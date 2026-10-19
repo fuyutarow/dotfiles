@@ -79,6 +79,17 @@ await Bun.write(path, JSON.stringify(state));
     deploy,
     probe,
     linkTriggers,
+    record: async () => {
+      const path = join(
+        ctx.stateHome ?? join(home, ".local/state"),
+        "dotfiles/deploy-started-triggers.json",
+      );
+      const parsed = jsonOf(z.array(z.string())).safeParse(
+        await Bun.file(path).text(),
+      );
+      expect(parsed.success).toBe(true);
+      return parsed.success ? parsed.data : [];
+    },
     fail: (verb: string) => {
       failure = verb;
     },
@@ -111,7 +122,6 @@ test.each(["linux", "wsl"] as const)(
     expect(
       f.triggers.every((trigger) => /\.(timer|path)$/u.test(trigger.unit)),
     ).toBe(true);
-    expect(f.triggers.every((trigger) => !trigger.installed)).toBe(true);
     expect(await f.deploy()).toBeUndefined();
     const first = await f.calls();
     expect(
@@ -119,7 +129,7 @@ test.each(["linux", "wsl"] as const)(
     ).toEqual(f.triggers.map((trigger) => trigger.unit));
     for (const trigger of f.triggers)
       expect(f.reports).toContain(
-        `started: ${trigger.unit} (first installation)`,
+        `started: ${trigger.unit} (first deploy start)`,
       );
     const current = jsonOf(
       z.record(
@@ -154,7 +164,7 @@ test.each(["linux", "wsl"] as const)(
     expect(f.reports).toEqual(
       f.triggers.map(
         (trigger) =>
-          `left inactive: ${trigger.unit} (already installed before deploy; user stop preserved)`,
+          `left inactive: ${trigger.unit} (previously started; user stop preserved)`,
       ),
     );
     expect(
@@ -166,7 +176,7 @@ test.each(["linux", "wsl"] as const)(
 );
 
 test.each([".timer", ".path"])(
-  "an existing disabled %s and a changed or dangling link never become first installations",
+  "a never-started %s linked by an earlier hook is started despite a repaired dangling link",
   async (suffix) => {
     const f = await fixture();
     f.linkTriggers();
@@ -178,14 +188,100 @@ test.each([".timer", ".path"])(
     await rm(firstUnit.path);
     await symlink(join(f.ctx.home, `missing${suffix}`), firstUnit.path);
     const installed = await captureDeclaredTriggers(f.ctx);
-    expect(installed.every((trigger) => trigger.installed)).toBe(true);
     // Repair the link, retaining the pre-link snapshot.
     link(f.ctx, firstUnit.source, firstUnit.path);
     expect(await f.deploy(installed)).toBeUndefined();
-    expect((await f.calls()).some((args) => args[0] === "start")).toBe(false);
+    expect(
+      (await f.calls())
+        .filter((args) => args[0] === "start")
+        .map((args) => args[1]),
+    ).toEqual(f.triggers.map((trigger) => trigger.unit));
     expect(f.reports).toHaveLength(f.triggers.length);
   },
 );
+
+test("active units seed the record and their later stops are preserved", async () => {
+  const f = await fixture();
+  f.linkTriggers();
+  for (const state of Object.values(f.state)) state.active = true;
+  await Bun.write(f.statePath, JSON.stringify(f.state));
+  expect(await f.deploy()).toBeUndefined();
+  expect(await f.record()).toEqual(
+    f.triggers.map((trigger) => trigger.unit).toSorted(),
+  );
+  for (const state of Object.values(f.state)) state.active = false;
+  await Bun.write(f.statePath, JSON.stringify(f.state));
+  expect(await f.deploy()).toBeUndefined();
+  expect((await f.calls()).some((args) => args[0] === "start")).toBe(false);
+  expect(f.reports).toHaveLength(f.triggers.length);
+});
+
+test.each(["herdr-projector.timer", "herdr-projector.path"])(
+  "a linked but unrecorded %s starts while recorded user stops stay inactive",
+  async (unit) => {
+    const f = await fixture();
+    f.linkTriggers();
+    const previouslyStarted = f.triggers.filter(
+      (trigger) => trigger.unit !== unit,
+    );
+    expect(await f.deploy(previouslyStarted)).toBeUndefined();
+    for (const state of Object.values(f.state)) state.active = false;
+    await Bun.write(f.statePath, JSON.stringify(f.state));
+    const before = (await f.calls()).length;
+    f.reports.length = 0;
+    expect(
+      await f.deploy(await captureDeclaredTriggers(f.ctx)),
+    ).toBeUndefined();
+    expect(
+      (await f.calls()).slice(before).filter((args) => args[0] === "start"),
+    ).toEqual([["start", unit]]);
+    expect(f.reports).toContain(`started: ${unit} (first deploy start)`);
+    for (const trigger of previouslyStarted)
+      expect(f.reports).toContain(
+        `left inactive: ${trigger.unit} (previously started; user stop preserved)`,
+      );
+  },
+);
+
+test("the record uses the selected XDG state home and survives link replacement", async () => {
+  const f = await fixture();
+  f.ctx.stateHome = join(f.ctx.home, "custom-state");
+  f.linkTriggers();
+  expect(await f.deploy()).toBeUndefined();
+  expect(await f.record()).toEqual(
+    f.triggers.map((trigger) => trigger.unit).toSorted(),
+  );
+  for (const trigger of f.triggers) await rm(trigger.path);
+  const snapshot = await captureDeclaredTriggers(f.ctx);
+  f.linkTriggers();
+  await Bun.write(f.statePath, JSON.stringify(f.state));
+  expect(await f.deploy(snapshot)).toBeUndefined();
+  expect((await f.calls()).filter((args) => args[0] === "start")).toHaveLength(
+    f.triggers.length,
+  );
+});
+
+test("a failed start is not recorded and is retried on the next deploy", async () => {
+  const f = await fixture();
+  f.linkTriggers();
+  f.fail("start");
+  expect((await f.deploy())?.message).toContain("start");
+  expect(await f.record()).toEqual([]);
+  f.fail("");
+  expect(await f.deploy()).toBeUndefined();
+  expect(f.reports).toHaveLength(f.triggers.length);
+});
+
+test("an invalid record fails closed before contacting systemd", async () => {
+  const f = await fixture();
+  f.linkTriggers();
+  await Bun.write(
+    join(f.ctx.home, ".local/state/dotfiles/deploy-started-triggers.json"),
+    "broken",
+  );
+  expect((await f.deploy())?.message).toContain("invalid deploy start record");
+  expect(await Bun.file(join(f.ctx.home, "calls.jsonl")).exists()).toBe(false);
+});
 
 test.each(["daemon-reload", "enable", "is-active", "start"])(
   "systemctl %s failure is reported and never claims a start",

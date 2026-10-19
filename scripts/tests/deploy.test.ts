@@ -113,11 +113,14 @@ test("deploy uses the final doctor RESULT counts rather than earlier summaries",
   );
 });
 
-test("deploy relays started and preserved timer reports for local and remote hosts", () => {
+test("deploy relays started and preserved timer/path reports for local and remote hosts", () => {
   const f = fixture();
-  const started = "started: herdr-projector.timer (first installation)";
+  const started = "started: herdr-projector.timer (first deploy start)";
+  const startedPath = "started: herdr-projector.path (first deploy start)";
   const preserved =
-    "left inactive: prompt-archive.timer (already installed before deploy; user stop preserved)";
+    "left inactive: prompt-archive.timer (previously started; user stop preserved)";
+  const preservedPath =
+    "left inactive: gpu-stall-notify.path (previously started; user stop preserved)";
   const result = Bun.spawnSync([process.execPath, script], {
     cwd: root,
     env: {
@@ -125,7 +128,7 @@ test("deploy relays started and preserved timer reports for local and remote hos
       DEPLOY_MISE: f.mise,
       DEPLOY_SSH: f.ssh,
       DEPLOY_EVENTS: join(f.dir, "events"),
-      DEPLOY_TIMER_OUTPUT: `${started}\n${preserved}\n`,
+      DEPLOY_TIMER_OUTPUT: `${started}\n${startedPath}\n${preserved}\n${preservedPath}\n`,
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -133,6 +136,6 @@ test("deploy relays started and preserved timer reports for local and remote hos
   });
   expect(result.exitCode, result.stderr.toString()).toBe(0);
   for (const host of ["local", "sol", "r99-u26"])
-    for (const line of [started, preserved])
+    for (const line of [started, startedPath, preserved, preservedPath])
       expect(result.stdout.toString()).toContain(`[deploy] ${host}: ${line}`);
 });

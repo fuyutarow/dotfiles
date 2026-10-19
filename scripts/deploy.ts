@@ -35,7 +35,7 @@ if (parsed._.length > 0 || parsed.flags.since === "") {
 const emit = (line: string) => process.stdout.write(`[deploy] ${line}\n`);
 function reportTimers(host: string, output: string): void {
   for (const line of output.split("\n"))
-    if (/^(started|left inactive): \S+\.timer \(/u.test(line))
+    if (/^(started|left inactive): \S+\.(timer|path) \(/u.test(line))
       emit(`${host}: ${line}`);
 }
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;

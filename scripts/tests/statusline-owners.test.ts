@@ -35,7 +35,7 @@ const failedOwnerProbe = (cmd: string[]) =>
     timedOut: false,
   });
 
-test("registry links all owner units; owner deployment enables the timer without activation and starts the path", async () => {
+test("registry links all owner units; owner deployment enables triggers without activation", async () => {
   const home = await mkdtemp(join(tmpdir(), "statusline-units-"));
   roots.push(home);
   const ctx: Ctx = {
@@ -64,7 +64,7 @@ test("registry links all owner units; owner deployment enables the timer without
   expect(calls).toEqual([
     ["daemon-reload"],
     ["enable", "statusline-sampler.timer"],
-    ["enable", "--now", "agx-doctor.path"],
+    ["enable", "agx-doctor.path"],
     ["start", "--no-block", "agx-doctor.service"],
   ]);
   calls.length = 0;

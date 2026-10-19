@@ -38,7 +38,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { access, lstat, realpath } from "node:fs/promises";
+import { access, mkdir, realpath, rename } from "node:fs/promises";
 import { hostname, homedir, release } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
@@ -66,6 +66,7 @@ export type Ctx = {
   changedLinks?: Set<string>;
   unreachable?: Set<string>;
   failures?: Error[];
+  stateHome?: string;
 };
 
 const unreachableError = z.object({
@@ -718,40 +719,27 @@ export function ensureToolOwned(ctx: Ctx, p: string): void {
   say(`created (tool-owned, empty): ${p}`);
 }
 
-/** Snapshot before linkAll: an installed timer/path's inactivity is an intentional stop. */
-export async function captureDeclaredTriggers(ctx: Ctx) {
-  if (ctx.os === "mac" || ctx.mode === "check") return [];
-  return Promise.all(
+/** Enumerate declared triggers; link existence does not establish deployment history. */
+export function captureDeclaredTriggers(ctx: Ctx) {
+  if (ctx.os === "mac" || ctx.mode === "check") return Promise.resolve([]);
+  return Promise.resolve(
     LINKS.filter(
       ([when, , destination]) =>
         applies(when, ctx.os) &&
         dirname(destination) === ".config/systemd/user" &&
         (destination.endsWith(".timer") || destination.endsWith(".path")),
-    ).map(async ([, source, destination]) => {
+    ).map(([, source, destination]) => {
       const path = join(ctx.home, destination);
-      // lstat counts dangling links and masks as installed too; never infer a new
-      // installation from a missing target or from a changed symlink.
-      const state = await attempt(() => lstat(path));
-      const installed =
-        state.ok ||
-        !z.object({ code: z.literal("ENOENT") }).safeParse(state.error).success;
-      if (!state.ok && installed) {
-        ctx.failures ??= [];
-        ctx.failures.push(
-          new Error(`cannot inspect ${path}: ${errorMessage(state.error)}`),
-        );
-      }
       return {
         unit: destination.slice(destination.lastIndexOf("/") + 1),
         source,
         path,
-        installed,
       };
     }),
   );
 }
 
-/** Enable declared timer/path units, activating only units absent before this deploy. */
+/** Enable declared triggers; recorded starts preserve subsequent intentional stops. */
 export async function deployDeclaredTriggers(
   ctx: Ctx,
   triggers: Awaited<ReturnType<typeof captureDeclaredTriggers>>,
@@ -781,6 +769,37 @@ export async function deployDeclaredTriggers(
         () => false,
       )));
   if (!systemd) return undefined;
+  const recordPath = join(
+    ctx.stateHome ?? join(ctx.home, ".local/state"),
+    "dotfiles/deploy-started-triggers.json",
+  );
+  const record = await attempt(() => Bun.file(recordPath).text());
+  const started = new Set<string>();
+  if (record.ok) {
+    const parsed = jsonOf(z.array(z.string())).safeParse(record.value);
+    if (!parsed.success)
+      return new Error(`invalid deploy start record: ${recordPath}`);
+    for (const unit of parsed.data) started.add(unit);
+  } else if (
+    !z.object({ code: z.literal("ENOENT") }).safeParse(record.error).success
+  ) {
+    return new Error(
+      `cannot read ${recordPath}: ${errorMessage(record.error)}`,
+    );
+  }
+  const save = async (): Promise<Error | undefined> => {
+    const result = await attempt(async () => {
+      await mkdir(dirname(recordPath), { recursive: true });
+      const temp = `${recordPath}.${randomUUID()}.tmp`;
+      await Bun.write(temp, `${JSON.stringify([...started].toSorted())}\n`, {
+        mode: 0o600,
+      });
+      await rename(temp, recordPath);
+    });
+    return result.ok
+      ? undefined
+      : new Error(`cannot save ${recordPath}: ${errorMessage(result.error)}`);
+  };
   const run = async (args: string[]) => {
     const result = await probe(args);
     return result.code === 0
@@ -791,6 +810,7 @@ export async function deployDeclaredTriggers(
   };
   const reloadError = await run(["daemon-reload"]);
   if (reloadError !== undefined) return reloadError;
+  const inactive: typeof triggers = [];
   for (const trigger of triggers) {
     const source = await realpath(join(ctx.dotfiles, trigger.source)).catch(
       () => null,
@@ -803,20 +823,32 @@ export async function deployDeclaredTriggers(
     const enableError = await run(["enable", trigger.unit]);
     if (enableError !== undefined) return enableError;
     const active = await probe(["is-active", trigger.unit]);
-    if (active.code === 0) continue;
+    if (active.code === 0) {
+      // Bootstrap existing installations before any starts; later stops stay stopped.
+      started.add(trigger.unit);
+      continue;
+    }
     if (active.code !== 3)
       return new Error(
         `systemctl --user is-active ${trigger.unit} failed (exit ${active.code}): ${active.out}`,
       );
-    if (trigger.installed) {
+    inactive.push(trigger);
+  }
+  const seedError = await save();
+  if (seedError !== undefined) return seedError;
+  for (const trigger of inactive) {
+    if (started.has(trigger.unit)) {
       report(
-        `left inactive: ${trigger.unit} (already installed before deploy; user stop preserved)`,
+        `left inactive: ${trigger.unit} (previously started; user stop preserved)`,
       );
       continue;
     }
     const startError = await run(["start", trigger.unit]);
     if (startError !== undefined) return startError;
-    report(`started: ${trigger.unit} (first installation)`);
+    started.add(trigger.unit);
+    const saveError = await save();
+    if (saveError !== undefined) return saveError;
+    report(`started: ${trigger.unit} (first deploy start)`);
   }
   return undefined;
 }
@@ -927,7 +959,7 @@ export async function deployGpuSampler(
   return undefined;
 }
 
-/** Enable the registry-linked timer; --check never talks to the user manager. */
+/** Enable registry-linked triggers; activation belongs to deployDeclaredTriggers. */
 export async function deployStatuslineOwners(
   ctx: Ctx,
   probe = async (args: string[]) => {
@@ -977,7 +1009,7 @@ export async function deployStatuslineOwners(
   for (const args of [
     ["daemon-reload"],
     ["enable", "statusline-sampler.timer"],
-    ["enable", "--now", "agx-doctor.path"],
+    ["enable", "agx-doctor.path"],
     ["start", "--no-block", "agx-doctor.service"],
   ]) {
     const result = await probe(args);
@@ -1054,6 +1086,10 @@ async function main(): Promise<Error | void> {
     mode: parsed.flags.force ? "force" : mode,
     drift: [],
     changedLinks: new Set(),
+    ...(process.env.XDG_STATE_HOME === undefined ||
+    process.env.XDG_STATE_HOME === ""
+      ? {}
+      : { stateHome: process.env.XDG_STATE_HOME }),
   };
   const rootsError = assertRoots(ctx.home, ctx.dotfiles);
   if (rootsError !== undefined) return rootsError;

@@ -6,6 +6,8 @@ import { z } from "../../shared/src/zod.ts";
 import {
   buildLockHolderLaunch,
   buildSystemdLaunch,
+  gpuAdmissionRefusal,
+  gpuSlotPool,
   validateManifest,
   type ResourceManifest,
 } from "../src/agent-resource-run.ts";
@@ -43,7 +45,23 @@ async function fixture(m = manifest()) {
   const path = join(dir, "manifest.json");
   await Bun.write(path, JSON.stringify(m));
   const policy = join(dir, "policy.toml");
-  await Bun.write(policy, "schema=1\ngpu_max_concurrent_jobs=1\n");
+  await Bun.write(
+    policy,
+    "schema=1\ngpu_max_concurrent_jobs=1\ngpu_safety_mib=512\n",
+  );
+  if (m.device.kind === "gpu")
+    await Bun.write(
+      join(dir, "gpu-owner.json"),
+      JSON.stringify({
+        schema: 1,
+        attemptAt: 1,
+        devices: [
+          { id: m.device.gpu_id, totalMiB: 12288, usedMiB: 0, utilPct: 0 },
+        ],
+        processes: [],
+        samples: [],
+      }),
+    );
   return {
     m,
     path,
@@ -204,6 +222,101 @@ test("manifest schema retains all P7 fields, bounds and compile slot extension",
   ];
   for (const value of invalid)
     expect(validateManifest(value).isErr()).toBe(true);
+});
+test("GPU pool identity is the manifest device id, independent of compile slots", () => {
+  expect(gpuSlotPool(0)).toBe("gpu.0");
+  expect(gpuSlotPool(1)).toBe("gpu.1");
+  expect(
+    validateManifest(
+      manifest({
+        compile_slots: ["julia-compile"],
+        device: { kind: "gpu", gpu_id: 1, vram_peak_bytes: 1 },
+      }),
+    ).isOk(),
+  ).toBe(true);
+});
+test("GPU admission refuses a recorded stall and reports its evidence", async () => {
+  const state = {
+    schema: 1 as const,
+    attemptAt: 1,
+    unresponsiveSince: 2,
+    stallEvidence: "NVML probe timed out",
+    devices: [{ id: 0, totalMiB: 12288, usedMiB: 0, utilPct: 0 }],
+    processes: [],
+    samples: [],
+  };
+  const refusal = await gpuAdmissionRefusal(
+    { gpu_id: 0, vram_peak_bytes: 1 },
+    512,
+    { state },
+  );
+  expect(refusal).toContain("NVML probe timed out");
+  expect(refusal).toContain("gpu-owner.json");
+});
+test("GPU admission refuses an unadmitted zombie GPU holder", async () => {
+  const f = await fixture();
+  const procRoot = join(f.dir, "proc");
+  const pid = 987654321;
+  const processDir = join(procRoot, String(pid));
+  await mkdir(processDir, { recursive: true });
+  await Bun.write(
+    join(processDir, "cgroup"),
+    "0::/user.slice/unmanaged.scope\n",
+  );
+  await Bun.write(
+    join(processDir, "status"),
+    "Name:\ttest\nState:\tZ (zombie)\n",
+  );
+  await Bun.write(join(processDir, "cmdline"), "julia\\0runner.jl");
+  const state = {
+    schema: 1 as const,
+    attemptAt: 1,
+    devices: [{ id: 0, totalMiB: 12288, usedMiB: 100, utilPct: 0 }],
+    processes: [{ pid, usedMiB: 100 }],
+    samples: [],
+  };
+  const refusal = await gpuAdmissionRefusal(
+    { gpu_id: 0, vram_peak_bytes: 1 },
+    512,
+    { procRoot, state },
+  );
+  expect(refusal).toContain(`pid=${pid}`);
+  expect(refusal).toContain("state=ZOMBIE");
+  expect(refusal).toContain("cgroup");
+});
+test("GPU VRAM guard sums admitted job peaks against device total and safety margin", async () => {
+  const f = await fixture();
+  const procRoot = join(f.dir, "proc");
+  const pid = 987654322;
+  const processDir = join(procRoot, String(pid));
+  await mkdir(processDir, { recursive: true });
+  await Bun.write(
+    join(processDir, "cgroup"),
+    "0::/user.slice/agent-resource-existing.scope\n",
+  );
+  await Bun.write(
+    join(processDir, "status"),
+    "Name:\tjulia\nState:\tS (sleeping)\n",
+  );
+  await Bun.write(
+    join(processDir, "environ"),
+    `AGENT_RESOURCE_ADMISSION_RECEIPT=${JSON.stringify({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 300 * 1024 ** 2 } })}\0`,
+  );
+  const state = {
+    schema: 1 as const,
+    attemptAt: 1,
+    devices: [{ id: 0, totalMiB: 1024, usedMiB: 300, utilPct: 0 }],
+    processes: [{ pid, usedMiB: 300 }],
+    samples: [],
+  };
+  const refusal = await gpuAdmissionRefusal(
+    { gpu_id: 0, vram_peak_bytes: 300 * 1024 ** 2 },
+    512,
+    { procRoot, state },
+  );
+  expect(refusal).toContain("GPU VRAM budget exceeded");
+  expect(refusal).toContain("admitted=314572800");
+  expect(refusal).toContain("safety_margin=512MiB");
 });
 test("scope properties include RAM, zero swap, quota, tasks, walltime and OOM policy", () => {
   const m = manifest();
@@ -448,7 +561,7 @@ test.skipIf(!live)(
     const locksRoot = join(runtime, "agent-resource");
     await mkdir(join(locksRoot, "slots"), { recursive: true });
     const blocker = Bun.spawn(
-      ["flock", "-F", join(locksRoot, "slots/gpu.0"), "sleep", "3"],
+      ["flock", "-F", join(locksRoot, "slots/gpu.0.0"), "sleep", "3"],
       { stdout: "ignore", stderr: "ignore", timeout: 5000 },
     );
     await Bun.sleep(100);
@@ -525,7 +638,7 @@ test.skipIf(!live)(
   },
   10000,
 );
-test("recorded stall DENY contains evidence and GPU-holding pid/command; missing state permits GPU", async () => {
+test("recorded stall DENY contains evidence and GPU-holding pid/command", async () => {
   const f = await fixture(
     manifest({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 } }),
   );

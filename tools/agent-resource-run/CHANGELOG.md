@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.7 — 2026-10-19
+
+- Refuse GPU admission without healthy, scoped, and sufficient VRAM evidence
+
 ## 1.5.6 — 2026-10-19
 
 - Default to one host GPU job and retain slots through failed scope cleanup until all descendants exit

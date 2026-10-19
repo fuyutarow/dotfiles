@@ -3,13 +3,23 @@
 import { readFile } from "node:fs/promises";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { err, fromAsyncThrowable, ok } from "neverthrow";
+import { gpuAdmissionRefusal } from "./agent-resource-run.ts";
 
 async function main() {
   const command = jsonOf(z.array(z.string()).min(1)).safeParse(
     process.env.AGENT_RESOURCE_SCOPE_COMMAND,
   );
   const receipt = jsonOf(
-    z.object({ scope_unit: z.string(), host_ram_peak_bytes: z.number() }),
+    z.object({
+      scope_unit: z.string(),
+      host_ram_peak_bytes: z.number(),
+      gpu_safety_mib: z.number().optional(),
+      device: z.object({
+        kind: z.string(),
+        gpu_id: z.number().optional(),
+        vram_peak_bytes: z.number().optional(),
+      }),
+    }),
   ).safeParse(process.env.AGENT_RESOURCE_ADMISSION_RECEIPT);
   if (!command.success || !receipt.success)
     return err(new Error("invalid scope payload"));
@@ -22,6 +32,22 @@ async function main() {
     !cgroup.split("/").includes(receipt.data.scope_unit)
   )
     return err(new Error("outside admitted scope"));
+  if (receipt.data.device.kind === "gpu") {
+    const { gpu_id, vram_peak_bytes } = receipt.data.device;
+    const safetyMiB = receipt.data.gpu_safety_mib;
+    if (
+      gpu_id === undefined ||
+      vram_peak_bytes === undefined ||
+      safetyMiB === undefined
+    )
+      return err(new Error("incomplete GPU admission receipt"));
+    const refusal = await gpuAdmissionRefusal(
+      { gpu_id, vram_peak_bytes },
+      safetyMiB,
+      { currentScope: receipt.data.scope_unit },
+    );
+    if (refusal !== undefined) return err(new Error(refusal));
+  }
   const root = `/sys/fs/cgroup${cgroup}`;
   const [max, high, swap, peak] = await Promise.all(
     ["memory.max", "memory.high", "memory.swap.max", "pids.peak"].map((name) =>

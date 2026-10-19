@@ -151,6 +151,7 @@ async function policy() {
     .object({
       schema: z.literal(1),
       gpu_max_concurrent_jobs: positive.max(1024),
+      gpu_safety_mib: positive.max(1024 * 1024),
     })
     .safeParse(toml.value);
   if (!parsed.success)
@@ -187,18 +188,119 @@ function runtimeDirectory() {
     );
   return ok(join(root, "agent-resource"));
 }
-async function stall(): Promise<string | undefined> {
-  const state = await readGpuState();
-  if (state?.unresponsiveSince === undefined) return undefined;
-  const holders = await Promise.all(
-    state.processes.map(async ({ pid }) => {
-      const command = (await optionalText(`/proc/${pid}/cmdline`)).unwrapOr(
-        undefined,
-      );
-      return `${pid} ${command?.replaceAll("\0", " ").trim() ?? "[exited or unavailable]"}`;
-    }),
-  );
-  return `GPU stall recorded since ${state.unresponsiveSince}; evidence=${gpuStatePath()}: ${state.stallEvidence ?? state.why ?? "unresponsiveSince set"}; GPU-holding pids: ${holders.length > 0 ? holders.join("; ") : "none recorded"}`;
+export const gpuSlotPool = (gpuId: number) => `gpu.${gpuId}`;
+
+/** Refuse GPU work unless every sampled holder belongs to a declared GPU scope. */
+export async function gpuAdmissionRefusal(
+  deviceRequest: { gpu_id: number; vram_peak_bytes: number },
+  safetyMiB: number,
+  options: {
+    procRoot?: string;
+    state?: Awaited<ReturnType<typeof readGpuState>>;
+    currentScope?: string;
+  } = {},
+): Promise<string | undefined> {
+  const procRoot = options.procRoot ?? "/proc";
+  const state = options.state ?? (await readGpuState());
+  if (state === undefined)
+    return `GPU owner state unavailable; evidence=${gpuStatePath()}`;
+  if (state.unresponsiveSince !== undefined) {
+    const holders = await Promise.all(
+      state.processes.map(async ({ pid }) => {
+        const command = (
+          await optionalText(join(procRoot, String(pid), "cmdline"))
+        ).unwrapOr(undefined);
+        return `${pid} ${command?.replaceAll("\0", " ").trim() ?? "[exited or unavailable]"}`;
+      }),
+    );
+    return `GPU stall recorded since ${state.unresponsiveSince}; evidence=${gpuStatePath()}: ${state.stallEvidence ?? state.why ?? "unresponsiveSince set"}; GPU-holding pids: ${holders.length > 0 ? holders.join("; ") : "none recorded"}`;
+  }
+  const device = state.devices.find(({ id }) => id === deviceRequest.gpu_id);
+  if (device === undefined)
+    return `GPU device ${deviceRequest.gpu_id} capacity unavailable; evidence=${gpuStatePath()}`;
+
+  const scopes = new Map<string, number>();
+  const procEntries = await fromAsyncThrowable(() => readdir(procRoot))();
+  if (procEntries.isErr())
+    return `GPU process inventory unavailable; evidence=${procRoot}`;
+  for (const entry of procEntries.value) {
+    if (!/^\d+$/u.test(entry)) continue;
+    const base = join(procRoot, entry);
+    const [cgroup, environ] = await Promise.all([
+      optionalText(join(base, "cgroup")),
+      optionalText(join(base, "environ")),
+    ]);
+    const scope = cgroup.isOk()
+      ? cgroup.value?.match(
+          /(?:^|\/)(agent-resource-[^/\n]+\.scope)(?:$|\n)/mu,
+        )?.[1]
+      : undefined;
+    if (scope === undefined || scopes.has(scope)) continue;
+    const receiptText = environ
+      .unwrapOr(undefined)
+      ?.split("\0")
+      .find((value) => value.startsWith("AGENT_RESOURCE_ADMISSION_RECEIPT="))
+      ?.slice("AGENT_RESOURCE_ADMISSION_RECEIPT=".length);
+    const receipt =
+      receiptText === undefined
+        ? undefined
+        : jsonOf(
+            z.object({
+              device: z
+                .object({
+                  kind: z.unknown().optional(),
+                  gpu_id: z.unknown().optional(),
+                  vram_peak_bytes: z.unknown().optional(),
+                })
+                .optional(),
+            }),
+          ).safeParse(receiptText);
+    const gpuReceipt =
+      receipt !== undefined && receipt.success
+        ? receipt.data.device
+        : undefined;
+    if (gpuReceipt === undefined || gpuReceipt.kind !== "gpu") continue;
+    if (
+      typeof gpuReceipt.gpu_id !== "number" ||
+      !Number.isSafeInteger(gpuReceipt.gpu_id) ||
+      typeof gpuReceipt.vram_peak_bytes !== "number" ||
+      !Number.isSafeInteger(gpuReceipt.vram_peak_bytes) ||
+      gpuReceipt.vram_peak_bytes <= 0
+    )
+      return `GPU scope receipt invalid scope=${scope}; evidence=${join(base, "environ")}`;
+    scopes.set(
+      scope,
+      gpuReceipt.gpu_id === deviceRequest.gpu_id
+        ? gpuReceipt.vram_peak_bytes
+        : 0,
+    );
+  }
+  for (const { pid } of state.processes) {
+    const base = join(procRoot, String(pid));
+    const [cgroup, processStatus, command] = await Promise.all([
+      optionalText(join(base, "cgroup")),
+      optionalText(join(base, "status")),
+      optionalText(join(base, "cmdline")),
+    ]);
+    const scope = cgroup.isOk()
+      ? cgroup.value?.match(
+          /(?:^|\/)(agent-resource-[^/\n]+\.scope)(?:$|\n)/mu,
+        )?.[1]
+      : undefined;
+    const zombie =
+      processStatus.isOk() && /^State:\s+Z/mu.test(processStatus.value ?? "");
+    if (scope === undefined)
+      return `GPU holder outside admitted GPU scope pid=${pid}${zombie ? " state=ZOMBIE" : ""} command=${command.unwrapOr(undefined)?.replaceAll("\0", " ").trim() ?? "[unavailable]"}; evidence=${join(base, "cgroup")}`;
+    if (!scopes.has(scope))
+      return `GPU holder admission receipt unavailable pid=${pid}${zombie ? " state=ZOMBIE" : ""}; evidence=${join(base, "environ")}`;
+  }
+  const admittedBytes = [...scopes.entries()]
+    .filter(([scope]) => scope !== options.currentScope)
+    .reduce((sum, [, bytes]) => sum + bytes, 0);
+  const ceiling = device.totalMiB * 1024 ** 2 - safetyMiB * 1024 ** 2;
+  if (deviceRequest.vram_peak_bytes + admittedBytes > ceiling)
+    return `GPU VRAM budget exceeded gpu=${deviceRequest.gpu_id} requested=${deviceRequest.vram_peak_bytes} admitted=${admittedBytes} total=${device.totalMiB * 1024 ** 2} safety_margin=${safetyMiB}MiB; evidence=${gpuStatePath()}`;
+  return undefined;
 }
 // flock itself owns locking and waiting. The availability probe is advisory: the actual
 // acquisition below is atomic even when another caller takes this candidate first.
@@ -344,7 +446,10 @@ async function run(
   const config = await policy();
   if (config.isErr()) return err(config.error);
   if (manifest.device.kind === "gpu") {
-    const refusal = await stall();
+    const refusal = await gpuAdmissionRefusal(
+      manifest.device,
+      config.value.gpu_safety_mib,
+    );
     if (refusal !== undefined) return ok(failure(69, refusal, report));
   }
   const manager = await output([
@@ -393,6 +498,7 @@ async function run(
     controller_pid: process.pid,
     cpu_ids: ids,
     host_ram_peak_bytes: manifest.host_ram_peak_bytes,
+    gpu_safety_mib: config.value.gpu_safety_mib,
     scratch_bytes: manifest.scratch_bytes,
     device: manifest.device,
     started_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
@@ -463,7 +569,7 @@ async function run(
   if (manifest.device.kind === "gpu") {
     const slot = await poolSlot(
       slots,
-      "gpu",
+      gpuSlotPool(manifest.device.gpu_id),
       config.value.gpu_max_concurrent_jobs,
     );
     if (slot.isErr()) return err(slot.error);

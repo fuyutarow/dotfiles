@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch fleet session changes for Herdr identity projection
+
+[Path]
+PathChanged=%t/fleet/sessions
+Unit=herdr-projector.service
+
+[Install]
+WantedBy=default.target

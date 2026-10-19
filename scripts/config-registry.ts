@@ -231,6 +231,16 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   ],
   [
     "not-mac",
+    "systemd/herdr-projector.path",
+    ".config/systemd/user/herdr-projector.path",
+  ],
+  [
+    "not-mac",
+    "systemd/herdr-projector.path",
+    ".config/systemd/user/default.target.wants/herdr-projector.path",
+  ],
+  [
+    "not-mac",
     "systemd/herdr-projector.timer",
     ".config/systemd/user/herdr-projector.timer",
   ],

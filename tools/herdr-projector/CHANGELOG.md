@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7 — 2026-10-19
+
+- Trigger projection on fleet session directory changes and poll Herdr panes every 60 seconds
+
 ## 0.1.6 — 2026-10-19
 
 - Match Codex panes by their reported session id

@@ -1,9 +1,9 @@
 [Unit]
-Description=Refresh Herdr fleet identity projection
+Description=Refresh Herdr identity projection for pane changes
 
 [Timer]
-OnBootSec=5s
-OnUnitActiveSec=5s
+OnBootSec=60s
+OnUnitActiveSec=60s
 AccuracySec=1s
 Unit=herdr-projector.service
 

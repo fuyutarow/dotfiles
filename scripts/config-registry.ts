@@ -214,6 +214,16 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
     "systemd/gpu-sampler.timer",
     ".config/systemd/user/gpu-sampler.timer",
   ],
+  [
+    "not-mac",
+    "systemd/prompt-archive.service",
+    ".config/systemd/user/prompt-archive.service",
+  ],
+  [
+    "not-mac",
+    "systemd/prompt-archive.timer",
+    ".config/systemd/user/prompt-archive.timer",
+  ],
 
   // --- cocoindex-code (declarative global settings = no interactive `ccc init`) ---
   [
@@ -493,6 +503,7 @@ const OTHER: readonly Surface[] = [
       "tools/agent-resource-run/package.json",
       "tools/disk-reclaim/package.json",
       "tools/storage-headroom/package.json",
+      "tools/prompt-archive/package.json",
       "tools/detect-japanese/package.json",
       "tools/statusline/package.json",
       "tools/serena-foreground/package.json",

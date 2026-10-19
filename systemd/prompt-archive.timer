@@ -1,0 +1,11 @@
+[Unit]
+Description=Archive typed prompt history every ten minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+AccuracySec=1min
+Unit=prompt-archive.service
+
+[Install]
+WantedBy=timers.target

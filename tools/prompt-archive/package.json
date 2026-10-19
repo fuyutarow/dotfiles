@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/prompt-archive",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "prompt-archive": "src/prompt-archive.ts"
+  }
+}

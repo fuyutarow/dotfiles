@@ -71,6 +71,11 @@ export function sysSegment(
       );
     gpuAge = (m.stale?.secs ?? 0) * 1000;
   }
+  const stall =
+    vram?.isErr() === true && vram.error.startsWith("GPU stalled ")
+      ? vram.error
+      : undefined;
+  if (stall !== undefined) gpu = roles.value(stall, "167");
   const parts: string[] = [
     cpu.match(
       (v) => {
@@ -96,7 +101,7 @@ export function sysSegment(
         ),
       (why) => field("ram", "RAM", observed(undefined, why)),
     ),
-    ...(vram === undefined
+    ...(vram === undefined || stall !== undefined
       ? []
       : [
           vram.match(

@@ -1,7 +1,6 @@
 import type { RouteScan } from "./dispatch-runs.ts";
 
-// These workspace findings have clearing commands in agx doctor. Run-history
-// classifications (including orphaned/unjudged) are diagnostic history only.
+// Only findings with a clearing command belong here. Historical counters stay in doctor.
 const ACTIONS: Record<string, string> = {
   stale: "ws refresh",
   abandoned: "ws gc --abandoned",
@@ -13,53 +12,40 @@ const ACTIONS: Record<string, string> = {
   "accepted-landed-present": "tkt gc",
 };
 
-/** Cached facts only: neither jj nor a classifier belongs on the render path. */
+/** One optional action row, assembled exclusively from owner-published facts. */
 export function fleetLine(
   scan: RouteScan | undefined,
   at = Temporal.Now.instant().epochMilliseconds,
 ): string {
-  const workers = scan?.fleet;
-  const ws = scan?.workspaces;
-  const findings = scan?.findings;
-  const age = Math.max(
-    scan?.snapshotAgeSecs ?? 0,
-    ws?.stale === true
-      ? Math.max(1, Math.floor((at - ws.capturedAt) / 1000))
-      : 0,
-    findings?.stale === true
-      ? Math.max(1, Math.floor((at - findings.capturedAt) / 1000))
-      : 0,
-  );
-  let freshness = "unknown";
-  if (
-    workers !== undefined &&
-    ws !== undefined &&
-    ws.fleetKnown !== false &&
-    findings !== undefined
-  )
-    freshness = age === 0 ? "" : `stale(${age}s)`;
-  else if (age > 0) freshness = `stale(${age}s) unknown`;
-  const anomalies = Object.entries(findings?.kinds ?? {})
-    .filter(([kind, count]) => count > 0 && ACTIONS[kind] !== undefined)
-    .toSorted(([a], [b]) => a.localeCompare(b));
-  const health = findings === undefined ? ["anomalies unknown"] : ["ok"];
-  if (anomalies.length > 0)
-    health.splice(
-      0,
-      1,
-      ...anomalies.map(
-        ([kind, count], index) =>
-          `${index === 0 ? "⚠ " : ""}${ACTIONS[kind]} ${count}`,
-      ),
-    );
-  const other = workers === undefined ? 0 : workers.other;
-  const workerSummary = `workers ${workers?.here ?? "unknown"} running`;
-  return [
-    workerSummary + (other > 0 ? ` (+${other} in other sessions)` : ""),
-    `ws ${ws?.here === undefined ? "" : `${ws.here} here · `}${ws?.fleetKnown === false ? "unknown" : (ws?.total ?? "unknown")} all`,
-    `unlanded ${ws?.fleetKnown === false ? "unknown" : (ws?.unlanded ?? "unknown")}`,
-    `collectable ${ws?.fleetKnown === false ? "unknown" : (ws?.collectable ?? "unknown")}`,
-    ...(freshness === "" ? [] : [freshness]),
-    ...health,
-  ].join(" · ");
+  const parts: string[] = [];
+  if ((scan?.actions?.judge ?? 0) > 0)
+    parts.push(`judge ${scan?.actions?.judge} (agx judge)`);
+  if ((scan?.actions?.land ?? 0) > 0)
+    parts.push(`land ${scan?.actions?.land} (mise run land)`);
+  const commands = new Map<string, number>();
+  for (const [kind, count] of Object.entries(
+    scan?.findings?.kinds ?? {},
+  ).toSorted(([a], [b]) => a.localeCompare(b))) {
+    const command = ACTIONS[kind];
+    if (command !== undefined && count > 0)
+      commands.set(command, (commands.get(command) ?? 0) + count);
+  }
+  for (const [command, count] of commands) parts.push(`⚠ ${command} ${count}`);
+  if ((scan?.fleet?.other ?? 0) > 0)
+    parts.push(`+${scan?.fleet?.other} workers in other sessions`);
+  // Event-driven owners have no elapsed-time expiry. A missed publication or
+  // failed read names the affected source and keeps its original observation age.
+  const stale: string[] = [];
+  if ((scan?.snapshotAgeSecs ?? 0) > 60)
+    stale.push(`stale runs ${scan?.snapshotAgeSecs}s`);
+  for (const [name, source] of [
+    ["ws", scan?.workspaces],
+    ["doctor", scan?.findings],
+  ] as const)
+    if (source?.stale === true && at - source.capturedAt > 60_000)
+      stale.push(
+        `stale ${name} ${Math.floor((at - source.capturedAt) / 1000)}s`,
+      );
+  // Source age is supporting detail, never a bottom row without an action.
+  return parts.length === 0 ? "" : [...parts, ...stale].join(" · ");
 }

@@ -1,4 +1,6 @@
 import { renderUnavailable, unavailable } from "./ansi.ts";
+import { dur } from "./jobs.ts";
+import { join } from "node:path";
 import { memReading, type MemReading } from "./host-model.ts";
 import { sysRow, formatBytes, type HostLoad } from "./host-display.ts";
 export { MemReadingSchema, memReading } from "./host-model.ts";
@@ -388,7 +390,35 @@ async function ramFracAsync(): Promise<Result<MemReading, string>> {
   return reading === undefined ? err("meminfo unparsable") : ok(reading);
 }
 async function vramFracAsync(): Promise<Result<MemReading, string>> {
-  const reading = vramFromState(await readGpuState());
+  const state = await readGpuState();
+  if (state?.unresponsiveSince !== undefined) {
+    const age = dur(
+      Math.max(
+        0,
+        Math.floor(
+          (Temporal.Now.instant().epochMilliseconds - state.unresponsiveSince) /
+            1000,
+        ),
+      ),
+    );
+    const owners = await Promise.all(
+      state.processes.map(async ({ pid }) => {
+        const comm = await readFile(
+          join(
+            process.env.STATUSLINE_PROC_ROOT ?? "/proc",
+            String(pid),
+            "comm",
+          ),
+          "utf8",
+        ).catch(() => "unknown");
+        return `${comm.trim()} ${pid}`;
+      }),
+    );
+    return err(
+      `GPU stalled ${age}${owners.length === 0 ? "" : ` (${owners.join(", ")})`}`,
+    );
+  }
+  const reading = vramFromState(state);
   if (reading.isErr()) return reading;
   const cccIndexing = await sampleCccIndexing({
     cachePath: `${HOME}/.cache/claude/statusline-ccc.json`,

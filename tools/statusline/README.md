@@ -104,9 +104,7 @@ format.
 
 Dispatch worker rows show the roster row, elapsed time, cost, worker/workspace name and ticket.
 Session IDs remain in the data and are omitted from worker rows. Legacy `agx-<slug>` worker names
-display as `agt_<slug>`. The summary always includes `dispatch warning: none` when no warning is
-present. Its lost count uses the same `orphaned` classification as `agx doctor`, excluding legacy
-history and ended runs with missing returns.
+display as `agt_<slug>`. The bottom row is optional: it lists pending judgments from this session (`judge N (agx judge)`), accepted runs with an unlanded workspace verdict (`land N (mise run land)`), remedy-named doctor findings, and `+N workers in other sessions`. Running workers already have their own rows.
 
 Storage still reads the canonical `agents/hooks/storage-headroom.toml` as runtime data, resolved
 relative to this package rather than cwd. Only `storageLine` is imported from shared storage code.
@@ -226,12 +224,11 @@ their values. An idle file does not become stale just because time has passed:
 and shows its original age. `agx-doctor.path` triggers a debounced singleton
 refresh after either diagnostic input changes.
 
-`ws N here · M all` selects the current repository from the workspace owner's
-inventory and labels the fleet total. Counts cover the existing GC inventory,
-excluding workspaces already collected. A partial first observation shows the
-repository count with an unknown fleet total until a complete fleet GC succeeds.
+Workspace inventory totals remain available in `ws ls` and `agx doctor`. The statusline reads `records.jsonl` for completed-run judgments (the current-runs owner intentionally publishes only active and orphaned rows) and joins accepted runs to `workspace-verdicts.json` rows for landing evidence. Counts are runs, not workspaces. A landed verdict or `landed` judgment clears the landing item; a missing verdict does not imply unlanded work.
 
 The anomaly suffix counts only workspace/ticket findings with clearing actions from
 `agx doctor`, labeled with those commands (`ws refresh`, `ws gc …`, `tkt gc`, or
 `mise run land`). Historical outside-home, unjudged, orphaned and legacy counters
 remain available in `agx doctor`; they do not appear in that suffix.
+
+When `gpu-owner.json` has `unresponsiveSince`, Sys shows `GPU stalled <age> (<comm> <pid>)` instead of a utilization average. Process names come from read-only `/proc/<pid>/comm`; missing names remain `unknown`. The sampler prepares this display for the normal fast read path. Source ages name the stale owner and never create a bottom row on their own.

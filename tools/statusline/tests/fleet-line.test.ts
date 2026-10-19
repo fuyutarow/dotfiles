@@ -89,8 +89,8 @@ test("doctor findings retain every source kind, omit zero counts, and require a 
       },
       at,
     ),
-  ).toEndWith(" · ok");
-  expect(fleetLine(undefined, at)).toEndWith("anomalies unknown");
+  ).toBe("");
+  expect(fleetLine(undefined, at)).toBe("");
 });
 
 test("fleet counts gc verdicts, including legacy and abandoned, without implying deletion permission", () => {
@@ -202,27 +202,25 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
       const scan = await agxRouteRunsAsync(process.env, "here", false);
       const df = {cwd:${JSON.stringify(home)},sid:"here",model:"fixture",wfOn:false,rc:"off",rlModel:[],jobs:[],orphans:0,
         routes:ok(scan),vram:undefined,disks:ok([]),cpuPct:ok(0),ram:ok({pct:0,frac:"0/1G"})};
-      const lines = render(df).split("\\n").filter(line => line.startsWith("workers "));
+      const lines = render(df).split("\\n").filter(line => line.includes("workers in other sessions"));
       if (${age} >= 0) expect(render(df)).toContain("agt_model-layer@ws_model-layer tkt_model-layer");
-      expect(lines).toHaveLength(1);
+      expect(lines).toHaveLength(${age >= 0 ? 1 : 0});
       expect(spawned).not.toHaveBeenCalled();
       for (const spy of childSpies) expect(spy).not.toHaveBeenCalled();
-      console.log(lines[0]);
+      console.log(lines[0] ?? "");
     `,
       { HOME: home, AGX_STATE_DIR: state, XDG_STATE_HOME: state },
     );
     expect(output).toMatchSnapshot(name);
     if (name === "fresh")
-      expect(output).toBe(
-        "workers 2 running (+2 in other sessions) · ws 6 all · unlanded 2 · collectable 3 · ok",
-      );
+      expect(output).toBe("judge 2 (agx judge) · +2 workers in other sessions");
   }
 });
 
 test.each([
-  [2, 2, "workers 2 running (+2 in other sessions)"],
-  [2, 0, "workers 2 running"],
-  [0, 3, "workers 0 running (+3 in other sessions)"],
+  [2, 2, "+2 workers in other sessions"],
+  [2, 0, ""],
+  [0, 3, "+3 workers in other sessions"],
 ] as const)(
   "worker phrase snapshot: here %d, others %d",
   async (here, others, expected) => {
@@ -265,10 +263,9 @@ test.each([
       routes:ok(scan),vram:undefined,disks:ok([]),cpuPct:ok(0),ram:ok({pct:0,frac:"0/1G"})});
     const lines = text.split("\\n");
     const agx = lines.find(line => line.startsWith("agx "));
-    expect(agx).toBeDefined();
-    expect(agx).not.toContain("other sessions");
+    expect(agx).toBeUndefined();
     expect(text.split("other sessions").length - 1).toBe(${others > 0 ? 1 : 0});
-    console.log(lines.find(line => line.startsWith("workers "))?.split(" · ")[0]);
+    console.log(lines.find(line => line.includes("workers in other sessions"))?.split(" · ")[0] ?? "");
   `,
       { HOME: home, XDG_STATE_HOME: state, AGX_STATE_DIR: state },
     );
@@ -285,7 +282,7 @@ test("unchanged workspace counts do not become stale with elapsed time", () => {
     snapshotAgeSecs: 0,
     workspaces: workspaceCounts(tsv, at - 120_000),
   };
-  expect(fleetLine(scan, at)).toContain("collectable 3 · unknown");
+  expect(fleetLine(scan, at)).toBe("");
 });
 
 test("a cold per-repository observation never masquerades as a fleet total", () => {
@@ -305,6 +302,5 @@ test("a cold per-repository observation never masquerades as a fleet total", () 
     },
     at,
   );
-  expect(line).toContain("ws 13 here · unknown all");
-  expect(line).toContain("unlanded unknown");
+  expect(line).toBe("");
 });

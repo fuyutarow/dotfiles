@@ -67,6 +67,7 @@ function doingOf(dir: string, runId: string): RouteRun["doing"] {
   };
 }
 export interface RouteScan {
+  actions?: { judge: number; land: number } | undefined;
   findings?: FleetFindings | undefined;
   workspaces?: WorkspaceCounts | undefined;
   fleet?:
@@ -255,6 +256,10 @@ export async function agxRouteRunsAsync(
   return {
     runs,
     unreadable,
+    actions: {
+      judge: snapshot.judgments?.[dispatcherSession ?? ""] ?? 0,
+      land: snapshot.land ?? 0,
+    },
     fleet:
       summary === undefined || session === undefined
         ? undefined

@@ -182,9 +182,7 @@ describe("statusline Sys row: VRAM", () => {
         samples: [],
       }),
     );
-    expect(sysRow(render({ home, bin }).text)).toContain(
-      "VRAM n/a (GPU stall recorded since ",
-    );
+    expect(sysRow(render({ home, bin }).text)).toContain("GPU stalled ");
   });
 });
 

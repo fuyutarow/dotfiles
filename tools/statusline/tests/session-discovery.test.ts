@@ -261,7 +261,7 @@ test("finds Claude and Codex only in the selected cwd and builds recorded payloa
   expect(automatic.stdout.toString()).toContain("GPT-6.1-Sol");
   expect(automatic.stdout.toString()).toContain("medium");
   const output = automatic.stdout.toString();
-  for (const label of ["Rate:", "Sys:", "Job:", "workers ", "codex-session-b"])
+  for (const label of ["Rate:", "Sys:", "Job:", "codex-session-b"])
     expect(output.split(label)).toHaveLength(2);
   expect(output).not.toContain("0s old");
   const selected = Bun.spawn(

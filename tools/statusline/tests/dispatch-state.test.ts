@@ -2,7 +2,6 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { routeLines, routeRuns, routeRunsAsync } from "../src/dispatch-runs.ts";
-import { DIM, ESC, RST } from "../src/ansi.ts";
 import { cleanupTempDirs, tempDir } from "./helpers.ts";
 
 afterAll(cleanupTempDirs);
@@ -78,9 +77,7 @@ test("unattributed rows stay dim even with an absent or empty payload session", 
         lost: 0,
         unattributed: 2,
       }),
-    ).toEqual([
-      `${ESC}[38;5;167mlost 0${RST} ${DIM}·${RST} ${DIM}unattributed 2${RST}`,
-    ]);
+    ).toEqual([]);
   }
   expect(
     routeLines([], "owner", 0, {
@@ -90,5 +87,5 @@ test("unattributed rows stay dim even with an absent or empty payload session", 
       lost: 0,
       unattributed: 0,
     }),
-  ).toEqual([`${ESC}[38;5;167mlost 0${RST}`]);
+  ).toEqual([]);
 });

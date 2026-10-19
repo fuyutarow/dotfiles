@@ -1,13 +1,13 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: fresh 1`] = `"workers 2 running (+2 in other sessions) · ws 6 all · unlanded 2 · collectable 3 · ok"`;
+exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: fresh 1`] = `"judge 2 (agx judge) · +2 workers in other sessions"`;
 
-exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: old 1`] = `"workers 2 running (+2 in other sessions) · ws 6 all · unlanded 2 · collectable 3 · ok"`;
+exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: old 1`] = `"judge 2 (agx judge) · +2 workers in other sessions"`;
 
-exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: missing 1`] = `"workers unknown running · ws unknown all · unlanded unknown · collectable unknown · unknown · anomalies unknown"`;
+exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: missing 1`] = `""`;
 
-exports[`worker phrase snapshot: here 2, others 2 1`] = `"workers 2 running (+2 in other sessions)"`;
+exports[`worker phrase snapshot: here 2, others 2 1`] = `"+2 workers in other sessions"`;
 
-exports[`worker phrase snapshot: here 2, others 0 1`] = `"workers 2 running"`;
+exports[`worker phrase snapshot: here 2, others 0 1`] = `""`;
 
-exports[`worker phrase snapshot: here 0, others 3 1`] = `"workers 0 running (+3 in other sessions)"`;
+exports[`worker phrase snapshot: here 0, others 3 1`] = `"+3 workers in other sessions"`;

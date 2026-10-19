@@ -7,7 +7,6 @@ import { rateRow } from "./rate-limits.ts";
 import { admittedJobSegment } from "./jobs.ts";
 import { routeLines } from "./dispatch-display.ts";
 import { sysRow } from "./host-display.ts";
-import { recoverHealthBadge } from "./recover-health.ts";
 import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
 import { fromThrowable } from "neverthrow";
 import { renderRows, type DisplayRows } from "./row-state.ts";
@@ -231,70 +230,8 @@ export function render(
     observed(df.jobScanWhy === undefined ? jobValue : undefined, df.jobScanWhy),
   );
   const scan = df.routes?.isOk() === true ? df.routes.value : undefined;
-  const routeText =
-    scan === undefined || scan.snapshotWhy !== undefined
-      ? undefined
-      : routeLines(scan.runs, df.sid, scan.unreadable, {
-          ...scan.fleet,
-          lost: scan.findings?.lost ?? scan.fleet?.lost,
-        }).join("\n");
-  const routeWhy =
-    df.routes?.isErr() === true
-      ? df.routes.error
-      : (scan?.snapshotWhy ?? "snapshot unavailable");
-  let dispatchWarning: string | undefined =
-    df.dispatchWarning === undefined
-      ? "dispatch warning: none"
-      : `${ESC}[38;5;178m${df.dispatchWarning}${RST}`;
-  if (df.dispatchWarningWhy !== undefined) dispatchWarning = undefined;
-  let recover = recoverHealthBadge(df.recoverHealth, df.recoverHealth?.at);
-  if (recover !== undefined) recover = `${ESC}[38;5;167m${recover}${RST}`;
-  const recoverValue = recover ?? "recover: none";
-  const runLines = [
-    field(
-      "agx",
-      "agx",
-      observed(
-        routeText === "" ? "agx 0 workers" : routeText,
-        routeWhy,
-        (scan?.snapshotAgeSecs ?? 0) * 1000,
-      ),
-    ),
-    field(
-      "dispatch-warning",
-      "dispatch warning",
-      observed(dispatchWarning, df.dispatchWarningWhy),
-    ),
-    field(
-      "recover",
-      "recover",
-      observed(
-        df.recoverHealthWhy === undefined ? recoverValue : undefined,
-        df.recoverHealthWhy,
-        df.recoverHealth === undefined
-          ? 0
-          : Math.max(
-              0,
-              Temporal.Now.instant().epochMilliseconds -
-                df.recoverHealth.at -
-                30000,
-            ),
-      ),
-    ),
-  ];
-  const [agxSummary = "", ...agxDetails] = (runLines[0] ?? "").split("\n");
-  const warningLine =
-    (runLines[1]?.trim() ?? "") === "" ? "dispatch warning: none" : runLines[1];
-  const recoverLine =
-    (runLines[2]?.trim() ?? "") === "" ? "recover: none" : runLines[2];
-  const agxBlock = [
-    ...agxDetails,
-    [agxSummary, warningLine, recoverLine]
-      .filter((part) => part !== undefined && part.trim() !== "")
-      .join(` ${DIM}·${RST} `),
-  ]
-    .filter((line) => line !== "")
-    .join("\n");
+  const agxBlock = routeLines(scan?.runs ?? [], df.sid).join("\n");
+  const bottom = fleetLine(scan);
 
   const rows = {
     prompt: observed(
@@ -309,9 +246,9 @@ export function render(
     sys: observed(sysLine),
     job: observed(jobLine),
     agx: observed(agxBlock),
-    fleet: observed(fleetLine(scan)),
-    "dispatch-warning": observed(warningLine),
-    recover: observed(recoverLine),
+    fleet: observed(bottom),
+    "dispatch-warning": observed(""),
+    recover: observed(""),
   } satisfies DisplayRows;
   if (options.layout !== undefined) {
     // Transcript snapshots select rows from this render, with the same field resolver and ages.

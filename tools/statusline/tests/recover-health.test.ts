@@ -125,7 +125,9 @@ describe("recover health", () => {
       },
     );
     const badOutput = render({ ...frame, recoverHealth: bad });
-    expect(badOutput).toContain("\u001B[38;5;167mRecover: wsl FATAL\u001B[0m");
+    expect(badOutput).not.toContain(
+      "\u001B[38;5;167mRecover: wsl FATAL\u001B[0m",
+    );
     expect(render({ ...frame, recoverHealth: undefined })).not.toContain(
       "Recover:",
     );

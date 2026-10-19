@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.5 — 2026-10-19
+
+- Show GPU stalls on Sys and only actionable dispatch items on the optional bottom row
+
 ## 0.20.4 — 2026-10-18
 
 - Keep Claude and Codex sidebar identity tokens tied to their own session events

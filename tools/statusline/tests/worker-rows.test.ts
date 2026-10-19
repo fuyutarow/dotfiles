@@ -139,11 +139,9 @@ test("worker snapshot uses doctor's classification and hides vendor sessions", a
   expect(output.sessions).toEqual([VENDOR, VENDOR]);
   const ansi = new RegExp(`${String.fromCodePoint(27)}\\[[0-9;]*m`, "gu");
   const lines = output.lines.map((line) => line.replaceAll(ansi, ""));
-  expect(lines[0]).toBe(`lost ${doctorLost}`);
-  expect(lines.slice(1)).toHaveLength(2);
-  expect(lines.slice(1).every((line) => line.includes("agt_x@ws_x"))).toBe(
-    true,
-  );
+  expect(lines.join("\n")).not.toContain("lost");
+  expect(lines).toHaveLength(2);
+  expect(lines.every((line) => line.includes("agt_x@ws_x"))).toBe(true);
   expect(lines.join("\n")).not.toMatch(/01a1|082b|agx-x/u);
   expect(lines.join("\n")).toMatchSnapshot();
   await rm(root, { recursive: true, force: true });

@@ -410,7 +410,7 @@ describe("legacy enriched Run row", () => {
     expect(rows).toHaveLength(2);
     expect(rows.join("\n")).toContain("Repo: dotfiles");
     expect(rows.join("\n")).toContain("resume:");
-    expect(out).toContain("unreadable 2");
+    expect(out).not.toContain("unreadable 2");
   });
 
   test("a live worker shows its row, elapsed time and label", async () => {
@@ -729,15 +729,13 @@ describe("legacy enriched Run row", () => {
     const dir = join(scratch, "other-session");
     marker(dir, "other", process.pid, "private worker", 90, "other-session-id");
     const out = await render(dir);
-    expect(out).toContain("+1 in other sessions");
+    expect(out).toContain("+1 workers in other sessions");
     expect(
       out
         .split("\n")
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
-    ).toEqual([
-      "workers 0 running (+1 in other sessions) · ws unknown all · unlanded unknown · collectable unknown · unknown · ok",
-    ]);
+    ).toEqual(["+1 workers in other sessions"]);
     expect(out).not.toContain("private worker");
     expect(out).not.toContain("luna-high");
   });
@@ -746,8 +744,8 @@ describe("legacy enriched Run row", () => {
     const dir = join(scratch, "no-dispatcher");
     marker(dir, "unowned", process.pid, "undispatched worker", 90, null);
     const out = await render(dir);
-    expect(out).toContain("unattributed 1");
-    expect(out).toContain("workers 0 running (+1 in other sessions)");
+    expect(out).not.toContain("unattributed");
+    expect(out).toContain("+1 workers in other sessions");
     expect(out).not.toContain("undispatched worker");
   });
 
@@ -776,17 +774,13 @@ describe("legacy enriched Run row", () => {
         .split("\n")
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
-    ).toEqual([
-      "workers 1 running (+3 in other sessions) · ws unknown all · unlanded unknown · collectable unknown · unknown · ok",
-    ]);
+    ).toEqual(["judge 1 (agx judge) · +3 workers in other sessions"]);
     expect(
       out
         .replaceAll(ANSI, "")
         .split("\n")
         .find((line) => line.startsWith("agx ")),
-    ).toBe(
-      "agx fresh · lost 3 · unattributed 2 · dispatch warning n/a (dispatch warning unavailable) · recover n/a (recover health unavailable)",
-    );
+    ).toBeUndefined();
     expect(out).not.toContain("other worker");
     expect(out).not.toContain("unowned worker");
     expect(out).not.toContain("dead own");
@@ -799,7 +793,7 @@ describe("legacy enriched Run row", () => {
     marker(dir, "own", process.pid, "my worker", 90, SESSION);
     const out = await render(dir);
     expect(out).not.toMatch(/in other sessions|unattributed/u);
-    expect(out).toContain("lost 0");
+    expect(out).not.toContain("lost");
   });
 
   test("legacy active directories no longer supply Run rows", async () => {
@@ -1306,7 +1300,7 @@ describe("legacy enriched Run row", () => {
     expect(
       out.split("\n").find((line) => line.startsWith("Job:")),
     ).not.toContain("agx");
-    expect(out).toContain("lost 0");
+    expect(out).not.toContain("lost");
   });
 
   test("Job entries share one name + elapsed format in every session", async () => {
@@ -1491,23 +1485,18 @@ describe("legacy enriched Run row", () => {
       ...old,
       orphanRow("judged", 120, { decision: "reject", note: "" }),
     ];
-    const agxFoldLost = foldedRows.filter(
-      (row) => row.state === "ended" && row.outcome === "lost",
-    ).length;
     const out = await render(
       join(scratch, "orphan-old"),
       undefined,
       SESSION,
       JSON.stringify(foldedRows),
     );
-    expect(out).toContain(`lost ${agxFoldLost}`);
+    expect(out).not.toContain("lost");
     const agxLine = out.split("\n").find((line) => line.startsWith("agx "));
-    expect(agxLine).toContain(
-      `agx fresh · lost ${agxFoldLost} · dispatch warning n/a (dispatch warning unavailable) · recover n/a (recover health unavailable)`,
-    );
+    expect(agxLine).toBeUndefined();
     expect(
       out.split("\n").filter((line) => line.startsWith("agx ")),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
   });
 
   test("a claude run shows its worker-progress.jsonl, not no event yet", async () => {
@@ -1540,10 +1529,10 @@ describe("legacy enriched Run row", () => {
     const dir = join(scratch, "stale");
     marker(dir, "b", 2_147_483_000, "killed");
     const out = await render(dir);
-    expect(out).toContain("lost 1");
+    expect(out).not.toContain("lost");
     expect(
       out.split("\n").filter((line) => line.startsWith("agx ")),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
     expect(out).not.toMatch(/^luna-high .* killed/mu);
   });
 
@@ -1559,6 +1548,6 @@ describe("legacy enriched Run row", () => {
     const out = await new Response(p.stdout).text();
     const stderr = await new Response(p.stderr).text();
     expect(await p.exited, stderr).toBe(0);
-    expect(out.replace(ANSI, "")).toContain("agx n/a (snapshot unavailable)");
+    expect(out.replace(ANSI, "")).not.toContain("agx n/a");
   });
 });

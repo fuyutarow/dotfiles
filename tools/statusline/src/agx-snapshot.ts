@@ -59,6 +59,8 @@ const SnapshotSchema = z.lazy(() =>
   }),
 );
 export interface AgxSnapshotRead {
+  judgments?: Record<string, number> | undefined;
+  land?: number | undefined;
   findings?: FleetFindings | undefined;
   workspaces?: WorkspaceCounts | undefined;
   summary?: z.output<typeof SummarySchema> | undefined;
@@ -146,6 +148,7 @@ export async function readAgxSnapshotAsync(
         capturedAt: z.number(),
         complete: z.literal(true),
         fleetComplete: z.boolean().optional(),
+        rows: z.array(z.array(z.string())).optional(),
         repos: z
           .record(
             z.string(),
@@ -209,8 +212,14 @@ export async function readAgxSnapshotAsync(
             join(stateDir(env), "workspace-verdicts.json"),
           ),
         };
+  const listingRows = snapshot?.output;
+  const rows = Array.isArray(listingRows)
+    ? listingRows
+    : (listingRows?.runs ?? []);
+  const actions = await readRunActions(env, ws?.rows ?? [], rows);
   if (snapshot === undefined)
     return {
+      ...actions,
       rows: undefined,
       ageSeconds: undefined,
       reason: "snapshot unavailable",
@@ -219,6 +228,7 @@ export async function readAgxSnapshotAsync(
     };
   const listing = snapshot.output;
   return {
+    ...actions,
     rows: Array.isArray(listing) ? listing : listing.runs,
     summary: Array.isArray(listing) ? undefined : listing.summary,
     workspaces,
@@ -234,4 +244,72 @@ export async function readAgxSnapshotAsync(
       : 0,
     reason: undefined,
   };
+}
+
+// current-runs intentionally omits completed history. The append-only state log is
+// the authority for pending judgments; workspace verdicts supply landing evidence.
+const ActionRun = z.object({
+  id: z.string(),
+  state: z.enum(["running", "ended"]),
+  dispatcher_session: z.string().nullable(),
+  workspace: z.string().optional(),
+  judgment: z.object({ decision: z.string() }).nullable(),
+});
+const ActionEvent = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("started"),
+    id: z.string(),
+    dispatcher_session: z.string().nullable(),
+    workspace: z.string(),
+  }),
+  z.object({ kind: z.literal("ended"), id: z.string() }),
+  z.object({ kind: z.literal("judged"), id: z.string(), decision: z.string() }),
+]);
+async function readRunActions(
+  env: NodeJS.ProcessEnv,
+  verdicts: string[][],
+  rows: unknown[] = [],
+): Promise<{ judgments: Record<string, number>; land: number }> {
+  const runs = new Map<string, z.output<typeof ActionRun>>();
+  for (const row of rows) {
+    const parsed = ActionRun.safeParse(row);
+    if (parsed.success) runs.set(parsed.data.id, parsed.data);
+  }
+  const log = await Bun.file(join(stateDir(env), "records.jsonl"))
+    .text()
+    .catch(() => "");
+  // A partial final append is not an event yet.
+  for (const line of log.slice(0, log.lastIndexOf("\n") + 1).split("\n")) {
+    const parsed = jsonOf(ActionEvent).safeParse(line);
+    if (!parsed.success) continue;
+    const event = parsed.data;
+    if (event.kind === "started") {
+      runs.set(event.id, { ...event, state: "running", judgment: null });
+      continue;
+    }
+    const run = runs.get(event.id);
+    if (run === undefined) continue;
+    if (event.kind === "ended") run.state = "ended";
+    if (event.kind === "judged") run.judgment = { decision: event.decision };
+  }
+  const unlanded = new Set(
+    verdicts.filter((row) => row[2] === "unlanded").map((row) => row[0]),
+  );
+  const judgments: Record<string, number> = {};
+  let land = 0;
+  for (const run of runs.values()) {
+    if (run.state !== "ended") continue;
+    if (run.judgment === null && run.dispatcher_session !== null)
+      Object.defineProperty(judgments, run.dispatcher_session, {
+        value:
+          (Object.hasOwn(judgments, run.dispatcher_session)
+            ? (judgments[run.dispatcher_session] ?? 0)
+            : 0) + 1,
+        enumerable: true,
+        configurable: true,
+      });
+    if (run.judgment?.decision === "accept" && unlanded.has(run.workspace))
+      land++;
+  }
+  return { judgments, land };
 }

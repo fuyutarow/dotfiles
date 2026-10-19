@@ -131,9 +131,7 @@ test("fixed core outputs are rendered verbatim; bf3bb781 has no working row and 
     cpuPct: ok(0),
     ram: ok({ pct: 0, frac: "0/1G" }),
   });
-  expect(out).toContain(
-    "workers 37 running (+11 in other sessions) · ws 13 here · 89 all · unlanded 23 · collectable 17",
-  );
+  expect(out).toContain("+11 workers in other sessions");
   expect(out).not.toContain("outside-home 2");
   expect(out).toContain("tkt_live-ticket");
   expect(out).toContain("0m42s");
@@ -168,10 +166,10 @@ test("agx/ws/doctor row path spawns nothing", async () => {
     .then(async () => {
       const started = performance.now();
       const scan = await agxRouteRunsAsync(env, "here", false, cwd);
-      expect(fleetLine(scan)).toContain("ws 13 here · 89 all");
-      expect(routeLines(scan.runs, "here", 0, scan.fleet).join("\n")).toContain(
-        "lost 0",
-      );
+      expect(fleetLine(scan)).toContain("+11 workers in other sessions");
+      expect(
+        routeLines(scan.runs, "here", 0, scan.fleet).join("\n"),
+      ).not.toContain("lost");
       for (const child of children) expect(child).not.toHaveBeenCalled();
       expect(spawned).not.toHaveBeenCalled();
       expect(sync).not.toHaveBeenCalled();

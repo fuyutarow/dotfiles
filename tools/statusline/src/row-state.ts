@@ -28,17 +28,16 @@ const LABELS = {
   recover: "recover",
 } satisfies Record<RowKind, string>;
 
-/** Row membership is fixed even when every source fails. Empty rows are never filtered. */
+/** Resource rows remain explicit; worker and action rows exist only when populated. */
 export function renderRows(rows: DisplayRows): string {
   return ROW_KINDS.flatMap((kind) => {
     const state = rows[kind];
     assert.ok(state !== undefined, `missing statusline row: ${kind}`);
     if (kind === "dispatch-warning" || kind === "recover") return [];
-    if (kind === "agx") {
+    if (kind === "agx" || kind === "fleet") {
       const text =
         state.kind === "fresh" ? state.value : renderField("agx", state);
-      assert.ok(text.trim() !== "", "empty statusline row: agx");
-      return [text];
+      return text.trim() === "" ? [] : [text];
     }
     const nonempty =
       state.kind !== "unknown" && state.value.trim() === ""

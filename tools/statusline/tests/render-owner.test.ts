@@ -195,7 +195,7 @@ test("standalone and Claude stdin render owner files without any subprocess, net
     expect(output).toContain("ws: ws_context-fix");
     expect(output).not.toContain("wt");
     expect(output.split("\n")[0]).toEndWith(`v${version}`);
-    expect(output).toContain("workers 0 running");
+    expect(output).not.toContain("workers 0 running");
     expect(output).not.toContain("old");
     expect(output).not.toContain("stale");
   }

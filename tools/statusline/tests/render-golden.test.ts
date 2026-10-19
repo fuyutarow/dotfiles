@@ -63,8 +63,8 @@ describe("statusline render golden", () => {
     lines[0] = "<prompt-head>";
     expect(lines.join("\n")).toMatchSnapshot();
     const summary = lines.find((line) => line.startsWith("agx "));
-    expect(summary).toContain("dispatch warning: none");
-    expect(summary?.split("·").every((part) => part.trim() !== "")).toBe(true);
+    expect(summary).toBeUndefined();
+    expect(lines.join("\n")).not.toContain("dispatch warning: none");
     const emptyWarning = render({
       ...dataframe,
       fields: {
@@ -75,10 +75,7 @@ describe("statusline render golden", () => {
       .replaceAll(ANSI, "")
       .split("\n")
       .find((line) => line.startsWith("agx "));
-    expect(emptyWarning).toContain("dispatch warning: none");
-    expect(emptyWarning?.split("·").every((part) => part.trim() !== "")).toBe(
-      true,
-    );
+    expect(emptyWarning).toBeUndefined();
 
     const workerLines = render({
       ...dataframe,

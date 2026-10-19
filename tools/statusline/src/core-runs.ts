@@ -70,6 +70,11 @@ export async function readCoreRuns(
   return {
     runs,
     unreadable,
+    actions: {
+      judge:
+        snapshot.judgments?.[currentDispatcherSession(sessionId) ?? ""] ?? 0,
+      land: snapshot.land ?? 0,
+    },
     workspaces: snapshot.workspaces,
     findings: snapshot.findings,
     fleet:

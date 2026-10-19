@@ -120,7 +120,18 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
       const previousFailed = z
         .object({ error: z.string() })
         .safeParse(prior?.value);
-      if (failed.success && prior !== undefined && !previousFailed.success) {
+      // A driver stall is a current observation, not a failed attempt to take a
+      // reading. Keeping last-good VRAM here would conceal it behind GPU≈.
+      const gpuStalled =
+        key === "vram" &&
+        failed.success &&
+        failed.data.error.startsWith("GPU stalled ");
+      if (
+        failed.success &&
+        !gpuStalled &&
+        prior !== undefined &&
+        !previousFailed.success
+      ) {
         next.fields[key] = { ...prior, error: failed.data.error };
         return;
       }

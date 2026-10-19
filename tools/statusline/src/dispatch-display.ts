@@ -1,4 +1,4 @@
-import { DIM, ESC, RST, renderUnavailable, unavailable } from "./ansi.ts";
+import { DIM, RST, renderUnavailable, unavailable } from "./ansi.ts";
 import { dur } from "./jobs.ts";
 import { relative } from "node:path";
 import { formatCostUsd } from "../../shared/src/dispatch-pricing.ts";
@@ -63,8 +63,8 @@ function padDisplay(value: string, width: number, left = false): string {
 export function routeLines(
   runs: RouteRun[],
   sessionId: string | undefined,
-  unreadable = 0,
-  counts?: Partial<NonNullable<RouteScan["fleet"]>>,
+  _unreadable = 0,
+  _counts?: Partial<NonNullable<RouteScan["fleet"]>>,
 ): string[] {
   const live = runs
     .filter((r) => r.alive)
@@ -131,29 +131,18 @@ export function routeLines(
     (r, i) =>
       `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${DIM}${padDisplay(identities[i] ?? "", identityWidth)}${identities[i] === "" ? "" : " "}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing, r.phase, r.coreState)}`,
   );
-  const summary = [
-    `${ESC}[38;5;167mlost ${counts?.lost ?? "unknown"}${RST}`,
-    ...((counts?.unattributed ?? 0) > 0
-      ? [`${DIM}unattributed ${counts?.unattributed}${RST}`]
-      : []),
-    ...(unreadable > 0
-      ? [`${ESC}[38;5;178munreadable ${unreadable}${RST}`]
-      : []),
-  ];
-  if (summary.length > 0) lines.unshift(summary.join(` ${DIM}·${RST} `));
   return lines;
 }
 
-/** Match agx ls: explicit agx override, Claude session environment, then payload. */
+/** An explicitly selected display session wins over the invoking shell's identity. */
 export function currentDispatcherSession(
   payloadSession: string | undefined,
 ): string | undefined {
-  return (
-    [process.env.AGX_DISPATCHER_SESSION, process.env.CLAUDE_CODE_SESSION_ID]
-      .find((value) => value !== undefined && value.trim() !== "")
-      ?.trim() ??
-    (payloadSession === undefined || payloadSession.trim() === ""
-      ? undefined
-      : payloadSession.trim())
-  );
+  return [
+    payloadSession,
+    process.env.AGX_DISPATCHER_SESSION,
+    process.env.CLAUDE_CODE_SESSION_ID,
+  ]
+    .find((value) => value !== undefined && value.trim() !== "")
+    ?.trim();
 }

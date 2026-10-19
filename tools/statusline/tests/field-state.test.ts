@@ -130,7 +130,7 @@ test("R3: every row kind renders when every reader times out before any good obs
   const errors = await new Response(child.stderr).text();
   expect(await child.exited, errors).toBe(0);
   const lines = output.trim().split("\n");
-  expect(lines).toHaveLength(ROW_KINDS.length - 2);
+  expect(lines).toHaveLength(6);
   const labels = [
     "|",
     "account n/a",
@@ -138,14 +138,11 @@ test("R3: every row kind renders when every reader times out before any good obs
     "Rate:",
     "Sys:",
     "Job: scan n/a",
-    "agx n/a",
   ];
   for (const [index, label] of labels.entries())
     expect(lines[index]).toContain(label);
-  expect(lines[6]).toContain("dispatch warning n/a");
-  expect(lines[6]).toContain("recover n/a");
-  expect(lines.at(-1)).toContain("workers unknown running");
-  expect(output).toContain("dispatch timeout 5ms");
+  expect(output).not.toContain("agx fresh");
+  expect(output).not.toContain("workers unknown running");
 });
 
 test("R3: the closed row record cannot silently omit or empty any row", () => {
@@ -279,8 +276,6 @@ test("every previously good display field survives failed reads independently wi
     "disk:Disk C:",
     "disk:Disk WSL",
     "disk:tmpfs",
-    "dispatch-warning",
-    "recover",
   ]) {
     const previous = before[key];
     expect(previous?.kind, key).toBe("fresh");
@@ -373,7 +368,7 @@ test("three disk-snapshot workers survive an outer dispatch timeout, including s
   const text = plain(await new Response(child.stdout).text());
   expect(await child.exited).toBe(0);
   for (const n of [1, 2, 3]) expect(text).toContain(`terra-${n}`);
-  expect(text).toContain("agx fresh");
+  expect(text).not.toContain("agx fresh");
   expect(text).not.toMatch(/agx \d+m old/u);
   expect(text).not.toContain("agx n/a");
   // A reader that reports its failure as a Result must use the same disk fallback,
@@ -411,8 +406,8 @@ test("three disk-snapshot workers survive an outer dispatch timeout, including s
     stderr: "pipe",
     timeout: 15000,
   });
-  expect(plain(await new Response(empty.stdout).text())).toContain(
-    "agx n/a (snapshot unavailable)",
+  expect(plain(await new Response(empty.stdout).text())).not.toContain(
+    "agx n/a",
   );
   expect(await empty.exited).toBe(0);
 }, 15000);

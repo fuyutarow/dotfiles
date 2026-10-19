@@ -1,0 +1,6 @@
+[Unit]
+Description=Project fleet session identities onto Herdr panes
+
+[Service]
+Type=oneshot
+ExecStart=%h/.bun/bin/herdr-projector

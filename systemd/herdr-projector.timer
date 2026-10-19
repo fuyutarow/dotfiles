@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh Herdr fleet identity projection
+
+[Timer]
+OnBootSec=5s
+OnUnitActiveSec=5s
+AccuracySec=1s
+Unit=herdr-projector.service
+
+[Install]
+WantedBy=timers.target

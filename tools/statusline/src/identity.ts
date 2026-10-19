@@ -1,8 +1,8 @@
 import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { stat } from "node:fs/promises";
-import { createConnection } from "node:net";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, maybe, z } from "./zod.ts";
+import { writeFleetSession } from "../../shared/src/fleet-session.ts";
 import {
   execAsyncWithin,
   execBounded,
@@ -13,6 +13,7 @@ import {
 } from "./bounded.ts";
 
 const HOME = process.env.HOME ?? "";
+const fleetUnavailable = (why: string) => ({ na: true as const, why });
 // Which Claude account this CLI is authenticated as, AND the per-model weekly caps below —
 // one parse of ~/.claude.json serves both, the same file `claude` itself writes on login and
 // keeps refreshing (via `cachedUsageUtilization`) whenever it fetches usage data.
@@ -236,12 +237,6 @@ export async function rcStateAsync(): Promise<RcState> {
 }
 
 /** Plain text for herdr's $rc token — same three states, no ANSI (herdr styles its own rows). */
-const RC_TOKEN: Record<RcState, string> = {
-  on: "🔗",
-  off: "rc:off",
-  unknown: "rc:?",
-};
-
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
 const AGENT_NAME_TTL_MS = 30_000;
 const AGENT_LIST_TIMEOUT_MS = 3000; // `claude agents --json`, slower than the 2000ms enrichment bound
@@ -379,172 +374,48 @@ export async function agentNameAsync(
   return ok(next[sid]?.name);
 }
 
-// Best-effort push to herdr over the same JSON-RPC unix socket its own vendored integration
-// (hooks/herdr-agent-state.sh) already talks to. A raw socket write, not a subprocess, so
-// unlike agentName()'s `claude agents --json` this is cheap enough to do on EVERY render —
-// which is the point: it makes the sidebar self-correcting.
-//
-//   pane.report_metadata  the live model as the $model row token (herdr/config.toml's
-//                         [ui.sidebar.agents] rows), so a mid-session model switch (manual
-//                         /model, switchModelsOnFlag) shows up. The addressable session name
-//                         rides the same request as $fullname, for the sidebar (herdr's
-//                         rows_by_agent.claude reads that back, not "tab" — see below). $effort
-//                         mirrors this statusline's own effort readout ("xhigh" or "xhigh+WF"
-//                         when dynamic-workflow orchestration is engaged) into the row, added
-//                         2026-09-03 on request, placed between $model and $rc. $rc is a
-//                         one-glyph Remote Control indicator, placed right of $effort in that
-//                         same row (2026-09-03, on request) — 🔗 while
-//                         $CLAUDE_CODE_BRIDGE_SESSION_ID is set (Claude Code v2.1.199+ sets it
-//                         only while this session has an active Remote Control connection),
-//                         else "". Unlike fullname, $effort and $rc are sent every render even
-//                         when empty — fullname is a one-way "eventually known" value so an
-//                         absent key is fine, but both of these must actively toggle off (effort
-//                         disappears on a mid-session switch to a model with no reasoning-effort
-//                         param; rc on disconnect), and omitting the key here would leave a stale
-//                         value showing (untested against herdr's own merge-vs-replace semantics
-//                         for a dropped key, so don't rely on that).
-//   tab.rename            only the trailing `-`-segment of the session name ("firedancer-dc"
-//                         -> "dc"), so the desktop tab bar (which shows the tab's real name)
-//                         stays compact. The untruncated name lives in $fullname instead.
-//
-// WHY THE STATUSLINE RENAMES THE TAB, when hooks/herdr-tab-name.ts already does it at
-// SessionStart: a once-per-session write has now failed twice, in two different ways, and each
-// time left a permanently wrong label until the next session start.
-//   1. `claude -c` keeps the session id but mints a new name suffix, so the hook wrote the
-//      pre-restart name (fixed separately, by making that hook stop reading the shared cache).
-//   2. `claude --fork-session` starts a session that is not yet in `claude agents --json` when
-//      SessionStart fires, so the hook's bounded retries expire and it writes nothing at all —
-//      observed 2026-08-30: the tab kept herdr's default numeric label while the status row
-//      showed the real name.
-// Both are the same shape: a single write at one instant cannot survive a value that is either
-// wrong or unknowable at that instant. Re-asserting it every render is what actually holds.
-// Renaming to the value it already has is a no-op in herdr, so this sends unconditionally
-// rather than paying a read round-trip to compare.
-//
-// COST: a manual `herdr tab rename` on a Claude pane's tab is reverted on the next render.
-// That follows from the same rule this whole setup exists to enforce — the tab label IS the
-// session's name — but it does mean tab labels are not free-form while a session is live.
-//
-// Bounded by a 200ms timeout so an unavailable or slow socket never meaningfully delays the
-// statusline itself; any failure is silently swallowed like every other segment in this file.
-// ONE REQUEST PER CONNECTION, deliberately. Writing two newline-delimited requests down a
-// single socket and closing it immediately silently drops everything after the first —
-// measured 2026-08-31: the pane token landed, the tab.rename that followed it on the same
-// connection did not, while the identical pair on two connections both landed. We never read
-// the replies (fire-and-forget is the whole point of doing this every render), so there is no
-
-// point at which waiting would be safe; a connection each is the cheap, correct shape.
-function herdrSend(socketPath: string, req: unknown): Promise<void> {
-  return new Promise<void>((resolve) => {
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      resolve();
-    };
-    const timer = setTimeout(finish, 200);
-    timer.unref();
-    const socketResult = fromThrowable(() => {
-      const socket = createConnection(socketPath, () => {
-        socket.write(`${JSON.stringify(req)}\n`, () => {
-          clearTimeout(timer);
-          socket.end();
-          finish();
-        });
-      });
-      socket.unref();
-      return socket;
-    })();
-    if (socketResult.isErr()) {
-      clearTimeout(timer);
-      finish();
-      return;
-    }
-    socketResult.value.on("error", () => {
-      clearTimeout(timer);
-      finish();
-    });
-  });
-}
-
+// The statusline is the sole writer of the shared fleet handoff. herdr-projector consumes these
+// atomic session files and owns the tab and pane metadata surfaces.
 export async function reportToHerdr(
   m: string,
   sessionName?: string,
   effortDisplay?: string, // plain-text "xhigh" / "xhigh+WF"
-  rc: RcState = rcState(),
+  _rc: RcState = rcState(),
   vendor: "claude" | "codex" = "claude",
 ): Promise<void> {
-  const socketPath = process.env.HERDR_SOCKET_PATH;
   const paneId = process.env.HERDR_PANE_ID;
-  const tabId = process.env.HERDR_TAB_ID;
+  const id =
+    vendor === "codex"
+      ? (process.env.CODEX_SESSION_ID ?? process.env.CODEX_THREAD_ID)
+      : process.env.CLAUDE_CODE_SESSION_ID;
   if (
     process.env.HERDR_ENV !== "1" ||
-    socketPath === undefined ||
-    socketPath === "" ||
     paneId === undefined ||
-    paneId === ""
+    paneId === "" ||
+    id === undefined ||
+    id === ""
   )
     return;
-
-  const stamp = Temporal.Now.instant().epochMilliseconds;
-  const tokens: Record<string, string> = {
-    model: m,
-    fullname: sessionName ?? "",
-    effort: effortDisplay ?? "",
-    rc: vendor === "codex" ? "" : RC_TOKEN[rc],
-  };
-  // Rides the SAME request as model — one socket round-trip, not two (see the
-  // ONE-REQUEST-PER-CONNECTION note above for why a second request here would risk being
-  // dropped anyway).
-  // Always write the fullname key: an empty/unknown current identity must retire
-  // the previous pane occupant's value rather than leave it attached to this row.
-  await herdrSend(socketPath, {
-    id: `dotfiles:statusline-model:${stamp}`,
-    method: "pane.report_metadata",
-    params: {
-      pane_id: paneId,
-      source: "dotfiles:statusline-model",
-      tokens,
-    },
+  await writeFleetSession({
+    schema: 1,
+    session_id: id,
+    vendor,
+    name:
+      sessionName !== undefined && sessionName !== ""
+        ? sessionName
+        : fleetUnavailable("agent name unavailable"),
+    model: m !== "" ? m : fleetUnavailable("model unavailable"),
+    effort:
+      effortDisplay !== undefined && effortDisplay !== ""
+        ? effortDisplay
+        : fleetUnavailable("effort unavailable"),
+    ctx: fleetUnavailable("context unavailable to identity writer"),
+    rate: fleetUnavailable("rate limits unavailable to identity writer"),
+    cwd: process.cwd(),
+    pane_id: paneId ?? null,
+    updated_at: Temporal.Now.instant().toString(),
   });
-  if (
-    tabId !== undefined &&
-    tabId !== "" &&
-    sessionName !== undefined &&
-    sessionName !== ""
-  ) {
-    const lastNamePart = sessionName.split("-").pop();
-    const shortName =
-      lastNamePart !== undefined && lastNamePart !== ""
-        ? lastNamePart
-        : sessionName;
-    await herdrSend(socketPath, {
-      id: `dotfiles:statusline-tab:${stamp}`,
-      method: "tab.rename",
-      params: { tab_id: tabId, label: shortName },
-    });
-  }
 }
 
 /** Clear vendor identity on a pane before its new session has reportable metadata. */
-export async function clearHerdrMetadata(): Promise<void> {
-  const socketPath = process.env.HERDR_SOCKET_PATH;
-  const paneId = process.env.HERDR_PANE_ID;
-  if (
-    process.env.HERDR_ENV !== "1" ||
-    socketPath === undefined ||
-    socketPath === "" ||
-    paneId === undefined ||
-    paneId === ""
-  )
-    return;
-  await herdrSend(socketPath, {
-    id: `dotfiles:statusline-clear:${Temporal.Now.instant().epochMilliseconds}`,
-    method: "pane.report_metadata",
-    params: {
-      pane_id: paneId,
-      source: "dotfiles:statusline-model",
-      tokens: { fullname: "", model: "", effort: "", rc: "" },
-    },
-  });
-}
+export async function clearHerdrMetadata(): Promise<void> {}

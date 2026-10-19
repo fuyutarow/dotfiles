@@ -17,11 +17,11 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "agx-doctor-compose-"));
   const bin = join(root, "bin");
   await mkdir(bin);
-  for (const tool of ["agx-worker", "ws", "tkt"]) {
+  for (const tool of ["agx-worker", "agx-ws", "agx-ticket"]) {
     const path = join(bin, tool);
     await writeFile(
       path,
-      `#!${process.execPath}\nconst tool=${JSON.stringify(tool)};\nif(process.env.MODE==="malformed" && tool==="ws") {process.stdout.write("not json\\n");}\nelse if(process.env.MODE!=="clean" && !(process.env.MODE==="empty-failure" && tool==="ws")) process.stdout.write(JSON.stringify({tool,object:tool+"-object",finding:"fixture",remedy:"repair"})+"\\n");\nprocess.exitCode=process.env.MODE==="clean"?0:(tool==="ws" && process.env.MODE==="failure"?3:1);\n`,
+      `#!${process.execPath}\nconst tool=${JSON.stringify(tool)};\nif(process.env.MODE==="malformed" && tool==="agx-ws") {process.stdout.write("not json\\n");}\nelse if(process.env.MODE!=="clean" && !(process.env.MODE==="empty-failure" && tool==="agx-ws")) process.stdout.write(JSON.stringify({tool,object:tool+"-object",finding:"fixture",remedy:"repair"})+"\\n");\nprocess.exitCode=process.env.MODE==="clean"?0:(tool==="agx-ws" && process.env.MODE==="failure"?3:1);\n`,
     );
     await chmod(path, 0o755);
   }
@@ -91,7 +91,7 @@ test.each(["failure", "empty-failure", "malformed", "missing"])(
   async (mode) => {
     await using f = await fixture();
     expect((await invoke(f, "clean")).snapshot.complete).toBe(true);
-    if (mode === "missing") await rm(join(f.bin, "ws"));
+    if (mode === "missing") await rm(join(f.bin, "agx-ws"));
     const result = await invoke(f, mode);
     expect(result.exit).toBe(2);
     expect(result.err).not.toBe("");

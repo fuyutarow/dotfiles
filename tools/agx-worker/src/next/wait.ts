@@ -59,7 +59,7 @@ function notifications(root: string) {
   };
 }
 
-/** Same selector grammar as `agx ls`: exact id, exact ticket, unique id prefix. */
+/** Same selector grammar as `agx worker ls`: exact id, exact ticket, unique id prefix. */
 const select = (
   rows: readonly Row[],
   selector: string,
@@ -95,7 +95,7 @@ const line = (entry: Row): string =>
   `${entry.id} ${entry.state} tkt_${entry.ticket} row=${entry.row} exit=${entry.exit ?? "-"} outcome=${entry.outcome ?? "-"}`;
 
 /**
- * `agx ls --wait SELECTOR`: a read-only incremental fold over the record log, woken by
+ * `agx worker ls --wait SELECTOR`: a read-only incremental fold over the record log, woken by
  * file notification with a slow liveness fallback. Its cursor never writes a snapshot.
  * Run-id selectors preserve immediate terminal lookup. Ticket selectors ignore
  * runs already terminal on the initial read, then return the first eligible run

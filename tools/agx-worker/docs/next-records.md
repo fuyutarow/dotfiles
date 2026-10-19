@@ -1,4 +1,4 @@
-# agx run records
+# agx worker run records
 
 `agx-worker` stores one append-only JSONL file at `$AGX_NEXT_STATE_DIR/records.jsonl`
 (default: `$AGX_STATE_DIR/records.jsonl` when that override is set, otherwise
@@ -6,24 +6,24 @@
 Each line is one event. Readers ignore an incomplete trailing line and reject malformed
 complete lines. Readers ignore unknown fields; writers may add fields; required fields never
 change type. Event `at` values are RFC 3339 timestamps. Ticket paths are positional:
-`agx check TICKET.md` and `agx run TICKET.md --cd TREE`.
-Judgments use `agx judge RUN_ID accept|reject [--note TEXT]`; every `ls --json`
+`agx worker check TICKET.md` and `agx worker run TICKET.md --cd TREE`.
+Judgments use `agx worker judge RUN_ID accept|reject [--note TEXT]`; every `ls --json`
 `judgment.decision` is `accept`, `reject`, or `null`. A continuation
-uses `agx run TICKET.md --continue PREVIOUS_RUN_ID`.
-`agx run` records `dispatcher_session` from `--session ID`, then `AGX_DISPATCHER_SESSION`,
+uses `agx worker run TICKET.md --continue PREVIOUS_RUN_ID`.
+`agx worker run` records `dispatcher_session` from `--session ID`, then `AGX_DISPATCHER_SESSION`,
 `CLAUDE_CODE_SESSION_ID`, or `CODEX_SESSION_ID`; missing session context is recorded as `null`
 with a `WARN` line.
 verify should include `mise run gate:land` for a change that will land in dotfiles.
 
-Human `agx ls` shows runs newest first, limited to the last 30 by default; `agx ls --all` shows
-the full list. `agx ls --json` remains complete and preserves append/fold order when no selector
-is supplied. `agx ls SELECTOR [--json]` selects an exact run id, unique run-id prefix, or exact
+Human `agx worker ls` shows runs newest first, limited to the last 30 by default; `agx worker ls --all` shows
+the full list. `agx worker ls --json` remains complete and preserves append/fold order when no selector
+is supplied. `agx worker ls SELECTOR [--json]` selects an exact run id, unique run-id prefix, or exact
 ticket name. A ticket selection is ordered oldest first so its latest run is last. Ambiguous
 prefixes and unmatched selectors exit 2 with one candidate line.
 
-JSON rows include `health`, computed by the same classification as `agx doctor`:
+JSON rows include `health`, computed by the same classification as `agx worker doctor`:
 `orphaned`, `unjudged`, or `null` when there is no finding. Imported and pre-contract
-history and judged runs have no finding and remain visible through `agx ls --all`.
+history and judged runs have no finding and remain visible through `agx worker ls --all`.
 The statusline's lost count counts only `orphaned` rows.
 
 The next ticket schema requires `proposition.id`, `proposition.claim`, and
@@ -75,7 +75,7 @@ to the worker, rather than a second process timeout. `supersedes = "RUN_ID"` (or
 - `judged`: `{ "kind": "judged", "id", "at", "decision", "note" }`.
 
 Imported events may carry `legacy_key`, a deterministic deduplication key.
-`agx stats --import-legacy` reads `runs*.jsonl` from `$AGX_STATE_DIR` (default
+`agx worker stats --import-legacy` reads `runs*.jsonl` from `$AGX_STATE_DIR` (default
 `~/.local/state/agx`), folds `run`, `acceptance`, `interim`, and `landed` rows into the same
 event log, skips malformed lines, and reports import counts. Legacy `acceptance` rows become
 `accept` or `reject`; `landed` becomes `accept`. Legacy `grade` and `grade-waived` rows are
@@ -88,7 +88,7 @@ Events are append-only. The current run view folds events by `id`: the latest
 progress and judgment win; a `started` with no `ended` is `running` while its
 owner lease matches and `ended` with outcome `lost` otherwise; a run with `ended` is `ended`. Legacy starts without a lease use their PID for liveness and migrate to the same closed view on read. Signal traps write outcome `stopped` with `signal` (SIGTERM, SIGINT, or SIGHUP). Derived loss includes `evidence` with expected/observed process identity and the systemd unit Result when available. A collected or unavailable unit has a null Result; loss still follows process evidence.
 
-## `agx ls --json`
+## `agx worker ls --json`
 
 The output is an array of objects with these contract fields:
 
@@ -109,7 +109,7 @@ The output is an array of objects with these contract fields:
 | `report_path` | Final report path, or `null` until ended. |
 | `verify` | Ordered `{ "cmd", "exit", "log_path" }` facts from ticket verification, or `[]` when no commands were declared / for older records. |
 | `last_progress_path` | Most recent interim-return path, or `null`. |
-| `continues` | Previous agx run id supplied via `--continue`, or `null` for a fresh run. |
+| `continues` | Previous agx worker run id supplied via `--continue`, or `null` for a fresh run. |
 | `supersedes` | Run replaced by this fresh dispatch, or `null`; absent in historical runs. |
 | `base_rev` | Full commit id observed in the `--cd` tree before routing; absent when `--cd` has no repository and in historical runs. |
 | `premise_commits` | `{ premise, commit }` entries: revision/bookmark premises resolve their referenced commit; file, symbol and task checks are observed in the tree at `base_rev`, or omitted here when there is no repository. |
@@ -141,13 +141,13 @@ including the premise and at most the last three trimmed lines of command output
 
 ## Incremental run view
 
-`agx ls` and other `foldedRuns` callers cache event prefixes only in process memory. Each reader validates inode, device, size, and complete-line offset before reusing its prefix. Rotation and truncation rebuild it; incomplete UTF-8 tails remain unconsumed. Old `records.fold.json` snapshots are ignored. Neither `ls` nor `ls --wait` writes any file.
+`agx worker ls` and other `foldedRuns` callers cache event prefixes only in process memory. Each reader validates inode, device, size, and complete-line offset before reusing its prefix. Rotation and truncation rebuild it; incomplete UTF-8 tails remain unconsumed. Old `records.fold.json` snapshots are ignored. Neither `ls` nor `ls --wait` writes any file.
 
 Process liveness and early-quit classification are recomputed on every read.
 Before returning derived loss, readers check whether the log changed during
 asynchronous process/unit observation and replay it if needed. An `ended` record
 appended before the owner disappeared takes precedence over the earlier read.
-`agx ls --running` filters to runs whose dispatcher PID is currently live, excluding
+`agx worker ls --running` filters to runs whose dispatcher PID is currently live, excluding
 ended runs (including lost). It combines with selectors, `--json`, and `--all`; the
 human limit and older-run count apply to the filtered runs. Warm reads consume
 only appended log bytes, plus any previously incomplete tail; validating the memory cache,
@@ -155,7 +155,7 @@ checking liveness, and emitting rows still cost proportionally to the stored run
 
 ## Doctor findings
 
-`agx doctor` reports current states that require a person's action. It reports
+`agx worker doctor` reports current states that require a person's action. It reports
 `orphaned` only for an unjudged leased run whose owner is gone and
 whose `ended` record is absent after the liveness recheck. A recorded completion
 with an explicit `returned` flag and no judgment is `unjudged` immediately,
@@ -164,17 +164,17 @@ identifies a completion from before the return contract; it produces no finding.
 For current writers, `returned` records the fenced
 `agx-return` marker, not the existence of a final JSON report; this flag does not
 establish process loss. Runs without a recorded lease, including legacy imports,
-and runs with a judgment produce no run finding. History stays in `agx ls --all`;
+and runs with a judgment produce no run finding. History stays in `agx worker ls --all`;
 none of these classifications rewrites it.
 
 Each finding includes its one-line action:
 
 | Kind | Action |
 | --- | --- |
-| `orphaned` | Review the lost run and run `agx judge RUN_ID accept\|reject`. |
-| `unjudged` | Review the completed run and run `agx judge RUN_ID accept\|reject`. |
+| `orphaned` | Review the lost run and run `agx worker judge RUN_ID accept\|reject`. |
+| `unjudged` | Review the completed run and run `agx worker judge RUN_ID accept\|reject`. |
 | `outside-home` | Move the ticket to the ticket home printed in the finding. |
-| `accepted-landed-present` | Run the printed `tkt gc --repo REPO` to collect the ticket. |
-| `collectable` | Run the printed `ws gc --include-unrecorded --repo REPO`. |
+| `accepted-landed-present` | Run the printed `agx ticket gc --repo REPO` to collect the ticket. |
+| `collectable` | Run the printed `agx ws gc --include-unrecorded --repo REPO`. |
 | `unlanded-72h` | Enter the printed workspace and run `mise run land`. |
-| `stale` | Run the printed `ws refresh NAME --repo REPO`. |
+| `stale` | Run the printed `agx ws refresh NAME --repo REPO`. |

@@ -32,7 +32,7 @@ export async function pinContinuation(
       return null;
     }
     return exitWithError(
-      `agx: cannot continue run ${continuationId}: ${reason}; start a fresh run with: agx run ${ticketPath}\n`,
+      `agx: cannot continue run ${continuationId}: ${reason}; start a fresh run with: agx worker run ${ticketPath}\n`,
       2,
     );
   };

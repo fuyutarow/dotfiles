@@ -26,7 +26,7 @@ rumdl = "0.2.78"
 
 [tasks.accept]
 depends = ["bun:check"]
-description = "READ-ONLY acceptance view for the latest selected agx run; does not judge or land. Usage: mise run accept -- <ticket|run-id>"
+description = "READ-ONLY acceptance view for the latest selected agx worker run; does not judge or land. Usage: mise run accept -- <ticket|run-id>"
 dir = "{{config_root}}"
 run = "bun scripts/agx-accept.ts"
 
@@ -497,6 +497,7 @@ depends = ["fmt:check", "lint", "lint:changesets"]
 [tasks.changeset]
 depends = ["bun:check"]
 description = "Generate a validated tool changeset"
+raw_args = true
 run = "bun scripts/changeset.ts"
 
 [tasks."lint:changesets"]

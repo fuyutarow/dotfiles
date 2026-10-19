@@ -148,7 +148,7 @@ const runLatest = (root: string, ticket: string, ...flags: string[]) =>
     },
   );
 
-test("agx ls selects an id prefix and an exact ticket with newest last", () => {
+test("agx worker ls selects an id prefix and an exact ticket with newest last", () => {
   const root = fixture();
   const prefix = runLs(root, "run-ticket-ol");
   expect(prefix.exitCode).toBe(0);
@@ -195,7 +195,7 @@ test("agx ls selects an id prefix and an exact ticket with newest last", () => {
   expect(ambiguousPrefix.stderr.toString().trim().split("\n")).toHaveLength(1);
 }, 60_000);
 
-test("agx ls --latest selects a continued run and emits its outcome facts", () => {
+test("agx worker ls --latest selects a continued run and emits its outcome facts", () => {
   const root = fixture();
   const result = runLatest(root, "accept-fold", "--json");
   expect(result.exitCode).toBe(0);
@@ -225,7 +225,7 @@ test("agx ls --latest selects a continued run and emits its outcome facts", () =
   expect(human.stdout.toString()).toContain("report_path=");
 });
 
-test("agx ls --latest requires an exact ticket and rejects a missing ticket", () => {
+test("agx worker ls --latest requires an exact ticket and rejects a missing ticket", () => {
   const root = fixture();
   const result = Bun.spawnSync(
     [process.execPath, "tools/agx-worker/src/next/cli.ts", "ls", "--latest"],

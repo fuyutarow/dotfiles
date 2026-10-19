@@ -96,7 +96,7 @@ async function fixture(workerBody: string, verify: string | string[]) {
 
 const DONE = `process.stdout.write(JSON.stringify({ exit: 0, report: { summary: "done", changes: [], checks: [], for_coordinator: [], open: [] } }) + "\\n");\n`;
 
-describe("agx run owns its temp space", () => {
+describe("agx worker run owns its temp space", () => {
   test("bare service environment shares user tools, mise PATH and temp with verify; records failure kinds", async () => {
     const f = await fixture(
       `import { writeFileSync } from "node:fs";

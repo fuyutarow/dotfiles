@@ -46,8 +46,8 @@ Repo CLIs and libraries live under `tools/<name>/` (release changesets, generate
 semver and `CHANGELOG.md`, `src/`, `tests/`; see README → Architecture → tools for the release
 rule; parts may import only their own dir and `tools/shared/`): `tools/smart-open`, `tools/repo-retrieve`
 (`rr` / `repo-retrieve`), `tools/agx` (the process-only `agx` suite entry),
-`tools/agx-worker` (`agx worker` / `agx-worker`; deprecated `agx-next` forwards here), `tools/agx-ws` (`agx ws` / `ws`),
-`tools/agx-ticket` (`agx ticket` / `tkt`), `tools/agent-resource-run`, and
+`tools/agx-worker` (`agx worker` / `agx-worker`), `tools/agx-ws` (`agx ws` / `agx-ws`),
+`tools/agx-ticket` (`agx ticket` / `agx-ticket`), `tools/agent-resource-run`, and
 `tools/serena-foreground` (both OSes), `tools/storage-headroom` (storage decisions and read-only
 headroom CLI), `tools/secrets-push`, `tools/sui-keystore-merge`, `tools/shared` (code several tools import, including Bash parsing and hook path
 resolution).
@@ -119,8 +119,8 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    `~/.local/share`; the `rip` shell function refuses tmpfs/ramfs graveyards. The linked
    `environment.d` declaration supplies the home-data fallback to systemd user services and
    `systemd-run --user`; `zsh/bashrc` exports both values for bash SSH commands. Bash reads the same prefix.
-   Durable `agx run` commands must pass `-E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID` to
-   `systemd-run --user`; `agx run` also accepts `--session ID` when a caller cannot forward env.
+   Durable `agx worker run` commands must pass `-E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID` to
+   `systemd-run --user`; `agx worker run` also accepts `--session ID` when a caller cannot forward env.
    Brewfile.core declares bun/uv for all cwd, including Claude hooks. Do not put Homebrew shellenv, plugins, prompts,
    completions, or anything that can print/hang there.
 6. **No implicit global toolchain (INV-6).** A managed tool is reachable where a config

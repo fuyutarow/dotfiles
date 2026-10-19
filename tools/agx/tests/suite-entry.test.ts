@@ -4,6 +4,20 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pkg from "../package.json" with { type: "json" };
+import rootPackage from "../../../package.json" with { type: "json" };
+import wsPackage from "../../agx-ws/package.json" with { type: "json" };
+import ticketPackage from "../../agx-ticket/package.json" with { type: "json" };
+
+test("only prefixed workspace and ticket bins are exported", () => {
+  expect(Object.hasOwn(rootPackage.bin, "ws")).toBe(false);
+  expect(Object.hasOwn(rootPackage.bin, "tkt")).toBe(false);
+  expect(rootPackage.bin["agx-ws"]).toBe("tools/agx-ws/src/ws.ts");
+  expect(rootPackage.bin["agx-ticket"]).toBe("tools/agx-ticket/src/tkt.ts");
+  expect(Object.hasOwn(wsPackage.bin, "ws")).toBe(false);
+  expect(Object.hasOwn(ticketPackage.bin, "tkt")).toBe(false);
+  expect(wsPackage.bin["agx-ws"]).toBe("src/ws.ts");
+  expect(ticketPackage.bin["agx-ticket"]).toBe("src/tkt.ts");
+});
 
 const entry = join(import.meta.dir, "../src/agx.ts");
 async function fixture() {
@@ -70,12 +84,12 @@ test.each([
   "stats",
   "roster",
   "doctor",
+  "jev",
   "unknown",
   "constructor",
   "__proto__",
   "agx-next",
   "agx-run",
-  "jev",
 ])("suite rejects '%s' without dispatching", async (verb) => {
   await using f = await fixture();
   const result = await run(f.bin, [verb, "ticket.md"], 19);

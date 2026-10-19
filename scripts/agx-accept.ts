@@ -147,15 +147,18 @@ const main = async (): Promise<void> => {
     process.exitCode = 2;
     return;
   }
-  const listing = await runProcess(["agx", "ls", selector, "--json"], {
-    cwd: process.cwd(),
-    env: process.env,
-    timeout: 15_000,
-  });
+  const listing = await runProcess(
+    ["agx", "worker", "ls", selector, "--json"],
+    {
+      cwd: process.cwd(),
+      env: process.env,
+      timeout: 15_000,
+    },
+  );
   if (listing.exitCode !== 0) {
     const errorText = listing.stderr.toString();
     process.stderr.write(
-      errorText === "" ? "agx-accept: agx ls failed\n" : errorText,
+      errorText === "" ? "agx-accept: agx worker ls failed\n" : errorText,
     );
     process.exitCode = listing.exitCode ?? 2;
     return;
@@ -164,12 +167,12 @@ const main = async (): Promise<void> => {
     listing.stdout.toString(),
   );
   if (!decoded.success) {
-    process.stderr.write("agx-accept: agx ls returned invalid JSON\n");
+    process.stderr.write("agx-accept: agx worker ls returned invalid JSON\n");
     process.exitCode = 2;
     return;
   }
   if (decoded.data.length === 0) {
-    process.stderr.write("agx-accept: agx ls selected no runs\n");
+    process.stderr.write("agx-accept: agx worker ls selected no runs\n");
     process.exitCode = 2;
     return;
   }
@@ -179,7 +182,7 @@ const main = async (): Promise<void> => {
     decoded.data.some((entry) => entry.ticket !== selectedTicket)
   ) {
     process.stderr.write(
-      "agx-accept: agx ls returned multiple tickets; update agx to a selector-aware version\n",
+      "agx-accept: agx worker ls returned multiple tickets; update agx to a selector-aware version\n",
     );
     process.exitCode = 2;
     return;
@@ -203,7 +206,7 @@ const main = async (): Promise<void> => {
   }
 
   process.stdout.write(
-    `NEXT\nagx judge ${run.id} accept --note "<note>"\nmise run land -- <workspace-name> -m "<message>"\n`,
+    `NEXT\nagx worker judge ${run.id} accept --note "<note>"\nmise run land -- <workspace-name> -m "<message>"\n`,
   );
 };
 

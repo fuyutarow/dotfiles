@@ -1019,7 +1019,7 @@ export async function deployStatuslineOwners(
       );
   }
   say(
-    "enabled: statusline-sampler.timer (5s after completion; agx doctor follows its inputs)",
+    "enabled: statusline-sampler.timer (5s after completion; agx worker doctor follows its inputs)",
   );
   return undefined;
 }

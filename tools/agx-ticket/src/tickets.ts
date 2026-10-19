@@ -188,7 +188,7 @@ export async function create(options: {
   set: string[];
   each?: string | undefined;
 }): Promise<Attempt<string[]>> {
-  const checkedSlug = validateSlug(options.slug, "tkt new");
+  const checkedSlug = validateSlug(options.slug, "agx ticket new");
   if (!checkedSlug.ok) return checkedSlug;
   const ctx = await context(options.repo);
   if (!ctx.ok) return ctx;
@@ -389,13 +389,14 @@ export async function list(
   if (!contextResult.ok) return contextResult;
   const ctx = contextResult.value;
   const records = await command(
-    ["agx", "ls", "--json", "--all"],
+    ["agx", "worker", "ls", "--json", "--all"],
     ctx.root,
     options.quiet,
   );
   if (!records.ok) return records;
   const runs = jsonOf(z.array(Run)).safeParse(records.value);
-  if (!runs.success) return bad(`invalid agx ls --json: ${runs.error.message}`);
+  if (!runs.success)
+    return bad(`invalid agx worker ls --json: ${runs.error.message}`);
   return listWithRuns(ctx, runs.data, options);
 }
 
@@ -556,10 +557,14 @@ export async function doctor(): Promise<Attempt<string[]>> {
   const records =
     first === undefined
       ? good("[]")
-      : await command(["agx", "ls", "--json", "--all"], first.backing, true);
+      : await command(
+          ["agx", "worker", "ls", "--json", "--all"],
+          first.backing,
+          true,
+        );
   if (!records.ok) return records;
   const runs = jsonOf(z.array(Run)).safeParse(records.value);
-  if (!runs.success) return bad("invalid agx ls --json");
+  if (!runs.success) return bad("invalid agx worker ls --json");
   const files = new Map<
     string,
     { name: string; ticket: string; path: string }[]
@@ -658,7 +663,7 @@ function acceptedLandedFindings(backing: string, rows: TicketRow[]): string[] {
         backing,
         row.ticket,
         "accepted-landed-present",
-        `tkt gc --repo ${backing}`,
+        `agx ticket gc --repo ${backing}`,
       ]
         .map((value) => doctorClean(value))
         .join("\t"),

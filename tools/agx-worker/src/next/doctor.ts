@@ -29,7 +29,13 @@ function runFinding(
   const kind = run.health;
   return kind === undefined || kind === null
     ? undefined
-    : ["agx-worker", run.cwd, run.id, kind, `agx judge ${run.id} accept|reject`]
+    : [
+        "agx-worker",
+        run.cwd,
+        run.id,
+        kind,
+        `agx worker judge ${run.id} accept|reject`,
+      ]
         .map((value) => clean(value))
         .join("\t");
 }

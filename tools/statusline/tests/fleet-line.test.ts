@@ -72,10 +72,10 @@ test("doctor findings retain every source kind, omit zero counts, and require a 
   });
   expect(doctorFindings("bad", at)).toBeUndefined();
   expect(fleetLine({ runs: [], unreadable: 0, findings }, at)).toContain(
-    "ws refresh 1",
+    "agx ws refresh 1",
   );
   expect(fleetLine({ runs: [], unreadable: 0, findings }, at)).toEndWith(
-    "⚠ ws refresh 1",
+    "⚠ agx ws refresh 1",
   );
   expect(
     fleetLine(

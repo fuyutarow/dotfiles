@@ -29,7 +29,7 @@ export async function roster(ticketPath?: string): Promise<number> {
   }
   const loaded = await loadRoster(process.env.DISPATCH_ROSTER_PATH);
   if (!loaded.ok) {
-    process.stderr.write(`agx roster: ${oneLine(loaded.error)}\n`);
+    process.stderr.write(`agx worker roster: ${oneLine(loaded.error)}\n`);
     return 1;
   }
   process.stdout.write(`${JSON.stringify(loaded.value)}\n`);

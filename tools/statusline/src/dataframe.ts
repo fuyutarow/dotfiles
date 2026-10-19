@@ -57,7 +57,7 @@ export interface Dataframe {
   jobScanWhy?: string | undefined; // the process scan failed: jobs/orphans are unknown, not zero
   // agx workers. undefined = agx has never run on this machine (no state dir).
   routes?: Result<RouteScan, string> | undefined;
-  // Current-session runs from agx ls; optional for render-only fixtures using the legacy row source.
+  // Current-session runs from agx worker ls; optional for render-only fixtures using the legacy row source.
   jobRuns?: JobRun[] | undefined;
   dispatchWarning?: string | undefined; // codex-share warning for this host, see dispatch-warning.ts
   dispatchWarningWhy?: string | undefined;

@@ -23,7 +23,7 @@ async function invoke(...args: string[]) {
   return { stdout, stderr, exitCode };
 }
 
-test("agx roster --json prints the validated roster value", async () => {
+test("agx worker roster --json prints the validated roster value", async () => {
   const loaded = await loadRoster();
   expect(loaded.ok).toBe(true);
   if (!loaded.ok) return;

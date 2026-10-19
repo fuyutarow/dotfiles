@@ -102,7 +102,7 @@ test("WS-GC-TIMER: registry links both units and the only service command uses s
   }
   const service = await Bun.file(join(REPO, "systemd/ws-gc.service")).text();
   expect(service.split("\n").filter((line) => line.startsWith("Exec"))).toEqual(
-    ["ExecStart=%h/.bun/bin/ws gc --all --legacy"],
+    ["ExecStart=%h/.bun/bin/agx ws gc --all --legacy"],
   );
   expect(service).toContain("StandardOutput=journal");
   expect(service).not.toContain("--abandoned");

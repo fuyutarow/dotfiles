@@ -519,7 +519,7 @@ describe("enforce-storage-headroom", () => {
         ?.permissionDecision,
     ).toBe("deny");
     expect(
-      decisionOf(runHook(HOOK, bash("agx stats && cp x y"), env).stdout)
+      decisionOf(runHook(HOOK, bash("agx worker stats && cp x y"), env).stdout)
         ?.permissionDecision,
     ).toBe("deny");
   });

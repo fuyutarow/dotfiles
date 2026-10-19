@@ -755,7 +755,8 @@ const OTHER: readonly Surface[] = [
     when: "all",
     sources: [".ws.toml"],
     deployed: "the checkout",
-    consumer: "ws add (readiness commands) and ws rm / gc (trunk revset)",
+    consumer:
+      "agx ws add (readiness commands) and agx ws rm / gc (trunk revset)",
     writer: "human, in the repo",
     verify: "bun test tools/agx-ws",
   },

@@ -69,7 +69,7 @@ await runAddCommand(async () => {
 });
 
 test.each(["readiness", "lock"])(
-  "ws add whole-command deadline identifies %s on stderr",
+  "agx ws add whole-command deadline identifies %s on stderr",
   async (stage) => {
     const root = await mkdtemp(join(tmpdir(), "ws-command-deadline-"));
     const checked = await attempt(async () => {

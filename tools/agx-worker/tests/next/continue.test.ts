@@ -136,7 +136,7 @@ const Started = z.looseObject({
 });
 const Receipt = z.looseObject({ id: z.string(), row: z.string() });
 
-describe("agx run --continue pins the prior row", () => {
+describe("agx worker run --continue pins the prior row", () => {
   test.each(["design_g5", "Design-G5"])(
     "legacy ticket %s resumes on its pinned row",
     async (name) => {
@@ -186,7 +186,7 @@ describe("agx run --continue pins the prior row", () => {
     const lines = result.stderr.toString().trim().split("\n");
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("bare-run");
-    expect(lines[0]).toContain("agx run");
+    expect(lines[0]).toContain("agx worker run");
     expect(f.events()).toHaveLength(before);
     expect(existsSync(join(f.state, "runs"))).toBe(false);
   });

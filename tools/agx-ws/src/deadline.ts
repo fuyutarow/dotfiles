@@ -42,7 +42,10 @@ export async function runAddCommand(
     );
     process.exit(2);
   }
-  const state = { step: "initialize ws add", children: new Set<() => void>() };
+  const state = {
+    step: "initialize agx ws add",
+    children: new Set<() => void>(),
+  };
   // Deliberately referenced: AbortSignal.timeout alone is not a command-lifetime watchdog.
   setTimeout(() => {
     for (const kill of state.children) kill();

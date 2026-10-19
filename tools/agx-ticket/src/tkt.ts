@@ -156,7 +156,7 @@ const doctorCommand = command(
 );
 await cli({
   ...common,
-  name: "tkt",
+  name: "agx-ticket",
   version: pkg.version,
   help: { description: "Create, inspect and collect project tickets." },
   commands: [newCommand, lsCommand, gcCommand, doctorCommand],

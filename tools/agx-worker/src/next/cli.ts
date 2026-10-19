@@ -58,7 +58,7 @@ async function main(): Promise<void> {
         name: "agx-worker run",
         help: {
           description:
-            "To amend a continuation, edit the ticket file, then `agx run TICKET --continue RUN`.",
+            "To amend a continuation, edit the ticket file, then `agx worker run TICKET --continue RUN`.",
         },
         parameters: ["<ticket>"],
         flags: {
@@ -72,7 +72,7 @@ async function main(): Promise<void> {
           },
           continue: {
             type: String,
-            description: "previous agx run id to continue",
+            description: "previous agx worker run id to continue",
           },
           supersedes: {
             type: String,
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
           },
           dispatchBinding: {
             type: String,
-            description: "internal binding supplied by agx dispatch",
+            description: "internal binding supplied by agx worker dispatch",
           },
         },
         strictFlags: true,
@@ -264,7 +264,7 @@ async function main(): Promise<void> {
     if (parsed._[0] !== undefined) exit = await roster(parsed._[0]);
     else if (parsed.flags.json === true) exit = await roster();
     else {
-      process.stderr.write("agx roster: use --json\n");
+      process.stderr.write("agx worker roster: use --json\n");
       exit = 2;
     }
   }

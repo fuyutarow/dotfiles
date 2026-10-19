@@ -1,12 +1,12 @@
 [Unit]
-Description=Collect finished jj workspaces using ws safe classes
+Description=Collect finished jj workspaces using agx ws safe classes
 
 [Service]
 Type=oneshot
 WorkingDirectory=%h/dotfiles
 Environment=PATH=%h/.bun/bin:%h/.local/bin:%h/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
 # Abandonment remains an explicit owner command, never an unattended action.
-ExecStart=%h/.bun/bin/ws gc --all --legacy
+ExecStart=%h/.bun/bin/agx ws gc --all --legacy
 StandardOutput=journal
 StandardError=journal
 TimeoutStartSec=30min

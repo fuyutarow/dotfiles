@@ -28,7 +28,7 @@ hook route. Repeated invocations and disposable test setup do not add variants.
 | repo-retrieve definitions | committed diff, dirty status, HEAD (3) | Same `child.ts` boundary; optional locks disabled. Definition/router suites. |
 | Storage hook, disabled legacy route | Checkout policy/count probes (excluded from active count) | Parsed raw adds, including sparse/wrapped adds, are denied before policy loading. Help remains usable. Storage adapter tests use invalid policy config to prove ordering. |
 
-Workspace creation belongs to foreground `ws` (landed in `56e774eec9e0`, renamed to
+Workspace creation belongs to foreground `agx ws` (landed in `56e774eec9e0`, renamed to
 `tools/agx-ws` in `6bff24ef563e`). Its standalone policy/CLI probes are outside this recovered
 boundary scope. The compatibility workspace hook retains its existing advice; the storage hook
 provides the unconditional refusal. Codex TERM/KILL cleanup already landed in

@@ -758,7 +758,7 @@ export async function list(flags: Flags): Promise<number> {
   } else if (selector === undefined && visible.length > 0) {
     output += "\n";
     const older = rows.length - visible.length;
-    if (older > 0) output += `… ${older} older (agx ls --all)\n`;
+    if (older > 0) output += `… ${older} older (agx worker ls --all)\n`;
   }
   process.stdout.write(output);
   return 0;

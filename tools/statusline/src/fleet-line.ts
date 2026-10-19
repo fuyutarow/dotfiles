@@ -2,14 +2,14 @@ import type { RouteScan } from "./dispatch-runs.ts";
 
 // Only findings with a clearing command belong here. Historical counters stay in doctor.
 const ACTIONS: Record<string, string> = {
-  stale: "ws refresh",
-  abandoned: "ws gc --abandoned",
-  "legacy-empty": "ws gc --legacy",
-  "legacy-layout": "ws gc --legacy",
-  empty: "ws gc --include-unrecorded",
-  collectable: "ws gc --include-unrecorded",
+  stale: "agx ws refresh",
+  abandoned: "agx ws gc --abandoned",
+  "legacy-empty": "agx ws gc --legacy",
+  "legacy-layout": "agx ws gc --legacy",
+  empty: "agx ws gc --include-unrecorded",
+  collectable: "agx ws gc --include-unrecorded",
   "unlanded-72h": "mise run land",
-  "accepted-landed-present": "tkt gc",
+  "accepted-landed-present": "agx ticket gc",
 };
 
 /** One optional action row, assembled exclusively from owner-published facts. */
@@ -21,7 +21,7 @@ export function fleetLine(
   if (scan?.actions?.judgeWhy !== undefined)
     parts.push(`judge n/a (${scan.actions.judgeWhy})`);
   if ((scan?.actions?.judge ?? 0) > 0)
-    parts.push(`judge ${scan?.actions?.judge} (agx judge)`);
+    parts.push(`judge ${scan?.actions?.judge} (agx worker judge)`);
   if ((scan?.actions?.land ?? 0) > 0)
     parts.push(`land ${scan?.actions?.land} (mise run land)`);
   const commands = new Map<string, number>();

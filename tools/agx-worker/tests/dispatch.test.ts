@@ -76,7 +76,7 @@ function fixture() {
     writeFileSync(path, `#!/bin/sh\n${body.join("\n")}\n`);
     chmodSync(path, 0o755);
   };
-  shim("ws", [
+  shim("agx-ws", [
     `printf '%s\\n' "$@" > "$FAKE_WS_ARGS"`,
     'if [ "$FAKE_WS_FAIL" = "yes" ]; then echo "ws: /home/fuyu is not a valid local jj workspace" >&2; exit 1; fi',
     'slug="$2"',
@@ -270,9 +270,9 @@ test("dispatch uses machine output when readiness prints the reported install ch
 test.each([
   [
     "FAKE_WS_FAIL",
-    "ws add failed: ws: /home/fuyu is not a valid local jj workspace",
+    "agx ws add failed: ws: /home/fuyu is not a valid local jj workspace",
   ],
-  ["FAKE_WS_INVALID", "ws add returned an invalid workspace"],
+  ["FAKE_WS_INVALID", "agx ws add returned an invalid workspace"],
 ])(
   "dispatch names the cause and fails without starting a unit: %s",
   async (flag, cause) => {

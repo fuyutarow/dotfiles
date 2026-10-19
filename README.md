@@ -105,7 +105,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │   ├── rr/          # rr (= repo-retrieve): declared query-shape router over ccc / rg / Serena; src/ (CLI, ccc adapters, python helpers), retrieval.toml, tests/
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
 │   ├── agx/        # agx suite entry: process router only, no state or decision logic
-│   ├── agx-worker/ # agx worker / agx-worker: dispatch, run, check, ls, judge, stats, roster, doctor; existing agx-next records
+│   ├── agx-worker/ # agx worker / agx-worker: dispatch, run, check, ls, judge, stats, roster, doctor; existing worker records
 │   ├── jex/        # jex Q FILE...: zero-shot multi-label yes/no classifier through the shared Jev client
 │   ├── agx-ws/     # agx ws / agx-ws: repo-agnostic jj workspace lifecycle
 │   ├── agx-ticket/ # agx ticket / agx-ticket: ticket issuance, derived listing and collection

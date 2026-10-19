@@ -108,7 +108,7 @@ format.
 
 Dispatch worker rows show the roster row, elapsed time, cost, worker/workspace name and ticket.
 Session IDs remain in the data and are omitted from worker rows. Legacy `agx-<slug>` worker names
-display as `agt_<slug>`. The bottom row is optional: it lists pending judgments from this session (`judge N (agx judge)`), accepted runs with an unlanded workspace verdict (`land N (mise run land)`), remedy-named doctor findings, and `+N workers in other sessions`. Running workers already have their own rows.
+display as `agt_<slug>`. The bottom row is optional: it lists pending judgments from this session (`judge N (agx worker judge)`), accepted runs with an unlanded workspace verdict (`land N (mise run land)`), remedy-named doctor findings, and `+N workers in other sessions`. Running workers already have their own rows.
 
 Storage still reads the canonical `agents/hooks/storage-headroom.toml` as runtime data, resolved
 relative to this package rather than cwd. Only `storageLine` is imported from shared storage code.
@@ -218,8 +218,8 @@ can be checked independently of unrelated concurrent edits elsewhere in this rep
 
 The agx and fleet rows read `current-runs.json`, `workspace-verdicts.json`, and
 `doctor.json` under the agx state directory. Run appends publish current rows and
-session counts; `ws gc` and successful workspace creation/removal publish verdicts;
-`agx doctor` publishes complete findings. Rendering never starts a refresh for
+session counts; `agx ws gc` and successful workspace creation/removal publish verdicts;
+`agx worker doctor` publishes complete findings. Rendering never starts a refresh for
 these rows. Missing observations remain unknown and older observations retain
 their values. An idle file does not become stale just because time has passed:
 `current-runs.json` is stale only when its mtime precedes `records.jsonl`;
@@ -228,15 +228,15 @@ their values. An idle file does not become stale just because time has passed:
 and shows its original age. `agx-doctor.path` triggers a debounced singleton
 refresh after either diagnostic input changes.
 
-Workspace inventory totals remain available in `ws ls` and `agx doctor`. The statusline reads `records.jsonl` for completed-run judgments (the current-runs owner intentionally publishes only active and orphaned rows). `judge` counts unjudged runs that ended within the last 24 hours in the rendered dispatcher session. Without a session, it counts recent runs whose workspace belongs to the current repository, using the owner's repository roots and workspace membership; an unknown repository shows `judge n/a` with a reason. Missing, invalid and future end timestamps never count. Older history stays in `agx doctor`.
+Workspace inventory totals remain available in `agx ws ls` and `agx worker doctor`. The statusline reads `records.jsonl` for completed-run judgments (the current-runs owner intentionally publishes only active and orphaned rows). `judge` counts unjudged runs that ended within the last 24 hours in the rendered dispatcher session. Without a session, it counts recent runs whose workspace belongs to the current repository, using the owner's repository roots and workspace membership; an unknown repository shows `judge n/a` with a reason. Missing, invalid and future end timestamps never count. Older history stays in `agx worker doctor`.
 
 `land` joins accepted runs to the current repository's `workspace-verdicts.json` lines and counts only `unlanded` verdicts whose workspace directory still exists. Counts are runs, not workspaces. A landed verdict or `landed` judgment clears the landing item; a missing verdict does not imply unlanded work. Rendering performs no refresh or synchronous filesystem calls for these actions.
 
 Prepared standalone rows use repository scope even when agent sessions are discovered. Prepared views carry an action-scope protocol marker so historical counters cannot survive in an older cached view; a selected session rebuilds its own actions.
 
 The anomaly suffix counts only workspace/ticket findings with clearing actions from
-`agx doctor`, labeled with those commands (`ws refresh`, `ws gc …`, `tkt gc`, or
+`agx worker doctor`, labeled with those commands (`agx ws refresh`, `agx ws gc …`, `agx ticket gc`, or
 `mise run land`). Historical outside-home, unjudged, orphaned and legacy counters
-remain available in `agx doctor`; they do not appear in that suffix.
+remain available in `agx worker doctor`; they do not appear in that suffix.
 
 When `gpu-owner.json` has `unresponsiveSince` or a failed probe (`consecutiveProbeMisses > 0`), the GPU segment on Sys shows `⚠ GPU stalled since HH:MM JST · gpu-sampler --check` instead of a utilization average. The timestamp is the recorded stall onset, or the failed attempt time when no onset is recorded, always in Asia/Tokyo. Paused probes add no warning. This only reads owner state; it never runs `nvidia-smi`. The sampler prepares this display for the normal fast read path. Source ages name the stale owner and never create a bottom row on their own.

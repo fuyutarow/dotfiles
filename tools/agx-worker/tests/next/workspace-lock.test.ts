@@ -434,7 +434,7 @@ for (const [signal, exit] of [
     expect(code).toBe(2);
     expect(stderr).toContain("no vendor session");
     expect(stderr).toContain("ended stopped");
-    expect(stderr).toContain(`agx run ${f.ticket}`);
+    expect(stderr).toContain(`agx worker run ${f.ticket}`);
     expect(await Bun.file(f.log).text()).toBe(before);
   });
 }

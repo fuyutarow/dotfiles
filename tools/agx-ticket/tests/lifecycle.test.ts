@@ -64,7 +64,7 @@ async function fixture(custom?: string) {
   const shim = join(bin, "agx");
   await writeFile(
     shim,
-    `#!${bun}\nif (process.argv.slice(2).join(' ') !== 'ls --json --all') process.exit(9);\nprocess.stdout.write(await Bun.file(process.env.TKT_RECORDS).text());\n`,
+    `#!${bun}\nif (process.argv.slice(2).join(' ') !== 'worker ls --json --all') process.exit(9);\nprocess.stdout.write(await Bun.file(process.env.TKT_RECORDS).text());\n`,
   );
   await chmod(shim, 0o755);
   await writeFile(records, "[]");
@@ -96,7 +96,7 @@ test("new accepts a hyphenated slug and refuses underscores and uppercase before
   for (const slug of ["arena_g3", "Arena-G3"]) {
     const refused = await f.tkt(["new", slug]);
     expect(refused.code).toBe(1);
-    expect(refused.err).toContain("tkt new arena-g3");
+    expect(refused.err).toContain("agx ticket new arena-g3");
   }
   expect(
     await Bun.file(join(f.repo, ".agents/tickets/arena_g3.md")).exists(),

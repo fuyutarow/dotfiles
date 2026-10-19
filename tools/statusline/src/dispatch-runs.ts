@@ -48,7 +48,7 @@ export interface RouteRun {
       }
     | undefined;
 }
-// Lost rows come from the same health classification as agx doctor (orphaned),
+// Lost rows come from the same health classification as agx worker doctor (orphaned),
 // excluding pre-lease history classified as legacy.
 const readText = fromThrowable((path: string) => readFileSync(path, "utf8"));
 function doingOf(dir: string, runId: string): RouteRun["doing"] {
@@ -152,7 +152,7 @@ export async function agxJobRunsAsync(
       : [];
   });
 }
-/** Read the cached agx ls rows for Run display and count malformed rows. */
+/** Read the cached agx worker ls rows for Run display and count malformed rows. */
 export async function agxRouteRunsAsync(
   env: NodeJS.ProcessEnv = process.env,
   sessionId?: string,

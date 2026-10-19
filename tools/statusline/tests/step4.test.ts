@@ -158,7 +158,7 @@ test("completed session judgments, accepted unlanded runs and remedy findings sh
       const scan = await readCoreRuns({ AGX_STATE_DIR: root }, "here", root);
       expect(scan.actions).toEqual({ judge: 1, land: 1 });
       expect(output(scan).split("\n").at(-1)).toBe(
-        "judge 1 (agx judge) · land 1 (mise run land) · ⚠ tkt gc 14",
+        "judge 1 (agx worker judge) · land 1 (mise run land) · ⚠ agx ticket gc 14",
       );
       expect(spawned).not.toHaveBeenCalled();
     })
@@ -372,7 +372,7 @@ test("1000 old unjudged runs and foreign sessions render only judge 2", async ()
     { kind: "judged", id: "judged", decision: "reject" },
   ]);
   const scan = await readCoreRuns({ AGX_STATE_DIR: root }, "here", root);
-  expect(output(scan).split("\n").at(-1)).toBe("judge 2 (agx judge)");
+  expect(output(scan).split("\n").at(-1)).toBe("judge 2 (agx worker judge)");
 });
 
 async function verdictFixture(
@@ -454,14 +454,14 @@ test("standalone scopes recent judgments to repository including published exter
         undefined,
         root + "/subdir",
       );
-      expect(fleetLine(scan)).toStartWith("judge 2 (agx judge)");
+      expect(fleetLine(scan)).toStartWith("judge 2 (agx worker judge)");
       const unknown = await readCoreRuns(
         { AGX_STATE_DIR: root },
         undefined,
         "/unknown",
       );
       expect(fleetLine(unknown)).toContain(
-        "judge n/a (repository scope unavailable; agx doctor)",
+        "judge n/a (repository scope unavailable; agx worker doctor)",
       );
     })
     .finally(() => {

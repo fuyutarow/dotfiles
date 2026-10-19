@@ -23,6 +23,6 @@ test("agx-worker run --help explains continuation amendments", () => {
   );
   expect(result.exitCode).toBe(0);
   expect(result.stdout.toString()).toContain(
-    "To amend a continuation, edit the ticket file, then `agx run TICKET --continue RUN`.",
+    "To amend a continuation, edit the ticket file, then `agx worker run TICKET --continue RUN`.",
   );
 });

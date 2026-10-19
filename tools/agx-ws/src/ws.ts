@@ -211,7 +211,7 @@ const gcCommand = command(
     ignoreArgv: rejectPrototypeFlag,
     help: {
       description:
-        "Enumerate jj workspaces. Print TSV: path, kind, verdict, change id, age, reason. Legacy workspaces are report-only until --legacy. .ws.toml keep is always protected; ws add is the only creator.",
+        "Enumerate jj workspaces. Print TSV: path, kind, verdict, change id, age, reason. Legacy workspaces are report-only until --legacy. .ws.toml keep is always protected; agx ws add is the only creator.",
     },
     flags: {
       dryRun: { type: Boolean, description: "report only; remove nothing" },
@@ -286,7 +286,7 @@ const doctorCommand = command(
     if (!done.ok) {
       fail(done.error);
       if (process.env.AGX_DOCTOR_QUIET !== "1")
-        process.stderr.write("agx-ws doctor: error\n");
+        process.stderr.write("agx ws doctor: error\n");
       return;
     }
     const output = doctorOutput(done.value);
@@ -297,13 +297,13 @@ const doctorCommand = command(
     }
     process.stdout.write(output.value);
     if (process.env.AGX_DOCTOR_QUIET !== "1")
-      process.stderr.write(`agx-ws doctor: ${done.value.length} finding(s)\n`);
+      process.stderr.write(`agx ws doctor: ${done.value.length} finding(s)\n`);
     process.exitCode = done.value.length === 0 ? 0 : 1;
   },
 );
 
 void cli({
-  name: "ws",
+  name: "agx-ws",
   version: packageJson.version,
   help: { description: "Create, inspect and collect repository workspaces." },
   strictFlags: true,

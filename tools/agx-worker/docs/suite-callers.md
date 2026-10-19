@@ -1,10 +1,12 @@
 # AGX suite caller inventory — 2026-10-19
 
-Read-only search of the workspace, registered repositories (`scripts/workspace-repos.ts`), and the rendered global CLAUDE.md. Includes command argv arrays, executable callers, tests, documentation, and historical records; a match is not a claim that a historical instruction is executed. This inventory predates the suite command cuts and is retained as historical caller evidence.
+Read-only search of the workspace, registered repositories (`scripts/workspace-repos.ts`), and the rendered global CLAUDE.md. Includes command argv arrays, executable callers, tests, documentation, and historical records; a match is not a claim that a historical instruction is executed. The accepted interfaces are `agx worker|ticket|ws ARGS` and `agx-worker|agx-ticket|agx-ws ARGS`. Old top-level verbs, `agx-next`, `agx-run`, `agx jev`, `agx-worker jev`, and the bare `ws` / `tkt` bins are removed. `jex` owns the Jev client interface.
 
 Query: `\bagx[ \t]+(run|dispatch|check|ls|judge|stats|roster|doctor)\b|["']agx["'][ \t]*,[ \t]*["'](run|dispatch|check|ls|judge|stats|roster|doctor)["']|\bagx-run\b`
 
 Raw output, including snippets and pre-edit matches: `/tmp/agx-suite-callers.json`. Entries below list every matched file and line; a count means matched lines, not invocations. The pre-edit workspace inventory is retained so moved callers are not lost.
+
+The previously inventoried external DX caller declared `["agx", "jev"]`; that external repository is outside this checkout. This repository no longer provides either Jev command; use `jex`.
 
 ## Before rename: /home/fuyu/dotfiles.ws/ws_agx-suite-thin
 

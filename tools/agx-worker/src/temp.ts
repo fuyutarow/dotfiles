@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { z } from "../../../agents/hooks/zod.ts";
 import { err, fromThrowable, ok, Result } from "neverthrow";
 
-// Every agx run owns one directory under the temp root, named by its run id, with a sibling
+// Every agx worker run owns one directory under the temp root, named by its run id, with a sibling
 // `<run-id>.pid` that records the owning agx process. The owner removes the directory when the
 // run ends; a SIGKILLed owner leaves both behind and the next run's sweep removes them once the
 // recorded pid is dead.

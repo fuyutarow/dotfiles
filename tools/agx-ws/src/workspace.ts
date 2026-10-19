@@ -404,7 +404,7 @@ async function collectWorkspace(
     {
       pid: process.pid,
       host: hostname(),
-      what: "ws gc land-temp",
+      what: "agx ws gc land-temp",
       since: Temporal.Now.instant().toString(),
     },
     { waitMs: 0 },
@@ -478,7 +478,7 @@ async function readyWorkspace(
 
 export async function add(options: AddOptions): Promise<Attempt<string>> {
   enterStep("validate workspace and read configuration");
-  const slug = validateSlug(options.slug, "ws add");
+  const slug = validateSlug(options.slug, "agx ws add");
   if (!slug.ok) return slug;
   const name = `ws_${slug.value}`;
   const repo = resolveRepo(options.repo);
@@ -503,7 +503,7 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
   enterStep("acquire workspace store lock");
   const result = await withLock(
     repo.value,
-    `ws add ${options.slug}`,
+    `agx ws add ${options.slug}`,
     async () => {
       enterStep("check workspace registration");
       const names = await workspaceNames(repo.value);
@@ -580,7 +580,7 @@ export async function refresh(options: {
   const pre = common(repo.value);
   if (!pre.ok) return pre;
   const dir = join(repo.value.wsRoot, name.value);
-  return withLock(repo.value, `ws refresh ${options.slug}`, async () => {
+  return withLock(repo.value, `agx ws refresh ${options.slug}`, async () => {
     const owner = jjWorkspace(dir);
     if (!owner.ok) return owner;
     if (
@@ -617,7 +617,7 @@ export async function remove(options: {
   if (!existsSync(dir)) return bad(`${dir} does not exist`);
   const result = await withLock(
     repo.value,
-    `ws rm ${options.slug}`,
+    `agx ws rm ${options.slug}`,
     async () => {
       const names = await workspaceNames(repo.value);
       if (!names.ok) return names;
@@ -663,16 +663,16 @@ export type RunRecord = z.output<typeof RunRecord>;
 async function agxRecords(cwd: string): Promise<Attempt<RunRecord[]>> {
   if (Bun.which("agx") === null)
     return bad("agx is not on PATH: mise run deps");
-  const ran = await exec(["agx", "ls", "--json"], cwd);
-  if (!ran.ok) return bad(`agx ls --json: ${msg(ran)}`);
+  const ran = await exec(["agx", "worker", "ls", "--json"], cwd);
+  if (!ran.ok) return bad(`agx worker ls --json: ${msg(ran)}`);
   if (ran.value.code !== 0)
     return bad(
-      `agx ls --json failed (exit ${ran.value.code}): ${ran.value.err.trim()}`,
+      `agx worker ls --json failed (exit ${ran.value.code}): ${ran.value.err.trim()}`,
     );
   const json = jsonOf(z.array(RunRecord)).safeParse(ran.value.out);
   return json.success
     ? good(json.data)
-    : bad(`agx ls --json: unexpected output: ${json.error.message}`);
+    : bad(`agx worker ls --json: unexpected output: ${json.error.message}`);
 }
 
 const realCache = new Map<string, string>();
@@ -1227,7 +1227,7 @@ export async function adopt(
   };
   if (options.dryRun) return run();
   const pre = common(repo);
-  return pre.ok ? withLock(repo, "ws adopt", run) : pre;
+  return pre.ok ? withLock(repo, "agx ws adopt", run) : pre;
 }
 
 /** Freeze one real trunk commit for the whole repo; root is not a usable integration branch. */
@@ -1837,7 +1837,7 @@ export async function gc(options: GcOptions): Promise<Attempt<GcResult>> {
       if (c.collect && allowed && !options.dryRun) {
         const done = await withLock<Classification>(
           repo,
-          `ws gc ${ws.name}`,
+          `agx ws gc ${ws.name}`,
           async () => {
             // Refresh every verdict input after acquiring the lock, including policy and runs.
             const currentConfig = await readConfig(repo, true);
@@ -1977,7 +1977,7 @@ export type DoctorWorkspaceRow = {
   ageMs: number | undefined;
 };
 
-/** Read-only inventory built from the same workspaces and classifier as `ws gc --dry-run`. */
+/** Read-only inventory built from the same workspaces and classifier as `agx ws gc --dry-run`. */
 export async function doctorInventory(
   root = resolve(import.meta.dir, "../../.."),
   findingsOnly = false,
@@ -2003,7 +2003,7 @@ export async function doctorInventory(
     if (!trunk.ok) return trunk;
     const candidates = await workspaces(repo);
     if (!candidates.ok) return candidates;
-    // agx ls is a global run inventory, independent of repository cwd.
+    // agx worker ls is a global run inventory, independent of repository cwd.
     records ??= await agxRecords(repo.backing);
     if (!records.ok) return records;
     for (const ws of candidates.value) {
@@ -2053,7 +2053,7 @@ export async function doctor(): Promise<Attempt<string[]>> {
   return good(doctorFindings(inventory.value));
 }
 
-/** Findings count workspaces that the unattended `ws gc --all --legacy` cannot collect. */
+/** Findings count workspaces that the unattended `agx ws gc --all --legacy` cannot collect. */
 export function doctorFindings(rows: DoctorWorkspaceRow[]): string[] {
   const findings: string[] = [];
   for (const row of rows) {
@@ -2079,23 +2079,23 @@ export function doctorFindings(rows: DoctorWorkspaceRow[]): string[] {
     };
     if (c.verdict === "stale") {
       const slug = row.name.startsWith("ws_") ? row.name.slice(3) : row.name;
-      emit("stale", `ws refresh ${slug} --repo ${row.repo}`);
+      emit("stale", `agx ws refresh ${slug} --repo ${row.repo}`);
       continue;
     }
     if (c.verdict === "abandoned") {
       emit(
         "abandoned",
-        `ws gc --abandoned${row.kind === "legacy" ? " --legacy" : ""} --repo ${row.repo}`,
+        `agx ws gc --abandoned${row.kind === "legacy" ? " --legacy" : ""} --repo ${row.repo}`,
       );
     } else if (row.kind === "legacy") {
       emit(
         c.verdict === "empty" ? "legacy-empty" : "legacy-layout",
-        `ws gc --legacy --repo ${row.repo}`,
+        `agx ws gc --legacy --repo ${row.repo}`,
       );
     } else if (c.verdict === "empty") {
-      emit("empty", `ws gc --include-unrecorded --repo ${row.repo}`);
+      emit("empty", `agx ws gc --include-unrecorded --repo ${row.repo}`);
     } else if (c.verdict === "landed") {
-      emit("collectable", `ws gc --include-unrecorded --repo ${row.repo}`);
+      emit("collectable", `agx ws gc --include-unrecorded --repo ${row.repo}`);
     }
     if (
       c.verdict === "unlanded" &&

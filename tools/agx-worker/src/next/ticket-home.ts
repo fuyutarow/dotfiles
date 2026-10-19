@@ -224,5 +224,5 @@ export async function ticketPlacement(
     const target = await realpath(home).catch(() => home);
     if (inside(resolve(path), home) && inside(physical, target)) return null;
   }
-  return `refused ticket path ${resolve(path)} is volatile or outside its home; declared home: ${ctx.home}; create a ticket with tkt new --repo ${ctx.root} <slug>`;
+  return `refused ticket path ${resolve(path)} is volatile or outside its home; declared home: ${ctx.home}; create a ticket with agx ticket new --repo ${ctx.root} <slug>`;
 }

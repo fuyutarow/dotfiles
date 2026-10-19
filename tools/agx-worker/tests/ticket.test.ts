@@ -27,7 +27,9 @@ describe("parseTicket", () => {
   test("no front matter is invalid and names the skeleton command", () => {
     const r = parseTicket("RESOURCE-CLASS(NONCOMPUTE): x\n# task\n");
     expect(r.kind).toBe("invalid");
-    expect(r.kind === "invalid" && r.reason).toContain("pass it to agx run");
+    expect(r.kind === "invalid" && r.reason).toContain(
+      "pass it to agx worker run",
+    );
   });
 
   test("a valid ticket: fields, defaults, and the prose without the front matter", () => {

@@ -947,7 +947,7 @@ describe("agx-worker run", () => {
     expect(humanLines).toHaveLength(31);
     expect(humanLines[0]).toStartWith("run-31 ");
     expect(humanLines[29]).toStartWith("run-2 ");
-    expect(humanLines[30]).toBe("… 2 older (agx ls --all)");
+    expect(humanLines[30]).toBe("… 2 older (agx worker ls --all)");
 
     const all = Bun.spawnSync(
       [process.execPath, "tools/agx-worker/src/next/cli.ts", "ls", "--all"],

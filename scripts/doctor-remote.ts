@@ -129,7 +129,7 @@ async function checkSshCmd(host: string): Promise<Finding> {
 
 async function checkCodexRoute(host: string): Promise<Finding> {
   // Match agx's codex-resource-probe command shape and the worker's startup flags. The helper has
-  // no remote diagnostic CLI, so run the probe over SSH. `agx run` defaults to workspace-write;
+  // no remote diagnostic CLI, so run the probe over SSH. `agx worker run` defaults to workspace-write;
   // ask Codex to execute `true` so PASS confirms the sandbox actually ran a command. Allow 30 s
   // for the model response; the helper's 5 s resource-probe bound is too short for this check.
   const r = await run(

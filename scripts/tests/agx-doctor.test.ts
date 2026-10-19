@@ -132,8 +132,8 @@ async function fixture(name: string) {
   }
   for (const [binName, source] of [
     ["agx-worker", "agx-worker/src/next/cli.ts"],
-    ["ws", "agx-ws/src/ws.ts"],
-    ["tkt", "agx-ticket/src/tkt.ts"],
+    ["agx-ws", "agx-ws/src/ws.ts"],
+    ["agx-ticket", "agx-ticket/src/tkt.ts"],
   ]) {
     await fs.symlink(
       join(import.meta.dir, "../../tools", source!),
@@ -161,7 +161,7 @@ async function fixture(name: string) {
   };
 }
 
-test("agx doctor clean fixture is silent on stdout and exits zero", async () => {
+test("agx worker doctor clean fixture is silent on stdout and exits zero", async () => {
   const f = await fixture("clean");
   const before = await Promise.all([
     jjOperations(f.dotfiles, f.env),
@@ -170,14 +170,14 @@ test("agx doctor clean fixture is silent on stdout and exits zero", async () => 
   const result = await run([process.execPath, ENTRY], f.dotfiles, f.env);
   expect(result.exitCode, result.stderr).toBe(0);
   expect(result.stdout).toBe("");
-  expect(result.stderr).toBe("agx doctor: 0 finding(s)\n");
+  expect(result.stderr).toBe("agx worker doctor: 0 finding(s)\n");
   // Ticket doctor reads global history once across both repositories.
   expect(
     (await Bun.file(f.env.DOCTOR_CALLS!).text())
       .trim()
       .split("\n")
-      .filter((line) => line === "ls --json --all"),
-  ).toEqual(["ls --json --all"]);
+      .filter((line) => line === "worker ls --json --all"),
+  ).toEqual(["worker ls --json --all"]);
   expect(await Bun.file(join(f.state, "records.jsonl")).exists()).toBe(false);
   expect(
     await Promise.all([
@@ -187,7 +187,7 @@ test("agx doctor clean fixture is silent on stdout and exits zero", async () => 
   ).toEqual(before);
 }, 30_000);
 
-test("agx doctor folds the run, workspace, and ticket owners with exact findings", async () => {
+test("agx worker doctor folds the run, workspace, and ticket owners with exact findings", async () => {
   const f = await fixture("findings");
   const events = [
     {
@@ -402,20 +402,20 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
   expect(result.exitCode, result.stderr).toBe(1);
   expect(result.stdout.trim().split("\n").toSorted()).toEqual(
     [
-      `agx-worker\t${f.repo}\torphan\torphaned\tagx judge orphan accept|reject`,
-      `agx-worker\t${f.repo}\tlost\tunjudged\tagx judge lost accept|reject`,
-      `agx-worker\t${f.repo}\tunjudged\tunjudged\tagx judge unjudged accept|reject`,
-      `agx-ws\t${f.repo}\tws_landed\tcollectable\tws gc --include-unrecorded --repo ${f.repo}`,
+      `agx-worker\t${f.repo}\torphan\torphaned\tagx worker judge orphan accept|reject`,
+      `agx-worker\t${f.repo}\tlost\tunjudged\tagx worker judge lost accept|reject`,
+      `agx-worker\t${f.repo}\tunjudged\tunjudged\tagx worker judge unjudged accept|reject`,
+      `agx-ws\t${f.repo}\tws_landed\tcollectable\tagx ws gc --include-unrecorded --repo ${f.repo}`,
       `agx-ws\t${f.repo}\tws_old\tunlanded-72h\tcd ${old} && mise run land`,
-      `agx-ws\t${f.repo}\tws_stale\tstale\tws refresh stale --repo ${f.repo}`,
-      `agx-ticket\t${f.repo}\taccepted\taccepted-landed-present\ttkt gc --repo ${f.repo}`,
+      `agx-ws\t${f.repo}\tws_stale\tstale\tagx ws refresh stale --repo ${f.repo}`,
+      `agx-ticket\t${f.repo}\taccepted\taccepted-landed-present\tagx ticket gc --repo ${f.repo}`,
       `agx-ticket\t${f.repo}\tstray\toutside-home\tmv ${join(f.repo, "stray.md")} ${f.tickets}/`,
     ].toSorted(),
   );
   // The unattended collector handles empty legacy workspaces; doctor reports only
   // workspaces requiring attention, so the legacy fixture must stay silent.
   expect(result.stdout).not.toContain(`\tlegacy\t`);
-  expect(result.stderr).toBe("agx doctor: 8 finding(s)\n");
+  expect(result.stderr).toBe("agx worker doctor: 8 finding(s)\n");
   const summary = await run([process.execPath, ENTRY, "--json"], f.dotfiles, {
     ...f.env,
     AGX_DISPATCHER_SESSION: "",
@@ -468,7 +468,7 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
   expect(ticketDoctor.exitCode).toBe(1);
   expect(ticketDoctor.stdout.trim().split("\n").toSorted()).toEqual(
     [
-      `agx-ticket\t${f.repo}\taccepted\taccepted-landed-present\ttkt gc --repo ${f.repo}`,
+      `agx-ticket\t${f.repo}\taccepted\taccepted-landed-present\tagx ticket gc --repo ${f.repo}`,
       `agx-ticket\t${f.repo}\tstray\toutside-home\tmv ${join(f.repo, "stray.md")} ${f.tickets}/`,
     ].toSorted(),
   );
@@ -570,7 +570,7 @@ test("invalid run history remains a failure and cannot publish a complete snapsh
     f.env,
   );
   expect(result.exitCode).toBe(2);
-  expect(result.stderr).toContain("invalid agx ls --json");
+  expect(result.stderr).toContain("invalid agx worker ls --json");
   expect(result.stdout).toContain('"complete":false');
   expect(await Bun.file(join(f.state, "doctor.json")).text()).toContain(
     '"complete":false',
@@ -616,7 +616,7 @@ process.exitCode = await child.exited;
     commands.filter((line) => line.includes('"workspace","list"')),
   ).toHaveLength(1);
   expect((await Bun.file(f.env.DOCTOR_CALLS!).text()).trim()).toBe(
-    "ls --json --all",
+    "worker ls --json --all",
   );
 });
 
@@ -699,14 +699,14 @@ test("doctor reports only current actionable runs and keeps history in ls --all"
         f.repo,
         "orphaned",
         "orphaned",
-        "agx judge orphaned accept|reject",
+        "agx worker judge orphaned accept|reject",
       ].join("\t"),
       [
         "agx-worker",
         f.repo,
         "unjudged",
         "unjudged",
-        "agx judge unjudged accept|reject",
+        "agx worker judge unjudged accept|reject",
       ].join("\t"),
       [
         "agx-ticket",

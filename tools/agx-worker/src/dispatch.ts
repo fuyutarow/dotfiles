@@ -24,7 +24,7 @@ const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
-    process.stderr.write("agx dispatch: unknown option '--__proto__'\n");
+    process.stderr.write("agx worker dispatch: unknown option '--__proto__'\n");
     process.exit(2);
   }
 };
@@ -146,12 +146,12 @@ async function listedRuns(
       error:
         result.err.trim() !== ""
           ? result.err.trim()
-          : `agx ls exited ${result.code}`,
+          : `agx worker ls exited ${result.code}`,
     };
   const parsed = Rows.safeParse(result.out);
   return parsed.success
     ? { rows: parsed.data }
-    : { error: "agx ls returned an invalid run list" };
+    : { error: "agx worker ls returned an invalid run list" };
 }
 
 function matches(row: RunRow, binding: DispatchBinding): boolean {
@@ -179,7 +179,7 @@ async function ticketSlug(path: string): Promise<Attempt<string>> {
   const name = parsed.success
     ? (parsed.data.name ?? basename(path, ".md"))
     : basename(path, ".md");
-  return validateSlug(name, "tkt new");
+  return validateSlug(name, "agx ticket new");
 }
 
 export async function dispatch(options: {
@@ -196,7 +196,9 @@ export async function dispatch(options: {
   const ticketPath = resolve(cwd, options.ticketPath);
   const ticket = await ticketSlug(ticketPath);
   if (!ticket.ok) {
-    process.stderr.write(`agx dispatch: ${errorMessage(ticket.error)}\n`);
+    process.stderr.write(
+      `agx worker dispatch: ${errorMessage(ticket.error)}\n`,
+    );
     return 1;
   }
   const slug = ticket.value;
@@ -204,7 +206,7 @@ export async function dispatch(options: {
   const ticketRepo = await defaultRepositoryRoot(dirname(ticketPath), env);
   if (ticketRepo.root === undefined) {
     process.stderr.write(
-      `agx dispatch: cannot resolve ticket repository: ${ticketRepo.error}\n`,
+      `agx worker dispatch: cannot resolve ticket repository: ${ticketRepo.error}\n`,
     );
     return 1;
   }
@@ -215,7 +217,7 @@ export async function dispatch(options: {
     : unitInput;
   if (!/^[A-Za-z0-9][A-Za-z0-9:_.@-]*$/u.test(unit)) {
     process.stderr.write(
-      `agx dispatch: invalid systemd unit name '${unitInput}'\n`,
+      `agx worker dispatch: invalid systemd unit name '${unitInput}'\n`,
     );
     return 2;
   }
@@ -224,7 +226,7 @@ export async function dispatch(options: {
     !["none", "read-only", "workspace-write"].includes(options.sandbox)
   ) {
     process.stderr.write(
-      "agx dispatch: --sandbox must be none, read-only, or workspace-write\n",
+      "agx worker dispatch: --sandbox must be none, read-only, or workspace-write\n",
     );
     return 2;
   }
@@ -234,7 +236,7 @@ export async function dispatch(options: {
     Bun.which("systemd-run", whichOptions) === null
   ) {
     process.stderr.write(
-      "agx dispatch: systemctl and systemd-run are required\n",
+      "agx worker dispatch: systemctl and systemd-run are required\n",
     );
     return 1;
   }
@@ -246,17 +248,17 @@ export async function dispatch(options: {
   const failures: string[] = [];
   if (active.code === 0)
     failures.push(
-      `agx dispatch: unit ${unit}.service is already running; repair: wait for it to end or choose --unit`,
+      `agx worker dispatch: unit ${unit}.service is already running; repair: wait for it to end or choose --unit`,
     );
   const ws = await invoke(
-    ["ws", "add", wsSlug, "--repo", ticketRepo.root, "--reuse", "--json"],
+    ["agx-ws", "add", wsSlug, "--repo", ticketRepo.root, "--reuse", "--json"],
     cwd,
     env,
   );
   if (ws.code !== 0) {
     const reason = ws.err.trim();
     process.stderr.write(
-      `agx dispatch: ws add failed: ${reason !== "" ? reason : `exit ${ws.code}`}\n`,
+      `agx worker dispatch: agx ws add failed: ${reason !== "" ? reason : `exit ${ws.code}`}\n`,
     );
     return ws.code === 0 ? 1 : ws.code;
   }
@@ -267,7 +269,7 @@ export async function dispatch(options: {
     basename(parsedWorkspace.data.workspace) !== `ws_${wsSlug}`
   ) {
     process.stderr.write(
-      "agx dispatch: ws add returned an invalid workspace path\n",
+      "agx worker dispatch: agx ws add returned an invalid workspace path\n",
     );
     return 1;
   }
@@ -276,13 +278,13 @@ export async function dispatch(options: {
   const workspaceRepo = await defaultRepositoryRoot(workspace, env);
   if (workspaceRepo.root === undefined) {
     process.stderr.write(
-      `agx dispatch: cannot verify ticket/workspace repositories: ${workspaceRepo.error}\n`,
+      `agx worker dispatch: cannot verify ticket/workspace repositories: ${workspaceRepo.error}\n`,
     );
     return 1;
   }
   if (ticketRepo.root !== workspaceRepo.root) {
     failures.push(
-      `agx dispatch: ticket repository ${ticketRepo.root} differs from workspace repository ${workspaceRepo.root}; repair: select a workspace in the ticket repository`,
+      `agx worker dispatch: ticket repository ${ticketRepo.root} differs from workspace repository ${workspaceRepo.root}; repair: select a workspace in the ticket repository`,
     );
   }
 
@@ -304,7 +306,7 @@ export async function dispatch(options: {
   if (checked.code !== 0)
     failures.push(
       (checked.err.trim() === "" ? undefined : checked.err.trim()) ??
-        "agx dispatch: preflight failed; repair: run agx worker check for the target tree",
+        "agx worker dispatch: preflight failed; repair: run agx worker check for the target tree",
     );
   if (failures.length > 0) {
     process.stderr.write(`${failures.join("\n")}\n`);
@@ -318,7 +320,7 @@ export async function dispatch(options: {
     unit,
   });
   if (!parsedBinding.success) {
-    process.stderr.write("agx dispatch: cannot create run binding\n");
+    process.stderr.write("agx worker dispatch: cannot create run binding\n");
     return 1;
   }
   const binding: DispatchBinding = parsedBinding.data;
@@ -326,7 +328,7 @@ export async function dispatch(options: {
   const before = await listedRuns(cwd, env);
   if (before.rows === undefined) {
     process.stderr.write(
-      `agx dispatch: cannot read run records: ${before.error}\n`,
+      `agx worker dispatch: cannot read run records: ${before.error}\n`,
     );
     return 1;
   }
@@ -360,7 +362,7 @@ export async function dispatch(options: {
   if (started.code !== 0) {
     const reason = started.err.trim();
     process.stderr.write(
-      `agx dispatch: ${unit}.service did not start: ${reason !== "" ? reason : `systemd-run exited ${started.code}`}\n`,
+      `agx worker dispatch: ${unit}.service did not start: ${reason !== "" ? reason : `systemd-run exited ${started.code}`}\n`,
     );
     return started.code === 0 ? 1 : started.code;
   }
@@ -381,7 +383,7 @@ export async function dispatch(options: {
     await Bun.sleep(100);
   }
   process.stderr.write(
-    `agx dispatch: ${unit}.service started but no matching run record appeared${listError === undefined ? "" : `: ${listError}`}\n`,
+    `agx worker dispatch: ${unit}.service started but no matching run record appeared${listError === undefined ? "" : `: ${listError}`}\n`,
   );
   return 1;
 }
@@ -403,7 +405,7 @@ export async function dispatchMain(commandArgs: string[]): Promise<void> {
         },
         continue: {
           type: String,
-          description: "previous agx run id to continue",
+          description: "previous agx worker run id to continue",
         },
       },
       strictFlags: true,
@@ -432,7 +434,9 @@ export async function dispatchMain(commandArgs: string[]): Promise<void> {
   );
   if (result.ok) process.exitCode = result.value;
   else {
-    process.stderr.write(`agx dispatch: ${errorMessage(result.error)}\n`);
+    process.stderr.write(
+      `agx worker dispatch: ${errorMessage(result.error)}\n`,
+    );
     process.exitCode = 1;
   }
 }

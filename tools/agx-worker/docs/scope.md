@@ -14,7 +14,7 @@ agx-worker has four jobs:
 - **Fold:** `ls`, `stats`, and `judge` read or append those events. `judge` appends a judgment; `ls` and `stats` fold existing records.
 
 Its worker commands are `dispatch`, `run`, `check`, `ls`, `judge`, `stats`, `roster`, and `doctor`.
-`dispatch` obtains its workspace through `ws add --json`; workspace creation stays in ws.
+`dispatch` obtains its workspace through `agx ws add --json`; workspace creation stays in `agx ws`.
 `roster TICKET` prints one selected row; legacy `roster --json` prints the full roster.
 `doctor` reports worker findings as JSON Lines.
 `check TICKET [--cd TREE]` runs the same input preflights as `run`: ticket schema and write-glob shape, ticket home, worker commit and premises, target mise environment/trust, running workspace, ownerless ref locks, sandbox, replacement/continuation references and roster eligibility. It prints every discoverable failure on its own line with a repair and exits 2 if any fail. A malformed input can prevent dependent checks, but independent checks still run. `dispatch` checks its selected workspace before starting the service and includes those failures alongside service/workspace findings. `check` also reports overlapping live write globs as warnings; it does not reserve writes, create a workspace, route a worker or launch a service. Launch-time commit and workspace-lock checks remain necessary because state can change after a check. The event log is the single durable run-event data file. A run also creates per-run brief, report, and progress artifacts alongside that log.
@@ -25,7 +25,7 @@ is its `default` workspace, even when `--cd` selects a secondary workspace. Rela
 resolve from that repository root; absolute homes are allowed. Revision and premise checks
 still use the dispatch workspace. A declared home is honoured even under `/tmp`. Both `check`
 and `run` refuse tickets outside the default and declared homes with exit 2 and a `WARN` naming
-the declared home and `tkt new`. Symlinks cannot make an outside file appear to belong to a home.
+the declared home and `agx ticket new`. Symlinks cannot make an outside file appear to belong to a home.
 Uncommitted changes to `.agx.toml` do not change the accepted home.
 
 Before launching a worker, `run` writes the input bytes to `runs/<id>/ticket.orig.md`, writes
@@ -45,28 +45,28 @@ Content snapshots still count changed files in the promised write surface and de
 outcome from the worker report and checks. A Git or jj worker directory records its own
 commit as `base_rev`, including a scratch directory initialized with `jj git init`.
 
-`agx-worker` owns fold and selection for `agx ls [SELECTOR] [--json]`, which accepts a run id, a unique run-id prefix, or an exact ticket name. Ticket selection returns that ticket's runs oldest first, with the newest run last. `agx ls --ticket TICKET --latest [--json]` prints only the latest run's `id`, `state`, `outcome`, `verify_exits`, and `report_path`; a continuation run is the latest run for its ticket and supersedes its parent. Callers read the report through `report_path`. Ambiguous ID prefixes and unmatched selectors exit 2 with one line naming candidates. `agx ls --wait SELECTOR` is the one way to wait, and it is a read-only fold, not state: it takes an initial read, then re-reads the records file at a bounded poll interval (`AGX_WAIT_POLL_MS`, default 1000). A run-id selector preserves immediate lookup and returns at once if that run is already `ended`. An exact ticket selector ignores runs already terminal on the initial read; it waits until a run that was running on that read, or a run first recorded later, becomes `ended` (including derived `lost`, so a missing final report cannot hide a finished run), then prints that run's row in `ls` format (JSON with `--json`). It writes no file, not even the fold snapshot, and an empty, ambiguous, or unmatched selector exits 2 at once. The acceptance view is composed outside agx-worker by `scripts/agx-accept.ts`; agx-worker deliberately does not render reports or inspect workspace diffs.
+`agx-worker` owns fold and selection for `agx worker ls [SELECTOR] [--json]`, which accepts a run id, a unique run-id prefix, or an exact ticket name. Ticket selection returns that ticket's runs oldest first, with the newest run last. `agx worker ls --ticket TICKET --latest [--json]` prints only the latest run's `id`, `state`, `outcome`, `verify_exits`, and `report_path`; a continuation run is the latest run for its ticket and supersedes its parent. Callers read the report through `report_path`. Ambiguous ID prefixes and unmatched selectors exit 2 with one line naming candidates. `agx worker ls --wait SELECTOR` is the one way to wait, and it is a read-only fold, not state: it takes an initial read, then re-reads the records file at a bounded poll interval (`AGX_WAIT_POLL_MS`, default 1000). A run-id selector preserves immediate lookup and returns at once if that run is already `ended`. An exact ticket selector ignores runs already terminal on the initial read; it waits until a run that was running on that read, or a run first recorded later, becomes `ended` (including derived `lost`, so a missing final report cannot hide a finished run), then prints that run's row in `ls` format (JSON with `--json`). It writes no file, not even the fold snapshot, and an empty, ambiguous, or unmatched selector exits 2 at once. The acceptance view is composed outside agx-worker by `scripts/agx-accept.ts`; agx-worker deliberately does not render reports or inspect workspace diffs.
 
 ## 2. agx-worker does not
 
 | concern | owner | why |
 | --- | --- | --- |
-| Ticket storage, history, and amendments | Plain files plus jj | Tickets are inputs; `agx check` validates an input and does not own its history. |
+| Ticket storage, history, and amendments | Plain files plus jj | Tickets are inputs; `agx worker check` validates an input and does not own its history. |
 | Write exclusion between workers | jj workspaces plus rebase at land | agx-worker only prints overlap `WARN` lines; it does not lock or block writes. |
-| Workspace creation, readiness, collection and landing | `ws` (`tools/agx-ws`) / `mise run land` | agx-worker consumes a tree via `--cd`; creating, readying and collecting trees is `ws` (`tools/agx-ws`). Landing belongs to `mise run land`. |
-| Durability or detach beyond the session | `systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run ...` | The caller chooses a service lifecycle; `-E NAME` carries the dispatcher's session into the unit. |
+| Workspace creation, readiness, collection and landing | `agx ws` (`tools/agx-ws`) / `mise run land` | agx-worker consumes a tree via `--cd`; creating, readying and collecting trees is `agx ws` (`tools/agx-ws`). Landing belongs to `mise run land`. |
+| Durability or detach beyond the session | `systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run ...` | The caller chooses a service lifecycle; `-E NAME` carries the dispatcher's session into the unit. |
 | CPU/GPU/RAM admission | `agent-resource-run` | Resource admission is outside agx-worker's routing and event-recording jobs. |
 | Commits and pushes | `mise run commit` / `mise run land` | agx-worker records worker outcomes; repository publication belongs to the repository tasks. |
-| Acceptance | A human or coordinator | Verify results are recorded facts; a human or coordinator reads them and decides acceptance. `agx judge` records the accept/reject decision and optional note; agx-worker does not decide acceptance. |
-| Notifications and recap demands | Hooks consuming `agx ls --json` | Hooks can derive notifications from folded state; they must run the installed suite entry, not a checkout's working copy. |
-| Waiting for a run | `agx ls --wait SELECTOR` (a read-only fold) | A stateful wait/detach command was removed on purpose; `ls --wait` only re-reads `records.jsonl` and writes nothing. |
+| Acceptance | A human or coordinator | Verify results are recorded facts; a human or coordinator reads them and decides acceptance. `agx worker judge` records the accept/reject decision and optional note; agx-worker does not decide acceptance. |
+| Notifications and recap demands | Hooks consuming `agx worker ls --json` | Hooks can derive notifications from folded state; they must run the installed suite entry, not a checkout's working copy. |
+| Waiting for a run | `agx worker ls --wait SELECTOR` (a read-only fold) | A stateful wait/detach command was removed on purpose; `ls --wait` only re-reads `records.jsonl` and writes nothing. |
 | Searching code | `rr` | Code retrieval belongs to the repository search tool, not agx-worker. |
 | Routing quality | Jev, corrected through the brief and roster `use_for` | Routing is Jev's choice among roster rows; agx-worker has no routing override. |
 | Worker continuity records | The worker harness | A dispatched worker receives a bounded environment without coordinator slot or vendor session IDs. It owns its brief and workspace and does not bind a continuation record. |
 
 ## 3. Derived, not stored
 
-Listed runs form the closed union `running{lease} | ended{outcome}`; `lost` is derived from owner lease evidence on every read without writing events or snapshots, while the `agx run` part traps SIGTERM/SIGINT/SIGHUP and records `ended{outcome: stopped, signal}`.
+Listed runs form the closed union `running{lease} | ended{outcome}`; `lost` is derived from owner lease evidence on every read without writing events or snapshots, while the `agx worker run` part traps SIGTERM/SIGINT/SIGHUP and records `ended{outcome: stopped, signal}`.
 
 - A replaced run is named in a later fresh dispatch's `supersedes`, supplied by `--supersedes RUN`
   or the ticket's `supersedes` field. A resumed vendor session uses `--continue RUN` and records

@@ -123,7 +123,7 @@ test("composer presents the latest ticket run from fixture records and fake jj",
   const cli = join(process.cwd(), "tools/agx-worker/src/next/cli.ts");
   await writeFile(
     join(bin, "agx"),
-    `#!/bin/sh\nif [ "\${AGX_FAKE_LEGACY:-}" = "1" ]; then\n  exec ${shellQuote(process.execPath)} ${shellQuote(cli)} ls --json\nfi\nexec ${shellQuote(process.execPath)} ${shellQuote(cli)} "$@"\n`,
+    `#!/bin/sh\nif [ "\${AGX_FAKE_LEGACY:-}" = "1" ]; then\n  exec ${shellQuote(process.execPath)} ${shellQuote(cli)} ls --json\nfi\n[ "$1" = worker ] || exit 2\nshift\nexec ${shellQuote(process.execPath)} ${shellQuote(cli)} "$@"\n`,
   );
   await writeFile(
     join(bin, "jj"),
@@ -152,9 +152,11 @@ test("composer presents the latest ticket run from fixture records and fake jj",
   expect(output).toContain("(fail) assertion failed");
   expect(output).toContain("latest report line");
   expect(output).toContain(`fixture diff for ${workspace}`);
-  expect(output).toContain('agx judge run-latest accept --note "<note>"');
+  expect(output).toContain(
+    'agx worker judge run-latest accept --note "<note>"',
+  );
   expect(output).toContain('mise run land -- <workspace-name> -m "<message>"');
-  expect(output).not.toContain("agx judge run-earlier");
+  expect(output).not.toContain("agx worker judge run-earlier");
 
   await rm(workspace, { recursive: true, force: true });
   const removed = await runProcess(

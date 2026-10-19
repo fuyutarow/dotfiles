@@ -13,7 +13,7 @@ const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 async function runDoctor(json: boolean): Promise<number> {
-  const targets = ["agx-worker", "ws", "tkt"];
+  const targets = ["agx-worker", "agx-ws", "agx-ticket"];
   const results = await Promise.all(
     targets.map(async (target) => {
       const result = await attempt(async () => {
@@ -61,7 +61,7 @@ async function runDoctor(json: boolean): Promise<number> {
     ) && records.every((record) => record.success);
   if (!complete)
     process.stderr.write(
-      "agx doctor: incomplete doctor output; inspect owner diagnostics\n",
+      "agx worker doctor: incomplete doctor output; inspect owner diagnostics\n",
     );
   {
     const findings = results.flatMap((result) =>
@@ -106,12 +106,12 @@ async function runDoctor(json: boolean): Promise<number> {
     }
     if (json) process.stdout.write(JSON.stringify(snapshot) + "\n");
   }
-  process.stderr.write(`agx doctor: ${count} finding(s)\n`);
+  process.stderr.write(`agx worker doctor: ${count} finding(s)\n`);
   return complete ? Math.max(...results.map((result) => result.exitCode)) : 2;
 }
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    process.stderr.write("agx doctor: unknown option --__proto__\n");
+    process.stderr.write("agx worker doctor: unknown option --__proto__\n");
     process.exit(2);
   }
 }
@@ -129,7 +129,7 @@ async function main(): Promise<void> {
     },
   });
   if (parsed._.length > 0) {
-    process.stderr.write("agx doctor: unexpected argument\n");
+    process.stderr.write("agx worker doctor: unexpected argument\n");
     process.exitCode = 2;
     return;
   }

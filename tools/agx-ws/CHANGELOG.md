@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0 — 2026-10-19
+
+- Remove the bare ws command alias; use agx ws or agx-ws.
+
 ## 0.9.1 — 2026-10-19
 
 - Probe graveyard filesystem type with GNU stat first and BSD stat as fallback.

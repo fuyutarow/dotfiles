@@ -1985,7 +1985,8 @@ export async function checkAgx(
   });
   if (result.missing)
     return fail("agx", "bun is not on PATH", "mise run install:tools");
-  if (result.timedOut) return warn("agx", "agx doctor timed out after 30s");
+  if (result.timedOut)
+    return warn("agx", "agx worker doctor timed out after 30s");
   const lines = result.out.split(/\r?\n/u).filter(Boolean);
   if (result.code === 0) {
     const summary = result.err.trim();
@@ -2001,7 +2002,7 @@ export async function checkAgx(
   const detail = result.err.trim();
   return warn(
     "agx",
-    detail !== "" ? detail : `agx doctor exited ${result.code}`,
+    detail !== "" ? detail : `agx worker doctor exited ${result.code}`,
   );
 }
 

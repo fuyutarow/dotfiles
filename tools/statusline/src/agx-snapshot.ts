@@ -355,7 +355,7 @@ async function readRunActions(
     land,
     judgeWhy:
       repo === undefined
-        ? "repository scope unavailable; agx doctor"
+        ? "repository scope unavailable; agx worker doctor"
         : undefined,
   };
 }

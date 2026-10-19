@@ -1041,7 +1041,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     const refused = await f.land([], { LAND_NO_ACCEPT: "1" });
     expect(refused.exitCode).toBe(1);
     expect(refused.stdout.toString()).toContain(
-      'agx judge run-from-workspace accept --note "<reason>"',
+      'agx worker judge run-from-workspace accept --note "<reason>"',
     );
     expect(
       (await f.log()).some(
@@ -1164,7 +1164,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     );
   });
 
-  test("land preflight reads an accepted judgment from agx ls records", async () => {
+  test("land preflight reads an accepted judgment from agx worker ls records", async () => {
     const f = await fixture();
     const state = join(f.main, "agx-next-state");
     await mkdir(state, { recursive: true });
@@ -1255,7 +1255,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     });
     expect(result.exitCode).toBe(1);
     expect(result.stdout.toString()).toContain(
-      'ticket landsplit has no current accept judgment; import legacy runs if needed with `agx stats --import-legacy`, inspect `agx ls --json`, then judge run `landsplit-resume` with `agx judge landsplit-resume accept --note "<reason>"`',
+      'ticket landsplit has no current accept judgment; import legacy runs if needed with `agx worker stats --import-legacy`, inspect `agx worker ls --json`, then judge run `landsplit-resume` with `agx worker judge landsplit-resume accept --note "<reason>"`',
     );
     expect(
       (await f.log()).some(
@@ -1264,7 +1264,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     ).toBe(false);
   });
 
-  test("land prints the agx judge command with supplied review context", async () => {
+  test("land prints the agx worker judge command with supplied review context", async () => {
     const f = await fixture();
     const state = join(f.main, "..", "agx-state");
     await mkdir(state, { recursive: true });
@@ -1278,7 +1278,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     });
     expect(refused.exitCode).toBe(1);
     expect(refused.stdout.toString()).toContain(
-      'agx judge reviewed-run accept --note "independent review independent-review"',
+      'agx worker judge reviewed-run accept --note "independent review independent-review"',
     );
     expect(await readFile(join(state, "runs.jsonl"), "utf8")).not.toContain(
       '"kind":"acceptance","run_id":"reviewed-run"',

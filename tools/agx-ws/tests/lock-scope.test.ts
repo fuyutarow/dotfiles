@@ -106,7 +106,7 @@ test("WS-GC-LOCK-SCOPE: dry runs neither acquire a held lock nor snapshot dirty 
   const owner = JSON.stringify({
     pid: process.pid,
     host: hostname(),
-    what: "ws add fixture-holder",
+    what: "agx ws add fixture-holder",
     since: Temporal.Now.instant().toString(),
   });
   await Bun.write(join(f.lock, "owner.json"), owner);
@@ -141,7 +141,7 @@ test("WS-GC-LOCK-SCOPE: add acquires during many slow read-only classifications"
 const args = process.argv.slice(2);
 if (args.includes("status") && args.includes("--ignore-working-copy")) {
   const holder = Bun.file(${JSON.stringify(join(f.lock, "owner.json"))});
-  if (await holder.exists() && (await holder.text()).includes('"what":"ws gc')) { process.stderr.write("classification holds store lock"); process.exit(9); }
+  if (await holder.exists() && (await holder.text()).includes('"what":"agx ws gc')) { process.stderr.write("classification holds store lock"); process.exit(9); }
   await Bun.write(${JSON.stringify(gate)}, "started");
   await Bun.sleep(700);
 }
@@ -197,7 +197,7 @@ const child = Bun.spawn([${JSON.stringify(realRip)}, ...process.argv.slice(2)], 
   expect(added.code, added.err).toBe(0);
   expect(elapsed).toBeLessThan(11_000);
   expect(added.err).toMatch(
-    /waiting [5-9]\d*s for ws gc ws_a \(pid \d+, host .+, since .+\) on /u,
+    /waiting [5-9]\d*s for agx ws gc ws_a \(pid \d+, host .+, since .+\) on /u,
   );
   const collected = await gc;
   expect(collected.code, collected.err).toBe(0);
@@ -270,17 +270,17 @@ test("WS-GC-LOCK-SCOPE: gc skips a repository locked by add", async () => {
     JSON.stringify({
       pid: process.pid,
       host: hostname(),
-      what: "ws add owner",
+      what: "agx ws add owner",
       since: Temporal.Now.instant().toString(),
     }),
   );
   const collected = await f.command(["gc", "--include-unrecorded"]);
   expect(collected.code, collected.err).toBe(0);
-  expect(collected.out).toContain("ws add owner");
+  expect(collected.out).toContain("agx ws add owner");
   expect(collected.out).toContain("collection skipped");
   expect(await Bun.file(join(f.dir("kept"), "a.txt")).exists()).toBe(true);
   const owner = jsonOf(z.object({ what: z.string() })).safeParse(
     await Bun.file(join(f.lock, "owner.json")).text(),
   );
-  expect(owner.success && owner.data.what).toBe("ws add owner");
+  expect(owner.success && owner.data.what).toBe("agx ws add owner");
 });

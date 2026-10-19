@@ -147,7 +147,9 @@ async function nextAgxRuns(
   );
   if (command.exitCode !== 0)
     return errAsync(
-      new Error(`agx ls --json failed: ${command.stderr.toString().trim()}`),
+      new Error(
+        `agx worker ls --json failed: ${command.stderr.toString().trim()}`,
+      ),
     );
   const parsed = jsonOf(
     z.array(
@@ -164,7 +166,7 @@ async function nextAgxRuns(
   if (!parsed.success)
     return errAsync(
       new Error(
-        `agx ls --json returned invalid output: ${parsed.error.message}`,
+        `agx worker ls --json returned invalid output: ${parsed.error.message}`,
       ),
     );
   return okAsync(
@@ -1026,7 +1028,8 @@ async function main(
         },
         review: {
           type: String,
-          description: "Independent agx run ID reviewing this acceptance.",
+          description:
+            "Independent agx worker run ID reviewing this acceptance.",
         },
         message: {
           type: String,
@@ -1132,7 +1135,7 @@ async function main(
       if (parsed._.length !== 1 || (parsed.flags.message?.trim() ?? "") === "")
         return reject("one workspace and -m <message> are required");
       if (parsed.flags.review?.trim() === "")
-        return reject("--review requires a non-empty agx run ID");
+        return reject("--review requires a non-empty agx worker run ID");
       const root = (yield* read(process.cwd(), ["workspace", "root"])).trim();
       const mainRoot = await mainCheckout(root);
       const release = queueLockHeld ? () => {} : await landLock(mainRoot);
@@ -1187,10 +1190,10 @@ async function main(
         if (!accept) {
           return reject(
             `ticket ${ticket} has no current accept judgment; import legacy runs if needed with ` +
-              `\`agx stats --import-legacy\`, inspect \`agx ls --json\`, then judge run \`${run_id}\` ` +
+              `\`agx worker stats --import-legacy\`, inspect \`agx worker ls --json\`, then judge run \`${run_id}\` ` +
               (parsed.flags.review === undefined
-                ? `with \`agx judge ${run_id} accept --note "<reason>"\``
-                : `with \`agx judge ${run_id} accept --note "independent review ${parsed.flags.review}"\``),
+                ? `with \`agx worker judge ${run_id} accept --note "<reason>"\``
+                : `with \`agx worker judge ${run_id} accept --note "independent review ${parsed.flags.review}"\``),
           );
         }
       }

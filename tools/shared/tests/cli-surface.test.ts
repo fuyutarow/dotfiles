@@ -97,38 +97,18 @@ for await (const packagePath of new Bun.Glob("tools/*/package.json").scan({
           const result = await run(entry, [flag]);
           expect(result).toEqual({
             stdout: `${Object.keys(pkg.bin ?? {})[0]} ${pkg.version}\n`,
-            stderr:
-              name === "agx-next"
-                ? "agx-next is deprecated; use agx-worker (agx worker) instead\n"
-                : "",
+            stderr: "",
             exit: 0,
           });
         }
         const plain = await run(entry, ["--help"]);
         expect(plain.exit, plain.stderr).toBe(0);
-        expect(plain.stderr).toBe(
-          name === "agx-next"
-            ? "agx-next is deprecated; use agx-worker (agx worker) instead\n"
-            : "",
-        );
+        expect(plain.stderr).toBe("");
         expect(plain.stdout).toContain(name === "agx" ? "TOOLS:" : "Show help");
         expect(plain.stdout).not.toContain("\u001B");
         for (const { tty, color } of environments) {
           const rendered = await run(entry, ["--help"], tty, color);
-          if (name === "agx-next") {
-            const warning =
-              "agx-next is deprecated; use agx-worker (agx worker) instead\n";
-            expect(`${rendered.stdout}${rendered.stderr}`).toContain(warning);
-            expect(rendered.stdout.replace(warning, "")).toBe(
-              plain.stdout.replace(warning, ""),
-            );
-            expect(rendered.stderr.replace(warning, "")).toBe(
-              plain.stderr.replace(warning, ""),
-            );
-            expect(rendered.exit).toBe(plain.exit);
-          } else {
-            expect(rendered).toEqual(plain);
-          }
+          expect(rendered).toEqual(plain);
         }
         // The forwarding wrapper must deliver the typed token to its downstream diagnostic.
         const extraEnv: NodeJS.ProcessEnv = {};

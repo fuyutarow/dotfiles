@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.0.0 — 2026-10-19
+
+- Remove the agx-next bin and Jev subcommand; use agx worker and jex
+
 ## 7.1.4 — 2026-10-19
 
 - Limit overlap warnings to the checked ticket repository

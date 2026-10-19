@@ -114,7 +114,7 @@ const pathExists = (dir: string): Promise<boolean> =>
     () => false,
   );
 
-describe("ws adopt", () => {
+describe("agx ws adopt", () => {
   test("WS-ADOPT-2: strips layout prefixes, preserves run suffixes and re-homes adopted changes", async () => {
     const path = await repo('trunk = "main"\n');
     for (const [old, slug] of [
@@ -452,7 +452,7 @@ process.exitCode = stage === "add" && args.includes("add") && code === 0 ? 1 : c
   });
 });
 
-describe("ws add", () => {
+describe("agx ws add", () => {
   test("JSON output stays machine readable through install chatter and reuse", async () => {
     const chatter =
       "30 packages installed …\n/home/fuyu/dotfiles.ws/ws_fleet-line-real'\n";
@@ -710,7 +710,7 @@ describe("ws add", () => {
     for (const slug of ["arena_g3", "Arena-G3"]) {
       const refused = await ws(["add", slug], path);
       expect(refused.code).toBe(1);
-      expect(refused.err).toContain("ws add arena-g3");
+      expect(refused.err).toContain("agx ws add arena-g3");
       expect(await Bun.file(join(wsDir(path, slug), ".jj/repo")).exists()).toBe(
         false,
       );
@@ -730,7 +730,7 @@ describe("ws add", () => {
   });
 });
 
-describe("ws refresh", () => {
+describe("agx ws refresh", () => {
   test("updates a rebased workspace without rerunning readiness or widening sparse", async () => {
     const path = await repo('ready = ["echo ready >> ready.out"]\n');
     expect((await ws(["add", "stale"], path)).code).toBe(0);
@@ -764,7 +764,7 @@ describe("ws refresh", () => {
   });
 });
 
-describe("ws rm", () => {
+describe("agx ws rm", () => {
   test("removes a landed workspace: forgotten and ripped", async () => {
     const path = await repo('trunk = "main"\n');
     await ws(["add", "clean"], path);
@@ -801,7 +801,7 @@ describe("ws rm", () => {
   });
 });
 
-describe("ws gc", () => {
+describe("agx ws gc", () => {
   test("reports narrowed sparse patterns even for an unrecorded workspace", async () => {
     const path = await repo('trunk = "main"\n');
     expect((await ws(["add", "narrow"], path)).code).toBe(0);
@@ -1178,7 +1178,7 @@ describe("gc integration branches", () => {
     const wrapper = join(realBin, "agx");
     await Bun.write(
       wrapper,
-      `#!/usr/bin/env bun\nconst p=Bun.spawn([process.execPath,${JSON.stringify(join(import.meta.dir, "../../agx/src/agx.ts"))},"worker",...process.argv.slice(2)],{stdin:"ignore",stdout:"inherit",stderr:"inherit"});process.exitCode=await p.exited;\n`,
+      `#!/usr/bin/env bun\nconst p=Bun.spawn([process.execPath,${JSON.stringify(join(import.meta.dir, "../../agx/src/agx.ts"))},...process.argv.slice(2)],{stdin:"ignore",stdout:"inherit",stderr:"inherit"});process.exitCode=await p.exited;\n`,
     );
     await chmod(wrapper, 0o755);
     const env = baseEnv({
@@ -1262,7 +1262,7 @@ describe("gc integration branches", () => {
     const wrapper = join(realBin, "agx");
     await Bun.write(
       wrapper,
-      `#!/usr/bin/env bun\nconst p=Bun.spawn([process.execPath,${JSON.stringify(join(import.meta.dir, "../../agx/src/agx.ts"))},"worker",...process.argv.slice(2)],{stdin:"ignore",stdout:"inherit",stderr:"inherit"});process.exitCode=await p.exited;\n`,
+      `#!/usr/bin/env bun\nconst p=Bun.spawn([process.execPath,${JSON.stringify(join(import.meta.dir, "../../agx/src/agx.ts"))},...process.argv.slice(2)],{stdin:"ignore",stdout:"inherit",stderr:"inherit"});process.exitCode=await p.exited;\n`,
     );
     await chmod(wrapper, 0o755);
     const env = baseEnv({

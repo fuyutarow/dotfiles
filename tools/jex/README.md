@@ -20,7 +20,7 @@ including command checks, are rejected; the caller owns verification.
 ```sh
 jex questions.toml report.md > ev.json
 jex --request questions.toml report.md # print the exact request; send nothing
-jex questions.toml report.md > ev.json && agx judge RUN accept --evidence ev.json
+jex questions.toml report.md > ev.json && agx worker judge RUN accept --evidence ev.json
 ```
 
 There are no subcommands. Flags may precede or follow operands; `--` permits paths
@@ -57,13 +57,12 @@ rejected.
 `JEX_JEV_URL` overrides the endpoint (then `AGX_NEXT_JEV_URL`, then
 `https://api.typesafe.ai/v1/systemone`). `JEX_JEV_MODEL` defaults to `jev-latest`.
 The shared Jev client uses `TYPESAFE_API_KEY`, then fnox, then the legacy TypeSafe
-key file, exactly as agx-run does; calls have a 30-second timeout and no retries.
+key file, exactly as agx-worker does; calls have a 30-second timeout and no retries.
 The request uses [TypeSafe Noul questions](https://docs.typesafe.ai/primitives/noul)
 and validates [Noul answers](https://docs.typesafe.ai/api) against the exact requested ids.
 
-`agx judge RUN accept|reject --evidence FILE` accepts repeatable evidence flags.
+`agx worker judge RUN accept|reject --evidence FILE` accepts repeatable evidence flags.
 Each file is read as UTF-8 and stored with its path, byte SHA-256, and full content
 in the single appended judgment record. Evidence is opaque: even probabilities
 below 0.5 do not override the caller's explicit decision. All evidence must be
 readable before a record is appended; no evidence flag preserves the old format.
-`agx jev` remains available, deprecated in favour of `jex`; its removal is separate work.

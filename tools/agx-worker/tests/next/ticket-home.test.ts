@@ -27,7 +27,7 @@ const CLI = resolve("tools/agx-worker/src/next/cli.ts");
 const text = (extra = "") =>
   `+++\nschema = 2\nname = "home"\noutcome = "recover ticket"\n${extra}\n[proposition]\nid = "HOME"\nclaim = "ticket is recoverable"\nrefuted_by = "bytes differ"\n+++\n原本\r\n`;
 
-test("new dispatch refuses nonconforming names with tkt new repair, without artifacts", async () => {
+test("new dispatch refuses nonconforming names with agx ticket new repair, without artifacts", async () => {
   const f = await fixture();
   for (const command of ["check", "run"]) {
     for (const name of ["design_g5", "Design-G5"]) {
@@ -35,14 +35,14 @@ test("new dispatch refuses nonconforming names with tkt new repair, without arti
       await writeFile(f.ticket, original);
       const result = await f.invoke([command, f.ticket]);
       expect(result.exit).toBe(2);
-      expect(result.err).toContain("tkt new design-g5");
+      expect(result.err).toContain("agx ticket new design-g5");
       expect(await readFile(f.ticket, "utf8")).toBe(original);
     }
   }
   const unnamed = join(f.directory, "design_g5.md");
   await writeFile(unnamed, text().replace('name = "home"\n', ""));
   expect((await f.invoke(["check", unnamed])).err).toContain(
-    "tkt new design-g5",
+    "agx ticket new design-g5",
   );
   const valid = join(f.directory, "arena-g3.md");
   await writeFile(valid, text().replace('name = "home"\n', ""));
@@ -312,7 +312,7 @@ test("an undeclared external ticket names its path even under an invalid reposit
   }
 });
 
-test("check refuses an undeclared /tmp ticket with refused, declared home and tkt new", async () => {
+test("check refuses an undeclared /tmp ticket with refused, declared home and agx ticket new", async () => {
   const f = await fixture();
   const stray = join(f.root, "stray.md");
   await writeFile(stray, text());
@@ -320,7 +320,7 @@ test("check refuses an undeclared /tmp ticket with refused, declared home and tk
   expect(result.exit).toBe(2);
   expect(result.err).toMatch(/^agx: refused ticket path/u);
   expect(result.err).toContain(f.directory);
-  expect(result.err).toContain("tkt new");
+  expect(result.err).toContain("agx ticket new");
   expect(
     await Bun.file(join(f.env.AGX_NEXT_STATE_DIR, "records.jsonl")).exists(),
   ).toBe(false);

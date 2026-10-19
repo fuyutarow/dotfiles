@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0 — 2026-10-19
+
+- Remove the legacy top-level Jev alias; use jex
+
 ## 0.6.3 — 2026-10-19
 
 - Remove temporary agx jev forwarding

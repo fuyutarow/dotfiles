@@ -289,7 +289,7 @@ describe("legacy enriched Run row", () => {
     expect(scan.runs.filter((run) => !run.alive)).toHaveLength(0);
   });
 
-  test("renders worker and workspace names from an agx run record", async () => {
+  test("renders worker and workspace names from an agx worker run record", async () => {
     const row = {
       id: "named-run",
       ticket: "fixture-ticket",
@@ -1330,7 +1330,7 @@ describe("legacy enriched Run row", () => {
     expect(first).not.toMatch(/cpu\+1/u);
   });
 
-  test("agx ls rows without started_at show explicit n/a elapsed", async () => {
+  test("agx worker ls rows without started_at show explicit n/a elapsed", async () => {
     const out = await render(
       join(scratch, "missing-start-time"),
       undefined,

@@ -4,6 +4,7 @@ Dispatch, inspect and judge worker runs. Invoke it directly or through `agx work
 
 The append-only records and their format remain at `$XDG_STATE_HOME/agx-next/records.jsonl`
 (default `~/.local/state/agx-next/records.jsonl`). Existing history is read unchanged.
+`agx-next` is the legacy state-directory name; there is no `agx-next` command. `agx-run` is removed.
 
 [Scope and ownership](docs/scope.md) · [Suite architecture](../spec/architecture.md) · [Caller inventory](docs/suite-callers.md)
 
@@ -27,9 +28,9 @@ agx-worker dispatch .agents/tickets/foo-bar.md [--ws other] [--unit agt_other-2]
 ```
 
 Dispatch defaults to the ticket's `name` (or its filename without `.md`): `ws_<name>` and
-`agt_<name>`. `--ws` overrides the workspace slug passed to `ws add`; `--unit` overrides the
+`agt_<name>`. `--ws` overrides the workspace slug passed to `agx ws add`; `--unit` overrides the
 systemd service name. The repository comes from the ticket's location, independently of the caller's
-working directory. Dispatch consumes `ws add --json` so readiness output cannot become a path.
+working directory. Dispatch consumes `agx ws add --json` so readiness output cannot become a path.
 Dispatch creates or reuses the workspace, refuses an active unit, verifies
 the ticket and workspace resolve to the same repository default workspace, then starts the unit.
 It waits for a run record containing its binding and prints the run id. It exits non-zero when the
@@ -40,4 +41,4 @@ unit cannot start or the record does not appear.
 `agx-worker doctor` diagnoses worker records only. Each finding is one JSON line with
 `tool`, `object` (repository and run id), `finding`, and `remedy`. Exit 0 means clean, 1 means
 findings, and 2 means incomplete diagnostics or usage failure. `scripts/agx-doctor.ts` composes
-this output with `ws doctor` and `tkt doctor`; composition is outside the suite dispatcher.
+this output with `agx ws doctor` and `agx ticket doctor`; composition is outside the suite dispatcher.

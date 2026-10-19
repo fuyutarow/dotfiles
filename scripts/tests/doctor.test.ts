@@ -110,7 +110,7 @@ test("mise doctor has an agx fleet row and reports its findings", async () => {
     return {
       code: 0,
       out: "",
-      err: "agx doctor: 0 finding(s)\n",
+      err: "agx worker doctor: 0 finding(s)\n",
       timedOut: false,
       missing: false,
     };

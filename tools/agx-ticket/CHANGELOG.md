@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 — 2026-10-19
+
+- Remove the bare tkt command alias; use agx ticket or agx-ticket.
+
 ## 0.2.0 — 2026-10-19
 
 - Emit ticket doctor findings in the shared JSON Lines shape

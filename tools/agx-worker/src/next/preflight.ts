@@ -107,8 +107,12 @@ export async function preflight(
         "use a relative glob without .., relative to --cd",
       );
   if (ticket !== undefined && continuationId === undefined) {
-    const slug = validateSlug(ticket.name ?? basename(path, ".md"), "tkt new");
-    if (!slug.ok) add(String(slug.error), "use the suggested tkt new command");
+    const slug = validateSlug(
+      ticket.name ?? basename(path, ".md"),
+      "agx ticket new",
+    );
+    if (!slug.ok)
+      add(String(slug.error), "use the suggested agx ticket new command");
   }
   const located = await ticketContext(dirname(resolve(path)));
   const repository =
@@ -122,7 +126,7 @@ export async function preflight(
     if (placement !== null)
       add(
         placement,
-        "create or move the ticket using tkt new in the declared home",
+        "create or move the ticket using agx ticket new in the declared home",
       );
   }
   const worker = await ticketContext(cwd);
@@ -249,7 +253,7 @@ export async function preflight(
   )
     add(
       `cannot supersede unknown run ${supersedes}`,
-      "select an existing run id from agx ls",
+      "select an existing run id from agx worker ls",
     );
   const loaded = await loadRoster(process.env.DISPATCH_ROSTER_PATH);
   if (!loaded.ok)
@@ -261,7 +265,7 @@ export async function preflight(
     continuationId === undefined
       ? undefined
       : await pinContinuation(continuationId, path, undefined, (reason) => {
-          add(reason, `start a fresh run with: agx run ${path}`);
+          add(reason, `start a fresh run with: agx worker run ${path}`);
         });
   const capacityPrevious =
     continuationId === undefined

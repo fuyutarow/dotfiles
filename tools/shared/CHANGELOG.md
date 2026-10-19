@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.4 — 2026-10-19
+
+- Notify the owner desktop once per recorded GPU stall through a systemd path watcher
+
 ## 0.15.3 — 2026-10-19
 
 - Fix GPU slot inventory PID column and refresh reasoned paused samples on inventory errors

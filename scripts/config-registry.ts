@@ -216,6 +216,16 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   ],
   [
     "not-mac",
+    "systemd/gpu-stall-notify.service",
+    ".config/systemd/user/gpu-stall-notify.service",
+  ],
+  [
+    "not-mac",
+    "systemd/gpu-stall-notify.path",
+    ".config/systemd/user/gpu-stall-notify.path",
+  ],
+  [
+    "not-mac",
     "systemd/prompt-archive.service",
     ".config/systemd/user/prompt-archive.service",
   ],

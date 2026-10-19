@@ -12,6 +12,23 @@ the declared core-tool PATH. Use the same absolute `XDG_STATE_HOME` for the serv
 and consumers if overriding the default `$HOME/.local/state/gpu-owner.json`.
 Consumers never start this service.
 
+`gpu-stall-notify.path` watches the default owner-state file and starts
+`gpu-stall-notify.service` when it changes. The service reads the recorded stall
+without querying the driver. Each new `unresponsiveSince` timestamp produces one
+desktop notification naming the UTC time and `gpu-sampler --check`: a Windows
+PowerShell toast on WSL, or `notify-send` on other Linux desktops. The WSL service
+resolves PowerShell on PATH, then the default Windows C: mount.
+
+Successful delivery commands are acknowledged separately in
+`gpu-stall-notified.json` beside the owner state, by atomic replacement. Healthy
+state (an omitted or null timestamp) does not notify. Restarting the service or
+repeated sampler writes do not repeat an acknowledged stall. Failed commands leave
+the stall pending for the next owner-state change; errors go to the user journal.
+Systemd serializes service invocations. As with desktop notifications generally,
+a successful command cannot prove the owner saw the toast; a crash between sending
+and saving the receipt can repeat it. If overriding `XDG_STATE_HOME`, also override
+the path unit's watched path and the notification service's environment.
+
 Each invocation checks the live `lslocks` rows for files matching `gpu.*` in
 `$XDG_RUNTIME_DIR/agent-resource/slots` before considering any driver query. A
 held GPU slot writes `paused: true`, the holder `{ slot, pid }`, and fresh

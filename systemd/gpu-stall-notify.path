@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch GPU owner state for recorded stalls
+
+[Path]
+PathChanged=%h/.local/state/gpu-owner.json
+Unit=gpu-stall-notify.service
+
+[Install]
+WantedBy=default.target

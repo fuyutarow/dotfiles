@@ -46,7 +46,8 @@
     "lint-ts-candidate": "agents/skills/wiring-mise-tasks/scripts/lint-ts-candidate.ts",
     "jex": "tools/jex/src/jex.ts",
     "xmsg": "tools/xmsg/src/xmsg.ts",
-    "agx-worker": "tools/agx-worker/src/next/cli.ts"
+    "agx-worker": "tools/agx-worker/src/next/cli.ts",
+    "preset": "tools/preset/src/preset.ts"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",

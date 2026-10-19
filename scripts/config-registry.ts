@@ -539,6 +539,7 @@ const OTHER: readonly Surface[] = [
       "tools/disk-reclaim/package.json",
       "tools/storage-headroom/package.json",
       "tools/prompt-archive/package.json",
+      "tools/preset/package.json",
       "tools/detect-japanese/package.json",
       "tools/statusline/package.json",
       "tools/serena-foreground/package.json",

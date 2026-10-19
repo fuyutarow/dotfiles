@@ -47,6 +47,11 @@ async function main(): Promise<void> {
     await help();
     return;
   }
+  // Temporary dx 0.1.4 compatibility; cut-agx-bins removes this at dx 0.1.5.
+  if (first === "jev") {
+    process.exitCode = await forwardPath("agx-worker", argv);
+    return;
+  }
   if (!tools.includes(first)) {
     process.stderr.write(
       `agx: unknown tool '${first}'; expected worker, ticket, ws\n`,

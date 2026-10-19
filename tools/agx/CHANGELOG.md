@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2 — 2026-10-19
+
+- Restore temporary agx jev forwarding for dx 0.1.4
+
 ## 0.6.1 — 2026-10-19
 
 - Keep suite help conformance after the split

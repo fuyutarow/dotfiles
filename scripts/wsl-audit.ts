@@ -65,6 +65,10 @@ const SWAP_USED_WARN_GB = 1; // swap use means the .wslconfig memory= cap is bei
 // sustained condition. 80% of a 3-sample mean is a real saturation signal; 80% of one sample is a
 // coin flip. host_cpu_max is carried alongside so a genuine spike stays visible without warning.
 const HOST_CPU_WARN_PCT = 80;
+// Native Windows performance counter: 100% is rated speed; boost can exceed it.
+// Low speed at idle is normal power saving, so only flag it under sustained load.
+const HOST_CPU_PERF_WARN_PCT = 90;
+const HOST_CPU_THROTTLE_LOAD_PCT = 50;
 // Judged on the 5-MINUTE window (some avg300), displayed as the 10-second one. avg10 tracks the
 // workload, not a fault: ccc indexing pushed guest IO PSI avg10 to 20.42 and raised a WARN while
 // the same instant read avg60=6.24 and avg300=3.39 — a burst, over before anyone could look. That
@@ -269,18 +273,21 @@ $os = Get-CimInstance Win32_OperatingSystem
 $c = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
 "host_c_total=" + $c.Size
 "host_c_free=" + $c.FreeSpace
-$cpuSamples = @(); $availSamples = @(); $readSamples = @()
+$cpuSamples = @(); $perfSamples = @(); $availSamples = @(); $readSamples = @()
 1..3 | ForEach-Object {
   $p = Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor | Where-Object { $_.Name -eq '_Total' }
+  $perf = Get-CimInstance Win32_PerfFormattedData_Counters_ProcessorInformation -Filter "Name='_Total'"
   $m = Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory
   $cpuSamples += $p.PercentProcessorTime
+  if ($null -ne $perf.PercentProcessorPerformance) { $perfSamples += $perf.PercentProcessorPerformance }
   $availSamples += $m.AvailableMBytes
   $readSamples += $m.PageReadsPersec
   if ($_ -lt 3) { Start-Sleep -Milliseconds 700 }
 }
-"host_cpu_pct=" + [int](($cpuSamples | Measure-Object -Average).Average)
+"host_cpu_pct=" + ($cpuSamples | Measure-Object -Average).Average.ToString([System.Globalization.CultureInfo]::InvariantCulture)
 "host_cpu_max=" + [int](($cpuSamples | Measure-Object -Maximum).Maximum)
 "host_cpu_n=" + @($cpuSamples).Count
+"host_cpu_perf_pct=" + $(if ($perfSamples.Count -eq 3) { ($perfSamples | Measure-Object -Average).Average.ToString([System.Globalization.CultureInfo]::InvariantCulture) } else { 'na' })
 "host_ram_avail=" + [int64]([int](($availSamples | Measure-Object -Average).Average)) * 1048576
 "host_pagereads=" + [int](($readSamples | Measure-Object -Average).Average)
 $vm = Get-Process -Name vmmemWSL
@@ -338,6 +345,7 @@ export type FindingKey =
   | "mem-avail"
   | "swap-used"
   | "host-cpu"
+  | "host-cpu-throttle"
   | "psi-cpu"
   | "psi-io"
   | "host-spin"
@@ -383,7 +391,7 @@ export function judge(
       f.push({
         level: "WARN",
         key: "guest-disk",
-        text: `guest / at ${pct.toFixed(0)}% used`,
+        text: `guest / at ${pct.toFixed(1)}% used`,
       });
     }
   }
@@ -411,6 +419,19 @@ export function judge(
   }
 
   const cpu = num(h, "host_cpu_pct");
+  const perf = num(h, "host_cpu_perf_pct");
+  if (
+    perf !== null &&
+    perf < HOST_CPU_PERF_WARN_PCT &&
+    cpu !== null &&
+    cpu >= HOST_CPU_THROTTLE_LOAD_PCT
+  ) {
+    f.push({
+      level: "WARN",
+      key: "host-cpu-throttle",
+      text: `host CPU throttling: processor performance ${perf}% mean of rated speed (<${HOST_CPU_PERF_WARN_PCT}%) with CPU time ${cpu}% (>=${HOST_CPU_THROTTLE_LOAD_PCT}%) — rated speed not reached under load; possible thermal or power limit`,
+    });
+  }
   if (cpu !== null && cpu > HOST_CPU_WARN_PCT) {
     f.push({
       level: "WARN",
@@ -502,8 +523,17 @@ export function judge(
   return f;
 }
 
+// Round only at the text boundary, including verdict thresholds and process CPU percentages.
+// The measured values and JSON output retain their full precision.
+function percentageText(text: string): string {
+  return text.replaceAll(
+    /-?\d+(?:\.\d+)?(?:e[+-]?\d+)?%/giu,
+    (pct) => `${Number(pct.slice(0, -1)).toFixed(1)}%`,
+  );
+}
+
 function reportLine(k: string, v: string): void {
-  console.log(`  ${k.padEnd(10)}${v}`);
+  console.log(`  ${k.padEnd(10)}${percentageText(v)}`);
 }
 
 function report(
@@ -537,7 +567,7 @@ function report(
     "disk",
     du === null || dt === null || da === null
       ? "?"
-      : `/ ${gb(du)} used of ${gb(dt)} (${((du / dt) * 100).toFixed(0)}%)   avail ${gb(da)}   IO PSI ${g.get("io_psi")}`,
+      : `/ ${gb(du)} used of ${gb(dt)} (${((du / dt) * 100).toFixed(1)}%)   avail ${gb(da)}   IO PSI ${g.get("io_psi")}`,
   );
   for (const k of ["top1", "top2", "top3"]) {
     const v = g.get(k);
@@ -550,6 +580,7 @@ function report(
   reportLine(
     "cpu",
     `${cpu ?? "?"}% mean of ${h.get("host_cpu_n") ?? "?"} (max ${h.get("host_cpu_max") ?? "?"}%)` +
+      `   processor performance ${num(h, "host_cpu_perf_pct") ?? "?"}% mean of rated speed` +
       `   uptime ${h.get("host_uptime_h") ?? "?"}h`,
   );
   const rt = num(h, "host_ram_total");
@@ -707,7 +738,8 @@ async function main(): Promise<void> {
     report(g, h, { alloc, apparent });
     console.log("---");
     for (const d of dead) console.log(`UNREACHABLE  ${d}`);
-    for (const f of findings) console.log(`${f.level}  ${f.text}`);
+    for (const f of findings)
+      console.log(`${f.level}  ${percentageText(f.text)}`);
     if (dead.length === 0 && findings.length === 0) {
       console.log("OK  every threshold clear");
     }

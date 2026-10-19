@@ -1,10 +1,9 @@
 // bun test for scripts/wsl-audit.ts — the guest+host resource audit.
 //
-// Layer 1 only (the house's "unit tests against the exported pure helpers" layer): judge(),
+// Unit tests against the exported pure helpers: judge(),
 // parseKv() and toMntPath() are pure functions over already-collected readings, so they are
-// host-independent and need no fixture binary. The transport legs are deliberately NOT tested
-// here — they were proven end-to-end against the real host over both ssh and interop, and a mock
-// of ssh would prove only that the mock works.
+// host-independent. A fixture ssh binary also checks text/JSON output through the CLI; it does
+// not validate Windows counters or the real ssh/interop transports.
 //
 // THE REASON THIS FILE EXISTS is the memory-PSI corroboration gate. That gate was added because
 // warning on memory PSI alone fired permanently on a healthy WSL2 guest (dropCache refaults, not
@@ -12,7 +11,11 @@
 // is indistinguishable from a deleted check, and it would sit in the monitor as dead code that
 // looks like coverage. So every corroboration branch is exercised in both directions.
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, chmod, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+import { jsonText } from "../../agents/hooks/zod";
 import { judge, parseKv, toMntPath } from "../wsl-audit";
 
 const GB = 1024 ** 3;
@@ -51,6 +54,7 @@ function healthyHost(over: Record<string, string> = {}): Map<string, string> {
       host_c_total: String(930 * GB),
       host_c_free: String(400 * GB),
       host_cpu_pct: "20",
+      host_cpu_perf_pct: "125",
       host_vmmem: String(39 * GB),
       host_cpu_max: "25",
       host_cpu_n: "3",
@@ -68,6 +72,123 @@ const keys = (g: Map<string, string>, h: Map<string, string>) =>
   judge(g, h)
     .map((f) => f.key)
     .toSorted();
+
+describe("wsl-audit — host CPU throttling", () => {
+  test.each([
+    ["125", "70", false],
+    ["70", "70", true],
+    ["70", "20", false],
+    ["89.9", "50", true],
+    ["90", "50", false],
+    ["70", "49", false],
+    ["70", "49.999", false],
+    ["na", "70", false],
+    ["", "70", false],
+    ["invalid", "70", false],
+    ["70", "na", false],
+  ])("performance %s with CPU time %s warns=%s", (perf, cpu, warns) => {
+    const h = parseKv(
+      `host_cpu_perf_pct=${perf}\nhost_cpu_pct=${cpu}\nhost_cpu_n=3`,
+    );
+    const findings = judge(healthyGuest(), h);
+    expect(findings.map((f) => f.key)).toEqual(
+      warns ? ["host-cpu-throttle"] : [],
+    );
+    if (warns) {
+      expect(findings[0]?.level).toBe("WARN");
+      expect(findings[0]?.text).toContain("<90%");
+      expect(findings[0]?.text).toContain(">=50%");
+    }
+  });
+
+  test("wsl-audit reports performance beside CPU time in text and in --json", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "wsl-audit-performance-"));
+    await using _cleanup = {
+      [Symbol.asyncDispose]: () => rm(dir, { recursive: true, force: true }),
+    };
+    const ssh = join(dir, "ssh");
+    const guest = [
+      ...healthyGuest({
+        disk_used: String(950 * GB),
+        top1: "worker 12.345% 10MB",
+      }),
+    ]
+      .map(([k, v]) => `${k}=${v}`)
+      .join("\n");
+    const host = [
+      ...healthyHost({
+        host_cpu_pct: "83.33333333333333",
+        host_cpu_perf_pct: "70.66666666666667",
+        host_cpu_max: "91.234",
+      }),
+    ]
+      .map(([k, v]) => `${k}=${v}`)
+      .join("\n");
+    await Bun.write(
+      ssh,
+      `#!${process.execPath}
+const host = process.argv.includes("audit-host");
+process.stdout.write(host ? ${JSON.stringify(host)} : ${JSON.stringify(guest)});
+`,
+    );
+    await chmod(ssh, 0o755);
+    for (const flags of [[], ["--json"]]) {
+      const proc = Bun.spawn(
+        [
+          process.execPath,
+          join(import.meta.dir, "../wsl-audit.ts"),
+          "--guest",
+          "audit-guest",
+          "--host",
+          "audit-host",
+          ...flags,
+        ],
+        {
+          env: { ...process.env, PATH: `${dir}:${process.env.PATH ?? ""}` },
+          stdout: "pipe",
+          stderr: "pipe",
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      const [out, err, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      expect(err).toBe("");
+      expect(code).toBe(0);
+      if (flags.length > 0) {
+        const parsed = jsonText.safeParse(out);
+        expect(parsed.success).toBe(true);
+        expect(parsed.data).toMatchObject({
+          host: {
+            host_cpu_pct: "83.33333333333333",
+            host_cpu_perf_pct: "70.66666666666667",
+          },
+          findings: [
+            { key: "guest-disk", level: "WARN" },
+            { key: "host-cpu-throttle", level: "WARN" },
+            { key: "host-cpu", level: "WARN" },
+          ],
+        });
+      } else {
+        expect(out).toContain(
+          "83.3% mean of 3 (max 91.2%)   processor performance 70.7% mean of rated speed",
+        );
+        expect(out).toContain("WARN  host CPU throttling:");
+        expect(out).toContain(
+          "performance 70.7% mean of rated speed (<90.0%) with CPU time 83.3% (>=50.0%)",
+        );
+        expect(out).toContain("worker 12.3% 10MB");
+        expect(out).toContain("(95.0%)");
+        expect(out).toContain("guest / at 95.0% used");
+        const percentages = out.match(/\d+(?:\.\d+)?%/gu) ?? [];
+        expect(percentages.length).toBeGreaterThan(0);
+        expect(percentages.every((pct) => /^\d+\.\d%$/u.test(pct))).toBe(true);
+      }
+    }
+  });
+});
 
 describe("judge — baseline", () => {
   test("a healthy pair produces no findings at all", () => {

@@ -53,7 +53,7 @@ if (verb === "show") {
   console.log("Result=" + current.result + "\\nExecMainStatus=" + current.status + "\\nActiveState=" + (current.result === "success" ? "inactive" : "failed"));
 }
 if (verb === "enable") {
-  current.active = "active";
+  if (args.includes("--now")) current.active = "active";
   await Bun.write(state, JSON.stringify(current));
 }
 `,
@@ -115,8 +115,10 @@ test("GPU-SAMPLER-TIMER: registry links both units and service invokes only the 
   expect(timer).toContain("Unit=gpu-sampler.service");
   expect(await deployGpuSampler(f.ctx, f.probe, true)).toBeUndefined();
   expect(await Bun.file(f.calls).text()).toBe(
-    "--user daemon-reload\n--user enable --now gpu-sampler.timer\n",
+    "--user daemon-reload\n--user enable gpu-sampler.timer\n",
   );
+  // Timer activation is owned by the registry-wide deployment pass.
+  await f.writeState("active");
   expect((await f.doctor()).code).toBe(0);
 });
 
@@ -160,6 +162,6 @@ test("GPU-SAMPLER-TIMER: deployment refuses undeclared units and reports enable 
     link(f.ctx, `systemd/${unit}`, join(f.home, ".config/systemd/user", unit));
   await f.writeState("inactive", "success", 0, "enable");
   expect((await deployGpuSampler(f.ctx, f.probe, true))?.message).toContain(
-    "enable --now gpu-sampler.timer failed",
+    "enable gpu-sampler.timer failed",
   );
 });

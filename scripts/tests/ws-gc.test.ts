@@ -53,7 +53,7 @@ if (verb === "show") {
   console.log("Result=" + current.result + "\\nExecMainStatus=" + current.status + "\\nActiveState=" + (current.result === "success" ? "inactive" : "failed"));
 }
 if (verb === "enable") {
-  current.active = "active";
+  if (args.includes("--now")) current.active = "active";
   await Bun.write(state, JSON.stringify(current));
 }
 `,
@@ -112,8 +112,10 @@ test("WS-GC-TIMER: registry links both units and the only service command uses s
   expect(timer).toContain("Unit=ws-gc.service");
   expect(await deployWsGc(f.ctx, f.probe, true)).toBeUndefined();
   expect(await Bun.file(f.calls).text()).toBe(
-    "--user daemon-reload\n--user enable --now ws-gc.timer\n",
+    "--user daemon-reload\n--user enable ws-gc.timer\n",
   );
+  // Timer activation is owned by the registry-wide deployment pass.
+  await f.writeState("active");
   expect((await f.doctor()).code).toBe(0);
 });
 
@@ -157,6 +159,6 @@ test("WS-GC-TIMER: deployment refuses undeclared units and reports enable failur
     link(f.ctx, `systemd/${unit}`, join(f.home, ".config/systemd/user", unit));
   await f.writeState("inactive", "success", 0, "enable");
   expect((await deployWsGc(f.ctx, f.probe, true))?.message).toContain(
-    "enable --now ws-gc.timer failed",
+    "enable ws-gc.timer failed",
   );
 });

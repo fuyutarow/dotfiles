@@ -1,5 +1,14 @@
 # Script changes
 
+## 2026-10-19 — start newly installed user timers
+
+`link:dots` snapshots declared timer paths before linking, enables every applicable
+timer, and starts inactive timers only when their unit path was absent before
+that deployment. Already installed inactive timers retain their stopped state,
+including after a link repair. Each start and preserved stop is reported by
+`link:dots` and relayed by `deploy` with its host. The ccc daemon activation rule
+is unchanged. These repo scripts have no separate package version.
+
 ## 2026-10-14 — land pushes after rebasing onto origin
 
 `mise run land` commits without an inline push, fetches `origin`, rebases `alpha`

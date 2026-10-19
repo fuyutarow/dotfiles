@@ -38,7 +38,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { access, realpath } from "node:fs/promises";
+import { access, lstat, realpath } from "node:fs/promises";
 import { hostname, homedir, release } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
@@ -718,7 +718,110 @@ export function ensureToolOwned(ctx: Ctx, p: string): void {
   say(`created (tool-owned, empty): ${p}`);
 }
 
-/** Enable the registry-linked timer; --check never talks to the user manager. */
+/** Snapshot before linkAll: an installed timer's inactivity is an intentional stop. */
+export async function captureDeclaredTimers(ctx: Ctx) {
+  if (ctx.os === "mac" || ctx.mode === "check") return [];
+  return Promise.all(
+    LINKS.filter(
+      ([when, , destination]) =>
+        applies(when, ctx.os) &&
+        dirname(destination) === ".config/systemd/user" &&
+        destination.endsWith(".timer"),
+    ).map(async ([, source, destination]) => {
+      const path = join(ctx.home, destination);
+      // lstat counts dangling links and masks as installed too; never infer a new
+      // installation from a missing target or from a changed symlink.
+      const state = await attempt(() => lstat(path));
+      const installed =
+        state.ok ||
+        !z.object({ code: z.literal("ENOENT") }).safeParse(state.error).success;
+      if (!state.ok && installed) {
+        ctx.failures ??= [];
+        ctx.failures.push(
+          new Error(`cannot inspect ${path}: ${errorMessage(state.error)}`),
+        );
+      }
+      return {
+        unit: destination.slice(destination.lastIndexOf("/") + 1),
+        source,
+        path,
+        installed,
+      };
+    }),
+  );
+}
+
+/** Enable every declared timer, activating only timers absent before this deploy. */
+export async function deployDeclaredTimers(
+  ctx: Ctx,
+  timers: Awaited<ReturnType<typeof captureDeclaredTimers>>,
+  probe = async (args: string[]) => {
+    const child = Bun.spawn(["systemctl", "--user", ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 10_000,
+    });
+    const [out, err, code] = await Promise.all([
+      child.stdout.text(),
+      child.stderr.text(),
+      child.exited,
+    ]);
+    return { code, out: `${out}${err}`.trim() };
+  },
+  available?: boolean,
+  report: (line: string) => void = say,
+): Promise<Error | undefined> {
+  if (ctx.os === "mac" || ctx.mode === "check") return undefined;
+  const systemd =
+    available ??
+    (Bun.which("systemctl") !== null &&
+      Bun.which("systemctl") !== undefined &&
+      (await access("/run/systemd/system").then(
+        () => true,
+        () => false,
+      )));
+  if (!systemd) return undefined;
+  const run = async (args: string[]) => {
+    const result = await probe(args);
+    return result.code === 0
+      ? undefined
+      : new Error(
+          `systemctl --user ${args.join(" ")} failed (exit ${result.code}): ${result.out}; repair: mise run link:dots`,
+        );
+  };
+  const reloadError = await run(["daemon-reload"]);
+  if (reloadError !== undefined) return reloadError;
+  for (const timer of timers) {
+    const source = await realpath(join(ctx.dotfiles, timer.source)).catch(
+      () => null,
+    );
+    const target = await realpath(timer.path).catch(() => null);
+    if (source === null || target !== source)
+      return new Error(
+        `${timer.unit} is not the declared link; repair: mise run link:dots`,
+      );
+    const enableError = await run(["enable", timer.unit]);
+    if (enableError !== undefined) return enableError;
+    const active = await probe(["is-active", timer.unit]);
+    if (active.code === 0) continue;
+    if (active.code !== 3)
+      return new Error(
+        `systemctl --user is-active ${timer.unit} failed (exit ${active.code}): ${active.out}`,
+      );
+    if (timer.installed) {
+      report(
+        `left inactive: ${timer.unit} (already installed before deploy; user stop preserved)`,
+      );
+      continue;
+    }
+    const startError = await run(["start", timer.unit]);
+    if (startError !== undefined) return startError;
+    report(`started: ${timer.unit} (first installation)`);
+  }
+  return undefined;
+}
+
+/** Enable the registry-linked timer; activation belongs to deployDeclaredTimers. */
 export async function deployWsGc(
   ctx: Ctx,
   probe = async (args: string[]) => {
@@ -760,7 +863,7 @@ export async function deployWsGc(
         `${unit} is not the declared link; repair: mise run link:dots`,
       );
   }
-  for (const args of [["daemon-reload"], ["enable", "--now", "ws-gc.timer"]]) {
+  for (const args of [["daemon-reload"], ["enable", "ws-gc.timer"]]) {
     const result = await probe(args);
     if (result.code !== 0)
       return new Error(
@@ -813,10 +916,7 @@ export async function deployGpuSampler(
         `${unit} is not the declared link; repair: mise run link:dots`,
       );
   }
-  for (const args of [
-    ["daemon-reload"],
-    ["enable", "--now", "gpu-sampler.timer"],
-  ]) {
+  for (const args of [["daemon-reload"], ["enable", "gpu-sampler.timer"]]) {
     const result = await probe(args);
     if (result.code !== 0)
       return new Error(
@@ -876,7 +976,8 @@ export async function deployStatuslineOwners(
   }
   for (const args of [
     ["daemon-reload"],
-    ["enable", "--now", "statusline-sampler.timer", "agx-doctor.path"],
+    ["enable", "statusline-sampler.timer"],
+    ["enable", "--now", "agx-doctor.path"],
     ["start", "--no-block", "agx-doctor.service"],
   ]) {
     const result = await probe(args);
@@ -964,6 +1065,8 @@ async function main(): Promise<Error | void> {
     );
     if (refused !== undefined) return refused;
   }
+  const timers = await captureDeclaredTimers(ctx);
+  if (ctx.failures?.[0] !== undefined) return ctx.failures[0];
   linkAll(ctx, sshVersion());
   if (ctx.failures?.[0] !== undefined) return ctx.failures[0];
   if (ctx.mode === "check") {
@@ -981,6 +1084,8 @@ async function main(): Promise<Error | void> {
   if (ownersError !== undefined) return ownersError;
   const daemonError = deployCccDaemon(ctx);
   if (daemonError !== undefined) return daemonError;
+  const timersError = await deployDeclaredTimers(ctx, timers);
+  if (timersError !== undefined) return timersError;
   if (ctx.os === "mac") loadSmartOpenReceiver(ctx);
   const skipped = ctx.unreachable?.size ?? 0;
   say(skipped === 0 ? "done." : `done with ${skipped} unreachable path(s).`);

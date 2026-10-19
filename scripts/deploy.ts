@@ -33,6 +33,11 @@ if (parsed._.length > 0 || parsed.flags.since === "") {
   process.exit(2);
 }
 const emit = (line: string) => process.stdout.write(`[deploy] ${line}\n`);
+function reportTimers(host: string, output: string): void {
+  for (const line of output.split("\n"))
+    if (/^(started|left inactive): \S+\.timer \(/u.test(line))
+      emit(`${host}: ${line}`);
+}
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 const revision = parsed.flags.since ?? "alpha";
 const begin = `__DEPLOY_SMOKE_BEGIN_${process.pid}__`;
@@ -116,6 +121,7 @@ async function deployLocal(): Promise<string> {
       600_000,
       env,
     );
+    reportTimers("local", result.stdout);
     if (result.timedOut) return `FAIL ${task} timed out`;
     if (result.code !== 0)
       return `FAIL ${task} exited ${result.code}: ${diagnostic(result.stderr)}`;
@@ -166,6 +172,7 @@ for (const host of LAND_HOSTS) {
     process.cwd(),
   );
   const detail = diagnostic(result.stderr);
+  reportTimers(host.alias, result.stdout);
   const refusal = foreignWip(`${result.stdout}\n${result.stderr}`);
   let verdict: string;
   let smokeText: string | undefined;

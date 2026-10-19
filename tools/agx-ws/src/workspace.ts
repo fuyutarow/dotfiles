@@ -69,7 +69,7 @@ const ConfigSchema = z.strictObject({
 const LEGACY_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 const TERMINAL_STATES = new Set(["ended", "orphaned"]);
 
-type Ran = { code: number; out: string; err: string };
+export type Ran = { code: number; out: string; err: string };
 
 async function exec(
   cmd: string[],
@@ -173,20 +173,27 @@ function legacyWorkspaceName(slug: string): Attempt<string> {
 }
 
 /** Filesystem type of the nearest existing ancestor; preserve named step failures. */
-async function fsType(path: string): Promise<Attempt<string>> {
+export async function fsType(
+  path: string,
+  runCommand: typeof exec = exec,
+): Promise<Attempt<string>> {
   let probe = path;
   while (!existsSync(probe) && dirname(probe) !== probe) probe = dirname(probe);
-  const args =
-    process.platform === "darwin"
-      ? ["-f", "%T", probe]
-      : ["-f", "-c", "%T", probe];
-  const ran = await exec(["stat", ...args], probe);
-  if (!ran.ok) return ran;
-  return ran.value.code === 0
-    ? good(ran.value.out.trim())
-    : bad(
-        `stat ${args.join(" ")} failed (exit ${ran.value.code}): ${ran.value.err.trim()}`,
-      );
+  const forms = [
+    ["-f", "-c", "%T", probe], // GNU stat
+    ["-f", "%T", probe], // BSD stat
+  ];
+  const failures: string[] = [];
+  for (const args of forms) {
+    const ran = await runCommand(["stat", ...args], probe);
+    if (ran.ok && ran.value.code === 0) return good(ran.value.out.trim());
+    failures.push(
+      ran.ok
+        ? `stat ${args.join(" ")} failed (exit ${ran.value.code}): ${ran.value.err.trim()}`
+        : `stat ${args.join(" ")} failed: ${msg(ran)}`,
+    );
+  }
+  return bad(failures.join("; "));
 }
 
 export type Graveyard = { path: string };

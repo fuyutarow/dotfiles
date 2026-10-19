@@ -35,6 +35,9 @@ async function help(): Promise<void> {
       .find((line) => line.trim() !== "");
     process.stdout.write(`  ${tool}  ${description?.trim() ?? ""}\n`);
   }
+  process.stdout.write(
+    "\nOPTIONS:\n  -h, --help  Show help\n  -V, --version  Show version\n",
+  );
 }
 
 async function main(): Promise<void> {

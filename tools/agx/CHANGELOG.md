@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 — 2026-10-19
+
+- Keep suite help conformance after the split
+
 ## 0.6.0 — 2026-10-19
 
 - Accept only worker, ticket and ws as suite tools

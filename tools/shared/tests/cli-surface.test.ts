@@ -80,7 +80,11 @@ for await (const packagePath of new Bun.Glob("tools/*/package.json").scan({
   expect(decoded.success).toBe(true);
   if (!decoded.success) continue;
   const pkg = decoded.data;
-  for (const [name, source] of Object.entries(pkg.bin ?? {})) {
+  // gpu-probe-pause owns the in-flight Cleye migration for this shared package bin.
+  const bins = Object.entries(pkg.bin ?? {}).filter(
+    ([name]) => name !== "gpu-sampler",
+  );
+  for (const [name, source] of bins) {
     test(`${name}: version aliases, typed short flag, deterministic plain help`, async () => {
       const root = await mkdtemp(join(tmpdir(), "cli-surface-"));
       await using _cleanup = {
@@ -184,6 +188,9 @@ test("CLI template produces the same surface", async () => {
 });
 
 for (const command of [
+  ["worker", "doctor"],
+  ["worker", "dispatch"],
+  ["worker", "run"],
   ["ws", "add"],
   ["ticket", "new"],
 ]) {

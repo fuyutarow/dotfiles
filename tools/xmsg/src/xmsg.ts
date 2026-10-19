@@ -2,7 +2,7 @@
 import { cli } from "cleye";
 import packageJson from "../package.json" with { type: "json" };
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
-import { plainHelp, printVersion } from "../../shared/src/cli.ts";
+import { standardCli } from "../../shared/src/cli.ts";
 import { claudeReceipt } from "./claude-receipt.ts";
 
 function unknown(reason: string): number {
@@ -93,18 +93,13 @@ async function send(
 }
 
 async function main(): Promise<number> {
-  if (printVersion(packageJson, "xmsg", Bun.argv.slice(2))) return 0;
+  const argv = Bun.argv.slice(2);
+  const parse = standardCli(cli, packageJson, () => argv);
   const parsed = await attempt(() =>
-    cli({
+    parse({
       name: "xmsg",
       parameters: ["[action]"],
       strictFlags: true,
-      ignoreArgv(type, flag) {
-        if (type === "unknown-flag") {
-          process.stderr.write(`xmsg: unknown option: ${flag}\n`);
-          process.exit(2);
-        }
-      },
       flags: {
         to: {
           type: String,
@@ -118,7 +113,6 @@ async function main(): Promise<number> {
         },
       },
       help: {
-        render: plainHelp,
         description:
           "Send once to an existing session. Exit: 0 accepted, 1 rejected, 2 usage, 3 unreachable, 4 acceptance unknown.",
       },

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5 — 2026-10-19
+
+- Use the shared CLI conformance surface
+
 ## 0.1.4 — 2026-10-19
 
 - Skip unchanged projection cycles and read only Codex rollout identity metadata

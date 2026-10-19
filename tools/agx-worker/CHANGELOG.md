@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.0.1 — 2026-10-19
+
+- Keep the deprecated alias CLI surface conformant
+
 ## 6.0.0 — 2026-10-19
 
 - Rename the run engine to agx-worker, move dispatch into it, and retain agx-next as a deprecated PATH shim

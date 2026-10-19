@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 — 2026-10-19
+
+- Use the shared CLI conformance surface
+
 ## 0.1.2 — 2026-10-18
 
 - Pin the one-shot Claude messaging relay to Haiku with low effort.

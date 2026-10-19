@@ -320,7 +320,13 @@ async function project(): Promise<number> {
 }
 
 if (import.meta.main) {
-  if (argv.some((arg) => ["--help", "-h", "--version", "-V"].includes(arg))) {
+  if (
+    argv.some(
+      (arg) =>
+        ["--help", "-h", "--version", "-V"].includes(arg) ||
+        arg.startsWith("-"),
+    )
+  ) {
     cli({
       name: "herdr-projector",
       parameters: [],

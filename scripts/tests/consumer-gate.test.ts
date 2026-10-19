@@ -292,31 +292,27 @@ test("owner declarations select only the declared shared surfaces", async () => 
     ...parsed.data.pending,
   ].toSorted(
     (a, b) =>
-      ["retrospectives", "firedancer", "polysearch-v1", "coralbase"].indexOf(
-        a.name,
-      ) -
-      ["retrospectives", "firedancer", "polysearch-v1", "coralbase"].indexOf(
-        b.name,
-      ),
+      ["retrospectives", "firedancer", "polysearch-v1"].indexOf(a.name) -
+      ["retrospectives", "firedancer", "polysearch-v1"].indexOf(b.name),
   );
-  expect(declarations).toHaveLength(4);
+  expect(declarations).toHaveLength(3);
   expect(declarations.map((row: { name: string }) => row.name)).toEqual([
     "retrospectives",
     "firedancer",
     "polysearch-v1",
-    "coralbase",
   ]);
   expect(declarations[0]).toMatchObject({
     trunk: "alpha",
-    command: ["mise", "run", "check"],
-    surfaces: ["presets/typescript"],
+    command: ["sh", "-c", "jj-commit --help >/dev/null && mise-contract"],
+    surfaces: ["package-bins"],
+    bins: ["jj-commit", "mise-contract"],
   });
   expect(declarations[0]?.setup).toBeUndefined();
   expect(declarations[0]?.preset_dirs).toBeUndefined();
   expect(declarations[1]?.command).toEqual(["mise", "run", "lint:ts"]);
   expect(
     declarations.slice(2).map((row: { surfaces: string[] }) => row.surfaces),
-  ).toEqual([["package-bins"], ["package-bins"]]);
+  ).toEqual([["package-bins"]]);
   expect(declarations[2]?.full_gate_rule).toContain("CLI or manifest schema");
   expect(declarations[2]?.trunk).toBeUndefined();
   expect(parsed.data.pending).toHaveLength(0);

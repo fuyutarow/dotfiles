@@ -5,9 +5,10 @@
 name = "retrospectives"
 root = "/home/fuyu/Workspace/retrospectives"
 trunk = "alpha"
-surfaces = ["presets/typescript"]
-# No setup: dx supplies runtime dependencies; check depends on lint (dx check @).
-command = ["mise", "run", "check"]
+surfaces = ["package-bins"]
+bins = ["jj-commit", "mise-contract"]
+# Owner request 2026-10-19: only the house bins remain shared; no dx or TS preset.
+command = ["sh", "-c", "jj-commit --help >/dev/null && mise-contract"]
 timeout_ms = 120000
 
 [[consumers]]
@@ -33,14 +34,3 @@ notify = [{ paths = ["tools/agent-resource-run/**"], contact = "polysearch-v1-ag
 full_gate_rule = "The owner runs the full gate only when agent-resource-run CLI or manifest schema changes."
 timeout_ms = 600000
 
-[[consumers]]
-name = "coralbase"
-root = "/home/fuyu/Workspace/coralbase"
-trunk = "alpha"
-surfaces = ["package-bins"]
-bins = ["fmt-staged", "mise-contract", "jj-commit", "jj-push"]
-setup = ["mise", "run", "setup"]
-# Coordinator: cheap gate; full hook:pre-commit = fmt:staged + lint needs a path argument.
-# Add presets/typescript only after coralbase runs preset sync.
-command = ["mise", "run", "lint"]
-timeout_ms = 120000

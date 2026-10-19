@@ -120,7 +120,7 @@ test("composer presents the latest ticket run from fixture records and fake jj",
     `${records.map((event) => JSON.stringify(event)).join("\n")}\n`,
   );
 
-  const cli = join(process.cwd(), "tools/agx-run/src/next/cli.ts");
+  const cli = join(process.cwd(), "tools/agx-worker/src/next/cli.ts");
   await writeFile(
     join(bin, "agx"),
     `#!/bin/sh\nif [ "\${AGX_FAKE_LEGACY:-}" = "1" ]; then\n  exec ${shellQuote(process.execPath)} ${shellQuote(cli)} ls --json\nfi\nexec ${shellQuote(process.execPath)} ${shellQuote(cli)} "$@"\n`,

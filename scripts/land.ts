@@ -125,18 +125,20 @@ async function nextAgxRuns(
 ): Promise<Result<WorkspaceRun[], Error>> {
   // Resolve the declaration in the selected tree, never an installed bin that may
   // still point at an entry removed by this landing.
-  const packageRoot = join(root, "tools/agx-run");
+  const packageRoot = join(root, "tools/agx-worker");
   const manifest = jsonOf(
-    z.looseObject({ bin: z.looseObject({ "agx-run": z.string() }) }),
+    z.looseObject({ bin: z.looseObject({ "agx-worker": z.string() }) }),
   ).safeParse(await readFile(join(packageRoot, "package.json"), "utf8"));
   if (!manifest.success)
     return err(
-      new Error(`invalid agx-run bin declaration: ${manifest.error.message}`),
+      new Error(
+        `invalid agx-worker bin declaration: ${manifest.error.message}`,
+      ),
     );
   const command = await runProcess(
     [
       process.execPath,
-      resolve(packageRoot, manifest.data.bin["agx-run"]),
+      resolve(packageRoot, manifest.data.bin["agx-worker"]),
       "ls",
       "--json",
     ],

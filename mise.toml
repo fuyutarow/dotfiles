@@ -436,8 +436,8 @@ run = "bun test tools/repo-retrieve/tests"
 [tasks."test:agx"]
 depends = ["bun:check"]
 dir = "{{config_root}}"
-description = "agx suite and run-engine tests: fake workers, fake Jev, scratch state dir"
-run = "bun test tools/agx tools/agx-run"
+description = "agx suite and worker tests: fake workers, fake Jev, scratch state dir"
+run = "bun test tools/agx tools/agx-worker"
 
 [tasks."test:skills"]
 depends = ["bun:check"]

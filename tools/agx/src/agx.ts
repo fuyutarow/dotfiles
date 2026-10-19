@@ -1,41 +1,77 @@
 #!/usr/bin/env bun
 import { printVersion } from "../../shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
-// argv-forwarding: agx-run, agx-ws, agx-ticket
-import { fileURLToPath } from "node:url";
-import { typeFlag } from "type-flag";
+import { forwardPath } from "../../shared/src/path-dispatch.ts";
 
-if (import.meta.main && printVersion(cliPackage, "agx", process.argv.slice(2)))
-  process.exit(0);
-
-const argv = Bun.argv.slice(2);
-const parsed = typeFlag({}, [...argv], { ignore: () => true });
-if (Object.keys(parsed.unknownFlags).length > 0) {
-  process.stderr.write("agx: unexpected suite flag\n");
-  process.exit(2);
-}
-const [first, ...remaining] = argv;
-const prefix = new Map([
-  ["doctor", fileURLToPath(new URL("./doctor.ts", import.meta.url))],
-  ["dispatch", fileURLToPath(new URL("./dispatch.ts", import.meta.url))],
-  ["ws", fileURLToPath(new URL("../../agx-ws/src/ws.ts", import.meta.url))],
-  [
-    "ticket",
-    fileURLToPath(new URL("../../agx-ticket/src/tkt.ts", import.meta.url)),
-  ],
+const argv = process.argv.slice(2);
+const tools = ["worker", "ticket", "ws"];
+const transition = new Map([
+  ["run", "worker"],
+  ["dispatch", "worker"],
+  ["check", "worker"],
+  ["ls", "worker"],
+  ["judge", "worker"],
+  ["stats", "worker"],
+  ["roster", "worker"],
+  ["doctor", "worker"],
+  ["jev", "worker"],
 ]);
-const prefixed = first === undefined ? undefined : prefix.get(first);
-{
-  const target =
-    prefixed ??
-    fileURLToPath(new URL("../../agx-run/src/next/cli.ts", import.meta.url));
-  const forwarded = prefixed === undefined ? argv : remaining;
 
-  // bounded: the selected CLI owns its foreground command lifetime; the suite adds no second timeout.
-  const child = Bun.spawn([process.execPath, target, ...forwarded], {
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  process.exitCode = await child.exited;
+async function help(): Promise<void> {
+  process.stdout.write(
+    `agx ${cliPackage.version}\n\nUSAGE: agx <tool> [args...]\n\nTOOLS:\n`,
+  );
+  for (const tool of tools) {
+    const child = Bun.spawn([`agx-${tool}`, "--help"], {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 5000,
+    });
+    const [out, err, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    if (code !== 0) {
+      process.stderr.write(
+        err !== "" ? err : `agx: agx-${tool} --help exited ${code}\n`,
+      );
+      process.exitCode = code;
+      return;
+    }
+    const description = out
+      .split(/\r?\n/u)
+      .slice(1)
+      .find((line) => line.trim() !== "");
+    process.stdout.write(`  ${tool}  ${description?.trim() ?? ""}\n`);
+  }
 }
+
+async function main(): Promise<void> {
+  if (printVersion(cliPackage, "agx", argv)) return;
+  const [first, ...remaining] = argv;
+  if (first === undefined || first === "--help" || first === "-h") {
+    await help();
+    return;
+  }
+  const legacy = transition.get(first);
+  const tool = legacy ?? first;
+  if (!tools.includes(tool)) {
+    process.stderr.write(`agx: unknown tool '${first}'; use agx --help\n`);
+    process.exitCode = 2;
+    return;
+  }
+  if (legacy !== undefined)
+    process.stderr.write(
+      `agx: '${first}' is deprecated; use 'agx worker ${first}'\n`,
+    );
+  process.exitCode = await forwardPath(
+    `agx-${tool}`,
+    legacy === undefined ? remaining : argv,
+  );
+}
+await main().catch((error: unknown) => {
+  process.stderr.write(`agx: ${String(error)}\n`);
+  process.exitCode = 2;
+});

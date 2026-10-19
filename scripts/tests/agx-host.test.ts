@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { declareRentedCodexHost } from "../agx-host.ts";
-import { readCodexHostDeclaration } from "../../tools/agx-run/src/workers/codex-host.ts";
+import { readCodexHostDeclaration } from "../../tools/agx-worker/src/workers/codex-host.ts";
 
 const home = (): string => mkdtempSync(join(tmpdir(), "agx-host-"));
 

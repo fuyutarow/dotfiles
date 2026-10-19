@@ -46,7 +46,7 @@ Repo CLIs and libraries live under `tools/<name>/` (release changesets, generate
 semver and `CHANGELOG.md`, `src/`, `tests/`; see README → Architecture → tools for the release
 rule; parts may import only their own dir and `tools/shared/`): `tools/smart-open`, `tools/repo-retrieve`
 (`rr` / `repo-retrieve`), `tools/agx` (the process-only `agx` suite entry),
-`tools/agx-run` (`agx run` and legacy run commands), `tools/agx-ws` (`agx ws` / `ws`),
+`tools/agx-worker` (`agx worker` / `agx-worker`; deprecated `agx-next` forwards here), `tools/agx-ws` (`agx ws` / `ws`),
 `tools/agx-ticket` (`agx ticket` / `tkt`), `tools/agent-resource-run`, and
 `tools/serena-foreground` (both OSes), `tools/storage-headroom` (storage decisions and read-only
 headroom CLI), `tools/secrets-push`, `tools/sui-keystore-merge`, `tools/shared` (code several tools import, including Bash parsing and hook path

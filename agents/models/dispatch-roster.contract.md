@@ -17,11 +17,11 @@ The contract for `agents/models/dispatch-roster.toml`. The roster is the source 
 - Run history: append-only records are read through `agx ls --json`; legacy run logs can be imported by `agx stats --import-legacy`
 - Continuation: `agx run TICKET.md --continue RUN_ID` continues the selected run's vendor session
 - Durable execution: `agx dispatch TICKET.md [--ws SLUG] [--unit NAME] [--sandbox MODE] [--continue RUN_ID]`
-- Verification command: `bun test agents/models/tests/roster.test.ts agents/claude/hooks/tests/enforce-dispatch-contract.test.ts tools/agx-run/tests/next/run.test.ts`
-- Positive case: the roster loads, every row renders, `agx run` records the selected row, and all five commands are available
+- Verification command: `bun test agents/models/tests/roster.test.ts agents/claude/hooks/tests/enforce-dispatch-contract.test.ts tools/agx-worker/tests/next/run.test.ts`
+- Positive case: the roster loads, every row renders, `agx run` records the selected row, and the documented worker commands are available
 - Negative case: an unknown roster key, malformed source, duplicate choice id, or invalid default rejects the roster load
 
 ## Residual
 
 - Benchmark and price values are human-maintained snapshots; this contract does not establish that they remain current or that Jev's selection is good.
-- `agx-next` remains a package alias for this release. Its state directory name is retained to preserve existing records.
+- `agx-next` remains a deprecated forwarding bin for this release. `agx-run` is removed. Its state directory name is retained to preserve existing records.

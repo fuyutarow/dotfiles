@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 — 2026-10-19
+
+- Emit ticket doctor findings in the shared JSON Lines shape
+
 ## 0.1.7 — 2026-10-18
 
 - Reduce doctor CPU by sharing run history, ticket metadata, and workspace landing probes within each diagnostic.

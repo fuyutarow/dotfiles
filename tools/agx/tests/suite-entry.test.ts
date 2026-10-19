@@ -1,141 +1,145 @@
-import { expect, test } from "bun:test";
-import { fileURLToPath } from "node:url";
-import { loadRoster } from "../../../agents/models/roster.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
+import { expect, test } from "bun:test";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import pkg from "../package.json" with { type: "json" };
 
-const ENTRY = fileURLToPath(new URL("../src/agx.ts", import.meta.url));
-const JsonValue = jsonOf(z.unknown());
-
-async function invoke(...args: string[]) {
-  const child = Bun.spawn([process.execPath, ENTRY, ...args], {
+const entry = join(import.meta.dir, "../src/agx.ts");
+async function fixture() {
+  const bin = await mkdtemp(join(tmpdir(), "agx-path-"));
+  for (const tool of ["worker", "ws", "ticket"]) {
+    const path = join(bin, `agx-${tool}`);
+    await writeFile(
+      path,
+      `#!${process.execPath}\nif(process.argv[2]==="--help") { process.stdout.write("agx-${tool} v99.0.0\\n\\n${tool} description from owner\\n"); process.exitCode=Number(process.env.FAKE_EXIT ?? 0); } else { process.stdout.write(JSON.stringify({tool:${JSON.stringify(tool)},args:process.argv.slice(2)})+"\\n"); process.exitCode=Number(process.env.FAKE_EXIT ?? 0); }\n`,
+    );
+    await chmod(path, 0o755);
+  }
+  return {
+    bin,
+    async [Symbol.asyncDispose]() {
+      await rm(bin, { recursive: true, force: true });
+    },
+  };
+}
+async function run(bin: string, args: string[], exit = 0) {
+  const child = Bun.spawn([process.execPath, entry, ...args], {
+    env: { ...process.env, PATH: bin, FAKE_EXIT: String(exit) },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    timeout: 5000,
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
+  const [stdout, stderr, code] = await Promise.all([
+    child.stdout.text(),
+    child.stderr.text(),
     child.exited,
   ]);
-  return { stdout, stderr, exitCode };
+  return { stdout, stderr, code };
 }
-
-async function invokeWithInput(
-  input: string,
-  env: NodeJS.ProcessEnv,
-  ...args: string[]
-) {
-  const child = Bun.spawn([process.execPath, ENTRY, ...args], {
-    env,
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  await child.stdin.write(input);
-  await child.stdin.end();
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  return { stdout, stderr, exitCode };
-}
-
-test("suite entry runs run, ws, and ticket help through their CLIs", async () => {
-  const cases = [
-    { args: ["--version"], output: /^agx \d+\.\d+\.\d+\n$/u },
-    {
-      args: ["--help"],
-      output: /agx dispatch <ticket.md>[\s\S]*USAGE:[\s\S]*jev[\s\S]*roster/u,
-    },
-    { args: ["run", "--help"], output: /run/u },
-    {
-      args: ["dispatch", "--help"],
-      output: /USAGE:[\s\S]*<ticket>[\s\S]*--continue[\s\S]*--unit[\s\S]*--ws/u,
-    },
-    { args: ["check", "--help"], output: /agx check/u },
-    { args: ["ls", "--help"], output: /agx ls/u },
-    { args: ["judge", "--help"], output: /agx judge/u },
-    { args: ["stats", "--help"], output: /agx stats/u },
-    { args: ["jev", "--help"], output: /stdin/u },
-    { args: ["roster", "--help"], output: /JSON/u },
-    { args: ["ws", "--help"], output: /ws/u },
-    { args: ["ticket", "--help"], output: /tkt/u },
-  ];
-
-  for (const { args, output } of cases) {
-    const result = await invoke(...args);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toMatch(output);
+test("suite forwards exact argv through PATH and preserves exit status", async () => {
+  await using f = await fixture();
+  for (const [tool, args] of [
+    ["worker", ["ls"]],
+    ["ws", ["ls"]],
+    ["ticket", ["--help"]],
+  ] as const) {
+    // Only --help used by suite discovery is special in these fake bins.
+    const result = await run(f.bin, [tool, ...args], 37);
     expect(result.stderr).toBe("");
+    if (tool === "ticket") {
+      expect(result.stdout).toContain("ticket description from owner");
+    } else {
+      expect(decode(result.stdout)).toEqual({ tool, args: [...args] });
+      expect(result.code).toBe(37);
+    }
+    expect(result.code).toBe(37);
   }
-}, 30_000);
-
-test("agx roster --json prints the validated roster value", async () => {
-  const loaded = await loadRoster();
-  expect(loaded.ok).toBe(true);
-  if (!loaded.ok) return;
-
-  const result = await invoke("roster", "--json");
-  expect(result.exitCode, result.stderr).toBe(0);
-  expect(result.stderr).toBe("");
-  const parsed = JsonValue.safeParse(result.stdout);
-  expect(parsed.success).toBe(true);
-  if (parsed.success) expect(parsed.data).toEqual(loaded.value);
+  const raw = ["run", "a b.md", "--", "-Z", "雪"];
+  const result = await run(f.bin, ["worker", ...raw], 23);
+  expect(decode(result.stdout)).toEqual({ tool: "worker", args: raw });
+  expect(result.code).toBe(23);
 });
-
-test("agx jev posts to the endpoint override and reports an HTTP error", async () => {
-  const requests: unknown[] = [];
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: async (request) => {
-      const body = await request.text();
-      const parsed = JsonValue.safeParse(body);
-      requests.push(parsed.success ? parsed.data : body);
-      return new URL(request.url).pathname === "/error"
-        ? Response.json({ error: "fixture" }, { status: 503 })
-        : Response.json({ answers: { worker: { choice: "fixture" } } });
-    },
-  });
-  const request = { state: { task: "fixture" }, questions: { worker: {} } };
-  const env = {
-    ...process.env,
-    AGX_NEXT_JEV_URL: new URL("/answer", server.url).href,
-    TYPESAFE_API_KEY: "agx-test-key",
-  };
-  await (async () => {
-    const answer = await invokeWithInput(JSON.stringify(request), env, "jev");
-    expect(answer.exitCode, answer.stderr).toBe(0);
-    expect(answer.stderr).toBe("");
-    const decodedAnswer = JsonValue.safeParse(answer.stdout);
-    expect(decodedAnswer.success).toBe(true);
-    if (!decodedAnswer.success) return;
-    expect(decodedAnswer.data).toEqual({
-      answers: { worker: { choice: "fixture" } },
+test("static legacy transition emits exactly one hint", async () => {
+  await using f = await fixture();
+  for (const verb of [
+    "run",
+    "dispatch",
+    "check",
+    "ls",
+    "judge",
+    "stats",
+    "roster",
+    "doctor",
+    "jev",
+  ]) {
+    const result = await run(f.bin, [verb, "ticket.md"], 19);
+    expect(result.code).toBe(19);
+    expect(decode(result.stdout)).toEqual({
+      tool: "worker",
+      args: [verb, "ticket.md"],
     });
-    expect(requests).toEqual([request]);
-
-    const failure = await invokeWithInput(
-      JSON.stringify(request),
-      { ...env, AGX_NEXT_JEV_URL: new URL("/error", server.url).href },
-      "jev",
+    expect(result.stderr).toBe(
+      `agx: '${verb}' is deprecated; use 'agx worker ${verb}'\n`,
     );
-    expect(failure.exitCode).not.toBe(0);
-    expect(failure.stdout).toBe("");
-    expect(failure.stderr).toContain("HTTP 503");
-    expect(failure.stderr.trim().split("\n")).toHaveLength(1);
-    expect(requests).toEqual([request, request]);
-  })().finally(() => {
-    void server.stop(true);
-  });
+  }
+});
+test("suite owns its version and takes descriptions from PATH tools", async () => {
+  await using f = await fixture();
+  for (const flag of ["-V", "--version"]) {
+    const result = await run(f.bin, [flag]);
+    expect(result.stdout).toBe(`agx ${pkg.version}\n`);
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+  }
+  const help = await run(f.bin, ["-h"]);
+  expect(help.code).toBe(0);
+  expect(help.stdout).not.toContain("99.0.0");
+  for (const tool of ["worker", "ticket", "ws"])
+    expect(help.stdout).toContain(`  ${tool}  ${tool} description from owner`);
+});
+test("suite source contains only dispatch and discovery, with no owner modules", async () => {
+  const source = await Bun.file(entry).text();
+  expect(source).not.toMatch(
+    /records\.jsonl|XDG_STATE|AGX_STATE|writeFile|mkdir|fileURLToPath/u,
+  );
+  expect(source).not.toMatch(/from\s+["'][^"']*agx-(?:worker|ws|ticket)/u);
 });
 
-test("suite entry only starts part processes and holds no state", async () => {
-  const source = await Bun.file(ENTRY).text();
-  expect(source).toContain("Bun.spawn(");
-  expect(source).not.toMatch(/from\s+["'][^"']*agx-(?:run|ws|ticket)/u);
-  expect(source).not.toMatch(
-    /records\.jsonl|XDG_STATE|AGX_STATE|writeFile|mkdir/u,
+function decode(text: string) {
+  const parsed = jsonOf(
+    z.object({ tool: z.string(), args: z.array(z.string()) }),
+  ).safeParse(text);
+  expect(parsed.success).toBe(true);
+  return parsed.success ? parsed.data : undefined;
+}
+
+test("deprecated agx-next forwards through PATH with one hint and preserves status", async () => {
+  await using f = await fixture();
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      join(import.meta.dir, "../../agx-worker/src/agx-next.ts"),
+      "ls",
+      "--json",
+    ],
+    {
+      env: { ...process.env, PATH: f.bin, FAKE_EXIT: "29" },
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 5000,
+    },
+  );
+  const [out, err, exit] = await Promise.all([
+    child.stdout.text(),
+    child.stderr.text(),
+    child.exited,
+  ]);
+  expect(decode(out)).toEqual({ tool: "worker", args: ["ls", "--json"] });
+  expect(exit).toBe(29);
+  expect(err).toBe(
+    "agx-next is deprecated; use agx-worker (agx worker) instead\n",
   );
 });

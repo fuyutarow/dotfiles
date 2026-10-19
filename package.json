@@ -22,8 +22,6 @@
     "btmp": "tools/herdr-btm/src/btmp.ts",
     "tool": "tools/tool-tiers/src/tool.ts",
     "agx": "tools/agx/src/agx.ts",
-    "agx-run": "tools/agx-run/src/next/cli.ts",
-    "agx-next": "tools/agx-run/src/next/cli.ts",
     "agx-ws": "tools/agx-ws/src/ws.ts",
     "ws": "tools/agx-ws/src/ws.ts",
     "coredev": "tools/coredev/src/coredev.ts",
@@ -46,7 +44,9 @@
     "tkt": "tools/agx-ticket/src/tkt.ts",
     "lint-ts-candidate": "agents/skills/wiring-mise-tasks/scripts/lint-ts-candidate.ts",
     "jex": "tools/jex/src/jex.ts",
-    "xmsg": "tools/xmsg/src/xmsg.ts"
+    "xmsg": "tools/xmsg/src/xmsg.ts",
+    "agx-worker": "tools/agx-worker/src/next/cli.ts",
+    "agx-next": "tools/agx-worker/src/agx-next.ts"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",

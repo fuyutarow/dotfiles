@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { doctorOutput } from "../../shared/src/doctor-record.ts";
 import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "../../shared/src/cli.ts";
 import {
@@ -138,7 +139,13 @@ const doctorCommand = command(
     show(
       () => doctorTickets(),
       (items) => {
-        lines(items);
+        const output = doctorOutput(items);
+        if (!output.ok) {
+          fail(output.error);
+          process.exitCode = 2;
+          return;
+        }
+        process.stdout.write(output.value);
         if (process.env.AGX_DOCTOR_QUIET !== "1")
           process.stderr.write(
             `agx-ticket doctor: ${items.length} finding(s)\n`,
@@ -151,5 +158,6 @@ await cli({
   ...common,
   name: "tkt",
   version: pkg.version,
+  help: { description: "Create, inspect and collect project tickets." },
   commands: [newCommand, lsCommand, gcCommand, doctorCommand],
 });

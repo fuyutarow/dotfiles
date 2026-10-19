@@ -498,7 +498,7 @@ const OTHER: readonly Surface[] = [
       "tools/serena-foreground/package.json",
       "tools/tool-tiers/package.json",
       "tools/agx/package.json",
-      "tools/agx-run/package.json",
+      "tools/agx-worker/package.json",
       "tools/jex/package.json",
       "tools/xmsg/package.json",
       "tools/coredev/package.json",
@@ -680,7 +680,7 @@ const OTHER: readonly Surface[] = [
     ],
     deployed: "the checkout; rendered into ~/.claude/CLAUDE.md",
     consumer:
-      "dispatch hook, agx run/check/ls/judge/stats, codex worker, render-home",
+      "dispatch hook, agx-worker run/check/ls/judge/stats/roster, codex worker, render-home",
     writer:
       "human, in the repo (CONFIGURATION CONTRACT: dispatch-roster.contract.md)",
     verify: `mise run test:hooks · test:agx · ${DOCTOR} (rendered)`,

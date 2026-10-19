@@ -10,7 +10,7 @@ Environment=PATH=%h/.bun/bin:%h/.local/bin:%h/.linuxbrew/bin:/home/linuxbrew/.li
 # input changes during this window and the run; doctor starts at most once/60s.
 # Keep StartLimitIntervalSec=0: a rate-limit rejection would disable the path.
 ExecStartPre=/usr/bin/sleep 60
-ExecStart=%h/.bun/bin/agx doctor --json
+ExecStart=/usr/bin/env bun %h/dotfiles/scripts/agx-doctor.ts --json
 SuccessExitStatus=1
 TimeoutStartSec=120s
 StandardOutput=journal

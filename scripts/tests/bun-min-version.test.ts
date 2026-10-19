@@ -18,7 +18,9 @@ test("minimum has one declaration per manifest and mise satisfies it", async () 
   expect(source.match(/"bun"\s*:/gu)).toHaveLength(1);
   expect(manifest.data.engines.bun).toBe(">=1.4.3");
   const mise = Bun.TOML.parse(await Bun.file(join(root, "mise.toml")).text());
-  expect(mise).toMatchObject({ tools: { bun: "1.4" } });
+  expect(mise).toMatchObject({
+    tools: { bun: manifest.data.engines.bun.slice(2) },
+  });
   const Lock = z.object({
     tools: z.object({
       bun: z
@@ -38,7 +40,7 @@ test("minimum has one declaration per manifest and mise satisfies it", async () 
   if (!locked.success) return;
   const bun = locked.data.tools.bun[0];
   expect(bun?.version).toBe(manifest.data.engines.bun.slice(2));
-  expect(bun?.specifiers).toEqual(["1.4"]);
+  expect(bun?.specifiers).toEqual([manifest.data.engines.bun.slice(2)]);
   expect(
     Bun.semver.satisfies(bun?.version ?? "", manifest.data.engines.bun),
   ).toBe(true);

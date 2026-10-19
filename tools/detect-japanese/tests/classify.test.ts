@@ -60,7 +60,7 @@ test.each([
   ],
   [
     "paths and verification status do not outweigh Japanese prose",
-    "完了。tools/agx-run/src/ticket.ts と CHANGELOG を更新、verify は exit=0。",
+    "完了。tools/agx-worker/src/ticket.ts と CHANGELOG を更新、verify は exit=0。",
     "japanese-primary",
   ],
   [

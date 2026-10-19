@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0 — 2026-10-19
+
+- Emit workspace doctor findings in the shared JSON Lines shape
+
 ## 0.8.5 — 2026-10-18
 
 - Reduce doctor work by sharing run history, skipping silent recent landing checks, and batching content comparisons.

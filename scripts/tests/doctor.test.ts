@@ -90,7 +90,7 @@ test("mise doctor has an agx fleet row and reports its findings", async () => {
     "agx-ws\trepo\tws_old\tunlanded-72h\tcd repo.ws/ws_old && mise run land";
   const failed = await checkAgx(ctx, async (cmd, opts) => {
     await Promise.resolve();
-    expect(cmd).toEqual(["agx", "doctor"]);
+    expect(cmd).toEqual(["bun", "scripts/agx-doctor.ts"]);
     expect(opts.cwd).toBe(ctx.dotfiles);
     return {
       code: 1,

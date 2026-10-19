@@ -1,0 +1,11 @@
+{
+  "version": "6.0.0",
+  "name": "@dotfiles/agx-worker",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agx-worker": "src/next/cli.ts",
+    "agx-next": "src/agx-next.ts"
+  },
+  "description": "Dispatch, inspect and judge worker runs."
+}

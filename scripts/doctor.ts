@@ -1971,11 +1971,12 @@ export async function checkAgx(
   ctx: Ctx,
   probe: typeof run = run,
 ): Promise<Finding> {
-  const result = await probe(["agx", "doctor"], {
+  const result = await probe(["bun", "scripts/agx-doctor.ts"], {
     ms: 30_000,
     cwd: ctx.dotfiles,
   });
-  if (result.missing) return fail("agx", "agx is not on PATH", "mise run deps");
+  if (result.missing)
+    return fail("agx", "bun is not on PATH", "mise run install:tools");
   if (result.timedOut) return warn("agx", "agx doctor timed out after 30s");
   const lines = result.out.split(/\r?\n/u).filter(Boolean);
   if (result.code === 0) {
@@ -1983,7 +1984,12 @@ export async function checkAgx(
     return pass("agx", summary !== "" ? summary : "fleet clean");
   }
   if (result.code === 1)
-    return fail("agx", `${lines.length} fleet finding(s)`, "agx doctor", lines);
+    return fail(
+      "agx",
+      `${lines.length} fleet finding(s)`,
+      "bun scripts/agx-doctor.ts",
+      lines,
+    );
   const detail = result.err.trim();
   return warn(
     "agx",

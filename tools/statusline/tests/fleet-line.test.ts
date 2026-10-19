@@ -158,7 +158,7 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
       .join("\n") + "\n",
   );
   const folded = await run(
-    `import {list} from ${JSON.stringify(join(import.meta.dir, "../../agx-run/src/next/run.ts"))}; await list({json:true, summary:true});`,
+    `import {list} from ${JSON.stringify(join(import.meta.dir, "../../agx-worker/src/next/run.ts"))}; await list({json:true, summary:true});`,
   );
   const doctorOutput = JSON.stringify({
     kinds: { orphaned: 1, unjudged: 1 },

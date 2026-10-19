@@ -1,3 +1,4 @@
+import { DoctorRecord } from "../../shared/src/doctor-record.ts";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,7 +7,7 @@ import { agxSnapshotPath } from "../src/agx-snapshot.ts";
 import { decodedJson } from "./decode.ts";
 import { z } from "../src/zod.ts";
 
-const CLI = join(import.meta.dir, "../../agx-run/src/next/cli.ts");
+const CLI = join(import.meta.dir, "../../agx-worker/src/next/cli.ts");
 const SESSION = "worker-rows-dispatcher";
 const VENDOR = "01a1111b-7dab-7d61-8f9b-231c4cc9082b";
 
@@ -94,10 +95,14 @@ test("worker snapshot uses doctor's classification and hides vendor sessions", a
   const doctor = await invoke(CLI, "doctor");
   expect(doctor.exit).toBe(1);
   expect(doctor.stdout).not.toContain("legacy-import");
-  expect(doctor.stdout).toContain("\tunjudged\t");
-  const doctorLost = doctor.stdout
+  const findings = doctor.stdout
+    .trim()
     .split("\n")
-    .filter((line) => line.includes("\torphaned\t")).length;
+    .map((line) => decodedJson(DoctorRecord, line));
+  expect(findings.some((record) => record.finding === "unjudged")).toBe(true);
+  const doctorLost = findings.filter(
+    (record) => record.finding === "orphaned",
+  ).length;
   expect(doctorLost).toBe(1);
   await Bun.write(
     agxSnapshotPath(env),

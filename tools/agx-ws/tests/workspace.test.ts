@@ -19,7 +19,7 @@ import {
 } from "node:fs";
 import { tmpdir, hostname } from "node:os";
 import { join } from "node:path";
-import { mkdir, chmod, unlink, lstat } from "node:fs/promises";
+import { mkdir, chmod, unlink, lstat, symlink } from "node:fs/promises";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 setDefaultTimeout(60_000);
@@ -1171,6 +1171,10 @@ describe("gc integration branches", () => {
     const realBin = join(scratch, "immutable-bin");
     await mkdir(state);
     await mkdir(realBin);
+    await symlink(
+      join(import.meta.dir, "../../agx-worker/src/next/cli.ts"),
+      join(realBin, "agx-worker"),
+    );
     const wrapper = join(realBin, "agx");
     await Bun.write(
       wrapper,
@@ -1251,6 +1255,10 @@ describe("gc integration branches", () => {
     const realBin = join(scratch, "unaccepted-bin");
     await mkdir(state);
     await mkdir(realBin);
+    await symlink(
+      join(import.meta.dir, "../../agx-worker/src/next/cli.ts"),
+      join(realBin, "agx-worker"),
+    );
     const wrapper = join(realBin, "agx");
     await Bun.write(
       wrapper,

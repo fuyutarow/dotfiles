@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { doctorOutput } from "../../shared/src/doctor-record.ts";
 import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "../../shared/src/cli.ts";
 import { StepFailure } from "./subprocess.ts";
@@ -288,7 +289,13 @@ const doctorCommand = command(
         process.stderr.write("agx-ws doctor: error\n");
       return;
     }
-    for (const line of done.value) process.stdout.write(`${line}\n`);
+    const output = doctorOutput(done.value);
+    if (!output.ok) {
+      fail(output.error);
+      process.exitCode = 2;
+      return;
+    }
+    process.stdout.write(output.value);
     if (process.env.AGX_DOCTOR_QUIET !== "1")
       process.stderr.write(`agx-ws doctor: ${done.value.length} finding(s)\n`);
     process.exitCode = done.value.length === 0 ? 0 : 1;
@@ -298,6 +305,7 @@ const doctorCommand = command(
 void cli({
   name: "ws",
   version: packageJson.version,
+  help: { description: "Create, inspect and collect repository workspaces." },
   strictFlags: true,
   ignoreArgv: rejectPrototypeFlag,
   commands: [

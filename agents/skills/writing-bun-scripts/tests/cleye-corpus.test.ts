@@ -19,8 +19,8 @@ const CORPUS: CorpusEntry[] = [
   { path: "agents/codex/codex-runtime.ts" },
   { path: "agents/codex/hooks/quote-command.ts" },
   { path: "agents/goal-kernel/cli.ts" },
-  { path: "tools/agx-run/src/next/cli.ts", cli: true },
-  { path: "tools/agx-run/src/workers/codex.ts" },
+  { path: "tools/agx-worker/src/next/cli.ts", cli: true },
+  { path: "tools/agx-worker/src/workers/codex.ts" },
   { path: "scripts/deployment-selection.ts" },
   { path: "scripts/consumer-gate.ts" },
   { path: "scripts/guest-capacity-recover.ts" },
@@ -41,8 +41,8 @@ const CORPUS: CorpusEntry[] = [
     command: "status",
   },
   { path: "tools/agx-ticket/src/tkt.ts" },
-  { path: "tools/agx/src/dispatch.ts" },
-  { path: "tools/agx/src/doctor.ts" },
+  { path: "tools/agx-worker/src/dispatch.ts" },
+  { path: "scripts/agx-doctor.ts" },
   { path: "tools/herdr-btm/src/btmp.ts", cli: false },
   { path: "tools/detect-japanese/src/cli.ts" },
   { path: "tools/jex/src/jex.ts" },
@@ -83,7 +83,7 @@ const CORPUS: CorpusEntry[] = [
   { path: "agents/skills/directing-research/scripts/research-check.ts" },
   { path: "agents/skills/directing-research/scripts/research-run-check.ts" },
   { path: "agents/skills/driving-antigravity/scripts/probe-models.ts" },
-  { path: "tools/agx-run/src/workers/run-claude.ts" },
+  { path: "tools/agx-worker/src/workers/run-claude.ts" },
   { path: "agents/skills/driving-git/scripts/git-check.ts" },
   { path: "agents/skills/driving-grok/scripts/probe-models.ts" },
   { path: "agents/skills/forging-novel-theses/scripts/gate-check.ts" },
@@ -153,6 +153,14 @@ const CORPUS: CorpusEntry[] = [
     unknownFlag: { exit: 2, message: "Unknown flag" },
   },
   { path: "tools/agx-ws/src/ws.ts" },
+  {
+    path: "tools/statusline/src/statusline-main.ts",
+    executable: "tools/statusline/src/statusline.ts",
+  },
+  {
+    path: "tools/xmsg/src/xmsg.ts",
+    unknownFlag: { exit: 2, message: "unknown option" },
+  },
 ] satisfies readonly CorpusEntry[];
 
 async function run(

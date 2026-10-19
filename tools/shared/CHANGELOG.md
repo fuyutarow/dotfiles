@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.0 — 2026-10-19
+
+- Share the tool, object, finding and remedy diagnostic record schema
+
 ## 0.12.1 — 2026-10-18
 
 - Require consecutive probe misses before recording a GPU stall

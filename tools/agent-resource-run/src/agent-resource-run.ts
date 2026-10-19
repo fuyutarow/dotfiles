@@ -198,6 +198,7 @@ export async function gpuAdmissionRefusal(
     procRoot?: string;
     state?: Awaited<ReturnType<typeof readGpuState>>;
     currentScope?: string;
+    currentReservationId?: string;
   } = {},
 ): Promise<string | undefined> {
   const procRoot = options.procRoot ?? "/proc";
@@ -220,6 +221,7 @@ export async function gpuAdmissionRefusal(
     return `GPU device ${deviceRequest.gpu_id} capacity unavailable; evidence=${gpuStatePath()}`;
 
   const scopes = new Map<string, number>();
+  const admittedScopes = new Set<string>();
   const procEntries = await fromAsyncThrowable(() => readdir(procRoot))();
   if (procEntries.isErr())
     return `GPU process inventory unavailable; evidence=${procRoot}`;
@@ -253,6 +255,7 @@ export async function gpuAdmissionRefusal(
                   vram_peak_bytes: z.unknown().optional(),
                 })
                 .optional(),
+              reservation_id: z.string().optional(),
             }),
           ).safeParse(receiptText);
     const gpuReceipt =
@@ -268,12 +271,19 @@ export async function gpuAdmissionRefusal(
       gpuReceipt.vram_peak_bytes <= 0
     )
       return `GPU scope receipt invalid scope=${scope}; evidence=${join(base, "environ")}`;
-    scopes.set(
-      scope,
+    const reservationId =
+      receipt?.success === true
+        ? (receipt.data.reservation_id ?? scope)
+        : scope;
+    const admittedBytes =
       gpuReceipt.gpu_id === deviceRequest.gpu_id
         ? gpuReceipt.vram_peak_bytes
-        : 0,
-    );
+        : 0;
+    const existingBytes = scopes.get(reservationId);
+    if (existingBytes !== undefined && existingBytes !== admittedBytes)
+      return `GPU reservation receipt mismatch reservation=${reservationId}; evidence=${join(base, "environ")}`;
+    scopes.set(reservationId, admittedBytes);
+    admittedScopes.add(scope);
   }
   for (const { pid } of state.processes) {
     const base = join(procRoot, String(pid));
@@ -291,11 +301,15 @@ export async function gpuAdmissionRefusal(
       processStatus.isOk() && /^State:\s+Z/mu.test(processStatus.value ?? "");
     if (scope === undefined)
       return `GPU holder outside admitted GPU scope pid=${pid}${zombie ? " state=ZOMBIE" : ""} command=${command.unwrapOr(undefined)?.replaceAll("\0", " ").trim() ?? "[unavailable]"}; evidence=${join(base, "cgroup")}`;
-    if (!scopes.has(scope))
+    if (!admittedScopes.has(scope))
       return `GPU holder admission receipt unavailable pid=${pid}${zombie ? " state=ZOMBIE" : ""}; evidence=${join(base, "environ")}`;
   }
   const admittedBytes = [...scopes.entries()]
-    .filter(([scope]) => scope !== options.currentScope)
+    .filter(
+      ([reservationId]) =>
+        reservationId !== options.currentScope &&
+        reservationId !== options.currentReservationId,
+    )
     .reduce((sum, [, bytes]) => sum + bytes, 0);
   const ceiling = device.totalMiB * 1024 ** 2 - safetyMiB * 1024 ** 2;
   if (deviceRequest.vram_peak_bytes + admittedBytes > ceiling)

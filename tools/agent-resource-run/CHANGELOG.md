@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.8 — 2026-10-19
+
+- Count each GPU reservation once during in-scope admission re-checks
+
 ## 1.5.7 — 2026-10-19
 
 - Refuse GPU admission without healthy, scoped, and sufficient VRAM evidence

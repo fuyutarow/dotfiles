@@ -318,6 +318,54 @@ test("GPU VRAM guard sums admitted job peaks against device total and safety mar
   expect(refusal).toContain("admitted=314572800");
   expect(refusal).toContain("safety_margin=512MiB");
 });
+test("GPU VRAM re-check deduplicates scopes sharing one reservation receipt", async () => {
+  const f = await fixture();
+  const procRoot = join(f.dir, "proc");
+  const reservationId = "reservation-own";
+  const receipt = JSON.stringify({
+    reservation_id: reservationId,
+    device: {
+      kind: "gpu",
+      gpu_id: 0,
+      vram_peak_bytes: 7 * 1024 ** 3,
+    },
+  });
+  const pids = [987654323, 987654324];
+  for (const [index, pid] of pids.entries()) {
+    const processDir = join(procRoot, String(pid));
+    await mkdir(processDir, { recursive: true });
+    await Bun.write(
+      join(processDir, "cgroup"),
+      `0::/user.slice/agent-resource-${index === 0 ? "job" : "holder"}.scope\n`,
+    );
+    await Bun.write(join(processDir, "status"), "State:\tS (sleeping)\n");
+    await Bun.write(
+      join(processDir, "environ"),
+      `AGENT_RESOURCE_ADMISSION_RECEIPT=${receipt}\0`,
+    );
+  }
+  const state = {
+    schema: 1 as const,
+    attemptAt: 1,
+    devices: [{ id: 0, totalMiB: 12288, usedMiB: 7516, utilPct: 0 }],
+    processes: pids.map((pid) => ({ pid, usedMiB: 3758 })),
+    samples: [],
+  };
+  const request = { gpu_id: 0, vram_peak_bytes: 7 * 1024 ** 3 };
+  expect(
+    await gpuAdmissionRefusal(request, 512, {
+      procRoot,
+      state,
+      currentReservationId: reservationId,
+    }),
+  ).toBeUndefined();
+  const concurrent = await gpuAdmissionRefusal(request, 512, {
+    procRoot,
+    state,
+  });
+  expect(concurrent).toContain("GPU VRAM budget exceeded");
+  expect(concurrent).toContain(`admitted=${7 * 1024 ** 3}`);
+});
 test("scope properties include RAM, zero swap, quota, tasks, walltime and OOM policy", () => {
   const m = manifest();
   const argv = buildSystemdLaunch(m, "agent-resource-test.scope", ["true"]);
@@ -468,6 +516,56 @@ test.skipIf(!live)(
         )
       ).exit,
     ).toBe(2);
+  },
+  30000,
+);
+test.skipIf(!live)(
+  "real GPU admission re-check admits one 7 GiB job and refuses a concurrent second",
+  async () => {
+    const requestBytes = 7 * 1024 ** 3;
+    const f = await fixture(
+      manifest({
+        device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: requestBytes },
+      }),
+    );
+    const policy = join(f.dir, "policy-concurrent.toml");
+    await Bun.write(
+      policy,
+      "schema=1\ngpu_max_concurrent_jobs=2\ngpu_safety_mib=512\n",
+    );
+    f.env.AGENT_RESOURCE_POLICY = policy;
+    const marker = join(f.dir, "first-job-started");
+    const first = invoke(
+      [
+        "--manifest",
+        f.path,
+        "--",
+        process.execPath,
+        "-e",
+        `
+          const fs = await import('node:fs/promises');
+          await fs.writeFile(${JSON.stringify(marker)}, 'admitted');
+          await Bun.sleep(3000);
+        `,
+      ],
+      f.env,
+    );
+    for (let n = 0; n < 1000 && !(await Bun.file(marker).exists()); n++)
+      await Bun.sleep(10);
+    expect(await Bun.file(marker).exists()).toBe(true);
+    const secondManifest = manifest({
+      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: requestBytes },
+    });
+    const second = await invoke(
+      ["--manifest", f.path, "--job-id", secondManifest.job_id, "--", "true"],
+      f.env,
+    );
+    expect(second.exit, second.stdout + second.stderr).toBe(69);
+    expect(second.stdout).toContain("GPU VRAM budget exceeded");
+    expect(second.stdout).toContain(`admitted=${requestBytes}`);
+    const firstResult = await first;
+    expect(firstResult.exit, firstResult.stdout + firstResult.stderr).toBe(0);
+    expect(firstResult.stdout).toContain("ADMIT job=");
   },
   30000,
 );

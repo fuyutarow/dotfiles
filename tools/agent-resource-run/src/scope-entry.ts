@@ -12,6 +12,7 @@ async function main() {
   const receipt = jsonOf(
     z.object({
       scope_unit: z.string(),
+      reservation_id: z.string(),
       host_ram_peak_bytes: z.number(),
       gpu_safety_mib: z.number().optional(),
       device: z.object({
@@ -44,7 +45,10 @@ async function main() {
     const refusal = await gpuAdmissionRefusal(
       { gpu_id, vram_peak_bytes },
       safetyMiB,
-      { currentScope: receipt.data.scope_unit },
+      {
+        currentScope: receipt.data.scope_unit,
+        currentReservationId: receipt.data.reservation_id,
+      },
     );
     if (refusal !== undefined) return err(new Error(refusal));
   }

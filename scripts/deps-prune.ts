@@ -1,4 +1,4 @@
-// Consumer: owner/agent. deps prunes only dangling bin links owned by this checkout.
+// Consumer: owner/agent. deps prunes obsolete bin links owned by this checkout.
 // Zero-install, no argv boundary: safe after restoring deps on a fresh host.
 import {
   lstat,
@@ -11,7 +11,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join, parse, relative, resolve, sep } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
-import { z } from "../agents/hooks/zod.ts";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 async function info(path: string, follow = false) {
   const result = await attempt(() => (follow ? stat(path) : lstat(path)));
@@ -49,40 +49,78 @@ async function targetPath(
   return absolute;
 }
 
-export async function danglingRepoBins(
+async function ownedRepoBins(
   root: string,
   binDir: string,
-): Promise<string[] | Error> {
+): Promise<Array<{ name: string; path: string; dangling: boolean }> | Error> {
   const dir = await info(binDir);
   if (dir instanceof Error) return dir;
   if (dir === null) return [];
   const repo = await realpath(root);
-  const dangling: string[] = [];
+  const owned: Array<{ name: string; path: string; dangling: boolean }> = [];
   for (const name of await readdir(binDir)) {
     const path = join(binDir, name);
     const entry = await info(path);
     if (entry instanceof Error) return entry;
     if (entry?.isSymbolicLink() !== true) continue;
-    const live = await info(path, true);
-    if (live instanceof Error) return live;
-    if (live !== null) continue;
     const target = await targetPath(path);
     if (target instanceof Error) return target;
-    if (target !== undefined && target.startsWith(`${repo}${sep}`))
-      dangling.push(path);
+    if (
+      target === undefined ||
+      (target !== repo && !target.startsWith(`${repo}${sep}`))
+    )
+      continue;
+    const live = await info(path, true);
+    if (live instanceof Error) return live;
+    owned.push({ name, path, dangling: live === null });
   }
-  return dangling.toSorted();
+  return owned;
+}
+
+export async function danglingRepoBins(
+  root: string,
+  binDir: string,
+): Promise<string[] | Error> {
+  const owned = await ownedRepoBins(root, binDir);
+  if (owned instanceof Error) return owned;
+  return owned
+    .filter((bin) => bin.dangling)
+    .map((bin) => bin.path)
+    .toSorted();
+}
+
+async function readDeclaredBins(root: string): Promise<Set<string> | Error> {
+  const result = await attempt(() =>
+    Bun.file(join(root, "package.json")).text(),
+  );
+  if (!result.ok) return new Error(errorMessage(result.error));
+  const parsed = jsonOf(
+    z.looseObject({
+      bin: z.record(z.string(), z.string()),
+    }),
+  ).safeParse(result.value);
+  if (!parsed.success)
+    return new Error(
+      `invalid package.json bin declaration: ${parsed.error.message}`,
+    );
+  return new Set(Object.keys(parsed.data.bin));
 }
 
 export async function pruneRepoBins(
   root: string,
   binDir: string,
 ): Promise<string[] | Error> {
-  const removed = await danglingRepoBins(root, binDir);
-  if (removed instanceof Error) return removed;
+  const declaredBins = await readDeclaredBins(root);
+  if (declaredBins instanceof Error) return declaredBins;
+  const owned = await ownedRepoBins(root, binDir);
+  if (owned instanceof Error) return owned;
+  const removed = owned
+    .filter((bin) => bin.dangling || !declaredBins.has(bin.name))
+    .map((bin) => bin.path)
+    .toSorted();
   for (const path of removed) {
     await unlink(path);
-    process.stdout.write(`[deps] removed dangling repo bin: ${path}\n`);
+    process.stdout.write(`[deps] removed obsolete repo bin: ${path}\n`);
   }
   return removed;
 }

@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pruneRepoBins } from "../deps-prune.ts";
+import { danglingRepoBins, pruneRepoBins } from "../deps-prune.ts";
 
 test("prune removes dangling repo links, including Bun global links, and preserves foreign/live links", async () => {
   const temp = mkdtempSync(join(tmpdir(), "deps-prune-"));
@@ -25,6 +25,16 @@ test("prune removes dangling repo links, including Bun global links, and preserv
   for (const path of [repo, bins, packages])
     mkdirSync(path, { recursive: true });
   writeFileSync(join(repo, "live.ts"), "live");
+  writeFileSync(
+    join(repo, "package.json"),
+    JSON.stringify({
+      bin: {
+        live: "live.ts",
+        "agx-ws": "live.ts",
+        "agx-ticket": "live.ts",
+      },
+    }),
+  );
   symlinkSync(repo, join(packages, "dotfiles"));
   symlinkSync(join(repo, "removed.ts"), join(bins, "direct"));
   symlinkSync(
@@ -33,6 +43,9 @@ test("prune removes dangling repo links, including Bun global links, and preserv
   );
   symlinkSync(join(temp, "foreign/missing.ts"), join(bins, "foreign"));
   symlinkSync(join(repo, "live.ts"), join(bins, "live"));
+  symlinkSync(join(repo, "live.ts"), join(bins, "agx-ws"));
+  symlinkSync(join(repo, "live.ts"), join(bins, "agx-ticket"));
+  symlinkSync(join(repo, "live.ts"), join(bins, "retired-live"));
   symlinkSync(join(temp, "repo-other/missing.ts"), join(bins, "prefix"));
   symlinkSync(join(temp, "foreign"), join(packages, "foreign"));
   symlinkSync(
@@ -40,13 +53,22 @@ test("prune removes dangling repo links, including Bun global links, and preserv
     join(bins, "foreign-global"),
   );
   writeFileSync(join(bins, "regular"), "keep");
+  expect(await danglingRepoBins(repo, bins)).toEqual([
+    join(bins, "direct"),
+    join(bins, "global"),
+  ]);
+  expect(existsSync(join(bins, "retired-live"))).toBe(true);
   expect(await pruneRepoBins(repo, bins)).toEqual([
     join(bins, "direct"),
     join(bins, "global"),
+    join(bins, "retired-live"),
   ]);
   for (const name of ["foreign", "prefix", "foreign-global"])
     expect(lstatSync(join(bins, name)).isSymbolicLink()).toBe(true);
   expect(existsSync(join(bins, "live"))).toBe(true);
+  expect(existsSync(join(bins, "agx-ws"))).toBe(true);
+  expect(existsSync(join(bins, "agx-ticket"))).toBe(true);
+  expect(existsSync(join(bins, "retired-live"))).toBe(false);
   expect(existsSync(join(bins, "regular"))).toBe(true);
   expect(await pruneRepoBins(repo, bins)).toEqual([]);
 });

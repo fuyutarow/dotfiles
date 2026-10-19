@@ -147,6 +147,63 @@ of `tools/` (including the suite boundary, dispatch pipeline, capacity domain, o
 invariant's check or planned ticket) lives in
 [`tools/spec/architecture.md`](tools/spec/architecture.md); each tool README links to it.
 
+### Tool installation kinds
+
+There are two tool kinds, with separate install modes:
+
+- **A — operator tools** are called machine-wide by people or agents. Install the pinned root
+  package dependencies with `bun install`, then expose its A bins with `bun link`. A machine has
+  one installed version of each.
+- **B — repository contract tools** are called by a repository's own commit flow or `mise run
+  check`, and must work on a fresh clone. Copy their source into each consuming repository; that
+  repository pins its copy and updates it only through an explicit pull. Consumers never symlink
+  to or name a dotfiles path, and repository gates never depend on an A tool.
+
+The root `package.json` bin map is the source inventory. Aliases are listed separately so every
+bin name has a classification.
+
+| Bin | Kind | Reason |
+|---|---|---|
+| `baseline` | A | Operator command for inspecting benchmark baselines. |
+| `agent-resource-run` | A | People and agents invoke resource-bounded runs across repositories. |
+| `gpu-sampler` | A | Machine service and operators use the shared GPU sample. |
+| `serena-foreground` | A | Agents invoke the Serena foreground adapter from any repository. |
+| `rr` | A | People and agents use the repository query router from any cwd. |
+| `repo-retrieve` | A | Alias for the machine-wide `rr` operator. |
+| `smart-open` | A | Shell and operators open paths or URLs across repositories. |
+| `disk-reclaim` | A | Operators reclaim machine storage. |
+| `storage-headroom` | A | Operators inspect machine storage headroom. |
+| `prompt-archive` | A | Operators search and manage the machine prompt archive. |
+| `statusline` | A | Agent runtime invokes the machine status renderer. |
+| `btmp` | A | Operators inspect the herdr backtrace map. |
+| `herdr-projector` | A | Operators project herdr session state machine-wide. |
+| `tool` | A | Operators look up the machine's declared tool tiers. |
+| `agx` | A | People and agents dispatch the machine-wide agx suite. |
+| `agx-ws` | A | Alias for the machine-wide `agx ws` operator. |
+| `ws` | A | Short alias for the machine-wide workspace operator. |
+| `coredev` | A | Operators manage approved remote core development hosts. |
+| `sui-keystore-merge` | A | Operators merge local Sui keystore data. |
+| `jj-commit` | B | A consumer repository's commit task runs its pinned commit helper. |
+| `jj-push` | B | A consumer repository's push task runs its pinned push helper. |
+| `jj-precommit` | B | A consumer repository's commit gate runs its pinned pre-commit helper. |
+| `fmt-staged` | B | A consumer repository's staged formatter runs from its own source copy. |
+| `mise-contract` | B | A consumer repository checks its own mise task contract. |
+| `wiring-check` | B | A consumer repository checks its own repository wiring. |
+| `continuation-check` | B | A consumer repository validates its own continuation record. |
+| `continuation-checkpoint` | B | A consumer repository checkpoints its own continuation record. |
+| `research-docs-check` | B | A consumer repository checks its own research document rules. |
+| `tex-oracle` | B | A consumer repository's TeX gate uses its pinned oracle helper. |
+| `scope-check` | B | A consumer repository checks its own harness scope. |
+| `gate-diagnostics-check` | B | A consumer repository checks its own gate diagnostics. |
+| `script-check` | B | A consumer repository validates its own scripts. |
+| `skill-check` | B | A consumer repository validates its own skills. |
+| `agx-ticket` | A | Operators issue and collect tickets across repositories. |
+| `tkt` | A | Short alias for the machine-wide ticket operator. |
+| `lint-ts-candidate` | B | A consumer repository's TypeScript lint gate uses its pinned checker. |
+| `jex` | A | People and agents classify files from any repository. |
+| `xmsg` | A | Operators send messages across agent sessions. |
+| `agx-worker` | A | People and agents dispatch and inspect work across repositories. |
+
 `jex Q FILE...` classifies files against yes/no questions in TOML; `--request` previews without sending.
 See [jex](tools/jex/README.md) for its JSON and exit contracts. Attach its output with
 `agx worker judge RUN accept|reject --evidence FILE` (repeatable): agx records SHA-256 and content
@@ -280,6 +337,12 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
      Claude Code's `env.TZ`, and expected by `doctor:remote`.
    - Remaining human-driven write-through, by design: `sheldon add` (edits `sheldon/plugins.toml`,
      measured) and Karabiner's GUI (macOS) are the owner editing the declaration through a tool.
+9. **Tools have two kinds and two install modes.** Machine-wide operator tools (A) are installed
+   from the pinned root package with `bun install` / `bun link`, one version per machine.
+   Repository contract tools (B), used by a repository's commit flow and `mise run check`, are
+   copied into that repository and updated only by an explicit pull. A consumer never symlinks to
+   or names a dotfiles path; a repository gate never depends on an A tool. The full bin inventory
+   and classifications live in _Architecture → Tool installation kinds_.
 
 ## Setup
 

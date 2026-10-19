@@ -12,6 +12,7 @@
   "bin": {
     "baseline": "tools/baseline/src/baseline.ts",
     "agent-resource-run": "tools/agent-resource-run/src/agent-resource-run.ts",
+    "gpu-sampler": "tools/shared/src/gpu-sampler.ts",
     "serena-foreground": "tools/serena-foreground/src/serena-foreground.ts",
     "rr": "tools/repo-retrieve/src/repo-retrieve.ts",
     "repo-retrieve": "tools/repo-retrieve/src/repo-retrieve.ts",

@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 // Sole nvidia-smi owner. Run this foreground entrypoint under the host's supervisor.
 // Recover a crashed owner only after /proc proves both owner and driver absent.
 // Retired owner directories prevent delayed reclaimers from moving a successor lock.

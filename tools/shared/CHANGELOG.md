@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.1 — 2026-10-19
+
+- Expose gpu-sampler as a PATH command
+
 ## 0.14.0 — 2026-10-19
 
 - Add schema 1 fleet session handoff with atomic publication and shared Stop snapshot rows

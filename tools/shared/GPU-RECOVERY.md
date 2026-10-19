@@ -90,7 +90,7 @@ Run the steps in order. The process and state inspections are read-only.
    recovered:
 
    ```sh
-   bun tools/shared/src/gpu-sampler.ts --check
+   gpu-sampler --check
    ```
 
    Exit 1 prints each remaining failure: a dxg `D`-state process, an unknown

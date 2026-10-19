@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 — 2026-10-19
+
+- Clear stale pane identity tokens
+
 ## 0.1.2 — 2026-10-19
 
 - Require vendor-matched Herdr session identities and shorten unknown labels

@@ -62,14 +62,18 @@ async function herdr(args: string[]): Promise<boolean> {
 }
 
 function sessionWhy(session: FleetSessionRead | undefined): string {
-  if (session === undefined) return "no id";
+  if (session === undefined) return "no session id";
   const unavailable = FleetSessionUnavailableSchema.safeParse(session);
   if (unavailable.success) {
-    if (unavailable.data.why.includes("missing")) return "missing";
-    if (unavailable.data.why.includes("invalid")) return "invalid";
-    return "unknown";
+    if (unavailable.data.why.includes("missing")) return "no session file";
+    if (unavailable.data.why.includes("invalid")) return "invalid session file";
+    return "session unavailable";
   }
-  return "unknown";
+  const parsed = FleetSessionSchema.safeParse(session);
+  const name = parsed.success
+    ? FleetSessionUnavailableSchema.safeParse(parsed.data.name)
+    : undefined;
+  return name?.success === true ? "name unavailable" : "session unavailable";
 }
 
 function unavailableLabel(agent: Agent, why: string): string {
@@ -127,25 +131,16 @@ export async function projectAgents(
     }
     const matchedSessionId =
       parsedCandidate.success &&
-      (parsedCandidate.data.vendor !== vendor ||
-        parsedCandidate.data.session_id !== sessionId)
-        ? undefined
-        : sessionId;
+      parsedCandidate.data.vendor === vendor &&
+      parsedCandidate.data.session_id === sessionId
+        ? sessionId
+        : undefined;
     const parsedSession = FleetSessionSchema.safeParse(session);
     const identity = parsedSession.success ? parsedSession.data : undefined;
     const knownName =
       identity !== undefined && typeof identity.name === "string"
         ? identity.name
         : undefined;
-    const known = knownName !== undefined;
-    const priorSessionId = agent.tokens?.fleet_session_id;
-    const priorName = agent.tokens?.fullname ?? "";
-    const priorKnown =
-      priorSessionId === matchedSessionId &&
-      priorName !== "" &&
-      !priorName.includes("(unidentified:");
-    if (!known && priorKnown) continue;
-
     const why = sessionWhy(session);
     const name = knownName ?? unavailableLabel(agent, why);
     const model =
@@ -156,7 +151,9 @@ export async function projectAgents(
       identity !== undefined && typeof identity.effort === "string"
         ? identity.effort
         : "";
-    const rc = agent.tokens?.rc ?? "rc:?";
+    // Fleet-session records do not carry RC state, so never inherit a pane token
+    // that may have been written by an older projector or statusline.
+    const rc = "rc:?";
 
     const renamed = await apply(["tab", "rename", agent.tab_id, name]);
     const reported = await apply([

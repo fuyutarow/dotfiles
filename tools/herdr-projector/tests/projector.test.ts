@@ -85,8 +85,13 @@ test("projects known identity metadata and labels unknown agents without model",
   expect(calls[1]).toContain("fullname=project-agt_abcd");
   expect(calls[1]).toContain("model=Opus 5.5");
   expect(calls[1]).toContain("effort=high");
-  expect(calls[1]).toContain("rc=🔗");
-  expect(calls[2]).toEqual(["tab", "rename", "tab-2", "codex · n/a(missing)"]);
+  expect(calls[1]).toContain("rc=rc:?");
+  expect(calls[2]).toEqual([
+    "tab",
+    "rename",
+    "tab-2",
+    "codex · n/a(no session file)",
+  ]);
   expect(calls[3]).toContain("model=");
 });
 
@@ -107,7 +112,12 @@ test("rejects a Claude session for a Codex pane and clears its identity", async 
     new Map([["sid-1", parsedClaude.data]]),
     (args) => Promise.resolve(calls.push(args)).then(() => true),
   );
-  expect(calls[0]).toEqual(["tab", "rename", "tab-2", "codex · n/a(no id)"]);
+  expect(calls[0]).toEqual([
+    "tab",
+    "rename",
+    "tab-2",
+    "codex · n/a(no session id)",
+  ]);
   expect(calls[1]).toContain("model=");
   expect(calls[1]).toContain("fleet_session_id=");
 });
@@ -168,27 +178,41 @@ test("keeps unavailable labels within 40 characters", async () => {
   );
   const label = calls[0]?.[3] ?? "";
   expect(label.length).toBeLessThanOrEqual(40);
-  expect(label).toContain(" · n/a(no id)");
+  expect(label).toContain(" · n/a(no session id)");
 });
 
-test("unknown refresh does not overwrite an existing known identity for the same session", async () => {
+test("missing session clears stale identity tokens and explains the missing file", async () => {
   const calls: string[][] = [];
   await projectAgents(
     [
       {
-        agent: "claude",
-        pane_id: "pane-1",
-        tab_id: "tab-1",
-        agent_session: { value: "sid-1" },
+        agent: "codex",
+        pane_id: "pane-2",
+        tab_id: "tab-2",
+        agent_session: { value: "stale-id" },
         tokens: {
-          fleet_session_id: "sid-1",
-          fullname: "project-agt_abcd",
+          fleet_session_id: "stale-id",
+          fullname: "standard-skills-agt_0mr6",
           model: "Opus 5.5",
+          effort: "medium",
+          rc: "🔗",
         },
       },
     ],
-    new Map(),
+    new Map([
+      ["stale-id", { na: true, why: "fleet session stale-id is missing" }],
+    ]),
     (args) => Promise.resolve(calls.push(args)).then(() => true),
   );
-  expect(calls).toEqual([]);
+  expect(calls[0]).toEqual([
+    "tab",
+    "rename",
+    "tab-2",
+    "codex · n/a(no session file)",
+  ]);
+  expect(calls[1]).toContain("fullname=codex · n/a(no session file)");
+  expect(calls[1]).toContain("model=");
+  expect(calls[1]).toContain("effort=");
+  expect(calls[1]).toContain("rc=rc:?");
+  expect(calls[1]).toContain("fleet_session_id=");
 });

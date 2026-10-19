@@ -500,9 +500,13 @@ if (liveMode) {
   process.exit(code);
 } else {
   const current = session ?? {};
-  if (session !== undefined)
-    await writeStatuslineFleetSession(session, codexMode ? "codex" : "claude");
   const df = await buildDataframe(current, { codex: codexMode });
+  if (session !== undefined)
+    await writeStatuslineFleetSession(
+      session,
+      codexMode ? "codex" : "claude",
+      codexMode ? undefined : df.sessionName,
+    );
   process.stdout.write(
     `${render(df, { codex: codexMode, layout: "block" })}${codexMode && onceMode ? "\n" : ""}`,
   );

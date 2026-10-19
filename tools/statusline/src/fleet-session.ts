@@ -5,6 +5,7 @@ import {
   type FleetSessionUnavailable,
 } from "../../shared/src/fleet-session.ts";
 import type { SessionStatus } from "./session-status.ts";
+import { agentNameAsync } from "./identity.ts";
 
 type Vendor = FleetSession["vendor"];
 type Unavailable = FleetSessionUnavailable;
@@ -32,11 +33,24 @@ function isoFromEpochSeconds(value: number | undefined, why: string) {
   return Temporal.Instant.fromEpochMilliseconds(value * 1000).toString();
 }
 
-function sessionName(vendor: Vendor) {
+async function sessionName(
+  vendor: Vendor,
+  sessionId: string,
+  hint: string | undefined,
+  resolvedName: string | undefined,
+) {
   if (vendor === "codex")
     return unavailable("Codex rollout has no addressable agent name");
-  return unavailable(
-    "Claude session name is not available in the statusline payload",
+  if (resolvedName !== undefined && resolvedName !== "") return resolvedName;
+  if (process.env.HERDR_ENV !== "1")
+    return unavailable(
+      "Claude name lookup is not enabled outside Herdr sessions",
+    );
+  const result = await agentNameAsync(sessionId, hint);
+  if (result.isErr()) return unavailable(result.error);
+  return availableText(
+    result.value,
+    "Claude agent name is not listed for this session",
   );
 }
 
@@ -86,6 +100,7 @@ function sessionRate(
 export async function writeStatuslineFleetSession(
   session: SessionStatus,
   vendor: Vendor,
+  resolvedName?: string,
 ): Promise<void> {
   const sessionId = session.sessionId;
   if (sessionId === undefined || sessionId === "") return;
@@ -114,14 +129,19 @@ export async function writeStatuslineFleetSession(
       session.rateLimits?.fiveHour?.resetsAt,
       session.rateLimits?.sevenDay?.resetsAt,
     );
+    const name = await sessionName(
+      vendor,
+      sessionId,
+      session.sessionName,
+      resolvedName,
+    );
     const paneId = process.env.TMUX_PANE;
     const record: FleetSession = {
       schema: 1,
       session_id: sessionId,
       vendor,
-      // session_name is only a display hint; the statusline payload does not provide the
-      // addressable Claude agent name, and resolving it would spawn a subprocess per render.
-      name: sessionName(vendor),
+      // Claude passes the same resolved name used by the statusline's Session identity line.
+      name,
       model: availableText(
         session.model?.name,
         "model display name is not available",

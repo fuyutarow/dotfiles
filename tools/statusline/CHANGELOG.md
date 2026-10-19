@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.9 — 2026-10-19
+
+- Write resolved Claude session names to fleet handoffs
+
 ## 0.20.8 — 2026-10-19
 
 - Write Claude and Codex statusline session handoffs for fleet consumers

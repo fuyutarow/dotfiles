@@ -1,5 +1,13 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -40,6 +48,7 @@ test("Claude status writes its normalized statusline facts atomically", async ()
       },
     },
     "claude",
+    "dotfiles-agt_fixture",
   );
 
   const stored = await readFleetSession("claude-session", {
@@ -49,7 +58,7 @@ test("Claude status writes its normalized statusline facts atomically", async ()
     schema: 1,
     session_id: "claude-session",
     vendor: "claude",
-    name: { na: true },
+    name: "dotfiles-agt_fixture",
     model: "Claude Example",
     effort: "high",
     ctx: { tokens: 1200, pct: 12.5 },
@@ -110,10 +119,14 @@ test("Claude statusline payload writes the session handoff on the entrypoint", a
   const home = join(root, "entry-home");
   const runtime = join(root, "entry-runtime");
   const cwd = join(root, "entry-project");
+  const claudeBin = join(root, "claude-fixture");
+  const agentFixture = join(import.meta.dir, "fixtures/claude-agents.json");
   await Promise.all([
     mkdir(join(home, ".claude"), { recursive: true }),
     mkdir(cwd, { recursive: true }),
   ]);
+  await writeFile(claudeBin, '#!/bin/sh\ncat "$STATUSLINE_AGENT_FIXTURE"\n');
+  await chmod(claudeBin, 0o755);
   const child = Bun.spawn(
     [process.execPath, join(import.meta.dir, "../src/statusline-main.ts")],
     {
@@ -122,11 +135,14 @@ test("Claude statusline payload writes the session handoff on the entrypoint", a
         HOME: home,
         PWD: cwd,
         XDG_RUNTIME_DIR: runtime,
-        CLAUDE_CODE_EXECPATH: join(root, "missing-claude-entrypoint"),
+        HERDR_ENV: "1",
+        CLAUDE_CODE_EXECPATH: claudeBin,
+        STATUSLINE_AGENT_FIXTURE: agentFixture,
       },
       stdin: new Blob([
         JSON.stringify({
           session_id: "entrypoint-session",
+          session_name: "statusline-title-hint",
           cwd,
           model: { display_name: "Claude Entry" },
           effort: { level: "low" },
@@ -155,6 +171,7 @@ test("Claude statusline payload writes the session handoff on the entrypoint", a
     session_id: "entrypoint-session",
     cwd,
     model: "Claude Entry",
+    name: "dotfiles-agt_g67e",
     effort: "low",
     ctx: { tokens: 100, pct: 12 },
   });

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4 — 2026-10-19
+
+- Skip unchanged projection cycles and read only Codex rollout identity metadata
+
 ## 0.1.3 — 2026-10-19
 
 - Clear stale pane identity tokens

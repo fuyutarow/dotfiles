@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
+import { mkdir, rename } from "node:fs/promises";
+import { join } from "node:path";
 import { standardCli } from "../../shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
 import {
@@ -8,7 +10,11 @@ import {
   readFleetSession,
   type FleetSessionRead,
 } from "../../shared/src/fleet-session.ts";
-import { readCodexSessionStatus } from "../../statusline/src/adapters/codex-rollout.ts";
+import {
+  codexDiscoveryStamp,
+  codexRolloutSnapshot,
+  findCodexSessionId as lookupCodexSessionId,
+} from "./codex-session-id.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const argv = process.argv.slice(2);
@@ -92,10 +98,10 @@ export async function projectAgents(
   agents: Agent[],
   sessions: ReadonlyMap<string, FleetSessionRead>,
   apply: (args: string[]) => Promise<boolean>,
-  findCodexSessionId: CodexSessionLookup = async (cwd) =>
-    (await readCodexSessionStatus(cwd))?.sessionId,
+  findCodexSessionId: CodexSessionLookup = lookupCodexSessionId,
 ): Promise<number> {
   let updated = 0;
+  const codexIds = new Map<string, Promise<string | undefined>>();
   for (const agent of agents) {
     if (agent.pane_id === undefined || agent.tab_id === undefined) continue;
     const vendor = agent.agent;
@@ -105,8 +111,11 @@ export async function projectAgents(
       sessionId === undefined &&
       vendor === "codex" &&
       agent.cwd !== undefined
-    )
-      sessionId = await findCodexSessionId(agent.cwd);
+    ) {
+      const lookup = codexIds.get(agent.cwd) ?? findCodexSessionId(agent.cwd);
+      codexIds.set(agent.cwd, lookup);
+      sessionId = await lookup;
+    }
     let candidate =
       sessionId === undefined ? undefined : sessions.get(sessionId);
     if (
@@ -187,19 +196,127 @@ async function project(): Promise<number> {
     );
     return 1;
   }
+  const runtime = process.env.XDG_RUNTIME_DIR;
+  const cacheDir =
+    runtime === undefined || runtime === ""
+      ? undefined
+      : join(runtime, "herdr-projector");
+  const cachePath =
+    cacheDir === undefined
+      ? undefined
+      : join(cacheDir, `${Bun.hash(import.meta.path)}.json`);
+  const Cache = jsonOf(
+    z.object({ key: z.string(), inferredIds: z.array(z.string()) }),
+  );
+  const cached = Cache.safeParse(
+    cachePath === undefined
+      ? ""
+      : await Bun.file(cachePath)
+          .text()
+          .catch(() => ""),
+  );
+  const inferredIds = new Set(cached.success ? cached.data.inferredIds : []);
   const sessionIds = [
-    ...new Set(
-      agents.flatMap((agent) => {
+    ...new Set([
+      ...inferredIds,
+      ...agents.flatMap((agent) => {
         const id = agent.agent_session?.value;
         return id === undefined || id === "" ? [] : [id];
       }),
-    ),
+    ]),
   ];
   const results = await Promise.all(
     sessionIds.map(async (id) => [id, await readFleetSession(id)] as const),
   );
   const sessions = new Map(results);
-  return projectAgents(agents, sessions, herdr);
+  const needsCodexLookup = agents.some(
+    (agent) =>
+      agent.agent === "codex" &&
+      agent.agent_session?.value === undefined &&
+      agent.cwd !== undefined &&
+      agent.pane_id !== undefined &&
+      agent.tab_id !== undefined,
+  );
+  const discovery = needsCodexLookup ? await codexDiscoveryStamp() : [];
+  const identities = () =>
+    [...sessions.entries()]
+      .toSorted(([a], [b]) => a.localeCompare(b))
+      .map(([id, session]) => {
+        const parsed = FleetSessionSchema.safeParse(session);
+        if (!parsed.success) return [id, session];
+        const { vendor, session_id, name, model, effort } = parsed.data;
+        return [id, { vendor, session_id, name, model, effort }];
+      });
+  const panes = agents.map((agent) => ({
+    ...agent,
+    tokens: {
+      fullname: agent.tokens?.fullname,
+      model: agent.tokens?.model,
+      effort: agent.tokens?.effort,
+      rc: agent.tokens?.rc,
+      fleet_session_id: agent.tokens?.fleet_session_id,
+    },
+  }));
+  const fingerprint = () =>
+    new Bun.CryptoHasher("sha256")
+      .update(
+        JSON.stringify({
+          version: cliPackage.version,
+          panes,
+          identities: identities(),
+          discovery,
+        }),
+      )
+      .digest("hex");
+  if (cached.success && cached.data.key === fingerprint()) {
+    process.stdout.write("herdr-projector: unchanged; projected 0 pane(s)\n");
+    return 0;
+  }
+  let applied = true;
+  inferredIds.clear();
+  const rollouts = needsCodexLookup ? await codexRolloutSnapshot() : [];
+  const result = await projectAgents(
+    agents,
+    sessions,
+    async (args) => {
+      const ok = await herdr(args);
+      applied = applied && ok;
+      return ok;
+    },
+    async (cwd) => {
+      const id = await lookupCodexSessionId(
+        cwd,
+        undefined,
+        undefined,
+        rollouts,
+      );
+      if (id !== undefined) {
+        inferredIds.add(id);
+        if (!sessions.has(id)) sessions.set(id, await readFleetSession(id));
+      }
+      return id;
+    },
+  );
+  // A failed mutation must be retried, and cache trouble must not block projection.
+  if (applied && cacheDir !== undefined && cachePath !== undefined) {
+    await (async () => {
+      const currentIds = new Set([
+        ...inferredIds,
+        ...agents.flatMap((agent) => agent.agent_session?.value ?? []),
+      ]);
+      for (const id of sessions.keys())
+        if (!currentIds.has(id)) sessions.delete(id);
+      await mkdir(cacheDir, { recursive: true, mode: 0o700 });
+      const temp = `${cachePath}.${process.pid}.tmp`;
+      await Bun.write(
+        temp,
+        JSON.stringify({ key: fingerprint(), inferredIds: [...inferredIds] }),
+        { mode: 0o600 },
+      );
+      await rename(temp, cachePath);
+    })().catch(() => null);
+  }
+  return applied ? result : 1;
 }
 
 if (import.meta.main) {

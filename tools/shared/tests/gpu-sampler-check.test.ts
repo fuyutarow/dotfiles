@@ -55,9 +55,11 @@ test("reports an admitted-job pause as OK without requiring a fresh probe", asyn
     `${JSON.stringify({
       schema: 1,
       attemptAt: f.at,
-      sampledAt: f.at - 60_000,
+      sampledAt: f.at,
+      lastProbeAt: f.at - 60_000,
       na: true,
-      why: "probe paused: GPU job admitted",
+      paused: true,
+      holder: { slot: "gpu.0.0", pid: 2468 },
       devices: [],
       processes: [],
       samples: [],
@@ -66,7 +68,7 @@ test("reports an admitted-job pause as OK without requiring a fresh probe", asyn
   expect(await checkGpuSampler(f)).toEqual({
     ok: true,
     failures: [],
-    paused: "probe paused: GPU job admitted",
+    paused: "probe paused: GPU job admitted (slot gpu.0.0, PID 2468)",
   });
 });
 

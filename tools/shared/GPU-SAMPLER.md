@@ -14,12 +14,16 @@ Consumers never start this service.
 
 Each invocation checks the live `lslocks` rows for files matching `gpu.*` in
 `$XDG_RUNTIME_DIR/agent-resource/slots` before considering any driver query. A
-held GPU slot writes `na: true` and `why: "probe paused: GPU job admitted"`;
-it preserves the last successful `sampledAt` and sample ring and does not count
-as a miss or stall. The first cycle after all GPU slots are free can probe
-without waiting out a pause-induced cooldown. `gpu-sampler --check` treats this
-state as OK and prints the pause reason. Slot inventory failures pause probing
-as well, fail-closed. If no slot directory exists, there are no admitted slots.
+held GPU slot writes `paused: true`, the holder `{ slot, pid }`, and fresh
+`attemptAt` and `sampledAt` timestamps. `sampledAt` marks the current owner
+state as available during the admitted job; `lastProbeAt` marks when the
+preserved device values were actually queried. The sample ring and device
+values are preserved. A paused cycle does not add a probe miss or set
+`unresponsiveSince`. `gpu-sampler --check` treats this state as OK and prints
+the holder's slot and PID. The first cycle after all GPU slots are free can
+probe without waiting out a pause-induced cooldown. Slot inventory failures
+pause probing as well, fail-closed, but do not refresh `sampledAt` or claim a
+holder. If no slot directory exists, there are no admitted slots.
 
 When no GPU slot is held, each invocation inventories Linux `/proc` before
 starting `nvidia-smi -q -x`.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.2 — 2026-10-19
+
+- Record fresh GPU sampler state during admitted-job pauses
+
 ## 0.15.1 — 2026-10-19
 
 - Pause GPU sampling while admitted GPU slots are held

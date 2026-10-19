@@ -244,7 +244,7 @@ const pausedReason = "probe paused: GPU job admitted";
 /** Match agent-resource-run status: only lslocks rows on GPU slot files count. */
 async function gpuSlotHeld(
   options: SamplerOptions,
-): Promise<boolean | undefined> {
+): Promise<{ slot: string; pid: number } | false | undefined> {
   if (process.platform !== "linux") return undefined;
   const runtimeRoot = process.env.XDG_RUNTIME_DIR;
   const directory =
@@ -281,12 +281,21 @@ async function gpuSlotHeld(
   const [stdout, exit] = await Promise.all([child.stdout.text(), child.exited]);
   if (exit !== 0) return undefined;
   const parsed = jsonOf(
-    z.object({ locks: z.array(z.object({ path: z.string().nullable() })) }),
+    z.object({
+      locks: z.array(
+        z.object({
+          path: z.string().nullable(),
+          pid: z.number().int().positive(),
+        }),
+      ),
+    }),
   ).safeParse(stdout.trim());
   if (!parsed.success) return undefined;
-  return parsed.data.locks.some(
-    (row) => row.path !== null && slots.has(row.path),
-  );
+  for (const row of parsed.data.locks) {
+    if (row.path === null || !slots.has(row.path)) continue;
+    return { slot: basename(row.path), pid: row.pid };
+  }
+  return false;
 }
 
 type ProcFinding = {
@@ -386,8 +395,10 @@ export async function checkGpuSampler(
     inspectProcesses(procRoot),
   ]);
   const failures: string[] = [];
-  const paused =
-    state?.na === true && state.why === pausedReason ? state.why : undefined;
+  let paused: string | undefined;
+  if (state?.paused === true)
+    paused = `${pausedReason} (slot ${state.holder?.slot ?? "unknown"}, PID ${state.holder?.pid ?? "unknown"})`;
+  else if (state?.na === true && state.why === pausedReason) paused = state.why;
 
   if (proc.dxgTasks.length > 0)
     failures.push(`D-state process(es) in dxg: ${proc.dxgTasks.join(", ")}`);
@@ -411,7 +422,9 @@ export async function checkGpuSampler(
       failures.push(
         "cannot fully verify GPU-holding zombies because process inventory is incomplete",
       );
-    const isPaused = state.na === true && state.why === pausedReason;
+    const isPaused =
+      state.paused === true ||
+      (state.na === true && state.why === pausedReason);
     if (
       !isPaused &&
       (state.sampledAt === undefined ||
@@ -463,9 +476,17 @@ export async function runGpuSampler(
         ...base,
         attemptAt: now,
         na: true,
-        unresponsiveSince: undefined,
-        stallEvidence: undefined,
-        why,
+        ...(unavailable
+          ? { paused: undefined, holder: undefined, why }
+          : {
+              sampledAt: now,
+              lastProbeAt: base.lastProbeAt ?? base.sampledAt,
+              paused: true,
+              holder: slotHeld,
+              unresponsiveSince: undefined,
+              stallEvidence: undefined,
+              why: undefined,
+            }),
       });
       return why;
     }
@@ -505,6 +526,8 @@ export async function runGpuSampler(
       ...base,
       attemptAt: now,
       na: undefined,
+      paused: undefined,
+      holder: undefined,
       why: undefined,
     };
     await writeState(path, pending);
@@ -579,6 +602,9 @@ export async function runGpuSampler(
       schema: 1,
       attemptAt: now,
       na: undefined,
+      lastProbeAt: at,
+      paused: undefined,
+      holder: undefined,
       sampledAt: at,
       consecutiveProbeMisses: 0,
       ...snapshot,

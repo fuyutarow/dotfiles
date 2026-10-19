@@ -115,6 +115,14 @@ export const GpuStateSchema = z.object({
   schema: z.literal(1),
   attemptAt: z.number().int().nonnegative(),
   sampledAt: z.number().int().nonnegative().optional(),
+  lastProbeAt: z.number().int().nonnegative().optional(),
+  paused: z.literal(true).optional(),
+  holder: z
+    .object({
+      slot: z.string().regex(/^gpu\.\d+\.\d+$/u),
+      pid: z.number().int().positive(),
+    })
+    .optional(),
   unresponsiveSince: z.number().int().nonnegative().optional(),
   na: z.literal(true).optional(),
   stallEvidence: z.string().optional(),
@@ -147,6 +155,7 @@ export function gpuStateFailure(
     return state.why ?? "stale (no GPU sample)";
   if (state.sampledAt > now || now - state.sampledAt > maxAgeMs)
     return "stale (GPU sample expired)";
+  if (state.paused === true) return undefined;
   return state.why;
 }
 export type GpuRead =

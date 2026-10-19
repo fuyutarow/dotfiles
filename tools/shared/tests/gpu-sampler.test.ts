@@ -76,7 +76,7 @@ test("pauses during a held GPU slot without probing or counting a miss, then res
   await writeFile(slot, "");
   await writeFile(
     options.lslocksPath,
-    `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify({ locks: [{ path: slot }] }))});\n`,
+    `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify({ locks: [{ path: slot, pid: 2468 }] }))});\n`,
     { mode: 0o755 },
   );
   await Bun.write(
@@ -93,12 +93,15 @@ test("pauses during a held GPU slot without probing or counting a miss, then res
   const paused = await readGpuState(options.statePath);
   expect(paused).toMatchObject({
     na: true,
-    why: "probe paused: GPU job admitted",
-    sampledAt: at,
+    paused: true,
+    holder: { slot: "gpu.0.0", pid: 2468 },
+    lastProbeAt: at,
+    sampledAt: at + 60_000,
     attemptAt: at + 60_000,
     consecutiveProbeMisses: 0,
     samples: good?.samples,
   });
+  expect(gpuReadFromState(paused, at + 60_000).ok).toBe(true);
   expect(paused?.unresponsiveSince).toBeUndefined();
   expect(await Bun.file(calls).text()).toBe("x");
 
@@ -112,6 +115,9 @@ test("pauses during a held GPU slot without probing or counting a miss, then res
   );
   expect(await Bun.file(calls).text()).toBe("xx");
   expect((await readGpuState(options.statePath))?.sampledAt).toBe(at + 60_001);
+  expect((await readGpuState(options.statePath))?.lastProbeAt).toBe(
+    at + 60_001,
+  );
 });
 test("one XML snapshot includes GPU memory, power, utilization and per-process memory", () => {
   expect(parseGpuXml(GPU_XML)).toEqual({

@@ -25,7 +25,11 @@ import { hostname, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
-import { packageBinProblems, runLandConsumerGates } from "../land.ts";
+import {
+  packageBinProblems,
+  removedCommandCallers,
+  runLandConsumerGates,
+} from "../land.ts";
 import { landStateDir } from "../land-queue.ts";
 import { doctorReport } from "../land-doctor.ts";
 import { applyToolChangesets } from "../land-changesets.ts";
@@ -122,6 +126,42 @@ test("package bin targets must be executable and start with a shebang", async ()
 
 test("every repository package bin target is executable and has a shebang", async () => {
   expect(await packageBinProblems(REPO)).toEqual([]);
+});
+
+test("removed command preflight lists fixture callers and honors callers-cleared", async () => {
+  const root = await mkdtemp(join(tmpdir(), "land-removal-guard-"));
+  temporary.push(root);
+  const home = join(root, "home");
+  const workspace = join(home, "Workspace");
+  const repo = join(workspace, "caller-fixture");
+  await mkdir(join(repo, ".git"), { recursive: true });
+  await mkdir(join(repo, "src"), { recursive: true });
+  await writeFile(
+    join(repo, "src", "use-command.sh"),
+    "#!/bin/sh\nfixture-cli --help\nagx jev\n",
+  );
+
+  const result = await removedCommandCallers(
+    ["fixture-cli", "jev"],
+    "Remove old commands",
+    home,
+    workspace,
+  );
+  expect(result.isOk()).toBe(true);
+  if (result.isErr()) return;
+  expect(result.value).toEqual([
+    `${repo}/src/use-command.sh:2 (fixture-cli)`,
+    `${repo}/src/use-command.sh:3 (jev)`,
+  ]);
+
+  const cleared = await removedCommandCallers(
+    ["fixture-cli", "jev"],
+    "Remove old commands\n\ncallers-cleared: fixture-cli\ncallers-cleared: jev",
+    home,
+    workspace,
+  );
+  expect(cleared.isOk()).toBe(true);
+  if (cleared.isOk()) expect(cleared.value).toEqual([]);
 });
 
 test("restored candidate reloads its inline registry schema after the same path was imported", async () => {

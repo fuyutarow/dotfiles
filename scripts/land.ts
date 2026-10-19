@@ -38,6 +38,7 @@ import {
   validPath,
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
 import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
+import { registeredRepos } from "./workspace-repos.ts";
 import {
   enqueue,
   landLock,
@@ -647,6 +648,131 @@ function packageBinMap(text: string): unknown {
   return parsed.success ? parsed.data.bin : Symbol.for("invalid-package-json");
 }
 
+function packageBinNames(text: string | undefined): string[] {
+  if (text === undefined) return [];
+  const parsed = jsonOf(
+    z.looseObject({
+      name: z.string().optional(),
+      bin: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
+    }),
+  ).safeParse(text);
+  if (!parsed.success || parsed.data.bin === undefined) return [];
+  if (typeof parsed.data.bin !== "string") return Object.keys(parsed.data.bin);
+  const name = parsed.data.name?.split("/").at(-1);
+  return name === undefined ? [] : [name];
+}
+
+function agxRouterVerbs(text: string | undefined): string[] {
+  if (text === undefined) return [];
+  const tools = text.match(/\bconst\s+tools\s*=\s*\[([^\]]*)\]/u)?.[1];
+  return tools === undefined
+    ? []
+    : Array.from(
+        tools.matchAll(/["']([a-z][a-z0-9-]*)["']/gu),
+        (match) => match[1] ?? "",
+      );
+}
+
+function removalSearchPattern(name: string): string {
+  const escaped = name.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  if (name === "jev")
+    return `(^|[^[:alnum:]_])agx[[:space:]]+${escaped}([^[:alnum:]_-]|$)|["']agx["'][[:space:]]*,[[:space:]]*["']${escaped}["']`;
+  return `(^|[[:space:]"'\u0060])${escaped}($|[[:space:]"'\u0060])`;
+}
+
+async function searchRemovalCallers(
+  search: string,
+  repo: string,
+  name: string,
+): Promise<Result<string[], Error>> {
+  const result = await runProcess(
+    [search, "regex", "--project", repo, "--query", removalSearchPattern(name)],
+    { cwd: repo, timeout: 30_000 },
+  );
+  if (result.exitCode === 1) return ok([]);
+  if (result.exitCode !== 0)
+    return err(
+      new Error(
+        `repo-retrieve caller search failed for ${name} in ${repo} (exit ${result.exitCode}): ${result.stderr.toString().trim()}`,
+      ),
+    );
+  return ok(
+    result.stdout
+      .toString()
+      .split("\n")
+      .flatMap((line) => {
+        const match = line.match(/^(.+):(\d+):/u);
+        return match?.[1] === undefined || match[2] === undefined
+          ? []
+          : [`${repo}/${match[1].replace(/^\.\//u, "")}:${match[2]} (${name})`];
+      }),
+  );
+}
+
+export async function removedCommandCallers(
+  names: readonly string[],
+  commitMessage: string,
+  home = process.env.HOME ?? "",
+  workspace = join(home, "Workspace"),
+): Promise<Result<string[], Error>> {
+  const pending = names.filter(
+    (name) => !commitMessage.includes(`callers-cleared: ${name}`),
+  );
+  if (pending.length === 0) return ok([]);
+  const search = Bun.which("repo-retrieve");
+  if (search === null)
+    return err(
+      new Error("repo-retrieve is required for removal caller checks"),
+    );
+  const callers = new Set<string>();
+  const searches = registeredRepos(home, workspace).flatMap((repo) =>
+    pending.map((name) => ({ repo, name })),
+  );
+  for (const { repo, name } of searches) {
+    const result = await searchRemovalCallers(search, repo, name);
+    if (result.isErr()) return err(result.error);
+    for (const caller of result.value) callers.add(caller);
+  }
+  return ok([...callers].toSorted());
+}
+
+function removedNames<T>(before: readonly T[], after: readonly T[]): T[] {
+  const retained = new Set(after);
+  return before.filter((name) => !retained.has(name));
+}
+
+function landRemovedCommands(
+  root: string,
+  changedPaths: readonly string[],
+  before: string,
+  after: string,
+): ResultAsync<string[], Error> {
+  return safeTry(async function* () {
+    const beforePaths = new Set(
+      (yield* jj(root, ["file", "list", "-r", before])).split("\n"),
+    );
+    const afterPaths = new Set(
+      (yield* jj(root, ["file", "list", "-r", after])).split("\n"),
+    );
+    const removals = new Set<string>();
+    for (const path of changedPaths) {
+      const isRouter = path === "tools/agx/src/agx.ts";
+      if (!isRouter && !path.endsWith("package.json")) continue;
+      const oldFile = beforePaths.has(path)
+        ? yield* jj(root, ["file", "show", "-r", before, path])
+        : undefined;
+      const newFile = afterPaths.has(path)
+        ? yield* jj(root, ["file", "show", "-r", after, path])
+        : undefined;
+      const removed = isRouter
+        ? removedNames(agxRouterVerbs(oldFile), agxRouterVerbs(newFile))
+        : removedNames(packageBinNames(oldFile), packageBinNames(newFile));
+      for (const name of removed) removals.add(name);
+    }
+    return ok([...removals].toSorted());
+  });
+}
+
 function packageBinMapDiffers(
   oldFile: string | undefined,
   newFile: string | undefined,
@@ -1098,6 +1224,23 @@ async function main(
       let changed = yield* paths(workerRoot, alpha, "@");
       if (changed.length === 0)
         return reject("workspace change is empty after rebase");
+      const removedCommands = yield* landRemovedCommands(
+        landerRoot,
+        changed,
+        alpha,
+        "@",
+      );
+      if (removedCommands.length > 0) {
+        const callers = await removedCommandCallers(
+          removedCommands,
+          parsed.flags.message ?? "",
+        );
+        if (callers.isErr()) return reject(errorMessage(callers.error));
+        if (callers.value.length > 0)
+          return reject(
+            `removed command callers remain; clear them or add ${removedCommands.map((name) => `\`callers-cleared: ${name}\``).join(", ")}: ${callers.value.join(", ")}`,
+          );
+      }
       const basePaths = new Set(
         (yield* jj(landerRoot, [
           "file",

@@ -95,6 +95,22 @@ test("reports dxg D-state, GPU-holding zombie, failed probe, and unresponsive st
   ]);
 });
 
+test("reports the underlying slot inventory error instead of an admitted-job pause", async () => {
+  const f = await fixture();
+  const why =
+    "probe paused: GPU slot state unavailable: lslocks exited 3: denied";
+  await Bun.write(
+    f.statePath,
+    JSON.stringify({
+      ...ownerState(f.at),
+      paused: true,
+      na: true,
+      why,
+    }),
+  );
+  expect(await checkGpuSampler(f)).toEqual({ ok: false, failures: [why] });
+});
+
 test("fails closed when state or process inventory cannot be verified", async () => {
   const f = await fixture();
   await rm(f.statePath);

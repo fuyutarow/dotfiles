@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.3 — 2026-10-19
+
+- Fix GPU slot inventory PID column and refresh reasoned paused samples on inventory errors
+
 ## 0.15.2 — 2026-10-19
 
 - Record fresh GPU sampler state during admitted-job pauses

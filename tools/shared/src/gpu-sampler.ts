@@ -242,23 +242,33 @@ export type GpuSamplerCheckOptions = {
 const pausedReason = "probe paused: GPU job admitted";
 
 /** Match agent-resource-run status: only lslocks rows on GPU slot files count. */
-async function gpuSlotHeld(
+export async function gpuSlotHeld(
   options: SamplerOptions,
-): Promise<{ slot: string; pid: number } | false | undefined> {
-  if (process.platform !== "linux") return undefined;
+): Promise<
+  | { slot: string; pid: number; error?: never }
+  | false
+  | { error: string; slot?: never; pid?: never }
+> {
+  if (process.platform !== "linux")
+    return { error: "slot inventory requires Linux" };
   const runtimeRoot = process.env.XDG_RUNTIME_DIR;
   const directory =
     options.slotDirectory ??
     (runtimeRoot !== undefined && runtimeRoot.startsWith("/")
       ? join(runtimeRoot, "agent-resource", "slots")
       : undefined);
-  if (directory === undefined) return undefined;
+  if (directory === undefined)
+    return {
+      error: "XDG_RUNTIME_DIR must name an absolute user runtime directory",
+    };
   const names = await attempt(() => readdir(directory));
   if (!names.ok) {
     const missing = z
       .object({ code: z.literal("ENOENT") })
       .safeParse(names.error);
-    return missing.success ? false : undefined;
+    return missing.success
+      ? false
+      : { error: `cannot read ${directory}: ${String(names.error)}` };
   }
   const slots = new Set(
     names.value
@@ -269,17 +279,23 @@ async function gpuSlotHeld(
   const binary = options.lslocksPath ?? "lslocks";
   const childResult = await attempt(() =>
     Promise.resolve(
-      Bun.spawn([binary, "--json", "--notruncate", "--output", "PATH"], {
+      Bun.spawn([binary, "--json", "--notruncate", "--output", "PID,PATH"], {
         stdout: "pipe",
-        stderr: "ignore",
+        stderr: "pipe",
         timeout: 5000,
       }),
     ),
   );
-  if (!childResult.ok) return undefined;
+  if (!childResult.ok)
+    return { error: `cannot start ${binary}: ${String(childResult.error)}` };
   const child = childResult.value;
-  const [stdout, exit] = await Promise.all([child.stdout.text(), child.exited]);
-  if (exit !== 0) return undefined;
+  const [stdout, stderr, exit] = await Promise.all([
+    child.stdout.text(),
+    child.stderr.text(),
+    child.exited,
+  ]);
+  if (exit !== 0)
+    return { error: `${binary} exited ${exit}: ${stderr.trim()}` };
   const parsed = jsonOf(
     z.object({
       locks: z.array(
@@ -289,8 +305,9 @@ async function gpuSlotHeld(
         }),
       ),
     }),
-  ).safeParse(stdout.trim());
-  if (!parsed.success) return undefined;
+  ).safeParse(stdout.trim() === "" ? '{"locks":[]}' : stdout.trim());
+  if (!parsed.success)
+    return { error: `invalid ${binary} output: ${parsed.error.message}` };
   for (const row of parsed.data.locks) {
     if (row.path === null || !slots.has(row.path)) continue;
     return { slot: basename(row.path), pid: row.pid };
@@ -396,7 +413,9 @@ export async function checkGpuSampler(
   ]);
   const failures: string[] = [];
   let paused: string | undefined;
-  if (state?.paused === true)
+  if (state?.paused === true && state.why !== undefined)
+    failures.push(state.why);
+  else if (state?.paused === true)
     paused = `${pausedReason} (slot ${state.holder?.slot ?? "unknown"}, PID ${state.holder?.pid ?? "unknown"})`;
   else if (state?.na === true && state.why === pausedReason) paused = state.why;
 
@@ -468,16 +487,19 @@ export async function runGpuSampler(
     };
     const slotHeld = await gpuSlotHeld(options);
     if (slotHeld !== false) {
-      const unavailable = slotHeld === undefined;
+      const unavailable = slotHeld.error !== undefined;
       const why = unavailable
-        ? "probe paused: GPU slot state unavailable"
+        ? `probe paused: GPU slot state unavailable: ${slotHeld.error}`
         : pausedReason;
       await writeState(path, {
         ...base,
         attemptAt: now,
+        sampledAt: now,
+        lastProbeAt: base.lastProbeAt ?? base.sampledAt,
+        paused: true,
         na: true,
         ...(unavailable
-          ? { paused: undefined, holder: undefined, why }
+          ? { holder: undefined, why }
           : {
               sampledAt: now,
               lastProbeAt: base.lastProbeAt ?? base.sampledAt,

@@ -22,8 +22,17 @@ values are preserved. A paused cycle does not add a probe miss or set
 `unresponsiveSince`. `gpu-sampler --check` treats this state as OK and prints
 the holder's slot and PID. The first cycle after all GPU slots are free can
 probe without waiting out a pause-induced cooldown. Slot inventory failures
-pause probing as well, fail-closed, but do not refresh `sampledAt` or claim a
-holder. If no slot directory exists, there are no admitted slots.
+pause probing as well, fail-closed, and write fresh `attemptAt` and `sampledAt`,
+`paused: true`, and a `why` containing the underlying error without claiming a
+holder. `lastProbeAt` still identifies the preserved device observation; an
+inventory pause is not a successful driver probe. The recovery check reports the
+inventory error. If no slot directory exists, there are no admitted slots.
+
+The inventory requests both `PID` and `PATH` from `lslocks`, matching the fields
+it validates. Requesting only `PATH` omits `pid` from every row and incorrectly
+rejects even unrelated locks as invalid slot state. Empty `lslocks` output means
+no locks, matching `agent-resource-run status`. The unit receives
+`XDG_RUNTIME_DIR` from the user manager; no shell initialization is required.
 
 When no GPU slot is held, each invocation inventories Linux `/proc` before
 starting `nvidia-smi -q -x`.

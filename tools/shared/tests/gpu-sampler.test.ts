@@ -19,6 +19,7 @@ import {
   hostHasNvidiaSmi,
   parseGpuXml,
   runGpuSampler,
+  gpuSlotHeld,
 } from "../src/gpu-sampler.ts";
 import { GPU_XML, ownerState } from "./gpu-owner-fixture.ts";
 const dirs: string[] = [];
@@ -64,6 +65,94 @@ async function fixture(hang = false) {
     },
   };
 }
+
+test.skipIf(process.platform !== "linux")(
+  "slot reader uses explicit unit environment and handles empty and unlocked slot directories",
+  async () => {
+    const { dir, options, calls } = await fixture();
+    const runtime = join(dir, "runtime");
+    const slots = join(runtime, "agent-resource", "slots");
+    await mkdir(slots, { recursive: true });
+    const module = join(import.meta.dir, "../src/gpu-sampler.ts");
+    const childOptions = {
+      ...options,
+      slotDirectory: undefined,
+      lslocksPath: undefined,
+    };
+    const script = `import { gpuSlotHeld, runGpuSampler } from ${JSON.stringify(module)};
+      const options = ${JSON.stringify(childOptions)};
+      if (await gpuSlotHeld(options) !== false) throw new Error("expected no slot holder");
+      process.stdout.write(await runGpuSampler(options));`;
+    for (const populated of [false, true]) {
+      if (populated) await writeFile(join(slots, "gpu.0.0"), "");
+      const child = Bun.spawn([process.execPath, "-e", script], {
+        // No inherited shell variables: systemd supplies the runtime root and unit PATH.
+        env: { HOME: dir, XDG_RUNTIME_DIR: runtime, PATH: "/usr/bin:/bin" },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 10_000,
+      });
+      const [stdout, stderr, exit] = await Promise.all([
+        child.stdout.text(),
+        child.stderr.text(),
+        child.exited,
+      ]);
+      expect(exit, stderr).toBe(0);
+      expect(stdout).toBe(populated ? "refused: 60s interval" : "sampled");
+    }
+    expect(await Bun.file(calls).text()).toBe("x");
+  },
+);
+
+test("unreadable slot inventory writes a fresh reasoned pause and resumes immediately", async () => {
+  const { options, calls, dir } = await fixture();
+  const at = 1_000_000;
+  expect(await runGpuSampler({ ...options, now: () => at })).toBe("sampled");
+  const previous = await readGpuState(options.statePath);
+  const invalid = join(dir, "not-a-directory");
+  await writeFile(invalid, "");
+  const result = await runGpuSampler({
+    ...options,
+    slotDirectory: invalid,
+    now: () => at + 1,
+  });
+  expect(result).toContain("ENOTDIR");
+  expect(await readGpuState(options.statePath)).toMatchObject({
+    attemptAt: at + 1,
+    sampledAt: at + 1,
+    lastProbeAt: at,
+    paused: true,
+    na: true,
+    why: result,
+    samples: previous?.samples,
+  });
+  expect(await Bun.file(calls).text()).toBe("x");
+  expect(await runGpuSampler({ ...options, now: () => at + 2 })).toBe(
+    "sampled",
+  );
+});
+
+test("slot reader reports command and parse failures with their underlying errors", async () => {
+  const { options, slotDirectory } = await fixture();
+  await writeFile(join(slotDirectory, "gpu.0.0"), "");
+  await writeFile(
+    options.lslocksPath,
+    `#!${process.execPath}\nprocess.stderr.write("inventory denied"); process.exit(3);\n`,
+  );
+  expect(await gpuSlotHeld(options)).toEqual({
+    error: `${options.lslocksPath} exited 3: inventory denied`,
+  });
+  await writeFile(
+    options.lslocksPath,
+    `#!${process.execPath}\nprocess.stdout.write('invalid');\n`,
+  );
+  expect(JSON.stringify(await gpuSlotHeld(options))).toContain("invalid");
+  expect(
+    JSON.stringify(
+      await gpuSlotHeld({ ...options, lslocksPath: "/nonexistent/lslocks" }),
+    ),
+  ).toContain("cannot start");
+});
 
 test("pauses during a held GPU slot without probing or counting a miss, then resumes immediately", async () => {
   const { options, calls, slotDirectory } = await fixture();

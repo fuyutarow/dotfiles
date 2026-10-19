@@ -1,14 +1,14 @@
-# agx-ticket — `tkt`
+# agx-ticket — `agx ticket`
 
 `tools/agx-ticket` owns issuance and collection of plain ticket files for any repository. It is the
-counterpart of `ws` for workspaces. agx-run runs and records judgments; jj retains ticket history.
+counterpart of `agx ws` for workspaces. agx-worker runs and records judgments; jj retains ticket history.
 Install the root package bins with `mise run deps`. Its initial release was 0.1.0, from seed metadata
 0.0.0 and the initial minor changeset.
 Land generates tools/agx-ticket/CHANGELOG.md.
 
 ## Proposition TKT-LIFECYCLE
 
-Fixtures in `tools/agx-ticket/tests/lifecycle.test.ts` use real jj repositories and fake `agx ls --json`.
+Fixtures in `tools/agx-ticket/tests/lifecycle.test.ts` use real jj repositories and fake `agx worker ls --json`.
 They exercise issuance without overwrite, three input lines producing three files, all five
 states, and GC deleting exactly accepted tickets with landed workspaces. A GC deletion of a
 no-run, running, unjudged, rejected or unlanded ticket, an overwrite, or a tkt state file refutes
@@ -21,9 +21,9 @@ a TTY or reads stdin. Flags may follow positionals; Cleye rejects unknown flags 
 arguments. `--help` and `--version` are read-only. Repeat `--set` to supply multiple values.
 
 ```text
-tkt new <slug> [--from <template>] [--set k=v]... [--each <inputs-file>] [--repo P]
-tkt ls [--repo P] [--json]
-tkt gc [--dry-run] [--repo P]
+agx ticket new <slug> [--from <template>] [--set k=v]... [--each <inputs-file>] [--repo P]
+agx ticket ls [--repo P] [--json]
+agx ticket gc [--dry-run] [--repo P]
 ```
 
 `--repo` defaults to cwd. Repository discovery walks upward to jj metadata or a Git root.
@@ -58,15 +58,15 @@ lines, ignores blank lines, and creates `<slug>-1.md`, `<slug>-2.md`, etc. Nonbl
 preserved. Empty input fails. Counts mean files, one per nonblank line.
 
 ```sh
-tkt new inspect --from template.md --set owner=alice
-tkt new inspect --from template.md --each inputs.txt
+agx ticket new inspect --from template.md --set owner=alice
+agx ticket new inspect --from template.md --each inputs.txt
 ```
 
 ### Derived listing
 
-`ls` reads `agx ls --json --all` once, so history beyond agx-run's default 30-run window is included.
+`ls` reads `agx worker ls --json --all` once, so history beyond agx-worker's default 30-run window is included.
 It lists regular `.md` files immediately inside the ticket directory and ignores symlinks.
-Ticket identity is front matter `name`, falling back to the filename stem. agx-run's ticket name,
+Ticket identity is front matter `name`, falling back to the filename stem. agx-worker's ticket name,
 absolute path, or filename must match, and its workspace must share the jj store or its cwd must
 resolve to this repository. A removed workspace under the standard sibling <repo>.ws directory
 also preserves run identity; it cannot establish landing after jj forgets it. A ticket with a foreign repository's run stays `no-run`.
@@ -87,7 +87,7 @@ All nonempty ancestors must be reachable from `.ws.toml`'s `trunk` revset, defau
 Read-only jj probes use `--ignore-working-copy`: they never snapshot or rebase a workspace.
 Landing is therefore about recorded commits; a coordinator should finish and snapshot work
 before accepting it. A forgotten workspace, failed revset or non-jj repository yields unknown
-landing and prevents collection. An agx-run read or schema failure fails the whole listing.
+landing and prevents collection. An agx-worker read or schema failure fails the whole listing.
 
 Human stdout contains one tab-separated line per file:
 `state <TAB> true|false|unknown <TAB> path <TAB> reason`.
@@ -98,13 +98,13 @@ Human stdout contains one tab-separated line per file:
 
 GC selects only `accepted` rows with `landed: true`. Dry-run prints exactly those paths as
 `would-collect <TAB> path`, appending a volatile-path notice when applicable. It changes nothing.
-Actual GC re-reads agx-run and jj immediately before each deletion and checks the run id still matches,
+Actual GC re-reads agx-worker and jj immediately before each deletion and checks the run id still matches,
 then unlinks only regular ticket files. Output is `collected <TAB> path`. Other files remain.
 An error stops further deletion and exits nonzero; completed deletions are reported in the error diagnostic.
 Recover versioned tickets through jj history. No workspace, agx record, or history is removed.
 
 No tkt ledger, cache, lock, or state file is written. The only writes are issued ticket files and
-eligible file deletions. agx-run owns its own storage behavior. Without a cross-tool transaction, a
+eligible file deletions. agx-worker owns its own storage behavior. Without a cross-tool transaction, a
 new dispatch concurrent with the final unlink can race GC; coordinators must serialize dispatch
 and GC. The recheck reduces that window and never treats a failed read as permission to delete.
 

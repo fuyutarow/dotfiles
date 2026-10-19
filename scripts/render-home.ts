@@ -4,7 +4,7 @@
 //                               + zsh/timezone (env.TZ) + agents/hooks/hooks.toml (claude)
 //   ~/.codex/hooks.json      <- agents/codex/hooks.json + agents/hooks/hooks.toml (codex)
 //   ~/.claude/CLAUDE.md      <- agents/claude/CLAUDE.md + agents/models/dispatch-roster.toml
-//                                (including the rendered five-command agx policy)
+//                                (including the rendered worker command policy)
 // Consumer: scripts/link-dots.ts (and therefore `mise run link:dots` + the post-merge hook), and
 // `mise run doctor`, which renders into a scratch HOME and compares. Output is verdict lines.
 //

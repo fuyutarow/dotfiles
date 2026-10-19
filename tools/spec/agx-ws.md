@@ -1,7 +1,7 @@
-# agx-ws — `ws`
+# agx-ws — `agx ws`
 
 `tools/agx-ws/` is the sole owner of the run-workspace lifecycle: where a workspace lives, how it
-is made ready, when it may be removed. Package bins `ws` and `agx-ws`, installed by `bun link`
+is made ready, when it may be removed. Use `agx ws` or the `agx-ws` bin, installed by `bun link`
 (`mise run deps`) like `rr` and `agx`. It is repo-agnostic: it knows jj, not dotfiles.
 
 **Proposition (WS-ONE-OWNER-NO-STATE).** `add` creates the declared path and runs the readiness
@@ -18,7 +18,7 @@ workspaces whose sparse patterns are not exactly `.`. Refuted by a stale workspa
 or add, a newly added workspace with narrowed sparse patterns, or a narrowed fixture omitted
 from the gc report. Fixtures use temporary jj repositories outside the checkout.
 
-**Proposition (WS-GC-LOCK-SCOPE).** A GC pass over many slow classifications permits `ws add`
+**Proposition (WS-GC-LOCK-SCOPE).** A GC pass over many slow classifications permits `agx ws add`
 to acquire the store lock during classification or immediately after the current workspace's
 removal. A changed verdict is re-checked under that lock and retained when no longer collectable.
 Dry runs never take the exclusive lock or snapshot workspaces. Waits exceeding five seconds
@@ -34,21 +34,21 @@ For a repo whose backing store is `<parent>/<repo>`:
 | --- | --- |
 | workspace directory | `<parent>/<repo>.ws/ws_<slug>` |
 | jj workspace name | `ws_<slug>` (the directory name) |
-| agx-run worker (elsewhere) | `agt_<slug>` |
+| agx-worker worker (elsewhere) | `agt_<slug>` |
 
-`--repo P` (default: the cwd) may be the main checkout or any workspace of the store; `ws` resolves
+`--repo P` (default: the cwd) may be the main checkout or any workspace of the store; `agx ws` resolves
 the backing store from jj's own metadata without invoking jj. A slug is letters, digits, `_`, `-`.
 
-ws and agx-run compose by data and by names, never by a shared ledger: agx routes commands to the
-parts, agx-run consumes a tree through `--cd`, and `ws gc` reads `agx ls --json`.
+agx-ws and agx-worker compose by data and by names, never by a shared ledger: agx routes commands to the
+parts, agx-worker consumes a tree through `--cd`, and `agx ws gc` reads `agx worker ls --json`.
 
 ## Verbs
 
 ```text
-ws add <slug> [--rev R] [--repo P]
-ws refresh <slug> [--repo P]
-ws rm  <slug> [--repo P]
-ws gc  [--dry-run] [--include-unrecorded] [--repo P]
+agx ws add <slug> [--rev R] [--repo P]
+agx ws refresh <slug> [--repo P]
+agx ws rm  <slug> [--repo P]
+agx ws gc  [--dry-run] [--include-unrecorded] [--repo P]
 ```
 
 - **add** — resolves `--rev` (exactly one commit), updates stale source/backing workspaces with
@@ -79,7 +79,7 @@ Candidates are `<repo>.ws/ws_*` and the legacy siblings `<parent>/<repo>-ws-*` a
 `~/Workspace/<repo>-arm-*`) that are jj workspaces of the same store. A candidate is collected
 only if all hold:
 
-1. **Lineage is terminal.** The lineage is every `agx ls --json` record whose `workspace` or `cwd` lies
+1. **Lineage is terminal.** The lineage is every `agx worker ls --json` record whose `workspace` or `cwd` lies
    inside the directory, closed over `continues` in both directions. Every record in it must have
    state `ended` or `orphaned`. Any other state, including a later run that continues an ended
    one, keeps the workspace.
@@ -110,7 +110,7 @@ Unknown keys are an error. dotfiles declares the example above.
 
 ## Invariants
 
-- **No durable state of its own.** Everything is derived from jj, `.ws.toml`, `agx ls --json` and
+- **No durable state of its own.** Everything is derived from jj, `.ws.toml`, `agx worker ls --json` and
   the filesystem. The lock directory `<parent>/<repo>.ws.lock` is removed on release. Foreground
   waiters advertise transient intent in the adjacent `.ws.lock.waiters/` directory, cleaned on
   completion; dead local waiter entries are discarded by GC.
@@ -130,10 +130,10 @@ Unknown keys are an error. dotfiles declares the example above.
   before the first mutation.
   Refresh uses only the applicable subset described above.
 
-## Interface with agx-run
+## Interface with agx-worker
 
-`ws gc` needs from each `agx ls --json` record: `id`, `state`, `workspace`, `cwd`, `continues`, and
-optionally `end_commit` (the commit id of the run's working copy when the run ended). agx-run does
-not record `end_commit` yet; until it does, the live `@` check alone judges landing. The agx-run
-scope row for workspaces should read: "agx-run consumes a tree via `--cd`; creating, readying and
-collecting trees is `ws` (`tools/agx-ws`)".
+`agx ws gc` needs from each `agx worker ls --json` record: `id`, `state`, `workspace`, `cwd`, `continues`, and
+optionally `end_commit` (the commit id of the run's working copy when the run ended). agx-worker does
+not record `end_commit` yet; until it does, the live `@` check alone judges landing. The agx-worker
+scope row for workspaces should read: "agx-worker consumes a tree via `--cd`; creating, readying and
+collecting trees is `agx ws` (`tools/agx-ws`)".

@@ -41,8 +41,8 @@ not in them; this file does not invent it. Section 7 records the one layer rule 
 ## Suite
 
 The `agx` executable dispatches three tools on PATH: `agx worker`, `agx ws`, and `agx ticket`.
-Legacy top-level worker verbs still forward with one stderr migration hint. `agx-next` remains
-a deprecated forwarding bin for firedancer while its caller migrates; `agx-run` is removed.
+Accepted command forms are `agx <tool> ARGS` and `agx-<tool> ARGS`, where
+`<tool>` is `worker`, `ticket`, or `ws`. Use `jex` for oracle classification.
 
 | part | one job | single home | what it does not hold |
 | --- | --- | --- | --- |
@@ -59,13 +59,13 @@ The `agx` entry imports no part code and calls each part's CLI in a child proces
 | component | one job | state it writes (only it writes it) | input to output |
 | --- | --- | --- | --- |
 | ticket (a file) | the spec of one issue | the ticket file, written by the coordinator | intent to outcome, writes, verify, premises |
-| `agx check` | validate a ticket | none | ticket and tree to OK, or a refusal with reasons |
-| `agx run` | choose a row, confine a worker, run it, record the result | `records.jsonl` (append only) | ticket and tree to a run record |
+| `agx worker check` | validate a ticket | none | ticket and tree to OK, or a refusal with reasons |
+| `agx worker run` | choose a row, confine a worker, run it, record the result | `records.jsonl` (append only) | ticket and tree to a run record |
 | router (inside `agx-worker`) | choose the row | none (reads roster, usage, records) | needs, route capability, usage, judged history to a row, or stop |
-| `agx ls` | fold, select | none (reads records) | selector to rows or JSON |
-| `agx judge` | record a judgment | append to `records.jsonl` | run and verdict to a judgment row |
-| `agx stats` | fold statistics | none | records to numbers |
-| `ws` (`tools/agx-ws`, queued as workspace-tool) | the life of a run's working tree | none (reads jj, per-repo config, agx-worker records) | slug, rev to `<repo>.ws/ws_<slug>`; reclaim |
+| `agx worker ls` | fold, select | none (reads records) | selector to rows or JSON |
+| `agx worker judge` | record a judgment | append to `records.jsonl` | run and verdict to a judgment row |
+| `agx worker stats` | fold statistics | none | records to numbers |
+| `agx ws` (`tools/agx-ws`, queued as workspace-tool) | the life of a run's working tree | none (reads jj, per-repo config, agx-worker records) | slug, rev to `<repo>.ws/ws_<slug>`; reclaim |
 | systemd | process lifetime, durability | unit state | command to unit, exit |
 | integrator (not started; today `mise run land`) | the only writer of trunk | trunk, an integrator-only tree, a lock | accepted diffs to trunk (pushed) |
 | guard (hook, jj wrapper) | enforce the worker boundary | none | worker command to allow or deny |
@@ -79,15 +79,15 @@ stored anywhere; it is derived from records and the jj ancestry (invariant I2).
 ## 3. Data flow, by names
 
 ```text
-intent -> ticket -- agx check
-            \-> ws add ws_<slug> -> systemd: agx run
+intent -> ticket -- agx worker check
+            \-> agx ws add ws_<slug> -> systemd: agx worker run
                                       (router -> sandboxed worker -> snapshot at run end -> record)
-                                      \-> coordinator wakes (R1: agx ls --wait)
-                                          \-> agx judge (verify against the trunk baseline)
+                                      \-> coordinator wakes (R1: agx worker ls --wait)
+                                          \-> agx worker judge (verify against the trunk baseline)
                                               \-> integrator (rebase or merge -> gate -> commit -> push;
                                                   a conflict goes back to a worker as an issue)
                                                   \-> trunk -> deploy -> machine
-                                                  \-> ws gc (finished lineage, nothing unlanded)
+                                                  \-> agx ws gc (finished lineage, nothing unlanded)
 ```
 
 Parts are joined by **names**, not by a ledger:
@@ -117,8 +117,8 @@ Keys the declaration is to carry: `trunk`, `integrate` (`rebase`, `jj-merge`, `c
 | id | invariant | enforced by | status |
 | --- | --- | --- | --- |
 | I1 | One writer per state. Trunk is written only by the integrator the repository declares; a rescue fast-forward is a recorded integrator step. Tools never write a linked file. | `scripts/tests/one-writer-check.test.ts` (`lint:one-writer`: a deployed path that is still a symlink fails); `scripts/tests/lint-ignore.test.ts` (`lint:ignore`); `scripts/tests/land.test.ts` ("LAND-OWN-TREE refuses its dirty tree with exact paths before rebase") | PARTIAL; a declared integrator that is the only trunk writer: R6 (integrator, not started) |
-| I2 | No component holds a copy of another's state. "Unintegrated" derives from records, ancestry and `integrated_query`. | `tools/agx-worker/tests/startup.test.ts` ("help and bare invocation do not touch run state") | PARTIAL for agx; `ws` and the integrator: workspace-tool (queued), R6 |
-| I3 | Fail first. Check at the door: `agx check` passes, colocated jj, session id, the Claude sandbox settings, the integrator's declared scope is clean. | `tools/agx-worker/tests/next/run.test.ts` ("refuses dispatch when the target has an ownerless ref lock"); `tools/agx-worker/tests/premises.test.ts`; `tools/agx-worker/tests/run-claude.test.ts` ("passes sandbox settings to Claude for scoped shell execution"); `tools/agx-worker/tests/codex.test.ts` ("omitting sandbox remains refused before Codex starts") | PARTIAL; gaps: colocated-jj precondition (R3), a missing session id only warns (`run.test.ts` asserts the `WARN dispatcher session is unavailable` line), the router falls back instead of stopping (`tools/agx-worker/tests/next/route.test.ts` "an invalid Jev choice records the fallback reason and probabilities" documents the fallback; ticket: router-fail-first, queued) |
+| I2 | No component holds a copy of another's state. "Unintegrated" derives from records, ancestry and `integrated_query`. | `tools/agx-worker/tests/startup.test.ts` ("help and bare invocation do not touch run state") | PARTIAL for agx; `agx ws` and the integrator: workspace-tool (queued), R6 |
+| I3 | Fail first. Check at the door: `agx worker check` passes, colocated jj, session id, the Claude sandbox settings, the integrator's declared scope is clean. | `tools/agx-worker/tests/next/run.test.ts` ("refuses dispatch when the target has an ownerless ref lock"); `tools/agx-worker/tests/premises.test.ts`; `tools/agx-worker/tests/run-claude.test.ts` ("passes sandbox settings to Claude for scoped shell execution"); `tools/agx-worker/tests/codex.test.ts` ("omitting sandbox remains refused before Codex starts") | PARTIAL; gaps: colocated-jj precondition (R3), a missing session id only warns (`run.test.ts` asserts the `WARN dispatcher session is unavailable` line), the router falls back instead of stopping (`tools/agx-worker/tests/next/route.test.ts` "an invalid Jev choice records the fallback reason and probabilities" documents the fallback; ticket: router-fail-first, queued) |
 | I4 | A worker never rewrites shared state: op restore, revert, undo; another's commits; trunk; bookmarks and pushes outside its declared namespace. `refs/jj/keep` is not shared state (read-only jj writes it). | none. `tools/disk-reclaim/tests/worker-guard.test.ts` guards disk-reclaim only, not jj. | UNCHECKED: worker-jj-guard (queued) |
 | I5 | A worker writes only its working tree, its declared namespace, and the declared `external_writers` via. How far this holds is stated per route: codex workspace-write is OS-enforced; Claude's Bash and its children are OS-enforced and its tools are bounded by permission rules; `--sandbox none` guarantees nothing. Declared external data and excluded paths are readable, read-only. | `tools/agx-worker/tests/codex.test.ts` ("omitting sandbox remains refused before Codex starts"); `tools/agx-worker/tests/run-claude.test.ts` ("passes sandbox settings to Claude for scoped shell execution", `failIfUnavailable`) | PARTIAL; `external_writers` and declared read-only data: R5 (not started) |
 | I6 | A result derives from facts: the diff after the snapshot, declared byproducts excluded, declared verification targets, one report shape. Abnormal exit and timeout still recover the artifacts and the report. Load (loadavg, reservation wait) is recorded. | `tools/shared/tests/run-result.test.ts` ("zero turns or no output can never be delivered", "a missing required verification result cannot be delivered"); `tools/agx-worker/tests/next/run.test.ts` ("a sub-two-minute zero-change exit without RETURN fails its lineage"); `tools/agx-worker/tests/report.test.ts` ("empty, non-JSON and wrong-shape messages are errors that say which") | PARTIAL; timeout facts, declared byproducts, load record: run-outcome2 (queued) |
@@ -224,7 +224,7 @@ Order is by demonstrated harm (a run id exists), not by request. Status is as of
 
 | release | content | harm that justified it | status |
 | --- | --- | --- | --- |
-| R1 | `agx ls --wait`: block until one selected run ends, return its row | missed completions (perf_gf2, mod_merge_r); watch loops were refused | not landed: `--wait` exists only in a historical entry of `tools/agx-worker/CHANGELOG.md`, not in `agx ls`; the 2026-10-14 switch removed waiting from agx on purpose (`tools/agx-worker/docs/scope.md`), so the replacement must be a fold over records, not state (I11) |
+| R1 | `agx worker ls --wait`: block until one selected run ends, return its row | missed completions (perf_gf2, mod_merge_r); watch loops were refused | not landed: `--wait` exists only in a historical entry of `tools/agx-worker/CHANGELOG.md`, not in `agx worker ls`; the 2026-10-14 switch removed waiting from agx on purpose (`tools/agx-worker/docs/scope.md`), so the replacement must be a fold over records, not state (I11) |
 | R2 | Continuation (I13) and interim return (I16); session recorded for every route | 3e66a238, 01654343, sdk-layer, walrus 21eb1a84, mod_merge_v2, readlock | continue-pin landed (367abb54); the interim record distinction waits for run-outcome2 |
 | R3 | Explicit environment (I14) and check before launch (I3) | hotfix leak, exit 127, statusline, a broken TOML launch | partly landed (worker environment); unit environment and colocated-jj check not started |
 | R4 | Result and report shape from facts (I6) | a2319ea5, four stringified reports | run-outcome2 queued |
@@ -232,7 +232,7 @@ Order is by demonstrated harm (a run id exists), not by request. Status is as of
 | R6 | Integrator slot; dotfiles `land` becomes one implementation; coralbase `jj-merge`; soks `command` | coralbase MERGE18 to 22; hand-run `jj new` incidents | not started |
 | R7 | Resource admission (I15) | integ5 out of budget, eleven localnets, GPU exit 69 | not started |
 
-Queued with no release number: workspace-tool (`ws`, G1; carries the tree-lifecycle part of jjsafe4),
+Queued with no release number: workspace-tool (`agx ws`, G1; carries the tree-lifecycle part of jjsafe4),
 worker-jj-guard (I4, G7), jjsafe4 (I8), router-fail-first (I3, G3).
 
 Deferred on purpose (one or fewer incidents; a manual workaround is cheap): swapping the brief of
@@ -246,14 +246,14 @@ What each component intentionally does not do:
 | component | does not |
 | --- | --- |
 | agx | create working trees, integrate, detach, keep a ledger or a lease, render acceptance views, re-pick a row on continue |
-| `agx ls` | keep its own state or store polling results |
+| `agx worker ls` | keep its own state or store polling results |
 | ws | run workers, decide acceptance, keep state files |
 | integrator | judge dirt outside its declared scope, permit a direct push |
 | router | substitute a row silently, bias a route through roster wording, guess a route's capability |
 | worker | commit, push, rewrite shared state, write outside its declaration, write to `/tmp` |
 | boundary judgment | turn I10 into a refusal, judge overlap across repositories |
 | unit | inherit an environment from the manager |
-| coordinator | do issue-specific work, create working trees by hand once `ws` exists |
+| coordinator | do issue-specific work, create working trees by hand once `agx ws` exists |
 | mise | host a component that has a contract |
 
 Still missing, with the thing that fills each: waiting (R1), environment (R3), results (R4), policy

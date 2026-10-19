@@ -260,13 +260,13 @@ describe("render-home: base only", () => {
       "when codex and claude rows are comparable, choose codex",
     );
     for (const text of [
-      "agx run <ticket.md>",
-      "agx check <ticket.md>",
-      "agx ls [--json]",
-      "agx judge <run> accept|reject",
-      "agx stats [--import-legacy]",
-      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run <ticket.md>",
-      "agx run <ticket.md> --continue <run>",
+      "agx worker run <ticket.md>",
+      "agx worker check <ticket.md>",
+      "agx worker ls [--json]",
+      "agx worker judge <run> accept|reject",
+      "agx worker stats [--import-legacy]",
+      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run <ticket.md>",
+      "agx worker run <ticket.md> --continue <run>",
       "$XDG_STATE_HOME/agx-next/records.jsonl",
       "Ticket time boxes: `timeout_s` defaults to 600 seconds",
     ])
@@ -562,20 +562,20 @@ describe("render-home: the rest of the rendered half", () => {
     run({ HOME: home, DOTFILES: dotfiles });
     const md = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
     expect(md).toMatch(
-      /^# policy\n\n<!-- roster:begin -->\n<!-- RENDERED [^\n]*-->\n- \*\*Every worker starts with `agx run <ticket>`/u,
+      /^# policy\n\n<!-- roster:begin -->\n<!-- RENDERED [^\n]*-->\n- \*\*Every worker starts with `agx worker run <ticket>`/u,
     );
     expect(md).toContain(
       "| default | id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |",
     );
     expect(ROUTE_BIAS.every((phrase) => !md.includes(phrase))).toBe(true);
     for (const command of [
-      "agx run <ticket.md>",
-      "agx check <ticket.md>",
-      "agx ls [--json]",
-      "agx judge <run> accept|reject",
-      "agx stats [--import-legacy]",
-      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run <ticket.md>",
-      "agx run <ticket.md> --continue <run>",
+      "agx worker run <ticket.md>",
+      "agx worker check <ticket.md>",
+      "agx worker ls [--json]",
+      "agx worker judge <run> accept|reject",
+      "agx worker stats [--import-legacy]",
+      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run <ticket.md>",
+      "agx worker run <ticket.md> --continue <run>",
     ])
       expect(md).toContain(command);
     expect(md).not.toMatch(/\bagx (?:dispatch|ticket|ps|ledger)\b/u);

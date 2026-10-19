@@ -1,6 +1,6 @@
 # dispatch-roster — the ONE home of the models a coordinator may dispatch work to.
 #
-# Every worker starts with `agx run <ticket>`; Jev selects a roster row from the ticket.
+# Every worker starts with `agx worker run <ticket>`; Jev selects a roster row from the ticket.
 # The five commands are run, check, ls, judge and stats. The route says how the picked row runs:
 #   route = "codex"  — bun tools/agx-worker/src/workers/codex.ts --choice <id>; Codex is the worker's own harness.
 #   route = "claude" — claude -p through tools/agx-worker/src/workers/run-claude.ts.

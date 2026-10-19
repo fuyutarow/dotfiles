@@ -188,7 +188,7 @@ describe("dispatch roster", () => {
     await rm(folder, { recursive: true, force: true });
   });
 
-  test("rendered roster policy describes the five agx commands", async () => {
+  test("rendered roster policy describes the six worker commands", async () => {
     const loaded = await loadRoster();
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
@@ -205,18 +205,22 @@ describe("dispatch roster", () => {
       loaded.value.choice.find((row) => row.id === "luna-max")?.use_for,
     ).not.toMatch(/claude/iu);
     for (const command of [
-      "agx run",
-      "agx check",
-      "agx ls",
-      "agx judge",
-      "agx stats",
+      "agx worker dispatch",
+      "agx worker run",
+      "agx worker check",
+      "agx worker ls",
+      "agx worker judge",
+      "agx worker stats",
     ])
       expect(policy).toContain(command);
     expect(policy).toContain(
-      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run",
+      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run",
     );
     expect(policy).toContain("--continue");
-    expect(policy).not.toMatch(/\bagx (?:dispatch|ticket|ps|ledger)\b/u);
+    expect(policy).not.toMatch(
+      /\bagx\s+(?:run|dispatch|check|ls|judge|stats|roster|doctor|jev)\b/u,
+    );
+    expect(policy).not.toMatch(/\bagx-worker\s+jev\b/u);
     expect(policy).not.toContain("RESOURCE-CLASS");
     expect(policy).not.toContain("Ticket amend");
   });

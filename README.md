@@ -107,8 +107,8 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │   ├── agx/        # agx suite entry: process router only, no state or decision logic
 │   ├── agx-worker/ # agx worker / agx-worker: dispatch, run, check, ls, judge, stats, roster, doctor; existing agx-next records
 │   ├── jex/        # jex Q FILE...: zero-shot multi-label yes/no classifier through the shared Jev client
-│   ├── agx-ws/     # agx ws / ws: repo-agnostic jj workspace lifecycle
-│   ├── agx-ticket/ # agx ticket / tkt: ticket issuance, derived listing and collection
+│   ├── agx-ws/     # agx ws / agx-ws: repo-agnostic jj workspace lifecycle
+│   ├── agx-ticket/ # agx ticket / agx-ticket: ticket issuance, derived listing and collection
 │   ├── storage-headroom/ # storage decisions (decide) and read-only headroom CLI; hooks adapt the verdict
 │   └── shared/      # code several tools import (Bash syntax parsing, hook path resolution, zod, attempt, narrow, typesafe-key, jev-client, sockets, model-orders, worker-env)
 ├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
@@ -130,7 +130,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
 │                #   and shared agent assets (commands/, skills/); other repos call task helpers
 │                #   through package.json bins instead of skill installation paths
-├── tools/       # repo CLIs (rr, agx suite, ws, tkt, agent-resource-run, serena-foreground, smart-open, secrets-push, sui-keystore-merge) + shared TS modules
+├── tools/       # repo CLIs (rr, agx suite, agent-resource-run, serena-foreground, smart-open, secrets-push, sui-keystore-merge) + shared TS modules
 ├── scripts/     # plumbing — config-registry.ts, link-dots.ts, check-tools.sh, shared tool lookup
 ├── Brewfile.core      # tools needed on every box
 ├── Brewfile.ondemand  # tools installed when first needed (OS guards stay here)
@@ -140,8 +140,8 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 
 The `agx` command dispatches `agx worker`, `agx ticket`, and `agx ws` to their `agx-*` bins on PATH.
 Each tool owns its help, decisions, and state. Suite help takes each description from that tool’s help.
-Old top-level worker verbs still forward with one stderr migration hint. `agx-next` is a deprecated
-forwarding bin retained for firedancer until its caller migrates; `agx-run` is removed.
+Accepted command forms are `agx <tool> ARGS` and `agx-<tool> ARGS`, where
+`<tool>` is `worker`, `ticket`, or `ws`.
 `agx -V` prints only the suite version. The architecture
 of `tools/` (including the suite boundary, dispatch pipeline, capacity domain, oracle rule, and each
 invariant's check or planned ticket) lives in
@@ -149,12 +149,12 @@ invariant's check or planned ticket) lives in
 
 `jex Q FILE...` classifies files against yes/no questions in TOML; `--request` previews without sending.
 See [jex](tools/jex/README.md) for its JSON and exit contracts. Attach its output with
-`agx judge RUN accept|reject --evidence FILE` (repeatable): agx records SHA-256 and content
-without interpreting them. `agx jev` is deprecated in favour of `jex` and remains available.
+`agx worker judge RUN accept|reject --evidence FILE` (repeatable): agx records SHA-256 and content
+without interpreting them. Use `jex` for oracle classification.
 
-`tools/agx-ticket/` (`tkt`, [spec](tools/spec/agx-ticket.md)) owns plain ticket issuance and collection across
-repositories: `tkt new` renders templates without overwriting, `tkt ls` derives run state and
-landing from agx-worker and jj, and `tkt gc --dry-run` previews collection of accepted, landed tickets.
+`tools/agx-ticket/` (`agx ticket`, [spec](tools/spec/agx-ticket.md)) owns plain ticket issuance and collection across
+repositories: `agx ticket new` renders templates without overwriting, `agx ticket ls` derives run state and
+landing from agx-worker and jj, and `agx ticket gc --dry-run` previews collection of accepted, landed tickets.
 It keeps no state file; tickets default to `.agents/tickets` or `.agx.toml`'s `tickets` directory.
 
 Each tool change records its release intent in a generated `tools/<name>/.changes/<slug>.md`
@@ -178,17 +178,17 @@ for one second, and refreshes diagnostics through a single `agx-doctor.service`.
 Both triggers are enabled by `mise run link:dots` and checked by `mise run doctor`.
 
 On Linux, `mise run link:dots` links and enables `ws-gc.timer`. Five minutes after boot and
-hourly thereafter it runs `ws gc --all --legacy`, with TSV output in
+hourly thereafter it runs `agx ws gc --all --legacy`, with TSV output in
 `journalctl --user -u ws-gc.service`. It uses the existing empty, landed and idle land-temp
 classes; kept, live and unlanded workspaces remain protected. Abandoned workspaces require an
 explicit owner command with `--abandoned`; the timer never passes it. Unrecorded workspaces in
 the standard layout still require `--include-unrecorded`. `mise run doctor` fails when the
-timer is inactive or the service's last run failed. `ws doctor` counts workspace findings
+timer is inactive or the service's last run failed. `agx ws doctor` counts workspace findings
 that this unattended command cannot collect, including abandoned and unrecorded workspaces.
-`agx-worker doctor`, `ws doctor`, and `tkt doctor` each emit JSON Lines with
+`agx-worker doctor`, `agx ws doctor`, and `agx ticket doctor` each emit JSON Lines with
 `tool`, `object`, `finding`, and `remedy`. `scripts/agx-doctor.ts` concatenates them, writes the
 machine snapshot consumed by statusline, and exits nonzero for findings or incomplete diagnostics.
-The systemd unit runs this composition directly; `agx doctor` forwards only to the worker doctor.
+The systemd unit runs this composition directly; `agx worker doctor` forwards only to the worker doctor.
 
 **Single sources of truth** — each fact has one home, so nothing drifts:
 
@@ -218,15 +218,15 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    exports `GRAVEYARD` (the variable read by `rm-improved` rip) and `RIP_GRAVEYARD` (used by repo
    tools) under `$XDG_DATA_HOME` or `~/.local/share`. The `rip` function refuses tmpfs/ramfs
    graveyards; linked `environment.d` settings cover systemd user services and `systemd-run --user`.
-   For durable `agx run` dispatches, carry the caller's session with
-   `systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run TICKET.md`.
+   For durable `agx worker run` dispatches, carry the caller's session with
+   `systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run TICKET.md`.
    Naming (owner decision, 2026-10-17): workers use `agt_<slug>` and workspaces use
    `ws_<slug>`, where `<slug>` is lowercase ASCII words joined by hyphens
    (`[a-z0-9]+(-[a-z0-9]+)*`); the underscore appears only after the prefix.
-   `ws add` and `tkt new` reject other slugs with a hyphenated suggestion. New `agx check`/`agx run`
+   `agx ws add` and `agx ticket new` reject other slugs with a hyphenated suggestion. New `agx worker check`/`agx worker run`
    dispatches apply the same rule to the ticket's `name` (or filename without `.md` when omitted),
-   suggesting `tkt new` to create a conforming ticket. Existing workspaces and tickets are not
-   renamed; workspace refresh/removal and `agx run --continue` retain legacy-name access.
+   suggesting `agx ticket new` to create a conforming ticket. Existing workspaces and tickets are not
+   renamed; workspace refresh/removal and `agx worker run --continue` retain legacy-name access.
    Before dispatch, agx refuses a Git ref lock with no open holder that is older than 60 seconds.
    It prints the lock path and age, then gives the `rip <path>` repair after confirming no holder.
    Bash SSH shells read the same prefix and export both variables. `brew shellenv` belongs in login

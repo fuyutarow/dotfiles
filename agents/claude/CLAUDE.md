@@ -8,17 +8,17 @@
 <!-- roster:begin -->
 <!-- The dispatch policy is rendered HERE at deploy time (scripts/render-home.ts, from agents/models/dispatch-roster.toml) into ~/.claude/CLAUDE.md. This file keeps only the markers: one writer per file. -->
 <!-- roster:end -->
-- **Dispatch workers through agx.** Start durable work with `agx dispatch <ticket>`; use
-  `agx check <ticket>`, `agx ls`, `agx judge <run> accept|reject`, and `agx stats` as needed.
-  Continue a vendor session with `agx dispatch <ticket> --continue <run>`.
+- **Dispatch workers through agx.** Start durable work with `agx worker dispatch <ticket>`; use
+  `agx worker check <ticket>`, `agx worker ls`, `agx worker judge <run> accept|reject`, and `agx worker stats` as needed.
+  Continue a vendor session with `agx worker dispatch <ticket> --continue <run>`.
 - **Execution stays observable; durability is earned, not stolen.** A PreToolUse hook denies
   Bash that orphans work to init — `setsid` (bare), `nohup`, `disown`, a detacher inside a
   nested shell string, detached `tmux`/`screen` launches, and `at`/`batch`/`crontab` writes.
   What is banned is UNOBSERVABLE durability, not durability: `setsid --wait` (the parent still
-  waits, and agent-resource-run's own launch form) and `agx dispatch <ticket>` (manager-owned,
+  waits, and agent-resource-run's own launch form) and `agx worker dispatch <ticket>` (manager-owned,
   stoppable, journal-streamed, and exit-status recorded) stay open. Order of preference:
   `run_in_background:true` to watch it now → `agent-resource-run --manifest` for compute →
-  `agx dispatch <ticket>` for durable agx runs.
+  `agx worker dispatch <ticket>` for durable agx runs.
   If none fit, STOP and say so; do not invent another way. Live jobs and orphan count render in
   the statusline's `Job:` segment.
 - **ccc-registered repos: raw search is banned; say WHAT you are looking for through `rr`.**

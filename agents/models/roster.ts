@@ -191,7 +191,7 @@ export function rosterTable(r: Roster): string {
  * the repo's agents/claude/CLAUDE.md holds only the markers — one writer per file. */
 export function rosterPolicy(r: Roster): string {
   return [
-    `- **Every worker starts with \`agx run <ticket>\`. The router chooses from the roster using the ticket and the recorded run history.**`,
+    `- **Every worker starts with \`agx worker run <ticket>\`. The router chooses from the roster using the ticket and the recorded run history.**`,
     `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest priced row; as of ${r.as_of}.`,
     "",
     ...rosterTable(r)
@@ -199,8 +199,9 @@ export function rosterPolicy(r: Roster): string {
       .map((l) => (l === "" ? "" : `  ${l}`)),
     "",
     "  How to choose: describe the task, expected outcome, writable paths, and verification in the ticket. The router selects an available roster row and records it with the run.",
-    `  How to run: \`agx run <ticket.md> [--cd TREE] [--sandbox none|read-only|workspace-write] [--session ID]\`. Validate a ticket with \`agx check <ticket.md> [--cd TREE]\`. Use \`agx ls [--json]\` to inspect runs, \`agx judge <run> accept|reject [--note TEXT]\` to record a judgment, and \`agx stats [--import-legacy]\` for run statistics. Continue a session with \`agx run <ticket.md> --continue <run>\`. Durable runs use \`systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run <ticket.md>\`.`,
-    "  Ticket home: ticket files stay in the project that owns them and are passed to agx by path. Run records and judgments live in `$XDG_STATE_HOME/agx-next/records.jsonl` (or `~/.local/state/agx-next/records.jsonl` by default); `agx ls --json` reports each run's ticket, workspace, status, and judgment.",
-    "  Ticket time boxes: `timeout_s` defaults to 600 seconds. `--continue` resumes the selected run's vendor session. An interim `agx-return` is saved as run progress; the worker continues until its timeout or final return. `agx check` validates the ticket and its declared premises before dispatch.",
+    "  Managed dispatch: `agx worker dispatch <ticket.md> [--ws SLUG] [--unit NAME] [--sandbox MODE] [--continue RUN_ID]` starts a durable worker run.",
+    `  How to run: \`agx worker run <ticket.md> [--cd TREE] [--sandbox none|read-only|workspace-write] [--session ID]\`. Validate a ticket with \`agx worker check <ticket.md> [--cd TREE]\`. Use \`agx worker ls [--json]\` to inspect runs, \`agx worker judge <run> accept|reject [--note TEXT]\` to record a judgment, and \`agx worker stats [--import-legacy]\` for run statistics. Continue a session with \`agx worker run <ticket.md> --continue <run>\`. Durable runs use \`systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run <ticket.md>\`.`,
+    "  Ticket home: ticket files stay in the project that owns them and are passed to agx by path. Run records and judgments live in `$XDG_STATE_HOME/agx-next/records.jsonl` (or `~/.local/state/agx-next/records.jsonl` by default); `agx worker ls --json` reports each run's ticket, workspace, status, and judgment.",
+    "  Ticket time boxes: `timeout_s` defaults to 600 seconds. `--continue` resumes the selected run's vendor session. An interim `agx-return` is saved as run progress; the worker continues until its timeout or final return. `agx worker check` validates the ticket and its declared premises before dispatch.",
   ].join("\n");
 }

@@ -13,7 +13,7 @@ const Proposition = z.looseObject({
   refuted_by: oneLine,
 });
 
-const writeGlob = z
+export const writeGlob = z
   .string()
   .min(1)
   .refine((glob) => !glob.startsWith("/") && !glob.split("/").includes(".."));
@@ -21,7 +21,7 @@ const Ticket = z
   .looseObject({
     schema: z.literal(2),
     name: z.string().min(1).optional(),
-    writes: z.array(writeGlob).default([]),
+    writes: z.array(z.string().min(1)).default([]),
     outcome: z.string().trim().min(1),
     verify: z.array(z.string().trim().min(1)).default([]),
     timeout_s: z.number().int().min(60).max(14_400).optional(),
@@ -64,7 +64,7 @@ const Ticket = z
 export type NextTicket = z.output<typeof Ticket>;
 export type ParsedNextTicket =
   | { success: true; ticket: NextTicket; prose: string; warnings: string[] }
-  | { success: false; reason: string };
+  | { success: false; reason: string; reasons?: string[] };
 
 const parseToml = fromThrowable(
   (text: string): unknown => Bun.TOML.parse(text),
@@ -76,7 +76,10 @@ const rowOf = (value: unknown): Record<string, unknown> | undefined => {
   return parsed.success ? parsed.data : undefined;
 };
 
-export function parseNextTicket(text: string): ParsedNextTicket {
+export function parseNextTicket(
+  text: string,
+  collectWrites = false,
+): ParsedNextTicket {
   const lines = text.split("\n");
   if (lines[0]?.trimEnd() !== "+++")
     return { success: false, reason: "a ticket starts with +++ front matter" };
@@ -96,8 +99,6 @@ export function parseNextTicket(text: string): ParsedNextTicket {
     };
   const checked = Ticket.safeParse(fields.data);
   if (!checked.success) {
-    const issue = checked.error.issues[0];
-    const path = issue?.path.map(String).join(".");
     const examples: Record<string, string> = {
       schema: "schema = 2",
       outcome: 'outcome = "Deliver the result"',
@@ -109,21 +110,40 @@ export function parseNextTicket(text: string): ParsedNextTicket {
       "resources.cpu": "cpu = 1",
       "resources.ram_gb": "ram_gb = 1",
     };
-    const example = examples[path ?? ""];
-    const table =
-      path?.includes(".") === true
+    const reasons = checked.error.issues.map((issue) => {
+      const path = issue.path.map(String).join(".");
+      const example = examples[path];
+      const table = path.includes(".")
         ? `[${path.split(".")[0]}]`
         : "ticket front matter";
-    const suffix = example === undefined ? "" : `; example: ${example}`;
-    return {
-      success: false,
-      reason:
-        path === undefined || path === ""
-          ? (issue?.message ?? "invalid ticket")
-          : `${table} ${path}: ${issue?.message ?? "invalid value"}${suffix}`,
-    };
+      const suffix = example === undefined ? "" : `; example: ${example}`;
+      return path === ""
+        ? issue.message
+        : `${table} ${path}: ${issue.message}${suffix}`;
+    });
+    const writes = z.array(z.string()).safeParse(fields.data.writes);
+    reasons.push(
+      ...(writes.success ? writes.data : []).flatMap((glob, index) =>
+        writeGlob.safeParse(glob).success
+          ? []
+          : [
+              `ticket front matter writes.${index}: use a relative glob without .., relative to --cd`,
+            ],
+      ),
+    );
+    return { success: false, reason: reasons.join("; "), reasons };
   }
 
+  if (!collectWrites) {
+    const invalid = checked.data.writes.findIndex(
+      (glob) => !writeGlob.safeParse(glob).success,
+    );
+    if (invalid >= 0)
+      return {
+        success: false,
+        reason: `ticket front matter writes.${invalid}: use a relative glob without ..; repair writes relative to --cd`,
+      };
+  }
   const warnings = new Set<string>();
   const supported = new Set([
     "schema",

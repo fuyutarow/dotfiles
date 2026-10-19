@@ -17,7 +17,7 @@ Its worker commands are `dispatch`, `run`, `check`, `ls`, `judge`, `stats`, `ros
 `dispatch` obtains its workspace through `ws add --json`; workspace creation stays in ws.
 `roster TICKET` prints one selected row; legacy `roster --json` prints the full roster.
 `doctor` reports worker findings as JSON Lines.
- `check` validates ticket premises in the supplied tree and reports overlapping live write globs; it does not reserve writes. The event log is the single durable run-event data file. A run also creates per-run brief, report, and progress artifacts alongside that log.
+`check TICKET [--cd TREE]` runs the same input preflights as `run`: ticket schema and write-glob shape, ticket home, worker commit and premises, target mise environment/trust, running workspace, ownerless ref locks, sandbox, replacement/continuation references and roster eligibility. It prints every discoverable failure on its own line with a repair and exits 2 if any fail. A malformed input can prevent dependent checks, but independent checks still run. `dispatch` checks its selected workspace before starting the service and includes those failures alongside service/workspace findings. `check` also reports overlapping live write globs as warnings; it does not reserve writes, create a workspace, route a worker or launch a service. Launch-time commit and workspace-lock checks remain necessary because state can change after a check. The event log is the single durable run-event data file. A run also creates per-run brief, report, and progress artifacts alongside that log.
 
 Tickets live in `<repo>/.agents/tickets/`, or in the home declared by `tickets = "<path>"`
 in the `--cd` repository's `.agx.toml` at `trunk()` (Git: `HEAD`). For jj, the repository root

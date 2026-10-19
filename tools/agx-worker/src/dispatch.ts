@@ -243,12 +243,11 @@ export async function dispatch(options: {
     cwd,
     env,
   );
-  if (active.code === 0) {
-    process.stderr.write(
-      `agx dispatch: unit ${unit}.service is already running\n`,
+  const failures: string[] = [];
+  if (active.code === 0)
+    failures.push(
+      `agx dispatch: unit ${unit}.service is already running; repair: wait for it to end or choose --unit`,
     );
-    return 1;
-  }
   const ws = await invoke(
     ["ws", "add", wsSlug, "--repo", ticketRepo.root, "--reuse", "--json"],
     cwd,
@@ -282,10 +281,34 @@ export async function dispatch(options: {
     return 1;
   }
   if (ticketRepo.root !== workspaceRepo.root) {
-    process.stderr.write(
-      `agx dispatch: ticket repository ${ticketRepo.root} differs from workspace repository ${workspaceRepo.root}\n`,
+    failures.push(
+      `agx dispatch: ticket repository ${ticketRepo.root} differs from workspace repository ${workspaceRepo.root}; repair: select a workspace in the ticket repository`,
     );
-    return 1;
+  }
+
+  const checked = await invoke(
+    [
+      "agx-worker",
+      "check",
+      ticketPath,
+      "--cd",
+      workspace,
+      ...(options.sandbox === undefined ? [] : ["--sandbox", options.sandbox]),
+      ...(options.continuation === undefined
+        ? []
+        : ["--continue", options.continuation]),
+    ],
+    cwd,
+    env,
+  );
+  if (checked.code !== 0)
+    failures.push(
+      (checked.err.trim() === "" ? undefined : checked.err.trim()) ??
+        "agx dispatch: preflight failed; repair: run agx worker check for the target tree",
+    );
+  if (failures.length > 0) {
+    process.stderr.write(`${failures.join("\n")}\n`);
+    return 2;
   }
 
   const parsedBinding = DispatchBindingSchema.safeParse({

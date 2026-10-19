@@ -111,8 +111,18 @@ async function main(): Promise<void> {
         flags: {
           cd: {
             type: String,
-            description: "tree in which to evaluate ticket premises",
+            description:
+              "target tree for all launch preflights (no reservation)",
           },
+          sandbox: {
+            type: String,
+            description: "sandbox to validate against the ticket",
+          },
+          continue: {
+            type: String,
+            description: "previous run to validate for continuation",
+          },
+          supersedes: { type: String, description: "previous run to replace" },
         },
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,
@@ -120,7 +130,13 @@ async function main(): Promise<void> {
       undefined,
       commandArgs,
     );
-    exit = await check({ ticket: parsed._[0], cd: parsed.flags.cd });
+    exit = await check({
+      ticket: parsed._[0],
+      cd: parsed.flags.cd,
+      sandbox: parsed.flags.sandbox,
+      continue: parsed.flags.continue,
+      supersedes: parsed.flags.supersedes,
+    });
   } else if (commandName === "ls") {
     const parsed = cli(
       {

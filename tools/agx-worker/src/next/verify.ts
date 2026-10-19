@@ -31,6 +31,7 @@ export function verificationEnvironment(
   cwd: string,
   source: NodeJS.ProcessEnv,
   temp: NodeJS.ProcessEnv,
+  onFailure?: (reason: string) => void,
 ): NodeJS.ProcessEnv {
   const home = source.HOME;
   const paths = (source.PATH ?? "/usr/bin:/bin").split(":");
@@ -64,10 +65,17 @@ export function verificationEnvironment(
   const parsed = jsonOf(z.record(z.string(), z.string())).safeParse(
     result.stdout.toString(),
   );
-  if (result.exitCode !== 0 || !parsed.success)
+  if (result.exitCode !== 0 || !parsed.success) {
+    if (onFailure !== undefined) {
+      onFailure(
+        `cannot assemble repository mise environment: ${(result.stderr.toString().trim() === "" ? undefined : result.stderr.toString().trim()) ?? "mise env returned invalid JSON"}`,
+      );
+      return base;
+    }
     return exitWithError(
       "agx: cannot assemble repository mise environment\n",
       2,
     );
+  }
   return { ...base, ...parsed.data, ...temp };
 }

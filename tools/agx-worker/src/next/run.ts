@@ -3,13 +3,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
-import { validateSlug } from "../../../shared/src/slug.ts";
-import { checkPremises } from "../premises.ts";
 import { verifyLine } from "../ticket.ts";
 import { parseReport, parseReturn, withReportInstruction } from "../report.ts";
-import { parseNextTicket, type NextTicket } from "./ticket.ts";
+import { type NextTicket } from "./ticket.ts";
 import { ticketContext, ticketPlacement } from "./ticket-home.ts";
 import {
   append,
@@ -26,18 +23,15 @@ import {
 } from "./store.ts";
 import { leaseFor, type StopSignal } from "./lease.ts";
 import { route } from "./route.ts";
-import {
-  loadRoster,
-  routeFilterLabel,
-} from "../../../../agents/models/roster.ts";
 import { pinContinuation } from "./continue.ts";
+import { routeFilterLabel } from "../../../../agents/models/roster.ts";
+import {
+  earlyQuitRows,
+  preflight,
+  printPreflightFailures,
+} from "./preflight.ts";
 import { createRunTemp } from "../temp.ts";
 import { exitWithError } from "./exit.ts";
-import { ownerlessRefLocks } from "../../../shared/src/ref-locks.ts";
-import {
-  DispatchBindingSchema,
-  type DispatchBinding,
-} from "../../../shared/src/agx-dispatch-binding.ts";
 import { changedFiles, deriveOutcome, workspaceSnapshot } from "./outcome.ts";
 import {
   verificationEnvironment,
@@ -71,27 +65,6 @@ const refuseRunningWorkspace = async (cwd: string): Promise<void> => {
   if (holder !== undefined)
     fatal(`workspace ${cwd} already has running run ${holder.id}`, 2);
 };
-const ticketFor = async (path: string, newDispatch = true) => {
-  const bytes = await readFile(path).catch(() =>
-    fatal(`no such ticket: ${path}`, 2),
-  );
-  const parsed = parseNextTicket(bytes.toString("utf8"));
-  const accepted = parsed.success
-    ? parsed
-    : fatal(`invalid ticket: ${parsed.reason}`, 2);
-  if (newDispatch) {
-    const slug = validateSlug(
-      accepted.ticket.name ?? basename(path, ".md"),
-      "tkt new",
-    );
-    if (!slug.ok) return fatal(String(slug.error));
-  }
-  if (accepted.warnings.length > 0)
-    process.stderr.write(
-      `WARN ignored legacy ticket fields: ${accepted.warnings.join(", ")}\n`,
-    );
-  return { ticket: accepted.ticket, prose: accepted.prose, bytes };
-};
 const contextFor = async (path: string, cwd: string, ticket: NextTicket) => {
   const located = await ticketContext(dirname(resolve(path)));
   if (!located.ok) return fatal(located.error);
@@ -119,45 +92,6 @@ const contextFor = async (path: string, cwd: string, ticket: NextTicket) => {
     );
   return ctx;
 };
-const premiseCommits = async (
-  ticket: NextTicket,
-  ctx: Awaited<ReturnType<typeof contextFor>>,
-) => {
-  const commits: { premise: string; commit: string }[] = [];
-  for (const premise of ticket.premises ?? []) {
-    let reference = /^(?:rev|bookmark):(.+)$/u.exec(premise)?.[1];
-    if (
-      ctx.vcs === "git" &&
-      premise.startsWith("bookmark:") &&
-      reference !== undefined
-    ) {
-      const at = reference.lastIndexOf("@");
-      reference =
-        at < 0
-          ? `refs/heads/${reference}`
-          : `refs/remotes/${reference.slice(at + 1)}/${reference.slice(0, at)}`;
-    }
-    const commit =
-      reference === undefined ? ctx.base_rev : await ctx.revision(reference);
-    if (commit === null && reference === undefined && ctx.vcs === undefined)
-      continue;
-    if (commit === null)
-      return fatal(`cannot resolve premise commit: ${premise}`);
-    commits.push({ premise, commit });
-  }
-  return commits;
-};
-const checkedPremises = (
-  ticket: NextTicket,
-  cwd: string,
-  vcs: string | undefined,
-) =>
-  checkPremises(
-    ticket.premises?.filter(
-      (premise) => vcs !== "git" || !premise.startsWith("rev:"),
-    ),
-    cwd,
-  );
 const renderPromise = (
   ticket: NextTicket,
   cwd: string,
@@ -202,51 +136,7 @@ const persistInterim = (id: string, path: string, message: string): void => {
   append({ kind: "progress", id, at: now(), path });
 };
 
-const LegacyReport = z.looseObject({
-  summary: z.string().optional(),
-  changes: z.array(z.unknown()).optional(),
-});
-
-export async function earlyQuitRows(
-  ticket: string,
-  cwd: string,
-): Promise<string[]> {
-  return (await foldedRuns())
-    .filter((priorRun) => priorRun.ticket === ticket && priorRun.cwd === cwd)
-    .flatMap((priorRun) => {
-      if (priorRun.failed_early_quit) return [priorRun.row];
-      const endedAt = priorRun.ended_at;
-      const reportPath = priorRun.report_path;
-      if (
-        priorRun.state !== "ended" ||
-        priorRun.exit !== 0 ||
-        priorRun.returned !== undefined ||
-        priorRun.changed_files !== undefined ||
-        endedAt === null ||
-        reportPath === null
-      )
-        return [];
-      const duration = fromThrowable(
-        () =>
-          Temporal.Instant.from(endedAt)
-            .since(Temporal.Instant.from(priorRun.started_at))
-            .total({ unit: "seconds" }),
-        (error) => error,
-      )();
-      if (!duration.isOk() || duration.value >= 120) return [];
-      const text = fromThrowable(
-        () => readFileSync(reportPath, "utf8"),
-        (error) => error,
-      )();
-      if (!text.isOk()) return [];
-      const report = jsonOf(LegacyReport).safeParse(text.value);
-      if (!report.success) return [];
-      const returned = report.data.summary?.includes("agx-return") ?? false;
-      return !returned && report.data.changes?.length === 0
-        ? [priorRun.row]
-        : [];
-    });
-}
+export { earlyQuitRows } from "./preflight.ts";
 
 const lastLines = (output: string, count: number): string => {
   const lines = output.split(/\r?\n/u);
@@ -306,21 +196,13 @@ export async function check(flags: Flags): Promise<number> {
   const path = value(flags, "ticket");
   const cwd = resolve(value(flags, "cd") ?? process.cwd());
   if (path === undefined) return fatal("check requires positional TICKET", 2);
-  const { ticket } = await ticketFor(path);
-  const ctx = await contextFor(path, cwd, ticket);
+  const inspected = await preflight(path, cwd, flags);
+  if (inspected.failures.length > 0)
+    return printPreflightFailures(inspected.failures);
+  const { ticket, loaded } = inspected;
+  if (ticket === undefined || !loaded.ok)
+    return fatal("preflight did not resolve ticket and roster");
   overlapWarnings(ticket.writes);
-  const premises = checkedPremises(ticket, cwd, ctx.vcs);
-  if (premises.status === "missing") {
-    return fatal(
-      `missing premises in --cd tree: ${premises.details.join("; ")}`,
-      2,
-    );
-  }
-  if (premises.status === "timeout") fatal("premise check timed out", 2);
-  await premiseCommits(ticket, ctx);
-  const loaded = await loadRoster(process.env.DISPATCH_ROSTER_PATH);
-  if (!loaded.ok)
-    return fatal(`cannot read dispatch roster: ${loaded.error}`, 1);
   process.stdout.write(
     `OK ticket=${ticket.name ?? basename(path, ".md")} cwd=${cwd} ${routeFilterLabel(loaded.value.auto)}\n`,
   );
@@ -331,83 +213,43 @@ export async function run(flags: Flags): Promise<number> {
   const path = value(flags, "ticket");
   const cwd = resolve(value(flags, "cd") ?? process.cwd());
   if (path === undefined) return fatal("run requires positional TICKET", 2);
-  const { ticket, prose, bytes } = await ticketFor(
-    path,
-    value(flags, "continue") === undefined,
-  );
+  const inspected = await preflight(path, cwd, flags);
+  if (inspected.failures.length > 0)
+    return printPreflightFailures(inspected.failures);
+  const {
+    ticket,
+    prose,
+    bytes,
+    ctx,
+    sandbox,
+    binding,
+    pinned: inspectedContinuation,
+    premise_commits,
+  } = inspected;
+  if (ticket === undefined || bytes === null || ctx === undefined)
+    return fatal("preflight did not resolve ticket and context");
   const actualUnit = await invocationUnitFor();
   const ticketName = ticket.name ?? basename(path, ".md");
-  const rawBinding = value(flags, "dispatchBinding");
-  let binding: DispatchBinding | undefined;
-  if (rawBinding !== undefined) {
-    const parsedBinding = jsonOf(DispatchBindingSchema).safeParse(rawBinding);
-    if (!parsedBinding.success)
-      return fatal(`invalid dispatch binding: ${parsedBinding.error.message}`);
-    binding = parsedBinding.data;
-    if (binding.ticket !== ticketName || resolve(binding.workspace) !== cwd)
-      return fatal(
-        "dispatch binding does not match the ticket and --cd workspace",
-      );
-  }
-  const sandbox =
-    value(flags, "sandbox") ?? ticket.sandbox ?? "workspace-write";
-  if (!new Set(["none", "read-only", "workspace-write"]).has(sandbox))
-    return fatal("--sandbox must be none, read-only, or workspace-write", 2);
-  if (ticket.sandbox !== undefined && ticket.sandbox !== sandbox)
-    return fatal(
-      `--sandbox ${sandbox} differs from ticket sandbox ${ticket.sandbox}`,
-    );
-  await refuseRunningWorkspace(cwd);
-  overlapWarnings(ticket.writes);
-  const staleRefLocks = ownerlessRefLocks(cwd);
-  if (staleRefLocks.length > 0) {
-    const details = staleRefLocks
-      .map(
-        ({ path: lockPath, ageMs }) =>
-          `${lockPath} age=${Math.floor(ageMs / 1_000)}s`,
-      )
-      .join("; ");
-    return fatal(
-      `ownerless Git ref lock(s) block dispatch: ${details}. Confirm no holder, then repair with: rip <path>`,
-      2,
-    );
-  }
-  const ctx = await contextFor(path, cwd, ticket);
-  if (ctx.base_rev === null && ctx.vcs !== undefined)
-    return fatal("cannot resolve --cd commit for base_rev");
-  if (ctx.vcs === undefined)
-    process.stderr.write(
-      "agx: no repository in --cd; base_rev absent; repository changes, end commit and landing unavailable\n",
-    );
-  const premises = checkedPremises(ticket, cwd, ctx.vcs);
-  if (premises.status === "missing")
-    return fatal(
-      `missing premises in --cd tree: ${premises.details.join("; ")}`,
-      2,
-    );
-  if (premises.status === "timeout") return fatal("premise check timed out", 2);
   const continuationId = value(flags, "continue");
-  let supersedes = value(flags, "supersedes") ?? ticket.supersedes;
-  if (continuationId !== undefined && supersedes !== undefined)
-    return fatal("supersedes and --continue are mutually exclusive");
-  if (
-    supersedes !== undefined &&
-    !(await foldedRuns()).some((prior) => prior.id === supersedes)
-  )
-    return fatal(`cannot supersede unknown run ${supersedes}`);
-  const premise_commits = await premiseCommits(ticket, ctx);
   const routing = {
     brief: `Proposition ${ticket.proposition.id}: ${ticket.proposition.claim}\n${prose}`,
     capabilities: ticket.capabilities ?? [],
     timeoutS: ticket.timeout_s ?? 600,
     maskedRows: await earlyQuitRows(ticketName, cwd),
   };
-  const pinned =
+  const selectedContinuation =
     continuationId === undefined
       ? undefined
       : await pinContinuation(continuationId, path, routing);
-  supersedes = pinned?.supersedes ?? supersedes;
+  const pinned = selectedContinuation ?? inspectedContinuation;
+  const supersedes =
+    pinned?.supersedes ?? value(flags, "supersedes") ?? ticket.supersedes;
   const resumeSession = pinned?.resumeSession;
+  overlapWarnings(ticket.writes);
+  if (ctx.vcs === undefined)
+    process.stderr.write(
+      "agx: no repository in --cd; base_rev absent; repository changes, end commit and landing unavailable\n",
+    );
   const row =
     pinned?.row ??
     (await route(

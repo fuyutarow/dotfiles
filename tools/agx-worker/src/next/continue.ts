@@ -18,18 +18,24 @@ export type PinnedContinuation = Readonly<{
 export async function pinContinuation(
   continuationId: string,
   ticketPath: string,
-  routing: {
+  routing?: {
     brief: string;
     capabilities: readonly string[];
     timeoutS: number;
     maskedRows: readonly string[];
   },
-): Promise<PinnedContinuation> {
-  const refuse = (reason: string): never =>
-    exitWithError(
+  onFailure?: (reason: string) => void,
+): Promise<PinnedContinuation | null> {
+  const refuse = (reason: string): null => {
+    if (onFailure !== undefined) {
+      onFailure(`cannot continue run ${continuationId}: ${reason}`);
+      return null;
+    }
+    return exitWithError(
       `agx: cannot continue run ${continuationId}: ${reason}; start a fresh run with: agx run ${ticketPath}\n`,
       2,
     );
+  };
   const previous = (await foldedRuns()).find(
     (entry) => entry.id === continuationId,
   );
@@ -44,6 +50,8 @@ export async function pinContinuation(
   if (!loaded.ok) return refuse(`cannot read dispatch roster: ${loaded.error}`);
   const row = loaded.value.choice.find((entry) => entry.id === previous.row);
   if (previous.outcome === "capacity") {
+    // Inspection validates the reference without selecting or launching a worker.
+    if (routing === undefined) return null;
     const masked = loaded.value.choice
       .filter(
         (entry) =>

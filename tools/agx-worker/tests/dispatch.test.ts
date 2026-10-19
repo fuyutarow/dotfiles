@@ -109,6 +109,7 @@ function fixture() {
   shim("systemd-run", ['exec bun "$FAKE_SYSTEMD_RUN_SCRIPT" "$@"']);
   shim("agx-worker", [
     'if [ "$1" = "ls" ]; then cat "$FAKE_RECORDS"; exit 0; fi',
+    'if [ "$1" = "check" ]; then if [ "$FAKE_CHECK_FAIL" = "yes" ]; then printf "agx: invalid writes; repair: use relative globs\\nagx: untrusted mise.toml; repair: mise trust\\n" >&2; exit 2; fi; exit 0; fi',
     'echo "unexpected fake agx command: $*" >&2',
     "exit 2",
   ]);
@@ -285,3 +286,15 @@ test.each([
     expect(await Bun.file(f.records).text()).toBe("[]\n");
   },
 );
+
+test("dispatch reports service and all check failures before starting a unit", async () => {
+  const f = fixture();
+  f.env.FAKE_ACTIVE = "yes";
+  f.env.FAKE_CHECK_FAIL = "yes";
+  const result = await invoke(f);
+  expect(result.exitCode).toBe(2);
+  expect(result.stderr).toContain("already running");
+  expect(result.stderr).toContain("invalid writes; repair:");
+  expect(result.stderr).toContain("untrusted mise.toml; repair:");
+  expect(await Bun.file(f.unitArgs).exists()).toBe(false);
+});

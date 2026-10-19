@@ -54,7 +54,7 @@ const REGISTRY = join(
 );
 const FETCH_MS = 30_000;
 
-function rejectPrototypeFlag(
+function isPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): boolean {
@@ -490,13 +490,17 @@ async function applyFixes(fixes: Fix[]): Promise<Result<void, string>> {
 
 async function main(): Promise<Result<void, string>> {
   let prototypeFlag = false;
+  const rejectPrototypeFlag = (
+    type: "known-flag" | "unknown-flag" | "argument",
+    flag: string,
+  ): void => {
+    prototypeFlag = isPrototypeFlag(type, flag) || prototypeFlag;
+  };
   const parsed = cli(
     {
       name: "apply.ts",
       strictFlags: true,
-      ignoreArgv: (type, flag) => {
-        prototypeFlag = rejectPrototypeFlag(type, flag) || prototypeFlag;
-      },
+      ignoreArgv: rejectPrototypeFlag,
       parameters: [],
       help: {
         description:
@@ -554,7 +558,21 @@ async function main(): Promise<Result<void, string>> {
       process.stdout.write(`SKIP  ${vault} (no .obsidian/)\n`);
       continue;
     }
-    const app = await appFixes(dir, wantAppResult.value);
+    const shadowBase = resolve(
+      process.env.HOME ?? "",
+      ".obsidian-remote/vaults",
+    );
+    const canonicalBase = await realpath(shadowBase).catch(() => shadowBase);
+    const shadow =
+      resolve(vault).startsWith(shadowBase + sep) ||
+      (await realpath(vault)).startsWith(canonicalBase + sep);
+    if (shadow)
+      process.stdout.write(
+        `SKIP  ${vault}: settings and enabled plugins owned by open-remote.ts (shadow vault); pinned plugin files still verified\n`,
+      );
+    const app = shadow
+      ? ok<Fix[]>([])
+      : await appFixes(dir, wantAppResult.value);
     if (app.isErr()) return err(app.error);
     const pluginResults = await Promise.all(
       validPlugins.map(([id, p]) => pluginFixes(dir, id, p)),
@@ -563,15 +581,21 @@ async function main(): Promise<Result<void, string>> {
     if (pluginError !== undefined && pluginError.isErr())
       return err(pluginError.error);
     const settingsResults = await Promise.all(
-      validPlugins.map(([id, p]) => pluginSettingsFixes(dir, id, p.settings)),
+      validPlugins.map(([id, p]) =>
+        shadow
+          ? Promise.resolve(ok<Fix[]>([]))
+          : pluginSettingsFixes(dir, id, p.settings),
+      ),
     );
     const settingsError = settingsResults.find((result) => result.isErr());
     if (settingsError !== undefined && settingsError.isErr())
       return err(settingsError.error);
-    const enabled = await enableFix(
-      dir,
-      validPlugins.map(([id]) => id),
-    );
+    const enabled = shadow
+      ? ok<Fix[]>([])
+      : await enableFix(
+          dir,
+          validPlugins.map(([id]) => id),
+        );
     if (enabled.isErr()) return err(enabled.error);
     const fixes = [
       ...app.value,

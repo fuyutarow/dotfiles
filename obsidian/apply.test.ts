@@ -199,3 +199,79 @@ test("merges declared settings atomically and keeps check read-only", async () =
   await walk(obsidianDir);
   expect(tempFiles).toEqual([]);
 });
+
+test("shadow settings stay byte-identical while pinned plugin files are installed", async () => {
+  const home = await mkdtemp(join(tmpdir(), "obs-shadow-owner-"));
+  tempDirs.push(home);
+  const vault = join(home, ".obsidian-remote/vaults/host--notes");
+  const config = join(vault, ".obsidian");
+  const registry = join(
+    home,
+    "Library/Application Support/obsidian/obsidian.json",
+  );
+  const data = join(config, "plugins/remote-ssh/data.json");
+  const app = join(config, "app.json");
+  const enabled = join(config, "community-plugins.json");
+  const bytes =
+    '{ "profiles": [{"id":"so-owner","remotePath":"/notes"}], "autoConnectProfileId":"so-owner", "secrets":{"keep":true} }\n';
+  await Bun.write(data, bytes);
+  await Bun.write(app, '{ "promptDelete": false }\n');
+  await Bun.write(enabled, '["remote-ssh"]\n');
+  await Bun.write(
+    registry,
+    JSON.stringify({ vaults: { shadow: { path: vault } } }),
+  );
+  const appSource = join(home, "app-source.json");
+  const pluginSource = join(home, "plugin-source.json");
+  await Bun.write(appSource, '{"promptDelete":true}');
+  await Bun.write(
+    pluginSource,
+    JSON.stringify({
+      "remote-ssh": {
+        local: "local-plugins/doc-view",
+        settings: {
+          profiles: [{ id: "house" }],
+          autoConnectProfileId: "house",
+        },
+      },
+      "doc-view": { local: "local-plugins/doc-view" },
+    }),
+  );
+  const run = async (args: string[] = []) => {
+    const child = Bun.spawn(
+      [process.execPath, join(import.meta.dir, "apply.ts"), ...args],
+      {
+        env: {
+          ...process.env,
+          HOME: home,
+          OBSIDIAN_APP_SOURCE: appSource,
+          OBSIDIAN_PLUGINS_SOURCE: pluginSource,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 30_000,
+      },
+    );
+    const [exit, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    return { exit, stdout, stderr };
+  };
+  expect((await run(["--check"])).exit).toBe(1);
+  expect(await run()).toMatchObject({ exit: 0, stderr: "" });
+  const checked = await run(["--check"]);
+  expect(checked.exit).toBe(0);
+  expect(checked.stdout).toContain("SKIP");
+  expect(checked.stdout).toContain("owned by open-remote.ts");
+  expect(await readFile(data, "utf8")).toBe(bytes);
+  expect(await readFile(app, "utf8")).toBe('{ "promptDelete": false }\n');
+  expect(await readFile(enabled, "utf8")).toBe('["remote-ssh"]\n');
+  expect(
+    await Bun.file(join(config, "plugins/doc-view/main.js")).exists(),
+  ).toBe(true);
+  expect(
+    await Bun.file(join(config, "plugins/remote-ssh/main.js")).exists(),
+  ).toBe(true);
+});

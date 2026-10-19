@@ -16,6 +16,7 @@ export const RemoteRequest = z.object({
   port: z.coerce.number().int().min(1).max(65535),
   user: z.string().min(1),
   proxyjump: z.string().optional(),
+  action: z.enum(["open", "forget"]).optional(),
 });
 type Request = z.infer<typeof RemoteRequest>;
 const ObjectJson = jsonOf(z.record(z.string(), z.unknown()));
@@ -191,6 +192,13 @@ if (import.meta.main) {
     const parsed = jsonOf(RemoteRequest).safeParse(await Bun.stdin.text());
     if (!parsed.success) return err("invalid receiver request");
     const request = parsed.data;
+    if (request.action === "forget") {
+      const { forgetShadow } = await import("./forget-shadow.ts");
+      return forgetShadow({
+        kind: "profile",
+        value: profileId(request.alias, request.path),
+      });
+    }
     const target = await shadowPath(request);
     await mkdir(target, { recursive: true, mode: 0o700 });
     return openVault(target, () => prepareShadow(target, request), trust);

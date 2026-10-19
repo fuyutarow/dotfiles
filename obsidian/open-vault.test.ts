@@ -252,6 +252,10 @@ test("WSL obs resolves its default directory and refuses files or extra argument
   expect(await readFile(argsFile, "utf8")).toBe(
     JSON.stringify(["--app", "obsidian", "--", f.target]),
   );
+  expect((await run(["--forget"])).exit).toBe(0);
+  expect(await readFile(argsFile, "utf8")).toBe(
+    JSON.stringify(["--app", "obsidian", "--forget", "--", f.target]),
+  );
   expect((await run([f.registry])).exit).toBe(1);
   expect((await run([f.target, f.target])).exit).toBe(1);
 });
@@ -436,3 +440,168 @@ test("a stalled graceful quit times out without touching registry or terminating
   expect(await f.events()).not.toContain('["kill');
   expect(await f.events()).not.toContain('["open"');
 }, 30_000);
+
+async function forgetFixture() {
+  const f = await fixture();
+  const target = join(f.home, ".obsidian-remote/vaults/host--notes");
+  const other = join(f.home, ".obsidian-remote/vaults/host--other");
+  for (const [path, id] of [
+    [target, "so-selected"],
+    [other, "so-other"],
+  ]) {
+    if (path === undefined || id === undefined) continue;
+    await Bun.write(
+      join(path, ".obsidian/plugins/remote-ssh/data.json"),
+      JSON.stringify({ autoConnectProfileId: id, profiles: [{ id }] }),
+    );
+    await Bun.write(join(path, "note.md"), id);
+  }
+  const original = {
+    ...f.original,
+    vaults: {
+      ...f.original.vaults,
+      shadow: { path: target, ts: 3 },
+      otherShadow: { path: other, ts: 4 },
+    },
+  };
+  await Bun.write(f.registry, JSON.stringify(original));
+  // Fixture rip moves the entire directory; no destructive fake and recovery is asserted below.
+  await writeFile(
+    join(f.home, "bin/rip"),
+    `#!${process.execPath}
+import { mkdir, rename } from 'node:fs/promises';
+const args = process.argv.slice(2);
+if (await Bun.file(process.env.HOME+'/rip-fail').exists()) process.exit(9);
+await mkdir(args[1], {recursive:true});
+await rename(args[3], args[1]+'/recovered-shadow');
+`,
+    { mode: 0o755 },
+  );
+  const run = async (remote = false, path = target) => {
+    const child = Bun.spawn(
+      remote
+        ? [process.execPath, join(import.meta.dir, "open-remote.ts")]
+        : [
+            "zsh",
+            "-f",
+            "-c",
+            'source "$DOTFILES/zsh/mac.zsh"; obs --forget "$@"',
+            "obs",
+            path,
+          ],
+      {
+        env: {
+          ...f.env,
+          ZDOTDIR: f.home,
+          GRAVEYARD: join(f.home, "graveyard"),
+        },
+        stdin: remote
+          ? new Blob([
+              JSON.stringify({
+                alias: "fixture",
+                path: "/notes",
+                hostname: "box.invalid",
+                port: 22,
+                user: "user",
+                action: "forget",
+              }),
+            ])
+          : "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 30_000,
+      },
+    );
+    const [exit, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    return { exit, stdout, stderr };
+  };
+  return { ...f, target, other, original, runForget: run };
+}
+
+test("forget removes exactly one shadow after graceful flush and preserves recoverable contents", async () => {
+  const f = await forgetFixture();
+  await Bun.write(join(f.home, "running"), "1");
+  await Bun.write(join(f.home, "flush"), "1");
+  const result = await f.runForget();
+  expect(result).toMatchObject({ exit: 0, stderr: "" });
+  const expected = record(f.original.vaults);
+  delete expected.shadow;
+  expected.cccccccccccccccc = {
+    path: join(f.home, "other"),
+    ts: 3,
+    open: true,
+  };
+  expect(await object(f.registry)).toEqual({ ...f.original, vaults: expected });
+  expect(await exists(f.target)).toBe(false);
+  expect(
+    await readFile(join(f.home, "graveyard/recovered-shadow/note.md"), "utf8"),
+  ).toBe("so-selected");
+  expect(await readFile(join(f.other, "note.md"), "utf8")).toBe("so-other");
+  expect(await f.events()).toContain("osascript");
+  expect(await f.events()).not.toContain('["kill');
+});
+
+test("remote forget finds auto-connect identity and never creates an unknown shadow", async () => {
+  const f = await forgetFixture();
+  const { profileId } = await import("./open-remote.ts");
+  await Bun.write(
+    join(f.target, ".obsidian/plugins/remote-ssh/data.json"),
+    JSON.stringify({ autoConnectProfileId: profileId("fixture", "/notes") }),
+  );
+  expect((await f.runForget(true)).exit).toBe(0);
+  const before = await readFile(f.registry, "utf8");
+  expect((await f.runForget(true)).exit).toBe(2);
+  expect(await readFile(f.registry, "utf8")).toBe(before);
+  expect(await exists(f.other)).toBe(true);
+});
+
+test("unknown, house vault, quit refusal and rip failure preserve registry and vaults", async () => {
+  const f = await forgetFixture();
+  const before = await readFile(f.registry, "utf8");
+  expect((await f.runForget(false, join(f.home, "old"))).exit).toBe(2);
+  expect((await f.runForget(true)).exit).toBe(2);
+  expect(await f.events()).toBe("");
+  await Bun.write(join(f.home, "running"), "1");
+  await Bun.write(join(f.home, "refuse"), "1");
+  expect((await f.runForget()).stderr).toContain("refused graceful quit");
+  expect(await readFile(f.registry, "utf8")).toBe(before);
+  await rm(join(f.home, "running"));
+  await Bun.write(join(f.home, "rip-fail"), "1");
+  expect((await f.runForget()).stderr).toContain("registry restored");
+  expect(await object(f.registry)).toEqual(f.original);
+  expect(await exists(f.target)).toBe(true);
+});
+
+test("forget refuses duplicate identities and registry paths inside the selected shadow", async () => {
+  const f = await forgetFixture();
+  const original = await readFile(f.registry, "utf8");
+  const nested = join(f.target, "nested-vault");
+  await mkdir(nested);
+  for (const path of [f.target, nested]) {
+    await Bun.write(
+      f.registry,
+      JSON.stringify({
+        ...f.original,
+        vaults: { ...f.original.vaults, conflict: { path, extra: true } },
+      }),
+    );
+    const before = await readFile(f.registry, "utf8");
+    expect((await f.runForget()).exit).toBe(2);
+    expect(await readFile(f.registry, "utf8")).toBe(before);
+    expect(await exists(f.target)).toBe(true);
+  }
+  await Bun.write(f.registry, original);
+  const { profileId } = await import("./open-remote.ts");
+  for (const path of [f.target, f.other])
+    await Bun.write(
+      join(path, ".obsidian/plugins/remote-ssh/data.json"),
+      JSON.stringify({ autoConnectProfileId: profileId("fixture", "/notes") }),
+    );
+  expect((await f.runForget(true)).stderr).toContain("ambiguous");
+  expect(await readFile(f.registry, "utf8")).toBe(original);
+  expect(await f.events()).toBe("");
+});

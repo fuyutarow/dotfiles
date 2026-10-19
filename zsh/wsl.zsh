@@ -89,11 +89,17 @@ link-win-exes
 alias open='smart-open'
 # A vouched smart-open forward lets the Mac build a Remote SSH shadow vault for this directory.
 obs() {
+  emulate -L zsh
+  local -a action
+  if [[ ${1:-} == --forget ]]; then
+    action=(--forget)
+    shift
+  fi
   if (( $# > 1 )) || [[ ! -d ${1:-$PWD} ]]; then
-    print -u2 -- 'obs: usage: obs [directory]'
+    print -u2 -- 'obs: usage: obs [--forget] [directory]'
     return 1
   fi
-  smart-open --app obsidian -- "${${1:-$PWD}:A}"
+  smart-open --app obsidian "${action[@]}" -- "${${1:-$PWD}:A}"
 }
 # winget: run the real thing, then refresh the symlink farm (`link-win-exes`, above) so a
 # just-installed allowlisted tool is usable in EVERY live pane immediately — PATH never changes,

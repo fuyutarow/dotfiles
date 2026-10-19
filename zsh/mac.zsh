@@ -16,6 +16,16 @@ obs() {
     return 1
   fi
 
+  if [[ ${1:-} == --forget ]]; then
+    shift
+    if (( $# > 1 )); then
+      print -u2 -- "usage: obs --forget [shadow dir]"
+      return 2
+    fi
+    command bun "${DOTFILES:-$HOME/dotfiles}/obsidian/forget-shadow.ts" -- "${1:-$PWD}"
+    return $?
+  fi
+
   if (( $# > 1 )); then
     print -u2 -- 'usage: obs [dir]'
     return 2

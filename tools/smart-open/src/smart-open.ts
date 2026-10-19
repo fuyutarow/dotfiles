@@ -87,6 +87,11 @@ const argv = cli(
         default: "vscode",
         description: "remote path app: vscode or obsidian (directories only)",
       },
+      forget: {
+        type: Boolean,
+        default: false,
+        description: "forget the remote Obsidian shadow vault (recoverable)",
+      },
       here: {
         type: Boolean,
         default: false,
@@ -106,6 +111,9 @@ if (!["vscode", "obsidian"].includes(argv.flags.app))
   die("--app must be vscode or obsidian");
 if (argv.flags.app === "obsidian" && argv.flags.here)
   die("--app obsidian requires a client SSH forward");
+
+if (argv.flags.forget && argv.flags.app !== "obsidian")
+  die("--forget requires --app obsidian");
 
 const pathExists = async (path: string): Promise<boolean> =>
   (await attempt(() => stat(path))).ok;
@@ -362,6 +370,7 @@ async function routePath(path: string): Promise<Routed> {
       kind,
       host: SSH_HOST,
       ...(argv.flags.app === "obsidian" ? { app: "obsidian" } : {}),
+      ...(argv.flags.forget ? { action: "forget" } : {}),
     }),
   );
   if (probe.outcome === "client") {

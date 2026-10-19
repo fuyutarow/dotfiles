@@ -34,7 +34,7 @@ async function exists(path: string): Promise<boolean> {
   );
 }
 
-async function readRegistry(): Promise<
+export async function readRegistry(): Promise<
   Result<
     { data: Record<string, unknown>; vaults: Record<string, unknown> },
     string
@@ -70,7 +70,7 @@ async function containing(
   return best;
 }
 
-async function command(
+export async function command(
   args: string[],
   waitMs = WAIT_MS,
 ): Promise<{ exit: number; stderr: string }> {
@@ -95,13 +95,13 @@ async function command(
   return { exit, stderr: stderr.slice(0, 2_000) };
 }
 
-async function running(): Promise<Result<boolean, string>> {
+export async function running(): Promise<Result<boolean, string>> {
   const result = await command(["pgrep", "-x", "Obsidian"]);
   if (result.exit > 1) return err(`pgrep failed: ${result.stderr}`);
   return ok(result.exit === 0);
 }
 
-async function quit(): Promise<Result<void, string>> {
+export async function quit(): Promise<Result<void, string>> {
   const result = await command(["osascript", "-e", 'quit app "Obsidian"']);
   if (result.exit !== 0)
     return err(`Obsidian refused graceful quit: ${result.stderr}`);
@@ -117,7 +117,9 @@ async function quit(): Promise<Result<void, string>> {
   );
 }
 
-async function atomicWrite(data: Record<string, unknown>): Promise<void> {
+export async function atomicWrite(
+  data: Record<string, unknown>,
+): Promise<void> {
   const temp = `${REGISTRY}.${crypto.randomUUID()}.tmp`;
   const mode = (await exists(REGISTRY))
     ? (await stat(REGISTRY)).mode & 0o777
@@ -147,7 +149,7 @@ async function openUri(
   return ok(undefined);
 }
 
-async function acquireLock(lock: string): Promise<Result<void, string>> {
+export async function acquireLock(lock: string): Promise<Result<void, string>> {
   const deadline = performance.now() + 120_000;
   while (performance.now() < deadline) {
     const locked = await mkdir(lock).then(

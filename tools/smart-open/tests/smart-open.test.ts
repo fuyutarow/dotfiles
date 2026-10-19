@@ -514,6 +514,10 @@ import { RemoteRequest, shadowPath, prepareShadow } from ${JSON.stringify(module
 const parsed = RemoteRequest.safeParse(JSON.parse(await Bun.stdin.text()));
 if (!parsed.success) process.exit(2);
 const req = parsed.data;
+if (req.action === 'forget') {
+ await Bun.write(join(process.env.HOME, 'forget-request'), JSON.stringify(req));
+ process.exit(0);
+}
 if (await Bun.file(join(process.env.HOME, 'fail-obs')).exists()) process.exit(7);
 // Longer than the ordinary ACK: Obsidian must wait for setup, not claim early success.
 await Bun.sleep(2100);
@@ -596,11 +600,42 @@ await Bun.write(join(process.env.HOME, 'shadow'), target);
     hostKeyStore: { keep: true },
     secrets: { keep: "secret" },
   });
+  expect((await client(["--app", "obsidian", "--forget", dir], env)).code).toBe(
+    0,
+  );
+  expect(await json(join(dir, "forget-request"))).toMatchObject({
+    action: "forget",
+    alias: "probe-host",
+    path: dir,
+    hostname: "box.invalid",
+    user: "remote-user",
+  });
   const before = await Bun.file(dataPath).text();
   for (const request of [
     { app: "obsidian", path: dir, host: "elsewhere", kind: "dir" },
     { app: "obsidian", path: dir, host: "probe-host", kind: "file" },
     { app: "unrecognised", path: dir, host: "probe-host", kind: "dir" },
+    {
+      app: "obsidian",
+      action: "forget",
+      path: dir,
+      host: "elsewhere",
+      kind: "dir",
+    },
+    {
+      app: "vscode",
+      action: "forget",
+      path: dir,
+      host: "probe-host",
+      kind: "dir",
+    },
+    {
+      app: "obsidian",
+      action: "erase",
+      path: dir,
+      host: "probe-host",
+      kind: "dir",
+    },
   ])
     expect((await ask(sock, `${JSON.stringify(request)}\n`)).reply).toStartWith(
       "refused:",

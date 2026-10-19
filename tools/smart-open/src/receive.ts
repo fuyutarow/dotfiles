@@ -354,7 +354,12 @@ async function handlePath(
   kind: unknown,
   host: unknown,
   app: unknown = "vscode",
+  action: unknown = "open",
 ): Promise<string> {
+  if (action !== "open" && action !== "forget")
+    return "refused: unknown action";
+  if (action === "forget" && app !== "obsidian")
+    return "refused: forget requires Obsidian";
   const bad = malformedPath(path, kind, host, app);
   if (bad !== null) return bad;
   // Narrowed by malformedPath; restated for the type checker.
@@ -370,7 +375,7 @@ async function handlePath(
     note("unvouched host");
     return `refused: ${h} does not forward smart-open to this receiver`;
   }
-  if (app === "obsidian") return openObsidian(p, h, attach);
+  if (app === "obsidian") return openObsidian(p, h, attach, action);
   const code = await sshResolve(
     editor,
     Math.max(1, settleMs - (performance.now() - start)),
@@ -396,6 +401,7 @@ async function openObsidian(
   path: string,
   alias: string,
   ssh: Resolved,
+  action: string,
 ): Promise<string> {
   if (obsidianBusy) return "busy: Obsidian setup in progress";
   obsidianBusy = true;
@@ -409,6 +415,7 @@ async function openObsidian(
         JSON.stringify({
           alias,
           path,
+          action,
           hostname: ssh.hostname,
           port: ssh.port,
           user: ssh.user,
@@ -441,7 +448,13 @@ async function handle(line: string): Promise<string> {
   const checked = jsonOf(MessageSchema).safeParse(line);
   const msg = checked.success ? checked.data : undefined;
   if (msg !== undefined && Object.hasOwn(msg, "path"))
-    return handlePath(msg["path"], msg["kind"], msg["host"], msg["app"]);
+    return handlePath(
+      msg["path"],
+      msg["kind"],
+      msg["host"],
+      msg["app"],
+      msg["action"],
+    );
   if (msg !== undefined && Object.hasOwn(msg, "app"))
     return "refused: app requires a directory path";
   const rawUrl = msg?.["url"];

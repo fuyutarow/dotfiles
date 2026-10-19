@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // Consumer: humans and agents running one RAM-bounded command; Linux fails closed.
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir } from "node:fs/promises";
+import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import { availableParallelism, homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
@@ -207,7 +207,18 @@ async function poolSlot(directory: string, pool: string, capacity: number) {
     join(directory, `${pool}.${n}`),
   );
   for (const path of candidates) {
-    const probe = await output(["flock", "-n", "-E", "75", path, "true"]);
+    // GPU selection must not briefly reserve an exclusive research slot before
+    // announcing the want and receiving ccc's release acknowledgment.
+    const mode = pool === "gpu" ? ["--shared"] : [];
+    const probe = await output([
+      "flock",
+      ...mode,
+      "-n",
+      "-E",
+      "75",
+      path,
+      "true",
+    ]);
     if (probe.code === 0) return ok(path);
     if (probe.code !== 75)
       return err(new Error(`flock probe failed: ${probe.stderr.trim()}`));
@@ -224,6 +235,15 @@ function lock(path: string, wait: number, conflict: number, command: string[]) {
     String(wait),
     path,
     ...command,
+  ];
+}
+// Research keeps shared ownership until its slot and all scoped descendants exit.
+// ccc owns the same lock exclusively through CUDA process exit, acknowledging release.
+export function cccHandoffLock(root: string, wait: number, command: string[]) {
+  return [
+    "flock",
+    "--shared",
+    ...lock(join(root, "ccc-gpu.lock"), wait, 75, command).slice(1),
   ];
 }
 async function cpuIds(count: number) {
@@ -421,6 +441,11 @@ async function run(
     if (slot.isErr()) return err(slot.error);
     argv = lock(slot.value, wait, 75, argv);
   }
+  await using handoffCleanup = new AsyncDisposableStack();
+  let want: string | undefined;
+  handoffCleanup.defer(async () => {
+    if (want !== undefined) await unlink(want);
+  });
   if (manifest.device.kind === "gpu") {
     const slot = await poolSlot(
       slots,
@@ -429,9 +454,15 @@ async function run(
     );
     if (slot.isErr()) return err(slot.error);
     argv = lock(slot.value, wait, 75, argv);
+    argv = cccHandoffLock(root, wait, argv);
+    const wants = join(root, "gpu-wants");
+    await mkdir(wants, { recursive: true, mode: 0o700 });
+    const marker = join(wants, reservationId);
+    await writeFile(marker, String(process.pid), { flag: "wx", mode: 0o600 });
+    want = marker;
   }
   argv = lock(identity, 0, 69, argv);
-  // bounded: each flock has -w; the command and descendants have RuntimeMaxSec in systemd.
+  // bounded: each flock has -w; systemd owns RuntimeMaxSec and descendant cleanup.
   const child = Bun.spawn(argv, {
     cwd: options.cwd ?? process.cwd(),
     env: scopedEnv,

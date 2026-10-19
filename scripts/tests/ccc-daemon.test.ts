@@ -131,23 +131,20 @@ test("an old enable edge pointing directly at the repo declaration migrates to t
   expect((await f.doctor()).verdict).toBe("PASS");
 }, 20_000);
 
-test("doctor reports the CPU-only policy and rejects a unit without GPU isolation", async () => {
+test("doctor passes the GPU path and rejects CPU-only isolation", async () => {
   const f = await fixture("enabled", "active");
   await f.enableEdge();
   expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
-  expect((await f.doctor()).detail).toContain("CPU-only indexing");
+  expect((await f.doctor()).detail).toContain("GPU-only indexing");
   const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
   await writeFile(
     unit,
-    (await readFile(unit, "utf8")).replaceAll(
-      /^Environment="(?:CUDA_VISIBLE_DEVICES|COCOINDEX_RUN_GPU_IN_SUBPROCESS).*\n/gmu,
-      "",
-    ),
+    (await readFile(unit, "utf8")) + '\nEnvironment="CUDA_VISIBLE_DEVICES="',
   );
   expect((await f.doctor()).verdict).toBe("FAIL");
 }, 20_000);
 
-test.each(["CUDA_VISIBLE_DEVICES", "COCOINDEX_RUN_GPU_IN_SUBPROCESS"])(
+test.each(["CCC_GPU_BATCH_SIZE", "COCOINDEX_RUN_GPU_IN_SUBPROCESS"])(
   "doctor rejects an installed unit missing %s",
   async (key) => {
     const f = await fixture("enabled", "active");

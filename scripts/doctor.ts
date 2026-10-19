@@ -942,16 +942,24 @@ export async function checkCccDaemon(
   const actual = installed
     ? await attemptOr(() => readFileSync(unit, "utf8"), "")
     : "";
-  const policyLines = [
-    'Environment="CUDA_VISIBLE_DEVICES="',
-    'Environment="COCOINDEX_RUN_GPU_IN_SUBPROCESS=0"',
-  ];
-  const cpuPolicy =
-    policyLines.every(
-      (line) =>
-        declared.split("\n").includes(line) &&
-        actual.split("\n").includes(line),
-    ) && actual.includes("ccc-daemon-launch.py");
+  const policyLines = declared
+    .split("\n")
+    .filter((line) =>
+      /^Environment="(?:CCC_GPU_|COCOINDEX_RUN_GPU_IN_SUBPROCESS)/u.test(line),
+    );
+  const gpuPolicy =
+    [
+      "CCC_GPU_UTILIZATION_PERCENT",
+      "CCC_GPU_BATCH_SIZE",
+      "CCC_GPU_WAIT_SECONDS",
+      "CCC_GPU_WINDOW",
+      "COCOINDEX_RUN_GPU_IN_SUBPROCESS",
+    ].every((key) =>
+      policyLines.some((line) => line.startsWith(`Environment="${key}=`)),
+    ) &&
+    policyLines.every((line) => actual.split("\n").includes(line)) &&
+    actual.includes("ccc-daemon-launch.py") &&
+    !actual.split("\n").includes('Environment="CUDA_VISIBLE_DEVICES="');
   if (
     !r.timedOut &&
     state === "inactive" &&
@@ -960,11 +968,11 @@ export async function checkCccDaemon(
     enabled.out.trim() === "enabled" &&
     installed &&
     edge &&
-    cpuPolicy
+    gpuPolicy
   )
     return warn(
       "ccc-daemon",
-      "ccc-daemon.service is stopped; CPU-only unit installed. Deploy preserves stops; start explicitly with systemctl --user start ccc-daemon when wanted",
+      "ccc-daemon.service is stopped; GPU-only unit installed. Deploy preserves stops; start explicitly with systemctl --user start ccc-daemon when wanted",
     );
   return r.code === 0 &&
     !r.timedOut &&
@@ -974,14 +982,14 @@ export async function checkCccDaemon(
     enabled.out.trim() === "enabled" &&
     installed &&
     edge &&
-    cpuPolicy
+    gpuPolicy
     ? pass(
         "ccc-daemon",
-        `ccc-daemon.service enabled and active; CPU-only indexing; launcher enforces embedding.device=cpu; ${policyLines.join("; ")}. Unit declaration checked; restart is required to activate changed launcher policy in an incumbent daemon`,
+        `ccc-daemon.service enabled and active; GPU-only indexing; CUDA process exits before research takes a GPU slot (ccc-gpu.lock handoff); embeddings deferred during research; elastic VRAM with gpu_partition_ccc_mib as the standing floor (resource-policy.toml); ${policyLines.join("; ")}. Unit declaration checked; restart is required to activate changed launcher policy in an incumbent daemon`,
       )
     : fail(
         "ccc-daemon",
-        `ccc-daemon.service is ${enablementLabel} / ${stateLabel}; real unit: ${installed}; default.target edge: ${edge}; CPU-only policy: ${cpuPolicy} — supervised searches need an enabled, active daemon with the declared CPU policy`,
+        `ccc-daemon.service is ${enablementLabel} / ${stateLabel}; real unit: ${installed}; default.target edge: ${edge}; GPU-only policy: ${gpuPolicy} — supervised searches need an enabled, active daemon with the declared GPU policy`,
         "mise run link:dots",
       );
 }

@@ -1,18 +1,20 @@
 """Run every ccc embedding batch on an elastic, GPU-only allocator partition.
 
-The standing partition is the floor; ccc borrows currently free VRAM and shrinks its allocator
-cap when live research reservations appear. A transiently unavailable partition, window, duty
+The supervised GPU process exits on a research want, releasing its entire CUDA context.
+The standing partition is the floor; ccc borrows currently free VRAM only while all research
+GPU flock slots are free. A transiently unavailable partition, research slot, window, duty
 slot, or headroom budget delays the batch; there is deliberately no CPU embedding path. The model
 remains on CUDA between batches.
 """
 
+import fcntl
 import json
 import logging
 import os
-import tempfile
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -27,10 +29,11 @@ MIB = 1024 * 1024
 
 
 def state_directory() -> Path:
-    runtime = os.environ.get("XDG_RUNTIME_DIR", "")
-    if runtime and Path(runtime).is_absolute():
-        return Path(runtime) / "agent-resource-control"
-    return Path(tempfile.gettempdir()) / f"agent-resource-control-{os.getuid()}"
+    """Use arr-thin's runtime root; no private fallback that could miss research locks."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime is None or not Path(runtime).is_absolute():
+        raise ValueError("XDG_RUNTIME_DIR must name the user runtime directory")
+    return Path(runtime) / "agent-resource"
 
 
 def batch_limit_for_partition(
@@ -42,54 +45,8 @@ def batch_limit_for_partition(
     return max(0, remaining_mib // CHUNK_WORKSPACE_MIB)
 
 
-def live_gpu_reservation_bytes(directory: Path, device: int) -> int | None:
-    """Read live agent-resource-run GPU reservations for one physical device.
-
-    Return None when a ledger entry cannot be trusted, so callers can retain only the
-    standing partition instead of expanding the ccc allocator cap on incomplete data.
-    Stale records are ignored but left for the ledger owner to clean up.
-    """
-    try:
-        entries = tuple(directory.glob("*.reservation.json"))
-    except OSError:
-        return None
-
-    reserved_bytes = 0
-    for entry in entries:
-        try:
-            record = json.loads(entry.read_text())
-        except (OSError, json.JSONDecodeError):
-            return None
-        if not isinstance(record, dict):
-            return None
-        if record.get("schema") != 1:
-            return None
-        pid = record.get("controller_pid")
-        gpu = record.get("device")
-        if type(pid) is not int or pid < 1 or not isinstance(gpu, dict):
-            return None
-        if gpu.get("kind") != "gpu" or gpu.get("gpu_id") != device:
-            continue
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            continue
-        except PermissionError:
-            pass
-        except OverflowError:
-            return None
-        except OSError:
-            return None
-        vram_peak_bytes = gpu.get("vram_peak_bytes")
-        if type(vram_peak_bytes) is not int or vram_peak_bytes < 0:
-            return None
-        reserved_bytes += vram_peak_bytes
-    return reserved_bytes
-
-
 def elastic_allocator_cap_bytes(
     free_bytes: int | None,
-    live_reserved_bytes: int | None,
     allocator_reserved_bytes: int,
     standing_partition_mib: int,
     safety_margin_mib: int,
@@ -97,24 +54,20 @@ def elastic_allocator_cap_bytes(
     """Return a safe allocator cap or None when even the standing floor is unavailable.
 
     ``free_bytes + allocator_reserved_bytes`` is the ccc process's current allocation plus
-    device headroom. Live reservations and the configured device safety margin are removed
-    before expanding above the standing partition. Unknown ledger data falls back to the
-    standing floor only; unknown device headroom denies the batch.
+    device headroom. The configured safety margin is removed before expanding above the
+    standing partition. Call only while holding shared locks on all research GPU slots;
+    unknown device headroom denies the batch.
     """
     floor = standing_partition_mib * MIB
     if free_bytes is None or free_bytes < 0 or allocator_reserved_bytes < 0:
         return None
     safe_upper_bound = free_bytes + allocator_reserved_bytes - safety_margin_mib * MIB
-    if live_reserved_bytes is None:
-        return floor if safe_upper_bound >= floor else None
-    cap = safe_upper_bound - live_reserved_bytes
-    return cap if cap >= floor else None
+    return safe_upper_bound if safe_upper_bound >= floor else None
 
 
 def resize_allocator_cap(
     torch,
     probe_free_bytes: Callable[[int], int | None],
-    live_reserved_bytes: int | None,
     device: int,
     standing_partition_mib: int,
     safety_margin_mib: int,
@@ -125,7 +78,6 @@ def resize_allocator_cap(
     allocator_reserved_bytes = int(torch.cuda.memory_reserved(0))
     cap_bytes = elastic_allocator_cap_bytes(
         free_bytes,
-        live_reserved_bytes,
         allocator_reserved_bytes,
         standing_partition_mib,
         safety_margin_mib,
@@ -248,12 +200,45 @@ class YieldGuard:
         directory: Path,
         policy: Policy,
         wait: Callable[[float], None] = time.sleep,
+        gpu_slots: int = 1,
     ) -> None:
+        if gpu_slots < 1:
+            raise ValueError("research GPU slot count must be positive")
         self.directory = directory
+        self.gpu_slots = gpu_slots
         self.policy = policy
         self.wait = wait
         self.serial = threading.Lock()
         self.next_gpu_at = 0.0
+        self.release_requested = threading.Event()
+
+    @contextmanager
+    def research_slots_idle(self) -> Iterator[bool]:
+        """Non-blocking LOCK_SH probes of arr-thin's slots/gpu.<n> LOCK_EX locks.
+
+        Keep shared locks until the GPU call returns so research cannot acquire a slot
+        between the probe and the call. Never unlink slot files: flock locks the inode.
+        Include older slot files too, so a capacity decrease cannot hide a live job.
+        Filesystem/probe failures deny GPU use, just like an occupied slot.
+        """
+        with ExitStack() as locks:
+            try:
+                slots = self.directory / "slots"
+                slots.mkdir(mode=0o700, parents=True, exist_ok=True)
+                paths = {slots / f"gpu.{n}" for n in range(self.gpu_slots)}
+                paths.update(
+                    path
+                    for path in slots.iterdir()
+                    if path.name.startswith("gpu.") and path.name[4:].isdigit()
+                )
+                for path in sorted(paths):
+                    handle = locks.enter_context(path.open("a+"))
+                    fcntl.flock(handle, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            except OSError:
+                locks.close()
+                yield False
+                return
+            yield True
 
     def status(self, reason: str | None) -> None:
         value = json.dumps(
@@ -284,6 +269,8 @@ class YieldGuard:
         """Serialize GPU calls and wait on every admission failure; never fall back to CPU."""
         with self.serial:
             while True:
+                if self.release_requested.is_set():
+                    os._exit(0)
                 reason = self._wait_reason()
                 if reason is not None:
                     self.status(reason)
@@ -292,7 +279,14 @@ class YieldGuard:
                 self.status(None)
                 start = time.monotonic()
                 try:
-                    result = gpu()
+                    with self.research_slots_idle() as idle:
+                        if not idle:
+                            self.status("research GPU slot held or unreadable; waiting")
+                        else:
+                            result = gpu()
+                    if not idle:
+                        self.wait(self.policy.wait_seconds)
+                        continue
                 except GpuUnavailable:
                     elapsed = time.monotonic() - start
                     self._record_duty(elapsed)
@@ -315,7 +309,8 @@ class GpuUnavailable(RuntimeError):
 
 def prepare_partition(guard: YieldGuard, apply_partition: Callable[[str], str]) -> str:
     """Wait for the ccc partition before importing Torch or starting the daemon."""
-    while True:
+
+    def prepare() -> str:
         result = apply_partition("ccc")
         if result == "cuda":
             return result
@@ -323,8 +318,9 @@ def prepare_partition(guard: YieldGuard, apply_partition: Callable[[str], str]) 
             raise RuntimeError(
                 f"ccc requires CUDA; partition setup returned {result!r}"
             )
-        guard.status("GPU partition unavailable; waiting to start ccc")
-        guard.wait(guard.policy.wait_seconds)
+        raise GpuUnavailable
+
+    return guard.run(prepare)
 
 
 def install(

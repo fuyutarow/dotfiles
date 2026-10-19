@@ -10,6 +10,25 @@ GPU jobs acquire one of the flock files at
 slots use the same mechanism and the existing `~/.config/agent-resource/slots.toml`
 capacity declaration. No FIFO order is promised.
 
+Before taking a GPU slot, research writes a unique want file under
+`$XDG_RUNTIME_DIR/agent-resource/gpu-wants/` and waits with `flock --shared -w`
+on `agent-resource/ccc-gpu.lock`. The ccc supervisor holds that lock exclusively
+through the exit of its GPU daemon child. It watches wants with inotify, asks the
+child to finish its current batch, and releases ownership only after process exit
+has destroyed the CUDA context and VRAM allocations. There is no grace timer.
+The research process retains shared ownership through slot release and scope
+cleanup; its want is removed afterward. Multiple research jobs can hold shared
+ownership concurrently. A timeout returns 75 and removes the caller's want.
+
+ccc defers embeddings during research instead of moving them to CPU. Its supervisor
+resumes the GPU child only when both wants and held slots are absent. Supervised
+clients cannot lazily spawn another daemon; requests during the handoff can fail
+and should be retried after research. An abruptly killed runner can leave a want
+file: this fails closed. Remove that file only after verifying its recorded PID
+and research scope have exited. Never unlink lock files, which would split ownership
+across different inodes. Operator stops still belong to systemd; deployment only
+enables the service and never starts it.
+
 Every command runs in its own `systemd-run --user --scope --collect` scope with
 MemoryMax, MemoryHigh, zero swap, CPUQuota, TasksMax, RuntimeMaxSec and OOMPolicy=kill.
 Before launch, the scope child verifies the effective RAM/swap ceiling and pids.peak.

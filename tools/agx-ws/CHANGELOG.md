@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1 — 2026-10-19
+
+- Probe graveyard filesystem type with GNU stat first and BSD stat as fallback.
+
 ## 0.9.0 — 2026-10-19
 
 - Emit workspace doctor findings in the shared JSON Lines shape

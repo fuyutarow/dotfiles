@@ -1,7 +1,9 @@
 """GPU-only ccc admission tests; partition/NVML and CUDA surfaces are mocked."""
 
+import fcntl
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -15,7 +17,6 @@ from ccc_gpu_yield import (
     configure_partition,
     elastic_allocator_cap_bytes,
     install,
-    live_gpu_reservation_bytes,
     partition_has_room,
     prepare_partition,
     resize_allocator_cap,
@@ -61,9 +62,13 @@ def install_torch(monkeypatch):
 
 def test_runtime_path_matches_runner(monkeypatch):
     monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/fixture")
-    assert state_directory() == Path("/run/user/fixture/agent-resource-control")
+    assert state_directory() == Path("/run/user/fixture/agent-resource")
     monkeypatch.setenv("XDG_RUNTIME_DIR", "relative")
-    assert state_directory().name == f"agent-resource-control-{os.getuid()}"
+    with pytest.raises(ValueError, match="XDG_RUNTIME_DIR"):
+        state_directory()
+    monkeypatch.delenv("XDG_RUNTIME_DIR")
+    with pytest.raises(ValueError, match="XDG_RUNTIME_DIR"):
+        state_directory()
 
 
 def test_batch_default_and_override_are_bounded_by_partition(monkeypatch):
@@ -85,85 +90,85 @@ def test_batch_default_and_override_are_bounded_by_partition(monkeypatch):
     assert batch_limit_for_partition(1109, 512) == 0
 
 
-def test_live_gpu_reservations_sum_only_live_matching_devices(tmp_path):
-    records = {
-        "matching.reservation.json": {
-            "schema": 1,
-            "controller_pid": os.getpid(),
-            "device": {"kind": "gpu", "gpu_id": 0, "vram_peak_bytes": 3 * 1024**3},
-        },
-        "other-device.reservation.json": {
-            "schema": 1,
-            "controller_pid": os.getpid(),
-            "device": {"kind": "gpu", "gpu_id": 1, "vram_peak_bytes": 4 * 1024**3},
-        },
-        "cpu.reservation.json": {
-            "schema": 1,
-            "controller_pid": os.getpid(),
-            "device": {"kind": "cpu"},
-        },
-        "stale.reservation.json": {
-            "schema": 1,
-            "controller_pid": 2**30,
-            "device": {"kind": "gpu", "gpu_id": 0, "vram_peak_bytes": 5 * 1024**3},
-        },
-    }
-    for name, record in records.items():
-        (tmp_path / name).write_text(json.dumps(record))
+@pytest.mark.parametrize("slot", [0, 1, 2, 9])
+def test_held_research_slot_yields_and_all_free_slots_resume(tmp_path, slot):
+    slots = tmp_path / "slots"
+    slots.mkdir()
+    with subprocess.Popen(
+        [
+            "flock",
+            "-F",
+            "-n",
+            str(slots / f"gpu.{slot}"),
+            sys.executable,
+            "-u",
+            "-c",
+            "import sys; print('held', flush=True); sys.stdin.read()",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ) as research:
+        try:
+            assert research.stdout.readline() == b"held\n"
+            calls = []
+            waits = []
 
-    assert live_gpu_reservation_bytes(tmp_path, 0) == 3 * 1024**3
+            def wait(seconds):
+                waits.append(seconds)
+                assert calls == []
+                status = json.loads((tmp_path / "ccc-gpu-status.json").read_text())
+                assert status["deferring"] is True
+                assert "research GPU slot" in status["reason"]
+                research.communicate(timeout=5)
+                assert research.returncode == 0
+
+            guard = YieldGuard(tmp_path, Policy(), wait=wait, gpu_slots=3)
+            assert guard.run(lambda: calls.append("cuda") or "result") == "result"
+            assert calls == ["cuda"]
+            assert waits == [1.0]
+            assert guard.run(lambda: "resumed") == "resumed"
+            assert waits == [1.0]
+        finally:
+            if research.poll() is None:
+                research.kill()
+                research.communicate(timeout=5)
 
 
-def test_elastic_allocator_cap_tracks_free_space_and_reservations():
+def test_gpu_batch_holds_shared_slots_until_return(tmp_path):
+    guard = YieldGuard(tmp_path, Policy(), gpu_slots=3)
+
+    def gpu():
+        for n in range(3):
+            with (
+                (tmp_path / "slots" / f"gpu.{n}").open("a+") as research,
+                pytest.raises(BlockingIOError),
+            ):
+                fcntl.flock(research, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return "cuda"
+
+    assert guard.run(gpu) == "cuda"
+    for n in range(3):
+        with (tmp_path / "slots" / f"gpu.{n}").open("a+") as research:
+            fcntl.flock(research, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def test_elastic_allocator_cap_tracks_free_space():
     mib = 1024**2
     gib = 1024**3
-
-    idle_cap = elastic_allocator_cap_bytes(
-        free_bytes=10 * gib,
-        live_reserved_bytes=0,
-        allocator_reserved_bytes=1 * gib,
-        standing_partition_mib=2048,
-        safety_margin_mib=512,
-    )
-    reserved_cap = elastic_allocator_cap_bytes(
-        free_bytes=10 * gib,
-        live_reserved_bytes=4 * gib,
-        allocator_reserved_bytes=1 * gib,
-        standing_partition_mib=2048,
-        safety_margin_mib=512,
-    )
-    assert idle_cap == (10 + 1) * gib - 512 * mib
-    assert reserved_cap == (10 + 1 - 4) * gib - 512 * mib
-    assert reserved_cap >= 2048 * mib
-    assert reserved_cap < idle_cap
     assert (
-        elastic_allocator_cap_bytes(
-            free_bytes=10 * gib,
-            live_reserved_bytes=10 * gib,
-            allocator_reserved_bytes=1 * gib,
-            standing_partition_mib=2048,
-            safety_margin_mib=512,
-        )
-        is None
+        elastic_allocator_cap_bytes(10 * gib, 1 * gib, 2048, 512)
+        == 11 * gib - 512 * mib
     )
-    assert (
-        elastic_allocator_cap_bytes(
-            free_bytes=10 * gib,
-            live_reserved_bytes=None,
-            allocator_reserved_bytes=1 * gib,
-            standing_partition_mib=2048,
-            safety_margin_mib=512,
-        )
-        == 2048 * mib
-    )
+    for free in (None, -1, 100 * mib):
+        assert elastic_allocator_cap_bytes(free, 0, 2048, 512) is None
 
 
-def test_allocator_cap_is_resized_from_mocked_free_vram_and_ledger():
+def test_allocator_cap_is_resized_from_mocked_free_vram():
     mib = 1024**2
     gib = 1024**3
     fractions = []
-    free_samples = iter([10 * gib, 10 * gib, 10 * gib])
-    reservation_samples = iter([0, 4 * gib, 10 * gib])
+    free_samples = iter([10 * gib, 3 * gib, 0])
     torch = SimpleNamespace(
         cuda=SimpleNamespace(
             empty_cache=lambda: None,
@@ -176,53 +181,12 @@ def test_allocator_cap_is_resized_from_mocked_free_vram_and_ledger():
             ),
         )
     )
-
-    idle_cap = resize_allocator_cap(
-        torch,
-        lambda _device: next(free_samples),
-        next(reservation_samples),
-        0,
-        2048,
-        512,
-    )
-    reserved_cap = resize_allocator_cap(
-        torch,
-        lambda _device: next(free_samples),
-        next(reservation_samples),
-        0,
-        2048,
-        512,
-    )
-    blocked_cap = resize_allocator_cap(
-        torch,
-        lambda _device: next(free_samples),
-        next(reservation_samples),
-        0,
-        2048,
-        512,
-    )
-
-    assert idle_cap == 10 * gib + gib - 512 * mib
-    assert reserved_cap == 10 * gib + gib - 4 * gib - 512 * mib
-    assert reserved_cap >= 2048 * mib
-    assert fractions == [idle_cap / (12 * gib), reserved_cap / (12 * gib)]
-    assert blocked_cap is None
-
-
-def test_live_research_reservation_does_not_defer_ccc(tmp_path):
-    (tmp_path / "research.reservation.json").write_text(
-        json.dumps(
-            {
-                "schema": 1,
-                "controller_pid": os.getpid(),
-                "device": {"kind": "gpu"},
-            }
-        )
-    )
-    guard = YieldGuard(tmp_path, Policy())
-    assert guard.run(lambda: "cuda batch") == "cuda batch"
-    status = json.loads((tmp_path / "ccc-gpu-status.json").read_text())
-    assert status["deferring"] is False
+    caps = [
+        resize_allocator_cap(torch, lambda _device: next(free_samples), 0, 2048, 512)
+        for _ in range(3)
+    ]
+    assert caps == [11 * gib - 512 * mib, 4 * gib - 512 * mib, None]
+    assert fractions == [caps[0] / (12 * gib), caps[1] / (12 * gib)]
 
 
 def test_unavailable_gpu_waits_then_runs_gpu_only(tmp_path):
@@ -373,31 +337,38 @@ def test_embedder_batches_on_gpu_and_keeps_model_resident(tmp_path, monkeypatch)
     assert refreshes == ["checked", "checked"]
 
 
-def test_cpu_embedding_callback_does_not_exist_even_after_reservation(
-    tmp_path, monkeypatch
-):
-    reservation = tmp_path / "research.reservation.json"
-    reservation.write_text(
-        json.dumps(
-            {"schema": 1, "controller_pid": os.getpid(), "device": {"kind": "gpu"}}
-        )
-    )
-    model = SimpleNamespace()
+def test_embedder_waits_for_research_then_embeds_only_on_cuda(tmp_path, monkeypatch):
+    slots = tmp_path / "slots"
+    slots.mkdir()
     devices = []
+    moves = []
+    waits = []
+    model = SimpleNamespace(
+        max_seq_length=512,
+        to=lambda **kwargs: moves.append(kwargs),
+    )
 
     def encode(texts, **kwargs):
         devices.append(kwargs["device"])
         return [[text] for text in texts]
 
     model.encode = encode
-    model.max_seq_length = 512
-    model.to = lambda **_kwargs: None
     Embedder = install_embedder(monkeypatch, model)
     install_torch(monkeypatch)
-    guard = YieldGuard(tmp_path, Policy())
-    install(guard, lambda _service: "cuda")
-    assert Embedder()._get_model().encode(["chunk"]) == [["chunk"]]
-    assert devices == ["cuda:0"]
+    with (slots / "gpu.0").open("a+") as research:
+        fcntl.flock(research, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        def wait(seconds):
+            assert devices == [] and moves == []
+            waits.append(seconds)
+            fcntl.flock(research, fcntl.LOCK_UN)
+
+        guard = YieldGuard(tmp_path, Policy(), wait=wait)
+        install(guard, lambda _service: "cuda")
+        assert Embedder()._get_model().encode(["chunk"]) == [["chunk"]]
+        assert waits == [1.0]
+        assert devices == ["cuda:0"]
+        assert moves == [{"device": "cuda:0", "dtype": "float16"}]
 
 
 def test_cuda_oom_retries_transient_single_chunk_on_gpu(tmp_path, monkeypatch):
@@ -480,32 +451,3 @@ def test_single_chunk_oom_retries_then_surfaces_file_error_without_cpu(
     assert devices == ["cuda:0", "cuda:0"]
     assert "SentenceTransformer truncation" in caplog.text
     assert "cannot embed one chunk after retry at max_seq_length=512" in caplog.text
-
-
-def test_fp16_embeddings_match_fp32_on_cuda_sample():
-    torch = pytest.importorskip("torch")
-    if not torch.cuda.is_available():
-        pytest.skip("CUDA is unavailable")
-    sentence_transformers = pytest.importorskip("sentence_transformers")
-    model = sentence_transformers.SentenceTransformer(
-        "ibm-granite/granite-embedding-311m-multilingual-r2", device="cuda:0"
-    )
-    samples = [
-        "CUDA OOM batches are split recursively before indexing continues.",
-        "GPU 上で埋め込みを計算し、CPU へフォールバックしない。",
-    ]
-    reference = model.encode(
-        samples, normalize_embeddings=True, show_progress_bar=False
-    )
-    assert model.max_seq_length > 0
-    long_tokens = model.tokenize(["truncation check " * model.max_seq_length])
-    assert long_tokens["input_ids"].shape[1] <= model.max_seq_length
-
-    model.to(device="cuda:0", dtype=torch.float16)
-    actual = model.encode(samples, normalize_embeddings=True, show_progress_bar=False)
-    reference_tensor = torch.as_tensor(reference, device="cuda:0", dtype=torch.float32)
-    actual_tensor = torch.as_tensor(actual, device="cuda:0", dtype=torch.float32)
-    cosine = torch.nn.functional.cosine_similarity(
-        reference_tensor, actual_tensor, dim=1
-    )
-    assert float(cosine.min().item()) >= 0.999

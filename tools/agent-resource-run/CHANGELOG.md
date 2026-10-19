@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.5 — 2026-10-19
+
+- Wait for ccc CUDA process exit before acquiring research GPU slots
+
 ## 1.5.4 — 2026-10-19
 
 - Replace resource ledgers and monitors with bounded flock slots and systemd scopes while retaining caller contracts.

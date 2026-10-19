@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { stat } from "node:fs/promises";
+import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
 const WorkspaceCountsSchema = () =>
   z.object({
@@ -60,6 +61,8 @@ const SnapshotSchema = z.lazy(() =>
 );
 export interface AgxSnapshotRead {
   judgments?: Record<string, number> | undefined;
+  repositoryJudgments?: number | undefined;
+  judgeWhy?: string | undefined;
   land?: number | undefined;
   findings?: FleetFindings | undefined;
   workspaces?: WorkspaceCounts | undefined;
@@ -155,6 +158,7 @@ export async function readAgxSnapshotAsync(
             z.object({
               counts: WorkspaceCountsSchema().omit({ capturedAt: true }),
               capturedAt: z.number(),
+              lines: z.array(z.string()).optional(),
             }),
           )
           .optional(),
@@ -216,7 +220,7 @@ export async function readAgxSnapshotAsync(
   const rows = Array.isArray(listingRows)
     ? listingRows
     : (listingRows?.runs ?? []);
-  const actions = await readRunActions(env, ws?.rows ?? [], rows);
+  const actions = await readRunActions(env, own?.lines ?? [], rows, repo);
   if (snapshot === undefined)
     return {
       ...actions,
@@ -253,6 +257,7 @@ const ActionRun = z.object({
   state: z.enum(["running", "ended"]),
   dispatcher_session: z.string().nullable(),
   workspace: z.string().optional(),
+  ended_at: z.string().optional(),
   judgment: z.object({ decision: z.string() }).nullable(),
 });
 const ActionEvent = z.discriminatedUnion("kind", [
@@ -262,14 +267,19 @@ const ActionEvent = z.discriminatedUnion("kind", [
     dispatcher_session: z.string().nullable(),
     workspace: z.string(),
   }),
-  z.object({ kind: z.literal("ended"), id: z.string() }),
+  z.object({
+    kind: z.literal("ended"),
+    id: z.string(),
+    at: z.string().optional(),
+  }),
   z.object({ kind: z.literal("judged"), id: z.string(), decision: z.string() }),
 ]);
 async function readRunActions(
   env: NodeJS.ProcessEnv,
-  verdicts: string[][],
+  verdicts: string[],
   rows: unknown[] = [],
-): Promise<{ judgments: Record<string, number>; land: number }> {
+  repo?: string,
+) {
   const runs = new Map<string, z.output<typeof ActionRun>>();
   for (const row of rows) {
     const parsed = ActionRun.safeParse(row);
@@ -289,17 +299,37 @@ async function readRunActions(
     }
     const run = runs.get(event.id);
     if (run === undefined) continue;
-    if (event.kind === "ended") run.state = "ended";
+    if (event.kind === "ended") {
+      run.state = "ended";
+      run.ended_at = event.at;
+    }
     if (event.kind === "judged") run.judgment = { decision: event.decision };
   }
+  const workspaceRows = verdicts.map((line) => line.split("\t"));
+  const members = new Set(workspaceRows.map((row) => row[0]));
   const unlanded = new Set(
-    verdicts.filter((row) => row[2] === "unlanded").map((row) => row[0]),
+    workspaceRows.filter((row) => row[2] === "unlanded").map((row) => row[0]),
   );
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const cutoff = now - 24 * 60 * 60_000;
   const judgments: Record<string, number> = {};
+  let repositoryJudgments = 0;
   let land = 0;
   for (const run of runs.values()) {
     if (run.state !== "ended") continue;
-    if (run.judgment === null && run.dispatcher_session !== null)
+    const belongs =
+      repo !== undefined &&
+      run.workspace !== undefined &&
+      (members.has(run.workspace) ||
+        run.workspace === repo ||
+        run.workspace.startsWith(repo + "/") ||
+        run.workspace.startsWith(repo + ".ws/"));
+    const endedAt = fromThrowable(
+      () => Temporal.Instant.from(run.ended_at ?? "").epochMilliseconds,
+    )().unwrapOr(Number.NaN);
+    const recent = endedAt >= cutoff && endedAt <= now;
+    if (run.judgment === null && recent && belongs) repositoryJudgments++;
+    if (run.judgment === null && recent && run.dispatcher_session !== null)
       Object.defineProperty(judgments, run.dispatcher_session, {
         value:
           (Object.hasOwn(judgments, run.dispatcher_session)
@@ -308,8 +338,24 @@ async function readRunActions(
         enumerable: true,
         configurable: true,
       });
-    if (run.judgment?.decision === "accept" && unlanded.has(run.workspace))
+    if (
+      run.judgment?.decision === "accept" &&
+      belongs &&
+      unlanded.has(run.workspace) &&
+      run.workspace !== undefined &&
+      (await stat(run.workspace)
+        .then((info) => info.isDirectory())
+        .catch(() => false))
+    )
       land++;
   }
-  return { judgments, land };
+  return {
+    judgments,
+    repositoryJudgments,
+    land,
+    judgeWhy:
+      repo === undefined
+        ? "repository scope unavailable; agx doctor"
+        : undefined,
+  };
 }

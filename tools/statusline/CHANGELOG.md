@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.7 — 2026-10-19
+
+- Scope judge to the last 24 hours in the rendered session or repository and land to existing unlanded workspaces in this repository
+
 ## 0.20.6 — 2026-10-19
 
 - Fix --watch --thread and standalone --thread to render and refresh the selected Codex thread; diagnose unknown IDs and conflicting selectors.

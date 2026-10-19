@@ -2,6 +2,7 @@
 import { DIM, ESC, RST } from "./ansi.ts";
 import { readInput } from "./stdin.ts";
 import { presentation } from "./presentation.ts";
+import { readCoreRuns } from "./core-runs.ts";
 import cliPackage from "../package.json" with { type: "json" };
 const { version } = cliPackage;
 import { realpath } from "node:fs/promises";
@@ -76,6 +77,7 @@ async function renderDiscovered(
         sources: { codexRate: () => Promise.resolve(ok(undefined)) },
       },
     );
+    frame.routes = ok(await readCoreRuns(process.env, null, cwd));
     return `${render(frame, { layout: "location" })}\n${DIM}no agent session in ${cwd}${RST}\n${render(frame, { layout: "shared" })}`;
   }
   const blocks: string[] = [];
@@ -107,6 +109,8 @@ async function renderDiscovered(
     if (sharedFrame === undefined || !codex) sharedFrame = frame;
     blocks.push(render(frame, { codex, layout: "session" }));
   }
+  if (sharedFrame !== undefined && sessionId === undefined)
+    sharedFrame.routes = ok(await readCoreRuns(process.env, null, cwd));
   if (sharedFrame !== undefined)
     blocks.push(render(sharedFrame, { layout: "shared" }));
   return blocks.join("\n");

@@ -1,8 +1,8 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: fresh 1`] = `"judge 2 (agx judge) · +2 workers in other sessions"`;
+exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: fresh 1`] = `"+2 workers in other sessions"`;
 
-exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: old 1`] = `"judge 2 (agx judge) · +2 workers in other sessions"`;
+exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: old 1`] = `"+2 workers in other sessions"`;
 
 exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: missing 1`] = `""`;
 

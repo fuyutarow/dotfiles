@@ -33,7 +33,13 @@ function decode(value: string | undefined): string | undefined {
 }
 export function encodePresentation(view: Presentation): string {
   return [
-    ["statusline-view", view.schema, view.version, view.at].join("\t"),
+    [
+      "statusline-view",
+      view.schema,
+      view.version,
+      view.at,
+      "actions-24h-v1",
+    ].join("\t"),
     ...view.rows.flatMap((row) => [
       ["row", encode(row.cwd), encode(row.location), encode(row.shared)].join(
         "\t",
@@ -48,12 +54,15 @@ export function encodePresentation(view: Presentation): string {
 }
 function decodePresentation(text: string): Presentation | undefined {
   const [header, ...records] = text.split("\n");
-  const [magic, schema, release, stamp] = (header ?? "").split("\t");
+  const [magic, schema, release, stamp, actionScope] = (header ?? "").split(
+    "\t",
+  );
   const at = Number(stamp);
   if (
     magic !== "statusline-view" ||
     schema !== "1" ||
     release !== version ||
+    actionScope !== "actions-24h-v1" ||
     !Number.isFinite(at) ||
     at <= 0
   )
@@ -147,6 +156,8 @@ export async function presentation(
   cwd: string,
   sessionId?: string,
 ): Promise<string | undefined> {
+  // Prepared shared rows have repository scope. A selected session needs its own actions.
+  if (sessionId !== undefined) return undefined;
   for (const path of [presentationPath(), `${presentationPath()}.last-good`]) {
     const text = await readFile(path, "utf8").catch(() => "");
     const view = decodePresentation(text);

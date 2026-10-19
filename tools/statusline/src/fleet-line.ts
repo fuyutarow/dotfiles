@@ -18,6 +18,8 @@ export function fleetLine(
   at = Temporal.Now.instant().epochMilliseconds,
 ): string {
   const parts: string[] = [];
+  if (scan?.actions?.judgeWhy !== undefined)
+    parts.push(`judge n/a (${scan.actions.judgeWhy})`);
   if ((scan?.actions?.judge ?? 0) > 0)
     parts.push(`judge ${scan?.actions?.judge} (agx judge)`);
   if ((scan?.actions?.land ?? 0) > 0)

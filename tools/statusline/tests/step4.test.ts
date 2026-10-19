@@ -41,7 +41,11 @@ const started = (id: string, session = "here") => ({
   dispatcher_session: session,
   workspace: `/ws/${id}`,
 });
-const ended = (id: string) => ({ kind: "ended", id });
+const ended = (id: string) => ({
+  kind: "ended",
+  id,
+  at: Temporal.Now.instant().toString(),
+});
 async function seed(root: string, records: unknown[] = []) {
   await writeFile(
     join(root, "records.jsonl"),
@@ -106,12 +110,14 @@ test("only running workers: worker rows remain and the bottom row is absent", as
 });
 test("completed session judgments, accepted unlanded runs and remedy findings share one action row", async () => {
   const root = await fixture();
+  const land = join(root, "land");
+  await mkdir(land);
   await seed(root, [
     started("judge"),
     ended("judge"),
     started("foreign", "elsewhere"),
     ended("foreign"),
-    started("land"),
+    { ...started("land"), workspace: land },
     ended("land"),
     { kind: "judged", id: "land", decision: "accept" },
     started("done"),
@@ -125,9 +131,16 @@ test("completed session judgments, accepted unlanded runs and remedy findings sh
       capturedAt: at(),
       complete: true,
       rows: [
-        ["/ws/land", "ws", "unlanded"],
+        [land, "ws", "unlanded"],
         ["/ws/done", "ws", "landed"],
       ],
+      repos: {
+        [root]: {
+          lines: [`${land}\tws\tunlanded`],
+          counts: { total: 1, unlanded: 1, collectable: 0, legacy: 0 },
+          capturedAt: at(),
+        },
+      },
     }),
   );
   await writeFile(
@@ -142,7 +155,7 @@ test("completed session judgments, accepted unlanded runs and remedy findings sh
   const spawned = spyOn(Bun, "spawn");
   await Promise.resolve()
     .then(async () => {
-      const scan = await readCoreRuns({ AGX_STATE_DIR: root }, "here");
+      const scan = await readCoreRuns({ AGX_STATE_DIR: root }, "here", root);
       expect(scan.actions).toEqual({ judge: 1, land: 1 });
       expect(output(scan).split("\n").at(-1)).toBe(
         "judge 1 (agx judge) · land 1 (mise run land) · ⚠ tkt gc 14",
@@ -270,4 +283,135 @@ test("sampler publishes a GPU stall over a previously good utilization sample", 
   expect(exit, stdout + stderr).toBe(0);
   expect(await Bun.file(owner).text()).toContain("GPU stalled ");
   expect(await Bun.file(owner).text()).not.toContain('"gpuAvg15":1');
+});
+
+test("1000 old unjudged runs and foreign sessions render only judge 2", async () => {
+  const root = await fixture();
+  const old = Temporal.Instant.fromEpochMilliseconds(
+    at() - 25 * 60 * 60_000,
+  ).toString();
+  await seed(root, [
+    ...Array.from({ length: 1000 }, (_, n) => [
+      started(`old-${n}`),
+      { ...ended(`old-${n}`), at: old },
+    ]).flat(),
+    started("recent-1"),
+    ended("recent-1"),
+    started("recent-2"),
+    ended("recent-2"),
+    started("foreign", "elsewhere"),
+    ended("foreign"),
+    started("unknown-date"),
+    { kind: "ended", id: "unknown-date" },
+    started("invalid-date"),
+    { ...ended("invalid-date"), at: "invalid" },
+    started("future"),
+    {
+      ...ended("future"),
+      at: Temporal.Instant.fromEpochMilliseconds(at() + 60_000).toString(),
+    },
+    started("running"),
+    started("judged"),
+    ended("judged"),
+    { kind: "judged", id: "judged", decision: "reject" },
+  ]);
+  const scan = await readCoreRuns({ AGX_STATE_DIR: root }, "here", root);
+  expect(output(scan).split("\n").at(-1)).toBe("judge 2 (agx judge)");
+});
+
+async function verdictFixture(
+  root: string,
+  lines: string[],
+  other: string[] = [],
+) {
+  const counts = {
+    total: lines.length,
+    unlanded: 0,
+    collectable: 0,
+    legacy: 0,
+  };
+  await writeFile(
+    join(root, "workspace-verdicts.json"),
+    JSON.stringify({
+      counts,
+      capturedAt: at(),
+      complete: true,
+      rows: [...lines, ...other].map((line) => line.split("\t")),
+      repos: {
+        [root]: { lines, counts, capturedAt: at() },
+        [root + "-foreign"]: { lines: other, counts, capturedAt: at() },
+      },
+    }),
+  );
+}
+
+test("accepted runs all in trunk render no land; foreign and missing workspaces never count", async () => {
+  const root = await fixture();
+  const landed = join(root, "landed"),
+    missing = join(root, "missing"),
+    foreign = join(root, "foreign");
+  await Promise.all([mkdir(landed), mkdir(foreign)]);
+  await seed(
+    root,
+    [landed, missing, foreign].flatMap((workspace, n) => [
+      { ...started(`accepted-${n}`), workspace },
+      ended(`accepted-${n}`),
+      { kind: "judged", id: `accepted-${n}`, decision: "accept" },
+    ]),
+  );
+  await verdictFixture(
+    root,
+    [`${landed}\tws\tlanded`, `${missing}\tws\tunlanded`],
+    [`${foreign}\tws\tunlanded`],
+  );
+  const scan = await readCoreRuns({ AGX_STATE_DIR: root }, "here", root);
+  expect(scan.actions?.land).toBe(0);
+  expect(output(scan)).not.toContain("(mise run land)");
+});
+
+test("standalone scopes recent judgments to repository including published external workspaces", async () => {
+  const root = await fixture();
+  const external = join(await fixture(), "external");
+  const keys = ["AGX_DISPATCHER_SESSION", "CLAUDE_CODE_SESSION_ID"];
+  const saved = keys.map((key) => process.env[key]);
+  for (const key of keys) delete process.env[key];
+  await Promise.resolve()
+    .then(async () => {
+      await seed(root, [
+        { ...started("local", "a"), workspace: root + ".ws/one" },
+        ended("local"),
+        { ...started("external", "b"), workspace: external },
+        ended("external"),
+        { ...started("foreign", "c"), workspace: root + "-foreign/ws" },
+        ended("foreign"),
+        { ...started("old", "a"), workspace: root },
+        {
+          ...ended("old"),
+          at: Temporal.Instant.fromEpochMilliseconds(
+            at() - 25 * 60 * 60_000,
+          ).toString(),
+        },
+      ]);
+      await verdictFixture(root, [`${external}\tws\tunlanded`]);
+      const scan = await readCoreRuns(
+        { AGX_STATE_DIR: root },
+        undefined,
+        root + "/subdir",
+      );
+      expect(fleetLine(scan)).toStartWith("judge 2 (agx judge)");
+      const unknown = await readCoreRuns(
+        { AGX_STATE_DIR: root },
+        undefined,
+        "/unknown",
+      );
+      expect(fleetLine(unknown)).toContain(
+        "judge n/a (repository scope unavailable; agx doctor)",
+      );
+    })
+    .finally(() => {
+      keys.forEach((key, n) => {
+        if (saved[n] === undefined) delete process.env[key];
+        else process.env[key] = saved[n];
+      });
+    });
 });

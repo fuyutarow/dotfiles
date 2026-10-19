@@ -228,7 +228,11 @@ their values. An idle file does not become stale just because time has passed:
 and shows its original age. `agx-doctor.path` triggers a debounced singleton
 refresh after either diagnostic input changes.
 
-Workspace inventory totals remain available in `ws ls` and `agx doctor`. The statusline reads `records.jsonl` for completed-run judgments (the current-runs owner intentionally publishes only active and orphaned rows) and joins accepted runs to `workspace-verdicts.json` rows for landing evidence. Counts are runs, not workspaces. A landed verdict or `landed` judgment clears the landing item; a missing verdict does not imply unlanded work.
+Workspace inventory totals remain available in `ws ls` and `agx doctor`. The statusline reads `records.jsonl` for completed-run judgments (the current-runs owner intentionally publishes only active and orphaned rows). `judge` counts unjudged runs that ended within the last 24 hours in the rendered dispatcher session. Without a session, it counts recent runs whose workspace belongs to the current repository, using the owner's repository roots and workspace membership; an unknown repository shows `judge n/a` with a reason. Missing, invalid and future end timestamps never count. Older history stays in `agx doctor`.
+
+`land` joins accepted runs to the current repository's `workspace-verdicts.json` lines and counts only `unlanded` verdicts whose workspace directory still exists. Counts are runs, not workspaces. A landed verdict or `landed` judgment clears the landing item; a missing verdict does not imply unlanded work. Rendering performs no refresh or synchronous filesystem calls for these actions.
+
+Prepared standalone rows use repository scope even when agent sessions are discovered. Prepared views carry an action-scope protocol marker so historical counters cannot survive in an older cached view; a selected session rebuilds its own actions.
 
 The anomaly suffix counts only workspace/ticket findings with clearing actions from
 `agx doctor`, labeled with those commands (`ws refresh`, `ws gc …`, `tkt gc`, or

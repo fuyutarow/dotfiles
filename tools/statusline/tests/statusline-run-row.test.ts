@@ -774,7 +774,7 @@ describe("legacy enriched Run row", () => {
         .split("\n")
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
-    ).toEqual(["judge 1 (agx judge) · +3 workers in other sessions"]);
+    ).toEqual(["+3 workers in other sessions"]);
     expect(
       out
         .replaceAll(ANSI, "")

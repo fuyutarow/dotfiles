@@ -26,14 +26,16 @@ const Row = z.lazy(() =>
 /** The core's rows and summaries, without vendor enrichment or local state inference. */
 export async function readCoreRuns(
   env: NodeJS.ProcessEnv = process.env,
-  sessionId?: string,
+  sessionId?: string | null,
   cwd = process.cwd(),
 ): Promise<RouteScan> {
   const snapshot = await readAgxSnapshotAsync(env, cwd);
+  // null explicitly selects the repository-wide standalone view, without env fallback.
+  const dispatcherSession =
+    sessionId === null ? undefined : currentDispatcherSession(sessionId);
   const summary = snapshot.summary;
   const session =
-    summary?.sessions[currentDispatcherSession(sessionId) ?? ""] ??
-    summary?.noSession;
+    summary?.sessions[dispatcherSession ?? ""] ?? summary?.noSession;
   const runs: RouteRun[] = [];
   let unreadable = 0;
   for (const value of snapshot.rows ?? []) {
@@ -72,7 +74,10 @@ export async function readCoreRuns(
     unreadable,
     actions: {
       judge:
-        snapshot.judgments?.[currentDispatcherSession(sessionId) ?? ""] ?? 0,
+        dispatcherSession === undefined
+          ? (snapshot.repositoryJudgments ?? 0)
+          : (snapshot.judgments?.[dispatcherSession] ?? 0),
+      judgeWhy: dispatcherSession === undefined ? snapshot.judgeWhy : undefined,
       land: snapshot.land ?? 0,
     },
     workspaces: snapshot.workspaces,

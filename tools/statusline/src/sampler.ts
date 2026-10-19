@@ -26,6 +26,7 @@ import {
   type PresentationRow,
 } from "./presentation.ts";
 import { render } from "./format.ts";
+import { readCoreRuns } from "./core-runs.ts";
 import { renderField } from "./field-state.ts";
 import { version } from "../package.json";
 
@@ -282,7 +283,10 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
             codex: session.vendor === "codex",
           }),
         })),
-        shared: render(first, { layout: "shared" }),
+        shared: render(
+          { ...first, routes: ok(await readCoreRuns(process.env, null, cwd)) },
+          { layout: "shared" },
+        ),
       });
     }
     const view: Presentation = {

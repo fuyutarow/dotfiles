@@ -88,10 +88,16 @@ test("two live sessions render one location and one machine block; corrupt view 
   expect(output?.split("Session:")).toHaveLength(3);
   expect(output).not.toContain("old");
   expect(output).not.toContain("@@STATUSLINE");
+  // A selected session must rebuild its own actions instead of reusing repository counts.
+  expect(await presentation(root, "codex")).toBeUndefined();
   await writeFile(presentationPath(), "broken");
   expect(await presentation(root)).toContain("samples 1s old");
   await rm(join(root, "proc/102/cmdline"));
   expect(await presentation(root)).not.toContain("Session: claude");
+  const historical = encodePresentation(view).replace("\tactions-24h-v1", "");
+  await writeFile(presentationPath(), historical);
+  await writeFile(`${presentationPath()}.last-good`, historical);
+  expect(await presentation(root)).toBeUndefined();
 });
 
 test("project XDG overrides cannot hide the host sampler; unreadable snapshot retains values across cold reads", async () => {

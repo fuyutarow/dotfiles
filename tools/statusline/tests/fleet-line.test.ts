@@ -212,8 +212,7 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
       { HOME: home, AGX_STATE_DIR: state, XDG_STATE_HOME: state },
     );
     expect(output).toMatchSnapshot(name);
-    if (name === "fresh")
-      expect(output).toBe("judge 2 (agx judge) · +2 workers in other sessions");
+    if (name === "fresh") expect(output).toBe("+2 workers in other sessions");
   }
 });
 

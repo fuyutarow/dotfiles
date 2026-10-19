@@ -28,4 +28,6 @@ if (mode === "refused") receipt = { outcome: "refused", report };
 if (mode === "structured") receipt = { structured_output: report };
 if (mode === "last-message") receipt = { last_message: JSON.stringify(report) };
 if (mode === "string-report") receipt = { report: JSON.stringify(report) };
+if (mode === "trailing-text")
+  receipt = { last_message: `${JSON.stringify(report)}\nextra text` };
 process.stdout.write(`${JSON.stringify(receipt)}\n`);

@@ -50,6 +50,7 @@ test("ended fixtures retain measured outcomes while routing omits ungraded raw h
     ["structured", "ok"],
     ["last-message", "ok"],
     ["string-report", "malformed"],
+    ["trailing-text", "ok"],
   ];
   const expected: string[] = [];
   const env = {
@@ -96,6 +97,10 @@ test("ended fixtures retain measured outcomes while routing omits ungraded raw h
     );
     expect(receipt.success).toBe(true);
     if (receipt.success) expect(receipt.data.outcome).toBe(outcome);
+    if (mode === "trailing-text")
+      expect(stderr).toContain(
+        "WARN trailing text after report JSON: extra text",
+      );
     expect(captured?.state.history).toBeUndefined();
     expect(captured?.questions.worker.criteria["luna-high"]).toContain(
       "graded here 0/0/0",
@@ -114,7 +119,7 @@ test("ended fixtures retain measured outcomes while routing omits ungraded raw h
   if (rows.success) {
     expect(rows.data.map((row) => row.outcome)).toEqual(expected);
     expect(rows.data.map((row) => row.changed_files)).toEqual([
-      0, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+      0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     ]);
   }
   const events = readFileSync(join(state, "records.jsonl"), "utf8")

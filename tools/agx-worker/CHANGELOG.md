@@ -1,5 +1,9 @@
 # Changelog
 
+## 7.1.3 — 2026-10-19
+
+- Use the last valid final report and warn on trailing text
+
 ## 7.1.2 — 2026-10-19
 
 - Report all worker preflight failures with repairs in check, run and dispatch before launch.

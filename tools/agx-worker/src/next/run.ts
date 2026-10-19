@@ -545,6 +545,8 @@ export async function run(flags: Flags): Promise<number> {
     workerReceipt.structured_output ?? workerReceipt.report,
     workerReceipt.last_message ?? receiptLine,
   );
+  for (const warning of parsedReport.ok ? (parsedReport.warnings ?? []) : [])
+    process.stderr.write(`WARN ${warning}\n`);
   const outcome = deriveOutcome({
     capacity,
     timedOut:

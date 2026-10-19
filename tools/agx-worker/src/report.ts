@@ -144,8 +144,34 @@ export const withReportInstruction = (text: string): string =>
   `${text.trimEnd()}\n\n${REPORT_INSTRUCTION}\n`;
 
 export type ParsedReport =
-  | { ok: true; report: WorkerReport }
+  | { ok: true; report: WorkerReport; warnings?: string[] }
   | { ok: false; error: string };
+
+/** Complete top-level JSON object spans, including objects embedded in surrounding prose. */
+const jsonObjectSpans = (text: string): { start: number; end: number }[] => {
+  const spans: { start: number; end: number }[] = [];
+  let start: number | undefined;
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quoted && escaped) escaped = false;
+    else if (quoted && char === "\\") escaped = true;
+    else if (quoted && char === '"') quoted = false;
+    else if (quoted) continue;
+    else if (char === '"' && depth > 0) quoted = true;
+    else if (char === "{") {
+      start ??= index;
+      depth += 1;
+    } else if (char === "}" && depth > 0) depth -= 1;
+    if (!quoted && char === "}" && depth === 0 && start !== undefined) {
+      spans.push({ start, end: index + 1 });
+      start = undefined;
+    }
+  }
+  return spans;
+};
 
 export type ParsedReturn =
   | { kind: "missing" }
@@ -210,12 +236,39 @@ export function parseReport(
   const text = lastMessage.trim();
   if (structured === undefined && text === "")
     return { ok: false, error: "the worker's final message is empty" };
+  const candidateText = (FENCE.exec(text)?.[1] ?? text)
+    .replace(RETURN_FENCE, "")
+    .trim();
   const candidate =
     structured !== undefined
       ? z.unknown().safeParse(structured)
-      : jsonText.safeParse(
-          (FENCE.exec(text)?.[1] ?? text).replace(RETURN_FENCE, "").trim(),
+      : jsonText.safeParse(candidateText);
+  const parsed = candidate.success
+    ? WorkerReport.safeParse(candidate.data)
+    : undefined;
+  if (parsed?.success === true) return { ok: true, report: parsed.data };
+  if (structured === undefined) {
+    const valid = jsonObjectSpans(candidateText)
+      .flatMap((span) => {
+        const decoded = jsonText.safeParse(
+          candidateText.slice(span.start, span.end),
         );
+        if (!decoded.success) return [];
+        const report = WorkerReport.safeParse(decoded.data);
+        return report.success ? [{ ...span, report: report.data }] : [];
+      })
+      .at(-1);
+    if (valid !== undefined) {
+      const trailing = candidateText.slice(valid.end).trim();
+      return {
+        ok: true,
+        report: valid.report,
+        ...(trailing === ""
+          ? {}
+          : { warnings: [`trailing text after report JSON: ${trailing}`] }),
+      };
+    }
+  }
   if (!candidate.success)
     return {
       ok: false,
@@ -224,11 +277,10 @@ export function parseReport(
         "the final message is not JSON: ",
       ),
     };
-  const parsed = WorkerReport.safeParse(candidate.data);
-  if (parsed.success) return { ok: true, report: parsed.data };
+  const issues = parsed?.success === false ? parsed.error.issues : [];
   return {
     ok: false,
-    error: `the final message is JSON of the wrong shape: ${parsed.error.issues
+    error: `the final message is JSON of the wrong shape: ${issues
       .slice(0, 3)
       .map(
         (i) =>

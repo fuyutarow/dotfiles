@@ -111,6 +111,16 @@ describe("report", () => {
     expect(parseReport(GOOD, "").ok).toBe(true);
   });
 
+  test("uses the last complete valid report and warns about trailing text", () => {
+    const earlier = { ...GOOD, summary: "earlier" };
+    const message = `${JSON.stringify(earlier)}\n${JSON.stringify(GOOD)}\nextra text`;
+    expect(parseReport(undefined, message)).toEqual({
+      ok: true,
+      report: GOOD,
+      warnings: ["trailing text after report JSON: extra text"],
+    });
+  });
+
   test("parses the tagged RETURN record from a final message", () => {
     const record = {
       findings: [{ text: "Premise is false", fleet: true }],

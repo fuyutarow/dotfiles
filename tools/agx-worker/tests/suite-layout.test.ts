@@ -3,12 +3,12 @@ import rootPackage from "../../../package.json" with { type: "json" };
 import packageJson from "../package.json" with { type: "json" };
 import { COMMANDS } from "../src/next/cli.ts";
 
-test("the run package exposes agx-worker and keeps the agx-next alias", () => {
+test("the run package exposes only the agx-worker bin", () => {
   expect(rootPackage.bin.agx).toBe("tools/agx/src/agx.ts");
   expect(rootPackage.bin["agx-worker"]).toBe(
     "tools/agx-worker/src/next/cli.ts",
   );
-  expect(rootPackage.bin["agx-next"]).toBe("tools/agx-worker/src/agx-next.ts");
+  expect(rootPackage.bin).not.toHaveProperty("agx-next");
   expect(Object.keys(rootPackage.bin)).not.toContain("agx-run");
   expect(packageJson.name).toBe("@dotfiles/agx-worker");
   expect(packageJson.version).toMatch(
@@ -16,7 +16,6 @@ test("the run package exposes agx-worker and keeps the agx-next alias", () => {
   );
   expect(packageJson.bin).toEqual({
     "agx-worker": "src/next/cli.ts",
-    "agx-next": "src/agx-next.ts",
   });
 });
 
@@ -29,7 +28,6 @@ test("the CLI exposes the run, doctor, and process interface commands", () => {
     "judge",
     "stats",
     "doctor",
-    "jev",
     "roster",
   ]);
 });

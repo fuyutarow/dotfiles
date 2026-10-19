@@ -1,7 +1,7 @@
 # agx-worker CLI contract
 
-`agx-worker` owns worker runs. Its package bin points to `src/next/cli.ts`; `agx-next` remains
-a deprecated PATH forwarding bin while consumers migrate. The suite also accepts `agx worker`.
+`agx-worker` owns worker runs. Its package bin points to `src/next/cli.ts`. The suite also accepts
+`agx worker`.
 
 | Command | Purpose |
 | --- | --- |
@@ -13,7 +13,6 @@ a deprecated PATH forwarding bin while consumers migrate. The suite also accepts
 | `agx worker dispatch TICKET [--ws SLUG] [--unit NAME]` | Obtain a workspace through ws and start a durable worker unit. |
 | `agx worker roster TICKET` | Print one selected roster row. Legacy roster --json retains the full validated roster. |
 | `agx worker doctor` | Diagnose worker records as tool/object/finding/remedy JSON Lines. |
-| `agx worker jev` | Deprecated transport filter retained for dx; prefer jex. |
 
 Tickets are caller-owned files. `agx run` accepts positional ticket paths and optionally a working
 tree and sandbox mode. A continuation uses the previous run ID and resumes its vendor session.

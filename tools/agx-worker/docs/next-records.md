@@ -1,6 +1,6 @@
 # agx run records
 
-`agx` (also available as `agx-next` for one release) stores one append-only JSONL file at `$AGX_NEXT_STATE_DIR/records.jsonl`
+`agx-worker` stores one append-only JSONL file at `$AGX_NEXT_STATE_DIR/records.jsonl`
 (default: `$AGX_STATE_DIR/records.jsonl` when that override is set, otherwise
 `$XDG_STATE_HOME/agx-next/records.jsonl` or `~/.local/state/agx-next/records.jsonl`).
 Each line is one event. Readers ignore an incomplete trailing line and reject malformed

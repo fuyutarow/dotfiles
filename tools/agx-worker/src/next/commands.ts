@@ -6,6 +6,5 @@ export const COMMAND_NAMES = [
   "judge",
   "stats",
   "doctor",
-  "jev",
   "roster",
 ] as const;

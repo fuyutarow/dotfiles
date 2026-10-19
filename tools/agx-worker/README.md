@@ -4,23 +4,8 @@ Dispatch, inspect and judge worker runs. Invoke it directly or through `agx work
 
 The append-only records and their format remain at `$XDG_STATE_HOME/agx-next/records.jsonl`
 (default `~/.local/state/agx-next/records.jsonl`). Existing history is read unchanged.
-`agx-next` forwards here with one deprecation hint while firedancer migrates. `agx-run` is removed.
 
 [Scope and ownership](docs/scope.md) · [Suite architecture](../spec/architecture.md) · [Caller inventory](docs/suite-callers.md)
-
-## Jev
-
-Send one JSON request on stdin with the request shape accepted by the internal Jev client:
-
-```sh
-printf '%s\n' '{"state":{"task":"..."},"questions":{"worker":{}}}' | agx-worker jev
-```
-
-`agx-worker jev` is deprecated in favour of `jex`; it remains for dx. It posts to the configured Jev endpoint and prints the answer JSON on stdout. It exits 0
-for an HTTP 200 JSON answer. Endpoint, credentials, and timeout follow the dispatch router:
-`AGX_NEXT_JEV_URL` overrides the roster endpoint, and the key uses the shared TypeSafe resolver.
-An unavailable transport, non-200 response, or invalid JSON answer exits non-zero with a one-line
-reason on stderr.
 
 ## Dispatch roster
 

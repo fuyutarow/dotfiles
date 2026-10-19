@@ -16,7 +16,7 @@ agx-worker has four jobs:
 Its worker commands are `dispatch`, `run`, `check`, `ls`, `judge`, `stats`, `roster`, and `doctor`.
 `dispatch` obtains its workspace through `ws add --json`; workspace creation stays in ws.
 `roster TICKET` prints one selected row; legacy `roster --json` prints the full roster.
-Deprecated `jev` remains a transport filter for dx. `doctor` reports worker findings as JSON Lines.
+`doctor` reports worker findings as JSON Lines.
  `check` validates ticket premises in the supplied tree and reports overlapping live write globs; it does not reserve writes. The event log is the single durable run-event data file. A run also creates per-run brief, report, and progress artifacts alongside that log.
 
 Tickets live in `<repo>/.agents/tickets/`, or in the home declared by `tickets = "<path>"`

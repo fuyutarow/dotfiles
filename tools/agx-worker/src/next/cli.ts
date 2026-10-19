@@ -7,7 +7,7 @@ import { standardCli } from "../../../shared/src/cli.ts";
 import { exitWithError } from "./exit.ts";
 import { flushRunPublications } from "./store.ts";
 import { doctor } from "./doctor.ts";
-import { jev, roster } from "./public.ts";
+import { roster } from "./public.ts";
 import packageJson from "../../package.json" with { type: "json" };
 
 const cliArgv = () => process.argv.slice(2);
@@ -219,22 +219,6 @@ async function main(): Promise<void> {
       commandArgs,
     );
     exit = await doctor();
-  } else if (commandName === "jev") {
-    cli(
-      {
-        name: "agx-worker jev",
-        help: {
-          description:
-            "Deprecated in favour of jex. POST one JSON request from stdin to the configured Jev endpoint; print the JSON answer to stdout.",
-        },
-        parameters: [],
-        strictFlags: true,
-        ignoreArgv: rejectPrototypeFlag,
-      },
-      undefined,
-      commandArgs,
-    );
-    exit = await jev();
   } else if (commandName === "roster") {
     const parsed = cli(
       {

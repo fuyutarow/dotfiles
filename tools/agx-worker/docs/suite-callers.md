@@ -1,12 +1,10 @@
 # AGX suite caller inventory — 2026-10-19
 
-Read-only search of the workspace, registered repositories (`scripts/workspace-repos.ts`), and the rendered global CLAUDE.md. Includes command argv arrays, executable callers, tests, documentation, and historical records; a match is not a claim that a historical instruction is executed. Existing old top-level verbs remain supported. `agx-next` remains a deprecated PATH shim for firedancer; `agx-run` is removed.
+Read-only search of the workspace, registered repositories (`scripts/workspace-repos.ts`), and the rendered global CLAUDE.md. Includes command argv arrays, executable callers, tests, documentation, and historical records; a match is not a claim that a historical instruction is executed. This inventory predates the suite command cuts and is retained as historical caller evidence.
 
-Query: `\bagx[ \t]+(run|dispatch|check|ls|judge|stats|roster|doctor|jev)\b|["']agx["'][ \t]*,[ \t]*["'](run|dispatch|check|ls|judge|stats|roster|doctor|jev)["']|\bagx-(run|next)\b`
+Query: `\bagx[ \t]+(run|dispatch|check|ls|judge|stats|roster|doctor)\b|["']agx["'][ \t]*,[ \t]*["'](run|dispatch|check|ls|judge|stats|roster|doctor)["']|\bagx-run\b`
 
 Raw output, including snippets and pre-edit matches: `/tmp/agx-suite-callers.json`. Entries below list every matched file and line; a count means matched lines, not invocations. The pre-edit workspace inventory is retained so moved callers are not lost.
-
-Production Jev caller: `/home/fuyu/Workspace/dx/src/config.ts:16` declares `["agx", "jev"]`; `tests/contracts.test.ts:236` checks it. `agx-worker jev` and the `agx jev` transition remain deprecated in favour of `jex`.
 
 ## Before rename: /home/fuyu/dotfiles.ws/ws_agx-suite-thin
 
@@ -198,7 +196,6 @@ Production Jev caller: `/home/fuyu/Workspace/dx/src/config.ts:16` declares `["ag
 - `tools/agx-worker/tests/suite-layout.test.ts:6,9,10,17`
 - `tools/agx-worker/tests/public.test.ts:44,57`
 - `tools/agx-worker/tests/ticket.test.ts:30`
-- `tools/agx-worker/src/agx-next.ts:8`
 - `tools/agx-worker/src/next/continue.ts:22`
 - `tools/agx-worker/src/next/cli.ts:63,77,89,247`
 - `tools/agx-worker/src/next/store.ts:125`

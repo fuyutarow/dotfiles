@@ -1,5 +1,9 @@
 # Changelog
 
+## 7.0.0 — 2026-10-19
+
+- Remove the deprecated agx-next bin and worker Jev transport command while preserving the record store path.
+
 ## 6.0.1 — 2026-10-19
 
 - Keep the deprecated alias CLI surface conformant

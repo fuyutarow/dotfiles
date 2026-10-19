@@ -39,7 +39,7 @@ const scratch = async (prefix: string): Promise<string> => {
   return root;
 };
 
-describe("agx-next run", () => {
+describe("agx-worker run", () => {
   test("reads a systemd service unit from the process cgroup", () => {
     expect(
       systemdUnitName(

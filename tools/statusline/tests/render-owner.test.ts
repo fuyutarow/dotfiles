@@ -122,6 +122,7 @@ test("standalone and Claude stdin render owner files without any subprocess, net
     STATUSLINE_PROC_ROOT: proc,
     AGX_STATE_DIR: state,
     AGX_NEXT_STATE_DIR: "",
+    XDG_RUNTIME_DIR: "",
     HERDR_ENV: "0",
   };
   await writeFile(

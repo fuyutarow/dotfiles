@@ -16,6 +16,7 @@ import { promptParts } from "./prompt-stamp.ts";
 import { coloredHead, render } from "./format.ts";
 import { buildDataframe } from "./build-dataframe.ts";
 import type { readLiveCodexRate } from "./codex-rate.ts";
+import { writeStatuslineFleetSession } from "./fleet-session.ts";
 const liveRate: typeof readLiveCodexRate = async (path) => {
   if (path === undefined) return ok(undefined);
   const { readLiveCodexRate } = await import("./codex-rate.ts");
@@ -491,13 +492,17 @@ if (liveMode) {
         return 2;
       }
       pinnedSession ??= current;
+      await writeStatuslineFleetSession(current, "codex");
       const frame = await buildDataframe(current, { codex: true });
       return render(frame, { codex: true, layout: "block" });
     },
   });
   process.exit(code);
 } else {
-  const df = await buildDataframe(session ?? {}, { codex: codexMode });
+  const current = session ?? {};
+  if (session !== undefined)
+    await writeStatuslineFleetSession(session, codexMode ? "codex" : "claude");
+  const df = await buildDataframe(current, { codex: codexMode });
   process.stdout.write(
     `${render(df, { codex: codexMode, layout: "block" })}${codexMode && onceMode ? "\n" : ""}`,
   );

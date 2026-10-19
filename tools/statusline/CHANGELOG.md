@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.8 — 2026-10-19
+
+- Write Claude and Codex statusline session handoffs for fleet consumers
+
 ## 0.20.7 — 2026-10-19
 
 - Scope judge to the last 24 hours in the rendered session or repository and land to existing unlanded workspaces in this repository

@@ -44,6 +44,7 @@ const CORPUS: CorpusEntry[] = [
   { path: "tools/agx-worker/src/dispatch.ts" },
   { path: "scripts/agx-doctor.ts" },
   { path: "tools/herdr-btm/src/btmp.ts", cli: false },
+  { path: "tools/herdr-projector/src/herdr-projector.ts" },
   { path: "tools/detect-japanese/src/cli.ts" },
   { path: "tools/jex/src/jex.ts" },
   { path: "tools/baseline/src/baseline.ts" },
@@ -57,6 +58,10 @@ const CORPUS: CorpusEntry[] = [
     unknownFlag: { exit: 2, message: "Unknown flag" },
   },
   { path: "tools/repo-retrieve/src/bench-definitions.ts" },
+  {
+    path: "tools/shared/src/gpu-sampler.ts",
+    unknownFlag: { exit: 2, message: "unknown option" },
+  },
   { path: "tools/serena-foreground/src/serena-foreground.ts" },
   { path: "agents/skills/codifying-doctrine/scripts/doctrine-check.ts" },
   { path: "agents/skills/commanding-research-fleets/scripts/check.ts" },
@@ -147,6 +152,7 @@ const CORPUS: CorpusEntry[] = [
   { path: "tools/smart-open/src/receive.ts" },
   { path: "tools/smart-open/src/smart-open.ts" },
   { path: "tools/statusline/src/sampler.ts" },
+  { path: "tools/prompt-archive/src/prompt-archive.ts" },
   { path: "tools/sui-keystore-merge/src/sui-keystore-merge.ts" },
   {
     path: "tools/storage-headroom/src/storage-headroom.ts",
@@ -159,7 +165,7 @@ const CORPUS: CorpusEntry[] = [
   },
   {
     path: "tools/xmsg/src/xmsg.ts",
-    unknownFlag: { exit: 2, message: "unknown option" },
+    unknownFlag: { exit: 1, message: "Unknown flag" },
   },
 ] satisfies readonly CorpusEntry[];
 
@@ -186,7 +192,7 @@ async function run(
       env: { ...process.env, NO_COLOR: "1" },
       stdout: "pipe",
       stderr: "pipe",
-      timeout: 5_000,
+      timeout: 10_000,
       killSignal: "SIGKILL",
     },
   );

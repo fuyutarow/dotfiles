@@ -199,7 +199,7 @@ describe("agx-worker run", () => {
     }
     writeFileSync(
       ticket,
-      `+++\nschema = 2\nname = "fake"\nwrites = ["src/**"]\noutcome = "run fake worker"\nconsumer = "legacy consumer field"\nfirst_return = "legacy return field"\nread_only_diagnostic = true\ntimeout_reason = "legacy reason"\nverify = []\ncapabilities = ["routine-check"]\n[proposition]\nid = "T1"\nclaim = "fake worker runs"\nrefuted_by = "worker does not run"\ndecides = "infrastructure"\nserves = ["coordination-throughput"]\ngraph_node = "legacy-node"\n+++\nRESOURCE-CLASS(NONCOMPUTE): test fixture\nDo the test.\n`,
+      `+++\nschema = 2\nname = "fake"\nwrites = ["src/**"]\noutcome = "run fake worker"\nconsumer = "legacy consumer field"\nfirst_return = "legacy return field"\nfirst_return_s = 1\ntimeout_s = 60\nread_only_diagnostic = true\ntimeout_reason = "legacy reason"\nverify = []\ncapabilities = ["routine-check"]\n[proposition]\nid = "T1"\nclaim = "fake worker runs"\nrefuted_by = "worker does not run"\ndecides = "infrastructure"\nserves = ["coordination-throughput"]\ngraph_node = "legacy-node"\n+++\nRESOURCE-CLASS(NONCOMPUTE): test fixture\nDo the test.\n`,
     );
     const interim = JSON.stringify({
       interim: true,
@@ -212,7 +212,7 @@ describe("agx-worker run", () => {
     const interimMessage = `\`\`\`agx-return\n${interim}\n\`\`\``;
     writeFileSync(
       worker,
-      `import { appendFileSync } from "node:fs";\nconst resumeIndex = process.argv.indexOf("--resume");\nconst vendorSession = resumeIndex < 0 ? "vendor-1" : "continued-" + String(process.argv[resumeIndex + 1]);\nappendFileSync(process.env.AGX_INTERIM_REPORTS_FILE, JSON.stringify({ last_message: ${JSON.stringify(interimMessage)} }) + "\\n");\nprocess.stdout.write(JSON.stringify({ exit: 0, report: { summary: "fake done", changes: [], checks: [], for_coordinator: [], open: [] }, vendor_session: vendorSession }) + "\\n");\n`,
+      `import { appendFileSync } from "node:fs";\nconst resumeIndex = process.argv.indexOf("--resume");\nconst vendorSession = resumeIndex < 0 ? "vendor-1" : "continued-" + String(process.argv[resumeIndex + 1]);\nif (process.env.AGX_LATE_FIXTURE === "1") await Bun.sleep(1400);\nelse appendFileSync(process.env.AGX_INTERIM_REPORTS_FILE, JSON.stringify({ last_message: ${JSON.stringify(interimMessage)} }) + "\\n");\nprocess.stdout.write(JSON.stringify({ exit: 0, report: { summary: "fake done", changes: [], checks: [], for_coordinator: [], open: [] }, vendor_session: vendorSession }) + "\\n");\n`,
     );
 
     const workerEnv = {
@@ -300,6 +300,68 @@ describe("agx-worker run", () => {
     expect(started.dispatcher_session).toBe("flag-session");
     expect(started.continues).toBeNull();
     if (started.id === undefined) return;
+
+    const lateBinding = {
+      ...binding,
+      id: "00000000-0000-4000-8000-000000000002",
+    };
+    const lateRun = Bun.spawnSync(
+      [
+        process.execPath,
+        "tools/agx-worker/src/next/cli.ts",
+        "run",
+        ticket,
+        "--cd",
+        root,
+        "--sandbox",
+        "read-only",
+        "--dispatch-binding",
+        JSON.stringify(lateBinding),
+      ],
+      {
+        cwd: process.cwd(),
+        env: { ...workerEnv, AGX_LATE_FIXTURE: "1" },
+        timeout: 10_000,
+      },
+    );
+    expect(lateRun.exitCode).toBe(0);
+    const lateRecordsResult = jsonOf(
+      z.array(
+        z.looseObject({
+          kind: z.string(),
+          id: z.string().optional(),
+          at: z.string().optional(),
+          first_return_s: z.number().optional(),
+          elapsed: z.number().optional(),
+          exit: z.number().optional(),
+        }),
+      ),
+    ).safeParse(
+      `[${readFileSync(join(state, "records.jsonl"), "utf8").trim().split("\n").join(",")}]`,
+    );
+    expect(lateRecordsResult.success).toBe(true);
+    if (!lateRecordsResult.success) return;
+    const lateRecords = lateRecordsResult.data;
+    const lateEvents = lateRecords.filter(
+      (event) => event.kind === "late" && event.id === lateBinding.id,
+    );
+    expect(lateEvents).toHaveLength(1);
+    expect(lateEvents[0]).toMatchObject({
+      first_return_s: 1,
+      id: lateBinding.id,
+      kind: "late",
+    });
+    expect(lateEvents[0]?.at).toBeDefined();
+    expect(lateEvents[0]?.elapsed).toBeGreaterThanOrEqual(1);
+    const lateEnded = lateRecords.find(
+      (event) => event.kind === "ended" && event.id === lateBinding.id,
+    );
+    expect(lateEnded?.exit).toBe(0);
+    expect(
+      lateRecords.filter(
+        (event) => event.kind === "late" && event.id === binding.id,
+      ),
+    ).toHaveLength(0);
 
     const accepted = Bun.spawnSync(
       [

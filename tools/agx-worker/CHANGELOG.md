@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.0.1 — 2026-10-19
+
+- Record one late event when a worker misses its interim-return deadline
+
 ## 8.0.0 — 2026-10-19
 
 - Remove the agx-next bin and Jev subcommand; use agx worker and jex

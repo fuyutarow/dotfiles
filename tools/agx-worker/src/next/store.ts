@@ -85,6 +85,14 @@ const EventSchema = z.discriminatedUnion("kind", [
     legacy_key: z.string().optional(),
   }),
   z.looseObject({
+    kind: z.literal("late"),
+    id: z.string(),
+    at: z.string(),
+    first_return_s: z.number().int().positive(),
+    elapsed: z.number().nonnegative(),
+    legacy_key: z.string().optional(),
+  }),
+  z.looseObject({
     kind: z.literal("ended"),
     id: z.string(),
     at: z.string(),

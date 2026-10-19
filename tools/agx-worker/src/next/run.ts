@@ -127,13 +127,15 @@ const renderPromise = (
       prose.trim(),
     ].join("\n"),
   );
-const persistInterim = (id: string, path: string, message: string): void => {
+const persistInterim = (id: string, path: string, message: string): boolean => {
   const parsed = parseReturn(message);
-  if (parsed.kind !== "valid" || parsed.record.interim !== true) return;
+  if (parsed.kind !== "valid" || parsed.record.interim !== true) return false;
   const progressText = `${JSON.stringify(parsed.record)}\n`;
-  if (existsSync(path) && readFileSync(path, "utf8") === progressText) return;
+  if (existsSync(path) && readFileSync(path, "utf8") === progressText)
+    return true;
   writeFileSync(path, progressText);
   append({ kind: "progress", id, at: now(), path });
+  return true;
 };
 
 export { earlyQuitRows } from "./preflight.ts";
@@ -486,6 +488,11 @@ export async function run(flags: Flags): Promise<number> {
     },
     timeout: (ticket.timeout_s ?? 600) * 1000,
   });
+  const firstReturnS =
+    ticket.first_return_s ?? Math.floor((ticket.timeout_s ?? 600) / 2);
+  const workerStartedAt = performance.now();
+  let progressSeen = false;
+  let lateRecorded = false;
   killWorker = () => {
     child.kill();
   };
@@ -497,7 +504,7 @@ export async function run(flags: Flags): Promise<number> {
       ? Promise.resolve("")
       : new Response(child.stdout).text();
   let progressOffset = 0;
-  const progressWatcher = setInterval(() => {
+  const observeInterim = (): void => {
     if (!existsSync(interimPath)) return;
     const data = readFileSync(interimPath, "utf8");
     const fresh = data.slice(progressOffset);
@@ -507,8 +514,26 @@ export async function run(flags: Flags): Promise<number> {
     const record = jsonOf(
       z.looseObject({ last_message: z.string() }),
     ).safeParse(last);
-    if (!record.success) return;
-    persistInterim(id, progressPath, record.data.last_message);
+    if (record.success)
+      progressSeen ||= persistInterim(
+        id,
+        progressPath,
+        record.data.last_message,
+      );
+  };
+  const progressWatcher = setInterval(() => {
+    observeInterim();
+    const elapsed = (performance.now() - workerStartedAt) / 1000;
+    if (!progressSeen && !lateRecorded && elapsed >= firstReturnS) {
+      append({
+        kind: "late",
+        id,
+        at: now(),
+        first_return_s: firstReturnS,
+        elapsed: Math.floor(elapsed),
+      });
+      lateRecorded = true;
+    }
   }, 100);
   const exit = await child.exited;
   clearInterval(progressWatcher);
@@ -599,7 +624,11 @@ export async function run(flags: Flags): Promise<number> {
             finalInterim,
           );
     if (interim?.success === true)
-      persistInterim(id, progressPath, interim.data.last_message);
+      progressSeen ||= persistInterim(
+        id,
+        progressPath,
+        interim.data.last_message,
+      );
   }
   if (stopTask !== undefined) await stopTask;
   append({

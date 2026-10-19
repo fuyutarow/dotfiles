@@ -50,7 +50,10 @@ async function main() {
         currentReservationId: receipt.data.reservation_id,
       },
     );
-    if (refusal !== undefined) return err(new Error(refusal));
+    if (refusal !== undefined) {
+      process.stdout.write(`DENY ${refusal}\n`);
+      return err(new Error(refusal));
+    }
   }
   const root = `/sys/fs/cgroup${cgroup}`;
   const [max, high, swap, peak] = await Promise.all(

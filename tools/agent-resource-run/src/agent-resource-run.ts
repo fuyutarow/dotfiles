@@ -151,7 +151,11 @@ async function policy() {
     .object({
       schema: z.literal(1),
       gpu_max_concurrent_jobs: positive.max(1024),
-      gpu_safety_mib: positive.max(1024 * 1024),
+      // Preserve the established policy default for older policy files.
+      gpu_safety_mib: positive
+        .max(1024 * 1024)
+        .optional()
+        .default(512),
     })
     .safeParse(toml.value);
   if (!parsed.success)
@@ -325,7 +329,7 @@ async function poolSlot(directory: string, pool: string, capacity: number) {
   for (const path of candidates) {
     // GPU selection must not briefly reserve an exclusive research slot before
     // announcing the want and receiving ccc's release acknowledgment.
-    const mode = pool === "gpu" ? ["--shared"] : [];
+    const mode = pool.startsWith("gpu.") ? ["--shared"] : [];
     const probe = await output([
       "flock",
       ...mode,
@@ -459,7 +463,12 @@ async function run(
   report(recovery.message);
   const config = await policy();
   if (config.isErr()) return err(config.error);
-  if (manifest.device.kind === "gpu") {
+  // A live GPU admission check belongs inside scope-entry, after the runner
+  // has announced its want and acquired the CCC handoff lock. Before handoff,
+  // CCC is still the legitimate GPU owner and can make this check refuse the
+  // very request that would ask it to release the device. Check-only has no
+  // handoff or scope-entry, so retain its immediate read-only admission check.
+  if (manifest.device.kind === "gpu" && checkOnly) {
     const refusal = await gpuAdmissionRefusal(
       manifest.device,
       config.value.gpu_safety_mib,

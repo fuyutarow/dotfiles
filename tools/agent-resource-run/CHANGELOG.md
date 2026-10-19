@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.9 — 2026-10-19
+
+- Defer live GPU admission until CCC releases its context
+
 ## 1.5.8 — 2026-10-19
 
 - Count each GPU reservation once during in-scope admission re-checks

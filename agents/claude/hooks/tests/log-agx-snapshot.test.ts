@@ -5,6 +5,7 @@ import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
 import { runHook, tempHome } from "./helpers.ts";
 import { decoded } from "../../../hooks/tests/decode.ts";
+import { fleetSessionFixture } from "./fleet-session-fixture.ts";
 
 const HOOK = "log-agx-snapshot.ts";
 const Message = z.object({ systemMessage: z.string() });
@@ -78,6 +79,38 @@ function message(result: ReturnType<typeof fire>, session = "s1") {
 }
 
 describe("log-agx-snapshot", () => {
+  test("Stop includes this session's context and rates from the fleet handoff", async () => {
+    const f = await fixture();
+    await fleetSessionFixture(f.home);
+    const msg = message(fire(f));
+    expect(msg).toContain("Ctx: 120k 60%");
+    expect(msg).toContain("Rate: 5h 40% · 7d 60%");
+    expect(msg).toContain("0 running");
+    expect(msg).not.toContain("input has no");
+  });
+
+  test("another fleet session's context and rates are excluded", async () => {
+    const f = await fixture();
+    await fleetSessionFixture(f.home, "other");
+    const msg = message(fire(f));
+    expect(msg).not.toContain("Ctx:");
+    expect(msg).not.toContain("Rate:");
+  });
+
+  test("malformed or mismatched handoffs preserve the run snapshot", async () => {
+    const f = await fixture();
+    const { session, path } = await fleetSessionFixture(f.home);
+    for (const text of [
+      "{bad",
+      "null",
+      JSON.stringify({ ...session, session_id: "other" }),
+    ]) {
+      await Bun.write(path, text);
+      const msg = message(fire(f));
+      expect(msg).toContain("0 running");
+      expect(msg).not.toContain("Ctx:");
+    }
+  });
   test("Stop lists only this session's runs with run prefixes and vendor session/thread ids", async () => {
     const f = await fixture([
       row("abcdef12-aaaa", "s1", "claude-worker-session"),

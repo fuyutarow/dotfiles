@@ -6,6 +6,7 @@ import { parseJson } from "../../../hooks/narrow.ts";
 import { runHook, tempHome } from "./helpers.ts";
 import { promptParts } from "../prompt-stamp.ts";
 import { decoded } from "../../../hooks/tests/decode.ts";
+import { fleetSessionFixture } from "./fleet-session-fixture.ts";
 
 const HOOK = "log-sys-snapshot.ts";
 const LINE = "Sys: CPU 25% · RAM 18% (10.0/54.9G) · VRAM 28% (3.3/12.0G)";
@@ -54,10 +55,61 @@ const fire = (home: string, event: string) =>
   runHook(
     HOOK,
     { hook_event_name: event, session_id: "s1" },
-    { HOME: home, XDG_STATE_HOME: join(home, ".local", "state") },
+    {
+      HOME: home,
+      XDG_STATE_HOME: join(home, ".local", "state"),
+      XDG_RUNTIME_DIR: join(home, "runtime"),
+    },
   );
 
 describe("log-sys-snapshot", () => {
+  test("Stop reads this session's context and rates from the fleet handoff before legacy unavailable rows", async () => {
+    const home = homeWithCache(1_000);
+    await fleetSessionFixture(home);
+    writeSession(home, "s1", [
+      "Ctx: n/a (input has no context percentage)",
+      "Rate: n/a (input has no Claude rate limits)",
+    ]);
+    const msg = body(fire(home, "Stop").stdout);
+    expect(msg).toBe(`Ctx: 120k 60% | Rate: 5h 40% · 7d 60% | ${LINE}`);
+    expect(msg).not.toContain("input has no");
+  });
+
+  test("another fleet session never supplies this session's context or rates", async () => {
+    const home = homeWithCache(1_000);
+    await fleetSessionFixture(home, "other");
+    expect(body(fire(home, "Stop").stdout)).toBe(LINE);
+  });
+
+  test("malformed or mismatched fleet files fall back without suppressing Sys", async () => {
+    const home = homeWithCache(1_000);
+    const { session, path } = await fleetSessionFixture(home);
+    for (const text of [
+      "{bad",
+      "null",
+      JSON.stringify({ ...session, session_id: "other" }),
+    ]) {
+      await Bun.write(path, text);
+      expect(body(fire(home, "Stop").stdout)).toBe(LINE);
+    }
+  });
+
+  test("handoff data survives old updated_at and null legacy cache", async () => {
+    const home = homeWithCache(1_000);
+    const { session, path } = await fleetSessionFixture(home);
+    await Bun.write(
+      path,
+      JSON.stringify({ ...session, updated_at: "2020-01-01T00:00:00Z" }),
+    );
+    writeSession(home, "s1", []);
+    await Bun.write(
+      join(home, ".cache/claude/statusline-session/s1.json"),
+      "null",
+    );
+    const msg = body(fire(home, "Stop").stdout);
+    expect(msg).toContain("Ctx: 120k 60%");
+    expect(msg).toContain("Rate: 5h 40% · 7d 60%");
+  });
   test("Stop attaches the cached Sys row as a systemMessage", () => {
     const r = fire(homeWithCache(1_000), "Stop");
     expect(r.code).toBe(0);

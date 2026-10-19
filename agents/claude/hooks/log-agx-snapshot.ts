@@ -10,6 +10,10 @@ import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { parseJson, strAt } from "../../hooks/narrow.ts";
 import { jsonOf, z } from "../../hooks/zod.ts";
 import { hookJson } from "./lib.ts";
+import {
+  fleetSessionRows,
+  readFleetSession,
+} from "../../../tools/shared/src/fleet-session.ts";
 
 const MIN_GAP_MS = 60_000;
 const nonEmpty = (v: string | undefined): string | undefined =>
@@ -109,8 +113,10 @@ async function main(): Promise<void> {
   const body = result.ok
     ? result.value
     : `n/a (${oneLine(errorMessage(result.error))})`;
+  const session = sid === undefined ? undefined : await readFleetSession(sid);
+  const rows = session === undefined ? [] : fleetSessionRows(session);
   process.stdout.write(
-    `${hookJson({ systemMessage: `Agx: session=${oneLine(sid ?? "n/a (not supplied)")} | ${body}` })}\n`,
+    `${hookJson({ systemMessage: [`Agx: session=${oneLine(sid ?? "n/a (not supplied)")}`, ...rows, body].join(" | ") })}\n`,
   );
   await attempt(async () => {
     await mkdir(cadenceDir, { recursive: true });

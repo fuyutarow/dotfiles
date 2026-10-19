@@ -1,5 +1,9 @@
 import { hookJson } from "./lib.ts";
 import { hasBareUnavailable } from "../../../tools/statusline/src/ansi.ts";
+import {
+  fleetSessionRows,
+  readFleetSession,
+} from "../../../tools/shared/src/fleet-session.ts";
 // Stop / PostToolUse hook — attach one line "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: 5h … · 7d … | Sys: CPU …"
 // (time, this session's context and API budget, host) to the thread at this moment, so a transcript shows what the machine looked like WHEN something
 // happened, not only what the statusline shows now.
@@ -60,20 +64,26 @@ async function main(): Promise<void> {
   if (now - cachedAt > STALE_MS) return;
 
   const key = sid.replaceAll(/[^A-Za-z0-9_-]/gu, "_");
-  // This session's rows, as the statusline ordered them. Missing or stale -> none.
+  // Schema 1 handoff takes precedence over the legacy statusline presentation cache.
+  // It is session-owned state, not a sampler observation: updated_at is not a TTL.
+  const fleet = await readFleetSession(sid);
+  // Legacy rows remain a fallback while the writer migrates to the shared handoff.
   const read = await attempt(() =>
     parseJson(readFileSync(`${SESSION_DIR}/${key}.json`, "utf8")),
   );
-  if (read.ok && read.value === null) return; // a literal null file was never a readable record
+  if (fleet === undefined && read.ok && read.value === null) return;
   const sess: unknown = read.ok ? read.value : {};
   const sessAt = at(sess, "at");
   const fresh = typeof sessAt === "number" && now - sessAt <= STALE_MS;
-  const rows = (fresh ? (arr(at(sess, "rows")) ?? []) : []).flatMap((r) => {
-    const row = strAt(r, "ansi") ?? strAt(r, "line");
-    return row === undefined || row === "" || hasBareUnavailable(row)
-      ? []
-      : [row];
-  });
+  let rows = fleet === undefined ? [] : fleetSessionRows(fleet);
+  if (fleet === undefined && fresh) {
+    rows = (arr(at(sess, "rows")) ?? []).flatMap((r) => {
+      const row = strAt(r, "ansi") ?? strAt(r, "line");
+      return row === undefined || row === "" || hasBareUnavailable(row)
+        ? []
+        : [row];
+    });
+  }
   // One record per line: "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: … | Sys: …" — who and where
   // (sessions now span machines), and this event's time (the mobile app shows none), in the
   // prompt's own head shape (prompt-stamp.ts); the separator is SEP.

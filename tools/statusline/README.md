@@ -90,7 +90,11 @@ are ignored. Outside a repository there is no workspace-name segment or workspac
 Codex CLI has no command-driven statusline setting, so tmux renders the Codex adapter outside the
 TUI. `--codex` with no other flags uses the current directory; `--cwd` selects by the supplied
 directory, `--pid` reads the process cwd through `/proc`, and `--thread` selects the
-rollout whose filename ends in the supplied thread ID. Cwd and PID selection use the newest rollout
+rollout whose filename ends in the supplied thread ID. `--thread` implies `--codex`:
+`statusline --watch --thread <id>` and `statusline --thread <id>` refresh that thread in a terminal
+until interrupted; `--once` or redirected stdout renders one snapshot. Explicit `--watch` requires
+a terminal on stdout. A thread cannot be combined with `--cwd`, `--pid`, `--session`, `--json`,
+or a subcommand; invalid combinations exit 2 with a diagnostic. Cwd and PID selection use the newest rollout
 whose `session_meta.cwd` matches and whose `originator` is `codex-tui`, skipping
 `codex_exec` workers. A snapshot selection with no match prints one dim line and exits; live
 `--watch` keeps polling until it finds a session. Codex

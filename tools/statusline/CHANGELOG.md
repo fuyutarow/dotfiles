@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.6 — 2026-10-19
+
+- Fix --watch --thread and standalone --thread to render and refresh the selected Codex thread; diagnose unknown IDs and conflicting selectors.
+
 ## 0.20.5 — 2026-10-19
 
 - Show GPU stalls on Sys and only actionable dispatch items on the optional bottom row

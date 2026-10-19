@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import { isolatedStatuslineEnv } from "./helpers.ts";
 
 const script = join(import.meta.dir, "..", "src", "statusline.ts");
@@ -86,6 +87,151 @@ function rolloutWithoutSessionId(): string {
     ].join("\n") + "\n"
   );
 }
+
+test.each([{ flags: ["--watch", "--thread"] }, { flags: ["--thread"] }])(
+  "thread selector under a PTY renders and keeps refreshing: %j",
+  async ({ flags }) => {
+    const home = await mkdtemp(join(tmpdir(), "statusline-thread-home-"));
+    homes.push(home);
+    const day = Temporal.Now.plainDateISO();
+    const directory = join(
+      home,
+      ".codex",
+      "sessions",
+      String(day.year),
+      String(day.month).padStart(2, "0"),
+      String(day.day).padStart(2, "0"),
+    );
+    await mkdir(directory, { recursive: true });
+    const pinned = join(
+      directory,
+      "rollout-2026-10-11T00-00-00-pinned-a.jsonl",
+    );
+    await writeFile(pinned, rollout("gpt-6-luna", 1000));
+    let output = "";
+    const proc = Bun.spawn([process.execPath, script, ...flags, "pinned-a"], {
+      cwd: home,
+      env: renderEnv(home),
+      timeout: 20000,
+      terminal: {
+        cols: 100,
+        rows: 24,
+        data: (_terminal, bytes) => {
+          output += Buffer.from(bytes).toString();
+        },
+      },
+    });
+    processes.push(proc);
+    expect(
+      await waitUntil(
+        () => output.includes("Updated every 5s") || proc.exitCode !== null,
+        5000,
+      ),
+    ).toBe(true);
+    expect(stripVTControlCharacters(output)).toContain("Session: pinned-a");
+    expect(proc.exitCode).toBeNull();
+    await writeFile(pinned, rollout("gpt-6-orbit", 54000));
+    await writeFile(
+      join(directory, "rollout-2026-10-11T00-00-01-newer-b.jsonl"),
+      rollout("gpt-6-newer", 99000).replaceAll("pinned-a", "newer-b"),
+    );
+    expect(await waitUntil(() => output.includes("GPT-6-Orbit"), 8000)).toBe(
+      true,
+    );
+    expect(output).not.toContain("GPT-6-Newer");
+    expect(proc.exitCode).toBeNull();
+    proc.terminal?.write(Buffer.from([3]));
+    expect(await waitUntil(() => proc.exitCode !== null, 3000)).toBe(true);
+    expect(proc.exitCode).toBe(130);
+    expect(output).toContain(`${esc}?25h${esc}?1049l`);
+  },
+  20000,
+);
+
+test.each(
+  [
+    ["--watch", "--thread", "missing-thread"],
+    ["--thread", "missing-thread"],
+    ["--watch", "--thread", "pinned-a", "--cwd", "/fixture/codex"],
+    ["--watch", "--thread", "pinned-a", "--pid", "1"],
+    ["--watch", "--thread", "pinned-a", "--once"],
+    ["--watch", "--thread", "pinned-a", "--session", "other"],
+    ["--watch", "--thread", "pinned-a", "--json"],
+    ["--watch", "--thread", "pinned-a", "--interval", "0"],
+    ["--watch", "--thread", ""],
+    ["sessions", "--thread", "pinned-a"],
+    ["payload", "--thread", "pinned-a"],
+  ].map((flags) => ({ flags })),
+)("thread usage failures under a PTY are visible: %j", async ({ flags }) => {
+  const home = await mkdtemp(join(tmpdir(), "statusline-thread-error-"));
+  homes.push(home);
+  let output = "";
+  const proc = Bun.spawn([process.execPath, script, ...flags], {
+    cwd: home,
+    env: renderEnv(home),
+    timeout: 5000,
+    terminal: {
+      cols: 100,
+      rows: 24,
+      data: (_terminal, bytes) => {
+        output += Buffer.from(bytes).toString();
+      },
+    },
+  });
+  processes.push(proc);
+  expect(await waitUntil(() => proc.exitCode !== null, 4000)).toBe(true);
+  expect(proc.exitCode).toBe(2);
+  expect(output).toContain("FATAL:");
+  if (flags.includes("missing-thread"))
+    expect(output).toContain("missing-thread");
+});
+
+test("thread snapshots render without a TTY and explicit watch refuses a pipe", async () => {
+  const home = await mkdtemp(join(tmpdir(), "statusline-thread-snapshot-"));
+  homes.push(home);
+  const day = Temporal.Now.plainDateISO();
+  const directory = join(
+    home,
+    ".codex",
+    "sessions",
+    String(day.year),
+    String(day.month).padStart(2, "0"),
+    String(day.day).padStart(2, "0"),
+  );
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    join(directory, "rollout-2026-10-11T00-00-00-pinned-a.jsonl"),
+    rollout("gpt-6-luna", 1000),
+  );
+  for (const flags of [
+    ["--thread", "pinned-a"],
+    ["--thread", "pinned-a", "--once"],
+    ["--watch", "--thread", "pinned-a"],
+  ]) {
+    const proc = Bun.spawn([process.execPath, script, ...flags], {
+      cwd: home,
+      env: renderEnv(home),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 5000,
+    });
+    processes.push(proc);
+    const [out, error, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    if (flags.includes("--watch")) {
+      expect(code).toBe(2);
+      expect(error).toContain("--watch requires a TTY");
+    } else {
+      expect(code).toBe(0);
+      expect(stripVTControlCharacters(out)).toContain("Session: pinned-a");
+      expect(error).toBe("");
+    }
+  }
+});
 
 test("live Codex PTY redraws changed pinned session and restores the terminal on q", async () => {
   const home = await mkdtemp(join(tmpdir(), "statusline-live-home-"));

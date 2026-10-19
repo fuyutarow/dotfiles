@@ -302,6 +302,23 @@ const watchSeconds =
     ? args._.command
     : undefined;
 const subcommand = watchSeconds === undefined ? args._.command : undefined;
+// A thread identifies Codex even without --codex. Validate selectors before dispatch:
+// generic watch and machine subcommands must never silently ignore a supplied thread.
+const threadMode = args.flags.thread !== undefined;
+if (
+  threadMode &&
+  (args.flags.thread?.trim() === "" ||
+    args.flags.pid !== undefined ||
+    args.flags.cwd !== undefined ||
+    args.flags.session !== undefined ||
+    args.flags.json === true ||
+    subcommand !== undefined)
+) {
+  process.stderr.write(
+    "FATAL: --thread requires a non-empty ID and cannot be combined with --pid, --cwd, --session, --json or a command\n",
+  );
+  process.exit(2);
+}
 if (subcommand === "sessions") {
   await listSessions(args.flags.cwd ?? process.cwd());
   process.exit(0);
@@ -319,7 +336,7 @@ if (subcommand !== undefined) {
   process.stderr.write(`FATAL: unknown statusline command ${subcommand}\n`);
   process.exit(2);
 }
-const codexMode = args.flags.codex ?? false;
+const codexMode = args.flags.codex === true || threadMode;
 const onceMode = args.flags.once ?? false;
 const watchMode = args.flags.watch ?? false;
 const intervalText = args.flags.interval ?? watchSeconds;

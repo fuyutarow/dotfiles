@@ -5,17 +5,6 @@ import { forwardPath } from "../../shared/src/path-dispatch.ts";
 
 const argv = process.argv.slice(2);
 const tools = ["worker", "ticket", "ws"];
-const transition = new Map([
-  ["run", "worker"],
-  ["dispatch", "worker"],
-  ["check", "worker"],
-  ["ls", "worker"],
-  ["judge", "worker"],
-  ["stats", "worker"],
-  ["roster", "worker"],
-  ["doctor", "worker"],
-  ["jev", "worker"],
-]);
 
 async function help(): Promise<void> {
   process.stdout.write(
@@ -55,21 +44,14 @@ async function main(): Promise<void> {
     await help();
     return;
   }
-  const legacy = transition.get(first);
-  const tool = legacy ?? first;
-  if (!tools.includes(tool)) {
-    process.stderr.write(`agx: unknown tool '${first}'; use agx --help\n`);
+  if (!tools.includes(first)) {
+    process.stderr.write(
+      `agx: unknown tool '${first}'; expected worker, ticket, ws\n`,
+    );
     process.exitCode = 2;
     return;
   }
-  if (legacy !== undefined)
-    process.stderr.write(
-      `agx: '${first}' is deprecated; use 'agx worker ${first}'\n`,
-    );
-  process.exitCode = await forwardPath(
-    `agx-${tool}`,
-    legacy === undefined ? remaining : argv,
-  );
+  process.exitCode = await forwardPath(`agx-${first}`, remaining);
 }
 await main().catch((error: unknown) => {
   process.stderr.write(`agx: ${String(error)}\n`);

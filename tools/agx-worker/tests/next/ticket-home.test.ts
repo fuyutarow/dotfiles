@@ -180,6 +180,7 @@ test.each([
     const result = await command([
       process.execPath,
       resolve("tools/agx/src/agx.ts"),
+      "worker",
       "check",
       ticket,
       "--cd",

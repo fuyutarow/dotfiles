@@ -61,29 +61,29 @@ test("suite forwards exact argv through PATH and preserves exit status", async (
   expect(decode(result.stdout)).toEqual({ tool: "worker", args: raw });
   expect(result.code).toBe(23);
 });
-test("static legacy transition emits exactly one hint", async () => {
+test.each([
+  "run",
+  "dispatch",
+  "check",
+  "ls",
+  "judge",
+  "stats",
+  "roster",
+  "doctor",
+  "jev",
+  "unknown",
+  "constructor",
+  "__proto__",
+  "agx-next",
+  "agx-run",
+])("suite rejects '%s' without dispatching", async (verb) => {
   await using f = await fixture();
-  for (const verb of [
-    "run",
-    "dispatch",
-    "check",
-    "ls",
-    "judge",
-    "stats",
-    "roster",
-    "doctor",
-    "jev",
-  ]) {
-    const result = await run(f.bin, [verb, "ticket.md"], 19);
-    expect(result.code).toBe(19);
-    expect(decode(result.stdout)).toEqual({
-      tool: "worker",
-      args: [verb, "ticket.md"],
-    });
-    expect(result.stderr).toBe(
-      `agx: '${verb}' is deprecated; use 'agx worker ${verb}'\n`,
-    );
-  }
+  const result = await run(f.bin, [verb, "ticket.md"], 19);
+  expect(result.code).toBe(2);
+  expect(result.stdout).toBe("");
+  expect(result.stderr).toBe(
+    `agx: unknown tool '${verb}'; expected worker, ticket, ws\n`,
+  );
 });
 test("suite owns its version and takes descriptions from PATH tools", async () => {
   await using f = await fixture();
@@ -114,32 +114,3 @@ function decode(text: string) {
   expect(parsed.success).toBe(true);
   return parsed.success ? parsed.data : undefined;
 }
-
-test("deprecated agx-next forwards through PATH with one hint and preserves status", async () => {
-  await using f = await fixture();
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      join(import.meta.dir, "../../agx-worker/src/agx-next.ts"),
-      "ls",
-      "--json",
-    ],
-    {
-      env: { ...process.env, PATH: f.bin, FAKE_EXIT: "29" },
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: 5000,
-    },
-  );
-  const [out, err, exit] = await Promise.all([
-    child.stdout.text(),
-    child.stderr.text(),
-    child.exited,
-  ]);
-  expect(decode(out)).toEqual({ tool: "worker", args: ["ls", "--json"] });
-  expect(exit).toBe(29);
-  expect(err).toBe(
-    "agx-next is deprecated; use agx-worker (agx worker) instead\n",
-  );
-});

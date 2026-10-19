@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0 — 2026-10-19
+
+- Accept only worker, ticket and ws as suite tools
+
 ## 0.5.0 — 2026-10-19
 
 - Route the suite through PATH tools and keep legacy worker verbs as deprecated forwards

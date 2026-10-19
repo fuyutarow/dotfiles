@@ -9,10 +9,7 @@ A PATH dispatcher for three tools:
 Arguments and child exit status pass through. `agx -V` prints the suite version only.
 `agx -h` takes each tool’s one-line description from its own PATH help.
 
-The static transition table forwards `run`, `dispatch`, `check`, `ls`, `judge`,
-`stats`, `roster`, `doctor`, and deprecated `jev` to the worker, emitting one stderr
-line naming `agx worker <verb>`. `agx doctor` diagnoses workers only.
-The machine diagnostic composition lives in `scripts/agx-doctor.ts`, invoked by the systemd unit.
+Only `worker`, `ticket`, and `ws` are accepted as tools. An unknown tool exits 2
+with one stderr line naming the three accepted tools and no stdout output.
 
-See [worker interfaces](../agx-worker/README.md) for dispatch, roster and deprecated Jev use,
-and the [caller inventory](../agx-worker/docs/suite-callers.md) for the migration search.
+See [worker interfaces](../agx-worker/README.md) for worker commands.

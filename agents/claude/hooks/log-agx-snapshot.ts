@@ -11,8 +11,10 @@ import { parseJson, strAt } from "../../hooks/narrow.ts";
 import { jsonOf, z } from "../../hooks/zod.ts";
 import { hookJson } from "./lib.ts";
 import {
-  fleetSessionRows,
+  FleetSessionSchema,
+  FleetSessionUnavailableSchema,
   readFleetSession,
+  type FleetSession,
 } from "../../../tools/shared/src/fleet-session.ts";
 
 const MIN_GAP_MS = 60_000;
@@ -20,6 +22,25 @@ const nonEmpty = (v: string | undefined): string | undefined =>
   v !== undefined && v !== "" ? v : undefined;
 const oneLine = (text: string): string =>
   text.replaceAll(/[\r\n\u2028\u2029]/gu, " ");
+
+const unavailable = (value: unknown) =>
+  `n/a (${FleetSessionUnavailableSchema.safeParse(value).data?.why ?? "not recorded"})`;
+
+function sessionRows(session: FleetSession): string[] {
+  const ctx = FleetSessionSchema.shape.ctx.options[0].safeParse(session.ctx);
+  let context = `Ctx: ${unavailable(session.ctx)}`;
+  if (ctx.success) {
+    const { tokens, pct } = ctx.data;
+    const shown =
+      tokens < 1000 ? `${tokens}` : `${Math.round(tokens / 100) / 10}k`;
+    context = `Ctx: ${shown} ${pct}%`;
+  }
+  const rate = FleetSessionSchema.shape.rate.options[0].safeParse(session.rate);
+  const usage = rate.success
+    ? `Rate: 5h ${rate.data.five_h_pct}% · 7d ${rate.data.seven_d_pct}%`
+    : `Rate: ${unavailable(session.rate)}`;
+  return [context, usage].map((row) => oneLine(row));
+}
 
 // Same owner path as agx-run/store.ts. The statusline reader also consumes this
 // publication, but imports npm dependencies; hooks must work before bun install.
@@ -113,8 +134,10 @@ async function main(): Promise<void> {
   const body = result.ok
     ? result.value
     : `n/a (${oneLine(errorMessage(result.error))})`;
-  const session = sid === undefined ? undefined : await readFleetSession(sid);
-  const rows = session === undefined ? [] : fleetSessionRows(session);
+  const session = FleetSessionSchema.safeParse(
+    sid === undefined ? undefined : await readFleetSession(sid),
+  );
+  const rows = session.success ? sessionRows(session.data) : [];
   process.stdout.write(
     `${hookJson({ systemMessage: [`Agx: session=${oneLine(sid ?? "n/a (not supplied)")}`, ...rows, body].join(" | ") })}\n`,
   );

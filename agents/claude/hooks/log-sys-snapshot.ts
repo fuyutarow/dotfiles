@@ -1,8 +1,10 @@
 import { hookJson } from "./lib.ts";
 import { hasBareUnavailable } from "../../../tools/statusline/src/ansi.ts";
 import {
-  fleetSessionRows,
+  FleetSessionSchema,
+  FleetSessionUnavailableSchema,
   readFleetSession,
+  type FleetSession,
 } from "../../../tools/shared/src/fleet-session.ts";
 // Stop / PostToolUse hook — attach one line "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: 5h … · 7d … | Sys: CPU …"
 // (time, this session's context and API budget, host) to the thread at this moment, so a transcript shows what the machine looked like WHEN something
@@ -44,6 +46,27 @@ const DIM = "\u001B[2m";
 const SEP = ` ${DIM}|${RST} `; // the statusline's own separator
 const MIN_GAP_MS = 60_000;
 
+const unavailable = (value: unknown) =>
+  `n/a (${FleetSessionUnavailableSchema.safeParse(value).data?.why ?? "not recorded"})`;
+
+function sessionRows(session: FleetSession): string[] {
+  const ctx = FleetSessionSchema.shape.ctx.options[0].safeParse(session.ctx);
+  let context = `Ctx: ${unavailable(session.ctx)}`;
+  if (ctx.success) {
+    const { tokens, pct } = ctx.data;
+    const shown =
+      tokens < 1000 ? `${tokens}` : `${Math.round(tokens / 100) / 10}k`;
+    context = `Ctx: ${shown} ${pct}%`;
+  }
+  const rate = FleetSessionSchema.shape.rate.options[0].safeParse(session.rate);
+  const usage = rate.success
+    ? `Rate: 5h ${rate.data.five_h_pct}% · 7d ${rate.data.seven_d_pct}%`
+    : `Rate: ${unavailable(session.rate)}`;
+  return [context, usage].map((row) =>
+    row.replaceAll(/[\r\n\u2028\u2029]/gu, " "),
+  );
+}
+
 async function main(): Promise<void> {
   const payload = readStdinJson();
   const event = strAt(payload, "hook_event_name") ?? "";
@@ -66,17 +89,17 @@ async function main(): Promise<void> {
   const key = sid.replaceAll(/[^A-Za-z0-9_-]/gu, "_");
   // Schema 1 handoff takes precedence over the legacy statusline presentation cache.
   // It is session-owned state, not a sampler observation: updated_at is not a TTL.
-  const fleet = await readFleetSession(sid);
+  const fleet = FleetSessionSchema.safeParse(await readFleetSession(sid));
   // Legacy rows remain a fallback while the writer migrates to the shared handoff.
   const read = await attempt(() =>
     parseJson(readFileSync(`${SESSION_DIR}/${key}.json`, "utf8")),
   );
-  if (fleet === undefined && read.ok && read.value === null) return;
+  if (!fleet.success && read.ok && read.value === null) return;
   const sess: unknown = read.ok ? read.value : {};
   const sessAt = at(sess, "at");
   const fresh = typeof sessAt === "number" && now - sessAt <= STALE_MS;
-  let rows = fleet === undefined ? [] : fleetSessionRows(fleet);
-  if (fleet === undefined && fresh) {
+  let rows = fleet.success ? sessionRows(fleet.data) : [];
+  if (!fleet.success && fresh) {
     rows = (arr(at(sess, "rows")) ?? []).flatMap((r) => {
       const row = strAt(r, "ansi") ?? strAt(r, "line");
       return row === undefined || row === "" || hasBareUnavailable(row)

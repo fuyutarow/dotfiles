@@ -97,6 +97,21 @@ describe("log-agx-snapshot", () => {
     expect(msg).not.toContain("Rate:");
   });
 
+  test("handoff unavailable reasons are printed on one line and token counts stay readable", async () => {
+    const f = await fixture();
+    const { session, path } = await fleetSessionFixture(f.home);
+    const na = { na: true, why: "not observed\nthis turn" };
+    await Bun.write(path, JSON.stringify({ ...session, ctx: na, rate: na }));
+    const msg = message(fire(f));
+    expect(msg).toContain("Ctx: n/a (not observed this turn)");
+    expect(msg).toContain("Rate: n/a (not observed this turn)");
+    await Bun.write(
+      path,
+      JSON.stringify({ ...session, ctx: { tokens: 999, pct: 0.5 } }),
+    );
+    expect(message(fire(f))).toContain("Ctx: 999 0.5%");
+  });
+
   test("malformed or mismatched handoffs preserve the run snapshot", async () => {
     const f = await fixture();
     const { session, path } = await fleetSessionFixture(f.home);

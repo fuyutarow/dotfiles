@@ -81,6 +81,22 @@ describe("log-sys-snapshot", () => {
     expect(body(fire(home, "Stop").stdout)).toBe(LINE);
   });
 
+  test("handoff unavailable reasons replace legacy rows and remain on one line", async () => {
+    const home = homeWithCache(1_000);
+    const { session, path } = await fleetSessionFixture(home);
+    const na = { na: true, why: "not observed\nthis turn" };
+    writeSession(home, "s1", ["Ctx: 1k 1%", "Rate: 5h 1% · 7d 1%"]);
+    await Bun.write(path, JSON.stringify({ ...session, ctx: na, rate: na }));
+    expect(body(fire(home, "Stop").stdout)).toBe(
+      `Ctx: n/a (not observed this turn) | Rate: n/a (not observed this turn) | ${LINE}`,
+    );
+    await Bun.write(
+      path,
+      JSON.stringify({ ...session, ctx: { tokens: 999, pct: 0.5 } }),
+    );
+    expect(body(fire(home, "Stop").stdout)).toContain("Ctx: 999 0.5%");
+  });
+
   test("malformed or mismatched fleet files fall back without suppressing Sys", async () => {
     const home = homeWithCache(1_000);
     const { session, path } = await fleetSessionFixture(home);

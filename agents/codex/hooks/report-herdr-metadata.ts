@@ -73,7 +73,16 @@ async function reportRequestedSession(
     now - previous.at < DEDUPE_MS
   )
     return;
-  await reportToHerdr(model, name, effort, "unknown", "codex").catch(() => {});
+  await reportToHerdr(
+    model,
+    name,
+    effort,
+    "unknown",
+    "codex",
+    requestedThread,
+    session.cwd,
+  ).catch(() => {});
+  await reportSessionId(requestedThread).catch(() => {});
   // Sender is best-effort; expire even unchanged stamps so a lost report retries.
   await mkdir(directory, { recursive: true, mode: 0o700 })
     .then(async () => {
@@ -93,6 +102,34 @@ const hasHerdrPane =
   process.env.HERDR_PANE_ID !== undefined &&
   process.env.HERDR_PANE_ID !== "";
 
+async function reportSessionId(sessionId: string) {
+  const paneId = process.env.HERDR_PANE_ID;
+  const executable = Bun.which("herdr");
+  if (paneId === undefined || paneId === "" || executable === null) return;
+  const child = Bun.spawn(
+    [
+      executable,
+      "pane",
+      "report-agent-session",
+      "--source",
+      "dotfiles:codex-session",
+      "--agent",
+      "codex",
+      "--agent-session-id",
+      sessionId,
+      paneId,
+    ],
+    {
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+      timeout: 2000,
+      killSignal: "SIGTERM",
+    },
+  );
+  await child.exited.catch(() => null);
+}
+
 // A pane can be reused before a new rollout exists (or even before Codex gives
 // us a session id). Retire the old occupant's tokens at the start boundary.
 if (event === "SessionStart" && hasHerdrPane)
@@ -101,7 +138,7 @@ if (event === "SessionStart" && hasHerdrPane)
 if (
   (event === "SessionStart" || event === "Stop" || event === "PostToolUse") &&
   threadId !== undefined &&
-  /^[A-Za-z0-9_-]{1,128}$/u.test(threadId) &&
+  /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(threadId) &&
   hasHerdrPane
 ) {
   await reportRequestedSession(threadId, event);

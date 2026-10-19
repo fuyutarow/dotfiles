@@ -383,12 +383,12 @@ export async function reportToHerdr(
   effortDisplay?: string, // plain-text "xhigh" / "xhigh+WF"
   _rc: RcState = rcState(),
   vendor: "claude" | "codex" = "claude",
+  codexSessionId?: string,
+  codexCwd?: string,
 ): Promise<void> {
   const paneId = process.env.HERDR_PANE_ID;
   const id =
-    vendor === "codex"
-      ? (process.env.CODEX_SESSION_ID ?? process.env.CODEX_THREAD_ID)
-      : process.env.CLAUDE_CODE_SESSION_ID;
+    vendor === "codex" ? codexSessionId : process.env.CLAUDE_CODE_SESSION_ID;
   if (
     process.env.HERDR_ENV !== "1" ||
     paneId === undefined ||
@@ -412,7 +412,7 @@ export async function reportToHerdr(
         : fleetUnavailable("effort unavailable"),
     ctx: fleetUnavailable("context unavailable to identity writer"),
     rate: fleetUnavailable("rate limits unavailable to identity writer"),
-    cwd: process.cwd(),
+    cwd: vendor === "codex" ? (codexCwd ?? process.cwd()) : process.cwd(),
     pane_id: paneId ?? null,
     updated_at: Temporal.Now.instant().toString(),
   });

@@ -1,36 +1,8 @@
 import { expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, rm, utimes } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  codexDiscoveryStamp,
-  findCodexSessionId,
-} from "../src/codex-session-id.ts";
-
-test("Codex identity discovery ignores rollout body and excludes other clients", async () => {
-  const root = await mkdtemp(join(tmpdir(), "projector-rollouts-"));
-  await using _cleanup = {
-    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
-  };
-  const day = join(root, "2026", "10", "19");
-  await mkdir(day, { recursive: true });
-  const tui = join(day, "rollout-tui.jsonl");
-  await Bun.write(
-    tui,
-    `${JSON.stringify({ type: "session_meta", payload: { originator: "codex-tui", cwd: "/project", id: "thread-id" } })}\n${"invalid body\n".repeat(100000)}`,
-  );
-  await utimes(tui, 1, 1);
-  await Bun.write(
-    join(day, "rollout-exec.jsonl"),
-    `${JSON.stringify({ type: "session_meta", payload: { originator: "codex-exec", cwd: "/project", id: "wrong" } })}\n`,
-  );
-  const today = Temporal.PlainDate.from("2026-10-19");
-  expect(await findCodexSessionId("/project", root, today)).toBe("thread-id");
-  const before = await codexDiscoveryStamp(root, today);
-  await Bun.write(join(day, "rollout-new.jsonl"), "{}\n");
-  expect(await codexDiscoveryStamp(root, today)).not.toEqual(before);
-  expect(await findCodexSessionId("/missing", root, today)).toBeUndefined();
-});
+import { writeFleetSession } from "../../shared/src/fleet-session.ts";
 
 test("CLI caches unchanged cycles, invalidates inputs, and retries failed writes", async () => {
   const root = await mkdtemp(join(tmpdir(), "projector-cycle-"));
@@ -53,7 +25,13 @@ if (process.argv[2] === "agent") {
   const agentsFile = join(root, "agents.json");
   const callsFile = join(root, "calls");
   const failFile = join(root, "fail");
-  const agents = [
+  const agents: Array<{
+    agent: string;
+    pane_id: string;
+    tab_id: string;
+    cwd: string;
+    agent_session?: { value: string };
+  }> = [
     {
       agent: "codex",
       pane_id: "pane",
@@ -107,9 +85,28 @@ if (process.argv[2] === "agent") {
   expect(await readFile(callsFile, "utf8")).toBe("apply\napply\n");
   expect((await cycle()).stdout).toContain("unchanged");
   expect(await readFile(callsFile, "utf8")).toBe("apply\napply\n");
-  // An atomically published inferred session must wake projection too.
-  await mkdir(join(root, "fleet", "sessions"), { recursive: true });
-  await Bun.write(join(root, "fleet", "sessions", "sid-1.json"), "{}");
+  // Same-cwd rollout and fleet records are ignored until Herdr reports that exact ID.
+  expect(
+    await writeFleetSession(
+      {
+        schema: 1,
+        session_id: "sid-1",
+        vendor: "codex",
+        name: "project-agt_abcd",
+        model: "gpt-6.1-sol",
+        effort: "medium",
+        ctx: { tokens: 10, pct: 1 },
+        rate: { na: true, why: "not available" },
+        cwd: "/project",
+        pane_id: null,
+        updated_at: Temporal.Now.instant().toString(),
+      },
+      { XDG_RUNTIME_DIR: root },
+    ),
+  ).toMatchObject({ ok: true });
+  expect((await cycle()).stdout).toContain("unchanged");
+  agents[0]!.agent_session = { value: "sid-1" };
+  await writeAgents();
   expect((await cycle()).stdout).not.toContain("unchanged");
   agents[0]!.tab_id = "new-tab";
   await writeAgents();

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.11 — 2026-10-19
+
+- Write Codex rollout identity to fleet sessions
+
 ## 0.20.10 — 2026-10-19
 
 - Bound async statusline children by the render deadline and align Herdr tests with fleet-session ownership

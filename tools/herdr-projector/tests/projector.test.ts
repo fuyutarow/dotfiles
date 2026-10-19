@@ -122,7 +122,7 @@ test("rejects a Claude session for a Codex pane and clears its identity", async 
   expect(calls[1]).toContain("fleet_session_id=");
 });
 
-test("uses Herdr's Codex id and statusline rollout selection when needed", async () => {
+test("matches the Codex rollout only by Herdr's exact session id", async () => {
   const calls: string[][] = [];
   const parsedCodex = FleetSessionSchema.safeParse(
     session({
@@ -133,7 +133,6 @@ test("uses Herdr's Codex id and statusline rollout selection when needed", async
   );
   expect(parsedCodex.success).toBe(true);
   if (!parsedCodex.success) return;
-  let lookedUpCwd = "";
   await projectAgents(
     [
       {
@@ -152,15 +151,16 @@ test("uses Herdr's Codex id and statusline rollout selection when needed", async
     ],
     new Map([["codex-thread", parsedCodex.data]]),
     (args) => Promise.resolve(calls.push(args)).then(() => true),
-    (cwd) => {
-      lookedUpCwd = cwd;
-      return Promise.resolve("codex-thread");
-    },
   );
-  expect(lookedUpCwd).toBe("/workspace/project");
   expect(calls[1]).toContain("model=gpt-6.1-sol");
-  expect(calls[3]).toContain("model=gpt-6.1-sol");
-  expect(calls[3]).toContain("fleet_session_id=codex-thread");
+  expect(calls[2]).toEqual([
+    "tab",
+    "rename",
+    "tab-3",
+    "codex · n/a(no session id)",
+  ]);
+  expect(calls[3]).toContain("model=");
+  expect(calls[3]).toContain("fleet_session_id=");
 });
 
 test("keeps unavailable labels within 40 characters", async () => {

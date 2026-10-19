@@ -111,7 +111,12 @@ test("one bit < .5 fails with bits on stdout", async () => {
   answer = replies(0.499, 0.8);
   const result = await run();
   expect(result.exit).toBe(1);
-  expect(verdict(result.stdout).bits[0]?.p).toBe(0.499);
+  expect(verdict(result.stdout)).toEqual({
+    bits: [
+      { id: "a", p: 0.499, reason: "Jev Noul probability of yes" },
+      { id: "b", p: 0.8, reason: "fixture" },
+    ],
+  });
 });
 test("refuted >= .5 fails, below .5 succeeds", async () => {
   const ref = join(root, "refuted.toml");
@@ -128,8 +133,13 @@ test("refuted >= .5 fails, below .5 succeeds", async () => {
     };
     const result = await run([ref, file]);
     expect(result.exit).toBe(p >= 0.5 ? 1 : 0);
-    expect(verdict(result.stdout).refuted?.p).toBe(p);
-    expect(verdict(result.stdout).bits).toHaveLength(2);
+    expect(verdict(result.stdout)).toEqual({
+      bits: [
+        { id: "a", p: 0.8, reason: "Jev Noul probability of yes" },
+        { id: "b", p: 0.9, reason: "fixture" },
+      ],
+      refuted: { p, reason: "Jev Noul probability of yes" },
+    });
   }
 });
 test("missing and extra ids cannot judge and still print bits", async () => {
@@ -245,7 +255,7 @@ test("usage and unknown flags fail with exit 2; version aliases print the packag
   for (const flag of ["-V", "--version"]) {
     const version = await run([flag]);
     expect(version.exit).toBe(0);
-    expect(version.stdout).toBe("jex 0.2.0\n");
+    expect(version.stdout).toBe("jex 0.2.1\n");
     expect(version.stderr).toBe("");
   }
 });

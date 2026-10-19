@@ -718,15 +718,15 @@ export function ensureToolOwned(ctx: Ctx, p: string): void {
   say(`created (tool-owned, empty): ${p}`);
 }
 
-/** Snapshot before linkAll: an installed timer's inactivity is an intentional stop. */
-export async function captureDeclaredTimers(ctx: Ctx) {
+/** Snapshot before linkAll: an installed timer/path's inactivity is an intentional stop. */
+export async function captureDeclaredTriggers(ctx: Ctx) {
   if (ctx.os === "mac" || ctx.mode === "check") return [];
   return Promise.all(
     LINKS.filter(
       ([when, , destination]) =>
         applies(when, ctx.os) &&
         dirname(destination) === ".config/systemd/user" &&
-        destination.endsWith(".timer"),
+        (destination.endsWith(".timer") || destination.endsWith(".path")),
     ).map(async ([, source, destination]) => {
       const path = join(ctx.home, destination);
       // lstat counts dangling links and masks as installed too; never infer a new
@@ -751,10 +751,10 @@ export async function captureDeclaredTimers(ctx: Ctx) {
   );
 }
 
-/** Enable every declared timer, activating only timers absent before this deploy. */
-export async function deployDeclaredTimers(
+/** Enable declared timer/path units, activating only units absent before this deploy. */
+export async function deployDeclaredTriggers(
   ctx: Ctx,
-  timers: Awaited<ReturnType<typeof captureDeclaredTimers>>,
+  triggers: Awaited<ReturnType<typeof captureDeclaredTriggers>>,
   probe = async (args: string[]) => {
     const child = Bun.spawn(["systemctl", "--user", ...args], {
       stdout: "pipe",
@@ -791,37 +791,37 @@ export async function deployDeclaredTimers(
   };
   const reloadError = await run(["daemon-reload"]);
   if (reloadError !== undefined) return reloadError;
-  for (const timer of timers) {
-    const source = await realpath(join(ctx.dotfiles, timer.source)).catch(
+  for (const trigger of triggers) {
+    const source = await realpath(join(ctx.dotfiles, trigger.source)).catch(
       () => null,
     );
-    const target = await realpath(timer.path).catch(() => null);
+    const target = await realpath(trigger.path).catch(() => null);
     if (source === null || target !== source)
       return new Error(
-        `${timer.unit} is not the declared link; repair: mise run link:dots`,
+        `${trigger.unit} is not the declared link; repair: mise run link:dots`,
       );
-    const enableError = await run(["enable", timer.unit]);
+    const enableError = await run(["enable", trigger.unit]);
     if (enableError !== undefined) return enableError;
-    const active = await probe(["is-active", timer.unit]);
+    const active = await probe(["is-active", trigger.unit]);
     if (active.code === 0) continue;
     if (active.code !== 3)
       return new Error(
-        `systemctl --user is-active ${timer.unit} failed (exit ${active.code}): ${active.out}`,
+        `systemctl --user is-active ${trigger.unit} failed (exit ${active.code}): ${active.out}`,
       );
-    if (timer.installed) {
+    if (trigger.installed) {
       report(
-        `left inactive: ${timer.unit} (already installed before deploy; user stop preserved)`,
+        `left inactive: ${trigger.unit} (already installed before deploy; user stop preserved)`,
       );
       continue;
     }
-    const startError = await run(["start", timer.unit]);
+    const startError = await run(["start", trigger.unit]);
     if (startError !== undefined) return startError;
-    report(`started: ${timer.unit} (first installation)`);
+    report(`started: ${trigger.unit} (first installation)`);
   }
   return undefined;
 }
 
-/** Enable the registry-linked timer; activation belongs to deployDeclaredTimers. */
+/** Enable the registry-linked timer; activation belongs to deployDeclaredTriggers. */
 export async function deployWsGc(
   ctx: Ctx,
   probe = async (args: string[]) => {
@@ -1065,7 +1065,7 @@ async function main(): Promise<Error | void> {
     );
     if (refused !== undefined) return refused;
   }
-  const timers = await captureDeclaredTimers(ctx);
+  const triggers = await captureDeclaredTriggers(ctx);
   if (ctx.failures?.[0] !== undefined) return ctx.failures[0];
   linkAll(ctx, sshVersion());
   if (ctx.failures?.[0] !== undefined) return ctx.failures[0];
@@ -1084,8 +1084,8 @@ async function main(): Promise<Error | void> {
   if (ownersError !== undefined) return ownersError;
   const daemonError = deployCccDaemon(ctx);
   if (daemonError !== undefined) return daemonError;
-  const timersError = await deployDeclaredTimers(ctx, timers);
-  if (timersError !== undefined) return timersError;
+  const triggersError = await deployDeclaredTriggers(ctx, triggers);
+  if (triggersError !== undefined) return triggersError;
   if (ctx.os === "mac") loadSmartOpenReceiver(ctx);
   const skipped = ctx.unreachable?.size ?? 0;
   say(skipped === 0 ? "done." : `done with ${skipped} unreachable path(s).`);

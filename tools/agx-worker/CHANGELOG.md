@@ -1,5 +1,9 @@
 # Changelog
 
+## 7.1.0 — 2026-10-19
+
+- Add latest ticket run selection with verification exits and report path
+
 ## 7.0.0 — 2026-10-19
 
 - Remove the deprecated agx-next bin and worker Jev transport command while preserving the record store path.

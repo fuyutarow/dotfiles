@@ -42,6 +42,7 @@ const fixture = (): string => {
       id: "run-ticket-new",
       at: "2026-10-14T10:00:00Z",
       ticket: "accept-fold",
+      continues: "run-ticket-old",
       writes: [],
       cwd: root,
       workspace: root,
@@ -55,9 +56,35 @@ const fixture = (): string => {
       id: "run-ticket-new",
       at: "2026-10-14T10:02:00Z",
       exit: 1,
-      report_path: null,
+      outcome: "verify-failed",
+      report_path: join(root, "state", "runs", "run-ticket-new", "report.json"),
       vendor_session: null,
-      verify: [],
+      verify: [
+        {
+          cmd: "mise run check",
+          exit: 7,
+          log_path: join(
+            root,
+            "state",
+            "runs",
+            "run-ticket-new",
+            "verify-01.log",
+          ),
+          kind: "failed",
+        },
+        {
+          cmd: "mise run lint",
+          exit: 0,
+          log_path: join(
+            root,
+            "state",
+            "runs",
+            "run-ticket-new",
+            "verify-02.log",
+          ),
+          kind: "passed",
+        },
+      ],
     },
     {
       kind: "started",
@@ -97,6 +124,23 @@ const runLs = (root: string, selector: string) =>
       "ls",
       selector,
       "--json",
+    ],
+    {
+      cwd: process.cwd(),
+      env: { ...process.env, AGX_NEXT_STATE_DIR: join(root, "state") },
+    },
+  );
+
+const runLatest = (root: string, ticket: string, ...flags: string[]) =>
+  Bun.spawnSync(
+    [
+      process.execPath,
+      "tools/agx-worker/src/next/cli.ts",
+      "ls",
+      "--ticket",
+      ticket,
+      "--latest",
+      ...flags,
     ],
     {
       cwd: process.cwd(),
@@ -150,3 +194,46 @@ test("agx ls selects an id prefix and an exact ticket with newest last", () => {
   expect(ambiguousPrefix.stderr.toString()).toContain("run-ticket-extra");
   expect(ambiguousPrefix.stderr.toString().trim().split("\n")).toHaveLength(1);
 }, 60_000);
+
+test("agx ls --latest selects a continued run and emits its outcome facts", () => {
+  const root = fixture();
+  const result = runLatest(root, "accept-fold", "--json");
+  expect(result.exitCode).toBe(0);
+  const latest = jsonOf(
+    z.object({
+      id: z.string(),
+      state: z.string(),
+      outcome: z.string().nullable(),
+      verify_exits: z.array(z.number()),
+      report_path: z.string().nullable(),
+    }),
+  ).safeParse(result.stdout.toString());
+  expect(latest.success).toBe(true);
+  if (latest.success)
+    expect(latest.data).toEqual({
+      id: "run-ticket-new",
+      state: "ended",
+      outcome: "verify-failed",
+      verify_exits: [7, 0],
+      report_path: join(root, "state", "runs", "run-ticket-new", "report.json"),
+    });
+
+  const human = runLatest(root, "accept-fold");
+  expect(human.exitCode).toBe(0);
+  expect(human.stdout.toString()).toContain("run-ticket-new state=ended");
+  expect(human.stdout.toString()).toContain("verify_exits=7,0");
+  expect(human.stdout.toString()).toContain("report_path=");
+});
+
+test("agx ls --latest requires an exact ticket and rejects a missing ticket", () => {
+  const root = fixture();
+  const result = Bun.spawnSync(
+    [process.execPath, "tools/agx-worker/src/next/cli.ts", "ls", "--latest"],
+    {
+      cwd: process.cwd(),
+      env: { ...process.env, AGX_NEXT_STATE_DIR: join(root, "state") },
+    },
+  );
+  expect(result.exitCode).toBe(2);
+  expect(result.stderr.toString()).toContain("--latest requires --ticket");
+});

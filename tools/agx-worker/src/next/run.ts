@@ -798,6 +798,62 @@ export { runningSummary } from "./listing.ts";
 import { runningSummary, listingRows } from "./listing.ts";
 
 export async function list(flags: Flags): Promise<number> {
+  const latest = flags.latest === true || value(flags, "latest") === "true";
+  const ticket = value(flags, "ticket");
+  if (latest || ticket !== undefined) {
+    const selector = value(flags, "selector");
+    if (latest && ticket === undefined) {
+      process.stderr.write("agx: --latest requires --ticket <name>\n");
+      return 2;
+    }
+    if (!latest) {
+      process.stderr.write("agx: --ticket requires --latest\n");
+      return 2;
+    }
+    if (
+      selector !== undefined ||
+      flags.all === true ||
+      flags.running === true ||
+      flags.wait === true ||
+      flags.summary === true
+    ) {
+      process.stderr.write(
+        "agx: --latest accepts only --ticket <name> and optional --json\n",
+      );
+      return 2;
+    }
+    const allRuns = await foldedRuns();
+    const ticketRuns = allRuns.filter((entry) => entry.ticket === ticket);
+    const latestRun = ticketRuns.at(-1);
+    if (latestRun === undefined) {
+      const candidates = [
+        ...new Set(allRuns.map((entry) => `tkt_${entry.ticket}`)),
+      ]
+        .toSorted()
+        .slice(0, 10);
+      process.stderr.write(
+        `agx: no run for exact ticket '${ticket}'${candidates.length === 0 ? "" : `; ticket candidates: ${candidates.join(", ")}`}\n`,
+      );
+      return 2;
+    }
+    const verifyExits = latestRun.verify.map((result) => result.exit);
+    if (flags.json === true || value(flags, "json") === "true") {
+      process.stdout.write(
+        `${JSON.stringify({
+          id: latestRun.id,
+          state: latestRun.state,
+          outcome: latestRun.outcome,
+          verify_exits: verifyExits,
+          report_path: latestRun.report_path,
+        })}\n`,
+      );
+    } else {
+      process.stdout.write(
+        `${latestRun.id} state=${latestRun.state} outcome=${latestRun.outcome ?? "-"} verify_exits=${verifyExits.length === 0 ? "-" : verifyExits.join(",")} report_path=${latestRun.report_path ?? "-"}\n`,
+      );
+    }
+    return 0;
+  }
   const running = flags.running === true || value(flags, "running") === "true";
   const rows = (await foldedRuns()).filter(
     (entry) => !running || entry.state === "running",

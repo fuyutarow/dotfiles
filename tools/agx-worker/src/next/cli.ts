@@ -131,6 +131,14 @@ async function main(): Promise<void> {
             "List runs newest first (last 30 by default; use --all for everything). SELECTOR is a run id/prefix or ticket name.",
         },
         flags: {
+          ticket: {
+            type: String,
+            description: "exact ticket name for --latest",
+          },
+          latest: {
+            type: Boolean,
+            description: "show only the latest run for --ticket",
+          },
           json: { type: Boolean, description: "emit the ls JSON contract" },
           summary: {
             type: Boolean,

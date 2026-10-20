@@ -27,6 +27,38 @@ const session = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const unit = (name: string) =>
+  Bun.file(
+    join(import.meta.dir, `../../../systemd/herdr-projector.${name}`),
+  ).text();
+
+test("fleet burst activations coalesce before reading without exhausting protective limits", async () => {
+  const [service, path, timer] = await Promise.all([
+    unit("service"),
+    unit("path"),
+    unit("timer"),
+  ]);
+  // A fixed pre-read window cannot be extended by a continuous stream of events.
+  // systemd keeps a oneshot activating throughout ExecStartPre and ExecStart.
+  expect(service).toContain("Type=oneshot");
+  expect(service).toContain("ExecStartPre=/usr/bin/sleep 3\nExecStart=");
+  expect(service).toContain("StartLimitIntervalSec=10s");
+  expect(service).toContain("StartLimitBurst=5");
+  // Even zero-cost projections can start at most four times in any ten seconds.
+  const delay = Number(
+    service.match(/^ExecStartPre=\/usr\/bin\/sleep (\d+)$/mu)?.[1],
+  );
+  const interval = Number(
+    service.match(/^StartLimitIntervalSec=(\d+)s$/mu)?.[1],
+  );
+  const burst = Number(service.match(/^StartLimitBurst=(\d+)$/mu)?.[1]);
+  expect(Math.floor(interval / delay) + 1).toBeLessThan(burst);
+  expect(path).toContain("PathChanged=%t/fleet/sessions");
+  expect(path).toContain("Unit=herdr-projector.service");
+  expect(timer).toContain("OnUnitActiveSec=60s");
+  expect(timer).toContain("Unit=herdr-projector.service");
+});
+
 test("shared fleet session atomically writes and reads schema 1", async () => {
   const root = await mkdtemp(join(tmpdir(), "fleet-session-"));
   await using _cleanup = {

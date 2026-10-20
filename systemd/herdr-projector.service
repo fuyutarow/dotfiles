@@ -1,6 +1,13 @@
 [Unit]
 Description=Project fleet session identities onto Herdr panes
+# Retain protection independently of the user manager's defaults.
+StartLimitIntervalSec=10s
+StartLimitBurst=5
 
 [Service]
 Type=oneshot
+# Coalesce fleet bursts while activating, then read the latest inputs. Starts
+# stay >=3s apart (at most 4 per 10s); continuous updates cannot defer the read.
+# Changes during projection queue a follow-up; the 60s pane poll still applies.
+ExecStartPre=/usr/bin/sleep 3
 ExecStart=%h/.bun/bin/herdr-projector

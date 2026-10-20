@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.11 — 2026-10-20
+
+- Coalesce fleet update bursts before projection while retaining systemd start limits
+
 ## 0.1.10 — 2026-10-20
 
 - Recognize native selection controls with or without Earlier messages available

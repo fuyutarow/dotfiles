@@ -668,6 +668,8 @@ const nativeShortcuts = "← for agents · ? for shortcuts";
 const nativeWarning = `${nativeShortcuts}                          ⚠ 1 warning · f2 to view`;
 const nativeSelection =
   "New activity · Earlier messages available.  ^c copy · enter copy & follow · esc clear";
+const nativeSelectionWithoutEarlier =
+  "New activity · ^c copy · enter copy & follow · esc clear";
 const liveFooterWitnesses = [
   {
     pane: "w9:p1B",
@@ -692,6 +694,14 @@ const liveFooterWitnesses = [
     model: "GPT-6.1-Sol",
     state: "Ready",
     controls: nativeSelection,
+  },
+  {
+    pane: "wW:p4",
+    id: "01a15a6e-48ec-78a0-a662-17e7e984e19f",
+    cwd: "~/Workspace/coralbase",
+    model: "GPT-6.1-Sol",
+    state: "Ready",
+    controls: nativeSelectionWithoutEarlier,
   },
   {
     pane: "wX:p2",

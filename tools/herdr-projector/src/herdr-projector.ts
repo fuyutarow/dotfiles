@@ -97,7 +97,7 @@ export function nativeFooterObservation(text: string):
   const shortcuts =
     /^← for agents · \? for shortcuts(?:[ \t]+⚠ 1 warning · f2 to view)?$/u;
   const selection =
-    /^New activity · Earlier messages available\.[ \t]+\^c copy · enter copy & follow · esc clear$/u;
+    /^New activity · (?:Earlier messages available\.[ \t]+)?\^c copy · enter copy & follow · esc clear$/u;
   if (!shortcuts.test(controls) && !selection.test(controls)) return undefined;
   const shape =
     /^\s*([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}) · (GPT-[A-Za-z0-9.-]+) (minimal|low|medium|high|xhigh|max|ultra) · ((?:\/|~\/)[^·\r\n]+) · (Working|Ready|Idle|Done|Blocked)\s*$/u;

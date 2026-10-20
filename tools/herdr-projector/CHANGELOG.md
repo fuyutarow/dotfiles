@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.10 — 2026-10-20
+
+- Recognize native selection controls with or without Earlier messages available
+
 ## 0.1.9 — 2026-10-20
 
 - Report verified native Codex identity under herdr:codex authority and retain current footer cwd

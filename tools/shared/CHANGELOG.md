@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.6 — 2026-10-20
+
+- Separate validated Codex creation metadata from explicitly verified native runtime cwd
+
 ## 0.15.5 — 2026-10-20
 
 - Add bounded exact Codex rollout identity and settings reader with fallback-compatible fleet refresh

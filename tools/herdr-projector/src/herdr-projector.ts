@@ -9,7 +9,6 @@ import {
   FleetSessionSchema,
   FleetSessionUnavailableSchema,
   readFleetSession,
-  fleetCwdMatches,
   codexRolloutPath,
   readCodexNativeSession,
   writeFleetSessionIfChanged,
@@ -160,9 +159,7 @@ export async function bindNativeCodexFooters(
       await readFleetSession(id, env),
     );
     const preserved =
-      existing.success &&
-      existing.data.vendor === "codex" &&
-      (await fleetCwdMatches(existing.data.cwd, cwd))
+      existing.success && existing.data.vendor === "codex"
         ? existing.data
         : undefined;
     const seed: FleetSession = {
@@ -179,7 +176,7 @@ export async function bindNativeCodexFooters(
       updated_at: Temporal.Now.instant().toString(),
     };
     const refreshed = FleetSessionSchema.safeParse(
-      await readCodexNativeSession(seed, env, path),
+      await readCodexNativeSession(seed, env, path, "verified-native-footer"),
     );
     if (
       !refreshed.success ||
@@ -192,7 +189,7 @@ export async function bindNativeCodexFooters(
       "report-agent-session",
       pane,
       "--source",
-      "dotfiles:herdr-projector",
+      "herdr:codex",
       "--agent",
       "codex",
       "--agent-session-id",
@@ -226,7 +223,7 @@ export async function bindNativeCodexFooters(
       "report-agent-session",
       agent.pane_id,
       "--source",
-      "dotfiles:herdr-projector",
+      "herdr:codex",
       "--agent",
       "codex",
     ]);

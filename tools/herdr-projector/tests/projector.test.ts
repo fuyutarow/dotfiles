@@ -228,7 +228,10 @@ import {
   nativeFooterObservation,
 } from "../src/herdr-projector.ts";
 import { mkdir } from "node:fs/promises";
-import { refreshCodexFleetSession } from "../../shared/src/fleet-session.ts";
+import {
+  refreshCodexFleetSession,
+  readCodexNativeSession,
+} from "../../shared/src/fleet-session.ts";
 
 test("native footer requires complete status row at viewport bottom and exact shortcuts", () => {
   expect(nativeFooterId(footer())).toBe(footerThread);
@@ -325,7 +328,7 @@ test("native footer validates exact rollout then reports identity and normal fle
       "report-agent-session",
       "pane",
       "--source",
-      "dotfiles:herdr-projector",
+      "herdr:codex",
       "--agent",
       "codex",
       "--agent-session-id",
@@ -380,7 +383,7 @@ test("footer mismatch, ambiguity, and read-time session switch cannot report a n
   };
   for (const overrides of [
     { id: nextThread },
-    { cwd: "/different" },
+
     { originator: "Claude Code" },
     { session_id: nextThread },
   ]) {
@@ -422,7 +425,7 @@ test("footer mismatch, ambiguity, and read-time session switch cannot report a n
       )
     ).size,
   ).toBe(0);
-  expect(calls.length).toBe(6);
+  expect(calls.length).toBe(5);
   expect(calls.every((args) => !args.includes("--agent-session-id"))).toBe(
     true,
   );
@@ -652,7 +655,7 @@ test("footer switch while native report is pending cannot persist stale fleet ob
     "report-agent-session",
     "pane",
     "--source",
-    "dotfiles:herdr-projector",
+    "herdr:codex",
     "--agent",
     "codex",
   ]);
@@ -709,7 +712,7 @@ const liveFooterWitnesses = [
   {
     pane: "wZ:p1",
     id: "01a14aa8-a8bd-7520-a062-ad2fec436099",
-    cwd: "/My Drive/fuyu  sktn/Personal-Drive",
+    cwd: "/mnt/g/my drive/fuyu  sktn/personal-drive",
     model: "GPT-6.1-Sol",
     state: "Ready",
     controls: nativeShortcuts,
@@ -771,8 +774,8 @@ test("seven native witnesses bind Ready, warning and selection variants and repe
     expect(after.ino).toBe(before.ino);
     expect(after.mtimeNs).toBe(before.mtimeNs);
     expect(await readFile(path, "utf8")).toBe(content);
-    // Native control variants never waive exact metadata cwd verification.
-    await fixture.rollout(witness.id, { cwd: "/wrong/native/cwd" });
+    // Native control variants never waive exact metadata ID/vendor verification.
+    await fixture.rollout(witness.id, { id: nextThread });
     expect((await bindNativeCodexFooters(agents, read, apply, env)).size).toBe(
       0,
     );
@@ -803,7 +806,7 @@ test("native controls reject extra prose, partial warnings and partial selection
 
 import { symlink } from "node:fs/promises";
 
-test("native displayed cwd accepts only verified realpath equivalence and ignores stale shell alias", async () => {
+test("fallback cwd requires verified equivalence while native runtime cwd ignores stale shell alias", async () => {
   await using fixture = await nativeFixture();
   const actual = join(fixture.root, "actual");
   const alias = join(fixture.root, "alias");
@@ -846,16 +849,12 @@ test("native displayed cwd accepts only verified realpath equivalence and ignore
   await fixture.rollout(footerThread, {
     cwd: join(fixture.root, "nonexistent"),
   });
+  const priorSeed = FleetSessionSchema.safeParse(prior);
+  expect(priorSeed.success).toBe(true);
+  if (!priorSeed.success) return;
   expect(
-    (
-      await bindNativeCodexFooters(
-        agents,
-        () => Promise.resolve(observed),
-        apply,
-        fixture.env,
-      )
-    ).size,
-  ).toBe(0);
+    await readCodexNativeSession(priorSeed.data, fixture.env),
+  ).toMatchObject({ na: true });
   expect(
     (
       await bindNativeCodexFooters(
@@ -866,4 +865,151 @@ test("native displayed cwd accepts only verified realpath equivalence and ignore
       )
     ).size,
   ).toBe(0);
+});
+
+test("native source authority binds selected agent_session and clears that same authority", async () => {
+  await using fixture = await nativeFixture();
+  await fixture.rollout(footerThread);
+  const selected = new Map<string, string>();
+  const metadata = new Map<string, string>();
+  const apply = (args: string[]) => {
+    if (
+      args[1] === "report-agent-session" &&
+      args[args.indexOf("--source") + 1] === "herdr:codex"
+    ) {
+      const flag = args.indexOf("--agent-session-id");
+      if (flag < 0) selected.delete(args[2] ?? "");
+      else selected.set(args[2] ?? "", args[flag + 1] ?? "");
+    }
+    if (args[1] === "report-metadata") {
+      expect(args[args.indexOf("--source") + 1]).toBe(
+        "dotfiles:herdr-projector",
+      );
+      const token = args.find((value) => value.startsWith("fleet_session_id="));
+      metadata.set(
+        args[2] ?? "",
+        token?.slice("fleet_session_id=".length) ?? "",
+      );
+    }
+    return Promise.resolve(true);
+  };
+  const agents = makeAgents();
+  const sessions = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(footer()),
+    apply,
+    fixture.env,
+  );
+  await projectAgents(agents, sessions, apply);
+  expect(selected.get("pane")).toBe(footerThread);
+  expect(metadata.get("pane")).toBe(footerThread);
+  const cleared = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve("no footer"),
+    apply,
+    fixture.env,
+  );
+  await projectAgents(agents, cleared, apply);
+  expect(selected.has("pane")).toBe(false);
+  expect(metadata.get("pane")).toBe("");
+});
+
+test("same-ID creation cwd and verified native runtime cwd have distinct authorities", async () => {
+  await using fixture = await nativeFixture();
+  const creation = "/mnt/g/My Drive/fuyu  sktn/Personal-Drive";
+  const runtime = "/mnt/g/my drive/fuyu  sktn/personal-drive";
+  const id = "01a14aa8-a8bd-7520-a062-ad2fec436099";
+  const path = await fixture.rollout(id, { cwd: creation });
+  const prior = session({
+    vendor: "codex",
+    session_id: id,
+    cwd: creation,
+    pane_id: "pane",
+  });
+  expect((await writeFleetSession(prior, fixture.env)).ok).toBe(true);
+  const observed = footer(id)
+    .replace("~/project", runtime)
+    .replace("Working", "Ready");
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const agents = makeAgents();
+  const result = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(observed),
+    apply,
+    fixture.env,
+  );
+  expect(result.get(id)).toMatchObject({
+    cwd: runtime,
+    model: "GPT-6.1-Sol",
+    effort: "medium",
+    ctx: prior.ctx,
+    rate: prior.rate,
+    name: prior.name,
+  });
+  const strictSeed = FleetSessionSchema.safeParse({ ...prior, cwd: runtime });
+  expect(strictSeed.success).toBe(true);
+  if (!strictSeed.success) return;
+  expect(
+    await readCodexNativeSession(strictSeed.data, fixture.env, path),
+  ).toMatchObject({ na: true });
+  for (const overrides of [
+    { id: nextThread },
+    { originator: "Claude Code" },
+    { session_id: nextThread },
+  ]) {
+    await fixture.rollout(id, { cwd: creation, ...overrides });
+    expect(
+      (
+        await bindNativeCodexFooters(
+          agents,
+          () => Promise.resolve(observed),
+          apply,
+          fixture.env,
+        )
+      ).size,
+    ).toBe(0);
+  }
+});
+
+test("complete native footer cannot bind a missing or over-limit exact rollout", async () => {
+  await using fixture = await nativeFixture();
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  expect(
+    (
+      await bindNativeCodexFooters(
+        makeAgents(),
+        () => Promise.resolve(footer()),
+        apply,
+        fixture.env,
+      )
+    ).size,
+  ).toBe(0);
+  // Fixed session_meta limit stays 128 KiB; never scan history to recover a header.
+  await fixture.rollout(footerThread, {
+    base_instructions: { text: "x".repeat(128 * 1024) },
+  });
+  expect(
+    (
+      await bindNativeCodexFooters(
+        makeAgents(),
+        () => Promise.resolve(footer()),
+        apply,
+        fixture.env,
+      )
+    ).size,
+  ).toBe(0);
+  expect(calls.every((args) => !args.includes("--agent-session-id"))).toBe(
+    true,
+  );
+  expect(await readFleetSession(footerThread, fixture.env)).toMatchObject({
+    na: true,
+  });
 });

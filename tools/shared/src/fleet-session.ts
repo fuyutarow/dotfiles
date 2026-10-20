@@ -273,13 +273,16 @@ export async function codexRolloutPath(
   return selected;
 }
 
-/** Refresh from a validated native rollout using at most 128 KiB head + 256 KiB tail.
- * Reuses the fallback helper contract; no transcript-wide scan or second writer/cache.
+/** Read at most 128 KiB for session_meta and 256 KiB for settings.
+ * session_meta establishes ID/vendor and records creation cwd. Only the caller
+ * checking the complete native footer three times may supply current runtime cwd.
+ * Fallback callers retain strict metadata-cwd validation by default.
  */
 export async function readCodexNativeSession(
   session: FleetSession,
   env: NodeJS.ProcessEnv = process.env,
   nativePath?: string,
+  cwdAuthority: "session-meta" | "verified-native-footer" = "session-meta",
 ): Promise<FleetSessionRead> {
   if (session.vendor !== "codex") return session;
   const path = nativePath ?? (await codexRolloutPath(session.session_id, env));
@@ -301,10 +304,14 @@ export async function readCodexNativeSession(
       !meta.success ||
       meta.data.payload.id !== session.session_id ||
       (meta.data.payload.session_id !== undefined &&
-        meta.data.payload.session_id !== session.session_id) ||
+        meta.data.payload.session_id !== session.session_id)
+    )
+      return unavailable("rollout ID/vendor mismatch");
+    if (
+      cwdAuthority === "session-meta" &&
       !(await fleetCwdMatches(meta.data.payload.cwd, session.cwd))
     )
-      return unavailable("rollout ID/vendor/cwd mismatch");
+      return unavailable("rollout creation cwd differs from requested cwd");
     const start = Math.max(0, info.size - 256 * 1024);
     const tail = Buffer.alloc(info.size - start);
     const read = await handle.read(tail, 0, tail.length, start);

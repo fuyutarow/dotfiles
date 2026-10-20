@@ -20,14 +20,78 @@ never accepted as a send receipt. Success requires `success: true` and a `msg_id
 | ---- | ---------------------------------------------------------------------------- |
 | 0    | Accepted: Codex queue succeeded, or a Claude tool_result confirms acceptance |
 | 1    | Rejected/error reported by the transport                                     |
-| 2    | Invalid command usage                                                        |
-| 3    | Selected CLI unavailable or could not start                                  |
+| 2    | Invalid usage, invalid/missing selector, or ambiguous prefix                   |
+| 3    | Selected CLI unavailable, or prefix discovery unavailable/incomplete         |
 | 4    | Acceptance unknown: timeout, failed Claude run, or no confirmed tool_result  |
 
-The default send deadline is 60 seconds; `--timeout-ms N` changes it. A timeout can occur after
+The default send deadline is 60 seconds; `--timeout-ms N` changes it. Prefix discovery and
+the subsequent send share this single budget. A timeout can occur after
 the message was accepted. **Do not resend an unknown outcome without checking the recipient.**
 There are no automatic retries.
 
 Accepted means enqueued, not read or replied. xmsg owns no broker, inbox, launch/delegation, or
 reply tracking. To arrange a reply, include the sender's exact address in the message; the
 recipient can send another message using its native route or xmsg.
+
+## Discover recipients
+
+```sh
+xmsg list
+xmsg list --json --timeout-ms 5000
+xmsg send --to codex:<shown-short-UUID> --message 'Can you check this?'
+```
+
+Copy the shown address unchanged into `send --to`. Human output shortens UUIDs to the
+shortest currently unique front prefix, starting at 8 hexadecimal digits. It extends
+prefixes through UUID or exact-name collisions. Opaque native IDs remain full. JSON
+preserves the full canonical `address` and `id`, and adds `shortAddress`.
+Names may be duplicated; addresses are deduplicated by vendor and native ID (only actual
+UUIDs are normalized; opaque IDs remain case-sensitive), never by name, cwd, or order.
+The count is the number of unique addresses returned by successful inventories.
+
+Send accepts vendor-qualified UUID front prefixes of at least 4 hexadecimal digits,
+case-insensitively, with optional canonical UUID hyphens. It queries **only the selected
+vendor** and requires a complete, available native inventory before resolving a prefix.
+Exactly one match becomes the full native ID for one unchanged send. Ambiguity prints
+deterministically sorted full candidate addresses and names on stderr; missing, malformed,
+ambiguous or unverified prefixes cause no send. Exact registered names take precedence
+over prefix matching and UUID-format rejection; local name resolution also requires
+complete inventory. Full UUIDs take precedence over names and need no discovery.
+Opaque exact names retain the existing native send path even if discovery is unavailable.
+Spaces and punctuation in names, such as `review (v2)`, are passed literally; pattern-like
+characters are native exact-name text, never wildcard or fuzzy UUID-prefix syntax.
+Wildcards, fuzzy and substring matching are unsupported. UUID-shaped short names need
+discovery to distinguish them from prefixes. Inventory can change after listing; send
+checks uniqueness again rather than trusting the earlier display.
+
+Listing uses Claude's read-only `claude agents --json` active registration inventory
+(interactive and background), without a model turn or SendMessage. Codex listing connects
+to the **already running shared local app-server control socket**, using
+`thread/loaded/list` and metadata-only `thread/read`. This includes Desktop/shared
+app-server threads visible on that endpoint. It does not launch a daemon or read historical
+transcripts. Saved/resumable but unloaded threads are excluded, as are sessions owned by
+other endpoints (including a separate Windows Desktop backend when running in WSL).
+An absent/incompatible socket is explicitly unavailable; fleet/Herdr records are not used
+as reachability evidence. Codex uses `CODEX_HOME`, falling back to `~/.codex`.
+
+Human rows show only reusable short TO address, native name (or unavailable), cwd
+(or unavailable), and actual reported state. Availability is summarized once per vendor;
+source/RPC details and per-recipient availability remain in JSON and this documentation.
+JSON contains `recipients`,
+`count`, and per-vendor `backends`; each recipient includes `address`, `vendor`,
+`id`, `shortAddress`, nullable `name`/`cwd`, `state`, `availability`, `source`, and
+`observedAt` (observation time, not last activity). Registration/loading is discovery
+evidence, not a delivery, read receipt, or guarantee the recipient remains available.
+
+List exits **0** only when both inventories complete, including a genuinely empty result;
+**3** means at least one backend is unavailable, failed, timed out, exceeded bounds or
+returned an unsupported schema. Successful vendor results remain in partial output.
+Failures appear in stderr and JSON backend details. Usage errors exit **2** before
+discovery. `--to`/`--message` are send-only; `--json` is list-only.
+
+The existing `--timeout-ms` deadline applies independently to both concurrent inventory
+operations (default 60 seconds). Each backend is capped at 1,000 native records and 4 MiB
+of output; Codex follows bounded pagination. Unsupported fragmented WebSocket frames are
+reported as unavailable rather than silently omitted. Listing sends no agent messages,
+per-recipient ping, or retry, and creates no registry/cache. Existing send acceptance and
+exactly-once behavior remain unchanged.

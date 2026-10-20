@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { chmod, mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { jsonOf, z } from "../../shared/src/zod.ts";
@@ -56,17 +56,97 @@ async function run(
     exit?: number;
     delay?: number;
     missing?: boolean;
+    threads?: Array<{
+      id: string;
+      name?: string;
+      cwd?: string;
+      status: { type: string };
+    }>;
+    codexError?: boolean;
+    inventory?: string;
+    inventoryDelay?: number;
+    discoveryDelay?: number;
   } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), "xmsg-test-"));
   roots.push(root);
+  let server: ReturnType<typeof Bun.serve> | undefined;
+  if (options.threads !== undefined || options.codexError === true) {
+    await mkdir(join(root, "app-server-control"));
+    server = Bun.serve({
+      unix: join(root, "app-server-control", "app-server-control.sock"),
+      fetch(request, endpoint) {
+        if (!endpoint.upgrade(request, { data: undefined }))
+          void endpoint.stop(true);
+      },
+      websocket: {
+        async message(ws, raw) {
+          const parsedRequest = jsonOf(
+            z.object({
+              id: z.number(),
+              method: z.string(),
+              params: z.object({ threadId: z.string().optional() }).loose(),
+            }),
+          ).safeParse(String(raw));
+          if (!parsedRequest.success) return;
+          const request = parsedRequest.data;
+          const methods = ["initialize", "thread/loaded/list", "thread/read"];
+          expect(methods).toContain(request.method);
+          if (options.codexError === true) {
+            ws.send(
+              JSON.stringify({
+                id: request.id,
+                error: { message: "fixture backend failure" },
+              }),
+            );
+            return;
+          }
+          let response: unknown = {};
+          if (request.method === "thread/loaded/list")
+            response = {
+              data: options.threads?.map((t) => t.id),
+              nextCursor: null,
+            };
+          if (request.method === "thread/read")
+            response = {
+              thread: options.threads?.find(
+                (t) => t.id === request.params.threadId,
+              ),
+            };
+          await Bun.sleep(options.discoveryDelay ?? 0);
+          ws.send(JSON.stringify({ id: request.id, result: response }));
+        },
+      },
+    });
+  }
   const kind = options.kind ?? "claude";
+  if (options.threads !== undefined || options.codexError === true) {
+    const codex = join(root, "codex");
+    await Bun.write(
+      codex,
+      `#!${process.execPath}
+const file = Bun.file(process.env.XMSG_FAKE_ARGS);
+const previous = await file.exists() ? await file.text() : "";
+await Bun.write(file, previous + JSON.stringify(Bun.argv.slice(2)) + "\\n");
+process.exit(0);
+`,
+    );
+    await chmod(codex, 0o755);
+  }
   const argsFile = join(root, "argv.json");
   if (options.missing !== true) {
     const fake = join(root, kind);
     await Bun.write(
       fake,
-      `#!${process.execPath}\nawait Bun.write(process.env.XMSG_FAKE_ARGS, JSON.stringify(Bun.argv.slice(2)));\nprocess.stdout.write(process.env.XMSG_FAKE_OUTPUT ?? "");\nawait Bun.sleep(Number(process.env.XMSG_FAKE_DELAY ?? 0));\nprocess.exit(Number(process.env.XMSG_FAKE_EXIT ?? 0));\n`,
+      `#!${process.execPath}
+const args = Bun.argv.slice(2);
+const previous = await Bun.file(process.env.XMSG_FAKE_ARGS).exists() ? await Bun.file(process.env.XMSG_FAKE_ARGS).text() : "";
+await Bun.write(process.env.XMSG_FAKE_ARGS, previous + JSON.stringify(args) + "\\n");
+const inventory = args[0] === "agents" && process.env.XMSG_FAKE_INVENTORY !== undefined;
+process.stdout.write(inventory ? process.env.XMSG_FAKE_INVENTORY : (process.env.XMSG_FAKE_OUTPUT ?? ""));
+await Bun.sleep(Number(inventory ? process.env.XMSG_FAKE_INVENTORY_DELAY : (process.env.XMSG_FAKE_DELAY ?? 0)));
+process.exit(Number(process.env.XMSG_FAKE_EXIT ?? 0));
+`,
     );
     await chmod(fake, 0o755);
   }
@@ -87,6 +167,10 @@ async function run(
       env: {
         ...process.env,
         PATH: root,
+        HOME: root,
+        CODEX_HOME: root,
+        XMSG_FAKE_INVENTORY: options.inventory,
+        XMSG_FAKE_INVENTORY_DELAY: String(options.inventoryDelay ?? 0),
         XMSG_FAKE_ARGS: argsFile,
         XMSG_FAKE_OUTPUT: options.output ?? "",
         XMSG_FAKE_EXIT: String(options.exit ?? 0),
@@ -102,16 +186,20 @@ async function run(
     proc.stderr.text(),
     proc.exited,
   ]);
+  await server?.stop(true);
   const called = await Bun.file(argsFile).exists();
   const parsed = called
-    ? jsonOf(z.array(z.string())).safeParse(await Bun.file(argsFile).text())
+    ? z
+        .array(jsonOf(z.array(z.string())))
+        .safeParse((await Bun.file(argsFile).text()).trim().split("\n"))
     : undefined;
   return {
     stdout,
     stderr,
     exit,
     called,
-    argv: parsed?.success === true ? parsed.data : [],
+    calls: parsed?.success === true ? parsed.data : [],
+    argv: parsed?.success === true ? (parsed.data.at(-1) ?? []) : [],
   };
 }
 
@@ -282,4 +370,373 @@ test("Claude relay explicitly selects Haiku and low effort", async () => {
     "--effort",
     "low",
   ]);
+});
+
+const listArgs = ["list", "--json", "--timeout-ms", "1000"];
+const threads = [
+  {
+    id: "desktop-id",
+    name: "same",
+    cwd: "/desktop",
+    status: { type: "active" },
+  },
+  { id: "other-id", name: "same", cwd: "/desktop", status: { type: "idle" } },
+];
+const agents = [
+  { sessionId: "claude-id", name: "same", cwd: "/claude", status: "idle" },
+  { sessionId: "claude-id", name: "same", cwd: "/claude", status: "idle" },
+  { sessionId: "other-claude", status: "busy" },
+];
+const Inventory = jsonOf(
+  z.object({
+    count: z.number(),
+    recipients: z.array(
+      z.object({
+        address: z.string(),
+        name: z.string().nullable(),
+        cwd: z.string().nullable(),
+        state: z.string(),
+        availability: z.string(),
+        source: z.string(),
+        observedAt: z.string(),
+      }),
+    ),
+    backends: z.array(z.object({ availability: z.string() })),
+  }),
+);
+
+function readInventory(output: string) {
+  const parsed = Inventory.safeParse(output);
+  expect(parsed.success).toBe(true);
+  if (!parsed.success) return { count: -1, recipients: [], backends: [] };
+  return parsed.data;
+}
+
+test("list covers both native inventories, deduplicates exact IDs and preserves duplicate names", async () => {
+  const r = await run({
+    args: listArgs,
+    threads,
+    output: JSON.stringify(agents),
+  });
+  expect(r.exit).toBe(0);
+  expect(r.argv).toEqual(["agents", "--json"]);
+  expect(r.argv.join(" ")).not.toContain("SendMessage");
+  const inventory = readInventory(r.stdout);
+  expect(inventory.count).toBe(4);
+  expect(inventory.recipients.map((v) => v.address)).toEqual([
+    "claude:claude-id",
+    "claude:other-claude",
+    "codex:desktop-id",
+    "codex:other-id",
+  ]);
+  expect(inventory.recipients[1]?.name).toBeNull();
+  expect(inventory.recipients[2]?.state).toBe("active");
+  for (const recipient of inventory.recipients) {
+    expect(recipient.source).not.toBe("");
+    expect(recipient.observedAt).toMatch(/^\d{4}-/u);
+    const kind = recipient.address.startsWith("claude:") ? "claude" : "codex";
+    const sent = await run({
+      kind,
+      output: kind === "claude" ? stream(use, accepted) : "",
+      args: ["send", "--to", recipient.address, "--message", message],
+    });
+    expect(sent.exit).toBe(0);
+    if (kind === "codex") expect(sent.argv[2]).toBe(recipient.address.slice(6));
+    else
+      expect(sent.argv.at(-1)).toContain(
+        JSON.stringify(recipient.address.slice(7)),
+      );
+  }
+});
+
+test("empty native inventories are complete, not unavailable", async () => {
+  const r = await run({ args: listArgs, threads: [], output: "[]" });
+  expect(r.exit).toBe(0);
+  expect(readInventory(r.stdout).count).toBe(0);
+});
+
+test("missing backends cannot masquerade as empty success", async () => {
+  const r = await run({ args: listArgs, missing: true });
+  expect(r.exit).toBe(3);
+  expect(r.stderr).toContain("codex discovery unavailable");
+  expect(r.stderr).toContain("claude discovery unavailable");
+  expect(
+    readInventory(r.stdout).backends.every(
+      (b) => b.availability === "unavailable",
+    ),
+  ).toBe(true);
+});
+
+test.each([
+  { codexError: true, output: JSON.stringify(agents), count: 2 },
+  { threads, output: "model prose is not an inventory", count: 2 },
+  { threads, output: "[]", exit: 7, count: 2 },
+])(
+  "partial failure retains the other vendor and exits 3: %j",
+  async (options) => {
+    const r = await run({ ...options, args: listArgs });
+    expect(r.exit).toBe(3);
+    expect(readInventory(r.stdout).count).toBe(options.count);
+    expect(r.stderr).toContain("discovery unavailable");
+  },
+);
+
+test("human inventory shows concise rows and availability once per vendor", async () => {
+  const r = await run({
+    args: ["list"],
+    threads: [],
+    output: JSON.stringify(agents),
+  });
+  expect(r.exit).toBe(0);
+  expect(r.stdout).toContain("claude:other-claude");
+  expect(r.stdout).toContain('name="unavailable"');
+  expect(r.stdout).toContain("state=");
+  expect(r.stdout).not.toContain("source=");
+  expect(r.stdout).not.toContain("availability=");
+  expect(r.stdout).not.toContain("thread/loaded/list");
+  expect(r.stdout).not.toContain("claude agents --json");
+  expect(
+    r.stdout.split("\n").filter((line) => line === "codex: available"),
+  ).toHaveLength(1);
+  expect(
+    r.stdout.split("\n").filter((line) => line === "claude: available"),
+  ).toHaveLength(1);
+  expect(r.stdout.split("\n").filter((line) => line.includes("\t"))).toEqual([
+    'claude:claude-id\tname="same"\tcwd="/claude"\tstate="idle"',
+    'claude:other-claude\tname="unavailable"\tcwd="unavailable"\tstate="busy"',
+  ]);
+});
+
+test.each(
+  [
+    ["list", "--to", "codex:peer"],
+    ["list", "--message", "hi"],
+    ["list", "extra"],
+    ["list", "--timeout-ms", "0"],
+    ["send", "--json", "--to", "codex:peer", "--message", "hi"],
+  ].map((args) => ({ args })),
+)(
+  "unsupported list/send combinations fail before discovery: %j",
+  async ({ args }) => {
+    const r = await run({ args });
+    expect(r.exit).toBe(2);
+    expect(r.called).toBe(false);
+  },
+);
+
+test("list bounds a stalled native process", async () => {
+  const r = await run({
+    args: ["list", "--json", "--timeout-ms", "50"],
+    threads: [],
+    output: "[]",
+    delay: 5000,
+  });
+  expect(r.exit).toBe(3);
+  expect(r.stderr).toContain("discovery unavailable");
+});
+
+test("send accepts a literal message equal to the new list flag", async () => {
+  const r = await run({
+    kind: "codex",
+    args: ["send", "--to", "codex:literal-id", "--message=--json"],
+  });
+  expect(r.exit).toBe(0);
+  expect(r.argv).toEqual([
+    "queue",
+    "--thread",
+    "literal-id",
+    "--message",
+    "--json",
+  ]);
+});
+
+test("listing rejects record overflow without inventing a partial vendor inventory", async () => {
+  const output = JSON.stringify(
+    Array.from({ length: 1001 }, (_, i) => ({
+      sessionId: String(i),
+      status: "idle",
+    })),
+  );
+  const r = await run({ args: listArgs, threads: [], output });
+  expect(r.exit).toBe(3);
+  expect(readInventory(r.stdout).count).toBe(0);
+});
+
+const uuidA = "deadbeef-1234-4abc-8def-0123456789ab";
+const uuidB = "deadbeef-2234-4abc-8def-0123456789ab";
+const uuidThreads = [
+  { id: uuidA, name: "first", status: { type: "active" } },
+  { id: uuidB, name: "second", status: { type: "idle" } },
+];
+const sendArgs = (to: string, timeout = "1000") => [
+  "send",
+  "--to",
+  to,
+  "--message",
+  message,
+  "--timeout-ms",
+  timeout,
+];
+
+test("human list short address resolves through the CLI to one exact native send", async () => {
+  const listed = await run({
+    args: ["list"],
+    threads: uuidThreads,
+    output: "[]",
+  });
+  expect(listed.exit).toBe(0);
+  expect(listed.calls).toEqual([["agents", "--json"]]);
+  const address = listed.stdout
+    .split("\n")
+    .find((line) => line.startsWith("codex:deadbeef1"))
+    ?.split("\t")[0];
+  expect(address).toBe("codex:deadbeef1");
+  const sent = await run({
+    kind: "codex",
+    threads: uuidThreads,
+    args: sendArgs(address ?? ""),
+  });
+  expect(sent.exit).toBe(0);
+  expect(sent.calls).toEqual([
+    ["queue", "--thread", uuidA, "--message", message],
+  ]);
+  const json = await run({
+    args: listArgs,
+    threads: uuidThreads,
+    output: "[]",
+  });
+  expect(json.stdout).toContain(`"address":"codex:${uuidA}"`);
+  expect(json.stdout).toContain('"shortAddress":"codex:deadbeef1"');
+});
+
+test.each([
+  { selector: "deadbeef", reason: "matches 2" },
+  { selector: "ffff", reason: "No codex recipient" },
+  { selector: "dead-beef", reason: "canonical hyphens" },
+  { selector: "dea", reason: "4–32" },
+])("prefix refusal makes zero sends: %j", async ({ selector, reason }) => {
+  const r = await run({
+    kind: "codex",
+    threads: uuidThreads,
+    args: sendArgs(`codex:${selector}`),
+  });
+  expect(r.exit).toBe(2);
+  expect(r.stderr).toContain(reason);
+  expect(r.calls).toEqual([]);
+  if (selector === "deadbeef") {
+    expect(r.stderr).toContain(`codex:${uuidA}\tname="first"`);
+    expect(r.stderr.indexOf(uuidA)).toBeLessThan(r.stderr.indexOf(uuidB));
+  }
+});
+
+test("failed selected inventory cannot authorize a prefix send", async () => {
+  const r = await run({
+    kind: "codex",
+    codexError: true,
+    args: sendArgs("codex:dead"),
+  });
+  expect(r.exit).toBe(3);
+  expect(r.stderr).toContain("Cannot prove");
+  expect(r.calls).toEqual([]);
+});
+
+test("Claude prefix queries only Claude, then invokes its unchanged native send path once", async () => {
+  const r = await run({
+    inventory: JSON.stringify([{ sessionId: uuidA, status: "idle" }]),
+    output: stream(use, accepted),
+    args: sendArgs("claude:DEADBEEF-12"),
+  });
+  expect(r.exit).toBe(0);
+  expect(r.calls).toHaveLength(2);
+  expect(r.calls[0]).toEqual(["agents", "--json"]);
+  expect(r.calls[1]?.at(-1)).toContain(`Target: ${JSON.stringify(uuidA)}`);
+  expect(r.calls[1]?.at(-1)).toContain(
+    `Send this exact text once using SendMessage: ${JSON.stringify(message)}`,
+  );
+});
+
+test.each([
+  uuidA.toUpperCase(),
+  uuidA.replaceAll("-", "").toUpperCase(),
+  "opaque-Native",
+])(
+  "full UUID and opaque native names bypass unavailable discovery: %s",
+  async (selector) => {
+    const r = await run({ kind: "codex", args: sendArgs(`codex:${selector}`) });
+    expect(r.exit).toBe(0);
+    expect(r.calls).toEqual([
+      [
+        "queue",
+        "--thread",
+        selector === "opaque-Native" ? selector : uuidA,
+        "--message",
+        message,
+      ],
+    ]);
+  },
+);
+
+test("a registered UUID-shaped exact name wins before UUID validation", async () => {
+  const r = await run({
+    kind: "codex",
+    threads: [{ ...uuidThreads[0]!, name: "dead-beef" }],
+    args: sendArgs("codex:dead-beef"),
+  });
+  expect(r.exit).toBe(0);
+  expect(r.calls).toEqual([["queue", "--thread", uuidA, "--message", message]]);
+});
+
+test.each(
+  [
+    [...sendArgs("codex:dead"), "--invalid"],
+    [...sendArgs("codex:dead"), "--json"],
+  ].map((args) => ({ args })),
+)(
+  "malformed prefix flags reject before starting any CLI: %j",
+  async ({ args }) => {
+    const r = await run({ args });
+    expect(r.exit).toBe(2);
+    expect(r.calls).toEqual([]);
+  },
+);
+
+test.each(["review (v2)", "dead*", "^dead[beef]$", "review? | {v2} \\ done"])(
+  "opaque native name is forwarded literally once, never matched as a prefix: %s",
+  async (name) => {
+    const r = await run({
+      kind: "codex",
+      threads: uuidThreads,
+      args: sendArgs(`codex:${name}`),
+    });
+    expect(r.exit).toBe(0);
+    expect(r.calls).toEqual([
+      ["queue", "--thread", name, "--message", message],
+    ]);
+  },
+);
+
+test("prefix discovery and send share one timeout budget with no retry", async () => {
+  const start = performance.now();
+  const r = await run({
+    inventory: JSON.stringify([{ sessionId: uuidA, status: "idle" }]),
+    inventoryDelay: 550,
+    delay: 550,
+    output: stream(use, accepted),
+    args: sendArgs("claude:dead", "900"),
+  });
+  expect(r.exit).toBe(4);
+  expect(r.stderr).toContain("timed out");
+  expect(r.calls).toHaveLength(2);
+  expect(r.calls[0]).toEqual(["agents", "--json"]);
+  expect(performance.now() - start).toBeLessThan(1200);
+});
+
+test("prefix discovery timeout sends nothing", async () => {
+  const r = await run({
+    inventory: "[]",
+    inventoryDelay: 5000,
+    args: sendArgs("claude:dead", "80"),
+  });
+  expect(r.exit).toBe(3);
+  expect(r.calls).toEqual([["agents", "--json"]]);
 });

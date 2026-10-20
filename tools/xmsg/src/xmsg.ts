@@ -3,6 +3,8 @@ import { cli } from "cleye";
 import packageJson from "../package.json" with { type: "json" };
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { standardCli } from "../../shared/src/cli.ts";
+import { listRecipients, selectedInventory } from "./inventory.ts";
+import { canonicalUuid, resolveRecipientSelector } from "./recipient-prefix.ts";
 import { claudeReceipt } from "./claude-receipt.ts";
 
 function unknown(reason: string): number {
@@ -94,13 +96,22 @@ async function send(
 
 async function main(): Promise<number> {
   const argv = Bun.argv.slice(2);
-  const parse = standardCli(cli, packageJson, () => argv);
+  const parse = standardCli(cli, packageJson, () => [...argv]);
   const parsed = await attempt(() =>
     parse({
       name: "xmsg",
       parameters: ["[action]"],
       strictFlags: true,
+      ignoreArgv(type, flag) {
+        if (type !== "unknown-flag") return;
+        process.stderr.write(`xmsg: unknown flag ${flag}\n`);
+        process.exit(2);
+      },
       flags: {
+        json: {
+          type: Boolean,
+          description: "Machine-readable recipient inventory (list only)",
+        },
         to: {
           type: String,
           description: "Recipient: codex:<thread> or claude:<session>",
@@ -109,12 +120,12 @@ async function main(): Promise<number> {
         timeoutMs: {
           type: Number,
           default: 60_000,
-          description: "Send deadline in milliseconds",
+          description: "Send/discovery deadline in milliseconds",
         },
       },
       help: {
         description:
-          "Send once to an existing session. Exit: 0 accepted, 1 rejected, 2 usage, 3 unreachable, 4 acceptance unknown.",
+          "List discoverable recipients with xmsg list [--json], or send once to an existing session. List exits 0 complete, 3 incomplete. Send exit: 0 accepted, 1 rejected, 2 usage, 3 unreachable, 4 acceptance unknown.",
       },
     }),
   );
@@ -123,17 +134,35 @@ async function main(): Promise<number> {
     return 2;
   }
   const args = parsed.value;
+  if (args._.action === "list") {
+    if (
+      args._.length !== 1 ||
+      args.flags.to !== undefined ||
+      args.flags.message !== undefined ||
+      !Number.isInteger(args.flags.timeoutMs) ||
+      args.flags.timeoutMs < 1 ||
+      args.flags.timeoutMs > 2_147_483_647
+    ) {
+      process.stderr.write(
+        "xmsg: usage: xmsg list [--json] [--timeout-ms N]\n",
+      );
+      return 2;
+    }
+    return listRecipients(args.flags.json ?? false, args.flags.timeoutMs);
+  }
   const match = /^(codex|claude):(.+)$/u.exec(args.flags.to ?? "");
   const kind = match?.[1];
-  const id = match?.[2]?.trim();
+  const id = match?.[2];
   const message = args.flags.message;
   const timeoutMs = args.flags.timeoutMs;
   if (
     args._.action !== "send" ||
+    args.flags.json !== undefined ||
     args._.length !== 1 ||
     (kind !== "codex" && kind !== "claude") ||
     id === undefined ||
     id === "" ||
+    id.trim() !== id ||
     message === undefined ||
     message.length === 0 ||
     !Number.isInteger(timeoutMs) ||
@@ -145,7 +174,38 @@ async function main(): Promise<number> {
     );
     return 2;
   }
-  return send(kind, id, message, timeoutMs);
+  const deadline = performance.now() + timeoutMs;
+  let target = canonicalUuid(id) ?? id;
+  if (canonicalUuid(id) === undefined && /^[0-9a-f-]+$/iu.test(id)) {
+    const { recipients, evidence } = await selectedInventory(kind, timeoutMs);
+    const resolution = resolveRecipientSelector(
+      `${kind}:${id}`,
+      recipients,
+      evidence,
+    );
+    if (!resolution.ok) {
+      process.stderr.write(`xmsg: ${resolution.reason}\n`);
+      process.stderr.write(
+        resolution.candidates
+          .toSorted((a, b) => a.address.localeCompare(b.address))
+          .map(
+            (candidate) =>
+              `${candidate.address}\tname=${JSON.stringify(candidate.name)}\n`,
+          )
+          .join(""),
+      );
+      return evidence.available ? 2 : 3;
+    }
+    target = canonicalUuid(resolution.recipient.id) ?? resolution.recipient.id;
+  }
+  const remaining = Math.floor(deadline - performance.now());
+  if (remaining < 1) {
+    process.stderr.write(
+      "xmsg: discovery exhausted the send deadline; no send attempted\n",
+    );
+    return 3;
+  }
+  return send(kind, target, message, remaining);
 }
 
 if (import.meta.main) {

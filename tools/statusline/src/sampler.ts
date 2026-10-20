@@ -29,6 +29,8 @@ import { render } from "./format.ts";
 import { readCoreRuns } from "./core-runs.ts";
 import { renderField } from "./field-state.ts";
 import { version } from "../package.json";
+import { readFleetSession } from "../../shared/src/fleet-session.ts";
+import { snapshotWithFleetFacts } from "./snapshot-rate.ts";
 
 const plain = (value: string) =>
   value.replaceAll(new RegExp(`${ESC}\\[[0-9;]*m`, "gu"), "");
@@ -61,7 +63,11 @@ export async function publishSnapshots(
     await writeUsageSnapshotAsync(df, Math.floor(at / 1000));
     if (df.sid === undefined) continue;
     const sid = df.sid.replaceAll(/[^A-Za-z0-9_-]/gu, "_");
-    const rows = render(df, { layout: "snapshot" }).split("\n").slice(0, 2);
+    const fleet = await readFleetSession(df.sid);
+    const snapshot = snapshotWithFleetFacts(df, fleet);
+    const rows = render(snapshot, { layout: "snapshot" })
+      .split("\n")
+      .slice(0, 2);
     await writeCacheAsync(join(root, "statusline-session", `${sid}.json`), {
       at,
       rows: rows.map((ansi) => ({ line: plain(ansi), ansi })),

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.14 — 2026-10-20
+
+- Compose same-session Claude limits into published snapshots
+
 ## 0.20.13 — 2026-10-20
 
 - Declare session input provenance, reject mismatched sampled facts, require exact Codex identity, and distinguish redraws from sample freshness.

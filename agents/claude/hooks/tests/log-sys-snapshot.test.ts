@@ -63,16 +63,55 @@ const fire = (home: string, event: string) =>
   );
 
 describe("log-sys-snapshot", () => {
-  test("Stop reads this session's context and rates from the fleet handoff before legacy unavailable rows", async () => {
+  test("fresh statusline rows retain both provider limits and resets over the reduced fleet handoff", async () => {
     const home = homeWithCache(1_000);
     await fleetSessionFixture(home);
     writeSession(home, "s1", [
-      "Ctx: n/a (input has no context percentage)",
-      "Rate: n/a (input has no Claude rate limits)",
+      "Ctx: 609.8k 61%",
+      "Rate: claude 5h 23% ⟳12:34(55% 23%) · 7d 47% ⟳Jan 22 23:45(62% 47%) | codex 5h 31% ⟳14:10(70% 31%) · 7d 52% ⟳Jan 25 08:00(80% 52%) | Jev n/a (usage sample unavailable)",
     ]);
     const msg = body(fire(home, "Stop").stdout);
-    expect(msg).toBe(`Ctx: 120k 60% | Rate: 5h 40% · 7d 60% | ${LINE}`);
-    expect(msg).not.toContain("input has no");
+    expect(msg).toContain("Ctx: 609.8k 61%");
+    expect(msg).toContain("claude 5h 23% ⟳12:34(55% 23%)");
+    expect(msg).toContain("7d 47% ⟳Jan 22 23:45(62% 47%)");
+    expect(msg).toContain("codex 5h 31% ⟳14:10(70% 31%)");
+    expect(msg).toContain("7d 52% ⟳Jan 25 08:00(80% 52%)");
+    expect(msg).toContain("Jev n/a (usage sample unavailable)");
+    expect(msg).not.toContain("Rate: 5h 40% · 7d 60%");
+  });
+
+  test("unavailable published rows fall back to valid same-session fleet facts", async () => {
+    const home = homeWithCache(1_000);
+    await fleetSessionFixture(home);
+    writeSession(home, "s1", ["Ctx: n/a", "Rate: n/a"]);
+    expect(body(fire(home, "Stop").stdout)).toBe(
+      `Ctx: 120k 60% | Rate: 5h 40% · 7d 60% | ${LINE}`,
+    );
+
+    const stale = homeWithCache(1_000);
+    await fleetSessionFixture(stale);
+    writeSession(
+      stale,
+      "s1",
+      ["Ctx: 609k 61%", "Rate: claude 5h 23%"],
+      10 * 60_000,
+    );
+    expect(body(fire(stale, "Stop").stdout)).toBe(
+      `Ctx: 120k 60% | Rate: 5h 40% · 7d 60% | ${LINE}`,
+    );
+  });
+
+  test("fresh provider unavailability keeps its label and reason instead of fleet numbers", async () => {
+    const home = homeWithCache(1_000);
+    await fleetSessionFixture(home);
+    writeSession(home, "s1", [
+      "Ctx: 609.8k 61%",
+      "Rate: claude 5h 23% ⟳12:34 · 7d 47% ⟳Jan 22 23:45 | codex n/a (no fresh Codex rate event) | Jev n/a (usage sample unavailable)",
+    ]);
+    const msg = body(fire(home, "Stop").stdout);
+    expect(msg).toContain("claude 5h 23% ⟳12:34");
+    expect(msg).toContain("codex n/a (no fresh Codex rate event)");
+    expect(msg).not.toContain("5h 40% · 7d 60%");
   });
 
   test("another fleet session never supplies this session's context or rates", async () => {
@@ -85,7 +124,7 @@ describe("log-sys-snapshot", () => {
     const home = homeWithCache(1_000);
     const { session, path } = await fleetSessionFixture(home);
     const na = { na: true, why: "not observed\nthis turn" };
-    writeSession(home, "s1", ["Ctx: 1k 1%", "Rate: 5h 1% · 7d 1%"]);
+    writeSession(home, "s1", ["Ctx: n/a", "Rate: n/a"]);
     await Bun.write(path, JSON.stringify({ ...session, ctx: na, rate: na }));
     expect(body(fire(home, "Stop").stdout)).toBe(
       `Ctx: n/a (not observed this turn) | Rate: n/a (not observed this turn) | ${LINE}`,

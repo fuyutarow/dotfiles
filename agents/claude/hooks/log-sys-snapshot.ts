@@ -67,6 +67,16 @@ function sessionRows(session: FleetSession): string[] {
   );
 }
 
+function publishedSessionRows(sess: unknown): string[] {
+  const rows: string[] = [];
+  for (const r of arr(at(sess, "rows")) ?? []) {
+    const row = strAt(r, "ansi") ?? strAt(r, "line");
+    if (row === undefined || row === "" || hasBareUnavailable(row)) continue;
+    rows.push(row);
+  }
+  return rows;
+}
+
 async function main(): Promise<void> {
   const payload = readStdinJson();
   const event = strAt(payload, "hook_event_name") ?? "";
@@ -98,15 +108,13 @@ async function main(): Promise<void> {
   const sess: unknown = read.ok ? read.value : {};
   const sessAt = at(sess, "at");
   const fresh = typeof sessAt === "number" && now - sessAt <= STALE_MS;
-  let rows = fleet.success ? sessionRows(fleet.data) : [];
-  if (!fleet.success && fresh) {
-    rows = (arr(at(sess, "rows")) ?? []).flatMap((r) => {
-      const row = strAt(r, "ansi") ?? strAt(r, "line");
-      return row === undefined || row === "" || hasBareUnavailable(row)
-        ? []
-        : [row];
-    });
-  }
+  const publishedRows = fresh ? publishedSessionRows(sess) : [];
+  // The statusline publisher owns the complete per-session presentation, including provider
+  // slots and reset windows. Fleet is a reduced handoff, so use it only when that fresh
+  // presentation is unavailable; it remains the same-session fallback.
+  let rows = publishedRows;
+  if (publishedRows.length !== 2 && fleet.success)
+    rows = sessionRows(fleet.data);
   // One record per line: "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: … | Sys: …" — who and where
   // (sessions now span machines), and this event's time (the mobile app shows none), in the
   // prompt's own head shape (prompt-stamp.ts); the separator is SEP.

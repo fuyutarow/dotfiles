@@ -74,12 +74,16 @@ type SettingsCache = Settings & {
   complete: Settings;
 };
 const settingsCache = new Map<string, SettingsCache>();
+type SelectedRollout = {
+  path: string;
+  meta: NonNullable<Awaited<ReturnType<typeof metadata>>>;
+} | null;
 
 // Cache discovery only. Settings and context must reflect appends and replacements
 // immediately, including while this short-lived cross-process lookup is still fresh.
 async function cachedRolloutLookup(
   _key: string,
-  lookup: () => Promise<Awaited<ReturnType<typeof matchingRolloutOnDay>>>,
+  lookup: () => Promise<SelectedRollout>,
 ) {
   return lookup();
 }
@@ -130,16 +134,6 @@ async function rolloutsInDay(dir: string) {
     .slice(0, 100);
 }
 
-async function matchingRolloutOnDay(dir: string, cwd: string) {
-  const candidates = await rolloutsInDay(dir);
-  for (const candidate of candidates) {
-    const meta = await metadata(candidate.path);
-    if (meta?.payload.cwd === cwd && meta.payload.originator === "codex-tui")
-      return { path: candidate.path, meta };
-  }
-  return null;
-}
-
 async function matchingRolloutByThreadOnDay(dir: string, threadId: string) {
   const names = await readdir(dir).catch(() => []);
   const candidates = await Promise.all(
@@ -153,7 +147,8 @@ async function matchingRolloutByThreadOnDay(dir: string, threadId: string) {
         const info = await stat(path).catch(() => null);
         if (info?.isFile() !== true) return null;
         const meta = await metadata(path);
-        return meta?.payload.originator === "codex-tui" &&
+        return (meta?.payload.originator === "codex-tui" ||
+          meta?.payload.originator === "Codex Desktop") &&
           (meta.payload.session_id === threadId || meta.payload.id === threadId)
           ? { path, meta, mtimeMs: info.mtimeMs }
           : null;
@@ -164,22 +159,6 @@ async function matchingRolloutByThreadOnDay(dir: string, threadId: string) {
       .filter((candidate) => candidate !== null)
       .toSorted((a, b) => b.mtimeMs - a.mtimeMs)[0] ?? null
   );
-}
-
-async function matchingRollout(root: string, cwd: string) {
-  const today = Temporal.Now.plainDateISO();
-  for (let offset = 0; offset <= 366; offset++) {
-    const day = today.subtract({ days: offset });
-    const dir = join(
-      root,
-      String(day.year),
-      String(day.month).padStart(2, "0"),
-      String(day.day).padStart(2, "0"),
-    );
-    const match = await matchingRolloutOnDay(dir, cwd);
-    if (match !== null) return match;
-  }
-  return null;
 }
 
 async function matchingRolloutByThread(root: string, threadId: string) {
@@ -203,8 +182,11 @@ async function matchingRolloutBySessionIdOnDay(dir: string, sessionId: string) {
   for (const candidate of candidates) {
     const meta = await metadata(candidate.path);
     if (
-      meta?.payload.originator === "codex-tui" &&
-      (meta.payload.session_id === sessionId || meta.payload.id === sessionId)
+      (meta?.payload.originator === "codex-tui" ||
+        meta?.payload.originator === "Codex Desktop") &&
+      (meta.payload.id === sessionId ||
+        (meta.payload.id === undefined &&
+          meta.payload.session_id === sessionId))
     )
       return { path: candidate.path, meta };
   }
@@ -380,7 +362,7 @@ async function readSettingsSnapshot(
 }
 
 async function readSelectedSessionStatus(
-  selected: Awaited<ReturnType<typeof matchingRolloutOnDay>>,
+  selected: SelectedRollout,
   cwd: string | undefined,
 ): Promise<SessionStatus | undefined> {
   if (selected === null) return undefined;
@@ -416,7 +398,7 @@ async function readSelectedSessionStatus(
   };
 }
 
-/** Select the newest interactive TUI rollout for the cwd and normalize its current turn/context facts. */
+/** Read one declared transcript and normalize its current turn/context facts. */
 export async function readCodexTranscriptStatus(
   path: string,
   cwd: string,
@@ -429,11 +411,10 @@ export async function readCodexSessionStatus(
   cwd: string,
   root = join(process.env.HOME ?? "", ".codex", "sessions"),
 ): Promise<SessionStatus | undefined> {
-  const selected = await cachedRolloutLookup(`cwd:${root}:${cwd}`, () =>
-    matchingRollout(root, cwd),
-  );
-  if (selected !== null && selected.meta.payload.cwd !== cwd) return undefined;
-  return readSelectedSessionStatus(selected, cwd);
+  const sessionId = process.env.CODEX_SESSION_ID?.trim();
+  if (sessionId === undefined || sessionId === "") return undefined;
+  const selected = await readCodexThreadStatus(sessionId, root);
+  return selected?.cwd === cwd ? selected : undefined;
 }
 
 /** Select an interactive TUI rollout by its thread ID from the rollout filename. */

@@ -17,13 +17,25 @@ import {
 } from "../src/session-discovery.ts";
 import { decodedJson } from "./decode.ts";
 import { z } from "../src/zod.ts";
+import { ESC } from "../src/ansi.ts";
+import { encodePresentation, presentation } from "../src/presentation.ts";
+import { version } from "../package.json";
+import {
+  readCodexPinnedSessionStatus,
+  readCodexThreadStatus,
+  readCodexSessionStatus,
+} from "../src/adapters/codex-rollout.ts";
 
 const roots: string[] = [];
 const previousHome = process.env.HOME;
 const previousProcRoot = process.env.STATUSLINE_PROC_ROOT;
+const previousCodexSessionId = process.env.CODEX_SESSION_ID;
+const previousOwnerState = process.env.STATUSLINE_OWNER_STATE;
 afterEach(async () => {
   process.env.HOME = previousHome;
   process.env.STATUSLINE_PROC_ROOT = previousProcRoot;
+  process.env.CODEX_SESSION_ID = previousCodexSessionId;
+  process.env.STATUSLINE_OWNER_STATE = previousOwnerState;
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
@@ -260,6 +272,8 @@ test("finds Claude and Codex only in the selected cwd and builds recorded payloa
   expect(automatic.stdout.toString()).toContain("Opus 4.8");
   expect(automatic.stdout.toString()).toContain("GPT-6.1-Sol");
   expect(automatic.stdout.toString()).toContain("medium");
+  expect(automatic.stdout.toString()).toContain("Codex (transcript)");
+  expect(automatic.stdout.toString()).toContain("Claude (transcript)");
   const output = automatic.stdout.toString();
   for (const label of ["Rate:", "Sys:", "Job:", "codex-session-b"])
     expect(output.split(label)).toHaveLength(2);
@@ -283,6 +297,106 @@ test("finds Claude and Codex only in the selected cwd and builds recorded payloa
   expect(selectedExit, selectedErrors).toBe(0);
   expect(selectedOutput).toContain(claudeId);
   expect(selectedOutput).not.toContain("codex-session-b");
+
+  // A misplaced Claude payload under the Codex key must never supply selected facts.
+  await writeFile(
+    ownerPath,
+    JSON.stringify({
+      schema: 1,
+      fields: {
+        sessions: {
+          at: Temporal.Now.instant().epochMilliseconds,
+          value: sessions,
+        },
+        "session:codex-session-b": {
+          at: Temporal.Now.instant().epochMilliseconds,
+          value: {
+            cwd,
+            sessionId: claudeId,
+            model: { name: "claude-opus-5-5" },
+            context: { inputTokens: 678354 },
+          },
+        },
+      },
+    }),
+  );
+  for (const flags of [["--session", "codex-session-b"], []]) {
+    const picked = Bun.spawnSync([process.execPath, script, ...flags], {
+      cwd,
+      env,
+    });
+    const body = picked.stdout.toString();
+    expect(picked.exitCode, picked.stderr.toString()).toBe(0);
+    expect(body).toContain("Codex (transcript)");
+    expect(body).toContain("codex-session-b");
+    expect(body).toContain("GPT-6.1-Sol");
+    expect(body).toContain("21.0k");
+    const plain = body.replaceAll(new RegExp(`${ESC}\\[[0-9;]*m`, "gu"), "");
+    expect(
+      plain.split("\n").find((line) => line.startsWith("Codex (transcript)")),
+    ).toBe(
+      (
+        await readFile(
+          join(import.meta.dir, "fixtures/selected-codex-source.txt"),
+          "utf8",
+        )
+      ).trim(),
+    );
+    if (flags.length > 0) {
+      expect(body).not.toContain("Opus");
+      expect(body).not.toContain(claudeId);
+      expect(body).not.toContain("input has no Claude");
+    }
+  }
+  const unbound = Bun.spawnSync(
+    [process.execPath, script, "--codex", "--cwd", cwd],
+    {
+      cwd,
+      env: { ...env, CODEX_SESSION_ID: "" },
+    },
+  );
+  expect(unbound.exitCode).toBe(2);
+  expect(unbound.stderr.toString()).toContain("missing Codex runtime identity");
+  expect(unbound.stdout.toString()).not.toContain("GPT");
+  // Exact-ID lookup either returns a session or exits with a diagnostic; it has
+  // no successful "session absent" state and must never fall back to the cwd.
+  for (const flags of [
+    ["--thread", "absent-exact-session"],
+    ["--codex", "--cwd", cwd],
+  ]) {
+    const absent = Bun.spawnSync([process.execPath, script, ...flags], {
+      cwd,
+      env: { ...env, CODEX_SESSION_ID: "absent-exact-session" },
+    });
+    expect(absent.exitCode).toBe(2);
+    expect(absent.stderr.toString()).toContain("absent-exact-session");
+    expect(absent.stdout.toString()).toBe("");
+  }
+  const conflicting = Bun.spawnSync(
+    [process.execPath, script, "--codex", "--session", claudeId],
+    { cwd, env },
+  );
+  expect(conflicting.exitCode).toBe(2);
+  expect(conflicting.stderr.toString()).toContain("use --thread ID");
+  const wrongStdin = Bun.spawnSync(
+    [process.execPath, script, "--session", "codex-session-b"],
+    {
+      cwd,
+      env,
+      stdin: Buffer.from(
+        JSON.stringify({
+          cwd,
+          session_id: claudeId,
+          model: { display_name: "Opus 5.5" },
+        }),
+      ),
+    },
+  );
+  expect(wrongStdin.exitCode).toBe(2);
+  expect(wrongStdin.stderr.toString()).toContain(
+    "stdin session does not match",
+  );
+  expect(wrongStdin.stdout.toString()).toBe("");
 
   // Desktop sessions belong to their rollout cwd, not the app-server's cwd.
   await fs.unlink(join(proc, "102", "cwd"));
@@ -380,6 +494,7 @@ test("Claude stdin payload performs no process discovery", async () => {
   expect(exit, errors).toBe(0);
   expect(output).toContain("stdin-only");
   expect(errors).not.toContain("DISCOVERY_RAN");
+  expect(output).toContain("Claude (stdin)");
 });
 
 test("primary rollout wins over a newer auto-review carrying the same session ID", async () => {
@@ -412,4 +527,100 @@ test("primary rollout wins over a newer auto-review carrying the same session ID
   const sessions = await discoverSessions(cwd);
   expect(sessions).toHaveLength(1);
   expect(sessions[0]?.transcript_path).toBe(primary);
+});
+
+test("exact Desktop identity survives a newer auxiliary rollout and same-cwd session", async () => {
+  const { home, cwd } = await fixture();
+  const day = Temporal.Now.plainDateISO();
+  const root = join(home, ".codex/sessions");
+  const dir = join(
+    root,
+    String(day.year),
+    String(day.month).padStart(2, "0"),
+    String(day.day).padStart(2, "0"),
+  );
+  await mkdir(dir, { recursive: true });
+  for (const [id, sessionId, model, tokens] of [
+    ["desktop-owner", "desktop-owner", "gpt-6.1-sol", 21000],
+    ["auxiliary", "desktop-owner", "gpt-6-luna", 99000],
+    ["same-cwd-newer", "same-cwd-newer", "gpt-6-luna", 88000],
+  ] as const) {
+    await writeFile(
+      join(dir, `rollout-fixture-${id}.jsonl`),
+      [
+        {
+          type: "session_meta",
+          payload: {
+            id,
+            session_id: sessionId,
+            cwd,
+            originator: "Codex Desktop",
+          },
+        },
+        { type: "turn_context", payload: { model, effort: "medium" } },
+        {
+          type: "event_msg",
+          payload: {
+            type: "token_count",
+            info: {
+              last_token_usage: { input_tokens: tokens },
+              model_context_window: 200000,
+            },
+          },
+        },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join("\n") + "\n",
+    );
+  }
+  for (const read of [readCodexThreadStatus, readCodexPinnedSessionStatus]) {
+    const selected = await read("desktop-owner", root);
+    expect(selected?.sessionId).toBe("desktop-owner");
+    expect(selected?.model?.name).toBe("gpt-6.1-sol");
+    expect(selected?.context?.inputTokens).toBe(21000);
+    expect(selected?.context?.usedPercent).toBe(10.5);
+  }
+  process.env.CODEX_SESSION_ID = "";
+  expect(await readCodexSessionStatus(cwd, root)).toBeUndefined();
+  process.env.CODEX_SESSION_ID = "desktop-owner";
+  expect((await readCodexSessionStatus(cwd, root))?.sessionId).toBe(
+    "desktop-owner",
+  );
+});
+
+test("prepared displays require source labels protocol and report sample age separately", async () => {
+  const { home, proc, cwd } = await fixture();
+  process.env.STATUSLINE_OWNER_STATE = join(home, "owner.json");
+  await fakeProcess(proc, 301, "/usr/bin/codex", cwd);
+  const view = encodePresentation({
+    schema: 1,
+    version,
+    at: Temporal.Now.instant().epochMilliseconds - 59000,
+    rows: [
+      {
+        cwd,
+        location: "location",
+        shared: "Rate: codex sampler",
+        sessions: [
+          {
+            id: "selected",
+            pid: 301,
+            line: "Codex (transcript) | Session: selected",
+          },
+        ],
+      },
+    ],
+  });
+  const path = `${process.env.STATUSLINE_OWNER_STATE}.view`;
+  await writeFile(
+    path,
+    view.replace("actions-24h-session-sources-v2", "actions-24h-v1"),
+  );
+  expect(await presentation(cwd)).toBeUndefined();
+  await writeFile(path, view);
+  const output = await presentation(cwd);
+  expect(output).toContain("Codex (transcript) | Session: selected");
+  expect(output).toContain("samples 59s old");
+  // Shared repository rows cannot be reused for a selected session's display.
+  expect(await presentation(cwd, "selected")).toBeUndefined();
 });

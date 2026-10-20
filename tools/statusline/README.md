@@ -15,7 +15,7 @@ printf '%s' '{}' | bun tools/statusline/src/statusline.ts
 statusline
 statusline sessions --cwd . --json
 statusline payload <session-id>
-statusline --codex --cwd "$HOME/dotfiles"
+CODEX_SESSION_ID=<session-id> statusline --codex --cwd "$HOME/dotfiles"
 statusline --codex --thread 01a1291d-5a63-76d3-a760-021ebaabf5f2
 statusline --codex
 bun test tools/statusline/tests
@@ -48,7 +48,7 @@ explain missing fields rather than inventing a percentage or rate.
 | `statusline --codex --watch [--interval N]`             | Explicit live display; `--watch` requires TTY stdout. Interval is finite 1–3600 seconds and only valid in live mode. |
 | `--watch --once`, or Codex-only flags without `--codex` | Usage error (exit 2).                                                                                                |
 
-Live mode selects the initial rollout once, then rereads that session ID on every frame. It never switches to a newer same-directory session. The display uses the alternate screen and hides the cursor while active, then restores terminal state on exit or signal.
+Live mode selects an exact thread, then rereads that session ID on every frame. It never switches to a newer same-directory session. The display uses the alternate screen and hides the cursor while active, then restores terminal state on exit or signal. Its footer describes display redraw frequency; sampler observation ages are independent.
 
 The Claude adapter parses Claude Code statusline JSON on stdin and normalizes it to the provider-neutral
 `SessionStatus` contract; stdout retains the existing ANSI rows and graceful invalid-input messages.
@@ -88,15 +88,15 @@ The repository segment shows the sampled jj workspace name; payload git worktree
 are ignored. Outside a repository there is no workspace-name segment or workspace `here` count.
 
 Codex CLI has no command-driven statusline setting, so tmux renders the Codex adapter outside the
-TUI. `--codex` with no other flags uses the current directory; `--cwd` selects by the supplied
-directory, `--pid` reads the process cwd through `/proc`, and `--thread` selects the
+TUI. `--codex` requires `CODEX_SESSION_ID` unless `--thread` supplies the exact identity;
+`--cwd` constrains that identity to the supplied directory and `--pid` reads that constraint
+through `/proc`. Neither cwd nor PID alone selects a session. `--thread` selects the
 rollout whose filename ends in the supplied thread ID. `--thread` implies `--codex`:
 `statusline --watch --thread <id>` and `statusline --thread <id>` refresh that thread in a terminal
 until interrupted; `--once` or redirected stdout renders one snapshot. Explicit `--watch` requires
 a terminal on stdout. A thread cannot be combined with `--cwd`, `--pid`, `--session`, `--json`,
-or a subcommand; invalid combinations exit 2 with a diagnostic. Cwd and PID selection use the newest rollout
-whose `session_meta.cwd` matches and whose `originator` is `codex-tui`, skipping
-`codex_exec` workers. A snapshot selection with no match prints one dim line and exits; live
+or a subcommand; invalid combinations exit 2 with a diagnostic. Exact thread selection accepts
+`codex-tui` and `Codex Desktop` rollouts, skipping `codex_exec` workers. A snapshot selection with no match prints one dim line and exits; live
 `--watch` keeps polling until it finds a session. Codex
 output omits Claude-only identity, rate-window, diff and cost fields. An unknown thread ID prints
 one error line naming that ID and exits non-zero. The adapter reads bounded
@@ -105,6 +105,36 @@ rate data as explicit n/a slots. tmux checks `pane_current_command`, supplies th
 and refreshes through its existing five-second `status-interval`. Herdr's command entries are
 tab-bar-wide; its pane metadata is display-only, so neither provides tmux's active-pane command
 format.
+
+### Session source evidence (2026-10-19)
+
+Standalone output is a cwd-scoped inventory, not the selected Codex TUI's context. Each session
+line declares `Codex (transcript)`, `Claude (transcript)`, or `Claude (stdin)` and ends with its
+own Session ID. `--session ID` renders only that identity. Sampler session facts are accepted
+only when session ID, cwd, vendor and transcript path agree with the selected inventory entry;
+legacy or mismatched facts are reread from that exact transcript. Prepared displays from the
+older unlabeled protocol are rejected until the sampler republishes them.
+
+Read-only inspection of `~/.local/state/statusline/owner.json` confirmed the reported sessions:
+
+- Codex `01a15424-5f6d-7ce0-9244-eb632a37f579` reads
+  `~/.codex/sessions/2026/10/19/rollout-2026-10-19T21-30-32-01a15424-5f6d-7ce0-9244-eb632a37f579.jsonl`
+  (`session_meta.originator: Codex Desktop`). Its sampled model/effort were GPT-6.1-Sol/medium.
+- Claude `47cecd33-9bd9-42b8-be16-8f17bb0bae76` reads
+  `~/.claude/projects/-home-fuyu-dotfiles/47cecd33-9bd9-42b8-be16-8f17bb0bae76.jsonl`.
+  Its sampled model was Opus 5.5 and context was 678,354 tokens. Both inventory entries had
+  cwd `~/dotfiles`; the different rows were deliberate separate sessions, not evidence of
+  a Codex payload being replaced by Claude.
+
+The Claude transcript reconstruction supplies usage counts but no effort, percentage or rate
+limits. This concretely accounts for the reported missing effort/workflow/context-percent/rate
+inputs; the renderer must not infer them from the neighboring Codex row. Agent name comes from
+the sampler's `name:<Claude ID>` observation; RC comes from its separate `rcState` observation.
+Shared Rate slots have independent owners: Claude windows come from the Claude frame's input
+(absent in transcript reconstruction), model caps from sampled Claude account identity,
+Codex from `fields.codexRate`, and Jev from `fields.jevUsage`. No first-Codex-session rate
+lookup is performed by standalone rendering. A redraw every five seconds can display samples
+59 seconds old because `owner.json.view` is produced independently by the sampler.
 
 Dispatch worker rows show the roster row, elapsed time, cost, worker/workspace name and ticket.
 Session IDs remain in the data and are omitted from worker rows. Legacy `agx-<slug>` worker names

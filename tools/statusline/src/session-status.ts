@@ -3,6 +3,8 @@ import { z } from "./zod.ts";
 export const SessionStatusSchema = z.object({
   cwd: z.string().optional(),
   sessionId: z.string().optional(),
+  vendor: z.enum(["claude", "codex"]).optional(),
+  transcriptPath: z.string().optional(),
   sessionName: z.string().optional(),
   model: z
     .object({ name: z.string().optional(), id: z.string().optional() })
@@ -20,6 +22,8 @@ export const SessionStatusSchema = z.object({
 export interface SessionStatus {
   cwd?: string | undefined;
   sessionId?: string | undefined;
+  vendor?: "claude" | "codex" | undefined;
+  transcriptPath?: string | undefined;
   sessionName?: string | undefined;
   model?: { name?: string | undefined; id?: string | undefined } | undefined;
   context?:

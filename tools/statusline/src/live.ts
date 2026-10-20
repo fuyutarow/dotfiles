@@ -149,7 +149,7 @@ export async function runLive(options: LiveOptions): Promise<number> {
         break;
       }
       process.stdout.write(
-        `${ESC}2J${ESC}H${result.body}\n\n${ESC}2mUpdated every ${options.intervalSeconds}s · q / Ctrl+C to exit${ESC}0m`,
+        `${ESC}2J${ESC}H${result.body}\n\n${ESC}2mDisplay redraw every ${options.intervalSeconds}s · sample ages are separate · q / Ctrl+C to exit${ESC}0m`,
       );
       if (quitting) break;
       if (redrawRequested) continue;

@@ -281,6 +281,7 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
           line: render(frame, {
             layout: "session",
             codex: session.vendor === "codex",
+            source: "transcript",
           }),
         })),
         shared: render(

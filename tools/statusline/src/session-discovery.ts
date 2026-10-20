@@ -393,15 +393,18 @@ export async function statusForSession(
   if (session.vendor === "codex" && !sampledRender) {
     const { readCodexTranscriptStatus } =
       await import("./adapters/codex-rollout.ts");
-    return (
-      (await readCodexTranscriptStatus(
-        session.transcript_path,
-        session.cwd,
-      )) ?? {
-        cwd: session.cwd,
-        sessionId: session.session_id,
-      }
-    );
+    const data = (await readCodexTranscriptStatus(
+      session.transcript_path,
+      session.cwd,
+    )) ?? {
+      cwd: session.cwd,
+      sessionId: session.session_id,
+    };
+    return {
+      ...data,
+      vendor: session.vendor,
+      transcriptPath: session.transcript_path,
+    };
   }
   const payload =
     session.vendor === "codex"
@@ -418,6 +421,8 @@ export async function statusForSession(
   return {
     cwd: payload.cwd,
     sessionId: payload.session_id,
+    vendor: session.vendor,
+    transcriptPath: session.transcript_path,
     effort: payload.effort?.level,
     model:
       payload.model === undefined

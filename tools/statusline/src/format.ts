@@ -67,6 +67,7 @@ export function render(
     codex?: boolean;
     collect?: FieldDisplay;
     layout?: "location" | "session" | "shared" | "block" | "snapshot";
+    source?: "transcript" | "stdin";
   } = {},
 ): string {
   const codex = options.codex === true;
@@ -255,7 +256,10 @@ export function render(
     if (options.layout === "snapshot")
       return [ctxSegment(df, field), rateLine, sysLine].join("\n");
     const location = rows.prompt.kind === "fresh" ? rows.prompt.value : "";
-    const session = [agentLine, identityLine].filter(Boolean).join(SEP);
+    const provenance = `${codex ? "Codex" : "Claude"} (${options.source ?? (codex ? "transcript" : "stdin")})`;
+    const session = [provenance, agentLine, identityLine]
+      .filter(Boolean)
+      .join(SEP);
     const shared = renderRows(rows).split("\n").slice(3).join("\n");
     if (options.layout === "location") return location;
     if (options.layout === "session") return session;

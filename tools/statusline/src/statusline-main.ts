@@ -15,13 +15,7 @@ import { SessionStatusSchema, type SessionStatus } from "./session-status.ts";
 import { promptParts } from "./prompt-stamp.ts";
 import { coloredHead, render } from "./format.ts";
 import { buildDataframe } from "./build-dataframe.ts";
-import type { readLiveCodexRate } from "./codex-rate.ts";
 import { writeStatuslineFleetSession } from "./fleet-session.ts";
-const liveRate: typeof readLiveCodexRate = async (path) => {
-  if (path === undefined) return ok(undefined);
-  const { readLiveCodexRate } = await import("./codex-rate.ts");
-  return readLiveCodexRate(path);
-};
 import { runLive, type LiveFrame } from "./live.ts";
 import { readRenderSessions, readOwnerState } from "./owner-state.ts";
 import {
@@ -88,32 +82,37 @@ async function renderDiscovered(
       `session:${discovered.session_id}`
     ];
     const parsed = SessionStatusSchema.safeParse(saved?.value);
-    const data = parsed.success
-      ? parsed.data
-      : await statusForSession(discovered, true);
+    const data =
+      parsed.success &&
+      parsed.data.sessionId === discovered.session_id &&
+      parsed.data.cwd === discovered.cwd &&
+      parsed.data.vendor === discovered.vendor &&
+      parsed.data.transcriptPath === discovered.transcript_path
+        ? parsed.data
+        : await statusForSession(discovered, true);
     const codex = discovered.vendor === "codex";
     const frame = await buildDataframe(data, {
       ownerSnapshot,
       codex,
-      sources: {
-        codexRate: () =>
-          liveRate(
-            sessions.find((session) => session.vendor === "codex")
-              ?.transcript_path,
-          ),
-        ...(codex ? { agentName: () => Promise.resolve(ok(undefined)) } : {}),
-      },
+      sources: codex ? { agentName: () => Promise.resolve(ok(undefined)) } : {},
     });
     if (sharedFrame === undefined)
       blocks.push(render(frame, { layout: "location" }));
     // Prefer the Claude frame for the shared rate row (it includes all providers).
     if (sharedFrame === undefined || !codex) sharedFrame = frame;
-    blocks.push(render(frame, { codex, layout: "session" }));
+    blocks.push(
+      render(frame, { codex, layout: "session", source: "transcript" }),
+    );
   }
   if (sharedFrame !== undefined && sessionId === undefined)
     sharedFrame.routes = ok(await readCoreRuns(process.env, null, cwd));
   if (sharedFrame !== undefined)
-    blocks.push(render(sharedFrame, { layout: "shared" }));
+    blocks.push(
+      render(sharedFrame, {
+        codex: sessionId !== undefined && sessions[0]?.vendor === "codex",
+        layout: "shared",
+      }),
+    );
   return blocks.join("\n");
 }
 async function renderSelected(sessionId: string): Promise<void> {
@@ -132,14 +131,24 @@ async function renderSelected(sessionId: string): Promise<void> {
     (await ownerSnapshot)?.fields[`session:${selected.session_id}`]?.value,
   );
   const frame = await buildDataframe(
-    saved.success ? saved.data : await statusForSession(selected, true),
+    saved.success &&
+      saved.data.sessionId === selected.session_id &&
+      saved.data.cwd === selected.cwd &&
+      saved.data.vendor === selected.vendor &&
+      saved.data.transcriptPath === selected.transcript_path
+      ? saved.data
+      : await statusForSession(selected, true),
     {
       ownerSnapshot,
       codex: selected.vendor === "codex",
     },
   );
   process.stdout.write(
-    render(frame, { codex: selected.vendor === "codex", layout: "block" }),
+    render(frame, {
+      codex: selected.vendor === "codex",
+      layout: "block",
+      source: "transcript",
+    }),
   );
 }
 async function cwdForPid(pid: string): Promise<string | null> {
@@ -148,8 +157,7 @@ async function cwdForPid(pid: string): Promise<string | null> {
   return null;
 }
 async function codexSession(cwd?: string, pid?: string, threadId?: string) {
-  const { readCodexSessionStatus, readCodexThreadStatus } =
-    await import("./adapters/codex-rollout.ts");
+  const { readCodexThreadStatus } = await import("./adapters/codex-rollout.ts");
   if (pid !== undefined && cwd !== undefined)
     return { session: null, error: "use only one of --pid or --cwd" };
   if (threadId !== undefined && (pid !== undefined || cwd !== undefined))
@@ -175,21 +183,27 @@ async function codexSession(cwd?: string, pid?: string, threadId?: string) {
     cwd ?? (pid === undefined ? currentCwd : await cwdForPid(pid));
   if (selectedCwd === null || selectedCwd === "")
     return { session: null, error: "--codex requires --pid or --cwd" };
-  return {
-    session: await readCodexSessionStatus(selectedCwd),
-    cwd: selectedCwd,
-    error: null,
-  };
+  const runtimeId = process.env.CODEX_SESSION_ID?.trim();
+  if (runtimeId === undefined || runtimeId === "")
+    return {
+      session: null,
+      error:
+        "missing Codex runtime identity; supply --thread ID or CODEX_SESSION_ID (cwd/PID alone cannot select a session)",
+    };
+  const session = await readCodexThreadStatus(runtimeId);
+  if (session === undefined || session.cwd !== selectedCwd)
+    return {
+      session: null,
+      error: `no Codex session ${runtimeId} for ${selectedCwd}`,
+    };
+  return { session, cwd: selectedCwd, error: null };
 }
 const CodexSelectorFlagsSchema = z.object({
   cwd: z.string().optional(),
   pid: z.string().optional(),
   thread: z.string().optional(),
 });
-async function codexSessionFromFlags(
-  flags: unknown,
-  keepWatchingWhenAbsent = false,
-): Promise<SessionStatus | undefined> {
+async function codexSessionFromFlags(flags: unknown): Promise<SessionStatus> {
   const parsedFlags = CodexSelectorFlagsSchema.safeParse(flags);
   if (!parsedFlags.success) {
     const field = parsedFlags.error.issues[0]?.path.map(String).join(".");
@@ -206,13 +220,6 @@ async function codexSessionFromFlags(
   if (selected.error !== null) {
     process.stderr.write(`FATAL: ${selected.error}\n`);
     process.exit(2);
-  }
-  if (selected.session === undefined) {
-    if (keepWatchingWhenAbsent) return undefined;
-    process.stdout.write(
-      `${DIM}Codex: no interactive session for ${selected.cwd}${RST}${args.flags.once === true ? "\n" : ""}`,
-    );
-    process.exit(0);
   }
   return selected.session;
 }
@@ -234,7 +241,7 @@ function parseArguments(argv: string[]) {
         codex: {
           type: Boolean,
           description:
-            "Read the owner's interactive Codex session (defaults to the current directory)",
+            "Read an exact Codex thread (--thread or CODEX_SESSION_ID)",
         },
         pid: {
           type: String,
@@ -342,6 +349,12 @@ if (subcommand !== undefined) {
   process.exit(2);
 }
 const codexMode = args.flags.codex === true || threadMode;
+if (codexMode && args.flags.session !== undefined) {
+  process.stderr.write(
+    "FATAL: --codex cannot be combined with --session; use --thread ID\n",
+  );
+  process.exit(2);
+}
 const onceMode = args.flags.once ?? false;
 const watchMode = args.flags.watch ?? false;
 const intervalText = args.flags.interval ?? watchSeconds;
@@ -401,7 +414,7 @@ if (!codexMode && watchMode) {
 }
 let session: SessionStatus | undefined;
 if (codexMode) {
-  session = await codexSessionFromFlags(args.flags, liveMode);
+  session = await codexSessionFromFlags(args.flags);
 } else if (
   args.flags.pid !== undefined ||
   args.flags.cwd !== undefined ||
@@ -469,7 +482,7 @@ if (liveMode) {
       if (firstFrame) {
         current = pinnedSession;
       } else if (pinnedSession === undefined) {
-        current = await codexSessionFromFlags(args.flags, true);
+        current = await codexSessionFromFlags(args.flags);
       } else {
         const pinnedId = pinnedSession.sessionId;
         if (pinnedId === undefined || pinnedId === "") {

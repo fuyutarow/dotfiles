@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.13 — 2026-10-20
+
+- Declare session input provenance, reject mismatched sampled facts, require exact Codex identity, and distinguish redraws from sample freshness.
+
 ## 0.20.12 — 2026-10-19
 
 - Show recorded GPU stalls and failed probes with a JST timestamp and gpu-sampler --check; suppress alerts while paused.

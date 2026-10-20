@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, open, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -215,4 +215,655 @@ test("missing session clears stale identity tokens and explains the missing file
   expect(calls[1]).toContain("effort=");
   expect(calls[1]).toContain("rc=rc:?");
   expect(calls[1]).toContain("fleet_session_id=");
+});
+
+const footerThread = "01a15424-5f6d-7ce0-9244-eb632a37f579";
+const nextThread = "01a15424-5f6d-7ce0-9244-eb632a37f580";
+const footer = (id = footerThread) =>
+  `› Ask Codex to do anything\n\n  ${id} · GPT-6.1-Sol medium · ~/project · Working\n  ← for agents · ? for shortcuts\n`;
+
+import {
+  bindNativeCodexFooters,
+  nativeFooterId,
+  nativeFooterObservation,
+} from "../src/herdr-projector.ts";
+import { mkdir } from "node:fs/promises";
+import { refreshCodexFleetSession } from "../../shared/src/fleet-session.ts";
+
+test("native footer requires complete status row at viewport bottom and exact shortcuts", () => {
+  expect(nativeFooterId(footer())).toBe(footerThread);
+  for (const text of [
+    `The session is ${footerThread}`,
+    `${footerThread}\n← for agents · ? for shortcuts`,
+    footer().replace(" · Working", ""),
+    footer().replace("← for agents · ? for shortcuts", ""),
+    `${footer()}conversation continues`,
+    `${footer(footerThread).split("\n")[2]}\n${footer(nextThread)}`,
+    footer().replace("GPT-6.1-Sol", "Claude"),
+  ])
+    expect(nativeFooterId(text)).toBeUndefined();
+  expect(nativeFooterId(`prose UUID ${nextThread}\n${footer()}`)).toBe(
+    footerThread,
+  );
+});
+
+async function nativeFixture() {
+  const root = await mkdtemp(join(tmpdir(), "native-footer-"));
+  const dir = join(root, "sessions", "2026", "10", "19");
+  await mkdir(dir, { recursive: true });
+  const env = { CODEX_HOME: root, XDG_RUNTIME_DIR: root, HOME: "/workspace" };
+  const rollout = async (
+    id: string,
+    overrides: Record<string, unknown> = {},
+    suffix = "",
+  ) => {
+    const path = join(dir, `rollout-${suffix}-${id}.jsonl`);
+    await Bun.write(
+      path,
+      [
+        {
+          type: "session_meta",
+          payload: {
+            id,
+            cwd: "/workspace/project",
+            originator: "Codex Desktop",
+            ...overrides,
+          },
+        },
+        {
+          type: "turn_context",
+          payload: { model: "gpt-6.1-sol", effort: "medium" },
+        },
+        {
+          type: "event_msg",
+          payload: {
+            type: "thread_settings_applied",
+            thread_settings: { model: "gpt-6-astra", reasoning_effort: "high" },
+          },
+        },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join("\n") + "\n",
+    );
+    return path;
+  };
+  return {
+    root,
+    dir,
+    env,
+    rollout,
+    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
+  };
+}
+
+test("native footer validates exact rollout then reports identity and normal fleet metadata", async () => {
+  await using fixture = await nativeFixture();
+  await fixture.rollout(footerThread);
+  const agents = [
+    {
+      agent: "codex",
+      pane_id: "pane",
+      tab_id: "tab",
+      cwd: "/workspace/project",
+      agent_session: { value: "stale" },
+    },
+  ];
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const sessions = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(footer()),
+    apply,
+    fixture.env,
+  );
+  expect(calls).toEqual([
+    [
+      "pane",
+      "report-agent-session",
+      "pane",
+      "--source",
+      "dotfiles:herdr-projector",
+      "--agent",
+      "codex",
+      "--agent-session-id",
+      footerThread,
+    ],
+  ]);
+  expect(await readFleetSession(footerThread, fixture.env)).toMatchObject({
+    model: "GPT-6.1-Sol",
+    effort: "medium",
+    session_id: footerThread,
+  });
+  await projectAgents(agents, sessions, apply);
+  expect(calls.at(-1)).toContain(`fleet_session_id=${footerThread}`);
+  expect(calls.at(-1)).toContain("model=GPT-6.1-Sol");
+  await fixture.rollout(nextThread);
+  const next = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(footer(nextThread)),
+    apply,
+    fixture.env,
+  );
+  await projectAgents(agents, next, apply);
+  expect(agents[0]?.agent_session?.value).toBe(nextThread);
+  expect(calls.at(-1)).toContain(`fleet_session_id=${nextThread}`);
+  const missing = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve("missing footer"),
+    apply,
+    fixture.env,
+  );
+  await projectAgents(agents, missing, apply);
+  expect(agents[0]?.agent_session).toBeUndefined();
+  expect(calls.at(-1)).toContain("fleet_session_id=");
+});
+
+const makeAgents = () => [
+  {
+    agent: "codex",
+    pane_id: "pane",
+    tab_id: "tab",
+    cwd: "/workspace/project",
+    agent_session: { value: "stale" },
+  },
+];
+
+test("footer mismatch, ambiguity, and read-time session switch cannot report a native identity", async () => {
+  await using fixture = await nativeFixture();
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  for (const overrides of [
+    { id: nextThread },
+    { cwd: "/different" },
+    { originator: "Claude Code" },
+    { session_id: nextThread },
+  ]) {
+    await fixture.rollout(footerThread, overrides);
+    const agents = makeAgents();
+    expect(
+      (
+        await bindNativeCodexFooters(
+          agents,
+          () => Promise.resolve(footer()),
+          apply,
+          fixture.env,
+        )
+      ).size,
+    ).toBe(0);
+    expect(agents[0]?.agent_session).toBeUndefined();
+  }
+  await fixture.rollout(footerThread);
+  let reads = 0;
+  expect(
+    (
+      await bindNativeCodexFooters(
+        makeAgents(),
+        () =>
+          Promise.resolve(footer(reads++ === 0 ? footerThread : nextThread)),
+        apply,
+        fixture.env,
+      )
+    ).size,
+  ).toBe(0);
+  await fixture.rollout(footerThread, {}, "duplicate");
+  expect(
+    (
+      await bindNativeCodexFooters(
+        makeAgents(),
+        () => Promise.resolve(footer()),
+        apply,
+        fixture.env,
+      )
+    ).size,
+  ).toBe(0);
+  expect(calls.length).toBe(6);
+  expect(calls.every((args) => !args.includes("--agent-session-id"))).toBe(
+    true,
+  );
+});
+
+test("Claude identity is excluded from footer reads and native reports", async () => {
+  const agents = [
+    {
+      agent: "claude",
+      pane_id: "pane",
+      tab_id: "tab",
+      agent_session: { value: "claude-id" },
+    },
+  ];
+  const calls: string[][] = [];
+  let reads = 0;
+  await bindNativeCodexFooters(
+    agents,
+    () => {
+      reads++;
+      return Promise.resolve(footer());
+    },
+    (args) => {
+      calls.push(args);
+      return Promise.resolve(true);
+    },
+  );
+  expect(reads).toBe(0);
+  expect(calls).toEqual([]);
+  expect(agents[0]?.agent_session?.value).toBe("claude-id");
+});
+
+test("bounded exact rollout reads do not inherit stale fleet model when tail has no settings", async () => {
+  await using fixture = await nativeFixture();
+  const path = await fixture.rollout(footerThread);
+  const parsedSeed = FleetSessionSchema.safeParse(
+    session({ vendor: "codex", session_id: footerThread, model: "stale" }),
+  );
+  expect(parsedSeed.success).toBe(true);
+  if (!parsedSeed.success) return;
+  const seed = parsedSeed.data;
+  await Bun.write(
+    path,
+    (await Bun.file(path).text()) +
+      JSON.stringify({
+        type: "response_item",
+        payload: "x".repeat(512 * 1024),
+      }) +
+      "\n",
+  );
+  const result = await refreshCodexFleetSession(seed, fixture.env, path);
+  expect(result).toMatchObject({
+    session_id: footerThread,
+    model: { na: true },
+    effort: { na: true },
+  });
+  await Bun.write(path, "x".repeat(256 * 1024));
+  expect(await refreshCodexFleetSession(seed, fixture.env, path)).toMatchObject(
+    { na: true },
+  );
+});
+
+test("native footer retains model and effort only from the same complete observation", () => {
+  expect(nativeFooterObservation(footer())).toEqual({
+    id: footerThread,
+    model: "GPT-6.1-Sol",
+    effort: "medium",
+    cwd: "~/project",
+    state: "Working",
+  });
+  expect(
+    nativeFooterObservation(footer().replace("GPT-6.1-Sol ", "")),
+  ).toBeUndefined();
+  expect(
+    nativeFooterObservation(footer().replace(" medium", "")),
+  ).toBeUndefined();
+});
+
+test("identical footer projections preserve fleet file inode, content, timestamp and existing observations", async () => {
+  await using fixture = await nativeFixture();
+  await fixture.rollout(footerThread);
+  const prior = session({
+    vendor: "codex",
+    session_id: footerThread,
+    pane_id: "pane",
+    model: "old-model",
+  });
+  expect((await writeFleetSession(prior, fixture.env)).ok).toBe(true);
+  const agents = makeAgents();
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const read = () => Promise.resolve(footer());
+  const first = await bindNativeCodexFooters(agents, read, apply, fixture.env);
+  await projectAgents(agents, first, apply);
+  const path = join(fixture.root, "fleet", "sessions", `${footerThread}.json`);
+  await using original = await open(path, "r");
+  const before = await original.stat({ bigint: true });
+  const content = await readFile(path, "utf8");
+  const observed = await readFleetSession(footerThread, fixture.env);
+  expect(observed).toMatchObject({
+    name: prior.name,
+    ctx: prior.ctx,
+    rate: prior.rate,
+    model: "GPT-6.1-Sol",
+    effort: "medium",
+  });
+  const second = await bindNativeCodexFooters(agents, read, apply, fixture.env);
+  await projectAgents(agents, second, apply);
+  const after = await stat(path, { bigint: true });
+  expect(after.ino).toBe(before.ino);
+  expect(after.mtimeNs).toBe(before.mtimeNs);
+  expect(await readFile(path, "utf8")).toBe(content);
+  expect(second.get(footerThread)).toEqual(first.get(footerThread));
+  const changed = footer().replace("GPT-6.1-Sol medium", "GPT-6-Astra high");
+  const third = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(changed),
+    apply,
+    fixture.env,
+  );
+  await projectAgents(agents, third, apply);
+  expect((await stat(path, { bigint: true })).ino).not.toBe(before.ino);
+  expect(third.get(footerThread)).toMatchObject({
+    model: "GPT-6-Astra",
+    effort: "high",
+    ctx: prior.ctx,
+    rate: prior.rate,
+  });
+  expect(calls.at(-1)).toContain("model=GPT-6-Astra");
+});
+
+test("owner's long rollout displays verified native GPT-6.1-Sol medium without tail settings", async () => {
+  await using fixture = await nativeFixture();
+  const cwd = "/home/fuyu/dotfiles";
+  const path = await fixture.rollout(footerThread, { cwd });
+  await Bun.write(
+    path,
+    (await Bun.file(path).text()) +
+      JSON.stringify({
+        type: "response_item",
+        payload: "x".repeat(512 * 1024),
+      }) +
+      "\n",
+  );
+  const agents = [{ agent: "codex", pane_id: "wK:pY", tab_id: "tab", cwd }];
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const observed = footer().replace("~/project", "~/dotfiles");
+  const sessions = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(observed),
+    apply,
+    { ...fixture.env, HOME: "/home/fuyu" },
+  );
+  expect(sessions.get(footerThread)).toMatchObject({
+    session_id: footerThread,
+    model: "GPT-6.1-Sol",
+    effort: "medium",
+    cwd,
+  });
+  await projectAgents(agents, sessions, apply);
+  expect(calls.at(-1)).toContain("model=GPT-6.1-Sol");
+  expect(calls.at(-1)).toContain("effort=medium");
+});
+
+test("same-thread model, effort, cwd or state changes during validation cannot bind a pane", async () => {
+  await using fixture = await nativeFixture();
+  await fixture.rollout(footerThread);
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  for (const changed of [
+    footer().replace("GPT-6.1-Sol", "GPT-6-Astra"),
+    footer().replace(" medium", " high"),
+    footer().replace("~/project", "~/different"),
+    footer().replace("Working", "Idle"),
+    footer().replace(" medium", ""),
+  ]) {
+    let reads = 0;
+    const agents = makeAgents();
+    const result = await bindNativeCodexFooters(
+      agents,
+      () => Promise.resolve(reads++ === 0 ? footer() : changed),
+      apply,
+      fixture.env,
+    );
+    expect(result.size).toBe(0);
+    expect(agents[0]?.agent_session).toBeUndefined();
+  }
+  expect(calls.every((args) => !args.includes("--agent-session-id"))).toBe(
+    true,
+  );
+  expect(await readFleetSession(footerThread, fixture.env)).toMatchObject({
+    na: true,
+  });
+});
+
+test("footer switch while native report is pending cannot persist stale fleet observations", async () => {
+  await using fixture = await nativeFixture();
+  await fixture.rollout(footerThread);
+  let displayed = footer();
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    if (args.includes("--agent-session-id")) displayed = footer(nextThread);
+    return Promise.resolve(true);
+  };
+  const agents = makeAgents();
+  const result = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(displayed),
+    apply,
+    fixture.env,
+  );
+  expect(result.size).toBe(0);
+  expect(agents[0]?.agent_session).toBeUndefined();
+  expect(calls.at(-1)).toEqual([
+    "pane",
+    "report-agent-session",
+    "pane",
+    "--source",
+    "dotfiles:herdr-projector",
+    "--agent",
+    "codex",
+  ]);
+  expect(await readFleetSession(footerThread, fixture.env)).toMatchObject({
+    na: true,
+  });
+});
+
+const nativeShortcuts = "← for agents · ? for shortcuts";
+const nativeWarning = `${nativeShortcuts}                          ⚠ 1 warning · f2 to view`;
+const nativeSelection =
+  "New activity · Earlier messages available.  ^c copy · enter copy & follow · esc clear";
+const liveFooterWitnesses = [
+  {
+    pane: "w9:p1B",
+    id: "01a15704-c5a0-71d0-89c6-c9cebede0a1a",
+    cwd: "~/Workspace/firedancer",
+    model: "GPT-6.1-Sol",
+    state: "Ready",
+    controls: nativeShortcuts,
+  },
+  {
+    pane: "wK:pY",
+    id: footerThread,
+    cwd: "~/dotfiles",
+    model: "GPT-6.1-Sol",
+    state: "Working",
+    controls: nativeShortcuts,
+  },
+  {
+    pane: "wS:pB",
+    id: "01a14c81-208c-7910-8f3a-5ba99d58cd0b",
+    cwd: "~/Workspace/coralbase",
+    model: "GPT-6.1-Sol",
+    state: "Ready",
+    controls: nativeSelection,
+  },
+  {
+    pane: "wX:p2",
+    id: "01a149f4-46fc-7e70-90eb-1031f5666b61",
+    cwd: "~/Workspace/standard-skills",
+    model: "GPT-6.1-Sol",
+    state: "Ready",
+    controls: nativeWarning,
+  },
+  {
+    pane: "wY:p3",
+    id: "01a15444-ce40-7052-b5e9-d5ec23ce5a4a",
+    cwd: "~/Workspace/research-record-v2",
+    model: "GPT-6.1-Sol",
+    state: "Ready",
+    controls: nativeShortcuts,
+  },
+  {
+    pane: "wZ:p1",
+    id: "01a14aa8-a8bd-7520-a062-ad2fec436099",
+    cwd: "/My Drive/fuyu  sktn/Personal-Drive",
+    model: "GPT-6.1-Sol",
+    state: "Ready",
+    controls: nativeShortcuts,
+  },
+  {
+    pane: "w0:p1",
+    id: "01a14c5e-e08b-7963-8741-4a1beedcf84a",
+    cwd: "~/Workspace/coralbase",
+    model: "GPT-6-Luna",
+    state: "Ready",
+    controls: nativeShortcuts,
+  },
+];
+
+// Acceptance witnesses live only in fixtures; production resolves each explicitly displayed ID.
+test("seven native witnesses bind Ready, warning and selection variants and repeat without fleet writes", async () => {
+  await using fixture = await nativeFixture();
+  const env = { ...fixture.env, HOME: "/home/fuyu" };
+  for (const witness of liveFooterWitnesses) {
+    const cwd = witness.cwd.replace(/^~\//u, `${env.HOME}/`);
+    await fixture.rollout(witness.id, { cwd });
+    const observed = `\n  ${witness.id} · ${witness.model} medium · ${witness.cwd} · ${witness.state}\n  ${witness.controls}\n`;
+    const agents = [
+      {
+        agent: "codex",
+        pane_id: witness.pane,
+        tab_id: "tab",
+        cwd: "/old/shell/alias",
+      },
+    ];
+    const calls: string[][] = [];
+    const apply = (args: string[]) => {
+      calls.push(args);
+      return Promise.resolve(true);
+    };
+    let reads = 0;
+    const read = () => {
+      reads++;
+      return Promise.resolve(observed);
+    };
+    const first = await bindNativeCodexFooters(agents, read, apply, env);
+    expect(reads).toBe(3);
+    expect(first.get(witness.id)).toMatchObject({
+      session_id: witness.id,
+      cwd,
+      model: witness.model,
+      effort: "medium",
+    });
+    await projectAgents(agents, first, apply);
+    expect(calls.at(-1)).toContain(`model=${witness.model}`);
+    expect(calls.at(-1)).toContain("effort=medium");
+    const path = join(fixture.root, "fleet", "sessions", `${witness.id}.json`);
+    await using original = await open(path, "r");
+    const before = await original.stat({ bigint: true });
+    const content = await readFile(path, "utf8");
+    const second = await bindNativeCodexFooters(agents, read, apply, env);
+    expect(second.get(witness.id)).toEqual(first.get(witness.id));
+    const after = await stat(path, { bigint: true });
+    expect(after.ino).toBe(before.ino);
+    expect(after.mtimeNs).toBe(before.mtimeNs);
+    expect(await readFile(path, "utf8")).toBe(content);
+    // Native control variants never waive exact metadata cwd verification.
+    await fixture.rollout(witness.id, { cwd: "/wrong/native/cwd" });
+    expect((await bindNativeCodexFooters(agents, read, apply, env)).size).toBe(
+      0,
+    );
+  }
+});
+
+test("native controls reject extra prose, partial warnings and partial selection rows", () => {
+  for (const controls of [
+    `${nativeShortcuts} prose ${nextThread}`,
+    `${nativeWarning} extra`,
+    `${nativeShortcuts} ⚠ 1 warning`,
+    `${nativeShortcuts} f2 to view`,
+    `${nativeSelection} extra`,
+    "^c copy · enter copy & follow · esc clear",
+    "New activity · Earlier messages available.",
+  ]) {
+    const observed = footer()
+      .replace("Working", "Ready")
+      .replace(nativeShortcuts, controls);
+    expect(nativeFooterObservation(observed)).toBeUndefined();
+  }
+  expect(
+    nativeFooterObservation(
+      `The session ID is ${footerThread}\n${nativeSelection}`,
+    ),
+  ).toBeUndefined();
+});
+
+import { symlink } from "node:fs/promises";
+
+test("native displayed cwd accepts only verified realpath equivalence and ignores stale shell alias", async () => {
+  await using fixture = await nativeFixture();
+  const actual = join(fixture.root, "actual");
+  const alias = join(fixture.root, "alias");
+  await mkdir(actual);
+  await symlink(actual, alias, "dir");
+  await fixture.rollout(footerThread, { cwd: actual });
+  const prior = session({
+    vendor: "codex",
+    session_id: footerThread,
+    cwd: actual,
+    pane_id: "pane",
+  });
+  expect((await writeFleetSession(prior, fixture.env)).ok).toBe(true);
+  const observed = footer()
+    .replace("~/project", alias)
+    .replace("Working", "Ready");
+  const agents = [
+    {
+      agent: "codex",
+      pane_id: "pane",
+      tab_id: "tab",
+      cwd: "/stale/shell/path",
+    },
+  ];
+  const calls: string[][] = [];
+  const apply = (args: string[]) =>
+    Promise.resolve(calls.push(args)).then(() => true);
+  const result = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(observed),
+    apply,
+    fixture.env,
+  );
+  expect(result.get(footerThread)).toMatchObject({
+    cwd: alias,
+    ctx: prior.ctx,
+    rate: prior.rate,
+    name: prior.name,
+  });
+  await fixture.rollout(footerThread, {
+    cwd: join(fixture.root, "nonexistent"),
+  });
+  expect(
+    (
+      await bindNativeCodexFooters(
+        agents,
+        () => Promise.resolve(observed),
+        apply,
+        fixture.env,
+      )
+    ).size,
+  ).toBe(0);
+  expect(
+    (
+      await bindNativeCodexFooters(
+        agents,
+        () => Promise.resolve(footer()),
+        apply,
+        { ...fixture.env, HOME: undefined },
+      )
+    ).size,
+  ).toBe(0);
 });

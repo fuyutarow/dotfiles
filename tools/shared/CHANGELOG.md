@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.5 — 2026-10-20
+
+- Add bounded exact Codex rollout identity and settings reader with fallback-compatible fleet refresh
+
 ## 0.15.4 — 2026-10-19
 
 - Notify the owner desktop once per recorded GPU stall through a systemd path watcher

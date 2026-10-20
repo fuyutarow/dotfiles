@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8 — 2026-10-20
+
+- Validate visible native Codex footer IDs against exact rollout metadata before projecting existing panes
+
 ## 0.1.7 — 2026-10-19
 
 - Trigger projection on fleet session directory changes and poll Herdr panes every 60 seconds

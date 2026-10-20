@@ -1,13 +1,19 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
 import { mkdir, rename } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
+import { attempt } from "../../shared/src/attempt.ts";
 import { standardCli } from "../../shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
 import {
   FleetSessionSchema,
   FleetSessionUnavailableSchema,
   readFleetSession,
+  fleetCwdMatches,
+  codexRolloutPath,
+  readCodexNativeSession,
+  writeFleetSessionIfChanged,
+  type FleetSession,
   type FleetSessionRead,
 } from "../../shared/src/fleet-session.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
@@ -41,10 +47,191 @@ async function run(
     killSignal: "SIGKILL",
   });
   const [output, code] = await Promise.all([
-    new Response(child.stdout).text().catch(() => ""),
+    boundedOutput(child.stdout),
     child.exited,
   ]);
   return code === 0 ? output : undefined;
+}
+
+async function boundedOutput(
+  stream: ReadableStream<Uint8Array>,
+): Promise<string | undefined> {
+  const result = await attempt(async (): Promise<string | undefined> => {
+    const reader = stream.getReader();
+    using _release = {
+      [Symbol.dispose]: () => {
+        reader.releaseLock();
+      },
+    };
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const next = await reader.read();
+      if (next.done) return Buffer.concat(chunks).toString("utf8");
+      size += next.value.length;
+      if (size > 1024 * 1024) {
+        await reader.cancel();
+        return undefined;
+      }
+      chunks.push(next.value);
+    }
+  });
+  return result.ok ? result.value : undefined;
+}
+
+/** Only the complete penultimate native status row, followed by native shortcuts.
+ * The caller requests the visible viewport, never conversation history.
+ */
+export function nativeFooterObservation(text: string):
+  | {
+      id: string;
+      model: string;
+      effort: string;
+      cwd: string;
+      state: string;
+    }
+  | undefined {
+  if (text.length > 8192 || text.includes("\u001B")) return undefined;
+  const rows = text.trimEnd().split(/\r?\n/u);
+  if (rows.length > 5 || rows.length < 2) return undefined;
+  const controls = rows.at(-1)?.trim() ?? "";
+  const shortcuts =
+    /^← for agents · \? for shortcuts(?:[ \t]+⚠ 1 warning · f2 to view)?$/u;
+  const selection =
+    /^New activity · Earlier messages available\.[ \t]+\^c copy · enter copy & follow · esc clear$/u;
+  if (!shortcuts.test(controls) && !selection.test(controls)) return undefined;
+  const shape =
+    /^\s*([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}) · (GPT-[A-Za-z0-9.-]+) (minimal|low|medium|high|xhigh|max|ultra) · ((?:\/|~\/)[^·\r\n]+) · (Working|Ready|Idle|Done|Blocked)\s*$/u;
+  const matches = rows.flatMap((row) => shape.exec(row)?.[1] ?? []);
+  const match = shape.exec(rows.at(-2) ?? "");
+  if (matches.length !== 1 || match === null) return undefined;
+  const [, id, model, effort, cwd, state] = match;
+  if (
+    id === undefined ||
+    model === undefined ||
+    effort === undefined ||
+    cwd === undefined ||
+    state === undefined
+  )
+    return undefined;
+  return { id, model, effort, cwd, state };
+}
+
+export function nativeFooterId(text: string): string | undefined {
+  return nativeFooterObservation(text)?.id;
+}
+
+function nativeFooterCwd(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): string | undefined {
+  if (isAbsolute(cwd)) return cwd;
+  const home = env.HOME;
+  if (!cwd.startsWith("~/") || home === undefined || !isAbsolute(home))
+    return undefined;
+  return join(home, cwd.slice(2));
+}
+
+/** Refresh every Codex pane before the projection cache can skip a cycle. */
+export async function bindNativeCodexFooters(
+  agents: Agent[],
+  readTail: (pane: string) => Promise<string | undefined>,
+  apply: (args: string[]) => Promise<boolean>,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Map<string, FleetSessionRead>> {
+  const sessions = new Map<string, FleetSessionRead>();
+  for (const agent of agents) {
+    if (agent.agent !== "codex") continue;
+    agent.agent_session = undefined; // A previous tick's native ID is never evidence now.
+    if (agent.pane_id === undefined) continue;
+    const pane = agent.pane_id;
+    const footer = nativeFooterObservation((await readTail(pane)) ?? "");
+    if (footer === undefined) continue;
+    const cwd = nativeFooterCwd(footer.cwd, env);
+    if (cwd === undefined) continue;
+    const id = footer.id;
+    const path = await codexRolloutPath(id, env);
+    if (path === undefined) continue;
+    const unknown = {
+      na: true,
+      why: "not observed by native footer projector",
+    } satisfies FleetSessionRead;
+    const existing = FleetSessionSchema.safeParse(
+      await readFleetSession(id, env),
+    );
+    const preserved =
+      existing.success &&
+      existing.data.vendor === "codex" &&
+      (await fleetCwdMatches(existing.data.cwd, cwd))
+        ? existing.data
+        : undefined;
+    const seed: FleetSession = {
+      schema: 1,
+      session_id: id,
+      vendor: "codex",
+      cwd,
+      pane_id: pane,
+      name: preserved?.name ?? unknown,
+      model: unknown,
+      effort: unknown,
+      ctx: preserved?.ctx ?? unknown,
+      rate: preserved?.rate ?? unknown,
+      updated_at: Temporal.Now.instant().toString(),
+    };
+    const refreshed = FleetSessionSchema.safeParse(
+      await readCodexNativeSession(seed, env, path),
+    );
+    if (
+      !refreshed.success ||
+      JSON.stringify(nativeFooterObservation((await readTail(pane)) ?? "")) !==
+        JSON.stringify(footer)
+    )
+      continue;
+    const reported = await apply([
+      "pane",
+      "report-agent-session",
+      pane,
+      "--source",
+      "dotfiles:herdr-projector",
+      "--agent",
+      "codex",
+      "--agent-session-id",
+      id,
+    ]);
+    if (!reported) continue;
+    if (
+      JSON.stringify(nativeFooterObservation((await readTail(pane)) ?? "")) !==
+      JSON.stringify(footer)
+    )
+      continue;
+    const written = await writeFleetSessionIfChanged(
+      { ...refreshed.data, model: footer.model, effort: footer.effort },
+      env,
+    );
+    if (!written.ok) continue;
+    agent.agent_session = { value: id };
+    sessions.set(id, written.value);
+  }
+  // Omitted session fields explicitly report an unavailable native identity.
+  // Do this after failed validation as well as after a missing/clipped footer.
+  for (const agent of agents) {
+    if (
+      agent.agent !== "codex" ||
+      agent.pane_id === undefined ||
+      agent.agent_session?.value !== undefined
+    )
+      continue;
+    await apply([
+      "pane",
+      "report-agent-session",
+      agent.pane_id,
+      "--source",
+      "dotfiles:herdr-projector",
+      "--agent",
+      "codex",
+    ]);
+  }
+  return sessions;
 }
 
 async function agentList(): Promise<Agent[] | undefined> {
@@ -179,6 +366,28 @@ async function project(): Promise<number> {
     return 1;
   }
   const runtime = process.env.XDG_RUNTIME_DIR;
+  let applied = true;
+  const apply = async (args: string[]) => {
+    const ok = await herdr(args);
+    applied = applied && ok;
+    return ok;
+  };
+  const nativeSessions = await bindNativeCodexFooters(
+    agents,
+    (pane) =>
+      run("herdr", [
+        "pane",
+        "read",
+        pane,
+        "--source",
+        "visible",
+        "--format",
+        "text",
+        "--lines",
+        "5",
+      ]),
+    apply,
+  );
   const cacheDir =
     runtime === undefined || runtime === ""
       ? undefined
@@ -192,6 +401,7 @@ async function project(): Promise<number> {
     cachePath === undefined
       ? ""
       : await Bun.file(cachePath)
+          .slice(0, 4096)
           .text()
           .catch(() => ""),
   );
@@ -207,6 +417,7 @@ async function project(): Promise<number> {
     sessionIds.map(async (id) => [id, await readFleetSession(id)] as const),
   );
   const sessions = new Map(results);
+  for (const [id, session] of nativeSessions) sessions.set(id, session);
   const identities = () =>
     [...sessions.entries()]
       .toSorted(([a], [b]) => a.localeCompare(b))
@@ -236,16 +447,11 @@ async function project(): Promise<number> {
         }),
       )
       .digest("hex");
-  if (cached.success && cached.data.key === fingerprint()) {
+  if (applied && cached.success && cached.data.key === fingerprint()) {
     process.stdout.write("herdr-projector: unchanged; projected 0 pane(s)\n");
     return 0;
   }
-  let applied = true;
-  const result = await projectAgents(agents, sessions, async (args) => {
-    const ok = await herdr(args);
-    applied = applied && ok;
-    return ok;
-  });
+  const result = await projectAgents(agents, sessions, apply);
   // A failed mutation must be retried, and cache trouble must not block projection.
   if (applied && cacheDir !== undefined && cachePath !== undefined) {
     await (async () => {

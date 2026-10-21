@@ -19,11 +19,18 @@ import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const argv = process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, () => argv);
-const AgentSchema = z.object({
+export const AgentSchema = z.object({
   agent: z.string().optional(),
   pane_id: z.string().optional(),
   tab_id: z.string().optional(),
-  agent_session: z.object({ value: z.string().optional() }).nullish(),
+  agent_session: z
+    .object({
+      value: z.string().optional(),
+      source: z.string().optional(),
+      kind: z.string().optional(),
+      agent: z.string().optional(),
+    })
+    .nullish(),
   cwd: z.string().optional(),
   tokens: z.record(z.string(), z.string()).nullish(),
 });
@@ -31,6 +38,12 @@ const ListSchema = z.object({
   result: z.object({ agents: z.array(AgentSchema) }),
 });
 type Agent = z.output<typeof AgentSchema>;
+const RegisteredCodexSchema = z.object({
+  source: z.literal("herdr:codex"),
+  kind: z.literal("id"),
+  agent: z.literal("codex"),
+  value: z.string().regex(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u),
+});
 
 async function run(
   command: string,
@@ -141,7 +154,15 @@ export async function bindNativeCodexFooters(
   const sessions = new Map<string, FleetSessionRead>();
   for (const agent of agents) {
     if (agent.agent !== "codex") continue;
-    agent.agent_session = undefined; // A previous tick's native ID is never evidence now.
+    const registered = RegisteredCodexSchema.safeParse(agent.agent_session);
+    // Registration supplies only a provisional display ID. It cannot bind this
+    // pane or refresh a fleet record without an independently observed footer.
+    agent.agent_session = registered.success ? registered.data : undefined;
+    if (registered.success)
+      sessions.set(registered.data.value, {
+        na: true,
+        why: "native footer validation unavailable",
+      });
     if (agent.pane_id === undefined) continue;
     const pane = agent.pane_id;
     const footer = nativeFooterObservation((await readTail(pane)) ?? "");

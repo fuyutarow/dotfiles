@@ -11,6 +11,8 @@ import {
 } from "../../shared/src/fleet-session.ts";
 import { jsonOf } from "../../shared/src/zod.ts";
 import { projectAgents } from "../src/herdr-projector.ts";
+import { AgentSchema } from "../src/herdr-projector.ts";
+import ownerList from "./owner-list-oct21.json" with { type: "json" };
 
 const session = (overrides: Record<string, unknown> = {}) => ({
   schema: 1,
@@ -1054,4 +1056,103 @@ test("complete native footer cannot bind a missing or over-limit exact rollout",
   expect(await readFleetSession(footerThread, fixture.env)).toMatchObject({
     na: true,
   });
+});
+
+test("registration-only native reports cannot refresh prior fleet state without a footer", async () => {
+  await using fixture = await nativeFixture();
+  // This is a fresh list response whose source fields could have been written
+  // by the projector on an earlier pass. The rollout and cwd match too, but
+  // none of that proves this pane still displays the registered session.
+  const parsed = AgentSchema.safeParse({
+    agent: "codex",
+    pane_id: "same-cwd-pane",
+    tab_id: "same-cwd-tab",
+    cwd: "/workspace/project",
+    agent_session: {
+      value: footerThread,
+      source: "herdr:codex",
+      kind: "id",
+      agent: "codex",
+    },
+  });
+  expect(parsed.success).toBe(true);
+  if (!parsed.success) return;
+  const agents = [parsed.data];
+  await fixture.rollout(footerThread);
+  const prior = session({
+    vendor: "codex",
+    session_id: footerThread,
+    cwd: "/workspace/project",
+    pane_id: "old-same-cwd-pane",
+    model: "stale-model",
+    effort: "ultra",
+  });
+  expect((await writeFleetSession(prior, fixture.env)).ok).toBe(true);
+  const path = join(fixture.root, "fleet", "sessions", `${footerThread}.json`);
+  const before = await stat(path, { bigint: true });
+  const content = await readFile(path, "utf8");
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const sessions = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(undefined),
+    apply,
+    fixture.env,
+  );
+  expect(sessions.get(footerThread)).toEqual({
+    na: true,
+    why: "native footer validation unavailable",
+  });
+  expect(agents[0]?.agent_session?.value).toBe(footerThread);
+  expect(calls).toEqual([]);
+  await projectAgents(agents, sessions, apply);
+  const after = await stat(path, { bigint: true });
+  expect(after.ino).toBe(before.ino);
+  expect(after.mtimeNs).toBe(before.mtimeNs);
+  expect(await readFile(path, "utf8")).toBe(content);
+  expect(calls[0]).toEqual([
+    "tab",
+    "rename",
+    "same-cwd-tab",
+    "codex · n/a(session unavailable)",
+  ]);
+  expect(calls[1]).toContain("fleet_session_id=");
+  expect(calls[1]).toContain("model=");
+  expect(calls[1]).toContain("effort=");
+});
+
+test("untrusted provenance receives no provisional display ID", async () => {
+  await using fixture = await nativeFixture();
+  const sourceRow = ownerList.agents[0];
+  expect(sourceRow).toBeDefined();
+  if (sourceRow === undefined) return;
+  for (const override of [
+    { source: "dotfiles:herdr-projector" },
+    { agent: "claude" },
+    { kind: "name" },
+  ]) {
+    const parsed = AgentSchema.safeParse({
+      ...sourceRow,
+      agent_session: { ...sourceRow.agent_session, ...override },
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    const agents = [parsed.data];
+    const calls: string[][] = [];
+    const sessions = await bindNativeCodexFooters(
+      agents,
+      () => Promise.resolve(undefined),
+      (args) => {
+        calls.push(args);
+        return Promise.resolve(true);
+      },
+      fixture.env,
+    );
+    expect(sessions.size).toBe(0);
+    expect(agents[0]?.agent_session).toBeUndefined();
+    expect(calls.at(-1)).not.toContain("--agent-session-id");
+  }
 });

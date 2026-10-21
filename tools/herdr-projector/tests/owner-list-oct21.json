@@ -1,0 +1,9 @@
+{
+  "provenance": "Relevant exact field excerpts from owner-pasted herdr agent list. Capture timestamp/server endpoint not independently supplied. No native inspection by coordinator.",
+  "agents": [
+    {"agent":"codex","agent_session":{"agent":"codex","kind":"id","source":"herdr:codex","value":"01a15424-5f6d-7ce0-9244-eb632a37f579"},"agent_status":"blocked","cwd":"/home/fuyu/dotfiles","pane_id":"wK:pY","revision":165,"tokens":{"fullname":"codex · n/a(no session id)","rc":"rc:?"}},
+    {"agent":"codex","agent_session":{"agent":"codex","kind":"id","source":"herdr:codex","value":"01a15754-405f-7222-9cb9-a4689bfda188"},"agent_status":"working","cwd":"/home/fuyu/Workspace/coralbase","pane_id":"wS:pB","revision":104,"tokens":{"fullname":"codex · n/a(no session id)","rc":"rc:?"}},
+    {"agent":"codex","agent_session":{"agent":"codex","kind":"id","source":"herdr:codex","value":"01a15c22-8ac6-7833-bc4c-af7645942c6d"},"agent_status":"done","cwd":"/home/fuyu/Workspace/retrospectives","pane_id":"wM:p3","tokens":{"effort":"high","fleet_session_id":"01a15c22-8ac6-7833-bc4c-af7645942c6d","fullname":"codex · n/a(name unavailable)","model":"GPT-6.1-Sol","rc":"rc:?"}},
+    {"agent":"claude","agent_session":{"agent":"claude","kind":"id","source":"herdr:claude","value":"20c933cd-8c9d-4702-84ff-b306d19f9c6c"},"cwd":"/home/fuyu/Workspace/polysearch-v1","pane_id":"wG:p1","tokens":{"fullname":"claude · n/a(no session file)","rc":"rc:?"}}
+  ]
+}

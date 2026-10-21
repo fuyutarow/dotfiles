@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.12 — 2026-10-21
+
+- Keep footer-unavailable registrations unavailable and prevent fleet refresh.
+
 ## 0.1.11 — 2026-10-20
 
 - Coalesce fleet update bursts before projection while retaining systemd start limits

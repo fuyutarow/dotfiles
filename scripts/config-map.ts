@@ -109,6 +109,11 @@ const EXCLUDED: readonly {
     why: "test data and examples, read by their tests only",
   },
   {
+    test: (p) =>
+      p === "tools/herdr-projector/evidence/owner-native-validation-oct21.json",
+    why: "retained read-only owner evidence, not deployed configuration",
+  },
+  {
     test: (p) => p.includes(".example."),
     why: "an example, not a configuration",
   },

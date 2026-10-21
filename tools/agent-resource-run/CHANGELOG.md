@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.12 — 2026-10-21
+
+- Require a second identity-safe dxg D-state observation before GPU admission refuses a persistent stall.
+
 ## 1.5.11 — 2026-10-21
 
 - Revalidate tracked GPU task health at admission.

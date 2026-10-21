@@ -66,21 +66,78 @@ The inherited admission receipt and its digest remain available to polysearch's 
 each scope exposes its own cgroup v2 pids.peak. CPU_IDS is compatibility metadata,
 not exclusive affinity. Thread-count environment variables remain bounded.
 
+The runner does not retry a health denial, silently retry a launched command, or enter
+an unbounded admission loop. It performs admission confirmation only; caller retry and
+recovery remain caller responsibilities.
+
+## Bounded caller retry recipe
+
+Use a separate, commandless `--check-only` invocation to decide whether to wait and
+try admission again. This is the one safe prelaunch boundary: `--check-only` rejects a
+command, so no underlying workload can have run in that invocation. Treat it as a
+retryable external-health denial only when **both** of these are true:
+
+- It exits 69 and its runner-produced diagnostic begins `DENY GPU persistent dxg stall`
+  (either the `pid=` form or the `tgid=`/`tid=` form).
+- That same diagnostic contains `observations=2 interval_ms>=3000` and its evidence
+  paths. This is the runner's confirmed two-observation dxg result, not a single D
+  observation or a claim of continuous persistence.
+
+For one caller operation, take at most five commandless admission probes:
+
+1. Before the first probe, set one absolute deadline `D` that is no later than the
+   caller's walltime deadline. The caller must enforce `D` around every probe, wait,
+   and eventual launch; the manifest's `RuntimeMaxSec` is a per-launch limit, not a
+   replacement for this operation-wide deadline.
+2. Run `agent-resource-run --manifest "$manifest" --check-only` with no command. If it
+   admits, make exactly one normal launch invocation before `D` and do not put that
+   invocation in this retry loop.
+3. Only for the confirmed diagnostic above, and only while enough time remains before
+   `D`, wait before probes 2--5. Use base delays of 3, 6, 12, and 24 seconds,
+   respectively; multiply each by independently chosen jitter in `0.8..1.2`, then use
+   `min(30 seconds, jittered delay)`. Stop instead of sleeping or launching past `D`.
+4. Stop after five probes, any other result, or the deadline. Surface the diagnostic to
+   an operator; do not convert exhaustion into a command replay.
+
+`DENY` (69) and flock timeout (75) are status classes, not replay predicates. In a
+normal launch, the runner passes through the underlying command's exit status, so a
+workload may itself return 69 or 75. The launch path also emits unstructured
+human-readable output around scope entry and release. It exposes no machine-verifiable
+``launched`` or ``not launched`` field and `status` cannot reconstruct that outcome.
+Consequently, after any normal launch returns 69 or 75--including output that appears
+to be a scope-entry denial--the caller must report an unknown launch outcome and must
+not blindly replay the command. The same refusal applies when the caller did not retain
+the complete commandless `--check-only` diagnostic above.
+
+Do not retry any of the following as external-health recovery: invalid manifest, policy,
+slot, or job-id declarations (usage diagnostics); incomplete, invalid, unavailable, or
+mismatched admission receipts; unavailable Linux/user-systemd enforcement; duplicate
+job identity; fresh `HOLD RECOVER_VERDICT`; recorded `GPU stall recorded since` state;
+unreadable/invalid process, task, or confirmation evidence; unavailable GPU owner or
+device capacity; an outside/unreceipted holder; or `GPU VRAM budget exceeded`. Repair
+or investigate those conditions instead. The last case is a live sum of declared
+reservations against cached declared device total minus the policy safety margin; it is
+not a measurement of temporarily usable runtime VRAM, and this runner has no separate
+``usable VRAM`` retry diagnostic. DENY 69 and flock timeout 75 retain their separate
+meanings.
+
 A GPU-specific refusal uses live read-only `/proc/<tgid>/stat`,
 `/proc/<tgid>/task/<tid>/stat`, and `wchan` evidence, independent of
 `gpu-owner.json` being paused, stale, or missing `unresponsiveSince`. Every visible
 numeric thread-group entry and its numeric task entries are inspected, including work
-outside admitted scopes. A D-state leader waiting in dxg retains the PID diagnostic. A
-distinct D-state task waiting in dxg refuses with its TGID, TID, revalidated leader and
-task states, wait channel, and leader/task evidence paths; this distinguishes a zombie
-leader from a live blocked task. An unreadable, empty, or zero wait channel for a task
-still in D state fails closed. The task state and its start-time identity are rechecked
-after reading its wait channel, and the thread-group identity is rechecked before a
-refusal: an exited, woken, or reused task/TGID does not establish a live stall.
-Unreadable inventory/stat, malformed stat, or a task inventory that remains unavailable
-for a live thread group fails closed. A known non-dxg wait does not itself refuse GPU
-admission. This admission snapshot does not prove future driver health or prevent a
-stall that begins after the check.
+outside admitted scopes. A first D-state dxg observation is only a candidate. If any
+candidate exists, admission takes one shared, bounded 3-second confirmation delay, then
+requires the same start-time identity to be in D at a dxg wait channel again before
+refusing. This is two observations at least 3 seconds apart, not proof that D persisted
+continuously. A D-state leader reports its PID; a distinct D-state task reports its
+TGID, TID, revalidated leader and task states, wait channel, and evidence paths; this
+distinguishes a zombie leader from a live blocked task. A candidate that exits, wakes,
+or has a reused PID/TID does not establish a stall. An unreadable, empty, or zero wait
+channel for a task still in D state fails closed. Unreadable inventory/stat, malformed
+stat, or a task inventory that remains unavailable for a live thread group also fails
+closed. The fast path with no D/dxg candidate does not sleep. A known non-dxg wait does
+not itself refuse GPU admission. This admission snapshot does not prove future driver
+health or prevent a stall that begins after the check.
 
 Recorded `unresponsiveSince` still refuses admission and names recorded GPU-holding
 PIDs and commands. Missing owner/capacity data also refuses admission; sample age or

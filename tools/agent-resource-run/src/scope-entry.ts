@@ -42,6 +42,8 @@ async function main() {
       safetyMiB === undefined
     )
       return err(new Error("incomplete GPU admission receipt"));
+    // A live dxg candidate is confirmed by the shared bounded two-observation
+    // pass before this scope launches its command.
     const refusal = await gpuAdmissionRefusal(
       { gpu_id, vram_peak_bytes },
       safetyMiB,

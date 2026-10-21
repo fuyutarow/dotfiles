@@ -1,6 +1,6 @@
 {
   "name": "@dotfiles/agent-resource-run",
-  "version": "1.5.11",
+  "version": "1.5.12",
   "private": true,
   "type": "module",
   "bin": {

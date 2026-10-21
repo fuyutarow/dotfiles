@@ -291,8 +291,21 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
           }),
         })),
         shared: render(
-          { ...first, routes: ok(await readCoreRuns(process.env, null, cwd)) },
-          { layout: "shared" },
+          {
+            ...first,
+            routes: ok(
+              await readCoreRuns(
+                process.env,
+                null,
+                cwd,
+                selected.map((session) => session.session_id),
+              ),
+            ),
+          },
+          {
+            layout: "shared",
+            workerSessions: selected.map((session) => session.session_id),
+          },
         ),
       });
     }

@@ -138,7 +138,7 @@ lookup is performed by standalone rendering. A redraw every five seconds can dis
 
 Dispatch worker rows show the roster row, elapsed time, cost, worker/workspace name and ticket.
 Session IDs remain in the data and are omitted from worker rows. Legacy `agx-<slug>` worker names
-display as `agt_<slug>`. The bottom row is optional: it lists pending judgments from this session (`judge N (agx worker judge)`), accepted runs with an unlanded workspace verdict (`land N (mise run land)`), remedy-named doctor findings, and `+N workers in other sessions`. Running workers already have their own rows.
+display as `agt_<slug>`. The bottom row is optional: it lists pending judgments from this session (`judge N (agx worker judge)`), accepted runs with an unlanded workspace verdict (`land N (mise run land)`), remedy-named doctor findings, and the running-worker count outside the exact selected dispatcher session or displayed session inventory. A selected watch session shows that session's workers; an unselected cwd inventory shows workers attributed to any displayed provider session. When the run cache is known to trail the state log, its age is shown immediately.
 
 Storage still reads the canonical `agents/hooks/storage-headroom.toml` as runtime data, resolved
 relative to this package rather than cwd. Only `storageLine` is imported from shared storage code.

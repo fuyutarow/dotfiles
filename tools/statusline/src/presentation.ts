@@ -38,7 +38,7 @@ export function encodePresentation(view: Presentation): string {
       view.schema,
       view.version,
       view.at,
-      "actions-24h-session-sources-v2",
+      "session-inventory-worker-scope-v3",
     ].join("\t"),
     ...view.rows.flatMap((row) => [
       ["row", encode(row.cwd), encode(row.location), encode(row.shared)].join(
@@ -62,7 +62,7 @@ function decodePresentation(text: string): Presentation | undefined {
     magic !== "statusline-view" ||
     schema !== "1" ||
     release !== version ||
-    actionScope !== "actions-24h-session-sources-v2" ||
+    actionScope !== "session-inventory-worker-scope-v3" ||
     !Number.isFinite(at) ||
     at <= 0
   )

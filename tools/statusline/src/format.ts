@@ -68,6 +68,7 @@ export function render(
     collect?: FieldDisplay;
     layout?: "location" | "session" | "shared" | "block" | "snapshot";
     source?: "transcript" | "stdin";
+    workerSessions?: string[];
   } = {},
 ): string {
   const codex = options.codex === true;
@@ -231,7 +232,10 @@ export function render(
     observed(df.jobScanWhy === undefined ? jobValue : undefined, df.jobScanWhy),
   );
   const scan = df.routes?.isOk() === true ? df.routes.value : undefined;
-  const agxBlock = routeLines(scan?.runs ?? [], df.sid).join("\n");
+  const agxBlock = routeLines(
+    scan?.runs ?? [],
+    options.workerSessions ?? df.sid,
+  ).join("\n");
   const bottom = fleetLine(scan);
 
   const rows = {

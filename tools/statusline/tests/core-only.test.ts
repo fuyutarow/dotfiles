@@ -8,6 +8,7 @@ import { ok } from "neverthrow";
 import { render } from "../src/format.ts";
 import * as cp from "node:child_process";
 import { fleetLine } from "../src/fleet-line.ts";
+import { readCoreRuns } from "../src/core-runs.ts";
 
 const root = await mkdtemp(join(tmpdir(), "statusline-core-only-"));
 afterAll(() => rm(root, { recursive: true, force: true }));
@@ -131,13 +132,131 @@ test("fixed core outputs are rendered verbatim; bf3bb781 has no working row and 
     cpuPct: ok(0),
     ram: ok({ pct: 0, frac: "0/1G" }),
   });
-  expect(out).toContain("+11 workers in other sessions");
+  expect(out).toContain("+11 workers outside session here");
   expect(out).not.toContain("outside-home 2");
   expect(out).toContain("tkt_live-ticket");
   expect(out).toContain("0m42s");
   expect(out).not.toContain("finished-ticket");
   expect(out).not.toContain("lost 8");
   expect(out).not.toContain("no event yet");
+});
+
+test("Codex watch scope keeps both dispatcher workers visible beside a Claude session", async () => {
+  const state = join(root, "two-provider-state");
+  await mkdir(state, { recursive: true });
+  const isolatedEnv = {
+    ...env,
+    AGX_NEXT_STATE_DIR: state,
+    XDG_STATE_HOME: state,
+  };
+  const codexSession = "01a15424-5f6d-7ce0-9244-eb632a37f579";
+  const claudeSession = "47cecd33-9bd9-42b8-be16-8f17bb0bae76";
+  const workers = [
+    {
+      id: "c9d536ba-cdc8-4e67-9d44-c3cf52fae384",
+      ticket: "herdr-display-regression-oct21",
+      state: "running",
+      row: "sol-medium",
+      dispatcher_session: codexSession,
+      worker_name: "agt_herdr-display-regression-oct21",
+      workspace_name: "ws_herdr-display-regression-oct21",
+      elapsed_seconds: 137,
+      vendor_session: null,
+    },
+    {
+      id: "73091fb9-7f1a-4c25-b7e5-7336b37a37f5",
+      ticket: "gpu-self-clear-window",
+      state: "running",
+      row: "terra-high",
+      dispatcher_session: codexSession,
+      worker_name: "agt_gpu-self-clear-window",
+      workspace_name: "ws_gpu-self-clear-window",
+      elapsed_seconds: 288,
+      vendor_session: null,
+    },
+    {
+      id: "outside-inventory-worker",
+      ticket: "outside-inventory-worker",
+      state: "running",
+      row: "terra-high",
+      dispatcher_session: "unlisted-session",
+      worker_name: "agt_outside-inventory-worker",
+      workspace_name: "ws_outside-inventory-worker",
+      elapsed_seconds: 60,
+      vendor_session: null,
+    },
+  ];
+  await writeFile(
+    join(state, "current-runs.json"),
+    JSON.stringify({
+      output: JSON.stringify({
+        runs: workers,
+        summary: {
+          running: 3,
+          unattributed: 0,
+          sessions: {
+            [codexSession]: { here: 2, other: 1 },
+            [claudeSession]: { here: 0, other: 3 },
+          },
+          noSession: { here: 0, other: 3 },
+        },
+      }),
+      capturedAt: at,
+      exit: 0,
+    }),
+  );
+
+  const scan = await readCoreRuns(isolatedEnv, codexSession, cwd);
+  expect(scan.sessionScope).toBe(codexSession);
+  expect(scan.fleet).toMatchObject({ here: 2, other: 1, running: 3 });
+  expect(scan.runs.filter((run) => run.alive)).toHaveLength(3);
+  const rows = routeLines(scan.runs, codexSession);
+  expect(rows).toHaveLength(2);
+  expect(rows.join("\n")).toContain("agt_herdr-display-regression-oct21");
+  expect(rows.join("\n")).toContain("agt_gpu-self-clear-window");
+  expect(rows.join("\n")).not.toContain("claude-session-worker");
+  expect(fleetLine(scan)).toContain(
+    `+1 workers outside session ${codexSession}`,
+  );
+
+  const inventory = await readCoreRuns(isolatedEnv, null, cwd, [
+    codexSession,
+    claudeSession,
+  ]);
+  expect(inventory.inventorySessions).toEqual([codexSession, claudeSession]);
+  expect(inventory.fleet).toMatchObject({ here: 2, other: 1, running: 3 });
+  const inventoryRows = routeLines(inventory.runs, inventory.inventorySessions);
+  expect(inventoryRows).toHaveLength(2);
+  expect(inventoryRows.join("\n")).not.toContain("outside-inventory-worker");
+  expect(fleetLine(inventory)).toContain(
+    "+1 workers outside 2 displayed sessions",
+  );
+  const shared = render(
+    {
+      cwd,
+      sid: claudeSession,
+      model: "fixture",
+      wfOn: false,
+      rc: "off",
+      rlModel: [],
+      jobs: [],
+      orphans: 0,
+      routes: ok(inventory),
+      vram: undefined,
+      disks: ok([]),
+      cpuPct: ok(0),
+      ram: ok({ pct: 0, frac: "0/1G" }),
+    },
+    {
+      layout: "shared",
+      workerSessions: inventory.inventorySessions ?? [],
+    },
+  );
+  expect(shared).toContain("agt_herdr-display-regression-oct21");
+  expect(shared).toContain("agt_gpu-self-clear-window");
+  expect(shared).not.toContain("agt_claude-session-worker");
+  expect(shared).not.toContain("agt_outside-inventory-worker");
+  expect(shared).toContain("+1 workers outside 2 displayed sessions");
 });
 
 test("source guard: no run ledger, workspace enumeration, core count folding, or gc refresher", async () => {
@@ -166,7 +285,7 @@ test("agx/ws/doctor row path spawns nothing", async () => {
     .then(async () => {
       const started = performance.now();
       const scan = await agxRouteRunsAsync(env, "here", false, cwd);
-      expect(fleetLine(scan)).toContain("+11 workers in other sessions");
+      expect(fleetLine(scan)).toContain("+11 workers outside session here");
       expect(
         routeLines(scan.runs, "here", 0, scan.fleet).join("\n"),
       ).not.toContain("lost");

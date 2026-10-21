@@ -614,7 +614,10 @@ test("prepared displays require source labels protocol and report sample age sep
   const path = `${process.env.STATUSLINE_OWNER_STATE}.view`;
   await writeFile(
     path,
-    view.replace("actions-24h-session-sources-v2", "actions-24h-v1"),
+    view.replace(
+      "session-inventory-worker-scope-v3",
+      "actions-24h-session-sources-v2",
+    ),
   );
   expect(await presentation(cwd)).toBeUndefined();
   await writeFile(path, view);

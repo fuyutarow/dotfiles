@@ -105,12 +105,22 @@ async function renderDiscovered(
     );
   }
   if (sharedFrame !== undefined && sessionId === undefined)
-    sharedFrame.routes = ok(await readCoreRuns(process.env, null, cwd));
+    sharedFrame.routes = ok(
+      await readCoreRuns(
+        process.env,
+        null,
+        cwd,
+        sessions.map((session) => session.session_id),
+      ),
+    );
   if (sharedFrame !== undefined)
     blocks.push(
       render(sharedFrame, {
         codex: sessionId !== undefined && sessions[0]?.vendor === "codex",
         layout: "shared",
+        ...(sessionId === undefined
+          ? { workerSessions: sessions.map((session) => session.session_id) }
+          : {}),
       }),
     );
   return blocks.join("\n");

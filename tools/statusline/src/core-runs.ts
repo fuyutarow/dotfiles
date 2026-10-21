@@ -28,14 +28,31 @@ export async function readCoreRuns(
   env: NodeJS.ProcessEnv = process.env,
   sessionId?: string | null,
   cwd = process.cwd(),
+  inventorySessions?: string[],
 ): Promise<RouteScan> {
   const snapshot = await readAgxSnapshotAsync(env, cwd);
   // null explicitly selects the repository-wide standalone view, without env fallback.
   const dispatcherSession =
     sessionId === null ? undefined : currentDispatcherSession(sessionId);
+  const displayedSessions =
+    sessionId === null && inventorySessions !== undefined
+      ? [...new Set(inventorySessions)]
+      : undefined;
   const summary = snapshot.summary;
-  const session =
+  const here =
+    displayedSessions === undefined
+      ? undefined
+      : displayedSessions.reduce(
+          (count, id) => count + (summary?.sessions[id]?.here ?? 0),
+          0,
+        );
+  let session =
     summary?.sessions[dispatcherSession ?? ""] ?? summary?.noSession;
+  if (displayedSessions !== undefined)
+    session =
+      summary !== undefined && here !== undefined && here <= summary.running
+        ? { here, other: summary.running - here }
+        : undefined;
   const runs: RouteRun[] = [];
   let unreadable = 0;
   for (const value of snapshot.rows ?? []) {
@@ -72,6 +89,8 @@ export async function readCoreRuns(
   return {
     runs,
     unreadable,
+    sessionScope: dispatcherSession,
+    inventorySessions: displayedSessions,
     actions: {
       judge:
         dispatcherSession === undefined

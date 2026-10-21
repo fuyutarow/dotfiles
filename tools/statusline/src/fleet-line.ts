@@ -33,13 +33,21 @@ export function fleetLine(
       commands.set(command, (commands.get(command) ?? 0) + count);
   }
   for (const [command, count] of commands) parts.push(`⚠ ${command} ${count}`);
-  if ((scan?.fleet?.other ?? 0) > 0)
-    parts.push(`+${scan?.fleet?.other} workers in other sessions`);
+  if ((scan?.fleet?.other ?? 0) > 0) {
+    const count = scan?.fleet?.other;
+    if (scan?.inventorySessions !== undefined)
+      parts.push(
+        `+${count} workers outside ${scan.inventorySessions.length} displayed session${scan.inventorySessions.length === 1 ? "" : "s"}`,
+      );
+    else if (scan?.sessionScope !== undefined)
+      parts.push(`+${count} workers outside session ${scan.sessionScope}`);
+    else parts.push(`+${count} workers in other sessions`);
+  }
   // Event-driven owners have no elapsed-time expiry. A missed publication or
   // failed read names the affected source and keeps its original observation age.
   const stale: string[] = [];
-  if ((scan?.snapshotAgeSecs ?? 0) > 60)
-    stale.push(`stale runs ${scan?.snapshotAgeSecs}s`);
+  if ((scan?.snapshotAgeSecs ?? 0) > 0)
+    parts.push(`stale runs ${scan?.snapshotAgeSecs}s`);
   for (const [name, source] of [
     ["ws", scan?.workspaces],
     ["doctor", scan?.findings],

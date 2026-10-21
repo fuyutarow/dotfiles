@@ -62,7 +62,7 @@ function padDisplay(value: string, width: number, left = false): string {
 }
 export function routeLines(
   runs: RouteRun[],
-  sessionId: string | undefined,
+  sessionId: string | readonly string[] | undefined,
   _unreadable = 0,
   _counts?: Partial<NonNullable<RouteScan["fleet"]>>,
 ): string[] {
@@ -74,11 +74,13 @@ export function routeLines(
     (r) => r.dispatcherSession !== undefined && r.dispatcherSession !== "",
   );
 
-  const dispatcherSession = currentDispatcherSession(sessionId);
-  const own =
-    dispatcherSession === undefined || dispatcherSession === ""
-      ? []
-      : attributed.filter((r) => r.dispatcherSession === dispatcherSession);
+  const dispatcherSessions =
+    typeof sessionId === "string"
+      ? new Set([currentDispatcherSession(sessionId)].filter(Boolean))
+      : new Set(sessionId ?? []);
+  const own = attributed.filter((r) =>
+    dispatcherSessions.has(r.dispatcherSession ?? ""),
+  );
   const shown = own;
   const choices = shown.map((r) => r.choice);
   const elapsed = shown.map((r) =>

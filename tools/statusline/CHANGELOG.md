@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.15 — 2026-10-21
+
+- Watch worker rows now identify their dispatcher session and stale run snapshots immediately.
+
 ## 0.20.14 — 2026-10-20
 
 - Compose same-session Claude limits into published snapshots

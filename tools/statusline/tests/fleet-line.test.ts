@@ -93,6 +93,32 @@ test("doctor findings retain every source kind, omit zero counts, and require a 
   expect(fleetLine(undefined, at)).toBe("");
 });
 
+test("run snapshot lag is visible immediately when the source ledger is newer", () => {
+  expect(
+    fleetLine(
+      {
+        runs: [],
+        unreadable: 0,
+        sessionScope: "codex-session",
+        fleet: { running: 2, here: 1, other: 1, unattributed: 0 },
+        snapshotAgeSecs: 1,
+      },
+      at,
+    ),
+  ).toBe("+1 workers outside session codex-session · stale runs 1s");
+  expect(
+    fleetLine(
+      {
+        runs: [],
+        unreadable: 0,
+        fleet: { running: 0, here: 0, other: 0, unattributed: 0 },
+        snapshotAgeSecs: 1,
+      },
+      at,
+    ),
+  ).toBe("stale runs 1s");
+});
+
 test("fleet counts gc verdicts, including legacy and abandoned, without implying deletion permission", () => {
   expect(workspaceCounts(tsv, at)).toEqual({
     total: 6,
@@ -202,7 +228,7 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
       const scan = await agxRouteRunsAsync(process.env, "here", false);
       const df = {cwd:${JSON.stringify(home)},sid:"here",model:"fixture",wfOn:false,rc:"off",rlModel:[],jobs:[],orphans:0,
         routes:ok(scan),vram:undefined,disks:ok([]),cpuPct:ok(0),ram:ok({pct:0,frac:"0/1G"})};
-      const lines = render(df).split("\\n").filter(line => line.includes("workers in other sessions"));
+      const lines = render(df).split("\\n").filter(line => line.includes("workers outside session"));
       if (${age} >= 0) expect(render(df)).toContain("agt_model-layer@ws_model-layer tkt_model-layer");
       expect(lines).toHaveLength(${age >= 0 ? 1 : 0});
       expect(spawned).not.toHaveBeenCalled();
@@ -212,14 +238,15 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
       { HOME: home, AGX_STATE_DIR: state, XDG_STATE_HOME: state },
     );
     expect(output).toMatchSnapshot(name);
-    if (name === "fresh") expect(output).toBe("+2 workers in other sessions");
+    if (name === "fresh")
+      expect(output).toBe("+2 workers outside session here");
   }
 });
 
 test.each([
-  [2, 2, "+2 workers in other sessions"],
+  [2, 2, "+2 workers outside session here"],
   [2, 0, ""],
-  [0, 3, "+3 workers in other sessions"],
+  [0, 3, "+3 workers outside session here"],
 ] as const)(
   "worker phrase snapshot: here %d, others %d",
   async (here, others, expected) => {
@@ -263,8 +290,8 @@ test.each([
     const lines = text.split("\\n");
     const agx = lines.find(line => line.startsWith("agx "));
     expect(agx).toBeUndefined();
-    expect(text.split("other sessions").length - 1).toBe(${others > 0 ? 1 : 0});
-    console.log(lines.find(line => line.includes("workers in other sessions"))?.split(" · ")[0] ?? "");
+    expect(text.includes("workers outside session")).toBe(${others > 0});
+    console.log(lines.find(line => line.includes("workers outside session"))?.split(" · ")[0] ?? "");
   `,
       { HOME: home, XDG_STATE_HOME: state, AGX_STATE_DIR: state },
     );

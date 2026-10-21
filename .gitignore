@@ -1,7 +1,15 @@
 # Owner: repository maintainers. These are repo-local agent state and tool-owned data.
 /.serena/
 /.agent-state/
+
+# Owner: AGX coordinators. Ticket inputs and coordinator handoffs are runtime state.
+/.agents/tickets/
+/.agents/handoff-*.md
+
+# Owner: agent command framework. System command assets are tool-managed.
 /agents/commands/.system/
+
+# Owner: ccc. Its local data is tool-owned; only the declared settings survive.
 /.cocoindex_code/*
 !/.cocoindex_code/settings.yml
 

@@ -66,16 +66,21 @@ The inherited admission receipt and its digest remain available to polysearch's 
 each scope exposes its own cgroup v2 pids.peak. CPU_IDS is compatibility metadata,
 not exclusive affinity. Thread-count environment variables remain bounded.
 
-A GPU-specific refusal uses live read-only `/proc/<pid>/stat` and `wchan` evidence,
-independent of `gpu-owner.json` being paused, stale, or missing `unresponsiveSince`.
-Every visible numeric process entry is inspected, including processes outside admitted
-scopes. A D-state process waiting in dxg refuses admission and names its PID, state,
-wait channel and evidence paths. An unreadable, empty or zero wait channel for a process
-still in D state fails closed. The state is rechecked after reading its wait channel:
-an exited process or one that has left D state does not establish a live stall.
-Unreadable inventory/stat or malformed stat also fails closed. A known non-dxg wait
-does not itself refuse GPU admission. This process-leader snapshot does not enumerate
-individual threads or prove future driver health.
+A GPU-specific refusal uses live read-only `/proc/<tgid>/stat`,
+`/proc/<tgid>/task/<tid>/stat`, and `wchan` evidence, independent of
+`gpu-owner.json` being paused, stale, or missing `unresponsiveSince`. Every visible
+numeric thread-group entry and its numeric task entries are inspected, including work
+outside admitted scopes. A D-state leader waiting in dxg retains the PID diagnostic. A
+distinct D-state task waiting in dxg refuses with its TGID, TID, revalidated leader and
+task states, wait channel, and leader/task evidence paths; this distinguishes a zombie
+leader from a live blocked task. An unreadable, empty, or zero wait channel for a task
+still in D state fails closed. The task state and its start-time identity are rechecked
+after reading its wait channel, and the thread-group identity is rechecked before a
+refusal: an exited, woken, or reused task/TGID does not establish a live stall.
+Unreadable inventory/stat, malformed stat, or a task inventory that remains unavailable
+for a live thread group fails closed. A known non-dxg wait does not itself refuse GPU
+admission. This admission snapshot does not prove future driver health or prevent a
+stall that begins after the check.
 
 Recorded `unresponsiveSince` still refuses admission and names recorded GPU-holding
 PIDs and commands. Missing owner/capacity data also refuses admission; sample age or

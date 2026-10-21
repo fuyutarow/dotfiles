@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.11 — 2026-10-21
+
+- Revalidate tracked GPU task health at admission.
+
 ## 1.5.10 — 2026-10-21
 
 - Allow six GPU jobs within declared VRAM admission

@@ -1,20 +1,15 @@
-// Names use the same formatter as Claude's launcher/assign hook. Herdr contributes only an
-// existing name's suffix; model and effort must never be read from its possibly stale tokens.
+// Names use the same formatter as Claude's launcher/assign hook. Codex has no native agent-name
+// field, so its authoritative name is generated from the exact thread and cwd. Herdr display
+// tokens are presentation state and never a naming input.
 import { createConnection } from "node:net";
-import {
-  agentNameFor,
-  parseAgentName,
-} from "../../../tools/shared/src/agent-name.ts";
+import { agentNameFor } from "../../../tools/shared/src/agent-name.ts";
 import { jsonOf, z } from "../../hooks/zod.ts";
 
 export function codexAgentName(
   cwd: string,
   threadId: string,
-  existing?: string,
+  _paneDisplayName?: string,
 ): string {
-  const parsed = existing === undefined ? null : parseAgentName(existing);
-  const short = /^agt_([a-z0-9]+)$/u.exec(existing ?? "")?.[1];
-  const inherited = parsed?.role === "agt" ? parsed.id : short;
   // Stable across hook processes and resume, without consulting another vendor's session list.
   const digest = new Bun.CryptoHasher("sha256").update(threadId).digest();
   const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
@@ -22,7 +17,7 @@ export function codexAgentName(
     digest.subarray(0, 4),
     (byte) => alphabet[byte & 31],
   ).join("");
-  return agentNameFor(cwd, "agt", inherited ?? suffix);
+  return agentNameFor(cwd, "agt", suffix);
 }
 
 const PaneReply = jsonOf(
@@ -30,14 +25,14 @@ const PaneReply = jsonOf(
     result: z.object({
       pane: z.object({
         pane_id: z.string(),
-        tokens: z.object({ fullname: z.string().optional() }).optional(),
       }),
     }),
   }),
 );
 
-// Only a successful nameless reply permits minting a suffix. An unavailable server or invalid
-// reply must not overwrite a previously known name. No shell, Claude cache, or global settings.
+// A matching response proves the pane is current. Keep the compatibility shape for the reporter,
+// but never promote a pane display token to Codex identity. No shell, Claude cache, or global
+// settings.
 export async function readHerdrPaneName(): Promise<
   { name: string | undefined } | undefined
 > {
@@ -84,9 +79,7 @@ export async function readHerdrPaneName(): Promise<
       if (end < 0) return;
       const parsed = PaneReply.safeParse(input.slice(0, end));
       const pane = parsed.success ? parsed.data.result.pane : undefined;
-      finish(
-        pane?.pane_id === paneId ? { name: pane.tokens?.fullname } : undefined,
-      );
+      finish(pane?.pane_id === paneId ? { name: undefined } : undefined);
     });
   });
 }

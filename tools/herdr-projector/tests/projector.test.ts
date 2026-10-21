@@ -10,7 +10,11 @@ import {
   type FleetSessionRead,
 } from "../../shared/src/fleet-session.ts";
 import { jsonOf } from "../../shared/src/zod.ts";
-import { projectAgents } from "../src/herdr-projector.ts";
+import { readCodexNativeTitle } from "../../shared/src/codex-native-title.ts";
+import {
+  nativeTitleCacheInputs,
+  projectAgents,
+} from "../src/herdr-projector.ts";
 import { AgentSchema } from "../src/herdr-projector.ts";
 import ownerList from "./owner-list-oct21.json" with { type: "json" };
 
@@ -267,6 +271,14 @@ import {
   readCodexNativeSession,
 } from "../../shared/src/fleet-session.ts";
 
+type NativeTitleBindings = NonNullable<
+  Parameters<typeof bindNativeCodexFooters>[4]
+>;
+type KnownNativeTitle = Extract<
+  Awaited<ReturnType<typeof readCodexNativeTitle>>,
+  { kind: "known" }
+>;
+
 test("native footer requires complete status row at viewport bottom and exact shortcuts", () => {
   expect(nativeFooterId(footer())).toBe(footerThread);
   for (const text of [
@@ -332,6 +344,214 @@ async function nativeFixture() {
     [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
   };
 }
+
+async function writeNativeTitleIndex(
+  fixture: Awaited<ReturnType<typeof nativeFixture>>,
+  id: string,
+  title: string,
+  updatedAt = "2026-10-21T00:00:00.000Z",
+) {
+  await Bun.write(
+    join(fixture.root, "session_index.jsonl"),
+    `${JSON.stringify({ id, thread_name: title, updated_at: updatedAt })}\n`,
+  );
+}
+
+test("bound native title projects Unicode labels and leaves the fleet name canonical", async () => {
+  await using fixture = await nativeFixture();
+  await fixture.rollout(footerThread);
+  await writeNativeTitleIndex(fixture, footerThread, "レビュー 🧭");
+  const prior = session({
+    vendor: "codex",
+    session_id: footerThread,
+    pane_id: "pane",
+    name: "canonical-agt_abcd",
+  });
+  expect((await writeFleetSession(prior, fixture.env)).ok).toBe(true);
+
+  const agents = makeAgents();
+  const calls: string[][] = [];
+  const titles: NativeTitleBindings = new Map();
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const sessions = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(footer()),
+    apply,
+    fixture.env,
+    titles,
+  );
+  expect(titles.get("pane")).toMatchObject({
+    sessionId: footerThread,
+    title: { kind: "known", displayTitle: "レビュー 🧭" },
+  });
+  await projectAgents(agents, sessions, apply, titles);
+  expect(calls[1]).toEqual(["tab", "rename", "tab", "レビュー 🧭"]);
+  expect(calls[2]).toContain("fullname=レビュー 🧭");
+  expect(await readFleetSession(footerThread, fixture.env)).toMatchObject({
+    name: "canonical-agt_abcd",
+    session_id: footerThread,
+  });
+});
+
+test("registration-only identity cannot create a native title binding", async () => {
+  await using fixture = await nativeFixture();
+  await fixture.rollout(footerThread);
+  await writeNativeTitleIndex(fixture, footerThread, "unbound title");
+  const agents = [
+    {
+      agent: "codex",
+      pane_id: "pane",
+      tab_id: "tab",
+      agent_session: {
+        source: "herdr:codex",
+        kind: "id",
+        agent: "codex",
+        value: footerThread,
+      },
+    },
+  ];
+  const titles: NativeTitleBindings = new Map();
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const sessions = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve("no native footer"),
+    apply,
+    fixture.env,
+    titles,
+  );
+  expect(titles.size).toBe(0);
+  await projectAgents(agents, sessions, apply, titles);
+  expect(calls.some((args) => args.includes("unbound title"))).toBe(false);
+});
+
+test("footer switch during native title I/O discards the pending label", async () => {
+  await using fixture = await nativeFixture();
+  await fixture.rollout(footerThread);
+  await writeNativeTitleIndex(fixture, footerThread, "must be discarded");
+  let visible = footer();
+  const titles: NativeTitleBindings = new Map();
+  const agents = makeAgents();
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const readTitle = async (
+    id: string,
+    env: NodeJS.ProcessEnv = process.env,
+  ) => {
+    const result = await readCodexNativeTitle(id, env);
+    visible = footer(nextThread);
+    return result;
+  };
+  await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(visible),
+    apply,
+    fixture.env,
+    titles,
+    readTitle,
+  );
+  expect(titles.size).toBe(0);
+  expect(await readFleetSession(footerThread, fixture.env)).toMatchObject({
+    na: true,
+  });
+  expect(calls.some((args) => args.includes("--agent-session-id"))).toBe(true);
+});
+
+test("unavailable native title replaces a prior known label with fleet fallback", async () => {
+  await using fixture = await nativeFixture();
+  await fixture.rollout(footerThread);
+  await writeNativeTitleIndex(fixture, footerThread, "previous title");
+  const prior = session({
+    vendor: "codex",
+    session_id: footerThread,
+    pane_id: "pane",
+    name: "canonical-agt_abcd",
+  });
+  expect((await writeFleetSession(prior, fixture.env)).ok).toBe(true);
+  const agents = makeAgents();
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const knownTitles: NativeTitleBindings = new Map();
+  const known = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(footer()),
+    apply,
+    fixture.env,
+    knownTitles,
+  );
+  await projectAgents(agents, known, apply, knownTitles);
+  expect(calls.some((args) => args.includes("previous title"))).toBe(true);
+
+  await Bun.write(
+    join(fixture.root, "session_index.jsonl"),
+    `${JSON.stringify({
+      id: nextThread,
+      thread_name: "other",
+      updated_at: "2026-10-21T00:00:00.000Z",
+    })}\n`,
+  );
+  const unavailableTitles: NativeTitleBindings = new Map();
+  const unavailable = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(footer()),
+    apply,
+    fixture.env,
+    unavailableTitles,
+  );
+  expect(unavailableTitles.get("pane")).toMatchObject({
+    title: { kind: "unavailable" },
+  });
+  await projectAgents(agents, unavailable, apply, unavailableTitles);
+  expect(calls.at(-2)).toEqual(["tab", "rename", "tab", "canonical-agt_abcd"]);
+  expect(calls.at(-1)).toContain("fullname=canonical-agt_abcd");
+});
+
+test("native title cache inputs react to source changes but ignore observation time", () => {
+  const title = (
+    overrides: Partial<KnownNativeTitle> = {},
+  ): KnownNativeTitle => ({
+    kind: "known",
+    sessionId: footerThread,
+    displayTitle: "thread one",
+    sourceUpdatedAt: "2026-10-21T00:00:00.000Z",
+    observedAt: "2026-10-21T00:00:01.000Z",
+    ...overrides,
+  });
+  const inputs = (result: KnownNativeTitle) => {
+    const titles: NativeTitleBindings = new Map([
+      ["pane", { sessionId: footerThread, title: result }],
+    ]);
+    return JSON.stringify(nativeTitleCacheInputs(titles));
+  };
+  const baseline = inputs(title());
+  expect(
+    inputs(
+      title({
+        observedAt: "2026-10-21T00:01:00.000Z",
+      }),
+    ),
+  ).toBe(baseline);
+  expect(inputs(title({ displayTitle: "thread renamed" }))).not.toBe(baseline);
+  expect(
+    inputs(
+      title({
+        sourceUpdatedAt: "2026-10-21T00:02:00.000Z",
+      }),
+    ),
+  ).not.toBe(baseline);
+});
 
 test("native footer validates exact rollout then reports identity and normal fleet metadata", async () => {
   await using fixture = await nativeFixture();

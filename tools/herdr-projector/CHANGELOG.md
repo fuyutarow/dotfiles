@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.13 — 2026-10-21
+
+- Project native Codex titles after verified footer binding
+
 ## 0.1.12 — 2026-10-21
 
 - Keep footer-unavailable registrations unavailable and prevent fleet refresh.

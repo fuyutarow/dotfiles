@@ -15,6 +15,10 @@ import {
   type FleetSession,
   type FleetSessionRead,
 } from "../../shared/src/fleet-session.ts";
+import {
+  readCodexNativeTitle,
+  type CodexNativeTitleRead,
+} from "../../shared/src/codex-native-title.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const argv = process.argv.slice(2);
@@ -38,6 +42,7 @@ const ListSchema = z.object({
   result: z.object({ agents: z.array(AgentSchema) }),
 });
 type Agent = z.output<typeof AgentSchema>;
+type PaneTitleBinding = { sessionId: string; title: CodexNativeTitleRead };
 const RegisteredCodexSchema = z.object({
   source: z.literal("herdr:codex"),
   kind: z.literal("id"),
@@ -150,6 +155,8 @@ export async function bindNativeCodexFooters(
   readTail: (pane: string) => Promise<string | undefined>,
   apply: (args: string[]) => Promise<boolean>,
   env: NodeJS.ProcessEnv = process.env,
+  titles: Map<string, PaneTitleBinding> = new Map(),
+  readTitle: typeof readCodexNativeTitle = readCodexNativeTitle,
 ): Promise<Map<string, FleetSessionRead>> {
   const sessions = new Map<string, FleetSessionRead>();
   for (const agent of agents) {
@@ -217,6 +224,7 @@ export async function bindNativeCodexFooters(
       id,
     ]);
     if (!reported) continue;
+    const title = await readTitle(id, env);
     if (
       JSON.stringify(nativeFooterObservation((await readTail(pane)) ?? "")) !==
       JSON.stringify(footer)
@@ -229,6 +237,7 @@ export async function bindNativeCodexFooters(
     if (!written.ok) continue;
     agent.agent_session = { value: id };
     sessions.set(id, written.value);
+    titles.set(pane, { sessionId: id, title });
   }
   // Omitted session fields explicitly report an unavailable native identity.
   // Do this after failed validation as well as after a missing/clipped footer.
@@ -296,6 +305,7 @@ export async function projectAgents(
   agents: Agent[],
   sessions: ReadonlyMap<string, FleetSessionRead>,
   apply: (args: string[]) => Promise<boolean>,
+  titles: ReadonlyMap<string, PaneTitleBinding> = new Map(),
 ): Promise<number> {
   let updated = 0;
   for (const agent of agents) {
@@ -303,14 +313,8 @@ export async function projectAgents(
     const vendor = agent.agent;
     const herdrSessionId = agent.agent_session?.value;
     const sessionId = herdrSessionId;
-    let candidate =
+    const candidate =
       sessionId === undefined ? undefined : sessions.get(sessionId);
-    if (
-      candidate === undefined &&
-      sessionId !== undefined &&
-      herdrSessionId === undefined
-    )
-      candidate = await readFleetSession(sessionId);
     const parsedCandidate = FleetSessionSchema.safeParse(candidate);
     let session: FleetSessionRead | undefined;
     if (
@@ -337,8 +341,20 @@ export async function projectAgents(
       identity !== undefined && typeof identity.name === "string"
         ? identity.name
         : undefined;
+    const titleBinding =
+      agent.pane_id === undefined ? undefined : titles.get(agent.pane_id);
+    const nativeTitle =
+      vendor === "codex" &&
+      sessionId !== undefined &&
+      identity?.vendor === "codex" &&
+      identity.session_id === sessionId &&
+      titleBinding?.sessionId === sessionId &&
+      titleBinding.title.sessionId === sessionId &&
+      titleBinding.title.kind === "known"
+        ? titleBinding.title.displayTitle
+        : undefined;
     const why = sessionWhy(session);
-    const name = knownName ?? unavailableLabel(agent, why);
+    const name = nativeTitle ?? knownName ?? unavailableLabel(agent, why);
     const model =
       identity !== undefined && typeof identity.model === "string"
         ? identity.model
@@ -375,6 +391,25 @@ export async function projectAgents(
   return 0;
 }
 
+export function nativeTitleCacheInputs(
+  titles: ReadonlyMap<string, PaneTitleBinding>,
+) {
+  return [...titles.entries()]
+    .toSorted(([a], [b]) => a.localeCompare(b))
+    .map(([paneId, binding]) => ({
+      paneId,
+      boundId: binding.sessionId,
+      title:
+        binding.title.kind === "known"
+          ? {
+              kind: binding.title.kind,
+              value: binding.title.displayTitle,
+              sourceUpdatedAt: binding.title.sourceUpdatedAt,
+            }
+          : { kind: binding.title.kind, reason: binding.title.reason },
+    }));
+}
+
 async function project(): Promise<number> {
   const agents = await agentList();
   if (agents === undefined) {
@@ -390,6 +425,7 @@ async function project(): Promise<number> {
     applied = applied && ok;
     return ok;
   };
+  const titleBindings = new Map<string, PaneTitleBinding>();
   const nativeSessions = await bindNativeCodexFooters(
     agents,
     (pane) =>
@@ -405,6 +441,8 @@ async function project(): Promise<number> {
         "5",
       ]),
     apply,
+    process.env,
+    titleBindings,
   );
   const cacheDir =
     runtime === undefined || runtime === ""
@@ -462,6 +500,7 @@ async function project(): Promise<number> {
           version: cliPackage.version,
           panes,
           identities: identities(),
+          titles: nativeTitleCacheInputs(titleBindings),
         }),
       )
       .digest("hex");
@@ -469,7 +508,7 @@ async function project(): Promise<number> {
     process.stdout.write("herdr-projector: unchanged; projected 0 pane(s)\n");
     return 0;
   }
-  const result = await projectAgents(agents, sessions, apply);
+  const result = await projectAgents(agents, sessions, apply, titleBindings);
   // A failed mutation must be retried, and cache trouble must not block projection.
   if (applied && cacheDir !== undefined && cachePath !== undefined) {
     await (async () => {

@@ -345,9 +345,9 @@ test("owner declarations select only the declared shared surfaces", async () => 
   ]);
   expect(declarations[0]).toMatchObject({
     trunk: "alpha",
-    command: ["sh", "-c", "jj-commit --help >/dev/null && mise-contract"],
+    command: ["mise-contract"],
     surfaces: ["package-bins"],
-    bins: ["jj-commit", "mise-contract"],
+    bins: ["mise-contract"],
   });
   expect(declarations[0]?.setup).toBeUndefined();
   expect(declarations[0]?.preset_dirs).toBeUndefined();

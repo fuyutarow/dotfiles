@@ -6,9 +6,9 @@ name = "retrospectives"
 root = "/home/fuyu/Workspace/retrospectives"
 trunk = "alpha"
 surfaces = ["package-bins"]
-bins = ["jj-commit", "mise-contract"]
-# Owner request 2026-10-19: only the house bins remain shared; no dx or TS preset.
-command = ["sh", "-c", "jj-commit --help >/dev/null && mise-contract"]
+bins = ["mise-contract"]
+# dx land owns acceptance; only mise-contract remains shared.
+command = ["mise-contract"]
 timeout_ms = 120000
 
 [[consumers]]

@@ -39,8 +39,20 @@ never accepted as a send receipt. Success requires `success: true` and a `msg_id
 | 0    | Accepted: Codex queue succeeded, or a Claude tool_result confirms acceptance |
 | 1    | Rejected/error reported by the transport                                     |
 | 2    | Invalid usage, invalid/missing selector, or ambiguous prefix                   |
-| 3    | CLI unavailable, or required discovery unavailable/incomplete                 |
-| 4    | Acceptance unknown: timeout, failed Claude run, or no confirmed tool_result  |
+| 3    | CLI unavailable, required discovery unavailable/incomplete, or a complete Claude relay trace confirms no `SendMessage` was attempted |
+| 4    | Acceptance unknown: timeout, failed Claude run, malformed/incomplete trace, multiple sends, or a called `SendMessage` without one correlated receipt |
+
+A Claude no-send result requires a zero exit, parseable stream records, and a final
+`result/success` record with a string `result` field. Each top-level tool use must
+have exactly one later result. Captured non-action metadata frames are accepted
+only for known shapes; unknown frame types or subtypes remain unknown. The diagnostic
+says `no SendMessage attempted`; this differs from a called send with a missing or malformed receipt,
+which remains acceptance-unknown exit **4**. Model prose and absence of a success
+receipt alone never prove no-send. The top-level assistant/user roles must agree,
+tool-result IDs must match one earlier tool-use ID exactly once, and content blocks
+must use recognized text/tool-use/tool-result shapes. Orphan results, malformed
+possible tool uses, nested or unrecognized frames, and inconsistent roles fail
+closed as unknown. No outcome is retried automatically.
 
 The default send deadline is 60 seconds; `--timeout-ms N` changes it. Required discovery and
 the subsequent send share this single budget. A timeout can occur after
@@ -100,6 +112,10 @@ JSON contains `recipients`,
 `id`, `shortAddress`, nullable `name`/`cwd`, `state`, `availability`, `source`, and
 `observedAt` (observation time, not last activity). Registration/loading is discovery
 evidence, not a delivery, read receipt, or guarantee the recipient remains available.
+The Claude receipt parser correlates a top-level `SendMessage` call ID and the exact
+message text, but it receives no verified shared identity field for the destination.
+Claude registration UUIDs therefore are not proven to identify relay-visible peers;
+this parser change does not establish or infer that mapping.
 
 List exits **0** only when both inventories complete, including a genuinely empty result;
 **3** means at least one backend is unavailable, failed, timed out, exceeded bounds or

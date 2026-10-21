@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 — 2026-10-22
+
+- Distinguish complete Claude relay no-send traces from unknown acceptance
+
 ## 0.2.1 — 2026-10-21
 
 - Allow unqualified globally unique UUIDs, UUID prefixes and exact native names only after complete discovery of both vendors.

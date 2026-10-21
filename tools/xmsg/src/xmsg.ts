@@ -85,11 +85,17 @@ async function send(
     return 0;
   }
   const receipt = claudeReceipt(output, message);
+  if (code !== 0) return unknown(`claude exited ${code}`);
+  if (receipt?.accepted === "no-send") {
+    process.stderr.write(
+      "xmsg: no SendMessage attempted; Claude relay completed without delivery\n",
+    );
+    return 3;
+  }
   if (receipt?.accepted === false) {
     process.stderr.write("xmsg: SendMessage rejected the request\n");
     return 1;
   }
-  if (code !== 0) return unknown(`claude exited ${code}`);
   if (receipt === undefined)
     return unknown("no confirmed SendMessage tool_result");
   process.stdout.write(

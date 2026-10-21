@@ -39,8 +39,111 @@ const result = (content: unknown, toolUseId = "send-1", isError = false) => ({
 const accepted = result([
   { type: "text", text: JSON.stringify({ success: true, msg_id: msgId }) },
 ]);
+const listUse = {
+  type: "assistant",
+  message: {
+    role: "assistant",
+    content: [
+      { type: "tool_use", id: "list-1", name: "ListAgents", input: {} },
+    ],
+  },
+};
+const listResult = result("[]", "list-1");
+const nativeMetadata = [
+  {
+    type: "system",
+    subtype: "hook_started",
+    hook_event: "SessionStart",
+    hook_id: "fake-hook-id",
+    hook_name: "fake-hook",
+    session_id: "fake-session",
+    uuid: "fake-hook-start",
+  },
+  {
+    type: "system",
+    subtype: "hook_response",
+    exit_code: 0,
+    hook_event: "SessionStart",
+    hook_id: "fake-hook-id",
+    hook_name: "fake-hook",
+    outcome: "success",
+    output: "",
+    session_id: "fake-session",
+    stderr: "",
+    stdout: "",
+    uuid: "fake-hook-response",
+  },
+  {
+    type: "system",
+    subtype: "init",
+    session_id: "fake-session",
+    uuid: "fake-init",
+  },
+  {
+    type: "system",
+    subtype: "thinking_tokens",
+    estimated_tokens: 12,
+    estimated_tokens_delta: 4,
+    session_id: "fake-session",
+    uuid: "fake-thinking-tokens",
+  },
+  {
+    type: "system",
+    subtype: "informational",
+    content: "fake metadata",
+    level: "info",
+    session_id: "fake-session",
+    uuid: "fake-info",
+  },
+  {
+    type: "rate_limit_event",
+    rate_limit_info: {},
+    session_id: "fake-session",
+    uuid: "fake-rate-limit",
+  },
+];
+const nativeThinking = {
+  type: "assistant",
+  message: {
+    role: "assistant",
+    content: [
+      { type: "thinking", signature: "fake-signature", thinking: "fake" },
+    ],
+  },
+};
+const successfulEnd = {
+  type: "result",
+  subtype: "success",
+  result: "fake completion",
+  api_error_status: null,
+  duration_api_ms: 1,
+  duration_ms: 2,
+  fast_mode_disabled_reason: "",
+  fast_mode_state: "off",
+  first_content_frame_ms: 1,
+  is_error: false,
+  modelUsage: {},
+  num_turns: 1,
+  permission_denials: [],
+  queued_turn_count: 0,
+  result_index: 0,
+  safety_stops: 0,
+  session_id: "fake-session",
+  stop_reason: "end_turn",
+  subagent_stats: {},
+  terminal_reason: "completed",
+  time_to_request_ms: 1,
+  total_cost_usd: 0,
+  ttft_ms: 1,
+  ttft_stream_ms: 1,
+  usage: {},
+  uuid: "fake-result",
+};
+const errorEnd = { ...successfulEnd, subtype: "error", is_error: true };
 const stream = (...events: unknown[]) =>
   events.map((event) => JSON.stringify(event)).join("\n") + "\n";
+const completeStream = (...events: unknown[]) =>
+  stream(...events, successfulEnd);
 
 afterAll(async () => {
   await Promise.all(
@@ -204,7 +307,7 @@ process.exit(Number(process.env.XMSG_FAKE_EXIT ?? 0));
 }
 
 test("Claude acceptance requires a correlated tool result and hard tool restriction", async () => {
-  const r = await run({ output: stream(use, accepted) });
+  const r = await run({ output: completeStream(use, accepted) });
   expect(r.exit).toBe(0);
   expect(r.stdout).toContain(msgId);
   expect(r.argv).toContain("--tools=ListAgents,SendMessage");
@@ -214,8 +317,115 @@ test("Claude acceptance requires a correlated tool result and hard tool restrict
   expect(r.argv.at(-1)).toContain(JSON.stringify(message));
 });
 
+test("a complete clean relay with zero SendMessage calls is unavailable, not unknown", async () => {
+  const r = await run({ output: completeStream() });
+  expect(r.exit).toBe(3);
+  expect(r.stderr).toContain("no SendMessage attempted");
+  expect(r.stderr).not.toContain("acceptance unknown");
+  expect(r.stdout).not.toContain("accepted for");
+});
+
 test.each([
-  ["model text alone", stream({ type: "result", result: "XMSG_ACCEPTED" })],
+  ["orphan tool_result", result("orphan", "unseen-call")],
+  [
+    "wrong-role SendMessage event",
+    { ...use, message: { ...use.message, role: "user" } },
+  ],
+  [
+    "malformed possible tool_use",
+    {
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: "send-malformed", input: { message } },
+        ],
+      },
+    },
+  ],
+])("Claude %s cannot prove zero sends", async (_name, event) => {
+  const r = await run({ output: completeStream(event) });
+  expect(r.exit).toBe(4);
+  expect(r.stderr).toContain("acceptance unknown");
+  expect(r.stderr).not.toContain("no SendMessage attempted");
+});
+
+test("a correlated ListAgents use/result permits a complete no-send result", async () => {
+  const r = await run({
+    output: completeStream(
+      ...nativeMetadata,
+      listUse,
+      listResult,
+      nativeThinking,
+    ),
+  });
+  expect(r.exit).toBe(3);
+  expect(r.stderr).toContain("no SendMessage attempted");
+  expect(r.stderr).not.toContain("acceptance unknown");
+});
+
+test("an unpaired ListAgents use prevents complete no-send classification", async () => {
+  const r = await run({ output: completeStream(listUse) });
+  expect(r.exit).toBe(4);
+  expect(r.stderr).toContain("acceptance unknown");
+  expect(r.stderr).not.toContain("no SendMessage attempted");
+});
+
+test("terminal relay prose is not a receipt and does not imply a send", async () => {
+  const r = await run({ output: stream(successfulEnd) });
+  expect(r.exit).toBe(3);
+  expect(r.stderr).toContain("no SendMessage attempted");
+  expect(r.stdout).not.toContain("accepted for");
+});
+
+test("contradictory native result envelope cannot prove no-send", async () => {
+  const r = await run({ output: stream(errorEnd) });
+  expect(r.exit).toBe(4);
+  expect(r.stderr).toContain("acceptance unknown");
+  expect(r.stderr).not.toContain("no SendMessage attempted");
+});
+
+test("one called SendMessage without a receipt remains unknown after clean completion", async () => {
+  const r = await run({ output: completeStream(use) });
+  expect(r.exit).toBe(4);
+  expect(r.stderr).toContain("acceptance unknown");
+  expect(r.stderr).not.toContain("no SendMessage attempted");
+  expect(r.stderr).toContain("do not resend without checking");
+});
+
+test.each([
+  ["malformed line", "not JSON\n"],
+  ["malformed result frame", stream({ type: "result" })],
+  ["missing successful terminal record", stream()],
+])("Claude %s cannot prove no-send", async (_name, output) => {
+  const r = await run({ output });
+  expect(r.exit).toBe(4);
+  expect(r.stderr).toContain("acceptance unknown");
+  expect(r.stderr).not.toContain("no SendMessage attempted");
+});
+
+test("multiple top-level SendMessage calls remain unknown", async () => {
+  const secondUse = {
+    ...use,
+    message: {
+      ...use.message,
+      content: [
+        {
+          type: "tool_use",
+          id: "send-2",
+          name: "SendMessage",
+          input: { to: "peer", message },
+        },
+      ],
+    },
+  };
+  const r = await run({ output: completeStream(use, secondUse, accepted) });
+  expect(r.exit).toBe(4);
+  expect(r.stderr).toContain("acceptance unknown");
+  expect(r.stderr).not.toContain("no SendMessage attempted");
+});
+
+test.each([
   ["missing tool_result", stream(use)],
   ["missing tool_use", stream(accepted)],
   [
@@ -284,7 +494,7 @@ test.each([
 });
 
 test("a child failure cannot turn a tool receipt into success", async () => {
-  const r = await run({ output: stream(use, accepted), exit: 1 });
+  const r = await run({ output: completeStream(use, accepted), exit: 1 });
   expect(r.exit).toBe(4);
   expect(r.stdout).not.toContain("accepted for");
 });

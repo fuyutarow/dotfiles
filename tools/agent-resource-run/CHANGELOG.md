@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.13 — 2026-10-21
+
+- Confirm persistent unavailable task wchan evidence before denying GPU admission.
+
 ## 1.5.12 — 2026-10-21
 
 - Require a second identity-safe dxg D-state observation before GPU admission refuses a persistent stall.

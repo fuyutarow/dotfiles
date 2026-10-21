@@ -154,7 +154,7 @@ type ThreadGroup = {
   startTime: string | undefined;
   statPath: string;
 };
-type DxgCandidate =
+type DStateCandidate =
   | {
       kind: "leader";
       pid: string;
@@ -172,11 +172,12 @@ type DxgCandidate =
       leaderStatPath: string;
       taskStatPath: string;
       wchanPath: string;
+      initialWchan: "dxg" | "unavailable";
       observedAt: number;
     };
-type DxgObservation = {
-  candidate?: DxgCandidate;
-  candidates?: DxgCandidate[];
+type DStateObservation = {
+  candidate?: DStateCandidate;
+  candidates?: DStateCandidate[];
   refusal?: string;
 };
 type GpuAdmissionOptions = {
@@ -193,7 +194,7 @@ async function leaderDxgObservation(
   wchanPath: string,
   initialStat: string,
   now: () => number,
-): Promise<DxgObservation> {
+): Promise<DStateObservation> {
   const startTime = procStartTime(initialStat);
   if (startTime === undefined)
     return {
@@ -253,7 +254,7 @@ async function taskDxgRefusal(
   taskBase: string,
   tid: string,
   now: () => number,
-): Promise<DxgObservation> {
+): Promise<DStateObservation> {
   const taskStatPath = join(taskBase, "stat");
   const taskStat = await optionalText(taskStatPath);
   if (taskStat.isErr())
@@ -309,11 +310,11 @@ async function taskDxgRefusal(
     };
   if (currentLeaderStartTime !== leader.startTime) return {};
   const wchan = channel.unwrapOr(undefined)?.trim();
+  let initialWchan: "dxg" | "unavailable" | undefined;
   if (wchan === undefined || wchan === "" || wchan === "0")
-    return {
-      refusal: `GPU task D-state wait channel unavailable tgid=${leader.tgid} tid=${tid} leader_state=${currentLeaderState}; evidence=${wchanPath}`,
-    };
-  if (/dxg/iu.test(wchan))
+    initialWchan = "unavailable";
+  else if (/dxg/iu.test(wchan)) initialWchan = "dxg";
+  if (initialWchan !== undefined)
     return {
       candidate: {
         kind: "task",
@@ -324,6 +325,7 @@ async function taskDxgRefusal(
         leaderStatPath: leader.statPath,
         taskStatPath,
         wchanPath,
+        initialWchan,
         observedAt: now(),
       },
     };
@@ -333,14 +335,14 @@ async function taskGroupDxgRefusal(
   procRoot: string,
   leader: ThreadGroup,
   now: () => number,
-): Promise<DxgObservation> {
+): Promise<DStateObservation> {
   const taskRoot = join(procRoot, leader.tgid, "task");
   const taskDirectory = await fromAsyncThrowable(() => opendir(taskRoot))();
   if (taskDirectory.isErr()) {
     const refusal = await taskInventoryRefusal(taskRoot, leader);
     return refusal === undefined ? {} : { refusal };
   }
-  const candidates: DxgCandidate[] = [];
+  const candidates: DStateCandidate[] = [];
   const scanned = await fromAsyncThrowable(
     async (): Promise<string | undefined> => {
       for await (const task of taskDirectory.value) {
@@ -367,7 +369,7 @@ async function taskGroupDxgRefusal(
   return { candidates };
 }
 async function confirmedLeaderDxgRefusal(
-  candidate: Extract<DxgCandidate, { kind: "leader" }>,
+  candidate: Extract<DStateCandidate, { kind: "leader" }>,
 ): Promise<string | undefined> {
   const stat = await optionalText(candidate.statPath);
   if (stat.isErr())
@@ -397,7 +399,7 @@ async function confirmedLeaderDxgRefusal(
   return `GPU persistent dxg stall pid=${candidate.pid} state=D wchan=${wchan}; observations=2 interval_ms>=${DXG_CONFIRMATION_INTERVAL_MS}; evidence=${candidate.statPath},${candidate.wchanPath}`;
 }
 async function confirmedTaskDxgRefusal(
-  candidate: Extract<DxgCandidate, { kind: "task" }>,
+  candidate: Extract<DStateCandidate, { kind: "task" }>,
 ): Promise<string | undefined> {
   const task = await optionalText(candidate.taskStatPath);
   if (task.isErr())
@@ -450,20 +452,25 @@ async function confirmedTaskDxgRefusal(
   )
     return undefined;
   const wchan = channel.unwrapOr(undefined)?.trim();
-  if (wchan === undefined || wchan === "" || wchan === "0")
+  if (wchan === undefined || wchan === "" || wchan === "0") {
+    if (candidate.initialWchan === "unavailable")
+      return `GPU persistent D-state wait channel unavailable tgid=${candidate.tgid} tid=${candidate.tid} leader_state=${currentLeaderState} task_state=D; observations=2 interval_ms>=${DXG_CONFIRMATION_INTERVAL_MS}; evidence=${candidate.leaderStatPath},${candidate.taskStatPath},${candidate.wchanPath}`;
     return `GPU task D-state wait channel unavailable tgid=${candidate.tgid} tid=${candidate.tid}; evidence=${candidate.wchanPath}`;
+  }
   if (!/dxg/iu.test(wchan)) return undefined;
+  if (candidate.initialWchan === "unavailable")
+    return `GPU persistent D-state mixed wait-channel evidence tgid=${candidate.tgid} tid=${candidate.tid} leader_state=${currentLeaderState} task_state=D initial_wchan=unavailable confirmed_wchan=${wchan}; observations=2 interval_ms>=${DXG_CONFIRMATION_INTERVAL_MS}; evidence=${candidate.leaderStatPath},${candidate.taskStatPath},${candidate.wchanPath}`;
   return `GPU persistent dxg stall tgid=${candidate.tgid} tid=${candidate.tid} leader_state=${currentLeaderState} task_state=D wchan=${wchan}; observations=2 interval_ms>=${DXG_CONFIRMATION_INTERVAL_MS}; evidence=${candidate.leaderStatPath},${candidate.taskStatPath},${candidate.wchanPath}`;
 }
 async function confirmedDxgRefusal(
-  candidate: DxgCandidate,
+  candidate: DStateCandidate,
 ): Promise<string | undefined> {
   return candidate.kind === "leader"
     ? confirmedLeaderDxgRefusal(candidate)
     : confirmedTaskDxgRefusal(candidate);
 }
 async function confirmedDxgCandidates(
-  candidates: readonly DxgCandidate[],
+  candidates: readonly DStateCandidate[],
   now: () => number,
   sleep: (milliseconds: number) => Promise<void>,
 ): Promise<string | undefined> {
@@ -546,7 +553,7 @@ export async function gpuAdmissionRefusal(
   const now = options.now ?? (() => performance.now());
   const sleep =
     options.sleep ?? ((milliseconds: number) => Bun.sleep(milliseconds));
-  const candidates: DxgCandidate[] = [];
+  const candidates: DStateCandidate[] = [];
   // Inspect live process state independently of the sampler's paused/cache state.
   // This is host-wide: a dxg wait outside a runner scope can stall this GPU too.
   const procEntries = await fromAsyncThrowable(() => readdir(procRoot))();

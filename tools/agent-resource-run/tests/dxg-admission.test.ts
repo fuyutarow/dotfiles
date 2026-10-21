@@ -398,17 +398,24 @@ test("live leader with an inaccessible task inventory fails closed", async () =>
 });
 
 for (const channel of ["", "0", "missing", "unreadable"])
-  test(`D-state with ${channel === "" ? "empty" : channel} wchan fails closed`, async () => {
+  test(`D-state task with ${channel === "" ? "empty" : channel} wchan confirms before refusing`, async () => {
     await using f = await fixture();
-    const path = join(f.base, "wchan");
+    await fs.writeFile(join(f.base, "stat"), stat("Z"));
+    const task = await addTask(f, "456");
+    const path = task.wchanPath;
     await fs.rm(path);
     if (channel === "unreadable") await fs.mkdir(path); // EISDIR even as root.
     else if (channel !== "missing") await fs.writeFile(path, channel);
-    expect(
-      await gpuAdmissionRefusal(request, 512, { procRoot: f.root, state }),
-    ).toContain(
-      `GPU D-state wait channel unavailable pid=123; evidence=${path}`,
+    const control = confirmation();
+    const refusal = await gpuAdmissionRefusal(request, 512, {
+      procRoot: f.root,
+      state,
+      ...control.options,
+    });
+    expect(refusal).toContain(
+      `GPU persistent D-state wait channel unavailable tgid=123 tid=456 leader_state=Z task_state=D; observations=2 interval_ms>=3000; evidence=${join(f.base, "stat")},${task.statPath},${path}`,
     );
+    expect(control.sleeps).toEqual([3000]);
   });
 
 for (const processState of ["S", "R", "Z", "T", "t", "I", "X", "x"])

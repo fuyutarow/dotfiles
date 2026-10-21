@@ -125,19 +125,27 @@ A GPU-specific refusal uses live read-only `/proc/<tgid>/stat`,
 `/proc/<tgid>/task/<tid>/stat`, and `wchan` evidence, independent of
 `gpu-owner.json` being paused, stale, or missing `unresponsiveSince`. Every visible
 numeric thread-group entry and its numeric task entries are inspected, including work
-outside admitted scopes. A first D-state dxg observation is only a candidate. If any
-candidate exists, admission takes one shared, bounded 3-second confirmation delay, then
-requires the same start-time identity to be in D at a dxg wait channel again before
-refusing. This is two observations at least 3 seconds apart, not proof that D persisted
-continuously. A D-state leader reports its PID; a distinct D-state task reports its
-TGID, TID, revalidated leader and task states, wait channel, and evidence paths; this
-distinguishes a zombie leader from a live blocked task. A candidate that exits, wakes,
-or has a reused PID/TID does not establish a stall. An unreadable, empty, or zero wait
-channel for a task still in D state fails closed. Unreadable inventory/stat, malformed
-stat, or a task inventory that remains unavailable for a live thread group also fails
-closed. The fast path with no D/dxg candidate does not sleep. A known non-dxg wait does
-not itself refuse GPU admission. This admission snapshot does not prove future driver
-health or prevent a stall that begins after the check.
+outside admitted scopes. A readable dxg candidate requires the same start-time identity
+to be in D at a dxg wait channel again after one shared, bounded three-second confirmation
+delay. That is two readable dxg observations at least three seconds apart, not proof that D
+persisted continuously. A D-state leader reports its PID; a distinct D-state task reports
+its TGID, TID, revalidated leader and task states, wait channel, and evidence paths; this
+distinguishes a zombie leader from a live blocked task.
+
+A task whose initial wait channel is unreadable, empty, or zero is a different candidate.
+After the same shared delay, both TGID and TID start-time identities must still match and
+the task must still be in D. Unknown-to-unknown refuses as persistent uncertain D with
+`observations=2` and interval evidence. Unknown-to-dxg refuses as mixed wait-channel
+evidence, not as two dxg observations. Unknown-to-readable-non-dxg, non-D, gone, or reused
+task/leader identities discard the candidate. The leader's initial unavailable-wchan branch
+retains its immediate fail-closed policy from the 1.5.12 scope; this task-only change does
+not alter it.
+
+Unreadable inventory/stat, malformed stat, or a task inventory that remains unavailable
+for a live thread group also fails closed. The fast path has neither a readable-dxg candidate
+nor a D-state task with an unavailable wait channel, so it does not sleep. A known non-dxg
+wait does not itself refuse GPU admission. This admission snapshot does not prove future
+driver health or prevent a stall that begins after the check.
 
 Recorded `unresponsiveSince` still refuses admission and names recorded GPU-holding
 PIDs and commands. Missing owner/capacity data also refuses admission; sample age or

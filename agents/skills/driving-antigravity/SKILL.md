@@ -9,7 +9,7 @@ description: >-
   NO-METER—no per-call token/cost; count calls, never invent spend. UNCONFINED—default -p
   auto-approves writes; cwd≠boundary. CATALOG-BY-PROBE—--model needs exact agy models string.
   VERSION-DRIFTS—self-updates outside brew. Cuts: BINARY codex/grok→agx/driving-grok;
-  PURPOSE Claude harness (hooks/subagents)→operating-the-harness; Anthropic API/Claude
+  PURPOSE Claude harness (hooks/subagents)→declared local configuration and executable checks; Anthropic API/Claude
   pricing→claude-api (may co-fire; driving agy to Claude stays here); prompt wording→prompting-llms.
   gemini-cli deprecated; agy only. English skill; respond in the user's language (default Japanese).
 ---
@@ -21,7 +21,7 @@ description: >-
 > (Terra/codex + agy self-dogfood + sonnet refuters) flagged shell-injection, false containment,
 > and a too-low version floor)
 > **Scope**: embedding `agy` (Antigravity CLI) as a headless worker under Claude Code. The
-> `claude` harness itself → `operating-the-harness`; the `codex` subprocess → `agx worker run` / `agx worker judge`.
+> `claude` harness itself → its declared local configuration and executable checks; the `codex` subprocess → `agx worker run` / `agx worker judge`.
 > **Maturity**: EARLY — a first-principles port of the `agx worker run` subprocess pattern to
 > a ~9-week-old target (agy created 2026-05-13). This does NOT codify a settled community practice
 > (none exists yet); the popular community bridges (`gemini-mcp-tool`, ~2.3k★) wrap the SAME
@@ -188,7 +188,7 @@ MUST NOT fire (route):
 | the `codex` subprocess | `agx worker run` / `agx worker judge` |
 | the `claude -p` subprocess driven from Codex | Codex-only `agx worker run` |
 | GPT review — OpenAI's GPT via codex vs open-weight GPT-OSS via agy | OpenAI GPT (`codex exec`) → agx; GPT-OSS through agy's Google-subscription roster → here |
-| hook/settings/subagent-policy mechanics of the CLAUDE harness | `operating-the-harness` |
+| hook/settings/subagent-policy mechanics of the CLAUDE harness | local configuration source and executable checks |
 | "which Claude model + Anthropic pricing / API" | `claude-api` — it owns Claude model facts & the Anthropic API and may co-fire on any "Claude" mention; no exclusivity claimed here. Runtime cut: asking about the API/pricing → claude-api; DRIVING the agy binary that routes to a Claude model → here |
 | 「プロンプトを改善して」 | `prompting-llms` |
 | the worktree/branch the subprocess is given, how its output is reviewed (`range-diff`) and integrated | `driving-git` — PURPOSE: whether this subprocess needs containment → here; the worktree/branch, review and integration → `driving-git` (2026-09-21) |
@@ -215,7 +215,7 @@ skin over the identical `agy -p` call, not a different path to the model:
 | `agx worker run` | CARDINALITY/PURPOSE — which BINARY + its contract. `codex exec` (HAS per-call metering + a real `--sandbox read-only`, single-vendor GPT) → agx; `agy`/Antigravity (NO-METER, UNCONFINED, MULTI-VENDOR Gemini/Claude/GPT-OSS) → here. Both embed a headless CLI as a worker; decide by which binary you invoke. |
 | `driving-grok` | CARDINALITY/PURPOSE — which BINARY: `grok -p` (xAI Grok Build — METERED, real sandbox, carries an EXFIL-RISK data-leak law) → `driving-grok`; `agy` (Antigravity, NO-METER, UNCONFINED, multi-vendor) → here. |
 | `agx worker run` | CARDINALITY/PURPOSE — which BINARY: `agy` (Antigravity multi-vendor) → here; `claude -p` driven by Codex (Claude Code) → Codex-only agx worker. |
-| `operating-the-harness` | PURPOSE — which binary is being CONFIGURED: the `claude` harness (hooks, settings, subagent policy) → there; the `agy` subprocess → here. |
+| local configuration source and executable checks | PURPOSE — which binary is being CONFIGURED: the `claude` harness (hooks, settings, subagent policy) follows declared local sources and checks; the `agy` subprocess → here. |
 | `claude-api` | Anthropic API / Claude model facts + pricing → there (it may co-fire on "Claude" — no exclusivity claimed here). Driving the agy binary that routes to a Claude model, with no API/pricing question → here. |
 | `prompting-llms` | prompt WORDING → there; agy CLI mechanics → here. |
 

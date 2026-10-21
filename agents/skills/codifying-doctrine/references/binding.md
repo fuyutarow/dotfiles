@@ -36,7 +36,7 @@ sign-off, a mandatory delay. Absent a named friction mechanism, relabel the clau
 **Prose is not enforcement under adversarial pressure.** For any rule that must hold against an
 actor who wants it not to, the sentence is a request. Pair it with a control outside the
 contestable text: a program that denies, an isolated channel for untrusted input, least privilege.
-Route the installation to `operating-the-harness`; the requirement that a surface exist is D5 here.
+Route the installation through declared local configuration and executable checks; the requirement that a surface exist is D5 here.
 
 ## 2. Precedence and the same-rank tie-break
 

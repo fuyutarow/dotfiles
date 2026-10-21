@@ -18,7 +18,7 @@ Most dotfiles configure a shell. Two things here are less usual:
   links `agents/skills` into a tool directory. `agents/skills/` contains in-house skills only.
   Third-party source/name pairs live in [`agents/skills.thirdparty.toml`](agents/skills.thirdparty.toml) and
   `mise run skills:sync` installs them into tool-owned global directories. The authored skills —
-  `forging-skills`, `linting-prose`, `systematizing-knowledge`, `operating-the-harness`, … — are in
+  `forging-skills`, `linting-prose`, `systematizing-knowledge`, `wiring-repositories`, … — are in
   the [full index](agents/skills/). One `.mcp.json` supplies both Claude and Codex.
   Three narrow **Stop-hook gates** (exit 2) block the agent before it hands you bad work: a
   garbled/mis-serialized tool call, a self-congratulatory "PASS" with no evidence, and accidental

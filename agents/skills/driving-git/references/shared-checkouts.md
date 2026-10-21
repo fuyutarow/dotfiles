@@ -3,7 +3,7 @@
 > Scope: the git side of concurrency. What a session must check and announce when another session
 > can write the same repository. The other session may be a human, an agent, or a fleet peer.
 > Who dispatches whom, roles, acceptance → `orchestrating-agents` / `commanding-research-fleets`.
-> Claude Code's own worktree mechanics belong to `operating-the-harness`. That covers
+> Claude Code's own worktree mechanics follow declared local configuration and executable checks. That covers
 > `--worktree`, `EnterWorktree`, `isolation: worktree`, and its enforcement checks. This file
 > assumes they exist and says what the git commands must do.
 

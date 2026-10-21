@@ -8,7 +8,7 @@ description: >-
   .git が大きい, クリーンアップ / cleanup, gc / prune, 巨大ファイルを履歴から消す,
   LFS cache, and leaked secrets. Measure storage before deleting; verify the selected outcome.
   Cuts by PURPOSE: .gitignore / hooksPath / git-hook wiring → wiring-repositories;
-  harness permissions/isolation → operating-the-harness; code changes → implementing-and-debugging
+  harness permissions/isolation → declared local configuration and executable checks; code changes → implementing-and-debugging
   or refactoring-code, Git co-fires at commit; SSH keys → securing-remote-access, gh auth/signing here;
   version meaning → designing-version-schemes; jj commands → driving-jujutsu.
   English skill; respond in the user's language.
@@ -166,7 +166,7 @@ MUST NOT fire (with route):
 | Ask | Route |
 |---|---|
 | 「新リポの .gitignore と pre-commit hook 配線して」 | `wiring-repositories` — the wiring set and git-hook shape |
-| "add `Bash(git push *)` to the deny permissions" | `operating-the-harness` — permission rules |
+| "add `Bash(git push *)` to the deny permissions" | declared local permission source and executable checks |
 | 「この関数、振る舞い変えずに整理して」 (commit only at the end) | `refactoring-code` owns the change; this skill co-fires at the commit |
 | 「次のリリースは semver でいく? calver?」 | `designing-version-schemes` |
 | "generate an ssh key for GitHub" (the key, not git) | `securing-remote-access` |
@@ -181,7 +181,7 @@ MUST NOT fire (with route):
 | Sibling | Cut |
 |---|---|
 | `wiring-repositories` | **PURPOSE** — "Is the ask about which layers this repo admits (`.gitignore`, `core.hooksPath`, the git-hook shape), or about operating the repo day to day?" Layers → theirs. Operations → here. Reciprocal: its layer table names `git` as the frame; this skill lays no layer |
-| `operating-the-harness` | **PURPOSE** — Claude Code's `Bash(git *)` rules, `--worktree` / `EnterWorktree` / `isolation: worktree` mechanics and their enforcement, attribution settings → theirs. The git commands executed inside any of those → here. `references/shared-checkouts.md` assumes their mechanics and restates none |
+| local configuration source and executable checks | **PURPOSE** — Claude Code's `Bash(git *)` rules, `--worktree` / `EnterWorktree` / `isolation: worktree` mechanics and their enforcement, attribution settings follow declared local sources and checks. The git commands executed inside any of those → here. `references/shared-checkouts.md` assumes their mechanics and restates none |
 | `implementing-and-debugging` · `refactoring-code` | **DECISIVE** — "Is the question what to change, or how the change enters history?" What → theirs. History (scope, message, rewrite, publish) → here; **co-fire at commit time**. Their `git stash`-not-`checkout .` line agrees in substance — do not byte-diff |
 | `orchestrating-agents` · `commanding-research-fleets` | **PURPOSE** — dispatch, roles, acceptance → theirs. The git protocol every peer on one repo obeys (S1–S8) → here |
 | `agx` · `driving-grok` · `driving-antigravity` | **PURPOSE** — whether a foreign agent needs containment → theirs. The worktree/branch it gets and how its work is reviewed and integrated → here (`references/shared-checkouts.md` §4) |

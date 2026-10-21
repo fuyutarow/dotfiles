@@ -372,7 +372,7 @@ change.
   family instead (§6).
 
 Harness mechanics — workflow/agent tools, hooks, permissions — are owned by the
-`operating-the-harness` skill; not restated here.
+declared local configuration and executable checks; not restated here.
 
 ---
 

@@ -45,7 +45,7 @@ the documentation is valid.
 
 Do **not** add a global `Stop`, `PostToolUse`, or session hook from this skill. The checker is not a
 universal policy, and an always-running hook would make every repository pay for this one. Read
-`operating-the-harness` before any hook or settings change; it owns mechanism choice and scope.
+the declared local configuration and executable checks before any hook or settings change; they define mechanism choice and scope.
 
 ## Enforcement ladder
 
@@ -95,6 +95,6 @@ residual, not a tool to implement in this forge.
 Do not create a generic `repo-write`. A broad write surface would bypass admission and make a fluent
 model's interpretation look authorized. If a repeated, measured need remains after the read boundary is
 proven, consider only a constrained `repo-apply`: it must consume a domain-signed artifact, verify a base
-digest, restrict writes to an explicit allowlist, and run named acceptance commands. `operating-the-harness`
+digest, restrict writes to an explicit allowlist, and run named acceptance commands. Declared local configuration
 owns mechanism choice; this Skill owns the admission/lineage constraints. These are house controls, not
 claims established by OKF or by any LLM-wiki literature.

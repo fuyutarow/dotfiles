@@ -93,7 +93,7 @@ The safe siblings `sw` / `ch` / `chc` / `chd` → `switch` were already present 
 |---|---|---|
 | GitHub regular Git file limit | files above 100 MiB blocked; above 50 MiB warned | check staged sizes and the remote's result; quiet output never proves a successful push; direct source in §6 |
 | Claude Code `Bash(git push *)` deny rule | does NOT match `git -C . push`, `git -c … push`, `git 'push'` (code.claude.com permissions doc) | a permission rule is not a boundary; the deny-list is behavior, and a `-c`/`-C` spelling to dodge a rule is itself denied |
-| Claude Code worktree enforcement | blocks edits, cwd, and git redirects (`-C`, `--git-dir`, `GIT_DIR`, `cd`) into the main checkout while isolated; cannot be turned off | mechanics → `operating-the-harness` |
+| Claude Code worktree enforcement | blocks edits, cwd, and git redirects (`-C`, `--git-dir`, `GIT_DIR`, `cd`) into the main checkout while isolated; cannot be turned off | mechanics → declared local configuration and executable checks |
 
 ## 5. Sources (fetched; grades in the ledger)
 

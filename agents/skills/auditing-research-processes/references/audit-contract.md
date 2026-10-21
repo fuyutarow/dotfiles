@@ -43,5 +43,5 @@ write an independent `PROGRAMME_DECISION`.
 
 Use `arguing-research-papers` for a finished scientific claim/paper's argument. Use
 `supervising-research-programmes` for programme design and `directing-research-sections` for
-active section work. Use the relevant implementation owner or `operating-the-harness` for generic
+active section work. Use the relevant implementation owner or declared local configuration for generic
 software, dispatch, hook, permission, or control-plane incidents.

@@ -7,7 +7,7 @@ import { hookJson, hookStderr } from "./lib.ts";
 //   1. Any Write/Edit that leaves a shell script behind gets a NUDGE — exit 0 + JSON
 //      `additionalContext` recommending a `.ts` run by bun. That is the only channel that
 //      reaches the model on PreToolUse without blocking: raw stdout goes to the debug log and
-//      stderr on exit 0 is not fed back (dotfiles:operating-the-harness references/hooks.md). No
+//      stderr on exit 0 is not fed back (the archived harness contract records this). No
 //      permissionDecision is set, so the normal permission flow still applies.
 //   2. If the result would exceed MAX_LINES physical lines, the Write/Edit is DENIED —
 //      but only when it creates the file or grows it. A legacy script already over the limit

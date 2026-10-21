@@ -13,7 +13,7 @@ description: >-
   PLAN-IS-NOT-READONLY — --permission-mode plan doesn't block headless writes (use --sandbox
   read-only); METERED — --output-format json carries full token usage; CATALOG-BY-PROBE —
   models_cache is a snapshot. Cuts: codex (OpenAI GPT) → agx; agy (Antigravity/Google,
-  multi-vendor) → driving-antigravity; claude harness → operating-the-harness; prompt wording →
+  multi-vendor) → driving-antigravity; Claude harness → its local declaration and executable checks; prompt wording →
   prompting-llms; NOT the log-parsing grok / Groq (hardware) / xai-org/grok-1 / superagent-ai/grok-cli.
   English skill; respond in the user's language (default Japanese).
 ---
@@ -25,7 +25,7 @@ description: >-
 > containment, examples that skip their own `--sandbox` gate, and a sandbox-table skim-trap)
 > **Scope**: embedding xAI's `grok` (Grok Build) CLI as a headless worker under Claude Code. The
 > `codex` subprocess → `agx worker run` / `agx worker judge`; the `agy` subprocess → `driving-antigravity`; the `claude`
-> harness itself → `operating-the-harness`.
+> harness itself → its declared local configuration and executable checks.
 > **Maturity**: EARLY — grok CLI launched 2026-05-25 (~7–8 weeks old); community subprocess-drive
 > patterns are thin (the strongest, zachdunn/grok-plugin-claude-code, 18★, clones OpenAI's own
 > codex-plugin-cc). A first-principles port of the `agx worker run` worker pattern, hardened for
@@ -217,7 +217,7 @@ MUST NOT fire (route):
 | the `codex` subprocess (OpenAI GPT) | `agx worker run` / `agx worker judge` |
 | the `agy`/Antigravity subprocess (Google/multi-vendor) | `driving-antigravity` |
 | the `claude -p` subprocess driven from Codex | Codex-only `agx worker run` |
-| hooks/subagent-policy mechanics of the Claude Code harness | `operating-the-harness` |
+| hooks/subagent-policy mechanics of the Claude Code harness | local configuration source and executable checks |
 | xAI's raw REST API used DIRECTLY (not via the `grok` CLI) — `api.x.ai`, `XAI_API_KEY` in your own HTTP client, grok-4.5 REST pricing for that | model-native, no skill — name it. (CLI-relevant per-token cost for G5 spend IS in this skill's `references/model-catalog.md`) |
 | 「プロンプトを改善して」 | `prompting-llms` |
 | the worktree/branch the subprocess is given, how its output is reviewed (`range-diff`) and integrated | `driving-git` — PURPOSE: whether this subprocess needs containment → here; the worktree/branch, review and integration → `driving-git` (2026-09-21) |
@@ -233,7 +233,7 @@ MUST NOT fire (route):
 | `agx worker run` / `agx worker judge` | CARDINALITY/PURPOSE — which BINARY: `codex exec` (OpenAI GPT, metered, sandboxed) → agx; `grok -p` (xAI Grok, metered, sandboxed, EXFIL-RISK) → here. |
 | `driving-antigravity` | CARDINALITY/PURPOSE — `agy` (Antigravity/Google, NO-METER, UNCONFINED, multi-vendor) → driving-antigravity; `grok` (xAI, METERED, real sandbox, EXFIL-RISK, single-vendor) → here. |
 | `agx worker run` | CARDINALITY/PURPOSE — `grok -p` (xAI Grok) → here; `claude -p` driven by Codex (Claude Code) → Codex-only agx worker. |
-| `operating-the-harness` | PURPOSE — configuring the `claude` harness (hooks/settings/subagents) → there; the `grok` subprocess → here. |
+| local configuration source and executable checks | PURPOSE — configuring the `claude` harness (hooks/settings/subagents) follows its declared source and checks; the `grok` subprocess → here. |
 | `prompting-llms` | prompt WORDING → there; grok CLI mechanics → here. |
 
 ## Reference index

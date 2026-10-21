@@ -13,7 +13,7 @@ description: >-
   ドリフト監査, タスク体系を揃える. Cuts: WHICH tool is right for language L → writing-<lang> (a
   language merely NAMED while scaffolding stays here); TeX task wiring → compiling-latex co-fires
   FIRST and owns the latex:* bodies, while a bare latexmk/chktex problem with no task-graph ask
-  stays there alone; hook/settings enforcement → operating-the-harness. Language owners choose
+  stays there alone; hook/settings enforcement → declared local configuration and executable checks. Language owners choose
   tool requirements; this skill declares task runtimes in [tools]. English
   skill; respond in the user's language (default Japanese).
 ---
@@ -261,7 +261,7 @@ MUST NOT fire (route):
 |---|---|
 | 「latexmk がエラーで落ちる」 | `compiling-latex` — TeX build internals |
 | 「clippy の warning 直して」 | `writing-rust` / `implementing-and-debugging` — the code, not the graph |
-| 「hook で `mise run check` を強制したい」 | `operating-the-harness` — enforcement machinery (this skill only names the task) |
+| 「hook で `mise run check` を強制したい」 | declared local configuration and executable checks — enforcement machinery (this skill only names the task) |
 | 「mise で node 20 に固定したい」 — a pin with NO task invoking it | model-native. But a runtime any task body INVOKES is this skill's business: see RUNTIME-DECLARED below (2026-07-25 reversal — this row previously routed all of `[tools]` away, and the census found 3/3 repos invoking undeclared runtimes) |
 | 「この justfile にタスク足して」(他家リポ) | no skill — house repos have no justfile; other projects' justfiles are their own convention |
 
@@ -271,7 +271,7 @@ MUST NOT fire (route):
 |---|---|
 | `writing-julia` / `writing-rust` / `writing-python` / `writing-typescript` | PURPOSE — "which tool/flags are CORRECT for language L?" → theirs; "which verb, what name, where in the graph?" → here. Matrix cells cite them; conflicts are recorded as rulings in `references/recipes.md`, never silently overridden. |
 | `compiling-latex` | PURPOSE — TeX toolchain + `latex:*` leaf tasks → there (its `assets/mise-latex.toml`); cross-language verb contract + grammar → here. Reciprocal pointer lives in its Core Decisions. Both sides agree in SUBSTANCE; do not diff for byte-identity. |
-| `operating-the-harness` | PURPOSE — hooks/settings/CLAUDE.md enforcement → there; the task graph a hook invokes → here. `mise run check` as a verification loop is the seam: the loop's EXISTENCE is their doctrine, its SHAPE is this contract. |
+| local configuration source and executable checks | PURPOSE — hooks/settings/CLAUDE.md enforcement follows declared local sources and checks; the task graph a hook invokes → here. `mise run check` as a verification loop is the seam: the loop's existence is local policy, its shape is this contract. |
 | `driving-cocoindex` | no overlap — ccc state facts are theirs entirely. |
 | `wiring-repositories` | CARDINALITY — the names carry the cut: this wires ONE artifact, that wires the SET. This task graph, its verbs, its `templates/*.mise.toml` → here, INCLUDING 「新リポに mise.toml 置いて」. Which layers a repo admits, in what order, and whether the joint holds → there; it calls this skill for the mise layer and ships no competing template. Agree in SUBSTANCE; do not diff. |
 

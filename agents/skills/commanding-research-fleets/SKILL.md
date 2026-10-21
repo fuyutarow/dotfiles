@@ -214,7 +214,7 @@ unnecessary, that feeling is the failure mode — follow the map.*
 | One granted section's local charter, admission, or run | `directing-research-sections` |
 | Generic dispatch/visibility/veto/acceptance with no Director/PI/Researcher role content | `orchestrating-agents` alone |
 | Generic six-minute R&D execution, even when the parent is called Director | `driving-bibifi-cycles`; orchestration for delegation |
-| "add a rule: never force-push to main" — a guardrail, not a role charter | `operating-the-harness` |
+| "add a rule: never force-push to main" — a guardrail, not a role charter | repository-local enforcement source and check |
 | A cross-actor SACRIFICE tie-break with no named executor role | `codifying-doctrine` |
 | Auditing a frozen research episode's process integrity | `auditing-research-processes` |
 | A single CLI flag or call's syntax | the relevant `driving-*` skill |

@@ -210,7 +210,7 @@ exact-equivalent nouns (deliverable/framing/moat); **`scripts/codemix-flag.py`**
 paragraphs ≥8 latin/100字 as MIX — the model then classifies each token 3-way: standard domain term
 (keep) / pinned house token (keep, identifier) / gratuitous (violate). This skill is the
 FEEDBACK/detection layer at *deliverable* time; the UPSTREAM cure (the generation guardrail,
-owned by `operating-the-harness`) is the only layer left for this pathology — a per-turn Stop
+owned by declared local configuration) is the only layer left for this pathology — a per-turn Stop
 hook (`detect-prose-correo.ts`, correo calque layer) once gated the latin-verb+する residue on
 every turn too, but was removed 2026-09-03 at the orderer's direct order, its per-Stop
 regeneration cost having outweighed the catch. Code-switching is Language Confusion (Marchisio,

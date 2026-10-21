@@ -80,7 +80,7 @@ function checkFrontmatter(skillMd: string): void {
     fail(`description ~${raw.length} chars exceeds the 1500 house ceiling`);
   if (raw.length > 1024)
     console.warn(
-      `WARN: description ~${raw.length} chars exceeds the 1024 platform hard cap for API deployment (Claude Code's own listing cap differs — operating-the-harness owns that number)`,
+      `WARN: description ~${raw.length} chars exceeds the 1024 platform hard cap for API deployment (target-host listing limits may differ)`,
     );
   if (!/English skill; respond in the user's language/u.test(raw))
     fail("description must end with the language directive, verbatim");
@@ -105,7 +105,7 @@ function countTableRows(source: string, headerRe: RegExp): number {
   return count;
 }
 
-// 2026-09-12: mirrors operating-the-harness/scripts/scope-check.ts's main()/catch convention —
+// 2026-09-12: mirrors scripts/harness/scope-check.ts's main()/catch convention —
 // cli()'s and rejectPrototypeFlag's thrown Errors (incl. --__proto__, cleye-corpus.test.ts's
 // third per-entry assertion) must land as a clean `FATAL: <message>` + exit 2, not an uncaught
 // stack trace + exit 1. Before this, every check below ran at module top level, so the same
@@ -223,7 +223,6 @@ async function main(): Promise<number> {
     "supervising-research-programmes",
     "directing-research-sections",
     "codifying-doctrine",
-    "operating-the-harness",
     "auditing-research-processes",
     "forging-skills",
   ]) {

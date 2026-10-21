@@ -5,7 +5,7 @@ description: >-
   authoring guidance. Use for SKILL.md work, スキル作成・改善・統廃合, trigger collisions,
   skill evals, unnecessary scaffolding, or retirement and listing-cost review.
   Owns content, boundaries and proportionate verification; harness loading and enforcement
-  belong to operating-the-harness. Reuse available skill-creator machinery.
+  belong to the target host's declared local configuration. Reuse available skill-creator machinery.
   English skill; respond in the user's language.
 ---
 
@@ -72,7 +72,7 @@ Compare actual decisions and consumer paths; retain necessary domain-specific ru
 When a split is justified, name the distinguishing question.
 Check both collision and mutual deferral.
 
-Read `operating-the-harness`'s commands-and-skills reference for the target host's mechanical contract.
+Read the target host's declared configuration and executable checks for its mechanical contract.
 Refresh facts affected by the revision; consult current official guidance and creator resources.
 For a paper corpus, let `systematizing-knowledge` synthesize it before distillation.
 
@@ -158,7 +158,7 @@ Do not automatically reactivate a retired skill through a surviving reference.
 | Request | Owner / relationship |
 |---|---|
 | Skill content, placement, distillation, trigger evaluation or standing | **Here** |
-| Host loading, permissions, hooks or listing diagnostics | `operating-the-harness`; resolve the affected mechanical contract first |
+| Host loading, permissions, hooks or listing diagnostics | target host's declared configuration and executable checks; resolve the affected mechanical contract first |
 | Scaffold, format validator, package or eval runner | Available `skill-creator` machinery and current guidance |
 | Ordinary prose | `linting-prose`; skill wording and operational clarity remain here |
 | Task manual versus cross-actor trade-offs | Here versus `codifying-doctrine` |

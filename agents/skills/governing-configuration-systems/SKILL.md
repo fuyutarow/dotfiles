@@ -6,7 +6,7 @@ description: >-
   for config architecture / JSON vs TOML / JSONC / JCS / canonicalization / signing / digest / gating /
   policy bundle / schema / configuration layering / decision event / 構成設計 / 設定ファイル設計 /
   TOMLかJSONか / 正規化 / 署名対象 / ダイジェスト / ゲート / ポリシー設定 / 設定スキーマ /
-  設定の階層. DECISIVE: .claude settings/hooks/MCP mechanics → operating-the-harness
+  設定の階層. DECISIVE: .claude settings/hooks/MCP mechanics → declared local configuration and executable checks
   (generic configuration-contract design may co-fire); repository layer/wiring → wiring-repositories;
   language manifest/parser implementation → writing-*; cross-format consumer/trust/effective-declaration/
   integrity contract → HERE; R&D authority →
@@ -120,7 +120,7 @@ No harness means the same map, serial.
 |---|---|
 | “Which value invariant belongs in a type, parser, or state API?” | `designing-type-contracts`; this skill retains configuration authority, overrides, representation and integrity. Link its result into C4 when needed. |
 | “Add one flag to this existing CLI config parser.” | implementing-and-debugging plus the language owner. |
-| “How do I configure Claude Code hooks, permissions, or MCP?” | operating-the-harness. |
+| “How do I configure Claude Code hooks, permissions, or MCP?” | Inspect the declared local configuration and executable checks. |
 | “Which config layers and tasks should this repository install?” | wiring-repositories. |
 | “Which Rust/Python/Julia manifest key or parser API should I use?” | The applicable writing-* skill. |
 | “Write or reforge a SKILL.md.” | forging-skills. |

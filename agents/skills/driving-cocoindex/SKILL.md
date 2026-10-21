@@ -12,7 +12,7 @@ description: >-
   concept/battery→ccc search; literal/exhaustive/files→rg; structural→ccc grep;
   symbol→driving-serena. Raw Grep is hook-denied only in operational ccc repos. Cuts:
   open-ended tour→Explore; install/upgrade→running-python-tools; dead MCP server
-  diagnostics→operating-the-harness FIRST. Missing router→STOP/repair, never emulate search with Python/Node;
+  diagnostics→inspect the local MCP declaration and its executable check first. Missing router→STOP/repair, never emulate search with Python/Node;
   empty ccc output→NO_MATCH, not PASS. English skill; respond in the user's language
   (default Japanese).
 ---
@@ -212,7 +212,7 @@ MCP earns its place only per-project, where `ccc init` has already run and a cal
 `search`'s typed JSON output over CLI text-scraping.
 
 MCP-server-dead diagnostics (is the process even starting, trust prompt, restart) are
-`operating-the-harness` territory — co-fire, run that FIRST; this skill supplies the
+Local MCP declaration and executable-check territory — inspect that FIRST; this skill supplies the
 ccc-specific expected surface and the CLI fallback once harness-liveness is confirmed or
 ruled out.
 
@@ -275,18 +275,18 @@ CO-FIRE, ORDERED SECOND (fires, but not first):
 
 | Ask                                            | Order                                                                                                                                                                                     |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "cocoindex MCP tools aren't showing up" (bare) | `operating-the-harness` diagnoses server liveness FIRST (MCP lifecycle); only once confirmed or ruled out does THIS skill supply the ccc-specific expected tool list and the CLI fallback |
+| "cocoindex MCP tools aren't showing up" (bare) | Inspect the local MCP declaration and server liveness FIRST; only once confirmed or ruled out does THIS skill supply the ccc-specific expected tool list and the CLI fallback |
 
 ## Routing — sibling cuts (reciprocal)
 
 | Sibling                                             | Cut                                                                                                                                                                                                                                                                                                                                                                           |
 | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `running-python-tools`                              | INSTALL-vs-DRIVE — getting `ccc` onto PATH, pinning, upgrading (`uv tool install/upgrade cocoindex-code`) → there; everything you do once it's there → here.                                                                                                                                                                                                                  |
-| `operating-the-harness`                             | MCP-LIFECYCLE-FIRST — is the `cocoindex-code` MCP server even starting (`.mcp.json`, trust prompt, `claude mcp list`, restart)? → there, co-fire, FIRST; what `ccc` itself does (search/daemon/project semantics), reached via MCP or direct Bash → here.                                                                                                                     |
+| local MCP declaration and executable checks | MCP-LIFECYCLE-FIRST — is the `cocoindex-code` MCP server even starting (`.mcp.json`, trust prompt, `claude mcp list`, restart)? Inspect those declared sources first; what `ccc` itself does (search/daemon/project semantics), reached via MCP or direct Bash → here. |
 | `driving-serena`                                    | SYMBOL-vs-CONCEPT, decisive — exact identifier plus semantic definition/callers/rename/outline → there; exhaustive lexical occurrences → `rr regex`; concept without an identifier → here. Pipeline: ccc LOCATES by concept → Serena NAVIGATES/EDITS.                                                                                                                         |
 | `repo-retrieve` / `Explore` (non-skill)             | QUERY-SHAPE ladder — literal string/regex/every-call-site → its literal/exhaustive rg routes; structural pattern → its ccc-grep route; open-ended "tour this repo" with no search term → Explore; a CONCEPT query against an INDEXED project → its concept/battery ccc route (CC1 first). Raw Grep is not a sibling: the user-global hook denies the unclassified surface.    |
 | `orchestrating-agents` (P7 resource envelopes)      | RESIDENT-vs-DISPATCH — per-run agent admission, declared per call and dying with its caller (`agent-resource-run --manifest`) → there; the ccc daemon, whose ceiling is declared ONCE in a supervisor unit and must survive every caller → here. The statusline `Job:` segment tracks only the dispatch path, so its silence about ccc is not evidence of an uncapped daemon. |
-| `operating-the-harness` (durability policy)         | The user-global rule that bans orphaning work to init, and sanctions `systemd-run --user --unit=<name>` as the manager-owned alternative, is owned THERE. THIS skill owns only why ccc in particular needs an owner and which verbs change under supervision.                                                                                                                 |
+| local durability policy | The user-global rule that bans orphaning work to init, and sanctions `systemd-run --user --unit=<name>` as the manager-owned alternative, remains in declared local configuration. THIS skill owns only why ccc in particular needs an owner and which verbs change under supervision. |
 | `raising-resolution`                                | Silent sub-step, LOWEST precedence: inspect the actual ccc state (`ccc status`, `ccc daemon status`, `cat ~/.cocoindex_code/global_settings.yml`, `claude mcp list`) before asserting a version/uptime/registration/MCP-liveness fact — never recall one from training; cocoindex-code is plausibly absent from training data entirely.                                       |
 | `writing-python`                                    | Contributing to `cocoindex-code`'s OWN Python source (upstream) → there; operating the already-built binary → here. No collision in normal driving usage.                                                                                                                                                                                                                     |
 | `systematizing-knowledge` / `structuring-documents` | SEARCH-vs-SYNTHESIS, decisive — 「ノートから探す/想起する」 (LOCATE passages in a corpus) → here; 「メモをまとめる/統合する/再構成する」 (SYNTHESIZE or reorganize what's found) → those skills. Shared 「メモ/ノート」 vocabulary, disjoint verbs; ccc can still serve as their locate step (pipeline, like serena).                                                         |

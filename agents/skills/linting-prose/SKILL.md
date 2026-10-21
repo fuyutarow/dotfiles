@@ -13,7 +13,7 @@ description: >-
   titles, "核" / "本体" / "PASS" / "receipt:", metaphor jargon 床/鎖/土台. Machine floor is
   DELEGATED to textlint/Vale.
   Not for deck/section/slide ownership (→ designing-presentations); hooks/CI (→
-  operating-the-harness); literature synthesis (→ systematizing-knowledge); SKILL.md prose (→
+  repository-local enforcement); literature synthesis (→ systematizing-knowledge); SKILL.md prose (→
   forging-skills); argument/contribution-level claim=evidence & 新規性 positioning (→
   arguing-research-papers); or info-MOVING fixes — MECE / 目標規定文 / 内容の精選 / 重点先行 at
   document scale (→ structuring-documents; cut FIX-LOCALITY: rewrite-words-in-place here,
@@ -132,7 +132,7 @@ FIRES: 文章校正・推敲 of a report/abstract/README/proposal · "LLMっぽ�
 complaints · reviewing an agent's own review prose · BEFORE drafting external-facing prose · choosing
 the textlint profile for a document. MUST NOT fire: deck/section order (→ designing-presentations) ·
 MECE/scatter/restructuring (→ structuring-documents) · SKILL.md prose (→ forging-skills — dual-reader, its skill-check owns the floor) · hook/CI
-wiring (→ operating-the-harness) · paper-corpus synthesis (→ systematizing-knowledge) · a one-line
+wiring (→ local configuration source and executable checks) · paper-corpus synthesis (→ systematizing-knowledge) · a one-line
 typo fix. Full desk-check set: `tests/triggers.md` — re-run it after ANY description edit.
 
 **Portfolio cut.** Wording and reader-facing lifecycle surfaces within one artifact remain HERE.

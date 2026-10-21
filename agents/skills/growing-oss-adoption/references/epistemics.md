@@ -129,7 +129,7 @@ Genuine unknowns this survey could not resolve. For a researcher, these are the 
 
 Scope: developer-facing OSS diagnosis, verification, and launch-readiness work executed with
 subagents — WHO runs each step of this skill, nothing more. Harness mechanics (spawn tools,
-permissions, hooks) belong to the `operating-the-harness` skill. Agents are **channel inspectors
+permissions, hooks) belong to declared local configuration and executable checks. Agents are **channel inspectors
 and hostile readers, never diffusion oracles**. The evidence boundary: **Tier-1** — present,
 observable channel state (a registry page, a ranking, a command's output today) — is admissible
 from an agent **with provenance** (URL or command output); **Tier-2** — future or counterfactual

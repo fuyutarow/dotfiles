@@ -15,7 +15,7 @@ import { hookJson } from "./lib.ts";
 // fleet_policy.toml) is legal ESM; Bun runs .ts hooks as modules, not CommonJS.
 //
 // FIRES ON EVERY PROMPT IN EVERY SESSION on this machine (UserPromptSubmit takes no matcher —
-// see operating-the-harness/references/hooks.md). The very first thing this does is a cheap
+// see the archived harness contract). The very first thing this does is a cheap
 // prefix regex, so the ~99.9% of prompts that aren't `/assign ...` cost one test and nothing
 // else. Anything unexpected falls through to a silent pass (exit 0, no output): blocking or
 // crashing on an ORDINARY prompt because of a bug here would be far worse than `/assign`

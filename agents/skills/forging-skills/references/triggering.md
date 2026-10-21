@@ -1,6 +1,6 @@
 # Triggering — precise discovery and relevant negatives
 
-> Scope: names, descriptions and selection evidence. Loading mechanics belong to `operating-the-harness`.
+> Scope: names, descriptions and selection evidence. Loading mechanics belong to declared local configuration.
 
 ## 1. Selection is an observed behavior
 

@@ -4,6 +4,16 @@ Skills retired from `agents/skills/`. Nothing here is linked into any agent (`mi
 only reads `agents/skills/`), so an archived skill never fires; the directory keeps the text
 reachable without `git log`.
 
+## 2026-10-21 owner-requested retirement
+
+| Skill | Archived | Why | Successor |
+|---|---|---|---|
+| [`operating-the-harness`](operating-the-harness/SKILL.md) | 2026-10-21 | Owner-requested retirement; callable guidance and mandatory invocation were removed | No replacement skill. Use each repository's declared configuration and executable checks; `scripts/harness/` retains the two shared checks. |
+
+The archived package retains the complete historical source, including copies of the two check
+scripts. The live executable owners are [`scripts/harness/scope-check.ts`](../../scripts/harness/scope-check.ts)
+and [`scripts/harness/gate-diagnostics-check.ts`](../../scripts/harness/gate-diagnostics-check.ts).
+
 | Skill | Archived | Why | Successor |
 |---|---|---|---|
 | `sandbox-sdk` | 2026-09-27 | Removed upstream: cloudflare/skills replaced it on 2026-08-07 (PR #92, f96bff7) with skills of different names | `sandbox-stable`, `sandbox-next`, `sandbox-migrate-to-next` in cloudflare/skills (not vendored here) |

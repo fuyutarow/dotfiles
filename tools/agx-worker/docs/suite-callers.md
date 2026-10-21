@@ -14,7 +14,7 @@ The previously inventoried external DX caller declared `["agx", "jev"]`; that ex
 - `tools/spec/agx-ticket.md:4,11,67,69,90,101,107`
 - `tools/spec/architecture.md:44,49,61,62,63,64,65,66,67,81,82,84,85,102,119,120,122,123,127,130,131,133,226,248,261`
 - `tools/spec/agx-ws.md:37,42,43,82,113,133,135,136,137,138`
-- `agents/skills/operating-the-harness/SKILL.md:29`
+- `archives/skills/operating-the-harness/SKILL.md:29` (retired historical source)
 - `agents/skills/writing-bun-scripts/tests/cleye-corpus.test.ts:22,23,86`
 - `package.json:25,26`
 - `tools/agx/tests/doctor.test.ts:136,149,166,385,386,387,398,553,680,684,687,691`
@@ -182,7 +182,7 @@ The previously inventoried external DX caller declared `["agx", "jev"]`; that ex
 - `tools/storage-headroom/tests/decision.test.ts:522`
 - `tools/spec/agx-ticket.md:4,11,67,69,90,101,107`
 - `tools/spec/architecture.md:44,49,61,62,63,64,65,66,67,81,82,84,85,102,120,226,248,261`
-- `agents/skills/operating-the-harness/SKILL.md:29`
+- `archives/skills/operating-the-harness/SKILL.md:29` (retired historical source)
 - `tools/statusline/tests/fleet-line.test.ts:161`
 - `tools/statusline/tests/fixtures/agx-ls-sample.json:18,36,37,38,44,123,204,249,280,311,333,359,389,422,444,510,583,625,647,669,686,691,722,767,804,809,860`
 - `tools/statusline/tests/fixtures/codex-rollout-run-activity.jsonl:1`
@@ -332,7 +332,7 @@ The previously inventoried external DX caller declared `["agx", "jev"]`; that ex
 - `tools/agx/src/doctor.ts:15,71,86,91,97,109`
 - `tools/agx/src/dispatch.ts:28,140,146,151,196,204,215,224,234,245,257,268,277,283,295,303,337,358,365,379,400`
 - `tools/agx/CHANGELOG.md:22`
-- `agents/skills/operating-the-harness/SKILL.md:29`
+- `archives/skills/operating-the-harness/SKILL.md:29` (retired historical source)
 - `tools/agx-run/tests/next/workspace-lock.test.ts:108,150,318,414,437`
 - `tools/agx-run/tests/next/incremental-fold.test.ts:207,238`
 - `scripts/agx-host.ts:13`

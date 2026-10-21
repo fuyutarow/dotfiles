@@ -214,7 +214,7 @@ env = { SKILLS_LINT_WORKTREE = "1" }
 description = "Structural skill floor and listing budget over the worktree; commit hooks use BASE plus selected REV paths"
 run = "bun scripts/lint-skills-floor.ts"
 
-# operating-the-harness P3: a rule naming ONE repo belongs in that repo's .claude/, never in user
+# Scope floor: a rule naming ONE repo belongs in that repo's .claude/, never in user
 # scope behind a cwd check. The check existed since that skill was forged but nothing ran it, so
 # three firedancer-gated hooks sat here for weeks after their properly-scoped successors had already
 # landed in that repo — firing twice inside it and no-oping everywhere else.
@@ -224,14 +224,14 @@ run = "bun scripts/lint-skills-floor.ts"
 [tasks."lint:harness-scope"]
 depends = ["bun:check"]
 dir = "{{config_root}}"
-description = "Fail when a user-scope config or hook in this repo hardcodes one repo's absolute path (operating-the-harness P3)"
-run = "bun agents/skills/operating-the-harness/scripts/scope-check.ts agents/claude && bun agents/skills/operating-the-harness/scripts/scope-check.ts agents/codex"
+description = "Fail when a user-scope config or hook in this repo hardcodes one repo's absolute path"
+run = "bun scripts/harness/scope-check.ts agents/claude && bun scripts/harness/scope-check.ts agents/codex"
 
 [tasks."lint:gates"]
 depends = ["bun:check"]
 dir = "{{config_root}}"
-description = "Batched-diagnostics floor (operating-the-harness §3): every deny site in a PreToolUse gate declares FATAL / SINGLE-AXIS / BATCHED, and a BATCHED gate carries a test proving two violations return in one decision"
-run = "bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts agents/claude/hooks && bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts agents/hooks"
+description = "Batched-diagnostics floor: every deny site in a PreToolUse gate declares FATAL / SINGLE-AXIS / BATCHED, and a BATCHED gate carries a test proving two violations return in one decision"
+run = "bun scripts/harness/gate-diagnostics-check.ts agents/claude/hooks && bun scripts/harness/gate-diagnostics-check.ts agents/hooks"
 
 # The hand-written TS lint config lives in presets/typescript/.oxlintrc.json.
 [tasks.preset]

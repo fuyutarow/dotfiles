@@ -148,7 +148,7 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    skills use one consistent shape — the official-recommended **gerund** form
    `<verb-ing>-<object>` describing the activity the skill provides (`writing-julia`,
    `compiling-latex`, `running-python-tools`, `securing-remote-access`, `systematizing-knowledge`,
-   `operating-the-harness`). Hard rules: lowercase/numbers/hyphens only and ≤64 chars. Shared
+   `wiring-repositories`). Hard rules: lowercase/numbers/hyphens only and ≤64 chars. Shared
    skills must not contain the reserved words `claude`/`anthropic`. Keep tool names and trigger
    keywords in
    `description:` (3rd person, "what + when") — that field, with the name, is what the model

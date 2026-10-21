@@ -1,6 +1,6 @@
 # Architecture — task boundaries and selective loading
 
-> Scope: placement and resource topology. Host format and loading belong to `operating-the-harness`.
+> Scope: placement and resource topology. Host format and loading belong to declared local configuration.
 
 ## 1. Progressive disclosure
 

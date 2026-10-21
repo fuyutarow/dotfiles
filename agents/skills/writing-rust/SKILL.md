@@ -78,7 +78,7 @@ role does **not** suspend RG0 (a substantive restructure — one that adds a dep
 first artifact WITHIN its turn, not the literal first output. Waiting for a reviewer to name crates
 one at a time ("why no clap? why no anyhow?") is the gate's **defining failure mode**, and it
 recurs — a prose gate alone is not enough, so the durable fix is a PreToolUse hook blocking the
-first `*.rs`/`Cargo.toml` edit until the table exists (→ `operating-the-harness`; not shipped here).
+first `*.rs`/`Cargo.toml` edit until the table exists (use the repository's declared local guard; not shipped here).
 Full artifact spec + trigger: RG0 row above; lookup: `references/selection.md`.
 
 ## Routing — sibling cuts (reciprocal)

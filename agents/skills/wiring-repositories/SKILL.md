@@ -11,7 +11,7 @@ description: >-
   .claude/, .githooks + core.hooksPath, the ccc index, and research-governance config — never a
   layer's contents. LAW: a layer enters only with the failure it prevents named in the commit.
   Cuts — CARDINALITY vs wiring-mise-tasks: ONE artifact (the task graph, its verbs, its
-  templates) is theirs; the SET and the ORDER are here. PURPOSE vs operating-the-harness: Claude
+  templates) is theirs; the SET and the ORDER are here. Claude
   Code hooks are theirs, GIT hooks are here; standing .claude/ up is here, its contents theirs.
   PURPOSE vs driving-cocoindex: `ccc init` is theirs. DECISIVE vs writing-julia/python/rust/
   bun-scripts and the built-in init: one manifest, or a CLAUDE.md alone, is theirs.
@@ -92,7 +92,7 @@ known work, that is the most expensive silent failure here.
 
 ## The git-hook shape — owned here, because nobody else owns it
 
-`operating-the-harness` owns **Claude Code** hooks: events, matchers, `settings.json`. Its hooks
+Declared local configuration owns **Claude Code** hooks: events, matchers, `settings.json`. Its hooks
 reference does not mention git hooks at all. So the git-hook layer's shape had no owner, while
 four repos each independently wrote the same rule into a comment at the top of their own hook.
 It is stated once, here.
@@ -157,7 +157,7 @@ answer.
 | mise `[tools]` pins | the repo runs any tool whose version changes its output | `wiring-mise-tasks` |
 | mise `[tasks]` verb contract | always — the contract is repo-invariant | `wiring-mise-tasks` |
 | language manifest | the repo holds that language's source; a notebook repo places it per `keeping-research-notebooks` homes §0, never at the root | `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` |
-| `.claude/settings.json` | a repo-specific rule exists that the **global** hooks do not already enforce — a jj repo always has one (JJ-2) | `operating-the-harness` |
+| `.claude/settings.json` | a repo-specific rule exists that the **global** hooks do not already enforce — a jj repo always has one (JJ-2) | declared local configuration and executable checks |
 | `.githooks/` + hooksPath | a check must run at commit time, not only on demand | **this skill** owns the hook's SHAPE (below); `wiring-mise-tasks` owns the task it calls |
 | `.cocoindex_code/` | unknown-name search will happen, and the corpus is too big to read | `driving-cocoindex` |
 | research-governance config | **multiple uncoordinated writers** produce documents here | `governing-research-documentation` |
@@ -226,7 +226,7 @@ MUST NOT fire (with route):
 |---|---|
 | 「mise.toml に task 足して」 / renaming a verb | `wiring-mise-tasks` ALONE — one artifact, not the set |
 | 「新リポに mise.toml 置いて。Rust プロジェクト」 (only the task runner named) | `wiring-mise-tasks` ALONE — it owns this ask and ships the template |
-| 「hook が発火しない」 with `.claude/` already wired | `operating-the-harness` — matcher and event mechanics |
+| 「hook が発火しない」 with `.claude/` already wired | declared local configuration and executable checks — matcher and event mechanics |
 | "make this repo searchable" (wiring already settled) | `driving-cocoindex` ALONE — registration is theirs |
 | `uv init` / `cargo new` / `bun init` for one package | that language's own skill — one manifest is theirs |
 | "Choose Rust crate/module boundaries inside an existing repository" | `writing-rust` RG5; co-fire `refactoring-code` for structural implementation |
@@ -241,7 +241,7 @@ MUST NOT fire (with route):
 | governing-configuration-systems | **DECISIVE:** which config layers a repo admits and their wiring order → HERE. The selected layer's consumer/trust, authority, integrity representation, and acceptance contract → governing-configuration-systems. |
 | `wiring-mise-tasks` | **CARDINALITY** — "Is the ask about ONE wiring artifact, or about which artifacts this repo gets and in what order?" One → theirs. The SET and the ORDER → here. It already claims 新リポの雛形 for the mise layer and **keeps it**. This skill calls it, ships no competing template, and writes no task body. Seam: agrees in substance; do not diff for byte-identity |
 | `wiring-mise-tasks` (hook seam) | The `hook:<event>` task NAME, the templates' `hook:pre-commit`, and the mise facts behind HOOK-3 are theirs (grammar rule 6, recipes §8). The hook SHAPE (HOOK-1/1a/1b) is here. Reciprocal, 2026-09-22 |
-| `operating-the-harness` | **PURPOSE, on two seams.** *Hooks*: theirs are Claude Code's (events, matchers, `settings.json`); **git** hooks are HOOK-1/HOOK-2 above, here. *`.claude/`*: standing it up and the inheritance rule → here; its contents and rule scoping → theirs, **MANDATORY co-fire once content is written** |
+| local configuration source and executable checks | **PURPOSE, on two seams.** *Hooks*: Claude Code's events, matchers, and `settings.json` follow their declared source and checks; **git** hooks are HOOK-1/HOOK-2 above, here. *`.claude/`*: standing it up and the inheritance rule → here; its contents and rule scoping follow its declared source. |
 | `driving-cocoindex` | **PURPOSE** — "Is there already a `cd`-able directory?" Registration, indexing, freshness, query shapes, and every daemon resource rule → theirs, **never restated**. Whether this repo admits an index, and the two orderings around it, → here |
 | `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` / `running-python-tools` | **DECISIVE by artifact:** manifest semantics and language idiom → their owner. Layer admission and cross-language manifest placement in a plain repo → here; in a notebook repo, placement is `keeping-research-notebooks` homes §0. Cargo package/workspace/target boundaries belong to `writing-rust` RG5. Root manifests may coexist in a plain repo. Agree in substance; do not diff for byte identity. |
 | `governing-research-documentation` | **CARDINALITY** — the governance config is ONE admissible layer here. Its schema, document lifecycle, authority and retirement → theirs |

@@ -296,7 +296,7 @@ async function checkDirectory(input: string): Promise<void> {
   } else if (Array.from(description).length > 1500) {
     warn(
       directory,
-      `description ${Array.from(description).length} chars > 1500 (local review threshold; target-host limits owned by operating-the-harness)`,
+      `description ${Array.from(description).length} chars > 1500 (local review threshold; target-host limits may differ)`,
     );
   }
 

@@ -11,7 +11,7 @@ description: >-
   decision is decoration; agreement is MEASURED by a blind divergence probe, never asserted.
   MUST-NOT-FIRE on a one-off decision, a settled procedure (SOP/runbook), or a universally-bad act
   — doctrine is steering, not a guardrail. Cuts: WHERE a rule installs and how the harness
-  enforces it → operating-the-harness (CO-FIRES); a task manual for one executor →
+  enforces it → declared local configuration and executable checks (CO-FIRES); a task manual for one executor →
   forging-skills, which owns this file's own craft; applying a risk-calibrated code discipline →
   practicing-tiger-style; agent dispatch → orchestrating-agents; reordering a doc whose rules are
   settled → structuring-documents; a paper corpus first → systematizing-knowledge.
@@ -85,7 +85,7 @@ A doctrine is **steering**, not a guardrail. Answer in writing:
 | The losing option is universally bad | that is a guardrail / anti-pattern, not a doctrine |
 | A settled sequence of steps exists | SOP, checklist, runbook — `forging-skills` if it is an agent manual |
 | The conflict is resolvable by asking | fix the channel; doctrine is for when you cannot ask |
-| It is about where a rule installs in the harness | `operating-the-harness` |
+| It is about where a rule installs in the harness | declared local configuration and executable checks |
 
 Only a YES to all three earns the gates below. **Over-firing is the model's dominant failure
 here.** An eight-principle doctrine for a two-person project is this skill failing.
@@ -172,8 +172,8 @@ unnecessary, that feeling is the failure mode — follow the map.*
 |---|---|
 | "Should we use Postgres or SQLite here?" | one decision — just decide it |
 | 「デプロイ手順をまとめて」 / a runbook, checklist, SOP | a procedure, not a tie-break; `forging-skills` if it is an agent manual |
-| "add a rule: never force-push to main" | universally-bad act = guardrail; `operating-the-harness` for the hook |
-| "why isn't my CLAUDE.md rule being followed?" | `operating-the-harness` — enforcement mechanics |
+| "add a rule: never force-push to main" | universally-bad act = guardrail; use the local hook declaration and executable check |
+| "why isn't my CLAUDE.md rule being followed?" | inspect declared local enforcement mechanics |
 | "write our company values page for the careers site" | marketing copy; `linting-prose` — unless the user wants it to BIND, then STEP 0 |
 | "review this PR against our coding standards" | applying an existing discipline; `practicing-tiger-style` for risk-calibrated code |
 | "reorder the sections of our engineering handbook" | `structuring-documents` — rules already settled |
@@ -185,7 +185,7 @@ unnecessary, that feeling is the failure mode — follow the map.*
 
 | Sibling | Cut (runtime-answerable) |
 |---|---|
-| `operating-the-harness` | **PURPOSE** — "Is the question WHERE this rule installs and how the harness enforces it, or WHETHER it is a binding trade-off at all?" Hooks, settings, scope, listing → there. Whether the rule sacrifices anything, what retires it, whether it converges → here. **CO-FIRES**: authored here, installed there. That skill's config-as-prose anti-pattern is this skill's D5. |
+| local configuration source and executable checks | **PURPOSE** — "Is the question WHERE this rule installs and how the harness enforces it, or WHETHER it is a binding trade-off at all?" Hooks, settings, scope, and listing follow declared local sources and checks. Whether the rule sacrifices anything, what retires it, whether it converges → here. **CO-FIRES**: authored here, installed through the local declaration. The config-as-prose anti-pattern is this skill's D5. |
 | `forging-skills` | **CARDINALITY/PURPOSE** — "Is the artifact a task manual loaded by ONE executor for ONE class of task, or the tie-break that governs actors ACROSS tasks when no procedure covers the case?" Manual → there. Tie-break → here. That skill is also the craft owner of THIS file: reforging `codifying-doctrine/SKILL.md` fires `forging-skills`, not this. |
 | `practicing-tiger-style` | **PURPOSE** — "Is the request to APPLY a risk-calibrated code discipline, or to AUTHOR/AUDIT the trade-off set itself?" That skill is a worked doctrine INSTANCE; this skill is the craft. Apply → there. Author or audit → here. |
 | `orchestrating-agents` | **PURPOSE** — dispatch, briefing, visibility, acceptance, resource admission → there. The priority ordering the dispatched actors carry when the brief runs out → here. Co-fire when a doctrine's probe needs a fleet. |

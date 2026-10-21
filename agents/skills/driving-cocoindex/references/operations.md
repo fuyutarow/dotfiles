@@ -506,7 +506,7 @@ on macOS this forge [dated:2026-07, UNVERIFIED elsewhere] — fallback:
 cwd it shows the literal `Not in an initialized project directory` stderr line followed
 near-instantly by a connection-closed error (an immediate fast-fail — timings →
 `catalog.md`), i.e. a project-root gate firing, not a slow start, a crash, or a timeout. If the log instead shows a long stall before failing, that is a _different_ class of
-problem (owned by `operating-the-harness`'s MCP-lifecycle diagnostics, not this one).
+problem (inspect the local MCP declaration and server lifecycle, not this one).
 
 **CLI vs MCP, when to bother**: the CLI exposes the full verb set (`init`/`index`/`search`/
 `grep`/`status`/`reset`/`doctor`/`daemon`) and works everywhere a shell does, including repos

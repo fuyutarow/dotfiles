@@ -165,7 +165,7 @@ SUPPORT a choice returns training-data folklore; verifiers are refutation-prompt
 Scale: single talk → fully solo, run the checklists yourself; large deck / defense backup arsenal →
 solo design + read-only audit fan-out + per-objection pipeline; multi-deck portfolio → audit fan-out
 per deck, design still solo per deck. No harness → same order, the audits become separate focused
-passes. Harness mechanics → operating-the-harness; wording-level prose audits → linting-prose.
+passes. Harness mechanics → declared local configuration and executable checks; wording-level prose audits → linting-prose.
 
 ## Pointers (depth lives in references/)
 

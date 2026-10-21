@@ -8,7 +8,7 @@ description: >-
   overlay → writer checkpoint. HERE initializes/reconciles the record locus; orchestrating-agents adds
   roles/visibility/veto/acceptance carrying only that locus; the sole HERE writer checkpoints the
   accepted overlay locator. Neither edits the other's semantic artifact. MUST NOT use for one-shot
-  diagnosis, hook/compact config alone→operating-the-harness, dispatch without durability, programme
+  diagnosis, hook/compact config alone→declared local configuration and executable checks, dispatch without durability, programme
   judgment alone→supervising-research-programmes, debug alone, trivial edits, private reasoning, secrets, poisoned
   context, or unauthorized paths. English skill; respond in the user's language (default Japanese).
 ---
@@ -37,7 +37,7 @@ TASK-CONTINUATION.md
 
 This skill owns only that transition and artifact. Domain skills still own the code, research,
 document, or operational result. `orchestrating-agents` owns dispatch and acceptance. It may carry
-the record locus but never its semantics. `operating-the-harness` owns compact hooks and product
+the record locus but never its semantics. Declared local configuration owns compact hooks and product
 configuration. It may transport the locus but never replace the record.
 
 Stable order: `continuity record -> orchestration overlay -> writer checkpoint`. After the domain
@@ -170,7 +170,7 @@ re-inject a trusted locator, never transcript text or the record body.
   artifacts → `governing-research-documentation`; persist its cited state only when C1 fires.
 - Agent roles, dependencies, vetoes, and acceptance → `orchestrating-agents`. Pass only the record
   locus into its dispatch overlay. Multiple agents alone do not trigger this Skill.
-- Compact hook, memory, or settings work → `operating-the-harness`; this skill owns record semantics.
+- Compact hook, memory, or settings work → declared local configuration and executable checks; this skill owns record semantics.
 - Leaked/malformed tool calls or retry loops → `recovering-poisoned-context` first. Never summarize a
   poisoned turn into the record.
 - Raw reasoning, transcript capture, secrets, credentials, or cross-user memory → refuse that content.

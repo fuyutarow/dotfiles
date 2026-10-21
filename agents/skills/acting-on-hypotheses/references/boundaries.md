@@ -97,10 +97,10 @@ the domain executor may perform only its contracted B→M work (`loop.md` §8).
 | **arguing-research-papers** | one finished evidence-backed manuscript claim | test an expensive/irreversible future bet HERE; run a cheap reversible probe with the domain/plain executor; argue completed evidence there |
 | **orchestrating-agents** | role topology, evidence visibility, veto timing, verification, acceptance | the one-tree decision artifacts stay HERE; multi-agent control may co-fire around probes |
 | **growing-oss-adoption** | making a specific OSS spread (distribution > love) | an OSS bet enters HERE only at the expensive/irreversible hard gate; cheap trials use the domain/plain executor, while adoption tactics stay with growing-oss-adoption |
-| **operating-the-harness** | `.claude`/config & harness engineering | orthogonal; a harness change still uses the GATE but defers config technique |
+| **declared local configuration** | `.claude`/config & harness engineering | orthogonal; a harness change still uses the GATE but defers config technique |
 
 **Precedence.** Domain-neutral and UPSTREAM of execution; defers to any domain owner (writing-julia /
-proving-theorems / growing-oss-adoption / operating-the-harness) for HOW. Owns only the selected
+proving-theorems / growing-oss-adoption / declared local configuration) for HOW. Owns only the selected
 expensive/irreversible one-tree bet's threshold, adjudication, and commitment — not routine execution.
 
 ## §5 — External frameworks: LINEAGE, not loaded skills (cannot co-fire — keep SHORT)

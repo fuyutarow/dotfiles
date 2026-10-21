@@ -477,7 +477,7 @@ subagents/workflows the gate's SEMANTICS do not change; only WHO runs a rung may
 - **Degradation.** No harness → nothing changes; the action ladder (§D.1) is already the solo form.
 - **Seams:** many-source sweeps → `systematizing-knowledge` (the cardinality cut, §B.6);
   expensive/irreversible forward-test probes → `acting-on-hypotheses`, cheap reversible probes →
-  domain/plain executor (§C.7); spawn/hook/workflow mechanics → `operating-the-harness`.
+  domain/plain executor (§C.7); spawn/hook/workflow mechanics → declared local configuration and executable checks.
 
 ---
 

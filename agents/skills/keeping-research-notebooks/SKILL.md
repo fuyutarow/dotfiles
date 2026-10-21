@@ -82,7 +82,7 @@ N3 and N4 detail: `references/launch-and-land.md`. N5 detail: `references/editio
 | research document, report, plan | the document portfolio | DOC ADMISSION | `governing-research-documentation` |
 | paper or slide source | `deliverables/papers/<dir>/`, `deliverables/slides/<dir>/` | working-copy edit, landed by the COMMITTER | dir name `compiling-latex`; argument `arguing-research-papers`; deck `designing-presentations` |
 | number, figure or table in a paper | a run artifact, cited by run id | the paper's build reads it | home here; evidence anchor `arguing-research-papers` |
-| ruling, owner feedback | memory; never a claim (a claim needs a record) | memory file plus index line | `operating-the-harness` |
+| ruling, owner feedback | memory; never a claim (a claim needs a record) | memory file plus index line | declared local configuration |
 | primary-source knowledge | the knowledge repo | that repo's distillation entry | `systematizing-knowledge` |
 | task or work state | TASK-CONTINUATION if the repo declares a locus, else "no declared home" | `continuing-long-running-tasks` | there |
 | large bytes | an ignored path inside the repo | write there; record its digest | — |

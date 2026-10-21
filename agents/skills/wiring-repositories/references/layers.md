@@ -15,7 +15,7 @@ The SKILL.md body carries none of this. A version number or a path detail there 
 | toolchain pins | `mise.toml` `[tools]` | `wiring-mise-tasks` |
 | verb contract | `mise.toml` `[tasks]` + aliases | `wiring-mise-tasks` → its `templates/<lang>.mise.toml`, gate `scripts/mise-contract.ts` |
 | language manifest | `Project.toml`+`Manifest.toml` / `pyproject.toml`+`uv.lock` / `Cargo.toml`+`Cargo.lock` / `package.json`+`bun.lock` | `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` |
-| agent harness | `.claude/settings.json`, `.claude/hooks/` | `operating-the-harness` |
+| agent harness | `.claude/settings.json`, `.claude/hooks/` | declared local configuration and executable checks |
 | commit enforcement | `.githooks/pre-commit` + `core.hooksPath` | `wiring-repositories` (Git-hook shape) + `wiring-mise-tasks` (task) |
 | semantic index | `.cocoindex_code/` | `driving-cocoindex` |
 | research governance | the governance config + declared document scopes | `governing-research-documentation` |

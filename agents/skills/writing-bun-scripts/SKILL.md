@@ -8,7 +8,7 @@ description: >-
   に書き換え, シェルスクリプト移行, bun スクリプト, bunx, npx, hooks 実装, or skill scripts/. CLI contract
   → designing-command-line-interfaces; TS → writing-typescript; Python → running-python-tools; task
   graph → wiring-mise-tasks; new repo → wiring-repositories first;
-  hook events → operating-the-harness; vendor CLI semantics → driving-*.
+  hook events → local configuration source and executable checks; vendor CLI semantics → driving-*.
   English skill; respond in the user's
   language.
 ---
@@ -143,7 +143,7 @@ FIRES:
 | "write a script that tallies brew leaves vs the Brewfile" | no bun keyword — BG0 routes local automation to bun ts |
 | 「probe-models.ts に --json フラグ足して」 | editing a house bun script (co-fire `implementing-and-debugging` FIRST when non-trivial) |
 | 「この script、yaml パーサ import していい？」(a bun script is in context) | BG3 dependency ladder |
-| 「hooks に新しい detector 足して」 | co-fire `operating-the-harness` FIRST (event/matcher contract); this owns the hook body |
+| 「hooks に新しい detector 足して」 | inspect the local event/matcher declaration FIRST; this owns the hook body |
 | 「この bootstrap の .sh も ts 化しよう」 | fires: check the callers — runs after bun → port it (link-dots.ts, 2026-10-05); truly before bun (installs bun) → stays a `bootstrap` shim (BG0) |
 
 MUST NOT fire (route):
@@ -172,7 +172,7 @@ MUST NOT fire (route):
 | `writing-python` | the same DECISIVE cut for KEPT code — kept Python → there; kept TS scripts → here. |
 | `wiring-mise-tasks` | PURPOSE — task NAME/verb/graph → theirs; the script BODY a task runs → here. |
 | `forging-skills` | PURPOSE — WHETHER a skill ships a script + floor-vs-semantic doctrine → theirs; HOW that script is written → here. |
-| `operating-the-harness` | PURPOSE — hook EVENTS/matchers/settings.json → theirs; the hook's `.ts` body → here (hooks rows in BG2/BG3). Its hooks reference carries generic bash/npx RECIPE examples from the upstream docs — illustrative contract, not house style; house hook bodies follow this skill (reciprocal note deferred, ledger). |
+| local configuration source and executable checks | PURPOSE — hook EVENTS/matchers/settings.json follow their declared source and checks; the hook's `.ts` body → here (hooks rows in BG2/BG3). House hook bodies follow this skill. |
 | `agx` / `driving-grok` / `driving-antigravity` | PURPOSE — their CLI laws and models → their owner; generic spawn/envelope/timeout craft → here (their scripts are corpus exemplars). |
 | `implementing-and-debugging` / `refactoring-code` | co-fire with ORDER on any behavior change / restructure — they govern; this supplies the bun oracle (floor + `bun test` green bracket) and the target idioms. |
 | `raising-resolution` | silent sub-step: probe the actual runtime (`bun --version`, run the command) before asserting a Bun fact — never recall one from training. |

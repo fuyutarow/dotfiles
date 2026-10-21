@@ -106,9 +106,9 @@ const CORPUS: CorpusEntry[] = [
     path: "agents/skills/governing-research-documentation/scripts/research-docs-check.ts",
   },
   {
-    path: "agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts",
+    path: "scripts/harness/gate-diagnostics-check.ts",
   },
-  { path: "agents/skills/operating-the-harness/scripts/scope-check.ts" },
+  { path: "scripts/harness/scope-check.ts" },
   { path: "agents/skills/surfacing-blind-spots/scripts/blind-spot-check.ts" },
   { path: "agents/skills/systematizing-knowledge/scripts/check-donor-set.ts" },
   { path: "agents/skills/systematizing-knowledge/scripts/check-ledger.ts" },

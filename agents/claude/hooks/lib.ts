@@ -3,7 +3,7 @@
 // the house zod-for-narrowing preference: payload/transcript shapes are hand-narrowed at
 // the JSON boundary and kept loose (`any`) on purpose.
 //
-// Hook protocol reminders (see operating-the-harness/references/hooks.md):
+// Hook protocol reminders (see the archived harness contract and local hook declarations):
 //   - stdin = event JSON
 //   - PreToolUse decision = exit 0 + JSON on stdout (decidePre)
 //   - Stop guard block    = top-level { decision: "block", reason } JSON on stdout. Existing

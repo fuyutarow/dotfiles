@@ -38,7 +38,7 @@ frozen terminal/stopped/failed episode packet + evidence locators
 | One live research section and local evidence | `directing-research-sections` | section signal or terminal packet |
 | **Frozen episode process audit** | **HERE** | frozen audit + declassified recommendation; stop |
 | Scientific claim or paper argument | `arguing-research-papers` | CLAIM SPEC |
-| Software or control-plane incident review | relevant domain skill / `operating-the-harness` | incident finding |
+| Software or control-plane incident review | relevant domain skill / local configuration source | incident finding |
 
 The **PURPOSE cut** is decisive: this skill asks whether a bounded research episode's
 record supports process findings. It does not decide whether a claim is true, assign a
@@ -117,7 +117,7 @@ skill-check agents/skills/auditing-research-processes
 |---|---|
 | "The section is still running; tell the director what to try." | `directing-research-sections` |
 | "Is this completed paper claim defensible?" | `arguing-research-papers` |
-| "Why did the build hook fail?" | `operating-the-harness` or the implementation owner |
+| "Why did the build hook fail?" | local configuration source or the implementation owner |
 | "Choose which open issue a director should take." | `supervising-research-programmes` |
 | "Invent a method for this research programme." | relevant section/search skill; not audit |
 

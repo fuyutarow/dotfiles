@@ -186,7 +186,7 @@ The bare token “survey” is not a trigger here; it belongs to SoK.
 | overlay agents, visibility, dependencies, vetoes, verification, or acceptance | **orchestrating-agents** | PURPOSE: control-plane topology there; HERE supplies cited present-state rows only |
 | implicit premises, ignored exceptions, or human tacit constraints in an existing plan/frame | **surfacing-blind-spots** | PURPOSE: EXPOSE into a Blind-spot packet there; inspect a fixed factual row HERE only after it is surfaced |
 | OSS-adoption diagnosis | **growing-oss-adoption** | owner |
-| `.claude` / CLAUDE.md / hooks config or harness mechanics | **operating-the-harness** | owner (closes the meta-loop) |
+| `.claude` / CLAUDE.md / hooks config or harness mechanics | **declared local configuration and executable checks** | inspect the source and run its narrow check |
 | skill creation / SKILL.md authoring/auditing (craft) | **forging-skills** | owner |
 | Julia / Lean execution | **writing-julia / proving-theorems** | owner |
 | an expensive/irreversible future bet or one with costly downstream exposure | **acting-on-hypotheses** | DECISIVE hard gate (see below) |

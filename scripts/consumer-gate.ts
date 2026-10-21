@@ -1,5 +1,6 @@
 // Consumer: land. Every subprocess runs with the host read-only and only its scratch tree writable.
 import {
+  chmod,
   cp,
   lstat,
   mkdir,
@@ -527,6 +528,30 @@ async function seedMiseInstalls(home: string): Promise<void> {
 
 // Resolve tools before any mount can shadow their symlink chain. Copies keep both
 // execvp and nested /usr/bin/env lookups independent of the consumer's live paths.
+async function captureExecutable(
+  executable: string,
+  target: string,
+): Promise<string | undefined> {
+  const header = await Bun.file(executable).slice(0, 128).text();
+  if (!/^#!\/usr\/bin\/env bun\r?\n/u.test(header)) {
+    await cp(executable, target);
+    return undefined;
+  }
+  // Snapshot only the resolved code graph; never expose adjacent configuration.
+  const built = await Bun.build({
+    entrypoints: [executable],
+    target: "bun",
+    format: "esm",
+    packages: "bundle",
+  });
+  const output = built.outputs[0];
+  if (!built.success || built.outputs.length !== 1 || output === undefined)
+    return `cannot capture Bun executable ${executable}: expected one code bundle; ${built.logs.map(String).join("; ")}`;
+  await Bun.write(target, output);
+  await chmod(target, (await stat(executable)).mode);
+  return undefined;
+}
+
 async function captureExecutables(scratch: string, consumer: Consumer) {
   const directory = join(scratch, "runtime-bin");
   await mkdir(directory);
@@ -547,13 +572,17 @@ async function captureExecutables(scratch: string, consumer: Consumer) {
     const executable = await realpath(found);
     const known = captured.get(executable);
     const target = known ?? join(directory, basename(name));
-    if (known === undefined) await cp(executable, target);
+    const error =
+      known === undefined
+        ? await captureExecutable(executable, target)
+        : undefined;
+    if (error !== undefined) return { ok: false as const, error };
     captured.set(executable, target);
     paths.set(name, target);
   }
   const bun = paths.get("bun");
   if (bun !== undefined) paths.set(process.execPath, bun);
-  return { directory, paths };
+  return { ok: true as const, directory, paths };
 }
 
 function inside(root: string, path: string): boolean {
@@ -701,6 +730,7 @@ async function checkConsumer(
     liveDotfiles,
   );
   const executables = await captureExecutables(scratch, consumer);
+  if (!executables.ok) return [`FAIL ${consumer.name}: ${executables.error}`];
   const roots = await Promise.all(
     [source, root, dotfiles].map((path) => attempt(() => realpath(path))),
   );

@@ -216,6 +216,48 @@ test("hooks and package bins run consumers against candidate implementations", a
   expect(sharedSurfaces(["agents/hooks/test.ts"])).toContain("hooks");
 });
 
+test("captured declared Bun bin retains sibling and transitive imports inside isolation", async () => {
+  const f = await fixture({ compliant: true });
+  // Uncommitted source is absent from the trunk export mounted over the live consumer.
+  const directory = join(f.consumer, "tools/import-bin");
+  await mkdir(directory, { recursive: true });
+  const entry = join(directory, "main.ts");
+  await writeFile(
+    join(directory, "value.ts"),
+    "export const value = 'captured-graph';",
+  );
+  await writeFile(
+    join(directory, "sibling.ts"),
+    "export {value} from './value.ts';",
+  );
+  await writeFile(
+    entry,
+    `#!/usr/bin/env bun
+import {value} from './sibling.ts';
+if (!import.meta.main || !import.meta.dir.endsWith('/runtime-bin')) throw new Error('capture bypassed');
+if (await Bun.file(${JSON.stringify(entry)}).exists()) throw new Error('live source visible');
+if (value !== 'captured-graph' || Bun.argv.at(-1) !== 'argument') throw new Error('graph or argv changed');
+process.stdout.write(value);
+`,
+  );
+  await chmod(entry, 0o755);
+  await writeFile(
+    join(f.consumer, "package.json"),
+    JSON.stringify({ bin: { "import-bin": "tools/import-bin/main.ts" } }),
+  );
+  const registry = join(f.root, "presets/consumers.toml");
+  await writeFile(
+    registry,
+    (await Bun.file(registry).text()).replace(
+      `command = [${JSON.stringify(process.execPath)}, "gate.ts"]`,
+      `command = [${JSON.stringify(entry)}, "argument"]`,
+    ),
+  );
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result.ok, result.lines.join("\n")).toBe(true);
+  expect(result.checked).toBe(1);
+});
+
 test("invalid or missing registry cannot approve shared changes", async () => {
   const f = await fixture();
   await writeFile(

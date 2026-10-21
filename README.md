@@ -259,8 +259,8 @@ The systemd unit runs this composition directly; `agx worker doctor` forwards on
 
 ## Design — the invariants
 
-The rules that keep the repo coherent. The agent-facing operational encoding lives in
-[`CLAUDE.md`](CLAUDE.md) (Claude Code) and [`AGENTS.md`](AGENTS.md) (Codex).
+The rules that keep the repo coherent. The maintained agent-facing project policy for
+Claude and Codex lives in [`AGENTS.md`](AGENTS.md).
 
 1. **Topic-first.** Adding or removing a tool touches exactly one directory plus `scripts/config-registry.ts`.
    No `common` / `mac` / `wsl` bucket directories — OS variance goes _inside_ the tool's directory.

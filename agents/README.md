@@ -1,5 +1,10 @@
 # Agent assets
 
+Repository project policy is maintained in [`../AGENTS.md`](../AGENTS.md) for Claude and
+Codex. Global vendor guidance under `claude/` is a separate deployment surface.
+`mise run agents:link` links commands and personal Codex guidance; skill installation is
+owned by `mise run skills:sync`.
+
 `skills/` contains in-house Agent Skills. `mise run skills:sync` installs bare-name copies into
 `~/.claude/skills` and `~/.agents/skills`. Third-party skill source/name pairs
 are declared in [`skills.thirdparty.toml`](skills.thirdparty.toml) and installed into tool-owned

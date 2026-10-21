@@ -1,5 +1,5 @@
 /**
- * Update the standalone Codex CLI, then close the app-server version gap it leaves behind.
+ * Reconcile the declared Codex CLI update with the app-server version gap it can leave behind.
  *
  * Invoked as a topgrade custom step (see topgrade/topgrade.toml). It lives here, as a real
  * file, rather than inline in that TOML for two measured reasons:
@@ -15,13 +15,19 @@
  *    for `$?`. shellcheck could not have caught it either: it does not analyse zsh. In TS the
  *    trap does not exist, and the JSON below is parsed natively instead of shelling out to jq.
  *
+ * UPDATE OWNERSHIP
+ * WSL's declared standalone provider is the Homebrew `codex` cask (Brewfile.core), so Topgrade's
+ * `brew_cask` step owns its version transition. Calling `codex update` there duplicates that work
+ * and is unsupported by the cask. macOS and ordinary Linux retain the standalone self-update;
+ * the Windows Desktop package owns its bundle update lifecycle.
+ *
  * WHY THE DAEMON NEEDS SEPARATE HANDLING
- * `codex update` only repoints the `current` symlink at the newest downloaded release. The
+ * An updated Codex release does not replace a running app-server daemon. The
  * long-lived `codex app-server` daemon (remote control / ChatGPT desktop connector) keeps
  * running the binary it was launched with until something restarts it. Measured 2026-08-23: a
- * daemon started 2026-08-03 was still serving 0.146.0 after `current` had moved through
+ * daemon started 2026-08-03 was still serving 0.146.0 after the managed release had moved through
  * 0.146.1 -> 0.147.0 -> 0.149.0. `codex app-server daemon version` reports the gap as
- * appServerVersion (running) vs managedCodexVersion (what `current` points at). That stale
+ * appServerVersion (running) vs managedCodexVersion (the installed release). That stale
  * daemon is not cosmetic: it also keeps serving its STARTUP-TIME config.toml, so config edits
  * silently do nothing until it is replaced.
  *
@@ -35,7 +41,7 @@
 import { jsonOf, z } from "../hooks/zod.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { resolveRuntime } from "./runtime.ts";
+import { hostKind, resolveRuntime } from "./runtime.ts";
 const recoverInvalid = <T extends z.ZodType>(schema: T) =>
   schema.optional().catch(undefined);
 
@@ -113,8 +119,14 @@ if (Bun.which(CODEX) === null) {
   process.exit(0);
 }
 
-// This step's exit status is the updater's own, per the convention in topgrade.toml.
-const { code: updateCode } = await run(["update"]);
+let updateCode = 0;
+if (hostKind() === "wsl") {
+  // Brewfile.core declares the WSL standalone CLI as a Homebrew cask. Topgrade's brew_cask
+  // step owns errors from that update; this follow-up must not mask them with a second updater.
+  console.log("codex: Homebrew owns WSL CLI updates — self-update skipped");
+} else {
+  updateCode = (await run(["update"])).code;
+}
 
 const v = await daemonVersion();
 const running = v?.appServerVersion;
@@ -145,9 +157,9 @@ if (running !== undefined && current !== undefined && running !== current) {
   }
 }
 
-// The update path restarts the daemon (above, or codex's own updater), and a restart is where remote
-// control was lost on 2026-10-01. Re-converge to agents/codex/app-server.toml; report, never mask
-// the update's own status.
+// An update path can restart the daemon, and a restart is where remote control was lost on
+// 2026-10-01. Re-converge to agents/codex/app-server.toml; report, never mask the standalone
+// updater's own status.
 const converge = Bun.spawn(
   ["bun", `${import.meta.dir}/codex-remote-control.ts`],
   {

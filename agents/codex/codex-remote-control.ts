@@ -1,10 +1,12 @@
 // `mise run codex:remote-control` — converge the Codex app-server daemon's remote control to
 // agents/codex/app-server.toml. Idempotent: no drift → no command (so a live daemon is never
-// restarted for nothing). On drift it runs `codex app-server daemon enable-remote-control` (or
-// disable-), which persists the setting AND restarts a running daemon — measured 2026-10-01, the
-// help text's "currently running" means a restart, so sessions on it are resumed, not kept.
+// restarted for nothing). On managed-daemon drift it runs `codex app-server daemon
+// enable-remote-control` (or disable-), which persists the setting AND restarts a running daemon
+// — measured 2026-10-01, the help text's "currently running" means a restart, so sessions on it
+// are resumed, not kept. An unmanaged direct app-server is an ownership boundary: report it and
+// leave it untouched, because daemon settings cannot synchronize that server.
 // Also run by agents/codex/codex-update.ts after every update. No argv (no Cleye boundary owed).
-// Exit: 0 converged/skipped · 1 still drifting after the command · 2 broken declaration.
+// Exit: 0 converged/skipped · 1 unresolved or unmanaged drift · 2 broken declaration.
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { drift, readDeclared, readLive } from "./remote-control.ts";
@@ -21,7 +23,18 @@ if (declared instanceof Error) {
   console.error(`codex-remote-control: ${declared.message}`);
   process.exit(2);
 }
-const before = drift(declared, await readLive(home));
+const live = await readLive(home);
+const before = drift(declared, live);
+if (live.unmanaged === true) {
+  console.error(
+    [
+      `codex-remote-control: drift — ${before.join("; ")}`,
+      "codex-remote-control: unmanaged app-server detected; daemon settings cannot synchronize it safely, so no change was made.",
+      "codex-remote-control: when its owning desktop or SSH session is no longer in use, replace it as a managed daemon, then rerun mise run codex:remote-control.",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
 if (before.length === 0) {
   console.log(
     `codex-remote-control: remote control ${declared ? "enabled" : "disabled"} — matches the declaration`,

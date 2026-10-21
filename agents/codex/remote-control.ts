@@ -107,5 +107,9 @@ export function drift(declared: boolean, live: Live): string[] {
     out.push(
       `running daemon remote control=${live.running}, declared ${declared}`,
     );
+  if (live.unmanaged === true)
+    out.push(
+      "running app-server is unmanaged; its remote-control state cannot be synchronized safely",
+    );
   return out;
 }

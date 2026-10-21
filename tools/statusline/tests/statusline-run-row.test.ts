@@ -729,13 +729,13 @@ describe("legacy enriched Run row", () => {
     const dir = join(scratch, "other-session");
     marker(dir, "other", process.pid, "private worker", 90, "other-session-id");
     const out = await render(dir);
-    expect(out).toContain("+1 workers in other sessions");
+    expect(out).toContain(`+1 workers outside session ${SESSION}`);
     expect(
       out
         .split("\n")
         .map((line) => line.replace(ANSI, ""))
-        .filter((line) => line.includes("in other sessions")),
-    ).toEqual(["+1 workers in other sessions"]);
+        .filter((line) => line.includes("outside session")),
+    ).toEqual([`+1 workers outside session ${SESSION}`]);
     expect(out).not.toContain("private worker");
     expect(out).not.toContain("luna-high");
   });
@@ -745,7 +745,7 @@ describe("legacy enriched Run row", () => {
     marker(dir, "unowned", process.pid, "undispatched worker", 90, null);
     const out = await render(dir);
     expect(out).not.toContain("unattributed");
-    expect(out).toContain("+1 workers in other sessions");
+    expect(out).toContain(`+1 workers outside session ${SESSION}`);
     expect(out).not.toContain("undispatched worker");
   });
 
@@ -773,8 +773,8 @@ describe("legacy enriched Run row", () => {
       out
         .split("\n")
         .map((line) => line.replace(ANSI, ""))
-        .filter((line) => line.includes("in other sessions")),
-    ).toEqual(["+3 workers in other sessions"]);
+        .filter((line) => line.includes("outside session")),
+    ).toEqual([`+3 workers outside session ${SESSION}`]);
     expect(
       out
         .replaceAll(ANSI, "")

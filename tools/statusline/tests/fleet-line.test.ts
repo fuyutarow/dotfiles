@@ -119,6 +119,39 @@ test("run snapshot lag is visible immediately when the source ledger is newer", 
   ).toBe("stale runs 1s");
 });
 
+test("run source distinguishes bounded view latency from stale and unavailable facts", () => {
+  expect(
+    fleetLine(
+      {
+        runs: [],
+        unreadable: 0,
+        runSource: { kind: "current", capturedAt: at - 1745 },
+      },
+      at,
+    ),
+  ).toBe("");
+  expect(
+    fleetLine(
+      {
+        runs: [],
+        unreadable: 0,
+        runSource: { kind: "stale", capturedAt: at - 1745 },
+      },
+      at,
+    ),
+  ).toBe("stale runs 1s");
+  expect(
+    fleetLine(
+      {
+        runs: [],
+        unreadable: 0,
+        runSource: { kind: "unknown", why: "snapshot unavailable" },
+      },
+      at,
+    ),
+  ).toBe("runs n/a (snapshot unavailable)");
+});
+
 test("fleet counts gc verdicts, including legacy and abandoned, without implying deletion permission", () => {
   expect(workspaceCounts(tsv, at)).toEqual({
     total: 6,

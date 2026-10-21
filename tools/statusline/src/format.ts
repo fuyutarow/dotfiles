@@ -68,7 +68,8 @@ export function render(
     collect?: FieldDisplay;
     layout?: "location" | "session" | "shared" | "block" | "snapshot";
     source?: "transcript" | "stdin";
-    workerSessions?: string[];
+    /** Prepared views add their source status when they are read, not when written. */
+    includeRunSource?: boolean;
   } = {},
 ): string {
   const codex = options.codex === true;
@@ -234,9 +235,13 @@ export function render(
   const scan = df.routes?.isOk() === true ? df.routes.value : undefined;
   const agxBlock = routeLines(
     scan?.runs ?? [],
-    options.workerSessions ?? df.sid,
+    scan?.inventorySessions ?? scan?.sessionScope,
   ).join("\n");
-  const bottom = fleetLine(scan);
+  const bottom = fleetLine(
+    scan,
+    Temporal.Now.instant().epochMilliseconds,
+    options.includeRunSource ?? true,
+  );
 
   const rows = {
     prompt: observed(

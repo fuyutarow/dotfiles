@@ -72,7 +72,7 @@ async function renderDiscovered(
         sources: { codexRate: () => Promise.resolve(ok(undefined)) },
       },
     );
-    frame.routes = ok(await readCoreRuns(process.env, null, cwd));
+    frame.routes = ok(await readCoreRuns(process.env, null, cwd, []));
     return `${render(frame, { layout: "location" })}\n${DIM}no agent session in ${cwd}${RST}\n${render(frame, { layout: "shared" })}`;
   }
   const blocks: string[] = [];
@@ -118,9 +118,6 @@ async function renderDiscovered(
       render(sharedFrame, {
         codex: sessionId !== undefined && sessions[0]?.vendor === "codex",
         layout: "shared",
-        ...(sessionId === undefined
-          ? { workerSessions: sessions.map((session) => session.session_id) }
-          : {}),
       }),
     );
   return blocks.join("\n");

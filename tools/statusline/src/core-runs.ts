@@ -4,6 +4,25 @@ import { readAgxSnapshotAsync } from "./agx-snapshot.ts";
 import { currentDispatcherSession } from "./dispatch-display.ts";
 import type { RouteRun, RouteScan } from "./dispatch-runs.ts";
 
+export type ResolvedRunScope =
+  | { kind: "session"; session: string | undefined }
+  | { kind: "inventory"; sessions: string[] };
+
+/** Resolve selector precedence once, before both summary counts and worker rows consume it. */
+export function resolveRunScope(
+  env: NodeJS.ProcessEnv,
+  sessionId: string | null | undefined,
+  inventorySessions?: readonly string[],
+): ResolvedRunScope {
+  if (sessionId === null && inventorySessions !== undefined)
+    return { kind: "inventory", sessions: [...new Set(inventorySessions)] };
+  return {
+    kind: "session",
+    session:
+      sessionId === null ? undefined : currentDispatcherSession(sessionId, env),
+  };
+}
+
 const Row = z.lazy(() =>
   z.object({
     id: z.string(),
@@ -31,13 +50,11 @@ export async function readCoreRuns(
   inventorySessions?: string[],
 ): Promise<RouteScan> {
   const snapshot = await readAgxSnapshotAsync(env, cwd);
-  // null explicitly selects the repository-wide standalone view, without env fallback.
+  const scope = resolveRunScope(env, sessionId, inventorySessions);
   const dispatcherSession =
-    sessionId === null ? undefined : currentDispatcherSession(sessionId);
+    scope.kind === "session" ? scope.session : undefined;
   const displayedSessions =
-    sessionId === null && inventorySessions !== undefined
-      ? [...new Set(inventorySessions)]
-      : undefined;
+    scope.kind === "inventory" ? scope.sessions : undefined;
   const summary = snapshot.summary;
   const here =
     displayedSessions === undefined
@@ -101,6 +118,7 @@ export async function readCoreRuns(
     },
     workspaces: snapshot.workspaces,
     findings: snapshot.findings,
+    runSource: snapshot.runSource,
     fleet:
       summary === undefined || session === undefined
         ? undefined

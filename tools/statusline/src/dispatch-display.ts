@@ -62,7 +62,7 @@ function padDisplay(value: string, width: number, left = false): string {
 }
 export function routeLines(
   runs: RouteRun[],
-  sessionId: string | readonly string[] | undefined,
+  scope: string | readonly string[] | undefined,
   _unreadable = 0,
   _counts?: Partial<NonNullable<RouteScan["fleet"]>>,
 ): string[] {
@@ -75,9 +75,7 @@ export function routeLines(
   );
 
   const dispatcherSessions =
-    typeof sessionId === "string"
-      ? new Set([currentDispatcherSession(sessionId)].filter(Boolean))
-      : new Set(sessionId ?? []);
+    typeof scope === "string" ? new Set([scope]) : new Set(scope ?? []);
   const own = attributed.filter((r) =>
     dispatcherSessions.has(r.dispatcherSession ?? ""),
   );
@@ -139,11 +137,12 @@ export function routeLines(
 /** An explicitly selected display session wins over the invoking shell's identity. */
 export function currentDispatcherSession(
   payloadSession: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
   return [
     payloadSession,
-    process.env.AGX_DISPATCHER_SESSION,
-    process.env.CLAUDE_CODE_SESSION_ID,
+    env.AGX_DISPATCHER_SESSION,
+    env.CLAUDE_CODE_SESSION_ID,
   ]
     .find((value) => value !== undefined && value.trim() !== "")
     ?.trim();

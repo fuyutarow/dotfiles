@@ -7,6 +7,8 @@ import type { SessionStatus } from "./session-status.ts";
 export interface AgentSession {
   vendor: "claude" | "codex";
   pid: number;
+  /** Linux boot/process generation captured with this discovery result. */
+  process_generation?: string | undefined;
   cwd: string;
   session_id: string;
   transcript_path: string;
@@ -15,6 +17,7 @@ export interface AgentSession {
 export const AgentSessionSchema = z.object({
   vendor: z.enum(["claude", "codex"]),
   pid: z.number(),
+  process_generation: z.string().optional(),
   cwd: z.string(),
   session_id: z.string(),
   transcript_path: z.string(),
@@ -43,16 +46,64 @@ const timestamp = (value: unknown): string | null => {
 const projectSlug = (cwd: string) => cwd.replaceAll("/", "-");
 const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
 
+function processGeneration(
+  stat: string | Buffer | null,
+  bootId?: string | null,
+): string | undefined {
+  if (stat === null) return undefined;
+  // comm is parenthesized and can contain spaces or parentheses.
+  const statText = String(stat);
+  const close = statText.lastIndexOf(")");
+  if (close < 0) return undefined;
+  const start = statText
+    .slice(close + 1)
+    .trim()
+    .split(/\s+/u)[19];
+  if (start === undefined || !/^\d+$/u.test(start)) return undefined;
+  return bootId === undefined || bootId === null || bootId === ""
+    ? start
+    : `${bootId}:${start}`;
+}
+
+/** A PID is only a session witness while its recorded Linux generation still exists. */
+export async function sessionProcessMatches(session: {
+  pid: number;
+  process_generation?: string | undefined;
+}): Promise<boolean> {
+  if (process.platform !== "linux") return true;
+  if (session.process_generation === undefined) return false;
+  const [command, generation] = await Promise.all([
+    fs
+      .readFile(join(procRoot(), String(session.pid), "cmdline"), "utf8")
+      .catch(() => ""),
+    fs
+      .readFile(join(procRoot(), String(session.pid), "stat"), "utf8")
+      .then((stat) =>
+        fs
+          .readFile(join(procRoot(), "sys/kernel/random/boot_id"), "utf8")
+          .then((boot) => processGeneration(stat, boot.trim()))
+          .catch(() => processGeneration(stat)),
+      )
+      .catch(() => null),
+  ]);
+  return command !== "" && generation === session.process_generation;
+}
+
 async function processRows(io: DiscoveryFs) {
+  const bootId = await io
+    .readFile(join(procRoot(), "sys/kernel/random/boot_id"), "utf8")
+    .then((value) => value.trim())
+    .catch(() => null);
   const names = await io.readdir(procRoot()).catch(() => []);
   return Promise.all(
     names
       .filter((name) => /^[1-9]\d*$/u.test(name))
       .map(async (name) => {
         const pid = Number(name);
-        const argv = await io
-          .readFile(join(procRoot(), name, "cmdline"))
-          .catch(() => null);
+        const [argv, stat] = await Promise.all([
+          io.readFile(join(procRoot(), name, "cmdline")).catch(() => null),
+          io.readFile(join(procRoot(), name, "stat")).catch(() => null),
+        ]);
         if (argv === null) return null;
         const args = argv.toString("utf8").split("\0").filter(Boolean);
         const first = args[0] ?? "";
@@ -72,9 +123,22 @@ async function processRows(io: DiscoveryFs) {
           vendor = "codex";
         if (vendor === undefined) return null;
         const cwd = await resolved(join(procRoot(), name, "cwd"), io);
-        return cwd === null
-          ? null
-          : { pid, cwd, vendor, server: args.includes("app-server") };
+        const generation = processGeneration(stat, bootId);
+        if (cwd === null) return null;
+        const result: {
+          pid: number;
+          cwd: string;
+          vendor: "claude" | "codex";
+          server: boolean;
+          process_generation?: string;
+        } = {
+          pid,
+          cwd,
+          vendor,
+          server: args.includes("app-server"),
+        };
+        if (generation !== undefined) result.process_generation = generation;
+        return result;
       }),
   );
 }
@@ -82,6 +146,7 @@ async function processRows(io: DiscoveryFs) {
 async function claudeSession(
   pid: number,
   cwd: string,
+  generation: string | undefined,
   io: DiscoveryFs,
 ): Promise<AgentSession | null> {
   const sessionFile = join(home(), ".claude", "sessions", `${pid}.json`);
@@ -120,7 +185,7 @@ async function claudeSession(
   );
   const transcriptInfo = await io.stat(transcript).catch(() => null);
   if (transcriptInfo?.isFile() !== true) return null;
-  return {
+  const session: AgentSession = {
     vendor: "claude",
     pid,
     cwd,
@@ -128,11 +193,14 @@ async function claudeSession(
     transcript_path: transcript,
     started_at: startedAt,
   };
+  if (generation !== undefined) session.process_generation = generation;
+  return session;
 }
 
 async function codexSessions(
   pid: number,
   cwd: string,
+  generation: string | undefined,
   allCwds: boolean,
   io: DiscoveryFs,
 ): Promise<AgentSession[]> {
@@ -175,7 +243,7 @@ async function codexSessions(
       const started = z.iso
         .datetime({ offset: true })
         .safeParse(payload?.timestamp);
-      return {
+      const session: AgentSession = {
         vendor: "codex",
         pid,
         cwd: canonicalCwd,
@@ -187,6 +255,8 @@ async function codexSessions(
               Math.trunc(info.birthtimeMs),
             ).toString(),
       };
+      if (generation !== undefined) session.process_generation = generation;
+      return session;
     }),
   );
   return rows.filter((row) => row !== null);
@@ -228,10 +298,15 @@ export async function discoverSessions(
     processes.map(async (proc) => {
       if (proc === null) return [];
       if (proc.vendor === "claude") {
-        const session = await claudeSession(proc.pid, proc.cwd, io);
+        const session = await claudeSession(
+          proc.pid,
+          proc.cwd,
+          proc.process_generation,
+          io,
+        );
         return session === null ? [] : [session];
       }
-      return codexSessions(proc.pid, cwd, allCwds, io);
+      return codexSessions(proc.pid, cwd, proc.process_generation, allCwds, io);
     }),
   );
   return rows

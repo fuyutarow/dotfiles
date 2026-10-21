@@ -6,7 +6,10 @@ import { jsonOf, z } from "./zod.ts";
 import { MemReadingSchema } from "./host-model.ts";
 import { RecoverHealthSchema } from "./recover-health.ts";
 import type { Sources } from "./build-dataframe.ts";
-import { AgentSessionSchema } from "./session-discovery.ts";
+import {
+  AgentSessionSchema,
+  sessionProcessMatches,
+} from "./session-discovery.ts";
 
 export const ownerStatePath = () =>
   process.env.STATUSLINE_OWNER_STATE ??
@@ -167,7 +170,7 @@ export async function readOwnerState(): Promise<OwnerState | undefined> {
   return undefined;
 }
 
-/** Discovery is sampled once for every session; rendering validates only the selected PIDs. */
+/** Discovery is sampled once; rendering accepts only the recorded process generation. */
 export async function readRenderSessions(
   cwd: string,
   pending = readOwnerState(),
@@ -181,18 +184,9 @@ export async function readRenderSessions(
     cwd === process.cwd() ? cwd : await realpath(cwd).catch(() => cwd);
   const selected = parsed.data.filter((session) => session.cwd === canonical);
   const alive = await Promise.all(
-    selected.map(async (session) => {
-      if (process.platform !== "linux") return session;
-      const command = await readFile(
-        join(
-          process.env.STATUSLINE_PROC_ROOT ?? "/proc",
-          String(session.pid),
-          "cmdline",
-        ),
-        "utf8",
-      ).catch(() => "");
-      return command === "" ? undefined : session;
-    }),
+    selected.map(async (session) =>
+      (await sessionProcessMatches(session)) ? session : undefined,
+    ),
   );
   return alive.filter((session) => session !== undefined);
 }

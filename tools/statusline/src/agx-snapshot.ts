@@ -59,6 +59,10 @@ const SnapshotSchema = z.lazy(() =>
     findings: FindingsSchema().optional(),
   }),
 );
+export type RunSnapshotSource =
+  | { kind: "current"; capturedAt: number }
+  | { kind: "stale"; capturedAt: number }
+  | { kind: "unknown"; why: string };
 export interface AgxSnapshotRead {
   judgments?: Record<string, number> | undefined;
   repositoryJudgments?: number | undefined;
@@ -68,6 +72,7 @@ export interface AgxSnapshotRead {
   workspaces?: WorkspaceCounts | undefined;
   summary?: z.output<typeof SummarySchema> | undefined;
   rows: unknown[] | undefined;
+  runSource: RunSnapshotSource;
   ageSeconds: number | undefined;
   reason: string | undefined;
 }
@@ -225,6 +230,7 @@ export async function readAgxSnapshotAsync(
     return {
       ...actions,
       rows: undefined,
+      runSource: { kind: "unknown", why: "snapshot unavailable" },
       ageSeconds: undefined,
       reason: "snapshot unavailable",
       workspaces,
@@ -234,6 +240,10 @@ export async function readAgxSnapshotAsync(
   return {
     ...actions,
     rows: Array.isArray(listing) ? listing : listing.runs,
+    runSource: {
+      kind: runsStale ? "stale" : "current",
+      capturedAt: snapshot.capturedAt,
+    },
     summary: Array.isArray(listing) ? undefined : listing.summary,
     workspaces,
     findings: findingsWithFreshness ?? snapshot.findings,

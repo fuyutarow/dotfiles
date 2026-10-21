@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.16 — 2026-10-21
+
+- Preserve resolved worker scope and reject reused prepared-view PIDs
+
 ## 0.20.15 — 2026-10-21
 
 - Watch worker rows now identify their dispatcher session and stale run snapshots immediately.

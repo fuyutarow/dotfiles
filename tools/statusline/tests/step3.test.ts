@@ -54,15 +54,24 @@ async function fixture() {
       writeFile(join(root, "proc", String(pid), "cmdline"), "fixture\0"),
     ),
   );
+  await Promise.all(
+    [101, 102].map((pid) =>
+      writeFile(
+        join(root, "proc", String(pid), "stat"),
+        `${pid} (fixture) S ${Array.from({ length: 18 }, () => "0").join(" ")} 100\n`,
+      ),
+    ),
+  );
   return root;
 }
 
 test("two live sessions render one location and one machine block; corrupt view uses last good with age", async () => {
   const root = await fixture();
+  const at = Temporal.Now.instant().epochMilliseconds;
   const view: Presentation = {
     schema: 1,
     version,
-    at: Temporal.Now.instant().epochMilliseconds,
+    at,
     rows: [
       {
         cwd: root,
@@ -71,12 +80,19 @@ test("two live sessions render one location and one machine block; corrupt view 
           {
             id: "codex",
             pid: 101,
+            process_generation: "100",
             line: "GPT-6.1-Sol | medium | Ctx: 21k | Session: codex",
           },
-          { id: "claude", pid: 102, line: "Opus 5.5 | Session: claude" },
+          {
+            id: "claude",
+            pid: 102,
+            process_generation: "100",
+            line: "Opus 5.5 | Session: claude",
+          },
         ],
         shared:
           "Rate: sampled\nSys: CPU 42%\nJob: idle\nagx 0 workers\nworkers 0 running",
+        runSource: { kind: "current", capturedAt: at },
       },
     ],
   };
@@ -93,7 +109,7 @@ test("two live sessions render one location and one machine block; corrupt view 
   await writeFile(presentationPath(), "broken");
   expect(await presentation(root)).toContain("samples 1s old");
   await rm(join(root, "proc/102/cmdline"));
-  expect(await presentation(root)).not.toContain("Session: claude");
+  expect(await presentation(root)).toBeUndefined();
   const historical = encodePresentation(view).replace("\tactions-24h-v1", "");
   await writeFile(presentationPath(), historical);
   await writeFile(`${presentationPath()}.last-good`, historical);

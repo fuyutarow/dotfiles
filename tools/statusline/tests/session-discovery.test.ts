@@ -63,10 +63,17 @@ async function fakeProcess(
   pid: number,
   binary: string,
   cwd: string,
+  generation = "100",
 ) {
   const directory = join(proc, String(pid));
   await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, "cmdline"), `${binary}\0--fixture\0`);
+  await Promise.all([
+    writeFile(join(directory, "cmdline"), `${binary}\0--fixture\0`),
+    writeFile(
+      join(directory, "stat"),
+      `${pid} (fixture) S ${Array.from({ length: 18 }, () => "0").join(" ")} ${generation}\n`,
+    ),
+  ]);
   await symlink(cwd, join(directory, "cwd"));
 }
 
@@ -253,6 +260,7 @@ test("finds Claude and Codex only in the selected cwd and builds recorded payloa
   expect(Object.keys(rows[0] ?? {}).toSorted()).toEqual([
     "cwd",
     "pid",
+    "process_generation",
     "session_id",
     "started_at",
     "transcript_path",
@@ -601,10 +609,15 @@ test("prepared displays require source labels protocol and report sample age sep
         cwd,
         location: "location",
         shared: "Rate: codex sampler",
+        runSource: {
+          kind: "current",
+          capturedAt: Temporal.Now.instant().epochMilliseconds - 59000,
+        },
         sessions: [
           {
             id: "selected",
             pid: 301,
+            process_generation: "100",
             line: "Codex (transcript) | Session: selected",
           },
         ],
@@ -615,8 +628,8 @@ test("prepared displays require source labels protocol and report sample age sep
   await writeFile(
     path,
     view.replace(
+      "session-inventory-worker-scope-v4",
       "session-inventory-worker-scope-v3",
-      "actions-24h-session-sources-v2",
     ),
   );
   expect(await presentation(cwd)).toBeUndefined();
@@ -626,4 +639,50 @@ test("prepared displays require source labels protocol and report sample age sep
   expect(output).toContain("samples 59s old");
   // Shared repository rows cannot be reused for a selected session's display.
   expect(await presentation(cwd, "selected")).toBeUndefined();
+});
+
+test("prepared membership rejects a reused PID instead of retaining its old shared scope", async () => {
+  const { home, proc, cwd } = await fixture();
+  process.env.STATUSLINE_OWNER_STATE = join(home, "owner.json");
+  await Promise.all([
+    fakeProcess(proc, 401, "/usr/bin/codex", cwd, "401"),
+    fakeProcess(proc, 402, "/usr/bin/codex", cwd, "402"),
+  ]);
+  const at = Temporal.Now.instant().epochMilliseconds;
+  await writeFile(
+    `${process.env.STATUSLINE_OWNER_STATE}.view`,
+    encodePresentation({
+      schema: 1,
+      version,
+      at,
+      rows: [
+        {
+          cwd,
+          location: "location",
+          shared: "old worker scope",
+          runSource: { kind: "current", capturedAt: at },
+          sessions: [
+            {
+              id: "A",
+              pid: 401,
+              process_generation: "401",
+              line: "Session: A",
+            },
+            {
+              id: "B",
+              pid: 402,
+              process_generation: "402",
+              line: "Session: B",
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  expect(await presentation(cwd)).toContain("Session: B");
+  await writeFile(
+    join(proc, "402", "stat"),
+    `402 (replacement) S ${Array.from({ length: 18 }, () => "0").join(" ")} 999\n`,
+  );
+  expect(await presentation(cwd)).toBeUndefined();
 });

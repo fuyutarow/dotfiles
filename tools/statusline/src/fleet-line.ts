@@ -1,3 +1,4 @@
+import type { RunSnapshotSource } from "./agx-snapshot.ts";
 import type { RouteScan } from "./dispatch-runs.ts";
 
 // Only findings with a clearing command belong here. Historical counters stay in doctor.
@@ -12,10 +13,21 @@ const ACTIONS: Record<string, string> = {
   "accepted-landed-present": "agx ticket gc",
 };
 
+/** Source age belongs to the run snapshot, not the time this view was published. */
+export function runSourceLine(
+  source: RunSnapshotSource | undefined,
+  at = Temporal.Now.instant().epochMilliseconds,
+): string {
+  if (source === undefined || source.kind === "current") return "";
+  if (source.kind === "unknown") return `runs n/a (${source.why})`;
+  return `stale runs ${Math.max(1, Math.floor((at - source.capturedAt) / 1000))}s`;
+}
+
 /** One optional action row, assembled exclusively from owner-published facts. */
 export function fleetLine(
   scan: RouteScan | undefined,
   at = Temporal.Now.instant().epochMilliseconds,
+  includeRunSource = true,
 ): string {
   const parts: string[] = [];
   if (scan?.actions?.judgeWhy !== undefined)
@@ -46,8 +58,14 @@ export function fleetLine(
   // Event-driven owners have no elapsed-time expiry. A missed publication or
   // failed read names the affected source and keeps its original observation age.
   const stale: string[] = [];
-  if ((scan?.snapshotAgeSecs ?? 0) > 0)
-    parts.push(`stale runs ${scan?.snapshotAgeSecs}s`);
+  if (includeRunSource) {
+    const source = runSourceLine(scan?.runSource, at);
+    if (source !== "") parts.push(source);
+    else if (scan?.snapshotWhy !== undefined)
+      parts.push(`runs n/a (${scan.snapshotWhy})`);
+    else if ((scan?.snapshotAgeSecs ?? 0) > 0)
+      parts.push(`stale runs ${scan?.snapshotAgeSecs}s`);
+  }
   for (const [name, source] of [
     ["ws", scan?.workspaces],
     ["doctor", scan?.findings],

@@ -247,16 +247,70 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
       cpuPct: ok(0),
       ram: ok({ pct: 0, frac: "0/1G" }),
     },
-    {
-      layout: "shared",
-      workerSessions: inventory.inventorySessions ?? [],
-    },
+    { layout: "shared" },
   );
   expect(shared).toContain("agt_herdr-display-regression-oct21");
   expect(shared).toContain("agt_gpu-self-clear-window");
   expect(shared).not.toContain("agt_claude-session-worker");
   expect(shared).not.toContain("agt_outside-inventory-worker");
   expect(shared).toContain("+1 workers outside 2 displayed sessions");
+
+  const ambient = await readCoreRuns(
+    { ...isolatedEnv, AGX_DISPATCHER_SESSION: codexSession },
+    undefined,
+    cwd,
+  );
+  expect(ambient.sessionScope).toBe(codexSession);
+  const ambientShared = render(
+    {
+      cwd,
+      sid: undefined,
+      model: "fixture",
+      wfOn: false,
+      rc: "off",
+      rlModel: [],
+      jobs: [],
+      orphans: 0,
+      routes: ok(ambient),
+      vram: undefined,
+      disks: ok([]),
+      cpuPct: ok(0),
+      ram: ok({ pct: 0, frac: "0/1G" }),
+    },
+    { layout: "shared" },
+  );
+  expect(ambientShared).toContain("agt_herdr-display-regression-oct21");
+  expect(ambientShared).toContain(`+1 workers outside session ${codexSession}`);
+
+  const explicit = await readCoreRuns(
+    { ...isolatedEnv, AGX_DISPATCHER_SESSION: codexSession },
+    claudeSession,
+    cwd,
+  );
+  expect(explicit.sessionScope).toBe(claudeSession);
+
+  const emptyInventory = await readCoreRuns(isolatedEnv, null, cwd, []);
+  expect(emptyInventory.inventorySessions).toEqual([]);
+  const emptyShared = render(
+    {
+      cwd,
+      sid: codexSession,
+      model: "fixture",
+      wfOn: false,
+      rc: "off",
+      rlModel: [],
+      jobs: [],
+      orphans: 0,
+      routes: ok(emptyInventory),
+      vram: undefined,
+      disks: ok([]),
+      cpuPct: ok(0),
+      ram: ok({ pct: 0, frac: "0/1G" }),
+    },
+    { layout: "shared" },
+  );
+  expect(emptyShared).not.toContain("tkt_");
+  expect(emptyShared).toContain("+3 workers outside 0 displayed sessions");
 });
 
 test("source guard: no run ledger, workspace enumeration, core count folding, or gc refresher", async () => {

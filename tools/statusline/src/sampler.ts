@@ -4,7 +4,11 @@ import { dirname, join } from "node:path";
 import { cli } from "cleye";
 import { buildDataframe } from "./build-dataframe.ts";
 import { COLLECTOR_SOURCES } from "./collector-sources.ts";
-import { discoverSessions, statusForSession } from "./session-discovery.ts";
+import {
+  discoverSessions,
+  statusForSession,
+  type AgentSession,
+} from "./session-discovery.ts";
 import {
   ownerStatePath,
   readOwnerState,
@@ -24,6 +28,7 @@ import {
   writePresentation,
   type Presentation,
   type PresentationRow,
+  type PresentationSession,
 } from "./presentation.ts";
 import { render } from "./format.ts";
 import { readCoreRuns } from "./core-runs.ts";
@@ -34,6 +39,27 @@ import { snapshotWithFleetFacts } from "./snapshot-rate.ts";
 
 const plain = (value: string) =>
   value.replaceAll(new RegExp(`${ESC}\\[[0-9;]*m`, "gu"), "");
+
+function presentationSessions(
+  frames: Array<{ session: AgentSession; frame: Dataframe }>,
+): PresentationSession[] {
+  const rows: PresentationSession[] = [];
+  for (const { session, frame } of frames) {
+    const row: PresentationSession = {
+      id: session.session_id,
+      pid: session.pid,
+      line: render(frame, {
+        layout: "session",
+        codex: session.vendor === "codex",
+        source: "transcript",
+      }),
+    };
+    if (session.process_generation !== undefined)
+      row.process_generation = session.process_generation;
+    rows.push(row);
+  }
+  return rows;
+}
 
 /** The transcript hook consumes these owner-written presentation snapshots. */
 export async function publishSnapshots(
@@ -269,6 +295,8 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
           { ownerSnapshot: Promise.resolve(next) },
         ));
       snapshotFrames.push(...frames.map(({ frame }) => frame));
+      const sessionIds = selected.map((session) => session.session_id);
+      const routes = await readCoreRuns(process.env, null, cwd, sessionIds);
       rows.push({
         cwd,
         location: render(first, {
@@ -281,32 +309,21 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
             return renderField(label, state);
           },
         }),
-        sessions: frames.map(({ session, frame }) => ({
-          id: session.session_id,
-          pid: session.pid,
-          line: render(frame, {
-            layout: "session",
-            codex: session.vendor === "codex",
-            source: "transcript",
-          }),
-        })),
+        sessions: presentationSessions(frames),
         shared: render(
           {
             ...first,
-            routes: ok(
-              await readCoreRuns(
-                process.env,
-                null,
-                cwd,
-                selected.map((session) => session.session_id),
-              ),
-            ),
+            routes: ok(routes),
           },
           {
             layout: "shared",
-            workerSessions: selected.map((session) => session.session_id),
+            includeRunSource: false,
           },
         ),
+        runSource: routes.runSource ?? {
+          kind: "unknown",
+          why: "snapshot unavailable",
+        },
       });
     }
     const view: Presentation = {

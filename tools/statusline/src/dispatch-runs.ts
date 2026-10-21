@@ -16,6 +16,7 @@ import {
 import {
   readAgxSnapshotAsync,
   stateDir as agxStateDir,
+  type RunSnapshotSource,
   type WorkspaceCounts,
   type FleetFindings,
 } from "./agx-snapshot.ts";
@@ -87,6 +88,8 @@ export interface RouteScan {
     | undefined;
   runs: RouteRun[];
   unreadable: number;
+  /** Validity of the owner-published run snapshot, distinct from this view's timestamp. */
+  runSource?: RunSnapshotSource | undefined;
   snapshotAgeSecs?: number | undefined;
   snapshotWhy?: string | undefined;
 }
@@ -262,6 +265,7 @@ export async function agxRouteRunsAsync(
   return {
     runs,
     unreadable,
+    sessionScope: dispatcherSession,
     actions: {
       judge:
         dispatcherSession === undefined
@@ -281,6 +285,7 @@ export async function agxRouteRunsAsync(
           },
     workspaces: snapshot.workspaces,
     findings: snapshot.findings,
+    runSource: snapshot.runSource,
     ...(snapshot.ageSeconds === undefined
       ? {}
       : { snapshotAgeSecs: snapshot.ageSeconds }),

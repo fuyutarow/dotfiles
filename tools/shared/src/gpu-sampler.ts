@@ -485,6 +485,24 @@ export async function runGpuSampler(
       processes: [],
       samples: [],
     };
+    if (await hostHasNvidiaSmi(options.procRoot)) {
+      const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
+      const stalled = consecutiveProbeMisses >= (options.stallMisses ?? 2);
+      await writeState(path, {
+        ...base,
+        attemptAt: now,
+        consecutiveProbeMisses,
+        ...(stalled
+          ? {
+              unresponsiveSince: base.unresponsiveSince ?? now,
+              stallEvidence: `${consecutiveProbeMisses} consecutive sampler starts found nvidia-smi still running`,
+            }
+          : { unresponsiveSince: undefined, stallEvidence: undefined }),
+      });
+      return stalled
+        ? "unresponsive: nvidia-smi persists"
+        : "slow sample: nvidia-smi exists";
+    }
     const slotHeld = await gpuSlotHeld(options);
     if (slotHeld !== false) {
       const unavailable = slotHeld.error !== undefined;
@@ -505,30 +523,10 @@ export async function runGpuSampler(
               lastProbeAt: base.lastProbeAt ?? base.sampledAt,
               paused: true,
               holder: slotHeld,
-              unresponsiveSince: undefined,
-              stallEvidence: undefined,
               why: undefined,
             }),
       });
       return why;
-    }
-    if (await hostHasNvidiaSmi(options.procRoot)) {
-      const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
-      const stalled = consecutiveProbeMisses >= (options.stallMisses ?? 2);
-      await writeState(path, {
-        ...base,
-        attemptAt: now,
-        consecutiveProbeMisses,
-        ...(stalled
-          ? {
-              unresponsiveSince: base.unresponsiveSince ?? now,
-              stallEvidence: `${consecutiveProbeMisses} consecutive sampler starts found nvidia-smi still running`,
-            }
-          : { unresponsiveSince: undefined, stallEvidence: undefined }),
-      });
-      return stalled
-        ? "unresponsive: nvidia-smi persists"
-        : "slow sample: nvidia-smi exists";
     }
     // A future timestamp also refuses: clock rollback must not bypass the minimum interval.
     if (

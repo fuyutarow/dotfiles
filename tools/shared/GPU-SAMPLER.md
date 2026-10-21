@@ -29,21 +29,27 @@ a successful command cannot prove the owner saw the toast; a crash between sendi
 and saving the receipt can repeat it. If overriding `XDG_STATE_HOME`, also override
 the path unit's watched path and the notification service's environment.
 
-Each invocation checks the live `lslocks` rows for files matching `gpu.*` in
-`$XDG_RUNTIME_DIR/agent-resource/slots` before considering any driver query. A
-held GPU slot writes `paused: true`, the holder `{ slot, pid }`, and fresh
+Each invocation first inventories `/proc` for an existing `nvidia-smi`, then
+checks the live `lslocks` rows for files matching `gpu.*` in
+`$XDG_RUNTIME_DIR/agent-resource/slots` before starting any driver query. An
+existing `nvidia-smi` is reported as a slow or unresponsive sample and is never
+replaced with another query, even while a GPU slot is held. A held GPU slot
+writes `paused: true`, the holder `{ slot, pid }`, and fresh
 `attemptAt` and `sampledAt` timestamps. `sampledAt` marks the current owner
 state as available during the admitted job; `lastProbeAt` marks when the
 preserved device values were actually queried. The sample ring and device
-values are preserved. A paused cycle does not add a probe miss or set
-`unresponsiveSince`. `gpu-sampler --check` treats this state as OK and prints
-the holder's slot and PID. The first cycle after all GPU slots are free can
-probe without waiting out a pause-induced cooldown. Slot inventory failures
-pause probing as well, fail-closed, and write fresh `attemptAt` and `sampledAt`,
-`paused: true`, and a `why` containing the underlying error without claiming a
-holder. `lastProbeAt` still identifies the preserved device observation; an
-inventory pause is not a successful driver probe. The recovery check reports the
-inventory error. If no slot directory exists, there are no admitted slots.
+values are preserved. A paused cycle does not add a probe miss and preserves any
+existing `unresponsiveSince` and `stallEvidence`; it cannot clear a prior stall
+without a successful probe. `gpu-sampler --check` treats an ordinary pause as OK
+and prints the holder's slot and PID, while independently reporting live dxg
+D-state tasks and any retained `unresponsiveSince`. The first cycle after all GPU slots
+are free can probe without waiting out a pause-induced cooldown. Slot inventory
+failures pause probing as well, fail-closed, and write fresh `attemptAt` and
+`sampledAt`, `paused: true`, and a `why` containing the underlying error without
+claiming a holder. They also preserve prior stall evidence. `lastProbeAt` still
+identifies the preserved device observation; an inventory pause is not a
+successful driver probe. The recovery check reports the inventory error. If no
+slot directory exists, there are no admitted slots.
 
 The inventory requests both `PID` and `PATH` from `lslocks`, matching the fields
 it validates. Requesting only `PATH` omits `pid` from every row and incorrectly
@@ -51,8 +57,8 @@ rejects even unrelated locks as invalid slot state. Empty `lslocks` output means
 no locks, matching `agent-resource-run status`. The unit receives
 `XDG_RUNTIME_DIR` from the user manager; no shell initialization is required.
 
-When no GPU slot is held, each invocation inventories Linux `/proc` before
-starting `nvidia-smi -q -x`.
+After the existing-process and slot checks, each invocation may start
+`nvidia-smi -q -x`.
 An existing process blocks the query regardless of its state, including D and Z.
 Inventory errors fail closed; platforms without this inventory also refuse queries.
 One XML response supplies device and process data. The owner atomically records an
@@ -72,7 +78,13 @@ file to prevent delayed concurrent reclaimers from moving a successor's lock.
 These small records must not be removed while sampler requests may still be running.
 Corrupt sample state also refuses queries and requires operator repair.
 
-The protocol serializes participating sampler invocations. Unmanaged programs must
-also migrate their driver queries to state reads: process inventory cannot prevent
-an unrelated program from independently launching a query after the inventory.
+The slot check and the subsequent spawn are separate operations. An admitted job
+can acquire its slot after the sampler sees no lock and before the sampler spawns;
+the sampler lock serializes sampler invocations only and does not make this
+cross-tool check-and-spawn sequence atomic. A second slot check would still leave
+a race window. Eliminating it requires shared mutual exclusion around admission
+and spawn. The protocol serializes participating sampler invocations. Unmanaged
+programs must also migrate their driver queries to state reads: process inventory
+cannot prevent an unrelated program from independently launching a query after
+the inventory.
 Whether polling triggers the WSL driver deadlock remains unverified.

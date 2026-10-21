@@ -16,6 +16,7 @@ import {
   sampleGpu,
 } from "../src/gpu-samples.ts";
 import {
+  checkGpuSampler,
   hostHasNvidiaSmi,
   parseGpuXml,
   runGpuSampler,
@@ -190,8 +191,12 @@ test("pauses during a held GPU slot without probing or counting a miss, then res
     consecutiveProbeMisses: 0,
     samples: good?.samples,
   });
-  expect(gpuReadFromState(paused, at + 60_000).ok).toBe(true);
-  expect(paused?.unresponsiveSince).toBeUndefined();
+  const pausedRead = gpuReadFromState(paused, at + 60_000);
+  expect(pausedRead.ok).toBe(false);
+  if (!pausedRead.ok)
+    expect(pausedRead.why).toContain("GPU stall recorded since");
+  expect(paused?.unresponsiveSince).toBe(at - 1);
+  expect(paused?.stallEvidence).toBe("prior probe stall");
   expect(await Bun.file(calls).text()).toBe("x");
 
   await writeFile(
@@ -208,6 +213,68 @@ test("pauses during a held GPU slot without probing or counting a miss, then res
     at + 60_001,
   );
 });
+test.skipIf(process.platform !== "linux")(
+  "a held slot cannot mask an existing dxg D-state process and recovery clears it only after a successful probe",
+  async () => {
+    const { options, calls, slotDirectory } = await fixture();
+    const at = 1_000_000;
+    expect(await runGpuSampler({ ...options, now: () => at })).toBe("sampled");
+
+    const slot = join(slotDirectory, "gpu.0.0");
+    await writeFile(slot, "");
+    await writeFile(
+      options.lslocksPath,
+      `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify({ locks: [{ path: slot, pid: 2468 }] }))});\n`,
+      { mode: 0o755 },
+    );
+    const pid = join(options.procRoot, "344072");
+    await mkdir(pid);
+    await writeFile(join(pid, "comm"), "nvidia-smi\n");
+    await writeFile(join(pid, "cmdline"), "nvidia-smi\0-q\0-x\0");
+    await writeFile(join(pid, "stat"), "344072 (nvidia-smi) D 1 0 0\n");
+    await writeFile(join(pid, "wchan"), "dxgvmb_send_sync_msg\n");
+
+    expect(await runGpuSampler({ ...options, now: () => at + 60_000 })).toBe(
+      "slow sample: nvidia-smi exists",
+    );
+    expect(await Bun.file(calls).text()).toBe("x");
+    const first = await readGpuState(options.statePath);
+    expect(first).toMatchObject({
+      consecutiveProbeMisses: 1,
+    });
+    expect(first?.paused).toBeUndefined();
+    const firstCheck = await checkGpuSampler({
+      statePath: options.statePath,
+      procRoot: options.procRoot,
+    });
+    expect(firstCheck.ok).toBe(false);
+    expect(firstCheck.failures.join("\n")).toContain(
+      "D-state process(es) in dxg: 344072",
+    );
+
+    expect(await runGpuSampler({ ...options, now: () => at + 120_000 })).toBe(
+      "unresponsive: nvidia-smi persists",
+    );
+    const stalled = await readGpuState(options.statePath);
+    expect(stalled?.unresponsiveSince).toBe(at + 120_000);
+    expect(stalled?.stallEvidence).toContain("nvidia-smi still running");
+    expect(await Bun.file(calls).text()).toBe("x");
+
+    await rm(pid, { recursive: true, force: true });
+    await writeFile(
+      options.lslocksPath,
+      `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify({ locks: [] }))});\n`,
+      { mode: 0o755 },
+    );
+    expect(await runGpuSampler({ ...options, now: () => at + 180_000 })).toBe(
+      "sampled",
+    );
+    const recovered = await readGpuState(options.statePath);
+    expect(recovered?.unresponsiveSince).toBeUndefined();
+    expect(recovered?.consecutiveProbeMisses).toBe(0);
+    expect(await Bun.file(calls).text()).toBe("xx");
+  },
+);
 test("one XML snapshot includes GPU memory, power, utilization and per-process memory", () => {
   expect(parseGpuXml(GPU_XML)).toEqual({
     devices: ownerState(0).devices,

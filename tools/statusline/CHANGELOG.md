@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.17 — 2026-10-21
+
+- Render unreported worker costs with an explicit reason
+
 ## 0.20.16 — 2026-10-21
 
 - Preserve resolved worker scope and reject reused prepared-view PIDs

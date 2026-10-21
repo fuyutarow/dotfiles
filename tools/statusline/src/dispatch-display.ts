@@ -41,11 +41,12 @@ function doingText(
 
 function costText(value: number | undefined, width: number): string {
   if (width === 0) return "";
-  if (value === undefined) return `${padDisplay("$–", width)} `;
   return `${padDisplay(costLabel(value), width)} `;
 }
-function costLabel(value: number): string {
-  return formatCostUsd(value);
+function costLabel(value: number | undefined): string {
+  return value === undefined
+    ? `$${renderUnavailable(unavailable("not reported"))}`
+    : formatCostUsd(value);
 }
 const RUN_LABEL_WIDTH = 32;
 function truncateDisplay(value: string, width: number): string {
@@ -91,9 +92,7 @@ export function routeLines(
       ? (r.doing?.costUsd ?? r.markerCostUsd)
       : (r.markerCostUsd ?? r.doing?.costUsd),
   );
-  const costLabels = costs.map((value) =>
-    value === undefined ? "$–" : costLabel(value),
-  );
+  const costLabels = costs.map((value) => costLabel(value));
   const costWidth = Math.max(
     0,
     ...costLabels.map((value) => Bun.stringWidth(value)),

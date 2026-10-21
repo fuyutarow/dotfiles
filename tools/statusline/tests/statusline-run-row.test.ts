@@ -508,7 +508,7 @@ describe("legacy enriched Run row", () => {
     expect(line).not.toContain("no event yet");
   });
 
-  test("grading phase stays visible for a Claude row with unknown cost", async () => {
+  test("grading phase stays visible for a Claude row with unreported cost", async () => {
     const dir = join(scratch, "claude-grading");
     const active = join(dir, "active");
     mkdirSync(active, { recursive: true });
@@ -532,7 +532,7 @@ describe("legacy enriched Run row", () => {
     const line = (await render(dir))
       .split("\n")
       .find((value) => value.startsWith("sonnet-medium "));
-    expect(line).toContain("$–");
+    expect(line).toContain("$n/a (not reported)");
     expect(line).toContain("grading");
     expect(line).not.toContain("no event yet");
   });

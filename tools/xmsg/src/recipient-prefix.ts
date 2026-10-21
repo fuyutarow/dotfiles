@@ -105,6 +105,80 @@ function resolved<R extends RecipientCandidate>(
   return { ok: true, recipient, address: recipient.address };
 }
 
+/** Global binding requires complete evidence from both native inventories. */
+export function resolveGlobalRecipientSelector<R extends RecipientCandidate>(
+  value: string,
+  candidates: readonly R[],
+  evidence: readonly RecipientInventoryEvidence[],
+): RecipientResolution<R> {
+  if (value.length === 0 || value.trim() !== value || value.includes(":"))
+    return failed(
+      "invalid",
+      [],
+      "Use [codex:|claude:]<UUID, UUID prefix or exact native name>.",
+    );
+  const unavailable = (["codex", "claude"] satisfies RecipientVendor[]).filter(
+    (vendor) =>
+      !evidence.some(
+        (item) => item.vendor === vendor && item.available && item.complete,
+      ),
+  );
+  if (unavailable.length > 0)
+    return failed(
+      "discovery-unavailable",
+      [],
+      `Cannot prove global uniqueness: ${unavailable
+        .map(
+          (vendor) =>
+            `${vendor} discovery unavailable/incomplete (${evidence.find((item) => item.vendor === vendor)?.reason ?? "no complete inventory"})`,
+        )
+        .join("; ")}. Qualify with codex: or claude:.`,
+    );
+
+  const known = [
+    ...uniqueByVendorId(candidates, "codex"),
+    ...uniqueByVendorId(candidates, "claude"),
+  ];
+  const full = canonicalUuid(value);
+  const ids =
+    full === undefined
+      ? []
+      : known.filter((item) => canonicalUuid(item.id) === full);
+  const names = known.filter((item) => item.name === value);
+  const prefix = canonicalPrefix(value);
+  let matches = ids;
+  if (matches.length === 0) matches = names;
+  if (matches.length === 0) {
+    if (prefix === undefined && UUID_INPUT_CHARS.test(value))
+      return failed(
+        "invalid",
+        [],
+        "UUID selectors must be 4–32 hexadecimal prefix digits with canonical hyphens.",
+      );
+    matches =
+      prefix === undefined
+        ? []
+        : known.filter(
+            (item) =>
+              canonicalUuid(item.id)?.replaceAll("-", "").startsWith(prefix) ===
+              true,
+          );
+  }
+  if (matches.length === 0)
+    return failed(
+      "not-found",
+      [],
+      `No recipient matches ${JSON.stringify(value)}; use an exact native name or UUID front prefix.`,
+    );
+  if (matches.length > 1)
+    return failed(
+      "ambiguous",
+      matches,
+      `${JSON.stringify(value)} matches ${matches.length} recipients; qualify with codex: or claude:, or extend the UUID prefix.`,
+    );
+  return resolved(matches[0]!);
+}
+
 /** Resolve only a vendor-qualified exact name, full UUID, or unique UUID front prefix. */
 export function resolveRecipientSelector<R extends RecipientCandidate>(
   selector: string,

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  resolveGlobalRecipientSelector,
   resolveRecipientSelector,
   shortRecipientAddress,
   type RecipientCandidate,
@@ -283,4 +284,53 @@ test("display address stays full when the selected recipient is absent from the 
   expect(shortRecipientAddress(target, [], complete("claude"))).toBe(
     `claude:${idA}`,
   );
+});
+
+test.each([idA, "01a1", "known"])(
+  "global resolution requires complete evidence even for %s",
+  (selector) => {
+    const candidates = [recipient("codex", idA, "known")];
+    for (const vendor of ["codex", "claude"] satisfies RecipientVendor[]) {
+      const evidence = [complete("codex"), complete("claude")].map((item) =>
+        item.vendor === vendor
+          ? Object.assign({}, item, { complete: false })
+          : item,
+      );
+      expect(
+        resolveGlobalRecipientSelector(selector, candidates, evidence),
+      ).toMatchObject({
+        ok: false,
+        error: "discovery-unavailable",
+      });
+    }
+    expect(
+      resolveGlobalRecipientSelector(selector, candidates, [complete("codex")]),
+    ).toMatchObject({
+      ok: false,
+      error: "discovery-unavailable",
+    });
+  },
+);
+
+test("global deduplication counts vendor plus canonical identity and keeps cross-vendor ambiguity", () => {
+  const target = recipient("codex", idA);
+  const evidence = [complete("codex"), complete("claude")];
+  const duplicate = recipient("codex", idA.toUpperCase());
+  expect(
+    resolveGlobalRecipientSelector(idA, [target, duplicate], evidence),
+  ).toMatchObject({
+    ok: true,
+    recipient: target,
+  });
+  expect(
+    resolveGlobalRecipientSelector(
+      idA,
+      [target, duplicate, recipient("claude", idA)],
+      evidence,
+    ),
+  ).toMatchObject({
+    ok: false,
+    error: "ambiguous",
+    candidates: [target, recipient("claude", idA)],
+  });
 });

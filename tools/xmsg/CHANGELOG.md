@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 — 2026-10-21
+
+- Allow unqualified globally unique UUIDs, UUID prefixes and exact native names only after complete discovery of both vendors.
+
 ## 0.2.0 — 2026-10-20
 
 - Add bounded read-only native recipient inventory with reusable addresses and JSON

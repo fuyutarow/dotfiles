@@ -4,7 +4,11 @@ import packageJson from "../package.json" with { type: "json" };
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { standardCli } from "../../shared/src/cli.ts";
 import { listRecipients, selectedInventory } from "./inventory.ts";
-import { canonicalUuid, resolveRecipientSelector } from "./recipient-prefix.ts";
+import {
+  canonicalUuid,
+  resolveGlobalRecipientSelector,
+  resolveRecipientSelector,
+} from "./recipient-prefix.ts";
 import { claudeReceipt } from "./claude-receipt.ts";
 
 function unknown(reason: string): number {
@@ -114,7 +118,8 @@ async function main(): Promise<number> {
         },
         to: {
           type: String,
-          description: "Recipient: codex:<thread> or claude:<session>",
+          description:
+            "Recipient: [codex:|claude:]<UUID, UUID prefix or exact native name>; unqualified requires both inventories",
         },
         message: { type: String, description: "Exact text to send" },
         timeoutMs: {
@@ -151,15 +156,16 @@ async function main(): Promise<number> {
     return listRecipients(args.flags.json ?? false, args.flags.timeoutMs);
   }
   const match = /^(codex|claude):(.+)$/u.exec(args.flags.to ?? "");
-  const kind = match?.[1];
-  const id = match?.[2];
+  let kind = match?.[1];
+  const selector = args.flags.to;
+  const id = match?.[2] ?? selector;
   const message = args.flags.message;
   const timeoutMs = args.flags.timeoutMs;
   if (
     args._.action !== "send" ||
     args.flags.json !== undefined ||
     args._.length !== 1 ||
-    (kind !== "codex" && kind !== "claude") ||
+    (kind === undefined && selector?.includes(":") === true) ||
     id === undefined ||
     id === "" ||
     id.trim() !== id ||
@@ -170,13 +176,45 @@ async function main(): Promise<number> {
     timeoutMs > 2_147_483_647
   ) {
     process.stderr.write(
-      "xmsg: usage: xmsg send --to codex:<thread>|claude:<session> --message TEXT [--timeout-ms N]\n",
+      "xmsg: usage: xmsg send --to [codex:|claude:]<UUID|UUID-prefix|exact-name> --message TEXT [--timeout-ms N]\n",
     );
     return 2;
   }
   const deadline = performance.now() + timeoutMs;
   let target = canonicalUuid(id) ?? id;
-  if (canonicalUuid(id) === undefined && /^[0-9a-f-]+$/iu.test(id)) {
+  if (kind === undefined) {
+    const inventories = await Promise.all([
+      selectedInventory(
+        "codex",
+        Math.max(1, Math.floor(deadline - performance.now())),
+      ),
+      selectedInventory(
+        "claude",
+        Math.max(1, Math.floor(deadline - performance.now())),
+      ),
+    ]);
+    const resolution = resolveGlobalRecipientSelector(
+      id,
+      inventories.flatMap((inventory) => inventory.recipients),
+      inventories.map((inventory) => inventory.evidence),
+    );
+    if (!resolution.ok) {
+      process.stderr.write(`xmsg: ${resolution.reason}\n`);
+      process.stderr.write(
+        resolution.candidates
+          .toSorted((a, b) => a.address.localeCompare(b.address))
+          .map(
+            (candidate) =>
+              `${candidate.address}\tname=${JSON.stringify(candidate.name)}\n`,
+          )
+          .join(""),
+      );
+      return resolution.error === "discovery-unavailable" ? 3 : 2;
+    }
+    kind = resolution.recipient.vendor;
+    target = resolution.recipient.id;
+  } else if (canonicalUuid(id) === undefined && /^[0-9a-f-]+$/iu.test(id)) {
+    if (kind !== "codex" && kind !== "claude") return 2;
     const { recipients, evidence } = await selectedInventory(kind, timeoutMs);
     const resolution = resolveRecipientSelector(
       `${kind}:${id}`,
@@ -205,6 +243,7 @@ async function main(): Promise<number> {
     );
     return 3;
   }
+  if (kind !== "codex" && kind !== "claude") return 2;
   return send(kind, target, message, remaining);
 }
 

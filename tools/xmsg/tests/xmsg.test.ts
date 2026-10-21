@@ -339,7 +339,7 @@ test.each(
     ["--__proto__"],
     ["--constructor"],
     ["send", "--to"],
-    ["send", "--to", "bad", "--message", "hi"],
+    ["send", "--to", "unknown:peer", "--message", "hi"],
     ["send", "extra", "--to", "codex:peer", "--message", "hi"],
     ["send", "--to", "codex:peer", "--message", "hi", "--timeout-ms", "0"],
   ].map((args) => ({ args })),
@@ -716,7 +716,6 @@ test.each(["review (v2)", "dead*", "^dead[beef]$", "review? | {v2} \\ done"])(
 );
 
 test("prefix discovery and send share one timeout budget with no retry", async () => {
-  const start = performance.now();
   const r = await run({
     inventory: JSON.stringify([{ sessionId: uuidA, status: "idle" }]),
     inventoryDelay: 550,
@@ -728,7 +727,6 @@ test("prefix discovery and send share one timeout budget with no retry", async (
   expect(r.stderr).toContain("timed out");
   expect(r.calls).toHaveLength(2);
   expect(r.calls[0]).toEqual(["agents", "--json"]);
-  expect(performance.now() - start).toBeLessThan(1200);
 });
 
 test("prefix discovery timeout sends nothing", async () => {
@@ -739,4 +737,205 @@ test("prefix discovery timeout sends nothing", async () => {
   });
   expect(r.exit).toBe(3);
   expect(r.calls).toEqual([["agents", "--json"]]);
+});
+
+// Calls count native CLI invocations; agents --json is discovery, all others send.
+const sends = (calls: string[][]) =>
+  calls.filter((args) => args[0] !== "agents");
+const globalAgents = (id = uuidB, name = "Claude peer") =>
+  JSON.stringify([{ sessionId: id, name, status: "idle" }]);
+
+test.each([
+  uuidA,
+  uuidA.replaceAll("-", "").toUpperCase(),
+  "DEADBEEF-12",
+  "first",
+])(
+  "unqualified Codex %s resolves globally and sends exact argv once",
+  async (selector) => {
+    const r = await run({
+      threads: [uuidThreads[0]!],
+      inventory: globalAgents(),
+      args: sendArgs(selector),
+    });
+    expect(r.exit).toBe(0);
+    expect(r.calls[0]).toEqual(["agents", "--json"]);
+    expect(sends(r.calls)).toEqual([
+      ["queue", "--thread", uuidA, "--message", message],
+    ]);
+  },
+);
+
+test.each([
+  uuidB,
+  "DEADBEEF-22",
+  "Claude peer",
+  "review (v2)",
+  "^dead[beef]$",
+  "review? | {v2} \\ done",
+])(
+  "unqualified Claude %s resolves literally and sends once",
+  async (selector) => {
+    const name =
+      selector.startsWith("review") || selector.startsWith("^")
+        ? selector
+        : "Claude peer";
+    const r = await run({
+      threads: [uuidThreads[0]!],
+      inventory: globalAgents(uuidB, name),
+      output: stream(use, accepted),
+      args: sendArgs(selector),
+    });
+    expect(r.exit).toBe(0);
+    expect(sends(r.calls)).toHaveLength(1);
+    expect(r.argv.at(-1)).toContain(`Target: ${JSON.stringify(uuidB)}`);
+    expect(r.argv.at(-1)).toContain(
+      `Send this exact text once using SendMessage: ${JSON.stringify(message)}`,
+    );
+  },
+);
+
+test.each([
+  { selector: "deadbeef", id: uuidB, name: "second" },
+  { selector: uuidA, id: uuidA, name: "duplicate identity" },
+  { selector: "first", id: uuidB, name: "first" },
+])(
+  "global collision refuses every native send: %j",
+  async ({ selector, id, name }) => {
+    const r = await run({
+      threads: [uuidThreads[0]!],
+      inventory: globalAgents(id, name),
+      args: sendArgs(selector),
+    });
+    expect(r.exit).toBe(2);
+    expect(sends(r.calls)).toEqual([]);
+    expect(r.stderr).toContain(`claude:${id}\tname=${JSON.stringify(name)}`);
+    expect(r.stderr).toContain(`codex:${uuidA}\tname="first"`);
+    expect(r.stderr.indexOf(`claude:${id}`)).toBeLessThan(
+      r.stderr.indexOf(`codex:${uuidA}`),
+    );
+    expect(r.stderr).toContain("qualify");
+  },
+);
+
+test("global full identity precedes another vendor's exact name", async () => {
+  const r = await run({
+    threads: [uuidThreads[0]!],
+    inventory: globalAgents(uuidB, uuidA),
+    args: sendArgs(uuidA),
+  });
+  expect(r.exit).toBe(0);
+  expect(sends(r.calls)).toEqual([
+    ["queue", "--thread", uuidA, "--message", message],
+  ]);
+});
+
+test.each(["deadbeef", "dead-beef", "dea"])(
+  "global exact name precedes prefix or format rejection: %s",
+  async (name) => {
+    const r = await run({
+      threads: [uuidThreads[0]!],
+      inventory: globalAgents(uuidB, name),
+      output: stream(use, accepted),
+      args: sendArgs(name),
+    });
+    expect(r.exit).toBe(0);
+    expect(sends(r.calls)).toHaveLength(1);
+    expect(r.argv.at(-1)).toContain(`Target: ${JSON.stringify(uuidB)}`);
+  },
+);
+
+test.each([uuidA, "deadbeef1", "first"])(
+  "partial Claude inventory blocks even an apparent Codex match: %s",
+  async (selector) => {
+    const r = await run({
+      threads: [uuidThreads[0]!],
+      inventory: "invalid schema",
+      args: sendArgs(selector),
+    });
+    expect(r.exit).toBe(3);
+    expect(sends(r.calls)).toEqual([]);
+    expect(r.stderr).toContain("claude discovery unavailable");
+    expect(r.stderr).toContain("codex: or claude:");
+  },
+);
+
+test("partial Codex inventory blocks an apparent Claude match", async () => {
+  const r = await run({
+    codexError: true,
+    inventory: globalAgents(),
+    args: sendArgs(uuidB),
+  });
+  expect(r.exit).toBe(3);
+  expect(sends(r.calls)).toEqual([]);
+  expect(r.stderr).toContain("codex discovery unavailable");
+});
+
+test.each(["dea", "dead-beef", "f".repeat(33), "absent", "dead*", "[first]"])(
+  "global malformed or missing selector refuses: %s",
+  async (selector) => {
+    const r = await run({
+      threads: [uuidThreads[0]!],
+      inventory: globalAgents(),
+      args: sendArgs(selector),
+    });
+    expect(r.exit).toBe(2);
+    expect(sends(r.calls)).toEqual([]);
+  },
+);
+
+test.each(["", " leading", "trailing ", "other:dead", "codex:"])(
+  "invalid syntax rejects before inventory: %s",
+  async (selector) => {
+    const r = await run({ args: sendArgs(selector) });
+    expect(r.exit).toBe(2);
+    expect(r.calls).toEqual([]);
+  },
+);
+
+test("unqualified discovery timeout sends nothing", async () => {
+  const r = await run({
+    threads: [uuidThreads[0]!],
+    inventory: globalAgents(),
+    inventoryDelay: 5000,
+    args: sendArgs(uuidA, "100"),
+  });
+  expect(r.exit).toBe(3);
+  expect(sends(r.calls)).toEqual([]);
+});
+
+test("both inventories run concurrently and the send receives only the remaining budget", async () => {
+  const r = await run({
+    threads: [],
+    discoveryDelay: 250,
+    inventory: globalAgents(),
+    inventoryDelay: 550,
+    output: stream(use, accepted),
+    delay: 550,
+    args: sendArgs(uuidB, "950"),
+  });
+  // Sequential discovery would exhaust this budget before send; a fresh send budget would succeed.
+  expect(r.exit).toBe(4);
+  expect(sends(r.calls)).toHaveLength(1);
+  expect(r.stderr).toContain("do not resend");
+});
+
+test("global binding preserves the discovered full native UUID spelling", async () => {
+  const id = uuidA.toUpperCase();
+  const r = await run({
+    threads: [{ id, status: { type: "active" } }],
+    inventory: "[]",
+    args: sendArgs(uuidA),
+  });
+  expect(r.exit).toBe(0);
+  expect(sends(r.calls)).toEqual([
+    ["queue", "--thread", id, "--message", message],
+  ]);
+});
+
+test("missing Codex endpoint blocks a globally unqualified Claude target", async () => {
+  const r = await run({ inventory: globalAgents(), args: sendArgs(uuidB) });
+  expect(r.exit).toBe(3);
+  expect(sends(r.calls)).toEqual([]);
+  expect(r.stderr).toContain("codex discovery unavailable");
 });

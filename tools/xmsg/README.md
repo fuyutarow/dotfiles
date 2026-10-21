@@ -7,9 +7,27 @@ Claude's `SendMessage`, `codex queue` for Codex, or `herdr agent prompt` under H
 ```sh
 xmsg send --to codex:<thread-id-or-exact-name> --message 'Can you check this?'
 xmsg send --to claude:<session-id-or-exact-name> --message 'Can you check this?'
+xmsg send --to 01a15424 --message 'Can you check this?'
+xmsg send --to 'review (v2)' --message 'Can you check this?'
 ```
 
-Only the selected CLI must be on `PATH`. Codex targets use `codex queue`. Claude targets use a
+Qualification is optional for a globally unique full UUID, UUID front prefix (at least
+4 hexadecimal digits, case-insensitive with canonical hyphens), or literal exact native
+name. Unqualified selectors query both native inventories concurrently and require both
+to be complete and available, even for a full UUID. Resolution checks full UUID identity
+first, exact names second, and UUID prefixes third. The same UUID in both vendors is
+ambiguous. Names, including spaces, parentheses and pattern characters, match literally;
+there is no fuzzy or wildcard interpretation. A colon introduces an explicit vendor
+qualifier; unknown qualifiers are usage errors.
+
+Ambiguity exits 2 with sorted fully qualified candidates and names; qualify the target
+or extend its UUID prefix. Missing or malformed selectors also exit 2. Incomplete or
+unavailable discovery exits 3, identifies the backend, and asks for `codex:` or `claude:`.
+These refusals send nothing. Exactly one global match sends once to its unchanged native
+ID. Discovery and the send share one overall deadline; inventories describe only the
+native endpoints below, not all saved or remote sessions.
+
+For qualified selectors, only the selected CLI must be on `PATH`. Codex targets use `codex queue`. Claude targets use a
 one-shot `claude --print --model haiku --effort low` relay, with `--tools` limiting built-in tools to `ListAgents` and
 `SendMessage` and `--allowedTools` pre-approving those tools. The relay uses a Claude turn to
 resolve one exact, unique target; this selection remains model-assisted. The unchanged message
@@ -21,10 +39,10 @@ never accepted as a send receipt. Success requires `success: true` and a `msg_id
 | 0    | Accepted: Codex queue succeeded, or a Claude tool_result confirms acceptance |
 | 1    | Rejected/error reported by the transport                                     |
 | 2    | Invalid usage, invalid/missing selector, or ambiguous prefix                   |
-| 3    | Selected CLI unavailable, or prefix discovery unavailable/incomplete         |
+| 3    | CLI unavailable, or required discovery unavailable/incomplete                 |
 | 4    | Acceptance unknown: timeout, failed Claude run, or no confirmed tool_result  |
 
-The default send deadline is 60 seconds; `--timeout-ms N` changes it. Prefix discovery and
+The default send deadline is 60 seconds; `--timeout-ms N` changes it. Required discovery and
 the subsequent send share this single budget. A timeout can occur after
 the message was accepted. **Do not resend an unknown outcome without checking the recipient.**
 There are no automatic retries.
@@ -49,7 +67,7 @@ Names may be duplicated; addresses are deduplicated by vendor and native ID (onl
 UUIDs are normalized; opaque IDs remain case-sensitive), never by name, cwd, or order.
 The count is the number of unique addresses returned by successful inventories.
 
-Send accepts vendor-qualified UUID front prefixes of at least 4 hexadecimal digits,
+Qualified send accepts UUID front prefixes of at least 4 hexadecimal digits,
 case-insensitively, with optional canonical UUID hyphens. It queries **only the selected
 vendor** and requires a complete, available native inventory before resolving a prefix.
 Exactly one match becomes the full native ID for one unchanged send. Ambiguity prints

@@ -119,6 +119,7 @@ qualify the result, and revise the affected theory. These are feedback loops, no
 
 ### Agent harness
 
+- [`driving-xmsg`](driving-xmsg/) — Discover and message existing Claude or Codex sessions through xmsg; distinguish enqueue acceptance, unknown outcomes and observed replies.
 - [`forging-skills`](forging-skills/) — Create and reforge Agent Skills to the house bar: triggers, gates, sibling cuts, verification.
 - [`continuing-long-running-tasks`](continuing-long-running-tasks/) — Keep one evidence-linked task record trustworthy across compact, resume, and Codex/Claude handoff.
 - [`driving-antigravity`](driving-antigravity/) — Drive the Antigravity CLI (`agy`) as a headless worker: multi-vendor roster on one subscription, no per-call meter, unconfined by default.

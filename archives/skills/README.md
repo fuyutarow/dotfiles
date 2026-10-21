@@ -8,6 +8,7 @@ reachable without `git log`.
 
 | Skill | Archived | Why | Successor |
 |---|---|---|---|
+| [`messaging-codex-sessions`](messaging-codex-sessions/SKILL.md) | 2026-10-21 | Owner-requested retirement; exact frozen source preserved, active Codex-only entrypoint removed | [`driving-xmsg`](../../agents/skills/driving-xmsg/SKILL.md) for existing Claude and Codex sessions. |
 | [`operating-the-harness`](operating-the-harness/SKILL.md) | 2026-10-21 | Owner-requested retirement; callable guidance and mandatory invocation were removed | No replacement skill. Use each repository's declared configuration and executable checks; `scripts/harness/` retains the two shared checks. |
 
 The archived package retains the complete historical source, including copies of the two check

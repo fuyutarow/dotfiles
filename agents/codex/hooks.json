@@ -157,6 +157,15 @@
             "command": "HOOK_SLUG=dotfiles:reply-language sh ~/.codex/hooks/run-reply-language.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK_SLUG=dotfiles:codex-math-delimiters bun ~/.codex/hooks/enforce-math-delimiters.ts",
+            "timeout": 5
+          }
+        ]
       }
     ]
   }

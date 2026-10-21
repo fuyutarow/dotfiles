@@ -171,6 +171,11 @@ script = "codex/hooks/enforce-dispatch-contract.ts"
 commands = ["sh ~/.codex/hooks/run-dispatch-contract.sh"]
 
 [[vendor_hook]]
+slug = "codex-math-delimiters"
+script = "codex/hooks/enforce-math-delimiters.ts"
+commands = ["bun ~/.codex/hooks/enforce-math-delimiters.ts"]
+
+[[vendor_hook]]
 slug = "codex-herdr-metadata"
 script = "codex/hooks/report-herdr-metadata.ts"
 commands = ["sh ~/.codex/hooks/run-herdr-metadata.sh"]

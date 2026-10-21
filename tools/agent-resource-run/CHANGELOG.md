@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.10 — 2026-10-21
+
+- Allow six GPU jobs within declared VRAM admission
+- Refuse GPU admission on live dxg D-state evidence independently of paused sampler cache
+
 ## 1.5.9 — 2026-10-19
 
 - Defer live GPU admission until CCC releases its context

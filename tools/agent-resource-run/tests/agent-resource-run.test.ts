@@ -74,6 +74,7 @@ async function fixture(m = manifest()) {
       DBUS_SESSION_BUS_ADDRESS: `unix:path=/run/user/${process.getuid?.()}/bus`,
       AGENT_RESOURCE_ADMISSION_RECEIPT: undefined,
       AGENT_RESOURCE_SCOPE_LAUNCH: undefined,
+      BUN_OPTIONS: `--preload ${join(import.meta.dir, "proc-integration-preload.ts")}`,
     },
   };
 }
@@ -96,7 +97,7 @@ async function invoke(
 }
 const live = process.platform === "linux" && Bun.which("systemd-run") !== null;
 
-test("operator default permits exactly one concurrent GPU job", async () => {
+test("operator default permits up to six concurrent GPU jobs", async () => {
   const parsed = z
     .object({
       schema: z.literal(1),
@@ -109,7 +110,7 @@ test("operator default permits exactly one concurrent GPU job", async () => {
     );
   expect(parsed.success).toBe(true);
   expect(parsed.success ? parsed.data.gpu_max_concurrent_jobs : undefined).toBe(
-    1,
+    6,
   );
 });
 
@@ -236,6 +237,9 @@ test("GPU pool identity is the manifest device id, independent of compile slots"
   ).toBe(true);
 });
 test("GPU admission refuses a recorded stall and reports its evidence", async () => {
+  const f = await fixture();
+  const procRoot = join(f.dir, "proc");
+  await mkdir(procRoot);
   const state = {
     schema: 1 as const,
     attemptAt: 1,
@@ -248,7 +252,7 @@ test("GPU admission refuses a recorded stall and reports its evidence", async ()
   const refusal = await gpuAdmissionRefusal(
     { gpu_id: 0, vram_peak_bytes: 1 },
     512,
-    { state },
+    { state, procRoot },
   );
   expect(refusal).toContain("NVML probe timed out");
   expect(refusal).toContain("gpu-owner.json");

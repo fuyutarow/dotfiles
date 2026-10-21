@@ -1,7 +1,8 @@
-# Runner policy. One GPU job scope at a time, including its surviving children.
-# This counts jobs across the host, not devices, processes, or existing slot files.
+# Runner policy. Six is the GPU job-count ceiling, including each job's surviving children.
+# Declared VRAM reservation admission still bounds concurrency; this count is not a
+# device/process count and makes no driver-concurrency safety guarantee.
 schema = 1
-gpu_max_concurrent_jobs = 1
+gpu_max_concurrent_jobs = 6
 
 # Compatibility capacity declarations: firedancer envs/jq/jq_capacity.py reads these.
 # The thin runner does not reserve or aggregate these resources.

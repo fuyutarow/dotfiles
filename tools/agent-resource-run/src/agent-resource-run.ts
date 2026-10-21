@@ -194,7 +194,7 @@ function runtimeDirectory() {
 }
 export const gpuSlotPool = (gpuId: number) => `gpu.${gpuId}`;
 
-/** Refuse GPU work unless every sampled holder belongs to a declared GPU scope. */
+/** Refuse live dxg stalls, unscoped sampled holders, and excess declared VRAM. */
 export async function gpuAdmissionRefusal(
   deviceRequest: { gpu_id: number; vram_peak_bytes: number },
   safetyMiB: number,
@@ -206,6 +206,41 @@ export async function gpuAdmissionRefusal(
   } = {},
 ): Promise<string | undefined> {
   const procRoot = options.procRoot ?? "/proc";
+  // Inspect live process state independently of the sampler's paused/cache state.
+  // This is host-wide: a dxg wait outside a runner scope can stall this GPU too.
+  const procEntries = await fromAsyncThrowable(() => readdir(procRoot))();
+  if (procEntries.isErr())
+    return `GPU process inventory unavailable; evidence=${procRoot}`;
+  for (const entry of procEntries.value) {
+    if (!/^\d+$/u.test(entry)) continue;
+    const base = join(procRoot, entry);
+    const statPath = join(base, "stat");
+    const stat = await optionalText(statPath);
+    if (stat.isErr())
+      return `GPU process state unreadable pid=${entry}; evidence=${statPath}`;
+    if (stat.value === undefined) continue; // Exited after inventory.
+    // comm may contain spaces and closing parentheses.
+    const state = /^\d+ \(.*\) ([A-Za-z]) /u.exec(stat.value)?.[1];
+    if (state === undefined)
+      return `GPU process state invalid pid=${entry}; evidence=${statPath}`;
+    if (state !== "D") continue;
+    const wchanPath = join(base, "wchan");
+    const channel = await optionalText(wchanPath);
+    // Exit or wake-up between stat and wchan is not evidence of a live stall.
+    const current = await optionalText(statPath);
+    if (current.isOk() && current.value === undefined) continue;
+    const currentState = current.isOk()
+      ? /^\d+ \(.*\) ([A-Za-z]) /u.exec(current.value ?? "")?.[1]
+      : undefined;
+    if (currentState !== undefined && currentState !== "D") continue;
+    if (currentState === undefined)
+      return `GPU D-state recheck unavailable pid=${entry}; evidence=${statPath}`;
+    const wchan = channel.unwrapOr(undefined)?.trim();
+    if (wchan === undefined || wchan === "" || wchan === "0")
+      return `GPU D-state wait channel unavailable pid=${entry}; evidence=${wchanPath}`;
+    if (/dxg/iu.test(wchan))
+      return `GPU live dxg stall pid=${entry} state=D wchan=${wchan}; evidence=${statPath},${wchanPath}`;
+  }
   const state = options.state ?? (await readGpuState());
   if (state === undefined)
     return `GPU owner state unavailable; evidence=${gpuStatePath()}`;
@@ -226,9 +261,6 @@ export async function gpuAdmissionRefusal(
 
   const scopes = new Map<string, number>();
   const admittedScopes = new Set<string>();
-  const procEntries = await fromAsyncThrowable(() => readdir(procRoot))();
-  if (procEntries.isErr())
-    return `GPU process inventory unavailable; evidence=${procRoot}`;
   for (const entry of procEntries.value) {
     if (!/^\d+$/u.test(entry)) continue;
     const base = join(procRoot, entry);

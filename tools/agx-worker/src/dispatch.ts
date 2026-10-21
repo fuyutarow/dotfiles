@@ -192,7 +192,16 @@ export async function dispatch(options: {
   env?: NodeJS.ProcessEnv;
 }): Promise<number> {
   const cwd = resolve(options.cwd ?? process.cwd());
-  const env = options.env ?? process.env;
+  const callerEnv = options.env ?? process.env;
+  // systemd does not inherit the caller's cwd; resolve the override once so
+  // preflight and the child load the same file. Keep empty input invalid.
+  const rosterPath = callerEnv.DISPATCH_ROSTER_PATH;
+  const env: NodeJS.ProcessEnv = {
+    ...callerEnv,
+    ...(rosterPath === undefined || rosterPath === ""
+      ? {}
+      : { DISPATCH_ROSTER_PATH: resolve(cwd, rosterPath) }),
+  };
   const ticketPath = resolve(cwd, options.ticketPath);
   const ticket = await ticketSlug(ticketPath);
   if (!ticket.ok) {
@@ -345,6 +354,7 @@ export async function dispatch(options: {
     "CLAUDE_CODE_SESSION_ID",
     "-E",
     "CODEX_SESSION_ID",
+    ...(rosterPath === undefined ? [] : ["-E", "DISPATCH_ROSTER_PATH"]),
     "--",
     "agx-worker",
     "run",

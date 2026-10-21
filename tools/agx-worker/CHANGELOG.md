@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.0.2 — 2026-10-22
+
+- Preserve explicit roster configuration across dispatch
+
 ## 8.0.1 — 2026-10-19
 
 - Record one late event when a worker misses its interim-return deadline

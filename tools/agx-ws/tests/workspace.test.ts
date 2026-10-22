@@ -114,6 +114,108 @@ const pathExists = (dir: string): Promise<boolean> =>
     () => false,
   );
 
+describe("WS-CONFIG-ONE-SOURCE-1023", () => {
+  for (const source of [
+    "untracked-only",
+    "committed-only",
+    "working-over-committed",
+  ]) {
+    test(`${source}: add, rm, gc and doctor share readiness, trunk and keep policy`, async () => {
+      const policy =
+        'trunk = "main"\nready = ["printf chosen-ready"]\nkeep = ["ws_safe"]\n';
+      const committed = source === "committed-only" ? policy : undefined;
+      const path = await repo(
+        source === "working-over-committed"
+          ? 'trunk = "missing-trunk"\nready = ["printf wrong-ready"]\nkeep = ["ws_other"]\n'
+          : committed,
+      );
+      if (source === "untracked-only")
+        await Bun.write(join(path, ".gitignore"), "/.ws.toml\n");
+      if (source === "committed-only") await unlink(join(path, ".ws.toml"));
+      else await Bun.write(join(path, ".ws.toml"), policy);
+
+      const added = await ws(["add", "safe"], path);
+      expect(added.code, added.err).toBe(0);
+      expect(added.out).toContain("chosen-ready");
+      expect(added.out).not.toContain("wrong-ready");
+      if (source === "untracked-only") {
+        const tracked = await jj(["file", "list"], path);
+        expect(tracked.code, tracked.err).toBe(0);
+        expect(tracked.out).not.toContain(".ws.toml");
+      }
+      if (source === "committed-only")
+        expect(existsSync(join(path, ".ws.toml"))).toBe(false);
+      const safe = wsDir(path, "safe");
+      // Doctor discovers checkout gitdir files; advertise the secondary fixture.
+      await Bun.write(join(safe, ".git"), `gitdir: ${join(path, ".git")}\n`);
+      // A secondary checkout's file is never the policy source, even when invoked there.
+      await Bun.write(
+        join(safe, ".ws.toml"),
+        'trunk = "wrong-checkout"\nkeep = []\n',
+      );
+      const refused = await ws(["rm", "safe"], safe);
+      expect(refused.code, refused.err).toBe(1);
+      expect(refused.err).toContain("is kept by .ws.toml");
+      const dry = await ws(["gc", "--dry-run", "--include-unrecorded"], safe);
+      expect(dry.code, dry.err).toBe(0);
+      expect(dry.out).toContain(`${safe}\tws\tkept\t`);
+
+      const inventory = `import { doctorInventory } from ${JSON.stringify(join(import.meta.dir, "../src/workspace.ts"))}; console.log(JSON.stringify(await doctorInventory()));`;
+      const doctor = await run(
+        ["bun", "-e", inventory],
+        safe,
+        baseEnv({
+          AGX_REPOS_ROOT: join(path, "..", "proj.ws"),
+        }),
+      );
+      expect(doctor.code, doctor.err).toBe(0);
+      expect(doctor.out).toContain('"ok":true');
+      expect(doctor.out).toContain('"name":"ws_safe"');
+      expect(doctor.out).toContain('"verdict":"kept"');
+
+      // Include an eligible candidate so real GC also exercises its locked config refresh.
+      const spare = await ws(["add", "spare"], path);
+      expect(spare.code, spare.err).toBe(0);
+      expect(spare.out).toContain("chosen-ready");
+      const collected = await ws(["gc", "--include-unrecorded"], safe);
+      expect(collected.code, collected.err).toBe(0);
+      expect(collected.out).toContain(`${safe}\tws\tkept\t`);
+      expect(collected.out).toContain(
+        `${wsDir(path, "spare")}\tws\tcollected\t`,
+      );
+      expect(existsSync(safe)).toBe(true);
+      expect(existsSync(wsDir(path, "spare"))).toBe(false);
+    });
+  }
+
+  test("invalid working policy fails closed instead of using committed policy", async () => {
+    const path = await repo('trunk = "main"\n');
+    expect((await ws(["add", "safe"], path)).code).toBe(0);
+    await Bun.write(
+      join(wsDir(path, "safe"), ".git"),
+      `gitdir: ${join(path, ".git")}\n`,
+    );
+    await Bun.write(join(path, ".ws.toml"), 'keep = "invalid"\n');
+    for (const args of [
+      ["add", "other"],
+      ["rm", "safe"],
+      ["gc", "--include-unrecorded"],
+    ]) {
+      const result = await ws(args, path);
+      expect(result.code, result.err).toBe(1);
+      expect(result.err).toContain(".ws.toml");
+    }
+    const doctor = await ws(
+      ["doctor"],
+      path,
+      baseEnv({ AGX_REPOS_ROOT: join(path, "..", "proj.ws") }),
+    );
+    expect(doctor.code, doctor.err).toBe(1);
+    expect(doctor.err).toContain(".ws.toml");
+    expect(existsSync(wsDir(path, "safe"))).toBe(true);
+  });
+});
+
 describe("agx ws adopt", () => {
   test("WS-ADOPT-2: strips layout prefixes, preserves run suffixes and re-homes adopted changes", async () => {
     const path = await repo('trunk = "main"\n');
@@ -1101,7 +1203,7 @@ const child = Bun.spawn([${JSON.stringify(rip)}, ...process.argv.slice(2)], {std
     ).toBe(true);
   });
 
-  test("uses jj trunk(), keeps root-only repos unclassified, and reads committed keep paths", async () => {
+  test("uses jj trunk(), keeps root-only repos unclassified, and reads working keep paths", async () => {
     const path = await repo('keep = ["../proj.ws/ws_safe"]\n');
     const configured = await jj(
       ["config", "set", "--repo", 'revset-aliases."trunk()"', "main"],
@@ -1110,15 +1212,15 @@ const child = Bun.spawn([${JSON.stringify(rip)}, ...process.argv.slice(2)], {std
     expect(configured.code, configured.err).toBe(0);
     expect((await ws(["add", "safe"], path)).code).toBe(0);
     expect((await ws(["add", "ancestor"], path)).code).toBe(0);
-    await Bun.write(join(path, ".ws.toml"), "keep = []\n");
+    await Bun.write(join(path, ".ws.toml"), 'keep = ["ws_ancestor"]\n');
     const dry = await ws(
       ["gc", "--dry-run", "--include-unrecorded", "--legacy"],
       path,
     );
     expect(dry.code, dry.err).toBe(0);
-    expect(dry.out).toContain(`${wsDir(path, "safe")}\tws\tkept\t`);
-    expect(dry.out).toContain(`${wsDir(path, "ancestor")}\tws\tempty\t`);
-    expect((await ws(["rm", "safe"], path)).code).toBe(1);
+    expect(dry.out).toContain(`${wsDir(path, "safe")}\tws\tempty\t`);
+    expect(dry.out).toContain(`${wsDir(path, "ancestor")}\tws\tkept\t`);
+    expect((await ws(["rm", "ancestor"], path)).code).toBe(1);
     expect(
       (
         await jj(
@@ -1413,7 +1515,7 @@ describe("gc integration branches", () => {
     expect((await jj(["bookmark", "set", "main", "-r", "@-"], path)).code).toBe(
       0,
     );
-    // readConfig reads @-; retain the explicit trunk without changing its tree.
+    // Neither working nor committed config exists; supply trunk through jj's default alias.
     expect(
       (
         await jj(

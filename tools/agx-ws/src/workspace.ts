@@ -131,26 +131,22 @@ export function resolveRepo(path: string): Attempt<Repo> {
   return good({ backing, name, parent, wsRoot: join(parent, `${name}.ws`) });
 }
 
-export async function readConfig(
-  repo: Repo,
-  committed = false,
-): Promise<Attempt<Config>> {
+/** All commands prefer the main checkout's working policy, then its parent revision. */
+export async function readConfig(repo: Repo): Promise<Attempt<Config>> {
   const file = join(repo.backing, CONFIG_FILE);
-  let text: string;
-  if (committed) {
-    const content = await jjOut(
-      ["file", "show", "-r", "@-", CONFIG_FILE],
-      repo.backing,
-      true,
-    );
-    if (!content.ok) return missingCommittedConfig(repo, content);
-    text = content.value;
-  } else {
-    if (!existsSync(file))
-      return good({ ready: [], trunk: "trunk()", keep: [] });
-    text = await Bun.file(file).text();
-  }
-  const parsed = await attempt(() => Bun.TOML.parse(text));
+  const working = existsSync(file);
+  const content = working
+    ? await attempt(() => Bun.file(file).text())
+    : await jjOut(
+        ["file", "show", "-r", "@-", CONFIG_FILE],
+        repo.backing,
+        true,
+      );
+  if (!content.ok)
+    return working
+      ? bad(`${file}: ${msg(content)}`)
+      : missingCommittedConfig(repo, content);
+  const parsed = await attempt(() => Bun.TOML.parse(content.value));
   if (!parsed.ok) return bad(`${file}: ${msg(parsed)}`);
   const checked = ConfigSchema.safeParse(parsed.value);
   return checked.success
@@ -614,7 +610,7 @@ export async function remove(options: {
   if (!name.ok) return name;
   const repo = resolveRepo(options.repo);
   if (!repo.ok) return repo;
-  const cfg = await readConfig(repo.value, true);
+  const cfg = await readConfig(repo.value);
   if (!cfg.ok) return cfg;
   const pre = common(repo.value);
   if (!pre.ok) return pre;
@@ -1802,7 +1798,7 @@ export async function gc(options: GcOptions): Promise<Attempt<GcResult>> {
   // Inventory and initial classification are read-only, including in a real collection pass.
   // A dry run never enters withLock (and therefore never creates waiter metadata either).
   const run = async (): Promise<Attempt<GcResult>> => {
-    const cfg = await readConfig(repo, true);
+    const cfg = await readConfig(repo);
     if (!cfg.ok) return cfg;
     const trunk = await trunkCommit(repo, cfg.value);
     if (!trunk.ok) return trunk;
@@ -1849,7 +1845,7 @@ export async function gc(options: GcOptions): Promise<Attempt<GcResult>> {
           `agx ws gc ${ws.name}`,
           async () => {
             // Refresh every verdict input after acquiring the lock, including policy and runs.
-            const currentConfig = await readConfig(repo, true);
+            const currentConfig = await readConfig(repo);
             if (!currentConfig.ok) return currentConfig;
             const currentTrunk = await trunkCommit(repo, currentConfig.value);
             if (!currentTrunk.ok) return currentTrunk;
@@ -2003,7 +1999,7 @@ export async function doctorInventory(
     const repo = resolved.value;
     if (seen.has(repo.backing)) continue;
     seen.add(repo.backing);
-    const cfg = await readConfig(repo, true);
+    const cfg = await readConfig(repo);
     if (!cfg.ok) return cfg;
     const trunk = await trunkCommit(repo, cfg.value);
     if (!trunk.ok) return trunk;

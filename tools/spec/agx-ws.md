@@ -30,11 +30,11 @@ for an entire pass, or removal without a locked re-check. Fixtures:
 
 For a repo whose backing store is `<parent>/<repo>`:
 
-| Thing | Name |
-| --- | --- |
-| workspace directory | `<parent>/<repo>.ws/ws_<slug>` |
-| jj workspace name | `ws_<slug>` (the directory name) |
-| agx-worker worker (elsewhere) | `agt_<slug>` |
+| Thing                         | Name                             |
+| ----------------------------- | -------------------------------- |
+| workspace directory           | `<parent>/<repo>.ws/ws_<slug>`   |
+| jj workspace name             | `ws_<slug>` (the directory name) |
+| agx-worker worker (elsewhere) | `agt_<slug>`                     |
 
 `--repo P` (default: the cwd) may be the main checkout or any workspace of the store; `agx ws` resolves
 the backing store from jj's own metadata without invoking jj. A slug is letters, digits, `_`, `-`.
@@ -99,11 +99,19 @@ patterns. Each candidate still produces one report line.
 
 ## Repo configuration: `.ws.toml`
 
-A small repo-owned file at the backing store root. Absent = no readiness commands, trunk `trunk()`.
+A small repo-owned file at the backing store root. Every command, including add, adopt, rm,
+gc and doctor, uses the main checkout's working `.ws.toml` when present, whether tracked or
+untracked. Otherwise it reads `.ws.toml` from that checkout's `@-` revision. If neither
+exists, defaults are no readiness commands, trunk `trunk()` and no keep entries. A config
+in a secondary workspace does not override this rule. Read or parse failures are errors,
+not a reason to fall back and silently lose keep protection. GC applies the same rule
+again under the store lock before removal. To clear committed policy, leave an empty
+working `.ws.toml`; deleting the working file selects the committed fallback.
 
 ```toml
 ready = ["mise trust -q", "bun install --frozen-lockfile"]   # sh -c, in order, in the new workspace
 trunk = "alpha"                                              # revset that defines "landed"
+keep = ["ws_reference"]                                      # workspace names or paths to preserve
 ```
 
 Unknown keys are an error. dotfiles declares the example above.

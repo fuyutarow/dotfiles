@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, utimes } from "node:fs/promises";
+import { chmod, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
@@ -22,20 +22,48 @@ const row = (
   vendor_session: vendor,
 });
 
-async function fixture(rows: unknown[] = [], legacy = false) {
+async function fixture(rows: unknown[] = []) {
   const home = tempHome();
-  const state = join(home, ".local/state/agx-next");
-  await mkdir(state, { recursive: true });
-  const path = join(state, "current-runs.json");
+  const bin = join(home, "bin");
+  await mkdir(bin);
+  const path = join(home, "status.json");
+  const calls = join(home, "calls.jsonl");
   await Bun.write(
     path,
     JSON.stringify({
-      output: JSON.stringify(legacy ? rows : { runs: rows, summary: {} }),
-      capturedAt: 1, // owner publications do not expire merely with wall-clock age
-      exit: 0,
+      schema: 1,
+      runs: {
+        source: "current",
+        captured_at: 1,
+        age_s: 0,
+        reason: null,
+        rows,
+        summary: null,
+      },
+      workspaces: null,
+      findings: null,
+      judgments: { by_session: {}, repository: 0, land: 0, why: null },
     }),
   );
-  return { home, state, path };
+  const agx = join(bin, "agx");
+  await Bun.write(
+    agx,
+    `#!${process.execPath}
+import { appendFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)) + "\\n");
+if (process.env.FAKE_AGX_MODE === "timeout") {
+  process.on("SIGTERM", () => {});
+  await Bun.sleep(10000);
+}
+if (process.env.FAKE_AGX_MODE === "failure") {
+  process.stderr.write("status unavailable\\ntry later\\n");
+  process.exit(7);
+}
+process.stdout.write(await Bun.file(${JSON.stringify(path)}).text());
+`,
+  );
+  await chmod(agx, 0o755);
+  return { home, path, calls };
 }
 
 function fire(
@@ -61,7 +89,7 @@ function fire(
       CODEX_THREAD_ID: "",
       CODEX_SESSION_ID: "",
       XDG_RUNTIME_DIR: join(f.home, "runtime"),
-      PATH: "/nonexistent",
+      PATH: join(f.home, "bin"),
       ...extra,
     },
   );
@@ -152,47 +180,82 @@ describe("log-agx-snapshot", () => {
     }
   });
 
-  test("legacy owner array is supported and missing vendor identity is explicit", async () => {
-    const msg = message(
-      fire(await fixture([row("abcdefgh-run", "s1", null)], true)),
-    );
+  test("missing vendor identity is explicit", async () => {
+    const msg = message(fire(await fixture([row("abcdefgh-run", "s1", null)])));
     expect(msg).toContain("abcdefgh");
     expect(msg).toContain("vendor_session=n/a (not recorded)");
   });
 
-  test("unreadable state prints n/a with its read failure reason", async () => {
+  test("non-zero CLI exit prints n/a with its failure reason", async () => {
     const f = await fixture();
     const msg = message(
-      fire(
-        f,
-        "Stop",
-        { session_id: "s1" },
-        { AGX_NEXT_STATE_DIR: join(f.home, "missing") },
-      ),
+      fire(f, "Stop", { session_id: "s1" }, { FAKE_AGX_MODE: "failure" }),
     );
     expect(msg).toContain("n/a (");
-    expect(msg).toContain("ENOENT");
+    expect(msg).toContain("agx status exited 7: status unavailable try later");
   });
 
   test("invalid JSON, invalid envelope and invalid listing print n/a with reason", async () => {
     for (const data of [
       "{nope",
       "null",
-      JSON.stringify({ output: "{}", capturedAt: 1, exit: 0 }),
+      JSON.stringify({
+        schema: 1,
+        runs: { source: "current", reason: null, rows: [{}] },
+      }),
     ]) {
       const f = await fixture();
       await Bun.write(f.path, data);
-      expect(message(fire(f))).toContain("n/a (invalid current-runs.json)");
+      expect(message(fire(f))).toContain("n/a (invalid agx status JSON)");
     }
   });
 
-  test("state publication older than records is reported as unavailable", async () => {
-    const f = await fixture([row("abcdef12-run")]);
-    await utimes(f.path, 1, 1);
-    await Bun.write(join(f.state, "records.jsonl"), "new record\n");
-    expect(message(fire(f))).toContain(
-      "n/a (current-runs.json predates records.jsonl)",
+  test("stale and unknown CLI snapshots are reported as unavailable", async () => {
+    for (const source of ["stale", "unknown"]) {
+      const f = await fixture();
+      await Bun.write(
+        f.path,
+        JSON.stringify({
+          schema: 1,
+          runs: {
+            source,
+            reason: source === "unknown" ? "snapshot unavailable" : null,
+            rows: source === "unknown" ? null : [row("hidden-run")],
+          },
+        }),
+      );
+      const msg = message(fire(f));
+      expect(msg).toContain(
+        source === "unknown"
+          ? "n/a (snapshot unavailable)"
+          : "n/a (agx status runs stale)",
+      );
+      expect(msg).not.toContain("hidden");
+    }
+  });
+
+  test("a hung CLI is killed within the hook's short timeout and fails open", async () => {
+    const f = await fixture();
+    const start = performance.now();
+    const msg = message(
+      fire(f, "Stop", undefined, { FAKE_AGX_MODE: "timeout" }),
     );
+    const elapsed = performance.now() - start;
+    expect(msg).toContain("n/a (");
+    expect(msg.toLowerCase()).toContain("timed out");
+    expect(elapsed).toBeGreaterThanOrEqual(450);
+    expect(elapsed).toBeLessThan(2000);
+    process.stdout.write(
+      `fake agx timeout hook latency: ${elapsed.toFixed(1)} ms\n`,
+    );
+  });
+
+  test("missing agx fails open", async () => {
+    expect(
+      message(
+        fire(await fixture(), "Stop", undefined, { PATH: "/nonexistent" }),
+      ),
+    ).toContain("n/a (agx not found on PATH)");
   });
 
   test("Stop survives an unwritable cadence cache", async () => {
@@ -225,29 +288,46 @@ describe("log-agx-snapshot", () => {
     );
   });
 
-  test("agx state overrides win over HOME and obsolete runtime cache", async () => {
-    const f = await fixture([row("default-run")]);
-    const override = await fixture([row("override-run")]);
-    const msg = message(
-      fire(
-        f,
-        "Stop",
-        { session_id: "s1" },
-        { AGX_NEXT_STATE_DIR: override.state, AGX_STATE_DIR: f.state },
-      ),
-    );
-    expect(msg).toContain("override");
-    expect(msg).not.toContain("default");
+  test("one CLI call receives the payload cwd as one argument, with process cwd fallback", async () => {
+    const f = await fixture([row("cli-run")]);
+    const start = performance.now();
     expect(
       message(
         fire(
           f,
           "Stop",
-          { session_id: "s1" },
-          { AGX_STATE_DIR: override.state },
+          { session_id: "s1", cwd: "/repo with spaces" },
+          {
+            AGX_NEXT_STATE_DIR: join(f.home, "missing-next"),
+            AGX_STATE_DIR: join(f.home, "missing-state"),
+          },
         ),
       ),
-    ).toContain("override");
+    ).toContain("cli-run");
+    const elapsed = performance.now() - start;
+    expect(await Bun.file(f.calls).text()).toBe(
+      `${JSON.stringify(["status", "--json", "--cwd", "/repo with spaces"])}\n`,
+    );
+    message(fire(f));
+    const calls = (await Bun.file(f.calls).text()).trim().split("\n");
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toBe(
+      JSON.stringify(["status", "--json", "--cwd", process.cwd()]),
+    );
+    process.stdout.write(
+      `fake agx success hook latency: ${elapsed.toFixed(1)} ms\n`,
+    );
+  });
+
+  test("ended-unjudged and orphaned counts remain session-scoped", async () => {
+    const f = await fixture([
+      { ...row("ended"), state: "ended", judgment: null },
+      { ...row("judged"), state: "ended", judgment: { decision: "accept" } },
+      { ...row("orphan"), state: "orphaned" },
+      { ...row("foreign", "other"), state: "ended" },
+    ]);
+    const msg = message(fire(f));
+    expect(msg).toContain("0 running · 1 ended-unjudged · orphaned 1");
   });
 
   test("other events stay silent", async () => {

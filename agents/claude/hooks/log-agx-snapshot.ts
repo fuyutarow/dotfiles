@@ -1,9 +1,10 @@
-// Stop / PostToolUse — one session-attributed fleet line, without spawning agx.
-// Read agx's owner publication, not the retired statusline presentation cache.
+// Stop / PostToolUse — one session-attributed fleet line via bounded agx status --json.
+// agx owns state discovery and freshness; this hook consumes only its public CLI.
 // Fail-open: unavailable state is a diagnostic, never a gate. Stop always emits;
 // PostToolUse retains its one-minute cadence. Cadence write failures cannot hide a line.
 
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
@@ -18,6 +19,8 @@ import {
 } from "../../../tools/shared/src/fleet-session.ts";
 
 const MIN_GAP_MS = 60_000;
+// Leave room for CLI startup, but cap a hung status command's impact on the session.
+const STATUS_TIMEOUT_MS = 500;
 const nonEmpty = (v: string | undefined): string | undefined =>
   v !== undefined && v !== "" ? v : undefined;
 const oneLine = (text: string): string =>
@@ -42,12 +45,6 @@ function sessionRows(session: FleetSession): string[] {
   return [context, usage].map((row) => oneLine(row));
 }
 
-// Same owner path as tools/agx-worker/src/next/store.ts. The statusline reader also consumes this
-// publication, but imports npm dependencies; hooks must work before bun install.
-const stateDir =
-  nonEmpty(process.env.AGX_NEXT_STATE_DIR) ??
-  nonEmpty(process.env.AGX_STATE_DIR) ??
-  join(process.env.HOME ?? homedir(), ".local/state/agx-next");
 const Run = z.looseObject({
   id: z.string().min(1),
   state: z.string(),
@@ -57,32 +54,44 @@ const Run = z.looseObject({
   row: z.string().optional(),
   judgment: z.unknown().optional(),
 });
-const Runs = z.array(Run);
-const Snapshot = jsonOf(
+const Status = jsonOf(
   z.object({
-    output: jsonOf(z.union([Runs, z.object({ runs: Runs })])),
-    capturedAt: z.number(),
-    exit: z.literal(0),
+    schema: z.literal(1),
+    runs: z.object({
+      source: z.enum(["current", "stale", "unknown"]),
+      reason: z.string().nullable(),
+      rows: z.array(Run).nullable(),
+    }),
   }),
 );
 
-async function describe(sid: string): Promise<string> {
-  const path = join(stateDir, "current-runs.json");
-  const read = await attempt(() => readFile(path, "utf8"));
-  if (!read.ok) return `n/a (${oneLine(errorMessage(read.error))})`;
-  const snapshot = Snapshot.safeParse(read.value);
-  if (!snapshot.success) return "n/a (invalid current-runs.json)";
-  // Owner publications expire on a newer event, not merely on wall-clock age.
-  const [published, records] = await Promise.all([
-    stat(path),
-    stat(join(stateDir, "records.jsonl")).catch(() => null),
-  ]);
-  if (records !== null && published.mtimeMs < records.mtimeMs)
-    return "n/a (current-runs.json predates records.jsonl)";
-  const output = snapshot.data.output;
-  const mine = (Array.isArray(output) ? output : output.runs).filter(
-    (run) => run.dispatcher_session === sid,
-  );
+function describe(sid: string, cwd: string): string {
+  const agx = Bun.which("agx");
+  if (agx === null) return "n/a (agx not found on PATH)";
+  // sync-ok: one bounded CLI read in a short-lived hook; no npm dependencies.
+  const result = spawnSync(agx, ["status", "--json", "--cwd", cwd], {
+    encoding: "utf8",
+    timeout: STATUS_TIMEOUT_MS,
+    killSignal: "SIGKILL",
+    maxBuffer: 1024 * 1024,
+  });
+  if (result.error !== undefined) {
+    if (
+      z.object({ code: z.literal("ETIMEDOUT") }).safeParse(result.error).success
+    )
+      return `n/a (agx status timed out after ${STATUS_TIMEOUT_MS} ms)`;
+    return `n/a (${oneLine(errorMessage(result.error))})`;
+  }
+  if (result.status !== 0)
+    return oneLine(
+      `n/a (agx status exited ${result.status ?? result.signal}: ${result.stderr.slice(0, 1024).trim()})`,
+    );
+  const status = Status.safeParse(result.stdout);
+  if (!status.success) return "n/a (invalid agx status JSON)";
+  const { source, reason, rows } = status.data.runs;
+  if (source !== "current" || rows === null)
+    return oneLine(`n/a (${reason ?? `agx status runs ${source}`})`);
+  const mine = rows.filter((run) => run.dispatcher_session === sid);
   const running = mine.filter((run) => run.state === "running");
   const ended = mine.filter(
     (run) => run.state === "ended" && (run.judgment ?? null) === null,
@@ -128,8 +137,12 @@ async function main(): Promise<void> {
     if (last.ok && Number.isFinite(last.value) && now - last.value < MIN_GAP_MS)
       return;
   }
-  const result = await attempt(async () =>
-    sid === undefined ? "n/a (session id not supplied)" : describe(sid),
+  const result = await attempt(() =>
+    Promise.resolve(
+      sid === undefined
+        ? "n/a (session id not supplied)"
+        : describe(sid, nonEmpty(strAt(payload, "cwd")) ?? process.cwd()),
+    ),
   );
   const body = result.ok
     ? result.value

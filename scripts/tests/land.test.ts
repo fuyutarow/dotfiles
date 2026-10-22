@@ -778,6 +778,65 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     }
   });
 
+  test("land refuses a two-commit workspace stack before rebase without changing it", async () => {
+    const f = await fixture();
+    await writeFile(join(f.worker, "lower.txt"), "lower commit\n");
+    await f.jj(f.worker, ["commit", "-m", "lower stack commit"]);
+    await writeFile(join(f.worker, "upper.txt"), "upper commit\n");
+    await f.jj(f.worker, ["status"]);
+
+    const alphaBefore = await f.jj(f.main, [
+      "log",
+      "--no-graph",
+      "-r",
+      "alpha",
+      "-T",
+      "commit_id",
+    ]);
+    const stackBefore = await f.jj(f.worker, [
+      "log",
+      "--no-graph",
+      "-r",
+      "alpha..@",
+      "-T",
+      'commit_id ++ "\\n"',
+    ]);
+    const result = await f.land();
+    const output = result.stdout.toString() + result.stderr.toString();
+
+    expect(result.exitCode, output).toBe(1);
+    expect(output).toContain(
+      "workspace has 2 commits above alpha; squash them into one (jj squash) and retry",
+    );
+    expect(output).not.toContain("[land] rebase:");
+    expect(
+      await f.jj(f.main, [
+        "log",
+        "--no-graph",
+        "-r",
+        "alpha",
+        "-T",
+        "commit_id",
+      ]),
+    ).toBe(alphaBefore);
+    expect(
+      await f.jj(f.worker, [
+        "log",
+        "--no-graph",
+        "-r",
+        "alpha..@",
+        "-T",
+        'commit_id ++ "\\n"',
+      ]),
+    ).toBe(stackBefore);
+    expect(await readFile(join(f.worker, "lower.txt"), "utf8")).toBe(
+      "lower commit\n",
+    );
+    expect(await readFile(join(f.worker, "upper.txt"), "utf8")).toBe(
+      "upper commit\n",
+    );
+  });
+
   test("unknown workspace is refused with the known workspace names", async () => {
     const f = await fixture();
     const result = await f.land([], {}, f.main, "not-a-workspace");

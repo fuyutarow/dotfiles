@@ -1208,6 +1208,17 @@ async function main(
           `[land] judgment: ok ${verdicts.length} accepted ticket lineage(s)`,
         );
       yield* jj(workerRoot, ["status"]);
+      const commitsAboveAlpha = yield* at(
+        workerRoot,
+        "alpha..@",
+        'commit_id ++ "\\n"',
+      ).map((commits) =>
+        commits === "" ? 0 : commits.split("\n").filter(Boolean).length,
+      );
+      if (commitsAboveAlpha !== 1)
+        return reject(
+          `workspace has ${commitsAboveAlpha} commits above alpha; squash them into one (jj squash) and retry`,
+        );
       if ((yield* at(workerRoot, "@", "conflict")) !== "false")
         return reject("workspace change has conflicts");
       const initial = yield* paths(workerRoot, "@-", "@");

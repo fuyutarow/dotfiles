@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0 — 2026-10-22
+
+- Add exact canonical file byte allowances to project index budgets
+
 ## 1.3.6 — 2026-10-19
 
 - Refuse effective dump, oversized-file and blob candidates before indexing with bounded admission inspection.

@@ -84,8 +84,16 @@ def main() -> None:
     limits = json.loads(sys.argv[3]) if sys.argv[2:3] == ["--limits"] else None
     if limits is None:
         raise ValueError("planner requires content limits from index-plan.ts")
+    allowances = limits.get("file_byte_allowances", {})
+    for name in allowances:
+        candidate = root / name
+        if candidate.resolve() != candidate or candidate.is_dir():
+            raise ValueError(f"noncanonical file byte allowance: {name}")
     total_bytes = 0
     for absolute, relative in iter_included_files(root, root, matcher):
+        if relative.as_posix() in allowances and absolute.resolve() != root / relative:
+            raise ValueError(f"noncanonical candidate: {relative}")
+        file_limit = allowances.get(relative.as_posix(), limits["max_file_bytes"])
         metadata = absolute.stat()
         size = metadata.st_size
         total_bytes += size
@@ -94,14 +102,15 @@ def main() -> None:
         chunks = math.ceil(size / 800)
         if (
             not blob
-            and size <= limits["max_file_bytes"]
+            and size <= file_limit
             and total_bytes <= limits["max_total_bytes"]
         ):
             with absolute.open("rb") as stream:
                 # One extra byte detects growth after stat without reading a
                 # concurrently growing file to EOF. Oversized files aren't opened.
-                raw = stream.read(limits["max_file_bytes"] + 1)
+                raw = stream.read(min(file_limit, limits["max_total_bytes"]) + 1)
             size = max(size, len(raw))
+            total_bytes += size - metadata.st_size
             try:
                 text = raw.decode("utf-8")
             except UnicodeDecodeError:

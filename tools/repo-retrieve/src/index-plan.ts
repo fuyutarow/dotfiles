@@ -22,6 +22,29 @@ const BudgetSchema = z
     max_data_share: z.number().min(0).max(1).default(0.2),
     max_seconds: z.number().positive().default(600),
     est_chunks_per_second: z.number().positive().default(50),
+    file_byte_allowances: z
+      .record(
+        z.string().refine(
+          (path) =>
+            path.length > 0 &&
+            path === path.trim() &&
+            path === path.normalize("NFC") &&
+            !["\\", ":", "*", "?", "[", "]", "{", "}"].some((char) =>
+              path.includes(char),
+            ) &&
+            !Array.from(path).some((char) => {
+              const code = char.codePointAt(0) ?? 0;
+              return code < 32 || code === 127;
+            }) &&
+            !path.startsWith("~") &&
+            path
+              .split("/")
+              .every((part) => part !== "" && part !== "." && part !== ".."),
+          "expected an exact canonical repository-relative file path",
+        ),
+        z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+      )
+      .optional(),
   })
   .strict();
 const FileSchema = z.object({
@@ -167,18 +190,24 @@ export function summarize(
   const inadequate =
     "effective candidate remains included; .gitignore/exclude_patterns or max_file_size in .cocoindex_code/settings.yml must exclude it";
   for (const file of files) {
+    const allowance = Object.hasOwn(
+      budget.file_byte_allowances ?? {},
+      file.path,
+    )
+      ? budget.file_byte_allowances?.[file.path]
+      : undefined;
     if (file.blob === true)
       violations.push(`${file.path}: binary/blob content; ${inadequate}`);
-    if (file.bytes > CONTENT_LIMITS.max_file_bytes)
+    if (file.bytes > (allowance ?? CONTENT_LIMITS.max_file_bytes))
       violations.push(
-        `${file.path}: ${file.bytes} bytes > per-file limit ${CONTENT_LIMITS.max_file_bytes}; ${inadequate}`,
+        `${file.path}: ${file.bytes} bytes > per-file limit ${allowance ?? CONTENT_LIMITS.max_file_bytes}; ${inadequate}`,
       );
     else if (
       file.kind === "data" &&
-      file.bytes > CONTENT_LIMITS.max_data_file_bytes
+      file.bytes > (allowance ?? CONTENT_LIMITS.max_data_file_bytes)
     )
       violations.push(
-        `${file.path}: dump/data candidate ${file.bytes} bytes > data-file limit ${CONTENT_LIMITS.max_data_file_bytes}; ${inadequate}`,
+        `${file.path}: dump/data candidate ${file.bytes} bytes > data-file limit ${allowance ?? CONTENT_LIMITS.max_data_file_bytes}; ${inadequate}`,
       );
   }
   if (bytes > CONTENT_LIMITS.max_total_bytes)
@@ -254,7 +283,10 @@ export async function computeIndexPlan(
         join(import.meta.dir, "ccc_plan.py"),
         project,
         "--limits",
-        JSON.stringify(CONTENT_LIMITS),
+        JSON.stringify({
+          ...CONTENT_LIMITS,
+          file_byte_allowances: budget.file_byte_allowances ?? {},
+        }),
       ],
       cwd: project,
       env: { ...process.env, RUST_LOG: "error", OTEL_SDK_DISABLED: "true" },

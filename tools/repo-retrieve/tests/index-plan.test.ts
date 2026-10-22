@@ -7,6 +7,7 @@ import {
   realpathSync,
   rmSync,
   truncateSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -595,4 +596,204 @@ test("rate history is per host and plans use the median of the latest nine runs"
   for (const rate of [100, 1, 2, 3, 4, 5, 6, 7, 8, 9])
     await recordIndexRate(rate, 100, path);
   expect(await readIndexRate(path)).toBe(5);
+});
+
+// The production entry imports only the fake walk/settings modules below, never an indexer.
+function allowanceFixture(
+  config: string,
+  entries: Record<string, string | number>,
+) {
+  const root = fixture();
+  const modules = join(root, ".fake", "cocoindex_code");
+  mkdirSync(modules, { recursive: true });
+  writeFileSync(join(modules, "__init__.py"), "");
+  writeFileSync(
+    join(modules, "settings.py"),
+    `
+from types import SimpleNamespace
+def load_project_settings(root):
+    return SimpleNamespace(include_patterns=[], exclude_patterns=[], max_file_size=None)
+`,
+  );
+  writeFileSync(
+    join(modules, "file_walk.py"),
+    `
+from pathlib import Path
+class Matcher:
+    def is_dir_included(self, path): return True
+def build_matcher(*args): return Matcher()
+def iter_included_files(root, directory, matcher):
+    for name in (root / '.candidates').read_text().splitlines():
+        yield root / name, Path(name)
+`,
+  );
+  const interpreter = join(root, ".fake", "python");
+  writeFileSync(
+    interpreter,
+    `#!/usr/bin/env bun
+const child = Bun.spawn(['uv', 'run', '--no-project', 'python', ...process.argv.slice(2)], {
+  env: {...process.env, PYTHONPATH: ${JSON.stringify(join(root, ".fake"))}},
+  stdin: 'inherit', stdout: 'inherit', stderr: 'inherit',
+});
+process.exit(await child.exited);
+`,
+  );
+  chmodSync(interpreter, 0o755);
+  const fake = join(root, ".fake", "ccc");
+  writeFileSync(fake, `#!${interpreter}\n`);
+  writeFileSync(join(root, ".cocoindex_code", "rr.toml"), config);
+  writeFileSync(join(root, ".candidates"), Object.keys(entries).join("\n"));
+  for (const [name, content] of Object.entries(entries)) {
+    mkdirSync(join(root, name, ".."), { recursive: true });
+    writeFileSync(join(root, name), typeof content === "string" ? content : "");
+    if (typeof content === "number") truncateSync(join(root, name), content);
+  }
+  return { root, fake, plan: () => computeIndexPlan(root, fake) };
+}
+
+const allowanceConfig = (path: string, cap: number, extra = "") =>
+  `[index]\n${extra}\n[index.file_byte_allowances]\n${JSON.stringify(path)} = ${cap}\n`;
+
+test("exact file allowance admits a bounded large specification with normal accounting", async () => {
+  const content = "Canonical specification prose.\n".repeat(40_000);
+  const f = allowanceFixture(allowanceConfig("docs/spec.md", content.length), {
+    "docs/spec.md": content,
+  });
+  const result = await f.plan();
+  expect(result.isOk()).toBe(true);
+  expect(result.isErr()).toBe(false);
+  if (result.isErr()) return;
+  expect(result.value.violations).toEqual([]);
+  expect(result.value.total).toMatchObject({
+    files: 1,
+    bytes: content.length,
+    est_chunks: Math.ceil(content.length / 800),
+  });
+  expect(result.value.directories[0]?.bytes).toBe(content.length);
+  expect(result.value.files[0]?.path).toBe("docs/spec.md");
+});
+
+test("exact allowance admits an oversized data file while retaining the data-share gate", async () => {
+  const rows = JSON.stringify({ rows: ["x".repeat(70_000)] });
+  const allowed = allowanceFixture(
+    allowanceConfig("data/rows.json", rows.length, "max_data_share = 1"),
+    { "data/rows.json": rows },
+  );
+  const admitted = await allowed.plan();
+  expect(admitted.isErr()).toBe(false);
+  if (admitted.isErr()) return;
+  expect(admitted.value.files[0]?.kind).toBe("data");
+  expect(admitted.value.violations).toEqual([]);
+
+  const overShare = allowanceFixture(
+    allowanceConfig("data/rows.json", rows.length),
+    {
+      "src/main.ts": "const value = true;\n".repeat(1_000),
+      "data/rows.json": rows,
+    },
+  );
+  const refused = await overShare.plan();
+  expect(refused.isErr()).toBe(false);
+  if (refused.isErr()) return;
+  expect(refused.value.violations.join("\n")).toContain("data share");
+});
+
+test("exact mismatch, cap exceedance, and absent permission retain individual refusal", async () => {
+  for (const config of [
+    "",
+    allowanceConfig("docs/other.md", 2_000_000),
+    allowanceConfig("docs/spec.md", 1_100_000),
+  ]) {
+    const f = allowanceFixture(config, {
+      "docs/spec.md": "Ordinary prose.\n".repeat(80_000),
+    });
+    const result = await f.plan();
+    expect(result.isErr()).toBe(false);
+    if (result.isErr()) return;
+    expect(result.value.violations.join("\n")).toContain("per-file limit");
+    expect(result.value.total.files).toBe(1);
+  }
+});
+
+test("invalid allowance paths and limits fail through production config before enumeration", async () => {
+  for (const path of [
+    "",
+    "/absolute.md",
+    "../escape.md",
+    "a/../b.md",
+    "./spec.md",
+    "a//b.md",
+    "docs/",
+    "docs/*.md",
+    "docs/?.md",
+    "docs/[a].md",
+    "a\\b.md",
+    "C:/file.md",
+    "~/file.md",
+  ]) {
+    const f = allowanceFixture(allowanceConfig(path, 2_000_000), {});
+    const result = await f.plan();
+    expect(result.isErr()).toBe(true);
+    if (result.isErr())
+      expect(result.error.message).toContain("invalid rr.toml");
+  }
+  for (const cap of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, Infinity, NaN]) {
+    const config = allowanceConfig("spec.md", cap)
+      .replace("Infinity", "inf")
+      .replace("NaN", "nan");
+    const f = allowanceFixture(config, {});
+    expect((await f.plan()).isErr()).toBe(true);
+  }
+});
+
+test("allowances preserve aggregate bytes, data bytes, chunks, share and blob gates", async () => {
+  for (const [path, bytes, expected] of [
+    ["spec.md", 40_000_001, "aggregate candidate bytes"],
+    ["rows.json", 8_000_001, "aggregate data bytes"],
+  ] as const) {
+    const f = allowanceFixture(allowanceConfig(path, bytes), {
+      [path]: bytes,
+    });
+    const result = await f.plan();
+    expect(result.isErr()).toBe(false);
+    if (result.isErr()) return;
+    expect(result.value.total.bytes).toBe(bytes);
+    expect(result.value.violations.join("\n")).toContain(expected);
+  }
+  const f = allowanceFixture(
+    allowanceConfig("spec.md", 2_000_000, "max_est_chunks = 1"),
+    {
+      "spec.md": "Specification prose.\n".repeat(60_000),
+      "blob.md": "a\0b",
+    },
+  );
+  const result = await f.plan();
+  expect(result.isErr()).toBe(false);
+  if (result.isErr()) return;
+  expect(result.value.violations.join("\n")).toContain("est_chunks");
+  expect(result.value.violations.join("\n")).toContain("binary/blob");
+});
+
+test("allowances reject directory and symlink aliases and never add excluded candidates", async () => {
+  for (const target of ["directory", "alias", "escape"]) {
+    const f = allowanceFixture(allowanceConfig("spec.md", 2_000_000), {});
+    if (target === "directory") mkdirSync(join(f.root, "spec.md"));
+    else {
+      const destination =
+        target === "escape" ? join(tmpdir(), "outside-spec.md") : "source.ts";
+      symlinkSync(destination, join(f.root, "spec.md"));
+    }
+    expect((await f.plan()).isErr()).toBe(true);
+  }
+  const f = allowanceFixture(allowanceConfig("excluded.md", 2_000_000), {
+    "source.ts": "const example = true;\n",
+  });
+  writeFileSync(
+    join(f.root, "excluded.md"),
+    "Excluded canonical prose.\n".repeat(60_000),
+  );
+  const result = await f.plan();
+  expect(result.isErr()).toBe(false);
+  if (result.isErr()) return;
+  expect(result.value.files.map((file) => file.path)).toEqual(["source.ts"]);
 });

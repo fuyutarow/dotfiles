@@ -83,7 +83,27 @@ max_est_chunks = 50000
 max_data_share = 0.20
 max_seconds = 600
 est_chunks_per_second = 50
+
+# Fictional canonical files; exact paths, never patterns or directories.
+[index.file_byte_allowances]
+"docs/contracts/example-spec.md" = 2097152
+"specifications/example-schema.json" = 131072
 ```
+
+An optional `index.file_byte_allowances` table replaces only the individual byte ceiling
+for each exact, normalized repository-relative file. Values must be finite positive safe
+integer bytes (at most 9007199254740991). Absolute paths, traversal, glob characters,
+backslashes, drive prefixes, noncanonical spellings, directories and symlink aliases are
+rejected before indexing. Omission preserves the ordinary 1 MiB file / 64 KiB data-file
+ceilings. This permission never includes a file excluded by ccc's matcher, `.gitignore`,
+exclude patterns or `max_file_size`; configure ccc separately if its size exclusion is too
+small for the intended candidate. The planner and backend retain the same candidate set.
+Allowed files retain all file, byte, directory and chunk accounting, the 40 MB total and
+8 MB data aggregate ceilings, data share, content/blob checks, measured-time gates and
+existing resource-control integration. Reads remain bounded by the declared ceiling and total-byte backstop.
+The existing `--accept-plan` override and advisory fallback time estimate remain unchanged.
+Project `.cocoindex_code/rr.toml` owns this setting; `retrieval.toml` configures definition
+retrieval and is not an index-policy source.
 
 These are also the defaults when omitted. Chunks are estimates, `ceil(Unicode characters / 800)`
 per nonblank UTF-8 file; undecodable files remain in the matched file count with zero chunks,

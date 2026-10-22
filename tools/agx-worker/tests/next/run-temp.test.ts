@@ -81,7 +81,7 @@ async function fixture(workerBody: string, verify: string | string[]) {
   writeFileSync(worker, workerBody);
   const env = {
     ...process.env,
-    AGX_NEXT_STATE_DIR: join(root, "state"),
+    AGX_STATE_DIR: join(root, "state"),
     JEV_URL: `http://127.0.0.1:${jevPort}/choice`,
     AGX_WORKER_BIN: worker,
     AGX_TMP_ROOT: tempRoot,
@@ -135,7 +135,7 @@ describe("agx worker run owns its temp space", () => {
     const env = {
       HOME: home,
       PATH: "/usr/bin:/bin",
-      AGX_NEXT_STATE_DIR: f.env.AGX_NEXT_STATE_DIR,
+      AGX_STATE_DIR: f.env.AGX_STATE_DIR,
       JEV_URL: f.env.JEV_URL,
       AGX_WORKER_BIN: f.env.AGX_WORKER_BIN,
       AGX_TMP_ROOT: f.env.AGX_TMP_ROOT,
@@ -166,7 +166,7 @@ describe("agx worker run owns its temp space", () => {
     });
     expect(listed.exitCode).toBe(0);
     const records = readFileSync(
-      join(f.env.AGX_NEXT_STATE_DIR, "records.jsonl"),
+      join(f.env.AGX_STATE_DIR, "records.jsonl"),
       "utf8",
     );
     for (const kind of ["passed", "unrunnable", "killed", "failed"])
@@ -308,7 +308,7 @@ describe("agx worker run owns its temp space", () => {
     expect(result.exitCode).toBe(0);
     expect(readdirSync(f.tempRoot)).toEqual([]);
     const state = readFileSync(
-      join(f.env.AGX_NEXT_STATE_DIR, "records.jsonl"),
+      join(f.env.AGX_STATE_DIR, "records.jsonl"),
       "utf8",
     );
     const parsed = jsonOf(

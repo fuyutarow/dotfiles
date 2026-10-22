@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.18.4 — 2026-10-23
+
+- Resolve legacy ledger reads under the unified state directory.
+
 ## 0.18.3 — 2026-10-23
 
 - Bound config inspections and preserve operational timeout diagnostics

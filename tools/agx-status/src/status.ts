@@ -1,23 +1,12 @@
 #!/usr/bin/env bun
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { stat } from "node:fs/promises";
 import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
 
-const nonEmpty = (value: string | undefined): string | undefined =>
-  value === "" ? undefined : value;
+import { stateDir, checkState } from "./state-dir.ts";
 
-function stateDir(env: NodeJS.ProcessEnv): string {
-  const override =
-    nonEmpty(env.AGX_NEXT_STATE_DIR) ?? nonEmpty(env.AGX_STATE_DIR);
-  if (override !== undefined) return override;
-  const stateHome =
-    env.XDG_STATE_HOME === ""
-      ? join(homedir(), ".local", "state")
-      : (env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"));
-  return join(stateHome, "agx-next");
-}
+await checkState();
 
 const workspaceCounts = z.object({
   total: z.number().int().nonnegative(),

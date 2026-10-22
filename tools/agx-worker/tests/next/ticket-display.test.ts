@@ -51,7 +51,6 @@ test("human ls and wait prefix the recorded slug; JSON and doctor JSONL retain m
           HOME: home,
           PATH: "",
           AGX_STATE_DIR: home,
-          AGX_NEXT_STATE_DIR: home,
           AGX_DISPATCHER_SESSION: "",
           CLAUDE_CODE_SESSION_ID: "",
         },

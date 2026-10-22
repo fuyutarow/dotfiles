@@ -127,18 +127,16 @@ export function dispatchStateDir(env: NodeJS.ProcessEnv = process.env): string {
   );
 }
 
-/** Read both locations until the agent-router state migration is complete.
- *  An explicit directory stays isolated for callers and tests; agx wins duplicate run ids. */
+/** Read-only location of the pre-separation ledger. */
+export function dispatchLegacyStateDir(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return join(dispatchStateDir(env), "legacy-v1");
+}
+
+/** Active markers are read only from the current state directory. */
 export function dispatchStateReadDirs(
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
-  const current = dispatchStateDir(env);
-  if (env.AGX_STATE_DIR !== undefined && env.AGX_STATE_DIR !== "")
-    return [current];
-  const base = env.XDG_STATE_HOME;
-  const legacy = join(
-    base === undefined || base === "" ? join(homedir(), ".local/state") : base,
-    "agent-router",
-  );
-  return [current, legacy];
+  return [dispatchStateDir(env)];
 }

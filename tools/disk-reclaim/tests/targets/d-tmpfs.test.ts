@@ -68,7 +68,7 @@ describe("tmpfs target", () => {
       "agx-leasefold-v352",
       "agx-leasefold-v352-live",
       "agx-test-ABCDEF",
-      "agx-next-fixed-import",
+      "agx-fixed-import",
     ];
     for (const name of names) {
       const dir = join(root, name);

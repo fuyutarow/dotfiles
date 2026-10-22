@@ -2,10 +2,11 @@
 
 Dispatch, inspect and judge worker runs. Invoke it directly or through `agx worker`.
 
-The append-only records and their format remain at `$XDG_STATE_HOME/agx-next/records.jsonl`
-(default `~/.local/state/agx-next/records.jsonl`). Judgments remain available to audit and
+The append-only records live at `<state>/records.jsonl`. State resolves from non-empty
+`AGX_STATE_DIR`, then `$XDG_STATE_HOME/agx`, then `~/.local/state/agx`. Legacy ledgers
+are read only from `<state>/legacy-v1`. Judgments remain available to audit and
 statistics views; local run outcomes and grades do not enter model selection criteria.
-`agx-next` is the legacy state-directory name; there is no `agx-next` command. `agx-run` is removed.
+See the [state migration refusals](contract.md) before migrating existing data.
 
 [Scope and ownership](docs/scope.md) · [Suite architecture](../spec/architecture.md) · [Caller inventory](docs/suite-callers.md)
 

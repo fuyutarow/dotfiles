@@ -13,13 +13,13 @@ import {
   fullFoldedRuns,
 } from "../../src/next/store.ts";
 
-const previousState = process.env.AGX_NEXT_STATE_DIR;
+const previousState = process.env.AGX_STATE_DIR;
 const previousPath = process.env.PATH;
 const roots: string[] = [];
 afterEach(async () => {
   await flushRunPublications();
-  if (previousState === undefined) delete process.env.AGX_NEXT_STATE_DIR;
-  else process.env.AGX_NEXT_STATE_DIR = previousState;
+  if (previousState === undefined) delete process.env.AGX_STATE_DIR;
+  else process.env.AGX_STATE_DIR = previousState;
   if (previousPath === undefined) delete process.env.PATH;
   else process.env.PATH = previousPath;
   await Promise.all(
@@ -30,7 +30,7 @@ afterEach(async () => {
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "agx-lost-race-"));
   roots.push(root);
-  process.env.AGX_NEXT_STATE_DIR = root;
+  process.env.AGX_STATE_DIR = root;
   await Bun.write(
     join(root, "records.jsonl"),
     Bun.file(join(import.meta.dir, "fixtures/lost-race-records.jsonl")),
@@ -154,7 +154,7 @@ test("doctor distinguishes observed completions, missing returns, legacy history
   const child = Bun.spawn(
     [process.execPath, "tools/agx-worker/src/next/cli.ts", "doctor"],
     {
-      env: { ...process.env, AGX_NEXT_STATE_DIR: root },
+      env: { ...process.env, AGX_STATE_DIR: root },
       stdout: "pipe",
       stderr: "pipe",
     },

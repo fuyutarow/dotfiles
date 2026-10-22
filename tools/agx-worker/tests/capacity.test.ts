@@ -274,7 +274,7 @@ test("real dispatch records capacity; fresh and continued dispatches cannot reus
     },
   };
   const env = {
-    AGX_NEXT_STATE_DIR: state,
+    AGX_STATE_DIR: state,
     JEV_URL: `http://127.0.0.1:${server.port}/`,
     TYPESAFE_API_KEY: "test-key",
     AGX_CODEX_BIN: f.bin,

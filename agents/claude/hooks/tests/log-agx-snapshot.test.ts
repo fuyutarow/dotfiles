@@ -83,7 +83,6 @@ function fire(
     },
     {
       HOME: f.home,
-      AGX_NEXT_STATE_DIR: "",
       AGX_STATE_DIR: "",
       CLAUDE_CODE_SESSION_ID: "",
       CODEX_THREAD_ID: "",
@@ -298,7 +297,6 @@ describe("log-agx-snapshot", () => {
           "Stop",
           { session_id: "s1", cwd: "/repo with spaces" },
           {
-            AGX_NEXT_STATE_DIR: join(f.home, "missing-next"),
             AGX_STATE_DIR: join(f.home, "missing-state"),
           },
         ),

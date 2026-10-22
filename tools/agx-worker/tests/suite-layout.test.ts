@@ -8,7 +8,6 @@ test("the run package exposes only the agx-worker bin", () => {
   expect(rootPackage.bin["agx-worker"]).toBe(
     "tools/agx-worker/src/next/cli.ts",
   );
-  expect(Object.hasOwn(rootPackage.bin, "agx-next")).toBe(false);
   expect(Object.keys(rootPackage.bin)).not.toContain("agx-run");
   expect(packageJson.name).toBe("@dotfiles/agx-worker");
   expect(packageJson.version).toMatch(

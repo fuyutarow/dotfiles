@@ -96,7 +96,7 @@ const fixture = async (ticketName = "pin") => {
         cwd: process.cwd(),
         env: {
           ...process.env,
-          AGX_NEXT_STATE_DIR: state,
+          AGX_STATE_DIR: state,
           AGX_TMP_ROOT: join(root, "agx-tmp"),
           JEV_URL: "http://127.0.0.1:1/choice",
           AGX_WORKER_BIN: worker,

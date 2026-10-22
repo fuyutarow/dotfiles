@@ -79,7 +79,7 @@ globalThis.setTimeout = (...args) => { Bun.write(${JSON.stringify(ready)}, "read
       stderr: "pipe",
       env: {
         ...process.env,
-        AGX_NEXT_STATE_DIR: join(root, "state"),
+        AGX_STATE_DIR: join(root, "state"),
         AGX_WAIT_POLL_MS: "50",
       },
     },

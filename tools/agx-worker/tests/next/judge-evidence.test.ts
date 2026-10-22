@@ -31,7 +31,7 @@ afterAll(async () => {
 });
 async function judge(args: string[]) {
   const child = Bun.spawn([process.execPath, cli, "judge", id, ...args], {
-    env: { ...process.env, AGX_NEXT_STATE_DIR: root },
+    env: { ...process.env, AGX_STATE_DIR: root },
     stdout: "pipe",
     stderr: "pipe",
     timeout: 10_000,

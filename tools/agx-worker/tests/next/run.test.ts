@@ -23,13 +23,13 @@ afterAll(tempDirs.assertRemoved);
 
 const servers: ReturnType<typeof Bun.spawn>[] = [];
 const roots: string[] = [];
-const priorNextStateDir = process.env.AGX_NEXT_STATE_DIR;
+const priorStateDir = process.env.AGX_STATE_DIR;
 afterEach(() => {
   for (const server of servers.splice(0)) server.kill();
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
-  if (priorNextStateDir === undefined) delete process.env.AGX_NEXT_STATE_DIR;
-  else process.env.AGX_NEXT_STATE_DIR = priorNextStateDir;
+  if (priorStateDir === undefined) delete process.env.AGX_STATE_DIR;
+  else process.env.AGX_STATE_DIR = priorStateDir;
 });
 const scratch = async (prefix: string): Promise<string> => {
   const root = registerTempDir(
@@ -113,10 +113,12 @@ describe("agx-worker run", () => {
           break;
         await Bun.sleep(25);
       }
+      const { AGX_NEXT_STATE_DIR: _retiredStateDir, ...inheritedEnv } =
+        process.env;
       const env = {
-        ...process.env,
+        ...inheritedEnv,
         XDG_CONFIG_HOME: join(root, "config"),
-        AGX_NEXT_STATE_DIR: state,
+        AGX_STATE_DIR: state,
         AGX_TMP_ROOT: join(root, "tmp"),
         JEV_URL: `http://127.0.0.1:${port}`,
         TYPESAFE_API_KEY: "test-key",
@@ -153,7 +155,7 @@ describe("agx-worker run", () => {
       expect(readFileSync(join(root, "order"), "utf8")).toBe(
         mode === "absent" ? "ticket\n" : "always-one\nalways-two\nticket\n",
       );
-      process.env.AGX_NEXT_STATE_DIR = state;
+      process.env.AGX_STATE_DIR = state;
       const run = (await foldedRuns()).at(-1);
       expect(run?.outcome).toBe(mode === "failed" ? "verify-failed" : "ok");
       expect(run?.verify.map((entry) => entry.cmd)).toEqual(
@@ -254,7 +256,7 @@ describe("agx-worker run", () => {
       ],
       {
         cwd: process.cwd(),
-        env: { ...process.env, AGX_NEXT_STATE_DIR: state },
+        env: { ...process.env, AGX_STATE_DIR: state },
         timeout: 5_000,
       },
     );
@@ -270,7 +272,7 @@ describe("agx-worker run", () => {
     const root = await scratch("early-quit-");
     const state = join(root, "state");
     mkdirSync(state, { recursive: true });
-    process.env.AGX_NEXT_STATE_DIR = state;
+    process.env.AGX_STATE_DIR = state;
     const started = "2026-10-14T01:00:00.000Z";
     const records = [
       {
@@ -309,7 +311,7 @@ describe("agx-worker run", () => {
     const root = await scratch("legacy-early-quit-");
     const state = join(root, "state");
     mkdirSync(state, { recursive: true });
-    process.env.AGX_NEXT_STATE_DIR = state;
+    process.env.AGX_STATE_DIR = state;
     const reportPath = join(root, "historical-report.json");
     writeFileSync(
       reportPath,
@@ -394,7 +396,7 @@ describe("agx-worker run", () => {
 
     const workerEnv = {
       ...process.env,
-      AGX_NEXT_STATE_DIR: state,
+      AGX_STATE_DIR: state,
       AGX_TMP_ROOT: join(root, "agx-tmp"),
       JEV_URL: `http://127.0.0.1:${jevPort}/choice`,
       AGX_WORKER_BIN: worker,
@@ -550,7 +552,7 @@ describe("agx-worker run", () => {
         "--note",
         "test acceptance",
       ],
-      { cwd: process.cwd(), env: { ...workerEnv, AGX_NEXT_STATE_DIR: state } },
+      { cwd: process.cwd(), env: { ...workerEnv, AGX_STATE_DIR: state } },
     );
     expect(accepted.exitCode).toBe(0);
 
@@ -590,7 +592,7 @@ describe("agx-worker run", () => {
         cwd: process.cwd(),
         env: {
           ...workerEnv,
-          AGX_NEXT_STATE_DIR: state,
+          AGX_STATE_DIR: state,
           AGX_DISPATCHER_SESSION: "",
           CLAUDE_CODE_SESSION_ID: "",
           CODEX_SESSION_ID: "codex-session",
@@ -646,7 +648,7 @@ describe("agx-worker run", () => {
       [process.execPath, "tools/agx-worker/src/next/cli.ts", "ls", "--json"],
       {
         cwd: process.cwd(),
-        env: { ...process.env, AGX_NEXT_STATE_DIR: state },
+        env: { ...process.env, AGX_STATE_DIR: state },
       },
     );
     const listedSchema = z.array(
@@ -722,7 +724,7 @@ describe("agx-worker run", () => {
         secondRow.id,
         "reject",
       ],
-      { cwd: process.cwd(), env: { ...workerEnv, AGX_NEXT_STATE_DIR: state } },
+      { cwd: process.cwd(), env: { ...workerEnv, AGX_STATE_DIR: state } },
     );
     expect(rejected.exitCode).toBe(0);
     expect(Object.keys(firstRow).toSorted()).toEqual(
@@ -774,7 +776,7 @@ describe("agx-worker run", () => {
       ],
       {
         cwd: process.cwd(),
-        env: { ...process.env, AGX_NEXT_STATE_DIR: join(root, "check-state") },
+        env: { ...process.env, AGX_STATE_DIR: join(root, "check-state") },
       },
     );
     expect(checked.exitCode).toBe(0);
@@ -821,7 +823,7 @@ describe("agx-worker run", () => {
     );
     const env = {
       ...process.env,
-      AGX_NEXT_STATE_DIR: state,
+      AGX_STATE_DIR: state,
       AGX_TMP_ROOT: join(root, "agx-tmp"),
       JEV_URL: `http://127.0.0.1:${jevPort}/choice`,
       AGX_WORKER_BIN: worker,
@@ -896,7 +898,7 @@ describe("agx-worker run", () => {
       ],
       {
         cwd: process.cwd(),
-        env: { ...process.env, AGX_NEXT_STATE_DIR: join(root, "state") },
+        env: { ...process.env, AGX_STATE_DIR: join(root, "state") },
       },
     );
     expect(result.exitCode).toBe(2);
@@ -905,15 +907,14 @@ describe("agx-worker run", () => {
 
   test("imports sampled real legacy line shapes once", async () => {
     const root = await scratch("next-import-");
-    const source = join(root, "legacy");
-    const destination = join(root, "next");
+    const destination = join(root, "state");
+    const source = join(destination, "legacy-v1");
     const fixture = join(import.meta.dir, "fixtures/legacy-real-shapes.jsonl");
     mkdirSync(source, { recursive: true });
     writeFileSync(join(source, "runs.jsonl"), readFileSync(fixture));
     const env = {
       ...process.env,
-      AGX_STATE_DIR: source,
-      AGX_NEXT_STATE_DIR: destination,
+      AGX_STATE_DIR: destination,
     };
     const first = Bun.spawnSync(
       [
@@ -1028,7 +1029,7 @@ describe("agx-worker run", () => {
       [process.execPath, "tools/agx-worker/src/next/cli.ts", "ls", "--json"],
       {
         cwd: process.cwd(),
-        env: { ...process.env, AGX_NEXT_STATE_DIR: state },
+        env: { ...process.env, AGX_STATE_DIR: state },
       },
     );
     const rows = jsonOf(
@@ -1064,7 +1065,7 @@ describe("agx-worker run", () => {
   });
 
   test("ls JSON exposes started and ended event timestamps", () => {
-    const root = mkdtempSync(join(tmpdir(), "agx-next-run-timestamps-"));
+    const root = mkdtempSync(join(tmpdir(), "agx-worker-run-timestamps-"));
     const state = join(root, "state");
     mkdirSync(state, { recursive: true });
     const runningAt = "2026-10-14T01:02:03Z";
@@ -1106,7 +1107,7 @@ describe("agx-worker run", () => {
       [process.execPath, "tools/agx-worker/src/next/cli.ts", "ls", "--json"],
       {
         cwd: process.cwd(),
-        env: { ...process.env, AGX_NEXT_STATE_DIR: state },
+        env: { ...process.env, AGX_STATE_DIR: state },
       },
     );
     const rows = jsonOf(
@@ -1176,7 +1177,7 @@ describe("agx-worker run", () => {
       join(state, "records.jsonl"),
       records.map((event) => JSON.stringify(event)).join("\n") + "\n",
     );
-    const env = { ...process.env, AGX_NEXT_STATE_DIR: state };
+    const env = { ...process.env, AGX_STATE_DIR: state };
     const human = Bun.spawnSync(
       [process.execPath, "tools/agx-worker/src/next/cli.ts", "ls"],
       { cwd: process.cwd(), env },

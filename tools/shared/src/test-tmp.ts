@@ -185,7 +185,6 @@ async function isolatedPaths(root: string) {
   const paths = {
     HOME: home,
     AGX_STATE_DIR: join(root, "xdg-state", "agx"),
-    AGX_NEXT_STATE_DIR: join(root, "xdg-state", "agx-next"),
     CLAUDE_BASH_DURATIONS_DIR: join(root, "xdg-state", "claude-bash-durations"),
     CLAUDE_CONFIG_DIR: join(home, ".claude"),
     CLAUDE_SESSION_SCRATCHPAD: join(root, "scratchpad"),

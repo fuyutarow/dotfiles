@@ -37,6 +37,11 @@ async function observation(path: string) {
   return parsed.data;
 }
 const roots: string[] = [];
+function inheritedEnv() {
+  const env = { ...process.env };
+  Reflect.deleteProperty(env, "AGX_NEXT_STATE_DIR");
+  return env;
+}
 afterEach(() => {
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
@@ -166,12 +171,12 @@ function fixture() {
     "exit 2",
   ]);
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...inheritedEnv(),
     PATH: `${bin}:${process.env.PATH}`,
     HOME: home,
     XDG_CONFIG_HOME: join(home, "config"),
     XDG_STATE_HOME: join(home, "state"),
-    AGX_NEXT_STATE_DIR: join(home, "state", "agx"),
+    AGX_STATE_DIR: join(home, "state", "agx"),
     DISPATCH_ROSTER_PATH: undefined,
     CLAUDE_CODE_SESSION_ID: "fixture-claude",
     CODEX_SESSION_ID: "fixture-codex",
@@ -738,7 +743,7 @@ test.each([
       f.ticket,
       `+++\nschema = 2\nname = "foo-bar"\noutcome = "fixture"\npremises = ${missingPremise ? '["file:main-only"]' : "[]"}\n[proposition]\nid = "P1"\nclaim = "fixture"\nrefuted_by = "fixture"\n+++\n`,
     );
-    const state = f.env.AGX_NEXT_STATE_DIR!;
+    const state = f.env.AGX_STATE_DIR!;
     mkdirSync(state, { recursive: true });
     writeFileSync(
       join(state, "records.jsonl"),

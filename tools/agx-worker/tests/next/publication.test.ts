@@ -5,13 +5,18 @@ import { tmpdir } from "node:os";
 import { append, flushRunPublications } from "../../src/next/store.ts";
 import { leaseFor } from "../../src/next/lease.ts";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
-const previous = process.env.AGX_NEXT_STATE_DIR;
+const previous = process.env.AGX_STATE_DIR;
 const roots: string[] = [];
+function inheritedEnv() {
+  const env = { ...process.env };
+  Reflect.deleteProperty(env, "AGX_NEXT_STATE_DIR");
+  return env;
+}
 afterEach(async () => {
   mock.restore();
   await flushRunPublications();
-  if (previous === undefined) delete process.env.AGX_NEXT_STATE_DIR;
-  else process.env.AGX_NEXT_STATE_DIR = previous;
+  if (previous === undefined) delete process.env.AGX_STATE_DIR;
+  else process.env.AGX_STATE_DIR = previous;
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
@@ -40,7 +45,7 @@ const Listing = z.object({
 test("record append publishes core facts atomically; ended bf3bb781 cannot remain working", async () => {
   const root = await mkdtemp(join(tmpdir(), "agx-publication-"));
   roots.push(root);
-  process.env.AGX_NEXT_STATE_DIR = root;
+  process.env.AGX_STATE_DIR = root;
   append({
     kind: "started",
     id: "bf3bb781",
@@ -138,7 +143,7 @@ test("owner publication seals loss once across observers and fixes JSON elapsed"
   const root = await mkdtemp(join(tmpdir(), "agx-seal-loss-"));
   roots.push(root);
   // Deliberately keep the ambient state elsewhere: publication must use its root.
-  process.env.AGX_NEXT_STATE_DIR = join(root, "unused-state");
+  process.env.AGX_STATE_DIR = join(root, "unused-state");
   const start = {
     kind: "started",
     id: "lost",
@@ -178,7 +183,7 @@ test("owner publication seals loss once across observers and fixes JSON elapsed"
         "-e",
         `import { publishCurrentRuns } from ${JSON.stringify(join(import.meta.dir, "../../src/next/store.ts"))}; await publishCurrentRuns(${JSON.stringify(root)});`,
       ],
-      { stdout: "pipe", stderr: "pipe", timeout: 10000 },
+      { env: inheritedEnv(), stdout: "pipe", stderr: "pipe", timeout: 10000 },
     ),
   );
   for (const observer of observers) {
@@ -221,7 +226,7 @@ test("owner publication seals loss once across observers and fixes JSON elapsed"
       "--all",
     ],
     {
-      env: { ...process.env, AGX_NEXT_STATE_DIR: root },
+      env: { ...inheritedEnv(), AGX_STATE_DIR: root },
       stdout: "pipe",
       stderr: "pipe",
       timeout: 5000,

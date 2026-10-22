@@ -10,8 +10,8 @@ test("sync and async readers deduplicate by run_id, independent of filename", as
   const base = tempDir("dispatch-migration-");
   for (const { dir, name, label } of [
     { dir: "agx", name: "new-name", label: "current" },
-    { dir: "agent-router", name: "old-name", label: "duplicate" },
-    { dir: "agent-router", name: "legacy", label: "legacy" },
+    { dir: "agx/legacy-v1", name: "old-name", label: "duplicate" },
+    { dir: "agx/legacy-v1", name: "legacy", label: "legacy" },
   ]) {
     const active = join(base, dir, "active");
     mkdirSync(active, { recursive: true });

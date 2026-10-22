@@ -339,7 +339,7 @@ describe("render-home: base only", () => {
       "agx worker stats [--import-legacy]",
       "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run <ticket.md>",
       "agx worker run <ticket.md> --continue <run>",
-      "$XDG_STATE_HOME/agx-next/records.jsonl",
+      "$XDG_STATE_HOME/agx/records.jsonl",
       "Ticket time boxes: `timeout_s` defaults to 600 seconds",
     ])
       expect(policy).toContain(text);
@@ -910,9 +910,11 @@ describe("render-home: public roster JSON", () => {
       md.indexOf("<!-- roster:begin -->"),
       md.indexOf("<!-- roster:end -->") + "<!-- roster:end -->".length,
     );
-    expect(Buffer.from(block)).toEqual(
-      readFileSync(join(import.meta.dir, "fixtures/render-home-roster.md")),
-    );
+    const original = readFileSync(
+      join(import.meta.dir, "fixtures/render-home-roster.md"),
+      "utf8",
+    ).replaceAll("agx-next/", "agx/");
+    expect(Buffer.from(`${block}\n`)).toEqual(Buffer.from(original));
     expect(readFileSync(SCRIPT, "utf8")).not.toMatch(
       /from\s+["']\.\.\/agents\/models\//u,
     );

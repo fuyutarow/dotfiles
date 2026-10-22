@@ -17,7 +17,7 @@ const at = Temporal.Now.instant().epochMilliseconds;
 const env = {
   HOME: root,
   PATH: "",
-  AGX_NEXT_STATE_DIR: join(root, "state"),
+  AGX_STATE_DIR: join(root, "state"),
   XDG_STATE_HOME: root,
   AGX_DISPATCHER_SESSION: "",
   CLAUDE_CODE_SESSION_ID: "",
@@ -95,21 +95,18 @@ const doctor = {
   complete: true,
   capturedAt: at,
 };
-await mkdir(env.AGX_NEXT_STATE_DIR, { recursive: true });
+await mkdir(env.AGX_STATE_DIR, { recursive: true });
 await writeFile(
-  join(env.AGX_NEXT_STATE_DIR, "current-runs.json"),
+  join(env.AGX_STATE_DIR, "current-runs.json"),
   JSON.stringify({ output: JSON.stringify(listing), capturedAt: at, exit: 0 }),
 );
 await writeFile(
-  join(env.AGX_NEXT_STATE_DIR, "workspace-verdicts.json"),
+  join(env.AGX_STATE_DIR, "workspace-verdicts.json"),
   JSON.stringify(workspace),
 );
+await writeFile(join(env.AGX_STATE_DIR, "doctor.json"), JSON.stringify(doctor));
 await writeFile(
-  join(env.AGX_NEXT_STATE_DIR, "doctor.json"),
-  JSON.stringify(doctor),
-);
-await writeFile(
-  join(env.AGX_NEXT_STATE_DIR, "records.jsonl"),
+  join(env.AGX_STATE_DIR, "records.jsonl"),
   "poison: renderer must not read this",
 );
 
@@ -146,7 +143,7 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
   await mkdir(state, { recursive: true });
   const isolatedEnv = {
     ...env,
-    AGX_NEXT_STATE_DIR: state,
+    AGX_STATE_DIR: state,
     XDG_STATE_HOME: state,
   };
   const codexSession = "01a15424-5f6d-7ce0-9244-eb632a37f579";

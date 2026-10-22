@@ -28,7 +28,7 @@ afterAll(() => {
 
 function run(args: string[]): { code: number; out: string; err: string } {
   const result = Bun.spawnSync([process.execPath, CLI, ...args], {
-    env: { ...process.env, AGX_NEXT_STATE_DIR: state },
+    env: { ...process.env, AGX_STATE_DIR: state },
     stdout: "pipe",
     stderr: "pipe",
   });

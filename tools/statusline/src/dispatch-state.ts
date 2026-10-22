@@ -5,6 +5,7 @@ import {
   ACTIVE_MARKER_SCHEMA,
   dispatchStateDir,
   dispatchStateReadDirs,
+  dispatchLegacyStateDir,
 } from "../../shared/src/dispatch-state.ts";
 
 export const STATE_SCHEMA = ACTIVE_MARKER_SCHEMA;
@@ -15,7 +16,9 @@ export const stateDir = dispatchStateDir;
 export const activeDir = (env: NodeJS.ProcessEnv = process.env): string =>
   join(stateDir(env), "active");
 export const activeDirs = (env: NodeJS.ProcessEnv = process.env): string[] =>
-  dispatchStateReadDirs(env).map((dir) => join(dir, "active"));
+  [...dispatchStateReadDirs(env), dispatchLegacyStateDir(env)].map((dir) =>
+    join(dir, "active"),
+  );
 /** What a running worker is doing, beside its marker: `<run_id>.progress.json` in activeDir.
  *  Codex and Claude workers write activity, cumulative usage when reported, and known cost here;
  *  the statusline Run rows read it, and agx removes it with the active marker. */

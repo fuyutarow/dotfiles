@@ -1,8 +1,8 @@
 # agx worker run records
 
-`agx-worker` stores one append-only JSONL file at `$AGX_NEXT_STATE_DIR/records.jsonl`
-(default: `$AGX_STATE_DIR/records.jsonl` when that override is set, otherwise
-`$XDG_STATE_HOME/agx-next/records.jsonl` or `~/.local/state/agx-next/records.jsonl`).
+`agx-worker` stores one append-only JSONL file at `<state>/records.jsonl`.
+State resolves from non-empty `AGX_STATE_DIR`, then non-empty `XDG_STATE_HOME` plus
+`/agx`, then `~/.local/state/agx`. See [startup migration refusals](../contract.md).
 Each line is one event. Readers ignore an incomplete trailing line and reject malformed
 complete lines. Readers ignore unknown fields; writers may add fields; required fields never
 change type. Event `at` values are RFC 3339 timestamps. Ticket paths are positional:
@@ -75,8 +75,7 @@ to the worker, rather than a second process timeout. `supersedes = "RUN_ID"` (or
 - `judged`: `{ "kind": "judged", "id", "at", "decision", "note" }`.
 
 Imported events may carry `legacy_key`, a deterministic deduplication key.
-`agx worker stats --import-legacy` reads `runs*.jsonl` from `$AGX_STATE_DIR` (default
-`~/.local/state/agx`), folds `run`, `acceptance`, `interim`, and `landed` rows into the same
+`agx worker stats --import-legacy` reads legacy ledgers from `<state>/legacy-v1` (read-only), folds `run`, `acceptance`, `interim`, and `landed` rows into the same
 event log, skips malformed lines, and reports import counts. Legacy `acceptance` rows become
 `accept` or `reject`; `landed` becomes `accept`. Legacy `grade` and `grade-waived` rows are
 ignored because grades are not judgments. Existing invalid `judged` decisions remain in the

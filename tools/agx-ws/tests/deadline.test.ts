@@ -39,7 +39,7 @@ await runAddCommand(async () => {
 });`,
     ],
     tmpdir(),
-    { ...process.env, WS_ADD_TIMEOUT_MS: "50" },
+    { ...stateTestEnv(), WS_ADD_TIMEOUT_MS: "50" },
   );
   expect(result.code).toBe(124);
   expect(result.out).toBe("");
@@ -61,7 +61,7 @@ await runAddCommand(async () => {
 });`,
     ],
     tmpdir(),
-    { ...process.env, WS_ADD_TIMEOUT_MS: "2000" },
+    { ...stateTestEnv(), WS_ADD_TIMEOUT_MS: "2000" },
   );
   expect(result.code).toBe(0);
   expect(result.out).toBe("o".repeat(262144));
@@ -82,12 +82,12 @@ test.each(["readiness", "lock"])(
       );
       await chmod(join(bin, "stat"), 0o755);
       const env = {
-        ...process.env,
+        ...stateTestEnv(),
         PATH: `${bin}:${process.env.PATH}`,
         JJ_USER: "test",
         JJ_EMAIL: "test@example.com",
         RIP_GRAVEYARD: join(root, "graveyard"),
-        AGX_NEXT_STATE_DIR: join(root, "state"),
+        AGX_STATE_DIR: join(root, "state"),
       };
       const init = await run(["jj", "git", "init", repo], root, env);
       expect(init.code, init.err).toBe(0);
@@ -140,7 +140,7 @@ test.each(["0", "-1", "NaN", "Infinity", "2147483648"])(
       [process.execPath, ws, "add", "deadline"],
       tmpdir(),
       {
-        ...process.env,
+        ...stateTestEnv(),
         WS_ADD_TIMEOUT_MS: timeout,
       },
     );
@@ -150,3 +150,10 @@ test.each(["0", "-1", "NaN", "Infinity", "2147483648"])(
     );
   },
 );
+
+// The shared preload still injects retired configuration; isolate refusal tests.
+function stateTestEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.AGX_NEXT_STATE_DIR;
+  return env;
+}

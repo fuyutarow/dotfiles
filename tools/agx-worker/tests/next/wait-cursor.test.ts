@@ -114,7 +114,7 @@ test("wait returns promptly after terminal record following N appends", async ()
     {
       env: {
         ...process.env,
-        AGX_NEXT_STATE_DIR: root,
+        AGX_STATE_DIR: root,
         AGX_WAIT_POLL_MS: "60000",
       },
       stdout: "pipe",
@@ -172,7 +172,7 @@ globalThis.setTimeout = (callback, delay, ...args) => {
       "--json",
     ],
     {
-      env: { ...process.env, AGX_NEXT_STATE_DIR: root, AGX_WAIT_POLL_MS: "1" },
+      env: { ...process.env, AGX_STATE_DIR: root, AGX_WAIT_POLL_MS: "1" },
       stdout: "pipe",
       stderr: "pipe",
       timeout: 9000,

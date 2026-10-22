@@ -55,7 +55,7 @@ test("ended fixtures retain measured outcomes while routing omits ungraded raw h
   const expected: string[] = [];
   const env = {
     ...process.env,
-    AGX_NEXT_STATE_DIR: state,
+    AGX_STATE_DIR: state,
     AGX_TMP_ROOT: join(root, "agx-tmp"),
     JEV_URL: `http://127.0.0.1:${server.port}/choice`,
     AGX_WORKER_BIN: join(import.meta.dir, "fixtures/outcome-worker.ts"),

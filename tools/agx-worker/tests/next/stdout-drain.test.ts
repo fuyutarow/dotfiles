@@ -39,7 +39,7 @@ afterAll(() => {
 
 test("ls JSON drains completely when the pipe reader starts slowly", async () => {
   const child = Bun.spawn([process.execPath, CLI, "ls", "--json"], {
-    env: { ...process.env, AGX_NEXT_STATE_DIR: state },
+    env: { ...process.env, AGX_STATE_DIR: state },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -55,7 +55,7 @@ test("ls JSON drains completely when the pipe reader starts slowly", async () =>
 
 test("unknown command still exits non-zero", () => {
   const child = Bun.spawnSync([process.execPath, CLI, "unknown-command"], {
-    env: { ...process.env, AGX_NEXT_STATE_DIR: state },
+    env: { ...process.env, AGX_STATE_DIR: state },
     stdout: "pipe",
     stderr: "pipe",
   });

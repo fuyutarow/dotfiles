@@ -4,7 +4,7 @@ import { cli as cleyeCli } from "cleye";
 import { standardCli } from "../tools/shared/src/cli.ts";
 import cliPackage from "../tools/agx/package.json" with { type: "json" };
 import { mkdir, rename, writeFile, unlink } from "node:fs/promises";
-import { homedir } from "node:os";
+import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
 import { join } from "node:path";
 import { DoctorRecord } from "../tools/shared/src/doctor-record.ts";
 import { jsonOf } from "../tools/shared/src/zod.ts";
@@ -81,17 +81,7 @@ async function runDoctor(json: boolean): Promise<number> {
       capturedAt: Temporal.Now.instant().epochMilliseconds,
     };
     {
-      const root =
-        [process.env.AGX_NEXT_STATE_DIR, process.env.AGX_STATE_DIR].find(
-          (value) => value !== undefined && value !== "",
-        ) ??
-        join(
-          (process.env.XDG_STATE_HOME === ""
-            ? undefined
-            : process.env.XDG_STATE_HOME) ??
-            join(process.env.HOME ?? homedir(), ".local/state"),
-          "agx-next",
-        );
+      const root = dispatchStateDir();
       await mkdir(root, { recursive: true });
       const path = join(root, "doctor.json");
       const temp = path + "." + crypto.randomUUID() + ".tmp";

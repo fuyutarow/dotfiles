@@ -2,7 +2,9 @@
 // agx validates writes here through its re-export and statusline/hooks use its reader schema.
 // Outside the repo by design: briefs and picks may be private. Zero-dep beyond the repo's zod bundle.
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { exitWithError } from "./next/exit.ts";
+import { dirname, join, resolve } from "node:path";
 import { fromThrowable, z } from "../../shared/src/zod.ts";
 import {
   ACTIVE_MARKER_SCHEMA,
@@ -35,7 +37,25 @@ export type Active = z.output<typeof ActiveWriterSchema>;
 
 /** $AGX_STATE_DIR (test seam), else $XDG_STATE_HOME/agx, else ~/.local/state/agx. */
 export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
-  return dispatchStateDir(env);
+  if (env.AGX_NEXT_STATE_DIR !== undefined)
+    exitWithError("agx: AGX_NEXT_STATE_DIR is retired; use AGX_STATE_DIR\n", 2);
+  const root = resolve(dispatchStateDir(env));
+  const base = resolve(
+    env.XDG_STATE_HOME === undefined || env.XDG_STATE_HOME === ""
+      ? join(homedir(), ".local", "state")
+      : env.XDG_STATE_HOME,
+  );
+  // sync-ok: reject an unmigrated store before synchronous state writers can create it.
+  if (!existsSync(root) && existsSync(join(base, "agx-next"))) {
+    const old = join(base, "agx");
+    const temporary = join(base, "agx.legacy-v1.tmp");
+    const retired = join(base, "agx-next");
+    exitWithError(
+      `agx: state migration required: mv ${old} ${temporary} && mv ${retired} ${old} && mv ${temporary} ${join(old, "legacy-v1")}\n`,
+      2,
+    );
+  }
+  return root;
 }
 
 /** Every brief's full original text (ticket included), once per content: `briefs/<sha256>.md`. The

@@ -76,11 +76,9 @@ test("registry links all owner units; owner deployment enables triggers without 
     join(ctx.dotfiles, "systemd/agx-doctor.path"),
     "utf8",
   );
+  expect(watcher).toContain("PathChanged=%h/.local/state/agx/records.jsonl");
   expect(watcher).toContain(
-    "PathChanged=%h/.local/state/agx-next/records.jsonl",
-  );
-  expect(watcher).toContain(
-    "PathChanged=%h/.local/state/agx-next/workspace-verdicts.json",
+    "PathChanged=%h/.local/state/agx/workspace-verdicts.json",
   );
   expect(watcher).not.toContain(
     "PathChanged=%h/.local/state/agx-next/doctor.json",

@@ -18,6 +18,11 @@ import { ticketContext, treeRead } from "../../src/next/ticket-home.ts";
 import { prepareTicketRepo, writeLocalTicketConfig } from "../ticket-repo.ts";
 
 const roots: string[] = [];
+function inheritedEnv() {
+  const env = { ...process.env };
+  Reflect.deleteProperty(env, "AGX_NEXT_STATE_DIR");
+  return env;
+}
 const originalXdg = process.env.XDG_CONFIG_HOME;
 beforeEach(async () => {
   const config = await mkdtemp(join(tmpdir(), "worker-xdg-"));
@@ -58,7 +63,7 @@ test("new dispatch refuses nonconforming names with agx ticket new repair, witho
   expect(checked.exit, checked.err).toBe(0);
   expect(checked.out).toContain("ticket=arena-g3 ");
   expect(
-    await Bun.file(join(f.env.AGX_NEXT_STATE_DIR, "records.jsonl")).exists(),
+    await Bun.file(join(f.env.AGX_STATE_DIR, "records.jsonl")).exists(),
   ).toBe(false);
 }, 30000);
 
@@ -106,12 +111,12 @@ test.each([
     await mkdir(bin);
     await symlink(CLI, join(bin, "agx-worker"));
     const env = {
-      ...process.env,
+      ...inheritedEnv(),
       PATH: `${bin}:${process.env.PATH ?? ""}`,
       JJ_CONFIG: "",
       JJ_USER: "Fixture",
       JJ_EMAIL: "fixture@example.invalid",
-      AGX_NEXT_STATE_DIR: join(parent, "state"),
+      AGX_STATE_DIR: join(parent, "state"),
       DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
       AGX_WORKER_BIN: join(parent, "worker.ts"),
       AGX_TMP_ROOT: join(parent, "tmp"),
@@ -222,7 +227,7 @@ test.each([
     if (!accepted) expect(result.err).toContain("agx: refused ticket path");
     expect(await readdir(join(root, ".jj/repo/op_heads"))).toEqual(before);
     expect(
-      await Bun.file(join(env.AGX_NEXT_STATE_DIR, "records.jsonl")).exists(),
+      await Bun.file(join(env.AGX_STATE_DIR, "records.jsonl")).exists(),
     ).toBe(false);
     if (secondary && home === "absolute") {
       await writeFile(
@@ -234,7 +239,7 @@ test.each([
       const fresh = await invokeWorker(["run"]);
       expect(fresh.exit, `${fresh.out}\n${fresh.err}`).toBe(0);
       const started = (
-        await readFile(join(env.AGX_NEXT_STATE_DIR, "records.jsonl"), "utf8")
+        await readFile(join(env.AGX_STATE_DIR, "records.jsonl"), "utf8")
       )
         .trim()
         .split("\n")
@@ -269,14 +274,14 @@ async function fixture(home = "tickets") {
   const ticket = join(directory, "home.md");
   await writeFile(ticket, text());
   const env = {
-    ...process.env,
+    ...inheritedEnv(),
     // Match prepareTicketRepo: reads must use the same Git context as commits.
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_DIR: undefined,
     GIT_WORK_TREE: undefined,
     GIT_INDEX_FILE: undefined,
-    AGX_NEXT_STATE_DIR: join(root, "state"),
+    AGX_STATE_DIR: join(root, "state"),
     DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
   };
   const invoke = async (args: string[], cwd = root) => {
@@ -386,7 +391,7 @@ test("check refuses an undeclared /tmp ticket with refused, declared home and ag
   expect(result.err).toContain(f.directory);
   expect(result.err).toContain("agx ticket new");
   expect(
-    await Bun.file(join(f.env.AGX_NEXT_STATE_DIR, "records.jsonl")).exists(),
+    await Bun.file(join(f.env.AGX_STATE_DIR, "records.jsonl")).exists(),
   ).toBe(false);
 }, 30000);
 
@@ -398,11 +403,11 @@ test("check accepts an absolute home declared on the repository trunk", async ()
   await mkdir(root, { recursive: true });
   await mkdir(directory, { recursive: true });
   const env = {
-    ...process.env,
+    ...inheritedEnv(),
     JJ_CONFIG: "",
     JJ_USER: "Fixture",
     JJ_EMAIL: "fixture@example.invalid",
-    AGX_NEXT_STATE_DIR: join(parent, "state"),
+    AGX_STATE_DIR: join(parent, "state"),
     DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
   };
   const jj = async (args: string[]) => {
@@ -486,7 +491,7 @@ test("a jj tree uses its recorded working-copy commit and committed home without
   const root = await mkdtemp(join(tmpdir(), "agx-ticket-home-jj-"));
   roots.push(root);
   const env = {
-    ...process.env,
+    ...inheritedEnv(),
     JJ_CONFIG: "",
     JJ_USER: "Fixture",
     JJ_EMAIL: "fixture@example.invalid",
@@ -575,7 +580,7 @@ test("a repository without agx.toml accepts its default home", async () => {
       stdout: "pipe",
       stderr: "pipe",
       timeout: 5000,
-      env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null" },
+      env: { ...inheritedEnv(), GIT_CONFIG_GLOBAL: "/dev/null" },
     });
     const [exit, , err] = await Promise.all([
       child.exited,
@@ -611,7 +616,7 @@ test("base_rev mismatch names both ids before routing, artifacts or launch", asy
   expect(exit).toBe(0);
   expect(result.err).toContain(head.trim());
   expect(
-    await Bun.file(join(f.env.AGX_NEXT_STATE_DIR, "records.jsonl")).exists(),
+    await Bun.file(join(f.env.AGX_STATE_DIR, "records.jsonl")).exists(),
   ).toBe(false);
 }, 30000);
 
@@ -634,7 +639,7 @@ test("conflicting sandbox and replacement declarations refuse before launch", as
   expect(mixed.exit).toBe(2);
   expect(mixed.err).toContain("mutually exclusive");
   expect(
-    await Bun.file(join(f.env.AGX_NEXT_STATE_DIR, "records.jsonl")).exists(),
+    await Bun.file(join(f.env.AGX_STATE_DIR, "records.jsonl")).exists(),
   ).toBe(false);
 }, 30000);
 
@@ -659,7 +664,7 @@ test("run preserves exact original bytes and hash, base and premise commits, rep
     Buffer.from([255, 0, 13, 10]),
   ]);
   await writeFile(f.ticket, original);
-  const state = f.env.AGX_NEXT_STATE_DIR;
+  const state = f.env.AGX_STATE_DIR;
   await mkdir(state);
   await writeFile(
     join(state, "records.jsonl"),
@@ -834,7 +839,7 @@ test("worker CLI check and run exit 2 for retired configuration before artifacts
     );
     expect(result.err.trim().split("\n")).toHaveLength(1);
     expect(
-      await Bun.file(join(f.env.AGX_NEXT_STATE_DIR, "records.jsonl")).exists(),
+      await Bun.file(join(f.env.AGX_STATE_DIR, "records.jsonl")).exists(),
     ).toBe(false);
   }
 });

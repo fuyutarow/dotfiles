@@ -43,7 +43,7 @@ test("legacy ownerless record folds to ended lost; ls and ls --wait write nothin
         ...args,
       ],
       {
-        env: { ...process.env, AGX_NEXT_STATE_DIR: root },
+        env: { ...process.env, AGX_STATE_DIR: root },
         stdout: "pipe",
         stderr: "pipe",
         timeout: 5000,

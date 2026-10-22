@@ -14,19 +14,19 @@ import {
 
 import { list } from "../../src/next/run.ts";
 
-const previous = process.env.AGX_NEXT_STATE_DIR;
+const previous = process.env.AGX_STATE_DIR;
 const roots: string[] = [];
 afterEach(async () => {
   await flushRunPublications();
-  if (previous === undefined) delete process.env.AGX_NEXT_STATE_DIR;
-  else process.env.AGX_NEXT_STATE_DIR = previous;
+  if (previous === undefined) delete process.env.AGX_STATE_DIR;
+  else process.env.AGX_STATE_DIR = previous;
   for (const root of roots.splice(0))
     fs.rmSync(root, { recursive: true, force: true });
 });
 const fixture = () => {
   const root = fs.mkdtempSync(join(tmpdir(), "agx-incremental-fold-"));
   roots.push(root);
-  process.env.AGX_NEXT_STATE_DIR = root;
+  process.env.AGX_STATE_DIR = root;
   return root;
 };
 const started = (id: string, pid = 2147483647): NextEvent => ({
@@ -205,7 +205,7 @@ test("ls --running combines with JSON, all and selector; cached liveness is refr
   const ls = (args: string[]) =>
     Bun.spawnSync(
       [process.execPath, "tools/agx-worker/src/next/cli.ts", "ls", ...args],
-      { env: { ...process.env, AGX_NEXT_STATE_DIR: root } },
+      { env: { ...process.env, AGX_STATE_DIR: root } },
     );
   const json = ls(["--running", "--json", "--all"]);
   expect(json.exitCode).toBe(0);
@@ -236,7 +236,7 @@ test("unwritable snapshot falls back safely and malformed complete tail is rejec
   fs.appendFileSync(recordPath(), '{"kind":"broken"}\n');
   const result = Bun.spawnSync(
     [process.execPath, "tools/agx-worker/src/next/cli.ts", "ls", "--json"],
-    { env: { ...process.env, AGX_NEXT_STATE_DIR: root } },
+    { env: { ...process.env, AGX_STATE_DIR: root } },
   );
   expect(result.exitCode).toBe(1);
   expect(result.stderr.toString()).toContain("invalid record log line");

@@ -93,7 +93,7 @@ test.each([
   "unknown",
   "constructor",
   "__proto__",
-  "agx-next",
+  "retired-tool",
   "agx-run",
 ])("suite rejects '%s' without dispatching", async (verb) => {
   await using f = await fixture();

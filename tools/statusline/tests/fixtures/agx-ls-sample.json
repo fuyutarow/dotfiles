@@ -15,7 +15,7 @@
       "decision": "reject",
       "note": "sandbox workspace-write: shared jj store read-only; rerun with --sandbox none"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/0abbe792-209f-4f3b-9029-81860c9561b0/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/0abbe792-209f-4f3b-9029-81860c9561b0/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -41,7 +41,7 @@
       "decision": "accept",
       "note": "real state: decisions now accept 257 / reject 94 / null 2431, no grade values; importer drops grade rows, fold maps landed->accept and ignores invalid; 3 verify pass rerun by coordinator"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/1577f691-e4b4-4ba9-9fcc-62fafa1f42d5/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/1577f691-e4b4-4ba9-9fcc-62fafa1f42d5/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -120,7 +120,7 @@
     "judgment": null,
     "report_path": null,
     "verify": [],
-    "last_progress_path": "/home/fuyu/.local/state/agx-next/runs/2b4b8547-bdbb-4853-9b33-1cab72229813/last-progress.json",
+    "last_progress_path": "/home/fuyu/.local/state/agx/runs/2b4b8547-bdbb-4853-9b33-1cab72229813/last-progress.json",
     "continues": null,
     "vendor_session": null
   },
@@ -201,7 +201,7 @@
       "decision": "reject",
       "note": "worker typo in its own workspace path"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/359d2f5d-b8cc-402d-b488-93ea3869985c/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/359d2f5d-b8cc-402d-b488-93ea3869985c/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -246,7 +246,7 @@
       "decision": "accept",
       "note": "machine evidence: suite 197 passed 0 failed, hook SPEC-LINT PASS, installed sha256 == release build (992d9068…)"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/47b7702c-0514-4dfb-a58e-34c0a7bcda23/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/47b7702c-0514-4dfb-a58e-34c0a7bcda23/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -277,7 +277,7 @@
       "decision": "accept",
       "note": "correct stop: sandbox workspace-write blocked writing the archive"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/4955a53b-a795-43d2-8a65-c50fb30d407f/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/4955a53b-a795-43d2-8a65-c50fb30d407f/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -308,7 +308,7 @@
       "decision": "accept",
       "note": "inventory, plan, verified external copy; returned on lint scope"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/4b48f474-6abd-4ed2-bd3c-39d36305937b/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/4b48f474-6abd-4ed2-bd3c-39d36305937b/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": "b8e6ba4b-4654-42b5-b1d9-47380400ab3a",
@@ -330,7 +330,7 @@
       "decision": "accept",
       "note": "bin preflight now runs on workerRoot after workspace resolution; new test covers exec workspace vs 0644 main; 3 verify pass rerun by coordinator"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/5f0b76e7-09f4-4d69-a1d1-a565ffd168a5/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/5f0b76e7-09f4-4d69-a1d1-a565ffd168a5/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -356,7 +356,7 @@
       "CLAUDE.md"
     ],
     "judgment": null,
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/61c24a45-4a99-48a8-940a-2fd162341265/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/61c24a45-4a99-48a8-940a-2fd162341265/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -386,7 +386,7 @@
       "decision": "accept",
       "note": "generator probe: renamed 99-zz-* drop-ins put wsl lib, brew, ~/.local/bin, ~/.bun/bin ahead of stock PATH; agx --help rc 0 under it; 4 verify pass"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/654b904a-a695-4ecf-88fa-bff6d35407f9/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/654b904a-a695-4ecf-88fa-bff6d35407f9/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": "8142e55e-f3bd-45bf-91f1-14b7ffeb2233",
@@ -419,7 +419,7 @@
       "decision": "accept",
       "note": "author evidence: suite 197/0/7, hook pass, SPEC-LINT PASS; committed; independent ship verification follows"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/687fe8ce-b0f9-4fbd-8a2b-c2b3440e4577/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/687fe8ce-b0f9-4fbd-8a2b-c2b3440e4577/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -441,7 +441,7 @@
       "decision": "reject",
       "note": "sandbox workspace-write: shared jj store read-only; rerun with --sandbox none"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/6be7371e-6685-466f-a6f7-4f17da072f31/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/6be7371e-6685-466f-a6f7-4f17da072f31/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -507,7 +507,7 @@
       "CLAUDE.md"
     ],
     "judgment": null,
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/8142e55e-f3bd-45bf-91f1-14b7ffeb2233/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/8142e55e-f3bd-45bf-91f1-14b7ffeb2233/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": "61c24a45-4a99-48a8-940a-2fd162341265",
@@ -580,7 +580,7 @@
       "decision": "reject",
       "note": "sandbox workspace-write: shared jj store read-only; rerun with --sandbox none"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/9ea217e9-127c-48b8-9adb-d7bdfca3b88b/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/9ea217e9-127c-48b8-9adb-d7bdfca3b88b/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -622,7 +622,7 @@
       "decision": "reject",
       "note": "sandbox workspace-write: shared jj store read-only; rerun with --sandbox none"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/a45aad4c-15f0-4889-ae84-583920942553/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/a45aad4c-15f0-4889-ae84-583920942553/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -644,7 +644,7 @@
       "decision": "accept",
       "note": "stopped on an empty graph read from example-store-v1-preview"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/a7c325ff-bb2a-4238-9866-20043975eb86/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/a7c325ff-bb2a-4238-9866-20043975eb86/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -666,7 +666,7 @@
       "decision": "reject",
       "note": "timeout at 3600 s; continuing"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/aeddfaae-a749-4977-9ead-918aab554e22/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/aeddfaae-a749-4977-9ead-918aab554e22/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -688,7 +688,7 @@
       "decision": "accept",
       "note": "live: slow pipe reader (sleep 0.5 | jq length) gets all 2765 runs three times; unknown command still exits 2; 3 verify pass rerun by coordinator"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/af1384d5-1c57-4452-80f0-4ab740dfddf0/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/af1384d5-1c57-4452-80f0-4ab740dfddf0/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -719,7 +719,7 @@
       "decision": "accept",
       "note": "correct return: launcher inputs live in research_record/; frozen-v0 gate blocks deletion"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/b8e6ba4b-4654-42b5-b1d9-47380400ab3a/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/b8e6ba4b-4654-42b5-b1d9-47380400ab3a/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -764,7 +764,7 @@
       "decision": "accept",
       "note": "correct: no registered missing-id finding exists"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/d45a860d-8e65-46ed-92b9-dc50c9d9f72b/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/d45a860d-8e65-46ed-92b9-dc50c9d9f72b/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -806,7 +806,7 @@
       "decision": "accept",
       "note": "scope.md: four jobs, eleven non-owned concerns with owners, derived-not-stored folds, triage rule; matches src/next; verify rerun by coordinator"
     },
-    "report_path": "/home/fuyu/.local/state/agx-next/runs/f1794233-9fd4-424e-906f-2502fda018a1/report.json",
+    "report_path": "/home/fuyu/.local/state/agx/runs/f1794233-9fd4-424e-906f-2502fda018a1/report.json",
     "verify": [],
     "last_progress_path": null,
     "continues": null,
@@ -857,7 +857,7 @@
     "judgment": null,
     "report_path": null,
     "verify": [],
-    "last_progress_path": "/home/fuyu/.local/state/agx-next/runs/fd11d28a-d6be-4d18-83af-597e5ccec4da/last-progress.json",
+    "last_progress_path": "/home/fuyu/.local/state/agx/runs/fd11d28a-d6be-4d18-83af-597e5ccec4da/last-progress.json",
     "continues": "96feb679-b3ac-4ba6-87d6-be4b2d891e7d",
     "vendor_session": "01a13898-1e53-7a52-8c7d-fd014e03b664"
   },

@@ -59,7 +59,7 @@ const RoutingRequest = z.looseObject({
 const priorRoster = process.env.DISPATCH_ROSTER_PATH;
 const priorUrl = process.env.JEV_URL;
 const priorHome = process.env.HOME;
-const priorStateDir = process.env.AGX_NEXT_STATE_DIR;
+const priorStateDir = process.env.AGX_STATE_DIR;
 const servers: ReturnType<typeof Bun.serve>[] = [];
 const roots: string[] = [];
 
@@ -78,7 +78,7 @@ async function isolateState() {
     roster.replace(/^routes = .*\n/mu, ""),
   );
   process.env.HOME = home;
-  process.env.AGX_NEXT_STATE_DIR = join(root, "state");
+  process.env.AGX_STATE_DIR = join(root, "state");
   return { root, home };
 }
 
@@ -169,8 +169,8 @@ afterEach(async () => {
   else process.env.JEV_URL = priorUrl;
   if (priorHome === undefined) delete process.env.HOME;
   else process.env.HOME = priorHome;
-  if (priorStateDir === undefined) delete process.env.AGX_NEXT_STATE_DIR;
-  else process.env.AGX_NEXT_STATE_DIR = priorStateDir;
+  if (priorStateDir === undefined) delete process.env.AGX_STATE_DIR;
+  else process.env.AGX_STATE_DIR = priorStateDir;
 });
 
 describe("retired Jev endpoint overrides", () => {

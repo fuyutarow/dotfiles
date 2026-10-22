@@ -7,6 +7,7 @@ import {
   ProgressSchema,
   ProgressReaderSchema,
   dispatchStateDir,
+  dispatchLegacyStateDir,
   dispatchStateReadDirs,
   parseActiveMarker,
   serializeActiveMarker,
@@ -58,30 +59,24 @@ test.each([
   );
 });
 
-test("default dispatch state reads include both migration locations", () => {
-  const base = join(homedir(), ".local/state");
-  expect(dispatchStateDir({})).toBe(join(base, "agx"));
-  expect(dispatchStateReadDirs({})).toEqual([
-    join(base, "agx"),
-    join(base, "agent-router"),
-  ]);
-});
-
-test("XDG state roots preserve current-first migration order", () => {
-  const env = { XDG_STATE_HOME: "/fixture/state", AGX_STATE_DIR: "" };
-  expect(dispatchStateReadDirs(env)).toEqual([
+test.each([
+  [{}, join(homedir(), ".local/state/agx")],
+  [
+    { AGX_STATE_DIR: "", XDG_STATE_HOME: "" },
+    join(homedir(), ".local/state/agx"),
+  ],
+  [
+    { XDG_STATE_HOME: "/fixture/state", AGX_STATE_DIR: "" },
     "/fixture/state/agx",
-    "/fixture/state/agent-router",
-  ]);
-});
-
-test("an explicit dispatch directory isolates reads from migration paths", () => {
-  const env = {
-    AGX_STATE_DIR: "/fixture/isolated",
-    XDG_STATE_HOME: "/fixture/state",
-  };
-  expect(dispatchStateDir(env)).toBe("/fixture/isolated");
-  expect(dispatchStateReadDirs(env)).toEqual(["/fixture/isolated"]);
+  ],
+  [
+    { AGX_STATE_DIR: "/fixture/isolated", XDG_STATE_HOME: "/fixture/state" },
+    "/fixture/isolated",
+  ],
+])("state and legacy reads share one root: %j", (env, root) => {
+  expect(dispatchStateDir(env)).toBe(root);
+  expect(dispatchStateReadDirs(env)).toEqual([root]);
+  expect(dispatchLegacyStateDir(env)).toBe(join(root, "legacy-v1"));
 });
 
 test("the strict writer and forward-compatible reader share the active marker contract", () => {

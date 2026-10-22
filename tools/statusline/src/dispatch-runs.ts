@@ -24,11 +24,13 @@ import {
 // resolves agx state. The later progress migration uses agx worker ls --json
 // last_progress_path and removes this resolver with that reader.
 function agxStateDir(env: NodeJS.ProcessEnv): string {
-  return (
-    [env.AGX_NEXT_STATE_DIR, env.AGX_STATE_DIR].find(
-      (value) => value !== undefined && value !== "",
-    ) ?? join(join(env.HOME ?? homedir(), ".local/state"), "agx-next")
-  );
+  if (env.AGX_STATE_DIR !== undefined && env.AGX_STATE_DIR !== "")
+    return env.AGX_STATE_DIR;
+  const stateHome =
+    env.XDG_STATE_HOME !== undefined && env.XDG_STATE_HOME !== ""
+      ? env.XDG_STATE_HOME
+      : join(env.HOME ?? homedir(), ".local/state");
+  return join(stateHome, "agx");
 }
 
 // Render rows use agx's published listing and doctor counts. Legacy marker readers below

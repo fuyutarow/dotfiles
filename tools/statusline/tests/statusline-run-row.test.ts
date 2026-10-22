@@ -1512,6 +1512,68 @@ describe("legacy enriched Run row", () => {
     expect(out).toMatch(/\$ bun test tests\/x\.ts .*12 cmd · 3 files/u);
   });
 
+  test.each([
+    {
+      name: "explicit override",
+      override: "custom",
+      xdg: "xdg",
+      path: "custom",
+    },
+    { name: "empty override", override: "", xdg: "xdg", path: "xdg/agx" },
+    {
+      name: "absent override",
+      override: undefined,
+      xdg: "xdg",
+      path: "xdg/agx",
+    },
+    { name: "empty XDG home", override: "", xdg: "", path: ".local/state/agx" },
+    {
+      name: "absent XDG home",
+      override: undefined,
+      xdg: undefined,
+      path: ".local/state/agx",
+    },
+  ])(
+    "worker progress state directory: $name",
+    async ({ name, override, xdg, path }) => {
+      const home = join(scratch, `progress-state-${name.replaceAll(" ", "-")}`);
+      const env = {
+        HOME: home,
+        AGX_STATE_DIR:
+          override === undefined || override === ""
+            ? override
+            : join(home, override),
+        XDG_STATE_HOME: xdg === undefined || xdg === "" ? xdg : join(home, xdg),
+      };
+      const runDir = join(home, path, "runs", "state-contract-run");
+      mkdirSync(runDir, { recursive: true });
+      writeFileSync(
+        join(runDir, "worker-progress.jsonl"),
+        progress("$ state-contract-progress", 1) + "\n",
+      );
+      seedAgxSnapshot(
+        env,
+        {
+          capturedAt: Temporal.Now.instant().epochMilliseconds,
+          output: JSON.stringify([
+            {
+              id: "state-contract-run",
+              ticket: "state-contract",
+              state: "running",
+              row: "sonnet-high",
+              dispatcher_session: SESSION,
+            },
+          ]),
+        },
+        home,
+      );
+      const scan = await agxRouteRunsAsync(env, SESSION, true, home);
+      expect(scan.runs).toHaveLength(1);
+      expect(scan.runs[0]?.doing?.last).toBe("$ state-contract-progress");
+      expect(scan.runs[0]?.doing?.commands).toBe(12);
+    },
+  );
+
   test("a marker whose process is gone is counted as lost, not hidden", async () => {
     const dir = join(scratch, "stale");
     marker(dir, "b", 2_147_483_000, "killed");

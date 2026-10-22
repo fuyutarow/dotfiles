@@ -21,7 +21,6 @@ import {
   stat as recordStat,
 } from "node:fs/promises";
 import { dlopen, FFIType } from "bun:ffi";
-import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fromPromise, fromThrowable } from "neverthrow";
@@ -124,18 +123,8 @@ const EventSchema = z.discriminatedUnion("kind", [
 ]);
 export type NextEvent = z.output<typeof EventSchema>;
 
-export const stateDir = (): string =>
-  resolve(
-    [process.env.AGX_NEXT_STATE_DIR, process.env.AGX_STATE_DIR].find(
-      (value) => value !== undefined && value !== "",
-    ) ??
-      join(
-        (process.env.XDG_STATE_HOME === ""
-          ? undefined
-          : process.env.XDG_STATE_HOME) ?? join(homedir(), ".local", "state"),
-        "agx-next",
-      ),
-  );
+import { stateDir } from "../state.ts";
+export { stateDir };
 export const recordPath = (root = stateDir()): string =>
   join(root, "records.jsonl");
 export const now = (): string => Temporal.Now.instant().toString();
@@ -248,10 +237,7 @@ const numberOf = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
 const legacyId = (runId: string): string =>
   `legacy-${createHash("sha256").update(runId).digest("hex").slice(0, 24)}`;
-const legacySourceDir = (): string =>
-  resolve(
-    process.env.AGX_STATE_DIR ?? join(homedir(), ".local", "state", "agx"),
-  );
+const legacySourceDir = (): string => join(stateDir(), "legacy-v1");
 
 const importedEventKeys = (): Set<string> =>
   new Set(

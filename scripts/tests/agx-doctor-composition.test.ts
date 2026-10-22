@@ -33,13 +33,19 @@ async function fixture() {
     },
   };
 }
-async function invoke(f: { root: string; bin: string }, mode: string) {
+async function invoke(
+  f: { root: string; bin: string },
+  mode: string,
+  env: NodeJS.ProcessEnv = {},
+  state = join(f.root, "state"),
+) {
   const child = Bun.spawn([process.execPath, entry], {
     env: {
       ...process.env,
       PATH: f.bin,
-      AGX_NEXT_STATE_DIR: join(f.root, "state"),
+      AGX_STATE_DIR: join(f.root, "state"),
       MODE: mode,
+      ...env,
     },
     stdin: "ignore",
     stdout: "pipe",
@@ -57,7 +63,7 @@ async function invoke(f: { root: string; bin: string }, mode: string) {
       total: z.number(),
       findings: z.array(z.string()),
     }),
-  ).safeParse(await readFile(join(f.root, "state/doctor.json"), "utf8"));
+  ).safeParse(await readFile(join(state, "doctor.json"), "utf8"));
   expect(snapshot.success).toBe(true);
   return {
     out,
@@ -96,5 +102,27 @@ test.each(["failure", "empty-failure", "malformed", "missing"])(
     expect(result.exit).toBe(2);
     expect(result.err).not.toBe("");
     expect(result.snapshot.complete).toBe(false);
+  },
+);
+
+test.each(["xdg", "home"])(
+  "doctor snapshot follows the %s fallback with empty overrides",
+  async (fallback) => {
+    await using f = await fixture();
+    const home = join(f.root, "home");
+    const xdg = fallback === "xdg" ? join(f.root, "xdg") : "";
+    const state =
+      fallback === "xdg" ? join(xdg, "agx") : join(home, ".local/state/agx");
+    const result = await invoke(
+      f,
+      "clean",
+      { HOME: home, XDG_STATE_HOME: xdg, AGX_STATE_DIR: "" },
+      state,
+    );
+    expect(result.exit).toBe(0);
+    expect(result.snapshot.complete).toBe(true);
+    expect(await Bun.file(join(state, "legacy-v1/doctor.json")).exists()).toBe(
+      false,
+    );
   },
 );

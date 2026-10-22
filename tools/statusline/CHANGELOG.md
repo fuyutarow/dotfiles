@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.2 — 2026-10-23
+
+- Resolve worker progress from the configured agx state directory
+
 ## 0.21.1 — 2026-10-23
 
 - Replace project-specific fixture names and allow an operator-configured sampler repository.

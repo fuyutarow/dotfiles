@@ -90,7 +90,7 @@ console.log(JSON.stringify({ report: { summary: "done", changes: [], checks: [],
   seed("prior", process.pid, true);
   const env = {
     ...process.env,
-    AGX_NEXT_STATE_DIR: state,
+    AGX_STATE_DIR: state,
     AGX_TMP_ROOT: join(root, "tmp"),
     JEV_URL: `http://127.0.0.1:${jev.port}/choice`,
     AGX_WORKER_BIN: worker,
@@ -394,8 +394,7 @@ for (const [signal, exit] of [
     const published = jsonOf(z.object({ output: z.string() })).safeParse(
       await Bun.file(
         join(
-          f.env.AGX_NEXT_STATE_DIR ??
-            expect.unreachable("missing isolated state"),
+          f.env.AGX_STATE_DIR ?? expect.unreachable("missing isolated state"),
           "current-runs.json",
         ),
       ).text(),

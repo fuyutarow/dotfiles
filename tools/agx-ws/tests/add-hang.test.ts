@@ -18,12 +18,12 @@ test("WS-ADD-HANG-2: three piped adds have a fixed jj budget as history and work
   if (realJj === null) return;
   await mkdir(bin);
   const env = {
-    ...process.env,
+    ...stateTestEnv(),
     PATH: `${bin}:${process.env.PATH}`,
     JJ_USER: "test",
     JJ_EMAIL: "test@example.com",
     RIP_GRAVEYARD: join(root, "graveyard"),
-    AGX_NEXT_STATE_DIR: join(root, "state"),
+    AGX_STATE_DIR: join(root, "state"),
   };
   for (const [name, body] of [
     ["stat", 'process.stdout.write("ext4\\n");'],
@@ -126,3 +126,10 @@ process.exitCode = await child.exited;`,
   await rm(root, { recursive: true, force: true });
   expect(checked.ok, checked.ok ? undefined : String(checked.error)).toBe(true);
 }, 90_000);
+
+// The shared preload still injects retired configuration; isolate refusal tests.
+function stateTestEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.AGX_NEXT_STATE_DIR;
+  return env;
+}

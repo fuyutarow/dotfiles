@@ -333,7 +333,10 @@ async function fixture() {
   const worker = join(temp, "dotfiles-arm-worker");
   const events = join(temp, "events");
   const env = {
-    ...process.env,
+    // Each fixture owns its dispatch configuration, including state isolation.
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !key.startsWith("AGX_")),
+    ),
     HOME: temp,
     JJ_CONFIG: join(temp, "config.toml"),
     JJ_USER: "Landing Test",
@@ -458,7 +461,7 @@ if (process.env.LAND_ADVANCE_ORIGIN === '1') {
 import { join } from 'node:path';
 const args = process.argv.slice(2);
 appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['ssh', ...args]) + '\\n');
-const runLog = join(process.env.AGX_STATE_DIR, 'runs.jsonl');
+const runLog = join(process.env.AGX_STATE_DIR, 'legacy-v1', 'runs.jsonl');
 const accepted = existsSync(runLog) && readFileSync(runLog, 'utf8').includes('"accept":true');
 if (process.env.LAND_ASSERT_DEPLOY_PRECONDITION === '1') appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['deploy-state', String(existsSync(process.env.LAND_EXPECT_WORKSPACE)), String(accepted)]) + '\\n');
 const host = args[2] ?? 'unknown';
@@ -493,7 +496,7 @@ if (args[0] === 'ledger' && args[1] === 'note' && args[3] === '--accept') {
   const record = { kind: 'acceptance', run_id: args[2], accept: true,
     ...(review < 0 ? {} : { review: args[review + 1] }),
     ...(noReview < 0 ? {} : { no_review: args[noReview + 1] }) };
-  appendFileSync(join(process.env.AGX_STATE_DIR, 'runs.jsonl'), JSON.stringify(record) + '\\n');
+  appendFileSync(join(process.env.AGX_STATE_DIR, 'legacy-v1', 'runs.jsonl'), JSON.stringify(record) + '\\n');
 }\n`,
   );
   await chmod(mise, 0o755);
@@ -1285,7 +1288,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
 
   test("land requires an existing accept judgment and leaves agx state unchanged", async () => {
     const f = await fixture();
-    const state = join(f.main, "..", "agx-state");
+    const state = join(f.main, "..", "agx-state", "legacy-v1");
     await mkdir(state, { recursive: true });
     await appendFile(
       join(state, "runs.jsonl"),
@@ -1303,6 +1306,16 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       ),
     ).toBe(false);
     await appendAcceptance(state, "run-from-workspace");
+    // A root-level ledger is not part of the read-only legacy ledger.
+    await writeFile(
+      join(f.env.AGX_STATE_DIR, "runs.jsonl"),
+      JSON.stringify({
+        kind: "run",
+        run_id: "root-decoy",
+        cwd: f.worker,
+        ticket: { name: "root-decoy" },
+      }) + "\n",
+    );
     const before = await digest(state);
     const result = await f.land();
     expect(
@@ -1313,12 +1326,12 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     expect((await f.log()).filter((event) => event[0] === "agx")).toEqual([]);
   });
 
-  test("accept judgment on the latest run in the workspace ticket lineage is sufficient", async () => {
+  test("accept judgment in an archived legacy ledger covers the latest workspace ticket lineage", async () => {
     const f = await fixture();
-    const state = join(f.main, "..", "agx-state");
+    const state = join(f.main, "..", "agx-state", "legacy-v1");
     await mkdir(state, { recursive: true });
     await appendFile(
-      join(state, "runs.jsonl"),
+      join(state, "runs-2026-10-13.jsonl"),
       [
         {
           kind: "run",
@@ -1364,7 +1377,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
 
   test("an unreported stopped predecessor does not block an accepted latest run", async () => {
     const f = await fixture();
-    const state = join(f.main, "..", "agx-state");
+    const state = join(f.main, "..", "agx-state", "legacy-v1");
     await mkdir(state, { recursive: true });
     await appendFile(
       join(state, "runs.jsonl"),
@@ -1409,7 +1422,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
 
   test("land preflight reads an accepted judgment from agx worker ls records", async () => {
     const f = await fixture();
-    const state = join(f.main, "agx-next-state");
+    const state = join(f.main, "agx-current-state");
     await mkdir(state, { recursive: true });
     await writeFile(
       join(state, "records.jsonl"),
@@ -1448,7 +1461,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         .join("\n") + "\n",
     );
     await writeFile(join(f.worker, "keep.txt"), "accepted next run\n");
-    const result = await f.land([], { AGX_NEXT_STATE_DIR: state });
+    const result = await f.land([], { AGX_STATE_DIR: state });
     expect(
       result.exitCode,
       result.stdout.toString() + result.stderr.toString(),
@@ -1460,7 +1473,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
 
   test("a later reject in the same workspace ticket lineage overrides an earlier accept", async () => {
     const f = await fixture();
-    const state = join(f.main, "..", "agx-state");
+    const state = join(f.main, "..", "agx-state", "legacy-v1");
     await mkdir(state, { recursive: true });
     await appendFile(
       join(state, "runs.jsonl"),
@@ -1509,7 +1522,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
 
   test("land prints the agx worker judge command with supplied review context", async () => {
     const f = await fixture();
-    const state = join(f.main, "..", "agx-state");
+    const state = join(f.main, "..", "agx-state", "legacy-v1");
     await mkdir(state, { recursive: true });
     await appendFile(
       join(state, "runs.jsonl"),
@@ -1547,7 +1560,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
 
   test("land succeeds without deploying and records no acceptance judgment", async () => {
     const f = await fixture();
-    const state = join(f.main, "..", "agx-state");
+    const state = join(f.main, "..", "agx-state", "legacy-v1");
     await mkdir(state, { recursive: true });
     await appendFile(
       join(state, "runs.jsonl"),
@@ -2190,12 +2203,15 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       ]);
       await writeFile(join(f.worker, "keep.txt"), "failed worker\n");
       await writeFile(join(second, "delete.txt"), "successful worker\n");
-      await mkdir(f.env.AGX_STATE_DIR, { recursive: true });
+      await mkdir(join(f.env.AGX_STATE_DIR, "legacy-v1"), { recursive: true });
       await appendFile(
-        join(f.env.AGX_STATE_DIR, "runs.jsonl"),
+        join(f.env.AGX_STATE_DIR, "legacy-v1", "runs.jsonl"),
         `${JSON.stringify({ kind: "run", run_id: "queued-run", cwd: second, ticket: { name: "queued" } })}\n`,
       );
-      await appendAcceptance(f.env.AGX_STATE_DIR, "queued-run");
+      await appendAcceptance(
+        join(f.env.AGX_STATE_DIR, "legacy-v1"),
+        "queued-run",
+      );
       expect(
         (await f.command(["--enqueue", f.worker, "-m", "Fail queued"]))
           .exitCode,

@@ -14,6 +14,11 @@ import { prepareTicketRepo } from "../ticket-repo.ts";
 import { parseNextTicket } from "../../src/next/ticket.ts";
 
 const roots: string[] = [];
+function inheritedEnv() {
+  const env = { ...process.env };
+  Reflect.deleteProperty(env, "AGX_NEXT_STATE_DIR");
+  return env;
+}
 afterEach(async () => {
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
@@ -79,9 +84,9 @@ test("check and run report writes, home, mise, live workspace and premises toget
   const records = `${JSON.stringify({ kind: "started", id: "live-holder", at: "2026-10-19T01:00:00Z", ticket: "prior", writes: [], cwd: root, workspace: root, row: "terra-high", dispatcher_session: null, vendor_session: null, pid: process.pid })}\n`;
   await writeFile(log, records);
   const env = {
-    ...process.env,
+    ...inheritedEnv(),
     PATH: `${bin}:${process.env.PATH}`,
-    AGX_NEXT_STATE_DIR: state,
+    AGX_STATE_DIR: state,
     DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
   };
   for (const command of ["check", "run"]) {
@@ -148,8 +153,8 @@ test("check warns only about overlapping runs whose ticket or workspace shares t
     `${overlapStartedRecord("same-repository", join(root, "secondary"), ticket)}\n${overlapStartedRecord("unrelated", unrelated, join(unrelatedTicketHome, "prior.md"))}\n`,
   );
   const env = {
-    ...process.env,
-    AGX_NEXT_STATE_DIR: state,
+    ...inheritedEnv(),
+    AGX_STATE_DIR: state,
     DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
   };
   const child = Bun.spawn(
@@ -194,7 +199,7 @@ test("inspection deadlines stay operational across VCS, mise and premise reads",
   });
   const environment = verificationEnvironment(
     root,
-    { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    { ...inheritedEnv(), PATH: `${bin}:${process.env.PATH}` },
     {},
     undefined,
     20,
@@ -253,9 +258,9 @@ process.exit(75);
       ],
       {
         env: {
-          ...process.env,
+          ...inheritedEnv(),
           PATH: `${bin}:${process.env.PATH}`,
-          AGX_NEXT_STATE_DIR: state,
+          AGX_STATE_DIR: state,
           DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
         },
         stdout: "pipe",

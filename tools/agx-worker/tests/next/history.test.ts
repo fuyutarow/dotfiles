@@ -5,17 +5,17 @@ import { tmpdir } from "node:os";
 import { gradedHistory } from "../../src/next/history.ts";
 import { fullFoldedRuns, type NextEvent } from "../../src/next/store.ts";
 
-const priorState = process.env.AGX_NEXT_STATE_DIR;
+const priorState = process.env.AGX_STATE_DIR;
 let root: string | undefined;
 afterEach(async () => {
   if (root !== undefined) await rm(root, { recursive: true, force: true });
-  if (priorState === undefined) delete process.env.AGX_NEXT_STATE_DIR;
-  else process.env.AGX_NEXT_STATE_DIR = priorState;
+  if (priorState === undefined) delete process.env.AGX_STATE_DIR;
+  else process.env.AGX_STATE_DIR = priorState;
 });
 
 test("audit history can aggregate judgments; unjudged exits do not imply acceptance", async () => {
   root = await mkdtemp(join(tmpdir(), "router-graded-"));
-  process.env.AGX_NEXT_STATE_DIR = root;
+  process.env.AGX_STATE_DIR = root;
   const at = "2026-10-16T00:00:00Z";
   const old = "2026-09-01T00:00:00Z";
   const input: NextEvent[] = [];

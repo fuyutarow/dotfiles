@@ -5,7 +5,7 @@ import { COMMAND_NAMES } from "./commands.ts";
 import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "../../../shared/src/cli.ts";
 import { exitWithError } from "./exit.ts";
-import { flushRunPublications } from "./store.ts";
+import { flushRunPublications, stateDir } from "./store.ts";
 import { doctor } from "./doctor.ts";
 import { roster } from "./public.ts";
 import packageJson from "../../package.json" with { type: "json" };
@@ -29,6 +29,7 @@ export const COMMANDS = COMMAND_NAMES.map((name) => ({
 
 async function main(): Promise<void> {
   const rawArgs = cliArgv();
+  if (COMMAND_NAMES.some((name) => name === rawArgs[0])) stateDir();
   const root = cli(
     {
       name: "agx-worker",

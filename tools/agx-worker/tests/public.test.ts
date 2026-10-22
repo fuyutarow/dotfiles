@@ -82,7 +82,7 @@ test("roster TICKET emits one selected row without starting a worker or changing
     env: {
       ...process.env,
       HOME: root,
-      AGX_NEXT_STATE_DIR: join(root, "state"),
+      AGX_STATE_DIR: join(root, "state"),
       DISPATCH_ROSTER_PATH: join(
         import.meta.dir,
         "../../../agents/models/dispatch-roster.toml",
@@ -122,7 +122,7 @@ test("renamed worker CLI reads pre-rename records byte for byte", async () => {
   const path = join(root, "records.jsonl");
   await writeFile(path, original);
   const child = Bun.spawn([process.execPath, ENTRY, "ls", "--all", "--json"], {
-    env: { ...process.env, AGX_NEXT_STATE_DIR: root },
+    env: { ...process.env, AGX_STATE_DIR: root },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",

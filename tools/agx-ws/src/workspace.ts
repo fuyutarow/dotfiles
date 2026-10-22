@@ -29,7 +29,7 @@ import {
   type Attempt,
 } from "../../shared/src/attempt.ts";
 import { acquire, pidAlive } from "../../shared/src/dir-lock.ts";
-import { dispatchStateDir } from "../../shared/src/dispatch-state.ts";
+import { stateDir } from "./state-dir.ts";
 import { validateSlug } from "../../shared/src/slug.ts";
 import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
 import { jjWorkspace, refLocks } from "./jj-workspace.ts";
@@ -855,7 +855,7 @@ type Classification = {
 };
 
 function landState(ws: Workspace): string | undefined {
-  const root = realOr(join(dispatchStateDir(), "land"));
+  const root = realOr(join(stateDir(), "land"));
   const dir = realOr(ws.dir);
   const state = dirname(dir);
   return basename(dir) === "workspace" && dirname(state) === root
@@ -2303,17 +2303,7 @@ async function publishVerdicts(
   result: GcResult,
   retained?: Set<string>,
 ): Promise<void> {
-  const root =
-    [process.env.AGX_NEXT_STATE_DIR, process.env.AGX_STATE_DIR].find(
-      (value) => value !== undefined && value !== "",
-    ) ??
-    join(
-      (process.env.XDG_STATE_HOME === ""
-        ? undefined
-        : process.env.XDG_STATE_HOME) ??
-        join(process.env.HOME ?? homedir(), ".local/state"),
-      "agx-next",
-    );
+  const root = stateDir();
   const path = join(root, "workspace-verdicts.json");
   await mkdir(root, { recursive: true });
   const release = await acquire(

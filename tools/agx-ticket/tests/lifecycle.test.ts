@@ -33,14 +33,13 @@ async function fixture(custom?: string) {
   await mkdir(bin, { recursive: true });
   await mkdir(home);
   const env = {
-    ...process.env,
+    ...stateTestEnv(),
     HOME: home,
     XDG_CONFIG_HOME: join(root, "config"),
     XDG_CACHE_HOME: home,
     XDG_STATE_HOME: home,
     BUN_RUNTIME_TRANSPILER_CACHE_PATH: join(root, "transpiler-cache"),
     AGX_STATE_DIR: home,
-    AGX_NEXT_STATE_DIR: home,
     JJ_CONFIG: "",
     JJ_USER: "Fixture",
     JJ_EMAIL: "fixture@example.com",
@@ -551,3 +550,84 @@ test("duplicate XDG root claims exit 2", async () => {
   expect(result.err).toContain("two files claim root");
   expect(result.out).toBe("");
 });
+import * as stateFs from "node:fs/promises";
+import { tmpdir as stateTmpdir } from "node:os";
+import {
+  stateDir as resolvedStateDir,
+  stateRefusal,
+} from "../src/state-dir.ts";
+
+test("single state directory precedence and startup refusals preserve data", async () => {
+  const root = await stateFs.mkdtemp(
+    join(stateTmpdir(), "agx-state-contract-"),
+  );
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () =>
+      stateFs.rm(root, { recursive: true, force: true }),
+  };
+  {
+    const env = { HOME: root, XDG_STATE_HOME: "", AGX_STATE_DIR: "" };
+    expect(resolvedStateDir(env)).toBe(join(root, ".local/state/agx"));
+    expect(resolvedStateDir({ ...env, XDG_STATE_HOME: root })).toBe(
+      join(root, "agx"),
+    );
+    const explicit = join(root, "custom");
+    expect(
+      resolvedStateDir({
+        ...env,
+        XDG_STATE_HOME: root,
+        AGX_STATE_DIR: explicit,
+      }),
+    ).toBe(explicit);
+    expect(await stateRefusal(env)).toBeUndefined();
+    await stateFs.mkdir(join(root, "agx-next"));
+    await stateFs.writeFile(join(root, "agx-next/sentinel"), "unchanged");
+    const migrationEnv = { ...env, XDG_STATE_HOME: root };
+    const expected = `agx: state migration required; run: mv ${root}/agx ${root}/agx.legacy-v1.tmp && mv ${root}/agx-next ${root}/agx && mv ${root}/agx.legacy-v1.tmp ${root}/agx/legacy-v1`;
+    expect(await stateRefusal(migrationEnv)).toBe(expected);
+    expect(
+      await stateRefusal({ ...migrationEnv, AGX_STATE_DIR: explicit }),
+    ).toBe(expected);
+    for (const override of [
+      {},
+      { AGX_NEXT_STATE_DIR: "" },
+      { AGX_NEXT_STATE_DIR: "retired" },
+    ]) {
+      const child = Bun.spawn(
+        [process.execPath, join(import.meta.dir, "../src/tkt.ts"), "--help"],
+        {
+          env: { ...stateTestEnv(), ...migrationEnv, ...override },
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 5000,
+        },
+      );
+      const [out, err, code] = await Promise.all([
+        child.stdout.text(),
+        child.stderr.text(),
+        child.exited,
+      ]);
+      expect(code).toBe(2);
+      expect(out).toBe("");
+      expect(err).toBe(
+        (Object.hasOwn(override, "AGX_NEXT_STATE_DIR")
+          ? "agx: AGX_NEXT_STATE_DIR is retired; use AGX_STATE_DIR"
+          : expected) + "\n",
+      );
+    }
+    expect(
+      await stateFs.readFile(join(root, "agx-next/sentinel"), "utf8"),
+    ).toBe("unchanged");
+    expect(await stateFs.readdir(root)).toEqual(["agx-next"]);
+    await stateFs.mkdir(join(root, "agx"));
+    expect(await stateRefusal(migrationEnv)).toBeUndefined();
+  }
+});
+
+// The shared preload still injects retired configuration; isolate refusal tests.
+function stateTestEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.AGX_NEXT_STATE_DIR;
+  return env;
+}

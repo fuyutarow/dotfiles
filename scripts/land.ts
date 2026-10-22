@@ -36,7 +36,7 @@ import {
   filesets,
   validPath,
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
-import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
+import { dispatchLegacyStateDir } from "../tools/shared/src/dispatch-state.ts";
 import { registeredRepos } from "./workspace-repos.ts";
 import {
   enqueue,
@@ -246,7 +246,7 @@ async function workspaceRuns(
 }
 
 async function workspaceLedgerLines(): Promise<string[]> {
-  const state = dispatchStateDir();
+  const state = dispatchLegacyStateDir();
   if (!(await pathExists(state))) return [];
   const archives = (await readdir(state))
     .filter((name) => /^runs-\d{4}-\d{2}-\d{2}\.jsonl$/u.test(name))
@@ -260,7 +260,7 @@ async function workspaceLedgerLines(): Promise<string[]> {
 }
 
 async function lifecycleLines(): Promise<string[]> {
-  const path = join(dispatchStateDir(), "lifecycle.jsonl");
+  const path = join(dispatchLegacyStateDir(), "lifecycle.jsonl");
   return (await pathExists(path))
     ? (await readFile(path, "utf8")).split("\n")
     : [];

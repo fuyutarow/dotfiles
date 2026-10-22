@@ -21,7 +21,6 @@ test("worker snapshot uses doctor's classification and hides vendor sessions", a
     XDG_CACHE_HOME: root,
     XDG_CONFIG_HOME: root,
     AGX_STATE_DIR: root,
-    AGX_NEXT_STATE_DIR: root,
     XDG_RUNTIME_DIR: root,
     AGX_DISPATCHER_SESSION: "",
     CLAUDE_CODE_SESSION_ID: "",

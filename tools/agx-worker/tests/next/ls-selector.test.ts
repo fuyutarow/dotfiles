@@ -127,7 +127,7 @@ const runLs = (root: string, selector: string) =>
     ],
     {
       cwd: process.cwd(),
-      env: { ...process.env, AGX_NEXT_STATE_DIR: join(root, "state") },
+      env: { ...process.env, AGX_STATE_DIR: join(root, "state") },
     },
   );
 
@@ -144,7 +144,7 @@ const runLatest = (root: string, ticket: string, ...flags: string[]) =>
     ],
     {
       cwd: process.cwd(),
-      env: { ...process.env, AGX_NEXT_STATE_DIR: join(root, "state") },
+      env: { ...process.env, AGX_STATE_DIR: join(root, "state") },
     },
   );
 
@@ -231,21 +231,23 @@ test("agx worker ls --latest requires an exact ticket and rejects a missing tick
     [process.execPath, "tools/agx-worker/src/next/cli.ts", "ls", "--latest"],
     {
       cwd: process.cwd(),
-      env: { ...process.env, AGX_NEXT_STATE_DIR: join(root, "state") },
+      env: { ...process.env, AGX_STATE_DIR: join(root, "state") },
     },
   );
   expect(result.exitCode).toBe(2);
   expect(result.stderr.toString()).toContain("--latest requires --ticket");
 });
 
-const workspaceLs = (root: string, ...flags: string[]) =>
-  Bun.spawnSync(
+const workspaceLs = (root: string, ...flags: string[]) => {
+  const { AGX_NEXT_STATE_DIR: _retiredStateDir, ...inheritedEnv } = process.env;
+  return Bun.spawnSync(
     [process.execPath, "tools/agx-worker/src/next/cli.ts", "ls", ...flags],
     {
-      env: { ...process.env, AGX_NEXT_STATE_DIR: join(root, "state") },
+      env: { ...inheritedEnv, AGX_STATE_DIR: join(root, "state") },
       timeout: 15_000,
     },
   );
+};
 
 const started = (id: string, workspace: string) => ({
   kind: "started",

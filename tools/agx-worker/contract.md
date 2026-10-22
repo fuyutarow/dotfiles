@@ -18,6 +18,7 @@ The top-level `objective` field in `roster --json` is the routing objective text
 Tickets are caller-owned files. `agx worker run` accepts positional ticket paths and optionally a working
 tree and sandbox mode. A continuation uses the previous run ID and resumes its vendor session,
 except for the capacity recovery described below.
+
 `dispatch --continue RUN_ID` uses that run's recorded `workspace` path, falling back to
 `cwd` when `workspace` is absent or empty. Both preflight and the durable worker receive
 that path and the unchanged continuation ID, preserving the ordinary vendor-session resume.
@@ -29,9 +30,16 @@ repository. A missing, unusable or unregistered path exits 2 before starting a w
 with one diagnostic line naming the recorded path, reason and repair: restore/register
 that path with `agx ws add`, or start a fresh run. Registry inspection timeouts retain
 temporary-unavailability exit 75.
-Run events, progress, and judgments are stored in one append-only `records.jsonl` file. The default
-state directory keeps its `agx-next` name for compatibility; the real state directory is not
-migrated by this CLI switch.
+
+Run events, progress, and judgments are stored in one append-only `records.jsonl` file. The state
+directory resolves from non-empty `AGX_STATE_DIR`, then non-empty `$XDG_STATE_HOME/agx`,
+then `~/.local/state/agx`. Legacy ledgers are read only from `<state>/legacy-v1`.
+Every worker command refuses `AGX_NEXT_STATE_DIR`, even when empty, with exit 2 and
+`agx: AGX_NEXT_STATE_DIR is retired; use AGX_STATE_DIR`. If the resolved state directory
+is missing but `<base>/agx-next` exists, startup refuses with exit 2 and prints:
+`mv <base>/agx <base>/agx.legacy-v1.tmp && mv <base>/agx-next <base>/agx && mv <base>/agx.legacy-v1.tmp <base>/agx/legacy-v1`.
+Here `<base>` is non-empty `XDG_STATE_HOME` or `~/.local/state`. The CLI never moves data.
+
 Local judgments and graded run summaries remain audit data and do not enter the Jev request or
 deterministic fallback ranking. Selection uses the ticket, roster evidence, explicit route and
 capability policy, live quota availability, and operational capacity guards.

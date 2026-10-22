@@ -1,5 +1,9 @@
 # Changelog
 
+## 10.0.0 — 2026-10-23
+
+- Unify worker state under AGX_STATE_DIR and agx with read-only legacy-v1 imports and explicit migration refusals
+
 ## 9.1.4 — 2026-10-23
 
 - Record lost run endings under owner locks during publication and preserve live units.

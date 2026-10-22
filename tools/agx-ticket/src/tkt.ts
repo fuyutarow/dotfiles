@@ -11,7 +11,9 @@ import { collect, create, doctor as doctorTickets, list } from "./tickets.ts";
 import pkg from "../package.json" with { type: "json" };
 
 import { AgxConfigError } from "../../shared/src/agx-config.ts";
+import { checkState } from "./state-dir.ts";
 
+await checkState();
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);
 

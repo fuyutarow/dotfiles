@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.0 — 2026-10-23
+
+- Refuse retired state configuration before ticket commands
+
 ## 1.0.1 — 2026-10-23
 
 - Use jj trunk() to detect landed runs

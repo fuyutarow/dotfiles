@@ -1,4 +1,4 @@
-{"kind":"run","schema":3,"run_id":"legacy-fixture-run","cwd":"/tmp/agx-next-fixture","dispatcher_session":"dispatcher-fixture","started_at":"2026-10-10T12:00:00Z","ended_at":"2026-10-10T12:02:00Z","exit":0,"pick":{"choice":"luna-high"},"ticket":{"name":"legacy_fixture","writes":["src/**"]},"worker":{"session":"vendor-fixture","outcome":"returned"}}
+{"kind":"run","schema":3,"run_id":"legacy-fixture-run","cwd":"/tmp/agx-worker-fixture","dispatcher_session":"dispatcher-fixture","started_at":"2026-10-10T12:00:00Z","ended_at":"2026-10-10T12:02:00Z","exit":0,"pick":{"choice":"luna-high"},"ticket":{"name":"legacy_fixture","writes":["src/**"]},"worker":{"session":"vendor-fixture","outcome":"returned"}}
 {"kind":"acceptance","schema":1,"run_id":"legacy-fixture-run","at":"2026-10-10T12:03:00Z","accept":true,"note":"fixture accepted"}
 {"kind":"grade","schema":1,"run_id":"legacy-fixture-run","graded_at":"2026-10-10T12:04:00Z","grade":"pass","graded_by":"jev","confidence":0.9,"evidence":[],"probabilities":{}}
 {"kind":"grade-waived","schema":1,"run_id":"legacy-fixture-run","waived_at":"2026-10-10T12:05:00Z","waived_by":"coordinator","reason":"fixture waiver"}

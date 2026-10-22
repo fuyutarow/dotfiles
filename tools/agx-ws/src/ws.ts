@@ -16,6 +16,10 @@ import {
   remove,
 } from "./workspace.ts";
 
+import { checkState } from "./state-dir.ts";
+
+await checkState();
+
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, packageJson, cliArgv);
 

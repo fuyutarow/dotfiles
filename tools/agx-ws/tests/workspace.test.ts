@@ -33,12 +33,11 @@ const home = join(scratch, "home");
 const baseEnv = (
   extra: Record<string, string> = {},
 ): Record<string, string | undefined> => ({
-  ...process.env,
+  ...stateTestEnv(),
   PATH: `${bin}:${process.env.PATH}`,
   HOME: home,
   XDG_STATE_HOME: join(home, "state"),
   AGX_STATE_DIR: join(home, "state/agx"),
-  AGX_NEXT_STATE_DIR: "",
   XDG_CONFIG_HOME: join(scratch, "config"),
   XDG_DATA_HOME: join(home, "data"),
   XDG_CACHE_HOME: join(scratch, "cache"),
@@ -735,7 +734,7 @@ describe("agx ws add", () => {
   test("add leaves verdict publication to explicit gc outside the repository and workspace directory", async () => {
     const path = await repo('trunk = "main"\n');
     const state = join(scratch, "explicit-verdict-state");
-    const env = baseEnv({ AGX_NEXT_STATE_DIR: state });
+    const env = baseEnv({ AGX_STATE_DIR: state });
     const verdictPath = join(state, "workspace-verdicts.json");
     const before = listing(join(path, ".."));
     const added = await ws(["add", "s1"], path, env);
@@ -1286,7 +1285,7 @@ describe("gc integration branches", () => {
     );
     await chmod(wrapper, 0o755);
     const env = baseEnv({
-      AGX_NEXT_STATE_DIR: state,
+      AGX_STATE_DIR: state,
       PATH: `${realBin}:${bin}:${process.env.PATH}`,
     });
     const old = Temporal.Now.instant().subtract({ hours: 48 }).toString();
@@ -1371,7 +1370,7 @@ describe("gc integration branches", () => {
     );
     await chmod(wrapper, 0o755);
     const env = baseEnv({
-      AGX_NEXT_STATE_DIR: state,
+      AGX_STATE_DIR: state,
       PATH: `${realBin}:${bin}:${process.env.PATH}`,
     });
     const old = Temporal.Now.instant().subtract({ hours: 48 }).toString();
@@ -1967,3 +1966,85 @@ process.exitCode=await p.exited;
   expect(names).toContain("ws_rollback-target:");
   setRecords([]);
 });
+
+import * as stateFs from "node:fs/promises";
+import { tmpdir as stateTmpdir } from "node:os";
+import {
+  stateDir as resolvedStateDir,
+  stateRefusal,
+} from "../src/state-dir.ts";
+
+test("single state directory precedence and startup refusals preserve data", async () => {
+  const root = await stateFs.mkdtemp(
+    join(stateTmpdir(), "agx-state-contract-"),
+  );
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () =>
+      stateFs.rm(root, { recursive: true, force: true }),
+  };
+  {
+    const env = { HOME: root, XDG_STATE_HOME: "", AGX_STATE_DIR: "" };
+    expect(resolvedStateDir(env)).toBe(join(root, ".local/state/agx"));
+    expect(resolvedStateDir({ ...env, XDG_STATE_HOME: root })).toBe(
+      join(root, "agx"),
+    );
+    const explicit = join(root, "custom");
+    expect(
+      resolvedStateDir({
+        ...env,
+        XDG_STATE_HOME: root,
+        AGX_STATE_DIR: explicit,
+      }),
+    ).toBe(explicit);
+    expect(await stateRefusal(env)).toBeUndefined();
+    await stateFs.mkdir(join(root, "agx-next"));
+    await stateFs.writeFile(join(root, "agx-next/sentinel"), "unchanged");
+    const migrationEnv = { ...env, XDG_STATE_HOME: root };
+    const expected = `agx: state migration required; run: mv ${root}/agx ${root}/agx.legacy-v1.tmp && mv ${root}/agx-next ${root}/agx && mv ${root}/agx.legacy-v1.tmp ${root}/agx/legacy-v1`;
+    expect(await stateRefusal(migrationEnv)).toBe(expected);
+    expect(
+      await stateRefusal({ ...migrationEnv, AGX_STATE_DIR: explicit }),
+    ).toBe(expected);
+    for (const override of [
+      {},
+      { AGX_NEXT_STATE_DIR: "" },
+      { AGX_NEXT_STATE_DIR: "retired" },
+    ]) {
+      const child = Bun.spawn(
+        [process.execPath, join(import.meta.dir, "../src/ws.ts"), "--help"],
+        {
+          env: { ...stateTestEnv(), ...migrationEnv, ...override },
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 5000,
+        },
+      );
+      const [out, err, code] = await Promise.all([
+        child.stdout.text(),
+        child.stderr.text(),
+        child.exited,
+      ]);
+      expect(code).toBe(2);
+      expect(out).toBe("");
+      expect(err).toBe(
+        (Object.hasOwn(override, "AGX_NEXT_STATE_DIR")
+          ? "agx: AGX_NEXT_STATE_DIR is retired; use AGX_STATE_DIR"
+          : expected) + "\n",
+      );
+    }
+    expect(
+      await stateFs.readFile(join(root, "agx-next/sentinel"), "utf8"),
+    ).toBe("unchanged");
+    expect(await stateFs.readdir(root)).toEqual(["agx-next"]);
+    await stateFs.mkdir(join(root, "agx"));
+    expect(await stateRefusal(migrationEnv)).toBeUndefined();
+  }
+});
+
+// The shared preload still injects retired configuration; isolate refusal tests.
+function stateTestEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.AGX_NEXT_STATE_DIR;
+  return env;
+}

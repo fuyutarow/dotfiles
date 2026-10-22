@@ -94,7 +94,10 @@ async function fixture(name: string) {
   for (const path of [dotfiles, repo, tickets, bin, state, cache])
     mkdirSync(path, { recursive: true });
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    // Each fixture owns its dispatch configuration, including state isolation.
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !key.startsWith("AGX_")),
+    ),
     HOME: home,
     PATH: `${bin}:${process.env.PATH ?? ""}`,
     JJ_CONFIG: "",
@@ -102,7 +105,6 @@ async function fixture(name: string) {
     JJ_EMAIL: "fixture@example.test",
     AGX_REPOS_ROOT: workspace,
     XDG_STATE_HOME: join(home, "state"),
-    AGX_NEXT_STATE_DIR: state,
     AGX_STATE_DIR: state,
     BUN_RUNTIME_TRANSPILER_CACHE_PATH: cache,
     DOCTOR_TICKET_RECORDS: ticketRecords,

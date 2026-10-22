@@ -80,9 +80,14 @@ async function status(
   dir: string,
   cwd: string,
 ): Promise<{ stdout: string; exitCode: number }> {
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    AGX_STATE_DIR: dir,
+  };
+  delete env.AGX_NEXT_STATE_DIR;
   const child = Bun.spawn(["bun", cli, "--json", "--cwd", cwd], {
     cwd,
-    env: { ...process.env, AGX_NEXT_STATE_DIR: dir },
+    env,
     stdout: "pipe",
     stderr: "pipe",
   });

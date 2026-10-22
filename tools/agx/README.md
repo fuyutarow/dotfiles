@@ -15,3 +15,8 @@ Only `worker`, `ticket`, `ws`, `status`, and `msg` are accepted as tools. An unk
 with one stderr line naming the five accepted tools and no stdout output.
 
 See [worker interfaces](../agx-worker/README.md) for worker commands.
+
+The suite forwards the environment unchanged. Its owner tools use non-empty
+`AGX_STATE_DIR`, then `$XDG_STATE_HOME/agx`, then `~/.local/state/agx`.
+The legacy ledger is read-only at `<state dir>/legacy-v1/`. Owner tools refuse
+retired state configuration with exit 2 before running a command.

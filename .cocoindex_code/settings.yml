@@ -8,6 +8,7 @@ exclude_patterns:
 - '**/vendor/*.*/*'
 - '**/vendor/*'
 - '**/.cocoindex_code'
+- 'karabiner/automatic_backups/*.json'
 include_patterns:
 - '**/*.py'
 - '**/*.pyi'

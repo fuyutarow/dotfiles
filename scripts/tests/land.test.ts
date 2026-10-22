@@ -234,6 +234,7 @@ async function fixture() {
     BUN_RUNTIME_TRANSPILER_CACHE_PATH: transpilerCache,
     LAND_EVENTS: events,
     AGX_STATE_DIR: join(temp, "agx-state"),
+    XDG_STATE_HOME: join(temp, "state"),
     LAND_EXPECT_WORKSPACE: worker,
   };
   await writeFile(
@@ -472,7 +473,101 @@ async function digest(root: string): Promise<string> {
 }
 
 describe("land workspace", () => {
-  test("moved entry uses landed code while the installed bin still points at the old path", async () => {
+  test("queue state belongs to dotfiles and never creates agx state", async () => {
+    const f = await fixture();
+    expect(
+      (await f.command(["--enqueue", f.worker, "-m", "State boundary"]))
+        .exitCode,
+    ).toBe(0);
+    const result = await f.command(["--queue-status"]);
+    expect(result.exitCode).toBe(0);
+    const state = join(
+      f.env.XDG_STATE_HOME,
+      "dotfiles",
+      "land",
+      basename(landStateDir(await realpath(f.main))),
+    );
+    expect(result.stdout.toString()).toContain(state);
+    expect(await pathExists(join(state, "queue.jsonl"))).toBe(true);
+    expect(await pathExists(f.env.AGX_STATE_DIR)).toBe(false);
+  });
+
+  test("all land modes refuse a nonempty legacy queue without touching either state", async () => {
+    const f = await fixture();
+    const old = join(f.env.AGX_STATE_DIR, "land");
+    await mkdir(old, { recursive: true });
+    await writeFile(
+      join(old, "queue.jsonl"),
+      "legacy queue must not be read\n",
+    );
+    const before = await digest(f.env.AGX_STATE_DIR);
+    for (const args of [
+      ["--enqueue", f.worker, "-m", "Migration"],
+      ["--queue-status"],
+      ["--run-queue"],
+      [f.worker, "-m", "Migration"],
+    ]) {
+      const result = await f.command(args);
+      expect(
+        result.exitCode,
+        result.stdout.toString() + result.stderr.toString(),
+      ).toBe(2);
+      const output = result.stdout.toString() + result.stderr.toString();
+      expect(output.trim().split("\n")).toHaveLength(1);
+      expect(output).toContain(
+        `mv -- '${old}' '${join(f.env.XDG_STATE_HOME, "dotfiles", "land")}'`,
+      );
+      expect(await digest(f.env.AGX_STATE_DIR)).toBe(before);
+      expect(await pathExists(join(f.env.XDG_STATE_HOME, "dotfiles"))).toBe(
+        false,
+      );
+    }
+  });
+
+  test("empty legacy queue does not block dotfiles state", async () => {
+    const f = await fixture();
+    const old = join(f.env.AGX_STATE_DIR, "land");
+    await mkdir(old, { recursive: true });
+    expect((await f.command(["--queue-status"])).exitCode).toBe(0);
+    expect(await readdir(old)).toEqual([]);
+  });
+
+  test("land state falls back to HOME when XDG_STATE_HOME is empty", async () => {
+    const f = await fixture();
+    const result = await f.command(["--queue-status"], {
+      XDG_STATE_HOME: "",
+      AGX_STATE_DIR: "",
+    });
+    expect(result.exitCode).toBe(0);
+    const state = join(
+      f.env.HOME,
+      ".local",
+      "state",
+      "dotfiles",
+      "land",
+      basename(landStateDir(await realpath(f.main))),
+    );
+    expect(result.stdout.toString()).toContain(state);
+    expect(await pathExists(state)).toBe(true);
+    expect(await pathExists(join(f.env.HOME, ".local", "state", "agx"))).toBe(
+      false,
+    );
+  });
+
+  test("default legacy agx queue is refused without AGX_STATE_DIR", async () => {
+    const f = await fixture();
+    const old = join(f.env.XDG_STATE_HOME, "agx", "land");
+    await mkdir(join(old, "old-repo"), { recursive: true });
+    const result = await f.command(["--queue-status"], { AGX_STATE_DIR: "" });
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout.toString()).toContain(`mv -- '${old}'`);
+    expect(await pathExists(join(f.env.XDG_STATE_HOME, "dotfiles"))).toBe(
+      false,
+    );
+    expect(await readdir(old)).toEqual(["old-repo"]);
+  });
+
+  test("moved entry lands without invoking post-push agx bookkeeping", async () => {
     const f = await fixture();
     const installed = join(dirname(f.main), "agx-worker");
     await mkdir(f.env.AGX_STATE_DIR, { recursive: true });
@@ -498,24 +593,18 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     expect(result.exitCode, output + result.stderr.toString()).toBe(0);
     expect(output).toContain("[land] summary: NOT LIVE");
     expect(output).toContain("NOT LIVE until: mise run deploy");
-    expect(output).toContain("[land] landed: recorded 1 run(s)");
+    expect(output).not.toContain("[land] landed:");
     expect(output).not.toContain("FAIL");
     expect(output).not.toContain("rollback:");
     const lander = join(
-      f.env.AGX_STATE_DIR,
+      f.env.XDG_STATE_HOME,
+      "dotfiles",
       "land",
       basename(landStateDir(await realpath(f.main))),
       "workspace",
     );
     expect((await f.log()).filter((event) => event[0] === "landed-ls")).toEqual(
-      [
-        [
-          "landed-ls",
-          join(lander, "tools/agx-worker/src/next/moved.ts"),
-          "ls",
-          "--json",
-        ],
-      ],
+      [],
     );
     expect(await pathExists(installed)).toBe(false);
     expect(
@@ -541,20 +630,18 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         "refs/heads/alpha",
       ]),
     );
-    expect(
-      await readFile(join(f.env.AGX_STATE_DIR, "runs.jsonl"), "utf8"),
-    ).toContain('"run_id":"moved-run"');
+    expect(await readdir(f.env.AGX_STATE_DIR)).toEqual([]);
   });
 
-  test("a post-push bookkeeping failure never restores checkout paths", async () => {
+  test("landing does not invoke a failing post-push agx entry", async () => {
     const f = await fixture();
     await writeFile(
       join(f.worker, "tools/agx-worker/src/next/cli.ts"),
       "#!/usr/bin/env bun\nprocess.stderr.write('fixture bookkeeping failure'); process.exit(9);\n",
     );
     const result = await f.land();
-    expect(result.exitCode).toBe(1);
-    expect(result.stdout.toString()).toContain("[land] landed: FAIL");
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).not.toContain("[land] landed:");
     expect(result.stdout.toString()).toContain("landed and pushed");
     expect(result.stdout.toString()).not.toContain("rollback:");
     expect(
@@ -1029,7 +1116,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     expect(await pathExists(aliasPath)).toBe(false);
   });
 
-  test("land requires an existing accept judgment and records a landed row", async () => {
+  test("land requires an existing accept judgment and leaves agx state unchanged", async () => {
     const f = await fixture();
     const state = join(f.main, "..", "agx-state");
     await mkdir(state, { recursive: true });
@@ -1049,24 +1136,13 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       ),
     ).toBe(false);
     await appendAcceptance(state, "run-from-workspace");
+    const before = await digest(state);
     const result = await f.land();
     expect(
       result.exitCode,
       result.stdout.toString() + result.stderr.toString(),
     ).toBe(0);
-    const lines = (await readFile(join(state, "runs.jsonl"), "utf8"))
-      .trim()
-      .split("\n");
-    const landing = jsonOf(
-      z.looseObject({
-        kind: z.string(),
-        run_id: z.string(),
-      }),
-    ).safeParse(lines.at(-1) ?? "");
-    expect(landing.success ? landing.data : undefined).toMatchObject({
-      kind: "landed",
-      run_id: "run-from-workspace",
-    });
+    expect(await digest(state)).toBe(before);
     expect((await f.log()).filter((event) => event[0] === "agx")).toEqual([]);
   });
 
@@ -1320,7 +1396,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     expect(result.stdout.toString()).not.toContain("[land] deploy:");
     expect(await pathExists(f.worker)).toBe(false);
     expect((await f.log()).filter((event) => event[0] === "ssh")).toEqual([]);
-    expect(await readFile(join(state, "runs.jsonl"), "utf8")).toContain(
+    expect(await readFile(join(state, "runs.jsonl"), "utf8")).not.toContain(
       '"kind":"landed","run_id":"deploy-failure-run"',
     );
     expect(
@@ -1584,7 +1660,8 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
   test("LAND-OWN-TREE refuses its dirty tree with exact paths before rebase", async () => {
     const f = await fixture();
     const state = join(
-      f.env.AGX_STATE_DIR,
+      f.env.XDG_STATE_HOME,
+      "dotfiles",
       "land",
       basename(landStateDir(await realpath(f.main))),
     );
@@ -1984,8 +2061,13 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       expect(await pathExists(second)).toBe(false);
       expect((await f.log()).filter((event) => event[0] === "agx")).toEqual([]);
       const state = landStateDir(await realpath(f.main));
-      // State belongs to this isolated fixture, rather than the test runner's own AGX state.
-      const actualState = join(f.env.AGX_STATE_DIR, "land", basename(state));
+      // State belongs to this isolated fixture, rather than the test runner's state.
+      const actualState = join(
+        f.env.XDG_STATE_HOME,
+        "dotfiles",
+        "land",
+        basename(state),
+      );
       const journal = await readFile(join(actualState, "queue.jsonl"), "utf8");
       expect(journal).toContain('"status":"FAIL"');
       expect(journal).toContain('"status":"OK"');
@@ -2020,7 +2102,8 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
           .exitCode,
       ).toBe(0);
       const state = join(
-        f.env.AGX_STATE_DIR,
+        f.env.XDG_STATE_HOME,
+        "dotfiles",
         "land",
         basename(landStateDir(await realpath(f.main))),
       );

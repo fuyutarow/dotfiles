@@ -4,7 +4,6 @@ import { access as accessPath } from "node:fs/promises";
 // Consumer: human/agent. Stage verdicts; stop on the first failure. Test seams are executable
 // paths LAND_MISE and LAND_SSH (argv is never interpreted by a local shell).
 import {
-  appendFile,
   cp,
   lstat,
   mkdir,
@@ -43,6 +42,7 @@ import {
   enqueue,
   landLock,
   landStateDir,
+  landStateReady,
   queueStatus,
   runQueue,
 } from "./land-queue.ts";
@@ -335,24 +335,6 @@ export function workspacePreflightVerdicts(
             ];
       }),
     );
-  });
-}
-
-function recordWorkspaceLanding(
-  workspace: string,
-  commit: string,
-  sourceRoot: string,
-): ResultAsync<number, Error> {
-  return safeTry(async function* () {
-    const ids = yield* await workspaceRuns(workspace, sourceRoot);
-    const log = join(dispatchStateDir(), "runs.jsonl");
-    for (const { run_id } of ids)
-      await appendFile(
-        log,
-        `${JSON.stringify({ kind: "landed", run_id, commit, at: Temporal.Now.instant().toString() })}\n`,
-        { mode: 0o600 },
-      );
-    return ok(ids.length);
   });
 }
 
@@ -1047,6 +1029,11 @@ async function main(
     undefined,
     argv,
   );
+  const migration = await landStateReady();
+  if (migration !== undefined) {
+    emit(`[land] FAIL ${migration.message}`);
+    return 2;
+  }
   const queueModes = [
     parsed.flags.enqueue !== undefined,
     parsed.flags.runQueue,
@@ -1390,13 +1377,6 @@ async function main(
           emit(
             `[land] NOT LIVE until: mise run deploy (changed: ${liveness.deployPaths.join(", ")})`,
           );
-        stage = "landed";
-        const recorded = yield* recordWorkspaceLanding(
-          workerRoot,
-          commit ?? "alpha",
-          landerRoot,
-        );
-        emit(`[land] landed: recorded ${recorded} run(s)`);
         stage = "workspace";
         yield* jj(landerRoot, ["workspace", "forget", workspaceName]);
         await rm(workerRoot, { recursive: true, force: true });

@@ -1,12 +1,11 @@
 // One durable journal and two lifetimes: runner.lock for a drain, land.lock for one landing.
 // No argv boundary; scripts/land.ts owns the CLI. Enqueue never starts a resident service.
-import { appendFile, mkdir } from "node:fs/promises";
-import { hostname } from "node:os";
+import { appendFile, mkdir, readdir } from "node:fs/promises";
+import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { acquire, holderOf, tryAcquire } from "../tools/shared/src/dir-lock.ts";
-import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
 import { LandReportSchema, landExit, type LandReport } from "./land-verdict.ts";
 
 const Enqueue = z.strictObject({
@@ -58,17 +57,47 @@ const owner = (what: string) => ({
   since: now(),
 });
 
+const stateHome = () =>
+  (process.env.XDG_STATE_HOME === ""
+    ? undefined
+    : process.env.XDG_STATE_HOME) ?? join(homedir(), ".local", "state");
+const landRoot = () => join(stateHome(), "dotfiles", "land");
+const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+
+// Inspect only the old directory's entries; never consume or migrate its journal.
+export async function landStateReady(): Promise<Error | undefined> {
+  const old = join(
+    (process.env.AGX_STATE_DIR === ""
+      ? undefined
+      : process.env.AGX_STATE_DIR) ?? join(stateHome(), "agx"),
+    "land",
+  );
+  const entries = await attempt(() => readdir(old));
+  if (!entries.ok) {
+    const missing = z
+      .object({ code: z.literal("ENOENT") })
+      .safeParse(entries.error);
+    return missing.success ? undefined : new Error(errorMessage(entries.error));
+  }
+  if (entries.value.length === 0) return undefined;
+  return new Error(
+    `legacy land state is non-empty; move it before retrying: test ! -e ${quote(landRoot())} && mkdir -p -- ${quote(join(stateHome(), "dotfiles"))} && mv -- ${quote(old)} ${quote(landRoot())}`,
+  );
+}
+
 export function landStateDir(mainRoot: string): string {
   const key = new Bun.CryptoHasher("sha256")
     .update(mainRoot)
     .digest("hex")
     .slice(0, 16);
-  return join(dispatchStateDir(), "land", key);
+  return join(landRoot(), key);
 }
 
 export async function landLock(
   mainRoot: string,
 ): Promise<(() => void | Promise<void>) | Error> {
+  const migration = await landStateReady();
+  if (migration !== undefined) return migration;
   const release = await acquire(
     join(landStateDir(mainRoot), "land.lock"),
     owner("land"),
@@ -138,6 +167,8 @@ export async function enqueue(
   mainRoot: string,
   request: { ws: string; msg: string; review?: string },
 ): Promise<string | Error> {
+  const migration = await landStateReady();
+  if (migration !== undefined) return migration;
   const state = landStateDir(mainRoot);
   return journal(state, async () => {
     const items = await readQueue(state);
@@ -161,6 +192,8 @@ export async function enqueue(
 export async function queueStatus(
   mainRoot: string,
 ): Promise<Error | undefined> {
+  const migration = await landStateReady();
+  if (migration !== undefined) return migration;
   const state = landStateDir(mainRoot);
   const items = await journal(state, async () => readQueue(state));
   if (items instanceof Error) return items;
@@ -199,6 +232,8 @@ export async function runQueue(
     request: QueueRequest,
   ) => Promise<{ exit: number; report?: LandReport }>,
 ): Promise<number | Error> {
+  const migration = await landStateReady();
+  if (migration !== undefined) return migration;
   const state = landStateDir(mainRoot);
   const runner = await Promise.resolve(
     tryAcquire(join(state, "runner.lock"), owner("land queue runner")),

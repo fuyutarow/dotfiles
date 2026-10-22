@@ -126,3 +126,12 @@ test("ledger acceptance extraction ignores run rows without a final judgment", (
     { run_id: "rejected", accept: false, order: 3 },
   ]);
 });
+
+test("acceptance survives without a landed row; landed alone is not a judgment", () => {
+  expect(
+    ledgerAcceptances([
+      JSON.stringify({ kind: "acceptance", run_id: "accepted", accept: true }),
+      JSON.stringify({ kind: "landed", run_id: "unjudged", commit: "abc" }),
+    ]),
+  ).toEqual([{ run_id: "accepted", accept: true, order: 0 }]);
+});

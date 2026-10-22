@@ -5,8 +5,8 @@ The command below used the workspace statusline through a temporary PATH entry.
 Both sessions are live in ~/dotfiles. The sampler used isolated owner/cache/disk-rate
 paths under this workspace; neither the installed CLI nor deployed host state changed.
 
-Root cause: coralbase Claude PID 3764 inherited
-XDG_STATE_HOME=/home/fuyu/Workspace/coralbase/.state; research-record-v2 PID 1408912
+Root cause: example-service Claude PID 3764 inherited
+XDG_STATE_HOME=/home/fuyu/Workspace/example-service/.state; example-records-v2 PID 1408912
 did not. Host sample readers had followed the project override. Host status now
 uses ~/.local/state, with explicit STATUSLINE/AGX overrides retained for probes.
 
@@ -43,6 +43,6 @@ statusline < /dev/null  0.03s user 0.01s system 100% cpu 0.045 total
 PASS: one location, two session lines, one Rate/Sys/Job/agx/fleet block; no 0s old;
 branch and sampled diff present; every timed render under 100ms.
 
-Live regression replay: launching the workspace CLI from ~/Workspace/coralbase with
-XDG_STATE_HOME=~/Workspace/coralbase/.state reads real host samples and agx state;
+Live regression replay: launching the workspace CLI from ~/Workspace/example-service with
+XDG_STATE_HOME=~/Workspace/example-service/.state reads real host samples and agx state;
 exit 0, no sampler unavailable or snapshot unavailable text.

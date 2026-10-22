@@ -79,12 +79,12 @@ test("Codex strips old Herdr display fullnames before generating its name", asyn
   expect(first).toEqual({ name: undefined });
   expect(second).toEqual({ name: undefined });
   const firstName = codexAgentName(
-    "/fixture/standard-skills",
+    "/fixture/example-skills",
     "thread",
     first?.name,
   );
   const secondName = codexAgentName(
-    "/fixture/standard-skills",
+    "/fixture/example-skills",
     "thread",
     second?.name,
   );
@@ -148,7 +148,7 @@ test("Claude status writes the fleet session and leaves Herdr metadata to its pr
     {
       sessionId: "claude-session",
       sessionName: "display-hint-only",
-      cwd: "/work/standard-skills",
+      cwd: "/work/example-skills",
       model: { name: "Opus 5.5" },
       effort: "medium",
       context: { inputTokens: 1200, usedPercent: 12.5 },
@@ -164,7 +164,7 @@ test("Claude status writes the fleet session and leaves Herdr metadata to its pr
     model: "Opus 5.5",
     effort: "medium",
     ctx: { tokens: 1200, pct: 12.5 },
-    cwd: "/work/standard-skills",
+    cwd: "/work/example-skills",
   });
 });
 
@@ -224,7 +224,7 @@ test("Claude status does not clear or report pane metadata on session start", as
   await writeStatuslineFleetSession(
     {
       sessionId: "claude-session-start",
-      cwd: "/work/research-record-v2",
+      cwd: "/work/example-records-v2",
       model: { name: "Sonnet 5.5" },
       effort: "high",
     },
@@ -240,7 +240,7 @@ test("Claude status does not clear or report pane metadata on session start", as
     vendor: "claude",
     model: "Sonnet 5.5",
     effort: "high",
-    cwd: "/work/research-record-v2",
+    cwd: "/work/example-records-v2",
   });
 });
 

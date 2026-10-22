@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.1 — 2026-10-23
+
+- Replace project-specific fixture names and allow an operator-configured sampler repository.
+
 ## 0.21.0 — 2026-10-23
 
 - Collect agx status JSON in the sampler and render run, workspace, finding and judgment rows from the owner cache.

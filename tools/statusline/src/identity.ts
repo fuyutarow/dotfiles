@@ -83,7 +83,7 @@ export async function ultracodeConfiguredAsync(): Promise<boolean | undefined> {
 
 // `name` — the actual field `claude agents --json` returns per session (confirmed live
 // 2026-08-28), and what `/list-agents` addresses it by. NOT a label this file invented: it
-// defaults to the auto-generated "firedancer-fe" form (docs call that default value the
+// defaults to the auto-generated "example-repo-fe" form (docs call that default value the
 // "default display name"; sessions.md), and tracks `--name`/`/rename` after that. Not on stdin
 // (see StatusInput's own note — `session_name` is a DIFFERENT, independently-tracked field) —
 // resolved by shelling out to `claude agents --json` and matching our own session_id, then

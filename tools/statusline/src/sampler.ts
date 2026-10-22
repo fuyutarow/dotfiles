@@ -214,10 +214,14 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
     persist("sessions", sessions);
     const home = process.env.HOME ?? "";
     const roots = new Set<string>();
+    const configuredRepository = process.env.STATUSLINE_REPOSITORY_ROOT;
     const candidates = [
       process.cwd(),
       join(home, "dotfiles"),
-      join(home, "Workspace/firedancer"),
+      // Optional operator-configured repository in addition to cwd and live sessions.
+      ...(configuredRepository !== undefined && configuredRepository !== ""
+        ? [configuredRepository]
+        : []),
       ...sessions.map((session) => session.cwd),
       ...(payloads ?? []).flatMap((payload) =>
         payload.cwd === undefined ? [] : [payload.cwd],

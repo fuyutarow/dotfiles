@@ -1061,7 +1061,7 @@ describe("legacy enriched Run row", () => {
       {
         name: "fresh",
         choice: "sonnet-high",
-        label: "Scope: put nncp v3.3 on firedancer",
+        label: "Scope: put nncp v3.3 on example-repo",
         pickSource: "jev",
         session: "8066abcd-0000-7000-8000-11111111e1b6",
         age: 619,

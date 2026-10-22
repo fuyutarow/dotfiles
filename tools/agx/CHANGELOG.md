@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 — 2026-10-23
+
+- Route agx status through the PATH agx-status bin and declare its installation surfaces.
+
 ## 1.0.0 — 2026-10-19
 
 - Remove the legacy top-level Jev alias; use jex

@@ -544,6 +544,7 @@ const OTHER: readonly Surface[] = [
       "tools/serena-foreground/package.json",
       "tools/tool-tiers/package.json",
       "tools/agx/package.json",
+      "tools/agx-status/package.json",
       "tools/agx-worker/package.json",
       "tools/jex/package.json",
       "tools/xmsg/package.json",

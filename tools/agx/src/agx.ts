@@ -4,7 +4,7 @@ import cliPackage from "../package.json" with { type: "json" };
 import { forwardPath } from "../../shared/src/path-dispatch.ts";
 
 const argv = process.argv.slice(2);
-const tools = ["worker", "ticket", "ws"];
+const tools = ["worker", "ticket", "ws", "status"];
 
 async function help(): Promise<void> {
   process.stdout.write(
@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   }
   if (!tools.includes(first)) {
     process.stderr.write(
-      `agx: unknown tool '${first}'; expected worker, ticket, ws\n`,
+      `agx: unknown tool '${first}'; expected worker, ticket, ws, status\n`,
     );
     process.exitCode = 2;
     return;

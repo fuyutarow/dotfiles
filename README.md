@@ -138,10 +138,10 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 └── mise.toml    # the task runner (no justfile)
 ```
 
-The `agx` command dispatches `agx worker`, `agx ticket`, and `agx ws` to their `agx-*` bins on PATH.
+The `agx` command dispatches `agx worker`, `agx ticket`, `agx ws`, and `agx status` to their `agx-*` bins on PATH.
 Each tool owns its help, decisions, and state. Suite help takes each description from that tool’s help.
 Accepted command forms are `agx <tool> ARGS` and `agx-<tool> ARGS`, where
-`<tool>` is `worker`, `ticket`, or `ws`.
+`<tool>` is `worker`, `ticket`, `ws`, or `status`.
 `agx -V` prints only the suite version. The architecture
 of `tools/` (including the suite boundary, dispatch pipeline, capacity domain, oracle rule, and each
 invariant's check or planned ticket) lives in
@@ -179,6 +179,7 @@ bin name has a classification.
 | `herdr-projector` | A | Operators project herdr session state machine-wide. |
 | `tool` | A | Operators look up the machine's declared tool tiers. |
 | `agx` | A | People and agents dispatch the machine-wide agx suite. |
+| `agx-status` | A | People and agents inspect combined run, workspace, ticket and doctor state across repositories. |
 | `agx-ws` | A | Alias for the machine-wide `agx ws` operator. |
 | `ws` | A | Short alias for the machine-wide workspace operator. |
 | `coredev` | A | Operators manage approved remote core development hosts. |

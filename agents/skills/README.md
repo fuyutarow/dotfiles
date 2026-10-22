@@ -129,7 +129,6 @@ qualify the result, and revise the affected theory. These are feedback loops, no
 
 ### Coding & proofs
 
-- [`implementing-and-debugging`](implementing-and-debugging/) — Discipline for writing or fixing non-trivial code: understand intent, fix the root cause, avoid flailing.
 - [`practicing-tiger-style`](practicing-tiger-style/) — Risk-calibrated Tiger discipline for high-consequence code: bounds, invariants, and a checkable failure-mode ledger.
 - [`refactoring-code`](refactoring-code/) — Behavior-preserving structural change toward 責務分界/局所化; harshly refuses 場当たり churn; enforces the two hats and name-your-oracle.
 - [`writing-julia`](writing-julia/) — Write correct, fast Julia for research — reach for it before any Julia coding or numerics.

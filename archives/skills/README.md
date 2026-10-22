@@ -4,6 +4,15 @@ Skills retired from `agents/skills/`. Nothing here is linked into any agent (`mi
 only reads `agents/skills/`), so an archived skill never fires; the directory keeps the text
 reachable without `git log`.
 
+## 2026-10-22 owner-requested retirement
+
+| Skill | Archived | Why | Successor |
+|---|---|---|---|
+| [`implementing-and-debugging`](implementing-and-debugging/SKILL.md) | 2026-10-22 | Owner-requested retirement; complete two-file historical package preserved byte-identically outside discovery | No new replacement skill. Ordinary work follows repository instructions and existing language/domain owners. |
+
+The archived name is a historical reference only: never call or automatically re-enable it.
+The package contains only the historical manual and verification ledger, with no executable consumer.
+
 ## 2026-10-21 owner-requested retirement
 
 | Skill | Archived | Why | Successor |

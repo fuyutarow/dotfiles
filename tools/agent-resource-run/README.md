@@ -79,9 +79,9 @@ retryable external-health denial only when **both** of these are true:
 
 - It exits 69 and its runner-produced diagnostic begins `DENY GPU persistent dxg stall`
   (either the `pid=` form or the `tgid=`/`tid=` form).
-- That same diagnostic contains `observations=2 interval_ms>=3000` and its evidence
-  paths. This is the runner's confirmed two-observation dxg result, not a single D
-  observation or a claim of continuous persistence.
+- That same diagnostic contains `observations=10 interval_ms>=3000` and its evidence
+  paths. This is the runner's confirmed ten-observation dxg result, with every observation still stalled;
+  it does not prove continuous persistence between observations.
 
 For one caller operation, take at most five commandless admission probes:
 
@@ -114,7 +114,7 @@ slot, or job-id declarations (usage diagnostics); incomplete, invalid, unavailab
 mismatched admission receipts; unavailable Linux/user-systemd enforcement; duplicate
 job identity; fresh `HOLD RECOVER_VERDICT`; recorded `GPU stall recorded since` state;
 unreadable/invalid process, task, or confirmation evidence; unavailable GPU owner or
-device capacity; an outside/unreceipted holder; or `GPU VRAM budget exceeded`. Repair
+device capacity; or `GPU VRAM budget exceeded`. Repair
 or investigate those conditions instead. The last case is a live sum of declared
 reservations against cached declared device total minus the policy safety margin; it is
 not a measurement of temporarily usable runtime VRAM, and this runner has no separate
@@ -126,17 +126,19 @@ A GPU-specific refusal uses live read-only `/proc/<tgid>/stat`,
 `gpu-owner.json` being paused, stale, or missing `unresponsiveSince`. Every visible
 numeric thread-group entry and its numeric task entries are inspected, including work
 outside admitted scopes. A readable dxg candidate requires the same start-time identity
-to be in D at a dxg wait channel again after one shared, bounded three-second confirmation
-delay. That is two readable dxg observations at least three seconds apart, not proof that D
-persisted continuously. A D-state leader reports its PID; a distinct D-state task reports
+to remain in D at a dxg wait channel across ten observations, separated by nine
+shared confirmation delays of at least three seconds each. A candidate that exits D,
+disappears, changes identity, or moves to a readable non-dxg wait at any observation is
+discarded. The observations do not prove continuous persistence between checks. A D-state leader reports its PID; a distinct D-state task reports
 its TGID, TID, revalidated leader and task states, wait channel, and evidence paths; this
 distinguishes a zombie leader from a live blocked task.
 
 A task whose initial wait channel is unreadable, empty, or zero is a different candidate.
-After the same shared delay, both TGID and TID start-time identities must still match and
-the task must still be in D. Unknown-to-unknown refuses as persistent uncertain D with
-`observations=2` and interval evidence. Unknown-to-dxg refuses as mixed wait-channel
-evidence, not as two dxg observations. Unknown-to-readable-non-dxg, non-D, gone, or reused
+Across the same ten-observation confirmation window, both TGID and TID start-time
+identities must still match and the task must still be in D. Unknown-to-unknown refuses
+as persistent uncertain D with `observations=10` and interval evidence. A transition
+from an unknown wait channel to dxg uses mixed wait-channel evidence, with refusal
+only after all ten observations remain stalled. Unknown-to-readable-non-dxg, non-D, gone, or reused
 task/leader identities discard the candidate. The leader's initial unavailable-wchan branch
 retains its immediate fail-closed policy from the 1.5.12 scope; this task-only change does
 not alter it.
@@ -149,10 +151,14 @@ driver health or prevent a stall that begins after the check.
 
 Recorded `unresponsiveSince` still refuses admission and names recorded GPU-holding
 PIDs and commands. Missing owner/capacity data also refuses admission; sample age or
-paused status alone does not. Existing holder-scope and declared VRAM checks remain.
+paused status alone does not. Holder identity checks are advisory; declared VRAM checks still enforce admission.
 The runner never invokes the GPU driver.
 
-Sampled-holder refusals include bounded provenance from the existing owner state.
+Sampled-holder warnings include bounded provenance from the existing owner state.
+Holder identity alone never refuses admission: unresolved, reused, nested, outside,
+or unreceipted holders emit `WARN GPU holder check is advisory, not refusing: <reason>`
+and admission continues. WSL driver PIDs may not resolve in the Linux namespace.
+Admission rests on the slot count, declared VRAM budget and dxg stall check.
 Version 1 `processIdentity.sampleAt` must equal `sampledAt` and identify a retained
 sample; exactly one observation must match the reported `rawDriverPid`. The diagnostic
 reports capture times, local read/missing/reuse/permission status and local PID/TGID/NSpid
@@ -165,16 +171,15 @@ come from the normal retained sample; admission adds no diagnostic probe or scan
 Operational LIMIT: the producer emits only `driverBinding: "unknown"`. Local numeric
 PID equality, a local start time, or the sampler's namespace does not establish the
 driver's PID namespace. Consequently, no currently emitted metadata can safely authorize
-stale-PID removal. An absent, reused, nested or outside holder remains refused even with
-correlated provenance. Existing live admitted-scope receipt checks and admission of an
-empty driver process list retain their behavior; metadata never supplies an admission
-receipt. Malformed metadata fails the owner-state schema check, and unrelated metadata
-does not grant admission. Sample correlation describes the retained observation, not
+stale-PID removal. An absent, reused, nested or outside holder emits an advisory warning even with
+correlated provenance. An empty driver process list produces no holder warning; metadata
+never supplies an admission receipt. Malformed metadata fails the owner-state schema check, and unrelated metadata
+does not establish holder identity. Sample correlation describes the retained observation, not
 proof that an old or paused sample describes the current driver.
 
 These are admission-time checks (`--check-only` and the scope-entry recheck after CCC
 handoff), not a continuous Z/D monitor. A cached zombie holder outside an admitted GPU
-scope is refused; an admitted zombie is not independently refused for being Z. During
+scope produces an advisory warning; being Z alone does not refuse admission. During
 execution, systemd owns resource limits and deadlines. On cleanup, the controller checks
 cgroup population and retains locks on unconfirmed cleanup; it does not classify Z/D
 processes or automatically kill a workload because of this new dxg observation.

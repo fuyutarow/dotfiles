@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, spyOn, test } from "bun:test";
 import { chmod, mkdtemp, mkdir, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +12,28 @@ import {
   type ResourceManifest,
 } from "../src/agent-resource-run.ts";
 
-const runtime = await mkdtemp(`/run/user/${process.getuid?.()}/arr-test-`);
+// Holder identity only contributes an advisory diagnostic, never a refusal.
+async function advisoryAdmission(
+  ...args: Parameters<typeof gpuAdmissionRefusal>
+) {
+  const warning = spyOn(console, "error").mockImplementation(() => {});
+  using _restoreWarning = {
+    [Symbol.dispose]: () => {
+      warning.mockRestore();
+    },
+  };
+  expect(await gpuAdmissionRefusal(...args)).toBeUndefined();
+  const lines = warning.mock.calls.map(([line]) => String(line));
+  for (const line of lines)
+    expect(line).toStartWith(
+      "WARN GPU holder check is advisory, not refusing: ",
+    );
+  return lines.join("\n");
+}
+
+const runtime = await mkdtemp(
+  join(process.env.AGX_TEST_RUNTIME_DIR ?? tmpdir(), "arr-test-"),
+);
 await symlink(`/run/user/${process.getuid?.()}/bus`, join(runtime, "bus"));
 await symlink(
   `/run/user/${process.getuid?.()}/systemd`,
@@ -268,7 +289,7 @@ test("GPU admission refuses a recorded stall and reports its evidence", async ()
   expect(refusal).toContain("NVML probe timed out");
   expect(refusal).toContain("gpu-owner.json");
 });
-test("GPU admission refuses an unadmitted zombie GPU holder", async () => {
+test("GPU admission warns about an unadmitted zombie GPU holder without refusing", async () => {
   const f = await fixture();
   const procRoot = join(f.dir, "proc");
   const pid = 987654321;
@@ -291,14 +312,14 @@ test("GPU admission refuses an unadmitted zombie GPU holder", async () => {
     processes: [{ pid, usedMiB: 100 }],
     samples: [],
   };
-  const refusal = await gpuAdmissionRefusal(
+  const warning = await advisoryAdmission(
     { gpu_id: 0, vram_peak_bytes: 1 },
     512,
     { procRoot, state },
   );
-  expect(refusal).toContain(`pid=${pid}`);
-  expect(refusal).toContain("state=ZOMBIE");
-  expect(refusal).toContain("cgroup");
+  expect(warning).toContain(`pid=${pid}`);
+  expect(warning).toContain("state=ZOMBIE");
+  expect(warning).toContain("cgroup");
 });
 test("GPU VRAM guard sums admitted job peaks against device total and safety margin", async () => {
   const f = await fixture();

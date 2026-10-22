@@ -1,9 +1,28 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gpuAdmissionRefusal } from "../src/agent-resource-run.ts";
 import type { GpuState } from "../../shared/src/gpu-samples.ts";
+
+// Holder identity only contributes an advisory diagnostic, never a refusal.
+async function advisoryAdmission(
+  ...args: Parameters<typeof gpuAdmissionRefusal>
+) {
+  const warning = spyOn(console, "error").mockImplementation(() => {});
+  using _restoreWarning = {
+    [Symbol.dispose]: () => {
+      warning.mockRestore();
+    },
+  };
+  expect(await gpuAdmissionRefusal(...args)).toBeUndefined();
+  const lines = warning.mock.calls.map(([line]) => String(line));
+  for (const line of lines)
+    expect(line).toStartWith(
+      "WARN GPU holder check is advisory, not refusing: ",
+    );
+  return lines.join("\n");
+}
 
 const request = { gpu_id: 0, vram_peak_bytes: 128 * 1024 ** 2 };
 const stat = (startTime: string, parent = 456) =>
@@ -74,50 +93,50 @@ test("handoff-held admission excludes the yielded ccc worker and retains the VRA
   ).toContain("GPU VRAM budget exceeded");
 });
 
-test("handoff-held admission refuses a sampled parent mismatch", async () => {
+test("handoff-held admission warns without refusing about a sampled parent mismatch", async () => {
   await using f = await fixture({ parent: 789 });
-  expect(await gpuAdmissionRefusal(request, 512, f.options)).toContain(
+  expect(await advisoryAdmission(request, 512, f.options)).toContain(
     "absent-or-pid-namespace-mismatch",
   );
 });
 
-test("handoff-held admission refuses a supervisor restarted after the sample", async () => {
+test("handoff-held admission warns without refusing about a supervisor restarted after the sample", async () => {
   await using f = await fixture({ startedAt: 1001 });
-  expect(await gpuAdmissionRefusal(request, 512, f.options)).toContain(
+  expect(await advisoryAdmission(request, 512, f.options)).toContain(
     "absent-or-pid-namespace-mismatch",
   );
 });
 
-test("check-only admission refuses the yielded ccc worker without the handoff lock", async () => {
+test("check-only admission warns without refusing about the yielded ccc worker without the handoff lock", async () => {
   await using f = await fixture();
   expect(
-    await gpuAdmissionRefusal(request, 512, {
+    await advisoryAdmission(request, 512, {
       ...f.options,
       cccHandoffHeld: false,
     }),
   ).toContain("absent-or-pid-namespace-mismatch");
 });
 
-test("handoff-held admission excludes a reused ccc worker PID but refuses a still-live worker", async () => {
+test("handoff-held admission excludes a reused ccc worker PID and warns without refusing about a still-live worker", async () => {
   await using f = await fixture();
   await mkdir(join(f.root, "123/task/123"), { recursive: true });
   await Bun.write(join(f.root, "123/stat"), stat("200"));
   expect(await gpuAdmissionRefusal(request, 512, f.options)).toBeUndefined();
   await Bun.write(join(f.root, "123/stat"), stat("100"));
-  expect(await gpuAdmissionRefusal(request, 512, f.options)).toContain(
+  expect(await advisoryAdmission(request, 512, f.options)).toContain(
     "status-unreadable-or-gone",
   );
 });
 
-test("handoff-held admission still refuses an unrelated absent holder", async () => {
+test("handoff-held admission warns without refusing about an unrelated absent holder", async () => {
   await using f = await fixture();
   f.state.processes.push({ pid: 789, usedMiB: 1 });
-  expect(await gpuAdmissionRefusal(request, 512, f.options)).toContain(
+  expect(await advisoryAdmission(request, 512, f.options)).toContain(
     "identity unverified pid=789",
   );
 });
 
-test("handoff supervisor lookup parses precise systemd UTC timestamps and fails closed", async () => {
+test("handoff supervisor lookup parses precise systemd UTC timestamps and warns without refusing", async () => {
   await using f = await fixture();
   const bin = join(f.root, "bin");
   await mkdir(bin);
@@ -155,20 +174,25 @@ process.stdout.write(await gpuAdmissionRefusal(${JSON.stringify(request)}, 512, 
       child.stderr.text(),
       child.exited,
     ]);
-    expect({ stderr, code }).toEqual({ stderr: "", code: 0 });
-    return stdout;
+    expect(code).toBe(0);
+    expect(stdout).toBe("admit");
+    return stderr;
   }
   await Bun.write(
     reply,
     "MainPID=456\nExecMainStartTimestamp=Thu 1970-01-01 00:00:00.900000 UTC\n",
   );
-  expect(await inspect()).toBe("admit");
+  expect(await inspect()).toBe("");
   for (const timestamp of ["Thu 1970-01-01 00:00:01.001000 UTC", "n/a"]) {
     await Bun.write(
       reply,
       `MainPID=456\nExecMainStartTimestamp=${timestamp}\n`,
     );
-    expect(await inspect()).toContain("absent-or-pid-namespace-mismatch");
+    const warning = await inspect();
+    expect(warning).toStartWith(
+      "WARN GPU holder check is advisory, not refusing: ",
+    );
+    expect(warning).toContain("absent-or-pid-namespace-mismatch");
   }
 });
 
@@ -178,7 +202,7 @@ for (const invalid of [
   "sample-mismatch",
   "supervisor-unavailable",
 ])
-  test(`handoff-held admission fails closed for ${invalid}`, async () => {
+  test(`handoff-held admission warns without refusing for ${invalid}`, async () => {
     await using f = await fixture();
     if (invalid === "missing-identity") f.state.processIdentity = undefined;
     if (invalid === "different-boot")
@@ -191,7 +215,7 @@ for (const invalid of [
       invalid === "supervisor-unavailable"
         ? { ...f.options, cccSupervisor: () => Promise.resolve(undefined) }
         : f.options;
-    expect(await gpuAdmissionRefusal(request, 512, options)).toContain(
+    expect(await advisoryAdmission(request, 512, options)).toContain(
       "absent-or-pid-namespace-mismatch",
     );
   });

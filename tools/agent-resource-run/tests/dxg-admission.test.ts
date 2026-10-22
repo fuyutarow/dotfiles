@@ -6,6 +6,25 @@ import { gpuAdmissionRefusal } from "../src/agent-resource-run.ts";
 import { type GpuState, readGpuState } from "../../shared/src/gpu-samples.ts";
 import { runGpuSampler } from "../../shared/src/gpu-sampler.ts";
 
+// Holder identity only contributes an advisory diagnostic, never a refusal.
+async function advisoryAdmission(
+  ...args: Parameters<typeof gpuAdmissionRefusal>
+) {
+  const warning = spyOn(console, "error").mockImplementation(() => {});
+  using _restoreWarning = {
+    [Symbol.dispose]: () => {
+      warning.mockRestore();
+    },
+  };
+  expect(await gpuAdmissionRefusal(...args)).toBeUndefined();
+  const lines = warning.mock.calls.map(([line]) => String(line));
+  for (const line of lines)
+    expect(line).toStartWith(
+      "WARN GPU holder check is advisory, not refusing: ",
+    );
+  return lines.join("\n");
+}
+
 const request = { gpu_id: 0, vram_peak_bytes: 128 * 1024 ** 2 };
 // Intentionally stale, paused, and missing both holders and unresponsiveSince.
 const state = {
@@ -121,6 +140,63 @@ async function addTask(
   return { base, statPath: join(base, "stat"), wchanPath: join(base, "wchan") };
 }
 
+for (const target of ["leader", "task"] as const)
+  for (let observation = 2; observation <= 10; observation += 1)
+    test(`${target} waking at observation ${observation} admits after prior stalls`, async () => {
+      await using f = await fixture();
+      let statPath = join(f.base, "stat");
+      let pid = "123";
+      let startTime = "100";
+      if (target === "task") {
+        await fs.writeFile(statPath, stat("Z"));
+        statPath = (await addTask(f, "456")).statPath;
+        pid = "456";
+        startTime = "200";
+      }
+      let round = 1;
+      const control = confirmation(async () => {
+        round += 1;
+        await fs.writeFile(
+          statPath,
+          stat(round === observation ? "S" : "D", { pid, startTime }),
+        );
+      });
+      expect(
+        await gpuAdmissionRefusal(request, 512, {
+          procRoot: f.root,
+          state,
+          ...control.options,
+        }),
+      ).toBeUndefined();
+      expect(control.sleeps).toEqual(
+        Array.from({ length: observation - 1 }, () => 3000),
+      );
+    });
+
+for (const elapsed of [2999, 3000, 4500])
+  test(`dxg confirmation requires at least 3000 ms per interval: elapsed=${elapsed}`, async () => {
+    await using f = await fixture();
+    let now = 0;
+    const sleeps: number[] = [];
+    const refusal = await gpuAdmissionRefusal(request, 512, {
+      procRoot: f.root,
+      state,
+      now: () => now,
+      sleep: (milliseconds) => {
+        sleeps.push(milliseconds);
+        now += elapsed;
+        return Promise.resolve();
+      },
+    });
+    if (elapsed < 3000) {
+      expect(refusal).toBeUndefined();
+      expect(sleeps).toEqual([3000]);
+    } else {
+      expect(refusal).toContain("observations=10 interval_ms>=3000");
+      expect(sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
+    }
+  });
+
 for (const scope of ["unmanaged.scope", "agent-resource-existing.scope"])
   test(`paused stale cache cannot mask a live dxg D-state in ${scope}`, async () => {
     await using f = await fixture(scope);
@@ -132,8 +208,8 @@ for (const scope of ["unmanaged.scope", "agent-resource-existing.scope"])
       ...control.options,
     });
     expect(refusal).toContain("GPU persistent dxg stall pid=123 state=D");
-    expect(refusal).toContain("observations=2 interval_ms>=3000");
-    expect(control.sleeps).toEqual([3000]);
+    expect(refusal).toContain("observations=10 interval_ms>=3000");
+    expect(control.sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
     expect(refusal).toContain("dxgk_wait_for_completion");
     expect(refusal).toContain(join(f.base, "stat"));
     expect(refusal).toContain(join(f.base, "wchan"));
@@ -152,7 +228,7 @@ test("Z leader with a distinct live dxg D-state task refuses with task evidence"
   expect(refusal).toContain(
     "GPU persistent dxg stall tgid=123 tid=456 leader_state=Z task_state=D",
   );
-  expect(control.sleeps).toEqual([3000]);
+  expect(control.sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
   for (const path of [join(f.base, "stat"), task.statPath, task.wchanPath])
     expect(refusal).toContain(path);
 });
@@ -217,7 +293,7 @@ for (const transition of ["exit", "wake", "reuse"])
 test("confirmation evidence becoming inaccessible fails closed", async () => {
   await using f = await fixture();
   const wchanPath = join(f.base, "wchan");
-  const control = confirmation(async () => fs.rm(wchanPath));
+  const control = confirmation(async () => fs.rm(wchanPath, { force: true }));
   expect(
     await gpuAdmissionRefusal(request, 512, {
       procRoot: f.root,
@@ -227,7 +303,7 @@ test("confirmation evidence becoming inaccessible fails closed", async () => {
   ).toContain(
     `GPU D-state wait channel unavailable pid=123; evidence=${wchanPath}`,
   );
-  expect(control.sleeps).toEqual([3000]);
+  expect(control.sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
 });
 
 test("leader confirmation with an extant stat missing its identity fails closed", async () => {
@@ -244,7 +320,7 @@ test("leader confirmation with an extant stat missing its identity fails closed"
   ).toContain(
     `GPU D-state confirmation identity unavailable pid=123; evidence=${join(f.base, "stat")}`,
   );
-  expect(control.sleeps).toEqual([3000]);
+  expect(control.sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
 });
 
 for (const target of ["task", "leader"] as const)
@@ -275,7 +351,7 @@ for (const target of ["task", "leader"] as const)
         ...control.options,
       }),
     ).toContain(expected);
-    expect(control.sleeps).toEqual([3000]);
+    expect(control.sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
   });
 
 for (const target of ["leader", "task", "task leader"] as const)
@@ -337,7 +413,7 @@ for (const target of ["leader", "task", "task leader"] as const)
         ...control.options,
       }),
     ).toContain(expected);
-    expect(control.sleeps).toEqual([3000]);
+    expect(control.sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
   });
 
 test("no D/dxg candidate is the fast path", async () => {
@@ -354,7 +430,7 @@ test("no D/dxg candidate is the fast path", async () => {
   expect(control.sleeps).toEqual([]);
 });
 
-test("leader and task candidates share one bounded confirmation interval", async () => {
+test("leader and task candidates share nine bounded confirmation intervals", async () => {
   await using f = await fixture();
   const task = await addTask(f, "456");
   const control = confirmation(async () =>
@@ -369,7 +445,7 @@ test("leader and task candidates share one bounded confirmation interval", async
     "GPU persistent dxg stall tgid=123 tid=456 leader_state=S task_state=D",
   );
   expect(refusal).toContain(task.wchanPath);
-  expect(control.sleeps).toEqual([3000]);
+  expect(control.sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
 });
 
 for (const transition of ["exit", "wake", "reuse"])
@@ -452,9 +528,9 @@ for (const channel of ["", "0", "missing", "unreadable"])
       ...control.options,
     });
     expect(refusal).toContain(
-      `GPU persistent D-state wait channel unavailable tgid=123 tid=456 leader_state=Z task_state=D; observations=2 interval_ms>=3000; evidence=${join(f.base, "stat")},${task.statPath},${path}`,
+      `GPU persistent D-state wait channel unavailable tgid=123 tid=456 leader_state=Z task_state=D; observations=10 interval_ms>=3000; evidence=${join(f.base, "stat")},${task.statPath},${path}`,
     );
-    expect(control.sleeps).toEqual([3000]);
+    expect(control.sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
   });
 
 const unavailableChannelCases = (["leader", "task"] as const).flatMap(
@@ -506,7 +582,9 @@ for (const { target, tie, channel } of unavailableChannelCases)
     } else {
       expect(refusal).toContain("wait channel unavailable");
       expect(refusal).toContain(wchanPath);
-      expect(control.sleeps).toEqual(target === "task" ? [3000] : []);
+      expect(control.sleeps).toEqual(
+        target === "task" ? Array.from({ length: 9 }, () => 3000) : [],
+      );
     }
   });
 
@@ -527,7 +605,7 @@ for (const target of ["leader", "task"] as const)
         ...control.options,
       }),
     ).toContain("GPU persistent dxg stall");
-    expect(control.sleeps).toEqual([3000]);
+    expect(control.sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
   });
 
 for (const processState of ["S", "R", "Z", "T", "t", "I", "X", "x"])
@@ -630,7 +708,7 @@ test("admission inspection never spawns GPU tools or workload processes", async 
       ...control.options,
     }),
   ).toContain("GPU persistent dxg stall");
-  expect(control.sleeps).toEqual([3000]);
+  expect(control.sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
   await fs.writeFile(join(f.base, "stat"), stat("S"));
   expect(
     await gpuAdmissionRefusal(request, 512, { procRoot: f.root, state }),
@@ -669,7 +747,7 @@ for (const scenario of [
   "live-outside",
   "live-admitted",
 ] as const)
-  test(`sampled holder ${scenario} never becomes false proven ownership or unsafe admission`, async () => {
+  test(`sampled holder ${scenario} warns without refusing or claiming proven ownership`, async () => {
     await using f = await fixture(
       !["absent", "gone", "live-outside"].includes(scenario)
         ? "agent-resource-existing.scope"
@@ -746,19 +824,33 @@ for (const scenario of [
         read.mockRestore();
       },
     };
-    const refusal = await gpuAdmissionRefusal(request, 512, {
+    const warning = await advisoryAdmission(request, 512, {
       procRoot: f.root,
       state: { ...state, processes: [{ pid: 123, usedMiB: 1 }] },
     });
-    if (scenario === "live-admitted") expect(refusal).toBeUndefined();
+    if (scenario === "live-admitted") expect(warning).toBe("");
     else if (scenario === "live-unadmitted")
-      expect(refusal).toContain("GPU holder admission receipt unavailable");
+      expect(warning).toContain("GPU holder admission receipt unavailable");
     else {
-      expect(refusal).toBeDefined();
-      expect(refusal).not.toContain("GPU holder outside admitted GPU scope");
-      expect(refusal).toContain("unverified");
-      expect(refusal).toContain("sampled_namespace=unknown");
-      expect(refusal).toContain(join(f.base, "stat"));
+      const reasons = {
+        absent: "reason=absent-or-pid-namespace-mismatch",
+        gone: "reason=gone-during-check",
+        reuse: "reason=pid-reused-during-check",
+        "stat-unreadable": "reason=stat-unreadable",
+        "cgroup-missing": "reason=cgroup-unreadable-or-gone",
+        "cgroup-unreadable": "reason=cgroup-unreadable-or-gone",
+        namespace: "reason=pid-namespace-or-tgid-mismatch",
+        tgid: "reason=pid-namespace-or-tgid-mismatch",
+        "status-unreadable": "reason=status-unreadable-or-gone",
+        esrch: "reason=stat-unreadable",
+        malformed: "reason=stat-identity-invalid",
+        "live-outside": "local_scope=outside-admitted-GPU-scope",
+      };
+      expect(warning).toContain(reasons[scenario]);
+      expect(warning).not.toContain("GPU holder outside admitted GPU scope");
+      expect(warning).toContain("unverified");
+      expect(warning).toContain("sampled_namespace=unknown");
+      expect(warning).toContain(join(f.base, "stat"));
     }
     if (scenario !== "absent") expect(holderStatReads).toBe(1);
   });
@@ -842,10 +934,14 @@ process.stdout.write(${JSON.stringify(xml)});\n`,
   });
   // Only private fixture state changes: a retained driver holder has no local PID.
   await fs.rm(f.base, { recursive: true });
-  const refusal = await gpuAdmissionRefusal(request, 512, {
-    procRoot: f.root,
-    state: loaded,
-  });
+  const warnings = (
+    await advisoryAdmission(request, 512, {
+      procRoot: f.root,
+      state: loaded,
+    })
+  ).split("\n");
+  expect(warnings).toHaveLength(2);
+  const warning = warnings[0];
   for (const text of [
     "unverified pid=123",
     `sampled_at=${at} identity_sample_at=${at}`,
@@ -854,9 +950,15 @@ process.stdout.write(${JSON.stringify(xml)});\n`,
     "local_observation=read",
     "local_nspid=123,7",
   ])
-    expect(refusal).toContain(text);
+    expect(warning).toContain(text);
   for (const text of ["PRIVATE", "987654", "456"])
-    expect(refusal).not.toContain(text);
+    expect(warning).not.toContain(text);
+  expect(warnings[1]).toContain("unverified pid=456");
+  expect(warnings[1]).toContain(
+    "local_pid=456 local_tgid=456 local_nspid=456,7",
+  );
+  for (const text of ["PRIVATE", "987654", "local_pid=123", "local_nspid=123"])
+    expect(warnings[1]).not.toContain(text);
   expect(await fs.readFile(calls, "utf8")).toBe('["-q","-x"]\n');
   expect(spawn).toHaveBeenCalledTimes(1);
 });
@@ -871,7 +973,7 @@ for (const status of [
   "limit",
   "unsupported",
 ] as const)
-  test(`retained sampler ${status} provenance diagnoses absent holder without granting driver binding`, async () => {
+  test(`retained sampler ${status} provenance diagnoses absent holder without refusing or granting driver binding`, async () => {
     await using f = await fixture();
     await fs.rm(f.base, { recursive: true });
     const cached = retainedState();
@@ -890,7 +992,7 @@ for (const status of [
         spawn.mockRestore();
       },
     };
-    const refusal = await gpuAdmissionRefusal(request, 512, {
+    const warning = await advisoryAdmission(request, 512, {
       procRoot: f.root,
       state: loaded,
     });
@@ -904,9 +1006,9 @@ for (const status of [
       "capture_ms=2..4",
       "row_capture_ms=2..3",
     ])
-      expect(refusal).toContain(text);
-    expect(refusal).not.toContain("PRIVATE");
-    expect(refusal).not.toContain("456");
+      expect(warning).toContain(text);
+    expect(warning).not.toContain("PRIVATE");
+    expect(warning).not.toContain("456");
     expect(spawn).not.toHaveBeenCalled();
   });
 
@@ -919,7 +1021,7 @@ for (const scenario of [
   "duplicate",
   "invalid-window",
 ] as const)
-  test(`sampler ${scenario} never supplies unrelated provenance or authorizes removal`, async () => {
+  test(`sampler ${scenario} warns without refusing or supplying unrelated provenance`, async () => {
     await using f = await fixture();
     await fs.rm(f.base, { recursive: true });
     const cached = retainedState();
@@ -936,12 +1038,12 @@ for (const scenario of [
       identity.processes[0]!.captureFinishedAt = 1;
     cached.processIdentity = scenario === "legacy" ? undefined : identity;
     if (scenario === "no-retained-sample") cached.samples = [];
-    const refusal = await gpuAdmissionRefusal(request, 512, {
+    const warning = await advisoryAdmission(request, 512, {
       procRoot: f.root,
       state: cached,
     });
-    expect(refusal).toContain("unverified pid=123");
-    expect(refusal).not.toContain("local_observation=");
+    expect(warning).toContain("unverified pid=123");
+    expect(warning).not.toContain("local_observation=");
     const reasons = {
       legacy: "legacy-missing",
       "old-sample": "sample-mismatch",
@@ -951,11 +1053,11 @@ for (const scenario of [
       duplicate: "row-unavailable",
       "invalid-window": "invalid-capture-window",
     };
-    expect(refusal).toContain(`sampler_identity=${reasons[scenario]}`);
+    expect(warning).toContain(`sampler_identity=${reasons[scenario]}`);
   });
 
 for (const scenario of ["outside", "admitted", "nested", "empty"] as const)
-  test(`sampler local match preserves ${scenario} admission behavior`, async () => {
+  test(`sampler local match admits ${scenario} and preserves advisory provenance`, async () => {
     await using f = await fixture(
       scenario === "admitted"
         ? "agent-resource-existing.scope"
@@ -970,18 +1072,18 @@ for (const scenario of ["outside", "admitted", "nested", "empty"] as const)
     if (scenario === "nested")
       cached.processIdentity!.processes[0]!.local!.nspid = [900, 123];
     if (scenario === "empty") cached.processes = [];
-    const refusal = await gpuAdmissionRefusal(request, 512, {
+    const warning = await advisoryAdmission(request, 512, {
       procRoot: f.root,
       state: cached,
     });
     if (scenario === "admitted" || scenario === "empty")
-      expect(refusal).toBeUndefined();
+      expect(warning).toBe("");
     else {
-      expect(refusal).toContain("unverified");
-      expect(refusal).toContain("driver_binding=unknown");
-      expect(refusal).toContain("sampler_identity=sample-correlated");
+      expect(warning).toContain("unverified");
+      expect(warning).toContain("driver_binding=unknown");
+      expect(warning).toContain("sampler_identity=sample-correlated");
       if (scenario === "nested")
-        expect(refusal).toContain("local_nspid=900,123");
+        expect(warning).toContain("local_nspid=900,123");
     }
   });
 

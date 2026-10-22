@@ -1,5 +1,62 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { doctorFindings, type DoctorWorkspaceRow } from "../src/workspace.ts";
+
+const scratch = await mkdtemp(join(tmpdir(), "ws-doctor-root-"));
+afterAll(() => rm(scratch, { recursive: true, force: true }));
+const cli = join(import.meta.dir, "../src/ws.ts");
+
+test("unset repository override retains registry discovery; an override bypasses the registry", async () => {
+  await mkdir(join(scratch, "presets"));
+  await writeFile(join(scratch, "presets/consumers.toml"), "consumers = 42\n");
+  const source = `import { doctorInventory } from ${JSON.stringify(join(import.meta.dir, "../src/workspace.ts"))}; console.log(JSON.stringify(await doctorInventory(process.argv[1])));`;
+  for (const root of [undefined, join(scratch, "empty")]) {
+    const child = Bun.spawn([process.execPath, "-e", source, scratch], {
+      env: { ...process.env, AGX_REPOS_ROOT: root },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [out, err, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    expect(code, err).toBe(0);
+    if (root === undefined) {
+      expect(out).toContain('"ok":false');
+      expect(out).toContain("consumer registry");
+    } else expect(out.trim()).toBe('{"ok":true,"value":[]}');
+  }
+});
+
+test("retired repository overrides fail with exit 2 even when empty or paired with the replacement", async () => {
+  for (const name of ["AGX_DOCTOR_HOME", "AGX_DOCTOR_WORKSPACE"]) {
+    for (const [value, replacement] of [
+      ["", undefined],
+      ["", scratch],
+      [scratch, undefined],
+      [scratch, scratch],
+    ]) {
+      const child = Bun.spawn([process.execPath, cli, "doctor"], {
+        env: { ...process.env, [name]: value, AGX_REPOS_ROOT: replacement },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [out, err, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      expect(code).toBe(2);
+      expect(out).toBe("");
+      expect(err.trim().split("\n")).toHaveLength(1);
+      expect(err).toContain(name);
+      expect(err).toContain("AGX_REPOS_ROOT");
+    }
+  }
+});
 
 function row(
   verdict: string,

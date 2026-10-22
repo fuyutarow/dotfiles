@@ -83,8 +83,8 @@ async function jjOperations(
 async function fixture(name: string) {
   const root = join(scratch, name);
   const home = join(root, "home");
-  const dotfiles = join(home, "dotfiles");
   const workspace = join(home, "Workspace");
+  const dotfiles = join(workspace, "dotfiles");
   const repo = join(workspace, "consumer");
   const tickets = join(root, "tickets");
   const bin = join(root, "bin");
@@ -100,8 +100,7 @@ async function fixture(name: string) {
     JJ_CONFIG: "",
     JJ_USER: "Fixture",
     JJ_EMAIL: "fixture@example.test",
-    AGX_DOCTOR_HOME: home,
-    AGX_DOCTOR_WORKSPACE: workspace,
+    AGX_REPOS_ROOT: workspace,
     XDG_STATE_HOME: join(home, "state"),
     AGX_NEXT_STATE_DIR: state,
     AGX_STATE_DIR: state,

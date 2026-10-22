@@ -27,6 +27,15 @@ import { JJ_READ_ARGS } from "../../shared/src/jj-read.ts";
 import { readonlyCommand } from "../../shared/src/readonly-command.ts";
 import { validateSlug } from "../../shared/src/slug.ts";
 
+for (const retired of ["AGX_DOCTOR_HOME", "AGX_DOCTOR_WORKSPACE"]) {
+  if (process.env[retired] !== undefined) {
+    process.stderr.write(
+      `agx-ticket: ${retired} is retired; unset it and use AGX_REPOS_ROOT instead\n`,
+    );
+    process.exit(2);
+  }
+}
+
 const bad = (error: string): Attempt<never> => ({ ok: false, error });
 const good = <T>(value: T): Attempt<T> => ({ ok: true, value });
 const absent = (error: unknown) =>
@@ -519,10 +528,9 @@ const isTicketFile = async (path: string): Promise<boolean> => {
 
 /** Read-only fleet check for ticket placement and accepted, landed tickets. */
 export async function doctor(): Promise<Attempt<string[]>> {
-  const home = process.env.AGX_DOCTOR_HOME ?? homedir();
-  const workspaceHome =
-    process.env.AGX_DOCTOR_WORKSPACE ?? join(home, "Workspace");
-  const repos = [join(home, "dotfiles")];
+  const override = process.env.AGX_REPOS_ROOT;
+  const workspaceHome = override ?? join(homedir(), "Workspace");
+  const repos = override === undefined ? [join(homedir(), "dotfiles")] : [];
   const workspaceEntries = await readdir(workspaceHome, {
     withFileTypes: true,
   }).catch(() => []);

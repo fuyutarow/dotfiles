@@ -44,8 +44,17 @@ async function fixture(custom?: string) {
     PATH: `${bin}:${process.env.PATH}`,
     TKT_RECORDS: records,
   };
-  async function run(args: string[], cwd = repo) {
-    const p = Bun.spawn(args, { cwd, env, stdout: "pipe", stderr: "pipe" });
+  async function run(
+    args: string[],
+    cwd = repo,
+    overrides: NodeJS.ProcessEnv = {},
+  ) {
+    const p = Bun.spawn(args, {
+      cwd,
+      env: { ...env, ...overrides },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const [out, err, code] = await Promise.all([
       new Response(p.stdout).text(),
       new Response(p.stderr).text(),
@@ -346,4 +355,58 @@ test("a workspace already removed by ws retains ticket state but cannot authoriz
   expect(row?.landed).toBeNull();
   expect((await f.tkt(["gc"])).out).toBe("");
   expect(await readdir(join(f.repo, ".agents/tickets"))).toEqual(["past.md"]);
+});
+
+test("repository override scans only its root and unset preserves both default locations", async () => {
+  const f = await fixture();
+  const defaults = [
+    join(f.home, "dotfiles"),
+    join(f.home, "Workspace/default"),
+  ];
+  for (const path of defaults) {
+    await mkdir(path, { recursive: true });
+    expect((await f.run(["jj", "git", "init", path], f.root)).code).toBe(0);
+    await writeFile(
+      join(path, "stray.md"),
+      "+++\nschema = 2\n[proposition]\n+++\n",
+    );
+  }
+  await writeFile(
+    join(f.repo, "stray.md"),
+    "+++\nschema = 2\n[proposition]\n+++\n",
+  );
+  const normal = await f.run([bun, cli, "doctor"], f.repo, {
+    AGX_REPOS_ROOT: undefined,
+  });
+  expect(normal.code, normal.err).toBe(1);
+  for (const path of defaults) expect(normal.out).toContain(path);
+  expect(normal.out).not.toContain(f.repo);
+  const overridden = await f.run([bun, cli, "doctor"], f.repo, {
+    AGX_REPOS_ROOT: f.root,
+  });
+  expect(overridden.code, overridden.err).toBe(1);
+  expect(overridden.out).toContain(f.repo);
+  for (const path of defaults) expect(overridden.out).not.toContain(path);
+});
+
+test("retired repository overrides fail with exit 2 even when empty or paired with the replacement", async () => {
+  const f = await fixture();
+  for (const name of ["AGX_DOCTOR_HOME", "AGX_DOCTOR_WORKSPACE"]) {
+    for (const [value, replacement] of [
+      ["", undefined],
+      ["", f.root],
+      [f.root, undefined],
+      [f.root, f.root],
+    ]) {
+      const refused = await f.run([bun, cli, "doctor"], f.repo, {
+        [name]: value,
+        AGX_REPOS_ROOT: replacement,
+      });
+      expect(refused.code).toBe(2);
+      expect(refused.out).toBe("");
+      expect(refused.err.trim().split("\n")).toHaveLength(1);
+      expect(refused.err).toContain(name);
+      expect(refused.err).toContain("AGX_REPOS_ROOT");
+    }
+  }
 });

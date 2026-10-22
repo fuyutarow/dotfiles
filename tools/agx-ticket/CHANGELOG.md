@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0 — 2026-10-23
+
+- Replace repository discovery overrides with AGX_REPOS_ROOT and reject retired doctor variables
+
 ## 0.4.0 — 2026-10-23
 
 - Replace doctor quiet environment control with --quiet and reject the retired variable.

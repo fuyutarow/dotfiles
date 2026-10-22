@@ -37,6 +37,15 @@ import { withWorkspaceLock } from "./lock.ts";
 import { runStep, StepFailure } from "./subprocess.ts";
 import { enterStep } from "./deadline.ts";
 
+for (const retired of ["AGX_DOCTOR_HOME", "AGX_DOCTOR_WORKSPACE"]) {
+  if (process.env[retired] !== undefined) {
+    process.stderr.write(
+      `agx-ws: ${retired} is retired; unset it and use AGX_REPOS_ROOT instead\n`,
+    );
+    process.exit(2);
+  }
+}
+
 const bad = (message: string): Attempt<never> => ({
   ok: false,
   error: message,
@@ -1952,19 +1961,16 @@ async function registeredRepoPaths(root: string): Promise<Attempt<string[]>> {
 }
 
 async function doctorRepoPaths(root: string): Promise<Attempt<string[]>> {
-  const home = process.env.AGX_DOCTOR_HOME;
-  if (home === undefined) return registeredRepoPaths(root);
-  const workspaceHome =
-    process.env.AGX_DOCTOR_WORKSPACE ?? join(home, "Workspace");
+  const workspaceHome = process.env.AGX_REPOS_ROOT;
+  if (workspaceHome === undefined) return registeredRepoPaths(root);
   const entries = await readdir(workspaceHome, { withFileTypes: true }).catch(
     () => [],
   );
-  return good([
-    join(home, "dotfiles"),
-    ...entries
+  return good(
+    entries
       .filter((entry) => entry.isDirectory())
       .map((entry) => join(workspaceHome, entry.name)),
-  ]);
+  );
 }
 
 export type DoctorWorkspaceRow = {

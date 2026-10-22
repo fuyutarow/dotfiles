@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.0 — 2026-10-23
+
+- Replace repository discovery overrides with AGX_REPOS_ROOT while preserving registry defaults
+
 ## 0.11.0 — 2026-10-23
 
 - Replace doctor quiet environment control with --quiet and reject the retired variable.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.2 — 2026-10-23
+
+- Generalize the parent pipe-draining test description
+
 ## 0.12.1 — 2026-10-23
 
 - Use one main-checkout config resolution rule for every workspace command

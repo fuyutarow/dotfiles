@@ -617,7 +617,7 @@
 
 ## 1.4.3 — 2026-10-08
 
-- Keep a change with its own acceptance check in one deliverable, including tests, seals, required params/config, and paired claim bounds; the firedancer field report said roughly 12 briefs were remanded as containers in an hour while the GPU idled, including an implementation split from its bit-identity test, an implementation split from its seal and params files (remanded twice), and a theorem split between lower and upper bounds.
+- Keep a change with its own acceptance check in one deliverable, including tests, seals, required params/config, and paired claim bounds; the example-learner field report said roughly 12 briefs were remanded as containers in an hour while the GPU idled, including an implementation split from its bit-identity test, an implementation split from its seal and params files (remanded twice), and a theorem split between lower and upper bounds.
 - Keep dependent or mutually-referencing sections of read-only design/proof tickets together; allow read-only splits only for independent questions, while exact-input requests remain clarifications.
 
 ## 1.4.2 — 2026-10-08

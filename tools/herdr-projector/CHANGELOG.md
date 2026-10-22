@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.14 — 2026-10-23
+
+- Use neutral repository names in projector fixtures
+
 ## 0.1.13 — 2026-10-21
 
 - Project native Codex titles after verified footer binding

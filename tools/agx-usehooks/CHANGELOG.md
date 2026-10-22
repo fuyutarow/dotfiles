@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 — 2026-10-23
+
+- Use neutral consumer names in hook runtime fixtures
+
 ## 1.0.0 — 2026-10-23
 
 - Remove AGX_KIND and AGX_LABELS job environment aliases; diagnose alias-only metadata with the canonical variable name.
@@ -20,12 +24,12 @@
 ## 0.9.0 — 2026-10-11
 
 - Export runtime schemas and their derived types for GPU readings, unavailable readings, runs and lane counts. All four selectors return parsed values. Invalid internal output emits a contract diagnostic and returns a separately parsed fail-open fallback.
-- Declare firedancer's hook consumer and add `mise run usehooks:consumers`; land runs it before commit when this library changes. The check resolves this workspace without changing consumer files or links, fails on hook diagnostics, reports other diagnostics, and explicitly skips absent checkouts.
+- Declare example-learner's hook consumer and add `mise run usehooks:consumers`; land runs it before commit when this library changes. The check resolves this workspace without changing consumer files or links, fails on hook diagnostics, reports other diagnostics, and explicitly skips absent checkouts.
 - Establish the public version rule: changing an exported shape requires a major version, including during 0.x. This release adds schemas without changing the existing 0.8.0 value shapes.
 
 ## 0.8.0 — 2026-10-11
 
-- **Breaking, previously unannounced:** `gpu()` changed from `{ utilPct } | "unknown"` to `GpuReading { nowPct, avg15Pct, avg60Pct, samples15, memUsedGiB, memTotalGiB } | GpuUnavailable { unavailable }`. Firedancer `.agents/hooks/lanes.ts:106–107` read `device.utilPct` and compared the value with `"unknown"`, causing TS2339/TS2367 and a Bun stop hook displaying `GPU undefined%`. The consumer owner must migrate those references to `device.nowPct` and narrow with `"unavailable" in device` before reading it. No compatibility alias is provided: a rename replaces every reference. Under the public version rule this shape change should have been a major release.
+- **Breaking, previously unannounced:** `gpu()` changed from `{ utilPct } | "unknown"` to `GpuReading { nowPct, avg15Pct, avg60Pct, samples15, memUsedGiB, memTotalGiB } | GpuUnavailable { unavailable }`. Example-learner `.agents/hooks/lanes.ts:106–107` read `device.utilPct` and compared the value with `"unknown"`, causing TS2339/TS2367 and a Bun stop hook displaying `GPU undefined%`. The consumer owner must migrate those references to `device.nowPct` and narrow with `"unavailable" in device` before reading it. No compatibility alias is provided: a rename replaces every reference. Under the public version rule this shape change should have been a major release.
 
 - Keep live-run selection on structured agx active markers, including the expanded agx 2.9.0 ticket shape; the `ps` column change (`id` → `ticket`, `run_id` moved last) cannot shift hook parsing.
 - Return the GPU sampling failure reason instead of collapsing it to an opaque unknown value. WSL discovery checks PATH and `/usr/lib/wsl/lib/nvidia-smi` with the existing bounded query.

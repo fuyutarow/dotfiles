@@ -1,3 +1,5 @@
+<!-- Consumer repository names and historical path components below are anonymized; example-* labels are not live source locators. -->
+
 # AGX suite caller inventory — 2026-10-19
 
 Read-only search of the workspace, registered repositories (`scripts/workspace-repos.ts`), and the rendered global CLAUDE.md. Includes command argv arrays, executable callers, tests, documentation, and historical records; a match is not a claim that a historical instruction is executed. The accepted interfaces are `agx worker|ticket|ws ARGS` and `agx-worker|agx-ticket|agx-ws ARGS`. Old top-level verbs, `agx-next`, `agx-run`, `agx jev`, `agx-worker jev`, and the bare `ws` / `tkt` bins are removed. `jex` owns the Jev client interface.
@@ -504,7 +506,7 @@ The previously inventoried external DX caller declared `["agx", "jev"]`; that ex
 - `agents/claude/hooks/tests/log-agx-snapshot.test.ts:26`
 
 
-## After rename search: /home/fuyu/Workspace/QOED
+## After rename search: /home/fuyu/Workspace/Example-science
 
 No matching callers or mentions (search exit 1).
 
@@ -513,46 +515,46 @@ No matching callers or mentions (search exit 1).
 
 - `records/20261015_scope-reversal-retro.md:27,90,93,94,95,96,98,101,134,135`
 - `records/20261016_coordinator-idle-overnight-retro.md:18,20,79`
-- `records/20261012_firedancer-devx-retro.md:25`
+- `records/20261012_example-learner-devx-retro.md:25`
 - `records/20261014_coordination-blockers-retro-2.md:64,70,85,114,122,125`
 - `records/20261016_frustration-review-6.md:53`
-- `records/20261015_firedancer-issue-structure-morning.md:11,49`
-- `records/20261015_coralbase-issue-structure-postmortem.md:50`
-- `records/20261016_firedancer-branch-repairs-not-on-main-line.md:12`
+- `records/20261015_example-learner-issue-structure-morning.md:11,49`
+- `records/20261015_example-app-issue-structure-postmortem.md:50`
+- `records/20261016_example-learner-branch-repairs-not-on-main-line.md:12`
 - `records/20261013_dotfiles-cli-devx-retro.md:80,82,83`
 - `records/20261018_dotfiles-night-issue-structure.md:55,56,100,118`
 - `records/20261016_dotfiles-land-lane-and-acceptance-noise.md:20,74,77,87,88,110`
-- `records/20261014_firedancer-concept-split-retro.md:71`
-- `records/20261016_firedancer-devx-and-concept-consolidation.md:12,28,108,109,110,111,112`
-- `records/20261016_firedancer-critical-path-blindness.md:91`
+- `records/20261014_example-learner-concept-split-retro.md:71`
+- `records/20261016_example-learner-devx-and-concept-consolidation.md:12,28,108,109,110,111,112`
+- `records/20261016_example-learner-critical-path-blindness.md:91`
 - `records/20261015_integration-pipeline-retro.md:79,128`
-- `records/20261014_firedancer-issue-structure-retro.md:87`
+- `records/20261014_example-learner-issue-structure-retro.md:87`
 - `records/20261016_frustration-review-3.md:24,49`
 - `records/20261015_dusk-shared-state-retro.md:50,77`
 - `records/20261014_agx-cutover-retro.md:34,35,52,58,74,77,109`
-- `records/20261016_firedancer-split-without-interface.md:20`
-- `records/20261015_firedancer-issue-structure-evening.md:81`
-- `records/20261016_firedancer-research-line-starved.md:11`
-- `records/20261016_polysearch-issue-structure-retro.md:61,77,127,145`
-- `records/20261011_firedancer-coord-postmortem2610-1114e1block.md:28`
+- `records/20261016_example-learner-split-without-interface.md:20`
+- `records/20261015_example-learner-issue-structure-evening.md:81`
+- `records/20261016_example-learner-research-line-starved.md:11`
+- `records/20261016_example-search-issue-structure-retro.md:61,77,127,145`
+- `records/20261011_example-learner-coord-postmortem2610-1114e1block.md:28`
 - `records/20261015_dispatch-hearing.md:22,42,72,78,81,119,140,149`
 - `records/20261015_afternoon-coordination-retro.md:28,110`
 - `records/20261017_dotfiles-progress-blockers-frustration.md:10,11,47,56,102`
-- `records/20261014_firedancer-brief-devx-retro.md:57,59`
-- `records/20261014_firedancer-evening-retro.md:45`
+- `records/20261014_example-learner-brief-devx-retro.md:57,59`
+- `records/20261014_example-learner-evening-retro.md:45`
 - `records/20261015_dispatch-architecture.md:24,25,26,27,28,29,40,41,42,43,44,56,57,58,59,78,81,82,85,96,109,167,168,169,170,172,209,283,286,290,293,296`
 - `records/20261016_frustration-review-5-and-devx.md:111,132`
 - `records/20261016_retrospectives-schema-and-review-gate-frustration.md:85`
-- `records/20261016_coralbase-layering-and-usecase-gap-frustration-review.md:45`
+- `records/20261016_example-app-layering-and-usecase-gap-frustration-review.md:45`
 - `records/20261017_dotfiles-statusline-heavy-render-frustration.md:4,28,35,50,52,84,107,110`
 - `records/20261014_coordination-blockers-retro.md:21,29,35,76,80,88`
 - `records/20261017_dx-design-frustration-review.md:74`
 - `records/20261016_housekeeping-blocks-work-retro.md:18,78`
-- `records/20261016_polysearch-v1-frustration-review.md:34,48,72`
-- `records/20261015_polysearch-issue-structure-retro.md:22,28,101,136`
+- `records/20261016_example-search-v1-frustration-review.md:34,48,72`
+- `records/20261015_example-search-issue-structure-retro.md:22,28,101,136`
 - `records/20261015_evening-agx-devx-retro.md:10,60,62,63,71,81,106,108,109,115,132,143`
-- `records/20261014_firedancer-contract-overreach-postmortem.md:42`
-- `records/raw/20261016_coralbase-layering-reports.txt:4,11,16,21`
+- `records/20261014_example-learner-contract-overreach-postmortem.md:42`
+- `records/raw/20261016_example-app-layering-reports.txt:4,11,16,21`
 - `records/20261015_devx-progress-blockers-retro.md:30,31,45,84,92`
 - `records/20261014_issue-structure-retro.md:24,32,95,120`
 - `records/20261015_ticket-home-retro.md:29,57,61,68,69,70,71,73,76`
@@ -581,7 +583,7 @@ No matching callers or mentions (search exit 1).
 - `tests/fixtures/retrospectives-review.json:13,14,15`
 
 
-## After rename search: /home/fuyu/Workspace/coralbase
+## After rename search: /home/fuyu/Workspace/example-app
 
 - `.agents/tickets/int19-fix.md:53`
 - `.agents/tickets/accept-ledger.md:39`
@@ -656,7 +658,7 @@ No matching callers or mentions (search exit 1).
 - `.agents/tickets/sp-rules.md:25`
 
 
-## After rename search: /home/fuyu/Workspace/polysearch-v1
+## After rename search: /home/fuyu/Workspace/example-search-v1
 
 - `.agents/tickets/261016-gatebudget.md:6`
 - `.agents/tickets/261016-doctormem.md:6`
@@ -670,22 +672,22 @@ No matching callers or mentions (search exit 1).
 - `docs/spec-drafts/1.202610.6-delta.md:45`
 
 
-## After rename search: /home/fuyu/Workspace/japox-monorepo
+## After rename search: /home/fuyu/Workspace/example-suite-monorepo
 
 No matching callers or mentions (search exit 1).
 
 
-## After rename search: /home/fuyu/Workspace/research-record-v2
+## After rename search: /home/fuyu/Workspace/example-records-v2
 
 - `.agents/tickets/rr2-review-rubric.md:11,38,68`
 
 
-## After rename search: /home/fuyu/Workspace/polysearch
+## After rename search: /home/fuyu/Workspace/example-search
 
 No matching callers or mentions (search exit 1).
 
 
-## After rename search: /home/fuyu/Workspace/research-record-v1
+## After rename search: /home/fuyu/Workspace/example-records-v1
 
 - `fragments/0d99891aed96603a17a0139ad56fb841ac3aa1b173679087fb3a023546206b55/objects/248177d2778f653c941bbf428d3655906e7af5eed380760c27f425408c75eef7:8`
 - `fragments/0d99891aed96603a17a0139ad56fb841ac3aa1b173679087fb3a023546206b55/objects/e501055ec716bb74478649516d18cccac79d4e8650898db53b5b3b10de303929:8`
@@ -827,12 +829,12 @@ No matching callers or mentions (search exit 1).
 - `fragments/cf37a11570e20a318833f2882b7b7a20ee2adee00ab0e88660b1412f6d17cc25/objects/1e52395f625688335c0207bede9c276e718fb5cfa3e313d08ab46c9e77ccbc33:2`
 
 
-## After rename search: /home/fuyu/Workspace/dpp-mvp
+## After rename search: /home/fuyu/Workspace/example-service
 
 No matching callers or mentions (search exit 1).
 
 
-## After rename search: /home/fuyu/Workspace/QINotebook
+## After rename search: /home/fuyu/Workspace/Example-notebook
 
 No matching callers or mentions (search exit 1).
 
@@ -842,12 +844,12 @@ No matching callers or mentions (search exit 1).
 No matching callers or mentions (search exit 1).
 
 
-## After rename search: /home/fuyu/Workspace/standard-skills
+## After rename search: /home/fuyu/Workspace/example-skills
 
 No matching callers or mentions (search exit 1).
 
 
-## After rename search: /home/fuyu/Workspace/firedancer
+## After rename search: /home/fuyu/Workspace/example-learner
 
 - `.agents/hooks/stop.test.ts:52,89`
 - `.agents/hooks/lanes.ts:102,103`
@@ -959,7 +961,7 @@ Query `["']agx["']` catches arrays split across lines and variable assignments. 
 - `tools/shared/src/test-tmp.ts:187`
 - `tools/shared/src/dispatch-state.ts:6`
 
-### /home/fuyu/Workspace/QOED
+### /home/fuyu/Workspace/Example-science
 
 No matching literal bin names.
 
@@ -980,35 +982,35 @@ No matching literal bin names.
 - `README.md:295`
 - `tests/contracts.test.ts:236`
 
-### /home/fuyu/Workspace/coralbase
+### /home/fuyu/Workspace/example-app
 
 No matching literal bin names.
 
-### /home/fuyu/Workspace/polysearch-v1
+### /home/fuyu/Workspace/example-search-v1
 
 No matching literal bin names.
 
-### /home/fuyu/Workspace/japox-monorepo
+### /home/fuyu/Workspace/example-suite-monorepo
 
 No matching literal bin names.
 
-### /home/fuyu/Workspace/research-record-v2
+### /home/fuyu/Workspace/example-records-v2
 
 No matching literal bin names.
 
-### /home/fuyu/Workspace/polysearch
+### /home/fuyu/Workspace/example-search
 
 No matching literal bin names.
 
-### /home/fuyu/Workspace/research-record-v1
+### /home/fuyu/Workspace/example-records-v1
 
 No matching literal bin names.
 
-### /home/fuyu/Workspace/dpp-mvp
+### /home/fuyu/Workspace/example-service
 
 No matching literal bin names.
 
-### /home/fuyu/Workspace/QINotebook
+### /home/fuyu/Workspace/Example-notebook
 
 No matching literal bin names.
 
@@ -1016,10 +1018,10 @@ No matching literal bin names.
 
 No matching literal bin names.
 
-### /home/fuyu/Workspace/standard-skills
+### /home/fuyu/Workspace/example-skills
 
 No matching literal bin names.
 
-### /home/fuyu/Workspace/firedancer
+### /home/fuyu/Workspace/example-learner
 
 - `.agents/hooks/lanes.ts:98,106,107`

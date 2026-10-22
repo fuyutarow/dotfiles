@@ -5,7 +5,7 @@ Part of the [tools/ architecture](../spec/architecture.md).
 “usehooks” names React-style `useXX` selectors: the IF side of an agent hook.
 Projects own the THEN side and write their actions in TypeScript.
 
-Projects write their actions in TypeScript. The optional second argument accepts `{ namespace, slug }`, or a string slug for existing callers. Explicit values win. The namespace defaults to the project root directory basename converted to kebab case, and the slug defaults to `prompt` or `stop` (for example, `[firedancer:stop]`). The root is discovered from the payload cwd, or the process cwd when unavailable; diagnostics before input is read use the process cwd. Context, Stop reasons, and diagnostics start with `[<namespace>:<slug>]`. `await onPrompt(fn, options)` adds returned strings as one `additionalContext` block; `await onStop(fn, options)` blocks with their joined reason, except when `stop_hook_active` is true. Callbacks receive `{ repoRoot, cwd, payload }` and return
+Projects write their actions in TypeScript. The optional second argument accepts `{ namespace, slug }`, or a string slug for existing callers. Explicit values win. The namespace defaults to the project root directory basename converted to kebab case, and the slug defaults to `prompt` or `stop` (for example, `[example-learner:stop]`). The root is discovered from the payload cwd, or the process cwd when unavailable; diagnostics before input is read use the process cwd. Context, Stop reasons, and diagnostics start with `[<namespace>:<slug>]`. `await onPrompt(fn, options)` adds returned strings as one `additionalContext` block; `await onStop(fn, options)` blocks with their joined reason, except when `stop_hook_active` is true. Callbacks receive `{ repoRoot, cwd, payload }` and return
 `string | false | null | undefined` or an array, synchronously or asynchronously. Empty
 entries disappear. Input errors, callback failures and the total 3 s timeout exit 0,
 emit no stdout, and report one stderr line.
@@ -25,16 +25,16 @@ unavailable or empty value.
 0.x. Adding exports without changing existing shapes is a minor version.
 
 `consumers.toml` declares consumer roots, hook scopes, commands, and their
-`link:agx-usehooks` link paths. `mise run usehooks:consumers` runs firedancer's
-`bunx tsc --noEmit -p <root>` (on r99-u26, `/home/fuyu/Workspace/firedancer`).
+`link:agx-usehooks` link paths. `mise run usehooks:consumers` runs the declared consumer's
+`bunx tsc --noEmit -p <root>`.
 The exact project command runs first, followed by a read-only hook check using a
 temporary config extending the project's config with `agx-usehooks` mapped to this
 workspace. It changes no consumer files or symlinks. Hook diagnostics fail either check; diagnostics
 elsewhere are reported, and compiler/config failures also fail. An absent checkout
 prints `SKIP: consumer not present on this host`, never PASS; run the check on
-r99-u26 where firedancer exists. Land invokes it before commit when this library
+a host where the declared consumer exists. Land invokes it before commit when this library
 changes. The 0.8.0 migration and consumer impact are recorded in CHANGELOG.md;
-the consumer owner migrates firedancer, with no `utilPct` compatibility alias.
+the consumer owner migrates their hooks, with no `utilPct` compatibility alias.
 
 - `await runningRuns(ctx)`: live `{ id, lane, row }[]`; missing ticket lanes are `"other"`.
 - `await scanRuns(ctx)`: the same live runs plus a count of unreadable markers; markers missing `run_id` or `pid` are skipped silently.

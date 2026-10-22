@@ -51,12 +51,12 @@
         "source": "herdr:codex",
         "value": "01a15754-405f-7222-9cb9-a4689bfda188"
       },
-      "supplied_cwd": "/home/fuyu/Workspace/coralbase",
+      "supplied_cwd": "/home/fuyu/Workspace/example-app",
       "result": {
         "schema": 1,
         "session_id": "01a15754-405f-7222-9cb9-a4689bfda188",
         "vendor": "codex",
-        "cwd": "/home/fuyu/Workspace/coralbase",
+        "cwd": "/home/fuyu/Workspace/example-app",
         "pane_id": "wS:pB",
         "name": {
           "na": true,

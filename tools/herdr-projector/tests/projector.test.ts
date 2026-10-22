@@ -230,7 +230,7 @@ test("missing session clears stale identity tokens and explains the missing file
         agent_session: { value: "stale-id" },
         tokens: {
           fleet_session_id: "stale-id",
-          fullname: "standard-skills-agt_0mr6",
+          fullname: "example-skills-agt_0mr6",
           model: "Opus 5.5",
           effort: "medium",
           rc: "🔗",
@@ -928,7 +928,7 @@ const liveFooterWitnesses = [
   {
     pane: "w9:p1B",
     id: "01a15704-c5a0-71d0-89c6-c9cebede0a1a",
-    cwd: "~/Workspace/firedancer",
+    cwd: "~/Workspace/example-learner",
     model: "GPT-6.1-Sol",
     state: "Ready",
     controls: nativeShortcuts,
@@ -944,7 +944,7 @@ const liveFooterWitnesses = [
   {
     pane: "wS:pB",
     id: "01a14c81-208c-7910-8f3a-5ba99d58cd0b",
-    cwd: "~/Workspace/coralbase",
+    cwd: "~/Workspace/example-app",
     model: "GPT-6.1-Sol",
     state: "Ready",
     controls: nativeSelection,
@@ -952,7 +952,7 @@ const liveFooterWitnesses = [
   {
     pane: "wW:p4",
     id: "01a15a6e-48ec-78a0-a662-17e7e984e19f",
-    cwd: "~/Workspace/coralbase",
+    cwd: "~/Workspace/example-app",
     model: "GPT-6.1-Sol",
     state: "Ready",
     controls: nativeSelectionWithoutEarlier,
@@ -960,7 +960,7 @@ const liveFooterWitnesses = [
   {
     pane: "wX:p2",
     id: "01a149f4-46fc-7e70-90eb-1031f5666b61",
-    cwd: "~/Workspace/standard-skills",
+    cwd: "~/Workspace/example-skills",
     model: "GPT-6.1-Sol",
     state: "Ready",
     controls: nativeWarning,
@@ -968,7 +968,7 @@ const liveFooterWitnesses = [
   {
     pane: "wY:p3",
     id: "01a15444-ce40-7052-b5e9-d5ec23ce5a4a",
-    cwd: "~/Workspace/research-record-v2",
+    cwd: "~/Workspace/example-records-v2",
     model: "GPT-6.1-Sol",
     state: "Ready",
     controls: nativeShortcuts,
@@ -984,7 +984,7 @@ const liveFooterWitnesses = [
   {
     pane: "w0:p1",
     id: "01a14c5e-e08b-7963-8741-4a1beedcf84a",
-    cwd: "~/Workspace/coralbase",
+    cwd: "~/Workspace/example-app",
     model: "GPT-6-Luna",
     state: "Ready",
     controls: nativeShortcuts,

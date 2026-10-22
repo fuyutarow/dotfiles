@@ -1,3 +1,5 @@
+<!-- Consumer repository names and historical path components below are anonymized; example-* labels are not live source locators. -->
+
 # tools/ architecture
 
 This is the single in-repo home of the architecture of the `tools/` programme: the dispatch
@@ -108,7 +110,7 @@ today by `tools/agx-worker/src/next/ticket-home.ts` and `tools/agx-ticket/src/ti
 see [agx-config.md](agx-config.md) for the planned single reader). Five sites run five different policies
 (trunk, integration shape, gate, after-integrate steps, worker commits), so none of them may be
 compiled into the mechanism. Acceptance of the design is that the same mechanism runs two real,
-different `.agx.toml` files (dotfiles and coralbase) with no change to its computation. Status: not
+different `.agx.toml` files (dotfiles and example-app) with no change to its computation. Status: not
 started (release R5).
 
 Keys the declaration is to carry: `trunk`, `integrate` (`rebase`, `jj-merge`, `command`),
@@ -231,8 +233,8 @@ Order is by demonstrated harm (a run id exists), not by request. Status is as of
 | R2 | Continuation (I13) and interim return (I16); session recorded for every route | 3e66a238, 01654343, sdk-layer, walrus 21eb1a84, mod_merge_v2, readlock | continue-pin landed (367abb54); the interim record distinction waits for run-outcome2 |
 | R3 | Explicit environment (I14) and check before launch (I3) | hotfix leak, exit 127, statusline, a broken TOML launch | partly landed (worker environment); unit environment and colocated-jj check not started |
 | R4 | Result and report shape from facts (I6) | a2319ea5, four stringified reports | run-outcome2 queued |
-| R5 | `.agx.toml` as the one home of repository policy (first: trunk, worker_bookmarks, union_merge, readiness) | firedancer's commits; coralbase and polysearch collisions | not started |
-| R6 | Integrator slot; dotfiles `land` becomes one implementation; coralbase `jj-merge`; soks `command` | coralbase MERGE18 to 22; hand-run `jj new` incidents | not started |
+| R5 | `.agx.toml` as the one home of repository policy (first: trunk, worker_bookmarks, union_merge, readiness) | example-learner's commits; example-app and example-search collisions | not started |
+| R6 | Integrator slot; dotfiles `land` becomes one implementation; example-app `jj-merge`; soks `command` | example-app MERGE18 to 22; hand-run `jj new` incidents | not started |
 | R7 | Resource admission (I15) | integ5 out of budget, eleven localnets, GPU exit 69 | not started |
 
 Queued with no release number: workspace-tool (`agx ws`, G1; carries the tree-lifecycle part of jjsafe4),

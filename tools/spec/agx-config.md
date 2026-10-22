@@ -1,3 +1,5 @@
+<!-- Consumer repository names and historical path components below are anonymized; example-* labels are not live source locators. -->
+
 # agx の設定 — 層と契約
 
 この文書は、agx が読む設定の置き場所、書き手、解決の規則を定める。親文書は

@@ -17,12 +17,15 @@ const entry = resolve(import.meta.dir, "../src/index.ts");
 setDefaultTimeout(20_000);
 
 test.each([
-  ['{ namespace: "qoed", slug: "review" }', "[qoed:review] notice"],
-  ['{ namespace: "qoed" }', "[qoed:stop] notice"],
+  [
+    '{ namespace: "example-science", slug: "review" }',
+    "[example-science:review] notice",
+  ],
+  ['{ namespace: "example-science" }', "[example-science:stop] notice"],
   ['{ slug: "review" }', "[repo:review] notice"],
 ])("namespace options %s preserve Stop JSON", (options, expected) => {
   const fixture = hook(
-    `return ${JSON.stringify(expected === "[qoed:review] notice" ? expected : "notice")};`,
+    `return ${JSON.stringify(expected === "[example-science:review] notice" ? expected : "notice")};`,
     "{}",
     "onStop",
     false,
@@ -272,7 +275,7 @@ test.each(["onPrompt", "onStop"])(
   "%s derives a project/event slug for existing one-argument calls",
   (event) => {
     const fixture = hook('return "notice";', "{}", event, false, true);
-    const project = join(fixture.dir, "Firedancer Project");
+    const project = join(fixture.dir, "Example-learner Project");
     const nested = join(project, "nested");
     mkdirSync(join(project, ".git"), { recursive: true });
     mkdirSync(nested);
@@ -285,15 +288,15 @@ test.each(["onPrompt", "onStop"])(
     expect(result.exitCode).toBe(0);
     expect(result.stderr.toString()).toBe("");
     expect(result.stdout.toString()).toContain(
-      `[firedancer-project:${suffix}] notice`,
+      `[example-learner-project:${suffix}] notice`,
     );
     expect(decodedJson(z.unknown(), result.stdout.toString())).toEqual(
       event === "onStop"
-        ? { decision: "block", reason: "[firedancer-project:stop] notice" }
+        ? { decision: "block", reason: "[example-learner-project:stop] notice" }
         : {
             hookSpecificOutput: {
               hookEventName: "UserPromptSubmit",
-              additionalContext: "[firedancer-project:prompt] notice",
+              additionalContext: "[example-learner-project:prompt] notice",
             },
           },
     );
@@ -305,7 +308,7 @@ test.each(["onPrompt", "onStop"])(
     expect(malformed.exitCode).toBe(0);
     expect(malformed.stdout.toString()).toBe("");
     expect(malformed.stderr.toString()).toStartWith(
-      `[firedancer-project:${suffix}] `,
+      `[example-learner-project:${suffix}] `,
     );
     const noCwd = Bun.spawnSync([process.execPath, fixture.path], {
       cwd: nested,
@@ -314,7 +317,7 @@ test.each(["onPrompt", "onStop"])(
     });
     expect(noCwd.exitCode).toBe(0);
     expect(noCwd.stdout.toString()).toContain(
-      `[firedancer-project:${suffix}] notice`,
+      `[example-learner-project:${suffix}] notice`,
     );
     rmSync(fixture.dir, { recursive: true, force: true });
   },

@@ -6,7 +6,7 @@ import { attempt } from "../../shared/src/attempt.ts";
 
 const ws = join(import.meta.dir, "../src/ws.ts");
 
-// One long-lived parent drains both pipes, as the firedancer launcher does.
+// One long-lived parent drains both pipes, as the example-learner launcher does.
 // Count external jj process starts, excluding repository setup and readiness commands.
 test("WS-ADD-HANG-2: three piped adds have a fixed jj budget as history and workspace counts grow", async () => {
   const root = await mkdtemp(join(tmpdir(), "ws-add-sequence-"));

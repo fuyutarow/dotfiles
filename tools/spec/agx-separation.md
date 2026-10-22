@@ -1,3 +1,5 @@
+<!-- Consumer repository names and historical path components below are anonymized; example-* labels are not live source locators. -->
+
 # agx を dotfiles から分離するか — 設計判断 (2026-10-23)
 
 この文書は、agx を dotfiles から分離するかどうかの判断材料と、移行の計画である。実装は含まない。

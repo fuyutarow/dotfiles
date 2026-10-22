@@ -7,6 +7,22 @@ import { attempt } from "./attempt.ts";
 import { typesafeKey } from "./typesafe-key.ts";
 import { jsonOf, z } from "./zod.ts";
 
+/** Resolve the shared endpoint override, refusing retired variable names. */
+export function jevEndpoint(
+  defaultUrl: string,
+  env: NodeJS.ProcessEnv = process.env,
+): { ok: true; value: string } | { ok: false; error: string } {
+  const retired = ["AGX_NEXT_JEV_URL", "JEX_JEV_URL"].filter(
+    (name) => env[name] !== undefined,
+  );
+  if (retired.length > 0)
+    return {
+      ok: false,
+      error: `${retired.join(", ")} is no longer supported; unset it and use JEV_URL instead`,
+    };
+  return { ok: true, value: env.JEV_URL ?? defaultUrl };
+}
+
 /** What runs.jsonl keeps about one Jev call (never the key). */
 export interface JevTrace {
   endpoint: string;

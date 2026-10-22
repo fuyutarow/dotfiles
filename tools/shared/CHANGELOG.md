@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.0 — 2026-10-23
+
+- Add shared Jev endpoint resolver with legacy variable rejection
+
 ## 0.15.7 — 2026-10-22
 
 - Record bounded local process identity with ordinary GPU samples

@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.4.0 — 2026-10-23
+
+- Use shared JEV_URL endpoint selection and reject retired overrides
+
 ## 8.3.0 — 2026-10-23
 
 - Expose the routing objective in the full roster JSON view

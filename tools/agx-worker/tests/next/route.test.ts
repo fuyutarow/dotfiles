@@ -57,7 +57,7 @@ const RoutingRequest = z.looseObject({
 });
 
 const priorRoster = process.env.DISPATCH_ROSTER_PATH;
-const priorUrl = process.env.AGX_NEXT_JEV_URL;
+const priorUrl = process.env.JEV_URL;
 const priorHome = process.env.HOME;
 const priorStateDir = process.env.AGX_NEXT_STATE_DIR;
 const servers: ReturnType<typeof Bun.serve>[] = [];
@@ -137,7 +137,7 @@ function startServer(choice: string, probabilities?: Record<string, number>) {
     },
   });
   servers.push(server);
-  process.env.AGX_NEXT_JEV_URL = `http://127.0.0.1:${server.port}/choice`;
+  process.env.JEV_URL = `http://127.0.0.1:${server.port}/choice`;
   return { server, request: () => requestBody };
 }
 
@@ -165,12 +165,46 @@ afterEach(async () => {
   for (const server of servers.splice(0)) await server.stop(true);
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
-  if (priorUrl === undefined) delete process.env.AGX_NEXT_JEV_URL;
-  else process.env.AGX_NEXT_JEV_URL = priorUrl;
+  if (priorUrl === undefined) delete process.env.JEV_URL;
+  else process.env.JEV_URL = priorUrl;
   if (priorHome === undefined) delete process.env.HOME;
   else process.env.HOME = priorHome;
   if (priorStateDir === undefined) delete process.env.AGX_NEXT_STATE_DIR;
   else process.env.AGX_NEXT_STATE_DIR = priorStateDir;
+});
+
+describe("retired Jev endpoint overrides", () => {
+  for (const name of ["AGX_NEXT_JEV_URL", "JEX_JEV_URL"]) {
+    for (const value of ["", "https://retired.invalid"]) {
+      test(`rejects ${name}=${JSON.stringify(value)} before sending`, async () => {
+        await isolateState();
+        const server = startServer("sol-high");
+        const child = Bun.spawn(
+          [
+            process.execPath,
+            "--eval",
+            `import { route } from ${JSON.stringify(new URL("../../src/next/route.ts", import.meta.url).pathname)}; await route("retired override");`,
+          ],
+          {
+            env: { ...process.env, [name]: value },
+            stdout: "pipe",
+            stderr: "pipe",
+            timeout: 5000,
+          },
+        );
+        const [exit, stdout, stderr] = await Promise.all([
+          child.exited,
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+        ]);
+        expect(exit).toBe(2);
+        expect(stdout).toBe("");
+        expect(stderr).toContain(name);
+        expect(stderr).toContain("use JEV_URL instead");
+        expect(server.request()).toBeUndefined();
+      });
+    }
+  }
 });
 
 describe("capability constrained routing", () => {

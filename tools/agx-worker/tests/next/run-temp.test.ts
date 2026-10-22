@@ -82,7 +82,7 @@ async function fixture(workerBody: string, verify: string | string[]) {
   const env = {
     ...process.env,
     AGX_NEXT_STATE_DIR: join(root, "state"),
-    AGX_NEXT_JEV_URL: `http://127.0.0.1:${jevPort}/choice`,
+    JEV_URL: `http://127.0.0.1:${jevPort}/choice`,
     AGX_WORKER_BIN: worker,
     AGX_TMP_ROOT: tempRoot,
     TYPESAFE_API_KEY: "test-key",
@@ -136,7 +136,7 @@ describe("agx worker run owns its temp space", () => {
       HOME: home,
       PATH: "/usr/bin:/bin",
       AGX_NEXT_STATE_DIR: f.env.AGX_NEXT_STATE_DIR,
-      AGX_NEXT_JEV_URL: f.env.AGX_NEXT_JEV_URL,
+      JEV_URL: f.env.JEV_URL,
       AGX_WORKER_BIN: f.env.AGX_WORKER_BIN,
       AGX_TMP_ROOT: f.env.AGX_TMP_ROOT,
       TYPESAFE_API_KEY: f.env.TYPESAFE_API_KEY,

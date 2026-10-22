@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { INPUT_CAP } from "../src/classify.ts";
+import packageJson from "../package.json" with { type: "json" };
 
 const Verdict = z.object({
   model: z.union([
@@ -63,12 +64,17 @@ afterAll(async () => {
   await server.stop(true);
   await rm(root, { recursive: true, force: true });
 });
-async function run(args = [q, file], endpoint = server.url.href) {
+async function run(
+  args = [q, file],
+  endpoint = server.url.href,
+  env: NodeJS.ProcessEnv = {},
+) {
   const child = Bun.spawn([process.execPath, cli, ...args], {
     env: {
       ...process.env,
       TYPESAFE_API_KEY: "fake-jex-key",
-      JEX_JEV_URL: endpoint,
+      JEV_URL: endpoint,
+      ...env,
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -86,6 +92,26 @@ const replies = (a: number, b: number) => ({
     a: { type: "noul", noul: a },
     b: { type: "noul", noul: b, reason: "fixture" },
   },
+});
+
+test.each(
+  ["AGX_NEXT_JEV_URL", "JEX_JEV_URL"].flatMap((name) =>
+    ["", "https://retired.invalid"].flatMap((value) =>
+      [false, true].map((preview) => ({ name, value, preview })),
+    ),
+  ),
+)("rejects retired endpoint override %j", async ({ name, value, preview }) => {
+  const before = calls;
+  const result = await run(
+    preview ? ["--request", q, file] : [q, file],
+    server.url.href,
+    { [name]: value },
+  );
+  expect(result.exit).toBe(2);
+  expect(result.stdout).toBe("");
+  expect(result.stderr).toContain(name);
+  expect(result.stderr).toContain("use JEV_URL instead");
+  expect(calls).toBe(before);
 });
 
 test("all bits >= .5 succeeds and prints normalized bits", async () => {
@@ -295,7 +321,7 @@ test("usage and unknown flags fail with exit 2; version aliases print the packag
   for (const flag of ["-V", "--version"]) {
     const version = await run([flag]);
     expect(version.exit).toBe(0);
-    expect(version.stdout).toBe("jex 0.2.3\n");
+    expect(version.stdout).toBe(`jex ${packageJson.version}\n`);
     expect(version.stderr).toBe("");
   }
   const help = await run(["--help"]);

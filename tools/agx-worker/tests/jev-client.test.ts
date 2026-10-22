@@ -1,5 +1,57 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { postJev } from "../../shared/src/jev-client.ts";
+import { jevEndpoint, postJev } from "../../shared/src/jev-client.ts";
+
+describe("jevEndpoint", () => {
+  test("uses JEV_URL or the caller's default", () => {
+    expect(jevEndpoint("https://default.invalid", {})).toEqual({
+      ok: true,
+      value: "https://default.invalid",
+    });
+    expect(
+      jevEndpoint("https://default.invalid", {
+        JEV_URL: "https://override.invalid",
+      }),
+    ).toEqual({ ok: true, value: "https://override.invalid" });
+    expect(jevEndpoint("https://default.invalid", { JEV_URL: "" })).toEqual({
+      ok: true,
+      value: "",
+    });
+  });
+
+  test.each(
+    ["AGX_NEXT_JEV_URL", "JEX_JEV_URL"].flatMap((name) =>
+      ["", "https://retired.invalid"].flatMap((value) =>
+        [undefined, "https://override.invalid"].map((override) => ({
+          name,
+          value,
+          override,
+        })),
+      ),
+    ),
+  )("refuses retired override %j", ({ name, value, override }) => {
+    expect(
+      jevEndpoint("https://default.invalid", {
+        [name]: value,
+        JEV_URL: override,
+      }),
+    ).toEqual({
+      ok: false,
+      error: `${name} is no longer supported; unset it and use JEV_URL instead`,
+    });
+  });
+  test("names both retired variables when both are set", () => {
+    expect(
+      jevEndpoint("https://default.invalid", {
+        AGX_NEXT_JEV_URL: "",
+        JEX_JEV_URL: "",
+      }),
+    ).toEqual({
+      ok: false,
+      error:
+        "AGX_NEXT_JEV_URL, JEX_JEV_URL is no longer supported; unset it and use JEV_URL instead",
+    });
+  });
+});
 
 const testKey = "jev-client-fixture-secret";
 const previousKey = process.env.TYPESAFE_API_KEY;

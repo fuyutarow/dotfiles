@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
-import { postJev } from "../../shared/src/jev-client.ts";
+import { jevEndpoint, postJev } from "../../shared/src/jev-client.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const Question = z.strictObject({
@@ -130,6 +130,11 @@ export async function classify(
   paths: string[],
   preview: boolean,
 ): Promise<number> {
+  const endpoint = jevEndpoint("https://api.typesafe.ai/v1/systemone");
+  if (!endpoint.ok) {
+    diagnostic(endpoint.error);
+    return 2;
+  }
   const loaded = await attempt(async () =>
     Bun.TOML.parse(await Bun.file(qPath).text()),
   );
@@ -151,13 +156,7 @@ export async function classify(
     process.stdout.write(`${JSON.stringify(built.value)}\n`);
     return 0;
   }
-  const post = await postJev(
-    process.env.JEX_JEV_URL ??
-      process.env.AGX_NEXT_JEV_URL ??
-      "https://api.typesafe.ai/v1/systemone",
-    built.value,
-    30_000,
-  );
+  const post = await postJev(endpoint.value, built.value, 30_000);
   if (!post.ok) {
     diagnostic(post.reason);
     return 3;

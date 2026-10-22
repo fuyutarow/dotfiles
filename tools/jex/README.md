@@ -54,8 +54,10 @@ original byte size, and complete UTF-8 content. Files are streamed to compute th
 full hashes. The serialized request must fit 1 MiB; invalid UTF-8 in input content is
 rejected.
 
-`JEX_JEV_URL` overrides the endpoint (then `AGX_NEXT_JEV_URL`, then
-`https://api.typesafe.ai/v1/systemone`). `JEX_JEV_MODEL` defaults to `jev-latest`.
+`JEV_URL` overrides the endpoint (default `https://api.typesafe.ai/v1/systemone`)
+through the shared Jev client. Setting `JEX_JEV_URL` or `AGX_NEXT_JEV_URL`, even to an
+empty value or alongside `JEV_URL`, exits 2 with a migration diagnostic, including
+in `--request` mode. `JEX_JEV_MODEL` defaults to `jev-latest`.
 The shared Jev client uses `TYPESAFE_API_KEY`, then fnox, then the legacy TypeSafe
 key file, exactly as agx-worker does; calls have a 30-second timeout and no retries.
 The request uses [TypeSafe Noul questions](https://docs.typesafe.ai/primitives/noul)

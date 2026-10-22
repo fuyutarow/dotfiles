@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { postJev } from "../../../shared/src/jev-client.ts";
+import { jevEndpoint, postJev } from "../../../shared/src/jev-client.ts";
 import { sampleRow } from "../selection.ts";
 import {
   criterionFor,
@@ -45,7 +45,8 @@ export async function route(
     cooling.size === 0
       ? ""
       : `; capacity rows cooling down for up to ${CAPACITY_COOLDOWN_MS / 1000} s`;
-  const endpoint = process.env.AGX_NEXT_JEV_URL ?? roster.auto.jev.url;
+  const endpoint = jevEndpoint(roster.auto.jev.url);
+  if (!endpoint.ok) return exitWithError(`agx: ${endpoint.error}\n`, 2);
   let timeoutClass = "standard";
   if (timeoutS > 600) timeoutClass = "extended";
   if (timeoutS >= 3600) timeoutClass = "multi-hour";
@@ -119,7 +120,7 @@ export async function route(
     },
   };
   if (roster.auto.jev.api === "typesafe") request.model = roster.auto.jev.model;
-  const post = await postJev(endpoint, request, roster.auto.timeout_ms);
+  const post = await postJev(endpoint.value, request, roster.auto.timeout_ms);
   const fallback =
     candidates.find((row) => row.id === roster.default) ?? candidates[0]!;
   const recordPick = (

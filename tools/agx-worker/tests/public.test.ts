@@ -87,7 +87,7 @@ test("roster TICKET emits one selected row without starting a worker or changing
         import.meta.dir,
         "../../../agents/models/dispatch-roster.toml",
       ),
-      AGX_NEXT_JEV_URL: server.url.href,
+      JEV_URL: server.url.href,
       TYPESAFE_API_KEY: "fixture",
     },
     stdin: "ignore",

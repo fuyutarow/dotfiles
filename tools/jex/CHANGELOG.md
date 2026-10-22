@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 — 2026-10-23
+
+- Use shared JEV_URL endpoint selection and reject retired overrides
+
 ## 0.2.4 — 2026-10-19
 
 - Preserve Jev reasons and mark absent reasons as not available

@@ -9,7 +9,13 @@ import {
   statfsSync,
   writeFileSync,
 } from "node:fs";
-import { readdir, stat as fileStat } from "node:fs/promises";
+import {
+  mkdir,
+  open,
+  unlink,
+  readdir,
+  stat as fileStat,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -62,6 +68,12 @@ const POWERSHELL =
 const WSL_DISTRO = "Ubuntu-24.04";
 const MEMORY_AVAILABLE_EMERGENCY_MB = 2048;
 const CACHE_DROP_COOLDOWN_MS = 10 * 60 * 1000;
+// Persisted across timer invocations; one extra cache drop per continuous emergency.
+export const EMERGENCY_CACHE_DROP_OVERRIDE_LIMIT = 1;
+const EMERGENCY_EPISODE_PATH = join(
+  homedir(),
+  ".local/state/wsl-capacity-recover/emergency-cache-drop",
+);
 const DROP_CACHE_UNIT = "dotfiles-dropcache.service";
 const HARD_PAGE_READS_EMERGENCY_PER_SECOND = 500;
 export const TMPFS_RECLAIM_PERCENT = 80;
@@ -539,12 +551,51 @@ type MemoryEmergencyOptions = {
   measure: () => HostMemory | null | Promise<HostMemory | null>;
   measureBuffCache?: () => number | null;
   canAttemptDrop?: () => boolean;
+  claimEmergencyOverride?: () => boolean | Promise<boolean>;
   markDropAttempt?: () => boolean | void;
   fallbackWhenUnavailable?: boolean;
   isRestored?: (memory: HostMemory | null) => boolean;
   stopOnFailure?: boolean;
-  stopCompute: () => void | Promise<void>;
+  stopCompute: (recovery: MemoryRecovery) => void | Promise<void>;
 };
+
+export type MemoryRecovery = {
+  leverAttempted: boolean;
+  dropAttempted: boolean;
+  beforeMb: number;
+  afterMb: number | null;
+  memoryAfter: HostMemory | null;
+  beforeBuffCacheMb: number | null;
+  afterBuffCacheMb: number | null;
+  outcome: string;
+  emergencyOverride: boolean;
+  stopped: boolean;
+};
+
+/** Atomic claim survives timer restarts; a clear measurement ends the episode. */
+export async function claimEmergencyCacheDrop(
+  path = EMERGENCY_EPISODE_PATH,
+): Promise<boolean> {
+  await mkdir(dirname(path), { recursive: true });
+  const claimed = await fromAsyncThrowable(() => open(path, "wx"))();
+  if (claimed.isErr()) return false;
+  await using file = claimed.value;
+  await file.sync();
+  await using directory = await open(dirname(path), "r");
+  await directory.sync();
+  return true;
+}
+
+export async function resetEmergencyCacheDrop(
+  path = EMERGENCY_EPISODE_PATH,
+): Promise<void> {
+  const removed = await fromAsyncThrowable(() => unlink(path))();
+  if (removed.isErr() && !String(removed.error).includes("ENOENT")) {
+    process.stderr.write(
+      `WARN emergency episode reset failed: ${String(removed.error)}\n`,
+    );
+  }
+}
 
 async function performCacheDrop(
   options: MemoryEmergencyOptions,
@@ -598,23 +649,18 @@ async function performCacheDrop(
 
 export async function recoverMemoryEmergency(
   options: MemoryEmergencyOptions,
-): Promise<{
-  leverAttempted: boolean;
-  dropAttempted: boolean;
-  beforeMb: number;
-  afterMb: number | null;
-  memoryAfter: HostMemory | null;
-  beforeBuffCacheMb: number | null;
-  afterBuffCacheMb: number | null;
-  outcome: string;
-  stopped: boolean;
-}> {
+): Promise<MemoryRecovery> {
   const available = await options.isLeverAvailable();
   let leverAttempted = false;
   let dropAttempted = false;
   let outcome: string = "rate-limited";
   const canAttempt = options.canAttemptDrop?.() ?? true;
-  if (canAttempt) {
+  const emergencyOverride =
+    !canAttempt &&
+    options.stopOnFailure !== false &&
+    memoryEmergency(options.before) &&
+    (await (options.claimEmergencyOverride ?? claimEmergencyCacheDrop)());
+  if (canAttempt || emergencyOverride) {
     const result = await performCacheDrop(options, available);
     leverAttempted = result.leverAttempted;
     dropAttempted = result.dropAttempted;
@@ -636,6 +682,7 @@ export async function recoverMemoryEmergency(
   process.stdout.write(
     `MEM_RECLAIM lever=${leverAttempted ? DROP_CACHE_UNIT : "unavailable"} ` +
       `attempted=${dropAttempted} ` +
+      `emergency_override=${emergencyOverride} override_limit=${EMERGENCY_CACHE_DROP_OVERRIDE_LIMIT} ` +
       `before_mb=${options.before.availableMb} after_mb=${after?.availableMb ?? "unknown"} ` +
       `delta_mb=${after === null ? "unknown" : after.availableMb - options.before.availableMb} ` +
       `before_buff_cache_mb=${options.beforeBuffCacheMb ?? "unknown"} ` +
@@ -643,9 +690,21 @@ export async function recoverMemoryEmergency(
       `buff_cache_delta_mb=${afterBuffCacheMb === null || options.beforeBuffCacheMb === null || options.beforeBuffCacheMb === undefined ? "unknown" : afterBuffCacheMb - options.beforeBuffCacheMb} ` +
       `outcome=${outcome}\n`,
   );
-  const stopped = !restored && options.stopOnFailure !== false;
-  if (stopped) await options.stopCompute();
-  return {
+  // Tool faults, unknown measurements, and exhausted override budgets never authorize STOP.
+  const dropSucceeded =
+    dropAttempted &&
+    [
+      "restored",
+      "no-effect",
+      "unavailable-fallback",
+      "start-failed-fallback",
+    ].includes(outcome);
+  const stopped =
+    !restored &&
+    after !== null &&
+    dropSucceeded &&
+    options.stopOnFailure !== false;
+  const recovery = {
     leverAttempted,
     dropAttempted,
     beforeMb: options.before.availableMb,
@@ -654,8 +713,11 @@ export async function recoverMemoryEmergency(
     beforeBuffCacheMb: options.beforeBuffCacheMb ?? null,
     afterBuffCacheMb,
     outcome,
+    emergencyOverride,
     stopped,
   };
+  if (stopped) await options.stopCompute(recovery);
+  return recovery;
 }
 
 function guestBuffCacheMb(): number | null {
@@ -940,11 +1002,113 @@ function sameProcess(target: Extract<StopTarget, { kind: "pid" }>): boolean {
   );
 }
 
+export type CapacityDecisionContext = {
+  reason: "memory-emergency" | "disk-emergency" | "capacity-hold";
+  disk_free_bytes: number | null;
+  disk_deny_bytes: number | null;
+  disk_stop_bytes: number | null;
+  memory: HostMemory | null;
+  recovery: MemoryRecovery | null;
+  recordPath?: string;
+};
+
+export function capacityDecisionPath(): string {
+  return join(
+    process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"),
+    "dotfiles/capacity-decisions.jsonl",
+  );
+}
+
+/** Flush the intent before acting: inability to record must never kill research. */
+export async function recordCapacityDecision(
+  decision: "STOP" | "HOLD",
+  context: CapacityDecisionContext,
+  target: StopTarget | null = null,
+  signal: "TERM" | "KILL" | "unit-stop" | null = null,
+): Promise<string> {
+  const path = context.recordPath ?? capacityDecisionPath();
+  let members: ComputeProcess[] = [];
+  if (target?.kind === "unit") {
+    members = (await readdir("/proc"))
+      .filter((name) => /^\d+$/u.test(name))
+      .map((name) => readProcess(Number(name)))
+      .flatMap((member) =>
+        member !== null &&
+        member.cgroup.split("/").some((part) => part.trim() === target.name)
+          ? [member]
+          : [],
+      );
+  }
+  const current =
+    target?.kind === "pid" ? readProcess(target.pid) : (members[0] ?? null);
+  const record = {
+    schema: 1,
+    time: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
+    decision,
+    reason: context.reason,
+    measurements: {
+      disk_free_bytes: context.disk_free_bytes,
+      windows_available_mb: context.memory?.availableMb ?? null,
+      page_reads_s: context.memory?.pageReadsPerSecond ?? null,
+    },
+    thresholds: {
+      disk_deny_bytes: context.disk_deny_bytes,
+      disk_stop_bytes: context.disk_stop_bytes,
+      memory_available_mb: MEMORY_AVAILABLE_EMERGENCY_MB,
+      page_reads_s: HARD_PAGE_READS_EMERGENCY_PER_SECOND,
+    },
+    lever: context.recovery ?? {
+      outcome: "not-tried",
+      dropAttempted: false,
+      emergencyOverride: false,
+    },
+    emergency_override_limit: EMERGENCY_CACHE_DROP_OVERRIDE_LIMIT,
+    target: {
+      pid: target?.kind === "pid" ? target.pid : (current?.pid ?? null),
+      comm: target?.kind === "pid" ? target.comm : (current?.comm ?? null),
+      cgroup: current?.cgroup.trim() ?? null,
+      scope: target?.kind === "unit" ? target.name : null,
+      start_ticks: target?.kind === "pid" ? target.startTicks : null,
+      members: members.map(({ pid, comm, cgroup, startTicks: ticks }) => ({
+        pid,
+        comm,
+        cgroup: cgroup.trim(),
+        start_ticks: ticks,
+      })),
+    },
+    signal,
+    phase: "decision-before-action",
+  };
+  await mkdir(dirname(path), { recursive: true });
+  await using file = await open(path, "a", 0o600);
+  await file.appendFile(`${JSON.stringify(record)}\n`);
+  await file.sync();
+  await using directory = await open(dirname(path), "r");
+  await directory.sync();
+  return path;
+}
+
+const UNKNOWN_DECISION_CONTEXT: CapacityDecisionContext = {
+  reason: "disk-emergency",
+  disk_free_bytes: null,
+  disk_deny_bytes: null,
+  disk_stop_bytes: null,
+  memory: null,
+  recovery: null,
+};
+
 async function stopTarget(
   target: StopTarget,
   raw: Extract<StopTarget, { kind: "pid" }>[],
+  context: CapacityDecisionContext,
 ): Promise<void> {
   if (target.kind === "unit") {
+    const recordPath = await recordCapacityDecision(
+      "STOP",
+      context,
+      target,
+      "unit-stop",
+    );
     const stopped = await fromAsyncThrowable(() =>
       runBounded(["systemctl", "--user", "stop", target.name], 25_000),
     )();
@@ -952,17 +1116,24 @@ async function stopTarget(
       runBounded(["systemctl", "--user", "is-active", target.name], 5_000),
     )();
     process.stdout.write(
-      `STOP unit=${target.name} exit=${stopped.isOk() ? stopped.value.code : "error"} ` +
+      `STOP unit=${target.name} record=${recordPath} exit=${stopped.isOk() ? stopped.value.code : "error"} ` +
         `inactive=${active.isOk() && active.value.code !== 0 && !active.value.timedOut}\n`,
     );
     return;
   }
   if (!sameProcess(target)) return;
+  const recordPath = await recordCapacityDecision(
+    "STOP",
+    context,
+    target,
+    "TERM",
+  );
+  if (!sameProcess(target)) return;
   const result = fromThrowable(() => process.kill(target.pid, "SIGTERM"))();
   if (result.isOk()) {
     raw.push(target);
     process.stdout.write(
-      `STOP pid=${target.pid} comm=${target.comm} signal=TERM\n`,
+      `STOP pid=${target.pid} comm=${target.comm} signal=TERM record=${recordPath}\n`,
     );
     return;
   }
@@ -971,23 +1142,33 @@ async function stopTarget(
   );
 }
 
-export async function stopCompute(targets: StopTarget[]): Promise<void> {
+export async function stopCompute(
+  targets: StopTarget[],
+  context: CapacityDecisionContext = UNKNOWN_DECISION_CONTEXT,
+): Promise<void> {
   if (targets.length === 0) {
     process.stderr.write("NO_TARGET no recognized compute process to stop\n");
     return;
   }
   const raw: Extract<StopTarget, { kind: "pid" }>[] = [];
   for (const target of targets) {
-    await stopTarget(target, raw);
+    await stopTarget(target, raw, context);
   }
   if (raw.length > 0) await Bun.sleep(1_000);
   if (raw.some((target) => sameProcess(target))) await Bun.sleep(9_000);
   for (const target of raw) {
     if (!sameProcess(target)) continue;
+    const recordPath = await recordCapacityDecision(
+      "STOP",
+      context,
+      target,
+      "KILL",
+    );
+    if (!sameProcess(target)) continue;
     const result = fromThrowable(() => process.kill(target.pid, "SIGKILL"))();
     if (result.isOk()) {
       process.stdout.write(
-        `STOP pid=${target.pid} comm=${target.comm} signal=KILL\n`,
+        `STOP pid=${target.pid} comm=${target.comm} signal=KILL record=${recordPath}\n`,
       );
     } else {
       process.stderr.write(
@@ -1128,6 +1309,12 @@ async function main(): Promise<void> {
     );
   }
   const memoryLow = memoryEmergency(memoryBefore);
+  if (
+    memoryBefore !== null &&
+    memoryBefore.availableMb >= MEMORY_AVAILABLE_EMERGENCY_MB
+  ) {
+    await resetEmergencyCacheDrop();
+  }
   const memoryAvailableLow =
     memoryBefore !== null &&
     memoryBefore.availableMb < MEMORY_AVAILABLE_EMERGENCY_MB;
@@ -1163,6 +1350,18 @@ async function main(): Promise<void> {
   let memoryStillLow = memoryAvailableLow;
   let memoryLatest = memoryBefore;
   let memoryStopPerformed = false;
+  let recovery: MemoryRecovery | null = null;
+  const decisionContext = (
+    reason: CapacityDecisionContext["reason"],
+  ): CapacityDecisionContext => ({
+    reason,
+    disk_free_bytes: free,
+    disk_deny_bytes: policy.denyBytes,
+    disk_stop_bytes: policy.stopBytes,
+    memory: memoryLatest,
+    recovery,
+  });
+  await recordCapacityDecision("HOLD", decisionContext("capacity-hold"));
   if (memoryLow && memoryBefore !== null) {
     const memoryResult = await recoverMemoryEmergency({
       before: memoryBefore,
@@ -1175,12 +1374,16 @@ async function main(): Promise<void> {
       measure: probeHostMemory,
       measureBuffCache: guestBuffCacheMb,
       canAttemptDrop: cacheDropAllowed,
+      claimEmergencyOverride: claimEmergencyCacheDrop,
       markDropAttempt: markCacheDropAttempt,
-      stopCompute: async () => {
+      stopCompute: async (result) => {
+        recovery = result;
+        memoryLatest = result.memoryAfter;
         memoryStopPerformed = true;
-        await stopCompute(liveTargets());
+        await stopCompute(liveTargets(), decisionContext("memory-emergency"));
       },
     });
+    recovery = memoryResult;
     memoryStillLow =
       memoryResult.afterMb === null ||
       memoryResult.afterMb < MEMORY_AVAILABLE_EMERGENCY_MB;
@@ -1208,11 +1411,19 @@ async function main(): Promise<void> {
       holdMemoryResult.afterMb === null ||
       holdMemoryResult.afterMb < MEMORY_AVAILABLE_EMERGENCY_MB;
     memoryLatest = holdMemoryResult.memoryAfter;
+    recovery = holdMemoryResult;
+  }
+  if (
+    memoryLatest !== null &&
+    memoryLatest.availableMb >= MEMORY_AVAILABLE_EMERGENCY_MB
+  ) {
+    await resetEmergencyCacheDrop();
   }
   if (diskEmergency) {
     // Stop the known writers before a potentially slow cache walk. Once C: is at this floor,
     // spending minutes scanning while they keep writing can exhaust Windows first.
-    if (!memoryStopPerformed) await stopCompute(liveTargets());
+    if (!memoryStopPerformed)
+      await stopCompute(liveTargets(), decisionContext("disk-emergency"));
     const measured = freeBytes(policy.path);
     if (measured.isErr()) {
       process.stderr.write(`FATAL: ${String(measured.error)}\n`);
@@ -1235,7 +1446,7 @@ async function main(): Promise<void> {
     }
   }
   if (!diskEmergency && free < policy.stopBytes) {
-    await stopCompute(liveTargets());
+    await stopCompute(liveTargets(), decisionContext("disk-emergency"));
     const measured = freeBytes(policy.path);
     if (measured.isErr()) {
       process.stderr.write(`FATAL: ${String(measured.error)}\n`);
@@ -1253,7 +1464,7 @@ async function main(): Promise<void> {
   }
   if (free < policy.stopBytes) {
     // A service may have restarted while cleanup ran. Repeat the containment check.
-    await stopCompute(liveTargets());
+    await stopCompute(liveTargets(), decisionContext("disk-emergency"));
     const measured = freeBytes(policy.path);
     if (measured.isErr()) {
       process.stderr.write(`FATAL: ${String(measured.error)}\n`);
@@ -1262,6 +1473,10 @@ async function main(): Promise<void> {
     free = measured.value;
   }
   if (free < policy.denyBytes || memoryStillLow) {
+    const recordPath = await recordCapacityDecision(
+      "HOLD",
+      decisionContext("capacity-hold"),
+    );
     writeRecoveryVerdict(
       recoveryVerdictRecord(
         "HOLD",
@@ -1271,9 +1486,9 @@ async function main(): Promise<void> {
       ),
     );
     process.stdout.write(
-      `HOLD host_free=${gib(free)} deny_below=${gib(policy.denyBytes)} ` +
+      `HOLD disk_free=${gib(free)} deny_below=${gib(policy.denyBytes)} ` +
         `stop_below=${gib(policy.stopBytes)} memory_emergency=${memoryStillLow}; ` +
-        `new compute must remain denied\n`,
+        `new compute must remain denied record=${recordPath}\n`,
     );
     process.exitCode = 1;
     return;

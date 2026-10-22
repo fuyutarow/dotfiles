@@ -8,10 +8,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ok } from "neverthrow";
+import { fromAsyncThrowable, ok } from "neverthrow";
 import { fromThrowable, jsonOf, z } from "../../tools/shared/src/zod.ts";
 import {
   hasLiveBuildProcess,
+  claimEmergencyCacheDrop,
+  resetEmergencyCacheDrop,
+  recordCapacityDecision,
   loadRecoveryPolicy,
   memoryEmergency,
   parseHostMemory,
@@ -27,6 +30,7 @@ import {
   tmpfsThreshold,
   writeRecoveryVerdict,
   type ComputeProcess,
+  type CapacityDecisionContext,
 } from "../wsl-capacity-recover.ts";
 
 // The raw stop reads /proc/<pid>/stat for a process's start time (Linux procfs): declared, so macOS
@@ -58,6 +62,40 @@ const RecoveryVerdictSchema = z.looseObject({
   windows_available_mb: z.number().int().nonnegative().nullable(),
   recorded_at: z.string(),
 });
+const DecisionSchema = z.looseObject({
+  schema: z.literal(1),
+  decision: z.enum(["STOP", "HOLD"]),
+  reason: z.string(),
+  measurements: z.looseObject({ windows_available_mb: z.number().nullable() }),
+  target: z.looseObject({
+    pid: z.number().nullable(),
+    comm: z.string().nullable(),
+  }),
+  signal: z.string().nullable(),
+});
+
+function decisionContext(recordPath: string): CapacityDecisionContext {
+  return {
+    reason: "memory-emergency",
+    disk_free_bytes: 154 * GiB,
+    disk_deny_bytes: 6 * GiB,
+    disk_stop_bytes: 4 * GiB,
+    memory: { availableMb: 900, pageReadsPerSecond: 700 },
+    recovery: null,
+    recordPath,
+  };
+}
+
+function decisionRecords(path: string) {
+  return readFileSync(path, "utf8")
+    .trim()
+    .split("\n")
+    .flatMap((line) => {
+      const parsed = jsonOf(DecisionSchema).safeParse(line);
+      expect(parsed.success).toBe(true);
+      return parsed.success ? [parsed.data] : [];
+    });
+}
 
 afterEach(() => {
   for (const root of recoveryVerdictRoots.splice(0)) {
@@ -69,6 +107,139 @@ afterEach(() => {
 });
 
 describe("WSL capacity recovery decisions", () => {
+  test("rate-limited emergency gets one persisted override per episode; restoration avoids STOP", async () => {
+    const root = mkdtempSync(join(tmpdir(), "capacity-episode-"));
+    recoveryVerdictRoots.push(root);
+    const episode = join(root, "episode");
+    const events: string[] = [];
+    let availableMb = 900;
+    const options = {
+      before: { availableMb: 900, pageReadsPerSecond: 700 },
+      thresholdMb: 2048,
+      canAttemptDrop: () => false,
+      claimEmergencyOverride: () => claimEmergencyCacheDrop(episode),
+      isLeverAvailable: () => true,
+      startLever: () => {
+        events.push("drop");
+        return true;
+      },
+      fallbackDrop: () => false,
+      wait: () => {},
+      measure: () => ({ availableMb, pageReadsPerSecond: 700 }),
+      stopCompute: () => {
+        events.push("stop");
+      },
+    };
+    expect(await recoverMemoryEmergency(options)).toMatchObject({
+      emergencyOverride: true,
+      dropAttempted: true,
+      stopped: true,
+    });
+    // A fresh timer invocation must not reuse the override while pressure persists.
+    expect(await recoverMemoryEmergency({ ...options })).toMatchObject({
+      emergencyOverride: false,
+      dropAttempted: false,
+      stopped: false,
+    });
+    expect(events).toEqual(["drop", "stop"]);
+    await resetEmergencyCacheDrop(episode);
+    availableMb = 3000;
+    expect(await recoverMemoryEmergency(options)).toMatchObject({
+      emergencyOverride: true,
+      outcome: "restored",
+      stopped: false,
+    });
+    expect(events).toEqual(["drop", "stop", "drop"]);
+  });
+
+  test("non-emergency HOLD keeps the ten-minute rate limit", async () => {
+    const events: string[] = [];
+    const result = await recoverMemoryEmergency({
+      before: { availableMb: 900, pageReadsPerSecond: 10 },
+      thresholdMb: 2048,
+      stopOnFailure: false,
+      canAttemptDrop: () => false,
+      claimEmergencyOverride: () => {
+        events.push("override");
+        return true;
+      },
+      isLeverAvailable: () => true,
+      startLever: () => {
+        events.push("drop");
+        return true;
+      },
+      fallbackDrop: () => false,
+      wait: () => {},
+      measure: () => ({ availableMb: 900, pageReadsPerSecond: 10 }),
+      stopCompute: () => {
+        events.push("stop");
+      },
+    });
+    expect(result).toMatchObject({
+      outcome: "rate-limited",
+      emergencyOverride: false,
+      stopped: false,
+    });
+    expect(events).toEqual([]);
+  });
+
+  test.each(["stamp-fault", "lever-fault", "unknown-measurement"])(
+    "%s cannot authorize a memory STOP",
+    async (fault) => {
+      let stopped = false;
+      const result = await recoverMemoryEmergency({
+        before: { availableMb: 900, pageReadsPerSecond: 700 },
+        thresholdMb: 2048,
+        canAttemptDrop: () => false,
+        claimEmergencyOverride: () => true,
+        markDropAttempt: () => fault !== "stamp-fault",
+        isLeverAvailable: () => true,
+        startLever: () => fault !== "lever-fault",
+        fallbackDrop: () => false,
+        wait: () => {},
+        measure: () =>
+          fault === "unknown-measurement"
+            ? null
+            : { availableMb: 900, pageReadsPerSecond: 700 },
+        stopCompute: () => {
+          stopped = true;
+        },
+      });
+      expect(result.stopped).toBe(false);
+      expect(stopped).toBe(false);
+    },
+  );
+
+  test("HOLD and unit stop decisions append independently readable JSON lines", async () => {
+    const root = mkdtempSync(join(tmpdir(), "capacity-decisions-"));
+    recoveryVerdictRoots.push(root);
+    const path = join(root, "nested", "decisions.jsonl");
+    const context = decisionContext(path);
+    await recordCapacityDecision("HOLD", {
+      ...context,
+      reason: "capacity-hold",
+    });
+    await recordCapacityDecision(
+      "STOP",
+      context,
+      { kind: "unit", name: "sb-test.scope" },
+      "unit-stop",
+    );
+    expect(decisionRecords(path)).toMatchObject([
+      {
+        decision: "HOLD",
+        signal: null,
+        measurements: { windows_available_mb: 900 },
+      },
+      {
+        decision: "STOP",
+        signal: "unit-stop",
+        target: { scope: "sb-test.scope" },
+        thresholds: { memory_available_mb: 2048 },
+        emergency_override_limit: 1,
+      },
+    ]);
+  });
   test("writes an atomic, timestamped latest verdict consumable by admission", () => {
     const root = mkdtempSync(join(tmpdir(), "wsl-recovery-verdict-"));
     recoveryVerdictRoots.push(root);
@@ -475,45 +646,120 @@ describe("WSL capacity recovery decisions", () => {
     ).toBe(true);
   });
 
-  test.skipIf(NO_PROCFS)(
-    "raw process stop checks starttime and terminates only the selected PID",
-    async () => {
+  test.skipIf(NO_PROCFS).each(["TERM", "KILL"])(
+    "raw process %s checks starttime and records every signal for the selected PID",
+    async (signal) => {
       const dir = mkdtempSync(join(tmpdir(), "capacity-stop-"));
       const executable = join(dir, "julia");
-      symlinkSync("/bin/sleep", executable);
-      const proc = Bun.spawn([executable, "60"], {
-        stdout: "ignore",
-        stderr: "ignore",
-      });
+      const context = decisionContext(join(dir, "capacity-decisions.jsonl"));
+      symlinkSync(process.execPath, executable);
+      const proc = Bun.spawn(
+        [
+          executable,
+          "-e",
+          `${signal === "KILL" ? 'process.on("SIGTERM", () => {});' : ""} setInterval(() => {}, 1000); process.stdout.write("ready\\n");`,
+        ],
+        {
+          stdout: "pipe",
+          stderr: "ignore",
+        },
+      );
       using _cleanup = {
         [Symbol.dispose]: () => {
           if (proc.exitCode === null) proc.kill();
           rmSync(dir, { recursive: true, force: true });
         },
       };
+      const reader = proc.stdout.getReader();
+      await reader.read();
+      reader.releaseLock();
       const ticks = startTicks(readFileSync(`/proc/${proc.pid}/stat`, "utf8"));
       expect(ticks).not.toBeNull();
       expect(readFileSync(`/proc/${proc.pid}/comm`, "utf8").trim()).toBe(
         "julia",
       );
-      await stopCompute([
-        {
-          kind: "pid",
-          pid: proc.pid,
-          startTicks: "wrong-generation",
-          comm: "julia",
-        },
-      ]);
+      await stopCompute(
+        [
+          {
+            kind: "pid",
+            pid: proc.pid,
+            startTicks: "wrong-generation",
+            comm: "julia",
+          },
+        ],
+        context,
+      );
       expect(proc.exitCode).toBeNull();
-      await stopCompute([
+      expect(existsSync(context.recordPath ?? "")).toBe(false);
+      // A recording fault must leave the selected process alive.
+      const recordingFailure = await fromAsyncThrowable(() =>
+        stopCompute(
+          [
+            {
+              kind: "pid",
+              pid: proc.pid,
+              startTicks: ticks ?? "",
+              comm: "julia",
+            },
+          ],
+          { ...context, recordPath: join(executable, "impossible.jsonl") },
+        ),
+      )();
+      expect(recordingFailure.isErr()).toBe(true);
+      expect(proc.exitCode).toBeNull();
+      await recoverMemoryEmergency({
+        before: { availableMb: 900, pageReadsPerSecond: 700 },
+        thresholdMb: 2048,
+        canAttemptDrop: () => false,
+        claimEmergencyOverride: () =>
+          claimEmergencyCacheDrop(join(dir, "episode")),
+        isLeverAvailable: () => true,
+        startLever: () => true,
+        fallbackDrop: () => false,
+        wait: () => {},
+        measure: () => context.memory,
+        stopCompute: (recovery) =>
+          stopCompute(
+            [
+              {
+                kind: "pid",
+                pid: proc.pid,
+                startTicks: ticks ?? "",
+                comm: "julia",
+              },
+            ],
+            { ...context, recovery },
+          ),
+      });
+      expect(await proc.exited).not.toBe(0);
+      const records = decisionRecords(context.recordPath ?? "");
+      expect(records.slice(0, 1)).toMatchObject([
         {
-          kind: "pid",
-          pid: proc.pid,
-          startTicks: ticks ?? "",
-          comm: "julia",
+          decision: "STOP",
+          reason: "memory-emergency",
+          signal: "TERM",
+          measurements: {
+            windows_available_mb: 900,
+            disk_free_bytes: 154 * GiB,
+          },
+          thresholds: { disk_stop_bytes: 4 * GiB },
+          lever: {
+            emergencyOverride: true,
+            outcome: "no-effect",
+            dropAttempted: true,
+          },
+          target: {
+            pid: proc.pid,
+            comm: "julia",
+            cgroup: readFileSync("/proc/self/cgroup", "utf8").trim(),
+          },
         },
       ]);
-      expect(await proc.exited).not.toBe(0);
+      expect(records.map((record) => record.signal)).toEqual(
+        signal === "KILL" ? ["TERM", "KILL"] : ["TERM"],
+      );
+      expect(records.at(-1)?.target.pid).toBe(proc.pid);
     },
+    15_000,
   );
 });

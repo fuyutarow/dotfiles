@@ -1,59 +1,26 @@
-# Model roster — dated snapshot 2026-10-05
+# Model roster — authority and historical evidence
 
-> **Snapshot verified**: 2026-07-31。**2026-08-26 に availability gate が一度失敗している**(下の記録)。model 名と現在のavailabilityはこの file の SOLE home。
-> 役の恒久規則は `SKILL.md`、過去の配役と根拠は `../tests/forge-verification-ledger.md` が持つ。
+## Current dispatch authority
 
-## SOLE owner — current bearers
+現在の worker roster の唯一の正本は
+[dispatch-roster.toml](../../../models/dispatch-roster.toml)、その構成契約は
+[dispatch-roster.contract.md](../../../models/dispatch-roster.contract.md) にある。
+この参照には model 一覧、利用可否、固定配役、選択スコアを複製しない。
 
-この snapshot は現在のdispatchだけに使う。supervisor bearerは実務・成果物作成・独立検証・
-subagentを担わない。非supervisory roleは下のexecutor行のbearerだけが担う(supervisorと同じOpus 5.5でも、
-subagentとして別contextで動くopus-mediumはexecutor行に属する)。productionとverificationでは
-authorとverifierを同じbearerにしない。outside observerはtechnical truthの根拠やverifierにならない。
+通常の dispatch は caller 所有の ticket を `agx worker run <ticket>` に渡し、
+正本の roster と capability routing に選択を委ねる。
+model 指定の例外は、今回の caller が明示的に要求した正確な model だけである。
+この参照や過去の成功回数から手動で model・effort・verifier を固定しない。
+役と独立検収の責任分界は [SKILL.md](../SKILL.md)、過去の配役と根拠は
+[forge-verification-ledger.md](../tests/forge-verification-ledger.md) を参照する。
+履歴は現行の選択規則に昇格させない。
 
-| Slot | Current bearer | Allowed work | Dispatch constraint |
-|---|---|---|---|
-| supervisor / planning | Opus 5 | control plane only | executor、author、verifier、subagentへ配役しない。 |
-| supervisor / planning | gpt-5.6-sol | control plane only | executor、author、verifier、subagentへ配役しない。 |
-| delegated executor / verifier / outside observer | Sonnet 5.5 @ medium (`subagent_type:"sonnet-medium"`) | 端末操作や多段の道具の使用など、luna が苦手な作業の軽い側 | authorならverifierはgpt-5.6-terra。 |
-| delegated executor / verifier / outside observer | Sonnet 5.5 @ high (`subagent_type:"sonnet-high"`) | 仕様が明確な実装、バグ修正、テスト、ターミナル作業、量産、independent verification、または外界観測 | authorならverifierはgpt-5.6-terra。outside observerはtechnical truthの根拠にしない。 |
-| delegated executor / verifier / outside observer | Opus 5.5 @ medium (`subagent_type:"opus-medium"`) | 仕様が曖昧、複数リポジトリや大規模リファクタ、設計判断、事実の正確さ、Sonnet が同じ作業で詰まった | authorならverifierはgpt-5.6-terra。 |
-| delegated executor / verifier / outside observer | gpt-5.6-terra @ high (`model:"gpt-5.6-terra", reasoning_effort:"high"`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
-| delegated executor / verifier / outside observer | gpt-6.1-sol 以上 @ medium or high (`model:"gpt-6.1-sol", reasoning_effort:"medium" or "high"`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
-| delegated executor / verifier / outside observer | gpt-6-luna @ any effort — Claude 側からは `agx worker run <ticket>`、Codex Agent 側は `model:"gpt-6-luna", reasoning_effort:<any>` | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
+## Historical availability incident
 
-Claude 側の dispatch は `agents/models/dispatch-roster.toml`(2026-10-05、luna first)の表から1行を
-選ぶ。理由の記述はいらない(ラジオボタン式)。各行の `enabled` がconfigのスイッチで、`false` の行は実装を残したまま表から外れ、hook が「disabled」として拒否する(2026-10-05 の config は luna のみ。Claude の行は off、`enabled = true` 一行で戻る)。luna の行は main の Bash から
-`agx worker run <ticket> [--cd <dir>] [--sandbox none|read-only|workspace-write]`（durable run は named systemd user unit）、Claude の行も同じ ticket entrypoint を使う。
-`subagent_type:"<id>"`。Workflow ツールは使わない。`enforce-dispatch-contract.ts` が、Workflow、
-表にない `subagent_type`、luna の id を Agent に渡したものを拒否し、表を示す。
-Codex側の`spawn_agent`も同様に`model`と`reasoning_effort`を必ず明示する(上の三系統のみ、
-2026-09-27、`agents/codex/hooks/enforce-dispatch-contract.ts`が強制。世代の下限は`agents/hooks/model-floor.toml`が持つ(sol >= 6.1 など。新世代は編集なしで通る)。gpt-6.1-sol は 2026-10-03 に probe で PROBE_OK)。
-
-## Availability gate — no silent fallback
-
-binding は可用性の証明ではない。指定bearerが利用不能、指定が実効化できない、または独立性を
-満たす相手bearerが利用不能なら、別bearerへ黙って代替しない。発射を止めてsupervisorの裁定へ戻す。
-
-```yaml
-requested_slot:
-requested_bearer:
-probe_date:
-probe_result:
-failure_or_constraint:
-available_alternate:
-cross_bearer_verification_possible:
-supervisor_decision:
-```
-
-## Staleness triggers
-
-次のいずれかで snapshot を stale とし、一次資料とcapability probeを再照合してから更新する。
-
-- 上記bearerの利用可否、名称、model解決、またはdelegation surfaceが変わった。
-- supervisor-only prohibition、二bearerのproduction/verification限定、またはcross-bearer ruleが変わった。
-- availability gateがdispatch時に失敗した。
-
-## Availability gate — 記録
+以下は 2026-08-26 当時の失敗、代替判断、再検証案の記録であり、
+現在の model の利用可否、配役、fallback、再実行を指示するものではない。
+保持する教訓は、一往復の probe 成功では実務量の可用性を証明できず、
+検証した仕事量と独立性の限界を記録する必要がある、という点である。
 
 ### 2026-08-26 — gpt-5.6-terra が independent verifier として実効化できなかった
 
@@ -79,9 +46,6 @@ supervisor_decision: |
   覆せる既定(暫定・追認待ち)。同一 bearer(Sonnet)の盲検監査で代替した。
   起草していない腕が読むという盲検性は得たが、模型の系統が違うことによる独立性は得ていない。
   この差を検収記録に明示した。
-  戻し方: quota 回復後に同じ指示で gpt-5.6-terra を撃ち直す。
+  当時の再検証案: quota 回復後に同じ指示で gpt-5.6-terra を撃ち直す。
 ```
 
-**probe の設計についての教訓。**可用性の probe は、実務量に比例した消費を伴う形で撃たなければ
-意味を持たない。一往復の probe が通ることは、数万 token の検収が通ることを保証しない。
-次に availability gate を書くときは、`probe_result` に「どれだけの量で確かめたか」を含める。

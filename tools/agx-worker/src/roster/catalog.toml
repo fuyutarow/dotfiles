@@ -1,0 +1,530 @@
+schema = 1
+as_of = "2026-10-08"
+
+[jev]
+price_per_mtok_input = 0.042
+price_per_mtok_output = 0.0
+
+[sources]
+aa_releases = "https://artificialanalysis.ai/models/releases/"
+aa_coding_agents = "https://artificialanalysis.ai/agents/coding-agents"
+openai_pricing = "https://developers.openai.com/api/docs/pricing"
+openai_terra_model = "https://developers.openai.com/api/docs/models/gpt-5.6-terra"
+anthropic_pricing = "https://platform.claude.com/docs/en/about-claude/pricing"
+
+# Existing measured rows keep their TB4, SciCode, coding-agent and use_for values.
+[[choice]]
+id = "luna-low"
+route = "codex"
+model = "gpt-6-luna"
+effort = "low"
+aa_index = 22
+price_in = 0.10
+price_cached_in = 0.01
+price_out = 0.50
+use_for = "lowest-cost simple work: narrow extraction, lookup, or routine text"
+
+[[choice]]
+id = "luna-medium"
+route = "codex"
+model = "gpt-6-luna"
+effort = "medium"
+aa_index = 30
+tb4 = 2.5
+scicode = 50.9
+price_in = 0.10
+price_cached_in = 0.01
+price_out = 0.50
+use_for = "bulk read-only work: extraction, inventory, summaries, simple edits"
+
+[[choice]]
+id = "luna-high"
+route = "codex"
+model = "gpt-6-luna"
+effort = "high"
+aa_index = 33
+tb4 = 4.5
+scicode = 50.3
+price_in = 0.10
+price_cached_in = 0.01
+price_out = 0.50
+use_for = "the default worker: clear-spec code and text, fixes, tests"
+
+[[choice]]
+id = "luna-xhigh"
+route = "codex"
+model = "gpt-6-luna"
+effort = "xhigh"
+aa_index = 35
+tb4 = 8.1
+scicode = 51.7
+price_in = 0.10
+price_cached_in = 0.01
+price_out = 0.50
+use_for = "wide or risky refactors across many files (measured 2026-10-06: 3/3 complete, 0 regressions where luna-high was 6/7 with 2), and harder reasoning; still weak at long terminal sessions"
+
+[[choice]]
+id = "luna-max"
+route = "codex"
+model = "gpt-6-luna"
+effort = "max"
+aa_index = 38
+tb4 = 12.6
+scicode = 54.6
+coding_agent = 41.1
+price_in = 0.10
+price_cached_in = 0.01
+price_out = 0.50
+use_for = "the deepest luna for work needing maximum luna capability"
+
+[[choice]]
+id = "terra-low"
+route = "codex"
+model = "gpt-5.6-terra"
+effort = "low"
+aa_index = 28
+tb4 = 1.5 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra"
+scicode = 49.9 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra"
+price_in = 2.00 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+price_cached_in = 0.20 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+price_out = 12.00 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+use_for = "low-cost contained reasoning when luna-low's capability is insufficient"
+
+[[choice]]
+id = "terra-medium"
+route = "codex"
+model = "gpt-5.6-terra"
+effort = "medium"
+aa_index = 30
+tb4 = 1.0 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra"
+scicode = 50.5 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra"
+price_in = 2.00 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+price_cached_in = 0.20 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+price_out = 12.00 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+use_for = "routine reasoning tasks where luna's lower index is insufficient"
+
+[[choice]]
+id = "terra-high"
+route = "codex"
+model = "gpt-5.6-terra"
+effort = "high"
+aa_index = 34
+tb4 = 1.5 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra"
+scicode = 52.4 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra"
+price_in = 2.00 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+price_cached_in = 0.20 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+price_out = 12.00 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+use_for = "moderately difficult reasoning when luna-high is insufficient"
+
+[[choice]]
+id = "terra-xhigh"
+route = "codex"
+model = "gpt-5.6-terra"
+effort = "xhigh"
+aa_index = 38
+tb4 = 10.1 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra"
+scicode = 52.3 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra"
+price_in = 2.00 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+price_cached_in = 0.20 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+price_out = 12.00 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+use_for = "hard reasoning when luna-max's measured capability is insufficient"
+
+[[choice]]
+id = "terra-max"
+route = "codex"
+model = "gpt-5.6-terra"
+effort = "max"
+aa_index = 42
+tb4 = 35.4 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra"
+scicode = 55.0 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra"
+price_in = 2.00 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+price_cached_in = 0.20 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+price_out = 12.00 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
+use_for = "deep terra reasoning where the strongest luna effort is insufficient"
+
+# Sol 6.1 snapshot from 2026-10-08; preserve the historical rows and their source URLs.
+[[choice]]
+id = "sol-low"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "low"
+aa_index = 42
+tb4 = 30.8
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 53.2
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 2
+price_cached_in = 0.1
+price_out = 10
+use_for = "strong low-effort coding or reasoning; multi-step terminal/agentic work where small models fall short"
+
+[[choice]]
+id = "sol-medium"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "medium"
+aa_index = 48
+tb4 = 48.0
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 53.2
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 2
+price_cached_in = 0.1
+price_out = 10
+use_for = "difficult coding and reasoning with a strong cost-to-capability balance for multi-step terminal/agentic work"
+
+[[choice]]
+id = "sol-high"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "high"
+aa_index = 50
+tb4 = 51.5
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 55.8
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 2
+price_cached_in = 0.1
+price_out = 10
+use_for = "high-difficulty code and tool tasks needing near-top capability for multi-step terminal/agentic work"
+
+[[choice]]
+id = "sol-xhigh"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "xhigh"
+aa_index = 51
+tb4 = 54.0
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 55.7
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 2
+price_cached_in = 0.1
+price_out = 10
+use_for = "very hard multi-step coding and reasoning requiring near-frontier capability for multi-step terminal/agentic work"
+
+[[choice]]
+id = "sol-max"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "max"
+aa_index = 52
+tb4 = 56.1
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 54.2
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 2
+price_cached_in = 0.1
+price_out = 10
+use_for = "deep sol reasoning for tasks beyond lower-effort sol, including multi-step terminal/agentic work"
+
+[[choice]]
+id = "astra-low"
+route = "codex"
+model = "gpt-6-astra"
+effort = "low"
+aa_index = 46
+tb4 = 41.9 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 54.1 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 10.00
+price_cached_in = 1.00
+price_out = 50.00
+use_for = "high-capability low-effort work for multi-step terminal/agentic tasks where Sol 6.1 low is insufficient"
+
+[[choice]]
+id = "astra-medium"
+route = "codex"
+model = "gpt-6-astra"
+effort = "medium"
+aa_index = 50
+tb4 = 49.5 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 54.2 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 10.00
+price_cached_in = 1.00
+price_out = 50.00
+use_for = "difficult multi-step terminal/agentic tasks needing stronger capability than Sol 6.1 medium"
+
+[[choice]]
+id = "astra-high"
+route = "codex"
+model = "gpt-6-astra"
+effort = "high"
+aa_index = 51
+tb4 = 54.0 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 55.4 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 10.00
+price_cached_in = 1.00
+price_out = 50.00
+use_for = "very difficult multi-step terminal/agentic work where Sol 6.1 high is insufficient"
+
+[[choice]]
+id = "astra-xhigh"
+route = "codex"
+model = "gpt-6-astra"
+effort = "xhigh"
+aa_index = 52
+tb4 = 59.6 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 55.7 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 10.00
+price_cached_in = 1.00
+price_out = 50.00
+use_for = "frontier-level multi-step terminal/agentic work at high reasoning effort"
+
+[[choice]]
+id = "astra-max"
+route = "codex"
+model = "gpt-6-astra"
+effort = "max"
+aa_index = 53
+tb4 = 59.1 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 56.5 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 10.00
+price_cached_in = 1.00
+price_out = 50.00
+use_for = "deepest astra reasoning for the most demanding multi-step terminal/agentic work"
+
+[[choice]]
+id = "haiku-low"
+route = "claude"
+model = "claude-haiku-5-5"
+effort = "low"
+aa_index = 29 # AA (2026-10-08): https://artificialanalysis.ai/models/claude-haiku-5-5-low
+tb4 = 12.6 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro"
+price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
+price_out = 0.50
+use_for = "short tasks and quick Claude Code hook edits"
+
+[[choice]]
+id = "haiku-medium"
+route = "claude"
+model = "claude-haiku-5-5"
+effort = "medium"
+aa_index = 34 # AA (2026-10-08): https://artificialanalysis.ai/models/claude-haiku-5-5-medium
+tb4 = 15.2 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro"
+scicode = 49.0 # AA (2026-10-08): https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-medium-vs-claude-haiku-5-5-xhigh
+scicode_source = "https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-medium-vs-claude-haiku-5-5-xhigh"
+price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
+price_out = 0.50
+use_for = "short tasks and quick Claude Code hook edits needing more care than haiku-low"
+
+[[choice]]
+id = "haiku-high"
+route = "claude"
+model = "claude-haiku-5-5"
+effort = "high"
+aa_index = 38 # AA (2026-10-08): https://artificialanalysis.ai/models/claude-haiku-5-5-high
+tb4 = 21.7 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro"
+scicode = 49.0 # AA (2026-10-08): https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-high-vs-claude-haiku-5-5-medium
+scicode_source = "https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-high-vs-claude-haiku-5-5-medium"
+price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
+price_out = 0.50
+use_for = "Claude Code hook-sensitive edits needing stronger follow-through"
+
+[[choice]]
+id = "haiku-xhigh"
+route = "claude"
+model = "claude-haiku-5-5"
+effort = "xhigh"
+aa_index = 41 # AA (2026-10-08): https://artificialanalysis.ai/models/claude-haiku-5-5-xhigh
+tb4 = 29.3 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro"
+scicode = 52.0 # AA (2026-10-08): https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-vs-claude-haiku-5-5-xhigh
+scicode_source = "https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-vs-claude-haiku-5-5-xhigh"
+price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
+price_out = 0.50
+use_for = "demanding tasks needing high follow-through"
+
+[[choice]]
+id = "haiku-max"
+route = "claude"
+model = "claude-haiku-5-5"
+effort = "max"
+aa_index = 43 # AA (2026-10-08): https://artificialanalysis.ai/models/claude-haiku-5-5
+tb4 = 32.8 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro"
+scicode = 55.0 # AA (2026-10-08): https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-vs-claude-haiku-5-5-xhigh
+scicode_source = "https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-vs-claude-haiku-5-5-xhigh"
+price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
+price_out = 0.50
+use_for = "most demanding Haiku tasks"
+
+[[choice]]
+id = "sonnet-low"
+route = "claude"
+model = "claude-sonnet-5-5"
+effort = "low"
+aa_index = 36
+price_in = 2.00
+price_out = 10.00
+use_for = "low-effort reasoning"
+
+[[choice]]
+id = "sonnet-medium"
+route = "claude"
+model = "claude-sonnet-5-5"
+effort = "medium"
+aa_index = 41
+tb4 = 29.8
+scicode = 52.9
+coding_agent = 45.9
+price_in = 2.00
+price_out = 10.00
+use_for = "multi-step terminal/agentic work with strong measured capability"
+
+[[choice]]
+id = "sonnet-high"
+route = "claude"
+model = "claude-sonnet-5-5"
+effort = "high"
+aa_index = 47
+tb4 = 43.9
+scicode = 53.7
+coding_agent = 55.0
+price_in = 2.00
+price_out = 10.00
+use_for = "hard agentic work, long tool loops, live harness edits"
+
+[[choice]]
+id = "sonnet-xhigh"
+route = "claude"
+model = "claude-sonnet-5-5"
+effort = "xhigh"
+aa_index = 52
+price_in = 2.00
+price_out = 10.00
+use_for = "very hard agentic work"
+
+[[choice]]
+id = "sonnet-max"
+route = "claude"
+model = "claude-sonnet-5-5"
+effort = "max"
+aa_index = 56
+price_in = 2.00
+price_out = 10.00
+use_for = "hard long-running agentic work"
+
+[[choice]]
+id = "opus-low"
+route = "claude"
+model = "claude-opus-5-5"
+effort = "low"
+aa_index = 42
+price_in = 4.00
+price_out = 20.00
+use_for = "low-effort design judgment"
+
+[[choice]]
+id = "opus-medium"
+route = "claude"
+model = "claude-opus-5-5"
+effort = "medium"
+aa_index = 51
+tb4 = 52.5
+scicode = 59.3
+price_in = 4.00
+price_out = 20.00
+use_for = "ambiguous specs, design judgment, factual accuracy, multi-repo changes"
+
+[[choice]]
+id = "opus-high"
+route = "claude"
+model = "claude-opus-5-5"
+effort = "high"
+aa_index = 54
+price_in = 4.00
+price_out = 20.00
+use_for = "hard design and reasoning"
+
+[[choice]]
+id = "opus-xhigh"
+route = "claude"
+model = "claude-opus-5-5"
+effort = "xhigh"
+aa_index = 56
+price_in = 4.00
+price_out = 20.00
+use_for = "very hard design, accuracy, and multi-repo work"
+
+[[choice]]
+id = "opus-max"
+route = "claude"
+model = "claude-opus-5-5"
+effort = "max"
+aa_index = 58
+price_in = 4.00
+price_out = 20.00
+use_for = "most demanding judgment tasks"
+
+[[choice]]
+id = "fable-low"
+route = "claude"
+model = "claude-fable-5-1"
+effort = "low"
+aa_index = 47
+price_in = 10.00
+price_out = 50.00
+use_for = "high-capability low-effort reasoning"
+
+[[choice]]
+id = "fable-medium"
+route = "claude"
+model = "claude-fable-5-1"
+effort = "medium"
+aa_index = 49
+price_in = 10.00
+price_out = 50.00
+use_for = "difficult tasks needing more capability than sonnet-medium"
+
+[[choice]]
+id = "fable-high"
+route = "claude"
+model = "claude-fable-5-1"
+effort = "high"
+aa_index = 51
+price_in = 10.00
+price_out = 50.00
+use_for = "very difficult tasks"
+
+[[choice]]
+id = "fable-xhigh"
+route = "claude"
+model = "claude-fable-5-1"
+effort = "xhigh"
+aa_index = 53
+price_in = 10.00
+price_out = 50.00
+use_for = "frontier reasoning for long multi-step tasks"
+
+[[choice]]
+id = "fable-max"
+route = "claude"
+model = "claude-fable-5-1"
+effort = "max"
+aa_index = 53
+price_in = 10.00
+price_out = 50.00
+use_for = "hardest reasoning tasks"

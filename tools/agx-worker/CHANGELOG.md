@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.7.0 — 2026-10-23
+
+- Add independent roster catalog and policy loader
+
 ## 8.6.0 — 2026-10-23
 
 - Make the dispatch roster the codex worker model authority and remove hook floor reads

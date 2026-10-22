@@ -737,6 +737,15 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
+    sources: ["tools/agx-worker/src/roster/catalog.toml"],
+    deployed: "the agx-worker checkout, read in place",
+    consumer: "agx-worker roster loader",
+    writer: "agx owner, in the repo",
+    verify: "bun test tools/agx-worker/tests/roster",
+  },
+  {
+    kind: "in-place",
+    when: "all",
     sources: ["agents/models/releases.toml"],
     deployed: "the checkout",
     consumer: "mise run models:audit (check-releases.ts)",

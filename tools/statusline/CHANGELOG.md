@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.18 — 2026-10-23
+
+- Read Jev prices from the agx-worker roster CLI
+
 ## 0.20.17 — 2026-10-21
 
 - Render unreported worker costs with an explicit reason

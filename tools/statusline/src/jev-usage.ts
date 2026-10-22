@@ -1,6 +1,12 @@
 import { open, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import {
+  err,
+  fromAsyncThrowable,
+  fromThrowable,
+  ok,
+  type Result,
+} from "neverthrow";
 import { stateDir } from "./dispatch-state.ts";
 import { jsonOf, z } from "./zod.ts";
 
@@ -21,8 +27,52 @@ const RUN = z.looseObject({
 const TAIL_BYTES = 256 * 1024;
 const MAX_TAIL_BYTES = 8 * 1024 * 1024;
 const WINDOW_SECONDS = 7 * 24 * 60 * 60;
+const AGX_WORKER_CLI = join(
+  import.meta.dir,
+  "../../agx-worker/src/next/cli.ts",
+);
+const ROSTER_TIMEOUT_MS = 2_000;
+const ROSTER = z.looseObject({
+  auto: z.looseObject({
+    jev: z.looseObject({
+      price_per_mtok_input: z.number().nonnegative().optional(),
+      price_per_mtok_output: z.number().nonnegative().optional(),
+    }),
+  }),
+});
 
 export type JevUsage = { costUsd: number | undefined };
+
+async function readJevPrices(
+  cliPath: string,
+): Promise<Result<{ input: number; output: number } | null, unknown>> {
+  return fromAsyncThrowable(async () => {
+    const processHandle = Bun.spawn({
+      cmd: [process.execPath, cliPath, "roster", "--json"],
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: ROSTER_TIMEOUT_MS,
+    });
+    const [stdout, , exitCode] = await Promise.all([
+      new Response(processHandle.stdout).text(),
+      new Response(processHandle.stderr).text(),
+      processHandle.exited,
+    ]);
+    if (exitCode !== 0) return null;
+    const parsed = jsonOf(ROSTER).safeParse(stdout);
+    if (!parsed.success) return null;
+    const jev = parsed.data.auto.jev;
+    if (
+      jev.price_per_mtok_input === undefined ||
+      jev.price_per_mtok_output === undefined
+    )
+      return null;
+    return {
+      input: jev.price_per_mtok_input,
+      output: jev.price_per_mtok_output,
+    };
+  })();
+}
 
 async function parseTail(
   path: string,
@@ -69,6 +119,7 @@ async function parseTail(
 export async function readJevUsage(
   now = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000),
   path = join(stateDir(), "runs.jsonl"),
+  rosterCliPath = AGX_WORKER_CLI,
 ): Promise<Result<JevUsage | undefined, string>> {
   const info = await stat(path).catch(() => null);
   if (info === null || !info.isFile()) return ok(undefined);
@@ -96,17 +147,12 @@ export async function readJevUsage(
   })().catch(() => null);
   if (result === null) return err("Jev usage unavailable");
   if (!result.known) return ok(undefined);
-  const { loadRoster } = await import("../../../agents/models/roster.ts");
-  const prices = await loadRoster();
-  if (!prices.ok) return err("Jev price unavailable");
-  const jev = prices.value.auto.jev;
+  const prices = await readJevPrices(rosterCliPath);
+  if (prices.isErr() || prices.value === null)
+    return err("Jev price unavailable");
   const costUsd =
-    jev.price_per_mtok_input === undefined ||
-    jev.price_per_mtok_output === undefined
-      ? undefined
-      : (result.input * jev.price_per_mtok_input +
-          result.output * jev.price_per_mtok_output) /
-        1_000_000;
+    (result.input * prices.value.input + result.output * prices.value.output) /
+    1_000_000;
   return ok({
     costUsd,
   });

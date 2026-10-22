@@ -5,6 +5,20 @@ Use this when GPU consumers stop responding, `gpu-owner.json` records
 driver. The sampler is the only component that runs `nvidia-smi`; do not run it
 manually during recovery. Never signal a stuck GPU process.
 
+`agent-resource-run` scans leaders and nonleader threads host-wide for readable
+dxg wait channels, including `dxgvmb_send_sync_msg`, and confirms these D-state
+observations after at least three seconds. An unavailable wait channel
+(unreadable, missing, empty, or `0`) blocks admission only when the process is a
+sampled GPU holder or a readable `/proc/<pid>/fd` link targets `/dev/dxg`.
+Nonleader threads inherit this evidence from their thread group. A previously
+observed dxg wait also remains refusal evidence if its channel becomes
+unavailable during confirmation. Process names and root ownership do not
+establish a GPU tie: an unrelated D-state systemd-journald with an unreadable
+channel does not block admission. Unreadable descriptor inventories alone do
+not establish a tie. Sampled PIDs are conservative refusal evidence and do not
+prove local ownership or release; the existing holder verification still applies.
+The sampler recovery check in step 5 has its own checks described there.
+
 Run the steps in order. The process and state inspections are read-only.
 
 1. **Find the blocked GPU task and its wrapper.** In the affected WSL distro, run:

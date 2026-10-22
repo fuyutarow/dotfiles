@@ -6,6 +6,7 @@ import {
   opendir,
   readFile,
   readdir,
+  readlink,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -199,12 +200,31 @@ type GpuAdmissionOptions = {
     { pid: number; startedAt: number } | null | undefined
   >;
 };
+// A sampled holder is conservative refusal evidence, never proof of ownership
+// or release. Unreadable fd inventories do not establish a GPU tie.
+async function hasGpuTie(
+  procRoot: string,
+  pid: string,
+  state: GpuState | undefined,
+): Promise<boolean> {
+  if (state?.processes.some((holder) => String(holder.pid) === pid) === true)
+    return true;
+  const fdRoot = join(procRoot, pid, "fd");
+  const descriptors = await fromAsyncThrowable(() => readdir(fdRoot))();
+  if (descriptors.isErr()) return false;
+  for (const fd of descriptors.value) {
+    const target = await fromAsyncThrowable(() => readlink(join(fdRoot, fd)))();
+    if (target.isOk() && target.value === "/dev/dxg") return true;
+  }
+  return false;
+}
 async function leaderDxgObservation(
   pid: string,
   statPath: string,
   wchanPath: string,
   initialStat: string,
   now: () => number,
+  gpuTied: () => Promise<boolean>,
 ): Promise<DStateObservation> {
   const startTime = procStartTime(initialStat);
   if (startTime === undefined)
@@ -212,6 +232,12 @@ async function leaderDxgObservation(
       refusal: `GPU process identity unavailable pid=${pid}; evidence=${statPath}`,
     };
   const channel = await optionalText(wchanPath);
+  const wchan = channel.unwrapOr(undefined)?.trim();
+  if (
+    (wchan === undefined || wchan === "" || wchan === "0") &&
+    !(await gpuTied())
+  )
+    return {};
   const current = await optionalText(statPath);
   if (current.isErr())
     return {
@@ -225,7 +251,6 @@ async function leaderDxgObservation(
     };
   if (currentState !== "D" || procStartTime(current.value) !== startTime)
     return {};
-  const wchan = channel.unwrapOr(undefined)?.trim();
   if (wchan === undefined || wchan === "" || wchan === "0")
     return {
       refusal: `GPU D-state wait channel unavailable pid=${pid}; evidence=${wchanPath}`,
@@ -265,6 +290,7 @@ async function taskDxgRefusal(
   taskBase: string,
   tid: string,
   now: () => number,
+  gpuTied: () => Promise<boolean>,
 ): Promise<DStateObservation> {
   const taskStatPath = join(taskBase, "stat");
   const taskStat = await optionalText(taskStatPath);
@@ -287,6 +313,12 @@ async function taskDxgRefusal(
     };
   const wchanPath = join(taskBase, "wchan");
   const channel = await optionalText(wchanPath);
+  const wchan = channel.unwrapOr(undefined)?.trim();
+  if (
+    (wchan === undefined || wchan === "" || wchan === "0") &&
+    !(await gpuTied())
+  )
+    return {};
   const currentTask = await optionalText(taskStatPath);
   if (currentTask.isErr())
     return {
@@ -320,7 +352,6 @@ async function taskDxgRefusal(
       refusal: `GPU task leader recheck unavailable tgid=${leader.tgid} tid=${tid}; evidence=${leader.statPath}`,
     };
   if (currentLeaderStartTime !== leader.startTime) return {};
-  const wchan = channel.unwrapOr(undefined)?.trim();
   let initialWchan: "dxg" | "unavailable" | undefined;
   if (wchan === undefined || wchan === "" || wchan === "0")
     initialWchan = "unavailable";
@@ -346,6 +377,7 @@ async function taskGroupDxgRefusal(
   procRoot: string,
   leader: ThreadGroup,
   now: () => number,
+  gpuTied: () => Promise<boolean>,
 ): Promise<DStateObservation> {
   const taskRoot = join(procRoot, leader.tgid, "task");
   const taskDirectory = await fromAsyncThrowable(() => opendir(taskRoot))();
@@ -364,6 +396,7 @@ async function taskGroupDxgRefusal(
           join(taskRoot, tid),
           tid,
           now,
+          gpuTied,
         );
         if (observation.refusal !== undefined) return observation.refusal;
         if (observation.candidate !== undefined)
@@ -702,6 +735,7 @@ export async function gpuAdmissionRefusal(
   const now = options.now ?? (() => performance.now());
   const sleep =
     options.sleep ?? ((milliseconds: number) => Bun.sleep(milliseconds));
+  const state = options.state ?? (await readGpuState());
   const candidates: DStateCandidate[] = [];
   // Inspect live process state independently of the sampler's paused/cache state.
   // This is host-wide: a dxg wait outside a runner scope can stall this GPU too.
@@ -717,16 +751,17 @@ export async function gpuAdmissionRefusal(
       return `GPU process state unreadable pid=${entry}; evidence=${statPath}`;
     if (stat.value === undefined) continue; // Exited after inventory.
     // comm may contain spaces and closing parentheses.
-    const state = procState(stat.value);
-    if (state === undefined)
+    const processState = procState(stat.value);
+    if (processState === undefined)
       return `GPU process state invalid pid=${entry}; evidence=${statPath}`;
-    if (state !== "D") continue;
+    if (processState !== "D") continue;
     const observation = await leaderDxgObservation(
       entry,
       statPath,
       join(base, "wchan"),
       stat.value,
       now,
+      () => hasGpuTie(procRoot, entry, state),
     );
     if (observation.refusal !== undefined) return observation.refusal;
     if (observation.candidate !== undefined)
@@ -753,13 +788,13 @@ export async function gpuAdmissionRefusal(
         statPath: leaderStatPath,
       },
       now,
+      () => hasGpuTie(procRoot, entry, state),
     );
     if (observation.refusal !== undefined) return observation.refusal;
     candidates.push(...(observation.candidates ?? []));
   }
   const confirmation = await confirmedDxgCandidates(candidates, now, sleep);
   if (confirmation !== undefined) return confirmation;
-  const state = options.state ?? (await readGpuState());
   if (state === undefined)
     return `GPU owner state unavailable; evidence=${gpuStatePath()}`;
   if (state.unresponsiveSince !== undefined) {

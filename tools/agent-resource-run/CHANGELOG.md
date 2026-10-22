@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.17 — 2026-10-23
+
+- Require positive GPU evidence before refusing an unavailable D-state wait channel
+
 ## 1.5.16 — 2026-10-23
 
 - Exclude yielded ccc GPU workers from holder identity refusal after the locked handoff while preserving VRAM admission checks.

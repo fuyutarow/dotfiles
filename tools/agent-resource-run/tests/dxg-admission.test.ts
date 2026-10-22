@@ -437,7 +437,7 @@ test("live leader with an inaccessible task inventory fails closed", async () =>
 });
 
 for (const channel of ["", "0", "missing", "unreadable"])
-  test(`D-state task with ${channel === "" ? "empty" : channel} wchan confirms before refusing`, async () => {
+  test(`GPU holder D-state task with ${channel === "" ? "empty" : channel} wchan confirms before refusing`, async () => {
     await using f = await fixture();
     await fs.writeFile(join(f.base, "stat"), stat("Z"));
     const task = await addTask(f, "456");
@@ -448,12 +448,85 @@ for (const channel of ["", "0", "missing", "unreadable"])
     const control = confirmation();
     const refusal = await gpuAdmissionRefusal(request, 512, {
       procRoot: f.root,
-      state,
+      state: { ...state, processes: [{ pid: 123, usedMiB: 1 }] },
       ...control.options,
     });
     expect(refusal).toContain(
       `GPU persistent D-state wait channel unavailable tgid=123 tid=456 leader_state=Z task_state=D; observations=2 interval_ms>=3000; evidence=${join(f.base, "stat")},${task.statPath},${path}`,
     );
+    expect(control.sleeps).toEqual([3000]);
+  });
+
+const unavailableChannelCases = (["leader", "task"] as const).flatMap(
+  (target) =>
+    (["none", "sampled-holder", "dxg-fd"] as const).flatMap((tie) =>
+      ["", "0", "missing", "unreadable"].map((channel) => ({
+        target,
+        tie,
+        channel,
+      })),
+    ),
+);
+for (const { target, tie, channel } of unavailableChannelCases)
+  test(`${target} with ${channel === "" ? "empty" : channel} wchan and GPU tie=${tie}`, async () => {
+    await using f = await fixture();
+    // Root ownership is fixture metadata; a directory reliably makes wchan
+    // unreadable even when the test runner itself has root privileges.
+    await fs.writeFile(join(f.base, "status"), "Uid:\t0\t0\t0\t0\n");
+    await fs.writeFile(
+      join(f.base, "cmdline"),
+      "/usr/lib/systemd/systemd-journald\0",
+    );
+    let wchanPath = join(f.base, "wchan");
+    if (target === "task") {
+      await fs.writeFile(join(f.base, "stat"), stat("S"));
+      wchanPath = (await addTask(f, "456")).wchanPath;
+    }
+    await fs.rm(wchanPath);
+    if (channel === "unreadable") await fs.mkdir(wchanPath);
+    else if (channel !== "missing") await fs.writeFile(wchanPath, channel);
+    const fdRoot = join(f.base, "fd");
+    await fs.mkdir(fdRoot);
+    // An unrelated fd and a non-symlink entry are not ties.
+    await fs.symlink("/dev/null", join(fdRoot, "0"));
+    await fs.writeFile(join(fdRoot, "1"), "not a symlink");
+    if (tie === "dxg-fd") await fs.symlink("/dev/dxg", join(fdRoot, "2"));
+    const control = confirmation();
+    const refusal = await gpuAdmissionRefusal(request, 512, {
+      procRoot: f.root,
+      state: {
+        ...state,
+        processes: tie === "sampled-holder" ? [{ pid: 123, usedMiB: 1 }] : [],
+      },
+      ...control.options,
+    });
+    if (tie === "none") {
+      expect(refusal).toBeUndefined();
+      expect(control.sleeps).toEqual([]);
+    } else {
+      expect(refusal).toContain("wait channel unavailable");
+      expect(refusal).toContain(wchanPath);
+      expect(control.sleeps).toEqual(target === "task" ? [3000] : []);
+    }
+  });
+
+for (const target of ["leader", "task"] as const)
+  test(`unscoped unsampled ${target} with dxgvmb_send_sync_msg still refuses`, async () => {
+    await using f = await fixture();
+    let wchanPath = join(f.base, "wchan");
+    if (target === "task") {
+      await fs.writeFile(join(f.base, "stat"), stat("Z"));
+      wchanPath = (await addTask(f, "456")).wchanPath;
+    }
+    await fs.writeFile(wchanPath, "dxgvmb_send_sync_msg\n");
+    const control = confirmation();
+    expect(
+      await gpuAdmissionRefusal(request, 512, {
+        procRoot: f.root,
+        state,
+        ...control.options,
+      }),
+    ).toContain("GPU persistent dxg stall");
     expect(control.sleeps).toEqual([3000]);
   });
 

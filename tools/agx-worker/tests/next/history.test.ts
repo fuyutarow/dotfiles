@@ -13,7 +13,7 @@ afterEach(async () => {
   else process.env.AGX_NEXT_STATE_DIR = priorState;
 });
 
-test("judgments reach per-row criteria; unjudged exits do not imply acceptance", async () => {
+test("audit history can aggregate judgments; unjudged exits do not imply acceptance", async () => {
   root = await mkdtemp(join(tmpdir(), "router-graded-"));
   process.env.AGX_NEXT_STATE_DIR = root;
   const at = "2026-10-16T00:00:00Z";

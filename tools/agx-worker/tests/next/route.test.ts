@@ -273,9 +273,50 @@ describe("capability constrained routing", () => {
     }
   });
 
-  test("graded aggregate is passed to criterionFor without raw history", async () => {
+  test("local accepted and rejected history cannot change the Jev request", async () => {
+    const capture = async (decisions: readonly string[]) => {
+      await isolateState();
+      for (const decision of decisions) {
+        const started = appendStarted("sol-medium");
+        expect(started?.kind).toBe("started");
+        if (started?.kind !== "started") continue;
+        append({
+          kind: "ended",
+          id: started.id,
+          at: now(),
+          exit: 0,
+          outcome: "ok",
+          report_path: null,
+          vendor_session: null,
+        });
+        append({
+          kind: "judged",
+          id: started.id,
+          at: now(),
+          decision,
+          note: "audit-only local judgment",
+        });
+      }
+      const server = startServer("sonnet-high");
+      expect((await route("same frozen ticket")).id).toBe("sonnet-high");
+      const request = server.request();
+      expect(request).toBeDefined();
+      expect(request?.questions.worker.criteria["luna-high"]).not.toMatch(
+        /graded|accepted|rejected|history|recent|comparable/iu,
+      );
+      return request;
+    };
+
+    const successSkew = await capture(["accept", "accept", "accept", "accept"]);
+    const empty = await capture([]);
+    const inverted = await capture(["reject", "reject", "reject", "reject"]);
+    expect(empty).toEqual(successSkew);
+    expect(inverted).toEqual(successSkew);
+  });
+
+  test("historical Sol 6.1 grades stay on retired ids and do not appear on Sol 6.0", async () => {
     await isolateState();
-    const started = appendStarted("luna-high");
+    const started = appendStarted("sol-high");
     expect(started?.kind).toBe("started");
     if (started?.kind !== "started") return;
     append({
@@ -292,14 +333,19 @@ describe("capability constrained routing", () => {
       id: started.id,
       at: now(),
       decision: "accept",
-      note: "accepted by coordinator",
+      note: "historical Sol 6.1 acceptance",
     });
-    const server = startServer("sonnet-high");
-    expect((await route("aggregate replay")).id).toBe("sonnet-high");
-    expect(server.request()?.questions.worker.criteria["luna-high"]).toContain(
-      "graded here 1/0/0; recent 1/0/0; comparable unknown",
+    const server = startServer("sol6-high");
+    expect((await route("generation-isolation replay")).id).toBe("sol6-high");
+    expect(server.request()?.questions.worker.criteria["sol6-high"]).toContain(
+      "AA 42, TB4 26.3%",
     );
-    expect(server.request()?.state.history).toBeUndefined();
+    expect(
+      server.request()?.questions.worker.criteria["sol6-high"],
+    ).not.toMatch(/graded|history|recent|comparable|accepted|rejected/iu);
+    expect(
+      server.request()?.questions.worker.criteria["sol-high"],
+    ).toBeUndefined();
   });
   test("ROUTER-PROMPT-TREE: 7d is primary, 5h is secondary, and Jev chooses Codex", async () => {
     const { home } = await isolateState();
@@ -336,8 +382,8 @@ describe("capability constrained routing", () => {
     expect(request?.questions.worker.instructions).toBe(
       `${ROUTING_OBJECTIVE} Pick a roster row for this ticket.`,
     );
-    expect(request?.questions.worker.criteria["luna-high"]).toContain(
-      "graded here 0/0/0",
+    expect(request?.questions.worker.criteria["luna-high"]).not.toMatch(
+      /graded|history|recent|comparable/iu,
     );
     expect(
       Object.keys(request?.state.routes.claude.windows["7d"] ?? {}),
@@ -429,7 +475,7 @@ describe("capability constrained routing", () => {
     await isolateState();
     const server = startServer("luna-medium", {
       "luna-medium": 0.99,
-      "sol-low": 0.01,
+      "sol6-low": 0.01,
     });
     const parsed = parseNextTicket(
       `+++\nschema = 2\nname = "th-purge"\nwrites = ["PURGE-MANIFEST.tsv", "admission/**"]\noutcome = "inventory, classify, retain, and verify every theory file"\ntimeout_s = 14400\ncapabilities = ["terminal-agentic", "long-tool-loop", "bulk-classification"]\n[proposition]\nid = "TH-PURGE-1"\nclaim = "every THEORY file is retained byte-exact in canonical v1"\nrefuted_by = "a THEORY row lacks a verified v1 id or has a byte mismatch"\n+++\nInventory all prose research artifacts.\n`,
@@ -441,7 +487,7 @@ describe("capability constrained routing", () => {
       parsed.ticket.capabilities,
       parsed.ticket.timeout_s,
     );
-    expect(selected.id).toBe("sol-low");
+    expect(selected.id).not.toBe("sol6-low");
     expect(server.request()?.state.routes.claude.windows["7d"]?.status).toBe(
       "unknown",
     );
@@ -452,9 +498,9 @@ describe("capability constrained routing", () => {
     expect(
       server.request()?.questions.worker.criteria["luna-medium"],
     ).toBeUndefined();
-    expect(server.request()?.questions.worker.criteria["sol-low"]).toContain(
-      "TB4",
-    );
+    expect(
+      server.request()?.questions.worker.criteria["sol6-low"],
+    ).toBeUndefined();
     const criteria = Object.values(
       server.request()?.questions.worker.criteria ?? {},
     );
@@ -480,9 +526,9 @@ describe("capability constrained routing", () => {
       "inventory and classify the repo",
       parsed.ticket.capabilities,
       parsed.ticket.timeout_s,
-      ["sol-low"],
+      ["sol6-low"],
     );
-    expect(retry.id).not.toBe("sol-low");
+    expect(retry.id).not.toBe("sol6-low");
     expect(retry.id).not.toBe("luna-medium");
     appendStarted(retry.id);
   });
@@ -589,4 +635,76 @@ describe("capability constrained routing", () => {
       );
     }
   });
+});
+
+test("fresh Sol6.0 criteria use sourced metrics; retired Jev pick cannot select 6.1", async () => {
+  await isolateState();
+  const server = startServer("sol-high", { "sol-high": 1 });
+  const picked = await route("fresh generation probe");
+  expect(picked.id).not.toStartWith("sol-");
+  expect(picked.model).not.toBe("gpt-6.1-sol");
+  const criteria = server.request()?.questions.worker.criteria ?? {};
+  expect(
+    Object.keys(criteria).filter((id) => id.startsWith("sol6-")),
+  ).toHaveLength(5);
+  expect(criteria["sol6-high"]).toContain("AA 42, TB4 26.3%");
+  expect(criteria["sol6-high"]).toContain("measurement date unknown");
+  expect(criteria["sol6-high"]).toContain("SciCode under review");
+  expect(criteria["sol6-high"]).toContain("Standard API list price");
+  expect(criteria["sol6-high"]).toContain(
+    "subscription marginal spend unknown",
+  );
+  expect(criteria["sol-high"]).toBeUndefined();
+});
+for (const capability of ["terminal-agentic", "long-tool-loop"]) {
+  test(`Sol6.0 ${capability} eligibility is exactly xhigh/max`, async () => {
+    await isolateState();
+    const server = startServer("sol6-xhigh", { "sol6-xhigh": 1 });
+    expect((await route("terminal probe", [capability])).id).toBe("sol6-xhigh");
+    const criteria = server.request()?.questions.worker.criteria ?? {};
+    expect(
+      Object.keys(criteria)
+        .filter((id) => id.startsWith("sol6-"))
+        .toSorted(),
+    ).toEqual(["sol6-max", "sol6-xhigh"]);
+    expect(criteria["sol6-xhigh"]).toContain("TB4 30.3%");
+    expect(criteria["sol6-max"]).toContain("TB4 43.9%");
+  });
+}
+test("combined candidate rejects mixed Sol generations before Jev, even outside auto routes", async () => {
+  const { root } = await isolateState();
+  const path = join(root, "roster.toml");
+  await writeFile(
+    path,
+    (await readFile(path, "utf8"))
+      .replace(
+        'id = "sol6-low"\nroute = "codex"\nmodel = "gpt-6-sol"',
+        'id = "sol6-low"\nroute = "claude"\nmodel = "gpt-6.1-sol"',
+      )
+      .replace("[auto]", '[auto]\nroutes = ["codex"]'),
+  );
+  const server = startServer("sol6-high");
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--eval",
+      `import {route} from ${JSON.stringify(new URL("../../src/next/route.ts", import.meta.url).pathname)}; await route("mixed candidate");`,
+    ],
+    { env: process.env, stdout: "pipe", stderr: "pipe", timeout: 5000 },
+  );
+  const [exit, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  // loadRoster failure is a configuration error (1); candidate exhaustion uses 2.
+  expect(exit, stderr).toBe(1);
+  expect(stdout).toBe("");
+  expect(stderr).toStartWith(
+    "agx: cannot read dispatch roster: model family sol has multiple generations:",
+  );
+  expect(stderr).toContain("Keep one generation for each family");
+  expect(stderr).toContain("gpt-6.1-sol");
+  expect(stderr).toContain("gpt-6-sol");
+  expect(server.request()).toBeUndefined();
 });

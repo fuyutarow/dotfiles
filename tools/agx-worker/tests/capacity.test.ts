@@ -144,7 +144,7 @@ test.each(["codex", "stderr", "stubborn", "wait", "claude", "claude-stderr"])(
       : [
           "tools/agx-worker/src/workers/codex.ts",
           "--model",
-          "gpt-6.1-sol",
+          "gpt-6-sol",
           "--effort",
           "medium",
           "--sandbox",
@@ -176,7 +176,7 @@ test("a worker doing real work can exceed the startup wait without capacity", as
     [
       "tools/agx-worker/src/workers/codex.ts",
       "--model",
-      "gpt-6.1-sol",
+      "gpt-6-sol",
       "--effort",
       "medium",
       "--sandbox",
@@ -204,7 +204,7 @@ test("authentication failures remain worker errors rather than cooling a model",
     [
       "tools/agx-worker/src/workers/codex.ts",
       "--model",
-      "gpt-6.1-sol",
+      "gpt-6-sol",
       "--effort",
       "medium",
       "--sandbox",
@@ -229,7 +229,7 @@ test("cool-down expires at 300 seconds and covers effort variants of that vendor
   const at = Temporal.Now.instant().epochMilliseconds;
   const runs = [
     {
-      row: "sol-medium",
+      row: "sol6-medium",
       outcome: "capacity",
       ended_at: Temporal.Instant.fromEpochMilliseconds(at).toString(),
     },
@@ -239,8 +239,8 @@ test("cool-down expires at 300 seconds and covers effort variants of that vendor
     roster.value.choice,
     at + CAPACITY_COOLDOWN_MS - 1,
   );
-  expect(cooling.has("sol-medium")).toBe(true);
-  expect(cooling.has("sol-low")).toBe(true);
+  expect(cooling.has("sol6-medium")).toBe(true);
+  expect(cooling.has("sol6-low")).toBe(true);
   expect(cooling.has("luna-high")).toBe(false);
   expect(
     capacityRows(runs, roster.value.choice, at + CAPACITY_COOLDOWN_MS).size,
@@ -261,7 +261,10 @@ test("real dispatch records capacity; fresh and continued dispatches cannot reus
     fetch: () =>
       Response.json({
         answers: {
-          worker: { choice: "sol-medium", probabilities: { "sol-medium": 1 } },
+          worker: {
+            choice: "sol6-medium",
+            probabilities: { "sol6-medium": 1 },
+          },
         },
       }),
   });
@@ -299,7 +302,7 @@ test("real dispatch records capacity; fresh and continued dispatches cannot reus
   const first = await run();
   expect(first.exit, first.stderr).toBe(75);
   const receipt = decodedJson(Receipt, first.stdout);
-  expect(receipt).toMatchObject({ row: "sol-medium", outcome: "capacity" });
+  expect(receipt).toMatchObject({ row: "sol6-medium", outcome: "capacity" });
   const firstEvents = (await readFile(join(state, "records.jsonl"), "utf8"))
     .trim()
     .split("\n")
@@ -309,11 +312,11 @@ test("real dispatch records capacity; fresh and continued dispatches cannot reus
     verify: [],
   });
   const fresh = decodedJson(Receipt, (await run()).stdout);
-  expect(fresh.row).not.toStartWith("sol-");
+  expect(fresh.row).not.toStartWith("sol6-");
   const continued = await run(["--continue", receipt.id ?? "missing"]);
   expect(continued.stderr).toContain("resuming");
   const resumed = decodedJson(Receipt, continued.stdout);
-  expect(resumed.row).not.toStartWith("sol-");
+  expect(resumed.row).not.toStartWith("sol6-");
   const calls = (await readFile(join(f.root, "invocations.jsonl"), "utf8"))
     .trim()
     .split("\n")
@@ -321,7 +324,7 @@ test("real dispatch records capacity; fresh and continued dispatches cannot reus
   expect(calls).toHaveLength(3);
   expect(calls[2]).toContain("resume");
   expect(calls[2]).toContain("capacity-thread");
-  expect(calls[2]?.[calls[2].indexOf("-m") + 1]).not.toBe("gpt-6.1-sol");
+  expect(calls[2]?.[calls[2].indexOf("-m") + 1]).not.toBe("gpt-6-sol");
   // No vendor session means a fresh replacement, with explicit lineage rather than --resume.
   const records = join(state, "records.jsonl");
   const old = "sessionless-capacity";
@@ -335,7 +338,7 @@ test("real dispatch records capacity; fresh and continued dispatches cannot reus
       writes: [],
       cwd: f.root,
       workspace: f.root,
-      row: "sol-medium",
+      row: "sol6-medium",
       dispatcher_session: null,
       vendor_session: null,
       pid: 0,
@@ -386,5 +389,5 @@ test("real dispatch records capacity; fresh and continued dispatches cannot reus
     `${historical.map((event) => JSON.stringify(event.outcome === "capacity" ? { ...event, at: staleAt } : event)).join("\n")}\n`,
   );
   const expired = await run(["--continue", receipt.id ?? "missing"]);
-  expect(decodedJson(Receipt, expired.stdout).row).not.toStartWith("sol-");
+  expect(decodedJson(Receipt, expired.stdout).row).not.toStartWith("sol6-");
 }, 30_000);

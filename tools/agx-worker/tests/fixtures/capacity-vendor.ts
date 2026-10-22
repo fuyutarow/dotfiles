@@ -29,7 +29,7 @@ if (
   mode === "codex" ||
   mode === "stubborn" ||
   mode === "stderr" ||
-  (mode === "sol-only" && model === "gpt-6.1-sol")
+  (mode === "sol-only" && model === "gpt-6-sol")
 ) {
   if (mode === "stubborn") process.on("SIGTERM", () => {});
   const message =

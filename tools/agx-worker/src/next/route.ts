@@ -11,7 +11,6 @@ import {
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { exitWithError } from "./exit.ts";
 import { readRouteUsage } from "./usage.ts";
-import { gradedHistory } from "./history.ts";
 import { foldedRuns, setPendingPickAudit } from "./store.ts";
 import { CAPACITY_COOLDOWN_MS, capacityRows } from "./capacity.ts";
 
@@ -78,12 +77,8 @@ export async function route(
         : "agx: all capability-eligible routes are at their subscription limit\n",
       2,
     );
-  const history = await gradedHistory(runs, brief);
   const criteria = Object.fromEntries(
-    candidates.map((row) => [
-      row.id,
-      criterionFor(roster, row, history(row.id)),
-    ]),
+    candidates.map((row) => [row.id, criterionFor(roster, row)]),
   );
   const request: Record<string, unknown> = {
     state: {

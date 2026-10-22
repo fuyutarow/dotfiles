@@ -3,14 +3,11 @@ import { escalationRow, sampleRow } from "../src/selection.ts";
 import { loadRoster } from "../../../agents/models/roster.ts";
 
 describe("deterministic escalation", () => {
-  test("sol-high and luna-low prefer capable next-effort rows at the cheapest price", async () => {
+  test("sourced Sol6.0 measurements establish capability-preserving escalation", async () => {
     const loaded = await loadRoster();
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
-    for (const [failedId, expectedId] of [
-      ["sol-high", "sol-xhigh"],
-      ["luna-low", "luna-medium"],
-    ]) {
+    for (const [failedId, expectedId] of [["luna-low", "luna-medium"]]) {
       const failed = loaded.value.choice.find((row) => row.id === failedId);
       expect(failed).toBeDefined();
       if (failed === undefined) continue;
@@ -21,17 +18,26 @@ describe("deterministic escalation", () => {
         selected,
       );
     }
+    const sol6High = loaded.value.choice.find((row) => row.id === "sol6-high");
+    expect(sol6High).toBeDefined();
+    if (sol6High !== undefined)
+      expect(
+        escalationRow(
+          loaded.value.choice.filter((row) => row.route === "codex"),
+          sol6High,
+        ),
+      ).toMatchObject({ id: "sol6-xhigh", model: "gpt-6-sol" });
   });
 
   test("cheap rows and same-family next effort cannot bypass the AA floor", () => {
     const failed = {
-      id: "sol-high",
+      id: "sol6-high",
       model: "sol",
       effort: "high",
       aa_index: 50,
     };
     const lower = {
-      id: "sol-xhigh",
+      id: "sol6-xhigh",
       model: "sol",
       effort: "xhigh",
       aa_index: 49,
@@ -52,10 +58,10 @@ describe("deterministic escalation", () => {
     expect(escalationRow(rows, failed)).toBeUndefined();
     expect(
       escalationRow(
-        [...rows, { ...lower, id: "sol-max", aa_index: 51 }],
+        [...rows, { ...lower, id: "sol6-max", aa_index: 51 }],
         failed,
       )?.id,
-    ).toBe("sol-max");
+    ).toBe("sol6-max");
   });
 
   test("hard-masked high effort cannot route back to the failed row", () => {
@@ -97,10 +103,10 @@ describe("deterministic escalation", () => {
   });
 
   test("unknown capability or price cannot establish a safe cheapest escalation", () => {
-    const row = { id: "sol-high", model: "sol", effort: "high" };
+    const row = { id: "sol6-high", model: "sol", effort: "high" };
     expect(escalationRow([row], row)).toBeUndefined();
     expect(
-      escalationRow([{ ...row, id: "sol-max", aa_index: 51 }], {
+      escalationRow([{ ...row, id: "sol6-max", aa_index: 51 }], {
         ...row,
         aa_index: 50,
       }),
@@ -109,7 +115,7 @@ describe("deterministic escalation", () => {
 
   test("a budget excluding every capable row cannot force a cheaper downgrade", () => {
     const failed = {
-      id: "sol-high",
+      id: "sol6-high",
       model: "sol",
       effort: "high",
       aa_index: 50,
@@ -126,7 +132,7 @@ describe("deterministic escalation", () => {
         price_out: 0.5,
       },
       failed,
-      { ...failed, id: "sol-xhigh", effort: "xhigh", aa_index: 51 },
+      { ...failed, id: "sol6-xhigh", effort: "xhigh", aa_index: 51 },
     ];
     expect(escalationRow(rows, failed, 0.02)).toBeUndefined();
   });

@@ -15,7 +15,7 @@ export const ROSTER_PATH = join(import.meta.dir, "dispatch-roster.toml");
 // otherwise believe it took effect. Optional numbers mean "not on a primary page", not a default.
 const RouteSchema = z.enum(["codex", "claude"]);
 const ChoiceSchema = z.strictObject({
-  id: z.string().regex(/^[a-z]+-[a-z]+$/u),
+  id: z.string().regex(/^[a-z]+[0-9]*-[a-z]+$/u),
   route: RouteSchema,
   model: z.string(),
   effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
@@ -102,6 +102,112 @@ export type RosterLoad =
   | { readonly ok: true; readonly value: Roster }
   | { readonly ok: false; readonly error: string };
 
+type ModelGeneration = Readonly<{ family: string; generation: string }>;
+type ModelGenerationParse =
+  | { readonly ok: true; readonly value: ModelGeneration | undefined }
+  | { readonly ok: false; readonly error: string };
+
+function normalizeGeneration(parts: string[]): string {
+  const normalized = parts.map((part) => BigInt(part).toString());
+  while (normalized.length > 1 && normalized.at(-1) === "0") normalized.pop();
+  return normalized.join(".");
+}
+
+/** Recognize only the provider slug shapes represented in the committed catalog. */
+function parseModelGeneration(model: string): ModelGenerationParse {
+  const gpt = /^gpt-(\d+(?:\.\d+)?)-([a-z]+)$/u.exec(model);
+  if (gpt !== null) {
+    const family = gpt[2];
+    const generation = gpt[1];
+    if (family === undefined || generation === undefined)
+      return {
+        ok: false,
+        error: `cannot read model slug ${JSON.stringify(model)}`,
+      };
+    return {
+      ok: true,
+      value: {
+        family,
+        generation: normalizeGeneration(generation.split(".")),
+      },
+    };
+  }
+
+  const malformedGptFamily = /^gpt-[\d.]+-([a-z]+)(?:-.+)?$/u.exec(model);
+  if (malformedGptFamily !== null) {
+    const family = malformedGptFamily[1];
+    return {
+      ok: false,
+      error:
+        `model slug ${JSON.stringify(model)} names supported family ${family} ` +
+        `but must use gpt-<numeric-generation>-${family}`,
+    };
+  }
+
+  const claude = /^claude-([a-z]+)-(\d+)-(\d+)$/u.exec(model);
+  if (claude !== null) {
+    const family = claude[1];
+    const major = claude[2];
+    const minor = claude[3];
+    if (family === undefined || major === undefined || minor === undefined)
+      return {
+        ok: false,
+        error: `cannot read model slug ${JSON.stringify(model)}`,
+      };
+    return {
+      ok: true,
+      value: {
+        family: `claude-${family}`,
+        generation: normalizeGeneration([major, minor]),
+      },
+    };
+  }
+
+  const malformedClaudeFamily = /^claude-([a-z]+)-(?=.*\d).+$/u.exec(model);
+  if (malformedClaudeFamily !== null) {
+    const family = malformedClaudeFamily[1];
+    return {
+      ok: false,
+      error:
+        `model slug ${JSON.stringify(model)} names supported family claude-${family} ` +
+        `but must use claude-${family}-<major>-<minor>`,
+    };
+  }
+
+  return { ok: true, value: undefined };
+}
+
+function generationExclusivityError(roster: Roster): string | undefined {
+  const families = new Map<string, Map<string, Set<string>>>();
+  for (const row of roster.choice) {
+    const parsed = parseModelGeneration(row.model);
+    if (!parsed.ok) return parsed.error;
+    if (parsed.value === undefined) continue;
+    const generations =
+      families.get(parsed.value.family) ?? new Map<string, Set<string>>();
+    const models =
+      generations.get(parsed.value.generation) ?? new Set<string>();
+    models.add(row.model);
+    generations.set(parsed.value.generation, models);
+    families.set(parsed.value.family, generations);
+  }
+
+  const conflicts = [...families].flatMap(([family, generations]) => {
+    if (generations.size < 2) return [];
+    const versions = [...generations].map(
+      ([generation, models]) =>
+        `${[...models].join(", ")} (generation ${generation})`,
+    );
+    return [
+      `model family ${family} has multiple generations: ${versions.join("; ")}`,
+    ];
+  });
+  return conflicts.length === 0
+    ? undefined
+    : `${conflicts.join(". ")}. Keep one generation for each family by removing or ` +
+        "updating the conflicting roster rows.";
+}
+
 /** The parsed roster, or why not (missing file, bad TOML, or zod's reason) — never a throw. */
 export async function loadRoster(path = ROSTER_PATH): Promise<RosterLoad> {
   const raw = await attempt(async () =>
@@ -109,9 +215,11 @@ export async function loadRoster(path = ROSTER_PATH): Promise<RosterLoad> {
   );
   if (!raw.ok) return { ok: false, error: errorMessage(raw.error) };
   const r = RosterSchema.safeParse(raw.value);
-  return r.success
+  if (!r.success) return { ok: false, error: r.error.message };
+  const generationError = generationExclusivityError(r.data);
+  return generationError === undefined
     ? { ok: true, value: r.data }
-    : { ok: false, error: r.error.message };
+    : { ok: false, error: generationError };
 }
 
 const num = (v: number | undefined): string => (v === undefined ? "–" : `${v}`);
@@ -134,6 +242,7 @@ export function costMultiple(r: Roster, c: Choice): number | undefined {
   return Math.round((own / cheapest) * 10) / 10;
 }
 
+/** Judgment counts remain an audit/history representation; routing does not consume them. */
 export type GradeCounts = Readonly<{
   accepted: number;
   partial: number;
@@ -146,31 +255,18 @@ export type Graded = Readonly<{
 }>;
 
 export const ROUTING_OBJECTIVE =
-  "Objective: get an accepted, useful result for this ticket fast and cheaply within subscription limits. Logic tree: A. Capability sufficiency (hard): satisfy required capability tags, task size, and long terminal/agentic work; use the brief and measured capabilities to assess sufficiency. B. Expected time to an accepted return: weigh likely success, latency, and rework; choose sufficient effort. C. Cost and subscription health: weigh 7-day windows most; 5-hour windows are secondary information. Keep the intended bias toward the codex route. Pace = used fraction minus elapsed fraction; negative means quota may expire unused. Stale or unknown usage is neutral. D. History is a weak prior for reference only, never the main criterion; little history means uncertainty, not a reason to avoid a row. Counts are accepted/partial/rejected, recent means 7 days, comparable means the same proposition when recorded. agx supplies the objective and evidence; Jev decides.";
+  "Objective: get an accepted, useful result for this ticket fast and cheaply within subscription limits. Logic tree: A. Capability sufficiency (hard): satisfy required capability tags, task size, and long terminal/agentic work; use the brief and measured capabilities to assess sufficiency. B. Expected time to an accepted return: weigh likely success, latency, and rework; choose sufficient effort. C. Cost and subscription health: weigh 7-day windows most; 5-hour windows are secondary information. Keep the intended bias toward the codex route. Pace = used fraction minus elapsed fraction; negative means quota may expire unused. Stale or unknown usage is neutral. agx supplies the objective and evidence; Jev decides.";
 
-const counts = (value: GradeCounts) =>
-  `${value.accepted}/${value.partial}/${value.rejected}`;
-
-/** What Jev reads about one row: what it is for, its measured capability, its price relative to the
- *  cheapest row, and how its graded runs here went. SELECTION (owner 2026-10-06: 「model パフォーマン
- *  ステーブルと task brief によって選択されるべき」): the pick comes from these numbers against the
- *  brief — no hand-set weight or post-hoc route bias corrects Jev afterwards. The route is part
- *  of each row's criterion. */
-export function criterionFor(r: Roster, c: Choice, graded?: Graded): string {
+/** What Jev reads about one row: its route, measured capability, and relative price. */
+export function criterionFor(r: Roster, c: Choice): string {
   const measured = [
     c.aa_index === undefined ? undefined : `AA ${c.aa_index}`,
     c.tb4 === undefined ? undefined : `TB4 ${c.tb4}% (long terminal/agentic)`,
     c.scicode === undefined ? undefined : `SciCode ${c.scicode}%`,
   ].filter((x) => x !== undefined);
-  const comparable =
-    graded?.comparable === undefined ? "unknown" : counts(graded.comparable);
-  const record =
-    graded === undefined
-      ? "no graded runs here yet"
-      : `graded here ${counts(graded.here)}; recent ${counts(graded.recent)}; comparable ${comparable}`;
   return (
-    `Route ${c.route}. ${c.use_for}. Measured (Artificial Analysis, ${r.as_of}): ${measured.join(", ")}. ` +
-    `Price ${price(c.price_in)}/${price(c.price_out)} per 1M tokens in/out = ${costMultiple(r, c) ?? "unknown"}x the cheapest row. ${record}.`
+    `Route ${c.route}. ${c.use_for}. Published benchmark snapshot (${c.model === "gpt-6-sol" ? "Artificial Analysis v4.3.2, accessed 2026-10-22; measurement date unknown; SciCode under review" : `Artificial Analysis, ${r.as_of}`}): ${measured.length === 0 ? "unknown" : measured.join(", ")}. ` +
+    `${c.model === "gpt-6-sol" ? "Standard API list price (prompt <=272K; subscription marginal spend unknown)" : "Price"} ${price(c.price_in)}/${price(c.price_out)} per 1M tokens in/out = ${costMultiple(r, c) ?? "unknown"}x the cheapest row.`
   );
 }
 
@@ -191,8 +287,8 @@ export function rosterTable(r: Roster): string {
  * the repo's agents/claude/CLAUDE.md holds only the markers — one writer per file. */
 export function rosterPolicy(r: Roster): string {
   return [
-    `- **Every worker starts with \`agx worker run <ticket>\`. The router chooses from the roster using the ticket and the recorded run history.**`,
-    `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest priced row; as of ${r.as_of}.`,
+    `- **Every worker starts with \`agx worker run <ticket>\`. The router chooses from the roster using the ticket, measured model evidence, and current operational availability.**`,
+    `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest priced row; older snapshot ${r.as_of}; Sol6.0 accessed 2026-10-22, measurement date unknown, AA index v4.3.2, SciCode under review, Standard API prices for prompts <=272K (subscription marginal spend unknown).`,
     "",
     ...rosterTable(r)
       .split("\n")

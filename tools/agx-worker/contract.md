@@ -19,6 +19,9 @@ except for the capacity recovery described below.
 Run events, progress, and judgments are stored in one append-only `records.jsonl` file. The default
 state directory keeps its `agx-next` name for compatibility; the real state directory is not
 migrated by this CLI switch.
+Local judgments and graded run summaries remain audit data and do not enter the Jev request or
+deterministic fallback ranking. Selection uses the ticket, roster evidence, explicit route and
+capability policy, live quota availability, and operational capacity guards.
 
 Use `agx worker ls --json` as the machine-readable view. Its rows include the run ID, ticket, state,
 workspace, selected roster row, write globs, judgment, report path, progress path, and continuation

@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.0.4 — 2026-10-22
+
+- Use sourced Sol6.0 rows, reject mixed model generations, and remove local judgment feedback from selection
+
 ## 8.0.3 — 2026-10-22
 
 - Recognize native Claude HTTP 529 retry events as capacity before vendor retries.

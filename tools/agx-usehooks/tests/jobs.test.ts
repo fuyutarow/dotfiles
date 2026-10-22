@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
@@ -135,6 +135,82 @@ test("job fallback reads process cwd and retains explicit kind and labels", asyn
     cwd: root,
     kind: "compute",
     labels: ["benchmark", "gpu"],
+  });
+});
+
+test.each([
+  ["AGX_KIND=compute", "AGX_JOB_KIND"],
+  ['AGX_LABELS="benchmark,gpu"', "AGX_JOB_LABELS"],
+])(
+  "retired job alias %s diagnoses %s and fails open",
+  async (environment, canonical) => {
+    const { ctx } = world([
+      {
+        Id: "alias.service",
+        ActiveState: "active",
+        SubState: "running",
+        Environment: environment,
+      },
+    ]);
+    const stderr = spyOn(process.stderr, "write").mockImplementation(
+      () => true,
+    );
+    await (async () => {
+      const [job] = await runningJobs(ctx);
+      expect(job).toMatchObject({ id: "alias.service", labels: [] });
+      expect(job).not.toHaveProperty("kind");
+      expect(stderr).toHaveBeenCalledTimes(1);
+      expect(stderr.mock.calls[0]?.[0]).toContain("agx-usehooks contract:");
+      expect(stderr.mock.calls[0]?.[0]).toContain(canonical);
+    })().finally(() => {
+      stderr.mockRestore();
+    });
+  },
+);
+
+test.each([
+  [
+    'AGX_JOB_KIND=compute AGX_JOB_LABELS="benchmark,gpu local"',
+    "compute",
+    ["benchmark", "gpu", "local"],
+  ],
+  ['AGX_JOB_KIND="" AGX_JOB_LABELS=""', "", []],
+])(
+  "canonical job metadata ignores conflicting aliases: %s",
+  async (environment, kind, labels) => {
+    const { ctx } = world([
+      {
+        Id: "canonical.service",
+        ActiveState: "active",
+        SubState: "running",
+        Environment: `${environment} AGX_KIND=retired AGX_LABELS=retired`,
+      },
+    ]);
+    const stderr = spyOn(process.stderr, "write").mockImplementation(
+      () => true,
+    );
+    await (async () => {
+      const [job] = await runningJobs(ctx);
+      expect(job).toMatchObject({ kind, labels });
+      expect(stderr).not.toHaveBeenCalled();
+    })().finally(() => {
+      stderr.mockRestore();
+    });
+  },
+);
+
+test("omitted job metadata remains optional without diagnostics", async () => {
+  const { ctx } = world([
+    { Id: "optional.service", ActiveState: "active", SubState: "running" },
+  ]);
+  const stderr = spyOn(process.stderr, "write").mockImplementation(() => true);
+  await (async () => {
+    const [job] = await runningJobs(ctx);
+    expect(job).toMatchObject({ labels: [] });
+    expect(job).not.toHaveProperty("kind");
+    expect(stderr).not.toHaveBeenCalled();
+  })().finally(() => {
+    stderr.mockRestore();
   });
 });
 

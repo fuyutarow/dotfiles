@@ -76,7 +76,11 @@ inside `ctx.repoRoot` yields `projectUnattributed`; all others are `foreign`.
 other sessions. Failed, exited, unavailable, or slow services produce no live jobs.
 The list and batched property read share a 1 s subprocess budget. Job kind and labels come
 from optional `AGX_JOB_KIND` and comma/space-separated `AGX_JOB_LABELS` unit environment
-values (`AGX_KIND` and `AGX_LABELS` are also accepted). `procRoot` defaults to `/proc` and
+values. The retired `AGX_KIND` and `AGX_LABELS` aliases are ignored; an alias without
+its canonical variable emits an `agx-usehooks contract:` diagnostic naming the canonical
+variable, while returning the job without that kind or with empty labels. Removing
+accepted environment names requires a major release, including during 0.x.
+`procRoot` defaults to `/proc` and
 may be supplied for alternate proc mounts or fixtures.
 
 Register the package once with `cd <dotfiles>/tools/agx-usehooks && bun link`.

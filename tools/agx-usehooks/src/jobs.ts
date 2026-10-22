@@ -93,14 +93,23 @@ async function jobFromUnit(
   let attribution: Job["attribution"] = "foreign";
   if (session !== undefined && session !== "") attribution = "session";
   else if (projectCwd(cwd, ctx.repoRoot)) attribution = "projectUnattributed";
-  const kind = env.get("AGX_JOB_KIND") ?? env.get("AGX_KIND");
+  for (const [canonical, retired] of [
+    ["AGX_JOB_KIND", "AGX_KIND"],
+    ["AGX_JOB_LABELS", "AGX_LABELS"],
+  ] as const) {
+    if (!env.has(canonical) && env.has(retired))
+      process.stderr.write(
+        `agx-usehooks contract: ${id}: use ${canonical}; ${retired} is no longer accepted\n`,
+      );
+  }
+  const kind = env.get("AGX_JOB_KIND");
   return {
     id,
     attribution,
     ...(session === undefined || session === "" ? {} : { session }),
     ...(cwd === undefined || cwd === "" ? {} : { cwd }),
     ...(kind === undefined ? {} : { kind }),
-    labels: (env.get("AGX_JOB_LABELS") ?? env.get("AGX_LABELS") ?? "")
+    labels: (env.get("AGX_JOB_LABELS") ?? "")
       .split(/[\s,]+/u)
       .filter((label) => label !== ""),
   };

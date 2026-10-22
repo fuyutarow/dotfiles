@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0 — 2026-10-23
+
+- Remove AGX_KIND and AGX_LABELS job environment aliases; diagnose alias-only metadata with the canonical variable name.
+
 ## 0.11.1 — 2026-10-17
 
 - Read GPU owner state and report stale or unresponsive observations.

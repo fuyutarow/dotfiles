@@ -38,10 +38,10 @@ describe("commandKey", () => {
     ["agx worker dispatch b.md --ws x", "agx worker dispatch --ws"],
     ["agx-worker dispatch b.md --ws x", "agx-worker dispatch --ws"],
     [
-      "polysearch leaderboard --all --format json",
-      "polysearch leaderboard --all --format",
+      "example-records leaderboard --all --format json",
+      "example-records leaderboard --all --format",
     ],
-    ["polysearch leaderboard", "polysearch leaderboard"],
+    ["example-records leaderboard", "example-records leaderboard"],
     ["bunx --bun oxlint --type-aware x.ts", "bunx --bun --type-aware"],
     ["ls", "ls"],
     ["/bin/cp -f a b", undefined],
@@ -149,11 +149,11 @@ describe("the measured rule", () => {
 test("one slow latest run is enough: judged by the larger of median and latest", () => {
   const dir = scratch();
   for (const [i, ms] of [500, 600, 700, 120_000].entries()) {
-    recordStart(dir, `j${i}`, "polysearch leaderboard --all", 0);
+    recordStart(dir, `j${i}`, "example-records leaderboard --all", 0);
     recordEnd(dir, `j${i}`, ms);
   }
-  expect(medianMs(dir, "polysearch leaderboard --all")).toBe(650);
-  expect(judgedMs(dir, "polysearch leaderboard --all")).toBe(120_000);
+  expect(medianMs(dir, "example-records leaderboard --all")).toBe(650);
+  expect(judgedMs(dir, "example-records leaderboard --all")).toBe(120_000);
 });
 
 test("a compound call first seen as a whole is still sent back when one of its steps is known slow", () => {

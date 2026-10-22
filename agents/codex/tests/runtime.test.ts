@@ -163,7 +163,7 @@ describe("WSL dual Codex runtime", () => {
     const encoded = conptyConfigArgument({
       executable: "C:\\Program Files\\Codex\\codex.exe",
       args: ["exec", "hello"],
-      cwd: "\\\\wsl.localhost\\r99-u26\\home\\fuyu\\Workspace\\firedancer",
+      cwd: "\\\\wsl.localhost\\r99-u26\\home\\fuyu\\Workspace\\example-research",
       codeXHome: "C:\\Users\\fuyutarow\\.codex",
       cols: 120,
       rows: 40,
@@ -173,7 +173,7 @@ describe("WSL dual Codex runtime", () => {
         JSON.stringify({
           executable: "C:\\Program Files\\Codex\\codex.exe",
           args: ["exec", "hello"],
-          cwd: "\\\\wsl.localhost\\r99-u26\\home\\fuyu\\Workspace\\firedancer",
+          cwd: "\\\\wsl.localhost\\r99-u26\\home\\fuyu\\Workspace\\example-research",
           codeXHome: "C:\\Users\\fuyutarow\\.codex",
           cols: 120,
           rows: 40,

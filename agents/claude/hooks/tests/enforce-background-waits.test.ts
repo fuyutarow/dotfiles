@@ -279,7 +279,7 @@ function decideWithEnv(command: string, env: NodeJS.ProcessEnv): string {
 }
 
 // A shell-level `&` inside a call that already has run_in_background:true outlives the observed
-// outer shell (firedancer coordinator, 2026-10-08): denied unless the script waits for the job.
+// outer shell (example-research coordinator, 2026-10-08): denied unless the script waits for the job.
 describe("unwaitedJobs", () => {
   const INCIDENT =
     "agx worker run /tmp/brief.md --continue run-123 > /tmp/out.log 2>&1 &";

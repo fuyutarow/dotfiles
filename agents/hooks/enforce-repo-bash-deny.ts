@@ -4,7 +4,7 @@
 // A repo declares what agents may not run in ONE place, its `.claude/settings.json`:
 //   "permissions": { "deny": ["Bash(git:*)", "Bash(command git:*)", "Bash(env git:*)"] }
 // Claude Code enforces that natively. Codex never reads the file, so before 2026-10-01 a Codex
-// session ran git in jj repos (dotfiles, firedancer) that ban it for agents. This hook reads the
+// session ran git in jj repos (dotfiles, example-research) that ban it for agents. This hook reads the
 // same rules and denies the same commands; Claude is not wired to it (hooks.toml vendors) —
 // a second judgment over the same act would only print a second message.
 //

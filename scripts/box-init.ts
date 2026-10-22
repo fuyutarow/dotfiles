@@ -21,7 +21,7 @@ type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 export type Cmd = { argv: string[]; stdinFrom?: string[] };
 
 export type Step = {
-  /** Verdict-line name, e.g. `clone firedancer`. */
+  /** Verdict-line name, e.g. `clone example-research`. */
   name: string;
   /** Steps sharing a group stop at the group's first FAIL; "" = the box itself (a FAIL stops all). */
   group: string;

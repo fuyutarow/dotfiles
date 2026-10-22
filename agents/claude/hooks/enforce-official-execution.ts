@@ -1,24 +1,24 @@
-// PreToolUse gate (matcher: Bash) — in a firedancer working copy, julia runs only TRACKED code.
+// PreToolUse gate (matcher: Bash) — in an example-research working copy, julia runs only TRACKED code.
 //
-// Owner, 2026-10-08: 「scratch の利用禁止を形式的に実現してください」. That day every firefly-gdl
+// Owner, 2026-10-08: 「scratch の利用禁止を形式的に実現してください」. That day every measured
 // number came from throwaway julia scripts in a scratchpad that called runner internals or
-// reimplemented arenas; none went through launcher/launch.ts, none was a polysearch run or a
-// leaderboard row (polysearch finding2610_0812efag3). polysearch's own hook only classifies WRITES
+// reimplemented arenas; none went through launcher/launch.ts, none was an example-records run or a
+// leaderboard row. example-records's own hook only classifies WRITES
 // into research_record/, so nothing stood between a scratch script and a reported number.
 //
-// A firedancer working copy is any directory whose root holds launcher/launch.ts AND
+// An example-research working copy is any directory whose root holds launcher/launch.ts AND
 // packages/ModelRegistry.jl — the main checkout, a jj workspace, a git worktree
-// (firedancer-simplify). A command that executes julia is allowed only when its program file is a
+// (example-research-simplify). A command that executes julia is allowed only when its program file is a
 // TRACKED file of such a working copy: present in the parent commit (@-) of a jj working copy, in
 // HEAD of a git one. A MODIFIED tracked file passes (developers edit tests); an UNTRACKED new file
 // does not — commit it first. Denied:
-//   (a) a program file outside every firedancer working copy (scratchpad, /tmp, $HOME/…, session
+//   (a) a program file outside every example-research working copy (scratchpad, /tmp, $HOME/…, session
 //       dirs) while `--project` points into one or the cwd is in one;
 //   (b) `-e/-E/--eval/--print`, a program read from stdin or a heredoc, or a bare REPL, under the
 //       same condition;
 //   (c) an untracked program file inside a working copy (also when cwd and --project are outside).
 // Allowed: `bun launcher/launch.ts …` (no julia here — it spawns it), tracked repo tests,
-// `julia --version`/`--help`, and julia with no firedancer project when the cwd is outside too.
+// `julia --version`/`--help`, and julia with no example-research project when the cwd is outside too.
 //
 // julia is found by the command it EXECUTES (shell-syntax.ts), through the wrappers an agent puts
 // in front: env/timeout/nice/sudo/time/command (effective()), plus agent-resource-run … --,
@@ -32,7 +32,7 @@
 //
 // LIMITS: scripts that call julia from inside (`bash run.sh`, `make`, `mise run <task>`, xargs) are
 // not followed — a wrapper script is itself a file this gate never reads. A path or --project built
-// from `$VAR` cannot be checked; inside a firedancer context it is denied, outside it passes.
+// from `$VAR` cannot be checked; inside an example-research context it is denied, outside it passes.
 // FAIL CLOSED on hook errors (registered with run.sh --fail-closed).
 
 import { readonlyCommand } from "../../../tools/shared/src/readonly-command.ts";
@@ -50,7 +50,7 @@ import {
 import { decidePre, findExe, readStdinJson } from "./lib.ts";
 
 const OFFICIAL_ROUTE =
-  "scratch execution is banned in firedancer: measure through " +
+  "scratch execution is banned in example-research: measure through " +
   "`mise exec -- bun launcher/launch.ts --rev <sealed sha> <arena> launcher/model_interface_runner.jl <params.toml> <manifest> <cause>`; " +
   "put diagnostics in a tracked, committed script.";
 
@@ -60,7 +60,7 @@ const JULIA_NAME = /^julia(?:-[\d.]+)?$/u;
 const JULIA_WORD = /(?:^|[\s;&|(`'"])(?:\S*\/)?julia(?:-[\d.]+)?(?=[\s'")]|$)/u;
 
 // ---------------------------------------------------------------------------------------------
-// firedancer working copies
+// example-research working copies
 
 const rootOf = new Map<string, string | null>();
 
@@ -82,7 +82,7 @@ function realish(p: string): string {
   return join(existsSync(head) ? realpathSync(head) : head, ...tail);
 }
 
-/** The firedancer working copy root containing `p`, or null. */
+/** The example-research working copy root containing `p`, or null. */
 function workingCopyOf(p: string): string | null {
   let dir = realish(p);
   const walked: string[] = [];
@@ -391,8 +391,8 @@ function expandHome(path: string): string {
   return path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
 }
 
-/** Is firedancer in play for this launch: cwd or --project/JULIA_PROJECT inside a working copy? */
-function inFiredancer(l: Launch, a: JuliaArgs): boolean {
+/** Is example-research in play for this launch: cwd or --project/JULIA_PROJECT inside a working copy? */
+function inWorkingCopy(l: Launch, a: JuliaArgs): boolean {
   if (workingCopyOf(l.cwd) !== null) return true;
   const project =
     a.project ??
@@ -407,7 +407,7 @@ function inFiredancer(l: Launch, a: JuliaArgs): boolean {
 function judgeLaunch(l: Launch): string | undefined {
   const a = parseJuliaArgs(l.args);
   if (a.query && a.program === undefined && !a.inline) return undefined;
-  const context = inFiredancer(l, a);
+  const context = inWorkingCopy(l, a);
 
   if (a.inline) {
     return context ? "julia -e/-E/--eval runs an inline program" : undefined;
@@ -450,7 +450,7 @@ function outsideWorkingCopyReason(
   context: boolean,
 ): string | undefined {
   if (!context) return undefined;
-  return `${abs} is a julia script outside every firedancer working copy`;
+  return `${abs} is a julia script outside every example-research working copy`;
 }
 
 /** Why this Bash command must be refused, or undefined. `cwd` is where the shell starts. */
@@ -461,7 +461,7 @@ export function scratchReason(
   if (!/julia/u.test(command)) return undefined;
   const parsed = parseShell(command, cwd);
   if (parsed === undefined) {
-    // the parser is not sure what runs: judge by text, but only where firedancer is in play
+    // the parser is not sure what runs: judge by text, but only where example-research is in play
     if (!JULIA_WORD.test(command)) return undefined;
     if (workingCopyOf(cwd) === null && !/firedancer/u.test(command))
       return undefined;

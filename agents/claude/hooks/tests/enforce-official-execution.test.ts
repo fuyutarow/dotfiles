@@ -6,8 +6,8 @@ import { decisionOf as decisionResult, runHook, tempDir } from "./helpers.ts";
 
 const HOOK = "enforce-official-execution.ts";
 
-// Two throwaway firedancer working copies: a jj one (colocated, like the main checkout) and a
-// plain git one (like the firedancer-simplify worktree), each with a committed test script, a
+// Two throwaway example-research working copies: a jj one (colocated, like the main checkout) and a
+// plain git one (like the example-research-simplify worktree), each with a committed test script, a
 // committed-then-edited one, and an untracked `scratch.jl`; plus a scratch dir outside both.
 const base = tempDir("fd-official-");
 const jj = join(base, "fd-jj");
@@ -172,7 +172,12 @@ const cases: Case[] = [
     () => elsewhere,
     false,
   ],
-  ["--version inside firedancer", () => "julia --version", () => jj, false],
+  [
+    "--version inside example-research",
+    () => "julia --version",
+    () => jj,
+    false,
+  ],
   [
     "--version with project",
     () => "julia --project=envs/gpu --version",
@@ -180,13 +185,13 @@ const cases: Case[] = [
     false,
   ],
   [
-    "julia, no firedancer project, cwd outside, script",
+    "julia, no example-research project, cwd outside, script",
     () => `julia ${scratch}/s.jl`,
     () => elsewhere,
     false,
   ],
   [
-    "julia -e outside firedancer",
+    "julia -e outside example-research",
     () => `julia -e 'println(1)'`,
     () => elsewhere,
     false,
@@ -270,15 +275,15 @@ const cases: Case[] = [
     () => ws,
     true,
   ],
-  // --- (a) script outside every working copy, firedancer project or cwd ----------------------
+  // --- (a) script outside every working copy, example-research project or cwd ----------------------
   [
-    "(a) scratch script, cwd in firedancer",
+    "(a) scratch script, cwd in example-research",
     () => `julia ${scratch}/s.jl`,
     () => jj,
     true,
   ],
   [
-    "(a) scratch script, --project into firedancer",
+    "(a) scratch script, --project into example-research",
     () => `julia --project=${jj}/envs/gpu ${scratch}/s.jl`,
     () => elsewhere,
     true,
@@ -311,7 +316,7 @@ const cases: Case[] = [
     true,
   ],
   [
-    "(a) $VAR path in firedancer",
+    "(a) $VAR path in example-research",
     () => "julia --project=envs/gpu $SCRIPT",
     () => jj,
     true,
@@ -346,7 +351,7 @@ const cases: Case[] = [
     true,
   ],
   ["(b) bare REPL", () => "julia --project=envs/gpu", () => jj, true],
-  ["(b) bare julia in firedancer cwd", () => "julia", () => gt, true],
+  ["(b) bare julia in example-research cwd", () => "julia", () => gt, true],
   // --- (c) untracked in a working copy -------------------------------------------------------
   [
     "(c) untracked jj",
@@ -496,7 +501,7 @@ describe("enforce-official-execution", () => {
     const v = await verdict(`julia --project=envs/gpu ${scratch}/s.jl`, jj);
     expect(v.reason).toContain("[dotfiles:official-execution]");
     expect(v.reason).toContain(
-      "scratch execution is banned in firedancer: measure through `mise exec -- bun launcher/launch.ts --rev <sealed sha> <arena> launcher/model_interface_runner.jl <params.toml> <manifest> <cause>`; put diagnostics in a tracked, committed script.",
+      "scratch execution is banned in example-research: measure through `mise exec -- bun launcher/launch.ts --rev <sealed sha> <arena> launcher/model_interface_runner.jl <params.toml> <manifest> <cause>`; put diagnostics in a tracked, committed script.",
     );
   });
 

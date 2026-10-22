@@ -46,9 +46,9 @@ describe("randomSuffix", () => {
 
 describe("sessionName", () => {
   test("lowercases the project and joins role + suffix with an underscore", () => {
-    expect(sessionName("/home/fuyu/Workspace/firedancer", "pi", "abcd")).toBe(
-      "firedancer-pi_abcd",
-    );
+    expect(
+      sessionName("/home/fuyu/Workspace/example-research", "pi", "abcd"),
+    ).toBe("example-research-pi_abcd");
   });
 
   test("lowercases a mixed-case cwd basename", () => {
@@ -65,8 +65,8 @@ describe("sessionName", () => {
 
   test("normalizes an underscored project to hyphens", () => {
     expect(
-      sessionName("/home/fuyu/Workspace/polysearch_v1", "agt", "f24v"),
-    ).toBe("polysearch-v1-agt_f24v");
+      sessionName("/home/fuyu/Workspace/example_research", "agt", "f24v"),
+    ).toBe("example-research-agt_f24v");
   });
 });
 

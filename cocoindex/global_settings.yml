@@ -12,8 +12,8 @@
 #     Why: house JA-notes+code A/B pilot — 311m-r2 beat 97m-r2 on both halves (notes and code),
 #     total nDCG@10 +70%; ruri-v3-70m won notes but lost code, unfit as ccc's single global model.
 #   2026-07-30  bekko-embedding-v1-a25m was swapped in and reverted the same day. The revert was
-#     NOT justified: it fired on a qoed smoke miss that a later audit showed was CONFOUNDED —
-#     the target `\section{適用境界}` sits in `papers/P2606_003-.../main.tex`, which qoed's own
+#     NOT justified: it fired on an example-repo smoke miss that a later audit showed was CONFOUNDED —
+#     the target `\section{適用境界}` sits in `papers/P2606_003-.../main.tex`, which example-repo's own
 #     settings.yml had already excluded as a demoted document in commit 7d915ed (2026-07-28),
 #     two days BEFORE the test. The recorded "rank 1 @ 0.90" expectation no longer holds for the
 #     incumbent either. bekko's status is UNDECIDED — neither adopted nor validly rejected.
@@ -24,7 +24,7 @@
 # FIRST — otherwise `ccc index` fails with "environment already open in this program" while
 # `ccc reset` still succeeds, leaving an empty index (measured 2026-07-30).
 #
-# Registered projects are NOT only under ~/Workspace — /home/fuyu/DPP/min-sys-dpp-mvp is one.
+# Registered projects are NOT only under ~/Workspace — ~/Projects/example-repo is one.
 # Enumerate before swapping; a project missed during a swap keeps a stale-dimension index.
 #
 # Device history:
@@ -38,10 +38,10 @@
 #     `ccc reset` / reindex is required (CPU vs GPU fp32 differ far below ranking resolution).
 #     Cost: query embedding moves to CPU, and a full reindex of a large project is slower.
 #     Revert with `device: cuda` (or delete the key) plus `ccc daemon stop`.
-#   2026-08-12  device cpu → unset. Firedancer's search index must finish promptly, and the
+#   2026-08-12  device cpu → unset. The research repository's search index must finish promptly, and the
 #     operator explicitly assigned GPU capacity to ccc indexing. Leaving the key unset keeps
 #     this shared file cross-platform: SentenceTransformers selects CUDA on WSL and the local
-#     accelerator on macOS. The current Firedancer index is rebuilt after this change.
+#     accelerator on macOS. The current research repository index is rebuilt after this change.
 
 embedding:
   provider: sentence-transformers
@@ -56,13 +56,13 @@ embedding:
 # honored, unlike a shell `export` against an already-running daemon, which does nothing.
 #
 # 2026-08-08  Added the thread/backpressure caps. Measured that day: the daemon ran 1h43m at
-#   588% CPU (≈6 of 12 cores) and 4.85 GiB peak RSS indexing firedancer + dotfiles, for a
+#   588% CPU (≈6 of 12 cores) and 4.85 GiB peak RSS indexing example-research + dotfiles, for a
 #   client that had died 1h40m earlier. Search is a support tool; it must yield. The hard
 #   ceilings live in cocoindex/ccc-daemon.service.wsl — these are the in-process complement,
 #   needed because PyTorch sizes its thread pool from nproc and never reads the cgroup quota.
-#   Values are provisional: re-measure peak RSS after a full firedancer index and tighten.
+#   Values are provisional: re-measure peak RSS after a full example-research index and tighten.
 # TEMPORARY 2026-09-13 (user request): indexing prioritized over research-yield while
-# firedancer + soks are both mid-index. Values below raised from the 2026-08-08 baseline
+# example-research + example-notes are both mid-index. Values below raised from the 2026-08-08 baseline
 # (OMP/MKL=2, COCOINDEX_MAX_INFLIGHT_COMPONENTS=32) under the unit's TasksMax=256 backstop.
 # Paired with the same-day raise in the tracked unit cocoindex/ccc-daemon.service.wsl
 # (CPUQuota 300%→900%, CPUWeight 20→200, Nice 10→0; the untracked drop-in was folded in).

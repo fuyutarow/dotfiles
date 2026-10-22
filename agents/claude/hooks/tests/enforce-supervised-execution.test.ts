@@ -27,7 +27,7 @@ describe("enforce-supervised-execution", () => {
     for (const command of [
       "setsid ./queue9.sh",
       "setsid bash /tmp/scratchpad/queue9.sh > q.log 2>&1",
-      "cd /home/fuyu/Workspace/firedancer && setsid ./run.sh &",
+      "cd /home/fuyu/Workspace/example-research && setsid ./run.sh &",
       "nohup julia probe.jl > out.log 2>&1 &",
       "nohup ./sweep.sh &",
       "./long-job.sh & disown",

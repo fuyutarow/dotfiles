@@ -19,7 +19,7 @@ const pathExists = (path: Parameters<typeof accessPath>[0]) =>
 // It calls `repo-retrieve index`, never bare `ccc index`. A bare `ccc index` refreshes the index
 // CONTENT but writes no watermark (INDEXED_AT, beside the DB) — only `repo-retrieve index` does —
 // so every commit advanced HEAD past the watermark and concept/battery answered NO_INDEX while the
-// index itself was current. firedancer measured and fixed the same defect in its own hook on
+// index itself was current. example-research measured and fixed the same defect in its own hook on
 // 2026-09-02; this body had kept the old form until 2026-09-22.
 if (Bun.which("ccc") === undefined) {
   process.exit(0);

@@ -133,7 +133,7 @@ rows = [
 # Both vendors — an override REPLACES rows, it doesn't extend them, so this repeats the layout
 # above rather than diffing against it. agents/claude/hooks/herdr-tab-name.ts and
 # tools/statusline now sends the real herdr tab name as just its trailing `-`-segment
-# ("firedancer-dc" -> "dc"), to keep the desktop tab bar compact — reading that back via the
+# ("example-research-dc" -> "dc"), to keep the desktop tab bar compact — reading that back via the
 # "tab" token here would shorten the sidebar too. $fullname is a second pane-metadata token
 # those same two writers report alongside it, carrying the untruncated name; this row reads
 # that instead, so the sidebar keeps the full name independently of the tab bar. Same colors and

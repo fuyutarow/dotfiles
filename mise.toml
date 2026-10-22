@@ -70,8 +70,8 @@ run = 'exec zsh -l'
 
 # ── Format / Lint ────────────────────────────────────────────────────────────
 # fmt (alias f) + lint aggregate over per-language sub-tasks (<domain>:<action>),
-# mirroring qoed. Markdown = rumdl (.rumdl.toml). Shell = shfmt + shellcheck for
-# bash. TypeScript = the ox toolchain, same as Coral-dpp: oxfmt for FORMAT (.oxfmtrc.json)
+# mirroring example-repo. Markdown = rumdl (.rumdl.toml). Shell = shfmt + shellcheck for
+# bash. TypeScript = the ox toolchain, shared across repositories: oxfmt for FORMAT (.oxfmtrc.json)
 # + oxlint for LINT (.oxlintrc.json, see lint:ts) + bun check for TYPES (tsconfig.json, see
 # typecheck), all pinned in package.json and restored by `mise run deps`. oxfmt replaced
 # biome on 2026-09-12 with a ZERO-diff migration: `.oxfmtrc.json` (2-space, width 80,
@@ -223,7 +223,7 @@ run = "bun scripts/lint-skills-floor.ts"
 
 # Scope floor: a rule naming ONE repo belongs in that repo's .claude/, never in user
 # scope behind a cwd check. The check existed since that skill was forged but nothing ran it, so
-# three firedancer-gated hooks sat here for weeks after their properly-scoped successors had already
+# three example-research-gated hooks sat here for weeks after their properly-scoped successors had already
 # landed in that repo — firing twice inside it and no-oping everywhere else.
 # Root is agents/claude, NOT the default ~/.claude: the RENDERED settings.json legitimately carries
 # the machine-specific autoMode overlay (see scripts/render-home.ts), and P3 is about
@@ -563,7 +563,7 @@ run = '''
 exec "$(mise which bun)" scripts/post-merge.ts
 '''
 
-# jj migration (2026-10-01, same shape as firedancer): agents never run git here — the project
+# jj migration (2026-10-01, same shape as example-research): agents never run git here — the project
 # .claude/settings.json denies it — and jj runs no Git hooks. The commit and pull entrypoints
 # preserve the pre-commit and post-merge hooks; push provides the guarded alpha bookmark push.
 [tasks.commit]

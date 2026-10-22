@@ -80,7 +80,7 @@ const HOST_CPU_THROTTLE_LOAD_PCT = 50;
 //
 // SEPARATE FLOORS, because CPU and IO PSI have completely different normal ranges on this host and
 // one shared number was inside one of them. Observed across 2026-09-13..14 under known-good load
-// (firedancer writing tens of GB, ccc indexing, julia pinning a core):
+// (example-research writing tens of GB, ccc indexing, julia pinning a core):
 //     CPU PSI some avg300    0.08 - 0.62
 //     IO  PSI some avg300    0.00 - 23.57
 // The shared floor of 20 therefore sat INSIDE the IO range: it fired at 23.57 while the only
@@ -103,7 +103,7 @@ const IO_PSI_WARN = 60; // ~2.5x the observed maximum; see the caveat above
 // AVAILABLE, never FreePhysicalMemory: Windows drives free memory to near zero by design, and
 // FreePhysicalMemory read 0.2GB on this host while 4.5GB was genuinely available. Corroborated by
 // HARD PAGE READS rather than by the gauge alone, for the same reason the memory-PSI row is
-// corroborated — measured 2026-09-14 while the host recovered from a firedancer burst:
+// corroborated — measured 2026-09-14 while the host recovered from an example-research burst:
 //     avail_gb       0.7   2.28   3.29   4.28   4.49     <- climbing back on its own
 //     pages_sec    32661 116185 163016  30923      0     <- includes dirty-page WRITEBACK
 //     pagereads/s   2861     15     11      7      0     <- the reads that actually block
@@ -493,7 +493,7 @@ export function judge(
   //   read the rate, not total  -> reclaim at 12000 pages/s with MemAvailable 41.5 GB of 54.9,
   //                                which is the kernel recycling cache under a write load, i.e.
   //                                the system working
-  // Firing on every ordinary firedancer job is what it amounted to, and a warning its reader
+  // Firing on every ordinary example-research job is what it amounted to, and a warning its reader
   // learns to skip costs more than it can ever return.
   //
   // What a real guest memory shortage DOES is exhaust MemAvailable or push pages to swap, and

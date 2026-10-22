@@ -940,8 +940,8 @@ git() {
 # there is no central file listing registered project roots, so a cached
 # roots-list lookup isn't possible. Instead each registered project carries
 # its OWN marker at its root: <root>/.cocoindex_code/settings.yml — the same
-# convention as .git (confirmed against ~/Workspace/{qoed,firedancer,beateater},
-# ~/DPP/min-sys-dpp-mvp, ~/ARTS/qinfogeo). Detection walks up from $PWD for
+# convention as .git (confirmed against repositories in multiple parent directories).
+# Detection walks up from $PWD for
 # that marker (bounded at "/"; pure zsh `[[ -f ]]` stat checks only — no ccc
 # invocation, no python, no file *content* read) and caches the per-$PWD
 # verdict in $_GREP_NUDGE_CCC_CACHE so repeated calls from the same directory
@@ -984,7 +984,7 @@ grep() {
 # the last `-<role>_`); _agent_name below is its pure-zsh twin and zsh/tests/terminal-hygiene.test.zsh
 # feeds it the shared vector table (tools/shared/tests/fixtures/agent-name-vectors.tsv). The project
 # slug is the lowercased cwd basename with every run of characters outside [a-z0-9] (including `_`)
-# turned into one `-`, so polysearch_v1 and polysearch-v1 both give "polysearch-v1-agt_f24v".
+# turned into one `-`, so example_research and example-research both give "example-research-agt_f24v".
 # Skips subcommands (`claude mcp ...`, `claude doctor`, ...) since they don't take --name, and
 # skips an explicit `-n/--name` the caller gave.
 #

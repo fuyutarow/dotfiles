@@ -298,7 +298,7 @@ root = "/unused"
 setup = ["true"]
 surfaces = ["presets/typescript"]
 preset_dirs = { typescript = "tools" }
-notify = [{ paths = ["tools/agent-resource-run/**"], contact = "polysearch-v1-agt_f24v", check = "RUSTC_WRAPPER= mise run hook:pre-commit" }]
+notify = [{ paths = ["tools/agent-resource-run/**"], contact = "example-research-agt_f24v", check = "RUSTC_WRAPPER= mise run hook:pre-commit" }]
 command = ["true"]
 timeout_ms = 1000
 `,
@@ -310,7 +310,7 @@ timeout_ms = 1000
   if (result.isErr()) return;
   expect(result.value.ok, result.value.lines.join("\n")).toBe(true);
   expect(result.value.lines.join("\n")).toContain(
-    "NOTICE schema-fixture: contact polysearch-v1-agt_f24v",
+    "NOTICE schema-fixture: contact example-research-agt_f24v",
   );
   expect(result.value.lines.join("\n")).not.toContain("stale schema");
   // A second restore at the same path must also invalidate the first candidate.

@@ -27,7 +27,7 @@ function rollout(id: string, model: string, effort: string) {
       payload: {
         id,
         session_id: id,
-        cwd: "/fixture/standard-skills",
+        cwd: "/fixture/example-repo",
         originator: "codex-tui",
       },
     },
@@ -92,7 +92,7 @@ test("Codex hook writes and reports the exact rollout session id", async () => {
             result: {
               pane: {
                 pane_id: "fixture-pane",
-                tokens: { fullname: "standard-skills-agt_0mr6" },
+                tokens: { fullname: "example-repo-agt_0mr6" },
               },
             },
           })}\n`,
@@ -163,10 +163,10 @@ test("Codex hook writes and reports the exact rollout session id", async () => {
   expect(fleetSession).toMatchObject({
     session_id: "target-thread",
     vendor: "codex",
-    name: "standard-skills-agt_0mr6",
+    name: "example-repo-agt_0mr6",
     model: "gpt-6.1-sol",
     effort: "medium",
-    cwd: "/fixture/standard-skills",
+    cwd: "/fixture/example-repo",
   });
   const calls: string[][] = [];
   await projectAgents(
@@ -176,7 +176,7 @@ test("Codex hook writes and reports the exact rollout session id", async () => {
         pane_id: "fixture-pane",
         tab_id: "fixture-tab",
         agent_session: { value: "target-thread" },
-        cwd: "/fixture/standard-skills",
+        cwd: "/fixture/example-repo",
       },
     ],
     new Map([["target-thread", fleetSession]]),

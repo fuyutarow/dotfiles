@@ -20,6 +20,13 @@
       "reason": "Intermediate restoration under survey-2610.1 admitted a 213-character authored entry. The later official-package adoption on the same date retires this selector and recovers the entire 213 characters. Canonical technical position remains urn:uuid:01a1380c-4295-76fc-9c22-eb1545f23c6e; no independent authored Sui selector remains active."
     },
     {
+      "date": "2026-10-11",
+      "from": 51223,
+      "to": 51683,
+      "spentBy": "record CLI admission",
+      "reason": "The owner-approved r99-u26 WIP admits a 460-character name+description entry for the example-research record CLI. The floor measured 51,223 chars at 58 skills before admission and 51,683 at 59 after; the cap matches the new total exactly, with no added slack."
+    },
+    {
       "date": "2026-10-10",
       "from": 50782,
       "to": 51223,
@@ -45,7 +52,7 @@
       "from": 65242,
       "to": 66012,
       "spentBy": "keeping-research-notebooks",
-      "reason": "A new 770-character name+description entry (26 + 744). The collection measured 64,906 at 74 skills before admission and 65,676 at 75 after; the raise equals that measured growth exactly, so the 336-char headroom is neither spent nor widened. The five reciprocal pointer rows (wiring-repositories, driving-jujutsu, writing-julia, validating-experimental-evidence, governing-research-documentation) are body rows and charge nothing. Admitted for ownership voids 2-8 of the sibling scope harvest (lexical sweep of agents/skills; no ccc battery): edition/revision discipline, the launcher as sole run entry, the single-committer protocol under jj, the repo-level directory convention, the scratchpad/agent-state ban, the retention-home map, and the run-landing commit ledger. Void 1 (record taxonomy, store CLI) belongs to driving-polysearch. Evidence: seven 2026-10-01 incidents in one research repo, each costing 30-120 minutes of critical path — an edition rewritten below its lineage, fixture-only conformance, a 4-of-5-file registration whose launcher dry-run printed modelCode:null at exit 0, 21 re-implemented shared kernels, agent VCS writes racing the committer, in-flight run dirs committed, scratchpad code landed as an external code dir. EXTEND was rejected: driving-jujutsu owns jj command semantics per workspace, wiring-repositories stops at wiring, validating-experimental-evidence forbids owning a store, writing-julia is language-scoped. Retiring a sibling was rejected: none does this job. The description sits above the spec's ~600-char target because the trigger desk-check failed two fire rows without the shared-checkout and conformance/acceptance tokens; ledger keeping-research-notebooks/tests/forge-verification-ledger.md §5."
+      "reason": "A new 770-character name+description entry (26 + 744). The collection measured 64,906 at 74 skills before admission and 65,676 at 75 after; the raise equals that measured growth exactly, so the 336-char headroom is neither spent nor widened. The five reciprocal pointer rows (wiring-repositories, driving-jujutsu, writing-julia, validating-experimental-evidence, governing-research-documentation) are body rows and charge nothing. Admitted for ownership voids 2-8 of the sibling scope harvest (lexical sweep of agents/skills; no ccc battery): edition/revision discipline, the launcher as sole run entry, the single-committer protocol under jj, the repo-level directory convention, the scratchpad/agent-state ban, the retention-home map, and the run-landing commit ledger. Void 1 (record taxonomy, store CLI) belongs to record-store tooling. Evidence: seven 2026-10-01 incidents in one research repo, each costing 30-120 minutes of critical path — an edition rewritten below its lineage, fixture-only conformance, a 4-of-5-file registration whose launcher dry-run printed modelCode:null at exit 0, 21 re-implemented shared kernels, agent VCS writes racing the committer, in-flight run dirs committed, scratchpad code landed as an external code dir. EXTEND was rejected: driving-jujutsu owns jj command semantics per workspace, wiring-repositories stops at wiring, validating-experimental-evidence forbids owning a store, writing-julia is language-scoped. Retiring a sibling was rejected: none does this job. The description sits above the spec's ~600-char target because the trigger desk-check failed two fire rows without the shared-checkout and conformance/acceptance tokens; ledger keeping-research-notebooks/tests/forge-verification-ledger.md §5."
     },
     {
       "date": "2026-09-21",

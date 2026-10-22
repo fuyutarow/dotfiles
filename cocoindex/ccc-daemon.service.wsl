@@ -40,7 +40,7 @@
 #
 # Priority history:
 #   2026-09-13  CPUQuota 300%→900%, CPUWeight 20→200, Nice 10→0, TasksMax 256→768. TEMPORARY,
-#     at user request, while soks + firedancer were both mid-index and the 3-core/low-weight
+#     at user request, while example-notes + example-research were both mid-index and the 3-core/low-weight
 #     default made even the file-diff phase stall (not just embedding throughput) under
 #     contention from two concurrent large indexes sharing this one daemon. Previously this
 #     was an untracked systemd drop-in — folded into this tracked unit instead so the override

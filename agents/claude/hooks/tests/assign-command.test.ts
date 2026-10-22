@@ -98,10 +98,10 @@ describe("assign-command: valid role renames the session", () => {
     );
     const r2 = runHook(
       HOOK,
-      payload("/assign agt", "/home/fuyu/Workspace/polysearch_v1"),
+      payload("/assign agt", "/home/fuyu/Workspace/example_research"),
     );
     expect((await decisionOf(r2.stdout)).sessionTitle).toMatch(
-      /^polysearch-v1-agt_[0-9a-hj-km-np-tv-z]{4}$/u,
+      /^example-research-agt_[0-9a-hj-km-np-tv-z]{4}$/u,
     );
   });
 

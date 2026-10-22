@@ -220,7 +220,7 @@ if (turns.length === 0) {
 
 const selected = turns.slice(-count);
 
-// The cross-session addressable name ("firedancer-fe"), not the AI-generated title — that
+// The cross-session addressable name ("example-research-fe"), not the AI-generated title — that
 // distinction is the whole point of the from header. Falls back to the raw session id.
 let name = sid;
 // leave the session id as the name on failure

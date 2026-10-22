@@ -28,8 +28,8 @@ export const stateDir = (env: NodeJS.ProcessEnv = process.env): string =>
   join(homedir(), ".local/state/claude-bash-durations");
 
 // The key is the command's leading words, then the FLAGS it was given (values dropped): a flag
-// changes what a command does and how long it takes (`polysearch leaderboard` 0.6 s vs
-// `polysearch leaderboard --all` 120 s, Vast 2026-10-06), while a value (a brief path, a message)
+// changes what a command does and how long it takes (`example-records leaderboard` 0.6 s vs
+// `example-records leaderboard --all` 120 s, Vast 2026-10-06), while a value (a brief path, a message)
 // must not split one kind of command into many. `--` ends the options; a path, a variable or a
 // quote ends the leading words.
 const NOT_A_WORD = /^[/.~$'"(]/u;

@@ -3,7 +3,7 @@ import { hookJson } from "./lib.ts";
 // the repository already has one that does the same thing, and say so to the model.
 //
 // WHY A HOOK. Re-implementation happens when nobody searched, not when the search was poor:
-// builders wrote kernels that already existed (firedancer, 2026-10-01). `rr exists`
+// builders wrote kernels that already existed (example-research, 2026-10-01). `rr exists`
 // answers the question well, but only if asked; this asks for them at the one moment it matters.
 //
 // What it does: finds definitions in the inserted text that were not in the replaced text (Write:

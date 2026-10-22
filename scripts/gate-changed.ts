@@ -9,19 +9,26 @@ import {
   type Attempt,
 } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
+import { JJ_READ_ARGS } from "../tools/shared/src/jj-read.ts";
+import { readonlyCommand } from "../tools/shared/src/readonly-command.ts";
 
 const ROOT = resolve(import.meta.dir, "..");
 const TYPESCRIPT = /\.(?:[cm]?ts|tsx)$/u;
 
 type Output = { stdout: string; stderr: string; exit: number };
 
-async function command(cmd: string[], cwd: string): Promise<Attempt<Output>> {
+async function command(
+  cmd: string[],
+  cwd: string,
+  env = process.env,
+): Promise<Attempt<Output>> {
   if (Bun.which(cmd[0] ?? "") === null)
     return { ok: false, error: `command unavailable: ${cmd[0]}` };
   const signal = AbortSignal.timeout(180_000);
   const result = await attempt(async () => {
     const child = Bun.spawn(cmd, {
       cwd,
+      env,
       stdout: "pipe",
       stderr: "pipe",
       signal,
@@ -38,22 +45,148 @@ async function command(cmd: string[], cwd: string): Promise<Attempt<Output>> {
   return result;
 }
 
-/** Snapshot this workspace, including uncommitted files, and compare it with trunk. */
-export async function changedFiles(root: string): Promise<Attempt<string[]>> {
-  const result = await command(
-    ["jj", "diff", "--from", "trunk()", "--template", 'path ++ "\\0"'],
-    root,
-  );
+async function commandOutput(
+  cmd: string[],
+  root: string,
+  env = process.env,
+): Promise<Attempt<string>> {
+  const result = await command(cmd, root, env);
   if (!result.ok) return result;
   if (result.value.exit !== 0)
     return {
       ok: false,
-      error: `jj diff failed (${result.value.exit}): ${result.value.stderr}`,
+      error: `read failed (${result.value.exit}): ${result.value.stderr}`,
     };
+  return { ok: true, value: result.value.stdout };
+}
+
+async function liveChanges(
+  root: string,
+  gitDir: string,
+  fork: string,
+  snapshot: string,
+  temporary: string,
+): Promise<Attempt<string[]>> {
+  // The private index supplies tracked paths from @. Git compares live contents
+  // and applies nested/global ignore rules and info/exclude for new files.
+  const env = {
+    ...process.env,
+    GIT_INDEX_FILE: join(temporary, "index"),
+    GIT_NO_LAZY_FETCH: "1",
+  };
+  const git = (args: string[]) =>
+    commandOutput(
+      [
+        "git",
+        "--no-optional-locks",
+        "--git-dir",
+        gitDir,
+        "--work-tree",
+        root,
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "core.splitIndex=false",
+        "-c",
+        `core.hooksPath=${temporary}`,
+        ...args,
+      ],
+      root,
+      env,
+    );
+  // jj's synthetic root has no Git commit. Ask the backend for its empty tree
+  // hash without writing an object (also works with SHA-256 Git repositories).
+  const base = /^0+$/u.test(fork)
+    ? await git(["hash-object", "-t", "tree", "--stdin"])
+    : ({ ok: true, value: fork } satisfies Attempt<string>);
+  if (!base.ok) return base;
+  const indexed = await git(
+    /^0+$/u.test(snapshot) ? ["read-tree", "--empty"] : ["read-tree", snapshot],
+  );
+  if (!indexed.ok) return indexed;
+  const diff = [
+    "diff",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--no-renames",
+    "--name-only",
+    "-z",
+  ];
+  const recorded = /^0+$/u.test(snapshot) ? base.value.trim() : snapshot;
+  // Keep committed changes and edits since @ separately: a live edit restoring
+  // the fork's contents must not cancel a path out of the selected set.
+  const [committed, changed, added] = await Promise.all([
+    git([...diff, base.value.trim(), recorded, "--"]),
+    git([...diff, recorded, "--"]),
+    git(["ls-files", "--others", "--exclude-standard", "-z"]),
+  ]);
+  if (!committed.ok) return committed;
+  if (!changed.ok) return changed;
+  if (!added.ok) return added;
   return {
     ok: true,
-    value: result.value.stdout.split("\0").filter((path) => path !== ""),
+    value: [
+      ...new Set(
+        (committed.value + changed.value + added.value)
+          .split("\0")
+          .filter(
+            (path) =>
+              path !== "" &&
+              path !== ".jj" &&
+              !path.startsWith(".jj/") &&
+              path !== ".git" &&
+              !path.startsWith(".git/"),
+          ),
+      ),
+    ],
   };
+}
+
+/** Compare the fork point with live files without updating the shared store. */
+export async function changedFiles(root: string): Promise<Attempt<string[]>> {
+  const read = (args: string[]) => {
+    const invocation = readonlyCommand(["jj", ...JJ_READ_ARGS, ...args], root);
+    return commandOutput(invocation.cmd, root, invocation.env);
+  };
+  const [gitDir, fork, snapshot] = await Promise.all([
+    read(["git", "root"]),
+    read([
+      "log",
+      "--no-graph",
+      "-r",
+      "heads(::trunk() & ::@)",
+      "-T",
+      'commit_id ++ "\\n"',
+    ]),
+    read(["log", "--no-graph", "-r", "@", "-T", "commit_id"]),
+  ]);
+  if (!gitDir.ok) return gitDir;
+  if (!fork.ok) return fork;
+  if (!snapshot.ok) return snapshot;
+  // Multiple merge bases have no unique fork point. Never silently select one.
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(fork.value.trim()))
+    return {
+      ok: false,
+      error: "expected exactly one fork point between trunk() and @",
+    };
+  const temporary = await attempt(() =>
+    mkdtemp(join(tmpdir(), "gate-changed-index-")),
+  );
+  if (!temporary.ok) return temporary;
+  const result = await attempt(() =>
+    liveChanges(
+      root,
+      gitDir.value.trimEnd(),
+      fork.value.trim(),
+      snapshot.value.trim(),
+      temporary.value,
+    ),
+  );
+  const cleanup = await attempt(() =>
+    rm(temporary.value, { recursive: true, force: true }),
+  );
+  if (!cleanup.ok) return cleanup;
+  return result.ok ? result.value : result;
 }
 
 async function existingFile(path: string): Promise<Attempt<boolean>> {

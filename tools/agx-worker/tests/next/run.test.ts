@@ -40,6 +40,30 @@ const scratch = async (prefix: string): Promise<string> => {
 };
 
 describe("agx-worker run", () => {
+  test("refuses the retired worker override before inspecting the ticket", () => {
+    const result = Bun.spawnSync(
+      [
+        process.execPath,
+        "tools/agx-worker/src/next/cli.ts",
+        "run",
+        "missing-ticket.md",
+      ],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          AGX_NEXT_WORKER: "/tmp/retired-worker.ts",
+          AGX_WORKER_BIN: "/tmp/current-worker.ts",
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr.toString().trim()).toBe(
+      "agx: AGX_NEXT_WORKER is no longer supported; use AGX_WORKER_BIN",
+    );
+  });
+
   test("reads a systemd service unit from the process cgroup", () => {
     expect(
       systemdUnitName(
@@ -220,7 +244,7 @@ describe("agx-worker run", () => {
       AGX_NEXT_STATE_DIR: state,
       AGX_TMP_ROOT: join(root, "agx-tmp"),
       AGX_NEXT_JEV_URL: `http://127.0.0.1:${jevPort}/choice`,
-      AGX_NEXT_WORKER: worker,
+      AGX_WORKER_BIN: worker,
       TYPESAFE_API_KEY: "test-key",
       DISPATCH_ROSTER_PATH: join(
         process.cwd(),
@@ -647,7 +671,7 @@ describe("agx-worker run", () => {
       AGX_NEXT_STATE_DIR: state,
       AGX_TMP_ROOT: join(root, "agx-tmp"),
       AGX_NEXT_JEV_URL: `http://127.0.0.1:${jevPort}/choice`,
-      AGX_NEXT_WORKER: worker,
+      AGX_WORKER_BIN: worker,
       TYPESAFE_API_KEY: "test-key",
       DISPATCH_ROSTER_PATH: join(
         process.cwd(),

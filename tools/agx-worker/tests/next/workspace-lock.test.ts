@@ -92,7 +92,7 @@ console.log(JSON.stringify({ report: { summary: "done", changes: [], checks: [],
     ...process.env,
     AGX_NEXT_STATE_DIR: state,
     AGX_TMP_ROOT: join(root, "tmp"),
-    AGX_NEXT_WORKER: worker,
+    AGX_WORKER_BIN: worker,
     AGX_NEXT_JEV_URL: `http://127.0.0.1:${jev.port}/choice`,
     TYPESAFE_API_KEY: "test-key",
     DISPATCH_ROSTER_PATH: join(

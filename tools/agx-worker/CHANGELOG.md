@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.1.0 — 2026-10-23
+
+- Rename worker executable override to AGX_WORKER_BIN
+
 ## 8.0.5 — 2026-10-22
 
 - Restore active Sol 6.1 choices while keeping history-free selection

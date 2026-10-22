@@ -254,7 +254,7 @@ test.each(["scratch", "empty-git", "other-repository"])(
         {
           env: {
             ...f.env,
-            AGX_NEXT_WORKER: worker,
+            AGX_WORKER_BIN: worker,
             AGX_TMP_ROOT: join(parent, "tmp"),
             AGX_NEXT_JEV_URL: "http://127.0.0.1:1/choice",
           },
@@ -639,7 +639,7 @@ test("run preserves exact original bytes and hash, base and premise commits, rep
       {
         env: {
           ...f.env,
-          AGX_NEXT_WORKER: worker,
+          AGX_WORKER_BIN: worker,
           AGX_TMP_ROOT: join(f.root, "tmp"),
           AGX_NEXT_JEV_URL: "http://127.0.0.1:1/choice",
         },

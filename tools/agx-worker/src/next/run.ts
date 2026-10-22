@@ -212,6 +212,11 @@ export async function check(flags: Flags): Promise<number> {
 }
 
 export async function run(flags: Flags): Promise<number> {
+  if (process.env.AGX_NEXT_WORKER !== undefined)
+    return fatal(
+      "AGX_NEXT_WORKER is no longer supported; use AGX_WORKER_BIN",
+      2,
+    );
   const path = value(flags, "ticket");
   const cwd = resolve(value(flags, "cd") ?? process.cwd());
   if (path === undefined) return fatal("run requires positional TICKET", 2);
@@ -396,7 +401,7 @@ export async function run(flags: Flags): Promise<number> {
   started = true;
 
   const workerPath =
-    process.env.AGX_NEXT_WORKER ??
+    process.env.AGX_WORKER_BIN ??
     join(
       import.meta.dir,
       "..",
@@ -404,7 +409,7 @@ export async function run(flags: Flags): Promise<number> {
       row.route === "codex" ? "codex.ts" : "run-claude.ts",
     );
   const workerArgs = (): string[] => {
-    if (process.env.AGX_NEXT_WORKER !== undefined)
+    if (process.env.AGX_WORKER_BIN !== undefined)
       return [
         workerPath,
         "--ticket",

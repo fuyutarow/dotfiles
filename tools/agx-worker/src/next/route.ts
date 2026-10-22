@@ -3,6 +3,7 @@ import { jevEndpoint, postJev } from "../../../shared/src/jev-client.ts";
 import { sampleRow } from "../selection.ts";
 import {
   criterionFor,
+  exhaustionPolicy,
   loadRoster,
   routeFilterLabel,
   ROUTING_OBJECTIVE,
@@ -69,7 +70,7 @@ export async function route(
         ["low", "medium", "high", "xhigh", "max"].indexOf(a.effort) -
         ["low", "medium", "high", "xhigh", "max"].indexOf(b.effort),
     );
-  const usage = await readRouteUsage();
+  const usage = await readRouteUsage(undefined, exhaustionPolicy(roster.auto));
   const candidates = eligible.filter((row) => usage[row.route].available);
   if (candidates.length === 0)
     return exitWithError(

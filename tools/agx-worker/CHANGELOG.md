@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.4.3 — 2026-10-23
+
+- Keep codex dispatchable when its subscription window is exhausted; the roster declares per route whether an exhausted window stops it
+
 ## 8.4.2 — 2026-10-23
 
 - Wait longer for dispatched run records and report the timeout bound

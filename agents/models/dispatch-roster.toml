@@ -30,6 +30,10 @@ default = "luna-high"
 # while Codex still runs on purchased credits (tools/agx-worker/src/next/usage.ts). Revert to
 # ["codex"] once that repair lands or the codex weekly window resets (2026-10-29 00:14 JST).
 routes = ["codex", "claude"]
+# What a 100% (exhausted, non-stale) subscription window does per route: "continue" dispatches and
+# resumes anyway (Codex runs on purchased credits); "stop" vetoes the route. Real refusals still
+# exclude a row through capacity cooldown. Contract: agents/models/dispatch-roster.contract.md.
+on_window_exhausted = { codex = "continue", claude = "stop" }
 max_task_chars = 6000
 timeout_ms = 20000
 no_egress = []

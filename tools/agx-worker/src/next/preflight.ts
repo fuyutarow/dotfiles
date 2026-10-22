@@ -5,6 +5,7 @@ import { validateSlug } from "../../../shared/src/slug.ts";
 import { ownerlessRefLocks } from "../../../shared/src/ref-locks.ts";
 import { checkPremises } from "../premises.ts";
 import {
+  exhaustionPolicy,
   loadRoster,
   routeFilterLabel,
 } from "../../../../agents/models/roster.ts";
@@ -279,7 +280,10 @@ export async function preflight(
     (continuationId === undefined || capacityPrevious !== undefined) &&
     ticket !== undefined
   ) {
-    const usage = await readRouteUsage();
+    const usage = await readRouteUsage(
+      undefined,
+      exhaustionPolicy(loaded.value.auto),
+    );
     const minimumTb4 = ticket.capabilities.some((tag) =>
       ["terminal-agentic", "long-tool-loop"].includes(tag),
     )

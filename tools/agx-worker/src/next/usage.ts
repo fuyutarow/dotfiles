@@ -5,6 +5,10 @@ import {
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readCodexSubscriptionUsage } from "../../../shared/src/codex-subscription-usage.ts";
+import type {
+  RouteName,
+  WindowExhaustion,
+} from "../../../../agents/models/roster.ts";
 
 const MAX_AGE_MS = 15 * 60 * 1000;
 
@@ -17,7 +21,10 @@ export type WindowUsageState = {
   status: "fresh" | "stale" | "unknown";
 };
 export type RouteUsageState = {
+  /** False only when an exhausted window is declared "stop" for this route. */
   available: boolean;
+  /** A non-stale window is at or above 100% of its allowance. */
+  exhausted: boolean;
   usage_status: "fresh" | "stale" | "unknown";
   preference: "pace" | "neutral";
   windows: Record<string, WindowUsageState>;
@@ -86,10 +93,11 @@ function assessWindow(
   };
 }
 
-function routeState(
+export function routeState(
   windows: Record<string, SubscriptionUsageWindow | undefined>,
   expected: Record<string, number>,
   nowMs: number,
+  exhaustion: WindowExhaustion = "continue",
 ): RouteUsageState {
   const assessed = Object.fromEntries(
     Object.entries(expected).map(([name, seconds]) => [
@@ -102,23 +110,33 @@ function routeState(
   if (values.some((window) => window.status === "fresh")) usageStatus = "fresh";
   else if (values.some((window) => window.status === "stale"))
     usageStatus = "stale";
-  const available = !values.some(
+  const exhausted = values.some(
     (window) =>
       window.status !== "stale" &&
       window.used_percent !== null &&
       window.used_percent >= 100,
   );
   return {
-    available,
+    available: !exhausted || exhaustion === "continue",
+    exhausted,
     usage_status: usageStatus,
     preference: usageStatus === "fresh" ? "pace" : "neutral",
     windows: assessed,
   };
 }
 
-/** Convert the statusline-owned snapshot into the fresh, stale, or unknown route state Jev sees. */
+/**
+ * Convert the statusline-owned snapshot into the fresh, stale, or unknown route state Jev sees.
+ * `exhaustion` is the roster's per-route declaration; an exhausted window vetoes a route only when declared "stop".
+ */
+const CONTINUE_ALL: Readonly<Record<RouteName, WindowExhaustion>> = {
+  claude: "continue",
+  codex: "continue",
+};
+
 export async function readRouteUsage(
   nowMs = Temporal.Now.instant().epochMilliseconds,
+  exhaustion = CONTINUE_ALL,
 ): Promise<RouteUsage> {
   const snapshot = readSubscriptionUsageSnapshot();
   const claude = snapshot?.routes.claude;
@@ -137,12 +155,14 @@ export async function readRouteUsage(
       { "7d": claude?.["7d"], "5h": claude?.["5h"] },
       EMPTY_WINDOWS.claude,
       nowMs,
+      exhaustion.claude,
     ),
     codex: {
       ...routeState(
         { "7d": recovered.window ?? codex?.["7d"] },
         EMPTY_WINDOWS.codex,
         nowMs,
+        exhaustion.codex,
       ),
       source_reason: recovered.reason,
     },

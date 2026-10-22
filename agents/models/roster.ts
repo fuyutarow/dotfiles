@@ -50,10 +50,24 @@ const JevEndpointSchema = z.discriminatedUnion("api", [
 ]);
 export type JevEndpoint = z.output<typeof JevEndpointSchema>;
 
+// What an exhausted subscription window (used_percent >= 100, not stale) does to a route. "continue"
+// keeps dispatching on the route, because a vendor may still serve it from purchased credits;
+// "stop" vetoes it in usage, dispatch, check and continuation. Real vendor refusals are learned
+// separately as capacity outcomes.
+const WindowExhaustionSchema = z.enum(["continue", "stop"]);
+export type WindowExhaustion = z.output<typeof WindowExhaustionSchema>;
+export type RouteName = z.output<typeof RouteSchema>;
+
 const AutoSchema = z.strictObject({
   routes: z
     .array(RouteSchema)
     .min(1, "auto.routes must not be empty; known routes: codex, claude")
+    .optional(),
+  on_window_exhausted: z
+    .strictObject({
+      codex: WindowExhaustionSchema.optional(),
+      claude: WindowExhaustionSchema.optional(),
+    })
     .optional(),
   max_task_chars: z.number().int().positive(),
   timeout_ms: z.number().int().positive(),
@@ -63,6 +77,14 @@ const AutoSchema = z.strictObject({
   jev: JevEndpointSchema,
 });
 export type AutoPolicy = z.output<typeof AutoSchema>;
+
+/** The exhausted-window action per route; an omitted route declaration means "continue". */
+export const exhaustionPolicy = (
+  auto: AutoPolicy,
+): Readonly<Record<RouteName, WindowExhaustion>> => ({
+  codex: auto.on_window_exhausted?.codex ?? "continue",
+  claude: auto.on_window_exhausted?.claude ?? "continue",
+});
 
 /** The active eligibility filter; omission preserves eligibility for every route. */
 export const routeFilterLabel = (auto: AutoPolicy): string =>

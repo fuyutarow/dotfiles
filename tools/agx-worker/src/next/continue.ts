@@ -1,4 +1,8 @@
-import { loadRoster, type Choice } from "../../../../agents/models/roster.ts";
+import {
+  exhaustionPolicy,
+  loadRoster,
+  type Choice,
+} from "../../../../agents/models/roster.ts";
 import { exitWithError } from "./exit.ts";
 import { foldedRuns } from "./store.ts";
 import { readRouteUsage } from "./usage.ts";
@@ -89,7 +93,11 @@ export async function pinContinuation(
   }
   if (row === undefined)
     return refuse(`its row ${previous.row} is not in the roster`);
-  if (!(await readRouteUsage())[row.route].available)
+  const usage = await readRouteUsage(
+    undefined,
+    exhaustionPolicy(loaded.value.auto),
+  );
+  if (!usage[row.route].available)
     return refuse(`its ${row.route} route is at its subscription limit`);
   return {
     previousId: previous.id,

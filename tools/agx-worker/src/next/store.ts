@@ -861,6 +861,54 @@ function schedulePublication(root: string): void {
   });
   publications.set(root, pending);
 }
+/** Ended-run facts are retained this long in `endedRuns`; readers re-apply their own cutoff. */
+const ENDED_WINDOW_MS = 24 * 60 * 60_000;
+
+const endedRow = (run: ListedRun, endedAt: string) => ({
+  id: run.id,
+  dispatcher_session: run.dispatcher_session,
+  workspace: run.workspace,
+  ended_at: endedAt,
+  judgment: run.judgment === null ? null : { decision: run.judgment.decision },
+});
+
+/**
+ * Facts for readers that must not replay the log: recent ended runs (any judgment) and every
+ * accepted run whose workspace directory still exists. Runs without an `ended` record (running,
+ * or derived loss) carry no `ended_at` and are omitted. Order follows the fold.
+ */
+export async function endedFacts(runs: ListedRun[], at: number) {
+  const ended = runs.flatMap((run) =>
+    run.ended_at === null ? [] : [{ run, endedAt: run.ended_at }],
+  );
+  const endedRuns = ended.flatMap(({ run, endedAt }) => {
+    const ms = fromThrowable(
+      () => Temporal.Instant.from(endedAt).epochMilliseconds,
+    )().unwrapOr(Number.NaN);
+    return ms >= at - ENDED_WINDOW_MS ? [endedRow(run, endedAt)] : [];
+  });
+  const accepted = ended.filter(
+    ({ run }) => run.judgment?.decision === "accept",
+  );
+  const present = new Map(
+    await Promise.all(
+      [...new Set(accepted.map(({ run }) => run.workspace))].map(
+        async (workspace) =>
+          [
+            workspace,
+            await recordStat(workspace)
+              .then((info) => info.isDirectory())
+              .catch(() => false),
+          ] as const,
+      ),
+    ),
+  );
+  const acceptedRuns = accepted.flatMap(({ run, endedAt }) =>
+    present.get(run.workspace) === true ? [endedRow(run, endedAt)] : [],
+  );
+  return { endedRuns, acceptedRuns };
+}
+
 export async function publishCurrentRuns(root = stateDir()): Promise<void> {
   const path = join(root, "current-runs.json");
   const deadline = performance.now() + 5000;
@@ -887,13 +935,15 @@ export async function publishCurrentRuns(root = stateDir()): Promise<void> {
         ),
         summary: runningSummary(runs),
       });
+      const capturedAt = Temporal.Now.instant().epochMilliseconds;
       const temp = path + "." + crypto.randomUUID() + ".tmp";
       await writeFile(
         temp,
         JSON.stringify({
           output,
-          capturedAt: Temporal.Now.instant().epochMilliseconds,
+          capturedAt,
           exit: 0,
+          ...(await endedFacts(runs, capturedAt)),
         }),
         { mode: 0o600 },
       );

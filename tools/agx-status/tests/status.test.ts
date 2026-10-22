@@ -68,10 +68,25 @@ async function fixture(name: string, stale: boolean): Promise<string> {
   const dir = join(fixtureRoot, name);
   await mkdir(dir, { recursive: true });
   await mkdir(repo, { recursive: true });
+  const pending = {
+    id: "pending",
+    dispatcher_session: "sessionA",
+    workspace: repo,
+    ended_at: oldEnd,
+    judgment: null,
+  };
+  const accepted = {
+    ...pending,
+    id: "accepted",
+    dispatcher_session: "sessionB",
+    judgment: { decision: "accept" },
+  };
   await put(dir, "current-runs.json", {
     output: JSON.stringify({ runs: [], summary }),
     capturedAt: snapshotAt,
     exit: 0,
+    endedRuns: [pending, accepted],
+    acceptedRuns: [accepted],
   });
   await put(dir, "workspace-verdicts.json", {
     counts: { ...counts, capturedAt: snapshotAt },

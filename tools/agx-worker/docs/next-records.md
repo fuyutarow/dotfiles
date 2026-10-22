@@ -57,15 +57,15 @@ to the worker, rather than a second process timeout. `supersedes = "RUN_ID"` (or
 ## Event lines
 
 - `started`: `{ "kind": "started", "id", "at", "ticket", "writes",
-  "cwd", "workspace", "row", "dispatcher_session", "vendor_session", "pid",
-  "continues?", "supersedes?", "base_rev?", "premise_commits?", "ticket_path?",
-  "ticket_orig_path?", "ticket_sha256?", "legacy_key?" }`.
+"cwd", "workspace", "row", "dispatcher_session", "vendor_session", "pid",
+"continues?", "supersedes?", "base_rev?", "premise_commits?", "ticket_path?",
+"ticket_orig_path?", "ticket_sha256?", "legacy_key?" }`.
   Session identifiers are nullable; `writes` is the ticket's relative path-glob list.
   `pid` is the dispatch process id. New runs include `lease: { pid, start, unit }`: start identifies the process (Linux boot id plus start ticks); unit is the owning systemd service when present.
 - `progress`: `{ "kind": "progress", "id", "at", "path", "legacy_key?" }`. `path` points to
   the per-run latest interim-return file, outside the checkout.
 - `ended`: `{ "kind": "ended", "id", "at", "exit", "report_path",
-  "vendor_session", "verify", "legacy_key?" }`. `exit` is the worker's exit code.
+"vendor_session", "verify", "legacy_key?" }`. `exit` is the worker's exit code.
   `report_path` points to the worker's final report file, or is `null` for a legacy run
   whose report was embedded in the old log. `verify` is an ordered array of
   `{ "cmd", "exit", "log_path" }` facts; each command runs through `sh -c` in the
@@ -92,31 +92,31 @@ owner lease matches and `ended` with outcome `lost` otherwise; a run with `ended
 
 The output is an array of objects with these contract fields:
 
-| Field | Meaning |
-| --- | --- |
-| `id` | Run identifier. |
-| `started_at` | RFC 3339 timestamp from the run's `started` event. |
-| `ended_at` | RFC 3339 timestamp from the run's `ended` event, or `null` while running or for derived loss. |
-| `ticket` | Ticket name, or the prompt filename when unnamed. |
-| `state` | `running` or `ended`; `outcome` is null while running and typed for ended runs. |
-| `exit` | Worker exit code, or `null` while running or for derived loss. |
-| `row` | Selected roster row. |
-| `dispatcher_session` | Session identifier of the dispatching coordinator. |
-| `cwd` | Working directory passed to the worker. |
-| `workspace` | Workspace root used for write globs and premise checks. |
-| `writes` | Ticket write globs. |
-| `judgment` | `null` or `{ "decision": "accept" | "reject", "note" }`. |
-| `report_path` | Final report path, or `null` until ended. |
-| `verify` | Ordered `{ "cmd", "exit", "log_path" }` facts from ticket verification, or `[]` when no commands were declared / for older records. |
-| `last_progress_path` | Most recent interim-return path, or `null`. |
-| `continues` | Previous agx worker run id supplied via `--continue`, or `null` for a fresh run. |
-| `supersedes` | Run replaced by this fresh dispatch, or `null`; absent in historical runs. |
-| `base_rev` | Full commit id observed in the `--cd` tree before routing; absent when `--cd` has no repository and in historical runs. |
-| `premise_commits` | `{ premise, commit }` entries: revision/bookmark premises resolve their referenced commit; file, symbol and task checks are observed in the tree at `base_rev`, or omitted here when there is no repository. |
-| `ticket_path` | Absolute source ticket path. |
-| `ticket_orig_path` | Per-run provenance copy, preserved byte-for-byte. |
-| `ticket_sha256` | SHA-256 of those original bytes; also written to `ticket.orig.md.sha256`. |
-| `vendor_session` | Latest worker vendor session identifier, or `null`. |
+| Field                | Meaning                                                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`                 | Run identifier.                                                                                                                                                                                              |
+| `started_at`         | RFC 3339 timestamp from the run's `started` event.                                                                                                                                                           |
+| `ended_at`           | RFC 3339 timestamp from the run's `ended` event, or `null` while running or for derived loss.                                                                                                                |
+| `ticket`             | Ticket name, or the prompt filename when unnamed.                                                                                                                                                            |
+| `state`              | `running` or `ended`; `outcome` is null while running and typed for ended runs.                                                                                                                              |
+| `exit`               | Worker exit code, or `null` while running or for derived loss.                                                                                                                                               |
+| `row`                | Selected roster row.                                                                                                                                                                                         |
+| `dispatcher_session` | Session identifier of the dispatching coordinator.                                                                                                                                                           |
+| `cwd`                | Working directory passed to the worker.                                                                                                                                                                      |
+| `workspace`          | Workspace root used for write globs and premise checks.                                                                                                                                                      |
+| `writes`             | Ticket write globs.                                                                                                                                                                                          |
+| `judgment`           | `null` or `{ "decision": "accept"                                                                                                                                                                            | "reject", "note" }`. |
+| `report_path`        | Final report path, or `null` until ended.                                                                                                                                                                    |
+| `verify`             | Ordered `{ "cmd", "exit", "log_path" }` facts from ticket verification, or `[]` when no commands were declared / for older records.                                                                          |
+| `last_progress_path` | Most recent interim-return path, or `null`.                                                                                                                                                                  |
+| `continues`          | Previous agx worker run id supplied via `--continue`, or `null` for a fresh run.                                                                                                                             |
+| `supersedes`         | Run replaced by this fresh dispatch, or `null`; absent in historical runs.                                                                                                                                   |
+| `base_rev`           | Full commit id observed in the `--cd` tree before routing; absent when `--cd` has no repository and in historical runs.                                                                                      |
+| `premise_commits`    | `{ premise, commit }` entries: revision/bookmark premises resolve their referenced commit; file, symbol and task checks are observed in the tree at `base_rev`, or omitted here when there is no repository. |
+| `ticket_path`        | Absolute source ticket path.                                                                                                                                                                                 |
+| `ticket_orig_path`   | Per-run provenance copy, preserved byte-for-byte.                                                                                                                                                            |
+| `ticket_sha256`      | SHA-256 of those original bytes; also written to `ticket.orig.md.sha256`.                                                                                                                                    |
+| `vendor_session`     | Latest worker vendor session identifier, or `null`.                                                                                                                                                          |
 
 ## Behavior notes
 
@@ -153,6 +153,25 @@ human limit and older-run count apply to the filtered runs. Warm reads consume
 only appended log bytes, plus any previously incomplete tail; validating the memory cache,
 checking liveness, and emitting rows still cost proportionally to the stored runs.
 
+## Published snapshot (`current-runs.json`)
+
+The owner publishes `$AGX_NEXT_STATE_DIR/current-runs.json` after each appended event, written
+atomically under a kernel lock: one file, one writer. It is `{ "output", "capturedAt", "exit",
+"endedRuns", "acceptedRuns" }`. `output` is the JSON text of `{ runs, summary }` for running and
+orphaned rows, unchanged. Readers must ignore unknown fields. The two arrays let `agx-status` count
+judgments without replaying `records.jsonl`; both hold rows
+`{ "id", "dispatcher_session", "workspace", "ended_at", "judgment" }` with `judgment` either
+`null` or `{ "decision" }`, in fold order, and only for runs that have an `ended` record (running
+runs and derived loss carry no `ended_at` and are omitted):
+
+| Field          | Contents                                                                                                                                                                                                               |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `endedRuns`    | Every ended run whose `ended_at` is within 24 h of `capturedAt` (judged or not). An unparsable `ended_at` is omitted. Readers re-apply their own 24 h cutoff.                                                          |
+| `acceptedRuns` | Every ended run judged `accept`, with no age limit, whose `workspace` was an existing directory at `capturedAt`. These are the candidates for a reader's unlanded count; readers still check the directory themselves. |
+
+Readers treat a snapshot older than `records.jsonl` as stale. A snapshot lacking either array comes
+from an older writer; its judgment facts are unavailable, not zero.
+
 ## Doctor findings
 
 `agx worker doctor` reports current states that require a person's action. It reports
@@ -169,12 +188,12 @@ none of these classifications rewrites it.
 
 Each finding includes its one-line action:
 
-| Kind | Action |
-| --- | --- |
-| `orphaned` | Review the lost run and run `agx worker judge RUN_ID accept\|reject`. |
-| `unjudged` | Review the completed run and run `agx worker judge RUN_ID accept\|reject`. |
-| `outside-home` | Move the ticket to the ticket home printed in the finding. |
-| `accepted-landed-present` | Run the printed `agx ticket gc --repo REPO` to collect the ticket. |
-| `collectable` | Run the printed `agx ws gc --include-unrecorded --repo REPO`. |
-| `unlanded-72h` | Enter the printed workspace and run `mise run land`. |
-| `stale` | Run the printed `agx ws refresh NAME --repo REPO`. |
+| Kind                      | Action                                                                     |
+| ------------------------- | -------------------------------------------------------------------------- |
+| `orphaned`                | Review the lost run and run `agx worker judge RUN_ID accept\|reject`.      |
+| `unjudged`                | Review the completed run and run `agx worker judge RUN_ID accept\|reject`. |
+| `outside-home`            | Move the ticket to the ticket home printed in the finding.                 |
+| `accepted-landed-present` | Run the printed `agx ticket gc --repo REPO` to collect the ticket.         |
+| `collectable`             | Run the printed `agx ws gc --include-unrecorded --repo REPO`.              |
+| `unlanded-72h`            | Enter the printed workspace and run `mise run land`.                       |
+| `stale`                   | Run the printed `agx ws refresh NAME --repo REPO`.                         |

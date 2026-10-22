@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.5.0 — 2026-10-23
+
+- current-runs.json also publishes endedRuns (24 h) and acceptedRuns (existing workspace) so agx-status reads no records.jsonl
+
 ## 8.4.3 — 2026-10-23
 
 - Keep codex dispatchable when its subscription window is exhausted; the roster declares per route whether an exhausted window stops it

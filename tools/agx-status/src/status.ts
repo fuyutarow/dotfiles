@@ -2,13 +2,9 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { stat } from "node:fs/promises";
-import { cli as cleyeCli } from "cleye";
-import { standardCli } from "../../shared/src/cli.ts";
 import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
 
-const cliArgv = () => process.argv.slice(2);
-const cli = standardCli(cleyeCli, pkg, cliArgv);
 const nonEmpty = (value: string | undefined): string | undefined =>
   value === "" ? undefined : value;
 
@@ -56,12 +52,21 @@ const listing = z.union([
   z.object({ runs: z.array(z.unknown()), summary }),
   z.array(z.unknown()),
 ]);
+const endedRun = z.object({
+  id: z.string(),
+  dispatcher_session: z.string().nullable(),
+  workspace: z.string(),
+  ended_at: z.string(),
+  judgment: z.object({ decision: z.string() }).nullable(),
+});
 const snapshot = z.object({
   output: jsonOf(listing),
   capturedAt: z.number(),
   exit: z.literal(0),
   workspaces: workspaceCounts.optional(),
   findings: findings.optional(),
+  endedRuns: z.array(endedRun).optional(),
+  acceptedRuns: z.array(endedRun).optional(),
 });
 const workspaceFile = z.object({
   counts: workspaceCounts.omit({ capturedAt: true }),
@@ -81,60 +86,14 @@ const workspaceFile = z.object({
     .optional(),
 });
 const doctorFile = findings.extend({ complete: z.literal(true) });
-const runRow = z.object({
-  id: z.string(),
-  state: z.enum(["running", "ended"]),
-  dispatcher_session: z.string().nullable(),
-  workspace: z.string().optional(),
-  ended_at: z.string().optional(),
-  judgment: z.object({ decision: z.string() }).nullable(),
-});
-const event = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("started"),
-    id: z.string(),
-    dispatcher_session: z.string().nullable(),
-    workspace: z.string(),
-  }),
-  z.object({
-    kind: z.literal("ended"),
-    id: z.string(),
-    at: z.string().optional(),
-  }),
-  z.object({ kind: z.literal("judged"), id: z.string(), decision: z.string() }),
-]);
-type Run = z.output<typeof runRow>;
+type Published = z.output<typeof snapshot>;
 
+/** Judgment counts from the ended-run facts agx-worker publishes; records.jsonl is never read. */
 async function readActions(
-  dir: string,
+  published: Published | undefined,
   verdicts: string[],
-  rows: unknown[],
   repo: string | undefined,
 ) {
-  const runs = new Map<string, Run>();
-  for (const row of rows) {
-    const parsed = runRow.safeParse(row);
-    if (parsed.success) runs.set(parsed.data.id, parsed.data);
-  }
-  const log = await Bun.file(join(dir, "records.jsonl"))
-    .text()
-    .catch(() => "");
-  for (const line of log.slice(0, log.lastIndexOf("\n") + 1).split("\n")) {
-    const parsed = jsonOf(event).safeParse(line);
-    if (!parsed.success) continue;
-    const item = parsed.data;
-    if (item.kind === "started") {
-      runs.set(item.id, { ...item, state: "running", judgment: null });
-      continue;
-    }
-    const run = runs.get(item.id);
-    if (run === undefined) continue;
-    if (item.kind === "ended") {
-      run.state = "ended";
-      run.ended_at = item.at;
-    }
-    if (item.kind === "judged") run.judgment = { decision: item.decision };
-  }
   const workspaceRows = verdicts.map((line) => line.split("\t"));
   const members = new Set(workspaceRows.map((row) => row[0]));
   const unlanded = new Set(
@@ -145,21 +104,20 @@ async function readActions(
   const bySession: Record<string, number> = {};
   let repository = 0;
   let land = 0;
-  for (const run of runs.values()) {
-    if (run.state !== "ended") continue;
-    const belongs =
-      repo !== undefined &&
-      run.workspace !== undefined &&
-      (members.has(run.workspace) ||
-        run.workspace === repo ||
-        run.workspace.startsWith(`${repo}/`) ||
-        run.workspace.startsWith(`${repo}.ws/`));
+  const belongs = (workspace: string): boolean =>
+    repo !== undefined &&
+    (members.has(workspace) ||
+      workspace === repo ||
+      workspace.startsWith(`${repo}/`) ||
+      workspace.startsWith(`${repo}.ws/`));
+  for (const run of published?.endedRuns ?? []) {
     const endedAt = fromThrowable(
-      () => Temporal.Instant.from(run.ended_at ?? "").epochMilliseconds,
+      () => Temporal.Instant.from(run.ended_at).epochMilliseconds,
     )().unwrapOr(Number.NaN);
     const recent = endedAt >= cutoff && endedAt <= now;
-    if (run.judgment === null && recent && belongs) repository++;
-    if (run.judgment === null && recent && run.dispatcher_session !== null)
+    if (run.judgment !== null || !recent) continue;
+    if (belongs(run.workspace)) repository++;
+    if (run.dispatcher_session !== null)
       Object.defineProperty(bySession, run.dispatcher_session, {
         value:
           (Object.hasOwn(bySession, run.dispatcher_session)
@@ -168,26 +126,33 @@ async function readActions(
         enumerable: true,
         configurable: true,
       });
-    if (
-      run.judgment?.decision === "accept" &&
-      belongs &&
-      unlanded.has(run.workspace) &&
-      run.workspace !== undefined &&
-      (await stat(run.workspace)
-        .then((info) => info.isDirectory())
-        .catch(() => false))
-    )
-      land++;
   }
-  return {
-    by_session: bySession,
-    repository,
-    land,
-    why:
-      repo === undefined
-        ? "repository scope unavailable; agx worker doctor"
-        : null,
-  };
+  const present = new Map<string, Promise<boolean>>();
+  const candidates = (published?.acceptedRuns ?? []).filter(
+    (run) =>
+      run.judgment?.decision === "accept" &&
+      belongs(run.workspace) &&
+      unlanded.has(run.workspace),
+  );
+  for (const run of candidates)
+    if (!present.has(run.workspace))
+      present.set(
+        run.workspace,
+        stat(run.workspace)
+          .then((info) => info.isDirectory())
+          .catch(() => false),
+      );
+  for (const run of candidates)
+    if ((await present.get(run.workspace)) === true) land++;
+  let why: string | null = null;
+  if (repo === undefined)
+    why = "repository scope unavailable; agx worker doctor";
+  else if (
+    published?.endedRuns === undefined ||
+    published.acceptedRuns === undefined
+  )
+    why = "judgment facts unpublished; agx worker doctor";
+  return { by_session: bySession, repository, land, why };
 }
 
 async function readStatus(env: NodeJS.ProcessEnv, cwd: string) {
@@ -276,7 +241,7 @@ async function readStatus(env: NodeJS.ProcessEnv, cwd: string) {
   let rows: unknown[] = [];
   if (runListing !== undefined)
     rows = Array.isArray(runListing) ? runListing : runListing.runs;
-  const actions = await readActions(dir, own?.lines ?? [], rows, repo);
+  const actions = await readActions(snap, own?.lines ?? [], repo);
   let runOutput: Record<string, unknown>;
   if (snap === undefined) {
     runOutput = {
@@ -339,28 +304,55 @@ const rejectPrototypeFlag = (type: string, flag: string): void => {
     process.exit(2);
   }
 };
-await cli(
-  {
-    name: "agx-status",
-    strictFlags: true,
-    ignoreArgv: rejectPrototypeFlag,
-    flags: {
-      json: { type: Boolean, description: "emit status as JSON" },
-      cwd: {
-        type: String,
-        description: "repository path (default: current directory)",
+const emit = async (cwd: string): Promise<void> => {
+  process.stdout.write(
+    `${JSON.stringify(await readStatus(process.env, cwd))}\n`,
+  );
+};
+
+/** The two forms every caller uses; everything else (help, version, errors) goes to cleye. */
+const operandOf = (value: string | undefined): string | undefined =>
+  value === undefined || value === "" || value.startsWith("-")
+    ? undefined
+    : value;
+function plainInvocation(argv: string[]): { cwd: string | undefined } | null {
+  const [first, second, third] = argv;
+  if (argv.length === 1 && first === "--json") return { cwd: undefined };
+  if (argv.length !== 3) return null;
+  let cwd: string | undefined;
+  if (first === "--json" && second === "--cwd") cwd = operandOf(third);
+  if (first === "--cwd" && third === "--json") cwd = operandOf(second);
+  return cwd === undefined ? null : { cwd };
+}
+
+// Loading cleye and the shared CLI wrapper costs more than the status read itself.
+const plain = plainInvocation(process.argv.slice(2));
+if (plain !== null) await emit(plain.cwd ?? process.cwd());
+else {
+  const { cli: cleyeCli } = await import("cleye");
+  const { standardCli } = await import("../../shared/src/cli.ts");
+  const cli = standardCli(cleyeCli, pkg, () => process.argv.slice(2));
+  await cli(
+    {
+      name: "agx-status",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      flags: {
+        json: { type: Boolean, description: "emit status as JSON" },
+        cwd: {
+          type: String,
+          description: "repository path (default: current directory)",
+        },
       },
+      help: { description: "Read-only summary of agx state files." },
     },
-    help: { description: "Read-only summary of agx state files." },
-  },
-  async (args) => {
-    if (args.flags.json !== true) {
-      process.stderr.write("Usage: agx-status --json [--cwd DIR]\n");
-      process.exitCode = 2;
-      return;
-    }
-    process.stdout.write(
-      `${JSON.stringify(await readStatus(process.env, args.flags.cwd ?? process.cwd()))}\n`,
-    );
-  },
-);
+    async (args) => {
+      if (args.flags.json !== true) {
+        process.stderr.write("Usage: agx-status --json [--cwd DIR]\n");
+        process.exitCode = 2;
+        return;
+      }
+      await emit(args.flags.cwd ?? process.cwd());
+    },
+  );
+}

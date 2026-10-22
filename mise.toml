@@ -494,6 +494,11 @@ depends = ["fmt:check", "lint", "test", "usehooks:consumers"]
 description = "Whole-tree land gate: non-mutating formatting checks + lint"
 depends = ["fmt:check", "lint", "lint:changesets"]
 
+[tasks."gate:changed"]
+description = "Check changed files against trunk: TS format, type-aware lint, no-sync, and project types (about 10 s; an empty change set passes)"
+dir = "{{config_root}}"
+run = "bun scripts/gate-changed.ts"
+
 [tasks.changeset]
 depends = ["bun:check"]
 description = "Generate a validated tool changeset"

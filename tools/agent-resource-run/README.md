@@ -198,3 +198,5 @@ child runners to processes with that fixture's `XDG_RUNTIME_DIR`. This prevents 
 host stalls and other test sessions' receipts from contaminating fake-work tests.
 The dxg unit fixtures separately exercise host-wide refusal outside admitted scopes;
 production has no environment override for its `/proc` inventory.
+
+GPU admission rationale and the dated OSS comparison are documented in [docs/](docs/).

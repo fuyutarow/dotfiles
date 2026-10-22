@@ -645,10 +645,11 @@ test("run preserves exact original bytes and hash, base and premise commits, rep
   expect(ctx.ok).toBe(true);
   if (!ctx.ok) return;
   const previousCommit = await ctx.revision("HEAD^");
+  expect(typeof previousCommit).toBe("string");
   expect(previousCommit).not.toBeNull();
   const baseRev = ctx.base_rev;
   expect(baseRev).not.toBeNull();
-  if (baseRev === null || previousCommit === null) return;
+  if (baseRev === null || typeof previousCommit !== "string") return;
   const original = Buffer.concat([
     Buffer.from(
       text(

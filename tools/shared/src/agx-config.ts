@@ -8,6 +8,21 @@ import { z } from "./zod.ts";
 
 /** Only this error class changes the ticket CLI's existing failure exit code. */
 export class AgxConfigError extends Error {}
+/** Inspection did not produce a policy verdict; callers must preserve exit 75. */
+export class InspectionUnavailable extends AgxConfigError {}
+export class InspectionTimeout extends InspectionUnavailable {
+  constructor(
+    bound: string,
+    milliseconds: number,
+    argv: string[],
+    cwd: string,
+  ) {
+    super(
+      `inspection timeout ${bound}=${milliseconds}ms; command=${JSON.stringify(argv)}; cwd=${cwd}`,
+    );
+  }
+}
+export const CONFIG_READ_TIMEOUT_MS = 60_000;
 const NonEmptyStrings = z.array(
   z.string().refine((value) => value.trim().length > 0, "must not be empty"),
 );
@@ -45,31 +60,64 @@ const failure = (message: string) => ({
 const good = <T>(value: T) => ({ ok: true as const, value });
 type Vcs = "jj" | "git" | "none";
 
-async function readCommand(
+export async function readCommand(
   argv: string[],
   cwd: string,
+  timeoutMs = CONFIG_READ_TIMEOUT_MS,
 ): Promise<Attempt<string>> {
   const result = await attempt(async () => {
     const invocation = readonlyCommand(argv, cwd);
+    const started = performance.now();
     const child = Bun.spawn(invocation.cmd, {
       cwd,
       env: invocation.env,
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
-      timeout: 5000,
+      // Allow the same lock-contention window as repository landing reads.
+      timeout: timeoutMs,
+      killSignal: "SIGKILL",
     });
     const [exit, out, err] = await Promise.all([
       child.exited,
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
     ]);
-    return { exit, out, err };
+    return {
+      exit,
+      out,
+      err,
+      timedOut:
+        child.signalCode === "SIGKILL" &&
+        performance.now() - started >= timeoutMs,
+    };
   });
   if (!result.ok) return result;
-  return result.value.exit === 0
-    ? good(result.value.out.trimEnd())
-    : failure(result.value.err.trim());
+  if (result.value.timedOut)
+    return {
+      ok: false,
+      error: new InspectionTimeout(
+        "CONFIG_READ_TIMEOUT_MS",
+        timeoutMs,
+        argv,
+        cwd,
+      ),
+    };
+  if (result.value.exit === 75)
+    return {
+      ok: false,
+      error: new InspectionUnavailable(
+        result.value.err.trim() === ""
+          ? `inspection unavailable; command=${JSON.stringify(argv)}; cwd=${cwd}; exit=75; no stderr`
+          : result.value.err.trim().replaceAll(/[\r\n]+/gu, "; "),
+      ),
+    };
+  if (result.value.exit === 0) return good(result.value.out.trimEnd());
+  const reason =
+    result.value.err.trim() === "" ? "no stderr" : result.value.err.trim();
+  return failure(
+    `config read ${JSON.stringify(argv)} in ${cwd} exited ${result.value.exit}: ${reason}`,
+  );
 }
 
 async function committedPolicy(
@@ -82,6 +130,7 @@ async function committedPolicy(
       ["git", "--no-optional-locks", "rev-parse", "--verify", "HEAD^{commit}"],
       root,
     );
+    if (!head.ok && head.error instanceof InspectionUnavailable) return head;
     if (!head.ok) return good(undefined); // An unborn Git tree has no committed policy.
   }
   const revision = vcs === "jj" ? "trunk()" : "HEAD";

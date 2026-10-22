@@ -30,6 +30,7 @@ const runCommand: CommandRunner = (argv, cwd, timeoutMs) => {
     env: invocation.env,
     stdout: "pipe",
     stderr: "pipe",
+    killSignal: "SIGKILL",
     timeout: Math.max(1, Math.floor(timeoutMs)),
   });
   return {
@@ -188,12 +189,25 @@ function simpleCommandExists(
 export function checkPremises(
   premises: string[] | undefined,
   cwd: string,
-  options: { budgetMs?: number; runner?: CommandRunner } = {},
+  options: {
+    budgetMs?: number;
+    runner?: CommandRunner;
+    onTimeout?: (argv: string[], cwd: string, budgetMs: number) => void;
+    onTemporaryFailure?: (argv: string[], cwd: string, output: string) => void;
+  } = {},
 ): PremiseCheck {
   if (premises === undefined || premises.length === 0) return { status: "ok" };
   const budgetMs = options.budgetMs ?? DEFAULT_BUDGET_MS;
   const startedAt = performance.now();
-  const runner = options.runner ?? runCommand;
+  const commandRunner = options.runner ?? runCommand;
+  const runner: CommandRunner = (argv, directory, timeoutMs) => {
+    const result = commandRunner(argv, directory, timeoutMs);
+    if (result.exitCode === 75)
+      options.onTemporaryFailure?.(argv, directory, result.output);
+    if (isTimeout(result, startedAt, budgetMs))
+      options.onTimeout?.(argv, directory, budgetMs);
+    return result;
+  };
   const remaining = (): number => budgetMs - (performance.now() - startedAt);
   const missing: string[] = [];
   const details: string[] = [];

@@ -2,7 +2,11 @@ import { lstat, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fromPromise } from "neverthrow";
 import { resolveAgxConfig } from "../../../shared/src/agx-config.ts";
-import { AgxConfigError } from "../../../shared/src/agx-config.ts";
+import {
+  AgxConfigError,
+  InspectionTimeout,
+  InspectionUnavailable,
+} from "../../../shared/src/agx-config.ts";
 import { JJ_READ_ARGS } from "../../../shared/src/jj-read.ts";
 import { readonlyCommand } from "../../../shared/src/readonly-command.ts";
 
@@ -14,29 +18,61 @@ const inside = (path: string, home: string) => {
   );
 };
 
-/** All VCS reads use the existing kernel read barrier and a bounded child. */
-export async function treeRead(argv: string[], cwd: string) {
+export const TREE_READ_TIMEOUT_MS = 60_000;
+/** Repository contention is an operational failure, never evidence of no VCS. */
+export async function treeRead(
+  argv: string[],
+  cwd: string,
+  timeoutMs = TREE_READ_TIMEOUT_MS,
+) {
   const invocation = readonlyCommand(argv, cwd);
   const result = await fromPromise(
     (async () => {
+      const started = performance.now();
       const child = Bun.spawn(invocation.cmd, {
         cwd,
         env: invocation.env,
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
-        timeout: 5000,
+        timeout: timeoutMs,
+        killSignal: "SIGKILL",
       });
       const [exit, out, err] = await Promise.all([
         child.exited,
         new Response(child.stdout).text(),
         new Response(child.stderr).text(),
       ]);
+      if (
+        child.signalCode === "SIGKILL" &&
+        performance.now() - started >= timeoutMs
+      )
+        return {
+          exit: 75,
+          out: "",
+          err: new InspectionTimeout(
+            "TREE_READ_TIMEOUT_MS",
+            timeoutMs,
+            argv,
+            cwd,
+          ).message,
+        };
+      if (exit === 75)
+        return {
+          exit,
+          out,
+          err:
+            err.trim() === ""
+              ? `inspection unavailable; command=${JSON.stringify(argv)}; cwd=${cwd}; exit=75; no stderr`
+              : err.trim().replaceAll(/[\r\n]+/gu, "; "),
+        };
       return { exit, out, err };
     })(),
-    String,
+    (error) => error,
   );
-  return result.isOk() ? result.value : { exit: 2, out: "", err: result.error };
+  return result.isOk()
+    ? result.value
+    : { exit: 2, out: "", err: String(result.error) };
 }
 
 async function repositoryKind(root: string) {
@@ -54,6 +90,7 @@ async function repositoryKind(root: string) {
       ],
       root,
     );
+    if (probe.exit === 75) return new InspectionUnavailable(probe.err);
     if (
       probe.exit === 0 &&
       /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(probe.out.trim())
@@ -73,6 +110,7 @@ async function repositoryKind(root: string) {
       ],
       root,
     );
+    if (probe.exit === 75) return new InspectionUnavailable(probe.err);
     if (
       probe.exit === 0 &&
       /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(probe.out.trim())
@@ -95,6 +133,12 @@ export async function ticketContext(cwd: string) {
   let vcs: "jj" | "git" | undefined;
   while (true) {
     const kind = await repositoryKind(root);
+    if (kind instanceof InspectionUnavailable)
+      return {
+        ok: false,
+        error: kind.message,
+        configurationError: kind,
+      } as const;
     if (kind !== null) {
       vcs = kind;
       break;
@@ -132,11 +176,18 @@ export async function ticketContext(cwd: string) {
       workspace,
     );
     const id = result.out.trim();
+    if (result.exit === 75) return new InspectionUnavailable(result.err);
     return result.exit === 0 && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(id)
       ? id
       : null;
   };
   const base_rev = await revision(vcs === "jj" ? "@" : "HEAD");
+  if (base_rev instanceof InspectionUnavailable)
+    return {
+      ok: false,
+      error: base_rev.message,
+      configurationError: base_rev,
+    } as const;
   const config = await resolveAgxConfig(root, { vcs: vcs ?? "none" });
   if (!config.ok)
     return {

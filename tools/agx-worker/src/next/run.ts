@@ -4,6 +4,7 @@ import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
+import { InspectionUnavailable } from "../../../shared/src/agx-config.ts";
 import { verifyLine } from "../ticket.ts";
 import { parseReport, parseReturn, withReportInstruction } from "../report.ts";
 import { type NextTicket } from "./ticket.ts";
@@ -218,6 +219,8 @@ export async function check(flags: Flags): Promise<number> {
   const cwd = resolve(value(flags, "cd") ?? process.cwd());
   if (path === undefined) return fatal("check requires positional TICKET", 2);
   const inspected = await preflight(path, cwd, flags);
+  if (inspected.temporary !== undefined)
+    return fatal(inspected.temporary.message, 75);
   if (inspected.failures.length > 0)
     return printPreflightFailures(inspected.failures);
   const { ticket, loaded } = inspected;
@@ -244,6 +247,8 @@ export async function run(flags: Flags): Promise<number> {
   const cwd = resolve(value(flags, "cd") ?? process.cwd());
   if (path === undefined) return fatal("run requires positional TICKET", 2);
   const inspected = await preflight(path, cwd, flags);
+  if (inspected.temporary !== undefined)
+    return fatal(inspected.temporary.message, 75);
   if (inspected.failures.length > 0)
     return printPreflightFailures(inspected.failures);
   const {
@@ -504,6 +509,7 @@ export async function run(flags: Flags): Promise<number> {
   };
   const before = workspaceSnapshot(cwd, ticket.writes);
   const runEnv = verificationEnvironment(cwd, process.env, temp.env);
+  if (runEnv instanceof InspectionUnavailable) return fatal(runEnv.message, 75);
   if (stopTask !== undefined) await stopTask;
   const child = Bun.spawn([process.execPath, ...workerArgs()], {
     cwd,

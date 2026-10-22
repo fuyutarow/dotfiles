@@ -17,7 +17,13 @@ import { pinContinuation } from "./continue.ts";
 import { readRouteUsage } from "./usage.ts";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { DispatchBindingSchema } from "../../../shared/src/agx-dispatch-binding.ts";
-import { AgxConfigError } from "../../../shared/src/agx-config.ts";
+import {
+  AgxConfigError,
+  InspectionTimeout,
+  InspectionUnavailable,
+} from "../../../shared/src/agx-config.ts";
+
+export const PREFLIGHT_PREMISE_BUDGET_MS = 60_000;
 
 export type PreflightFlags = Readonly<
   Record<string, string | boolean | undefined>
@@ -117,10 +123,20 @@ export async function preflight(
       add(String(slug.error), "use the suggested agx ticket new command");
   }
   const located = await ticketContext(dirname(resolve(path)));
+  if (
+    !located.ok &&
+    located.configurationError instanceof InspectionUnavailable
+  )
+    return { temporary: located.configurationError };
   const repository =
     located.ok && located.vcs === undefined
       ? await ticketContext(cwd)
       : located;
+  if (
+    !repository.ok &&
+    repository.configurationError instanceof InspectionUnavailable
+  )
+    return { temporary: repository.configurationError };
   if (!repository.ok && repository.configurationError !== undefined)
     failures.push(repository.configurationError);
   else if (!repository.ok)
@@ -137,6 +153,8 @@ export async function preflight(
       );
   }
   const worker = await ticketContext(cwd);
+  if (!worker.ok && worker.configurationError instanceof InspectionUnavailable)
+    return { temporary: worker.configurationError };
   const ctx =
     repository.ok && worker.ok
       ? {
@@ -162,19 +180,42 @@ export async function preflight(
         `base_rev mismatch: ticket ${resolve(path)}, declared ${ticket.base_rev}, repository ${ctx.root}, worker ${cwd} commit ${ctx.base_rev ?? "unavailable"}`,
         "update base_rev or select the intended --cd commit",
       );
+    let temporary: InspectionUnavailable | undefined;
     const premises = checkPremises(
       ticket.premises?.filter(
         (premise) => ctx.vcs !== "git" || !premise.startsWith("rev:"),
       ),
       cwd,
+      {
+        budgetMs: PREFLIGHT_PREMISE_BUDGET_MS,
+        onTimeout: (argv, directory, milliseconds) => {
+          temporary = new InspectionTimeout(
+            "PREFLIGHT_PREMISE_BUDGET_MS",
+            milliseconds,
+            argv,
+            directory,
+          );
+        },
+        onTemporaryFailure: (argv, directory, output) => {
+          temporary = new InspectionUnavailable(
+            output.trim() === ""
+              ? `inspection unavailable; command=${JSON.stringify(argv)}; cwd=${directory}; exit=75; no stderr`
+              : output.trim().replaceAll(/[\r\n]+/gu, "; "),
+          );
+        },
+      },
     );
+    if (temporary !== undefined) return { temporary };
     for (const detail of premises.status === "missing" ? premises.details : [])
       add(
         `missing premises in --cd tree: ${detail}`,
         "restore the premise or correct the ticket/--cd tree",
       );
     if (premises.status === "timeout")
-      add("premise check timed out", "repair the premise command and retry");
+      add(
+        "premise inspection command failed",
+        "repair the premise command and retry",
+      );
   }
   for (const premise of ticket !== undefined && ctx !== undefined
     ? (ticket.premises ?? [])
@@ -194,6 +235,7 @@ export async function preflight(
     }
     const commit =
       reference === undefined ? ctx.base_rev : await ctx.revision(reference);
+    if (commit instanceof InspectionUnavailable) return { temporary: commit };
     if (commit === null && reference === undefined && ctx.vcs === undefined)
       continue;
     if (commit === null)
@@ -214,12 +256,19 @@ export async function preflight(
       `ownerless Git ref lock(s) block dispatch: ${lockPath} age=${Math.floor(ageMs / 1000)}s`,
       "Confirm no holder, then repair with: rip <path>",
     );
-  verificationEnvironment(cwd, process.env, {}, (reason) => {
-    add(
-      reason,
-      `inspect the target configuration, then run mise trust in ${cwd}`,
-    );
-  });
+  const environment = verificationEnvironment(
+    cwd,
+    process.env,
+    {},
+    (reason) => {
+      add(
+        reason,
+        `inspect the target configuration, then run mise trust in ${cwd}`,
+      );
+    },
+  );
+  if (environment instanceof InspectionUnavailable)
+    return { temporary: environment };
   const sandbox =
     value(flags, "sandbox") ?? ticket?.sandbox ?? "workspace-write";
   if (!["none", "read-only", "workspace-write"].includes(sandbox))
@@ -337,6 +386,7 @@ export async function preflight(
       );
   }
   return {
+    temporary: undefined,
     failures,
     ticket,
     prose: parsed?.success === true ? parsed.prose : "",

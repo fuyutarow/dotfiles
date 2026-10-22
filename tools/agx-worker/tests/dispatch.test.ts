@@ -139,6 +139,7 @@ function fixture() {
     'if [ "$json" = "yes" ]; then printf \'{"workspace":"%s"}\\n\' "$workspace"; else printf \'%s\\n\' "$workspace"; fi',
   ]);
   shim("jj", [
+    'case " $* " in *" log "*) printf "%s\\n" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; exit 0 ;; esac',
     'case "$PWD" in',
     '  "$FAKE_REPO".ws/*) printf \'%s\\n\' "${FAKE_WORKSPACE_REPO:-$FAKE_REPO}" ;;',
     "  *) printf '%s\\n' \"$FAKE_REPO\" ;;",
@@ -206,7 +207,7 @@ async function invoke(f: ReturnType<typeof fixture>, ...args: string[]) {
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
-      timeout: 5000,
+      timeout: Number(f.env.FAKE_INVOKE_TIMEOUT_MS ?? 5000),
     },
   );
   const [stdout, stderr, exitCode] = await Promise.all([
@@ -485,3 +486,339 @@ test.each(["malformed", "unavailable", "empty", "stale"])(
       expect(await Bun.file(f.unitArgs).exists()).toBe(false);
   },
 );
+
+test("preflight refusal identifies the checked tree, revision and child exit", async () => {
+  const f = fixture();
+  f.env.FAKE_CHECK_FAIL = "yes";
+  const result = await invoke(
+    f,
+    "--continue",
+    "prior-run",
+    "--sandbox",
+    "none",
+  );
+  expect(result.exitCode).toBe(2);
+  expect(result.stderr).toContain(`--cd ${f.repo}.ws/ws_foo-bar`);
+  expect(result.stderr).toContain("@/base_rev=");
+  expect(result.stderr).toContain("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  expect(result.stderr).toContain("check exit=2");
+  expect(result.stderr).toContain("invalid writes");
+});
+
+test("a silent preflight refusal still identifies its child exit and tree", async () => {
+  const f = fixture();
+  writeFileSync(join(f.root, "bin/agx-worker"), "#!/bin/sh\nexit 7\n");
+  const result = await invoke(f);
+  expect(result.exitCode).toBe(2);
+  expect(result.stderr).toContain("check exit=7");
+  expect(result.stderr).toContain("no stderr");
+  expect(result.stderr).toContain(`--cd ${f.repo}.ws/ws_foo-bar`);
+});
+
+test("preflight can finish beyond the former 30000ms subprocess deadline", async () => {
+  const f = fixture();
+  writeFileSync(
+    join(f.root, "bin/agx-worker"),
+    `#!/usr/bin/env bun
+if (Bun.argv[2] === "check") {
+  await Bun.sleep(30_100);
+  console.error("fixture slow check refusal");
+  process.exit(2);
+}
+process.exit(1);
+`,
+  );
+  const child = Bun.spawn([process.execPath, ENTRY, "dispatch", f.ticket], {
+    cwd: f.repo,
+    env: f.env,
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 40_000,
+  });
+  const [code, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stderr).text(),
+  ]);
+  expect(code).toBe(2);
+  expect(stderr).toContain("fixture slow check refusal");
+  expect(stderr).toContain("check exit=2");
+  expect(await Bun.file(f.unitArgs).exists()).toBe(false);
+}, 45_000);
+
+test.each([false, true])(
+  "real jj continued workspace agrees with check (missing premise=%s)",
+  async (missingPremise) => {
+    const f = fixture();
+    f.env.AGX_DISPATCH_WAIT_MS = "1000";
+    f.env.FAKE_INVOKE_TIMEOUT_MS = "45000";
+    const jj = Bun.which("jj");
+    expect(jj).not.toBeNull();
+    if (jj === null) return;
+    rmSync(join(f.repo, ".jj"), { recursive: true });
+    f.env.JJ_CONFIG = "";
+    f.env.JJ_USER = "Fixture";
+    f.env.JJ_EMAIL = "fixture@example.invalid";
+    f.env.DISPATCH_ROSTER_PATH = fileURLToPath(
+      new URL("../../../agents/models/dispatch-roster.toml", import.meta.url),
+    );
+    const jjCommand = async (...args: string[]) => {
+      const child = Bun.spawn([jj, ...args], {
+        cwd: f.repo,
+        env: f.env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, out, err] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(code, err).toBe(0);
+      return out.trim();
+    };
+    await jjCommand("git", "init", ".");
+    await jjCommand(
+      "config",
+      "set",
+      "--repo",
+      'revset-aliases."trunk()"',
+      "bookmarks(main)",
+    );
+    writeFileSync(
+      join(f.repo, "agx.toml"),
+      'schema = 1\ntickets = ".agents/tickets"\n',
+    );
+    writeFileSync(join(f.repo, "main-only"), "present only in main checkout\n");
+    await jjCommand("new", "-m", "Fixture policy");
+    await jjCommand("bookmark", "create", "main", "-r", "@-");
+    const workspace = join(`${f.repo}.ws`, "ws_foo-bar");
+    mkdirSync(`${f.repo}.ws`, { recursive: true });
+    await jjCommand(
+      "workspace",
+      "add",
+      "--name",
+      "foo-bar",
+      "-r",
+      "root()",
+      workspace,
+    );
+    writeFileSync(join(f.root, "bin/jj"), `#!/bin/sh\nexec '${jj}' "$@"\n`);
+    writeFileSync(
+      f.ticket,
+      `+++\nschema = 2\nname = "foo-bar"\noutcome = "fixture"\npremises = ${missingPremise ? '["file:main-only"]' : "[]"}\n[proposition]\nid = "P1"\nclaim = "fixture"\nrefuted_by = "fixture"\n+++\n`,
+    );
+    const state = f.env.AGX_NEXT_STATE_DIR!;
+    mkdirSync(state, { recursive: true });
+    writeFileSync(
+      join(state, "records.jsonl"),
+      [
+        {
+          kind: "started",
+          id: "prior-run",
+          at: "2026-10-14T01:00:00Z",
+          ticket: "foo-bar",
+          ticket_path: f.ticket,
+          writes: [],
+          cwd: workspace,
+          workspace,
+          row: "terra-high",
+          dispatcher_session: null,
+          vendor_session: null,
+          pid: 0,
+        },
+        {
+          kind: "ended",
+          id: "prior-run",
+          at: "2026-10-14T01:10:00Z",
+          exit: 0,
+          report_path: null,
+          vendor_session: "fixture-session",
+          verify: [],
+        },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join("\n") + "\n",
+    );
+    const checkArgs = [
+      "check",
+      f.ticket,
+      "--cd",
+      workspace,
+      "--sandbox",
+      "none",
+      "--continue",
+      "prior-run",
+    ];
+    const checked = async (args: string[]) => {
+      const child = Bun.spawn([process.execPath, ENTRY, ...args], {
+        cwd: f.repo,
+        env: f.env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, out, err] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      return { code, out, err };
+    };
+    const main = await checked([
+      "check",
+      f.ticket,
+      "--cd",
+      f.repo,
+      "--sandbox",
+      "none",
+      "--continue",
+      "prior-run",
+    ]);
+    expect(main.code, main.err).toBe(0);
+    const direct = await checked(checkArgs);
+    expect(direct.code, direct.err).toBe(missingPremise ? 2 : 0);
+    const checkArgv = join(f.root, "check-argv.json");
+    writeFileSync(
+      join(f.root, "bin/agx-worker"),
+      `#!/usr/bin/env bun
+const args = Bun.argv.slice(2);
+if (args[0] === "check") {
+  await Bun.write(${JSON.stringify(checkArgv)}, JSON.stringify(args));
+  const child = Bun.spawn([process.execPath, ${JSON.stringify(ENTRY)}, ...args], { stdout: "inherit", stderr: "inherit" });
+  process.exit(await child.exited);
+}
+console.log(await Bun.file(${JSON.stringify(f.records)}).text());
+`,
+    );
+    const before = await jjCommand(
+      "--ignore-working-copy",
+      "log",
+      "-r",
+      "foo-bar@",
+      "--no-graph",
+      "-T",
+      "commit_id",
+    );
+    const result = await invoke(
+      f,
+      "--sandbox",
+      "none",
+      "--continue",
+      "prior-run",
+    );
+    expect(result.exitCode, result.stderr).toBe(direct.code);
+    const observedArgs = jsonOf(z.array(z.string())).safeParse(
+      await Bun.file(checkArgv).text(),
+    );
+    expect(observedArgs.success).toBe(true);
+    expect(observedArgs.data).toEqual(checkArgs);
+    expect(await Bun.file(join(workspace, ".agx.toml")).exists()).toBe(false);
+    expect(await Bun.file(join(workspace, "agx.toml")).exists()).toBe(false);
+    expect(
+      await jjCommand(
+        "--ignore-working-copy",
+        "log",
+        "-r",
+        "foo-bar@",
+        "--no-graph",
+        "-T",
+        "commit_id",
+      ),
+    ).toBe(before);
+    if (missingPremise) {
+      expect(result.stderr).toContain(`--cd ${workspace} @/base_rev=${before}`);
+      expect(result.stderr).toContain("check exit=2");
+      expect(result.stderr).toContain("file:main-only: file does not exist");
+      expect(await Bun.file(f.unitArgs).exists()).toBe(false);
+    }
+  },
+  60_000,
+);
+
+test.each(["check", "ls"])(
+  "dispatch propagates temporary %s failure without a verdict",
+  async (command) => {
+    const f = fixture();
+    writeFileSync(
+      join(f.root, "bin/agx-worker"),
+      `#!/bin/sh
+if [ "$1" = "${command}" ]; then
+  echo 'inspection timeout TEST_INSPECTION_MS=60000ms; command=["agx-worker","${command}"]; cwd=${f.repo}' >&2
+  exit 75
+fi
+if [ "$1" = "check" ]; then exit 0; fi
+cat "$FAKE_RECORDS"
+`,
+    );
+    const result = await invoke(f);
+    expect(result.exitCode).toBe(75);
+    expect(result.stderr).toContain("TEST_INSPECTION_MS=60000ms");
+    expect(result.stderr).not.toContain("preflight failed");
+    expect(await Bun.file(f.unitArgs).exists()).toBe(false);
+  },
+);
+
+test("dispatch check deadline is an operational timeout with exit 75", async () => {
+  const f = fixture();
+  writeFileSync(
+    join(f.root, "bin/agx-worker"),
+    `#!/usr/bin/env bun
+if (Bun.argv[2] === "check") {
+  await Bun.sleep(65_000);
+  console.error("late check verdict");
+  process.exit(2);
+}
+process.exit(1);
+`,
+  );
+  const child = Bun.spawn([process.execPath, ENTRY, "dispatch", f.ticket], {
+    cwd: f.repo,
+    env: f.env,
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 70_000,
+  });
+  const [code, err] = await Promise.all([
+    child.exited,
+    new Response(child.stderr).text(),
+  ]);
+  expect(code, err).toBe(75);
+  expect(err).toContain("DISPATCH_CHECK_TIMEOUT_MS=60000ms");
+  expect(err).toContain('"agx-worker","check"');
+  expect(err).toContain(`cwd=${f.repo}`);
+  expect(err).not.toContain("preflight failed");
+  expect(err).not.toContain("late check verdict");
+  expect(err.trim().split("\n")).toHaveLength(1);
+  expect(await Bun.file(f.unitArgs).exists()).toBe(false);
+}, 75_000);
+
+test("dispatch inspection helpers distinguish expiry from a completed failure", async () => {
+  const { invoke: inspect, invokeReadonly } =
+    await import("../src/dispatch.ts");
+  const f = fixture();
+  const slow = [process.execPath, "-e", "await Bun.sleep(5000)"];
+  const expiredList = await inspect(
+    slow,
+    f.repo,
+    f.env,
+    20,
+    "DISPATCH_LIST_TIMEOUT_MS",
+  );
+  expect(expiredList.code).toBe(75);
+  expect(expiredList.err).toContain("DISPATCH_LIST_TIMEOUT_MS=20ms");
+  const expiredTree = await invokeReadonly(slow, f.repo, f.env, 20);
+  expect(expiredTree.code).toBe(75);
+  expect(expiredTree.err).toContain("DISPATCH_TREE_READ_TIMEOUT_MS=20ms");
+  const completed = await inspect(
+    [
+      process.execPath,
+      "-e",
+      'console.error("completed refusal"); process.exit(2)',
+    ],
+    f.repo,
+    f.env,
+    2000,
+    "DISPATCH_CHECK_TIMEOUT_MS",
+  );
+  expect(completed.code).toBe(2);
+  expect(completed.err).toContain("completed refusal");
+});

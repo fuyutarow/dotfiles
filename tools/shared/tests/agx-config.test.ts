@@ -335,3 +335,64 @@ test.each(["", 'root = "relative"\n'])(
     if (!result.ok) expect(String(result.error)).toContain("root");
   },
 );
+
+test("config read waits beyond the former 5000ms limit for a queued jj read", async () => {
+  const f = await fixture('schema = 1\ntickets = "committed"\n');
+  const jj = Bun.which("jj");
+  expect(jj).not.toBeNull();
+  if (jj === null) return;
+  const bin = join(f.parent, "bin");
+  await mkdir(bin);
+  const shim = join(bin, "jj");
+  await writeFile(
+    shim,
+    `#!/usr/bin/env bun
+const args = Bun.argv.slice(2);
+if (args.includes("workspace")) await Bun.sleep(5100);
+const child = Bun.spawn([${JSON.stringify(jj)}, ...args], { stdout: "inherit", stderr: "inherit" });
+process.exit(await child.exited);
+`,
+    { mode: 0o755 },
+  );
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${bin}:${originalPath}`;
+  const selectedHome = await home(f.root).finally(() => {
+    process.env.PATH = originalPath;
+  });
+  expect(selectedHome).toBe(join(f.root, "committed"));
+}, 20_000);
+
+test("silent config command failure includes command, cwd and child exit", async () => {
+  const f = await fixture();
+  const bin = join(f.parent, "bin");
+  await mkdir(bin);
+  await writeFile(join(bin, "jj"), "#!/bin/sh\nexit 9\n", { mode: 0o755 });
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${bin}:${originalPath}`;
+  const result = await resolveAgxConfig(f.root).finally(() => {
+    process.env.PATH = originalPath;
+  });
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(String(result.error)).toContain(
+      '"workspace","root","--name","default"',
+    );
+    expect(String(result.error)).toContain(f.root);
+    expect(String(result.error)).toContain("exited 9: no stderr");
+  }
+});
+
+test("config read expiry carries its named operational timeout", async () => {
+  const { readCommand, InspectionTimeout } =
+    await import("../src/agx-config.ts");
+  const f = await fixture();
+  const argv = [process.execPath, "-e", "await Bun.sleep(5000)"];
+  const result = await readCommand(argv, f.root, 20);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error).toBeInstanceOf(InspectionTimeout);
+    expect(String(result.error)).toContain("CONFIG_READ_TIMEOUT_MS=20ms");
+    expect(String(result.error)).toContain(JSON.stringify(argv));
+    expect(String(result.error)).toContain(`cwd=${f.root}`);
+  }
+});

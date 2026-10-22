@@ -18,6 +18,12 @@ import {
 } from "../../shared/src/agx-dispatch-binding.ts";
 import { JJ_READ_ARGS } from "../../shared/src/jj-read.ts";
 import { readonlyCommand } from "../../shared/src/readonly-command.ts";
+import { InspectionTimeout } from "../../shared/src/agx-config.ts";
+
+export const DISPATCH_CHECK_TIMEOUT_MS = 60_000;
+export const DISPATCH_LIST_TIMEOUT_MS = 60_000;
+export const DISPATCH_COMMAND_TIMEOUT_MS = 60_000;
+export const DISPATCH_TREE_READ_TIMEOUT_MS = 60_000;
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, cliArgv);
@@ -41,46 +47,94 @@ const Rows = jsonOf(z.array(RunRow));
 const WorkspaceResult = jsonOf(z.object({ workspace: z.string().min(1) }));
 type RunRow = z.output<typeof RunRow>;
 
-async function invoke(
+export async function invoke(
   args: string[],
   cwd: string,
   env: NodeJS.ProcessEnv,
+  timeoutMs = DISPATCH_COMMAND_TIMEOUT_MS,
+  bound = "DISPATCH_COMMAND_TIMEOUT_MS",
 ): Promise<{ code: number; out: string; err: string }> {
+  const started = performance.now();
   const child = Bun.spawn(args, {
     cwd,
     env,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
-    timeout: 30_000,
+    timeout: timeoutMs,
+    killSignal: "SIGKILL",
   });
   const [out, err, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
     child.exited,
   ]);
+  if (
+    child.signalCode === "SIGKILL" &&
+    performance.now() - started >= timeoutMs
+  )
+    return {
+      code: 75,
+      out: "",
+      err: new InspectionTimeout(bound, timeoutMs, args, cwd).message,
+    };
+  if (code === 75)
+    return {
+      code,
+      out,
+      err:
+        err.trim() === ""
+          ? `inspection unavailable; command=${JSON.stringify(args)}; cwd=${cwd}; exit=75; no stderr`
+          : err.trim().replaceAll(/[\r\n]+/gu, "; "),
+    };
   return { code, out, err };
 }
 
-async function invokeReadonly(
+export async function invokeReadonly(
   args: string[],
   cwd: string,
   env: NodeJS.ProcessEnv,
+  timeoutMs = DISPATCH_TREE_READ_TIMEOUT_MS,
 ): Promise<{ code: number; out: string; err: string }> {
   const command = readonlyCommand(args, cwd, env);
+  const started = performance.now();
   const child = Bun.spawn(command.cmd, {
     cwd,
     env: command.env,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
-    timeout: 5000,
+    timeout: timeoutMs,
+    killSignal: "SIGKILL",
   });
   const [out, err, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
     child.exited,
   ]);
+  if (
+    child.signalCode === "SIGKILL" &&
+    performance.now() - started >= timeoutMs
+  )
+    return {
+      code: 75,
+      out: "",
+      err: new InspectionTimeout(
+        "DISPATCH_TREE_READ_TIMEOUT_MS",
+        timeoutMs,
+        args,
+        cwd,
+      ).message,
+    };
+  if (code === 75)
+    return {
+      code,
+      out,
+      err:
+        err.trim() === ""
+          ? `inspection unavailable; command=${JSON.stringify(args)}; cwd=${cwd}; exit=75; no stderr`
+          : err.trim().replaceAll(/[\r\n]+/gu, "; "),
+    };
   return { code, out, err };
 }
 
@@ -89,18 +143,21 @@ async function repositoryRootFromCommand(
   cwd: string,
   env: NodeJS.ProcessEnv,
   fallback: string,
-): Promise<{ root?: string; error?: string }> {
+): Promise<{ root?: string; error?: string; code?: number }> {
   const found = await invokeReadonly(args, cwd, env);
   const root = found.out.trim();
   if (found.code === 0 && root !== "") return { root: resolve(root) };
   const reason = found.err.trim();
-  return { error: reason !== "" ? reason : fallback };
+  return {
+    error: reason !== "" ? reason : fallback,
+    code: found.code === 75 ? 75 : 1,
+  };
 }
 
 async function defaultRepositoryRoot(
   path: string,
   env: NodeJS.ProcessEnv,
-): Promise<{ root?: string; error?: string }> {
+): Promise<{ root?: string; error?: string; code?: number }> {
   const resolvedPath = await attempt(() => realpath(path));
   if (!resolvedPath.ok) return { error: errorMessage(resolvedPath.error) };
   const physical = resolvedPath.value;
@@ -135,14 +192,17 @@ async function defaultRepositoryRoot(
 async function listedRuns(
   cwd: string,
   env: NodeJS.ProcessEnv,
-): Promise<{ rows?: RunRow[]; error?: string }> {
+): Promise<{ rows?: RunRow[]; error?: string; code?: number }> {
   const result = await invoke(
     ["agx-worker", "ls", "--json", "--all"],
     cwd,
     env,
+    DISPATCH_LIST_TIMEOUT_MS,
+    "DISPATCH_LIST_TIMEOUT_MS",
   );
   if (result.code !== 0)
     return {
+      code: result.code === 75 ? 75 : 1,
       error:
         result.err.trim() !== ""
           ? result.err.trim()
@@ -217,7 +277,7 @@ export async function dispatch(options: {
     process.stderr.write(
       `agx worker dispatch: cannot resolve ticket repository: ${ticketRepo.error}\n`,
     );
-    return 1;
+    return ticketRepo.code ?? 1;
   }
 
   const unitInput = options.unit ?? `agt_${slug}`;
@@ -255,6 +315,10 @@ export async function dispatch(options: {
     env,
   );
   const failures: string[] = [];
+  if (active.code === 75) {
+    process.stderr.write(`${active.err}\n`);
+    return 75;
+  }
   if (active.code === 0)
     failures.push(
       `agx worker dispatch: unit ${unit}.service is already running; repair: wait for it to end or choose --unit`,
@@ -284,12 +348,45 @@ export async function dispatch(options: {
   }
   const workspace = resolve(parsedWorkspace.data.workspace);
 
+  const jjWorkspace = await lstat(join(workspace, ".jj")).catch(() => null);
+  const revision = await invokeReadonly(
+    jjWorkspace === null
+      ? ["git", "--no-optional-locks", "rev-parse", "--verify", "HEAD^{commit}"]
+      : [
+          "jj",
+          ...JJ_READ_ARGS,
+          "log",
+          "-r",
+          "@",
+          "--no-graph",
+          "-T",
+          "commit_id",
+        ],
+    workspace,
+    env,
+  );
+  const revisionId = revision.out.trim();
+  if (revision.code === 75) {
+    process.stderr.write(`${revision.err}\n`);
+    return 75;
+  }
+  let revisionDescription = revisionId;
+  if (
+    revision.code !== 0 ||
+    !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(revisionId)
+  ) {
+    const reason =
+      revision.err.trim() === "" ? "no revision output" : revision.err.trim();
+    revisionDescription = `unavailable (revision exit=${revision.code}: ${reason.replaceAll(/[\r\n]+/gu, "; ")})`;
+  }
+  const tree = `--cd ${workspace} @/base_rev=${revisionDescription}`;
+
   const workspaceRepo = await defaultRepositoryRoot(workspace, env);
   if (workspaceRepo.root === undefined) {
     process.stderr.write(
       `agx worker dispatch: cannot verify ticket/workspace repositories: ${workspaceRepo.error}\n`,
     );
-    return 1;
+    return workspaceRepo.code ?? 1;
   }
   if (ticketRepo.root !== workspaceRepo.root) {
     failures.push(
@@ -311,14 +408,23 @@ export async function dispatch(options: {
     ],
     cwd,
     env,
+    DISPATCH_CHECK_TIMEOUT_MS,
+    "DISPATCH_CHECK_TIMEOUT_MS",
   );
+  if (checked.code === 75) {
+    process.stderr.write(`${checked.err}\n`);
+    return 75;
+  }
   if (checked.code !== 0)
     failures.push(
-      (checked.err.trim() === "" ? undefined : checked.err.trim()) ??
-        "agx worker dispatch: preflight failed; repair: run agx worker check for the target tree",
+      checked.err.trim() === ""
+        ? "no stderr"
+        : checked.err.trim().replaceAll(/[\r\n]+/gu, "; "),
     );
   if (failures.length > 0) {
-    process.stderr.write(`${failures.join("\n")}\n`);
+    process.stderr.write(
+      `agx worker dispatch: preflight failed ${tree}; check exit=${checked.code}: ${failures.join("; ")}\n`,
+    );
     return 2;
   }
 
@@ -339,7 +445,7 @@ export async function dispatch(options: {
     process.stderr.write(
       `agx worker dispatch: cannot read run records: ${before.error}\n`,
     );
-    return 1;
+    return before.code ?? 1;
   }
   const args = [
     "systemd-run",
@@ -383,6 +489,10 @@ export async function dispatch(options: {
   let listError: string | undefined;
   while (Temporal.Now.instant().epochMilliseconds <= deadline) {
     const current = await listedRuns(cwd, env);
+    if (current.code === 75) {
+      process.stderr.write(`${current.error}\n`);
+      return 75;
+    }
     listError = current.error;
     const run = current.rows?.find((row) => matches(row, binding));
     if (run !== undefined) {
@@ -392,9 +502,9 @@ export async function dispatch(options: {
     await Bun.sleep(100);
   }
   process.stderr.write(
-    `agx worker dispatch: ${unit}.service started but no matching run record appeared within ${waitMs}ms${listError === undefined ? "" : `: ${listError}`}\n`,
+    `agx worker dispatch: ${unit}.service started but no matching run record appeared within ${waitMs}ms (AGX_DISPATCH_WAIT_MS=${waitMs}ms); command=["agx-worker","ls","--json","--all"]; cwd=${cwd}${listError === undefined ? "" : `: ${listError}`}\n`,
   );
-  return 1;
+  return 75;
 }
 
 export async function dispatchMain(commandArgs: string[]): Promise<void> {

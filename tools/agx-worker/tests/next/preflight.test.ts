@@ -173,3 +173,104 @@ test("check warns only about overlapping runs whose ticket or workspace shares t
   expect(stderr).toContain("WARN overlap run=same-repository");
   expect(stderr).not.toContain("WARN overlap run=unrelated");
 }, 30000);
+
+test("inspection deadlines stay operational across VCS, mise and premise reads", async () => {
+  const { treeRead } = await import("../../src/next/ticket-home.ts");
+  const { verificationEnvironment } = await import("../../src/next/verify.ts");
+  const { checkPremises } = await import("../../src/premises.ts");
+  const { InspectionTimeout } =
+    await import("../../../shared/src/agx-config.ts");
+  const root = await mkdtemp(join(tmpdir(), "agx-inspection-timeout-"));
+  roots.push(root);
+  const argv = [process.execPath, "-e", "await Bun.sleep(5000)"];
+  const tree = await treeRead(argv, root, 20);
+  expect(tree.exit).toBe(75);
+  expect(tree.err).toContain("TREE_READ_TIMEOUT_MS=20ms");
+  const bin = join(root, "bin");
+  await mkdir(bin);
+  const mise = join(bin, "mise");
+  await writeFile(mise, "#!/usr/bin/env bun\nawait Bun.sleep(5000);\n", {
+    mode: 0o755,
+  });
+  const environment = verificationEnvironment(
+    root,
+    { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    {},
+    undefined,
+    20,
+  );
+  expect(environment).toBeInstanceOf(InspectionTimeout);
+  if (environment instanceof InspectionTimeout)
+    expect(environment.message).toContain("MISE_ENV_TIMEOUT_MS=20ms");
+  let premiseTimeout: string | undefined;
+  checkPremises(["task:fixture"], root, {
+    budgetMs: 20,
+    runner: () => ({ exitCode: null, output: "" }),
+    onTimeout: (args, cwd, budget) => {
+      premiseTimeout = new InspectionTimeout(
+        "PREFLIGHT_PREMISE_BUDGET_MS",
+        budget,
+        args,
+        cwd,
+      ).message;
+    },
+  });
+  expect(premiseTimeout).toContain(
+    'PREFLIGHT_PREMISE_BUDGET_MS=20ms; command=["mise","tasks","--json"]',
+  );
+});
+
+test("check and run preserve operational environment failure as exit 75 without run artifacts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agx-temporary-preflight-"));
+  roots.push(root);
+  await prepareTicketRepo(root);
+  const ticket = join(root, "ticket.md");
+  await writeFile(
+    ticket,
+    '+++\nschema = 2\nname = "temporary"\noutcome = "fixture"\n[proposition]\nid = "TEMP"\nclaim = "fixture"\nrefuted_by = "fixture"\n+++\n',
+  );
+  const bin = join(root, "bin");
+  const state = join(root, "state");
+  await mkdir(bin);
+  await mkdir(state);
+  await writeFile(
+    join(bin, "mise"),
+    `#!/usr/bin/env bun
+console.error('inspection timeout MISE_ENV_TIMEOUT_MS=60000ms; command=["mise","env","--json"]; cwd=${root}');
+process.exit(75);
+`,
+    { mode: 0o755 },
+  );
+  for (const command of ["check", "run"]) {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve("tools/agx-worker/src/next/cli.ts"),
+        command,
+        ticket,
+        "--cd",
+        root,
+      ],
+      {
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          AGX_NEXT_STATE_DIR: state,
+          DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 15_000,
+      },
+    );
+    const [code, err] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, err).toBe(75);
+    expect(err).toContain("MISE_ENV_TIMEOUT_MS=60000ms");
+    expect(err.trim().split("\n")).toHaveLength(1);
+    expect(err).not.toContain("preflight failed");
+    expect(await readdir(state)).not.toContain("runs");
+  }
+}, 30_000);

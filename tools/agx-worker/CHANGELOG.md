@@ -1,5 +1,10 @@
 # Changelog
 
+## 9.1.2 — 2026-10-23
+
+- Report preflight tree revision and child failure while keeping check judgments independent of inspection delays
+- Return temporary failure for bounded inspections without reporting a preflight verdict
+
 ## 9.1.1 — 2026-10-23
 
 - Cover worker checks from old workspace bases without retired-file refusal

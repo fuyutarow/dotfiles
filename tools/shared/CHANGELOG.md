@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.18.3 — 2026-10-23
+
+- Bound config inspections and preserve operational timeout diagnostics
+- Wait for repository config reads and report command failures with exit details
+
 ## 0.18.2 — 2026-10-23
 
 - Resolve repository policy and retired-file refusal only from the main checkout trunk

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.8 — 2026-10-23
+
+- Report foreign-owned rip-expire entries as named skips while preserving removal failures.
+
 ## 1.4.7 — 2026-10-17
 
 - Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.

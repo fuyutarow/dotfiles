@@ -1,10 +1,12 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
+import * as fsPromises from "node:fs/promises";
 import {
   chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   rmSync,
   utimesSync,
   writeFileSync,
@@ -15,6 +17,9 @@ import { join } from "node:path";
 import { deleteApproved } from "../src/delete.ts";
 import { loadConfig, run, type EngineOptions } from "../src/engine.ts";
 import { removeTree } from "../src/lib/remove-tree.ts";
+import { readReceipts } from "../src/receipt.ts";
+import { ReceiptV2 } from "../src/model.ts";
+import { createRipExpiryTarget } from "../src/targets/rip-expire.ts";
 import type { LivenessSnapshot } from "../src/liveness/facts.ts";
 import { purgeCandidates, purgeRip } from "../src/targets/purge.ts";
 import { createTmpfsTarget } from "../src/targets/tmpfs.ts";
@@ -137,6 +142,105 @@ test("a graveyard entry holding .git and .jj is purged; outside a graveyard it i
   expect(removed.entries_removed).toBeGreaterThan(5);
   expect(existsSync(grave)).toBe(false);
 });
+
+for (const scenario of ["foreign", "failure", "mixed"] as const) {
+  test(`rip-expire ${scenario}: foreign owners skip and owned removal failures fail the stage`, async () => {
+    const base = root(`reclaim-expire-${scenario}-`);
+    const graveyard = join(base, "graveyard");
+    const foreign = join(graveyard, "a-foreign");
+    const failed = join(graveyard, "b-owned-failure");
+    const uid = process.getuid?.() ?? 0;
+    mkdirSync(graveyard);
+    if (scenario !== "failure") {
+      mkdirSync(foreign);
+      writeFileSync(join(foreign, "payload"), "foreign payload");
+      chmodSync(foreign, 0o500);
+      utimesSync(foreign, old, old);
+    }
+    if (scenario !== "foreign") {
+      writeFileSync(failed, "owned payload");
+      expect(lstatSync(failed).uid).toBe(uid);
+      utimesSync(failed, old, old);
+    }
+    // Exercise the real walker without chown, sudo, or host permission assumptions.
+    const target = createRipExpiryTarget({
+      remove: async (path, options) => {
+        const unlink =
+          path === failed
+            ? spyOn(fsPromises, "unlink").mockRejectedValueOnce(
+                new Error("injected owned-entry unlink failure"),
+              )
+            : undefined;
+        return removeTree(path, {
+          ...options,
+          immutable: () => false,
+          owner: (entry) => ({
+            uid: entry === foreign ? uid + 1 : uid,
+            name: "fixture",
+          }),
+        }).finally(() => {
+          unlink?.mockRestore();
+        });
+      },
+    }).target;
+    const state = join(base, "state");
+    const procDir = join(base, "proc");
+    mkdirSync(procDir);
+    const previous = process.env.RIP_GRAVEYARD;
+    process.env.RIP_GRAVEYARD = graveyard;
+    const result = await run([target], {
+      context: {
+        mode: "plan",
+        explicit: false,
+        config: config(),
+        procDir,
+        scanCacheDir: join(base, "cache"),
+        log: () => {},
+      },
+      headroom: { drives: [] },
+      state,
+      yes: true,
+      captureLiveness: () => quietLiveness,
+    }).finally(() => {
+      if (previous === undefined) delete process.env.RIP_GRAVEYARD;
+      else process.env.RIP_GRAVEYARD = previous;
+    });
+    expect(result.exit).toBe(scenario === "foreign" ? 0 : 1);
+    const receipts = readReceipts(10, state);
+    expect(receipts.errors).toEqual([]);
+    expect(receipts.receipts).toHaveLength(1);
+    const parsed = ReceiptV2.safeParse(receipts.receipts[0]);
+    if (!parsed.success) expect.unreachable("missing v2 stage receipt");
+    const receipt = parsed.data;
+    expect(receipt.exit).toBe(result.exit);
+    if (scenario !== "failure") {
+      const action = receipt.actions.find((row) => row.path === foreign);
+      expect(action?.ok).toBe(true);
+      expect(action?.error).toBeNull();
+      expect(action?.bytes_freed).toBe(0);
+      expect(action?.skipped).toEqual([
+        { path: foreign, reason: "foreign-owner", owner_uid: uid + 1 },
+      ]);
+      expect(receipt.output).not.toBeNull();
+      const output = readFileSync(receipt.output ?? "", "utf8");
+      expect(
+        output.split(`skipped: foreign-owner uid=${uid + 1}`),
+      ).toHaveLength(2);
+      expect(readFileSync(join(foreign, "payload"), "utf8")).toBe(
+        "foreign payload",
+      );
+      expect(lstatSync(foreign).mode & 0o777).toBe(0o500);
+      expect(lstatSync(foreign).uid).toBe(uid);
+    }
+    if (scenario !== "foreign") {
+      const action = receipt.actions.find((row) => row.path === failed);
+      expect(action?.ok).toBe(false);
+      expect(action?.error).toContain("injected owned-entry unlink failure");
+      expect(action?.skipped).toBeUndefined();
+      expect(readFileSync(failed, "utf8")).toBe("owned payload");
+    }
+  });
+}
 
 test("rip-expire handles equally old subtrees in path order and can be limited to one subtree", async () => {
   const base = root("reclaim-expire-order-");

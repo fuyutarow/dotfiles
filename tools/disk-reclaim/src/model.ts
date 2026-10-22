@@ -25,6 +25,15 @@ export const ActionResult = z.object({
   ok: z.boolean(),
   bytes_freed: bytes,
   error: z.string().nullable(),
+  skipped: z
+    .array(
+      z.object({
+        path: absolute,
+        reason: z.literal("foreign-owner"),
+        owner_uid: z.number().int().nonnegative(),
+      }),
+    )
+    .optional(),
   c_free_before: z.number().nonnegative().optional(),
   c_free_after: z.number().nonnegative().optional(),
   c_free_delta: z.number().optional(),
@@ -138,6 +147,7 @@ export const ReceiptAction = z.object({
   bytes_freed: bytes,
   ok: z.boolean(),
   error: z.string().nullable(),
+  skipped: ActionResult.shape.skipped,
   recovery: z
     .object({
       repo: absolute,

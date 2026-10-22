@@ -162,7 +162,11 @@ async function enumerate(
 
 /** A work budget belongs to a stage, including measurement and deletion. */
 export function createRipExpiryTarget(
-  options: { budgetMs?: number; clock?: () => number } = {},
+  options: {
+    budgetMs?: number;
+    clock?: () => number;
+    remove?: typeof removeTree;
+  } = {},
 ) {
   const budgetMs = options.budgetMs ?? RIP_EXPIRY_BUDGET_MS;
   const clock = options.clock ?? (() => performance.now());
@@ -196,7 +200,14 @@ export function createRipExpiryTarget(
         row.logical += stat.size;
         state.knownBytes += stat.size;
       }
-      if (!stat.isDirectory() || stat.isSymbolicLink()) continue;
+      // Foreign contents are retained; an unreadable directory must still reach
+      // the removal guard and be reported as a foreign-owner skip.
+      if (
+        !stat.isDirectory() ||
+        stat.isSymbolicLink() ||
+        stat.uid !== (process.getuid?.() ?? 0)
+      )
+        continue;
       for (const name of await readdir(entry.path))
         row.pending.push({ path: join(entry.path, name), counted: false });
     }
@@ -356,7 +367,7 @@ export function createRipExpiryTarget(
       const state = states.get(ctx);
       if (candidate.path === null)
         return { ok: false, bytes_freed: 0, error: "missing graveyard path" };
-      const result = await removeTree(candidate.path, {
+      const result = await (options.remove ?? removeTree)(candidate.path, {
         uid: process.getuid?.() ?? 0,
         graveyard: true,
         incrementalGraveyard: true,
@@ -368,6 +379,21 @@ export function createRipExpiryTarget(
           protectedPaths: ctx.config.protected ?? [],
         },
       });
+      const skipped = result.refused
+        .filter((row) => row.reason === "entry is owned by another uid")
+        .map((row) => ({
+          path: row.path,
+          reason: "foreign-owner" as const,
+          owner_uid: row.owner_uid,
+        }));
+      const failures = [
+        ...result.errors.map((row) => row.error),
+        ...result.refused
+          .filter((row) => row.reason !== "entry is owned by another uid")
+          .map((row) => row.reason),
+      ];
+      for (const row of skipped)
+        ctx.log(`${row.path}: skipped: foreign-owner uid=${row.owner_uid}`);
       ctx.log(
         `${candidate.id}: ${result.ok ? 1 : 0} payload expired; ${result.entries_removed} entries removed (${result.entries_removed} files and directories, ${result.bytes_freed} bytes)`,
       );
@@ -391,14 +417,10 @@ export function createRipExpiryTarget(
         }
       }
       return {
-        ok: result.ok,
+        ok: result.ok || (skipped.length > 0 && failures.length === 0),
         bytes_freed: result.bytes_freed,
-        error: result.ok
-          ? null
-          : [
-              ...result.errors.map((row) => row.error),
-              ...result.refused.map((row) => row.reason),
-            ].join("; "),
+        error: failures.length === 0 ? null : failures.join("; "),
+        ...(skipped.length === 0 ? {} : { skipped }),
       };
     },
     finish: (ctx: Context) => {

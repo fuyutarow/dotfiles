@@ -1982,12 +1982,19 @@ export async function checkBrewShadows(ctx: Ctx): Promise<Finding> {
       "cannot locate brew on PATH; command shadow scan could not be completed",
     );
   const declarations = await declaredToolCommands(ctx.dotfiles);
-  const shadows = await findToolCommandShadows(
-    declarations.map(({ command }) => command),
-    path,
-    dirname(brew),
-    ctx.home,
-  );
+  const shadows = (
+    await findToolCommandShadows(
+      declarations.map(({ command }) => command),
+      path,
+      dirname(brew),
+      ctx.home,
+    )
+  ).filter(({ command, shadow }) => {
+    // A later user-bin duplicate is not a shadow: the shell still selects the
+    // Homebrew command. Report only the executable that command lookup selects.
+    const selected = Bun.which(command, { PATH: path });
+    return selected !== null && resolve(selected) === resolve(shadow);
+  });
   return shadows.length === 0
     ? pass(
         "brew-shadows",

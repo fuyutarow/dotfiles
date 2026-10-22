@@ -1280,7 +1280,7 @@ network_access = true
     expect(r.out).toContain(`${bin}/bun: cannot determine Bun version`);
   });
 
-  test("brew-shadows: a PATH copy before Homebrew FAILs with both paths and rip; no shadow PASSes", () => {
+  test("brew-shadows: only the PATH-selected copy before Homebrew FAILs", () => {
     const home = tmp("doctor-brew-shadow-home-");
     const shadowBin = join(home, ".local/bin");
     const brewBin = join(home, "brew/bin");
@@ -1289,6 +1289,8 @@ network_access = true
     writeFileSync(join(shadowBin, "mise"), "old mise");
     writeFileSync(join(brewBin, "mise"), "Homebrew mise");
     writeFileSync(join(brewBin, "brew"), "fake brew");
+    chmodSync(join(shadowBin, "mise"), 0o755);
+    chmodSync(join(brewBin, "mise"), 0o755);
     chmodSync(join(brewBin, "brew"), 0o755);
 
     const shadow = doctor("brew-shadows", {
@@ -1300,6 +1302,14 @@ network_access = true
     expect(shadow.out).toContain(join(shadowBin, "mise"));
     expect(shadow.out).toContain(join(brewBin, "mise"));
     expect(shadow.out).toContain("fix: rip <shadow>");
+
+    const laterDuplicate = doctor("brew-shadows", {
+      HOME: home,
+      DOTFILES: REPO,
+      PATH: `${brewBin}:${shadowBin}:/usr/bin:/bin`,
+    });
+    expect(laterDuplicate.code).toBe(0);
+    expect(laterDuplicate.out).toMatch(/^PASS {2}brew-shadows/mu);
 
     const clean = doctor("brew-shadows", {
       HOME: home,

@@ -21,7 +21,12 @@ import {
 } from "neverthrow";
 import { standardCli } from "../../shared/src/cli.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
-import { gpuStatePath, readGpuState } from "../../shared/src/gpu-samples.ts";
+import {
+  GpuProcessIdentitySchema,
+  gpuStatePath,
+  readGpuState,
+  type GpuState,
+} from "../../shared/src/gpu-samples.ts";
 import {
   assessRecoveryVerdict,
   readRecoveryVerdict,
@@ -543,6 +548,41 @@ function runtimeDirectory() {
 }
 export const gpuSlotPool = (gpuId: number) => `gpu.${gpuId}`;
 
+// Diagnostic only: local proc observations cannot establish the driver's namespace.
+function samplerProvenance(state: GpuState, pid: number): string {
+  const sample = `sampled_at=${state.sampledAt ?? "unknown"}`;
+  if (state.processIdentity === undefined)
+    return `${sample} sampler_identity=legacy-missing`;
+  const parsed = GpuProcessIdentitySchema.safeParse(state.processIdentity);
+  if (!parsed.success) return `${sample} sampler_identity=invalid`;
+  const identity = parsed.data;
+  const source = `${sample} identity_sample_at=${identity.sampleAt} driver_binding=unknown`;
+  if (identity.sampleAt !== state.sampledAt)
+    return `${source} sampler_identity=sample-mismatch`;
+  if (!state.samples.some(({ ts }) => ts === identity.sampleAt))
+    return `${source} sampler_identity=sample-not-retained`;
+  const rows = identity.processes.filter(
+    ({ rawDriverPid }) => rawDriverPid === pid,
+  );
+  if (rows.length !== 1)
+    return `${source} sampler_identity=row-unavailable omitted_processes=${identity.omittedProcesses} matching_rows=${rows.length}`;
+  const row = rows[0]!;
+  if (
+    identity.captureStartedAt > identity.captureFinishedAt ||
+    row.captureStartedAt < identity.captureStartedAt ||
+    row.captureFinishedAt > identity.captureFinishedAt ||
+    row.captureStartedAt > row.captureFinishedAt
+  )
+    return `${source} sampler_identity=invalid-capture-window`;
+  const local = row.local;
+  const localText =
+    local === undefined
+      ? ""
+      : ` local_pid=${local.pid} local_tgid=${local.tgid} local_nspid=${local.nspid.join(",")} local_starttime=${local.starttime.slice(0, 64)}`;
+  // Do not print raw stat/status/namespace/boot values or unrelated process rows.
+  return `${source} sampler_identity=sample-correlated capture_ms=${identity.captureStartedAt}..${identity.captureFinishedAt} row_capture_ms=${row.captureStartedAt}..${row.captureFinishedAt} local_observation=${row.status} before=${row.before.status} after=${row.after.status} process_status=${row.processStatus.status} namespace=${row.namespace.status} boot_id=${identity.bootId.status} sampler_collector_pid=${identity.collector.rawDriverPid} collector_observation=${identity.collector.status}${localText}`;
+}
+
 /** Refuse live dxg stalls, unscoped sampled holders, and excess declared VRAM. */
 export async function gpuAdmissionRefusal(
   deviceRequest: { gpu_id: number; vram_peak_bytes: number },
@@ -693,18 +733,18 @@ export async function gpuAdmissionRefusal(
   for (const { pid } of state.processes) {
     const base = join(procRoot, String(pid));
     const statPath = join(base, "stat");
-    // Cached driver PIDs have neither starttime nor namespace provenance. Two
-    // local observations can reject reuse, but absence cannot prove driver exit.
+    // Sampler provenance is diagnostic only. Two local observations can reject
+    // reuse, but absence cannot prove driver exit while driver binding is unknown.
     const before = await optionalText(statPath);
-    const [cgroup, processStatus, command] = await Promise.all([
+    const [cgroup, processStatus] = await Promise.all([
       optionalText(join(base, "cgroup")),
       optionalText(join(base, "status")),
-      optionalText(join(base, "cmdline")),
     ]);
     const after = await optionalText(statPath);
     const evidence = `${statPath},${join(base, "status")},${join(base, "cgroup")}`;
+    const provenance = samplerProvenance(state, pid);
     const uncertain = (reason: string) =>
-      `GPU holder identity unverified pid=${pid} reason=${reason}; sampled_namespace=unknown; evidence=${evidence}`;
+      `GPU holder identity unverified pid=${pid} reason=${reason}; sampled_namespace=unknown; ${provenance}; evidence=${evidence}`;
     if (before.isErr() || after.isErr()) return uncertain("stat-unreadable");
     if (before.value === undefined || after.value === undefined)
       return uncertain(
@@ -751,9 +791,9 @@ export async function gpuAdmissionRefusal(
     const zombie =
       processStatus.isOk() && /^State:\s+Z/mu.test(processStatus.value ?? "");
     if (scope === undefined)
-      return `GPU holder ownership unverified pid=${pid}${zombie ? " state=ZOMBIE" : ""} local_scope=outside-admitted-GPU-scope local_starttime=${startTime} sampled_namespace=unknown command=${command.unwrapOr(undefined)?.replaceAll("\0", " ").trim() ?? "[unavailable]"}; evidence=${evidence}`;
+      return `GPU holder ownership unverified pid=${pid}${zombie ? " state=ZOMBIE" : ""} local_scope=outside-admitted-GPU-scope local_starttime=${startTime} sampled_namespace=unknown; ${provenance}; evidence=${evidence}`;
     if (!admittedScopes.has(scope))
-      return `GPU holder admission receipt unavailable pid=${pid}${zombie ? " state=ZOMBIE" : ""}; evidence=${join(base, "environ")}`;
+      return `GPU holder admission receipt unavailable pid=${pid}${zombie ? " state=ZOMBIE" : ""}; ${provenance}; evidence=${join(base, "environ")}`;
   }
   const admittedBytes = [...scopes.entries()]
     .filter(

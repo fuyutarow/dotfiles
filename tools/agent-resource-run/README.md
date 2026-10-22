@@ -152,6 +152,26 @@ PIDs and commands. Missing owner/capacity data also refuses admission; sample ag
 paused status alone does not. Existing holder-scope and declared VRAM checks remain.
 The runner never invokes the GPU driver.
 
+Sampled-holder refusals include bounded provenance from the existing owner state.
+Version 1 `processIdentity.sampleAt` must equal `sampledAt` and identify a retained
+sample; exactly one observation must match the reported `rawDriverPid`. The diagnostic
+reports capture times, local read/missing/reuse/permission status and local PID/TGID/NSpid
+when available. Legacy missing metadata, a different sample, an unavailable or omitted
+row, and invalid capture windows receive distinct labels. Raw proc contents, boot and
+namespace values, command lines and unrelated rows are excluded from this provenance.
+The collector PID identifies the sampler, not a driver-reported holder. These fields
+come from the normal retained sample; admission adds no diagnostic probe or scan.
+
+Operational LIMIT: the producer emits only `driverBinding: "unknown"`. Local numeric
+PID equality, a local start time, or the sampler's namespace does not establish the
+driver's PID namespace. Consequently, no currently emitted metadata can safely authorize
+stale-PID removal. An absent, reused, nested or outside holder remains refused even with
+correlated provenance. Existing live admitted-scope receipt checks and admission of an
+empty driver process list retain their behavior; metadata never supplies an admission
+receipt. Malformed metadata fails the owner-state schema check, and unrelated metadata
+does not grant admission. Sample correlation describes the retained observation, not
+proof that an old or paused sample describes the current driver.
+
 These are admission-time checks (`--check-only` and the scope-entry recheck after CCC
 handoff), not a continuous Z/D monitor. A cached zombie holder outside an admitted GPU
 scope is refused; an admitted zombie is not independently refused for being Z. During

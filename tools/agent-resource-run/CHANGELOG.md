@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.15 — 2026-10-22
+
+- Correlate sampled-holder refusal diagnostics with retained sampler identity without granting driver binding
+
 ## 1.5.14 — 2026-10-22
 
 - Refuse vanished, reused, unreadable or namespace-mismatched GPU holders as unverified instead of claiming proven outside-scope ownership.

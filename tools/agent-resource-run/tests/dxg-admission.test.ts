@@ -3,6 +3,8 @@ import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gpuAdmissionRefusal } from "../src/agent-resource-run.ts";
+import { type GpuState, readGpuState } from "../../shared/src/gpu-samples.ts";
+import { runGpuSampler } from "../../shared/src/gpu-sampler.ts";
 
 const request = { gpu_id: 0, vram_peak_bytes: 128 * 1024 ** 2 };
 // Intentionally stale, paused, and missing both holders and unresponsiveSince.
@@ -15,6 +17,43 @@ const state = {
   processes: [],
   samples: [],
 };
+// Same schema as the frozen producer; collector PID is deliberately unrelated.
+function sampleIdentity(): NonNullable<GpuState["processIdentity"]> {
+  const observation: NonNullable<
+    GpuState["processIdentity"]
+  >["processes"][number] = {
+    rawDriverPid: 123,
+    captureStartedAt: 2,
+    captureFinishedAt: 3,
+    status: "read",
+    before: { status: "read", value: "PRIVATE stat blob" },
+    after: { status: "read", value: "PRIVATE stat blob" },
+    processStatus: { status: "read", value: "PRIVATE status blob" },
+    namespace: { status: "read", value: "PRIVATE namespace" },
+    local: { pid: 123, tgid: 123, nspid: [123], starttime: "100" },
+  };
+  return {
+    version: 1,
+    sampleAt: 1,
+    captureStartedAt: 2,
+    captureFinishedAt: 4,
+    driverBinding: "unknown",
+    bootId: { status: "read", value: "PRIVATE boot" },
+    collector: { ...observation, rawDriverPid: 999 },
+    processes: [observation],
+    omittedProcesses: 0,
+  };
+}
+function retainedState(): GpuState {
+  return {
+    ...state,
+    processes: [{ pid: 123, usedMiB: 1 }],
+    samples: [
+      { ts: 1, nextTs: 60001, utilPct: 0, memUsedGiB: 0, memTotalGiB: 1 },
+    ],
+    processIdentity: sampleIdentity(),
+  };
+}
 const stat = (
   value: string,
   { pid = "123", startTime = "100" }: { pid?: string; startTime?: string } = {},
@@ -650,3 +689,242 @@ for (const scenario of [
     }
     if (scenario !== "absent") expect(holderStatReads).toBe(1);
   });
+
+test("ordinary sampler publication correlates an unresolved holder without driver binding or extra queries", async () => {
+  await using f = await fixture();
+  await fs.writeFile(join(f.base, "stat"), stat("S"));
+  const at = 1_000_000;
+  const calls = join(f.root, "calls");
+  const statePath = join(f.root, "state.json");
+  const slotDirectory = join(f.root, "slots");
+  await fs.mkdir(slotDirectory);
+  const xml = `<nvidia_smi_log><gpu id="fake-device"><minor_number>0</minor_number>
+<fb_memory_usage><total>1024 MiB</total><used>1 MiB</used></fb_memory_usage>
+<utilization><gpu_util>0 %</gpu_util></utilization>
+<processes><process_info><pid>123</pid><used_memory>1 MiB</used_memory></process_info>
+<process_info><pid>456</pid><used_memory>0 MiB</used_memory></process_info></processes>
+</gpu></nvidia_smi_log>`;
+  await fs.writeFile(
+    join(f.root, "nvidia-smi"),
+    `#!${process.execPath}\nimport { appendFile } from "node:fs/promises";
+await appendFile(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)) + "\\n");
+process.stdout.write(${JSON.stringify(xml)});\n`,
+    { mode: 0o755 },
+  );
+  const identityIo = {
+    read: (path: string) => {
+      if (path === join(f.root, "sys/kernel/random/boot_id"))
+        return Promise.resolve("PRIVATE fictional boot");
+      let pid = process.pid;
+      if (path.includes("/123/")) pid = 123;
+      else if (path.includes("/456/")) pid = 456;
+      return Promise.resolve(
+        path.endsWith("/stat")
+          ? stat("S", { pid: String(pid), startTime: "700" }).replace(
+              "worker",
+              "PRIVATE",
+            )
+          : `Pid:\t${pid}\nTgid:\t${pid}\nNSpid:\t${pid}\t7\nName:\tPRIVATE\n`,
+      );
+    },
+    readlink: () => Promise.resolve("pid:[987654]"),
+  };
+  const spawn = spyOn(Bun, "spawn");
+  using _restore = {
+    [Symbol.dispose]: () => {
+      spawn.mockRestore();
+    },
+  };
+  expect(
+    await runGpuSampler({
+      statePath,
+      path: f.root,
+      fallbacks: [],
+      procRoot: f.root,
+      slotDirectory,
+      identityIo,
+      now: () => at,
+      timeoutMs: 5000,
+    }),
+  ).toBe("sampled");
+  const loaded = await readGpuState(statePath);
+  expect(loaded?.sampledAt).toBe(at);
+  expect(loaded?.samples.map((sample) => sample.ts)).toEqual([at]);
+  expect(loaded?.processes).toEqual([
+    { pid: 123, usedMiB: 1 },
+    { pid: 456, usedMiB: 0 },
+  ]);
+  expect(loaded?.processIdentity).toMatchObject({
+    sampleAt: at,
+    driverBinding: "unknown",
+    omittedProcesses: 0,
+    processes: [
+      {
+        rawDriverPid: 123,
+        status: "read",
+        local: { pid: 123, tgid: 123, nspid: [123, 7], starttime: "700" },
+      },
+      { rawDriverPid: 456, status: "read" },
+    ],
+  });
+  // Only private fixture state changes: a retained driver holder has no local PID.
+  await fs.rm(f.base, { recursive: true });
+  const refusal = await gpuAdmissionRefusal(request, 512, {
+    procRoot: f.root,
+    state: loaded,
+  });
+  for (const text of [
+    "unverified pid=123",
+    `sampled_at=${at} identity_sample_at=${at}`,
+    "driver_binding=unknown",
+    "sampler_identity=sample-correlated",
+    "local_observation=read",
+    "local_nspid=123,7",
+  ])
+    expect(refusal).toContain(text);
+  for (const text of ["PRIVATE", "987654", "456"])
+    expect(refusal).not.toContain(text);
+  expect(await fs.readFile(calls, "utf8")).toBe('["-q","-x"]\n');
+  expect(spawn).toHaveBeenCalledTimes(1);
+});
+
+for (const status of [
+  "read",
+  "missing-before",
+  "missing-after",
+  "reuse",
+  "permission",
+  "error",
+  "limit",
+  "unsupported",
+] as const)
+  test(`retained sampler ${status} provenance diagnoses absent holder without granting driver binding`, async () => {
+    await using f = await fixture();
+    await fs.rm(f.base, { recursive: true });
+    const cached = retainedState();
+    const identity = sampleIdentity();
+    identity.processes[0]!.status = status;
+    identity.processes.push({ ...identity.processes[0]!, rawDriverPid: 456 });
+    cached.processIdentity = identity;
+    const path = join(f.root, "gpu-owner.json");
+    await fs.writeFile(path, JSON.stringify(cached));
+    // Exercise the production state reader, including its schema boundary.
+    const loaded = await readGpuState(path);
+    expect(loaded).toBeDefined();
+    const spawn = spyOn(Bun, "spawn");
+    using _restore = {
+      [Symbol.dispose]: () => {
+        spawn.mockRestore();
+      },
+    };
+    const refusal = await gpuAdmissionRefusal(request, 512, {
+      procRoot: f.root,
+      state: loaded,
+    });
+    for (const text of [
+      "unverified pid=123",
+      "sampled_at=1 identity_sample_at=1",
+      "driver_binding=unknown",
+      "sampler_identity=sample-correlated",
+      `local_observation=${status}`,
+      "sampler_collector_pid=999",
+      "capture_ms=2..4",
+      "row_capture_ms=2..3",
+    ])
+      expect(refusal).toContain(text);
+    expect(refusal).not.toContain("PRIVATE");
+    expect(refusal).not.toContain("456");
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+for (const scenario of [
+  "legacy",
+  "old-sample",
+  "no-retained-sample",
+  "wrong-pid",
+  "omitted",
+  "duplicate",
+  "invalid-window",
+] as const)
+  test(`sampler ${scenario} never supplies unrelated provenance or authorizes removal`, async () => {
+    await using f = await fixture();
+    await fs.rm(f.base, { recursive: true });
+    const cached = retainedState();
+    const identity = sampleIdentity();
+    if (scenario === "old-sample") identity.sampleAt = 0;
+    if (scenario === "wrong-pid") identity.processes[0]!.rawDriverPid = 456;
+    if (scenario === "omitted") {
+      identity.processes = [];
+      identity.omittedProcesses = 1;
+    }
+    if (scenario === "duplicate")
+      identity.processes.push(identity.processes[0]!);
+    if (scenario === "invalid-window")
+      identity.processes[0]!.captureFinishedAt = 1;
+    cached.processIdentity = scenario === "legacy" ? undefined : identity;
+    if (scenario === "no-retained-sample") cached.samples = [];
+    const refusal = await gpuAdmissionRefusal(request, 512, {
+      procRoot: f.root,
+      state: cached,
+    });
+    expect(refusal).toContain("unverified pid=123");
+    expect(refusal).not.toContain("local_observation=");
+    const reasons = {
+      legacy: "legacy-missing",
+      "old-sample": "sample-mismatch",
+      "no-retained-sample": "sample-not-retained",
+      "wrong-pid": "row-unavailable",
+      omitted: "row-unavailable omitted_processes=1",
+      duplicate: "row-unavailable",
+      "invalid-window": "invalid-capture-window",
+    };
+    expect(refusal).toContain(`sampler_identity=${reasons[scenario]}`);
+  });
+
+for (const scenario of ["outside", "admitted", "nested", "empty"] as const)
+  test(`sampler local match preserves ${scenario} admission behavior`, async () => {
+    await using f = await fixture(
+      scenario === "admitted"
+        ? "agent-resource-existing.scope"
+        : "unmanaged.scope",
+    );
+    await fs.writeFile(join(f.base, "stat"), stat("S"));
+    await fs.writeFile(
+      join(f.base, "status"),
+      `State:\tS\nPid:\t123\nTgid:\t123\nNSpid:\t${scenario === "nested" ? "900 123" : "123"}\n`,
+    );
+    const cached = retainedState();
+    if (scenario === "nested")
+      cached.processIdentity!.processes[0]!.local!.nspid = [900, 123];
+    if (scenario === "empty") cached.processes = [];
+    const refusal = await gpuAdmissionRefusal(request, 512, {
+      procRoot: f.root,
+      state: cached,
+    });
+    if (scenario === "admitted" || scenario === "empty")
+      expect(refusal).toBeUndefined();
+    else {
+      expect(refusal).toContain("unverified");
+      expect(refusal).toContain("driver_binding=unknown");
+      expect(refusal).toContain("sampler_identity=sample-correlated");
+      if (scenario === "nested")
+        expect(refusal).toContain("local_nspid=900,123");
+    }
+  });
+
+test("malformed metadata is rejected by the production reader and never grants admission", async () => {
+  await using f = await fixture();
+  await fs.rm(f.base, { recursive: true });
+  const cached = retainedState();
+  const path = join(f.root, "gpu-owner.json");
+  for (const driverBinding of ["verified", null, 1]) {
+    await fs.writeFile(
+      path,
+      JSON.stringify({
+        ...cached,
+        processIdentity: { ...sampleIdentity(), driverBinding },
+      }),
+    );
+    expect(await readGpuState(path)).toBeUndefined();
+  }
+});

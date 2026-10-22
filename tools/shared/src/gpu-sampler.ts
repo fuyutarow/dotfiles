@@ -29,6 +29,10 @@ import {
   type GpuState,
 } from "./gpu-samples.ts";
 import pkg from "../package.json" with { type: "json" };
+import {
+  collectGpuProcessIdentity,
+  type IdentityIo,
+} from "./gpu-process-identity.ts";
 
 const tag = (xml: string, name: string): string | undefined =>
   new RegExp(`<${name}>([^<]*)</${name}>`, "u").exec(xml)?.[1]?.trim();
@@ -136,11 +140,29 @@ async function executable(
   return undefined;
 }
 async function writeState(path: string, state: GpuState): Promise<void> {
+  // Additive diagnostics must never push a previously readable sample over the
+  // reader's wire limit. Drop local rows first; preserve the raw GPU rows.
+  let output = JSON.stringify(state);
+  const identity = state.processIdentity;
+  for (;;) {
+    if (
+      identity === undefined ||
+      identity.processes.length === 0 ||
+      (Buffer.byteLength(output) < MAX_BYTES &&
+        Buffer.byteLength(JSON.stringify(identity)) <= 64 * 1024)
+    )
+      break;
+    identity.processes.pop();
+    identity.omittedProcesses++;
+    output = JSON.stringify(state);
+  }
+  if (identity !== undefined && Buffer.byteLength(output) >= MAX_BYTES)
+    output = JSON.stringify({ ...state, processIdentity: undefined });
   const temp = `${path}.${randomUUID()}.tmp`;
   await using _temp = {
     [Symbol.asyncDispose]: () => unlink(temp).catch(() => {}),
   };
-  await Bun.write(temp, `${JSON.stringify(state)}\n`, { mode: 0o600 });
+  await Bun.write(temp, `${output}\n`, { mode: 0o600 });
   await rename(temp, path);
 }
 async function boundedOutput(
@@ -220,6 +242,8 @@ async function acquireOwner(
   };
 }
 export type SamplerOptions = {
+  /** Deterministic bounded proc-read seam; never used for GPU queries. */
+  identityIo?: IdentityIo;
   statePath?: string;
   path?: string;
   fallbacks?: string[];
@@ -618,6 +642,11 @@ export async function runGpuSampler(
       memUsedGiB: first.usedMiB / 1024,
       memTotalGiB: first.totalMiB / 1024,
     };
+    const processIdentity = await collectGpuProcessIdentity(
+      snapshot.processes,
+      at,
+      options,
+    );
     await writeState(path, {
       schema: 1,
       attemptAt: now,
@@ -628,6 +657,7 @@ export async function runGpuSampler(
       sampledAt: at,
       consecutiveProbeMisses: 0,
       ...snapshot,
+      processIdentity,
       samples: [
         ...base.samples.filter((s) => at - s.ts <= RETAIN_MS),
         sample,

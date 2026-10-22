@@ -111,6 +111,50 @@ export const GpuProcessSchema = z.object({
   pid: z.number().int().positive(),
   usedMiB: z.number().nonnegative().nullable(),
 });
+// Local proc evidence never establishes the driver's PID namespace.
+export const GpuIdentityReadSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("read"), value: z.string().max(4096) }),
+  z.object({
+    status: z.enum(["missing", "permission", "error", "limit", "unsupported"]),
+  }),
+]);
+const LocalIdentitySchema = z.object({
+  pid: z.number().int().positive(),
+  tgid: z.number().int().positive(),
+  nspid: z.array(z.number().int().positive()).max(32),
+  starttime: z.string().regex(/^\d+$/u),
+});
+export const GpuLocalObservationSchema = z.object({
+  rawDriverPid: z.number().int().positive(),
+  captureStartedAt: z.number().int().nonnegative(),
+  captureFinishedAt: z.number().int().nonnegative(),
+  status: z.enum([
+    "read",
+    "missing-before",
+    "missing-after",
+    "permission",
+    "reuse",
+    "error",
+    "limit",
+    "unsupported",
+  ]),
+  before: GpuIdentityReadSchema,
+  after: GpuIdentityReadSchema,
+  processStatus: GpuIdentityReadSchema,
+  namespace: GpuIdentityReadSchema,
+  local: LocalIdentitySchema.optional(),
+});
+export const GpuProcessIdentitySchema = z.object({
+  version: z.literal(1),
+  sampleAt: z.number().int().nonnegative(),
+  captureStartedAt: z.number().int().nonnegative(),
+  captureFinishedAt: z.number().int().nonnegative(),
+  driverBinding: z.literal("unknown"),
+  bootId: GpuIdentityReadSchema,
+  collector: GpuLocalObservationSchema,
+  processes: z.array(GpuLocalObservationSchema).max(64),
+  omittedProcesses: z.number().int().nonnegative(),
+});
 export const GpuStateSchema = z.object({
   schema: z.literal(1),
   attemptAt: z.number().int().nonnegative(),
@@ -130,6 +174,7 @@ export const GpuStateSchema = z.object({
   why: z.string().optional(),
   devices: z.array(GpuDeviceSchema).max(256),
   processes: z.array(GpuProcessSchema).max(65536),
+  processIdentity: GpuProcessIdentitySchema.optional(),
   samples: z.array(GpuSampleSchema).max(MAX_SAMPLES),
 });
 export type GpuState = z.output<typeof GpuStateSchema>;

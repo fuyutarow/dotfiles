@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.7 — 2026-10-22
+
+- Record bounded local process identity with ordinary GPU samples
+
 ## 0.15.6 — 2026-10-20
 
 - Separate validated Codex creation metadata from explicitly verified native runtime cwd

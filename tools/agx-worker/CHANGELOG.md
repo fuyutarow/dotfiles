@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.0.3 — 2026-10-22
+
+- Recognize native Claude HTTP 529 retry events as capacity before vendor retries.
+
 ## 8.0.2 — 2026-10-22
 
 - Preserve explicit roster configuration across dispatch

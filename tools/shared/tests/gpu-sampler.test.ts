@@ -511,3 +511,81 @@ test("dead owner and absent driver allow recovery without discarding cooldown", 
   );
   expect(await Bun.file(calls).text()).toBe("x");
 });
+
+const identityStatText = (pid: number) =>
+  `${pid} (worker (nested)) S ${Array.from({ length: 18 }, () => "0").join(" ")} 12345 0`;
+test("ordinary writer publishes bounded local provenance without claiming driver binding", async () => {
+  const { options, calls } = await fixture();
+  const at = 1_000_000;
+  const identityIo = {
+    read: async (path: string) => {
+      await Promise.resolve();
+      if (path.endsWith("boot_id")) return "fake-boot";
+      const pid = path.includes("/self/") ? process.pid : 42;
+      if (path.endsWith("stat")) return identityStatText(pid);
+      return `Pid:\t${pid}\nTgid:\t${pid}\nNSpid:\t${pid}\t7\n`;
+    },
+    readlink: () => Promise.resolve("pid:[987]"),
+  };
+  expect(await runGpuSampler({ ...options, identityIo, now: () => at })).toBe(
+    "sampled",
+  );
+  const state = await readGpuState(options.statePath);
+  expect(state?.processes).toEqual([{ pid: 42, usedMiB: 512 }]);
+  expect(state?.processIdentity).toMatchObject({
+    version: 1,
+    sampleAt: at,
+    driverBinding: "unknown",
+    bootId: { status: "read", value: "fake-boot" },
+    processes: [
+      {
+        rawDriverPid: 42,
+        status: "read",
+        local: { pid: 42, tgid: 42, nspid: [42, 7], starttime: "12345" },
+      },
+    ],
+  });
+  expect(await Bun.file(calls).text()).toBe("x");
+  expect(
+    await runGpuSampler({ ...options, identityIo, now: () => at + 1 }),
+  ).toContain("60s");
+  expect(await Bun.file(calls).text()).toBe("x");
+  await writeFile(join(options.slotDirectory, "gpu.0.0"), "");
+  await writeFile(
+    options.lslocksPath,
+    `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify({ locks: [{ path: join(options.slotDirectory, "gpu.0.0"), pid: 9 }] }))});\n`,
+  );
+  let pauseReads = 0;
+  expect(
+    await runGpuSampler({
+      ...options,
+      identityIo: {
+        read: () => {
+          pauseReads++;
+          return Promise.resolve("unexpected");
+        },
+        readlink: identityIo.readlink,
+      },
+      now: () => at + 60_000,
+    }),
+  ).toContain("paused");
+  expect(pauseReads).toBe(0);
+  expect((await readGpuState(options.statePath))?.processIdentity).toEqual(
+    state?.processIdentity,
+  );
+  expect(await Bun.file(calls).text()).toBe("x");
+  await writeFile(
+    options.lslocksPath,
+    `#!${process.execPath}\nprocess.stdout.write('{"locks":[]}');\n`,
+  );
+  await writeFile(
+    join(options.path, "nvidia-smi"),
+    `#!${process.execPath}\nprocess.exit(3);\n`,
+  );
+  expect(
+    await runGpuSampler({ ...options, identityIo, now: () => at + 120_000 }),
+  ).toBe("slow sample");
+  expect((await readGpuState(options.statePath))?.processIdentity).toEqual(
+    state?.processIdentity,
+  );
+});

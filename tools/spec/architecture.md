@@ -40,9 +40,9 @@ not in them; this file does not invent it. Section 7 records the one layer rule 
 
 ## Suite
 
-The `agx` executable dispatches four tools on PATH: `agx worker`, `agx ws`, `agx ticket`, and `agx status`.
+The `agx` executable dispatches five tools on PATH: `agx worker`, `agx ws`, `agx ticket`, `agx status`, and `agx msg`.
 Accepted command forms are `agx <tool> ARGS` and `agx-<tool> ARGS`, where
-`<tool>` is `worker`, `ticket`, `ws`, or `status`. Use `jex` for oracle classification.
+`<tool>` is `worker`, `ticket`, `ws`, `status`, or `msg`. Use `jex` for oracle classification.
 
 | part | one job | single home | what it does not hold |
 | --- | --- | --- | --- |
@@ -51,6 +51,7 @@ Accepted command forms are `agx <tool> ARGS` and `agx-<tool> ARGS`, where
 | `agx-ws` | Create, ready, refresh, remove, and collect jj workspaces | `tools/agx-ws/`; jj owns workspace metadata | No run ledger or ticket state |
 | `agx-ticket` | Issue tickets and derive their lifecycle from run/workspace facts | `tools/agx-ticket/`; ticket files stay in the repository's declared directory | No run ledger, workspace lifecycle, or acceptance judgment |
 | `agx-status` | Fold run, workspace, ticket and doctor state into one JSON view | `tools/agx-status/` | No state |
+| `agx-msg` | Forward message commands to the xmsg CLI | `tools/xmsg/` | No message state or behavior of its own |
 
 Parts import only their own directory and `tools/shared/`; a part never imports another part.
 The `agx` entry imports no part code and calls each part's CLI in a child process.

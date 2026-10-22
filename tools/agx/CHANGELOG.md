@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0 — 2026-10-23
+
+- Add msg as an agx suite tool
+
 ## 1.1.0 — 2026-10-23
 
 - Route agx status through the PATH agx-status bin and declare its installation surfaces.

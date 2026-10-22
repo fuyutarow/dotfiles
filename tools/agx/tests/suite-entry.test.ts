@@ -14,6 +14,8 @@ test("only prefixed workspace and ticket bins are exported", () => {
   expect(rootPackage.bin["agx-ws"]).toBe("tools/agx-ws/src/ws.ts");
   expect(rootPackage.bin["agx-ticket"]).toBe("tools/agx-ticket/src/tkt.ts");
   expect(rootPackage.bin["agx-status"]).toBe("tools/agx-status/src/status.ts");
+  expect(rootPackage.bin["agx-msg"]).toBe("tools/xmsg/src/xmsg.ts");
+  expect(rootPackage.bin.xmsg).toBe("tools/xmsg/src/xmsg.ts");
   expect(Object.hasOwn(wsPackage.bin, "ws")).toBe(false);
   expect(Object.hasOwn(ticketPackage.bin, "tkt")).toBe(false);
   expect(wsPackage.bin["agx-ws"]).toBe("src/ws.ts");
@@ -23,7 +25,7 @@ test("only prefixed workspace and ticket bins are exported", () => {
 const entry = join(import.meta.dir, "../src/agx.ts");
 async function fixture() {
   const bin = await mkdtemp(join(tmpdir(), "agx-path-"));
-  for (const tool of ["worker", "ws", "ticket", "status"]) {
+  for (const tool of ["worker", "ws", "ticket", "status", "msg"]) {
     const path = join(bin, `agx-${tool}`);
     await writeFile(
       path,
@@ -60,6 +62,7 @@ test("suite forwards exact argv through PATH and preserves exit status", async (
     ["ws", ["ls"]],
     ["ticket", ["--help"]],
     ["status", ["--json", "a b.md", "--", "-Z", "雪"]],
+    ["msg", ["send", "--to", "fixture:session", "--message", "hello world"]],
   ] as const) {
     // Only --help used by suite discovery is special in these fake bins.
     const result = await run(f.bin, [tool, ...args], 37);
@@ -98,7 +101,7 @@ test.each([
   expect(result.code).toBe(2);
   expect(result.stdout).toBe("");
   expect(result.stderr).toBe(
-    `agx: unknown tool '${verb}'; expected worker, ticket, ws, status\n`,
+    `agx: unknown tool '${verb}'; expected worker, ticket, ws, status, msg\n`,
   );
 });
 test("suite owns its version and takes descriptions from PATH tools", async () => {
@@ -112,7 +115,7 @@ test("suite owns its version and takes descriptions from PATH tools", async () =
   const help = await run(f.bin, ["-h"]);
   expect(help.code).toBe(0);
   expect(help.stdout).not.toContain("99.0.0");
-  for (const tool of ["worker", "ticket", "ws", "status"])
+  for (const tool of ["worker", "ticket", "ws", "status", "msg"])
     expect(help.stdout).toContain(`  ${tool}  ${tool} description from owner`);
 });
 test("suite source contains only dispatch and discovery, with no owner modules", async () => {
@@ -121,7 +124,7 @@ test("suite source contains only dispatch and discovery, with no owner modules",
     /records\.jsonl|XDG_STATE|AGX_STATE|writeFile|mkdir|fileURLToPath/u,
   );
   expect(source).not.toMatch(
-    /from\s+["'][^"']*agx-(?:worker|ws|ticket|status)/u,
+    /from\s+["'][^"']*agx-(?:worker|ws|ticket|status|msg)/u,
   );
 });
 

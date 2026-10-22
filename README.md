@@ -138,10 +138,10 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 └── mise.toml    # the task runner (no justfile)
 ```
 
-The `agx` command dispatches `agx worker`, `agx ticket`, `agx ws`, and `agx status` to their `agx-*` bins on PATH.
+The `agx` command dispatches `agx worker`, `agx ticket`, `agx ws`, `agx status`, and `agx msg` to their `agx-*` bins on PATH. `agx-msg` is an alias for the existing `xmsg` tool.
 Each tool owns its help, decisions, and state. Suite help takes each description from that tool’s help.
 Accepted command forms are `agx <tool> ARGS` and `agx-<tool> ARGS`, where
-`<tool>` is `worker`, `ticket`, `ws`, or `status`.
+`<tool>` is `worker`, `ticket`, `ws`, `status`, or `msg`.
 `agx -V` prints only the suite version. The architecture
 of `tools/` (including the suite boundary, dispatch pipeline, capacity domain, oracle rule, and each
 invariant's check or planned ticket) lives in
@@ -170,6 +170,7 @@ bin name has a classification.
 | `serena-foreground` | A | Agents invoke the Serena foreground adapter from any repository. |
 | `rr` | A | People and agents use the repository query router from any cwd. |
 | `repo-retrieve` | A | Alias for the machine-wide `rr` operator. |
+| `agx-msg` | A | Alias for the suite's `msg` tool; `xmsg` remains available. |
 | `smart-open` | A | Shell and operators open paths or URLs across repositories. |
 | `disk-reclaim` | A | Operators reclaim machine storage. |
 | `storage-headroom` | A | Operators inspect machine storage headroom. |

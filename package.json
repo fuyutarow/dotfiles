@@ -25,6 +25,7 @@
     "herdr-projector": "tools/herdr-projector/src/herdr-projector.ts",
     "tool": "tools/tool-tiers/src/tool.ts",
     "agx": "tools/agx/src/agx.ts",
+    "agx-msg": "tools/xmsg/src/xmsg.ts",
     "agx-status": "tools/agx-status/src/status.ts",
     "agx-ws": "tools/agx-ws/src/ws.ts",
     "coredev": "tools/coredev/src/coredev.ts",

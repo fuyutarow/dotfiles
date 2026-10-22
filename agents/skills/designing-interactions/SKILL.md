@@ -6,7 +6,7 @@ description: >-
   モーダル, confirmation vs undo, 可逆性, wizard, captive UI, affordance, usability, 認知負荷,
   feedback latency (応答時間, 待ち表示), or simple-vs-easy. CLI grammar, stdout/stderr and machine modes, exit/outcome mapping, and compatibility
   → designing-command-line-interfaces. Visual styling → frontend-design; charts → dataviz; behavior
-  edits → implementing-and-debugging; wording → linting-prose; adoption → growing-oss-adoption.
+  edits → follow repository instructions and the relevant domain owner; wording → linting-prose; adoption → growing-oss-adoption.
   Real-user attention needs a domain test. Verdicts SOLO; inventories fan out. English skill; answer
   in the user's language.
 ---
@@ -195,7 +195,7 @@ Asks this skill must NOT take:
 | "which chart type, what colors by series, lay out this KPI row" | `dataviz` |
 | "LCP is 4s and CLS is 0.3 — audit the page" | `web-perf` first; remediation design can co-fire back here |
 | "extract this component's state from its layout, pixel-identical" | `refactoring-code` |
-| "write the code for the settings screen we already designed" | `implementing-and-debugging` |
+| "write the code for the settings screen we already designed" | Follow repository instructions and the relevant frontend/domain owner. |
 | "should we open-source this CLI, and how do we launch it" | `growing-oss-adoption` |
 | "restructure this design-spec **document**" | `structuring-documents` |
 | a one-line copy fix, or an ask a platform convention already settles | just do it — no ceremony |

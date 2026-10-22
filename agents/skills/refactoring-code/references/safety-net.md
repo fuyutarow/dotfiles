@@ -49,7 +49,7 @@ today**, discovered by running it — **not what the spec or the name says it sh
 
 For deletion, record the negative contract before editing:
 
-0. if the target is a supported feature or public API, stop and route to `implementing-and-debugging`;
+0. if the target is a supported feature or public API, stop and follow repository instructions and the relevant domain owner;
 1. enumerate the symbol, callers, config/string references, generated artifacts, and public aliases;
 2. decide which occurrences must become zero and which migrations must remain;
 3. delete one atomic row, then run both the behavior oracle and the absence search; and

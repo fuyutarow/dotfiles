@@ -20,7 +20,7 @@ to do something else"). The high-value triggers:
 
 - **Preparatory** (the best one) — *make the change easy (this may be hard), then make the easy
   change* (Beck). Refactor right before the feature that needs it, as its own green commit — **not
-  speculatively**. This is where `refactoring-code` and `implementing-and-debugging` co-fire.
+  speculatively**. Follow repository instructions for the behavior-changing implementation after this refactor.
 - **Comprehension** — as you grok code, move the understanding back into it (rename/extract).
 - **Litter-pickup** — clean a little as you pass through, without derailing the task.
 - **Rule of Three** (Beck, credited to Roberts) — first time, just do it; second, wince and duplicate

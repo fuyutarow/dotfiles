@@ -42,11 +42,11 @@ fires instead; a co-fire row states the order. Created v2607.1.0 (2026-07-12).
 
 | Ask | Expected order |
 |---|---|
-| "この Python サービスの落ちてるバグ直して" | `implementing-and-debugging` DEBUG gate first (root-cause/edit-surface) → this skill for the Python inside (PG0–PG4 idiom/gates) |
+| "この Python サービスの落ちてるバグ直して" | follow repository instructions and this skill for Python-specific guidance (PG0–PG4 idiom/gates) |
 | 「このモジュール、動作変えずに分割リファクタして」 | `refactoring-code` governs (two hats/oracle/deny-gate) → this skill supplies the Python oracle (ruff + type checker + pytest green bracket) + Python-safe transforms |
-| "新しい依存足してこの機能実装して" | `implementing-and-debugging` BUILD gate first (intent/edit surface) → this skill (PG0 env + PG1 selection) for the new dependency, same turn — order declared, not implicit |
-| "hydra の job submit 時に GPU が OOM になる。config 調整したい" | `implementing-and-debugging` DEBUG gate first (runtime failure, root-cause) → this skill for the config/experiment layer (research.md §1–§2: typed config, batch-size/memory knobs live in config-as-code, never a blind sweep) |
-| "ProcessPoolExecutor と pytest-xdist をサブエージェントごとに auto で回したら RAM が尽きる" | `implementing-and-debugging` diagnoses if failure repair is requested → this skill removes Python auto fanout → `orchestrating-agents` P7 admits explicit aggregate workers/RAM |
+| "新しい依存足してこの機能実装して" | follow repository instructions and this skill (PG0 env + PG1 selection) for the new dependency |
+| "hydra の job submit 時に GPU が OOM になる。config 調整したい" | follow repository instructions and this skill for the config/experiment layer (research.md §1–§2: typed config, batch-size/memory knobs live in config-as-code, never a blind sweep) |
+| "ProcessPoolExecutor と pytest-xdist をサブエージェントごとに auto で回したら RAM が尽きる" | follow repository instructions and the relevant domain owner for diagnosis → this skill removes Python auto fanout → `orchestrating-agents` P7 admits explicit aggregate workers/RAM |
 
 Adjudicated non-additions: 「Julia から SymPy を呼ぶには」 carries no writing-python description
 cut on purpose (description budget) — writing-julia's own description claims that ask explicitly

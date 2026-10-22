@@ -1,8 +1,8 @@
 # Formulating a research problem without cheap victories
 
 > **Sole home**: the normative formulation of a selected research problem. Inspecting what an existing
-> benchmark or dataset actually contains is `raising-resolution`; implementing a metric is
-> `implementing-and-debugging`.
+> benchmark or dataset actually contains is `raising-resolution`; implementing a metric follows
+> repository instructions and the relevant domain owner.
 
 ## 1. Decisive formulation
 

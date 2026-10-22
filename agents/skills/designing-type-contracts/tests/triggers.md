@@ -11,7 +11,7 @@
 | typestateでDBから復元した注文の支払いを保証できるか | Here: hydration, authoritative state and freshness; runtime residuals stay explicit. |
 | このenumなら不正な状態は作れないという主張を監査して | Here: exact predicate, construction paths, positive and forbidden cases. |
 | TypeScriptでoptional propertyを書く構文は | Plain/language explanation; no contract procedure. |
-| Fix this parser's known off-by-one | implementing-and-debugging; no modeling detour unless predicate is unclear. |
+| Fix this parser's known off-by-one | Follow repository instructions and the language owner; no modeling detour unless predicate is unclear. |
 | この変数に既知の型注釈を足して | Language owner or direct edit. |
 | TOML overrideの優先順位と署名対象を決めたい | governing-configuration-systems. |
 | FCISとは何か説明して | Plain explanation. |

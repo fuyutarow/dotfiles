@@ -28,6 +28,6 @@ Run these against the name and description after each description or cut edit.
 | “Canonicalize config before signing.” | `governing-configuration-systems`. |
 | “Launch our open-source CLI.” | `growing-oss-adoption`. |
 | `git status | jq .` once. | Direct shell use. |
-| “Implement the already-specified subcommand.” | `implementing-and-debugging` plus language owner. |
+| “Implement the already-specified subcommand.” | Follow repository instructions and the language owner. |
 | “My web page's spinner feels slow.” | `designing-interactions`; a GUI latency budget, not a CLI contract. |
-| “Why is this command slow? Make it faster.” | `implementing-and-debugging`; performance, not what the caller is told. |
+| “Why is this command slow? Make it faster.” | Follow repository instructions and the relevant performance/domain owner; performance, not what the caller is told. |

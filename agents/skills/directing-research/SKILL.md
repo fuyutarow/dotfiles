@@ -87,7 +87,7 @@ Each skill retains its own entry gate. This route does not create an `OPEN_ISSUE
 | Research-document authority, admission, retention, or retirement | `governing-research-documentation` |
 | Cross-session continuity, resume, or handoff record | `continuing-long-running-tasks` |
 | Bearers, dispatch, visibility, dependency, veto, verification, or acceptance | `orchestrating-agents` |
-| Generic software incident or postmortem | `implementing-and-debugging` |
+| Generic software incident or postmortem | Follow repository instructions and the relevant domain owner. |
 
 These are direct routes. The shim does not co-own their artifacts or add an orchestration overlay.
 

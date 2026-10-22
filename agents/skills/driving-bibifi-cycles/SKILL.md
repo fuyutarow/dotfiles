@@ -293,7 +293,7 @@ Stop at completion, user stop or a real authority boundary. Hand back accurate p
 | Notebook artifact homes, launch/landing and edition acceptance | `keeping-research-notebooks`; this loop consumes its bindings |
 | Exact proof and theory changes | `proving-theorems`, then `systematizing-theories` as applicable |
 | Explanatory candidate generation | `forming-hypotheses-from-anomalies` for one contrast; `forging-novel-theses` for a seeded batch under its entry contract |
-| Code repair or GPU path | `implementing-and-debugging` plus language/GPU owner |
+| Code repair or GPU path | Follow repository instructions and the relevant language/GPU owner |
 | Formal section admission or programme allocation | `directing-research-sections` / `supervising-research-programmes` |
 | Costly irreversible commitment | `acting-on-hypotheses` owns the discriminator, threshold, interpretation and Commit/Pivot/Kill; this loop may schedule its Build→Measure slice |
 | Slices, estimate/poker choice, dependencies, outcome selection and predecessor transfer | `references/microticket-patterns.md` |

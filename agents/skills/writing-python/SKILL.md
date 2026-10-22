@@ -8,7 +8,7 @@ description: >-
   依存関係 / 型ヒント / 仮想環境. Trigger on: pip install, venv, poetry, conda,
   requirements.txt, uv, ruff, pydantic, mypy/pyright/ty, pytest, FastAPI, httpx, polars,
   hydra. Cuts: run a tool NOW / one-off uvx・uv run → running-python-tools (code LIVING in
-  a repo → HERE); feature/bugfix → implementing-and-debugging (co-fire FIRST); restructure →
+  a repo → HERE); feature/bugfix → follow repository instructions and this language owner; restructure →
   refactoring-code (governs; this supplies the oracle); PyO3/maturin FROM Rust →
   writing-rust; prose → linting-prose. MANDATORY — read BEFORE writing ANY Python or adding
   ANY dependency. Facts ROT — verify live (PG1). New repo → wiring-repositories
@@ -83,7 +83,7 @@ style nit to clean up afterward.
 | `designing-type-contracts` | **PURPOSE:** invariant placement and construction-path design → there. Python validation APIs, model idioms and library selection remain here. |
 | governing-configuration-systems | **DECISIVE:** pyproject.toml or a Python parser's valid syntax, API, and implementation → HERE. A cross-format consumer/trust, effective-declaration, authority, or integrity contract → governing-configuration-systems. |
 | `running-python-tools` | PURPOSE cut (canonical phrasing OWNED HERE, mirrored there): "Writing/reviewing Python that will **LIVE in a repo** (project, module, kept script) → HERE. Invoking a Python-based tool or one-off snippet **NOW** (`uvx ruff`, `uv run --with pypdf`, `yt-dlp`, `jupyter`) → `running-python-tools`." PEP 723 single-file scripts: **authoring** the script → here; **invoking** it → there. Seam note: the two descriptions agree in substance — do not diff for byte-identity. |
-| `implementing-and-debugging` | Co-fire with ORDER on any non-trivial Python feature/bugfix — its change-safety gates run FIRST; this skill owns what correct Python looks like inside that frame (PG0–PG4). |
+| Repository instructions and this language owner | Implement Python changes under repository instructions and apply the relevant Python guidance here (PG0–PG4). |
 | `refactoring-code` | Co-fire on behavior-preserving restructure — it governs (two hats / oracle); this supplies the Python oracle (ruff + type checker + pytest green bracket) and Python-safe transforms. |
 | `writing-rust` | PyO3/maturin/FFI **as a Rust architecture decision** → there; the Python-side packaging/typing of the same project → here; running `maturin` itself → `running-python-tools`. |
 | `writing-julia` | `PythonCall`/`SymPyPythonCall` called FROM Julia → there (a Julia dependency-architecture decision), even though the payload is Python. |

@@ -8,7 +8,7 @@ description: >-
   .git が大きい, クリーンアップ / cleanup, gc / prune, 巨大ファイルを履歴から消す,
   LFS cache, and leaked secrets. Measure storage before deleting; verify the selected outcome.
   Cuts by PURPOSE: .gitignore / hooksPath / git-hook wiring → wiring-repositories;
-  harness permissions/isolation → declared local configuration and executable checks; code changes → implementing-and-debugging
+  harness permissions/isolation → declared local configuration and executable checks; code changes → repository instructions and relevant language/domain owners
   or refactoring-code, Git co-fires at commit; SSH keys → securing-remote-access, gh auth/signing here;
   version meaning → designing-version-schemes; jj commands → driving-jujutsu.
   English skill; respond in the user's language.
@@ -182,7 +182,7 @@ MUST NOT fire (with route):
 |---|---|
 | `wiring-repositories` | **PURPOSE** — "Is the ask about which layers this repo admits (`.gitignore`, `core.hooksPath`, the git-hook shape), or about operating the repo day to day?" Layers → theirs. Operations → here. Reciprocal: its layer table names `git` as the frame; this skill lays no layer |
 | local configuration source and executable checks | **PURPOSE** — Claude Code's `Bash(git *)` rules, `--worktree` / `EnterWorktree` / `isolation: worktree` mechanics and their enforcement, attribution settings follow declared local sources and checks. The git commands executed inside any of those → here. `references/shared-checkouts.md` assumes their mechanics and restates none |
-| `implementing-and-debugging` · `refactoring-code` | **DECISIVE** — "Is the question what to change, or how the change enters history?" What → theirs. History (scope, message, rewrite, publish) → here; **co-fire at commit time**. Their `git stash`-not-`checkout .` line agrees in substance — do not byte-diff |
+| Repository instructions and relevant language/domain owners · `refactoring-code` | **DECISIVE** — "Is the question what to change, or how the change enters history?" What → those owners. History (scope, message, rewrite, publish) → here; **co-fire at commit time**. The `git stash`-not-`checkout .` rule agrees in substance — do not byte-diff |
 | `orchestrating-agents` · `commanding-research-fleets` | **PURPOSE** — dispatch, roles, acceptance → theirs. The git protocol every peer on one repo obeys (S1–S8) → here |
 | `agx` · `driving-grok` · `driving-antigravity` | **PURPOSE** — whether a foreign agent needs containment → theirs. The worktree/branch it gets and how its work is reviewed and integrated → here (`references/shared-checkouts.md` §4) |
 | `securing-remote-access` | **DECISIVE by artifact** — the ssh key pair and its agent/hardware backing → theirs. `gh auth` state and the git-side signing config (`gpg.format`, `user.signingkey`, `commit.gpgsign`) → here (`references/jobs.md` §16, §21). Their body never mentions `gh`; this side owns it |

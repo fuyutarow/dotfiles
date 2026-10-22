@@ -6,7 +6,7 @@ description: >-
   比較土俵/基準線/漏れ/退行の証拠判断→validating-experimental-evidence。裸の「研究を進めて」では発火せず、
   programme設計→supervising-research-programmes、grant済みsection→directing-research-sections、
   凍結terminal audit→auditing-research-processesへrouteする。
-  Control-plane postmortem→here; software incident→implementing-and-debugging。
+  Control-plane postmortem→here; software incident→follow repository instructions and the relevant domain owner。
   Durable co-fire: continuity record → orchestration overlay → writer
   checkpoint; continuing-long-running-tasksがrecord/writer semanticsを持ち、ここはlocusだけを運ぶ。
   Cuts: research meaning→上記domain owner; document lifecycle→governing-research-documentation;
@@ -401,7 +401,7 @@ artifact は、loaded skills と `domain / craft` のowner記録である。
 
 | Ask / signal | 判定 | PURPOSE cut と owner | Artifact |
 |---|---|---|---|
-| generic software incident/postmortemで原因、修復、再発防止を問う。 | `NO-FIRE` | `implementing-and-debugging`が挙動とroot causeを所有する。dispatch/pacing等のcontrol-plane failureが明示された場合だけ別行で本skillがco-fireする。 | implementation diagnosis/fixへのpointer。 |
+| generic software incident/postmortemで原因、修復、再発防止を問う。 | `NO-FIRE` | Follow repository instructions and the relevant domain owner for diagnosis and repair. dispatch/pacing等のcontrol-plane failureが明示された場合だけ別行で本skillがco-fireする。 | implementation diagnosis/fixへのpointer。 |
 | 「研究を進めて」。mapもdispatch指定も無い。 | `NO-FIRE` | `driving-bibifi-cycles`が既存の目的・証拠を確認し、必要なcontent ownerを適用する。programme配分要求はそのownerへ。 | 委任が必要になった時点でoverlay。 |
 | 署名済みmapがある。またはdispatch/control-planeを明示している。 | `FIRE / CO-FIRE` | mapの意味はdomain owner。本skillはagent、visibility、dependency、veto、verification、acceptanceだけを載せる。 | map locus/digestとdispatch overlay。 |
 | 「起草と査読を委任」「定理や文書を起草・査読」。 | `FIRE / CO-FIRE` | 運転はここ。数学の中身は `proving-theorems`。 | role分離とco-fire記録。 |

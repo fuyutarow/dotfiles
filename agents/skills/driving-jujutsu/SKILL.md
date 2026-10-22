@@ -8,7 +8,7 @@ description: >-
   target revision, and exact bookmark before publishing. PURPOSE cut:
   jj commands and their Git interoperability → here; plain Git commands,
   shared Git checkout policy, and Git history cleanup → driving-git.
-  Code changes → implementing-and-debugging or refactoring-code; this skill
+  Structure-only changes → `refactoring-code`; behavior changes → repository instructions and the relevant language/domain owner; this skill
   co-fires when recording or publishing those changes. English skill;
   respond in the user's language.
 ---
@@ -104,7 +104,7 @@ This table is the trigger desk-check. Read only the name and description when re
 | “I have two changes in the working copy and only one should go into this commit” | FIRE: SNAPSHOT/split; headline keyword absent. |
 | 「git add したファイルだけ git commit して」 | NO-FIRE → `driving-git`. |
 | “Please clean 10 GB from .git and prune old worktrees” | NO-FIRE → `driving-git`. |
-| 「この関数のバグを直して。履歴は触らないで」 | NO-FIRE → `implementing-and-debugging`. |
+| 「この関数のバグを直して。履歴は触らないで」 | NO-FIRE; follow repository instructions and the relevant language/domain owner. |
 | “Add a pre-commit hook and .gitignore to this new repo” | NO-FIRE → `wiring-repositories`. |
 | 「柔術の試合ルールを調べて」 | NO-FIRE → sports-domain research. |
 | “Fix this code, then record it with jj and open a PR” | CO-FIRE: implementation first, this skill at record/publish, `driving-git` only for Git/gh-side actions. |

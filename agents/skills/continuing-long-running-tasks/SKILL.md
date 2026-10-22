@@ -163,8 +163,8 @@ re-inject a trusted locator, never transcript text or the record body.
 
 - One-shot explanation, translation, read-only lookup, or a single safe edit → no record.
 - One-shot incident explanation/diagnosis with no persistence request → no record.
-- Feature/debug correctness → `implementing-and-debugging`; co-fire here only when durable resume is
-  needed. Store evidence locators, never duplicate the implementation analysis.
+- Feature/debug correctness → follow repository instructions and the relevant domain owner; use this
+  skill only when durable resume is needed. Store evidence locators, never duplicate implementation analysis.
 - Research stage/portfolio judgment → `supervising-research-programmes`; point to its artifacts.
 - Research-document admission, authority, evidence lineage, review, retirement, or deletion across
   artifacts → `governing-research-documentation`; persist its cited state only when C1 fires.

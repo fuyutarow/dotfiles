@@ -8,7 +8,7 @@ description: >-
   (invocation, effects, channels, outcomes, evolution). Cuts: interaction meaning or
   reversibility → designing-interactions; one failure's message/locus/recovery card → designing-developer-diagnostics;
   config authority → governing-configuration-systems; version identifiers → designing-version-schemes;
-  implementation → implementing-and-debugging/writing-*; existing CLI usage → driving-*; launch →
+  implementation → repository instructions and writing-*; existing CLI usage → driving-*; launch →
   growing-oss-adoption. English skill;
   respond in the user's language.
 ---
@@ -88,7 +88,7 @@ locus or command/output/exit. No harness → same map, serial.
 | “Launch or distribute this CLI.” | `growing-oss-adoption`. |
 | A one-shot shell pipeline. | Use the shell directly; no contract is being kept. |
 | “Apply Unix philosophy to the design of this tool.” | `practicing-unix-philosophy` develops the design approach; return here for CLI protocol decisions. |
-| “Implement this agreed CLI.” | `implementing-and-debugging` plus the language owner. |
+| “Implement this agreed CLI.” | Follow repository instructions and the relevant language owner. |
 
 Ordered co-fires:
 
@@ -97,7 +97,7 @@ Ordered co-fires:
 | Destructive CLI | `designing-interactions` → this skill |
 | Known failure diagnostic | This outcome map → `designing-developer-diagnostics` |
 | Config precedence | `governing-configuration-systems` → this skill |
-| Unsettled CLI interface | This skill → `implementing-and-debugging` / `writing-*` |
+| Unsettled CLI interface | This skill → repository instructions / `writing-*` |
 
 ## Reference index
 

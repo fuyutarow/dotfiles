@@ -7,7 +7,7 @@ description: >-
   Verify crate facts; sync before async, ownership before clone, lightest fit before famous.
   Cargo layout → here; repo layers/polyglot placement → wiring-repositories;
   mise task graph → wiring-mise-tasks.
-  Change/debug → implementing-and-debugging; structure-only → refactoring-code;
+  Change/debug → repository instructions and this language owner; structure-only → refactoring-code;
   invariant placement/type-as-spec → designing-type-contracts; consequential risk → practicing-tiger-style.
   PyO3/maturin binding design stays here; Python tooling → running-python-tools.
   Excludes Rust-written CLI installation, syntax explanations, and prose editing with settled design.
@@ -73,9 +73,9 @@ feature-flag toggle on an already-declared crate**, or a **mechanical rename** (
 substitution only, however many files it touches) that changes no dependency and reshapes no
 ownership/API — ceremony on these fails RG0's own F1. A crate *rebrand* still fires when it adds a dep or reworks code: an observed rebrand fired on
 clap + `main.rs`, not on `[package].name`. Co-firing does not exempt you: under `refactoring-code` the passive-sounding "oracle"
-role does **not** suspend RG0 (a substantive restructure — one that adds a dep or reworks code — is still first-crate-entry; a mechanical rename that only substitutes an identifier is the NO-FIRE case above); under
-`implementing-and-debugging` its DEBUG/BUILD gate still runs FIRST and the sweep is writing-rust's
-first artifact WITHIN its turn, not the literal first output. Waiting for a reviewer to name crates
+role does **not** suspend RG0 (a substantive restructure — one that adds a dep or reworks code — is still first-crate-entry; a mechanical rename that only substitutes an identifier is the NO-FIRE case above).
+For code changes, follow repository instructions; the sweep is writing-rust's first artifact.
+Waiting for a reviewer to name crates
 one at a time ("why no clap? why no anyhow?") is the gate's **defining failure mode**, and it
 recurs — a prose gate alone is not enough, so the durable fix is a PreToolUse hook blocking the
 first `*.rs`/`Cargo.toml` edit until the table exists (use the repository's declared local guard; not shipped here).
@@ -89,7 +89,7 @@ Full artifact spec + trigger: RG0 row above; lookup: `references/selection.md`.
 | `wiring-mise-tasks` | **PURPOSE:** Rust package, feature and test-mode coverage stays here; task names, dependencies and runtime declarations stay there. Pass the RG5 scope to the task writer. |
 | `designing-type-contracts` | **PURPOSE:** choose predicates, representations, construction paths and residual obligations there. Rust visibility, ownership, conversions, Serde APIs and crate choices remain here. |
 | governing-configuration-systems | **DECISIVE:** Cargo.toml or a Rust parser's crate-specific manifest, API, and implementation → HERE. A format-independent configuration contract → governing-configuration-systems. |
-| `implementing-and-debugging` | **Co-fire on any non-trivial Rust feature/bugfix, with ORDER**: that skill owns language-agnostic change-safety (intent reconstruction, edit-surface scoping, **root-cause vs symptom** — a `.clone()`/`unwrap()` band-aid is the symptom-fix it forbids, RG2 is the Rust form, regression fear) — run its BUILD/DEBUG gate FIRST; this skill owns what correct Rust looks like inside that frame (RG0–RG4). |
+| Repository instructions and this language owner | Implement Rust changes under repository instructions and apply the relevant Rust guidance here (RG0–RG4). |
 | `refactoring-code` | **Co-fire on any behavior-preserving Rust restructuring, with ORDER**: its two-hats / oracle / deny-gate govern the change discipline; this skill supplies the Rust **oracle** (`cargo check` + `clippy` + `cargo nextest` green as the bracket) and the Rust-safe transforms (module/visibility moves, ownership refactors, `impl Trait` extraction). A Rust refactor that improves no named property is still 場当たり churn — its deny-gate applies unchanged. **The "oracle" role does NOT suspend RG0** — a rename/refactor here is still first-crate-entry; the fire/no-fire boundary is the ★ callout. |
 | `practicing-tiger-style` | **LANGUAGE cut**: “Is the unresolved question Rust-specific type, ownership, Result/panic, crate, unsafe, or tool choice rather than the cross-language risk ledger?” **Yes** → Rust mechanisms stay HERE; **No** → `practicing-tiger-style` owns the ledger. Co-fire when both remain material. |
 | `running-python-tools` | LANGUAGE cut: invoking a Python CLI/one-off → there. Calling Python FROM Rust or exposing Rust TO Python (**PyO3 / maturin / the FFI boundary**) → HERE — that is a Rust dependency-architecture decision (RG0 / selection.md), not Python tooling. |
@@ -219,8 +219,7 @@ hidden bug**. First restructure ownership: borrow instead of own, take `&str`/`&
 `String`/`Vec`, `Cow` for maybe-owned, split a struct so borrows don't overlap, index instead of
 holding a reference across a mutation. `.clone()` is fine when the data is genuinely small/owned
 or cloning is the honest cost — but it is a **decision, not a reflex**. Every `unsafe` needs a
-`// SAFETY:` line. Detail → `references/ownership.md`. (Co-fires with `implementing-and-debugging`:
-the band-aid-vs-root-cause rule is its territory; this is the Rust-specific form.)
+`// SAFETY:` line. Detail → `references/ownership.md`. Follow repository instructions for code changes.
 
 ### 2.3 the heavyweight crate when a light one — or std — fits
 

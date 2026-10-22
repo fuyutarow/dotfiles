@@ -9,7 +9,7 @@ description: >-
   Work selection→driving-bibifi-cycles; section run admission→directing-research-sections;
   costly test threshold→acting-on-hypotheses;
   dispatch/resources→orchestrating-agents; risk ledger→practicing-tiger-style;
-  code fix→implementing-and-debugging.
+  code fix→follow repository instructions and the relevant language/domain owner.
   English skill; respond in the user's language.
 ---
 
@@ -123,7 +123,7 @@ The disposition judgment stays SOLO; receipts may be collected in parallel.
 | Admit/register one granted section's run or commit learning | `directing-research-sections`; it consumes this disposition, never delegates its authority |
 | Agent roles, write-set isolation, CPU/GPU admission, status | `orchestrating-agents`; this skill supplies validity, not a fleet |
 | Decide where a prediction-time label invariant lives in a type, parser, or state API | `designing-type-contracts` after this skill states the information-flow requirement |
-| Implement a benchmark adapter, runner, leak test, polysearch schema, or promotion gate | `implementing-and-debugging` plus language owner; this skill supplies the negative cases |
+| Implement a benchmark adapter, runner, leak test, polysearch schema, or promotion gate | Follow repository instructions and the language owner; this skill supplies the negative cases |
 | Effective configuration/signature authority of a registry file | `governing-configuration-systems`; its contract can feed EV0 |
 | Consequential architecture/release risk | `practicing-tiger-style`; link this disposition into T2/T4 |
 | Frozen terminal research-process audit | `auditing-research-processes`; this skill can validate its measurement rows |

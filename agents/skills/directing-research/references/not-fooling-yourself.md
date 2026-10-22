@@ -106,7 +106,7 @@ terminal receipt through `research-process-postmortem.md`. Historical absence be
 ## 6. Hand-offs
 
 - Need to inspect a suspected present leak or anomaly -> `raising-resolution`.
-- Need to fix the implementation -> `implementing-and-debugging`.
+- Need to fix the implementation -> follow repository instructions and the relevant domain owner.
 - Need the pass/fail threshold or outcome-to-action table for one expensive/irreversible selected tree
   -> `acting-on-hypotheses`.
 - Need to run one cheap deterministic reversible probe -> domain/plain executor; return the result to

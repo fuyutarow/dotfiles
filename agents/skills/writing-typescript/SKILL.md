@@ -5,8 +5,7 @@ description: >-
   coalescing) not `||` for defaults; model absence with `undefined`/`null` before reaching for
   `""` sentinels; replace `switch` and nested ternaries with `ts-pattern`; validate/narrow with
   zod `safeParse` instead of hand-written type guards. Use when writing or
-  reviewing TypeScript, or adopting the house oxlint/tsconfig setup in another repo. Not for language-agnostic change discipline
-  (→ implementing-and-debugging), prose (→ linting-prose), or Bun script/runtime craft — spawn,
+  reviewing TypeScript, or adopting the house oxlint/tsconfig setup in another repo. Prose → linting-prose; Bun script/runtime craft — spawn,
   bunx, deps, script anatomy (→ writing-bun-scripts).
 paths: "**/*.{ts,tsx}"
 ---
@@ -73,8 +72,8 @@ tree. Dotfiles keeps its JSON codec in `agents/hooks/zod.ts`.
 Invariant placement, schema/type authority, and construction-path design → `designing-type-contracts`.
 This skill keeps TypeScript syntax and library idioms; the contract does not mandate a new dependency.
 
-Language-agnostic change discipline (intent, scope, root-cause, regression) → `implementing-and-debugging`.
-Prose/wording → `linting-prose`. This skill is ONLY the TypeScript-idiom floor.
+Follow repository instructions for implementation and debugging. Prose/wording → `linting-prose`.
+This skill is ONLY the TypeScript-idiom floor.
 Bun runtime & script craft — how a local script is built/run/tested/shipped, spawn/timeout,
 bunx, the dependency ladder → `writing-bun-scripts`; in zero-config standalone scripts its
 zero-dep floor beats this file's `ts-pattern`/`zod` rows (hand-rolled narrowing is the accepted

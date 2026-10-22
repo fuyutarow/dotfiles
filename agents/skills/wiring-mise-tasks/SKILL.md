@@ -260,7 +260,7 @@ MUST NOT fire (route):
 | Ask | Route |
 |---|---|
 | 「latexmk がエラーで落ちる」 | `compiling-latex` — TeX build internals |
-| 「clippy の warning 直して」 | `writing-rust` / `implementing-and-debugging` — the code, not the graph |
+| 「clippy の warning 直して」 | `writing-rust` — the code, not the graph |
 | 「hook で `mise run check` を強制したい」 | declared local configuration and executable checks — enforcement machinery (this skill only names the task) |
 | 「mise で node 20 に固定したい」 — a pin with NO task invoking it | model-native. But a runtime any task body INVOKES is this skill's business: see RUNTIME-DECLARED below (2026-07-25 reversal — this row previously routed all of `[tools]` away, and the census found 3/3 repos invoking undeclared runtimes) |
 | 「この justfile にタスク足して」(他家リポ) | no skill — house repos have no justfile; other projects' justfiles are their own convention |

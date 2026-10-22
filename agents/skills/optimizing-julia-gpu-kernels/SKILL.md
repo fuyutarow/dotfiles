@@ -10,7 +10,7 @@ description: >-
   packed/パック済み storage, Microfloats/cuTile, GPU rrule, scan, or SSM/Mamba—only with a
   Julia/CUDA.jl/CuArray device path. Cuts:
   host Julia → writing-julia; terminology/surveys/shopping/PyTorch-JAX → plain or
-  systematizing-knowledge; behavior change → implementing-and-debugging first. Cheap benchmark →
+  systematizing-knowledge; behavior change → follow repository instructions and the relevant owner. Cheap benchmark →
   GK2; costly bet → acting-on-hypotheses. English skill; answer in the user's language.
 ---
 
@@ -71,7 +71,7 @@ An unknown stage blocks unsupported whole-path forecasts, not a separately justi
 | Sibling | Cut |
 |---|---|
 | `writing-julia` | DECISIVE: is a GPU-first step or device path being designed, edited, or measured? GPU path → HERE, even if host Julia currently implements it. Host-only types, packages, AD frontend, CPU work → there. Co-fire; JG0 remains active and JG2 precedes GK1. State/API device ownership → there (JG8, §10.10); launch `get_backend(x)` and GKR stay HERE. |
-| `implementing-and-debugging` | Co-fire first for behavior change or bugfix. It owns change safety; this skill owns device legality and GPU evidence. |
+| Repository instructions and relevant domain owner | Handle behavior change or bugfix; this skill owns device legality and GPU evidence. |
 | `refactoring-code` | Co-fire for behavior-preserving restructuring. It owns the oracle bracket; GK2/GK3 supply GPU checks. |
 | `raising-resolution` | Inspect `CUDA.functional()`, `CUDA.versioninfo()`, `Pkg.status`, and a profile before a present-state claim. |
 | `acting-on-hypotheses` | Cheap reversible benchmarks stay in GK2. Use AOH only when costly downstream exposure depends on one untested result. |

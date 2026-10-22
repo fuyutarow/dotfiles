@@ -2,7 +2,7 @@
 name: refactoring-code
 description: >-
   Governs behavior-preserving structural change. DECISIVE Beck two-hats cut: observable behavior
-  changes (feature, bugfix, performance, logs) → implementing-and-debugging; structure only → HERE.
+  changes (feature, bugfix, performance, logs) → follow repository instructions and the relevant domain owner; structure only → HERE.
   Co-fire sequentially for preparatory refactoring. Pursues 責務分界 and 局所化; refuses 場当たり
   churn unless the smell and improved property are named. Name claim-specific behavior, structure,
   and deletion-absence oracles. Prefer small reversible edits and
@@ -78,7 +78,7 @@ mid-refactor, **STOP and flag it** — do not fix/add it in the same diff. Featu
 **separate step/diff** (separate commits, if committing at all — commit only when asked). **An
 edited test assertion is the tell** that behavior changed — a true refactor step keeps every
 expected value identical and green. When a feature needs a new shape, do the **preparatory refactor
-first** as its own green step, then the easy change (co-fire with `implementing-and-debugging`). →
+first** as its own green step, then the easy change under repository instructions. →
 sequencing in `references/strategy.md` §2–3.
 *Artifact*: two separable diffs, not one; the refactor diff has zero edited assertions.
 
@@ -153,11 +153,11 @@ claim says 全面 is a G5 violation — either narrow the claim or finish the in
 | Sibling | Cut |
 |---|---|
 | `designing-type-contracts` | **PURPOSE:** representation/enforcer design → there; preservation and structural purpose stay here. Tightening accepted inputs or public construction is a behavior change, not automatically a refactor. |
-| `implementing-and-debugging` | **DECISIVE cut = Beck's two hats**: "Does this change alter OBSERVABLE behavior?" **Yes** (add/change a feature, fix a bug) → there (the anti-flailing guards for behavior change). **No** (structure only, outputs/API/side-effects identical) → here. They **co-fire in sequence** for "make the change easy, then make the easy change": preparatory refactor here (hat 1, own step) → feature there (hat 2). If a diff does both, it violates G1 — split it. |
+| Repository instructions and domain owner | **DECISIVE cut = Beck's two hats**: "Does this change alter OBSERVABLE behavior?" **Yes** (add/change a feature, fix a bug) → follow repository instructions and the relevant domain owner. **No** (structure only, outputs/API/side-effects identical) → here. For "make the change easy, then make the easy change": preparatory refactor here (hat 1, own step) → feature under repository instructions (hat 2). If a diff does both, it violates G1 — split it. |
 | `practicing-tiger-style` | **CO-FIRE**: “Does behavior-preserving restructuring also need a ledger review of bounds, resource lifetime, and negative cases?” **Yes** → `practicing-tiger-style` owns the cross-language ledger review; this skill retains the preservation oracle and structural purpose. |
-| PERFORMANCE / OPTIMIZATION asks | Goal = change a runtime observable (latency / throughput / memory / allocation) — "make it faster", "optimize", "this is slow" — is **behavior-changing on the declared observable surface** (`references/safety-net.md` §5) → `implementing-and-debugging`, **even when phrased as "clean up"**. Fowler separates refactoring from optimization (optimization often trades clarity away — the opposite of the PURPOSE pole). A preparatory reshape BEFORE the measured optimization co-fires in sequence: reshape here → optimize there, profiler-first (`references/strategy.md`). |
+| PERFORMANCE / OPTIMIZATION asks | Goal = change a runtime observable (latency / throughput / memory / allocation) — "make it faster", "optimize", "this is slow" — is **behavior-changing on the declared observable surface** (`references/safety-net.md` §5); follow repository instructions and the relevant domain owner, **even when phrased as "clean up"**. Fowler separates refactoring from optimization (optimization often trades clarity away — the opposite of the PURPOSE pole). A preparatory reshape BEFORE the measured optimization comes first: reshape here → optimize under repository instructions, profiler-first (`references/strategy.md`). |
 | `structuring-documents` | **PURPOSE cut = object**: that skill localizes information in a DOCUMENT/prose (MECE one-home, single-source-of-truth, backward-only reference DAG). This skill localizes responsibility in CODE. Same 認識体系 (Parnas's uses-DAG = its reference DAG; Martin's CCP = its single-update-point), different artifact — never run one on the other's object. |
-| `implementing-and-debugging` (again, on `raising-resolution`) | Inspecting the actual code + callers + git co-change before restructuring is `raising-resolution` running as a **silent sub-step** inside G3/G4 — not a separate fire. |
+| `raising-resolution` | Inspecting the actual code + callers + git co-change before restructuring is `raising-resolution` running as a **silent sub-step** inside G3/G4 — not a separate fire. |
 | `writing-typescript`, `writing-julia`, `writing-python`, `writing-rust`, `writing-bun-scripts`, `sui-move` | **Co-fire**: they own language idiom & language-specific safe transforms; this owns language-agnostic behavior-preservation + architecture. Follow the language skill for idiom, this for the two hats / oracle / deny-gate. |
 | local configuration / `driving-git` (concurrency) | **PURPOSE cut — one question each.** Isolation tier and how to launch it → declared local configuration and executable checks. What a session checks and announces when another may write the repo → `driving-git` shared-checkouts. **What shape the CODE needs so N editors do not collide → HERE** (`architecture.md` §8). |
 | `driving-git` | **DECISIVE — what vs how it enters history.** This skill owns WHAT changes and the oracle; how the change becomes commits (scope, message, rewrite, publish) and the `git stash`-not-`checkout .` discipline's owner is `driving-git`. Co-fire at commit time. Seam agrees in substance; do not byte-diff (2026-09-21) |
@@ -174,9 +174,9 @@ Mikado), "reshape this before I add the feature"
 
 MUST NOT fire: a single trivial tool-done rename / a pure formatter run / a one-line mechanical tidy ·
 adding or changing a feature, fixing a bug, or removing a supported feature/API
-(→ `implementing-and-debugging`) · a performance
+(→ repository instructions and the relevant domain owner) · a performance
 optimization that targets the timing/allocation observable surface — "make it faster / optimize /
-this is slow" (→ `implementing-and-debugging`, two hats; see the PERFORMANCE routing row) · reviewing
+this is slow" (→ repository instructions and the relevant domain owner; see the PERFORMANCE routing row) · reviewing
 an already-written diff (→ `/code-review`) · restructuring a DOCUMENT or prose, not code (→
 `structuring-documents`) · wiring a refactor-lint into hooks/CI (→ local configuration source and executable checks) · a
 from-scratch greenfield build with no existing code to preserve.

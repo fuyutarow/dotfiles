@@ -9,7 +9,7 @@ description: >-
   every authored module forbids `export`/`@reexport`; stable API uses `public`; package source
   forbids implicit imports. MANDATORY before Julia code or a recordable run. §2.0 forbids FD
   derivatives, grid optimization, and lerp-as-evaluation.
-  Co-fire: feature/bugfix → implementing-and-debugging first. Refactor → refactoring-code governs.
+  Feature/bugfix → follow repository instructions and this language owner. Refactor → refactoring-code governs.
   GPU kernel work → optimizing-julia-gpu-kernels after host type discipline. Formal proofs →
   proving-theorems. Does an identity hold (記号検算) → verifying-symbolic-identities. Python tooling → running-python-tools. Config authority →
   governing-configuration-systems. New repo → wiring-repositories first. Descriptive,
@@ -60,7 +60,7 @@ Run through `agent-resource-run`. P7 alone owns resource limits.
 |---|---|
 | governing-configuration-systems | **DECISIVE:** Julia manifests/parsers → HERE. Config authority → there. |
 | `wiring-repositories` | **BY ARTIFACT:** Julia package content → HERE. Repo layer set and polyglot roots → there. |
-| `implementing-and-debugging` | **Co-fire:** its BUILD/DEBUG gate first; Julia correctness here. |
+| Repository instructions and this language owner | Implement and debug Julia code under repository instructions; Julia correctness is covered here. |
 | `refactoring-code` | **Co-fire:** it governs behavior preservation; Julia transforms and oracles here. |
 | `practicing-tiger-style` | **LANGUAGE:** Julia mechanism → HERE. Cross-language risk ledger → there. |
 | `proving-theorems` | **PURPOSE:** formal theorem → there. Julia computation or experiment → HERE. |

@@ -69,7 +69,7 @@ Japanese prose. Rungs: **R1**, **R2**, **R3**, **R3u**, **R4**, **R5**. Terms: *
 |---|---|
 | `writing-julia` | **PURPOSE:** does the ask decide whether an identity HOLDS? Yes → HERE, including which exact-CAS tool decides it. Code, packages for building or generating code, install and TTFX, Symbolics codegen, `lambdify` to AD → there. Its JG gates govern any Julia this skill writes. |
 | `proving-theorems` | **PURPOSE:** R1 certification, statement faithfulness and the `sorry` ledger → there. Choosing R2–R5, running the CAS, finding witnesses (cofactors for `linear_combination`) → HERE. A CAS result is an untrusted oracle until a kernel replays it. |
-| `implementing-and-debugging` | **Co-fire:** a new or broken checking script goes through its BUILD/DEBUG gate first. |
+| Relevant language/domain owner | A new or broken checking script follows repository instructions and its relevant language/domain owner. |
 | `validating-experimental-evidence` | **DECISIVE:** equality of mathematical expressions → HERE. A measured number against a baseline → there. |
 | `systematizing-knowledge` | **PURPOSE:** surveying CAS tools or the identity-testing literature → there. Checking a specific identity → HERE. |
 | `arguing-research-papers` | **PURPOSE:** whether a paper's argument or claim stands → there. Whether its equation (n) holds → HERE. |

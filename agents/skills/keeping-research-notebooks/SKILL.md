@@ -110,7 +110,7 @@ N3 and N4 detail: `references/launch-and-land.md`. N5 detail: `references/editio
 | Write or rename the commit or launch task body | `wiring-mise-tasks` |
 | What a measured number licenses: leak, footing, regression claim | `validating-experimental-evidence` |
 | Which experiment to run next | `driving-bibifi-cycles` |
-| Fix a bug inside a kernel | `implementing-and-debugging`, then the language skill |
+| Fix a bug inside a kernel | Follow repository instructions and the language skill |
 
 The full fire/no-fire set is `tests/triggers.md`; desk-check it after any description edit.
 

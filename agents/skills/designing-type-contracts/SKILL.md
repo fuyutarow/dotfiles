@@ -4,8 +4,8 @@ description: >-
   Designs type-as-spec contracts: 型設計, 仕様としての型, domain modeling, schema-first,
   parse don't validate, illegal states, smart constructors, newtypes, and typestate.
   Use when choosing which invariants types, parsers, or state APIs must enforce.
-  Stops at a scoped TYPE CONTRACT and verification plan; implementation → implementing-and-debugging
-  plus writing-*; configuration authority/signing → governing-configuration-systems;
+  Stops at a scoped TYPE CONTRACT and verification plan; implementation → repository instructions
+  and writing-*; configuration authority/signing → governing-configuration-systems;
   consequential recovery/resource constraints → practicing-tiger-style. Not for routine annotations,
   syntax explanations, or generic architecture reviews. English skill; respond in the user's language.
 ---
@@ -110,7 +110,7 @@ No harness → same map, serial.
 | Request | Owner / boundary |
 |---|---|
 | Choose invariant representation or audit what a type/schema actually enforces | Here. |
-| Implement/fix the parser, feature, or behavior | `implementing-and-debugging` first; consult here only for unresolved invariant placement. |
+| Implement/fix the parser, feature, or behavior | Follow repository instructions and the relevant language owner; consult here only for unresolved invariant placement. |
 | Preserve behavior while restructuring existing code | `refactoring-code`; changed accepted inputs or public construction paths require change discipline. |
 | Language syntax, library choice, or ordinary annotation | `writing-rust`, `writing-typescript`, `writing-python` or the language owner; no extra contract ceremony. |
 | Configuration overrides, effective authority, signing or canonical bytes | `governing-configuration-systems`; here only for an unresolved value invariant. |

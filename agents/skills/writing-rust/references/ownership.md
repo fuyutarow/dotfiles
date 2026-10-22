@@ -4,8 +4,7 @@
 > reflex `.clone()` / `Arc<Mutex<_>>` / `unsafe` / `.unwrap()` trades a *modeling* problem for a
 > runtime cost, a lock, UB risk, or a hidden panic. **Restructure ownership first.** This file is
 > the toolkit for doing that, plus the rules for the cases where an escape hatch is genuinely
-> correct. Co-fires with `implementing-and-debugging`: the band-aid-vs-root-cause rule is its
-> territory; this is the Rust-specific form.
+> correct. Follow repository instructions and the relevant Rust guidance for changes.
 
 ## The deny-gate
 

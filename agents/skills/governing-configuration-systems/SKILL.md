@@ -119,7 +119,7 @@ No harness means the same map, serial.
 | Ask | Route |
 |---|---|
 | “Which value invariant belongs in a type, parser, or state API?” | `designing-type-contracts`; this skill retains configuration authority, overrides, representation and integrity. Link its result into C4 when needed. |
-| “Add one flag to this existing CLI config parser.” | implementing-and-debugging plus the language owner. |
+| “Add one flag to this existing CLI config parser.” | Follow repository instructions and the language owner. |
 | “How do I configure Claude Code hooks, permissions, or MCP?” | Inspect the declared local configuration and executable checks. |
 | “Which config layers and tasks should this repository install?” | wiring-repositories. |
 | “Which Rust/Python/Julia manifest key or parser API should I use?” | The applicable writing-* skill. |

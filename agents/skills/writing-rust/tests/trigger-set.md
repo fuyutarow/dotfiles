@@ -57,8 +57,8 @@ states the order. Created v2607.1.0 (2026-07-06).
 |---|---|
 | "Set up Rust plus a web frontend, with hooks and mise tasks" | `wiring-repositories` admits roots/layers; RG5 owns Cargo semantics; `wiring-mise-tasks` owns tasks |
 | "Plan a Rust project layout without writing code or changing dependencies" | RG5 applies; RG0 codebase dependency sweep does not fire solely for the plan |
-| 「この Rust モジュールに機能を足して」 | `implementing-and-debugging` BUILD gate first (intent/edit-surface/root-cause) → this skill for the Rust inside (RG0–RG4) |
+| 「この Rust モジュールに機能を足して」 | repository instructions and this skill for Rust-specific guidance (RG0–RG4) |
 | 「この Rust パッケージ、リファクタして」 | `refactoring-code` governs (two hats / oracle / deny-gate) → this skill supplies the Rust oracle (`cargo check`+clippy+nextest) + Rust-safe transforms |
-| 「動かない Rust コードをデバッグして」 | `implementing-and-debugging` DEBUG gate first → this skill for Rust-specific diagnosis (`clippy`, `cargo check`, the error model) |
+| 「動かない Rust コードをデバッグして」 | repository instructions and this skill for Rust-specific diagnosis (`clippy`, `cargo check`, the error model) |
 | 「Rust crate を rebrand（rename＋dep 追加/コード改修・refactoring-code 統治下）」 | `refactoring-code` two-hats/oracle が統治 → だが **dep 追加/コード改修**を伴うので RG0 の**入場 sweep は依然 owed**（`[package].name` の string 変更単体でなく実作業が trigger・"oracle" 役でも免除されない） |
 | "publish my Rust CLI and also fix the arg parsing" | `growing-oss-adoption` (publish/adoption) + this skill (the arg-parsing code / crate choice) — parallel, different concerns |

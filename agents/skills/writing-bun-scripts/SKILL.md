@@ -141,7 +141,7 @@ FIRES:
 | 「この bash スクリプト、bun ts に書き換えて」 | the migration core |
 | 「移行した skill scripts、拙いから全面リファクタして」 | the standing work order — co-fire `refactoring-code` (governs: two hats, oracle); this supplies the Refactor map + the bun oracle |
 | "write a script that tallies brew leaves vs the Brewfile" | no bun keyword — BG0 routes local automation to bun ts |
-| 「probe-models.ts に --json フラグ足して」 | editing a house bun script (co-fire `implementing-and-debugging` FIRST when non-trivial) |
+| 「probe-models.ts に --json フラグ足して」 | editing a house bun script under repository instructions |
 | 「この script、yaml パーサ import していい？」(a bun script is in context) | BG3 dependency ladder |
 | 「hooks に新しい detector 足して」 | inspect the local event/matcher declaration FIRST; this owns the hook body |
 | 「この bootstrap の .sh も ts 化しよう」 | fires: check the callers — runs after bun → port it (link-dots.ts, 2026-10-05); truly before bun (installs bun) → stays a `bootstrap` shim (BG0) |
@@ -174,7 +174,7 @@ MUST NOT fire (route):
 | `forging-skills` | PURPOSE — WHETHER a skill ships a script + floor-vs-semantic doctrine → theirs; HOW that script is written → here. |
 | local configuration source and executable checks | PURPOSE — hook EVENTS/matchers/settings.json follow their declared source and checks; the hook's `.ts` body → here (hooks rows in BG2/BG3). House hook bodies follow this skill. |
 | `agx` / `driving-grok` / `driving-antigravity` | PURPOSE — their CLI laws and models → their owner; generic spawn/envelope/timeout craft → here (their scripts are corpus exemplars). |
-| `implementing-and-debugging` / `refactoring-code` | co-fire with ORDER on any behavior change / restructure — they govern; this supplies the bun oracle (floor + `bun test` green bracket) and the target idioms. |
+| `refactoring-code` | governs behavior-preserving restructure; this supplies the Bun oracle (floor + `bun test` green bracket) and target idioms. Follow repository instructions for implementation and debugging. |
 | `raising-resolution` | silent sub-step: probe the actual runtime (`bun --version`, run the command) before asserting a Bun fact — never recall one from training. |
 
 ## Reference index — load the file you need

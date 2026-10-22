@@ -6,7 +6,7 @@ description: >-
   Use for Tigerレビュー or consequential state, concurrency, capacity, recovery,
   and performance contracts, including prototype promotion and costly R&D.
   Produces scoped design decisions or findings with checks and remaining uncertainty.
-  Bug diagnosis belongs to implementing-and-debugging; language mechanisms to writing-*;
+  Bug diagnosis follows repository instructions and the relevant domain owner; language mechanisms to writing-*;
   skill revision to forging-skills. Disposable sketches use ordinary domain checks.
   English skill; respond in the user's language.
 ---
@@ -46,7 +46,7 @@ Choose from the requested action, before selecting checks:
 |---|---|---|
 | Review or assess an existing design/code | Review | Inspect selected boundaries; report each finding, evidence, untested condition, and clearing check. Finish the review even if the implementation remains unverified. Do not edit the target. |
 | Design without implementation | Design | Propose enforcement and checks for every selected requirement; expose unresolved decisions and assumptions. Finish with design readiness, not runtime acceptance. |
-| Build, fix, optimize, or harden | Change | Diagnose existing failures with `implementing-and-debugging` first. For new behavior, define the relevant contracts before implementation. Implement within authorization, run applicable checks, and report remaining gaps. |
+| Build, fix, optimize, or harden | Change | Follow repository instructions and the relevant domain owner when diagnosing failures. For new behavior, define the relevant contracts before implementation. Implement within authorization, run applicable checks, and report remaining gaps. |
 
 A request combining review and changes uses Change mode only for the authorized edits.
 History or explanation alone uses ordinary explanation or `systematizing-knowledge`.
@@ -171,7 +171,7 @@ The numbers are constructed example inputs, not Tiger thresholds.
 
 | Question | Owner / relationship |
 |---|---|
-| Root cause or observable behavior change | `implementing-and-debugging`; this skill adds the selected constraints |
+| Root cause or observable behavior change | Follow repository instructions and the relevant domain owner; this skill adds the selected constraints |
 | Behavior-preserving structural change | `refactoring-code`; apply this procedure only to consequential boundaries |
 | Type/schema invariant placement or language mechanism | `designing-type-contracts` or `writing-*`; link their enforcement into the record |
 | General decomposition or deployment choice | Task/domain owner; this skill checks selected state/resource/failure constraints |

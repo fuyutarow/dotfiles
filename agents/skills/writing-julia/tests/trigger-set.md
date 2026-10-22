@@ -164,11 +164,11 @@ MUST NOT FIRE as JG8 (near-miss):
 
 | Ask | Expected order |
 |---|---|
-| 「Julia のこのモジュールに機能を足して」 | `implementing-and-debugging` BUILD gate first → this skill for the Julia inside |
+| 「Julia のこのモジュールに機能を足して」 | repository instructions and this skill for Julia-specific guidance |
 | 「この Julia パッケージ、リファクタして」 | `refactoring-code` (two hats / oracle / deny-gate) governs → this skill supplies JET/Aqua bracket + JG3 transforms |
 | 「Julia で数値計算を GPU 化したい」(型設計から) | this skill (JG2 type discipline) co-fires BEFORE `optimizing-julia-gpu-kernels` — instability that is slow on CPU is a compile error in a kernel |
 | 「サブエージェントに Julia の rank 探索を並列実行させたい。RAM と GPU 上限も決めて」 | this skill owns Julia method/run discipline; `orchestrating-agents` P7 co-fires before the pilot and owns the envelope/admission |
-| 「動かない Julia コードをデバッグして」 | `implementing-and-debugging` DEBUG gate first → this skill for Julia-specific diagnosis (`@code_warntype`, JET) |
+| 「動かない Julia コードをデバッグして」 | repository instructions and this skill for Julia-specific diagnosis (`@code_warntype`, JET) |
 | 「Julia package を含む新しい repo を一式 scaffold して」 | `wiring-repositories` chooses layers/order → this skill owns JG6 package contents |
-| 「既存 Julia package の export を全廃して breaking release にして」 | `implementing-and-debugging` governs migration → JG7 + PK7 enforce zero exports |
+| 「既存 Julia package の export を全廃して breaking release にして」 | follow repository instructions for migration → JG7 + PK7 enforce zero exports |
 | 「edition の state を GPU 対応にして、device を引数で選ばせたい」 | this skill JG8 (state type, entry argument, receipt) → `optimizing-julia-gpu-kernels` GKR/GK for the step and kernels |

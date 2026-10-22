@@ -5,8 +5,8 @@ description: >-
   build, and tool failures — error messages / エラーメッセージ, diagnostics / 診断, stderr,
   exit code, source span, hint, suggestion, actionable error, helpful error, and failure UX.
   Use when a developer must identify a failure and choose a correct next action. PURPOSE: wording
-  alone → linting-prose; root-cause investigation or implementation → implementing-and-debugging
-  first; configuration authority/integrity → governing-configuration-systems; interaction flow or
+  alone → linting-prose; root-cause investigation or implementation → follow repository instructions
+  and the relevant domain owner; configuration authority/integrity → governing-configuration-systems; interaction flow or
   end-user GUI recovery → designing-interactions. English skill; respond in the user's language
   (default Japanese).
 ---
@@ -81,7 +81,7 @@ Agent agreement cannot prove a cause or validate a repair. No harness → same m
 | Ask | Route |
 |---|---|
 | “Polish this already-correct one-line error.” | `linting-prose` — word choice and reader fit. |
-| “Why does this command/config fail; fix it.” | `implementing-and-debugging` first; use this skill once the failure class is known. |
+| “Why does this command/config fail; fix it.” | Follow repository instructions and the relevant domain owner; use this skill once the failure class is known. |
 | “What configuration is authoritative, signed, or effective?” | `governing-configuration-systems`. |
 | “Design the modal, retry flow, or recovery UI for an end user.” | `designing-interactions`. |
 | “Add telemetry, logs, traces, or an incident dashboard.” | Implement under the relevant domain owner; this skill owns emitted diagnostics, not observability architecture. |

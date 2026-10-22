@@ -87,6 +87,6 @@ only; v0 and v1 coexist as separate stores and formats.
 | Which experiment to run next | `driving-bibifi-cycles` |
 | Whether a number is sound benchmark evidence | `validating-experimental-evidence` |
 | Where an artifact belongs and which launcher to use | `keeping-research-notebooks` |
-| Changing the v1 implementation | `implementing-and-debugging` |
+| Changing the v1 implementation | Follow repository instructions and the relevant language/domain owner. |
 | Operating polysearch-v0 or reading its frozen records | `driving-polysearch` |
 

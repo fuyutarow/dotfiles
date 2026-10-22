@@ -82,11 +82,11 @@ unreconciled corpus that skill exists to prevent.
 An `OPENING` is a bill of work derived from a SIGNED position, addressed and expiring. A `HYPOTHESIS` is a claim about what is happening,
 derived from a live anomaly. It expires when its kill condition fires. Signed position with gaps → there. Anomaly in front of you → here.
 
-### `implementing-and-debugging` — PREDICATE cut, and the over-firing guard
+### Ordinary implementation — PREDICATE cut, and the over-firing guard
 
 Runtime question — does the current account already predict this failure? A stack trace naming the
 line. A known bug class. An obvious cause. In each, the account predicts it. There is no anomaly.
-This skill firing is ceremony. Route there with no packet.
+This skill firing is unnecessary. Follow repository instructions and the relevant domain owner, with no packet.
 
 This cut carries the most over-firing risk. "Something broke and I do not yet know why" reads like
 an anomaly and usually is not one. The discriminator: an anomaly requires an
@@ -96,8 +96,8 @@ ACCOUNT that made a prediction. "I have not looked yet" is not an account.
 
 1. **Anomaly with no frame** — could be declined by both this skill and `forging-novel-theses`.
    Owner: HERE.
-2. **Unexplained failure in code** — could be declined by both this skill and
-   `implementing-and-debugging`. Owner: `implementing-and-debugging`, unless an account exists that
+2. **Unexplained failure in code** — could be declined by both this skill and ordinary implementation
+   work. Follow repository instructions and the relevant domain owner, unless an account exists that
    positively predicted the opposite outcome.
 3. **Anomaly WITH a frame and donors** — explanation stays HERE; explicit transformation goes to forging.
    Candidate count and input availability do not select the operation. Mixed requests compose the two.

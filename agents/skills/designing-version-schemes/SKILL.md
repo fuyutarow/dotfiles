@@ -114,7 +114,7 @@ and no independent agent produces a target comparator receipt.
 
 | Ask | Route |
 |---|---|
-| “Change the `version` field in this `pyproject.toml`.” | implementing-and-debugging plus writing-python. |
+| “Change the `version` field in this `pyproject.toml`.” | Follow repository instructions and writing-python. |
 | “Which Cargo.toml release command publishes this crate?” | writing-rust; adoption concerns co-fire growing-oss-adoption. |
 | “Choose a memorable product name for v2.” | growing-oss-adoption. |
 | “Sign this release manifest and define its canonical JSON.” | governing-configuration-systems. |
@@ -128,7 +128,7 @@ and no independent agent produces a target comparator receipt.
 | `growing-oss-adoption` | PURPOSE: version semantics, comparator, and range contract → HERE; release distribution, adoption cadence, public positioning, and naming → there. |
 | `governing-configuration-systems` | DECISIVE: version identifier and its comparator policy → HERE; source/effective declaration, canonical representation, signing, and configuration acceptance → there. |
 | `writing-python` / `writing-rust` / `writing-typescript` | DECISIVE: a language ecosystem's manifest syntax, API, or publish command → the language owner; a cross-ecosystem versioning policy before that implementation → HERE. |
-| `implementing-and-debugging` | PURPOSE: a concrete version-field or release-script change → there; selecting or auditing the scheme it implements → HERE. |
+| Language owner and repository instructions | PURPOSE: a concrete version-field or release-script change follows repository instructions and its language owner; selecting or auditing the scheme it implements → HERE. |
 | `driving-git` | DECISIVE: what a version or tag MEANS → HERE; `git tag` / tag-push mechanics and every other git operation → there (2026-09-21). |
 
 ## Reference index

@@ -12,8 +12,8 @@ description: >-
   and account for its vocabulary → HERE; transform sourced seeds in a selected frame → there.
   Candidate count and possession of a donor set do not decide the route. Cuts: premise audit →
   surfacing-blind-spots; is the anomaly real → raising-resolution FIRST; one selected costly bet →
-  acting-on-hypotheses; literature corpus → systematizing-knowledge; obvious cause in code →
-  implementing-and-debugging.
+  acting-on-hypotheses; literature corpus → systematizing-knowledge; obvious cause in code → follow
+  repository instructions and the relevant domain owner.
   English skill; respond in the user's language (default Japanese).
 ---
 
@@ -164,7 +164,7 @@ MUST NOT fire (with route):
 
 | Ask | Route |
 |---|---|
-| "the stack trace names the line — fix it" | `implementing-and-debugging`; no anomaly, the account predicts this |
+| "the stack trace names the line — fix it" | Follow repository instructions and the relevant domain owner; no anomaly, the account predicts this |
 | "generate 5 thesis candidates for this frame; here's the donor set" | `forging-novel-theses` — frame selected, seed frozen |
 | "what assumptions is this plan making?" | `surfacing-blind-spots` — premise audit of an artifact, no anomaly |
 | "is this number actually right?" | `raising-resolution` — establishing the fact, not explaining it |
@@ -183,7 +183,7 @@ MUST NOT fire (with route):
 | `acting-on-hypotheses` | **LIFECYCLE/PURPOSE cut** (not cardinality — both sides hold exactly one): does a hypothesis already EXIST and is the question commit/pivot/kill on a costly, hard-to-reverse bet? **Yes** → there. **No, it has not been built yet** → here. This skill hands its packet over; it never decides the bet. |
 | `systematizing-knowledge` | **Co-fire, sequential never racing**: a literature corpus runs as an SoK there FIRST; its signed position is what this skill's `Supplied:` row cites. Never survey from inside a packet. |
 | `operationalizing-research-gaps` | **PURPOSE cut**: a SIGNED corpus position's gaps → typed expiring `OPENING` rows there. A live anomaly in front of you → here. An `OPENING` is a bill of work; a `HYPOTHESIS` is a claim about what is happening. |
-| `implementing-and-debugging` | **PREDICATE cut**: does the current account already predict this failure (a named bug, a stack trace, a known cause)? **Yes** → there, no ceremony. **No — the account says this should not happen** → here. |
+| Domain implementation owner | **PREDICATE cut**: does the current account already predict this failure (a named bug, a stack trace, a known cause)? **Yes** → follow repository instructions and the relevant domain owner. **No — the account says this should not happen** → here. |
 
 ## Execution model — fan out the attempt, sign the packet solo
 

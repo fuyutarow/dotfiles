@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { workspaceCounts, doctorFindings } from "../src/agx-snapshot.ts";
+import { seedAgxSnapshot } from "./helpers.ts";
 import { fleetLine } from "../src/fleet-line.ts";
 
 const root = await mkdtemp(join(tmpdir(), "fleet-line-"));
@@ -235,17 +236,20 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
     const snapshotDir = state;
     await mkdir(snapshotDir, { recursive: true });
     const snapshot = join(snapshotDir, "current-runs.json");
-    if (age >= 0)
-      await writeFile(
-        snapshot,
-        JSON.stringify({
+    if (age >= 0) {
+      const capturedAt = at - age * 1000;
+      const workspaces = workspaceCounts(tsv, capturedAt);
+      const findings = doctorFindings(doctorOutput, capturedAt);
+      seedAgxSnapshot(
+        { HOME: home },
+        {
           output: folded,
-          capturedAt: at - age * 1000,
-          exit: 0,
-          workspaces: workspaceCounts(tsv, at - age * 1000),
-          findings: doctorFindings(doctorOutput, at - age * 1000),
-        }),
+          capturedAt,
+          ...(workspaces === undefined ? {} : { workspaces }),
+          ...(findings === undefined ? {} : { findings }),
+        },
       );
+    }
     // A concurrent/background refresher is already responsible for this minute.
     await writeFile(snapshot + ".attempt", String(at));
     const output = await run(
@@ -294,9 +298,9 @@ test.each([
       row: "terra-high",
       dispatcher_session: i < here ? "here" : "elsewhere",
     }));
-    await writeFile(
-      join(dir, "current-runs.json"),
-      JSON.stringify({
+    seedAgxSnapshot(
+      { HOME: home },
+      {
         output: JSON.stringify({
           runs: rows,
           summary: {
@@ -307,8 +311,7 @@ test.each([
           },
         }),
         capturedAt: at,
-        exit: 0,
-      }),
+      },
     );
     await writeFile(join(dir, "agx-runs.json.attempt"), String(at));
     const output = await run(

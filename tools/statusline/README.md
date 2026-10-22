@@ -74,7 +74,12 @@ The sampler also publishes `owner.json.view`, using the same renderer, and atomi
 copies of both files. Normal empty-stdin renders read that prepared display and selected
 PIDs, update its clock, and show an age when sampling stops or the main file is unreadable.
 This removes cold dependency initialization and whole-rollout settings scans from each render.
-On first use, the full renderer reads the owner file, the three agx owner files, transcripts and the selected
+The sampler runs `agx status --json --cwd DIR` once per sampled directory and stores its
+schema-1 JSON in the existing owner file. The adapter preserves agx run, workspace,
+finding and judgment counts; failed collection retains the prior value as stale.
+The legacy enriched progress reader still resolves agx state until its separate
+`agx worker ls --json` / `last_progress_path` migration.
+On first use, the full renderer reads the owner file, transcripts and the selected
 PIDs under `/proc`. It never launches a collector, fetches a rate, writes a cache or waits
 for a session render lock. Standalone discovery uses the sampler's live session inventory;
 `statusline sessions` explicitly performs discovery when requested. The sampler removes

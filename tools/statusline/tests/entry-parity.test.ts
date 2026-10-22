@@ -7,13 +7,17 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { setDefaultTimeout } from "bun:test";
 import { decodedJson } from "./decode.ts";
-import { cleanupTempDirs, tempHome, coreSnapshot } from "./helpers.ts";
+import {
+  cleanupTempDirs,
+  tempHome,
+  coreSnapshot,
+  seedAgxSnapshot,
+} from "./helpers.ts";
 import { z } from "../src/zod.ts";
-import { agxSnapshotPath } from "../src/agx-snapshot.ts";
 import { version } from "../package.json";
 import { hasBareUnavailable } from "../src/ansi.ts";
 
@@ -382,7 +386,11 @@ async function expectGolden(
       chmodSync(path, 0o755);
     };
     fake("git", "echo fixture-branch");
-    fake("agx", `exec "${process.execPath}" -e '${AGX_FIXTURE_RUNNER}'`);
+    fake(
+      "agx",
+      `if [ "$1" = "status" ]; then exec "${process.execPath}" -e 'process.stdout.write(await Bun.file(process.env.HOME + "/agx-status.json").text())'; fi
+exec "${process.execPath}" -e '${AGX_FIXTURE_RUNNER}'`,
+    );
     fake(
       "ps",
       "echo '9 02:00 /x/agent-resource-run --manifest /m/job.resource.json'\necho '1 00:30 /x/scratchpad/leak'",
@@ -496,13 +504,22 @@ async function expectGolden(
       env,
     });
     expect(agxRows.exitCode, agxRows.stderr.toString()).toBe(0);
-    const snapshotPath = agxSnapshotPath(env);
-    mkdirSync(dirname(snapshotPath), { recursive: true });
-    writeFileSync(
-      snapshotPath,
-      JSON.stringify(coreSnapshot(agxRows.stdout.toString(), NOW)),
+    const snapshotPath = seedAgxSnapshot(
+      env,
+      coreSnapshot(agxRows.stdout.toString(), NOW),
+      "/fixture",
     );
     expect(existsSync(snapshotPath)).toBe(true);
+    const owner = decodedJson(
+      z.object({
+        fields: z.record(z.string(), z.object({ value: z.unknown() })),
+      }),
+      readFileSync(snapshotPath, "utf8"),
+    );
+    writeFileSync(
+      join(home, "agx-status.json"),
+      JSON.stringify(owner.fields["agx:/fixture"]?.value),
+    );
     const run = async (entry: string) => {
       await seed();
       const sampler = Bun.spawnSync(

@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { agxSnapshotPath } from "../src/agx-snapshot.ts";
+import { seedAgxSnapshot } from "./helpers.ts";
 import { decodedJson } from "./decode.ts";
 import { z } from "../src/zod.ts";
 
@@ -104,19 +104,15 @@ test("worker snapshot uses doctor's classification and hides vendor sessions", a
     (record) => record.finding === "orphaned",
   ).length;
   expect(doctorLost).toBe(1);
-  await Bun.write(
-    agxSnapshotPath(env),
-    JSON.stringify({
-      output: listing.stdout,
+  seedAgxSnapshot(env, {
+    output: listing.stdout,
+    capturedAt: Temporal.Instant.from(at).epochMilliseconds,
+    findings: {
+      kinds: { orphaned: 1 },
+      lost: doctorLost,
       capturedAt: Temporal.Instant.from(at).epochMilliseconds,
-      exit: 0,
-      findings: {
-        kinds: { orphaned: 1 },
-        lost: doctorLost,
-        capturedAt: Temporal.Instant.from(at).epochMilliseconds,
-      },
-    }),
-  );
+    },
+  });
   // Run the readers and renderer under the same isolated environment as the CLI.
   // routeLines resolves dispatcher identity from process.env, not the scan's env argument.
   const renderer = join(root, "render.ts");

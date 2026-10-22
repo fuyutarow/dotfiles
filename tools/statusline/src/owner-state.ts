@@ -11,13 +11,9 @@ import {
   sessionProcessMatches,
 } from "./session-discovery.ts";
 
-export const ownerStatePath = () =>
-  process.env.STATUSLINE_OWNER_STATE ??
-  join(
-    join(process.env.HOME ?? "", ".local/state"),
-    "statusline",
-    "owner.json",
-  );
+export const ownerStatePath = (env: NodeJS.ProcessEnv = process.env) =>
+  env.STATUSLINE_OWNER_STATE ??
+  join(join(env.HOME ?? "", ".local/state"), "statusline", "owner.json");
 export const OwnerFieldSchema = z.object({
   at: z.number(),
   value: z.unknown(),
@@ -149,8 +145,10 @@ const RateSchema = z
     ...(credits === undefined ? {} : { credits }),
   }));
 
-export async function readOwnerState(): Promise<OwnerState | undefined> {
-  const path = ownerStatePath();
+export async function readOwnerState(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<OwnerState | undefined> {
+  const path = ownerStatePath(env);
   for (const candidate of [path, `${path}.last-good`]) {
     const text = await readFile(candidate, "utf8").catch(() => null);
     const parsed =
@@ -314,7 +312,7 @@ export function ownerSources(
     dispatchWarning: async () =>
       (await read("dispatchWarning", resultSchema(z.string().optional()))) ??
       ok(undefined),
-    routes: () => Promise.resolve(undefined), // The builder reads agx owner files directly.
+    routes: () => Promise.resolve(undefined), // The builder adapts agx data from this owner cache.
     herdrReport: () => Promise.resolve(),
   };
 }

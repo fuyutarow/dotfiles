@@ -15,11 +15,21 @@ import {
 } from "../../shared/src/dispatch-pricing.ts";
 import {
   readAgxSnapshotAsync,
-  stateDir as agxStateDir,
   type RunSnapshotSource,
   type WorkspaceCounts,
   type FleetFindings,
 } from "./agx-snapshot.ts";
+
+// SEP-STATUSLINE-STATUS-CLI-1023 exemption: only the legacy progress reader
+// resolves agx state. The later progress migration uses agx worker ls --json
+// last_progress_path and removes this resolver with that reader.
+function agxStateDir(env: NodeJS.ProcessEnv): string {
+  return (
+    [env.AGX_NEXT_STATE_DIR, env.AGX_STATE_DIR].find(
+      (value) => value !== undefined && value !== "",
+    ) ?? join(join(env.HOME ?? homedir(), ".local/state"), "agx-next")
+  );
+}
 
 // Render rows use agx's published listing and doctor counts. Legacy marker readers below
 // remain compatibility APIs; the dataframe never calls them or enriches the core rows.

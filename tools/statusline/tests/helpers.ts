@@ -1,7 +1,85 @@
-import { jsonOf, z } from "../src/zod.ts";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { fromThrowable, jsonOf, z } from "../src/zod.ts";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import {
+  agxStatusKey,
+  type FleetFindings,
+  type WorkspaceCounts,
+} from "../src/agx-snapshot.ts";
+import { ownerStatePath, OwnerStateSchema } from "../src/owner-state.ts";
+import { decodedJson } from "./decode.ts";
+
+/** Convert legacy listing fixtures into the sampler's CLI wire cache. */
+export function seedAgxSnapshot(
+  env: NodeJS.ProcessEnv,
+  snapshot: {
+    output: string;
+    capturedAt: number;
+    findings?: FleetFindings;
+    workspaces?: WorkspaceCounts;
+  },
+  cwd = process.cwd(),
+) {
+  const listing = decodedJson(
+    z.union([
+      z.array(z.unknown()),
+      z.object({ runs: z.array(z.unknown()), summary: z.unknown() }),
+    ]),
+    snapshot.output,
+  );
+  const findings = snapshot.findings;
+  const workspaces = snapshot.workspaces;
+  const value = {
+    schema: 1,
+    runs: {
+      source: "current",
+      captured_at: snapshot.capturedAt,
+      age_s: 0,
+      reason: null,
+      rows: Array.isArray(listing) ? listing : listing.runs,
+      summary: Array.isArray(listing) ? null : listing.summary,
+    },
+    workspaces:
+      workspaces === undefined
+        ? null
+        : {
+            ...workspaces,
+            captured_at: workspaces.capturedAt,
+            fleet_known: workspaces.fleetKnown,
+          },
+    findings:
+      findings === undefined
+        ? null
+        : { ...findings, captured_at: findings.capturedAt },
+    judgments: { by_session: {}, repository: 0, land: 0, why: null },
+  };
+  const path = ownerStatePath(env);
+  const previous = fromThrowable(() => readFileSync(path, "utf8"))();
+  const parsed = previous.isOk()
+    ? jsonOf(OwnerStateSchema).safeParse(previous.value)
+    : undefined;
+  const owner =
+    parsed?.success === true ? parsed.data : { schema: 1, fields: {} };
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(
+    path,
+    JSON.stringify({
+      ...owner,
+      fields: {
+        ...owner.fields,
+        [agxStatusKey(cwd)]: { at: snapshot.capturedAt, value },
+      },
+    }),
+  );
+  return path;
+}
 
 const dirs: string[] = [];
 export function tempDir(prefix: string): string {

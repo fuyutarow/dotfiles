@@ -32,6 +32,8 @@ import {
 } from "./presentation.ts";
 import { render } from "./format.ts";
 import { readCoreRuns } from "./core-runs.ts";
+import { agxStatusKey } from "./agx-snapshot.ts";
+import { collectAgxStatus } from "./agx-collector.ts";
 import { renderField } from "./field-state.ts";
 import { version } from "../package.json";
 import { readFleetSession } from "../../shared/src/fleet-session.ts";
@@ -262,6 +264,21 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
       ).map((key) => save(key, COLLECTOR_SOURCES[key])),
       ...[...roots].map((root) =>
         save(`repo:${root}`, () => COLLECTOR_SOURCES.repoState(root)),
+      ),
+      ...[
+        ...new Set([
+          process.cwd(),
+          ...roots,
+          ...sessions.map((session) => session.cwd),
+          ...(payloads ?? []).flatMap((payload) =>
+            payload.cwd === undefined ? [] : [payload.cwd],
+          ),
+        ]),
+      ].map((cwd) =>
+        save(agxStatusKey(cwd), async () => {
+          const result = await collectAgxStatus(cwd);
+          return result.isOk() ? result.value : { error: result.error };
+        }),
       ),
     ]);
     await Promise.all(

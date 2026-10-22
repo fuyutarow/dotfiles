@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.0 — 2026-10-23
+
+- Collect agx status JSON in the sampler and render run, workspace, finding and judgment rows from the owner cache.
+
 ## 0.20.18 — 2026-10-23
 
 - Read Jev prices from the agx-worker roster CLI

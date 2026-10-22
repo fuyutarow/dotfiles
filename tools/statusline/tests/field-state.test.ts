@@ -1,14 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { err, ok } from "neverthrow";
 import {
   buildDataframe,
@@ -16,7 +9,7 @@ import {
 } from "../src/build-dataframe.ts";
 import { observed, renderField, retainField } from "../src/field-state.ts";
 import { render } from "../src/format.ts";
-import { agxSnapshotPath } from "../src/agx-snapshot.ts";
+import { seedAgxSnapshot } from "./helpers.ts";
 import { jsonOf, z } from "../src/zod.ts";
 import type { SessionStatus } from "../src/session-status.ts";
 import { ROW_KINDS, renderRows, type DisplayRows } from "../src/row-state.ts";
@@ -331,11 +324,9 @@ test("three disk-snapshot workers survive an outer dispatch timeout, including s
     AGX_DISPATCHER_SESSION: "",
     CLAUDE_CODE_SESSION_ID: "",
   };
-  const path = agxSnapshotPath(env);
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(
-    path,
-    JSON.stringify({
+  seedAgxSnapshot(
+    env,
+    {
       output: JSON.stringify(
         [1, 2, 3].map((n) => ({
           id: `worker-${n}`,
@@ -349,8 +340,8 @@ test("three disk-snapshot workers survive an outer dispatch timeout, including s
         })),
       ),
       capturedAt: now() - 650000,
-      exit: 0,
-    }),
+    },
+    root,
   );
   const entry = join(import.meta.dir, "../src/statusline.ts");
   const input = JSON.stringify({

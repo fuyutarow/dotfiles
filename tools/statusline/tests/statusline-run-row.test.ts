@@ -12,15 +12,18 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fromThrowable } from "neverthrow";
 import { serializeActiveMarker } from "../../shared/src/dispatch-state.ts";
 import { agxJobRunsAsync, agxRouteRunsAsync } from "../src/dispatch-runs.ts";
 import { ProgressReaderSchema } from "../../shared/src/dispatch-state.ts";
 import { decodedJson } from "./decode.ts";
-import { coreSnapshot, isolatedStatuslineEnv } from "./helpers.ts";
+import {
+  coreSnapshot,
+  isolatedStatuslineEnv,
+  seedAgxSnapshot,
+} from "./helpers.ts";
 import { jsonOf, z } from "../src/zod.ts";
-import { agxSnapshotPath } from "../src/agx-snapshot.ts";
 import {
   deadOwnMarker,
   malformedMarker,
@@ -226,13 +229,9 @@ async function render(
     AGX_STATE_DIR: stateDir,
     XDG_STATE_HOME: xdgStateHome,
   });
-  const snapshotPath = agxSnapshotPath(renderEnv);
-  mkdirSync(dirname(snapshotPath), { recursive: true });
-  writeFileSync(
-    snapshotPath,
-    JSON.stringify(
-      coreSnapshot(agxRows, Temporal.Now.instant().epochMilliseconds),
-    ),
+  seedAgxSnapshot(
+    renderEnv,
+    coreSnapshot(agxRows, Temporal.Now.instant().epochMilliseconds),
   );
   const p = Bun.spawn([process.execPath, STATUSLINE], {
     stdin: new Blob([PAYLOAD]),
@@ -274,16 +273,10 @@ describe("legacy enriched Run row", () => {
       AGX_STATE_DIR: stateDir,
       AGX_JSON: rows,
     });
-    const snapshotPath = agxSnapshotPath(env);
-    mkdirSync(dirname(snapshotPath), { recursive: true });
-    writeFileSync(
-      snapshotPath,
-      JSON.stringify({
-        output: rows,
-        capturedAt: Temporal.Now.instant().epochMilliseconds,
-        exit: 0,
-      }),
-    );
+    seedAgxSnapshot(env, {
+      output: rows,
+      capturedAt: Temporal.Now.instant().epochMilliseconds,
+    });
     const scan = await agxRouteRunsAsync(env);
     expect(scan.unreadable).toBe(0);
     expect(scan.runs.filter((run) => !run.alive)).toHaveLength(0);
@@ -1435,16 +1428,10 @@ describe("legacy enriched Run row", () => {
         },
       ]),
     };
-    const snapshotPath = agxSnapshotPath(env);
-    mkdirSync(dirname(snapshotPath), { recursive: true });
-    writeFileSync(
-      snapshotPath,
-      JSON.stringify({
-        output: env.AGX_JSON,
-        capturedAt: Temporal.Now.instant().epochMilliseconds,
-        exit: 0,
-      }),
-    );
+    seedAgxSnapshot(env, {
+      output: env.AGX_JSON,
+      capturedAt: Temporal.Now.instant().epochMilliseconds,
+    });
     const first = await agxJobRunsAsync("dispatcher-short", env);
     const started = performance.now();
     const second = await agxJobRunsAsync("dispatcher-short", env);

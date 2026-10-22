@@ -15,7 +15,11 @@ import { version } from "../package.json";
 import { readAgxSnapshotAsync } from "../src/agx-snapshot.ts";
 import { cleanRetiredCaches } from "../src/sampler.ts";
 import { writeCacheAsync } from "../src/bounded.ts";
-import { coreSnapshot } from "./helpers.ts";
+import { coreSnapshot, seedAgxSnapshot } from "./helpers.ts";
+import { ownerStatePath } from "../src/owner-state.ts";
+import { agxStatusKey } from "../src/agx-snapshot.ts";
+import { z } from "../src/zod.ts";
+import { decodedJson } from "./decode.ts";
 import { jsonText } from "../src/zod.ts";
 
 const roots: string[] = [];
@@ -125,27 +129,21 @@ test("standalone and Claude stdin render owner files without any subprocess, net
     XDG_RUNTIME_DIR: "",
     HERDR_ENV: "0",
   };
-  await writeFile(
-    join(state, "current-runs.json"),
-    JSON.stringify(coreSnapshot("[]", at - 3600000)),
-  );
-  await writeFile(
-    join(state, "workspace-verdicts.json"),
-    JSON.stringify({
-      complete: true,
-      capturedAt: at,
-      counts: { total: 7, unlanded: 1, collectable: 2, legacy: 0 },
-      repos: {
-        [cwd]: {
-          capturedAt: at,
-          counts: { total: 2, unlanded: 1, collectable: 0, legacy: 0 },
-        },
+  seedAgxSnapshot(
+    env,
+    {
+      ...coreSnapshot("[]", at - 3600000),
+      workspaces: {
+        total: 7,
+        unlanded: 1,
+        collectable: 2,
+        legacy: 0,
+        here: 2,
+        capturedAt: at,
       },
-    }),
-  );
-  await writeFile(
-    join(state, "doctor.json"),
-    JSON.stringify({ complete: true, capturedAt: at, kinds: {}, lost: 0 }),
+      findings: { kinds: {}, lost: 0, capturedAt: at },
+    },
+    cwd,
   );
   const before = await readdir(home, { recursive: true });
   const invoke = async (selectedCwd: string, input: string) => {
@@ -209,39 +207,40 @@ test("standalone and Claude stdin render owner files without any subprocess, net
   );
 });
 
-test("only a newer input mtime marks derived agx and doctor state stale", async () => {
-  const state = await mkdtemp(join(tmpdir(), "owner-mtimes-"));
-  roots.push(state);
-  const env = { HOME: state, AGX_STATE_DIR: state };
+test("cache freshness follows CLI state and sampler failures rather than status-file mtimes", async () => {
+  const home = await mkdtemp(join(tmpdir(), "owner-cli-state-"));
+  roots.push(home);
+  const env = { HOME: home };
   const capturedAt = Temporal.Now.instant().epochMilliseconds - 3600000;
-  const runs = join(state, "current-runs.json"),
-    records = join(state, "records.jsonl"),
-    ws = join(state, "workspace-verdicts.json"),
-    doctor = join(state, "doctor.json");
-  await writeFile(records, "");
-  await writeFile(
-    ws,
-    JSON.stringify({
-      complete: true,
-      capturedAt,
-      counts: { total: 0, unlanded: 0, collectable: 0, legacy: 0 },
-    }),
-  );
-  await writeFile(runs, JSON.stringify(coreSnapshot("[]", capturedAt)));
-  await writeFile(
-    doctor,
-    JSON.stringify({ complete: true, capturedAt, kinds: {}, lost: 0 }),
-  );
-  await Promise.all([runs, doctor].map((path) => utimes(path, 2000, 2000)));
-  await Promise.all([records, ws].map((path) => utimes(path, 1000, 1000)));
+  seedAgxSnapshot(env, {
+    ...coreSnapshot("[]", capturedAt),
+    findings: { kinds: {}, lost: 0, capturedAt, stale: false },
+  });
   expect((await readAgxSnapshotAsync(env)).ageSeconds).toBe(0);
   expect((await readAgxSnapshotAsync(env)).findings?.stale).toBe(false);
-  await utimes(records, 3000, 3000);
+  const path = ownerStatePath(env);
+  const owner = decodedJson(
+    z.object({
+      schema: z.literal(1),
+      fields: z.record(
+        z.string(),
+        z.object({
+          at: z.number(),
+          value: z.unknown(),
+          error: z.string().optional(),
+        }),
+      ),
+    }),
+    await readFile(path, "utf8"),
+  );
+  const field = owner.fields[agxStatusKey(process.cwd())];
+  if (field === undefined) expect.unreachable("missing fixture field");
+  field.error = "agx status unavailable";
+  await writeFile(path, JSON.stringify(owner));
   const stale = await readAgxSnapshotAsync(env);
   expect(stale.ageSeconds).toBeGreaterThanOrEqual(3600);
   expect(stale.findings?.stale).toBe(true);
-  await writeFile(runs, "partial fixture");
-  expect((await readAgxSnapshotAsync(env)).rows).toEqual(stale.rows);
+  expect(stale.rows).toEqual([]);
 });
 
 test("failed atomic writes leave no temp files; retired presentation caches are removed by their owner", async () => {

@@ -70,6 +70,9 @@ type WorkspaceRun = {
   judgment?: { decision: "accept" | "reject" } | null;
 };
 
+const AGX_WORKER_LS_TIMEOUT_MS = 60_000;
+const AGX_WORKER_LS_TIMEOUT_ENV = "LAND_AGX_LS_TIMEOUT_MS";
+
 const ConsumerGateReportSchema = jsonOf(
   z.looseObject({
     ok: z.boolean(),
@@ -136,6 +139,17 @@ async function nextAgxRuns(
         `invalid agx-worker bin declaration: ${manifest.error.message}`,
       ),
     );
+  const timeoutSetting = process.env[AGX_WORKER_LS_TIMEOUT_ENV];
+  const timeoutMs =
+    timeoutSetting === undefined
+      ? AGX_WORKER_LS_TIMEOUT_MS
+      : Number(timeoutSetting);
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1)
+    return err(
+      new Error(
+        `${AGX_WORKER_LS_TIMEOUT_ENV} must be a positive integer number of milliseconds`,
+      ),
+    );
   const command = await runProcess(
     [
       process.execPath,
@@ -143,12 +157,16 @@ async function nextAgxRuns(
       "ls",
       "--json",
     ],
-    { cwd: root, env: process.env, timeout: 5_000 },
+    { cwd: root, env: process.env, signal: AbortSignal.timeout(timeoutMs) },
   );
+  if (command.timedOut)
+    return err(
+      new Error(`agx worker ls --json timed out after ${timeoutMs} ms`),
+    );
   if (command.exitCode !== 0)
-    return errAsync(
+    return err(
       new Error(
-        `agx worker ls --json failed: ${command.stderr.toString().trim()}`,
+        `agx worker ls --json failed with exit code ${command.exitCode}: ${command.stderr.toString().trim()}`,
       ),
     );
   const parsed = jsonOf(
@@ -290,9 +308,10 @@ export type WorkspacePreflightVerdict = {
 
 export function workspacePreflightVerdicts(
   workspace: string,
+  sourceRoot = resolve(import.meta.dir, ".."),
 ): ResultAsync<WorkspacePreflightVerdict[], Error> {
   return safeTry(async function* () {
-    const runs = yield* await workspaceRuns(workspace);
+    const runs = yield* await workspaceRuns(workspace, sourceRoot);
     const ticketByRun = new Map(
       runs.map((workspaceRun) => [workspaceRun.run_id, workspaceRun.ticket]),
     );
@@ -1434,6 +1453,7 @@ async function runProcess(
     cwd?: string;
     env?: NodeJS.ProcessEnv;
     timeout?: number;
+    signal?: AbortSignal;
     stdin?: "ignore";
     stdout?: "pipe";
     stderr?: "pipe";
@@ -1446,12 +1466,20 @@ async function runProcess(
     stderr: "pipe",
     timeout: options.timeout ?? 120_000,
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
+  const [stdout, stderr, exit] = await Promise.all([
     new Response(child.stdout).arrayBuffer(),
     new Response(child.stderr).arrayBuffer(),
-    child.exited,
+    child.exited.then((code) => ({
+      code,
+      timedOut: options.signal?.aborted ?? false,
+    })),
   ]);
-  return { stdout: Buffer.from(stdout), stderr: Buffer.from(stderr), exitCode };
+  return {
+    stdout: Buffer.from(stdout),
+    stderr: Buffer.from(stderr),
+    exitCode: exit.code,
+    timedOut: exit.timedOut,
+  };
 }
 
 function fromAsyncThrowable<A extends unknown[], T, E = unknown>(

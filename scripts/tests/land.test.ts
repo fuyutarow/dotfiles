@@ -29,6 +29,7 @@ import {
   packageBinProblems,
   removedCommandCallers,
   runLandConsumerGates,
+  workspacePreflightVerdicts,
 } from "../land.ts";
 import { landStateDir } from "../land-queue.ts";
 import { doctorReport } from "../land-doctor.ts";
@@ -86,6 +87,38 @@ async function writeToolChangelog(root: string, entry: string): Promise<void> {
     `# Changelog\n\n## ${entry}\n\n- entry\n\n## 1.0.0 — 2026-10-01\n\n- initial\n`,
   );
 }
+async function writeAgxLsFixture(root: string, source: string): Promise<void> {
+  const packageRoot = join(root, "tools/agx-worker");
+  await mkdir(join(packageRoot, "src"), { recursive: true });
+  await writeFile(
+    join(packageRoot, "package.json"),
+    JSON.stringify({ bin: { "agx-worker": "src/cli.ts" } }),
+  );
+  const cli = join(packageRoot, "src/cli.ts");
+  await writeFile(cli, `#!${process.execPath}\n${source}\n`);
+  await chmod(cli, 0o755);
+}
+async function withProcessEnv<T>(
+  values: Record<string, string>,
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = new Map(
+    Object.keys(values).map((key) => [key, process.env[key]]),
+  );
+  Object.assign(process.env, values);
+  return Promise.try(run).finally(() => {
+    previous.forEach((value, key) => {
+      restoreProcessEnv(key, value);
+    });
+  });
+}
+function restoreProcessEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    Reflect.deleteProperty(process.env, key);
+    return;
+  }
+  process.env[key] = value;
+}
 async function appendAcceptance(
   state: string,
   runId: string,
@@ -126,6 +159,81 @@ test("package bin targets must be executable and start with a shebang", async ()
 
 test("every repository package bin target is executable and has a shebang", async () => {
   expect(await packageBinProblems(REPO)).toEqual([]);
+});
+
+test("workspace listing reports its command and timeout duration", async () => {
+  const root = await mkdtemp(join(tmpdir(), "land-agx-ls-timeout-"));
+  temporary.push(root);
+  const workspace = join(root, "workspace");
+  const state = join(root, "agx-state");
+  await mkdir(workspace);
+  await writeAgxLsFixture(
+    root,
+    "await Bun.sleep(2_000); process.stdout.write('[]\\n');",
+  );
+
+  await withProcessEnv(
+    { AGX_STATE_DIR: state, LAND_AGX_LS_TIMEOUT_MS: "50" },
+    async () => {
+      const result = await workspacePreflightVerdicts(workspace, root);
+      expect(result.isErr()).toBe(true);
+      if (result.isErr())
+        expect(result.error.message).toBe(
+          "agx worker ls --json timed out after 50 ms",
+        );
+    },
+  );
+});
+
+test("workspace listing reports nonzero exit code and stderr", async () => {
+  const root = await mkdtemp(join(tmpdir(), "land-agx-ls-failure-"));
+  temporary.push(root);
+  const workspace = join(root, "workspace");
+  const state = join(root, "agx-state");
+  await mkdir(workspace);
+  await writeAgxLsFixture(
+    root,
+    "process.stderr.write('fixture failure'); process.exit(7);",
+  );
+
+  await withProcessEnv({ AGX_STATE_DIR: state }, async () => {
+    const result = await workspacePreflightVerdicts(workspace, root);
+    expect(result.isErr()).toBe(true);
+    if (result.isErr())
+      expect(result.error.message).toBe(
+        "agx worker ls --json failed with exit code 7: fixture failure",
+      );
+  });
+});
+
+test("workspace preflight invokes the available listing query and filters its rows", async () => {
+  const root = await mkdtemp(join(tmpdir(), "land-agx-ls-success-"));
+  temporary.push(root);
+  const workspace = join(root, "workspace");
+  const state = join(root, "agx-state");
+  const argsPath = join(root, "agx-args.json");
+  await mkdir(workspace);
+  await writeAgxLsFixture(
+    root,
+    `await Bun.write(process.env.LAND_AGX_LS_ARGS, JSON.stringify(process.argv.slice(2))); process.stdout.write(JSON.stringify([{id:'fixture-run',ticket:'fixture-ticket',workspace:${JSON.stringify(workspace)},judgment:{decision:'accept'}}]));`,
+  );
+
+  await withProcessEnv(
+    { AGX_STATE_DIR: state, LAND_AGX_LS_ARGS: argsPath },
+    async () => {
+      const result = await workspacePreflightVerdicts(workspace, root);
+      expect(result.isOk()).toBe(true);
+      if (result.isOk())
+        expect(result.value).toEqual([
+          { ticket: "fixture-ticket", run_id: "fixture-run", accept: true },
+        ]);
+      const args = jsonOf(z.array(z.string())).safeParse(
+        await readFile(argsPath, "utf8"),
+      );
+      expect(args.success).toBe(true);
+      if (args.success) expect(args.data).toEqual(["ls", "--json"]);
+    },
+  );
 });
 
 test("removed command preflight lists fixture callers and honors callers-cleared", async () => {

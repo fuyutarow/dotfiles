@@ -5,6 +5,11 @@
 
 ## 0. 結論
 
+**名前の決定 (2026-10-23、持ち主の指示):** リポジトリの設定ファイルは、ドットの付かない `agx.toml` とする。
+機械ごとの上書きは `agx.local.toml` とする (`mise.toml` と `mise.local.toml` と同じ形)。
+いまの `.agx.toml` は E1 で読むのをやめる。残っていたら黙って読まずに exit 2 で止め、`mv .agx.toml agx.toml` を示す (SEP-6)。
+以下で `<repo>/agx.toml` と書くのはこの名前のことで、§1 の「いまの姿」の `.agx.toml` は現状の名前である。
+
 いま agx が読む設定ファイルは、少なくとも 4 種類ある。分け方の軸は tool 名で、読み手と書き手と効く範囲ではない。
 そのために、同じ種類の値が二か所に分かれる一方で、性質の違う値が一つのファイルに混ざっている。
 
@@ -12,8 +17,8 @@
 
 | 層 | ファイル | 書き手 | 効く範囲 | commit するか |
 | --- | --- | --- | --- | --- |
-| L1 リポジトリの方針 | `<repo>/.agx.toml` | そのリポジトリの持ち主 (review を通る) | そのリポジトリを使う全機械 | する。trunk の revision から読む |
-| L2 機械ごとのリポジトリ上書き | `<repo>/.agx.local.toml` (gitignore) | その機械の操作者 | その機械のそのリポジトリ | しない。main checkout から読む |
+| L1 リポジトリの方針 | `<repo>/agx.toml` | そのリポジトリの持ち主 (review を通る) | そのリポジトリを使う全機械 | する。trunk の revision から読む |
+| L2 機械ごとのリポジトリ上書き | `<repo>/agx.local.toml` (gitignore) | その機械の操作者 | その機械のそのリポジトリ | しない。main checkout から読む |
 | L3 機械全体の操作方針 | `~/.config/agx/roster.toml` | 操作者 (dotfiles が宣言を配る) | その機械の全リポジトリ | dotfiles に宣言。配備先は 1 か所 |
 
 `.ws.toml` は L1 と L2 に吸収して廃止する。`trunk` の key はどこにも置かず、jj の `trunk()` を唯一の宣言にする。
@@ -58,7 +63,7 @@
 
 ## 2. 3 層の設定契約
 
-### 2.1 L1 リポジトリの方針 — `<repo>/.agx.toml`
+### 2.1 L1 リポジトリの方針 — `<repo>/agx.toml`
 
 ```toml
 schema = 1
@@ -71,7 +76,7 @@ ready = ["mise trust -q", "bun install --frozen-lockfile"]
 
 - Consumer: agx-worker (check、run、dispatch)、agx-ticket (new、ls、gc)、agx-ws (add の readiness)
 - Authority / writer: そのリポジトリの持ち主。変更はそのリポジトリの review と commit を通る
-- Effective configuration: main checkout の `trunk()` の revision にある `.agx.toml` (`jj file show -r 'trunk()' .agx.toml`)
+- Effective configuration: main checkout の `trunk()` の revision にある `agx.toml` (`jj file show -r 'trunk()' agx.toml`)
 - Source representation: TOML v1.0.0
 - Trust regime: human-authored, gated-decision
 - Signature / digest input: n/a
@@ -86,7 +91,7 @@ ready = ["mise trust -q", "bun install --frozen-lockfile"]
 - Positive case: `tickets = ".agents/tickets"` と `[ws] ready = [...]` を commit したリポジトリで、両方の命令が同じ `tickets` と `ready` を報告する
 - Negative case: `tickets = "/home/…"` (絶対 path)、未知の key `trunk = "alpha"`、`schema` の欠落は、どれも exit 2 と、直し方を示す 1 行で拒む
 
-### 2.2 L2 機械ごとのリポジトリ上書き — `<repo>/.agx.local.toml`
+### 2.2 L2 機械ごとのリポジトリ上書き — `<repo>/agx.local.toml`
 
 ```toml
 schema = 1
@@ -98,7 +103,7 @@ keep = ["/home/fuyu/Workspace/firedancer-arm-v4_dev"]
 
 - Consumer: L1 と同じ読み手
 - Authority / writer: その機械の操作者。commit しない (agx が `.gitignore` に入れるよう `agx ws doctor` で促す)
-- Effective configuration: main checkout の working file (例: `~/Workspace/firedancer/.agx.local.toml`)。workspace 側にあっても読まない
+- Effective configuration: main checkout の working file (例: `~/Workspace/firedancer/agx.local.toml`)。workspace 側にあっても読まない
 - Source representation: TOML v1.0.0
 - Trust regime: human-authored
 - Signature / digest input: n/a
@@ -158,18 +163,18 @@ codex の worker が model-floor を読むのはやめる。agx にとっての�
 
 | 段 | 内容 | 依存 | 検証 |
 | --- | --- | --- | --- |
-| E1 | 設定の reader を一つにする: L1 と L2 を読む関数を agx-worker に作り (S5 で `packages/core` に移す)、ticket-home.ts、tickets.ts、workspace.ts の 3 か所から使う。読む revision は L1 が `trunk()`、L2 が main checkout の working file | `ws-config-one-source-1023` (dotfiles のコーディネーター) の着地 | `bun test tools/agx-worker/tests/next/ticket-home.test.ts tools/agx-ticket/tests/lifecycle.test.ts tools/agx-ws/tests/workspace.test.ts` |
-| E2 | `.ws.toml` の廃止: `ready` を `.agx.toml` の `[ws]` へ、`keep` を `.agx.local.toml` へ。`.ws.toml` があったら exit 2 で移し方を示す。`trunk` の key は読まず、`trunk()` を使う | E1 | 同上と `bun test tools/agx-ws/tests/doctor.test.ts` |
+| E1 | 設定の reader を一つにし、名前を `agx.toml` / `agx.local.toml` に変える (`.agx.toml` は exit 2): L1 と L2 を読む関数を agx-worker に作り (S5 で `packages/core` に移す)、ticket-home.ts、tickets.ts、workspace.ts の 3 か所から使う。読む revision は L1 が `trunk()`、L2 が main checkout の working file | `ws-config-one-source-1023` (dotfiles のコーディネーター) の着地 | `bun test tools/agx-worker/tests/next/ticket-home.test.ts tools/agx-ticket/tests/lifecycle.test.ts tools/agx-ws/tests/workspace.test.ts` |
+| E2 | `.ws.toml` の廃止: `ready` を `agx.toml` の `[ws]` へ、`keep` を `agx.local.toml` へ。`.ws.toml` があったら exit 2 で移し方を示す。`trunk` の key は読まず、`trunk()` を使う | E1 | 同上と `bun test tools/agx-ws/tests/doctor.test.ts` |
 | E3 | `workspace_exclude` の扱い: 読み手がない (`tools/shared/src/workspace-policy.ts` に本番の import 元がない) ので、key ごと削除する | なし | `rr text 'workspace_exclude'` が spec 以外で NO_MATCH |
 | E4 | codex の worker が model-floor.toml を読むのをやめる | なし | `bun test tools/agx-worker/tests/codex.test.ts` |
-| E5 | 利用側の移行: dotfiles、coralbase、firedancer、polysearch-v1 の `.agx.toml`、`.ws.toml` を新しい形に書き換える。各リポジトリの持ち主の commit。coralbase の untracked の不変条件は、持ち主と決め直す | E2 | 各リポジトリで `agx worker check` と `agx ws gc --dry-run` |
+| E5 | 利用側の移行: dotfiles、coralbase、firedancer、polysearch-v1 の `.agx.toml` を `agx.toml` に改名し、`.ws.toml` を `agx.toml` の `[ws]` と `agx.local.toml` に分けて書き換える。各リポジトリの持ち主の commit。coralbase の untracked の不変条件は、持ち主と決め直す | E2 | 各リポジトリで `agx worker check` と `agx ws gc --dry-run` |
 | E6 | roster を L3 へ: `dispatch-roster.toml` を `~/.config/agx/roster.toml` に配備する (link:dots の表に 1 行)。loader は `AGX_ROSTER` → XDG の順で読み、`DISPATCH_ROSTER_PATH` を廃止する。`dispatch-pricing.ts` の独自の reader を消す | roster の consumer の切り替え (render と hook は済み) | `bun test tools/agx-worker/tests/public.test.ts tools/agx-worker/tests/selection.test.ts` と `mise run lint:config-map` |
 
 E1〜E4 は互いに独立していて、並べて出せる (E2 だけは E1 の後)。E5 は外の持ち主の作業である。E6 は S3 の roster の移動と一緒に行う。
 
 ## 5. 未決事項
 
-- **F1:** L2 のファイル名。`.agx.local.toml` は「main checkout にだけ置く untracked のファイル」で、mise の `mise.local.toml` と同じ慣習である。
+- **F1:** L2 のファイル名。`agx.local.toml` は「main checkout にだけ置く untracked のファイル」で、mise の `mise.local.toml` と同じ慣習である。
   別案は `~/.config/agx/repos/<repo の key>.toml` で、リポジトリの外に置く。前者を推す。理由は、どのリポジトリへの上書きかが置き場で分かり、
   coralbase の現状 (root の untracked のファイル) とも合うからである。
 - **F2:** coralbase の `.ws.toml` を untracked にした理由が、`ready` も機械ごとに変えたいということなのか、`keep` だけなのか。

@@ -66,7 +66,21 @@ prevent backend metadata writes. See [the call-site and patch inventory](docs/re
 
 The dispatcher does not detach, amend, or create ticket stores and does not run a pre-dispatch
 grader. `agx worker run` records an interim return as progress and continues the worker until completion or
-its timeout. Verification commands declared by the ticket run after the worker exits.
+its timeout. After the worker exits, effective `[verify].always` commands run in array order,
+followed by the ticket's `verify` commands. Both use the same working directory, environment,
+per-command logs, exit classification and outcome handling; any nonzero verification exit
+prevents an `ok` outcome. As with ticket verification, all commands run even after a failure.
+
+Repositories may declare `[verify]` with `always = ["command", "another command"]` in L1
+`agx.toml` or their XDG L2 repository override. The table is strict: only `always` is accepted,
+and its value must be an array of non-empty strings. The default is `[]`; L1 then L2 replace
+the array rather than concatenating it. An omitted key inherits, while `always = []` clears it.
+Resolution follows the existing immutable L1 and machine-local L2 reader for the execution
+repository. `agx worker check` prints effective non-empty always commands without executing them.
+Always command results carry `source: "[verify].always"` in the run's `verify` array and
+diagnostic output. When always commands are configured, the saved report also includes the
+complete ordered `verify` results. Without the key, existing output and verification behavior
+are preserved. Capacity runs skip both always and ticket verification.
 
 Vendor capacity ends a run with outcome `capacity` and temporary-unavailability exit 75. Codex's
 `Selected model is at capacity` and Claude's documented HTTP 529 `overloaded_error` are vendor

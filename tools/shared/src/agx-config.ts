@@ -8,12 +8,30 @@ import { z } from "./zod.ts";
 
 /** Only this error class changes the ticket CLI's existing failure exit code. */
 export class AgxConfigError extends Error {}
+const NonEmptyStrings = z.array(
+  z.string().refine((value) => value.trim().length > 0, "must not be empty"),
+);
+const VerifyConfig = z.strictObject({
+  always: NonEmptyStrings.optional(),
+});
+const WorkspaceConfig = z.strictObject({
+  ready: NonEmptyStrings.optional(),
+});
+const LocalWorkspaceConfig = z.strictObject({
+  ready: NonEmptyStrings.optional(),
+  keep: NonEmptyStrings.optional(),
+});
 const Config = z.strictObject({
   schema: z.literal(1),
   tickets: z.string().trim().min(1).optional(),
-  ws: z.record(z.string(), z.unknown()).optional(),
+  ws: WorkspaceConfig.optional(),
+  verify: VerifyConfig.optional(),
 });
-const LocalConfig = Config.extend({
+const LocalConfig = z.strictObject({
+  schema: z.literal(1),
+  tickets: z.string().trim().min(1).optional(),
+  ws: LocalWorkspaceConfig.optional(),
+  verify: VerifyConfig.optional(),
   root: z
     .string()
     .refine(isAbsolute, "root must be an absolute main-checkout path"),
@@ -176,6 +194,9 @@ async function resolveConfig(repoRoot: string, options: { vcs?: Vcs }) {
   const policy = await committedPolicy(root, vcs, workspace);
   if (!policy.ok) return policy;
   let tickets = ".agents/tickets";
+  let ready: string[] = [];
+  let keep: string[] = [];
+  let verifyAlways: string[] = [];
   if (policy.value !== undefined) {
     const name = "agx.toml";
     const text = policy.value;
@@ -183,6 +204,13 @@ async function resolveConfig(repoRoot: string, options: { vcs?: Vcs }) {
     if (!decoded.ok)
       return failure(
         `${join(root, name)}: invalid TOML: ${errorMessage(decoded.error)}`,
+      );
+    const workspaceTable = z
+      .looseObject({ ws: z.looseObject({}) })
+      .safeParse(decoded.value);
+    if (workspaceTable.success && Object.hasOwn(workspaceTable.data.ws, "keep"))
+      return failure(
+        `${join(root, name)}: [ws].keep belongs in $XDG_CONFIG_HOME/agx/repos/<name>.toml`,
       );
     const parsed = Config.safeParse(decoded.value);
     if (!parsed.success)
@@ -198,16 +226,24 @@ async function resolveConfig(repoRoot: string, options: { vcs?: Vcs }) {
         `${join(root, name)}: tickets must be relative; move absolute paths into $XDG_CONFIG_HOME/agx/repos/<name>.toml (default ~/.config/agx/repos/<name>.toml) with root = ${JSON.stringify(root)}`,
       );
     tickets = declared ?? tickets;
+    ready = parsed.data.ws?.ready ?? ready;
+    verifyAlways = parsed.data.verify?.always ?? verifyAlways;
   }
   const local = await localConfig(root);
   if (!local.ok) return local;
   tickets = local.value?.tickets ?? tickets;
+  ready = local.value?.ws?.ready ?? ready;
+  keep = local.value?.ws?.keep ?? keep;
+  verifyAlways = local.value?.verify?.always ?? verifyAlways;
   return good({
     root,
     tickets: resolve(
       root,
       tickets.startsWith("~/") ? join(homedir(), tickets.slice(2)) : tickets,
     ),
+    ready,
+    keep,
+    verifyAlways,
   });
 }
 
@@ -215,7 +251,15 @@ async function resolveConfig(repoRoot: string, options: { vcs?: Vcs }) {
 export async function resolveAgxConfig(
   repoRoot: string,
   options: { vcs?: Vcs } = {},
-): Promise<Attempt<{ root: string; tickets: string }>> {
+): Promise<
+  Attempt<{
+    root: string;
+    tickets: string;
+    ready: string[];
+    keep: string[];
+    verifyAlways: string[];
+  }>
+> {
   const result = await attempt(() => resolveConfig(repoRoot, options));
   const resolved = result.ok ? result.value : result;
   if (resolved.ok) return resolved;

@@ -150,7 +150,15 @@ export async function ticketContext(cwd: string) {
     } as const;
   root = config.value.root;
   const home = config.value.tickets;
-  return { ok: true, root, home, base_rev, revision, vcs } as const;
+  return {
+    ok: true,
+    root,
+    home,
+    base_rev,
+    revision,
+    vcs,
+    verifyAlways: config.value.verifyAlways,
+  } as const;
 }
 
 export async function ticketPlacement(

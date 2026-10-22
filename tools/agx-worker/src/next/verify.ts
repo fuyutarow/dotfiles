@@ -20,6 +20,7 @@ export const VerifyResult = z
     exit: z.number(),
     log_path: z.string(),
     kind: VerifyKind.optional(),
+    source: z.literal("[verify].always").optional(),
   })
   .transform((result) => ({
     ...result,

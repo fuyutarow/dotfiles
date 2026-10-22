@@ -78,6 +78,105 @@ test("defaults without files and schema-only policy", async () => {
   for (const policy of [undefined, "schema = 1\n"]) {
     const f = await fixture(policy);
     expect(await home(f.root)).toBe(join(f.root, ".agents/tickets"));
+    const result = await resolveAgxConfig(f.root);
+    expect(result.ok).toBe(true);
+    if (result.ok)
+      expect(result.value).toMatchObject({
+        ready: [],
+        keep: [],
+        verifyAlways: [],
+      });
+  }
+});
+test("verify.always replaces by key from L1 to L2, including an empty override", async () => {
+  const f = await fixture(
+    'schema = 1\n[verify]\nalways = ["first", "second"]\n',
+  );
+  const commands = async () => {
+    const result = await resolveAgxConfig(f.root);
+    expect(result.ok).toBe(true);
+    return result.ok ? result.value.verifyAlways : undefined;
+  };
+  expect(await commands()).toEqual(["first", "second"]);
+  await f.writeLocal('schema = 1\n[verify]\nalways = ["local"]\n');
+  expect(await commands()).toEqual(["local"]);
+  await f.writeLocal("schema = 1\n[verify]\n");
+  expect(await commands()).toEqual(["first", "second"]);
+  await f.writeLocal("schema = 1\n[verify]\nalways = []\n");
+  expect(await commands()).toEqual([]);
+});
+test("L2 can declare verify.always without L1", async () => {
+  const f = await fixture();
+  await f.writeLocal('schema = 1\n[verify]\nalways = ["local"]\n');
+  const result = await resolveAgxConfig(f.root);
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(result.value.verifyAlways).toEqual(["local"]);
+});
+test.each([
+  'verify = "wrong"',
+  "[verify]\nunknown = []",
+  '[verify]\nalways = "wrong"',
+  "[verify]\nalways = [1]",
+  '[verify]\nalways = [""]',
+  '[verify]\nalways = ["   "]',
+])("rejects invalid verify config at both layers: %s", async (table) => {
+  for (const layer of ["L1", "L2"]) {
+    const f = await fixture(
+      layer === "L1" ? `schema = 1\n${table}\n` : undefined,
+    );
+    await f.writeLocal(
+      `schema = 1\n${layer === "L2" ? table : '[verify]\nalways = ["valid override"]'}\n`,
+    );
+    const result = await resolveAgxConfig(f.root);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(AgxConfigError);
+      expect(String(result.error)).toContain(
+        layer === "L1" ? "agx.toml" : "repo.toml",
+      );
+    }
+  }
+});
+test("workspace keys replace independently from L1 to L2 and preserve keep entries", async () => {
+  const f = await fixture('schema = 1\n[ws]\nready = ["l1 one", "l1 two"]\n');
+  let result = await resolveAgxConfig(f.root);
+  expect(result.ok).toBe(true);
+  if (result.ok)
+    expect(result.value).toMatchObject({
+      ready: ["l1 one", "l1 two"],
+      keep: [],
+    });
+
+  await f.writeLocal(
+    'schema = 1\n[ws]\nready = ["l2"]\nkeep = ["relative path", "/absolute/path"]\n',
+  );
+  result = await resolveAgxConfig(f.root);
+  expect(result.ok).toBe(true);
+  if (result.ok)
+    expect(result.value).toMatchObject({
+      ready: ["l2"],
+      keep: ["relative path", "/absolute/path"],
+    });
+
+  await f.writeLocal('schema = 1\n[ws]\nkeep = ["still kept"]\n');
+  result = await resolveAgxConfig(f.root);
+  expect(result.ok).toBe(true);
+  if (result.ok)
+    expect(result.value).toMatchObject({
+      ready: ["l1 one", "l1 two"],
+      keep: ["still kept"],
+    });
+});
+test("rejects keep in L1 with the file and its L2 location", async () => {
+  const f = await fixture('schema = 1\n[ws]\nkeep = ["workspace"]\n');
+  const result = await resolveAgxConfig(f.root);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error).toBeInstanceOf(AgxConfigError);
+    expect(String(result.error)).toContain(join(f.root, "agx.toml"));
+    expect(String(result.error)).toContain(
+      "keep belongs in $XDG_CONFIG_HOME/agx/repos/<name>.toml",
+    );
   }
 });
 test("only trunk policy is authoritative, including committed nontrunk edits", async () => {
@@ -151,6 +250,9 @@ test.each([
   ['schema = 1\ntickets = "~/tickets"\n', "agx/repos/"],
   ['schema = 1\ntickets = ""\n', "tickets"],
   ['schema = 1\nws = "wrong"\n', "ws"],
+  ["schema = 1\n[ws]\nunknown = true\n", "unknown"],
+  ['schema = 1\n[ws]\nready = [""]\n', "ready"],
+  ['schema = 1\n[ws]\nready = ["   "]\n', "ready"],
   ["schema = 1\nschema = 1\n", "TOML"],
 ])("rejects invalid L1: %s", async (policy, message) => {
   const f = await fixture(policy);
@@ -164,16 +266,18 @@ test.each([
     expect(String(result.error)).not.toContain("\n");
   }
 });
-test.each(['tickets = "local"\n', "schema = 1\nunknown = true\n"])(
-  "rejects invalid L2: %s",
-  async (local) => {
-    const f = await fixture();
-    await f.writeLocal(local);
-    const result = await resolveAgxConfig(f.root);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(String(result.error)).toContain("repo.toml");
-  },
-);
+test.each([
+  ['tickets = "local"\n', "repo.toml"],
+  ["schema = 1\nunknown = true\n", "repo.toml"],
+  ["schema = 1\n[ws]\nunknown = true\n", "unknown"],
+  ['schema = 1\n[ws]\nkeep = [""]\n', "keep"],
+])("rejects invalid L2: %s", async (local, message) => {
+  const f = await fixture();
+  await f.writeLocal(local);
+  const result = await resolveAgxConfig(f.root);
+  expect(result.ok).toBe(false);
+  if (!result.ok) expect(String(result.error)).toContain(message);
+});
 
 test("L2 works without L1, ignores other roots, and rejects duplicate claims", async () => {
   const f = await fixture();

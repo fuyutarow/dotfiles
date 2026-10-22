@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.18.0 — 2026-10-23
+
+- Add strict repository verify.always configuration with layered replacement
+- Return validated workspace ready and keep settings from agx config
+
 ## 0.17.0 — 2026-10-23
 
 - Add one trunk-policy and main-checkout local agx configuration reader.

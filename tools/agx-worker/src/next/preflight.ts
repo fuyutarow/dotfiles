@@ -144,6 +144,7 @@ export async function preflight(
           base_rev: worker.base_rev,
           revision: worker.revision,
           vcs: worker.vcs,
+          verifyAlways: worker.verifyAlways,
         }
       : undefined;
   if (!worker.ok && worker.configurationError !== undefined)

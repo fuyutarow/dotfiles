@@ -15,6 +15,7 @@ import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { createTempTracker } from "../temp.ts";
 import { earlyQuitRows, systemdUnitName } from "../../src/next/run.ts";
 import { foldedRuns } from "../../src/next/store.ts";
+import { VerifyResult } from "../../src/next/verify.ts";
 
 const tempDirs = createTempTracker();
 const registerTempDir = tempDirs.register;
@@ -40,6 +41,158 @@ const scratch = async (prefix: string): Promise<string> => {
 };
 
 describe("agx-worker run", () => {
+  test.each(["passed", "failed", "absent"])(
+    "real run orders and records verify.always: %s",
+    async (mode) => {
+      const root = await scratch("always-");
+      const state = join(root, "state");
+      const always = [
+        'printf "always-one\\n" >> order; echo always-log; test "$VERIFY_FIXTURE" = shared',
+        `printf "always-two\\n" >> order; exit ${mode === "failed" ? 1 : 0}`,
+      ];
+      if (mode !== "absent") {
+        writeFileSync(
+          join(root, "agx.toml"),
+          `schema = 1\ntickets = "."\n[verify]\nalways = ${JSON.stringify(always)}\n`,
+        );
+        // Commit the declaration so the real immutable L1 reader sees it.
+        for (const args of [
+          ["add", "agx.toml"],
+          [
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "Declare verification",
+          ],
+        ]) {
+          const committed = Bun.spawnSync(["git", ...args], {
+            cwd: root,
+            env: {
+              ...process.env,
+              GIT_CONFIG_NOSYSTEM: "1",
+              GIT_CONFIG_GLOBAL: "/dev/null",
+            },
+          });
+          expect(committed.exitCode, committed.stderr.toString()).toBe(0);
+        }
+      }
+      const ticket = join(root, "ticket.md");
+      const ticketCommand =
+        'printf "ticket\\n" >> order; echo ticket-log; test "$VERIFY_FIXTURE" = shared';
+      writeFileSync(
+        ticket,
+        `+++\nschema = 2\nname = "always-probe"\nwrites = ["order"]\noutcome = "verify command order"\nverify = ${JSON.stringify([ticketCommand])}\n[proposition]\nid = "ORDER"\nclaim = "always runs first"\nrefuted_by = "incorrect order"\n+++\nRun the fixture.\n`,
+      );
+      const worker = join(root, "worker.ts");
+      writeFileSync(
+        worker,
+        'import { writeFileSync } from "node:fs"; writeFileSync("order", ""); console.log(JSON.stringify({ report: { summary: "done", changes: [], checks: [], for_coordinator: [], open: [] } }));\n',
+      );
+      const jevFile = join(root, "jev.ts");
+      const probe = Bun.serve({ port: 0, fetch: () => new Response() });
+      const port = probe.port;
+      await probe.stop(true);
+      writeFileSync(
+        jevFile,
+        `Bun.serve({ hostname: "127.0.0.1", port: ${port}, fetch: () => Response.json({ answers: { worker: { choice: "luna-high", confidence: 0.9 } } }) });\n`,
+      );
+      const server = Bun.spawn([process.execPath, jevFile], {
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+      servers.push(server);
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        if (
+          (await fetch(`http://127.0.0.1:${port}`).catch(() => null)) !== null
+        )
+          break;
+        await Bun.sleep(25);
+      }
+      const env = {
+        ...process.env,
+        XDG_CONFIG_HOME: join(root, "config"),
+        AGX_NEXT_STATE_DIR: state,
+        AGX_TMP_ROOT: join(root, "tmp"),
+        JEV_URL: `http://127.0.0.1:${port}`,
+        TYPESAFE_API_KEY: "test-key",
+        AGX_WORKER_BIN: worker,
+        VERIFY_FIXTURE: "shared",
+        DISPATCH_ROSTER_PATH: join(
+          process.cwd(),
+          "agents/models/dispatch-roster.toml",
+        ),
+      };
+      const invoke = (command: string) =>
+        Bun.spawnSync(
+          [
+            process.execPath,
+            "tools/agx-worker/src/next/cli.ts",
+            command,
+            ticket,
+            "--cd",
+            root,
+          ],
+          { cwd: process.cwd(), env, timeout: 10_000 },
+        );
+      const checked = invoke("check");
+      expect(checked.exitCode, checked.stderr.toString()).toBe(0);
+      if (mode === "absent")
+        expect(checked.stdout.toString()).not.toContain("[verify].always");
+      else
+        expect(checked.stdout.toString()).toContain(
+          `[verify].always=${JSON.stringify(always)}`,
+        );
+      expect(existsSync(join(root, "order"))).toBe(false);
+      const result = invoke("run");
+      expect(result.exitCode, result.stderr.toString()).toBe(0);
+      expect(readFileSync(join(root, "order"), "utf8")).toBe(
+        mode === "absent" ? "ticket\n" : "always-one\nalways-two\nticket\n",
+      );
+      process.env.AGX_NEXT_STATE_DIR = state;
+      const run = (await foldedRuns()).at(-1);
+      expect(run?.outcome).toBe(mode === "failed" ? "verify-failed" : "ok");
+      expect(run?.verify.map((entry) => entry.cmd)).toEqual(
+        mode === "absent" ? [ticketCommand] : [...always, ticketCommand],
+      );
+      const alwaysExits = [0, mode === "failed" ? 1 : 0, 0];
+      expect(run?.verify.map((entry) => entry.exit)).toEqual(
+        mode === "absent" ? [0] : alwaysExits,
+      );
+      expect(run).toBeDefined();
+      expect(run?.report_path).not.toBeNull();
+      if (run === undefined || run.report_path === null) return;
+      const parsedReport = jsonOf(
+        z.looseObject({ verify: z.array(VerifyResult).optional() }),
+      ).safeParse(readFileSync(run.report_path, "utf8"));
+      expect(parsedReport.success).toBe(true);
+      if (!parsedReport.success) return;
+      const report = parsedReport.data;
+      if (mode === "absent") {
+        expect(run.verify[0]).not.toHaveProperty("source");
+        expect(report).not.toHaveProperty("verify");
+      } else {
+        expect(run.verify.slice(0, 2).map((entry) => entry.source)).toEqual([
+          "[verify].always",
+          "[verify].always",
+        ]);
+        expect(run.verify[2]).not.toHaveProperty("source");
+        expect(report.verify).toEqual(run.verify);
+        expect(readFileSync(run.verify[0]!.log_path, "utf8")).toBe(
+          "always-log\n",
+        );
+      }
+      expect(readFileSync(run.verify.at(-1)!.log_path, "utf8")).toBe(
+        "ticket-log\n",
+      );
+    },
+    30_000,
+  );
+
   test("refuses the retired worker override before inspecting the ticket", () => {
     const result = Bun.spawnSync(
       [

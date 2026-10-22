@@ -86,6 +86,7 @@ const contextFor = async (path: string, cwd: string, ticket: NextTicket) => {
     base_rev: worker.base_rev,
     revision: worker.revision,
     vcs: worker.vcs,
+    verifyAlways: worker.verifyAlways,
   };
   if (ticket.base_rev !== undefined && ticket.base_rev !== ctx.base_rev)
     return fatal(
@@ -153,16 +154,25 @@ const runVerify = async (
   cwd: string,
   runDir: string,
   env: NodeJS.ProcessEnv,
+  always: string[],
 ): Promise<
-  { cmd: string; exit: number; log_path: string; kind: VerifyKind }[]
+  {
+    cmd: string;
+    exit: number;
+    log_path: string;
+    kind: VerifyKind;
+    source?: "[verify].always";
+  }[]
 > => {
   const results: {
     cmd: string;
     exit: number;
     log_path: string;
     kind: VerifyKind;
+    source?: "[verify].always";
   }[] = [];
-  for (const [index, cmd] of commands.entries()) {
+  for (const [index, cmd] of [...always, ...commands].entries()) {
+    const source = index < always.length ? "[verify].always" : undefined;
     const logPath = join(
       runDir,
       `verify-${String(index + 1).padStart(2, "0")}.log`,
@@ -189,8 +199,16 @@ const runVerify = async (
     const output = `${await stdout}${await stderr}`;
     writeFileSync(logPath, lastLines(output, 20));
     const kind = verifyKind(exit, child.signalCode);
-    process.stderr.write(`VERIFY exit=${exit} ${cmd} kind=${kind}\n`);
-    results.push({ cmd, exit, log_path: logPath, kind });
+    process.stderr.write(
+      `VERIFY exit=${exit} ${cmd} kind=${kind}${source === undefined ? "" : ` source=${source}`}\n`,
+    );
+    results.push({
+      cmd,
+      exit,
+      log_path: logPath,
+      kind,
+      ...(source === undefined ? {} : { source }),
+    });
   }
   return results;
 };
@@ -209,6 +227,10 @@ export async function check(flags: Flags): Promise<number> {
   process.stdout.write(
     `OK ticket=${ticket.name ?? basename(path, ".md")} cwd=${cwd} ${routeFilterLabel(loaded.value.auto)}\n`,
   );
+  if ((inspected.ctx?.verifyAlways.length ?? 0) > 0)
+    process.stdout.write(
+      `[verify].always=${JSON.stringify(inspected.ctx?.verifyAlways)}\n`,
+    );
   return 0;
 }
 
@@ -571,7 +593,7 @@ export async function run(flags: Flags): Promise<number> {
       : undefined;
   const verify = capacity
     ? []
-    : await runVerify(ticket.verify, cwd, runDir, runEnv);
+    : await runVerify(ticket.verify, cwd, runDir, runEnv, ctx.verifyAlways);
   const parsedReport = parseReport(
     workerReceipt.structured_output ?? workerReceipt.report,
     workerReceipt.last_message ?? receiptLine,
@@ -611,6 +633,11 @@ export async function run(flags: Flags): Promise<number> {
       open: [
         "The vendor did not complete this ticket; this is not a worker failure.",
       ],
+    };
+  if (ctx.verifyAlways.length > 0)
+    report = {
+      ...(typeof report === "object" && report !== null ? report : {}),
+      verify,
     };
   writeFileSync(reportPath, `${JSON.stringify(report)}\n`);
   const vendorSession =

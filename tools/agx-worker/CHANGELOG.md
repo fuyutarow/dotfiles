@@ -1,5 +1,9 @@
 # Changelog
 
+## 9.1.0 — 2026-10-23
+
+- Run declared always verification before ticket checks and record its source
+
 ## 9.0.0 — 2026-10-23
 
 - Read ticket homes through shared agx.toml policy and XDG root-selected overrides; reject retired .agx.toml.

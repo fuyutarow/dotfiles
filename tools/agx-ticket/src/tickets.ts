@@ -75,17 +75,6 @@ async function repository(
   }
 }
 
-async function configFile(
-  root: string,
-  name: string,
-): Promise<Attempt<unknown>> {
-  const path = join(root, name);
-  const present = await exists(path);
-  if (!present.ok) return present;
-  if (!present.value) return good({});
-  return attempt(async () => Bun.TOML.parse(await readFile(path, "utf8")));
-}
-const WsConfig = z.object({ trunk: z.string().min(1).default("trunk()") });
 export async function context(path: string) {
   const repo = await repository(path);
   const config = await resolveAgxConfig(repo.root, {
@@ -273,10 +262,6 @@ async function landing(
 ): Promise<{ landed: boolean | null; reason: string }> {
   if (ctx.store === null)
     return { landed: null, reason: "not a jj repository" };
-  const raw = await configFile(ctx.root, ".ws.toml");
-  if (!raw.ok) return { landed: null, reason: errorMessage(raw.error) };
-  const cfg = WsConfig.safeParse(raw.value);
-  if (!cfg.success) return { landed: null, reason: "invalid .ws.toml trunk" };
   const name = run.workspace_name ?? basename(run.workspace);
   if (!/^[A-Za-z0-9_-]+$/u.test(name))
     return { landed: null, reason: "invalid workspace name" };
@@ -295,7 +280,7 @@ async function landing(
       "log",
       "--no-graph",
       "-r",
-      `(::(${tips.join(" | ")}) ~ ::(${cfg.data.trunk})) ~ empty()`,
+      `(::(${tips.join(" | ")}) ~ ::trunk()) ~ empty()`,
       "-T",
       'commit_id ++ "\\n"',
     ],

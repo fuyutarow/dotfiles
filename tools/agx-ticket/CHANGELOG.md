@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 — 2026-10-23
+
+- Use jj trunk() to detect landed runs
+
 ## 1.0.0 — 2026-10-23
 
 - Share committed trunk ticket-home configuration and local overrides; reject retired configuration with exit 2.

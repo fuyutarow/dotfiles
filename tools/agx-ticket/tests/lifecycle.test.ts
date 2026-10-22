@@ -66,7 +66,6 @@ async function fixture(custom?: string) {
     return { out, err, code };
   }
   expect((await run(["jj", "git", "init", repo], root)).code).toBe(0);
-  await writeFile(join(repo, ".ws.toml"), 'trunk = "main"\n');
   if (custom !== undefined)
     await writeFile(join(repo, "agx.toml"), `schema = 1\n${custom}`);
   await writeFile(join(repo, "base"), "base\n");

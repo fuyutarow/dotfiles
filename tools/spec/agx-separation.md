@@ -8,6 +8,9 @@ issue: `agx-separation-study-1023`。依頼元: dotfiles セッション
 
 **部分的に分離する。ただし、先に dotfiles 内で境界を直してから、リポジトリを分ける。**
 
+0. 最初に段 S0 で名前を直す。状態ディレクトリは `~/.local/state/agx` にする。`agx-next` と
+   `AGX_NEXT_*` はやめる。一つの変数に二つの意味を持たせない (§3.6)。`agx-next` ができたのは、
+   dotfiles の land が `~/.local/state/agx` に書き込んでいるからである。その書き手をそこから出す。
 1. 段 S1〜S4 (dotfiles 内の境界修正) は、分離するかどうかに関わらず価値がある。いまの agx は
    architecture の I12 (「tool は自分のディレクトリと `tools/shared/` だけを import する」) を
    破っている (§3.2)。statusline と hook も agx の内部ファイルを直接読んでいる (§3.3)。
@@ -55,8 +58,12 @@ issue: `agx-separation-study-1023`。依頼元: dotfiles セッション
 - **SEP-2 (契約は CLI と schema だけ):** dotfiles と利用側リポジトリが agx に触れるのは、
   CLI の argv、終了コード、`--json` 出力、`.agx.toml`、チケット形式だけである。
   状態ディレクトリの中のファイルを直接読まない。
-- **SEP-3 (状態の書き手は一つ):** `~/.local/state/agx-next/` の書き手は agx だけである。
-  分離で場所も名前も変えない (`tools/agx-worker/contract.md:19-21` の互換方針を引き継ぐ)。
+- **SEP-3 (状態の書き手は一つ):** agx の状態ディレクトリは `$AGX_STATE_DIR` →
+  `$XDG_STATE_HOME/agx` → `~/.local/state/agx` の順で決まる一つだけで、書き手は agx だけである。
+  `agx-next` という名前は S0 でやめる (§3.6)。`tools/agx-worker/contract.md:19-21` の
+  「互換のため `agx-next` を残す」方針は、これで置き換える。
+- **SEP-6 (一つの値に一つの名前):** 一つの環境変数は一つの意味だけを持つ。別名は置かない。
+  廃止した名前が設定されていたら、黙って無視せず、新しい名前を示して exit 2 にする。
 - **SEP-4 (版は一つ):** 機械に入る agx の版は一つで、dotfiles がその版を一か所で宣言する。
 - **SEP-5 (fresh clone で動く):** agx リポジトリの gate は dotfiles なしで fresh clone から通る。
   dotfiles の gate も agx のチェックアウトなしで通る (README B 種の規則, `README.md:157-160`)。
@@ -181,14 +188,65 @@ shared 内部の import は `rr regex 'from "\./[a-z-]+\.ts"' -p tools/shared/sr
 `records.fold.json`, `records.jsonl`, `runs/`, `workspace-verdicts.json`, ほかに run が置いた
 log ファイル。`du -sh` は 325M。
 
-- 書き手は agx だけにする (SEP-3)。分離しても場所と名前は変えない。互換の名前を残す方針は
-  `tools/agx-worker/contract.md:19-21` にすでにある。移行はコードの場所の移動であり、データの移行ではない。
+- 書き手は agx だけにする (SEP-3)。場所は S0 で `~/.local/state/agx` に移す (§3.6)。
 - 外から読んでよいのは CLI 出力だけにする (SEP-2)。いま直接読んでいるのは §3.3 の statusline 2 ファイル、
   hook 1 ファイル、systemd path unit 1 個である。systemd の path 監視は内容を読まないので、
   監視する path を契約に書くことで残す。
 - `agx-usehooks` は旧 ledger `$AGX_STATE_DIR/runs.jsonl` (既定 `~/.local/state/agx/runs.jsonl`) を読む
   (`tools/agx-usehooks/README.md:15`)。`agx-next/records.jsonl` ではない。分離の前に、
   これが意図した互換なのか、古いままなのかを持ち主が決める必要がある (§9 R4)。
+
+### 3.6 状態ディレクトリの名前と環境変数の名前
+
+**`agx-next` が生まれた理由:** `~/.local/state/agx` は、2026-10-14 の切り替えより前の ledger
+(`runs-2026-10-1*.jsonl`, `lifecycle.jsonl`, `briefs/` ほか、603M) の置き場である。
+現行の agx はそれを避けて `agx-next` を使った。ところが `~/.local/state/agx` は死んでいない。
+`ls -lt ~/.local/state/agx` で見ると `runs.jsonl` は 2026-10-22 19:44 に、`land/<id>/queue.jsonl` は
+2026-10-17 以降に更新されている。書き手は dotfiles の land である。
+
+- `scripts/land.ts:348-353` が `landed` の行を `dispatchStateDir()/runs.jsonl` に追記している。
+  `dispatchStateDir` (`tools/shared/src/dispatch-state.ts:120-128`) は `~/.local/state/agx` を返す。
+- `scripts/land-queue.ts:9` も同じ関数で `~/.local/state/agx/land/` に queue を書く。
+
+つまり今は、agx でない dotfiles の land が「agx」という名前のディレクトリの書き手になっていて、
+agx 自身は `agx-next` に追い出されている。名前がおかしいのは、この書き手の取り違えの結果である。
+
+**`AGX_STATE_DIR` には意味が二つある (欠陥):**
+
+- 現行の状態: `tools/agx-worker/src/next/store.ts:125-134` (`AGX_NEXT_STATE_DIR` の次に読む)。
+- 旧 ledger の読み元: 同じファイルの `store.ts:247-250` (`legacySourceDir`)、
+  `tools/shared/src/dispatch-state.ts:121`、`tools/statusline/src/dispatch-state.ts:12`、
+  `agents/claude/hooks/log-agx-snapshot.ts:49`。
+- `AGX_STATE_DIR` だけを設定すると、現行と旧 ledger が同じディレクトリを指す。
+  test の隔離 (`tools/shared/src/test-tmp.ts:187`) はこの形で動いている。
+
+`XDG_STATE_HOME` の扱いも食い違っている。`store.ts:131-133` は従うが、
+`tools/statusline/src/agx-snapshot.ts:84` と `agents/claude/hooks/log-agx-snapshot.ts:50` は従わない。
+
+**環境変数の棚卸し:** `rr regex 'AGX_[A-Z0-9_]*'` (CHANGELOG と `.agents/` を除く) で 55 種類が見つかった。
+本番コードで使われていて名前に問題があるものと、その置き換えを次に示す。
+
+| 今の名前 | 使っている所 | 問題 | 新しい名前 |
+| --- | --- | --- | --- |
+| `AGX_NEXT_STATE_DIR` | `store.ts:127`, `tools/agx-ws/src/workspace.ts:2170`, `scripts/agx-doctor.ts:86`, `agx-snapshot.ts:82` | `next` は移行の残骸 | 廃止。`AGX_STATE_DIR` に一本化 |
+| `AGX_STATE_DIR` | 上記の 2 つの意味 | 一つの名前に二つの意味 | 現行の状態だけを指す。旧 ledger は `$AGX_STATE_DIR/legacy-v1/` (導出であり変数を持たない) |
+| 既定 `~/.local/state/agx-next` | `store.ts:134` ほか | 同上 | `~/.local/state/agx` |
+| `AGX_NEXT_JEV_URL` | `tools/agx-worker/src/next/route.ts:48`, `tools/jex/src/classify.ts:156` | `next`。jex が agx の変数を読む | `JEV_URL`。Jev クライアント (`jev-client.ts`) が一か所で読む。`JEX_JEV_URL` も廃止 |
+| `AGX_NEXT_WORKER` | `tools/agx-worker/src/next/run.ts:399,407` | `next`。中身は「worker 実行ファイルの差し替え」 | `AGX_WORKER_BIN` (`AGX_CODEX_BIN` と揃える) |
+| `AGX_KIND`, `AGX_LABELS` | `tools/agx-usehooks/src/jobs.ts:96,103` | `AGX_JOB_KIND`, `AGX_JOB_LABELS` の別名 | 別名を廃止 |
+| `AGX_DOCTOR_HOME`, `AGX_DOCTOR_WORKSPACE` | `tools/agx-ticket/src/tickets.ts:523-525`, `tools/agx-ws/src/workspace.ts:1955-1958` | doctor 以外でも使う。二つで一つの値 (リポジトリを探す根) を作る。`Workspace` は jj の workspace と紛らわしい | `AGX_REPOS_ROOT` 一つ (既定 `~/Workspace`) |
+| `AGX_DOCTOR_QUIET` | `scripts/agx-doctor.ts:24` が子に渡し、`ws.ts:288`, `tkt.ts:149`, `tickets.ts:271`, `next/doctor.ts:21` が読む | 呼び出し側の指示を環境変数で渡している | 各 `doctor` の `--quiet` フラグ |
+
+ほかの本番の名前 (`AGX_WORKER`, `AGX_DISPATCHER_SESSION`, `AGX_READONLY_COMMAND_JOB`, `AGX_CODEX_BIN`,
+`AGX_TMP_ROOT`, `AGX_WAIT_POLL_MS`, `AGX_DISPATCH_WAIT_MS`, `AGX_PROGRESS_EVERY_S`,
+`AGX_CODEX_PROGRESS_FILE`, `AGX_INTERIM_REPORTS_FILE`, `AGX_LAST_MESSAGE_FILE`,
+`AGX_WORKER_ACTIVITY_FILE`, `AGX_CODEX_HOST_FILE`, `AGX_JOB_KIND`, `AGX_JOB_LABELS`) は、
+一つの意味を名前どおりに持つので残す。`AGX_AUDIT_*`, `AGX_TEST_*`, `*_FIXTURE` は tests の中だけで使う。
+
+変数以外の `next` の残骸もなくす。対象は `tools/agx-worker/src/next/` と `tests/next/` (→ `src/`, `tests/`)、
+`docs/next-records.md` (→ `contract/records.md`)、型 `NextEvent` (`store.ts:123`, → `RunEvent`)、
+`dispatchStateDir` / `dispatchStateReadDirs` (`tools/shared/src/dispatch-state.ts:120-144`。
+この中には、さらに古い `agent-router` を読む分岐も残っている。そのディレクトリはもう存在しない)。
 
 ## 4. 規模
 
@@ -252,8 +310,9 @@ agx/
 
 - CLI: 各サブコマンドの argv、終了コード (0/1/2/3/75)、`--json` の schema。
 - チケット形式と `.agx.toml` の schema。reader は `packages/core` の一つだけにする (§3.4 の二重の reader を統合)。
-- 状態ディレクトリの場所 (`AGX_NEXT_STATE_DIR` → `AGX_STATE_DIR` → `~/.local/state/agx-next`) と、
+- 状態ディレクトリの場所 (`AGX_STATE_DIR` → `$XDG_STATE_HOME/agx` → `~/.local/state/agx`) と、
   外から監視してよい path (`records.jsonl`, `workspace-verdicts.json`)。中身を読む契約ではない。
+  `legacy-v1/` は読み取り専用で、書き手はいない。
 - 環境変数: `AGX_WORKER=1` (`tools/shared/src/worker-env.ts`)、`AGX_READONLY_COMMAND_JOB`、
   `AGX_DISPATCHER_SESSION` (`tools/agx-worker/contract.md:35-36`)。
 - 名前の規則: `<project-slug>-<role>_<id>`、`agt_<slug>`、`ws_<slug>` (`tools/spec/architecture.md:95-97`)。
@@ -334,6 +393,8 @@ Jev クライアントに agx 以外の利用者がさらに一つ増えたら (
 
 | 段 | 入力 | 出力 | 検証命令 | 戻し方 |
 | --- | --- | --- | --- | --- |
+| **S0a** land の状態を agx から出す | §3.6 | `scripts/land.ts` と `scripts/land-queue.ts` の状態を `$XDG_STATE_HOME/dotfiles/land/` に移す。`land.ts:348` の `landed` 追記をやめ、着地は jj の祖先関係から導く (architecture I2)。やめる前に、`landed` 行を読む箇所を `rr text '"landed"'` で全数確かめる | `bun test scripts/tests/land.test.ts`、`mise run gate:land` | commit を戻す。queue のファイルは元の場所へ `mv` |
+| **S0b** 名前を直し、状態を移す | S0a。`agx worker ls` で running が 0。`agx-doctor.path` と `statusline-sampler.timer` を止める | §3.6 の表のとおり変数と `next` を改名する。旧い名前が設定されていたら exit 2。`agx-next` が残っていたら移行の命令を示して exit 2。データは同じファイルシステム上の rename 3 回で移す: `agx` → `agx.legacy-v1.tmp`、`agx-next` → `agx`、`agx.legacy-v1.tmp` → `agx/legacy-v1`。`agx worker stats --import-legacy` と usehooks の旧 ledger 読み取りは `legacy-v1/` を読む。`systemd/agx-doctor.path:5-6`、`render-home` の文言 (`scripts/tests/render-home.test.ts:287`)、`tools/agx-worker/contract.md:19-21` を更新 | `mise run test:agx`、`bun test tools/agx-ws tools/agx-ticket tools/agx-usehooks tools/statusline`、`mise run test:hooks`、`bun test scripts/tests/statusline-owners.test.ts scripts/tests/render-home.test.ts`、移行後に `agx worker ls --json` の件数が移行前と一致すること | rename を逆順に 3 回行い、commit を戻す |
 | **S1** `agx status --json` を作る | §6.2 の仕様。`tools/statusline/src/agx-snapshot.ts` の読み取り内容 | `agx-worker` (または新しい `tools/agx-status/`) に `status --json` を追加。新しい状態ファイルは作らない | `mise run test:agx`、`bun test tools/statusline` | commit を戻す。statusline はまだ切り替えていないので影響なし |
 | **S2** statusline と hook を `agx status --json` に切り替える | S1 | `tools/statusline/src/agx-snapshot.ts`, `dispatch-runs.ts`, `agents/claude/hooks/log-agx-snapshot.ts` が状態ディレクトリを直接読まなくなる。`workspace-policy.ts` を削除 | `bun test tools/statusline`、`mise run test:hooks`、`bun test scripts/tests/statusline-owners.test.ts` | commit を戻す (S1 は残してよい) |
 | **S3** I12 の import 境界を直し、テストで固める | §3.2 C1〜C3 | roster (`agents/models/roster.ts`, `dispatch-roster.toml`) を `tools/agx-worker` 配下へ移す。`render-home.ts` は `agx worker roster --json` を読む。`temp.ts:15` は shared の zod を使う。codex worker の model floor 判定は hook に任せるか、agx 側の設定に移す (§9 R2)。import 境界テストを追加 (新規、architecture の spec-check-i12) | `mise run test:agx`、`bun test agents/models/tests`、`bun test scripts/tests/render-home.test.ts`、`mise run lint:config-map`、`mise run gate:land` | commit を戻す。roster の path が変わるので `mise run link:dots` を再実行する |
@@ -393,7 +454,11 @@ S1〜S4 だけで止める場合も、§2.2 の SEP-1〜SEP-3 は dotfiles の�
   worker 側をやめる案と、floor を roster に入れる案がある。
 - **R3:** subscription usage (`subscription-usage.ts`, `codex-subscription-usage.ts`) を、agx が
   `agx status` で出すか、statusline と agx がそれぞれ読むか。
-- **R4:** `agx-usehooks` の旧 ledger (`runs.jsonl`) の読み取りが、意図した互換か、古いままか (§3.5)。
+- **R4:** `agx-usehooks` の `launcherRunsToday` と `minutesSinceLastResult` は旧 ledger の
+  `runs.jsonl` を読む (§3.5)。旧 ledger に worker の run が書かれなくなってからは、その値は worker の
+  run を数えていない可能性が高い (未検証)。いまそのファイルに追記しているのは land の `landed` 行
+  (§3.6) だけである。S0b で `legacy-v1/` へ向けるか、`records.jsonl` (`agx worker ls --json`) を
+  読むように直すかを、firedancer の持ち主が決める。
 - **R5:** dotfiles の hook (`remind-reply-language.ts`) が、外部 package になった usehooks に依存してよいか。
 - **R6:** §5.3 (b) で、依存 package の bin が `bun link` で PATH に出るか (未検証)。
 

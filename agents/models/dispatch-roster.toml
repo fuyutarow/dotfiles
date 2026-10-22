@@ -26,7 +26,10 @@ default = "luna-high"
 # passed as a task-size class. Bulk-classification remains a task descriptor evaluated against
 # each eligible row's use_for, not a lexical row match that can override the long-session floor.
 [auto]
-routes = ["codex"]
+# 2026-10-23 owner ruling: allow claude until agx stops refusing codex at a 100% weekly window
+# while Codex still runs on purchased credits (tools/agx-worker/src/next/usage.ts). Revert to
+# ["codex"] once that repair lands or the codex weekly window resets (2026-10-29 00:14 JST).
+routes = ["codex", "claude"]
 max_task_chars = 6000
 timeout_ms = 20000
 no_egress = []

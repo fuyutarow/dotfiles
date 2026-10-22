@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.4.1 — 2026-10-23
+
+- Allow workspace-write Codex workers to use the declared shared Bun package cache.
+
 ## 8.4.0 — 2026-10-23
 
 - Use shared JEV_URL endpoint selection and reject retired overrides

@@ -162,7 +162,7 @@ type Run = {
 };
 function run(
   args: string[],
-  env: Record<string, string>,
+  env: NodeJS.ProcessEnv,
   prompt = "Audit this.",
 ): Run {
   const fakeBin = env.AGX_CODEX_BIN;
@@ -348,6 +348,12 @@ describe("agx", () => {
         const argv = readFileSync(log, "utf8").split("\n");
         if (resume) expect(argv).toContain(`sandbox_mode="${effective}"`);
         else expect(argv[argv.indexOf("--sandbox") + 1]).toBe(effective);
+        expect(
+          argv.filter((arg) =>
+            arg.startsWith("sandbox_workspace_write.writable_roots="),
+          ),
+        ).toHaveLength(sandbox === "workspace-write" ? 1 : 0);
+        expect(argv).not.toContain("--add-dir");
         expect(r.receipt.sandbox).toBe(sandbox);
         expect(r.receipt.sandbox_effective).toBe(effective);
         expect(
@@ -361,6 +367,51 @@ describe("agx", () => {
             .split("\n")
             .filter((line) => line === "agx: sandbox none (unsandboxed)"),
         ).toHaveLength(sandbox === "none" ? 1 : 0);
+      }
+    },
+  );
+
+  test.each([false, true])(
+    "workspace-write grants exactly the shared Bun cache and passes it in the environment (resume=%s)",
+    (resume) => {
+      for (const customCache of [undefined, 'shared cache "quoted"']) {
+        const fixtureDir = scratch();
+        const { bin, log } = fakeCodex(fixtureDir);
+        const home = join(fixtureDir, "home");
+        const cache =
+          customCache === undefined
+            ? join(home, ".bun", "install", "cache")
+            : join(fixtureDir, customCache);
+        const r = run(
+          [
+            ...FULL,
+            "--sandbox",
+            "workspace-write",
+            ...(resume ? ["--resume", "thread-test"] : []),
+          ],
+          {
+            AGX_CODEX_BIN: bin,
+            HOME: home,
+            BUN_INSTALL_CACHE_DIR:
+              customCache === undefined ? undefined : cache,
+          },
+        );
+        expect(r.code).toBe(0);
+        const launch = readFileSync(log, "utf8").split("\n");
+        const roots = launch.filter((arg) =>
+          arg.startsWith("sandbox_workspace_write.writable_roots="),
+        );
+        expect(roots).toHaveLength(1);
+        expect(launch[launch.indexOf(roots[0] ?? "") - 1]).toBe("-c");
+        expect(Bun.TOML.parse(roots[0] ?? "")).toEqual({
+          sandbox_workspace_write: { writable_roots: [cache] },
+        });
+        expect(r.receipt.sandbox_effective).toBe("workspace-write");
+        expect(
+          readFileSync(join(fixtureDir, "worker-env.log"), "utf8")
+            .split("\n")
+            .filter((line) => line.startsWith("BUN_INSTALL_CACHE_DIR=")),
+        ).toEqual([`BUN_INSTALL_CACHE_DIR=${cache}`]);
       }
     },
   );

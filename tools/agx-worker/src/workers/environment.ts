@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import {
   AGX_WORKER_ENV,
   AGX_WORKER_VALUE,
@@ -18,6 +20,8 @@ const WORKER_ENV_KEYS = [
   "TMPDIR",
   "TMP",
   "TEMP",
+  // Shared package cache selected by the dispatcher, also used as a Codex writable root.
+  "BUN_INSTALL_CACHE_DIR",
   // mise's active shell and explicit roots keep declared tool config and data discoverable.
   "MISE_ACTIVATE_SHIMS",
   "MISE_SHELL",
@@ -47,6 +51,19 @@ const WORKER_ENV_KEYS = [
   "OPENAI_API_KEY",
   "CODEX_API_KEY",
 ] as const;
+
+/** The one shared-cache declaration: environment values and writable roots use these same paths. */
+export function workerSharedCaches(source: NodeJS.ProcessEnv = process.env) {
+  return [
+    {
+      key: "BUN_INSTALL_CACHE_DIR",
+      root: resolve(
+        source.BUN_INSTALL_CACHE_DIR ??
+          join(source.HOME ?? homedir(), ".bun", "install", "cache"),
+      ),
+    },
+  ];
+}
 
 /** Build the complete child environment; coordinator and vendor session state never crosses. */
 export function workerEnvironment(

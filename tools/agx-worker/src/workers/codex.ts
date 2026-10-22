@@ -71,7 +71,7 @@ import { costUsd } from "../dispatch-cost.ts";
 import { activityWriter } from "../lifecycle.ts";
 import { interimReturnWriter, parseReturn } from "../report.ts";
 import { progressIntervalMs, progressThrottle } from "../progress.ts";
-import { workerEnvironment } from "./environment.ts";
+import { workerEnvironment, workerSharedCaches } from "./environment.ts";
 import {
   CAPACITY_EXIT,
   CAPACITY_STOP_GRACE_MS,
@@ -438,6 +438,9 @@ codexSandbox =
     : String(sandbox);
 
 // --- run --------------------------------------------------------------------------------------
+const environment = workerEnvironment();
+const sharedCaches = workerSharedCaches(environment);
+for (const cache of sharedCaches) environment[cache.key] = cache.root;
 const lastFile = join(argv.flags.receiptDir, `${runId}.last.txt`);
 mkdirSync(argv.flags.receiptDir, { recursive: true });
 // `codex exec resume` (codex-cli help read 2026-10-06) takes [SESSION_ID] [PROMPT] and -m, -c, -o,
@@ -453,6 +456,12 @@ const execFlags = [
   // Keep headless approvals independent of the interactive AutoReview default, also on resume.
   "-c",
   'approval_policy="never"',
+  ...(codexSandbox === "workspace-write"
+    ? [
+        "-c",
+        `sandbox_workspace_write.writable_roots=${JSON.stringify(sharedCaches.map((cache) => cache.root))}`,
+      ]
+    : []),
   "-o",
   lastFile,
   ...(argv.flags.outputSchema === undefined
@@ -535,7 +544,7 @@ const spawned = await attempt(() =>
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
-    env: workerEnvironment(),
+    env: environment,
     signal: deadline.signal,
     killSignal: "SIGTERM",
   }),

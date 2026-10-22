@@ -89,10 +89,20 @@ Only an ask that fits a job and cannot be answered by folding existing events ma
 
 Codex and Claude workers receive a closed stdin stream. Their prompts remain explicit arguments
 (the final `codex exec` argument and `claude -p <prompt>`), so a vendor cannot wait for an interactive
-input stream. Their environment is rebuilt from `PATH`, `HOME`, `LANG`, `TZ`,
-`AGX_DISPATCHER_SESSION`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
-`CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY`, and `CODEX_API_KEY`, with `AGX_WORKER=1`. Coordinator
+input stream. Their environment is rebuilt from the explicit allowlist in
+[`src/workers/environment.ts`](../src/workers/environment.ts): `PATH`, `HOME`, `LANG`, `TZ`,
+`USER`, `LOGNAME`, `SHELL`, `TERM`, `TMPDIR`, `TMP`, `TEMP`, `BUN_INSTALL_CACHE_DIR`,
+`MISE_ACTIVATE_SHIMS`, `MISE_SHELL`, `MISE_CONFIG_DIR`, `MISE_DATA_DIR`, `MISE_CACHE_DIR`,
+`MISE_INSTALLS_DIR`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`, `XDG_CONFIG_HOME`,
+`XDG_STATE_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `SSL_CERT_FILE`, `SSL_CERT_DIR`, `GRAVEYARD`,
+`RIP_GRAVEYARD`, `AGX_DISPATCHER_SESSION`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+`CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY`, and `CODEX_API_KEY`, plus the `AGX_*` namespace,
+with `AGX_WORKER=1`. Coordinator
 continuation slots and vendor session IDs are omitted; each vendor creates its own session identity.
+The same module's `workerSharedCaches` declares the shared package caches. Codex receives their
+resolved paths in its environment and, only for effective `workspace-write`, as
+`sandbox_workspace_write.writable_roots` on both fresh and resumed runs. Workspace and existing
+temporary-directory permissions remain Codex's responsibility. Claude isolation is unchanged.
 When a worker hook has no
 bound continuation record, the worker owns its brief and workspace and does not become read-only.
 A Codex `Reading additional input from stdin...` stderr line with no subsequent stdout event for 30

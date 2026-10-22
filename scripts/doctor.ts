@@ -1046,6 +1046,18 @@ export async function checkWsGc(
   );
 }
 
+function statuslineProbeProblem(
+  result: Awaited<ReturnType<typeof run>>,
+): string {
+  const reasons = [
+    ...(result.missing ? ["systemctl missing"] : []),
+    ...(result.timedOut ? ["systemctl timed out"] : []),
+    ...(result.code !== 0 ? [`systemctl exited ${result.code}`] : []),
+    ...(result.err.trim() !== "" ? [result.err.trim()] : []),
+  ];
+  return reasons.join("; ");
+}
+
 export async function checkStatuslineOwners(
   _ctx: Ctx,
   probe: typeof run = run,
@@ -1062,38 +1074,48 @@ export async function checkStatuslineOwners(
     return skip("statusline-owners", "no systemctl on this host");
   const failed = results.filter(
     ({ active }) =>
-      active.code !== 0 || active.timedOut || active.out.trim() !== "active",
+      active.missing ||
+      active.code !== 0 ||
+      active.timedOut ||
+      active.out.trim() !== "active",
   );
   if (failed.length > 0)
     return fail(
       "statusline-owners",
       failed
-        .map(({ unit, active }) => `${unit}: ${active.out.trim()}`)
+        .map(({ unit, active }) => {
+          const detail = [active.out.trim(), statuslineProbeProblem(active)]
+            .filter(Boolean)
+            .join("; ");
+          return `${unit}: ${detail === "" ? "no active state returned" : detail}`;
+        })
         .join("; "),
       "mise run link:dots",
     );
   // A running collector is healthy; a failed last invocation must remain visible.
-  const service = await probe(
-    [
-      "systemctl",
-      "--user",
-      "show",
-      "statusline-sampler.service",
-      "agx-doctor.service",
-      "--property=Result",
-    ],
-    { ms: 10_000 },
+  const collectors = await Promise.all(
+    ["statusline-sampler.service", "agx-doctor.service"].map(async (unit) => {
+      const service = await probe(
+        ["systemctl", "--user", "show", unit, "--property=Result"],
+        { ms: 10_000 },
+      );
+      if (service.missing || service.code !== 0 || service.timedOut)
+        return `${unit}: cannot read collector result: ${statuslineProbeProblem(service)}${service.out.trim() === "" ? "" : `; stdout: ${service.out.trim()}`}`;
+      const result = service.out
+        .split("\n")
+        .find((line) => line.startsWith("Result="));
+      if (result === undefined || result === "Result=")
+        return `${unit}: systemctl returned no Result property`;
+      if (result !== "Result=success")
+        return `${unit}: collector failed: ${result}`;
+      return null;
+    }),
   );
-  if (
-    service.code !== 0 ||
-    service.timedOut ||
-    service.out
-      .split("\n")
-      .some((line) => line.startsWith("Result=") && line !== "Result=success")
-  )
+  const collectorFailures = collectors.filter((detail) => detail !== null);
+  if (collectorFailures.length > 0)
     return fail(
       "statusline-owners",
-      `collector failed: ${service.out.trim()}`,
+      collectorFailures.join("; "),
       "journalctl --user -u statusline-sampler.service -u agx-doctor.service",
     );
   return pass(

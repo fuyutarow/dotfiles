@@ -108,3 +108,111 @@ test("doctor reports inactive triggers and a failed collector", async () => {
     "FAIL",
   );
 });
+
+const doctorCtx: DoctorCtx = {
+  home: "/fixture",
+  dotfiles: "/fixture",
+  isMac: false,
+  isWsl: false,
+  isCoreBox: false,
+};
+
+test("doctor reads each collector separately and names the failed unit", async () => {
+  const calls: string[][] = [];
+  const finding = await checkStatuslineOwners(doctorCtx, async (cmd) => {
+    calls.push(cmd);
+    const healthy = await ownerProbe(cmd);
+    if (cmd.includes("agx-doctor.service"))
+      return { ...healthy, out: "Result=exit-code\n" };
+    return healthy;
+  });
+  expect(finding.verdict).toBe("FAIL");
+  expect(finding.detail).toBe(
+    "agx-doctor.service: collector failed: Result=exit-code",
+  );
+  expect(calls.filter((cmd) => cmd.includes("show"))).toEqual([
+    [
+      "systemctl",
+      "--user",
+      "show",
+      "statusline-sampler.service",
+      "--property=Result",
+    ],
+    ["systemctl", "--user", "show", "agx-doctor.service", "--property=Result"],
+  ]);
+});
+
+test.each([
+  {
+    code: 1,
+    err: "Unit agx-doctor.service could not be found.",
+    timedOut: false,
+    missing: false,
+    reason: "systemctl exited 1; Unit agx-doctor.service could not be found.",
+  },
+  {
+    code: 143,
+    err: "",
+    timedOut: true,
+    missing: false,
+    reason: "systemctl timed out; systemctl exited 143",
+  },
+  {
+    code: 127,
+    err: "",
+    timedOut: false,
+    missing: true,
+    reason: "systemctl missing; systemctl exited 127",
+  },
+])(
+  "doctor explains probe failure even with successful stdout: $reason",
+  async ({ reason, ...failure }) => {
+    const finding = await checkStatuslineOwners(doctorCtx, async (cmd) => {
+      const healthy = await ownerProbe(cmd);
+      return cmd.includes("agx-doctor.service")
+        ? { ...healthy, ...failure }
+        : healthy;
+    });
+    expect(finding.verdict).toBe("FAIL");
+    expect(finding.detail).toContain(
+      `agx-doctor.service: cannot read collector result: ${reason}`,
+    );
+    expect(finding.detail).not.toContain("collector failed: Result=success");
+  },
+);
+
+test.each(["", "Result=\n", "LoadState=not-found\n"])(
+  "doctor rejects missing collector Result: %j",
+  async (out) => {
+    const finding = await checkStatuslineOwners(doctorCtx, async (cmd) => {
+      const healthy = await ownerProbe(cmd);
+      return cmd.includes("agx-doctor.service") ? { ...healthy, out } : healthy;
+    });
+    expect(finding.verdict).toBe("FAIL");
+    expect(finding.detail).toBe(
+      "agx-doctor.service: systemctl returned no Result property",
+    );
+  },
+);
+
+test("doctor reports inactive triggers and preserves bus errors", async () => {
+  const inactive = await checkStatuslineOwners(doctorCtx, async (cmd) => ({
+    ...(await ownerProbe(cmd)),
+    code: 3,
+    out: "inactive\n",
+  }));
+  expect(inactive.verdict).toBe("FAIL");
+  expect(inactive.detail).toContain(
+    "statusline-sampler.timer: inactive; systemctl exited 3",
+  );
+  const inaccessible = await checkStatuslineOwners(doctorCtx, async (cmd) => ({
+    ...(await ownerProbe(cmd)),
+    code: 1,
+    out: "",
+    err: "Failed to connect to bus: No data available",
+  }));
+  expect(inaccessible.verdict).toBe("FAIL");
+  expect(inaccessible.detail).toContain(
+    "systemctl exited 1; Failed to connect to bus: No data available",
+  );
+});

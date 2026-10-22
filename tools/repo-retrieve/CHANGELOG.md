@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.2 — 2026-10-23
+
+- Generalize benchmark attributions in retrieval docs and comments
+
 ## 1.4.1 — 2026-10-22
 
 - Reconcile captured index requests after verified success without clearing newer work, and report request activity truthfully.

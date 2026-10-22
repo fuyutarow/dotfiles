@@ -15,7 +15,7 @@ Why log-odds, not probability: measured 2026-10-01, the probabilities of the top
 saturate at 0.99x and stop separating; the logits keep a usable gap (ledger in README).
 
 Model ([definition.local] model): Qwen/Qwen3-Reranker-0.6B (Apache-2.0, multilingual incl. Japanese, trained on code). On the
-firedancer FireOps 24-query set it moved the correct definition into the top 3 for 21/24, from 16/24
+24-query evaluation it moved the correct definition into the top 3 for 21/24, from 16/24
 with embeddings alone (README, "Measurements").
 """
 

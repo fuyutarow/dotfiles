@@ -1254,7 +1254,7 @@ export async function runIndexWrapper(
   // commits touched is outside the index scope (ccc-scope.ts), the index is exactly what a scan
   // at headAfter would build, so headAfter is certified. Otherwise the scan is re-run — ccc
   // indexes incrementally, so a repeat costs only what changed — up to INDEX_ATTEMPTS times
-  // (firedancer 2026-09-25: ten agents committing every 1–2 min; a human needed three tries).
+  // (2026-09-25 evaluation: ten agents committing every 1–2 min; a human needed three tries).
   const observedRequest = await readIndexRequest(project);
   // A detached worker owns only the request passed by its parent. A foreground
   // scan may fulfill the prior request it captured, including an unresolvable old HEAD.

@@ -8,9 +8,9 @@
 // tool that computes a DIFFERENT dir than the daemon reads a DB nobody writes.
 //
 // WHY THE MAPPING IS SET AT ALL (2026-09-23): a DB inside the repo is rewritten on every commit
-// (firedancer: 2.8 GB rewritten per HEAD move), and every tool that walks the repo tree — a
+// (a large repository: 2.8 GB rewritten per HEAD move), and every tool that walks the repo tree — a
 // before/after file scan, a backup, rip — pays for bytes that are derived state, not project
-// content. firedancer measured polysearch's landing at 21–36 s while the daemon rewrote the
+// content. The indexed tool's landing took 21–36 s while the daemon rewrote the
 // in-repo DB, against 0.65–0.88 s otherwise. zsh/zshenv exports the mapping for every client,
 // and cocoindex/ccc-daemon.service.wsl sets the same value for the supervised daemon.
 //

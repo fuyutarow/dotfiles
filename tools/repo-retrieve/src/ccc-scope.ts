@@ -1,7 +1,7 @@
 // Did anything ccc indexes change between two commits? The freshness gate's watermark records a
 // git HEAD, and in a repo where ten agents commit every minute or two HEAD moves constantly —
 // mostly through append-only records the index excludes. A HEAD mismatch alone therefore said
-// "stale" about indexes that a re-index would reproduce byte for byte (firedancer 2026-09-25:
+// "stale" about indexes that a re-index would reproduce byte for byte (2026-09-25 evaluation:
 // NO_INDEX, then `index` failing twice on "HEAD moved", three minutes to one search).
 //
 // The question is answered by ccc's own matcher, run under ccc's own interpreter (ccc_scope.py),

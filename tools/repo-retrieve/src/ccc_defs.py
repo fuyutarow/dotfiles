@@ -10,7 +10,7 @@ may differ) and skips the full tree walk.
 Without argv[2]/[3], prints JSONL records to stdout (one-shot use).
 Cache: {"version", "files": {rel: {"mtime_ns", "size", "records", "publics"}}} — a file whose
 mtime and size are unchanged reuses its records, so a re-run after a few edits re-parses only those
-files (firedancer: 491 .jl files, 15 s full, well under 1 s for a typical commit).
+files (a large Julia repository: 491 .jl files, 15 s full, well under 1 s for a typical commit).
 Record: {"name","kind","lang","file","start","end","signature","doc","body","public"}
 `start`/`end` are 1-based lines of the definition itself; `doc` is the docstring or the comment
 block attached to it (Julia/Python string, `#`/`//`/`///`/`/** */` comments directly above).
@@ -260,7 +260,7 @@ def main() -> None:
 
     if only is not None:
         # The caller (git) named every path that may differ; everything else is the cache as is.
-        # Skips the full tree walk — the expensive part (~2.5 s of 3.4 s on firedancer).
+        # Skips the full tree walk — the expensive part (~2.5 s of 3.4 s on a large repository).
         files.update(old)
         for r in only:
             files.pop(r, None)

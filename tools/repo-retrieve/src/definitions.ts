@@ -1,8 +1,8 @@
 // `repo-retrieve definition` — "does this already exist?" answered as a few definition cards.
 //
 // WHY A SEPARATE ROUTE. `concept` ranks ccc's chunks: tests, comments, research records and copies
-// compete with the code, and a chunk is a slice, not a function. Measured 2026-10-01 on firedancer
-// (12 FireOps primitive needs, builder phrasing that does not name the function, EN + JA = 24
+// compete with the code, and a chunk is a slice, not a function. Measured 2026-10-01 on a large repository
+// (12 primitive needs, builder phrasing that does not name the function, EN + JA = 24
 // queries): the correct definition reached the top 3 for 13/24 with `concept`; builders missed
 // existing kernels and re-implemented them. This route searches DEFINITIONS only and reaches 21/24
 // (README "Measurements").
@@ -420,7 +420,7 @@ type Catalog = {
 
 // Bring the catalog to the working tree. Returns the definitions and the catalog dir.
 //
-// Two depths of check, because `git status` alone costs ~1 s on a large tree (firedancer, 611
+// Two depths of check, because `git status` alone costs ~1 s on a large tree (611
 // dirty paths, measured 2026-10-01) and every query would pay it:
 //   fast  same HEAD, last full check < SCAN_EVERY_MS ago → stat only the code files already in the
 //         catalog (~500 stats, a few ms); re-parse the ones that changed.

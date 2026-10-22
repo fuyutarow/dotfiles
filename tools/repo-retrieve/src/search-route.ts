@@ -53,7 +53,7 @@ const FILE_SCAN_PRIMITIVE =
 //   [cd <dir> &&] <router> <route> <args> [2>&1 | 2>/dev/null] | grep|rg [-F -i -v -w -n …] (-e PAT | -- PAT) [| head|tail [-n N | -N]]
 // One pattern and NO file operand (the filter reads the router's stream, never the tree); no
 // substitution, no other redirection, no further stage. A trailing head/tail only shortens what is
-// shown. Widened 2026-10-01 (firedancer report): the deny message recommended this form while the
+// shown. Widened 2026-10-01 (evaluation report): the deny message recommended this form while the
 // gate rejected `2>&1`, `-e`, and `| head` — three denials in one day for following the advice.
 const ROUTER_INVOCATION = String.raw`(?:rr|repo-retrieve|bun\s+(?:~\/\.claude\/hooks\/repo-retrieve\.ts|\/[^\s|;&]+\/repo-retrieve\.ts))`;
 // A literal backtick for the String.raw patterns below: `\`` would reach the RegExp as an

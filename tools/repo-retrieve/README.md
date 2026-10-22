@@ -190,9 +190,9 @@ reading the catalog as it stands.
    front. Without its partition it refuses (CPU measured 80-90 s per query) and the route answers
    `UNRANKED`.
 
-### Measurements (firedancer, 2026-10-01; case file kept outside this public repo)
+### Measurements (2026-10-01; benchmark case file kept outside this public repository)
 
-12 FireOps primitive needs × EN/JA, phrased without the function name, plus 4 needs nothing
+12 primitive needs × EN/JA, phrased without the function name, plus 4 needs nothing
 implements (× EN/JA):
 
 | method                                                   | top-3     | top-10    | absence right |

@@ -57,6 +57,20 @@ not the number of historical records or runs in other workspaces. Missing public
 the existing replay path with an explicit stderr diagnostic. Listing does not write or repair
 publications. The next owner publication produces them; rollout must update that writer.
 
+Owner publication, including the on-demand `agx worker doctor` command, reconciles lost
+runs. Under the publication lock and the run's workspace lock, it replays records and
+rechecks pid/start and unit liveness before appending exactly one `ended` event with
+outcome `lost`, the observed loss evidence, and `at` set to that locked observation time.
+A busy workspace is skipped until a later publication. An active unit or a live pid with
+a matching start prevents reconciliation. Existing records are never rewritten.
+After reconciliation, `ls --json --all` exposes a non-null `ended_at` and fixed
+`elapsed_seconds` for the lost run. Before an owner publication, read-only listing can
+still report derived loss with a null `ended_at`; run `agx worker doctor` to record it.
+Liveness always comes from pid/start and unit observations, never a missing end record.
+In-process full and incremental fold readers wait for already scheduled owner
+publication before reading. Publication uses its internal replay path to avoid
+waiting on itself; a read never schedules publication.
+
 `scripts/agx-accept.ts SELECTOR`, exposed as `mise run accept -- SELECTOR`, composes the selected
 latest run's verification exits, report preview, workspace diff stat, and suggested judge/land
 commands. It is read-only; the coordinator runs those commands separately.

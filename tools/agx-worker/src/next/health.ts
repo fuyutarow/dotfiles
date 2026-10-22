@@ -12,7 +12,7 @@ export function runHealth(
   // Pre-lease history (including imports) cannot establish modern lifecycle or
   // return guarantees. Missing metadata is not evidence that a run was lost.
   if (legacy) return undefined;
-  if (run.ended_at === null && run.outcome === "lost") return "orphaned";
+  if (run.outcome === "lost") return "orphaned";
   // An absent flag identifies completions written before the return contract.
   // A modern completion needs one judgment, regardless of its return/outcome.
   if (run.ended_at !== null && run.returned !== undefined) return "unjudged";

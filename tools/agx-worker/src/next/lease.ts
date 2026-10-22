@@ -64,6 +64,26 @@ export async function lossEvidence(
   let unitResult: string | null = null;
   const systemctl = Bun.which("systemctl", { PATH: process.env.PATH ?? "" });
   if (lease.unit !== null && systemctl !== null) {
+    const activity = Bun.spawn(
+      [
+        systemctl,
+        "--user",
+        "show",
+        lease.unit,
+        "--property=ActiveState",
+        "--value",
+      ],
+      { stdout: "pipe", stderr: "ignore", timeout: 1000 },
+    );
+    const [activityExit, activityText] = await Promise.all([
+      activity.exited,
+      new Response(activity.stdout).text(),
+    ]);
+    if (
+      activityExit === 0 &&
+      ["active", "activating", "reloading"].includes(activityText.trim())
+    )
+      return undefined;
     const child = Bun.spawn(
       [systemctl, "--user", "show", lease.unit, "--property=Result", "--value"],
       {

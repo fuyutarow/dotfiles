@@ -1,5 +1,9 @@
 # Changelog
 
+## 9.1.4 — 2026-10-23
+
+- Record lost run endings under owner locks during publication and preserve live units.
+
 ## 9.1.3 — 2026-10-23
 
 - Keep continuation dispatch in the recorded workspace and refuse missing or unregistered paths.

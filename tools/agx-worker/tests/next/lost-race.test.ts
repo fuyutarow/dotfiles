@@ -187,4 +187,14 @@ test("doctor distinguishes observed completions, missing returns, legacy history
   expect(
     findings.find((row) => row.object.split("/").at(-1) === "killed")?.finding,
   ).toBe("orphaned");
+  const endings = events(root).filter(
+    (event) => event.kind === "ended" && event.id === "killed",
+  );
+  expect(endings).toHaveLength(1);
+  expect(endings[0]).toMatchObject({
+    outcome: "lost",
+    evidence: { reason: "owner-gone" },
+  });
+  const ended = (await foldedRuns()).find((run) => run.id === "killed");
+  expect(ended?.ended_at).toBe(endings[0]?.at);
 });

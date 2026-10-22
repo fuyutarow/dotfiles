@@ -130,3 +130,167 @@ test("workspace publication reads no log bytes with a large unrelated history", 
   expect(rows.map((run) => run.id)).toEqual(["run-0"]);
   expect(opening).not.toHaveBeenCalled();
 });
+
+test("owner publication seals loss once across observers and fixes JSON elapsed", async () => {
+  const { acquireWorkspaceLock, events, foldedRuns, publishCurrentRuns } =
+    await import("../../src/next/store.ts");
+  const { listingRows } = await import("../../src/next/listing.ts");
+  const root = await mkdtemp(join(tmpdir(), "agx-seal-loss-"));
+  roots.push(root);
+  // Deliberately keep the ambient state elsewhere: publication must use its root.
+  process.env.AGX_NEXT_STATE_DIR = join(root, "unused-state");
+  const start = {
+    kind: "started",
+    id: "lost",
+    at: "2026-10-14T10:00:00Z",
+    ticket: "fixture",
+    writes: [],
+    cwd: root,
+    workspace: root,
+    row: "fixture",
+    dispatcher_session: null,
+    vendor_session: null,
+    pid: 2147483647,
+    lease: { pid: 2147483647, start: null, unit: null },
+  };
+  const live = {
+    ...start,
+    id: "live",
+    workspace: join(root, "live"),
+    pid: process.pid,
+    lease: await leaseFor(process.pid, null),
+  };
+  const path = join(root, "records.jsonl");
+  await Bun.write(
+    path,
+    [start, live].map((row) => JSON.stringify(row) + "\n").join(""),
+  );
+  const held = await acquireWorkspaceLock(root, root);
+  if (!held.ok) expect.unreachable(held.error);
+  await publishCurrentRuns(root);
+  await held.release();
+  expect(events(root).filter((event) => event.kind === "ended")).toEqual([]);
+  // Separate processes contend for the same kernel lock, with no shared cache.
+  const observers = Array.from({ length: 2 }, () =>
+    Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `import { publishCurrentRuns } from ${JSON.stringify(join(import.meta.dir, "../../src/next/store.ts"))}; await publishCurrentRuns(${JSON.stringify(root)});`,
+      ],
+      { stdout: "pipe", stderr: "pipe", timeout: 10000 },
+    ),
+  );
+  for (const observer of observers) {
+    const [exit, stderr] = await Promise.all([
+      observer.exited,
+      new Response(observer.stderr).text(),
+    ]);
+    expect(stderr).toBe("");
+    expect(exit).toBe(0);
+  }
+  await publishCurrentRuns(root);
+  const ends = events(root).filter((event) => event.kind === "ended");
+  expect(ends).toHaveLength(1);
+  expect(ends[0]).toMatchObject({
+    id: "lost",
+    outcome: "lost",
+    evidence: { reason: "owner-gone" },
+  });
+  const rows = await foldedRuns(root);
+  const lost = rows.find((run) => run.id === "lost");
+  expect(lost?.ended_at).not.toBeNull();
+  expect(lost?.evidence?.reason).toBe("owner-gone");
+  expect(rows.find((run) => run.id === "live")).toMatchObject({
+    state: "running",
+    ended_at: null,
+  });
+  const before = Temporal.Now.instant();
+  expect(
+    listingRows(rows, before).find((run) => run.id === "lost")?.elapsed_seconds,
+  ).toBe(
+    listingRows(rows, before.add({ hours: 1 })).find((run) => run.id === "lost")
+      ?.elapsed_seconds,
+  );
+  const reader = Bun.spawn(
+    [
+      process.execPath,
+      "tools/agx-worker/src/next/cli.ts",
+      "ls",
+      "--json",
+      "--all",
+    ],
+    {
+      env: { ...process.env, AGX_NEXT_STATE_DIR: root },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 5000,
+    },
+  );
+  const output = await new Response(reader.stdout).text();
+  expect(await reader.exited).toBe(0);
+  const parsed = jsonOf(
+    z.array(
+      z.looseObject({
+        id: z.string(),
+        state: z.string(),
+        ended_at: z.string().nullable(),
+        elapsed_seconds: z.number(),
+      }),
+    ),
+  ).safeParse(output);
+  expect(parsed.success).toBe(true);
+  if (!parsed.success) expect.unreachable("invalid listing");
+  expect(
+    parsed.data
+      .filter((run) => run.state === "ended")
+      .every((run) => run.ended_at !== null),
+  ).toBe(true);
+  expect(parsed.data.find((run) => run.id === "lost")?.elapsed_seconds).toBe(
+    listingRows(rows, before).find((run) => run.id === "lost")?.elapsed_seconds,
+  );
+});
+
+test("publication never ends a run whose unit remains active after its pid disappears", async () => {
+  const { chmod } = await import("node:fs/promises");
+  const { events, foldedRuns, publishCurrentRuns } =
+    await import("../../src/next/store.ts");
+  const root = await mkdtemp(join(tmpdir(), "agx-active-unit-"));
+  roots.push(root);
+  const binary = join(root, "systemctl");
+  await Bun.write(
+    binary,
+    `#!${process.execPath}\nprocess.stdout.write(process.argv.includes("--property=ActiveState") ? "active\\n" : "success\\n");\n`,
+  );
+  await chmod(binary, 0o755);
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${root}:${previousPath ?? ""}`;
+  await (async () => {
+    await Bun.write(
+      join(root, "records.jsonl"),
+      JSON.stringify({
+        kind: "started",
+        id: "active-unit",
+        at: "2026-10-14T10:00:00Z",
+        ticket: "fixture",
+        writes: [],
+        cwd: root,
+        workspace: root,
+        row: "fixture",
+        dispatcher_session: null,
+        vendor_session: null,
+        pid: 2147483647,
+        lease: { pid: 2147483647, start: null, unit: "agt_fixture.service" },
+      }) + "\n",
+    );
+    await publishCurrentRuns(root);
+    expect(events(root).filter((event) => event.kind === "ended")).toEqual([]);
+    expect((await foldedRuns(root))[0]).toMatchObject({
+      state: "running",
+      ended_at: null,
+    });
+  })().finally(() => {
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+  });
+});

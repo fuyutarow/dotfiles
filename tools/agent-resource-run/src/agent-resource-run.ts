@@ -692,11 +692,57 @@ export async function gpuAdmissionRefusal(
   }
   for (const { pid } of state.processes) {
     const base = join(procRoot, String(pid));
+    const statPath = join(base, "stat");
+    // Cached driver PIDs have neither starttime nor namespace provenance. Two
+    // local observations can reject reuse, but absence cannot prove driver exit.
+    const before = await optionalText(statPath);
     const [cgroup, processStatus, command] = await Promise.all([
       optionalText(join(base, "cgroup")),
       optionalText(join(base, "status")),
       optionalText(join(base, "cmdline")),
     ]);
+    const after = await optionalText(statPath);
+    const evidence = `${statPath},${join(base, "status")},${join(base, "cgroup")}`;
+    const uncertain = (reason: string) =>
+      `GPU holder identity unverified pid=${pid} reason=${reason}; sampled_namespace=unknown; evidence=${evidence}`;
+    if (before.isErr() || after.isErr()) return uncertain("stat-unreadable");
+    if (before.value === undefined || after.value === undefined)
+      return uncertain(
+        before.value !== undefined
+          ? "gone-during-check"
+          : "absent-or-pid-namespace-mismatch",
+      );
+    const startTime = procStartTime(before.value);
+    if (
+      startTime === undefined ||
+      !/^\d+$/u.test(startTime) ||
+      procStartTime(after.value) === undefined ||
+      !before.value.startsWith(`${pid} (`) ||
+      !after.value.startsWith(`${pid} (`)
+    )
+      return uncertain("stat-identity-invalid");
+    if (startTime !== procStartTime(after.value))
+      return uncertain("pid-reused-during-check");
+    const holderStatus = processStatus.unwrapOr(undefined);
+    if (holderStatus === undefined)
+      return uncertain("status-unreadable-or-gone");
+    // A translated/nested PID cannot establish equality with a driver PID.
+    const namespacePids = /^NSpid:\s+([^\n]+)/mu
+      .exec(holderStatus)?.[1]
+      ?.trim()
+      .split(/\s+/u);
+    const localPid = /^Pid:\s+(\d+)/mu.exec(holderStatus)?.[1];
+    const tgid = /^Tgid:\s+(\d+)/mu.exec(holderStatus)?.[1];
+    if (
+      localPid !== String(pid) ||
+      tgid !== String(pid) ||
+      namespacePids === undefined ||
+      namespacePids.length !== 1 ||
+      namespacePids[0] !== String(pid)
+    )
+      return uncertain("pid-namespace-or-tgid-mismatch");
+    if (cgroup.isErr() || cgroup.value === undefined)
+      return uncertain("cgroup-unreadable-or-gone");
     const scope = cgroup.isOk()
       ? cgroup.value?.match(
           /(?:^|\/)(agent-resource-[^/\n]+\.scope)(?:$|\n)/mu,
@@ -705,7 +751,7 @@ export async function gpuAdmissionRefusal(
     const zombie =
       processStatus.isOk() && /^State:\s+Z/mu.test(processStatus.value ?? "");
     if (scope === undefined)
-      return `GPU holder outside admitted GPU scope pid=${pid}${zombie ? " state=ZOMBIE" : ""} command=${command.unwrapOr(undefined)?.replaceAll("\0", " ").trim() ?? "[unavailable]"}; evidence=${join(base, "cgroup")}`;
+      return `GPU holder ownership unverified pid=${pid}${zombie ? " state=ZOMBIE" : ""} local_scope=outside-admitted-GPU-scope local_starttime=${startTime} sampled_namespace=unknown command=${command.unwrapOr(undefined)?.replaceAll("\0", " ").trim() ?? "[unavailable]"}; evidence=${evidence}`;
     if (!admittedScopes.has(scope))
       return `GPU holder admission receipt unavailable pid=${pid}${zombie ? " state=ZOMBIE" : ""}; evidence=${join(base, "environ")}`;
   }

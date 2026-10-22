@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -540,3 +540,113 @@ test("unreadable process inventory or stat fails closed", async () => {
     await gpuAdmissionRefusal(request, 512, { procRoot: f.root, state }),
   ).toContain("GPU process state unreadable pid=123");
 });
+
+for (const scenario of [
+  "absent",
+  "gone",
+  "reuse",
+  "stat-unreadable",
+  "cgroup-missing",
+  "cgroup-unreadable",
+  "namespace",
+  "tgid",
+  "status-unreadable",
+  "esrch",
+  "malformed",
+  "live-unadmitted",
+  "live-outside",
+  "live-admitted",
+] as const)
+  test(`sampled holder ${scenario} never becomes false proven ownership or unsafe admission`, async () => {
+    await using f = await fixture(
+      !["absent", "gone", "live-outside"].includes(scenario)
+        ? "agent-resource-existing.scope"
+        : "unmanaged.scope",
+    );
+    await fs.writeFile(join(f.base, "stat"), stat("S"));
+    await fs.writeFile(
+      join(f.base, "status"),
+      `State:\tS (sleeping)\nPid:\t123\nTgid:\t${scenario === "tgid" ? "99" : "123"}\nNSpid:\t${scenario === "namespace" ? "900 123" : "123"}\n`,
+    );
+    if (scenario === "absent") await fs.rm(f.base, { recursive: true });
+    if (scenario === "live-unadmitted")
+      await fs.writeFile(join(f.base, "environ"), "");
+    const readFile = fs.readFile;
+    let holderCheck = false;
+    let holderStatReads = 0;
+    const denied = mock<() => Promise<never>>().mockRejectedValue(
+      Object.assign(new Error("permission denied"), { code: "EACCES" }),
+    );
+    const gone = mock<() => Promise<never>>().mockRejectedValue(
+      Object.assign(new Error("gone"), { code: "ENOENT" }),
+    );
+    const noProcess = mock<() => Promise<never>>().mockRejectedValue(
+      Object.assign(new Error("no process"), { code: "ESRCH" }),
+    );
+    type ReadPath = Parameters<typeof readFile>[0];
+    type ReadOptions = Parameters<typeof readFile>[1];
+    type ReadResult = Awaited<ReturnType<typeof readFile>>;
+    function readHolder(
+      path: ReadPath,
+      options?:
+        | (Exclude<ReadOptions, string> & { encoding?: null | undefined })
+        | null,
+    ): Promise<Exclude<ReadResult, string>>;
+    function readHolder(
+      path: ReadPath,
+      options: BufferEncoding | (ReadOptions & { encoding: BufferEncoding }),
+    ): Promise<string>;
+    function readHolder(
+      path: ReadPath,
+      options?: ReadOptions,
+    ): Promise<ReadResult>;
+    // Bound the injected race to the sampled-holder pass, after live inventory.
+    async function readHolder(
+      path: ReadPath,
+      options?: ReadOptions,
+    ): Promise<ReadResult> {
+      if (path === join(f.base, "status")) {
+        holderCheck = true;
+        if (scenario === "status-unreadable") return denied();
+      }
+      if (path === join(f.base, "stat") && holderCheck) {
+        holderStatReads += 1;
+        if (scenario === "gone") await fs.rm(f.base, { recursive: true });
+        if (scenario === "reuse")
+          await fs.writeFile(path, stat("S", { startTime: "101" }));
+        if (scenario === "malformed") await fs.writeFile(path, "malformed\n");
+        if (scenario === "stat-unreadable") return denied();
+        if (scenario === "esrch") return noProcess();
+      }
+      if (path === join(f.base, "cgroup")) {
+        // First cgroup read is reservation discovery; second is holder inspection.
+        cgroupReads += 1;
+        if (cgroupReads === 2 && scenario === "cgroup-missing") return gone();
+        if (cgroupReads === 2 && scenario === "cgroup-unreadable")
+          return denied();
+      }
+      return readFile(path, options);
+    }
+    const read = spyOn(fs, "readFile").mockImplementation(readHolder);
+    let cgroupReads = 0;
+    using _restore = {
+      [Symbol.dispose]: () => {
+        read.mockRestore();
+      },
+    };
+    const refusal = await gpuAdmissionRefusal(request, 512, {
+      procRoot: f.root,
+      state: { ...state, processes: [{ pid: 123, usedMiB: 1 }] },
+    });
+    if (scenario === "live-admitted") expect(refusal).toBeUndefined();
+    else if (scenario === "live-unadmitted")
+      expect(refusal).toContain("GPU holder admission receipt unavailable");
+    else {
+      expect(refusal).toBeDefined();
+      expect(refusal).not.toContain("GPU holder outside admitted GPU scope");
+      expect(refusal).toContain("unverified");
+      expect(refusal).toContain("sampled_namespace=unknown");
+      expect(refusal).toContain(join(f.base, "stat"));
+    }
+    if (scenario !== "absent") expect(holderStatReads).toBe(1);
+  });

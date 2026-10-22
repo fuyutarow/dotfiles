@@ -22,6 +22,17 @@ afterAll(() => rm(runtime, { recursive: true, force: true }));
 const root = await mkdtemp(join(tmpdir(), "arr-thin-"));
 afterAll(() => rm(root, { recursive: true, force: true }));
 const runner = join(import.meta.dir, "../src/agent-resource-run.ts");
+async function holderIdentity(processDir: string, pid: number, state = "S") {
+  await mkdir(join(processDir, "task", String(pid)), { recursive: true });
+  await Bun.write(
+    join(processDir, "stat"),
+    `${pid} (fixture) ${state} ${Array.from({ length: 18 }, () => "1").join(" ")} 100 23 24\n`,
+  );
+  await Bun.write(
+    join(processDir, "status"),
+    `State:\t${state}\nPid:\t${pid}\nTgid:\t${pid}\nNSpid:\t${pid}\n`,
+  );
+}
 const manifest = (
   overrides: Partial<ResourceManifest> = {},
 ): ResourceManifest => ({
@@ -272,6 +283,7 @@ test("GPU admission refuses an unadmitted zombie GPU holder", async () => {
     "Name:\ttest\nState:\tZ (zombie)\n",
   );
   await Bun.write(join(processDir, "cmdline"), "julia\\0runner.jl");
+  await holderIdentity(processDir, pid, "Z");
   const state = {
     schema: 1 as const,
     attemptAt: 1,
@@ -302,6 +314,7 @@ test("GPU VRAM guard sums admitted job peaks against device total and safety mar
     join(processDir, "status"),
     "Name:\tjulia\nState:\tS (sleeping)\n",
   );
+  await holderIdentity(processDir, pid);
   await Bun.write(
     join(processDir, "environ"),
     `AGENT_RESOURCE_ADMISSION_RECEIPT=${JSON.stringify({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 300 * 1024 ** 2 } })}\0`,
@@ -343,6 +356,7 @@ test("GPU VRAM re-check deduplicates scopes sharing one reservation receipt", as
       `0::/user.slice/agent-resource-${index === 0 ? "job" : "holder"}.scope\n`,
     );
     await Bun.write(join(processDir, "status"), "State:\tS (sleeping)\n");
+    await holderIdentity(processDir, pid);
     await Bun.write(
       join(processDir, "environ"),
       `AGENT_RESOURCE_ADMISSION_RECEIPT=${receipt}\0`,

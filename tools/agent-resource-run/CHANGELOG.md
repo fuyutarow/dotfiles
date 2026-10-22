@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.14 — 2026-10-22
+
+- Refuse vanished, reused, unreadable or namespace-mismatched GPU holders as unverified instead of claiming proven outside-scope ownership.
+
 ## 1.5.13 — 2026-10-21
 
 - Confirm persistent unavailable task wchan evidence before denying GPU admission.

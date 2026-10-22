@@ -1,7 +1,10 @@
 import { attempt, errorMessage } from "../../../shared/src/attempt.ts";
 import { parseNextTicket } from "./ticket.ts";
 import { route } from "./route.ts";
-import { loadRoster } from "../../../../agents/models/roster.ts";
+import {
+  loadRoster,
+  ROUTING_OBJECTIVE,
+} from "../../../../agents/models/roster.ts";
 
 const oneLine = (reason: string): string => reason.replaceAll(/[\r\n]+/gu, " ");
 
@@ -32,6 +35,8 @@ export async function roster(ticketPath?: string): Promise<number> {
     process.stderr.write(`agx worker roster: ${oneLine(loaded.error)}\n`);
     return 1;
   }
-  process.stdout.write(`${JSON.stringify(loaded.value)}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ ...loaded.value, objective: ROUTING_OBJECTIVE })}\n`,
+  );
   return 0;
 }

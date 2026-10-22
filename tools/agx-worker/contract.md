@@ -10,8 +10,10 @@
 | `agx worker judge RUN_ID accept\|reject [--note TEXT]` | Append an acceptance or rejection judgment. |
 | `agx worker stats [--import-legacy]` | Report run counts; optionally import legacy run records. |
 | `agx worker dispatch TICKET [--ws SLUG] [--unit NAME]` | Obtain a workspace through `agx ws` and start a durable worker unit. |
-| `agx worker roster TICKET` | Print one selected roster row. Legacy roster --json retains the full validated roster. |
+| `agx worker roster TICKET` | Print one selected roster row. `roster --json` prints the full validated roster and routing objective. |
 | `agx worker doctor` | Diagnose worker records as tool/object/finding/remedy JSON Lines. |
+
+The top-level `objective` field in `roster --json` is the routing objective text used to select workers; the per-ticket `roster TICKET` output remains one selected row.
 
 Tickets are caller-owned files. `agx worker run` accepts positional ticket paths and optionally a working
 tree and sandbox mode. A continuation uses the previous run ID and resumes its vendor session,

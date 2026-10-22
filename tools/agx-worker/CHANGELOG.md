@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.3.0 — 2026-10-23
+
+- Expose the routing objective in the full roster JSON view
+
 ## 8.2.0 — 2026-10-23
 
 - Replace doctor quiet environment control with --quiet and reject the retired variable.

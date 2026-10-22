@@ -3,11 +3,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
-import { loadRoster } from "../../../agents/models/roster.ts";
+import {
+  loadRoster,
+  ROUTING_OBJECTIVE,
+} from "../../../agents/models/roster.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const ENTRY = fileURLToPath(new URL("../src/next/cli.ts", import.meta.url));
 const JsonValue = jsonOf(z.unknown());
+const FullRosterView = jsonOf(z.looseObject({ objective: z.string() }));
 
 async function invoke(...args: string[]) {
   const child = Bun.spawn([process.execPath, ENTRY, ...args], {
@@ -31,9 +35,16 @@ test("agx worker roster --json prints the validated roster value", async () => {
   const result = await invoke("roster", "--json");
   expect(result.exitCode, result.stderr).toBe(0);
   expect(result.stderr).toBe("");
-  const parsed = JsonValue.safeParse(result.stdout);
+  const parsed = FullRosterView.safeParse(result.stdout);
   expect(parsed.success).toBe(true);
-  if (parsed.success) expect(parsed.data).toEqual(loaded.value);
+  if (parsed.success) {
+    expect(parsed.data).toEqual({
+      ...loaded.value,
+      objective: ROUTING_OBJECTIVE,
+    });
+    expect(parsed.data.objective).toBe(ROUTING_OBJECTIVE);
+    expect(parsed.data).toMatchObject(loaded.value);
+  }
 });
 
 test("roster TICKET emits one selected row without starting a worker or changing records", async () => {

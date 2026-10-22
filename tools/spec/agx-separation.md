@@ -1,7 +1,6 @@
 # agx を dotfiles から分離するか — 設計判断 (2026-10-23)
 
-issue: `agx-separation-study-1023`。依頼元: dotfiles セッション
-`claude:87d88738-0902-447d-abfa-2016252d22fc`。この文書は判断材料と移行計画であり、実装はしない。
+この文書は、agx を dotfiles から分離するかどうかの判断材料と、移行の計画である。実装は含まない。
 計測はすべて dotfiles の作業コピー (2026-10-23, `alpha` = `bce015ad` の子孫) で行った。
 
 ## 0. 結論
@@ -18,14 +17,14 @@ issue: `agx-separation-study-1023`。依頼元: dotfiles セッション
 2. 段 S5〜S8 (新リポジトリ `agx` への移動) は、S1〜S4 の後で、§9 の再判断条件を満たすときに行う。
    S4 を終えると、移動は「コピーと固定版の取り込み」だけになる。
 3. 分離しない (現状維持) は推奨しない。契約 (チケット形式、`records.jsonl`、`.agx.toml`) は
-   firedancer と polysearch-v1 も使っているのに (§3.4)、その定義が個人用リポジトリの内部 import に
+   dotfiles の外の利用側リポジトリも使っているのに (§3.4)、その定義が個人用リポジトリの内部 import に
    埋まっている。この状態は分離しなくても直す必要がある。
 4. いきなり全部を分離することも推奨しない。いま切ると、roster、model floor、statusline、
    `land.ts` が agx のソースを直接 import したり読んだりしているため、二重実装か壊れたリンクが残る。
 
 ## 1. User story
 
-- **U1 (利用側リポジトリの調整役):** firedancer や coralbase のコーディネーターとして、
+- **U1 (利用側リポジトリの調整役):** dotfiles の外で agx を使うリポジトリのコーディネーターとして、
   dotfiles を読まずに、チケット形式、`.agx.toml`、`agx worker ls --json` の形を知りたい。
   そうすれば、dotfiles の変更で自分の lane が黙って壊れることがない。
 - **U2 (agx の保守者):** agx を変えるとき、dotfiles の hook、render、land の gate を
@@ -166,16 +165,15 @@ shared 内部の import は `rr regex 'from "\./[a-z-]+\.ts"' -p tools/shared/sr
 
 ### 3.4 利用側リポジトリ
 
-**計測方法:** `ls ~/Workspace/*/.agx.toml` と `ls -d ~/Workspace/coralbase/.agents/tickets`。
+利用側リポジトリが agx と結合する形は、次の三つである。
 
-| リポジトリ | `.agx.toml` | チケット置き場 | ほかの結合 |
-| --- | --- | --- | --- |
-| firedancer | あり。`tickets = "/home/fuyu/.local/state/firedancer-tickets/th"` | 状態ディレクトリ (絶対 path) | `agx-usehooks` を `node_modules/agx-usehooks` に link (`tools/agx-usehooks/consumers.toml:1-8`) |
-| polysearch-v1 | あり。`tickets = ".../polysearch-v1/.agents/tickets"` (FROZEN) | 本体チェックアウト | なし |
-| coralbase | **なし** | `.agents/tickets` (既定) | なし |
+- **チケットの置き場の宣言:** `.agx.toml` の `tickets`。宣言しない利用側は既定の `.agents/tickets` を使う (`scope.md:22`)。
+  宣言する利用側の中には、機械の絶対 path (リポジトリの外の状態ディレクトリ) を commit しているものがある。
+- **作業ツリーの設定:** `.ws.toml` の `ready`、`trunk`、`keep`。`keep` は機械の絶対 path を並べる。
+- **hook のライブラリ:** `agx-usehooks` を `node_modules/agx-usehooks` に link して使う利用側がある (`tools/agx-usehooks/consumers.toml:1-8`)。
 
-依頼の前提 2 は「coralbase も `.agx.toml` を通して使う」としていたが、実測では coralbase に
-`.agx.toml` はない。coralbase は既定のチケット置き場 (`scope.md:22`) で使っている。
+利用側によっては、追跡されたファイルの中身と名前に個人の道具の名前を置くことを、試験で禁じている。
+この場合、利用側は agx の設定ファイルを commit できない ([agx-config.md](agx-config.md) の R3)。
 
 `.agx.toml` の reader は二つある。`tools/agx-ticket/src/tickets.ts:131-156` と
 `tools/agx-worker/src/next/ticket-home.ts:51-59` である。さらに、使われていない
@@ -330,7 +328,7 @@ agx/
 である。出ないときは、`mise run deps` に `bun install -g <git URL>#<tag>` を足し、その版を
 `mise.toml` の一か所で宣言する。
 
-`agx-usehooks` は利用側ライブラリなので別に扱う。firedancer と dotfiles の hook
+`agx-usehooks` は利用側ライブラリなので別に扱う。これを使う利用側リポジトリと dotfiles の hook
 (`agents/hooks/remind-reply-language.ts:9`) は、それぞれの `package.json` に git URL とタグで固定する。
 hook は「依存なしで動く」規則 (root `package.json` の description) があるので、
 `remind-reply-language.ts` が usehooks を使い続けるかは dotfiles の持ち主が決める (§9 R5)。
@@ -402,8 +400,8 @@ Jev クライアントに agx 以外の利用者がさらに一つ増えたら (
 | (判断点) | S1〜S4 の結果、§9 の条件 | 分離を続けるかを決める | — | 続けない場合はここで止める。S1〜S4 は単独で価値がある |
 | **S5** 新リポジトリを作る | S4 後の `tools/agx*`, `tools/xmsg`, `tools/jex`, `tools/agx-core`, 文書, `bunfig` 相当 | `~/Workspace/agx` に §5.1 の構成で copy する。初回 commit に元の dotfiles revision を書く。agx 自身の `mise.toml` と CI | (新規) agx リポジトリで `mise run check`。dotfiles 側で `mise run test:agx` が同じ件数で通る (両方に同じコードがある期間) | 新リポジトリを使わないだけで済む。dotfiles は変わっていない |
 | **S6** dotfiles を利用側に切り替える | S5 のタグ | root `package.json` に固定版を追加 (§5.3 b)。`bin` から `agx`, `agx-worker`, `agx-ws`, `agx-ticket`, `jex`, `xmsg` を外す。`systemd/agx-doctor.service:13` を `agx doctor` に替える | `mise run deps` 後に `agx -V`、`mise run doctor`、`bun test scripts/tests/render-home.test.ts scripts/tests/land.test.ts`、`mise run gate:land` | `package.json` を戻して `mise run deps`。ソースは S7 まで dotfiles に残っている |
-| **S7** dotfiles からソースを消す | S6 が 1 週間問題なく動いたこと | `tools/agx*`, `tools/xmsg`, `tools/jex` を削除。`mise.toml` の `test:agx`, `usehooks:consumers` を外す。`scripts/config-registry.ts:534-556,726-734,757-762,795-799` を更新。`tools/spec/architecture.md` の Suite 節を agx の文書への参照に替える | `mise run lint:config-map`、`mise run test`、`mise run gate:land`、`mise run doctor` | commit を戻す (S6 の固定版はそのまま動く) |
-| **S8** 利用側の取り込みを切り替える | S5 のタグ | firedancer の `agx-usehooks` を git URL の固定版にする (`tools/agx-usehooks/consumers.toml` の link をやめる)。`.agx.toml` は変更不要 | firedancer で `bunx tsc --noEmit -p .` (いまの `usehooks:consumers` と同じ命令, `consumers.toml:8`) | firedancer の `package.json` を戻す |
+| **S7** dotfiles からソースを消す | S6 の後で、次の三つを観測したこと (暦の日数ではなく、確かめた事実を条件にする): 固定版の agx を通して、dotfiles と agx を使う各利用側リポジトリで受け入れ済みの run が少なくとも 1 件ずつある / `agx worker doctor` が新しい finding を出さない / 戻す手順 (固定版を外して dotfiles のソースに戻す) を一度実際に通した | `tools/agx*`, `tools/xmsg`, `tools/jex` を削除。`mise.toml` の `test:agx`, `usehooks:consumers` を外す。`scripts/config-registry.ts:534-556,726-734,757-762,795-799` を更新。`tools/spec/architecture.md` の Suite 節を agx の文書への参照に替える | `mise run lint:config-map`、`mise run test`、`mise run gate:land`、`mise run doctor` | commit を戻す (S6 の固定版はそのまま動く) |
+| **S8** 利用側の取り込みを切り替える | S5 のタグ | `agx-usehooks` を使う利用側リポジトリで、link をやめて git URL の固定版にする (`tools/agx-usehooks/consumers.toml` の link の宣言を消す) | その利用側で `bunx tsc --noEmit -p .` (いまの `usehooks:consumers` と同じ命令, `consumers.toml:8`) | その利用側の `package.json` を戻す |
 
 S1〜S4 はそれぞれ dotfiles の 1 つの issue にできる。S5〜S8 は agx リポジトリに 2 つ
 (S5、S8 の受け側)、dotfiles に 2 つ (S6、S7) の issue にできる。
@@ -432,7 +430,7 @@ S1〜S4 はそれぞれ dotfiles の 1 つの issue にできる。S5〜S8 は a
 | K2 | 状態ディレクトリの形が版の間で食い違い、古い版の statusline が新しい records を読めない | S2 の後は statusline が CLI 出力だけを読むので、版は agx 一つに閉じる (SEP-2) |
 | K3 | 動いている worker unit が、切り替えの途中で古いソースの path を参照する | `agx worker ls` で running が 0 のときに S6 と S7 を land する |
 | K4 | roster の移動で `~/.claude/CLAUDE.md` の描画が壊れ、全セッションの指示が変わる | S3 の検証に `scripts/tests/render-home.test.ts` を入れ、`mise run link:dots` の前に差分を見る |
-| K5 | firedancer の hook が、固定版に切り替える前に dotfiles のソースを失う | S8 を S7 より前に終える |
+| K5 | `agx-usehooks` を使う利用側の hook が、固定版に切り替える前に dotfiles のソースを失う | S8 を S7 より前に終える |
 | K6 | 二つのリポジトリで同じ設計の議論が二度起き、文書が食い違う | architecture の Suite 節と `scope.md` は agx 側だけに置き、dotfiles 側は参照だけにする |
 
 ## 9. 再判断の条件と未決事項
@@ -441,24 +439,21 @@ S5 (新リポジトリ) に進む条件は、次のどれかが起きたとき�
 
 - agx の変更が dotfiles の gate (agx と無関係な lint や test) で止められたことが、1 週間に 2 回以上ある。
 - 利用側リポジトリの調整役が、契約を知るために dotfiles を読む必要があったと報告する (U1 の実害)。
-- agx を公開する (acpx 調査の handoff でユーザーが「公開」を議題にしている) と決める。
+- agx を公開すると決める。
 
 S1〜S4 だけで止める場合も、§2.2 の SEP-1〜SEP-3 は dotfiles の中で成り立つ。
 
 未決事項 (持ち主の判断が要るもの):
 
-- **R1:** roster (`dispatch-roster.toml`) の持ち主。経路選択の入力なので agx が持つのが自然である。
-  ただし、価格表や AA の数値は dotfiles の `agents/models/releases.toml` と `mise run models:audit` で
-  保守されている (`scripts/config-registry.ts:736-744`)。どちらに置くかを決める。
-- **R2:** codex worker が `model-floor.toml` を読む方針 (§3.2 C3) を残すか。hook が同じ判定をするので、
-  worker 側をやめる案と、floor を roster に入れる案がある。
+- **R1 (決定済み):** roster は、agx が出荷する目録と、利用者の方針 (`~/.config/agx/agx.toml`) に分ける ([agx-config.md](agx-config.md) §3.3、§3.4)。
+- **R2 (決定済み):** codex の worker は `model-floor.toml` を読まない。agx にとっての下限は目録と方針で決まる ([agx-config.md](agx-config.md) §3.5)。
 - **R3:** subscription usage (`subscription-usage.ts`, `codex-subscription-usage.ts`) を、agx が
   `agx status` で出すか、statusline と agx がそれぞれ読むか。
 - **R4:** `agx-usehooks` の `launcherRunsToday` と `minutesSinceLastResult` は旧 ledger の
   `runs.jsonl` を読む (§3.5)。旧 ledger に worker の run が書かれなくなってからは、その値は worker の
   run を数えていない可能性が高い (未検証)。いまそのファイルに追記しているのは land の `landed` 行
   (§3.6) だけである。S0b で `legacy-v1/` へ向けるか、`records.jsonl` (`agx worker ls --json`) を
-  読むように直すかを、firedancer の持ち主が決める。
+  読むように直すかを、`agx-usehooks` を使う利用側の持ち主が決める。
 - **R5:** dotfiles の hook (`remind-reply-language.ts`) が、外部 package になった usehooks に依存してよいか。
 - **R6:** §5.3 (b) で、依存 package の bin が `bun link` で PATH に出るか (未検証)。
 

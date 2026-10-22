@@ -20,13 +20,6 @@
       "reason": "Intermediate restoration under survey-2610.1 admitted a 213-character authored entry. The later official-package adoption on the same date retires this selector and recovers the entire 213 characters. Canonical technical position remains urn:uuid:01a1380c-4295-76fc-9c22-eb1545f23c6e; no independent authored Sui selector remains active."
     },
     {
-      "date": "2026-10-11",
-      "from": 51223,
-      "to": 51683,
-      "spentBy": "driving-polysearch-v1",
-      "reason": "The owner-approved r99-u26 WIP admits a 460-character name+description entry for the polysearch-v1 record CLI. The floor measured 51,223 chars at 58 skills before admission and 51,683 at 59 after; the cap matches the new total exactly, with no added slack."
-    },
-    {
       "date": "2026-10-10",
       "from": 50782,
       "to": 51223,

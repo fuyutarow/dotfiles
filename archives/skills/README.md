@@ -4,6 +4,12 @@ Skills retired from `agents/skills/`. Nothing here is linked into any agent (`mi
 only reads `agents/skills/`), so an archived skill never fires; the directory keeps the text
 reachable without `git log`.
 
+## 2026-10-23 owner rule: no project names
+
+| Skill | Archived | Why | Successor |
+|---|---|---|---|
+| [`driving-polysearch-v1`](driving-polysearch-v1/SKILL.md) | 2026-10-23 | Owner rule: dotfiles must not contain proper nouns of the operator's other projects; the project is frozen and the skill drives its CLI | none; the project's own repository owns its CLI usage |
+
 ## 2026-10-22 owner-requested retirement
 
 | Skill | Archived | Why | Successor |

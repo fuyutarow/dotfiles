@@ -40,7 +40,7 @@ const RunRow = z.looseObject({
   ticket: z.string(),
   state: z.enum(["running", "ended"]),
   cwd: z.string(),
-  workspace: z.string(),
+  workspace: z.string().optional(),
   unit: z.string().optional(),
 });
 const Rows = jsonOf(z.array(RunRow));
@@ -219,7 +219,7 @@ function matches(row: RunRow, binding: DispatchBinding): boolean {
     row.id === binding.id &&
     row.ticket === binding.ticket &&
     resolve(row.cwd) === binding.workspace &&
-    resolve(row.workspace) === binding.workspace &&
+    resolve(row.workspace ?? row.cwd) === binding.workspace &&
     row.unit === binding.unit
   );
 }
@@ -240,6 +240,58 @@ async function ticketSlug(path: string): Promise<Attempt<string>> {
     ? (parsed.data.name ?? basename(path, ".md"))
     : basename(path, ".md");
   return validateSlug(name, "agx ticket new");
+}
+
+// Read the repository's registry, not directory names or a copied .jj marker.
+async function registeredWorkspace(
+  workspace: string,
+  repo: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ ok: boolean; reason?: string; code?: number }> {
+  const physical = await attempt(() => realpath(workspace));
+  if (!physical.ok) return { ok: false, reason: errorMessage(physical.error) };
+  const jj = await lstat(join(repo, ".jj")).catch(() => null);
+  const listed = await invokeReadonly(
+    jj === null
+      ? ["git", "--no-optional-locks", "worktree", "list", "--porcelain"]
+      : ["jj", ...JJ_READ_ARGS, "workspace", "list", "-T", 'name ++ "\\n"'],
+    repo,
+    env,
+  );
+  if (listed.code !== 0)
+    return {
+      ok: false,
+      reason:
+        listed.err.trim() === ""
+          ? "cannot read workspace registry"
+          : listed.err.trim(),
+      code: listed.code,
+    };
+  for (const line of listed.out.trim().split("\n")) {
+    if (line === "" || (jj === null && !line.startsWith("worktree "))) continue;
+    const root =
+      jj === null
+        ? { code: 0, out: line.slice("worktree ".length), err: "" }
+        : await invokeReadonly(
+            ["jj", ...JJ_READ_ARGS, "workspace", "root", "--name", line],
+            repo,
+            env,
+          );
+    if (root.code !== 0)
+      return {
+        ok: false,
+        reason:
+          root.err.trim() === ""
+            ? "cannot resolve registered workspace"
+            : root.err.trim(),
+        code: root.code,
+      };
+    if (root.out.trim() === "") continue;
+    const path = resolve(repo, root.out.trim());
+    if ((await realpath(path).catch(() => null)) === physical.value)
+      return { ok: true };
+  }
+  return { ok: false, reason: `not a registered workspace of ${repo}` };
 }
 
 export async function dispatch(options: {
@@ -323,30 +375,81 @@ export async function dispatch(options: {
     failures.push(
       `agx worker dispatch: unit ${unit}.service is already running; repair: wait for it to end or choose --unit`,
     );
-  const ws = await invoke(
-    ["agx-ws", "add", wsSlug, "--repo", ticketRepo.root, "--reuse", "--json"],
-    cwd,
-    env,
-  );
-  if (ws.code !== 0) {
-    const reason = ws.err.trim();
-    process.stderr.write(
-      `agx worker dispatch: agx ws add failed: ${reason !== "" ? reason : `exit ${ws.code}`}\n`,
+  let workspace: string;
+  if (options.continuation !== undefined) {
+    const runs = await listedRuns(cwd, env);
+    if (runs.rows === undefined) {
+      process.stderr.write(
+        `agx worker dispatch: cannot read run records: ${runs.error}\n`,
+      );
+      return runs.code ?? 1;
+    }
+    const previous = runs.rows.find((row) => row.id === options.continuation);
+    const recorded =
+      previous?.workspace === ""
+        ? previous.cwd
+        : (previous?.workspace ?? previous?.cwd);
+    const refuse = (reason: string): number => {
+      process.stderr.write(
+        `agx worker dispatch: cannot continue ${options.continuation}: recorded workspace ${JSON.stringify(recorded ?? "<unknown>")}: ${reason.replaceAll(/[\r\n]+/gu, "; ")}; repair: restore/register that path with agx ws add or start a fresh run\n`,
+      );
+      return 2;
+    };
+    if (recorded === undefined || recorded === "" || !isAbsolute(recorded))
+      return refuse("missing absolute workspace path in run record");
+    workspace = resolve(recorded);
+    if (options.ws !== undefined && basename(workspace) !== `ws_${options.ws}`)
+      return refuse(
+        `--ws ${options.ws} names a different workspace; omit --ws to continue`,
+      );
+    const info = await attempt(() => lstat(workspace));
+    if (!info.ok) return refuse(errorMessage(info.error));
+    const usable = await attempt(() => realpath(workspace));
+    if (!usable.ok) return refuse(errorMessage(usable.error));
+    const directory = await attempt(() => lstat(usable.value));
+    if (!directory.ok) return refuse(errorMessage(directory.error));
+    if (!directory.value.isDirectory())
+      return refuse("path is not a directory");
+    const registered = await registeredWorkspace(
+      workspace,
+      ticketRepo.root,
+      env,
     );
-    return ws.code === 0 ? 1 : ws.code;
-  }
-  const parsedWorkspace = WorkspaceResult.safeParse(ws.out);
-  if (
-    !parsedWorkspace.success ||
-    !isAbsolute(parsedWorkspace.data.workspace) ||
-    basename(parsedWorkspace.data.workspace) !== `ws_${wsSlug}`
-  ) {
-    process.stderr.write(
-      "agx worker dispatch: agx ws add returned an invalid workspace path\n",
+    if (!registered.ok && registered.code === 75) {
+      process.stderr.write(`${registered.reason}\n`);
+      return 75;
+    }
+    if (!registered.ok) {
+      return refuse(
+        registered.reason ?? "cannot verify workspace registration",
+      );
+    }
+  } else {
+    const ws = await invoke(
+      ["agx-ws", "add", wsSlug, "--repo", ticketRepo.root, "--reuse", "--json"],
+      cwd,
+      env,
     );
-    return 1;
+    if (ws.code !== 0) {
+      const reason = ws.err.trim();
+      process.stderr.write(
+        `agx worker dispatch: agx ws add failed: ${reason !== "" ? reason : `exit ${ws.code}`}\n`,
+      );
+      return ws.code === 0 ? 1 : ws.code;
+    }
+    const parsedWorkspace = WorkspaceResult.safeParse(ws.out);
+    if (
+      !parsedWorkspace.success ||
+      !isAbsolute(parsedWorkspace.data.workspace) ||
+      basename(parsedWorkspace.data.workspace) !== `ws_${wsSlug}`
+    ) {
+      process.stderr.write(
+        "agx worker dispatch: agx ws add returned an invalid workspace path\n",
+      );
+      return 1;
+    }
+    workspace = resolve(parsedWorkspace.data.workspace);
   }
-  const workspace = resolve(parsedWorkspace.data.workspace);
 
   const jjWorkspace = await lstat(join(workspace, ".jj")).catch(() => null);
   const revision = await invokeReadonly(

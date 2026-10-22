@@ -9,7 +9,7 @@
 | `agx worker ls [SELECTOR] [--workspace PATH] [--json]` | List runs and judgments; SELECTOR is a run id, unique run-id prefix, or exact ticket name. Ticket selections put the newest run last. |
 | `agx worker judge RUN_ID accept\|reject [--note TEXT]` | Append an acceptance or rejection judgment. |
 | `agx worker stats [--import-legacy]` | Report run counts; optionally import legacy run records. |
-| `agx worker dispatch TICKET [--ws SLUG] [--unit NAME]` | Obtain a workspace through `agx ws` and start a durable worker unit. |
+| `agx worker dispatch TICKET [--ws SLUG] [--unit NAME] [--continue RUN_ID]` | Obtain a workspace through `agx ws`, or reuse a continuation's recorded workspace, and start a durable worker unit. |
 | `agx worker roster TICKET` | Print one selected roster row. `roster --json` prints the full validated roster and routing objective. |
 | `agx worker doctor` | Diagnose worker records as tool/object/finding/remedy JSON Lines. |
 
@@ -18,6 +18,17 @@ The top-level `objective` field in `roster --json` is the routing objective text
 Tickets are caller-owned files. `agx worker run` accepts positional ticket paths and optionally a working
 tree and sandbox mode. A continuation uses the previous run ID and resumes its vendor session,
 except for the capacity recovery described below.
+`dispatch --continue RUN_ID` uses that run's recorded `workspace` path, falling back to
+`cwd` when `workspace` is absent or empty. Both preflight and the durable worker receive
+that path and the unchanged continuation ID, preserving the ordinary vendor-session resume.
+The ticket-derived default workspace is not used, even when the prior run used another
+`--ws` slug or `run --cd` path. Dispatch never invokes `agx ws add` for a continuation.
+An explicit `--ws` must name the recorded workspace (`ws_<slug>`); a different name exits 2.
+The recorded path must exist as a directory and be a registered workspace of the ticket's
+repository. A missing, unusable or unregistered path exits 2 before starting a worker,
+with one diagnostic line naming the recorded path, reason and repair: restore/register
+that path with `agx ws add`, or start a fresh run. Registry inspection timeouts retain
+temporary-unavailability exit 75.
 Run events, progress, and judgments are stored in one append-only `records.jsonl` file. The default
 state directory keeps its `agx-next` name for compatibility; the real state directory is not
 migrated by this CLI switch.

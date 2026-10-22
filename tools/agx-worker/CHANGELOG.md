@@ -1,5 +1,9 @@
 # Changelog
 
+## 9.1.3 — 2026-10-23
+
+- Keep continuation dispatch in the recorded workspace and refuse missing or unregistered paths.
+
 ## 9.1.2 — 2026-10-23
 
 - Report preflight tree revision and child failure while keeping check judgments independent of inspection delays

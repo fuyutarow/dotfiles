@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.4.2 — 2026-10-23
+
+- Wait longer for dispatched run records and report the timeout bound
+
 ## 8.4.1 — 2026-10-23
 
 - Allow workspace-write Codex workers to use the declared shared Bun package cache.

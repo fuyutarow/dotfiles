@@ -108,10 +108,9 @@ function fixture() {
       "}",
       'const cdIndex = command.indexOf("--cd");',
       "const workspace = command[cdIndex + 1];",
-      "writeFileSync(",
-      "  process.env.FAKE_RECORDS!,",
-      '  JSON.stringify([{ ...binding, state: "running", cwd: workspace }]) + "\\n",',
-      ");",
+      'const record = JSON.stringify([{ ...binding, state: "running", cwd: workspace }]) + "\\n";',
+      'if (process.env.FAKE_LATE_RECORD === "yes") writeFileSync(process.env.FAKE_PENDING_RECORD!, record);',
+      "else writeFileSync(process.env.FAKE_RECORDS!, record);",
     ].join("\n"),
   );
   const shim = (name: string, body: string[]) => {
@@ -151,7 +150,13 @@ function fixture() {
   ]);
   shim("systemd-run", ['exec bun "$FAKE_SYSTEMD_RUN_SCRIPT" "$@"']);
   shim("agx-worker", [
-    'if [ "$1" = "ls" ]; then cat "$FAKE_RECORDS"; exit 0; fi',
+    'if [ "$1" = "ls" ]; then',
+    '  if [ "$FAKE_LATE_RECORD" = "yes" ]; then',
+    '    if [ ! -e "$FAKE_LS_MARKER" ]; then touch "$FAKE_LS_MARKER"',
+    '    elif [ -s "$FAKE_PENDING_RECORD" ]; then cp "$FAKE_PENDING_RECORD" "$FAKE_RECORDS"; : > "$FAKE_PENDING_RECORD"; fi',
+    "  fi",
+    '  cat "$FAKE_RECORDS"; exit 0',
+    "fi",
     'if [ "$1" = "check" ] && [ "$FAKE_ROSTER_CHECK" = "yes" ]; then exec bun "$FAKE_ROSTER_SCRIPT" > "$FAKE_PREFLIGHT_ROSTER"; fi',
     'if [ "$1" = "check" ]; then if [ "$FAKE_CHECK_FAIL" = "yes" ]; then printf "agx: invalid writes; repair: use relative globs\\nagx: untrusted mise.toml; repair: mise trust\\n" >&2; exit 2; fi; exit 0; fi',
     'echo "unexpected fake agx command: $*" >&2',
@@ -172,6 +177,8 @@ function fixture() {
     FAKE_PREFLIGHT_ROSTER: join(root, "preflight-roster.json"),
     FAKE_REPO: repo,
     FAKE_RECORDS: records,
+    FAKE_PENDING_RECORD: join(root, "pending-record.json"),
+    FAKE_LS_MARKER: join(root, "ls-marker"),
     FAKE_UNIT_ARGS: unitArgs,
     FAKE_BINDING: bindingFile,
     FAKE_WS_ARGS: wsArgs,
@@ -285,7 +292,25 @@ test("dispatch refuses success when no run record appears", async () => {
   const result = await invoke(f);
   expect(result.exitCode).not.toBe(0);
   expect(result.stdout).toBe("");
-  expect(result.stderr).toContain("no matching run record appeared");
+  expect(result.stderr).toContain("agt_foo-bar.service");
+  expect(result.stderr).toContain(
+    "no matching run record appeared within 10ms",
+  );
+});
+
+test("dispatch finds a run record that appears after the first read", async () => {
+  const f = fixture();
+  f.env.FAKE_LATE_RECORD = "yes";
+  f.env.AGX_DISPATCH_WAIT_MS = "1000";
+  const result = await invoke(f);
+  expect(result.exitCode, result.stderr).toBe(0);
+  const parsedBinding = jsonOf(DispatchBindingSchema).safeParse(
+    await Bun.file(f.bindingFile).text(),
+  );
+  expect(parsedBinding.success).toBe(true);
+  if (!parsedBinding.success) return;
+  expect(result.stdout).toBe(`${parsedBinding.data.id}\n`);
+  expect(result.stderr).toBe("");
 });
 
 test("dispatch refuses a ticket and workspace from different repositories", async () => {

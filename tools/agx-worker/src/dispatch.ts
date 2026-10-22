@@ -377,10 +377,9 @@ export async function dispatch(options: {
     return started.code === 0 ? 1 : started.code;
   }
 
-  const waitMs = Number(env.AGX_DISPATCH_WAIT_MS ?? 20_000);
-  const deadline =
-    Temporal.Now.instant().epochMilliseconds +
-    (Number.isFinite(waitMs) ? waitMs : 20_000);
+  const configuredWaitMs = Number(env.AGX_DISPATCH_WAIT_MS ?? 60_000);
+  const waitMs = Number.isFinite(configuredWaitMs) ? configuredWaitMs : 60_000;
+  const deadline = Temporal.Now.instant().epochMilliseconds + waitMs;
   let listError: string | undefined;
   while (Temporal.Now.instant().epochMilliseconds <= deadline) {
     const current = await listedRuns(cwd, env);
@@ -393,7 +392,7 @@ export async function dispatch(options: {
     await Bun.sleep(100);
   }
   process.stderr.write(
-    `agx worker dispatch: ${unit}.service started but no matching run record appeared${listError === undefined ? "" : `: ${listError}`}\n`,
+    `agx worker dispatch: ${unit}.service started but no matching run record appeared within ${waitMs}ms${listError === undefined ? "" : `: ${listError}`}\n`,
   );
   return 1;
 }

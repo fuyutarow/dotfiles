@@ -331,8 +331,73 @@ test("a complete clean relay with zero SendMessage calls is unavailable, not unk
   const r = await run({ output: completeStream() });
   expect(r.exit).toBe(3);
   expect(r.stderr).toContain("no SendMessage attempted");
+  expect(r.stderr).toContain("step failed: ListAgents invocation");
+  expect(r.stderr).toContain("zero ListAgents calls");
+  expect(r.stderr).toContain("tool availability and permissions");
+  expect(r.stderr).not.toContain("completed without delivery");
   expect(r.stderr).not.toContain("acceptance unknown");
   expect(r.stdout).not.toContain("accepted for");
+});
+
+test.each(["codex", "claude"])(
+  "%s sender gets target-resolution evidence when a live registration UUID is absent from relay peers",
+  async (sender) => {
+    const target = "deadbeef-1234-4abc-8def-0123456789ab";
+    const selector = sender === "codex" ? target : "deadbeef";
+    const listing =
+      "Peer sessions (1):\n  intended-peer [a80909] · interactive · busy";
+    const r = await run({
+      args: [
+        "send",
+        "--to",
+        `claude:${selector}`,
+        "--from",
+        `${sender}:${target}`,
+        "--message",
+        message,
+      ],
+      inventory: JSON.stringify([
+        { sessionId: target, name: "intended-peer", status: "busy" },
+      ]),
+      output: completeStream(listUse, result(listing, "list-1")),
+    });
+    expect(r.exit).toBe(3);
+    expect(r.stderr).toContain(
+      "step failed: target resolution / SendMessage invocation",
+    );
+    expect(r.stderr).toContain(target);
+    expect(r.stderr).toContain("process exit 0");
+    expect(r.stderr).toContain('tool_use_id="list-1" is_error=false');
+    expect(r.stderr).toContain("intended-peer [a80909]");
+    expect(r.stderr).toContain("exact-native-name");
+    expect(r.stderr).toContain("Do not guess");
+    expect(r.stderr).not.toContain("completed without delivery");
+    expect(r.stdout).toBe("");
+    expect(r.calls).toHaveLength(sender === "codex" ? 1 : 2);
+    expect(r.argv.at(-1)).toContain(JSON.stringify(target));
+  },
+);
+
+test("failed ListAgents names the tool-result step and escapes bounded evidence", async () => {
+  const r = await run({
+    output: completeStream(
+      listUse,
+      result(
+        "permission denied\n\u001B[31m" + "x".repeat(2000),
+        "list-1",
+        true,
+      ),
+    ),
+  });
+  expect(r.exit).toBe(3);
+  expect(r.stderr).toContain("step failed: ListAgents result");
+  expect(r.stderr).toContain("is_error=true");
+  expect(r.stderr).toContain("permission denied\\n\\u001b[31m");
+  expect(r.stderr).toContain("(truncated)");
+  expect(r.stderr).not.toContain("x".repeat(1201));
+  expect(r.stderr).not.toContain("\u001B");
+  expect(r.stderr).toContain("tool availability and permissions");
+  expect(r.calls).toHaveLength(1);
 });
 
 test.each([

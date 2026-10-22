@@ -160,7 +160,15 @@ const Receipt = z.object({
 export type ClaudeReceipt =
   | { accepted: true; msgId: string }
   | { accepted: false }
-  | { accepted: "no-send"; topLevelSendCalls: 0 };
+  | {
+      accepted: "no-send";
+      topLevelSendCalls: 0;
+      step:
+        | "ListAgents invocation"
+        | "ListAgents result"
+        | "target resolution / SendMessage invocation";
+      evidence: string;
+    };
 
 /** Only a top-level, correlated tool result is evidence; model prose is never a receipt. */
 function receiptFromText(text: string): ClaudeReceipt[] {
@@ -177,6 +185,9 @@ class ReceiptReader {
   readonly receipts: ClaudeReceipt[] = [];
   readonly toolUses = new Set<string>();
   readonly toolResults = new Set<string>();
+  readonly lists = new Set<string>();
+  readonly listResults: Array<{ id: string; error: boolean; text: string }> =
+    [];
   topLevelSendCalls = 0;
   traceConsistent = true;
   constructor(readonly message: string) {}
@@ -194,6 +205,7 @@ class ReceiptReader {
     }
     if (this.toolUses.has(use.data.id)) this.traceConsistent = false;
     this.toolUses.add(use.data.id);
+    if (use.data.name === "ListAgents") this.lists.add(use.data.id);
     if (use.data.name !== "SendMessage") return;
     this.topLevelSendCalls += 1;
     this.sends.add(use.data.id);
@@ -220,6 +232,16 @@ class ReceiptReader {
       return;
     }
     this.toolResults.add(result.data.tool_use_id);
+    if (this.lists.has(result.data.tool_use_id)) {
+      this.listResults.push({
+        id: result.data.tool_use_id,
+        error: result.data.is_error === true,
+        text:
+          typeof result.data.content === "string"
+            ? result.data.content
+            : result.data.content.map((part) => part.text).join("\n"),
+      });
+    }
     if (!this.matching.has(result.data.tool_use_id)) return;
     if (result.data.is_error === true) {
       this.receipts.push({ accepted: false });
@@ -283,8 +305,26 @@ export function claudeReceipt(
     complete &&
     reader.traceConsistent &&
     reader.toolUses.size === reader.toolResults.size
-  )
-    return { accepted: "no-send", topLevelSendCalls: 0 };
+  ) {
+    const failed = reader.listResults.find((result) => result.error);
+    const listed = failed ?? reader.listResults.at(-1);
+    let step: Extract<ClaudeReceipt, { accepted: "no-send" }>["step"] =
+      "ListAgents invocation";
+    if (listed !== undefined)
+      step = "target resolution / SendMessage invocation";
+    if (failed !== undefined) step = "ListAgents result";
+    let evidence = "complete trace contains zero ListAgents calls";
+    if (listed !== undefined) {
+      const truncated = listed.text.length > 1200 ? " (truncated)" : "";
+      evidence = `ListAgents tool_use_id=${JSON.stringify(listed.id)} is_error=${listed.error}; tool_result excerpt=${JSON.stringify(listed.text.slice(0, 1200))}${truncated}`;
+    }
+    return {
+      accepted: "no-send",
+      topLevelSendCalls: 0,
+      step,
+      evidence,
+    };
+  }
   // More than one attempt/result may mean a duplicate send: never invite an automatic retry.
   return reader.topLevelSendCalls === 1 &&
     reader.sends.size === 1 &&

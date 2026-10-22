@@ -97,10 +97,17 @@ async function send(
     return 0;
   }
   const receipt = claudeReceipt(output, message);
-  if (code !== 0) return unknown(`claude exited ${code}`);
+  if (code !== 0)
+    return unknown(
+      `Claude relay process exited ${code}; inspect the Claude stderr above and check the recipient`,
+    );
   if (receipt?.accepted === "no-send") {
     process.stderr.write(
-      "xmsg: no SendMessage attempted; Claude relay completed without delivery\n",
+      `xmsg: no SendMessage attempted; Claude relay step failed: ${receipt.step} for claude:${JSON.stringify(id)} (process exit 0)\n` +
+        `xmsg: evidence: ${receipt.evidence}\n` +
+        (receipt.step === "target resolution / SendMessage invocation"
+          ? "xmsg: ListAgents completed but the relay did not select and send to a unique peer. Session UUIDs from claude agents --json may not appear in ListAgents. Verify the intended peer's exact native name with ListAgents in Claude; if uniquely identified, use xmsg send --to 'claude:<exact-native-name>'. Do not guess from a similar name.\n"
+          : "xmsg: inspect Claude's tool availability and permissions for ListAgents and SendMessage; run ListAgents in Claude to check the intended peer before trying again.\n"),
     );
     return 3;
   }

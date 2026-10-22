@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 — 2026-10-23
+
+- Name failed Claude relay steps and retain correlated ListAgents evidence with recovery guidance
+
 ## 0.3.0 — 2026-10-22
 
 - Add explicit full sender attribution and a truthful unknown sender envelope to every send.

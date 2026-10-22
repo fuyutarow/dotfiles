@@ -54,6 +54,21 @@ must use recognized text/tool-use/tool-result shapes. Orphan results, malformed
 possible tool uses, nested or unrecognized frames, and inconsistent roles fail
 closed as unknown. No outcome is retried automatically.
 
+No-send diagnostics name the observed unfinished relay step: `ListAgents invocation`
+when no listing was called, `ListAgents result` when a correlated listing result reports
+an error, or `target resolution / SendMessage invocation` when listing completed but
+the relay never called SendMessage. They include the target, process exit 0 and a
+JSON-escaped excerpt of the correlated ListAgents result (at most 1,200 characters
+before escaping), with an explicit truncation marker. This is tool evidence, not a
+model-generated explanation or proof that a session is offline.
+
+Session UUIDs from `claude agents --json` may be absent from the relay's ListAgents
+names/references even while the target is live. If resolution stops there, verify
+the intended peer's exact native name using ListAgents in Claude. If uniquely identified,
+use `xmsg send --to 'claude:<exact-native-name>'`; do not infer identity from a similar
+name, cwd or short reference. If ListAgents was not called or returned an error, inspect
+Claude's tool availability and permissions for ListAgents and SendMessage first.
+
 The default send deadline is 60 seconds; `--timeout-ms N` changes it. Required discovery and
 the subsequent send share this single budget. A timeout can occur after
 the message was accepted. **Do not resend an unknown outcome without checking the recipient.**

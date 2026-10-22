@@ -874,8 +874,23 @@ export async function gpuAdmissionRefusal(
     scopes.set(reservationId, admittedBytes);
     admittedScopes.add(scope);
   }
-  for (const { pid } of state.processes) {
-    if (await yieldedCccWorker(state, pid, procRoot, options)) continue;
+  // Holder identity is advisory: on WSL the driver reports PIDs that the Linux
+  // PID namespace cannot resolve, so refusing on them blocks every concurrent job.
+  // Admission rests on the declared VRAM budget below and the dxg stall check.
+  const sampled = state;
+  for (const { pid } of sampled.processes) {
+    const problem = await holderIdentityProblem(sampled, pid);
+    if (problem !== undefined)
+      console.error(
+        `WARN GPU holder check is advisory, not refusing: ${problem}`,
+      );
+  }
+  async function holderIdentityProblem(
+    sample: typeof sampled,
+    pid: number,
+  ): Promise<string | undefined> {
+    if (await yieldedCccWorker(sample, pid, procRoot, options))
+      return undefined;
     const base = join(procRoot, String(pid));
     const statPath = join(base, "stat");
     // Sampler provenance is diagnostic only. Two local observations can reject
@@ -887,7 +902,7 @@ export async function gpuAdmissionRefusal(
     ]);
     const after = await optionalText(statPath);
     const evidence = `${statPath},${join(base, "status")},${join(base, "cgroup")}`;
-    const provenance = samplerProvenance(state, pid);
+    const provenance = samplerProvenance(sample, pid);
     const uncertain = (reason: string) =>
       `GPU holder identity unverified pid=${pid} reason=${reason}; sampled_namespace=unknown; ${provenance}; evidence=${evidence}`;
     if (before.isErr() || after.isErr()) return uncertain("stat-unreadable");
@@ -939,6 +954,7 @@ export async function gpuAdmissionRefusal(
       return `GPU holder ownership unverified pid=${pid}${zombie ? " state=ZOMBIE" : ""} local_scope=outside-admitted-GPU-scope local_starttime=${startTime} sampled_namespace=unknown; ${provenance}; evidence=${evidence}`;
     if (!admittedScopes.has(scope))
       return `GPU holder admission receipt unavailable pid=${pid}${zombie ? " state=ZOMBIE" : ""}; ${provenance}; evidence=${join(base, "environ")}`;
+    return undefined;
   }
   const admittedBytes = [...scopes.entries()]
     .filter(

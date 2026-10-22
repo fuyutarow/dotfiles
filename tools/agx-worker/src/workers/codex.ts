@@ -409,7 +409,9 @@ codexSandbox =
 // --- run --------------------------------------------------------------------------------------
 const environment = workerEnvironment();
 const sharedCaches = workerSharedCaches(environment);
-for (const cache of sharedCaches) environment[cache.key] = cache.root;
+for (const cache of sharedCaches) {
+  if (cache.key !== undefined) environment[cache.key] = cache.root;
+}
 const lastFile = join(argv.flags.receiptDir, `${runId}.last.txt`);
 mkdirSync(argv.flags.receiptDir, { recursive: true });
 // `codex exec resume` (codex-cli help read 2026-10-06) takes [SESSION_ID] [PROMPT] and -m, -c, -o,

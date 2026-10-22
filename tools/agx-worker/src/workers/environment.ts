@@ -53,13 +53,21 @@ const WORKER_ENV_KEYS = [
 ] as const;
 
 /** The one shared-cache declaration: environment values and writable roots use these same paths. */
-export function workerSharedCaches(source: NodeJS.ProcessEnv = process.env) {
+export function workerSharedCaches(
+  source: NodeJS.ProcessEnv = process.env,
+): { key?: string; root: string }[] {
   return [
     {
       key: "BUN_INSTALL_CACHE_DIR",
       root: resolve(
         source.BUN_INSTALL_CACHE_DIR ??
           join(source.HOME ?? homedir(), ".bun", "install", "cache"),
+      ),
+    },
+    {
+      root: resolve(
+        source.XDG_CACHE_HOME ?? join(source.HOME ?? homedir(), ".cache"),
+        "cocoindex-code",
       ),
     },
   ];

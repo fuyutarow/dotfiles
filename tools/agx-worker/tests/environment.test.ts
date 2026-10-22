@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { AGX_WORKER_ENV } from "../../shared/src/worker-env.ts";
-import { workerEnvironment } from "../src/workers/environment.ts";
+import {
+  workerEnvironment,
+  workerSharedCaches,
+} from "../src/workers/environment.ts";
 
 const WORKER_ENV_KEYS = [
   "PATH",
@@ -40,6 +45,30 @@ const WORKER_ENV_KEYS = [
 ] as const;
 
 describe("worker environment", () => {
+  test("shared caches default to narrow roots under the worker home", () => {
+    for (const home of [undefined, "/worker-home"]) {
+      expect(workerSharedCaches({ HOME: home })).toEqual([
+        {
+          key: "BUN_INSTALL_CACHE_DIR",
+          root: join(home ?? homedir(), ".bun", "install", "cache"),
+        },
+        { root: join(home ?? homedir(), ".cache", "cocoindex-code") },
+      ]);
+    }
+  });
+
+  test("shared caches resolve overrides without granting the whole XDG cache home", () => {
+    expect(
+      workerSharedCaches({
+        BUN_INSTALL_CACHE_DIR: "relative-bun-cache",
+        XDG_CACHE_HOME: "relative-xdg-cache",
+      }),
+    ).toEqual([
+      { key: "BUN_INSTALL_CACHE_DIR", root: resolve("relative-bun-cache") },
+      { root: resolve("relative-xdg-cache", "cocoindex-code") },
+    ]);
+  });
+
   test("forwards the complete declared allow-list and AGX namespace", () => {
     const source = Object.fromEntries(
       [...WORKER_ENV_KEYS, "AGX_EXTRA_SETTING", "UNLISTED_SETTING"].map(

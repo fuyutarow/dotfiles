@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.8.1 — 2026-10-23
+
+- Allow workspace-write workers to update the code-search index cache from the shared-cache list.
+
 ## 8.8.0 — 2026-10-23
 
 - Add workspace-filtered worker listing backed by complete workspace publications

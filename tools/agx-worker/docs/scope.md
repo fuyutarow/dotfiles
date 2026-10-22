@@ -99,9 +99,15 @@ input stream. Their environment is rebuilt from the explicit allowlist in
 `CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY`, and `CODEX_API_KEY`, plus the `AGX_*` namespace,
 with `AGX_WORKER=1`. Coordinator
 continuation slots and vendor session IDs are omitted; each vendor creates its own session identity.
-The same module's `workerSharedCaches` declares the shared package caches. Codex receives their
-resolved paths in its environment and, only for effective `workspace-write`, as
-`sandbox_workspace_write.writable_roots` on both fresh and resumed runs. Workspace and existing
+The same module's `workerSharedCaches` is the single shared-cache list: the Bun install cache
+(`BUN_INSTALL_CACHE_DIR`, default `$HOME/.bun/install/cache`) and the code-search index cache
+(`$XDG_CACHE_HOME/cocoindex-code`, default `$HOME/.cache/cocoindex-code`). Both paths resolve
+to absolute paths. Codex receives the resolved Bun path in its environment; `XDG_CACHE_HOME`
+keeps its original value. Only effective `workspace-write` receives these roots as
+`sandbox_workspace_write.writable_roots` on both fresh and resumed runs; read-only receives
+no shared writable roots. The daemon runtime directory (`$HOME/.cocoindex_code`) is not added:
+the cocoindex client connects to the existing socket without creating files in its directory;
+daemon startup owns runtime-file writes. No home-wide or temp-wide root is added. Workspace and existing
 temporary-directory permissions remain Codex's responsibility. Claude isolation is unchanged.
 When a worker hook has no
 bound continuation record, the worker owns its brief and workspace and does not become read-only.

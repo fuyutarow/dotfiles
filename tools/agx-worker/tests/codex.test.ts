@@ -370,7 +370,7 @@ describe("agx", () => {
   );
 
   test.each([false, true])(
-    "workspace-write grants exactly the shared Bun cache and passes it in the environment (resume=%s)",
+    "workspace-write grants exactly the shared caches and preserves their environment (resume=%s)",
     (resume) => {
       for (const customCache of [undefined, 'shared cache "quoted"']) {
         const fixtureDir = scratch();
@@ -380,6 +380,14 @@ describe("agx", () => {
           customCache === undefined
             ? join(home, ".bun", "install", "cache")
             : join(fixtureDir, customCache);
+        const xdgCacheHome =
+          customCache === undefined
+            ? undefined
+            : join(fixtureDir, 'xdg cache "quoted"');
+        const indexCache = join(
+          xdgCacheHome ?? join(home, ".cache"),
+          "cocoindex-code",
+        );
         const r = run(
           [
             ...FULL,
@@ -390,6 +398,7 @@ describe("agx", () => {
           {
             AGX_CODEX_BIN: bin,
             HOME: home,
+            XDG_CACHE_HOME: xdgCacheHome,
             BUN_INSTALL_CACHE_DIR:
               customCache === undefined ? undefined : cache,
           },
@@ -402,7 +411,7 @@ describe("agx", () => {
         expect(roots).toHaveLength(1);
         expect(launch[launch.indexOf(roots[0] ?? "") - 1]).toBe("-c");
         expect(Bun.TOML.parse(roots[0] ?? "")).toEqual({
-          sandbox_workspace_write: { writable_roots: [cache] },
+          sandbox_workspace_write: { writable_roots: [cache, indexCache] },
         });
         expect(r.receipt.sandbox_effective).toBe("workspace-write");
         expect(
@@ -410,6 +419,13 @@ describe("agx", () => {
             .split("\n")
             .filter((line) => line.startsWith("BUN_INSTALL_CACHE_DIR=")),
         ).toEqual([`BUN_INSTALL_CACHE_DIR=${cache}`]);
+        expect(
+          readFileSync(join(fixtureDir, "worker-env.log"), "utf8")
+            .split("\n")
+            .filter((line) => line.startsWith("XDG_CACHE_HOME=")),
+        ).toEqual(
+          xdgCacheHome === undefined ? [] : [`XDG_CACHE_HOME=${xdgCacheHome}`],
+        );
       }
     },
   );

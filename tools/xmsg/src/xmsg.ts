@@ -11,6 +11,15 @@ import {
 } from "./recipient-prefix.ts";
 import { claudeReceipt } from "./claude-receipt.ts";
 
+const unknownSender =
+  "unknown (caller identity unavailable or inherited; use --from backend:<full-session-id>)";
+
+function explicitSender(value: string): string | undefined {
+  const match = /^(codex|claude):(.+)$/u.exec(value);
+  const id = canonicalUuid(match?.[2] ?? "");
+  return match === null || id === undefined ? undefined : `${match[1]}:${id}`;
+}
+
 function unknown(reason: string): number {
   process.stderr.write(
     `xmsg: acceptance unknown (${reason}); do not resend without checking\n`,
@@ -32,7 +41,10 @@ async function send(
   id: string,
   message: string,
   timeoutMs: number,
+  sender: string,
 ): Promise<number> {
+  // Only the first line is envelope metadata; never parse or strip the body.
+  message = `from: ${sender}\n\n${message}`;
   const args =
     kind === "codex"
       ? ["queue", "--thread", id, "--message", message]
@@ -127,7 +139,15 @@ async function main(): Promise<number> {
           description:
             "Recipient: [codex:|claude:]<UUID, UUID prefix or exact native name>; unqualified requires both inventories",
         },
-        message: { type: String, description: "Exact text to send" },
+        from: {
+          type: String,
+          description:
+            "Declared sender: codex:<full-UUID> or claude:<full-UUID>; no inherited environment inference",
+        },
+        message: {
+          type: String,
+          description: "Exact body below the sender envelope",
+        },
         timeoutMs: {
           type: Number,
           default: 60_000,
@@ -149,6 +169,7 @@ async function main(): Promise<number> {
     if (
       args._.length !== 1 ||
       args.flags.to !== undefined ||
+      args.flags.from !== undefined ||
       args.flags.message !== undefined ||
       !Number.isInteger(args.flags.timeoutMs) ||
       args.flags.timeoutMs < 1 ||
@@ -182,7 +203,17 @@ async function main(): Promise<number> {
     timeoutMs > 2_147_483_647
   ) {
     process.stderr.write(
-      "xmsg: usage: xmsg send --to [codex:|claude:]<UUID|UUID-prefix|exact-name> --message TEXT [--timeout-ms N]\n",
+      "xmsg: usage: xmsg send --to [codex:|claude:]<UUID|UUID-prefix|exact-name> --message TEXT [--from backend:<full-session-UUID>] [--timeout-ms N]\n",
+    );
+    return 2;
+  }
+  const sender =
+    args.flags.from === undefined
+      ? unknownSender
+      : explicitSender(args.flags.from);
+  if (sender === undefined) {
+    process.stderr.write(
+      "xmsg: invalid --from; use codex:<full-session-UUID> or claude:<full-session-UUID> (no prefixes or names)\n",
     );
     return 2;
   }
@@ -250,7 +281,7 @@ async function main(): Promise<number> {
     return 3;
   }
   if (kind !== "codex" && kind !== "claude") return 2;
-  return send(kind, target, message, remaining);
+  return send(kind, target, message, remaining, sender);
 }
 
 if (import.meta.main) {

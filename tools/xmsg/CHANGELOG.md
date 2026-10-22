@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 — 2026-10-22
+
+- Add explicit full sender attribution and a truthful unknown sender envelope to every send.
+
 ## 0.2.2 — 2026-10-22
 
 - Distinguish complete Claude relay no-send traces from unknown acceptance

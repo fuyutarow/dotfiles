@@ -75,7 +75,6 @@ async function readCommand(
 async function committedPolicy(
   root: string,
   vcs: Vcs,
-  workspace: string,
 ): Promise<Attempt<string | undefined>> {
   if (vcs === "none") return good(undefined);
   if (vcs === "git") {
@@ -86,7 +85,7 @@ async function committedPolicy(
     if (!head.ok) return good(undefined); // An unborn Git tree has no committed policy.
   }
   const revision = vcs === "jj" ? "trunk()" : "HEAD";
-  const names = (rev: string, cwd = root) =>
+  const names = (rev: string) =>
     readCommand(
       vcs === "jj"
         ? [
@@ -109,16 +108,11 @@ async function committedPolicy(
             ".agx.toml",
             "agx.toml",
           ],
-      cwd,
+      root,
     );
   const inventory = await names(revision);
   if (!inventory.ok) return inventory;
   if (inventory.value.split("\n").includes(".agx.toml")) return retired(root);
-  for (const cwd of vcs === "jj" ? new Set([root, workspace]) : []) {
-    const recorded = await names("@", cwd);
-    if (!recorded.ok) return recorded;
-    if (recorded.value.split("\n").includes(".agx.toml")) return retired(root);
-  }
   if (!inventory.value.split("\n").includes("agx.toml")) return good(undefined);
   return readCommand(
     vcs === "jj"
@@ -186,12 +180,7 @@ async function resolveConfig(repoRoot: string, options: { vcs?: Vcs }) {
     if (!main.ok) return main;
     root = await realpath(main.value);
   }
-  for (const directory of new Set([root, workspace])) {
-    const info = await attempt(() => lstat(join(directory, ".agx.toml")));
-    if (info.ok) return retired(root);
-    if (!missing(info.error)) return info;
-  }
-  const policy = await committedPolicy(root, vcs, workspace);
+  const policy = await committedPolicy(root, vcs);
   if (!policy.ok) return policy;
   let tickets = ".agents/tickets";
   let ready: string[] = [];

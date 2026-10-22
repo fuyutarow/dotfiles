@@ -474,7 +474,15 @@ test.each([
         (await f.run(["jj", "bookmark", "set", "main", "-r", "@-"])).code,
       ).toBe(0);
     }
-    if (legacy) await writeFile(join(f.repo, ".agx.toml"), "");
+    if (legacy) {
+      await writeFile(join(f.repo, ".agx.toml"), "");
+      expect(
+        (await f.run(["jj", "commit", "-m", "Retired trunk policy"])).code,
+      ).toBe(0);
+      expect(
+        (await f.run(["jj", "bookmark", "set", "main", "-r", "@-"])).code,
+      ).toBe(0);
+    }
     for (const args of [["new", "refused"], ["ls"], ["gc"]]) {
       const result = await f.tkt(args);
       expect(result.code, result.err).toBe(2);

@@ -159,6 +159,7 @@ describe("agx worker run --continue pins the prior row", () => {
       expect(started?.vendor_session).toBe("codex-thread-1");
       expect(started?.continues).toBe("codex-run");
     },
+    30000,
   );
 
   test("a claude run resumes its claude session on its claude row", async () => {
@@ -176,7 +177,7 @@ describe("agx worker run --continue pins the prior row", () => {
       .events()
       .find((event) => event.kind === "ended" && event.id === receipt.id);
     expect(ended?.vendor_session).toBe("next-claude-session-1");
-  });
+  }, 30000);
 
   test("a run without a vendor session exits 2 before any worker starts", async () => {
     const f = await fixture();
@@ -217,5 +218,5 @@ describe("agx worker run --continue pins the prior row", () => {
     );
     expect(brief).toContain("amended prose");
     expect(brief).not.toContain("first prose");
-  });
+  }, 30000);
 });

@@ -113,6 +113,9 @@ test.each([
       JJ_EMAIL: "fixture@example.invalid",
       AGX_NEXT_STATE_DIR: join(parent, "state"),
       DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
+      AGX_WORKER_BIN: join(parent, "worker.ts"),
+      AGX_TMP_ROOT: join(parent, "tmp"),
+      JEV_URL: "http://127.0.0.1:1/choice",
     };
     const command = async (args: string[], cwd = root) => {
       const child = Bun.spawn(args, {
@@ -143,6 +146,17 @@ test.each([
       'revset-aliases."trunk()"',
       "bookmarks(alpha)",
     ]);
+    await writeFile(join(root, ".agx.toml"), "legacy workspace policy\n");
+    await jj(["commit", "-m", "Legacy workspace base"]);
+    const oldBase = await jj([
+      "log",
+      "--no-graph",
+      "-r",
+      "@-",
+      "-T",
+      "commit_id",
+    ]);
+    await unlink(join(root, ".agx.toml"));
     const declared = home === "absolute" ? absoluteHome : "declared";
     if (home === "absolute") await writeLocalTicketConfig(root, declared);
     else
@@ -154,7 +168,15 @@ test.each([
     await jj(["bookmark", "create", "alpha", "-r", "@-"]);
     if (secondary) {
       await mkdir(join(parent, "repo.ws"));
-      await jj(["workspace", "add", "--name", "dispatch", workspace]);
+      await jj([
+        "workspace",
+        "add",
+        "--name",
+        "dispatch",
+        "-r",
+        oldBase,
+        workspace,
+      ]);
     }
     const cwd = secondary ? workspace : root;
     // Neither checkout's dirty declaration is authority; only trunk is.
@@ -202,6 +224,38 @@ test.each([
     expect(
       await Bun.file(join(env.AGX_NEXT_STATE_DIR, "records.jsonl")).exists(),
     ).toBe(false);
+    if (secondary && home === "absolute") {
+      await writeFile(
+        env.AGX_WORKER_BIN,
+        'console.log(JSON.stringify({exit:0, vendor_session:"fixture-session", report:{summary:"done",changes:[],checks:[],for_coordinator:[],open:[]}}));\n',
+      );
+      const invokeWorker = (args: string[]) =>
+        command([process.execPath, CLI, ...args, ticket, "--cd", cwd]);
+      const fresh = await invokeWorker(["run"]);
+      expect(fresh.exit, `${fresh.out}\n${fresh.err}`).toBe(0);
+      const started = (
+        await readFile(join(env.AGX_NEXT_STATE_DIR, "records.jsonl"), "utf8")
+      )
+        .trim()
+        .split("\n")
+        .flatMap((line) => {
+          const parsed = jsonOf(
+            z.looseObject({ kind: z.literal("started"), id: z.string() }),
+          ).safeParse(line);
+          return parsed.success ? [parsed.data.id] : [];
+        });
+      expect(started).toHaveLength(1);
+      const previous = started[0];
+      if (previous === undefined) return;
+      for (const workerCommand of ["check", "run"]) {
+        const continued = await invokeWorker([
+          workerCommand,
+          "--continue",
+          previous,
+        ]);
+        expect(continued.exit, `${continued.out}\n${continued.err}`).toBe(0);
+      }
+    }
   },
   30000,
 );
@@ -740,6 +794,36 @@ test.each([
 test("worker CLI check and run exit 2 for retired configuration before artifacts", async () => {
   const f = await fixture();
   await writeFile(join(f.root, ".agx.toml"), "");
+  for (const args of [
+    ["add", "--", ".agx.toml"],
+    [
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "--quiet",
+      "-m",
+      "Retired policy",
+    ],
+  ]) {
+    const child = Bun.spawn(["git", ...args], {
+      cwd: f.root,
+      env: f.env,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 5000,
+    });
+    const [exit, , err] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(exit, err).toBe(0);
+  }
   for (const command of ["check", "run"]) {
     const result = await f.invoke([command, f.ticket]);
     expect(result.exit, result.err).toBe(2);

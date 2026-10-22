@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.18.2 — 2026-10-23
+
+- Resolve repository policy and retired-file refusal only from the main checkout trunk
+
 ## 0.18.1 — 2026-10-23
 
 - Generalize consumer identifiers in fixtures and source comments

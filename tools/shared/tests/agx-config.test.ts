@@ -213,8 +213,35 @@ test("XDG L2 replaces per key and is selected by main checkout root", async () =
   await f.writeLocal('schema = 1\ntickets = "relative-local"\n');
   expect(await home(secondary)).toBe(join(f.root, "relative-local"));
 });
+test("old workspace bases cannot supply policy or the retired-file refusal", async () => {
+  const f = await fixture('schema = 1\ntickets = "trunk-tickets"\n');
+  await writeFile(join(f.root, ".agx.toml"), "legacy\n");
+  await writeFile(
+    join(f.root, "agx.toml"),
+    'schema = 1\ntickets = "old-tickets"\n',
+  );
+  await f.jj(["commit", "-m", "Old workspace policy"]);
+  const secondary = join(f.parent, "secondary");
+  await f.jj([
+    "workspace",
+    "add",
+    "--name",
+    "secondary",
+    "-r",
+    "@-",
+    secondary,
+  ]);
+  await f.jj(["new", "main"]);
+  const heads = await readdir(join(f.root, ".jj/repo/op_heads"));
+  expect(await home(secondary)).toBe(join(f.root, "trunk-tickets"));
+  const local = join(f.parent, "local-tickets");
+  await f.writeLocal(`schema = 1\ntickets = ${JSON.stringify(local)}\n`);
+  expect(await home(secondary)).toBe(local);
+  expect(await readdir(join(f.root, ".jj/repo/op_heads"))).toEqual(heads);
+});
+
 test.each(["working", "trunk", "recorded-workspace", "secondary"])(
-  "refuses retired file in %s",
+  "only trunk supplies retired-file refusal: %s",
   async (where) => {
     const f = await fixture();
     let path = join(f.root, ".agx.toml");
@@ -232,7 +259,7 @@ test.each(["working", "trunk", "recorded-workspace", "secondary"])(
       await unlink(path);
     }
     const result = await resolveAgxConfig(root);
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(where !== "trunk");
     if (!result.ok) {
       expect(result.error).toBeInstanceOf(AgxConfigError);
       expect(String(result.error)).toContain(

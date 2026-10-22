@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fromAsyncThrowable } from "neverthrow";
 import { existsSync, lstatSync, readdirSync, statfsSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import {
@@ -105,12 +106,12 @@ function symlinkPath(path: string): string | null {
   }
   return null;
 }
-function evaluate(
+async function evaluate(
   input: string,
   config: Config,
   processes: ProcessSnapshot,
   graveyard: string,
-): PlanRow {
+): Promise<PlanRow> {
   const path = resolve(input);
   const checks: Check[] = [];
   const add = (name: string, ok: boolean, detail: string) =>
@@ -159,7 +160,7 @@ function evaluate(
     escaped === null &&
     !inGraveyard &&
     lstatSync(path).isDirectory()
-      ? fromThrowable(() => directoryProtection(path))()
+      ? await fromAsyncThrowable(() => directoryProtection(path))()
       : null;
   let protectionReason: string | null = null;
   if (protection !== null) {
@@ -223,12 +224,13 @@ export async function deleteApproved(paths: string[], options: Options) {
   };
   const graveyard = graveyardRoot(options);
   const planProcesses = collectProcesses(procOptions);
-  const rows = paths.map((path) => {
+  const rows: PlanRow[] = [];
+  for (const path of paths) {
     options.progress?.reportProgress?.("delete", path, 0, 0);
-    const row = evaluate(path, options.config, planProcesses, graveyard);
+    const row = await evaluate(path, options.config, planProcesses, graveyard);
     options.progress?.reportProgress?.("delete", path, 1, row.bytes ?? 0, true);
-    return row;
-  });
+    rows.push(row);
+  }
   const lines = rows.map(
     (row) =>
       `${row.allowed ? "ALLOW" : "REFUSE"}\t${row.path}\t${row.bytes ?? "?"}\t${row.checks.map((c) => `${c.ok ? "ok" : "fail"}:${c.name}=${c.detail}`).join("; ")}`,
@@ -259,7 +261,7 @@ export async function deleteApproved(paths: string[], options: Options) {
   let exit = 0;
   const lockedProcesses = collectProcesses(procOptions);
   for (const row of rows) {
-    const checked = evaluate(
+    const checked = await evaluate(
       row.path,
       options.config,
       lockedProcesses,

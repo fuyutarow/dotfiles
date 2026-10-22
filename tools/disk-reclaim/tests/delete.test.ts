@@ -13,7 +13,6 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { spawnSync } from "node:child_process";
 import { loadConfig } from "../src/engine.ts";
 import { deleteApproved } from "../src/delete.ts";
 import { readReceipts } from "../src/receipt.ts";
@@ -21,6 +20,7 @@ import { removeTree } from "../src/lib/remove-tree.ts";
 import { ReceiptV2 } from "../src/model.ts";
 import { procFixture } from "./fixtures/procs.ts";
 import { tempRoot } from "./fixtures/temp.ts";
+import { World } from "./jj/fixture.ts";
 
 const fixtures: string[] = [];
 function restoreDirectories(path: string): void {
@@ -303,23 +303,23 @@ test("refuses a target with a same-uid child process cwd inside it", async () =>
 
 test("refuses a listed jj workspace and advises forgetting it first", async () => {
   const f = fixture();
-  const repo = join(f.path, "jjrepo");
   const workspace = join(f.path, "workspace");
-  const init = spawnSync("jj", ["git", "init", "--colocate", repo], {
-    encoding: "utf8",
+  const w = new World();
+  using cleanup = new DisposableStack();
+  const previousPath = process.env.PATH;
+  cleanup.defer(() => {
+    process.env.PATH = previousPath;
+    w.dispose();
   });
-  assert.ok(init.error === undefined, `jj git init failed: ${init.stderr}`);
-  expect(init.status).toBe(0);
-  const added = spawnSync(
-    "jj",
-    ["-R", repo, "workspace", "add", "--name", "candidate", workspace],
-    { encoding: "utf8" },
+  w.add("candidate", workspace);
+  const bin = join(f.path, "bin");
+  mkdirSync(bin);
+  writeFileSync(
+    join(bin, "agx"),
+    `#!${process.execPath}\nprocess.stdout.write("[]");\n`,
   );
-  assert.ok(
-    added.error === undefined,
-    `jj workspace add failed: ${added.stderr}`,
-  );
-  expect(added.status).toBe(0);
+  chmodSync(join(bin, "agx"), 0o755);
+  process.env.PATH = `${bin}:${previousPath}`;
   const result = await deleteApproved([workspace], {
     config: f.config,
     yes: true,

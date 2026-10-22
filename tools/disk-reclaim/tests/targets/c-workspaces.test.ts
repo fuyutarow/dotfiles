@@ -8,6 +8,7 @@ import {
 import assert from "node:assert/strict";
 import {
   existsSync,
+  chmodSync,
   mkdirSync,
   rmSync,
   symlinkSync,
@@ -23,6 +24,8 @@ import { collectProcesses } from "../../src/lib/procs.ts";
 import { procFixture } from "../fixtures/procs.ts";
 import { treeBytes } from "../../src/targets/tree.ts";
 import { loadConfig } from "../../src/engine.ts";
+import { runProtection } from "../../src/jj/run-guard.ts";
+import { directoryProtection, removeTree } from "../../src/lib/remove-tree.ts";
 
 type Recovery = NonNullable<ReceiptAction["recovery"]>;
 // Each case runs several real jj children, each bounded at twenty seconds by World.
@@ -45,13 +48,25 @@ const probe = (dir: string) => {
 };
 const target = createWorkspacesTarget({ openPaths: probe });
 const worlds: World[] = [];
+const originalPath = process.env.PATH;
 const world = (files?: Record<string, string>) => {
   const w = new World(files);
   mkdirSync(join(w.root, "proc"));
   worlds.push(w);
+  const bin = join(w.root, "bin");
+  mkdirSync(bin);
+  w.write(w.root, "runs.json", "[]");
+  w.write(
+    bin,
+    "agx",
+    `#!${process.execPath}\nprocess.stdout.write(await Bun.file(${JSON.stringify(join(w.root, "runs.json"))}).text());\n`,
+  );
+  chmodSync(join(bin, "agx"), 0o755);
+  process.env.PATH = `${bin}:${originalPath}`;
   return w;
 };
 afterEach(() => {
+  process.env.PATH = originalPath;
   for (const w of worlds.splice(0)) w.dispose();
 });
 afterAll(() => {
@@ -418,4 +433,85 @@ describe("workspaces target", () => {
     expect((await target.act(forged, w.context("run"))).ok).toBe(false);
     expect(w.workspaceNames()).toContain("default");
   });
+});
+
+for (const state of [
+  "unjudged",
+  "accepted-pending",
+  "accepted-landed",
+  "rejected",
+  "running",
+]) {
+  test(`SEP-WS-FORGET-UNJUDGED-1023: disk reclamation ${state}`, async () => {
+    const w = world();
+    const path = w.add("guarded");
+    const pending = w.commitId("@", path);
+    const candidate = only(await plan(w), path);
+    expect(candidate.verdict, candidate.reason).toBe("RECLAIM");
+    const main = w.commitId("main");
+    let decision: string | undefined;
+    if (state.startsWith("accepted")) decision = "accept";
+    if (state === "rejected") decision = "reject";
+    w.write(
+      w.root,
+      "runs.json",
+      JSON.stringify([
+        {
+          id: "latest",
+          workspace: path,
+          state: state === "running" ? "running" : "ended",
+          judgment: decision === undefined ? null : { decision },
+          end_commit: state === "accepted-pending" ? pending : main,
+        },
+      ]),
+    );
+    const allowed = state === "accepted-landed" || state === "rejected";
+    expect((await runProtection(w.repo, path)) === null).toBe(allowed);
+    const refreshed = only(await plan(w), path);
+    expect(refreshed.verdict).toBe(allowed ? "RECLAIM" : "ASK");
+    // Act on the old eligible plan to prove the effect boundary refreshes owner facts.
+    const result = await target.act(candidate, w.context("run"));
+    expect(result.ok, result.error ?? "").toBe(allowed);
+    expect(existsSync(path)).toBe(!allowed);
+    expect(w.workspaceNames().includes("guarded")).toBe(!allowed);
+  });
+}
+
+test("forgotten unjudged workspace is protected from direct recursive deletion", async () => {
+  const w = world();
+  const path = w.add("forgotten");
+  w.jj(w.repo, "workspace", "forget", "forgotten");
+  w.write(
+    w.root,
+    "runs.json",
+    JSON.stringify([
+      { id: "unjudged", workspace: path, state: "ended", judgment: null },
+    ]),
+  );
+  expect(await directoryProtection(path)).toContain("unjudged");
+  const result = await removeTree(path, {
+    uid: process.getuid?.() ?? 0,
+    immutable: () => false,
+    progress: false,
+  });
+  expect(result.ok).toBe(false);
+  expect(existsSync(join(path, "a"))).toBe(true);
+});
+
+test("unavailable or malformed run inventory never authorizes workspace deletion", async () => {
+  const w = world();
+  const path = w.add("unknown-owner");
+  const candidate = only(await plan(w), path);
+  expect(candidate.verdict).toBe("RECLAIM");
+  for (const body of [
+    "process.exitCode = 1;",
+    'process.stdout.write("not-json");',
+  ]) {
+    w.write(join(w.root, "bin"), "agx", `#!${process.execPath}\n${body}\n`);
+    expect(await runProtection(w.repo, path)).toContain("run inventory");
+    const result = await target.act(candidate, w.context("run"));
+    expect(result.ok).toBe(false);
+    expect(existsSync(path)).toBe(true);
+    expect(w.workspaceNames()).toContain("unknown-owner");
+  }
 });

@@ -95,6 +95,20 @@ async function jjOut(
   cwd: string,
   readonly: boolean,
 ): Promise<Attempt<string>> {
+  // All forget callers, including adoption and readiness rollback, cross this boundary.
+  if (args[0] === "workspace" && args[1] === "forget") {
+    const name = args[2];
+    if (name === undefined) return bad("workspace forget requires a name");
+    const repo = resolveRepo(cwd);
+    if (!repo.ok) return repo;
+    const root = await jjOut(["workspace", "root", "--name", name], cwd, true);
+    if (!root.ok) return root;
+    const allowed = await removalGuard(
+      repo.value,
+      resolve(cwd, root.value.trim()),
+    );
+    if (!allowed.ok) return allowed;
+  }
   const ran = await exec(
     [
       "jj",
@@ -219,7 +233,16 @@ export async function checkGraveyard(): Promise<Attempt<Graveyard>> {
   return good({ path });
 }
 
-async function bury(graveyard: Graveyard, dir: string): Promise<Attempt<void>> {
+async function bury(
+  graveyard: Graveyard,
+  dir: string,
+  commit: string,
+): Promise<Attempt<void>> {
+  // The directory still contains its store pointer after forget. Recheck before moving it.
+  const repo = resolveRepo(dir);
+  if (!repo.ok) return repo;
+  const allowed = await removalGuard(repo.value, dir, commit);
+  if (!allowed.ok) return allowed;
   if (Bun.which("rip") === null)
     return bad("rip is not on PATH: mise run install:tools");
   const ran = await exec(["rip", dir], dirname(dir), {
@@ -355,6 +378,12 @@ async function forgetAndBury(
   dir: string,
   abandon = false,
 ): Promise<Attempt<boolean>> {
+  const burialTip = await jjOut(
+    ["log", "--no-graph", "-r", `${name}@`, "-T", "commit_id"],
+    repo.backing,
+    true,
+  );
+  if (!burialTip.ok) return burialTip;
   const tip = abandon
     ? await jjOut(
         [
@@ -390,7 +419,7 @@ async function forgetAndBury(
       return abandoned;
     immutable = !abandoned.ok;
   }
-  const buried = await bury(graveyard, dir);
+  const buried = await bury(graveyard, dir, burialTip.value.trim());
   return buried.ok ? good(immutable) : buried;
 }
 
@@ -655,6 +684,7 @@ export async function remove(options: {
 const RunRecord = z.looseObject({
   id: z.string(),
   state: z.string(),
+  started_at: z.string().optional(),
   cwd: z.string().nullable().optional(),
   workspace: z.string().nullable().optional(),
   continues: z.string().nullable().optional(),
@@ -664,6 +694,94 @@ const RunRecord = z.looseObject({
   judgment: z.looseObject({ decision: z.string() }).nullable().optional(),
 });
 export type RunRecord = z.output<typeof RunRecord>;
+
+/** Fail closed before effects; content equality and elapsed time are not judgments. */
+async function runRemovalReason(
+  repo: Repo,
+  dir: string,
+  records: RunRecord[],
+  forgottenCommit?: string,
+): Promise<string | undefined> {
+  const lineage = lineageOf(records, realOr(dir));
+  const live = lineage.find((r) => !TERMINAL_STATES.has(r.state));
+  if (live !== undefined)
+    return `live or continuing run ${live.id} (${live.state})`;
+  // Continuations supersede their parents. Timestamps order unrelated runs, irrespective
+  // of the order returned by the inventory. Missing/invalid dates retain all candidates.
+  const parents = new Set(lineage.map((r) => r.continues));
+  const leaves = lineage.filter((r) => !parents.has(r.id));
+  if (lineage.length > 0 && leaves.length === 0)
+    return "cyclic run lineage; keep";
+  const dates = leaves.map((r) =>
+    fromThrowable(
+      () => Temporal.Instant.from(r.started_at ?? "").epochMilliseconds,
+    )().unwrapOr(Number.NaN),
+  );
+  const latest = dates.every((date) => Number.isFinite(date))
+    ? leaves.filter((_, i) => dates[i] === Math.max(...dates))
+    : leaves;
+  for (const run of latest) {
+    const decision = run.judgment?.decision;
+    if (decision === "reject") continue;
+    if (decision !== "accept") return `run ${run.id} is unjudged; keep`;
+    // Current worker inventories omit end_commit. In that case require the actual
+    // workspace commit to be reachable; never substitute content equality for ancestry.
+    let tip =
+      forgottenCommit === undefined
+        ? await jjOut(
+            ["log", "--no-graph", "-r", "@", "-T", "commit_id"],
+            dir,
+            true,
+          )
+        : good(forgottenCommit);
+    if (
+      run.end_commit !== undefined &&
+      run.end_commit !== null &&
+      run.end_commit !== ""
+    )
+      tip = good(run.end_commit);
+    if (!tip.ok)
+      return `cannot read accepted run ${run.id} change: ${msg(tip)}`;
+    const commit = tip.value.trim();
+    if (!/^[0-9a-f]{40,64}$/u.test(commit))
+      return `accepted run ${run.id} has an invalid run-end commit; keep`;
+    const cfg = await readConfig(repo);
+    if (!cfg.ok) return msg(cfg);
+    const landed = await jjOut(
+      [
+        "log",
+        "--no-graph",
+        "-r",
+        `(${commit}) & ::(${cfg.value.trunk})`,
+        "-T",
+        "commit_id",
+      ],
+      repo.backing,
+      true,
+    );
+    if (!landed.ok)
+      return `cannot establish landing for ${run.id}: ${msg(landed)}`;
+    if (landed.value.trim() !== commit)
+      return `accepted run ${run.id} is not reachable from ${cfg.value.trunk}; keep`;
+  }
+  return undefined;
+}
+
+async function removalGuard(
+  repo: Repo,
+  dir: string,
+  forgottenCommit?: string,
+): Promise<Attempt<void>> {
+  const records = await agxRecords(repo.backing);
+  if (!records.ok) return records;
+  const reason = await runRemovalReason(
+    repo,
+    dir,
+    records.value,
+    forgottenCommit,
+  );
+  return reason === undefined ? good(undefined) : bad(reason);
+}
 
 async function agxRecords(cwd: string): Promise<Attempt<RunRecord[]>> {
   if (Bun.which("agx") === null)
@@ -854,6 +972,8 @@ async function moveWorkspace(
   name: string,
   graveyard: Graveyard,
 ): Promise<Attempt<void>> {
+  const permitted = await removalGuard(repo, ws.dir);
+  if (!permitted.ok) return permitted;
   const occupied = busy(realOr(ws.dir));
   if (occupied !== undefined) return bad(occupied);
   const change = await jjOut(
@@ -891,6 +1011,11 @@ async function moveWorkspace(
       if (!forgot.ok)
         return bad(`${errorMessage(failure)}; rollback failed: ${msg(forgot)}`);
     }
+    const allowed = await removalGuard(repo, target);
+    if (!allowed.ok)
+      return bad(
+        `${errorMessage(failure)}; rollback retained workspace: ${msg(allowed)}`,
+      );
     const removed = await attempt(async () => {
       await rm(target, { recursive: true, force: true });
       if (!hadRoot) await rmdir(repo.wsRoot);
@@ -924,6 +1049,12 @@ async function moveWorkspace(
     if (active !== undefined) return bad(active);
     // Remember precisely the forget operation so a burial failure can restore the old
     // registration without rewinding unrelated operations in this shared store.
+    const burialTip = await jjOut(
+      ["log", "--no-graph", "-r", `${ws.name}@`, "-T", "commit_id"],
+      repo.backing,
+      true,
+    );
+    if (!burialTip.ok) return burialTip;
     const forgot = await jjOut(
       ["workspace", "forget", ws.name],
       repo.backing,
@@ -935,7 +1066,9 @@ async function moveWorkspace(
       repo.backing,
       true,
     );
-    const buried = operation.ok ? await bury(graveyard, ws.dir) : operation;
+    const buried = operation.ok
+      ? await bury(graveyard, ws.dir, burialTip.value.trim())
+      : operation;
     if (buried.ok) return good(undefined);
     const restored = operation.ok
       ? await jjOut(
@@ -1642,6 +1775,8 @@ async function classify(
   const live = lineage.find((r) => !TERMINAL_STATES.has(r.state));
   if (live !== undefined)
     return verdict("keep", `live or continuing run ${live.id} (${live.state})`);
+  const blocked = await runRemovalReason(repo, ws.dir, records);
+  if (blocked !== undefined) return verdict("keep", blocked);
   const land = landState(ws);
   if (land !== undefined)
     return (await landBusy(land))

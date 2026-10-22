@@ -17,6 +17,7 @@ import {
   type Listed,
 } from "../jj/discover.ts";
 import { jj, unpushedRevset, workingCopyRevset } from "../jj/jj.ts";
+import { runProtection } from "../jj/run-guard.ts";
 import type { OpenPaths } from "../lib/procs.ts";
 import { resolveProcRoot } from "../lib/procs.ts";
 import { createLivenessSnapshot, scratchRef } from "../liveness/facts.ts";
@@ -349,6 +350,8 @@ async function evaluate(
       name,
       "workspace root",
     );
+  const run = await runProtection(store, root);
+  if (run !== null) return ask(id, root, run, name, "run judged and landed");
   if (!existsSync(root)) {
     return {
       id,
@@ -587,6 +590,8 @@ export function createWorkspacesTarget(
         }
       }
       // 1. recovery is durable before anything is destroyed
+      const run = await runProtection(store, path);
+      if (run !== null) return fail(run);
       ctx.recordRecovery(candidate, {
         repo: store,
         workspace: name,
@@ -615,6 +620,7 @@ export function createWorkspacesTarget(
       }
       // 4. real delete
       const removed = await removeTree(path, {
+        forgottenWorkspaceCommit: { path, commit },
         uid: process.getuid?.() ?? 0,
         ...(options.owner === undefined ? {} : { owner: options.owner }),
         ...(options.immutable === undefined

@@ -12,7 +12,7 @@ import {
   lstatSync,
   readdirSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
 import { jsonOf } from "../../../shared/src/zod.ts";
 import { Plan, type Candidate } from "../../src/model.ts";
@@ -34,6 +34,15 @@ function fixture(procRoot?: string) {
     allowed = join(root, "allowed");
   mkdirSync(home);
   mkdirSync(allowed);
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  const inventory = join(root, "runs.json");
+  writeFileSync(inventory, "[]");
+  writeFileSync(
+    join(bin, "agx"),
+    `#!${process.execPath}\nprocess.stdout.write(await Bun.file(${JSON.stringify(inventory)}).text());\n`,
+  );
+  chmodSync(join(bin, "agx"), 0o755);
   const config = join(root, "reclaim.toml");
   writeFileSync(
     config,
@@ -42,6 +51,8 @@ function fixture(procRoot?: string) {
   const env = {
     ...process.env,
     HOME: home,
+    TMPDIR: dirname(root),
+    PATH: `${bin}:${process.env.PATH}`,
     XDG_CONFIG_HOME: join(home, "config"),
     XDG_CACHE_HOME: join(home, "cache"),
     XDG_STATE_HOME: join(home, "state"),

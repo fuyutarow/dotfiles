@@ -16,6 +16,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, join, resolve, sep } from "node:path";
 import { dlopen, FFIType, ptr, read } from "bun:ffi";
 import { listWorkspaces, storeOf } from "../jj/discover.ts";
+import { runProtection } from "../jj/run-guard.ts";
 import { fromThrowable } from "../../../shared/src/zod.ts";
 import { protectedReason, type ProtectionOptions } from "./protected.ts";
 type ProtectionProcesses = NonNullable<ProtectionOptions["processes"]>;
@@ -48,6 +49,8 @@ export type RemoveTreeOptions = {
   immutable?: (path: string) => boolean | null;
   dryRun?: boolean;
   allowListedWorkspace?: string;
+  /** Commit observed before this target forgot its registration; used only for ancestry. */
+  forgottenWorkspaceCommit?: { path: string; commit: string };
   /** Already-deleted data: process-use, repo-store and jj-workspace refusals do not apply. */
   graveyard?: boolean;
   /** Already-deleted payloads may make partial progress before cancellation. */
@@ -139,7 +142,10 @@ export function removeTreeProgress(
 }
 
 /** Check one directory only; callers walk their target without following symlinks. */
-export function directoryProtection(path: string): string | null {
+export async function directoryProtection(
+  path: string,
+  forgottenCommit?: string,
+): Promise<string | null> {
   if (
     existsSync(join(path, ".jj", "repo", "store")) ||
     (existsSync(join(path, ".git")) &&
@@ -148,6 +154,8 @@ export function directoryProtection(path: string): string | null {
     return "repo store holder";
   const store = storeOf(path);
   if (store === null) return null;
+  const run = await runProtection(store, path, forgottenCommit);
+  if (run !== null) return run;
   const result = listWorkspaces(store);
   if (result.listed === null)
     return `cannot inspect jj workspace store: ${result.error ?? "jj failed"}`;
@@ -462,10 +470,18 @@ export async function removeTree(
       return false;
     }
     if (stat.isDirectory() && !stat.isSymbolicLink()) {
+      const forgottenCommit =
+        options.forgottenWorkspaceCommit?.path === entry
+          ? options.forgottenWorkspaceCommit.commit
+          : undefined;
       const protection =
         options.graveyard === true
           ? null
-          : fromThrowable(() => directoryProtection(entry))().match(
+          : (
+              await fromAsyncThrowable(() =>
+                directoryProtection(entry, forgottenCommit),
+              )()
+            ).match(
               (reason) => reason,
               (error) => `cannot inspect repo store: ${message(error)}`,
             );

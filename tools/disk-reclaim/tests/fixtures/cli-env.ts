@@ -1,5 +1,5 @@
-import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 /** Every filesystem declaration and executable used by the spawned CLI is isolated. */
 export function cliEnv(
@@ -14,6 +14,14 @@ export function cliEnv(
   mkdirSync(bin, { recursive: true });
   mkdirSync(procRoot, { recursive: true });
   mkdirSync(tmpfsRoot, { recursive: true });
+  // The fixture's empty owner inventory explicitly declares its workspaces unrecorded.
+  const inventory = join(root, "runs.json");
+  writeFileSync(inventory, "[]");
+  writeFileSync(
+    join(bin, "agx"),
+    `#!${process.execPath}\nprocess.stdout.write(await Bun.file(${JSON.stringify(inventory)}).text());\n`,
+  );
+  chmodSync(join(bin, "agx"), 0o755);
   for (const name of ["jj", "git", "lsattr", "pgrep", "sh", "true"]) {
     const source = Bun.which(name);
     if (source !== null) symlinkSync(source, join(bin, name));
@@ -35,6 +43,7 @@ export function cliEnv(
   const env = {
     ...inherited,
     HOME: home,
+    TMPDIR: dirname(root),
     PATH: bin,
     RECLAIM_CONFIG: declaration,
     RECLAIM_STATE_DIR: join(root, "state"),

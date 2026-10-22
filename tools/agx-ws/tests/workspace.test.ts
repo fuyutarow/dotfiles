@@ -926,6 +926,7 @@ describe("agx ws gc", () => {
     cwd: wsDir(path, slug),
     workspace: wsDir(path, slug),
     continues: null,
+    judgment: { decision: "reject" },
     ...over,
   });
 
@@ -1244,6 +1245,7 @@ const recFor = (dir: string) => ({
   cwd: dir,
   workspace: dir,
   continues: null,
+  judgment: { decision: "reject" },
 });
 
 describe("gc integration branches", () => {
@@ -1315,6 +1317,7 @@ describe("gc integration branches", () => {
           vendor_session: null,
           verify: [],
         },
+        { kind: "judged", id, at: old, decision: "reject", note: "fixture" },
       ]
         .map((event) => JSON.stringify(event))
         .join("\n")}\n`,
@@ -1337,7 +1340,7 @@ describe("gc integration branches", () => {
     ).toContain(tip);
   });
 
-  test("WS-GC-UNACCEPTED: only opts old unaccepted work into abandonment", async () => {
+  test("WS-GC-UNACCEPTED: abandonment requires rejection; flags never override unjudged runs", async () => {
     const path = await repo('trunk = "main"\nkeep = ["ws_kept"]\n');
     const slugs = [
       "abandoned",
@@ -1390,6 +1393,7 @@ describe("gc integration branches", () => {
         writes: [],
         cwd: path,
         workspace: wsDir(path, slug),
+        continues: suffix === "second" ? `${slug}-first` : null,
         row: "fixture",
         dispatcher_session: null,
         vendor_session: null,
@@ -1417,6 +1421,13 @@ describe("gc integration branches", () => {
     };
     record("abandoned", "first", "verify-failed");
     record("abandoned", "second", "malformed");
+    events.push({
+      kind: "judged",
+      id: "abandoned-second",
+      at: old,
+      decision: "reject",
+      note: "fixture",
+    });
     record("accepted", "first", "ok", old, true);
     record("accepted", "second", "refused");
     record("running", "first", "timeout");
@@ -1769,4 +1780,190 @@ describe("gc integration branches", () => {
     expect(help.code).toBe(0);
     expect(help.out).toContain("only creator");
   });
+});
+
+// These cases reproduce the incident with an empty saved diff and exercise real CLI effects.
+describe("SEP-WS-FORGET-UNJUDGED-1023", () => {
+  for (const caller of ["gc", "rm", "adopt"] as const) {
+    for (const state of [
+      "unjudged",
+      "accepted-pending",
+      "accepted-landed",
+      "rejected",
+      "running",
+    ] as const) {
+      test(`${caller}: ${state} run gates forget and directory removal`, async () => {
+        const path = await repo('trunk = "main"\n');
+        setRecords([]);
+        expect((await ws(["add", "guarded"], path)).code).toBe(0);
+        const dir = wsDir(path, "guarded");
+        const main = (
+          await jj(["log", "--no-graph", "-r", "main", "-T", "commit_id"], path)
+        ).out.trim();
+        let commit = main;
+        if (state === "accepted-pending") {
+          // Recorded run work remains unlanded even when the current checkout is clean.
+          await Bun.write(join(dir, "pending.txt"), "unlanded\n");
+          commit = (
+            await jj(["log", "--no-graph", "-r", "@", "-T", "commit_id"], dir)
+          ).out.trim();
+          expect((await jj(["new", "main"], dir)).code).toBe(0);
+        }
+        let decision: string | undefined;
+        if (state.startsWith("accepted")) decision = "accept";
+        if (state === "rejected") decision = "reject";
+        setRecords([
+          {
+            id: "latest",
+            started_at: "2026-10-23T01:00:00Z",
+            state: state === "running" ? "running" : "ended",
+            ended_at: "2020-01-01T00:00:00Z",
+            outcome: "ok",
+            workspace: dir,
+            judgment: decision === undefined ? null : { decision },
+            end_commit: commit,
+          },
+        ]);
+        const allowed = state === "accepted-landed" || state === "rejected";
+        let args = ["rm", "guarded"];
+        if (caller === "adopt") args = ["adopt", dir, "--slug", "moved"];
+        if (caller === "gc")
+          args = ["gc", "--abandoned", "--legacy", "--include-unrecorded"];
+        const result = await ws(args, path);
+        expect(result.code, result.out + result.err).toBe(
+          allowed || caller === "gc" ? 0 : 1,
+        );
+        expect(existsSync(dir), result.out + result.err).toBe(!allowed);
+        const names = (
+          await jj(["--ignore-working-copy", "workspace", "list"], path)
+        ).out;
+        expect(names.includes("ws_guarded:")).toBe(!allowed);
+        let reason = "not reachable";
+        if (state === "unjudged") reason = "unjudged";
+        if (state === "running") reason = "live or continuing";
+        if (!allowed) expect(result.out + result.err).toContain(reason);
+        setRecords([]);
+      });
+    }
+  }
+
+  test("latest run wins regardless of inventory order; cwd and continuation links retain work", async () => {
+    const path = await repo('trunk = "main"\n');
+    setRecords([]);
+    expect((await ws(["add", "latest"], path)).code).toBe(0);
+    const dir = wsDir(path, "latest");
+    const old = {
+      id: "old",
+      state: "ended",
+      workspace: dir,
+      judgment: { decision: "reject" },
+      started_at: "2026-10-22T00:00:00Z",
+    };
+    const fresh = {
+      id: "new",
+      state: "ended",
+      cwd: join(dir, "nested"),
+      judgment: null,
+      started_at: "2026-10-23T00:00:00Z",
+    };
+    for (const rows of [
+      [old, fresh],
+      [fresh, old],
+    ]) {
+      setRecords(rows);
+      const result = await ws(["gc", "--abandoned"], path);
+      expect(result.out).toContain("run new is unjudged");
+      expect(existsSync(dir)).toBe(true);
+    }
+    setRecords([old, { ...fresh, cwd: "/elsewhere", continues: "old" }]);
+    expect((await ws(["rm", "latest"], path)).err).toContain(
+      "run new is unjudged",
+    );
+    setRecords([fresh, { ...old, started_at: "2026-10-24T00:00:00Z" }]);
+    expect((await ws(["rm", "latest"], path)).code).toBe(0);
+    setRecords([]);
+  });
+
+  test("failed readiness retains a workspace if readiness published an unjudged run", async () => {
+    const command = `printf '%s' '[{"id":"during-ready","state":"ended","workspace":"PLACEHOLDER","judgment":null}]' > ${JSON.stringify(records)}; exit 9`;
+    const path = await repo('trunk = "main"\n');
+    const dir = wsDir(path, "rollback");
+    await Bun.write(
+      join(path, ".ws.toml"),
+      `trunk = "main"\nready = [${JSON.stringify(command.replace("PLACEHOLDER", dir))}]\n`,
+    );
+    setRecords([]);
+    const result = await ws(["add", "rollback"], path);
+    expect(result.code).not.toBe(0);
+    expect(result.err).toContain("unjudged");
+    expect(existsSync(dir)).toBe(true);
+    expect(
+      (await jj(["--ignore-working-copy", "workspace", "list"], path)).out,
+    ).toContain("ws_rollback");
+    setRecords([]);
+  });
+
+  test("accepted inventory without end_commit requires actual ancestry, not equal content", async () => {
+    const path = await repo('trunk = "main"\n');
+    setRecords([]);
+    expect((await ws(["add", "ancestry"], path)).code).toBe(0);
+    const dir = wsDir(path, "ancestry");
+    setRecords([
+      {
+        id: "accepted",
+        state: "ended",
+        workspace: dir,
+        judgment: { decision: "accept" },
+      },
+    ]);
+    const refused = await ws(["rm", "ancestry"], path);
+    expect(refused.err).toContain("not reachable");
+    expect(existsSync(dir)).toBe(true);
+    expect((await jj(["edit", "main"], dir)).code).toBe(0);
+    const removed = await ws(["rm", "ancestry"], path);
+    expect(removed.code, removed.err).toBe(0);
+    expect(existsSync(dir)).toBe(false);
+    setRecords([]);
+  });
+});
+
+test("SEP-WS-FORGET-UNJUDGED-1023: adoption rollback retains a newly recorded target", async () => {
+  const path = await repo('trunk = "main"\n');
+  const source = join(path, "..", "legacy-rollback");
+  setRecords([]);
+  expect(
+    (await jj(["workspace", "add", "--name", "legacy", source], path)).code,
+  ).toBe(0);
+  const target = wsDir(path, "rollback-target");
+  const wrapper = join(scratch, "rollback-run-bin");
+  await mkdir(wrapper);
+  const realJj = Bun.which("jj");
+  expect(realJj).not.toBeNull();
+  await Bun.write(
+    join(wrapper, "jj"),
+    `#!/usr/bin/env bun
+const args=process.argv.slice(2);
+if (process.cwd() === ${JSON.stringify(target)} && args.includes("edit")) {
+  await Bun.write(${JSON.stringify(records)}, JSON.stringify([{id:"during-adoption",state:"ended",workspace:${JSON.stringify(target)},judgment:null}]));
+  process.exit(1);
+}
+const p=Bun.spawn([${JSON.stringify(realJj)},...args],{stdin:"ignore",stdout:"inherit",stderr:"inherit",timeout:20000});
+process.exitCode=await p.exited;
+`,
+  );
+  await chmod(join(wrapper, "jj"), 0o755);
+  const result = await ws(
+    ["adopt", source, "--slug", "rollback-target"],
+    path,
+    baseEnv({ PATH: `${wrapper}:${bin}:${process.env.PATH}` }),
+  );
+  expect(result.code).toBe(1);
+  expect(result.out + result.err).toContain("unjudged");
+  expect(existsSync(source)).toBe(true);
+  expect(existsSync(target)).toBe(true);
+  const names = (await jj(["--ignore-working-copy", "workspace", "list"], path))
+    .out;
+  expect(names).toContain("legacy:");
+  expect(names).toContain("ws_rollback-target:");
+  setRecords([]);
 });

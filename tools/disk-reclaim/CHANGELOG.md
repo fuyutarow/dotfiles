@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.10 — 2026-10-23
+
+- Preserve workspaces until their runs are judged and accepted changes land
+
 ## 1.4.9 — 2026-10-23
 
 - Use neutral workspace and process fixtures

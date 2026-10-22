@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.3 — 2026-10-23
+
+- Require run judgment and landing before workspace cleanup
+
 ## 0.12.2 — 2026-10-23
 
 - Generalize the parent pipe-draining test description

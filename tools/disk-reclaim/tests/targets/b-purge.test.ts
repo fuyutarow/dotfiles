@@ -11,7 +11,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tempRoot as allocateTempRoot } from "../fixtures/temp.ts";
 import { purge, purgeRip } from "../../src/targets/purge.ts";
 import { main as reclaimMain } from "../../src/reclaim.ts";
@@ -80,6 +80,7 @@ async function purgeTty(
     env: {
       ...process.env,
       HOME: root,
+      TMPDIR: dirname(root),
       RIP_GRAVEYARD: grave,
       XDG_DATA_HOME: join(root, "xdg"),
       XDG_CACHE_HOME: join(root, "cache"),

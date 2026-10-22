@@ -399,6 +399,8 @@ function watermarkPath(project: string): Result<string, Error> {
 }
 
 type IndexRequest = {
+  id?: string | undefined;
+  completedHead?: string | null | undefined;
   head: string | null;
   pid?: number | undefined;
   requestedAt: string;
@@ -406,6 +408,10 @@ type IndexRequest = {
 };
 
 const IndexRequestSchema = z.object({
+  id: z.string().optional(),
+  completedHead: z
+    .union([z.null(), z.string().regex(/^[0-9a-f]{40}$/iu)])
+    .optional(),
   head: z.union([z.null(), z.string().regex(/^[0-9a-f]{40}$/iu)]),
   pid: z.number().int().positive().optional(),
   requestedAt: z.string(),
@@ -432,37 +438,76 @@ export async function runningIndexPid(project: string): Promise<number | null> {
   return request?.state === "pending" ? (request.pid ?? null) : null;
 }
 
+// All request writers serialize replacement and identity-checked updates. No stale-lock
+// expiry: an interrupted writer must never let a second writer bypass mutual exclusion.
 async function writeIndexRequest(
   project: string,
   request: IndexRequest,
+  expected?: IndexRequest,
 ): Promise<Result<void, Error>> {
   const path = indexRequestPath(project);
   if (path.isErr()) return err(path.error);
-  const tmp = `${path.value}.tmp-${process.pid}`;
-  return fromAsyncThrowable(async () => {
+  const lockPath = path.value + ".lock";
+  const acquired = await acquireRequestLock(lockPath);
+  if (acquired.isErr()) return err(acquired.error);
+  const updated = await fromAsyncThrowable(async () => {
+    if (expected !== undefined) {
+      const current = await readIndexRequest(project);
+      if (
+        current === null ||
+        current.id !== expected.id ||
+        current.head !== expected.head ||
+        current.requestedAt !== expected.requestedAt ||
+        current.state !== expected.state
+      )
+        return;
+    }
+    const tmp = `${path.value}.tmp-${process.pid}`;
     await Bun.write(tmp, `${JSON.stringify(request, null, 2)}\n`);
     await rename(tmp, path.value);
   }, asError)();
+  const closed = await fromAsyncThrowable(
+    () => acquired.value.close(),
+    asError,
+  )();
+  const released = await fromAsyncThrowable(() => unlink(lockPath), asError)();
+  return updated.andThen(() => closed).andThen(() => released);
 }
 
-async function markIndexRequest(
-  project: string,
-  state: IndexRequest["state"],
-): Promise<Result<void, Error>> {
-  const request = await readIndexRequest(project);
-  return request === null
-    ? ok()
-    : writeIndexRequest(project, { ...request, state });
+async function acquireRequestLock(
+  path: string,
+): Promise<Result<Awaited<ReturnType<typeof open>>, Error>> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const opened = await fromAsyncThrowable(() => open(path, "wx"), asError)();
+    if (opened.isOk() || errnoCode(opened.error) !== "EEXIST") return opened;
+    await Bun.sleep(10);
+  }
+  return err(
+    new Error(
+      `index request update locked at ${path}; inspect the writer before recovering an interrupted lock`,
+    ),
+  );
 }
 
 async function markWorkerRequest(
   project: string,
+  request: IndexRequest | null,
   state: IndexRequest["state"],
+  completedHead?: string | null,
 ): Promise<void> {
-  const result = await markIndexRequest(project, state);
+  if (request === null) return;
+  const result = await writeIndexRequest(
+    project,
+    {
+      ...request,
+      state,
+      ...(completedHead === undefined ? {} : { completedHead }),
+    },
+    request,
+  );
   if (result.isErr())
     process.stderr.write(
-      `NOTE: could not update detached index status: ${result.error.message}\n`,
+      `NOTE: could not update index request status: ${result.error.message}\n`,
     );
 }
 
@@ -545,6 +590,13 @@ async function hasIndexArtifacts(
     if (entry.name === "rr.toml" || entry.name === "RR_ACCEPTED_PLAN.json")
       continue;
     if (entry.name === SETTINGS_BASENAME) continue; // hand-authored by `ccc init`, not indexing
+    if (
+      entry.name === INDEX_REQUEST_BASENAME ||
+      entry.name.startsWith(`${INDEX_REQUEST_BASENAME}.`) ||
+      entry.name === AUTO_REINDEX_STAMP_BASENAME ||
+      entry.name === AUTO_REINDEX_LOCK_BASENAME
+    )
+      continue; // request bookkeeping cannot prove that ccc built an index
     if (
       entry.name === WATERMARK_BASENAME ||
       entry.name.startsWith(`${WATERMARK_BASENAME}.tmp-`)
@@ -1123,6 +1175,7 @@ export async function runIndexWrapper(
     const head = await gitHead(project);
     if (head.isErr()) return err(head.error);
     const request: IndexRequest = {
+      id: crypto.randomUUID(),
       head: head.value,
       requestedAt: Temporal.Now.instant().toString({
         fractionalSecondDigits: 3,
@@ -1147,6 +1200,7 @@ export async function runIndexWrapper(
               ...process.env,
               REPO_RETRIEVE_INDEX_WORKER: "1",
               REPO_RETRIEVE_INDEX_REQUEST_HEAD: head.value ?? "none",
+              REPO_RETRIEVE_INDEX_REQUEST_ID: request.id,
             },
             stdin: "ignore",
             stdout: "ignore",
@@ -1157,14 +1211,22 @@ export async function runIndexWrapper(
       asError,
     )();
     if (child.isErr()) {
-      await writeIndexRequest(project, { ...request, state: "failed" });
+      await writeIndexRequest(
+        project,
+        { ...request, state: "failed" },
+        request,
+      );
       return err(child.error);
     }
     child.value.unref();
-    const recorded = await writeIndexRequest(project, {
-      ...request,
-      pid: child.value.pid,
-    });
+    const recorded = await writeIndexRequest(
+      project,
+      {
+        ...request,
+        pid: child.value.pid,
+      },
+      request,
+    );
     if (recorded.isErr())
       process.stderr.write(
         `NOTE: could not record detached index pid: ${recorded.error.message}\n`,
@@ -1193,6 +1255,13 @@ export async function runIndexWrapper(
   // at headAfter would build, so headAfter is certified. Otherwise the scan is re-run — ccc
   // indexes incrementally, so a repeat costs only what changed — up to INDEX_ATTEMPTS times
   // (firedancer 2026-09-25: ten agents committing every 1–2 min; a human needed three tries).
+  const observedRequest = await readIndexRequest(project);
+  // A detached worker owns only the request passed by its parent. A foreground
+  // scan may fulfill the prior request it captured, including an unresolvable old HEAD.
+  const capturedRequest =
+    worker && observedRequest?.id !== process.env.REPO_RETRIEVE_INDEX_REQUEST_ID
+      ? null
+      : observedRequest;
   const certifiedResult = await reindexCertified(
     project,
     ccc.value,
@@ -1201,7 +1270,7 @@ export async function runIndexWrapper(
     plan,
   );
   if (certifiedResult.isErr()) {
-    if (worker) await markWorkerRequest(project, "failed");
+    if (worker) await markWorkerRequest(project, capturedRequest, "failed");
     return err(certifiedResult.error);
   }
   const certifiedRun = certifiedResult.value;
@@ -1209,6 +1278,7 @@ export async function runIndexWrapper(
     if (worker)
       await markWorkerRequest(
         project,
+        capturedRequest,
         expectedHead === undefined ? "failed" : "stale",
       );
     return ok(certifiedRun.code);
@@ -1233,7 +1303,11 @@ export async function runIndexWrapper(
     `RESULT: INDEXED project=${project} head=${headLabel(head)} source=index ` +
       "confidence=verified(index)\n",
   );
-  if (worker) await markWorkerRequest(project, "complete");
+  const currentHead = await gitHead(project);
+  if (currentHead.isErr()) return err(currentHead.error);
+  if (currentHead.value === head)
+    await markWorkerRequest(project, capturedRequest, "complete", head);
+  else if (worker) await markWorkerRequest(project, capturedRequest, "stale");
   return ok(0);
 }
 
@@ -1276,23 +1350,6 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
     );
     if (count.exitCode === 0) gap = count.stdout.trim();
   }
-  if (request === null) {
-    process.stdout.write(
-      `RESULT: INDEX_STATUS project=${project} state=${watermark.value.kind === "ok" ? "idle" : "none"} built=${headLabel(builtHead)} gap=${gap} reindex=not-running\n`,
-    );
-    return ok(0);
-  }
-  if (head.value !== request.head && request.state !== "complete") {
-    process.stdout.write(
-      `RESULT: INDEX_STATUS project=${project} state=stale requested=${headLabel(request.head)} current=${headLabel(head.value)} built=${headLabel(builtHead)} gap=${gap} reindex=running\n`,
-    );
-    return ok(0);
-  }
-  const complete =
-    request.state === "complete" &&
-    watermark.value.kind === "ok" &&
-    watermark.value.value.source === "index" &&
-    watermark.value.value.head === request.head;
   const ccc = requireExecutable("ccc");
   if (ccc.isErr()) return err(ccc.error);
   const status = await runChildCaptured(
@@ -1301,15 +1358,54 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
     false,
     project,
   );
-  const projectState = status.stdout
+  const projectLine = status.stdout
     .split("\n")
-    .find((line) => line.trimStart().startsWith(`${project} [`))
-    ?.trim()
-    .split(" ")
-    .at(-1);
-  const state = complete ? "complete" : request.state;
+    .find((line) => line.trimStart().startsWith(`${project} [`));
+  const daemon =
+    status.exitCode === 0 && projectLine !== undefined
+      ? (/\[([^\]]+)\]/u.exec(projectLine)?.[1] ?? "unknown")
+      : "unknown";
+  let pidAlive = false;
+  if (request?.state === "pending" && request.pid !== undefined) {
+    const pid = request.pid;
+    const alive = fromThrowable(() => process.kill(pid, 0), asError)();
+    pidAlive = alive.isOk() || errnoCode(alive.error) === "EPERM";
+  }
+  const running = daemon === "indexing" || pidAlive;
+  let reindex = daemon === "unknown" ? "unknown" : "not-running";
+  if (running) reindex = "running";
+  const artifacts = await hasIndexArtifacts(project);
+  if (artifacts.isErr()) return err(artifacts.error);
+  const fresh =
+    watermark.value.kind === "ok" &&
+    watermark.value.value.source === "index" &&
+    builtHead === head.value &&
+    artifacts.value;
+  let state = fresh ? "idle" : "stale";
+  if (request === null) {
+    const requestPath = indexRequestPath(project);
+    if (requestPath.isErr()) return err(requestPath.error);
+    if (await Bun.file(requestPath.value).exists()) state = "invalid";
+    else if (watermark.value.kind === "missing") state = "none";
+  } else if (request.state === "complete") {
+    const completedHead =
+      request.completedHead === undefined
+        ? request.head
+        : request.completedHead;
+    state = fresh && completedHead === builtHead ? "complete" : "stale";
+  } else {
+    state = request.state;
+    if (request.head !== head.value) state = "stale";
+  }
   process.stdout.write(
-    `RESULT: INDEX_STATUS project=${project} state=${state} daemon=${projectState ?? "unknown"} built=${headLabel(builtHead)} gap=${gap} reindex=${request.state === "pending" ? "running" : "not-running"} head=${headLabel(request.head)}\n`,
+    `RESULT: INDEX_STATUS project=${project} state=${state} daemon=${daemon} built=${headLabel(builtHead)} gap=${gap} reindex=${reindex} current=${headLabel(head.value)}` +
+      (request === null
+        ? ""
+        : ` head=${headLabel(request.head)} requested=${headLabel(request.head)}`) +
+      (state === "invalid" || state === "pending" || state === "stale"
+        ? " remedy=run-repo-retrieve-index"
+        : "") +
+      "\n",
   );
   return ok(0);
 }

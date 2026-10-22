@@ -254,7 +254,8 @@ if [ "${name}" = ccc ] && [ "$1" = index ]; then
   if [ -n "\${FAKE_CCC_STDERR:-}" ]; then printf '%s\\n' "$FAKE_CCC_STDERR" >&2; fi
   # Stand-in for the real artifacts a genuine ccc index writes under .cocoindex_code -- lets
   # hasIndexArtifacts() (ccc-index.ts) see a project the router just indexed as non-empty.
-  touch "$PWD/.cocoindex_code/fake_target.db" 2>/dev/null || true
+  if [ "\${FAKE_CCC_NO_ARTIFACT:-0}" != 1 ]; then touch "$PWD/.cocoindex_code/fake_target.db"; fi
+  if [ -n "\${FAKE_CCC_REPLACE_REQUEST:-}" ]; then cat "$FAKE_CCC_REPLACE_REQUEST" > "$PWD/.cocoindex_code/INDEX_REQUEST.json"; fi
 fi
 if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_INDEX_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
 if [ "${name}" = ccc ] && [ "$1" = search ] && [ "\${FAKE_CCC_INDEXING_AFTER_SEARCH:-0}" = 1 ]; then touch "$FAKE_SEARCH_LOG.search-started"; fi
@@ -334,9 +335,13 @@ function run(
       COCOINDEX_CODE_DB_PATH_MAPPING: "",
       // Most tests pin the freshness gate without depending on a live ccc installation.
       REPO_RETRIEVE_AUTO_INDEX: "0",
+      XDG_STATE_HOME: join(tools.bin, "state"),
+      XDG_RUNTIME_DIR: join(tools.bin, "runtime"),
+      REPO_RETRIEVE_INDEX_WORKER: "0",
       ...env,
     },
   });
+  // Rate samples and runtime deferral state also belong exclusively to this fixture.
   // A rejected invocation need not create the child log.
   const log = existsSync(tools.log) ? readFileSync(tools.log, "utf8") : "";
   return {
@@ -1379,6 +1384,168 @@ describe("repo-retrieve route contract", () => {
     expect(search.stdout).toContain("confidence=verified(index)");
   });
 
+  test("request reconciliation retires an unresolved prior token only after verified foreground success", () => {
+    const { dir, head } = registerFreshGitProject();
+    const path = join(dir, ".cocoindex_code", "INDEX_REQUEST.json");
+    const request = {
+      head: "a".repeat(40),
+      requestedAt: "old",
+      state: "pending",
+    };
+    writeFileSync(path, JSON.stringify(request));
+    const before = run(dir, ["index", "--status"]);
+    expect(before.stdout).toContain("state=stale");
+    expect(before.stdout).toContain(`built=${head} gap=0`);
+    expect(before.stdout).toContain("reindex=not-running");
+    expect(run(dir, ["index"], { FAKE_CCC_CHUNK_DELTA: "1" }).code).toBe(0);
+    const status = run(dir, ["index", "--status"]);
+    expect(status.code).toBe(0);
+    expect(status.stdout).toContain("state=complete");
+    expect(status.stdout).toContain(`built=${head} gap=0 reindex=not-running`);
+    const recorded = decodedJson(
+      z.object({
+        head: z.string(),
+        completedHead: z.string().optional(),
+        id: z.string().optional(),
+        requestedAt: z.string(),
+        state: z.string(),
+      }),
+      readFileSync(path, "utf8"),
+    );
+    expect(recorded.head).toBe(request.head);
+    expect(recorded.completedHead).toBe(head);
+  });
+
+  test("request reconciliation completes legacy current-head requests and leaves request-free indexes idle", () => {
+    const { dir, head } = registerGitProject();
+    expect(run(dir, ["index"]).code).toBe(0);
+    expect(run(dir, ["index", "--status"]).stdout).toContain("state=idle");
+    const path = join(dir, ".cocoindex_code", "INDEX_REQUEST.json");
+    writeFileSync(
+      path,
+      JSON.stringify({ head, requestedAt: "old", state: "complete" }),
+    );
+    expect(run(dir, ["index", "--status"]).stdout).toContain("state=complete");
+    writeFileSync(
+      path,
+      JSON.stringify({ head, requestedAt: "old", state: "pending" }),
+    );
+    expect(run(dir, ["index"]).code).toBe(0);
+    expect(run(dir, ["index", "--status"]).stdout).toContain("state=complete");
+  });
+
+  test("request reconciliation preserves a newer same-head request created during foreground or worker indexing", () => {
+    for (const worker of [false, true]) {
+      const { dir, head } = registerGitProject();
+      const path = join(dir, ".cocoindex_code", "INDEX_REQUEST.json");
+      writeFileSync(
+        path,
+        JSON.stringify({
+          id: "old",
+          head,
+          requestedAt: "old",
+          state: "pending",
+        }),
+      );
+      const replacement = {
+        id: "new",
+        head,
+        requestedAt: "new",
+        state: "pending",
+      };
+      const fixture = join(dir, "replacement.json");
+      writeFileSync(fixture, JSON.stringify(replacement));
+      const result = run(dir, ["index"], {
+        FAKE_CCC_REPLACE_REQUEST: fixture,
+        REPO_RETRIEVE_INDEX_WORKER: worker ? "1" : "0",
+        REPO_RETRIEVE_INDEX_REQUEST_HEAD: head,
+        REPO_RETRIEVE_INDEX_REQUEST_ID: "old",
+      });
+      expect(result.code).toBe(0);
+      expect(
+        decodedJson(
+          z.object({
+            head: z.string(),
+            completedHead: z.string().optional(),
+            id: z.string().optional(),
+            requestedAt: z.string(),
+            state: z.string(),
+          }),
+          readFileSync(path, "utf8"),
+        ),
+      ).toEqual(replacement);
+      const status = run(dir, ["index", "--status"]);
+      expect(status.stdout).toContain("state=pending");
+      expect(status.stdout).toContain("gap=0 reindex=not-running");
+    }
+  });
+
+  test("request reconciliation leaves failed, unverified and HEAD-drift scans unresolved", () => {
+    for (const env of [
+      { FAKE_SEARCH_EXIT: "7" },
+      { FAKE_CCC_NO_ARTIFACT: "1" },
+      { FAKE_CCC_MUTATE_GIT_DURING_INDEX: "1" },
+    ]) {
+      const { dir, head } = registerGitProject();
+      const path = join(dir, ".cocoindex_code", "INDEX_REQUEST.json");
+      const request = { head, requestedAt: "old", state: "pending" };
+      writeFileSync(path, JSON.stringify(request));
+      const result = run(dir, ["index"], env);
+      if (env.FAKE_CCC_MUTATE_GIT_DURING_INDEX !== "1")
+        expect(result.code).not.toBe(0);
+      expect(
+        decodedJson(
+          z.object({
+            head: z.string(),
+            completedHead: z.string().optional(),
+            id: z.string().optional(),
+            requestedAt: z.string(),
+            state: z.string(),
+          }),
+          readFileSync(path, "utf8"),
+        ),
+      ).toEqual(request);
+      const status = run(dir, ["index", "--status"]);
+      expect(status.stdout).not.toContain("state=complete");
+      expect(status.stdout).toContain("reindex=not-running");
+    }
+  });
+
+  test("request reconciliation status reports invalid input, live workers and daemon indexing truthfully", () => {
+    const { dir, head } = registerFreshGitProject();
+    const path = join(dir, ".cocoindex_code", "INDEX_REQUEST.json");
+    writeFileSync(path, "invalid JSON");
+    const invalid = run(dir, ["index", "--status"]);
+    expect(invalid.stdout).toContain("state=invalid");
+    expect(invalid.stdout).toContain("remedy=run-repo-retrieve-index");
+    expect(invalid.stdout).toContain("reindex=not-running");
+    expect(readFileSync(path, "utf8")).toBe("invalid JSON");
+    writeFileSync(
+      path,
+      JSON.stringify({
+        head,
+        requestedAt: "old",
+        state: "pending",
+        pid: process.pid,
+      }),
+    );
+    expect(run(dir, ["index", "--status"]).stdout).toContain("reindex=running");
+    writeFileSync(
+      path,
+      JSON.stringify({
+        head: "b".repeat(40),
+        requestedAt: "old",
+        state: "pending",
+      }),
+    );
+    expect(
+      run(dir, ["index", "--status"], { FAKE_CCC_INDEXING: "1" }).stdout,
+    ).toContain("reindex=running");
+    expect(
+      run(dir, ["index", "--status"], { FAKE_CCC_DAEMON_DOWN: "1" }).stdout,
+    ).toContain("reindex=unknown");
+  });
+
   test("detached index records its watermark after the background worker finishes", () => {
     const { dir, head } = registerGitProject();
     const requested = run(dir, ["index", "--detach"]);
@@ -1529,6 +1696,13 @@ describe("repo-retrieve route contract", () => {
 
   test("a small net chunk increase during a large incremental index does not trigger projected ETA cancellation", async () => {
     const dir = registerProject();
+    // This fixture exercises incremental progress after admission. Its synthetic
+    // 8 MB source needs the same exact-file allowance as a real oversized source.
+    writeFileSync(join(dir, "source.ts"), "fixture source\n");
+    writeFileSync(
+      join(dir, ".cocoindex_code", "rr.toml"),
+      '[index.file_byte_allowances]\n"source.ts" = 8000000\n',
+    );
     const planFile = join(dir, "plan.jsonl");
     await Bun.write(
       planFile,

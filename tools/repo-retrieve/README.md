@@ -66,6 +66,21 @@ time without observable progress. Use `repo-retrieve index --detach` to leave a 
 running, then `repo-retrieve index --status` to inspect completion. The worker records the
 watermark only after indexing succeeds and HEAD remains unchanged from the request.
 
+A successful foreground index also completes the prior request it captured, provided its
+verified watermark still matches current HEAD. The request retains its original `head` and
+records `completedHead`; a newer request survives completion of older work, even at the same
+HEAD. New detached requests carry unique IDs. Request writes and identity checks share a short
+exclusive lock beside `INDEX_REQUEST.json`; an interrupted lock is reported for operator
+inspection rather than expired automatically.
+
+`index --status` reports `complete` for a fulfilled request with a current index, or `idle`
+for a current index without a request. Pending, stale and malformed requests remain visible;
+`invalid` includes a remedy and never silently deletes the record. `reindex=running` requires
+an observed indexing daemon or a live recorded worker PID. An idle daemon without a live
+worker reports `not-running`; unavailable activity information reports `unknown`. Status is
+read-only. Counts describe ccc's stored corpus, while `gap` counts commits since the build;
+neither counts pending requests.
+
 Every `rr index` first plans the current file set with ccc's installed matcher and walker,
 including nested `.gitignore`, exclude pruning, and `max_file_size`. Run `rr index --plan`
 to inspect it without starting ccc or contacting the daemon. Stdout contains one JSONL record

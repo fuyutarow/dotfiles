@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1 — 2026-10-22
+
+- Reconcile captured index requests after verified success without clearing newer work, and report request activity truthfully.
+
 ## 1.4.0 — 2026-10-22
 
 - Add exact canonical file byte allowances to project index budgets

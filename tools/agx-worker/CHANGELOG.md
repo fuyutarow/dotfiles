@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.8.0 — 2026-10-23
+
+- Add workspace-filtered worker listing backed by complete workspace publications
+
 ## 8.7.0 — 2026-10-23
 
 - Add independent roster catalog and policy loader

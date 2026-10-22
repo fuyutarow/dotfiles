@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, realpath, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -14,6 +14,7 @@ import {
   acquireWorkspaceLock,
   events,
   foldedRuns,
+  workspaceRuns,
   importLegacyRecords,
   now,
   overlapWarnings,
@@ -702,6 +703,17 @@ export { runningSummary } from "./listing.ts";
 import { runningSummary, listingRows } from "./listing.ts";
 
 export async function list(flags: Flags): Promise<number> {
+  const workspacePath = value(flags, "workspace");
+  const workspace =
+    workspacePath === undefined
+      ? undefined
+      : await realpath(resolve(workspacePath)).catch(() => null);
+  if (workspace === null) {
+    process.stderr.write(
+      "agx: workspace path does not exist or cannot be resolved\n",
+    );
+    return 2;
+  }
   const latest = flags.latest === true || value(flags, "latest") === "true";
   const ticket = value(flags, "ticket");
   if (latest || ticket !== undefined) {
@@ -719,7 +731,8 @@ export async function list(flags: Flags): Promise<number> {
       flags.all === true ||
       flags.running === true ||
       flags.wait === true ||
-      flags.summary === true
+      flags.summary === true ||
+      workspace !== undefined
     ) {
       process.stderr.write(
         "agx: --latest accepts only --ticket <name> and optional --json\n",
@@ -759,9 +772,9 @@ export async function list(flags: Flags): Promise<number> {
     return 0;
   }
   const running = flags.running === true || value(flags, "running") === "true";
-  const rows = (await foldedRuns()).filter(
-    (entry) => !running || entry.state === "running",
-  );
+  const rows = (
+    await (workspace === undefined ? foldedRuns() : workspaceRuns(workspace))
+  ).filter((entry) => !running || entry.state === "running");
   const asJson = value(flags, "json") === "true" || flags.json === true;
   const all = flags.all === true || value(flags, "all") === "true";
   const selector = value(flags, "selector");

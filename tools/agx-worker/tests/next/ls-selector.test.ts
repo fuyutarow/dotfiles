@@ -237,3 +237,129 @@ test("agx worker ls --latest requires an exact ticket and rejects a missing tick
   expect(result.exitCode).toBe(2);
   expect(result.stderr.toString()).toContain("--latest requires --ticket");
 });
+
+const workspaceLs = (root: string, ...flags: string[]) =>
+  Bun.spawnSync(
+    [process.execPath, "tools/agx-worker/src/next/cli.ts", "ls", ...flags],
+    {
+      env: { ...process.env, AGX_NEXT_STATE_DIR: join(root, "state") },
+      timeout: 15_000,
+    },
+  );
+
+const started = (id: string, workspace: string) => ({
+  kind: "started",
+  id,
+  at: "2026-10-14T12:00:00Z",
+  ticket: "live",
+  writes: [],
+  cwd: workspace,
+  workspace,
+  row: "fixture",
+  dispatcher_session: null,
+  vendor_session: null,
+  pid: process.pid,
+});
+
+test("workspace listing includes ended and live runs, resolves aliases, and preserves JSON rows", async () => {
+  const { appendFileSync, symlinkSync } = await import("node:fs");
+  const { publishCurrentRuns } = await import("../../src/next/store.ts");
+  const { leaseFor } = await import("../../src/next/lease.ts");
+  const root = fixture();
+  const other = join(root, "other");
+  mkdirSync(other);
+  const alias = join(root, "alias");
+  symlinkSync(root, alias);
+  const lease = await leaseFor(process.pid, null);
+  appendFileSync(
+    join(root, "state", "records.jsonl"),
+    [
+      { ...started("live-here", root), lease },
+      { ...started("live-other", other), lease },
+      started("ended-other", other),
+      {
+        kind: "ended",
+        id: "ended-other",
+        at: "2026-10-14T12:01:00Z",
+        exit: 0,
+        report_path: null,
+        vendor_session: null,
+      },
+    ]
+      .map((event) => JSON.stringify(event) + "\n")
+      .join(""),
+  );
+  await publishCurrentRuns(join(root, "state"));
+  const unfiltered = workspaceLs(root, "--json");
+  const schema = jsonOf(z.array(z.record(z.string(), z.unknown())));
+  const allResult = schema.safeParse(unfiltered.stdout.toString());
+  expect(allResult.success).toBe(true);
+  if (!allResult.success) return;
+  const all = allResult.data;
+  for (const flags of [[], ["--all"]]) {
+    const filtered = workspaceLs(
+      root,
+      "--json",
+      "--workspace",
+      alias,
+      ...flags,
+    );
+    expect(filtered.exitCode).toBe(0);
+    expect(filtered.stderr.toString()).toBe("");
+    const rowsResult = schema.safeParse(filtered.stdout.toString());
+    expect(rowsResult.success).toBe(true);
+    if (!rowsResult.success) return;
+    const rows = rowsResult.data;
+    expect(rows.map((row) => row.id)).toEqual([
+      "run-ticket-old",
+      "run-ticket-new",
+      "run-ticket-extra",
+      "live-here",
+    ]);
+    // Elapsed time is observation-time data, not a shape change.
+    for (const row of rows) {
+      const expected = all.find((entry) => entry.id === row.id);
+      expect(Object.keys(row).toSorted()).toEqual(
+        Object.keys(expected ?? {}).toSorted(),
+      );
+      expect({ ...row, elapsed_seconds: 0 }).toEqual({
+        ...expected,
+        elapsed_seconds: 0,
+      });
+    }
+  }
+  const running = workspaceLs(root, "--json", "--workspace", root, "--running");
+  const runningResult = schema.safeParse(running.stdout.toString());
+  expect(runningResult.success).toBe(true);
+  if (!runningResult.success) return;
+  expect(runningResult.data.map((row) => row.id)).toEqual(["live-here"]);
+  const human = workspaceLs(root, "--workspace", root, "--all");
+  expect(human.exitCode).toBe(0);
+  expect(human.stdout.toString()).toContain("live-here running");
+  expect(human.stdout.toString()).not.toContain("other");
+  const missing = workspaceLs(
+    root,
+    "--workspace",
+    join(root, "missing"),
+    "--json",
+  );
+  expect(missing.exitCode).toBe(2);
+  expect(missing.stdout.toString()).toBe("");
+  expect(missing.stderr.toString().trim().split("\n")).toHaveLength(1);
+  appendFileSync(
+    join(root, "state", "records.jsonl"),
+    JSON.stringify({
+      ...started("new-after-publication", root),
+      lease,
+    }) + "\n",
+  );
+  const stale = workspaceLs(root, "--json", "--workspace", root);
+  expect(stale.exitCode).toBe(0);
+  expect(stale.stderr.toString()).toContain("scanning records.jsonl");
+  const staleResult = schema.safeParse(stale.stdout.toString());
+  expect(staleResult.success).toBe(true);
+  if (!staleResult.success) return;
+  expect(
+    staleResult.data.some((row) => row.id === "new-after-publication"),
+  ).toBe(true);
+});

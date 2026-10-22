@@ -6,7 +6,7 @@
 | --- | --- |
 | `agx worker run TICKET [--cd TREE] [--sandbox MODE] [--continue RUN_ID] [--session ID]` | Route a ticket to a roster worker, run it, and append run records. |
 | `agx worker check TICKET [--cd TREE]` | Validate a ticket and its premises without starting a worker. |
-| `agx worker ls [SELECTOR] [--json]` | List runs and judgments; SELECTOR is a run id, unique run-id prefix, or exact ticket name. Ticket selections put the newest run last. |
+| `agx worker ls [SELECTOR] [--workspace PATH] [--json]` | List runs and judgments; SELECTOR is a run id, unique run-id prefix, or exact ticket name. Ticket selections put the newest run last. |
 | `agx worker judge RUN_ID accept\|reject [--note TEXT]` | Append an acceptance or rejection judgment. |
 | `agx worker stats [--import-legacy]` | Report run counts; optionally import legacy run records. |
 | `agx worker dispatch TICKET [--ws SLUG] [--unit NAME]` | Obtain a workspace through `agx ws` and start a durable worker unit. |
@@ -29,6 +29,22 @@ Use `agx worker ls --json` as the machine-readable view. Its rows include the ru
 workspace, selected roster row, write globs, judgment, report path, progress path, and continuation
 metadata. `scripts/land.ts` consumes this view alongside legacy run records when deciding whether a
 workspace has an accepted run.
+
+`ls --workspace PATH` compares real absolute paths, including symlink resolution. A missing or
+unresolvable path exits 2 with one diagnostic line. It combines with `--json`, `--all`,
+`--running`, selectors and `--summary`; it cannot combine with `--latest` or `--wait`.
+Filtering happens before the human output limit and running counts. JSON run objects retain
+the ordinary listing fields and observation-time elapsed values.
+
+The owner publishes complete per-workspace folds under `workspaces/<sha256-of-real-path>.json`
+alongside `current-runs.json`. These include all ended runs and running runs, without an age
+cutoff. A workspace read validates the log's device, inode, size, modification time and change
+time using metadata, then reads only that workspace's fold and rechecks liveness with the
+ordinary listing producer. Its work scales with the selected workspace's runs and output,
+not the number of historical records or runs in other workspaces. Missing publications
+(including those from older writers), invalid publications and stale log identities trigger
+the existing replay path with an explicit stderr diagnostic. Listing does not write or repair
+publications. The next owner publication produces them; rollout must update that writer.
 
 `scripts/agx-accept.ts SELECTOR`, exposed as `mise run accept -- SELECTOR`, composes the selected
 latest run's verification exits, report preview, workspace diff stat, and suggested judge/land

@@ -16,6 +16,7 @@ import {
   mkdir,
   open,
   rename,
+  realpath,
   writeFile,
   stat as recordStat,
 } from "node:fs/promises";
@@ -724,6 +725,115 @@ export async function foldedRuns(root = stateDir()) {
 
 const foldCache = new Map<string, z.output<typeof SnapshotSchema>>();
 
+const RecordIdentity = z.object({
+  size: z.number(),
+  ino: z.number(),
+  dev: z.number(),
+  mtimeMs: z.number(),
+  ctimeMs: z.number(),
+});
+const WorkspacePublication = z.object({
+  version: z.literal(1),
+  workspace: z.string(),
+  source: RecordIdentity,
+  runs: z.array(RunSchema),
+});
+const recordIdentity = async (root: string) => {
+  const info = await recordStat(recordPath(root)).catch(() => null);
+  const parsed = RecordIdentity.safeParse(info);
+  return parsed.success ? parsed.data : null;
+};
+const sameSource = (
+  a: z.output<typeof RecordIdentity> | null,
+  b: z.output<typeof RecordIdentity> | null,
+) => a !== null && b !== null && JSON.stringify(a) === JSON.stringify(b);
+const workspacePublicationPath = (workspace: string, root: string) =>
+  join(
+    root,
+    "workspaces",
+    createHash("sha256").update(workspace).digest("hex") + ".json",
+  );
+
+/** Only the selected workspace's full fold is read; the event log is stat'ed, never opened. */
+export async function workspaceRuns(
+  workspace: string,
+  root = stateDir(),
+): Promise<ListedRun[]> {
+  const before = await recordIdentity(root);
+  const publication = jsonOf(WorkspacePublication).safeParse(
+    await Bun.file(workspacePublicationPath(workspace, root))
+      .text()
+      .catch(() => ""),
+  );
+  if (
+    publication.success &&
+    publication.data.workspace === workspace &&
+    sameSource(before, publication.data.source) &&
+    sameSource(before, await recordIdentity(root))
+  ) {
+    return liveRuns(
+      new Map(publication.data.runs.map((run) => [run.id, run])),
+      before,
+      root,
+      () => workspaceRuns(workspace, root),
+    );
+  }
+  process.stderr.write(
+    `agx: workspace publication missing, invalid, or stale; scanning records.jsonl for ${workspace}\n`,
+  );
+  const runs = await foldedRuns(root);
+  const canonical = new Map(
+    await Promise.all(
+      [...new Set(runs.map((run) => run.workspace))].map(
+        async (path) =>
+          [path, await realpath(path).catch(() => resolve(path))] as const,
+      ),
+    ),
+  );
+  return runs.filter((run) => canonical.get(run.workspace) === workspace);
+}
+
+async function publishWorkspaceRuns(
+  root: string,
+  source: z.output<typeof RecordIdentity> | null,
+) {
+  const cached = foldCache.get(recordPath(root));
+  if (
+    cached === undefined ||
+    !sameSource(source, await recordIdentity(root)) ||
+    cached.size !== source?.size ||
+    cached.inode !== source.ino ||
+    cached.device !== source.dev
+  )
+    return;
+  const groups = new Map<string, FoldedRun[]>();
+  const canonical = new Map(
+    await Promise.all(
+      [...new Set(cached.runs.map((run) => run.workspace))].map(
+        async (path) =>
+          [path, await realpath(path).catch(() => resolve(path))] as const,
+      ),
+    ),
+  );
+  for (const run of cached.runs) {
+    const workspace = canonical.get(run.workspace) ?? resolve(run.workspace);
+    const rows = groups.get(workspace) ?? [];
+    rows.push(run);
+    groups.set(workspace, rows);
+  }
+  await mkdir(join(root, "workspaces"), { recursive: true });
+  for (const [workspace, runs] of groups) {
+    const path = workspacePublicationPath(workspace, root);
+    const temp = path + "." + crypto.randomUUID() + ".tmp";
+    await writeFile(
+      temp,
+      JSON.stringify({ version: 1, workspace, source, runs }),
+      { mode: 0o600 },
+    );
+    await rename(temp, path);
+  }
+}
+
 function withHealth(run: ListedRun, legacy: boolean): ListedRun {
   return Object.assign(run, {
     health: runHealth(run, legacy) ?? null,
@@ -926,7 +1036,9 @@ export async function publishCurrentRuns(root = stateDir()): Promise<void> {
   const held = lock;
   const result = await fromPromise(
     (async () => {
+      const source = await recordIdentity(root);
       const runs = await foldedRuns(root);
+      await publishWorkspaceRuns(root, source);
       const output = JSON.stringify({
         runs: listingRows(
           runs.filter(

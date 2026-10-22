@@ -162,6 +162,10 @@ async function main(): Promise<void> {
               "with --json, include running counts by dispatcher session",
           },
           all: { type: Boolean, description: "show every run" },
+          workspace: {
+            type: String,
+            description: "show runs for this real workspace path",
+          },
           running: { type: Boolean, description: "show only live runs" },
           wait: {
             type: Boolean,
@@ -175,6 +179,11 @@ async function main(): Promise<void> {
       undefined,
       commandArgs,
     );
+    if (parsed.flags.wait === true && parsed.flags.workspace !== undefined) {
+      process.stderr.write("agx: --workspace cannot be combined with --wait\n");
+      process.exitCode = 2;
+      return;
+    }
     exit =
       parsed.flags.wait === true
         ? await waitRun({

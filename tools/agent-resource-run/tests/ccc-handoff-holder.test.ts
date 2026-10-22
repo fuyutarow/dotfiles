@@ -1,0 +1,197 @@
+import { expect, test } from "bun:test";
+import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { gpuAdmissionRefusal } from "../src/agent-resource-run.ts";
+import type { GpuState } from "../../shared/src/gpu-samples.ts";
+
+const request = { gpu_id: 0, vram_peak_bytes: 128 * 1024 ** 2 };
+const stat = (startTime: string, parent = 456) =>
+  `123 (ccc worker) S ${parent} ${Array.from({ length: 17 }, () => "0").join(" ")} ${startTime} 0\n`;
+
+async function fixture({ parent = 456, startedAt = 900 } = {}) {
+  const root = await mkdtemp(join(tmpdir(), "arr-ccc-handoff-"));
+  await mkdir(join(root, "sys/kernel/random"), { recursive: true });
+  await Bun.write(join(root, "sys/kernel/random/boot_id"), "fixture-boot\n");
+  const observation = {
+    rawDriverPid: 123,
+    captureStartedAt: 1001,
+    captureFinishedAt: 1002,
+    status: "read" as const,
+    before: { status: "read" as const, value: stat("100", parent) },
+    after: { status: "read" as const, value: stat("100", parent) },
+    processStatus: {
+      status: "read" as const,
+      value: `Pid:\t123\nTgid:\t123\nNSpid:\t123\nPPid:\t${parent}\n`,
+    },
+    namespace: { status: "read" as const, value: "pid:[1]" },
+    local: { pid: 123, tgid: 123, nspid: [123], starttime: "100" },
+  };
+  const state: GpuState = {
+    schema: 1,
+    attemptAt: 1000,
+    sampledAt: 1000,
+    paused: true,
+    devices: [{ id: 0, totalMiB: 1024, usedMiB: 100, utilPct: 0 }],
+    processes: [{ pid: 123, usedMiB: 100 }],
+    samples: [
+      { ts: 1000, nextTs: 61000, utilPct: 0, memUsedGiB: 0.1, memTotalGiB: 1 },
+    ],
+    processIdentity: {
+      version: 1,
+      sampleAt: 1000,
+      captureStartedAt: 1001,
+      captureFinishedAt: 1003,
+      driverBinding: "unknown",
+      bootId: { status: "read", value: "fixture-boot" },
+      collector: { ...observation, rawDriverPid: 999 },
+      processes: [observation],
+      omittedProcesses: 0,
+    },
+  };
+  return {
+    root,
+    state,
+    options: {
+      procRoot: root,
+      state,
+      cccHandoffHeld: true,
+      cccSupervisor: () => Promise.resolve({ pid: 456, startedAt }),
+    },
+    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
+  };
+}
+
+test("handoff-held admission excludes the yielded ccc worker and retains the VRAM budget", async () => {
+  await using f = await fixture();
+  expect(await gpuAdmissionRefusal(request, 512, f.options)).toBeUndefined();
+  expect(
+    await gpuAdmissionRefusal(
+      { ...request, vram_peak_bytes: 513 * 1024 ** 2 },
+      512,
+      f.options,
+    ),
+  ).toContain("GPU VRAM budget exceeded");
+});
+
+test("handoff-held admission refuses a sampled parent mismatch", async () => {
+  await using f = await fixture({ parent: 789 });
+  expect(await gpuAdmissionRefusal(request, 512, f.options)).toContain(
+    "absent-or-pid-namespace-mismatch",
+  );
+});
+
+test("handoff-held admission refuses a supervisor restarted after the sample", async () => {
+  await using f = await fixture({ startedAt: 1001 });
+  expect(await gpuAdmissionRefusal(request, 512, f.options)).toContain(
+    "absent-or-pid-namespace-mismatch",
+  );
+});
+
+test("check-only admission refuses the yielded ccc worker without the handoff lock", async () => {
+  await using f = await fixture();
+  expect(
+    await gpuAdmissionRefusal(request, 512, {
+      ...f.options,
+      cccHandoffHeld: false,
+    }),
+  ).toContain("absent-or-pid-namespace-mismatch");
+});
+
+test("handoff-held admission excludes a reused ccc worker PID but refuses a still-live worker", async () => {
+  await using f = await fixture();
+  await mkdir(join(f.root, "123/task/123"), { recursive: true });
+  await Bun.write(join(f.root, "123/stat"), stat("200"));
+  expect(await gpuAdmissionRefusal(request, 512, f.options)).toBeUndefined();
+  await Bun.write(join(f.root, "123/stat"), stat("100"));
+  expect(await gpuAdmissionRefusal(request, 512, f.options)).toContain(
+    "status-unreadable-or-gone",
+  );
+});
+
+test("handoff-held admission still refuses an unrelated absent holder", async () => {
+  await using f = await fixture();
+  f.state.processes.push({ pid: 789, usedMiB: 1 });
+  expect(await gpuAdmissionRefusal(request, 512, f.options)).toContain(
+    "identity unverified pid=789",
+  );
+});
+
+test("handoff supervisor lookup parses precise systemd UTC timestamps and fails closed", async () => {
+  await using f = await fixture();
+  const bin = join(f.root, "bin");
+  await mkdir(bin);
+  const reply = join(f.root, "supervisor-reply");
+  await Bun.write(
+    join(bin, "systemctl"),
+    `#!${process.execPath}
+const expected = ["--user", "--timestamp=us+utc", "show", "ccc-daemon.service", "--property=MainPID,ExecMainStartTimestamp"];
+if (JSON.stringify(process.argv.slice(2)) !== JSON.stringify(expected)) process.exit(1);
+process.stdout.write(await Bun.file(${JSON.stringify(reply)}).text());
+`,
+    { mode: 0o755 },
+  );
+  const { cccSupervisor: _injected, ...options } = f.options;
+  await chmod(join(bin, "systemctl"), 0o755);
+  async function inspect() {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--eval",
+        `
+import { gpuAdmissionRefusal } from ${JSON.stringify(join(import.meta.dir, "../src/agent-resource-run.ts"))};
+process.stdout.write(await gpuAdmissionRefusal(${JSON.stringify(request)}, 512, ${JSON.stringify(options)}) ?? "admit");
+`,
+      ],
+      {
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 5000,
+      },
+    );
+    const [stdout, stderr, code] = await Promise.all([
+      child.stdout.text(),
+      child.stderr.text(),
+      child.exited,
+    ]);
+    expect({ stderr, code }).toEqual({ stderr: "", code: 0 });
+    return stdout;
+  }
+  await Bun.write(
+    reply,
+    "MainPID=456\nExecMainStartTimestamp=Thu 1970-01-01 00:00:00.900000 UTC\n",
+  );
+  expect(await inspect()).toBe("admit");
+  for (const timestamp of ["Thu 1970-01-01 00:00:01.001000 UTC", "n/a"]) {
+    await Bun.write(
+      reply,
+      `MainPID=456\nExecMainStartTimestamp=${timestamp}\n`,
+    );
+    expect(await inspect()).toContain("absent-or-pid-namespace-mismatch");
+  }
+});
+
+for (const invalid of [
+  "missing-identity",
+  "different-boot",
+  "sample-mismatch",
+  "supervisor-unavailable",
+])
+  test(`handoff-held admission fails closed for ${invalid}`, async () => {
+    await using f = await fixture();
+    if (invalid === "missing-identity") f.state.processIdentity = undefined;
+    if (invalid === "different-boot")
+      await Bun.write(
+        join(f.root, "sys/kernel/random/boot_id"),
+        "another-boot",
+      );
+    if (invalid === "sample-mismatch") f.state.sampledAt = 999;
+    const options =
+      invalid === "supervisor-unavailable"
+        ? { ...f.options, cccSupervisor: () => Promise.resolve(undefined) }
+        : f.options;
+    expect(await gpuAdmissionRefusal(request, 512, options)).toContain(
+      "absent-or-pid-namespace-mismatch",
+    );
+  });

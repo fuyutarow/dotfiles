@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.16 — 2026-10-23
+
+- Exclude yielded ccc GPU workers from holder identity refusal after the locked handoff while preserving VRAM admission checks.
+
 ## 1.5.15 — 2026-10-22
 
 - Correlate sampled-holder refusal diagnostics with retained sampler identity without granting driver binding

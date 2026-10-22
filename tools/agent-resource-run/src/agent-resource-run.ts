@@ -192,6 +192,12 @@ type GpuAdmissionOptions = {
   currentReservationId?: string;
   now?: () => number;
   sleep?: (milliseconds: number) => Promise<void>;
+  // Only scope-entry runs beneath the shared ccc handoff lock. Check-only must
+  // never infer release from a stale sampler row.
+  cccHandoffHeld?: boolean;
+  cccSupervisor?: () => Promise<
+    { pid: number; startedAt: number } | null | undefined
+  >;
 };
 async function leaderDxgObservation(
   pid: string,
@@ -583,6 +589,109 @@ function samplerProvenance(state: GpuState, pid: number): string {
   return `${source} sampler_identity=sample-correlated capture_ms=${identity.captureStartedAt}..${identity.captureFinishedAt} row_capture_ms=${row.captureStartedAt}..${row.captureFinishedAt} local_observation=${row.status} before=${row.before.status} after=${row.after.status} process_status=${row.processStatus.status} namespace=${row.namespace.status} boot_id=${identity.bootId.status} sampler_collector_pid=${identity.collector.rawDriverPid} collector_observation=${identity.collector.status}${localText}`;
 }
 
+async function cccSupervisor(): Promise<{
+  pid: number;
+  startedAt: number;
+} | null> {
+  const result = await output([
+    "systemctl",
+    "--user",
+    "--timestamp=us+utc",
+    "show",
+    "ccc-daemon.service",
+    "--property=MainPID,ExecMainStartTimestamp",
+  ]);
+  if (result.code !== 0) return null;
+  const pid = Number(/^MainPID=(\d+)$/mu.exec(result.stdout)?.[1]);
+  const timestamp =
+    /^ExecMainStartTimestamp=\S+ (\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?) UTC$/mu.exec(
+      result.stdout,
+    );
+  if (timestamp === null || !Number.isSafeInteger(pid) || pid <= 0) return null;
+  const started = fromThrowable(() =>
+    Temporal.Instant.from(`${timestamp[1]}T${timestamp[2]}Z`),
+  )();
+  if (started.isErr()) return null;
+  return { pid, startedAt: started.value.epochMilliseconds };
+}
+
+// The lock is the release acknowledgement; local absence alone is not. Bind
+// that acknowledgement to the sampled child of the same supervisor incarnation.
+async function yieldedCccWorker(
+  state: GpuState,
+  pid: number,
+  procRoot: string,
+  options: GpuAdmissionOptions,
+) {
+  if (options.cccHandoffHeld !== true) return false;
+  const parsed = GpuProcessIdentitySchema.safeParse(state.processIdentity);
+  if (!parsed.success) return false;
+  const identity = parsed.data;
+  const rows = identity.processes.filter((row) => row.rawDriverPid === pid);
+  if (
+    identity.sampleAt !== state.sampledAt ||
+    rows.length !== 1 ||
+    !state.samples.some(({ ts }) => ts === identity.sampleAt)
+  )
+    return false;
+  const row = rows[0]!;
+  if (
+    row.status !== "read" ||
+    row.before.status !== "read" ||
+    row.after.status !== "read" ||
+    row.processStatus.status !== "read" ||
+    row.local?.pid !== pid ||
+    row.local.tgid !== pid ||
+    row.local.nspid.length !== 1 ||
+    row.local.nspid[0] !== pid ||
+    !row.before.value.startsWith(`${pid} (`) ||
+    !row.after.value.startsWith(`${pid} (`) ||
+    procStartTime(row.before.value) !== row.local.starttime ||
+    procStartTime(row.after.value) !== row.local.starttime ||
+    identity.captureStartedAt > row.captureStartedAt ||
+    row.captureStartedAt > row.captureFinishedAt ||
+    row.captureFinishedAt > identity.captureFinishedAt
+  )
+    return false;
+  const parent = /^\d+ \(.*\) [A-Za-z] (\d+) /u;
+  const parentPid = Number(parent.exec(row.before.value)?.[1]);
+  if (
+    !Number.isSafeInteger(parentPid) ||
+    parentPid <= 0 ||
+    Number(parent.exec(row.after.value)?.[1]) !== parentPid ||
+    Number(/^PPid:\s+(\d+)$/mu.exec(row.processStatus.value)?.[1]) !== parentPid
+  )
+    return false;
+  const supervisor = await fromAsyncThrowable(
+    options.cccSupervisor ?? cccSupervisor,
+  )();
+  if (
+    supervisor.isErr() ||
+    supervisor.value === null ||
+    supervisor.value === undefined ||
+    supervisor.value.pid !== parentPid ||
+    supervisor.value.startedAt >= identity.sampleAt
+  )
+    return false;
+  const boot = await optionalText(join(procRoot, "sys/kernel/random/boot_id"));
+  if (
+    identity.bootId.status !== "read" ||
+    boot.isErr() ||
+    boot.value?.trim() !== identity.bootId.value.trim()
+  )
+    return false;
+  const current = await optionalText(join(procRoot, String(pid), "stat"));
+  if (current.isErr()) return false;
+  if (current.value === undefined) return true;
+  const startTime = procStartTime(current.value);
+  return (
+    current.value.startsWith(`${pid} (`) &&
+    startTime !== undefined &&
+    /^\d+$/u.test(startTime) &&
+    startTime !== row.local.starttime
+  );
+}
+
 /** Refuse live dxg stalls, unscoped sampled holders, and excess declared VRAM. */
 export async function gpuAdmissionRefusal(
   deviceRequest: { gpu_id: number; vram_peak_bytes: number },
@@ -731,6 +840,7 @@ export async function gpuAdmissionRefusal(
     admittedScopes.add(scope);
   }
   for (const { pid } of state.processes) {
+    if (await yieldedCccWorker(state, pid, procRoot, options)) continue;
     const base = join(procRoot, String(pid));
     const statPath = join(base, "stat");
     // Sampler provenance is diagnostic only. Two local observations can reject

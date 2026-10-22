@@ -50,6 +50,7 @@ async function main() {
       {
         currentScope: receipt.data.scope_unit,
         currentReservationId: receipt.data.reservation_id,
+        cccHandoffHeld: true,
       },
     );
     if (refusal !== undefined) {

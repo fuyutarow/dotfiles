@@ -42,6 +42,11 @@ import {
 } from "../../tools/disk-reclaim/src/lib/graveyards.ts";
 import { REF_LOCK_STALE_MS } from "../../tools/shared/src/ref-locks.ts";
 import { STEPS } from "../post-merge.ts";
+import {
+  desktopLauncherProblem,
+  installDesktopFacade,
+  launcherContents,
+} from "../../agents/codex/codex-runtime.ts";
 
 // The smart-open fixtures scope the forward with Match sessiontype (OpenSSH >= 9.9; Ubuntu 24.04
 // ships 9.6, which rejects the line).
@@ -816,6 +821,45 @@ describe("doctor", () => {
 
     expect(finding.verdict).toBe("FAIL");
     expect(finding.detail).toContain("not the required standalone provider");
+  });
+  test("codex-runtime: launcher diagnosis distinguishes missing, stale, and non-executable deployments", async () => {
+    const home = tmp("doctor-launcher-home-");
+    const launcher = join(home, ".local/bin/codex.exe");
+    const inspect = () => desktopLauncherProblem(home, process.execPath, REPO);
+    expect(await inspect()).toContain("cannot read:");
+    mkdirSync(dirname(launcher), { recursive: true });
+    writeFileSync(launcher, launcherContents("/retired/bun", REPO));
+    expect(await inspect()).toContain("contents differ from declaration");
+    expect(await inspect()).toContain("mise run codex:runtime");
+    writeFileSync(launcher, launcherContents(process.execPath, REPO));
+    chmodSync(launcher, 0o644);
+    expect(await inspect()).toContain("not executable:");
+    await installDesktopFacade(home, launcherContents(process.execPath, REPO));
+    expect(await inspect()).toBeUndefined();
+    expect(existsSync(join(home, ".local/bin/codex"))).toBe(false);
+  });
+  test("codex-runtime: doctor keeps failure causes after successful runtime rows", async () => {
+    const dotfiles = tmp("doctor-runtime-output-");
+    const codex = join(dotfiles, "agents/codex");
+    mkdirSync(codex, { recursive: true });
+    writeFileSync(
+      join(codex, "runtime.toml"),
+      '[providers]\nmac = "standalone"\nlinux = "standalone"\nwsl = "standalone"\n',
+    );
+    writeFileSync(
+      join(codex, "codex-runtime.ts"),
+      'console.log("PASS launcher fixture\\nFAIL desktop config missing fixture\\nFAIL native assets missing fixture"); process.exit(1);',
+    );
+    const finding = await checkCodexRuntime({
+      home: tmp("doctor-runtime-home-"),
+      dotfiles,
+      isMac: false,
+      isWsl: true,
+      isCoreBox: false,
+    });
+    expect(finding.detail).toBe("FAIL desktop config missing fixture");
+    expect(finding.lines).toContain("FAIL native assets missing fixture");
+    expect(finding.fix).toBe("mise run codex:runtime");
   });
   test("post-merge runs codex:config after relinking dotfiles", () => {
     const mise = readFileSync(join(REPO, "mise.toml"), "utf8");

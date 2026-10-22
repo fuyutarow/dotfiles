@@ -1744,10 +1744,17 @@ export async function checkCodexRuntime(ctx: Ctx): Promise<Finding> {
       "codex-runtime",
       "WSL plain codex uses the Homebrew cask while explicit codex.exe uses Windows Desktop with separate config homes",
     );
-  const [firstLine = ""] = (r.out + r.err).trim().split("\n");
+  const lines = (r.out + r.err).trim().split("\n").filter(Boolean);
+  const firstLine =
+    lines.find((line) => line.startsWith("FAIL")) ?? lines[0] ?? "";
   const detail =
     firstLine === "" ? `runtime check exited ${r.code}` : firstLine;
-  return fail("codex-runtime", detail, "mise run install:ai-clis");
+  return fail(
+    "codex-runtime",
+    detail,
+    "mise run codex:runtime",
+    lines.filter((line) => line !== firstLine),
+  );
 }
 
 export async function checkCodexSandboxNetwork(ctx: Ctx): Promise<Finding> {

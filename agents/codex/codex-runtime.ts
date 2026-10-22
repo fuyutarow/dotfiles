@@ -2,6 +2,7 @@
 // explicit `codex.exe` Windows Desktop launcher while plain `codex` stays native.
 import { cli } from "cleye";
 import {
+  access,
   chmod,
   lstat,
   mkdir,
@@ -9,6 +10,7 @@ import {
   rename,
   writeFile,
 } from "node:fs/promises";
+import { constants } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { attempt, errorMessage } from "../hooks/attempt.ts";
@@ -64,6 +66,25 @@ export function launcherContents(bun: string, dotfiles: string): string {
   return `#!/usr/bin/env sh\n${MANAGED_LAUNCHER}\nexec ${quoteShellArgument(bun)} ${quoteShellArgument(join(dotfiles, "agents/codex/codex-wsl.ts"))} "$@"\n`;
 }
 
+export async function desktopLauncherProblem(
+  home: string,
+  bun: string,
+  dotfiles: string,
+): Promise<string | undefined> {
+  const launcher = join(home, ".local/bin/codex.exe");
+  const contents = await attempt(() => Bun.file(launcher).text());
+  const owner =
+    "declared by agents/codex/codex-runtime.ts launcherContents; deploy with mise run codex:runtime";
+  if (!contents.ok)
+    return `FAIL launcher ${launcher}: cannot read: ${errorMessage(contents.error)}; ${owner}`;
+  if (contents.value !== launcherContents(bun, dotfiles))
+    return `FAIL launcher ${launcher}: contents differ from declaration (expected Bun ${bun}, entry ${join(dotfiles, "agents/codex/codex-wsl.ts")}); ${owner}`;
+  const executable = await attempt(() => access(launcher, constants.X_OK));
+  if (!executable.ok)
+    return `FAIL launcher ${launcher}: not executable: ${errorMessage(executable.error)}; ${owner}`;
+  return undefined;
+}
+
 export async function wslDistroName(
   inherited = process.env.WSL_DISTRO_NAME,
   windowsRoot = async (): Promise<string | undefined> => {
@@ -101,8 +122,10 @@ export async function installDesktopFacade(
       stat.value.isFile() &&
       existing.ok &&
       existing.value === contents
-    )
+    ) {
+      await chmod(target, 0o755);
       return;
+    }
     await archive(home, target);
   }
   await mkdir(dirname(target), { recursive: true });
@@ -195,19 +218,23 @@ async function converge(
       code: 2,
       lines: ["FAIL WSL plain codex must use the declared standalone provider"],
     };
-  const desktop = await resolveDesktopRuntime(dotfiles);
   const home = process.env.HOME ?? homedir();
   const bun = process.execPath;
   const contents = launcherContents(bun, dotfiles);
+  // Local drift must remain diagnosable even when Windows interop is unavailable.
+  if (checkOnly) {
+    const problem = await desktopLauncherProblem(home, bun, dotfiles);
+    if (problem !== undefined) return { code: 1, lines: [problem] };
+  }
+  const desktop = await resolveDesktopRuntime(dotfiles);
   const distro = await wslDistroName();
   if (distro === undefined || distro === "")
     return { code: 2, lines: ["FAIL WSL distribution is unavailable"] };
   const lines: string[] = [];
   const launcher = join(home, ".local/bin/codex.exe");
-  const launcherContentsAtPath = await attempt(() => Bun.file(launcher).text());
   if (checkOnly) {
     lines.push(
-      `${launcherContentsAtPath.ok && launcherContentsAtPath.value === contents ? "PASS" : "FAIL"} launcher ${launcher}`,
+      `PASS launcher ${launcher}`,
       `${(await hasManagedDefaultFacade(home)) ? "FAIL" : "PASS"} plain codex managed desktop facade retired`,
     );
     const assets = await windowsAssetsDrift(desktop.home);

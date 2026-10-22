@@ -154,6 +154,7 @@ const procState = (stat: string) => /^\d+ \(.*\) ([A-Za-z]) /u.exec(stat)?.[1];
 const procStartTime = (stat: string) =>
   /^\d+ \(.*\) [A-Za-z] (.*)/u.exec(stat)?.[1]?.trim().split(/\s+/u)[18];
 export const DXG_CONFIRMATION_INTERVAL_MS = 3_000;
+export const DXG_CONFIRMATION_OBSERVATIONS = 10;
 type ThreadGroup = {
   tgid: string;
   state: string;
@@ -440,7 +441,7 @@ async function confirmedLeaderDxgRefusal(
   if (wchan === undefined || wchan === "" || wchan === "0")
     return `GPU D-state wait channel unavailable pid=${candidate.pid}; evidence=${candidate.wchanPath}`;
   if (!/dxg/iu.test(wchan)) return undefined;
-  return `GPU persistent dxg stall pid=${candidate.pid} state=D wchan=${wchan}; observations=2 interval_ms>=${DXG_CONFIRMATION_INTERVAL_MS}; evidence=${candidate.statPath},${candidate.wchanPath}`;
+  return `GPU persistent dxg stall pid=${candidate.pid} state=D wchan=${wchan}; observations=${DXG_CONFIRMATION_OBSERVATIONS} interval_ms>=${DXG_CONFIRMATION_INTERVAL_MS}; evidence=${candidate.statPath},${candidate.wchanPath}`;
 }
 async function confirmedTaskDxgRefusal(
   candidate: Extract<DStateCandidate, { kind: "task" }>,
@@ -498,13 +499,13 @@ async function confirmedTaskDxgRefusal(
   const wchan = channel.unwrapOr(undefined)?.trim();
   if (wchan === undefined || wchan === "" || wchan === "0") {
     if (candidate.initialWchan === "unavailable")
-      return `GPU persistent D-state wait channel unavailable tgid=${candidate.tgid} tid=${candidate.tid} leader_state=${currentLeaderState} task_state=D; observations=2 interval_ms>=${DXG_CONFIRMATION_INTERVAL_MS}; evidence=${candidate.leaderStatPath},${candidate.taskStatPath},${candidate.wchanPath}`;
+      return `GPU persistent D-state wait channel unavailable tgid=${candidate.tgid} tid=${candidate.tid} leader_state=${currentLeaderState} task_state=D; observations=${DXG_CONFIRMATION_OBSERVATIONS} interval_ms>=${DXG_CONFIRMATION_INTERVAL_MS}; evidence=${candidate.leaderStatPath},${candidate.taskStatPath},${candidate.wchanPath}`;
     return `GPU task D-state wait channel unavailable tgid=${candidate.tgid} tid=${candidate.tid}; evidence=${candidate.wchanPath}`;
   }
   if (!/dxg/iu.test(wchan)) return undefined;
   if (candidate.initialWchan === "unavailable")
-    return `GPU persistent D-state mixed wait-channel evidence tgid=${candidate.tgid} tid=${candidate.tid} leader_state=${currentLeaderState} task_state=D initial_wchan=unavailable confirmed_wchan=${wchan}; observations=2 interval_ms>=${DXG_CONFIRMATION_INTERVAL_MS}; evidence=${candidate.leaderStatPath},${candidate.taskStatPath},${candidate.wchanPath}`;
-  return `GPU persistent dxg stall tgid=${candidate.tgid} tid=${candidate.tid} leader_state=${currentLeaderState} task_state=D wchan=${wchan}; observations=2 interval_ms>=${DXG_CONFIRMATION_INTERVAL_MS}; evidence=${candidate.leaderStatPath},${candidate.taskStatPath},${candidate.wchanPath}`;
+    return `GPU persistent D-state mixed wait-channel evidence tgid=${candidate.tgid} tid=${candidate.tid} leader_state=${currentLeaderState} task_state=D initial_wchan=unavailable confirmed_wchan=${wchan}; observations=${DXG_CONFIRMATION_OBSERVATIONS} interval_ms>=${DXG_CONFIRMATION_INTERVAL_MS}; evidence=${candidate.leaderStatPath},${candidate.taskStatPath},${candidate.wchanPath}`;
+  return `GPU persistent dxg stall tgid=${candidate.tgid} tid=${candidate.tid} leader_state=${currentLeaderState} task_state=D wchan=${wchan}; observations=${DXG_CONFIRMATION_OBSERVATIONS} interval_ms>=${DXG_CONFIRMATION_INTERVAL_MS}; evidence=${candidate.leaderStatPath},${candidate.taskStatPath},${candidate.wchanPath}`;
 }
 async function confirmedDxgRefusal(
   candidate: DStateCandidate,
@@ -519,15 +520,36 @@ async function confirmedDxgCandidates(
   sleep: (milliseconds: number) => Promise<void>,
 ): Promise<string | undefined> {
   if (candidates.length === 0) return undefined;
-  // This is two observations separated by one bounded shared delay, not proof
-  // that a task remained in D continuously throughout that interval.
-  await sleep(DXG_CONFIRMATION_INTERVAL_MS);
-  for (const candidate of candidates) {
-    if (now() - candidate.observedAt < DXG_CONFIRMATION_INTERVAL_MS) continue;
-    const refusal = await confirmedDxgRefusal(candidate);
-    if (refusal !== undefined) return refusal;
+  // A GPU process waits in dxg D-state briefly during normal work. Refuse only a
+  // candidate that stays stalled at every observation across the whole window
+  // (the stall criterion verified on 2026-10-21: >=10 observations, >=30 s).
+  let remaining = candidates;
+  let refusal: string | undefined;
+  for (let round = 1; round < DXG_CONFIRMATION_OBSERVATIONS; round += 1) {
+    await sleep(DXG_CONFIRMATION_INTERVAL_MS);
+    const observed = await stillStalled(remaining, round, now);
+    if (observed.stalled.length === 0) return undefined;
+    remaining = observed.stalled;
+    refusal = observed.refusal;
   }
-  return undefined;
+  return refusal;
+}
+async function stillStalled(
+  candidates: readonly DStateCandidate[],
+  round: number,
+  now: () => number,
+): Promise<{ stalled: DStateCandidate[]; refusal: string | undefined }> {
+  const stalled: DStateCandidate[] = [];
+  let refusal: string | undefined;
+  for (const candidate of candidates) {
+    if (now() - candidate.observedAt < DXG_CONFIRMATION_INTERVAL_MS * round)
+      continue;
+    const confirmed = await confirmedDxgRefusal(candidate);
+    if (confirmed === undefined) continue;
+    stalled.push(candidate);
+    refusal = confirmed;
+  }
+  return { stalled, refusal };
 }
 async function policy() {
   const path =

@@ -22,8 +22,7 @@ describe("dispatch roster", () => {
     const loaded = await loadRoster();
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
-    // Temporary owner ruling 2026-10-23 (dispatch-roster.toml [auto]); revert with the roster.
-    expect(loaded.value.auto.routes).toEqual(["codex", "claude"]);
+    expect(loaded.value.auto.routes).toEqual(["codex"]);
     for (const row of loaded.value.choice)
       expect(rosterTable(loaded.value)).toContain(`\`${row.id}\``);
   });

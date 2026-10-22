@@ -26,10 +26,7 @@ default = "luna-high"
 # passed as a task-size class. Bulk-classification remains a task descriptor evaluated against
 # each eligible row's use_for, not a lexical row match that can override the long-session floor.
 [auto]
-# 2026-10-23 owner ruling: allow claude until agx stops refusing codex at a 100% weekly window
-# while Codex still runs on purchased credits (tools/agx-worker/src/next/usage.ts). Revert to
-# ["codex"] once that repair lands or the codex weekly window resets (2026-10-29 00:14 JST).
-routes = ["codex", "claude"]
+routes = ["codex"]
 # What a 100% (exhausted, non-stale) subscription window does per route: "continue" dispatches and
 # resumes anyway (Codex runs on purchased credits); "stop" vetoes the route. Real refusals still
 # exclude a row through capacity cooldown. Contract: agents/models/dispatch-roster.contract.md.

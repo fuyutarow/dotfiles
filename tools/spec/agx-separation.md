@@ -65,7 +65,11 @@
   「互換のため `agx-next` を残す」方針は、これで置き換える。
 - **SEP-6 (一つの値に一つの名前):** 一つの環境変数は一つの意味だけを持つ。別名は置かない。
   廃止した名前が設定されていたら、黙って無視せず、新しい名前を示して exit 2 にする。
-- **SEP-4 (版は一つ):** 機械に入る agx の版は一つで、dotfiles がその版を一か所で宣言する。
+- **SEP-4 (版はリポジトリごとに一つ):** agx は版付きのリリースとして出し、利用側の各リポジトリが
+  自分の `mise.toml` の `[tools]` で版を一つに固定して入れる。機械全体に入れる版はない。
+  リポジトリの外から呼ぶもの (hook、systemd unit、statusline) は、dotfiles が固定した版を
+  明示して呼ぶ (§5.3)。一台の機械で版の違う agx が同じ状態ディレクトリを使うので、状態の
+  ファイルには形式の版を書き、読み手は知らない版を exit 2 で拒む (§5.2)。
 - **SEP-5 (fresh clone で動く):** agx リポジトリの gate は dotfiles なしで fresh clone から通る。
   dotfiles の gate も agx のチェックアウトなしで通る (README B 種の規則, `README.md:157-160`)。
 
@@ -313,6 +317,10 @@ agx/
 - 状態ディレクトリの場所 (`AGX_STATE_DIR` → `$XDG_STATE_HOME/agx` → `~/.local/state/agx`) と、
   外から監視してよい path (`records.jsonl`, `workspace-verdicts.json`)。中身を読む契約ではない。
   `legacy-v1/` は読み取り専用で、書き手はいない。
+- 状態の形式の版: 版の違う agx が同じ状態ディレクトリを読み書きする (SEP-4)。各状態ファイル
+  (records の行、発行物、作業ツリーの判定) は形式の版を持つ。書き手は自分の版を書き、読み手は
+  自分より新しい版を見たら黙って読み飛ばさず exit 2 にして、必要な agx の版を示す。形式を
+  壊す変更は major 版にし、移行の命令を同じ版で出す。
 - 環境変数: `AGX_WORKER=1` (`tools/shared/src/worker-env.ts`)、`AGX_READONLY_COMMAND_JOB`、
   `AGX_DISPATCHER_SESSION` (`tools/agx-worker/contract.md:35-36`)。
 - 名前の規則: `<project-slug>-<role>_<id>`、`agt_<slug>`、`ws_<slug>` (`tools/spec/architecture.md:95-97`)。
@@ -321,14 +329,31 @@ agx/
 
 | 方法 | 長所 | 短所 | 判定 |
 | --- | --- | --- | --- |
-| (a) `bun link` で `~/Workspace/agx` のチェックアウトを直接 PATH に出す | 速い。今と同じ使い心地 | 版がチェックアウトの状態に引きずられる。作業中の変更が機械全体に出る。SEP-4 に反する | 開発機の一時的な手段にとどめる |
-| (b) dotfiles の root `package.json` の `dependencies` に git URL とタグで固定し、`mise run deps` で全体に入れる | 版の宣言が dotfiles の一か所 (+ `bun.lock`) にある。A 種の「pinned root package」と同じ形 (`README.md:154-156`) | 依存の bin が `bun link` で全体の PATH に出るかを確かめる必要がある (未検証) | **推奨** |
-| (c) agx を `bun build --compile` の単体バイナリにして mise の github backend で入れる | bun 本体の版から独立する | `mise use -g` が禁止で、機械全体に出す経路がない (AGENTS.md の mise 規則)。リリース作業が増える | 採らない |
+| (a) `bun link` で `~/Workspace/agx` のチェックアウトを直接 PATH に出す | 速い。今と同じ使い心地 | 版がチェックアウトの状態に引きずられる。作業中の変更が機械全体に出る。SEP-4 に反する | agx 自身の開発中だけに使う |
+| (b) dotfiles の root `package.json` の `dependencies` に git URL とタグで固定し、`mise run deps` で全体に入れる | 版の宣言が dotfiles の一か所 (+ `bun.lock`) にある | 機械全体に一つの版を出す形で、利用側リポジトリが自分の版を宣言できない。依存の bin が `bun link` で PATH に出るかも未検証 | 採らない |
+| (c) agx を版付きのリリース (GitHub release) にし、利用側の各リポジトリが mise の `[tools]` で版を固定して入れる | 版の宣言が各利用側の `mise.toml` にあり、fresh clone で `mise install` すれば揃う。ほかの利用側の道具 (`"github:<owner>/<tool>" = { version = "…", bin_path = "bin" }`) と同じ形。bun 本体の版から独立できる (`bun build --compile`) | リリースの作業が増える。一台に版の違う agx が同居するので、状態の形式の版が要る (§5.2) | **採る** (2026-10-23 の持ち主の方針) |
 | (d) B 種として dotfiles にソースを copy する | fresh clone で動く | A 種の道具を B 種で配るのは README の区別に反する。版が二つになる | 採らない |
 
-(b) の未検証点は次の命令で確かめる。`bun add` で入れた依存の bin が `bun link` で出るかどうか
-である。出ないときは、`mise run deps` に `bun install -g <git URL>#<tag>` を足し、その版を
-`mise.toml` の一か所で宣言する。
+(c) の形は次のとおりである。
+
+- **リリース:** agx リポジトリは、タグ `vX.Y.Z` ごとに GitHub release を出す。成果物は、
+  suite の各命令 (`agx`, `agx-worker`, `agx-ws`, `agx-ticket`, `agx-status`, `xmsg`, `jex`) を
+  `bun build --compile` した単体バイナリを `bin/` に置いた archive で、OS と CPU ごとに一つずつ作る。
+  release は CI が作り、手で上げない。版の付け方は §5.2 の semver に従う。
+- **利用側の宣言:** 各利用側リポジトリの `mise.toml` に
+  `[tools] "github:fuyutarow/agx" = { version = "X.Y.Z", bin_path = "bin" }` を一行書く。
+  `mise install` で入り、そのリポジトリの中では PATH に出る。版を上げるのは、その一行を変える commit である。
+- **リポジトリの外から呼ぶもの:** `~/.claude` の hook、systemd unit、statusline は、どのリポジトリの
+  中でもない場所から動く。これらは dotfiles が固定した版を明示して呼ぶ
+  (`mise exec -C ~/dotfiles -- agx …`、または `mise where` が返す path)。PATH に出ている版を
+  たまたま使う形にはしない。
+- **`bun link` からの移行 (dotfiles):** 次を一つの commit にする。(1) dotfiles の `mise.toml` に
+  `[tools]` の一行を足す。(2) root `package.json` の `bin` から suite の命令を外し、`mise run deps` の
+  `bun link` で出していた入口をなくす。(3) hook、systemd unit、statusline の呼び出しを、上の明示した
+  形に書き換える。(4) `mise run doctor` に `which -a agx` の検査を足し、PATH に出る agx が mise の
+  一つだけであることを確かめる。戻すときは、この commit を戻して `mise run deps` を流す。
+- **ほかの利用側:** dotfiles の切り替えのあと、各利用側リポジトリの持ち主に、`[tools]` の一行を
+  足す依頼を出す。足すまでのあいだは、そのリポジトリの中でも dotfiles の版が使われる。
 
 `agx-usehooks` は利用側ライブラリなので別に扱う。これを使う利用側リポジトリと dotfiles の hook
 (`agents/hooks/remind-reply-language.ts:9`) は、それぞれの `package.json` に git URL とタグで固定する。
@@ -401,7 +426,7 @@ Jev クライアントに agx 以外の利用者がさらに一つ増えたら (
 | **S4** shared を分ける | §3.1 の表 | `tools/shared/src` のうち agx へ移すものを `tools/agx-core/` に移す。dotfiles 側 (`scripts/land.ts:40`, `land-queue.ts:9`, `agx-doctor.ts`, `doctor.ts:66`) は CLI の `--json` を読む。`scripts/agx-doctor.ts` を `agx doctor` にする。汎用部品は両側の copy にする | `mise run test:agx`、`bun test tools/agx-ws tools/agx-ticket`、`bun test scripts/tests/land.test.ts scripts/tests/agx-doctor.test.ts scripts/tests/doctor.test.ts`、`mise run usehooks:consumers`、`mise run gate:land` | commit を戻す。データは触らないので状態の戻しは不要 |
 | (判断点) | S1〜S4 の結果、§9 の条件 | 分離を続けるかを決める | — | 続けない場合はここで止める。S1〜S4 は単独で価値がある |
 | **S5** 新リポジトリを作る | S4 後の `tools/agx*`, `tools/xmsg`, `tools/jex`, `tools/agx-core`, 文書, `bunfig` 相当 | `~/Workspace/agx` に §5.1 の構成で copy する。初回 commit に元の dotfiles revision を書く。agx 自身の `mise.toml` と CI | (新規) agx リポジトリで `mise run check`。dotfiles 側で `mise run test:agx` が同じ件数で通る (両方に同じコードがある期間) | 新リポジトリを使わないだけで済む。dotfiles は変わっていない |
-| **S6** dotfiles を利用側に切り替える | S5 のタグ | root `package.json` に固定版を追加 (§5.3 b)。`bin` から `agx`, `agx-worker`, `agx-ws`, `agx-ticket`, `jex`, `xmsg` を外す。`systemd/agx-doctor.service:13` を `agx doctor` に替える | `mise run deps` 後に `agx -V`、`mise run doctor`、`bun test scripts/tests/render-home.test.ts scripts/tests/land.test.ts`、`mise run gate:land` | `package.json` を戻して `mise run deps`。ソースは S7 まで dotfiles に残っている |
+| **S6** dotfiles を利用側に切り替える | S5 の最初のリリース (GitHub release `vX.Y.Z`) | §5.3 (c) の「`bun link` からの移行」を一つの commit で行う: `mise.toml` の `[tools]` に固定版を足し、`bin` から `agx`, `agx-worker`, `agx-ws`, `agx-ticket`, `agx-status`, `jex`, `xmsg` を外し、hook・systemd unit・statusline の呼び出しを dotfiles の固定版を明示する形にする。`systemd/agx-doctor.service:13` を `agx doctor` に替える | `mise install` 後に `agx -V` が宣言した版を返す、`which -a agx` が mise の一つだけ、`mise run doctor`、`bun test scripts/tests/render-home.test.ts scripts/tests/land.test.ts`、`mise run gate:land` | commit を戻して `mise run deps`。ソースは S7 まで dotfiles に残っている |
 | **S7** dotfiles からソースを消す | S6 の後で、次の三つを観測したこと (暦の日数ではなく、確かめた事実を条件にする): 固定版の agx を通して、dotfiles と agx を使う各利用側リポジトリで受け入れ済みの run が少なくとも 1 件ずつある / `agx worker doctor` が新しい finding を出さない / 戻す手順 (固定版を外して dotfiles のソースに戻す) を一度実際に通した | `tools/agx*`, `tools/xmsg`, `tools/jex` を削除。`mise.toml` の `test:agx`, `usehooks:consumers` を外す。`scripts/config-registry.ts:534-556,726-734,757-762,795-799` を更新。`tools/spec/architecture.md` の Suite 節を agx の文書への参照に替える | `mise run lint:config-map`、`mise run test`、`mise run gate:land`、`mise run doctor` | commit を戻す (S6 の固定版はそのまま動く) |
 | **S8** 利用側の取り込みを切り替える | S5 のタグ | `agx-usehooks` を使う利用側リポジトリで、link をやめて git URL の固定版にする (`tools/agx-usehooks/consumers.toml` の link の宣言を消す) | その利用側で `bunx tsc --noEmit -p .` (いまの `usehooks:consumers` と同じ命令, `consumers.toml:8`) | その利用側の `package.json` を戻す |
 
@@ -429,6 +454,7 @@ S1〜S4 はそれぞれ dotfiles の 1 つの issue にできる。S5〜S8 は a
 | ID | 危険 | 対策 |
 | --- | --- | --- |
 | K1 | 切り替えの途中で、機械に agx が二つ入る (link と固定版) | S6 で `bin` を外すのと固定版の導入を同じ commit にする。`mise run doctor` で `which -a agx` を確かめる |
+| K1b | 利用側ごとに版が違うため、古い版の agx が新しい版の書いた状態を読み違える | 状態の形式に版を書き、読み手は知らない版を exit 2 で拒む (§5.2)。形式を壊す版上げは major にし、利用側の版上げを依頼してから出す |
 | K2 | 状態ディレクトリの形が版の間で食い違い、古い版の statusline が新しい records を読めない | S2 の後は statusline が CLI 出力だけを読むので、版は agx 一つに閉じる (SEP-2) |
 | K3 | 動いている worker unit が、切り替えの途中で古いソースの path を参照する | `agx worker ls` で running が 0 のときに S6 と S7 を land する |
 | K4 | roster の移動で `~/.claude/CLAUDE.md` の描画が壊れ、全セッションの指示が変わる | S3 の検証に `scripts/tests/render-home.test.ts` を入れ、`mise run link:dots` の前に差分を見る |
@@ -457,7 +483,8 @@ S1〜S4 だけで止める場合も、§2.2 の SEP-1〜SEP-3 は dotfiles の�
   (§3.6) だけである。S0b で `legacy-v1/` へ向けるか、`records.jsonl` (`agx worker ls --json`) を
   読むように直すかを、`agx-usehooks` を使う利用側の持ち主が決める。
 - **R5:** dotfiles の hook (`remind-reply-language.ts`) が、外部 package になった usehooks に依存してよいか。
-- **R6:** §5.3 (b) で、依存 package の bin が `bun link` で PATH に出るか (未検証)。
+- **R6:** §5.3 (c) で、`bun build --compile` した単体バイナリが、hook の起動時間 (いまは bun の
+  script) より遅くならないか (未計測)。遅いときは、hook から呼ぶ命令だけ `--json` の発行物を読む形に寄せる。
 
 ## 10. なぜ agx なのか — 層ごとの整理
 

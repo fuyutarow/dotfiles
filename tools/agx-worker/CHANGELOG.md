@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.0.5 — 2026-10-22
+
+- Restore active Sol 6.1 choices while keeping history-free selection
+
 ## 8.0.4 — 2026-10-22
 
 - Use sourced Sol6.0 rows, reject mixed model generations, and remove local judgment feedback from selection

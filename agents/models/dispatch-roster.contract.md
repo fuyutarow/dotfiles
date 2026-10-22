@@ -9,7 +9,7 @@ The contract for `agents/models/dispatch-roster.toml`. The roster is the source 
 - Source representation: TOML parsed with `Bun.TOML.parse` and validated by the strict roster schema
 - Trust regime: human-authored model, route, capability, and price data
 - Schema / version: `schema = 1`; unknown keys and duplicate choice ids are rejected
-- Selection: `agx worker run` sends the ticket and eligible roster rows to Jev, then records the selected generation-specific row id in the run record. A model generation gets new ids (for example, `sol6-high`); an id is never repointed to a different model generation.
+- Selection: `agx worker run` sends the ticket and eligible roster rows to Jev, then records the selected row id in the run record. Jev selection uses ticket and roster evidence, never local graded feedback. Sol 6.1 uses its historical `sol-low` through `sol-max` ids; retired ids are not repointed to another generation.
 - Capacity eligibility: recent `capacity` outcomes temporarily exclude the row and its vendor-model effort variants before Jev and fallback selection. Bounds and continuation recovery are defined in [the worker contract](../../tools/agx-worker/contract.md).
 - Route eligibility: optional `[auto].routes` limits auto-pick to the listed routes (`codex`, `claude`); omission allows every route. An empty list or unknown name rejects roster loading and names the known routes. The committed policy allows only `codex`. Capability and subscription filters apply within this allowlist; Jev and fallbacks cannot select an excluded row.
 - Model generation exclusivity: roster loading checks every candidate row before selection. Within each recognized model family, all rows must use one generation; rows for multiple efforts of the same exact model remain valid, as do independent families. A conflict reports the family and exact model slugs and tells the owner to keep one generation by removing or updating rows. Historical run records remain unchanged.
@@ -30,6 +30,6 @@ The contract for `agents/models/dispatch-roster.toml`. The roster is the source 
 - The worker state directory name is retained to preserve existing records; command entrypoints are `agx worker` and `agx-worker`.
 - Future provider slug formats remain opaque until declared; this contract does not infer family identity by stripping numeric tokens.
 
-## Sol6.0 evidence context
+## Sol 6.1 snapshot
 
-The five `sol6-*` rows use exact effort-matched frozen primary records accessed 2026-10-22. AA index v4.3.2 is rounded to integer points, TB4 v4 and SciCode to one decimal. Measurement dates are unknown; SciCode revision is unspecified and under review; Coding Agent Index is omitted. Standard API input/cache/output prices are $2/$0.20/$10 per million tokens for prompts <=272K, not subscription marginal spend. Context/output limits are 1,050,000/128,000 tokens; >272K input/cache rates double and output is 1.5x. Other families retain older snapshots. Only Sol6.0 xhigh/max clear TB4 >=30. Historical grades stay on retired `sol-*` IDs.
+The five `sol-*` rows restore their frozen 2026-10-08 Sol 6.1 snapshot and source URLs. Each effort clears the 30.0 TB4 terminal/agentic floor. These are published benchmark and list-price inputs; local grades do not affect selection. The generation loader rejects a mixed Sol roster before Jev is called.

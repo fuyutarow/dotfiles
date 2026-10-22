@@ -79,7 +79,7 @@ describe("dispatch roster", () => {
       /graded|history|recent|comparable|accepted/iu,
     );
   });
-  test("loads all 40 route and effort rows with generation-specific Sol 6.0 ids", async () => {
+  test("loads all 40 route and effort rows with historical Sol 6.1 ids", async () => {
     const loaded = await loadRoster();
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
@@ -109,11 +109,9 @@ describe("dispatch roster", () => {
     );
     expect(rosterTable(loaded.value)).toContain("$0.10/$0.01/$0.50");
     expect(rosterTable(loaded.value)).toContain("$2/—/$10");
-    const sol6 = loaded.value.choice.filter((row) =>
-      row.id.startsWith("sol6-"),
-    );
-    expect(sol6).toHaveLength(5);
-    expect(sol6.map((row) => row.effort)).toEqual([
+    const sol = loaded.value.choice.filter((row) => row.id.startsWith("sol-"));
+    expect(sol).toHaveLength(5);
+    expect(sol.map((row) => row.effort)).toEqual([
       "low",
       "medium",
       "high",
@@ -121,21 +119,21 @@ describe("dispatch roster", () => {
       "max",
     ]);
     const evidence = [
-      ["low", 34, 9.1, 50.2],
-      ["medium", 40, 18.7, 53.8],
-      ["high", 42, 26.3, 54.9],
-      ["xhigh", 44, 30.3, 55.1],
-      ["max", 48, 43.9, 57.6],
+      ["low", 42, 30.8, 53.2],
+      ["medium", 48, 48, 53.2],
+      ["high", 50, 51.5, 55.8],
+      ["xhigh", 51, 54, 55.7],
+      ["max", 52, 56.1, 54.2],
     ] as const satisfies ReadonlyArray<
       readonly [Choice["effort"], number, number, number]
     >;
     for (const [effort, aaIndex, tb4, scicode] of evidence) {
-      const row = sol6.find((candidate) => candidate.effort === effort);
+      const row = sol.find((candidate) => candidate.effort === effort);
       if (row === undefined) {
         expect(row).toBeDefined();
         continue;
       }
-      expect(row.model).toBe("gpt-6-sol");
+      expect(row.model).toBe("gpt-6.1-sol");
       expect([row.aa_index, row.tb4, row.scicode]).toEqual([
         aaIndex,
         tb4,
@@ -143,27 +141,27 @@ describe("dispatch roster", () => {
       ]);
       expect(row.coding_agent).toBeUndefined();
       expect(row.tb4_source).toStartWith(
-        "https://artificialanalysis.ai/models/comparisons/gpt-6-sol",
+        "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra",
       );
       expect(row.scicode_source).toBe(row.tb4_source);
       const criterion = criterionFor(loaded.value, row);
       expect(criterion).toContain("Published benchmark snapshot");
-      expect(criterion).toContain("measurement date unknown");
-      expect(criterion).not.toContain(loaded.value.as_of);
+      expect(criterion).toContain(loaded.value.as_of);
+      expect(tb4).toBeGreaterThanOrEqual(30);
       expect(criterion).not.toMatch(/graded|history|recent|comparable/iu);
       expect(row.price_in).toBe(2);
-      expect(row.price_cached_in).toBe(0.2);
+      expect(row.price_cached_in).toBe(0.1);
       expect(row.price_out).toBe(10);
     }
-    expect(loaded.value.choice.some((row) => row.model === "gpt-6.1-sol")).toBe(
+    expect(loaded.value.choice.some((row) => row.model === "gpt-6-sol")).toBe(
       false,
     );
     for (const id of [
-      "sol-low",
-      "sol-medium",
-      "sol-high",
-      "sol-xhigh",
-      "sol-max",
+      "sol6-low",
+      "sol6-medium",
+      "sol6-high",
+      "sol6-xhigh",
+      "sol6-max",
     ])
       expect(loaded.value.choice.some((row) => row.id === id)).toBe(false);
 
@@ -201,8 +199,8 @@ describe("dispatch roster", () => {
       expect(row).toContain(`${scicode} ${terraSource}`);
     }
     expect(rosterTable(loaded.value)).toContain("$2/$0.20/$12");
-    expect(criterionFor(loaded.value, sol6[0]!)).toContain(
-      "Artificial Analysis v4.3.2, accessed 2026-10-22; measurement date unknown; SciCode under review",
+    expect(criterionFor(loaded.value, sol[0]!)).toContain(
+      "Artificial Analysis, 2026-10-08",
     );
   });
 

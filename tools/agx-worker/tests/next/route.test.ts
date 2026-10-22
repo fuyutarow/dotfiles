@@ -314,7 +314,7 @@ describe("capability constrained routing", () => {
     expect(inverted).toEqual(successSkew);
   });
 
-  test("historical Sol 6.1 grades stay on retired ids and do not appear on Sol 6.0", async () => {
+  test("historical Sol 6.1 grades remain auditable and do not enter selection", async () => {
     await isolateState();
     const started = appendStarted("sol-high");
     expect(started?.kind).toBe("started");
@@ -335,17 +335,23 @@ describe("capability constrained routing", () => {
       decision: "accept",
       note: "historical Sol 6.1 acceptance",
     });
-    const server = startServer("sol6-high");
-    expect((await route("generation-isolation replay")).id).toBe("sol6-high");
-    expect(server.request()?.questions.worker.criteria["sol6-high"]).toContain(
-      "AA 42, TB4 26.3%",
+    const server = startServer("sol-high");
+    expect((await route("generation-isolation replay")).id).toBe("sol-high");
+    expect(server.request()?.questions.worker.criteria["sol-high"]).toContain(
+      "AA 50",
+    );
+    expect(server.request()?.questions.worker.criteria["sol-high"]).toContain(
+      "TB4 51.5%",
+    );
+    expect(server.request()?.questions.worker.criteria["sol-high"]).toContain(
+      "SciCode 55.8%",
+    );
+    expect(server.request()?.questions.worker.criteria["sol-high"]).not.toMatch(
+      /graded|history|recent|comparable|accepted|rejected/iu,
     );
     expect(
-      server.request()?.questions.worker.criteria["sol6-high"],
-    ).not.toMatch(/graded|history|recent|comparable|accepted|rejected/iu);
-    expect(
       server.request()?.questions.worker.criteria["sol-high"],
-    ).toBeUndefined();
+    ).not.toContain("historical Sol 6.1 acceptance");
   });
   test("ROUTER-PROMPT-TREE: 7d is primary, 5h is secondary, and Jev chooses Codex", async () => {
     const { home } = await isolateState();
@@ -475,7 +481,7 @@ describe("capability constrained routing", () => {
     await isolateState();
     const server = startServer("luna-medium", {
       "luna-medium": 0.99,
-      "sol6-low": 0.01,
+      "sol-low": 0.01,
     });
     const parsed = parseNextTicket(
       `+++\nschema = 2\nname = "th-purge"\nwrites = ["PURGE-MANIFEST.tsv", "admission/**"]\noutcome = "inventory, classify, retain, and verify every theory file"\ntimeout_s = 14400\ncapabilities = ["terminal-agentic", "long-tool-loop", "bulk-classification"]\n[proposition]\nid = "TH-PURGE-1"\nclaim = "every THEORY file is retained byte-exact in canonical v1"\nrefuted_by = "a THEORY row lacks a verified v1 id or has a byte mismatch"\n+++\nInventory all prose research artifacts.\n`,
@@ -487,7 +493,7 @@ describe("capability constrained routing", () => {
       parsed.ticket.capabilities,
       parsed.ticket.timeout_s,
     );
-    expect(selected.id).not.toBe("sol6-low");
+    expect(selected.id).toBe("sol-low");
     expect(server.request()?.state.routes.claude.windows["7d"]?.status).toBe(
       "unknown",
     );
@@ -498,9 +504,9 @@ describe("capability constrained routing", () => {
     expect(
       server.request()?.questions.worker.criteria["luna-medium"],
     ).toBeUndefined();
-    expect(
-      server.request()?.questions.worker.criteria["sol6-low"],
-    ).toBeUndefined();
+    expect(server.request()?.questions.worker.criteria["sol-low"]).toContain(
+      "TB4 30.8%",
+    );
     const criteria = Object.values(
       server.request()?.questions.worker.criteria ?? {},
     );
@@ -526,9 +532,9 @@ describe("capability constrained routing", () => {
       "inventory and classify the repo",
       parsed.ticket.capabilities,
       parsed.ticket.timeout_s,
-      ["sol6-low"],
+      ["sol-low"],
     );
-    expect(retry.id).not.toBe("sol6-low");
+    expect(retry.id).not.toBe("sol-low");
     expect(retry.id).not.toBe("luna-medium");
     appendStarted(retry.id);
   });
@@ -637,38 +643,49 @@ describe("capability constrained routing", () => {
   });
 });
 
-test("fresh Sol6.0 criteria use sourced metrics; retired Jev pick cannot select 6.1", async () => {
+test("fresh Sol 6.1 choice records the restored model and sourced criteria", async () => {
   await isolateState();
   const server = startServer("sol-high", { "sol-high": 1 });
   const picked = await route("fresh generation probe");
-  expect(picked.id).not.toStartWith("sol-");
-  expect(picked.model).not.toBe("gpt-6.1-sol");
+  expect(picked).toMatchObject({ id: "sol-high", model: "gpt-6.1-sol" });
   const criteria = server.request()?.questions.worker.criteria ?? {};
   expect(
-    Object.keys(criteria).filter((id) => id.startsWith("sol6-")),
+    Object.keys(criteria).filter((id) => id.startsWith("sol-")),
   ).toHaveLength(5);
-  expect(criteria["sol6-high"]).toContain("AA 42, TB4 26.3%");
-  expect(criteria["sol6-high"]).toContain("measurement date unknown");
-  expect(criteria["sol6-high"]).toContain("SciCode under review");
-  expect(criteria["sol6-high"]).toContain("Standard API list price");
-  expect(criteria["sol6-high"]).toContain(
-    "subscription marginal spend unknown",
+  expect(criteria["sol-high"]).toContain("AA 50");
+  expect(criteria["sol-high"]).toContain("TB4 51.5%");
+  expect(criteria["sol-high"]).toContain("SciCode 55.8%");
+  expect(criteria["sol-high"]).not.toMatch(
+    /graded|history|recent|comparable|accepted|rejected/iu,
   );
-  expect(criteria["sol-high"]).toBeUndefined();
+  expect(Object.keys(criteria).filter((id) => id.startsWith("sol6-"))).toEqual(
+    [],
+  );
+});
+
+test("retired Sol 6.0 Jev IDs are ineligible and never point to the 6.1 rows", async () => {
+  await isolateState();
+  const server = startServer("sol6-high", { "sol6-high": 1 });
+  const picked = await route("retired generation probe");
+  expect(picked.id).not.toBe("sol6-high");
+  expect(picked.model).not.toBe("gpt-6-sol");
+  const criteria = server.request()?.questions.worker.criteria ?? {};
+  expect(criteria["sol6-high"]).toBeUndefined();
+  expect(criteria["sol-high"]).toContain("AA 50, TB4 51.5%");
 });
 for (const capability of ["terminal-agentic", "long-tool-loop"]) {
-  test(`Sol6.0 ${capability} eligibility is exactly xhigh/max`, async () => {
+  test(`all restored Sol 6.1 efforts meet ${capability} eligibility`, async () => {
     await isolateState();
-    const server = startServer("sol6-xhigh", { "sol6-xhigh": 1 });
-    expect((await route("terminal probe", [capability])).id).toBe("sol6-xhigh");
+    const server = startServer("sol-xhigh", { "sol-xhigh": 1 });
+    expect((await route("terminal probe", [capability])).id).toBe("sol-xhigh");
     const criteria = server.request()?.questions.worker.criteria ?? {};
     expect(
       Object.keys(criteria)
-        .filter((id) => id.startsWith("sol6-"))
+        .filter((id) => id.startsWith("sol-"))
         .toSorted(),
-    ).toEqual(["sol6-max", "sol6-xhigh"]);
-    expect(criteria["sol6-xhigh"]).toContain("TB4 30.3%");
-    expect(criteria["sol6-max"]).toContain("TB4 43.9%");
+    ).toEqual(["sol-high", "sol-low", "sol-max", "sol-medium", "sol-xhigh"]);
+    expect(criteria["sol-low"]).toContain("TB4 30.8%");
+    expect(criteria["sol-max"]).toContain("TB4 56.1%");
   });
 }
 test("combined candidate rejects mixed Sol generations before Jev, even outside auto routes", async () => {
@@ -678,12 +695,12 @@ test("combined candidate rejects mixed Sol generations before Jev, even outside 
     path,
     (await readFile(path, "utf8"))
       .replace(
-        'id = "sol6-low"\nroute = "codex"\nmodel = "gpt-6-sol"',
-        'id = "sol6-low"\nroute = "claude"\nmodel = "gpt-6.1-sol"',
+        'id = "sol-low"\nroute = "codex"\nmodel = "gpt-6.1-sol"',
+        'id = "sol-low"\nroute = "claude"\nmodel = "gpt-6.0-sol"',
       )
       .replace("[auto]", '[auto]\nroutes = ["codex"]'),
   );
-  const server = startServer("sol6-high");
+  const server = startServer("sol-high");
   const child = Bun.spawn(
     [
       process.execPath,
@@ -704,7 +721,7 @@ test("combined candidate rejects mixed Sol generations before Jev, even outside 
     "agx: cannot read dispatch roster: model family sol has multiple generations:",
   );
   expect(stderr).toContain("Keep one generation for each family");
+  expect(stderr).toContain("gpt-6.0-sol");
   expect(stderr).toContain("gpt-6.1-sol");
-  expect(stderr).toContain("gpt-6-sol");
   expect(server.request()).toBeUndefined();
 });

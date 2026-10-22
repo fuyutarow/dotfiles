@@ -7,7 +7,7 @@
 # Agent, Task and Workflow tools dispatch nothing: the hook denies them and prints the table.
 #
 # CONFIGURATION CONTRACT: agents/models/dispatch-roster.contract.md.
-# Older-family numbers retain their as_of; Sol6.0 uses the frozen 2026-10-22 access packet; absent benchmark or price values are left out,
+# Numbers retain their sourced snapshot date; absent benchmark or price values are left out,
 # never estimated. Per-effort AA Intelligence Index: artificialanalysis.ai/models/releases/<slug>.
 # TB4 and SciCode are only retained where Artificial Analysis reports measurements for the row.
 #   aa_index   Artificial Analysis Intelligence Index (2026-10-06)
@@ -192,87 +192,81 @@ price_cached_in = 0.20 # OpenAI (2026-10-08): https://developers.openai.com/api/
 price_out = 12.00 # OpenAI (2026-10-08): https://developers.openai.com/api/docs/models/gpt-5.6-terra
 use_for = "deep terra reasoning where the strongest luna effort is insufficient"
 
-# Sol6.0 accessed 2026-10-22; measurement dates UNKNOWN, not release dates.
-# AA index v4.3.2; TB4 v4; SciCode unspecified revision / under review.
-# Coding Agent Index unknown, omitted. Per-row comparison URLs also source AA index.
-# Standard API: https://developers.openai.com/api/docs/models/gpt-6-sol
-# Input/cache/output $2/$0.20/$10 per 1M; prompt <=272K, not subscription spend.
-# Context/output 1,050,000/128,000 tokens; >272K input/cache 2x, output 1.5x.
-# Cache write $2.50/M separately; regional +10%, Flex/Batch 50%, Fast 2x.
+# Sol 6.1 snapshot from 2026-10-08; preserve the historical rows and their source URLs.
 [[choice]]
-id = "sol6-low"
+id = "sol-low"
 route = "codex"
-model = "gpt-6-sol"
+model = "gpt-6.1-sol"
 effort = "low"
-aa_index = 34
-tb4 = 9.1
-scicode = 50.2
-tb4_source = "https://artificialanalysis.ai/models/comparisons/gpt-6-sol-high-vs-gpt-6-sol-low"
-scicode_source = "https://artificialanalysis.ai/models/comparisons/gpt-6-sol-high-vs-gpt-6-sol-low"
-price_in = 2
-price_cached_in = 0.2
-price_out = 10
-use_for = "Sol6.0 low for bounded work without terminal-agentic/long-tool-loop requirement; AA TB4 below 30%."
-
-[[choice]]
-id = "sol6-medium"
-route = "codex"
-model = "gpt-6-sol"
-effort = "medium"
-aa_index = 40
-tb4 = 18.7
-scicode = 53.8
-tb4_source = "https://artificialanalysis.ai/models/comparisons/gpt-6-sol-medium-vs-gpt-6-sol-xhigh"
-scicode_source = "https://artificialanalysis.ai/models/comparisons/gpt-6-sol-medium-vs-gpt-6-sol-xhigh"
-price_in = 2
-price_cached_in = 0.2
-price_out = 10
-use_for = "Sol6.0 medium for bounded work without terminal-agentic/long-tool-loop requirement; AA TB4 below 30%."
-
-[[choice]]
-id = "sol6-high"
-route = "codex"
-model = "gpt-6-sol"
-effort = "high"
 aa_index = 42
-tb4 = 26.3
-scicode = 54.9
-tb4_source = "https://artificialanalysis.ai/models/comparisons/gpt-6-sol-high-vs-gpt-6-sol-low"
-scicode_source = "https://artificialanalysis.ai/models/comparisons/gpt-6-sol-high-vs-gpt-6-sol-low"
+tb4 = 30.8
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 53.2
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
 price_in = 2
-price_cached_in = 0.2
+price_cached_in = 0.1
 price_out = 10
-use_for = "Sol6.0 high for bounded work without terminal-agentic/long-tool-loop requirement; AA TB4 below 30%."
+use_for = "strong low-effort coding or reasoning; multi-step terminal/agentic work where small models fall short"
 
 [[choice]]
-id = "sol6-xhigh"
+id = "sol-medium"
 route = "codex"
-model = "gpt-6-sol"
-effort = "xhigh"
-aa_index = 44
-tb4 = 30.3
-scicode = 55.1
-tb4_source = "https://artificialanalysis.ai/models/comparisons/gpt-6-sol-medium-vs-gpt-6-sol-xhigh"
-scicode_source = "https://artificialanalysis.ai/models/comparisons/gpt-6-sol-medium-vs-gpt-6-sol-xhigh"
-price_in = 2
-price_cached_in = 0.2
-price_out = 10
-use_for = "Sol6.0 xhigh; AA TB4 clears 30% terminal floor; ticket-specific suitability remains uncertain."
-
-[[choice]]
-id = "sol6-max"
-route = "codex"
-model = "gpt-6-sol"
-effort = "max"
+model = "gpt-6.1-sol"
+effort = "medium"
 aa_index = 48
-tb4 = 43.9
-scicode = 57.6
-tb4_source = "https://artificialanalysis.ai/models/comparisons/gpt-6-sol-vs-gpt-6-sol-xhigh"
-scicode_source = "https://artificialanalysis.ai/models/comparisons/gpt-6-sol-vs-gpt-6-sol-xhigh"
+tb4 = 48.0
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 53.2
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
 price_in = 2
-price_cached_in = 0.2
+price_cached_in = 0.1
 price_out = 10
-use_for = "Sol6.0 max; AA TB4 clears 30% terminal floor; ticket-specific suitability remains uncertain."
+use_for = "difficult coding and reasoning with a strong cost-to-capability balance for multi-step terminal/agentic work"
+
+[[choice]]
+id = "sol-high"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "high"
+aa_index = 50
+tb4 = 51.5
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 55.8
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 2
+price_cached_in = 0.1
+price_out = 10
+use_for = "high-difficulty code and tool tasks needing near-top capability for multi-step terminal/agentic work"
+
+[[choice]]
+id = "sol-xhigh"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "xhigh"
+aa_index = 51
+tb4 = 54.0
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 55.7
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 2
+price_cached_in = 0.1
+price_out = 10
+use_for = "very hard multi-step coding and reasoning requiring near-frontier capability for multi-step terminal/agentic work"
+
+[[choice]]
+id = "sol-max"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "max"
+aa_index = 52
+tb4 = 56.1
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+scicode = 54.2
+scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra"
+price_in = 2
+price_cached_in = 0.1
+price_out = 10
+use_for = "deep sol reasoning for tasks beyond lower-effort sol, including multi-step terminal/agentic work"
 
 [[choice]]
 id = "astra-low"
@@ -287,7 +281,7 @@ scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-
 price_in = 10.00
 price_cached_in = 1.00
 price_out = 50.00
-use_for = "high-capability low-effort work for multi-step terminal/agentic tasks where Sol6.0 low is insufficient"
+use_for = "high-capability low-effort work for multi-step terminal/agentic tasks where Sol 6.1 low is insufficient"
 
 [[choice]]
 id = "astra-medium"
@@ -302,7 +296,7 @@ scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-
 price_in = 10.00
 price_cached_in = 1.00
 price_out = 50.00
-use_for = "difficult multi-step terminal/agentic tasks needing stronger capability than Sol6.0 medium"
+use_for = "difficult multi-step terminal/agentic tasks needing stronger capability than Sol 6.1 medium"
 
 [[choice]]
 id = "astra-high"
@@ -317,7 +311,7 @@ scicode_source = "https://artificialanalysis.ai/models/releases/comparisons/gpt-
 price_in = 10.00
 price_cached_in = 1.00
 price_out = 50.00
-use_for = "very difficult multi-step terminal/agentic work where Sol6.0 high is insufficient"
+use_for = "very difficult multi-step terminal/agentic work where Sol 6.1 high is insufficient"
 
 [[choice]]
 id = "astra-xhigh"

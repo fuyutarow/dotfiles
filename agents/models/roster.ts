@@ -265,8 +265,8 @@ export function criterionFor(r: Roster, c: Choice): string {
     c.scicode === undefined ? undefined : `SciCode ${c.scicode}%`,
   ].filter((x) => x !== undefined);
   return (
-    `Route ${c.route}. ${c.use_for}. Published benchmark snapshot (${c.model === "gpt-6-sol" ? "Artificial Analysis v4.3.2, accessed 2026-10-22; measurement date unknown; SciCode under review" : `Artificial Analysis, ${r.as_of}`}): ${measured.length === 0 ? "unknown" : measured.join(", ")}. ` +
-    `${c.model === "gpt-6-sol" ? "Standard API list price (prompt <=272K; subscription marginal spend unknown)" : "Price"} ${price(c.price_in)}/${price(c.price_out)} per 1M tokens in/out = ${costMultiple(r, c) ?? "unknown"}x the cheapest row.`
+    `Route ${c.route}. ${c.use_for}. Published benchmark snapshot (Artificial Analysis, ${r.as_of}): ${measured.length === 0 ? "unknown" : measured.join(", ")}. ` +
+    `Price ${price(c.price_in)}/${price(c.price_out)} per 1M tokens in/out = ${costMultiple(r, c) ?? "unknown"}x the cheapest row.`
   );
 }
 
@@ -288,7 +288,7 @@ export function rosterTable(r: Roster): string {
 export function rosterPolicy(r: Roster): string {
   return [
     `- **Every worker starts with \`agx worker run <ticket>\`. The router chooses from the roster using the ticket, measured model evidence, and current operational availability.**`,
-    `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest priced row; older snapshot ${r.as_of}; Sol6.0 accessed 2026-10-22, measurement date unknown, AA index v4.3.2, SciCode under review, Standard API prices for prompts <=272K (subscription marginal spend unknown).`,
+    `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest priced row; sourced snapshot ${r.as_of}.`,
     "",
     ...rosterTable(r)
       .split("\n")

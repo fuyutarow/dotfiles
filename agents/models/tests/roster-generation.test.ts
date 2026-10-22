@@ -44,10 +44,10 @@ async function loadWithModelChanges(changes: Readonly<Record<string, string>>) {
 
 describe("dispatch roster model generations", () => {
   test("rejects Sol generations across choice ids and efforts with an actionable error", async () => {
-    const currentSol = await committedModel("sol6-low");
+    const currentSol = await committedModel("sol-low");
     const alternateSol =
-      currentSol === "gpt-6.1-sol" ? "gpt-6.0-sol" : "gpt-6.1-sol";
-    const loaded = await loadWithModelChanges({ "sol6-low": alternateSol });
+      currentSol === "gpt-6.0-sol" ? "gpt-6.1-sol" : "gpt-6.0-sol";
+    const loaded = await loadWithModelChanges({ "sol-low": alternateSol });
     expect(loaded.ok).toBe(false);
     if (!loaded.ok) {
       expect(loaded.error).toContain("model family sol");
@@ -61,7 +61,7 @@ describe("dispatch roster model generations", () => {
     const loaded = await loadRoster();
     expect(loaded.ok).toBe(true);
     if (loaded.ok) {
-      const solModel = await committedModel("sol6-low");
+      const solModel = await committedModel("sol-low");
       expect(
         loaded.value.choice.filter((row) => row.model === solModel),
       ).toHaveLength(5);
@@ -87,7 +87,7 @@ describe("dispatch roster model generations", () => {
 
   test("reports malformed supported-family slugs and keeps opaque custom slugs loadable", async () => {
     const malformed = await loadWithModelChanges({
-      "sol6-low": "gpt-6..1-sol",
+      "sol-low": "gpt-6..1-sol",
     });
     expect(malformed.ok).toBe(false);
     if (!malformed.ok) {
@@ -107,7 +107,7 @@ describe("dispatch roster model generations", () => {
     }
 
     const opaque = await loadWithModelChanges({
-      "sol6-low": "custom-catalog-v2",
+      "sol-low": "custom-catalog-v2",
     });
     expect(opaque.ok).toBe(true);
 
@@ -125,20 +125,20 @@ for (const [first, second] of [
 ] as const) {
   test(`rejects generic-family collision: ${first} / ${second}`, async () => {
     expect(
-      (await loadWithModelChanges({ "sol6-low": first, "sol6-medium": second }))
+      (await loadWithModelChanges({ "sol-low": first, "sol-medium": second }))
         .ok,
     ).toBe(false);
   });
 }
 test("normalizes numeric generations without conflating independent families", async () => {
-  expect((await loadWithModelChanges({ "sol6-low": "gpt-06.0-sol" })).ok).toBe(
+  expect((await loadWithModelChanges({ "sol-low": "gpt-06.1-sol" })).ok).toBe(
     true,
   );
   expect(
     (
       await loadWithModelChanges({
-        "sol6-low": "gpt-7-comet",
-        "sol6-medium": "gpt-8-nova",
+        "sol-low": "gpt-7-comet",
+        "sol-medium": "gpt-8-nova",
       })
     ).ok,
   ).toBe(true);

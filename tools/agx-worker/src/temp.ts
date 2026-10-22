@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { z } from "../../../agents/hooks/zod.ts";
+import { z } from "../../shared/src/zod.ts";
 import { err, fromThrowable, ok, Result } from "neverthrow";
 
 // Every agx worker run owns one directory under the temp root, named by its run id, with a sibling

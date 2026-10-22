@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.1.1 — 2026-10-23
+
+- Import zod from shared module
+
 ## 8.1.0 — 2026-10-23
 
 - Rename worker executable override to AGX_WORKER_BIN

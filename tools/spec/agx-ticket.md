@@ -27,16 +27,36 @@ agx ticket gc [--dry-run] [--repo P]
 ```
 
 `--repo` defaults to cwd. Repository discovery walks upward to jj metadata or a Git root.
-For a jj workspace, files belong to that checkout; its backing store identifies matching runs.
+For a jj workspace, ticket storage belongs to its `default` workspace (the main checkout);
+its backing store identifies matching runs. Worker and ticket commands use one shared reader.
 The default directory is `<repo>/.agents/tickets`. A repo may declare another directory:
 
 ```toml
-# .agx.toml (other agx keys are preserved)
+# agx.toml, committed at trunk() (Git: HEAD)
+schema = 1
 tickets = "plans/tickets"
 ```
 
-Relative directories resolve from the repository root. Absolute directories and `~/` are
-supported. Paths under `/tmp`, `/private/tmp`, `/var/tmp`, `/dev/shm`, or `/run` are marked
+Relative directories resolve from the main repository root. Uncommitted `agx.toml` edits
+do not change the directory. Optional machine-local overrides live outside the repository in
+`$XDG_CONFIG_HOME/agx/repos/*.toml` (default `~/.config/agx/repos/*.toml`). Each file requires
+`schema = 1` and `root = "<absolute main-checkout real path>"`. The reader selects the one file
+whose root equals the repository's real main-checkout path. Two files claiming that root fail
+with exit 2; no matching file leaves L1 or the default in effect. The selected file replaces
+L1 per key. Absolute directories and `~/` are allowed only in this layer. For example:
+
+```toml
+# $XDG_CONFIG_HOME/agx/repos/project.toml (the filename is arbitrary)
+schema = 1
+root = "/srv/project"
+tickets = "/srv/tickets/project"
+```
+
+No repository working file supplies L2 overrides and no repository ignore rule is needed.
+Unknown keys and missing or unsupported schema values are rejected; a `[ws]` table is accepted
+and ignored by the ticket reader. A leftover `.agx.toml` in inspected revisions or working files
+is rejected with the rename instruction `mv .agx.toml agx.toml`, directing local absolute paths
+to an XDG override with `root` set to the main-checkout path. Paths under `/tmp`, `/private/tmp`, `/var/tmp`, `/dev/shm`, or `/run` are marked
 volatile in listings and collection output; jj history is not assured there.
 
 ### Issuance
@@ -111,7 +131,8 @@ and GC. The recheck reduces that window and never treats a failed read as permis
 ## Channels, outcomes and evolution
 
 All verbs run in the foreground. Before external reads, stderr prints `tkt: reading …`; jj is
-never killed by a timeout. Operational failures use `tkt: …` and exit 1. Cleye usage errors exit
+never killed by a timeout. Configuration errors from the shared reader emit one diagnostic line and exit 2.
+Other operational failures use `tkt: …` and exit 1. Cleye usage errors exit
 nonzero (normally 1; prototype-flag rejection exits 2). Success, including empty listings and
 empty GC selections, exits 0. Interruptions may leave a completed subset of a batch; exclusive
 creation protects retries from overwriting. The tool does not interpret exit-zero runs as accepted.

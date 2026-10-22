@@ -20,13 +20,21 @@ Its worker commands are `dispatch`, `run`, `check`, `ls`, `judge`, `stats`, `ros
 `check TICKET [--cd TREE]` runs the same input preflights as `run`: ticket schema and write-glob shape, ticket home, worker commit and premises, target mise environment/trust, running workspace, ownerless ref locks, sandbox, replacement/continuation references and roster eligibility. It prints every discoverable failure on its own line with a repair and exits 2 if any fail. A malformed input can prevent dependent checks, but independent checks still run. `dispatch` checks its selected workspace before starting the service and includes those failures alongside service/workspace findings. `check` also reports overlapping live write globs as warnings; it does not reserve writes, create a workspace, route a worker or launch a service. Launch-time commit and workspace-lock checks remain necessary because state can change after a check. The event log is the single durable run-event data file. A run also creates per-run brief, report, and progress artifacts alongside that log.
 
 Tickets live in `<repo>/.agents/tickets/`, or in the home declared by `tickets = "<path>"`
-in the `--cd` repository's `.agx.toml` at `trunk()` (Git: `HEAD`). For jj, the repository root
-is its `default` workspace, even when `--cd` selects a secondary workspace. Relative homes
-resolve from that repository root; absolute homes are allowed. Revision and premise checks
-still use the dispatch workspace. A declared home is honoured even under `/tmp`. Both `check`
+in the repository's optional `agx.toml` at `trunk()` (Git: `HEAD`), with required `schema = 1`.
+For jj, the repository root is its `default` workspace, even when `--cd` selects a secondary
+workspace. Relative homes resolve from that repository root. Machine-local overrides live in
+`$XDG_CONFIG_HOME/agx/repos/*.toml` (default `~/.config/agx/repos/*.toml`). Each file requires
+`schema = 1` and `root = "<absolute main-checkout real path>"`. The one file claiming that root
+overrides L1 per key and allows absolute ticket paths; duplicate claims fail with exit 2.
+Repository working files do not supply L2 overrides. Absolute paths in `agx.toml` are refused
+and must move to the XDG override. Revision and premise checks still use the dispatch workspace.
+A declared home is honoured even under `/tmp`. Both `check`
 and `run` refuse tickets outside the default and declared homes with exit 2 and a `WARN` naming
 the declared home and `agx ticket new`. Symlinks cannot make an outside file appear to belong to a home.
-Uncommitted changes to `.agx.toml` do not change the accepted home.
+Uncommitted changes to `agx.toml` do not change the accepted home. Both tools use the shared
+configuration reader. Unknown keys and missing or unsupported schema values fail with exit 2;
+a `[ws]` table is accepted for the workspace consumer. A leftover `.agx.toml` in the working
+files or inspected revisions fails with exit 2 and a rename instruction.
 
 Before launching a worker, `run` writes the input bytes to `runs/<id>/ticket.orig.md`, writes
 `ticket.orig.md.sha256`, and records `ticket_sha256`, the original and copied paths, `base_rev`

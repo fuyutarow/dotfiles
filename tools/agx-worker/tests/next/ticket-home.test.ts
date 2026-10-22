@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   mkdir,
@@ -15,10 +15,18 @@ import { join, resolve } from "node:path";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { parseNextTicket } from "../../src/next/ticket.ts";
 import { ticketContext, treeRead } from "../../src/next/ticket-home.ts";
-import { prepareTicketRepo } from "../ticket-repo.ts";
+import { prepareTicketRepo, writeLocalTicketConfig } from "../ticket-repo.ts";
 
 const roots: string[] = [];
+const originalXdg = process.env.XDG_CONFIG_HOME;
+beforeEach(async () => {
+  const config = await mkdtemp(join(tmpdir(), "worker-xdg-"));
+  roots.push(config);
+  process.env.XDG_CONFIG_HOME = config;
+});
 afterEach(async () => {
+  if (originalXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+  else process.env.XDG_CONFIG_HOME = originalXdg;
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
@@ -136,10 +144,12 @@ test.each([
       "bookmarks(alpha)",
     ]);
     const declared = home === "absolute" ? absoluteHome : "declared";
-    await writeFile(
-      join(root, ".agx.toml"),
-      `tickets = ${JSON.stringify(declared)}\n`,
-    );
+    if (home === "absolute") await writeLocalTicketConfig(root, declared);
+    else
+      await writeFile(
+        join(root, "agx.toml"),
+        `schema = 1\ntickets = ${JSON.stringify(declared)}\n`,
+      );
     await jj(["commit", "-m", "Declare ticket home"]);
     await jj(["bookmark", "create", "alpha", "-r", "@-"]);
     if (secondary) {
@@ -148,8 +158,8 @@ test.each([
     }
     const cwd = secondary ? workspace : root;
     // Neither checkout's dirty declaration is authority; only trunk is.
-    await writeFile(join(root, ".agx.toml"), 'tickets = "."\n');
-    await writeFile(join(cwd, ".agx.toml"), 'tickets = "."\n');
+    await writeFile(join(root, "agx.toml"), 'schema = 1\ntickets = "."\n');
+    await writeFile(join(cwd, "agx.toml"), 'schema = 1\ntickets = "."\n');
     const directory = new Map([
       ["default", join(root, ".agents/tickets")],
       ["absolute", absoluteHome],
@@ -366,10 +376,7 @@ test("check accepts an absolute home declared on the repository trunk", async ()
     'revset-aliases."trunk()"',
     "bookmarks(alpha)",
   ]);
-  await writeFile(
-    join(root, ".agx.toml"),
-    `tickets = ${JSON.stringify(directory)}\n`,
-  );
+  await writeLocalTicketConfig(root, directory);
   await jj(["bookmark", "create", "alpha", "-r", "@"]);
   await jj(["commit", "-m", "Declare absolute ticket home"]);
   const ticket = join(directory, "design_g5.md");
@@ -411,7 +418,7 @@ test("committed relative and absolute homes and the default home are accepted, i
 
 test("an uncommitted declaration and a symlink escaping the home cannot bypass placement", async () => {
   const f = await fixture();
-  await writeFile(join(f.root, ".agx.toml"), 'tickets = "."\n');
+  await writeFile(join(f.root, "agx.toml"), 'schema = 1\ntickets = "."\n');
   const stray = join(f.root, "stray.md");
   await writeFile(stray, text());
   expect((await f.invoke(["check", stray])).exit).toBe(2);
@@ -455,7 +462,7 @@ test("a jj tree uses its recorded working-copy commit and committed home without
     'revset-aliases."trunk()"',
     "bookmarks(alpha)",
   ]);
-  await writeFile(join(root, ".agx.toml"), 'tickets = "declared"\n');
+  await writeFile(join(root, "agx.toml"), 'schema = 1\ntickets = "declared"\n');
   await command(["commit", "-m", "Declare home"]);
   await command(["bookmark", "create", "alpha", "-r", "@-"]);
   const expected = await command([
@@ -467,7 +474,7 @@ test("a jj tree uses its recorded working-copy commit and committed home without
     "-T",
     "commit_id",
   ]);
-  await writeFile(join(root, ".agx.toml"), 'tickets = "dirty"\n');
+  await writeFile(join(root, "agx.toml"), 'schema = 1\ntickets = "dirty"\n');
   const before = await readdir(join(root, ".jj/repo/op_heads"));
   const ctx = await ticketContext(root);
   expect(ctx.ok).toBe(true);
@@ -489,12 +496,12 @@ test("a jj tree uses its recorded working-copy commit and committed home without
   expect(await readdir(join(root, ".jj/repo/op_heads"))).toEqual(before);
 }, 30000);
 
-test("a repository without .agx.toml accepts its default home", async () => {
+test("a repository without agx.toml accepts its default home", async () => {
   const f = await fixture(".agents/tickets");
-  await unlink(join(f.root, ".agx.toml"));
+  await unlink(join(f.root, "agx.toml"));
   // Remove the declaration from the disposable fixture's commit.
   for (const args of [
-    ["rm", "--", ".agx.toml"],
+    ["rm", "--", "agx.toml"],
     [
       "-c",
       "user.name=Fixture",
@@ -525,7 +532,7 @@ test("a repository without .agx.toml accepts its default home", async () => {
   }
   expect((await f.invoke(["check", f.ticket])).exit).toBe(0);
   expect(
-    (await treeRead(["git", "show", "HEAD:.agx.toml"], f.root)).exit,
+    (await treeRead(["git", "show", "HEAD:agx.toml"], f.root)).exit,
   ).not.toBe(0);
 }, 30000);
 
@@ -591,7 +598,7 @@ test("run preserves exact original bytes and hash, base and premise commits, rep
   const original = Buffer.concat([
     Buffer.from(
       text(
-        'premises = ["file:.agx.toml", "rev:HEAD^"]\nresources = { cpu = 1, ram_gb = 1 }\nexternal_reads = ["/reference"]\nfirst_return_s = 60\nnetwork = "none"\nsandbox = "read-only"',
+        'premises = ["file:agx.toml", "rev:HEAD^"]\nresources = { cpu = 1, ram_gb = 1 }\nexternal_reads = ["/reference"]\nfirst_return_s = 60\nnetwork = "none"\nsandbox = "read-only"',
       ),
     ),
     Buffer.from([255, 0, 13, 10]),
@@ -696,7 +703,7 @@ test("run preserves exact original bytes and hash, base and premise commits, rep
     expect(event.base_rev).toMatch(/^[a-f0-9]{40}$/u);
     expect(event.base_rev).toBe(baseRev);
     expect(event.premise_commits).toEqual([
-      { premise: "file:.agx.toml", commit: event.base_rev },
+      { premise: "file:agx.toml", commit: event.base_rev },
       { premise: "rev:HEAD^", commit: previousCommit },
     ]);
     const brief = await readFile(
@@ -728,4 +735,21 @@ test.each([
   'sandbox = "anything"',
 ])("rejects invalid typed declaration: %s", (extra) => {
   expect(parseNextTicket(text(extra)).success).toBe(false);
+});
+
+test("worker CLI check and run exit 2 for retired configuration before artifacts", async () => {
+  const f = await fixture();
+  await writeFile(join(f.root, ".agx.toml"), "");
+  for (const command of ["check", "run"]) {
+    const result = await f.invoke([command, f.ticket]);
+    expect(result.exit, result.err).toBe(2);
+    expect(result.out).toBe("");
+    expect(result.err.trim()).toBe(
+      `${f.root}/.agx.toml is retired; rename it: mv .agx.toml agx.toml (machine-local absolute paths go in $XDG_CONFIG_HOME/agx/repos/<name>.toml (default ~/.config/agx/repos/<name>.toml) with root = ${JSON.stringify(f.root)})`,
+    );
+    expect(result.err.trim().split("\n")).toHaveLength(1);
+    expect(
+      await Bun.file(join(f.env.AGX_NEXT_STATE_DIR, "records.jsonl")).exists(),
+    ).toBe(false);
+  }
 });

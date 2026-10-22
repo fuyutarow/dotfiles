@@ -10,12 +10,17 @@ import {
 import { collect, create, doctor as doctorTickets, list } from "./tickets.ts";
 import pkg from "../package.json" with { type: "json" };
 
+import { AgxConfigError } from "../../shared/src/agx-config.ts";
+
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);
 
 const fail = (error: unknown): void => {
-  process.stderr.write(`tkt: ${errorMessage(error)}\n`);
-  process.exitCode = 1;
+  const configuration = error instanceof AgxConfigError;
+  process.stderr.write(
+    configuration ? error.message + "\n" : `tkt: ${errorMessage(error)}\n`,
+  );
+  process.exitCode = configuration ? 2 : 1;
 };
 async function show<T>(
   work: () => Promise<Attempt<T>>,

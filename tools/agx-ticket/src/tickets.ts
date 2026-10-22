@@ -24,7 +24,7 @@ import {
 } from "../../shared/src/attempt.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { JJ_READ_ARGS } from "../../shared/src/jj-read.ts";
-import { readonlyCommand } from "../../shared/src/readonly-command.ts";
+import { resolveAgxConfig } from "../../shared/src/agx-config.ts";
 import { validateSlug } from "../../shared/src/slug.ts";
 
 for (const retired of ["AGX_DOCTOR_HOME", "AGX_DOCTOR_WORKSPACE"]) {
@@ -85,86 +85,18 @@ async function configFile(
   if (!present.value) return good({});
   return attempt(async () => Bun.TOML.parse(await readFile(path, "utf8")));
 }
-const Config = z.object({
-  tickets: z.string().min(1).default(".agents/tickets"),
-});
 const WsConfig = z.object({ trunk: z.string().min(1).default("trunk()") });
 export async function context(path: string) {
   const repo = await repository(path);
-  const raw = await committedConfig(repo.root, repo.store !== null);
-  if (!raw.ok) return raw;
-  const config = Config.safeParse(raw.value);
-  if (!config.success) return bad(`.agx.toml: ${config.error.message}`);
-  const declared = config.data.tickets;
-  const directory = resolve(
-    repo.root,
-    declared.startsWith("~/") ? join(homedir(), declared.slice(2)) : declared,
-  );
-  return good({ ...repo, directory });
-}
-async function committedConfig(
-  root: string,
-  jj: boolean,
-): Promise<Attempt<unknown>> {
-  const read = async (args: string[]) => {
-    const invocation = readonlyCommand(args, root);
-    const child = Bun.spawn(invocation.cmd, {
-      cwd: root,
-      env: invocation.env,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: 5000,
-    });
-    const [exit, out, err] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    return { exit, out, err };
-  };
-  const result = await attempt(async () => {
-    if (!jj) {
-      const head = await read([
-        "git",
-        "--no-optional-locks",
-        "rev-parse",
-        "--verify",
-        "--quiet",
-        "HEAD^{commit}",
-      ]);
-      if (head.exit !== 0) return good({});
-    }
-    const file = await read(
-      jj
-        ? ["jj", ...JJ_READ_ARGS, "file", "show", "-r", "@", ".agx.toml"]
-        : ["git", "--no-optional-locks", "show", "HEAD:.agx.toml"],
-    );
-    if (file.exit === 0)
-      return attempt((): unknown => Bun.TOML.parse(file.out));
-    // On the common present-file path one invocation suffices. A failed read
-    // still needs a listing to distinguish absence from a real read failure.
-    const names = await read(
-      jj
-        ? ["jj", ...JJ_READ_ARGS, "file", "list", "-r", "@", ".agx.toml"]
-        : [
-            "git",
-            "--no-optional-locks",
-            "ls-tree",
-            "--name-only",
-            "HEAD",
-            "--",
-            ".agx.toml",
-          ],
-    );
-    if (names.exit !== 0)
-      return bad(
-        `${root}: cannot read committed .agx.toml: ${names.err.trim()}`,
-      );
-    if (names.out.trim() === "") return good({});
-    return bad(`cannot read committed .agx.toml: ${file.err.trim()}`);
+  const config = await resolveAgxConfig(repo.root, {
+    vcs: repo.store === null ? "git" : "jj",
   });
-  return result.ok ? result.value : result;
+  if (!config.ok) return config;
+  return good({
+    ...repo,
+    root: config.value.root,
+    directory: config.value.tickets,
+  });
 }
 type Context = Extract<
   Awaited<ReturnType<typeof context>>,

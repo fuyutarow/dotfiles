@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.0 — 2026-10-23
+
+- Add one trunk-policy and main-checkout local agx configuration reader.
+
 ## 0.16.1 — 2026-10-23
 
 - Remove the unused workspace policy reader and workspace exclusion key.

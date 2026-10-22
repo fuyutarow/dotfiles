@@ -1,16 +1,29 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
 import { expect } from "bun:test";
+
+export async function writeLocalTicketConfig(root: string, tickets: string) {
+  const directory = join(
+    process.env.XDG_CONFIG_HOME ?? join(root, "fixture-config"),
+    "agx/repos",
+  );
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    join(directory, "repo.toml"),
+    `schema = 1\nroot = ${JSON.stringify(root)}\ntickets = ${JSON.stringify(tickets)}\n`,
+  );
+}
 
 /** A disposable Git tree with a committed home; all files stay under the caller's temp root. */
 export async function prepareTicketRepo(root: string, tickets = ".") {
   await writeFile(
-    join(root, ".agx.toml"),
-    `tickets = ${JSON.stringify(tickets)}\n`,
+    join(root, "agx.toml"),
+    `schema = 1\ntickets = ${JSON.stringify(isAbsolute(tickets) ? ".agents/tickets" : tickets)}\n`,
   );
+  if (isAbsolute(tickets)) await writeLocalTicketConfig(root, tickets);
   for (const args of [
     ["init", "--quiet"],
-    ["add", "--", ".agx.toml"],
+    ["add", "--", "agx.toml"],
     [
       "-c",
       "user.name=Fixture",

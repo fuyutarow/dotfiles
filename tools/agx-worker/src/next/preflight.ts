@@ -17,6 +17,7 @@ import { pinContinuation } from "./continue.ts";
 import { readRouteUsage } from "./usage.ts";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { DispatchBindingSchema } from "../../../shared/src/agx-dispatch-binding.ts";
+import { AgxConfigError } from "../../../shared/src/agx-config.ts";
 
 export type PreflightFlags = Readonly<
   Record<string, string | boolean | undefined>
@@ -82,7 +83,7 @@ export async function preflight(
   cwd: string,
   flags: PreflightFlags = {},
 ) {
-  const failures: string[] = [];
+  const failures: (string | AgxConfigError)[] = [];
   const add = (reason: string, repair: string) => {
     failures.push(`${reason.replaceAll(/[\r\n]+/gu, "; ")}; repair: ${repair}`);
   };
@@ -120,8 +121,13 @@ export async function preflight(
     located.ok && located.vcs === undefined
       ? await ticketContext(cwd)
       : located;
-  if (!repository.ok)
-    add(repository.error, "repair the repository and committed .agx.toml");
+  if (!repository.ok && repository.configurationError !== undefined)
+    failures.push(repository.configurationError);
+  else if (!repository.ok)
+    add(
+      repository.error,
+      "repair the repository, agx.toml and the XDG_CONFIG_HOME/agx/repos/*.toml override",
+    );
   else {
     const placement = await ticketPlacement(path, repository);
     if (placement !== null)
@@ -140,7 +146,9 @@ export async function preflight(
           vcs: worker.vcs,
         }
       : undefined;
-  if (!worker.ok) add(worker.error, "repair the --cd repository");
+  if (!worker.ok && worker.configurationError !== undefined)
+    failures.push(worker.configurationError);
+  else if (!worker.ok) add(worker.error, "repair the --cd repository");
   if (ctx !== undefined && ctx.base_rev === null && ctx.vcs !== undefined)
     add(
       "cannot resolve --cd commit for base_rev",
@@ -341,7 +349,12 @@ export async function preflight(
   };
 }
 
-export function printPreflightFailures(failures: string[]): number {
-  for (const failure of failures) process.stderr.write(`agx: ${failure}\n`);
+export function printPreflightFailures(
+  failures: (string | AgxConfigError)[],
+): number {
+  const lines = failures.map((failure) =>
+    failure instanceof AgxConfigError ? failure.message : `agx: ${failure}`,
+  );
+  for (const line of new Set(lines)) process.stderr.write(`${line}\n`);
   return 2;
 }

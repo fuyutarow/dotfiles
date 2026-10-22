@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0 — 2026-10-23
+
+- Share committed trunk ticket-home configuration and local overrides; reject retired configuration with exit 2.
+
 ## 0.5.0 — 2026-10-23
 
 - Replace repository discovery overrides with AGX_REPOS_ROOT and reject retired doctor variables

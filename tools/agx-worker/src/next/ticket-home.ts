@@ -1,8 +1,8 @@
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { homedir } from "node:os";
-import { fromPromise, fromThrowable } from "neverthrow";
-import { z } from "../../../shared/src/zod.ts";
+import { fromPromise } from "neverthrow";
+import { resolveAgxConfig } from "../../../shared/src/agx-config.ts";
+import { AgxConfigError } from "../../../shared/src/agx-config.ts";
 import { JJ_READ_ARGS } from "../../../shared/src/jj-read.ts";
 import { readonlyCommand } from "../../../shared/src/readonly-command.ts";
 
@@ -37,55 +37,6 @@ export async function treeRead(argv: string[], cwd: string) {
     String,
   );
   return result.isOk() ? result.value : { exit: 2, out: "", err: result.error };
-}
-
-async function committedHome(
-  vcs: "jj" | "git" | undefined,
-  root: string,
-  baseRev: string | null,
-) {
-  if (vcs === undefined || baseRev === null)
-    return { ok: true, declared: ".agents/tickets" } as const;
-  const names = await treeRead(
-    vcs === "jj"
-      ? ["jj", ...JJ_READ_ARGS, "file", "list", "-r", baseRev, ".agx.toml"]
-      : [
-          "git",
-          "--no-optional-locks",
-          "ls-tree",
-          "--name-only",
-          baseRev,
-          "--",
-          ".agx.toml",
-        ],
-    root,
-  );
-  if (names.exit !== 0)
-    return {
-      ok: false,
-      error: `cannot read committed ${join(root, ".agx.toml")}: ${names.err.trim()}`,
-    } as const;
-  if (names.out.trim() === "")
-    return { ok: true, declared: ".agents/tickets" } as const;
-  const config = await treeRead(
-    vcs === "jj"
-      ? ["jj", ...JJ_READ_ARGS, "file", "show", "-r", baseRev, ".agx.toml"]
-      : ["git", "--no-optional-locks", "show", `${baseRev}:.agx.toml`],
-    root,
-  );
-  const decoded = fromThrowable(
-    (): unknown => Bun.TOML.parse(config.out),
-    String,
-  )();
-  const checked = z
-    .object({ tickets: z.string().trim().min(1).default(".agents/tickets") })
-    .safeParse(decoded.isOk() ? decoded.value : undefined);
-  if (config.exit !== 0 || !checked.success)
-    return {
-      ok: false,
-      error: `invalid committed ${join(root, ".agx.toml")}: tickets must be a nonempty path`,
-    } as const;
-  return { ok: true, declared: checked.data.tickets } as const;
 }
 
 async function repositoryKind(root: string) {
@@ -138,6 +89,7 @@ export async function ticketContext(cwd: string) {
     return {
       ok: false,
       error: `cannot examine ticket repository at ${resolve(cwd)}`,
+      configurationError: undefined,
     } as const;
   let root = physical;
   let vcs: "jj" | "git" | undefined;
@@ -155,20 +107,6 @@ export async function ticketContext(cwd: string) {
     root = parent;
   }
   const workspace = root;
-  if (vcs === "jj") {
-    // Ticket storage belongs to the repository, not the dispatch workspace.
-    // Revision reads below use the discovered workspace, skipping invalid markers.
-    const repository = await treeRead(
-      ["jj", ...JJ_READ_ARGS, "workspace", "root", "--name", "default"],
-      workspace,
-    );
-    if (repository.exit !== 0 || repository.out.trim() === "")
-      return {
-        ok: false,
-        error: `cannot resolve repository default workspace at ${workspace}: ${repository.err.trim()}`,
-      } as const;
-    root = await realpath(repository.out.trim());
-  }
   const revision = async (rev: string) => {
     if (vcs === undefined) return null;
     const result = await treeRead(
@@ -199,19 +137,19 @@ export async function ticketContext(cwd: string) {
       : null;
   };
   const base_rev = await revision(vcs === "jj" ? "@" : "HEAD");
-  const config_rev = await revision(vcs === "jj" ? "trunk()" : "HEAD");
-  if (vcs !== undefined && config_rev === null)
+  const config = await resolveAgxConfig(root, { vcs: vcs ?? "none" });
+  if (!config.ok)
     return {
       ok: false,
-      error: `cannot resolve committed ticket configuration at ${root} for ${vcs === "jj" ? "trunk()" : "HEAD"}`,
+      configurationError:
+        config.error instanceof AgxConfigError ? config.error : undefined,
+      error:
+        config.error instanceof Error
+          ? config.error.message
+          : String(config.error),
     } as const;
-  const config = await committedHome(vcs, root, config_rev);
-  if (!config.ok) return config;
-  const declared = config.declared;
-  const home = resolve(
-    root,
-    declared.startsWith("~/") ? join(homedir(), declared.slice(2)) : declared,
-  );
+  root = config.value.root;
+  const home = config.value.tickets;
   return { ok: true, root, home, base_rev, revision, vcs } as const;
 }
 

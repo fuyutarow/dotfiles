@@ -26,13 +26,16 @@ async function fixture(custom?: string) {
   const repo = join(root, "repo");
   const bin = join(root, "bin");
   const records = join(root, "runs.json");
+  const localDirectory = join(root, "config/agx/repos");
+  await mkdir(localDirectory, { recursive: true });
+  const local = join(localDirectory, "repo.toml");
   const home = join(root, "home");
   await mkdir(bin, { recursive: true });
   await mkdir(home);
   const env = {
     ...process.env,
     HOME: home,
-    XDG_CONFIG_HOME: home,
+    XDG_CONFIG_HOME: join(root, "config"),
     XDG_CACHE_HOME: home,
     XDG_STATE_HOME: home,
     BUN_RUNTIME_TRANSPILER_CACHE_PATH: join(root, "transpiler-cache"),
@@ -64,11 +67,24 @@ async function fixture(custom?: string) {
   }
   expect((await run(["jj", "git", "init", repo], root)).code).toBe(0);
   await writeFile(join(repo, ".ws.toml"), 'trunk = "main"\n');
-  if (custom !== undefined) await writeFile(join(repo, ".agx.toml"), custom);
+  if (custom !== undefined)
+    await writeFile(join(repo, "agx.toml"), `schema = 1\n${custom}`);
   await writeFile(join(repo, "base"), "base\n");
   expect((await run(["jj", "commit", "-m", "base"])).code).toBe(0);
   expect(
     (await run(["jj", "bookmark", "create", "main", "-r", "@-"])).code,
+  ).toBe(0);
+  expect(
+    (
+      await run([
+        "jj",
+        "config",
+        "set",
+        "--repo",
+        'revset-aliases."trunk()"',
+        "bookmarks(main)",
+      ])
+    ).code,
   ).toBe(0);
   const shim = join(bin, "agx");
   await writeFile(
@@ -89,7 +105,17 @@ async function fixture(custom?: string) {
     workspace_name: "default",
     ...extra,
   });
-  return { root, repo, home, records, run, tkt, record };
+  return {
+    root,
+    repo,
+    home,
+    initialHome: await readdir(home),
+    local,
+    records,
+    run,
+    tkt,
+    record,
+  };
 }
 const Rows = z.array(
   z.object({
@@ -120,10 +146,10 @@ test("new accepts a hyphenated slug and refuses underscores and uppercase before
   );
 });
 
-test("an uncommitted .agx.toml edit does not move the ticket home", async () => {
+test("an uncommitted agx.toml edit does not move the ticket home", async () => {
   const f = await fixture('tickets = "committed-tickets"\n');
   await writeFile(
-    join(f.repo, ".agx.toml"),
+    join(f.repo, "agx.toml"),
     'tickets = "uncommitted-tickets"\n',
   );
   const result = await f.tkt(["new", "committed"]);
@@ -173,7 +199,7 @@ test("new defaults, template escaping, overwrite refusal and three input lines; 
     (await readdir(f.repo)).filter((name) => !before.includes(name)),
   ).toEqual([".agents"]);
   expect(await readdir(join(f.repo, ".agents"))).toEqual(["tickets"]);
-  expect(await readdir(f.home)).toEqual([]);
+  expect(await readdir(f.home)).toEqual(f.initialHome);
 });
 
 test("declared directory, all five states, dry-run exactly eligible and GC only accepted+landed", async () => {
@@ -307,8 +333,8 @@ test("absolute ticket directory; batch conflict preflight; symlinks never overwr
   const f = await fixture();
   const directory = join(f.root, "external-tickets");
   await writeFile(
-    join(f.repo, ".agx.toml"),
-    `tickets = ${JSON.stringify(directory)}\n`,
+    f.local,
+    `schema = 1\nroot = ${JSON.stringify(f.repo)}\ntickets = ${JSON.stringify(directory)}\n`,
   );
   expect(
     (await f.run(["jj", "commit", "-m", "Declare absolute ticket home"])).code,
@@ -409,4 +435,112 @@ test("retired repository overrides fail with exit 2 even when empty or paired wi
       expect(refused.err).toContain("AGX_REPOS_ROOT");
     }
   }
+});
+
+test.each([
+  {
+    name: "retired file",
+    policy: undefined,
+    legacy: true,
+    message: ".agx.toml is retired; rename it:",
+  },
+  {
+    name: "absolute L1 tickets",
+    policy: 'schema = 1\ntickets = "/absolute"\n',
+    legacy: false,
+    message: "agx/repos/",
+  },
+  {
+    name: "unknown key",
+    policy: "schema = 1\nunknown = true\n",
+    legacy: false,
+    message: "unknown",
+  },
+  {
+    name: "missing schema",
+    policy: 'tickets = "tickets"\n',
+    legacy: false,
+    message: "schema",
+  },
+])(
+  "configuration errors exit 2: $name",
+  async ({ policy, legacy, message }) => {
+    const f = await fixture();
+    if (policy !== undefined) {
+      await writeFile(join(f.repo, "agx.toml"), policy);
+      expect((await f.run(["jj", "commit", "-m", "Invalid policy"])).code).toBe(
+        0,
+      );
+      expect(
+        (await f.run(["jj", "bookmark", "set", "main", "-r", "@-"])).code,
+      ).toBe(0);
+    }
+    if (legacy) await writeFile(join(f.repo, ".agx.toml"), "");
+    for (const args of [["new", "refused"], ["ls"], ["gc"]]) {
+      const result = await f.tkt(args);
+      expect(result.code, result.err).toBe(2);
+      expect(result.err.trim().split("\n")).toHaveLength(1);
+      expect(result.err).toContain(message);
+      expect(result.out).toBe("");
+      if (legacy)
+        expect(result.err.trim()).toBe(
+          `${f.repo}/.agx.toml is retired; rename it: mv .agx.toml agx.toml (machine-local absolute paths go in $XDG_CONFIG_HOME/agx/repos/<name>.toml (default ~/.config/agx/repos/<name>.toml) with root = ${JSON.stringify(f.repo)})`,
+        );
+    }
+  },
+);
+
+test("other operational failures retain exit 1", async () => {
+  const f = await fixture();
+  expect((await f.tkt(["new", "existing"])).code).toBe(0);
+  const conflict = await f.tkt(["new", "existing"]);
+  expect(conflict.code).toBe(1);
+  expect(conflict.err).toContain("tkt:");
+  const template = await f.tkt([
+    "new",
+    "template",
+    "--from",
+    join(f.root, "missing"),
+  ]);
+  expect(template.code).toBe(1);
+  await writeFile(f.records, "invalid");
+  expect((await f.tkt(["ls"])).code).toBe(1);
+});
+
+test("secondary workspace issuance selects XDG L2 by main checkout root", async () => {
+  const f = await fixture('tickets = "policy"\n');
+  const secondary = join(f.root, "secondary");
+  expect(
+    (await f.run(["jj", "workspace", "add", "--name", "secondary", secondary]))
+      .code,
+  ).toBe(0);
+  await writeFile(
+    f.local,
+    `schema = 1\nroot = ${JSON.stringify(f.repo)}\ntickets = "main-local"\n`,
+  );
+  await writeFile(
+    join(secondary, "repo.toml"),
+    'schema = 1\ntickets = "wrong-local"\n',
+  );
+  const result = await f.run([
+    bun,
+    cli,
+    "new",
+    "secondary",
+    "--repo",
+    secondary,
+  ]);
+  expect(result.code, result.err).toBe(0);
+  expect(result.out.trim()).toBe(join(f.repo, "main-local/secondary.md"));
+});
+
+test("duplicate XDG root claims exit 2", async () => {
+  const f = await fixture();
+  const text = `schema = 1\nroot = ${JSON.stringify(f.repo)}\ntickets = "local"\n`;
+  await writeFile(f.local, text);
+  await writeFile(join(f.root, "config/agx/repos/duplicate.toml"), text);
+  const result = await f.tkt(["ls"]);
+  expect(result.code, result.err).toBe(2);
+  expect(result.err).toContain("two files claim root");
+  expect(result.out).toBe("");
 });

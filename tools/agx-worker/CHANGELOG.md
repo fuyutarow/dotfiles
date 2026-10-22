@@ -1,5 +1,9 @@
 # Changelog
 
+## 9.0.0 — 2026-10-23
+
+- Read ticket homes through shared agx.toml policy and XDG root-selected overrides; reject retired .agx.toml.
+
 ## 8.8.1 — 2026-10-23
 
 - Allow workspace-write workers to update the code-search index cache from the shared-cache list.

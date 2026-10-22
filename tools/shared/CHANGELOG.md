@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.1 — 2026-10-23
+
+- Remove the unused workspace policy reader and workspace exclusion key.
+
 ## 0.16.0 — 2026-10-23
 
 - Add shared Jev endpoint resolver with legacy variable rejection

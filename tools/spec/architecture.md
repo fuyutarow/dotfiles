@@ -103,7 +103,8 @@ One slug lets a name find its unit, tree and run, so an entry point holds no sta
 
 The mechanism (`agx-worker`, `agx-ws`, the integrator slot, guards, `agent-resource-run`) is common and knows no
 repository. The policy of each repository has one home: `.agx.toml` at the repository root (read
-today by `tools/shared/src/workspace-policy.ts` for `workspace_exclude`). Five sites run five different policies
+today by `tools/agx-worker/src/next/ticket-home.ts` and `tools/agx-ticket/src/tickets.ts`;
+see [agx-config.md](agx-config.md) for the planned single reader). Five sites run five different policies
 (trunk, integration shape, gate, after-integrate steps, worker commits), so none of them may be
 compiled into the mechanism. Acceptance of the design is that the same mechanism runs two real,
 different `.agx.toml` files (dotfiles and coralbase) with no change to its computation. Status: not
@@ -111,7 +112,7 @@ started (release R5).
 
 Keys the declaration is to carry: `trunk`, `integrate` (`rebase`, `jj-merge`, `command`),
 `integrate_command`, `gate`, `gate_skip_if_tested_diff_zero`, `after_integrate`, `push`,
-`worker_bookmarks`, `readiness`, `readiness_at`, `union_merge`, `workspace_exclude`, `resources`.
+`worker_bookmarks`, `readiness`, `readiness_at`, `union_merge`, `resources`.
 
 ## 5. Dispatch invariants I1 to I17
 

@@ -1,0 +1,12 @@
+tools/agx-worker/src/next/capacity.ts	agents/models/roster.ts
+tools/agx-worker/src/next/continue.ts	agents/models/roster.ts
+tools/agx-worker/src/next/history.ts	agents/models/roster.ts
+tools/agx-worker/src/next/preflight.ts	agents/models/roster.ts
+tools/agx-worker/src/next/public.ts	agents/models/roster.ts
+tools/agx-worker/src/next/route.ts	agents/models/roster.ts
+tools/agx-worker/src/next/run.ts	agents/models/roster.ts
+tools/agx-worker/src/next/usage.ts	agents/models/roster.ts
+tools/agx-worker/src/workers/codex.ts	agents/models/roster.ts
+tools/preset/src/preset.ts	agents/hooks/zod.ts
+tools/serena-foreground/src/serena-foreground.ts	tools/agent-resource-run/src/index.ts
+tools/shared/src/zod.ts	agents/hooks/vendor/deps.js

@@ -17,11 +17,10 @@ async function runDoctor(json: boolean): Promise<number> {
   const results = await Promise.all(
     targets.map(async (target) => {
       const result = await attempt(async () => {
-        const child = Bun.spawn([target, "doctor"], {
+        const child = Bun.spawn([target, "doctor", "--quiet"], {
           stdin: "ignore",
           stdout: "pipe",
           stderr: "pipe",
-          env: { ...process.env, AGX_DOCTOR_QUIET: "1" },
           timeout: 30_000,
         });
         const [stdout, stderr, exitCode] = await Promise.all([
@@ -116,6 +115,13 @@ function rejectPrototypeFlag(type: string, flag: string): void {
   }
 }
 async function main(): Promise<void> {
+  if (Object.hasOwn(process.env, "AGX_DOCTOR_QUIET")) {
+    process.stderr.write(
+      "agx worker doctor: AGX_DOCTOR_QUIET is no longer supported; use --quiet\n",
+    );
+    process.exitCode = 2;
+    return;
+  }
   const parsed = cli({
     name: "agx-doctor",
     parameters: [],

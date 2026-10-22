@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.2.0 — 2026-10-23
+
+- Replace doctor quiet environment control with --quiet and reject the retired variable.
+
 ## 8.1.1 — 2026-10-23
 
 - Import zod from shared module

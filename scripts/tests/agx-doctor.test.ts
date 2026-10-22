@@ -732,3 +732,68 @@ test("doctor reports only current actionable runs and keeps history in ls --all"
   for (const id of ["legacy-imported", "pre-contract", "judged"])
     expect(history.stdout).toContain(`"id":"${id}"`);
 });
+
+const doctorOwners = [
+  ["agx-worker", "agx-worker/src/next/cli.ts"],
+  ["agx-ws", "agx-ws/src/ws.ts"],
+  ["agx-ticket", "agx-ticket/src/tkt.ts"],
+] as const;
+
+for (const [tool, source] of doctorOwners) {
+  const entry = join(import.meta.dir, "../../tools", source);
+  test(`${tool} doctor --quiet suppresses only the summary and is documented`, async () => {
+    const f = await fixture(`quiet-${tool}`);
+    const normal = await run(
+      [process.execPath, entry, "doctor"],
+      f.dotfiles,
+      f.env,
+    );
+    const quiet = await run(
+      [process.execPath, entry, "doctor", "--quiet"],
+      f.dotfiles,
+      f.env,
+    );
+    expect(normal.exitCode, normal.stderr).toBe(0);
+    expect(normal.stderr).toContain("0 finding(s)");
+    expect(quiet.exitCode, quiet.stderr).toBe(normal.exitCode);
+    expect(quiet.stdout).toBe(normal.stdout);
+    expect(quiet.stderr).toBe("");
+    const help = await run(
+      [process.execPath, entry, "doctor", "--help"],
+      f.dotfiles,
+      f.env,
+    );
+    expect(help.exitCode).toBe(0);
+    expect(help.stdout).toContain("--quiet");
+  });
+
+  test.each(["1", "0", ""])(
+    `${tool} doctor rejects retired quiet environment value %j`,
+    async (value) => {
+      const result = await run(
+        [process.execPath, entry, "doctor", "--quiet"],
+        scratch,
+        {
+          ...process.env,
+          AGX_DOCTOR_QUIET: value,
+        },
+      );
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(result.stderr.trim().split("\n")).toHaveLength(1);
+      expect(result.stderr).toContain("AGX_DOCTOR_QUIET");
+      expect(result.stderr).toContain("--quiet");
+    },
+  );
+}
+
+test("composed doctor rejects the retired environment variable with one diagnostic", async () => {
+  const result = await run([process.execPath, ENTRY], scratch, {
+    ...process.env,
+    AGX_DOCTOR_QUIET: "1",
+  });
+  expect(result.exitCode).toBe(2);
+  expect(result.stdout).toBe("");
+  expect(result.stderr.trim().split("\n")).toHaveLength(1);
+  expect(result.stderr).toContain("--quiet");
+});

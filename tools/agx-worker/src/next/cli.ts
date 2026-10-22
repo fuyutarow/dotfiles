@@ -228,9 +228,22 @@ async function main(): Promise<void> {
     );
     exit = await stats(parsed.flags satisfies Flags);
   } else if (commandName === "doctor") {
-    cli(
+    if (Object.hasOwn(process.env, "AGX_DOCTOR_QUIET")) {
+      process.stderr.write(
+        "agx-worker doctor: AGX_DOCTOR_QUIET is no longer supported; use --quiet\n",
+      );
+      process.exitCode = 2;
+      return;
+    }
+    const parsed = cli(
       {
         name: "agx-worker doctor",
+        flags: {
+          quiet: {
+            type: Boolean,
+            description: "suppress the findings summary",
+          },
+        },
         parameters: [],
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,
@@ -242,7 +255,7 @@ async function main(): Promise<void> {
       undefined,
       commandArgs,
     );
-    exit = await doctor();
+    exit = await doctor(parsed.flags.quiet === true);
   } else if (commandName === "roster") {
     const parsed = cli(
       {

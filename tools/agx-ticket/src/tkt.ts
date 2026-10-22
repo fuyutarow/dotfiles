@@ -134,9 +134,19 @@ const doctorCommand = command(
     ...common,
     name: "doctor",
     help: { description: "Read-only registered ticket inventory." },
+    flags: {
+      quiet: { type: Boolean, description: "suppress the findings summary" },
+    },
   },
-  async () =>
-    show(
+  async (args) => {
+    if (Object.hasOwn(process.env, "AGX_DOCTOR_QUIET")) {
+      process.stderr.write(
+        "agx-ticket doctor: AGX_DOCTOR_QUIET is no longer supported; use --quiet\n",
+      );
+      process.exitCode = 2;
+      return;
+    }
+    await show(
       () => doctorTickets(),
       (items) => {
         const output = doctorOutput(items);
@@ -146,13 +156,14 @@ const doctorCommand = command(
           return;
         }
         process.stdout.write(output.value);
-        if (process.env.AGX_DOCTOR_QUIET !== "1")
+        if (args.flags.quiet !== true)
           process.stderr.write(
             `agx-ticket doctor: ${items.length} finding(s)\n`,
           );
         process.exitCode = items.length === 0 ? 0 : 1;
       },
-    ),
+    );
+  },
 );
 await cli({
   ...common,

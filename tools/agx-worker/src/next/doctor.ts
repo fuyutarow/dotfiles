@@ -3,7 +3,7 @@ import { foldedRuns, publishCurrentRuns } from "./store.ts";
 
 const clean = (value: string): string => value.replaceAll(/[\t\r\n]/gu, " ");
 
-export async function doctor(): Promise<number> {
+export async function doctor(quiet = false): Promise<number> {
   const findings: string[] = [];
 
   for (const run of await foldedRuns()) {
@@ -18,7 +18,7 @@ export async function doctor(): Promise<number> {
     return 2;
   }
   process.stdout.write(output.value);
-  if (process.env.AGX_DOCTOR_QUIET !== "1")
+  if (!quiet)
     process.stderr.write(`agx-worker doctor: ${findings.length} finding(s)\n`);
   return findings.length === 0 ? 0 : 1;
 }

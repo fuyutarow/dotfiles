@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.0 — 2026-10-23
+
+- Replace doctor quiet environment control with --quiet and reject the retired variable.
+
 ## 0.10.0 — 2026-10-19
 
 - Remove the bare ws command alias; use agx ws or agx-ws.

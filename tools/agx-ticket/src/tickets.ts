@@ -268,8 +268,7 @@ async function command(
   cwd: string,
   quiet = false,
 ): Promise<Attempt<string>> {
-  if (!quiet && process.env.AGX_DOCTOR_QUIET !== "1")
-    process.stderr.write(`tkt: reading ${args[0]} ${args[1]}\n`);
+  if (!quiet) process.stderr.write(`tkt: reading ${args[0]} ${args[1]}\n`);
   const ran = await attempt(async () => {
     const child = Bun.spawn(args, {
       cwd,

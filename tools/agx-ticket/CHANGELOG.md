@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 — 2026-10-23
+
+- Replace doctor quiet environment control with --quiet and reject the retired variable.
+
 ## 0.3.0 — 2026-10-19
 
 - Remove the bare tkt command alias; use agx ticket or agx-ticket.

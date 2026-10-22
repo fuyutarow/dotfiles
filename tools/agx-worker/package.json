@@ -1,5 +1,5 @@
 {
-  "version": "8.1.1",
+  "version": "8.2.0",
   "name": "@dotfiles/agx-worker",
   "private": true,
   "type": "module",

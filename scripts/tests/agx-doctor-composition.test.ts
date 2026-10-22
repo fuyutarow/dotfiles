@@ -21,7 +21,7 @@ async function fixture() {
     const path = join(bin, tool);
     await writeFile(
       path,
-      `#!${process.execPath}\nconst tool=${JSON.stringify(tool)};\nif(process.env.MODE==="malformed" && tool==="agx-ws") {process.stdout.write("not json\\n");}\nelse if(process.env.MODE!=="clean" && !(process.env.MODE==="empty-failure" && tool==="agx-ws")) process.stdout.write(JSON.stringify({tool,object:tool+"-object",finding:"fixture",remedy:"repair"})+"\\n");\nprocess.exitCode=process.env.MODE==="clean"?0:(tool==="agx-ws" && process.env.MODE==="failure"?3:1);\n`,
+      `#!${process.execPath}\nconst tool=${JSON.stringify(tool)};\nif (JSON.stringify(process.argv.slice(2)) !== JSON.stringify(["doctor", "--quiet"]) || Object.hasOwn(process.env, "AGX_DOCTOR_QUIET")) { console.error("invalid doctor quiet transport"); process.exit(2); }\nif(process.env.MODE==="malformed" && tool==="agx-ws") {process.stdout.write("not json\\n");}\nelse if(process.env.MODE!=="clean" && !(process.env.MODE==="empty-failure" && tool==="agx-ws")) process.stdout.write(JSON.stringify({tool,object:tool+"-object",finding:"fixture",remedy:"repair"})+"\\n");\nprocess.exitCode=process.env.MODE==="clean"?0:(tool==="agx-ws" && process.env.MODE==="failure"?3:1);\n`,
     );
     await chmod(path, 0o755);
   }

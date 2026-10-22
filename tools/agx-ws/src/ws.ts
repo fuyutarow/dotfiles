@@ -280,12 +280,22 @@ const doctorCommand = command(
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
     help: { description: "Read-only registered workspace inventory." },
+    flags: {
+      quiet: { type: Boolean, description: "suppress the findings summary" },
+    },
   },
-  async () => {
+  async (argv) => {
+    if (Object.hasOwn(process.env, "AGX_DOCTOR_QUIET")) {
+      process.stderr.write(
+        "agx ws doctor: AGX_DOCTOR_QUIET is no longer supported; use --quiet\n",
+      );
+      process.exitCode = 2;
+      return;
+    }
     const done = await doctorWorkspaces();
     if (!done.ok) {
       fail(done.error);
-      if (process.env.AGX_DOCTOR_QUIET !== "1")
+      if (argv.flags.quiet !== true)
         process.stderr.write("agx ws doctor: error\n");
       return;
     }
@@ -296,7 +306,7 @@ const doctorCommand = command(
       return;
     }
     process.stdout.write(output.value);
-    if (process.env.AGX_DOCTOR_QUIET !== "1")
+    if (argv.flags.quiet !== true)
       process.stderr.write(`agx ws doctor: ${done.value.length} finding(s)\n`);
     process.exitCode = done.value.length === 0 ? 0 : 1;
   },

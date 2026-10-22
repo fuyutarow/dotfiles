@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.6.0 — 2026-10-23
+
+- Make the dispatch roster the codex worker model authority and remove hook floor reads
+
 ## 8.5.0 — 2026-10-23
 
 - current-runs.json also publishes endedRuns (24 h) and acceptedRuns (existing workspace) so agx-status reads no records.jsonl

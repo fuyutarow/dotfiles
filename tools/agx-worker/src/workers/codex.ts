@@ -2,15 +2,16 @@
 // The main loop invokes this file directly; tests also exercise it as a child process.
 //
 // WHY A COMMAND, not a recipe pasted into every relay prompt: the recipe drifted (a dropped
-// `</dev/null` hung two runs for their whole budget), relays summarized instead of relaying, and a
-// wrapped `codex` escapes the model-floor hook, which only sees the Bash command line. This file
-// owns the invocation so a caller only has to read the receipt (agx C2/C3).
+// `</dev/null` hung two runs for their whole budget), relays summarized instead of relaying, and
+// this file owns the invocation so a caller only has to read the receipt (agx C2/C3). The selected
+// dispatch-roster row is the only authority for the model and effort this worker runs.
 //
 // Internal CLI contract (designing-command-line-interfaces C0–C5)
 //   C0  consumers   agx main loop; tests invoke the internal file directly.
-//   C1  invocation  `bun tools/agx-worker/src/workers/codex.ts` (--choice ID | --model M --effort E) --sandbox S --cd DIR [--timeout-s N]
+//   C1  invocation  `bun tools/agx-worker/src/workers/codex.ts --choice ID [--model M] [--effort E] --sandbox S --cd DIR [--timeout-s N]
 //                   [--receipt-dir D] (--prompt-file F | prompt on stdin)
-//                   model, effort, sandbox and cd are REQUIRED: a bare codex inherits config.toml.
+//                   --choice supplies model and effort; sandbox and cd are REQUIRED because a bare
+//                   codex inherits config.toml. Optional model/effort flags only assert the row.
 //                   --resume THREAD continues that codex session in place of a fresh one: same flags,
 //                   the receipt, progress and cause handling are those of a fresh run.
 //                   --choice names a codex-route row of agents/models/dispatch-roster.toml (the roster
@@ -25,7 +26,7 @@
 //                   line with the duration. Never silent for longer than HEARTBEAT_S.
 //   C4  outcomes    exit 0 ok (codex exit 0 and a non-empty last message)
 //                        1 codex-failed (nonzero exit, or exit 0 with no last message)
-//                        2 refused (usage, floor, sandbox/effort policy) — codex never started
+//                        2 refused (usage, roster, sandbox/effort policy) — codex never started
 //                        3 timeout, stdin-wait or spin (the receipt distinguishes them)
 //                       75 capacity (temporary vendor unavailability, not a worker failure)
 //                      every non-ok receipt has a non-empty `cause` (codex's last error event, else
@@ -50,11 +51,6 @@ import { fromThrowable } from "neverthrow";
 import { jsonOf, jsonText, z } from "../../../shared/src/zod.ts";
 import { attempt, errorMessage } from "../../../shared/src/attempt.ts";
 import { loadRoster } from "../../../../agents/models/roster.ts";
-import {
-  judge,
-  ordersIn,
-  parseFloorConfig,
-} from "../../../shared/src/model-orders.ts";
 import {
   lastError,
   progressWriter,
@@ -93,18 +89,6 @@ const STDIN_WAIT_MS =
     ? 30_000
     : Math.max(1, Number(process.env.AGX_CODEX_TEST_STDIN_WAIT_MS));
 const PROGRESS_INTERVAL_MS = progressIntervalMs();
-const FLOOR_CONFIG =
-  process.env.MODEL_FLOOR_CONFIG ??
-  join(
-    import.meta.dir,
-    "..",
-    "..",
-    "..",
-    "..",
-    "agents",
-    "hooks",
-    "model-floor.toml",
-  );
 // Test seam: the codex binary to run (a fake in tests). Never a model or sandbox override.
 const CODEX_BIN = process.env.AGX_CODEX_BIN ?? "codex";
 
@@ -153,8 +137,8 @@ const argv = cli(
       description:
         "Run one bounded `codex exec` and print a JSON receipt (exit, tokens, last message, duration).",
       examples: [
-        "bun tools/agx-worker/src/workers/codex.ts --model gpt-6-luna --effort medium --sandbox read-only --cd . --prompt-file brief.md",
-        "echo 'Reply OK' | bun tools/agx-worker/src/workers/codex.ts --model gpt-6-luna --effort low --sandbox read-only --cd /tmp",
+        "bun tools/agx-worker/src/workers/codex.ts --choice luna-medium --sandbox read-only --cd . --prompt-file brief.md",
+        "echo 'Reply OK' | bun tools/agx-worker/src/workers/codex.ts --choice luna-low --sandbox read-only --cd /tmp",
       ],
     },
     flags: {
@@ -165,11 +149,12 @@ const argv = cli(
       },
       model: {
         type: String,
-        description: "exact model slug (checked against model-floor.toml)",
+        description:
+          "optional model assertion; must equal the selected roster row",
       },
       effort: {
         type: String,
-        description: `reasoning effort: ${EFFORTS.join(" | ")}`,
+        description: `optional effort assertion; must equal the selected roster row (${EFFORTS.join(" | ")})`,
       },
       sandbox: {
         type: String,
@@ -219,7 +204,7 @@ const argv = cli(
   cliArgv(),
 );
 
-// Resolved model and effort: from --model/--effort, or from the roster row --choice names (below).
+// Resolved model and effort: always from the roster row --choice names (below).
 // Declared before emit() so every receipt, refusals included, shows what was actually ordered.
 let model = argv.flags.model;
 let effort = argv.flags.effort;
@@ -294,10 +279,6 @@ const { choice, sandbox, cd, timeoutS, promptFile, resume } = argv.flags;
 if (resume !== undefined && resume.trim() === "")
   refuse("--resume needs the codex thread id of the session to continue");
 if (choice !== undefined) {
-  if (model !== undefined || effort !== undefined)
-    refuse(
-      "give --choice OR --model/--effort, not both — --choice already sets model and effort",
-    );
   const roster = await loadRoster();
   if (!roster.ok) refuse(`cannot read the dispatch roster: ${roster.error}`);
   const row = roster.value.choice.find((c) => c.id === choice);
@@ -308,21 +289,31 @@ if (choice !== undefined) {
         .map((c) => c.id)
         .join(", ")}); a claude row runs through agx (run-claude.ts)`,
     );
+  if (model !== undefined && model !== row?.model)
+    refuse(
+      `--model '${model}' does not match the selected roster row '${choice}' model '${row?.model}'`,
+    );
+  if (effort !== undefined && effort !== row?.effort)
+    refuse(
+      `--effort '${effort}' does not match the selected roster row '${choice}' effort '${row?.effort}'`,
+    );
   model = row?.model;
   effort = row?.effort;
   selectedPrices = row;
+} else {
+  refuse(
+    "--choice is required; model and effort come from a codex-route roster row",
+  );
 }
 const missing = [
-  ["--model", model],
-  ["--effort", effort],
   ["--sandbox", sandbox],
   ["--cd", cd],
 ].flatMap(([flag, v]) => (v === undefined || v === "" ? [flag] : []));
 if (missing.length > 0)
   refuse(
-    `missing ${missing.join(", ")} — every call names model, effort, sandbox and directory`,
+    `missing ${missing.join(", ")} — the roster supplies model and effort; every call names sandbox and directory`,
   );
-if (!EFFORTS.includes(String(effort)))
+if (!EFFORTS.includes(effort))
   refuse(
     effort === "ultra"
       ? "effort ultra starts codex's own unbounded subagent fan-out, which the local P7 envelope cannot admit; use max (the deepest single agent) or an isolated runner"
@@ -338,28 +329,6 @@ if (!Number.isInteger(timeoutS) || timeoutS < 1 || timeoutS > MAX_TIMEOUT_S)
   refuse(
     `--timeout-s must be an integer from 1 to ${MAX_TIMEOUT_S}, got ${timeoutS}`,
   );
-
-// The same judgment the model-floor hook makes on a Bash command line, made on the command this
-// file is about to run: a wrapped codex must not be the way around the floor.
-const floorProblem = await attempt(() => {
-  const config = parseFloorConfig(
-    Bun.TOML.parse(readFileSync(FLOOR_CONFIG, "utf8")),
-  );
-  if (!config.ok)
-    return `model-floor config ${FLOOR_CONFIG} is invalid: ${config.errors.join("; ")}`;
-  const problems = ordersIn(`codex exec -m ${String(model)}`).flatMap((o) => {
-    const p = judge(o, config.floors);
-    return p === undefined ? [] : [p];
-  });
-  return problems.length > 0
-    ? `model-floor: ${problems.join("; ")}`
-    : undefined;
-});
-if (!floorProblem.ok)
-  refuse(
-    `cannot read the model floor ${FLOOR_CONFIG}: ${errorMessage(floorProblem.error)}`,
-  );
-if (floorProblem.value !== undefined) refuse(floorProblem.value);
 
 // HOST DECLARATION: a box where codex's own sandbox cannot exist. codex sandboxes with bwrap on
 // Linux, which needs an unprivileged user namespace; a Docker-default container (seccomp filter, no
@@ -450,7 +419,7 @@ const execFlags = [
   "--json",
   "--skip-git-repo-check",
   "-m",
-  String(model),
+  model,
   "-c",
   `model_reasoning_effort="${effort}"`,
   // Keep headless approvals independent of the interactive AutoReview default, also on resume.

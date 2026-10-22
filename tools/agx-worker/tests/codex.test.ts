@@ -213,10 +213,8 @@ function run(
   };
 }
 const FULL = [
-  "--model",
-  "gpt-6-luna",
-  "--effort",
-  "medium",
+  "--choice",
+  "luna-medium",
   "--sandbox",
   "read-only",
   "--cd",
@@ -418,7 +416,7 @@ describe("agx", () => {
 
   test("omitting sandbox remains refused before Codex starts", () => {
     const { bin, log } = fakeCodex(scratch());
-    const r = run([...FULL.slice(0, 4), ...FULL.slice(6)], {
+    const r = run([...FULL.slice(0, 2), ...FULL.slice(4)], {
       AGX_CODEX_BIN: bin,
     });
     expect(r.code).toBe(2);
@@ -428,16 +426,12 @@ describe("agx", () => {
   });
 
   test.each([
+    ["missing choice, sandbox and cd", [], "--choice is required"],
     [
-      "missing model, effort, sandbox and cd",
-      [],
-      "missing --model, --effort, --sandbox, --cd",
-    ],
-    [
-      "a model below its family's floor",
+      "a free model override without a roster choice",
       [
         "--model",
-        "gpt-5.6-luna",
+        "gpt-5.6-terra",
         "--effort",
         "medium",
         "--sandbox",
@@ -445,29 +439,13 @@ describe("agx", () => {
         "--cd",
         ".",
       ],
-      "model-floor:",
-    ],
-    [
-      "a model family with no floor",
-      [
-        "--model",
-        "gpt-9-nova",
-        "--effort",
-        "medium",
-        "--sandbox",
-        "read-only",
-        "--cd",
-        ".",
-      ],
-      "model-floor:",
+      "--choice is required",
     ],
     [
       "danger-full-access",
       [
-        "--model",
-        "gpt-6-luna",
-        "--effort",
-        "medium",
+        "--choice",
+        "luna-medium",
         "--sandbox",
         "danger-full-access",
         "--cd",
@@ -476,10 +454,10 @@ describe("agx", () => {
       "isolated runner only",
     ],
     [
-      "effort ultra",
+      "an effort override that differs from the roster row",
       [
-        "--model",
-        "gpt-6-luna",
+        "--choice",
+        "luna-medium",
         "--effort",
         "ultra",
         "--sandbox",
@@ -487,7 +465,7 @@ describe("agx", () => {
         "--cd",
         ".",
       ],
-      "cannot admit",
+      "does not match the selected roster row",
     ],
     [
       "a timeout above the ceiling",
@@ -667,17 +645,17 @@ describe("agx", () => {
     ).toBe(id);
   });
 
-  test("--emit-envelope still refuses what a run would refuse", () => {
+  test("--emit-envelope refuses a model assertion that differs from the roster row", () => {
     const dir = scratch();
     const path = join(dir, "job.resource.json");
     const p = Bun.spawnSync(
       [
         "bun",
         script,
+        "--choice",
+        "luna-low",
         "--model",
-        "gpt-5.6-luna",
-        "--effort",
-        "low",
+        "gpt-5.6-terra",
         "--sandbox",
         "read-only",
         "--cd",
@@ -703,18 +681,52 @@ describe("agx", () => {
     expect(argv).toContain('model_reasoning_effort="max"');
   });
 
+  test("a matching --model assertion cannot change the selected row or require floor config", () => {
+    const { bin, log } = fakeCodex(scratch());
+    const r = run(
+      [
+        "--choice",
+        "luna-medium",
+        "--model",
+        "gpt-6-luna",
+        "--sandbox",
+        "read-only",
+        "--cd",
+        tmpdir(),
+      ],
+      {
+        AGX_CODEX_BIN: bin,
+        MODEL_FLOOR_CONFIG: join(tmpdir(), "missing-model-floor.toml"),
+      },
+    );
+    expect(r.code).toBe(0);
+    expect(r.receipt.model).toBe("gpt-6-luna");
+    const argv = readFileSync(log, "utf8").split("\n");
+    expect(argv[argv.indexOf("-m") + 1]).toBe("gpt-6-luna");
+  });
+
   test.each([
     [["--choice", "sonnet-high"], "is not a codex-route row"],
-    [["--choice", "luna-high", "--model", "gpt-6-luna"], "not both"],
-  ])("--choice %p is refused before codex starts", (args, why) => {
-    const { bin, log } = fakeCodex(scratch());
-    const r = run([...args, "--sandbox", "read-only", "--cd", tmpdir()], {
-      AGX_CODEX_BIN: bin,
-    });
-    expect(r.code).toBe(2);
-    expect(r.receipt.why).toContain(why);
-    expect(existsSync(log)).toBe(false);
-  });
+    [
+      ["--choice", "luna-high", "--model", "gpt-5.6-terra"],
+      "does not match the selected roster row",
+    ],
+    [
+      ["--choice", "luna-medium", "--effort", "high"],
+      "does not match the selected roster row",
+    ],
+  ])(
+    "roster authority check %p is refused before codex starts",
+    (args, why) => {
+      const { bin, log } = fakeCodex(scratch());
+      const r = run([...args, "--sandbox", "read-only", "--cd", tmpdir()], {
+        AGX_CODEX_BIN: bin,
+      });
+      expect(r.code).toBe(2);
+      expect(r.receipt.why).toContain(why);
+      expect(existsSync(log)).toBe(false);
+    },
+  );
 
   test("an empty prompt is refused", () => {
     const { bin, log } = fakeCodex(scratch());
@@ -936,7 +948,7 @@ describe("agx", () => {
     expect(r.receipt.outcome).toBe("ok");
     const argv = readFileSync(log, "utf8").split("\n");
     expect(argv.slice(0, 2)).toEqual(["exec", "resume"]);
-    // the model-floor hook requires -m on every codex exec line
+    // Every resume keeps the roster-selected model explicit on the codex exec line.
     expect(argv[argv.indexOf("-m") + 1]).toBe("gpt-6-luna");
     expect(argv).toContain('model_reasoning_effort="medium"');
     // `codex exec resume` has no --sandbox / -C: the sandbox goes in as a config override

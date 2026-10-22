@@ -40,20 +40,25 @@ const safeWorkspace: Omit<WorkspaceFacts, "open"> = {
 };
 
 test("unknown unreadable process keeps comm and exe in the plan reason", () => {
-  const root = tempRoot("reclaim-polysearch-process-");
+  const root = tempRoot("reclaim-example-search-process-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
     rmSync(root, { recursive: true, force: true });
   });
   for (const code of ["EACCES", "EPERM"]) {
-    const proc = procFixture(join(root, code), "polysearch-ws", ["cwd"], code);
+    const proc = procFixture(
+      join(root, code),
+      "example-search-ws",
+      ["cwd"],
+      code,
+    );
     const open = collectProcesses(proc).openPaths(root);
     const judgement = judgeWorkspace({ ...safeWorkspace, open });
     expect(judgement.verdict).toBe("ASK");
     const reason = processDecisionText(judgement.reason);
     expect(reason).toContain("pid 9999999");
-    expect(reason).toContain("comm=polysearch-ws");
-    expect(reason).toContain("exe=/usr/bin/polysearch-ws");
+    expect(reason).toContain("comm=example-search-ws");
+    expect(reason).toContain("exe=/usr/bin/example-search-ws");
   }
 });
 

@@ -1,3 +1,5 @@
+> Project identifiers in this historical record have been generalized; consumer paths below are illustrative, not exact retrieval locations.
+
 # GPU third-stall admission watch — 2026-10-21
 
 ## Result
@@ -10,7 +12,7 @@ background watch was started.
 ## Declared request
 
 - Handoff file: `/tmp/dotfiles-third-gpu-check-manifest-path.txt`
-- Manifest: `/home/fuyu/.local/state/firedancer-admission/ctw-impl/gpu.resource.json`
+- Manifest: `/home/fuyu/.local/state/example-repo-admission/ctw-impl/gpu.resource.json`
 - Manifest SHA-256: `8372e7d68c12b5174dce0dcefb2953bfdfd9cda02c92c51108bb374ec63502b3`
 - Structural read-only validation: schema `1`; job `ctw-impl-gpu`; GPU `0`;
   declared VRAM peak `2147483648` bytes; `child_fanout` `0`; walltime `240` seconds.
@@ -22,7 +24,7 @@ background watch was started.
 - Path: `/home/fuyu/dotfiles/tools/agent-resource-run/src/agent-resource-run.ts`
 - Version: `agent-resource-run 1.5.12`
 - Invocation (with no workload command):
-  `agent-resource-run --manifest /home/fuyu/.local/state/firedancer-admission/ctw-impl/gpu.resource.json --check-only`
+  `agent-resource-run --manifest /home/fuyu/.local/state/example-repo-admission/ctw-impl/gpu.resource.json --check-only`
 
 ## Attempt receipt
 

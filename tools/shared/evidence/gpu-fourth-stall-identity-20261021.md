@@ -1,3 +1,5 @@
+> Project identifiers in this historical record have been generalized; consumer paths below are illustrative, not exact retrieval locations.
+
 # GPU fourth-stall identity receipt — 2026-10-21
 
 ## Scope and clock
@@ -12,7 +14,7 @@
 ## Manifest handoff
 
 - Verified caller GPU manifest:
-  `/home/fuyu/.local/state/firedancer-admission/ktm-registry/test.resource.json:1`.
+  `/home/fuyu/.local/state/example-repo-admission/ktm-registry/test.resource.json:1`.
   Its JSON declares `schema: 1`, `job_id: ktm-registry-parity`,
   `device.kind: gpu`, and `device.gpu_id: 0`.
 - Handoff written as exactly that absolute path, one line, to

@@ -52,7 +52,7 @@ export const agx290Marker = {
   choice: "luna-medium",
   pick_source: "resume",
   started_at: "2026-10-11T03:18:28.859245666Z",
-  cwd: "/home/fuyu/Workspace/firedancer-arm-c6u17",
+  cwd: "/home/fuyu/Workspace/example-repo-arm-c6u17",
   dispatcher_session: fixtureSession,
   phase: "working after interim RETURN 1",
   worker_session: "01a128f6-13c7-79c0-b24f-fbb979040b9f",
@@ -66,7 +66,7 @@ export const agx290Marker = {
   ticket: {
     writes: ["agent-notes/c6_u17.md", "packages/ModelRegistry.jl/**"],
     name: "c6_u17",
-    path: "/home/fuyu/.local/state/agx/tickets/firedancer-arm-c6u17/261011-c6_u17.md",
+    path: "/home/fuyu/.local/state/agx/tickets/example-repo-arm-c6u17/261011-c6_u17.md",
     lane: "implementation",
     kind: "compute",
     labels: ["implementation"],

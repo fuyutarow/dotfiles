@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5 — 2026-10-23
+
+- Generalize consumer identifiers in fixtures and source comments
+
 ## 0.2.4 — 2026-10-17
 
 - Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.

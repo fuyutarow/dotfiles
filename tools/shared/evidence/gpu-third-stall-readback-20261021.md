@@ -1,3 +1,5 @@
+> Project identifiers in this historical record have been generalized; consumer paths below are illustrative, not exact retrieval locations.
+
 # GPU third-stall readback — 2026-10-21
 
 ## Receipt boundary
@@ -45,7 +47,7 @@ not process age and not a D-state duration.
 
 ## Historical refusal versus current snapshot
 
-`/home/fuyu/.local/state/firedancer-admission/ctw-impl/parity.log:3-6` records
+`/home/fuyu/.local/state/example-repo-admission/ctw-impl/parity.log:3-6` records
 the 04:45Z refusal as `tgid=967361 tid=976782 leader_state=Z task_state=D
 wchan=dxgvmb_send_sync_msg; observations=2 interval_ms>=3000`, then code 69.
 That recorded blocked TGID/TID is distinct from dispatch's reported cached-holder
@@ -70,7 +72,7 @@ not establish holder identity or a driver cause.
 
 ## Verified manifest handoff
 
-`/home/fuyu/.local/state/firedancer-admission/ctw-impl/gpu.resource.json:1`
+`/home/fuyu/.local/state/example-repo-admission/ctw-impl/gpu.resource.json:1`
 is an existing caller declaration: schema `1`, job `ctw-impl-gpu`, and
 `device.kind:"gpu"`, `gpu_id:0`, `vram_peak_bytes:2147483648`. It was read at
 04:52:08Z without importing CUDA. The current parser's strict schema requires

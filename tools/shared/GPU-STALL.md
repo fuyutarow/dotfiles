@@ -1,3 +1,5 @@
+> Project identifiers in this historical record have been generalized; consumer paths below are illustrative, not exact retrieval locations.
+
 # WSL GPU stall RCA (2026-10-19)
 
 ## Finding
@@ -9,7 +11,7 @@ The immediate failure is in the WSL GPU-PV `dxg` guest/host request path: GPU ca
 At 18:53 JST on Oct 19, the WSL dxg path failed again with
 `dxgvmb_send_sync_msg: wait_for_completion failed`, followed by
 `dxgkio_query_adapter_info: Ioctl failed: -512`. Only one GPU job was admitted:
-firedancer pe-selcopy (Julia PID 4190016, alive in futex wait), with slot
+example-repo pe-selcopy (Julia PID 4190016, alive in futex wait), with slot
 `gpu.0.0` held by scope-controller PID 4189924. The process observed in D state
 was the sampler's own `nvidia-smi` (PID 45850, wait channel
 `dxgvmb_send_sync_msg`, query `adapter_info`). Earlier the same day, a stalled

@@ -392,10 +392,10 @@ describe("enforce-storage-headroom", () => {
   test.each([
     "systemd-run --user --unit=probe julia probe.jl",
     "agent-resource-run --manifest m.json",
-    "cd ~/Workspace/polysearch-rs && cargo build --release",
+    "cd ~/Workspace/example-search-rs && cargo build --release",
     "cargo test -p core",
     "julia --project=. scripts/run.jl",
-    "polysearch run --config x.toml",
+    "example-search run --config x.toml",
     "time nice julia probe.jl",
     "FOO=1 env BAR=2 cargo bench",
     "mise run test",

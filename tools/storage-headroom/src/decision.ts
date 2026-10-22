@@ -4,7 +4,7 @@
 // vhdx sat at 96% (46 GB free of 931 GB) while inside WSL `df /` still showed 483 GB free —
 // the guest never sees the host pressure, and every experiment kept writing state dumps
 // (58.7 GB of unreferenced .jls/.bin under archives/runs-2026-09-21/artifacts alone) and Rust
-// build output (polysearch-rs/target 62 GB). A full host drive takes down WSL and Windows
+// build output (example-search-rs/target 62 GB). A full host drive takes down WSL and Windows
 // together, so the assert has to sit in front of the commands that CREATE bytes, not in a
 // CLAUDE.md sentence the model can forget under pressure.
 //
@@ -26,7 +26,7 @@
 // canonicalizes its shell tools to tool_name "Bash" + tool_input.command, so this file reads one
 // payload shape for both. The 2026-09-26 near-miss that forced it: a Codex session rebuilt 145 GB
 // of target/ with C: at 3% free because this gate was registered for Claude only.
-// Authored in the firedancer session 2026-09-21 (host C: at 96%), installed here by the dotfiles
+// Authored in the example-repo session 2026-09-21 (host C: at 96%), installed here by the dotfiles
 // owner the same night; config split out 2026-09-22.
 
 import { createHash } from "node:crypto";
@@ -833,7 +833,7 @@ function locate(b: Budget, command: string, cwd: string): string | null {
 }
 
 // Drive thresholds fire only once the whole drive is nearly full; one build tree can grow far
-// faster than that. Measured 2026-09-22: polysearch-rs/target reached 104 GiB (59 GiB of it
+// faster than that. Measured 2026-09-22: example-search-rs/target reached 104 GiB (59 GiB of it
 // target/debug/incremental) after one day of parallel agent builds across worktrees, while the
 // drive gate stayed quiet until C: had under 60 GiB left. A target over its deny budget blocks
 // another build; cleanup remains a separate operation because another session may be using it.

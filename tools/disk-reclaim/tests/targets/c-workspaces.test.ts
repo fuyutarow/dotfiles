@@ -74,7 +74,7 @@ const failed = (c: Candidate) =>
   c.checks.filter((k) => k.ok !== true).map((k) => k.name);
 
 describe("workspaces target", () => {
-  test("sparse firedancer workspace with only tool caches is reclaimable", async () => {
+  test("sparse example-repo workspace with only tool caches is reclaimable", async () => {
     const caches = [
       ".rumdl_cache",
       ".ruff_cache",
@@ -83,7 +83,7 @@ describe("workspaces target", () => {
       "node_modules/.cache",
     ];
     const w = world({ ".gitignore": `${caches.join("/\n")}/\n` });
-    const ws = w.add("firedancer-sparse");
+    const ws = w.add("example-repo-sparse");
     w.jj(ws, "sparse", "set", "--clear", "--add", "a");
     for (const cache of caches) w.write(ws, `${cache}/entry`, "regenerable");
     const declared = loadConfig();

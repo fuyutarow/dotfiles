@@ -1,3 +1,5 @@
+> Project identifiers in this historical record have been generalized; consumer paths below are illustrative, not exact retrieval locations.
+
 # GPU recurrence evidence boundary — 2026-10-21
 
 ## Verdict
@@ -28,7 +30,7 @@ Receipts: incident 1 is supplied evidence, including self-clear in
 wording and mixed leader/task state are bounded in that same report. Incident 3
 is recorded in [gpu-third-stall-readback-20261021.md](gpu-third-stall-readback-20261021.md).
 Incident 4 is the saved checkpoint at
-[/home/fuyu/.local/state/firedancer-admission/ktm-registry/halfway.md:3-10](/home/fuyu/.local/state/firedancer-admission/ktm-registry/halfway.md:3).
+[/home/fuyu/.local/state/example-repo-admission/ktm-registry/halfway.md:3-10](/home/fuyu/.local/state/example-repo-admission/ktm-registry/halfway.md:3).
 
 ## Causal boundary
 

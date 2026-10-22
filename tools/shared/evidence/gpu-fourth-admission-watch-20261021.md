@@ -1,3 +1,5 @@
+> Project identifiers in this historical record have been generalized; consumer paths below are illustrative, not exact retrieval locations.
+
 # GPU fourth admission watch — 2026-10-21
 
 ## Scope and result
@@ -11,7 +13,7 @@ Result: **ADMIT**.
 ## Declaration validated read-only
 
 - Handoff file: `/tmp/dotfiles-fourth-gpu-manifest-path.txt`
-- Manifest path: `/home/fuyu/.local/state/firedancer-admission/ktm-registry/test.resource.json`
+- Manifest path: `/home/fuyu/.local/state/example-repo-admission/ktm-registry/test.resource.json`
 - Installed CLI: `agent-resource-run 1.5.12`
 - Declared job: `ktm-registry-parity`
 - Declared run class: `test`
@@ -25,7 +27,7 @@ threads, `8589934592` bytes host RAM peak, and `1073741824` bytes scratch.
 
 ## First and only probe
 
-- Command: `agent-resource-run --manifest /home/fuyu/.local/state/firedancer-admission/ktm-registry/test.resource.json --check-only`
+- Command: `agent-resource-run --manifest /home/fuyu/.local/state/example-repo-admission/ktm-registry/test.resource.json --check-only`
 - Start UTC: `2026-10-21T05:44:05Z`
 - Start JST: `2026-10-21T14:44:05+0900`
 - End UTC: `2026-10-21T05:44:06Z`

@@ -1,3 +1,5 @@
+> Project identifiers in this historical record have been generalized; consumer paths below are illustrative, not exact retrieval locations.
+
 # GPU-CHILD-REAP-CPU — 2026-10-21
 
 CPU-only exit and await tests passed for Bun 1.4.3 on this WSL2 host.
@@ -70,13 +72,13 @@ This matches the brief's prefix. Accepted report037d48e5 is supplied context;
 its body and historical incident evidence were not independently inspected.
 
 Source citations:
-[canonical_julia.ts:23](/home/fuyu/Workspace/firedancer.ws/ws_khop5-run/launcher/canonical_julia.ts:23)
+[canonical_julia.ts:23](/home/fuyu/Workspace/example-repo.ws/ws_khop5-run/launcher/canonical_julia.ts:23)
 constructs unshare → sh → mount/cd/shift/exec;
-[canonical_julia.ts:71](/home/fuyu/Workspace/firedancer.ws/ws_khop5-run/launcher/canonical_julia.ts:71)
+[canonical_julia.ts:71](/home/fuyu/Workspace/example-repo.ws/ws_khop5-run/launcher/canonical_julia.ts:71)
 spawns with inherited stdio/environment;
-[canonical_julia.ts:76](/home/fuyu/Workspace/firedancer.ws/ws_khop5-run/launcher/canonical_julia.ts:76)
+[canonical_julia.ts:76](/home/fuyu/Workspace/example-repo.ws/ws_khop5-run/launcher/canonical_julia.ts:76)
 registers signal forwarding;
-[canonical_julia.ts:80](/home/fuyu/Workspace/firedancer.ws/ws_khop5-run/launcher/canonical_julia.ts:80)
+[canonical_julia.ts:80](/home/fuyu/Workspace/example-repo.ws/ws_khop5-run/launcher/canonical_julia.ts:80)
 awaits child.exited and propagates status at line 82. The current source assigns
 the immediate-child wait to Bun; it does not establish historical process state.
 The canonical wrapper was read and hashed, never imported or executed.
@@ -116,7 +118,7 @@ uname -sr
 jj --ignore-working-copy log -r @ --no-graph -T 'commit_id ++ "\n"'
 # exit 0 in dotfiles: a553bd5495b6fccf1e9220aae812a1eeb0c73556
 # exit 0 in consumer: dc15f20cb0ea8ea40d839859b2292ac65549ab84
-sha256sum /home/fuyu/Workspace/firedancer.ws/ws_khop5-run/launcher/canonical_julia.ts
+sha256sum /home/fuyu/Workspace/example-repo.ws/ws_khop5-run/launcher/canonical_julia.ts
 # exit 0: db820797c8c171192a67cb025b162dd0c832a80ff3ffc14357c510e561099799
 mktemp -d /tmp/gpu-child-reap-cpu.XXXXXX
 # exit 0: /tmp/gpu-child-reap-cpu.IgHuof

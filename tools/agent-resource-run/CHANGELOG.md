@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.18 — 2026-10-23
+
+- Generalize consumer identifiers in compatibility fixtures
+
 ## 1.5.17 — 2026-10-23
 
 - Require positive GPU evidence before refusing an unavailable D-state wait channel

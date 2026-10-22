@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.18.1 — 2026-10-23
+
+- Generalize consumer identifiers in fixtures and source comments
+
 ## 0.18.0 — 2026-10-23
 
 - Add strict repository verify.always configuration with layered replacement

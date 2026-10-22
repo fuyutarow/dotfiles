@@ -1,3 +1,5 @@
+> Project identifiers in this historical record have been generalized; consumer paths below are illustrative, not exact retrieval locations.
+
 # CUDA driver inspection during a CPU-stage import
 
 ## Verdict
@@ -19,7 +21,7 @@ guarantee.
 
 ## Exact installed provenance and scope
 
-The relevant environment is `/home/fuyu/Workspace/firedancer/envs/gpu`:
+The relevant environment is `/home/fuyu/Workspace/example-repo/envs/gpu`:
 
 | Item | Evidence |
 | --- | --- |
@@ -80,7 +82,7 @@ path first and load the CUDA backend only in an explicit GPU stage. CUDA.jl's
 own conditional-use guidance confirms that CUDA always loads when depended on
 and makes `CUDA.functional()` a post-load capability check, not an import
 avoidance mechanism ([source](https://cuda.juliagpu.org/stable/installation/conditional/)).
-This report identifies no existing Firedancer CPU-only entrypoint that proves
+This report identifies no existing example-repo CPU-only entrypoint that proves
 that boundary; it proposes no source edit.
 
 ## Primary-source provenance
@@ -100,7 +102,7 @@ that boundary; it proposes no source edit.
 | Known: JLL automatic inspection | `JULIA_CUDA_USE_COMPAT=false` returns before helper inspection; preference may override env. |
 | Known: full CUDA import | CUDACore subsequently `dlopen`s and calls `cuInit`; no all-no-touch setting was found in scope. |
 | Uncertain | Whether this host's `dxg` driver call succeeds after the narrow mitigation; runtime was intentionally not run. |
-| Missing | A proven existing Firedancer CPU-only loader boundary that does not import CUDA. |
+| Missing | A proven existing example-repo CPU-only loader boundary that does not import CUDA. |
 
 ## SOKS distillation packet (not SOKS retention)
 
@@ -111,7 +113,7 @@ claim: For CUDA_Driver_jll 13.3.5+0, JULIA_CUDA_USE_COMPAT=false skips only
   automatic forward-compat driver inspection; it cannot guarantee that a
   CUDA/CUDACore import avoids the CUDA driver or dxg.
 installed_provenance:
-  manifest: /home/fuyu/Workspace/firedancer/envs/gpu/Manifest.toml:215-220
+  manifest: /home/fuyu/Workspace/example-repo/envs/gpu/Manifest.toml:215-220
   package_tree: e1545697ad04e71fc9d2d95b8f5f54c1244fb607
   package_cache: /home/fuyu/.julia/packages/CUDA_Driver_jll/NQ7aY
 evidence:

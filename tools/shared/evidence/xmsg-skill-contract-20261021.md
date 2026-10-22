@@ -1,3 +1,5 @@
+> Project identifiers in this historical record have been generalized; consumer paths below are illustrative, not exact retrieval locations.
+
 # xmsg shared-skill contract receipt
 
 Snapshot inspected: `e0dcb72f1da87995487deb6fc331df99bb200bbf` (frozen sources named in the brief). Local executable observed: `xmsg v0.2.1`. This receipt records contract facts for skill authors; it is not a delivery test.
@@ -39,7 +41,7 @@ A timeout can follow successful acceptance. No automatic retries. The Codex rece
 ## Current transport inventory gaps / cautions
 
 - Frozen-source contract supports existing local native endpoints only; listing does not cover every saved, remote, or separately hosted session (above).
-- Known peer report (not independently reproduced here): native interactive Claude `agents --json` inventory and headless relay `ListAgents` inventory differ; some listed Claude recipients fail before `SendMessage` and return exit 4. Exact Claude name `firedancer-agt_xj15` worked in that peer session, not a universal guarantee.
+- Known peer report (not independently reproduced here): native interactive Claude `agents --json` inventory and headless relay `ListAgents` inventory differ; some listed Claude recipients fail before `SendMessage` and return exit 4. Exact Claude name `example-repo-agt_xj15` worked in that peer session, not a universal guarantee.
 - Known peer report: exact Codex queue thread name/ID was accepted as queued, not delivered. Treat both transports' success as accepted/enqueued, never delivery or reply.
 - This run executed only local `xmsg --help` and `xmsg --version`; it did not run a real list or send. Thus no present inventory completeness or live transport reachability is asserted.
 

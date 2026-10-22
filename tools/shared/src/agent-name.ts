@@ -1,5 +1,5 @@
 // The one declared format of an agent session name: `<project-slug>-<role>_<id>`,
-// e.g. `polysearch-v1-agt_f24v`.
+// e.g. `example-search-v1-agt_f24v`.
 //
 // Convention (owner decision 2026-10-15; naming survey urn:uuid:01a13e5a-cec2-750e-b4ab-22efac6ddbce
 // found primary sources silent on a `-`/`_` hierarchy inside one name, so this is a declared

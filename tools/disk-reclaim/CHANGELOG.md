@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.9 — 2026-10-23
+
+- Use neutral workspace and process fixtures
+
 ## 1.4.8 — 2026-10-23
 
 - Report foreign-owned rip-expire entries as named skips while preserving removal failures.

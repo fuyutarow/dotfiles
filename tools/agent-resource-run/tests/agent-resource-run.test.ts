@@ -588,7 +588,7 @@ test.skipIf(!live)(
   30000,
 );
 test.skipIf(!live)(
-  "scope exposes per-run pids.peak and intact inherited polysearch admission",
+  "scope exposes per-run pids.peak and intact inherited example-search admission",
   async () => {
     const f = await fixture(
       manifest({ host_ram_peak_bytes: 1536 * 1024 ** 2 }),
@@ -820,7 +820,7 @@ test.skipIf(!live)(
     }
     const callers = [
       {
-        name: "firedancer launcher/launch.ts via launch_checks.ts",
+        name: "example-repo launcher/launch.ts via launch_checks.ts",
         flags: ["--job-id", "launcher-gpu-0-exclusive"],
         argv: [
           "mise",
@@ -837,23 +837,23 @@ test.skipIf(!live)(
         ],
       },
       {
-        name: "firedancer launcher/jq_submit.py",
+        name: "example-repo launcher/jq_submit.py",
         flags: [],
         argv: ["julia", "--project=envs/gpu", "runner.jl"],
       },
       {
-        name: "polysearch-v1 mise.toml up",
+        name: "example-search-v1 mise.toml up",
         flags: [],
         argv: ["cargo", "update", "--workspace"],
       },
       {
-        name: "polysearch-v1 mise.toml up:check",
+        name: "example-search-v1 mise.toml up:check",
         flags: [],
         argv: ["cargo", "update", "--workspace", "--dry-run"],
       },
       {
-        name: "polysearch-v1 scripts/gate-timings.ts",
-        flags: ["--job-id", "polysearch-v1-gate-fixture"],
+        name: "example-search-v1 scripts/gate-timings.ts",
+        flags: ["--job-id", "example-search-v1-gate-fixture"],
         argv: [
           "cargo",
           "test",

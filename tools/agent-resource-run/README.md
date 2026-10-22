@@ -54,7 +54,7 @@ If scope cleanup fails, times out, or leaves its cgroup populated, it reports HO
 retains the slots and retries until the cgroup is empty or removed. A cleanup error
 never authorizes another job.
 The runner returns the command's exit status, including scope OOM and walltime kills.
-VRAM budget environment variables remain for the firedancer model runner. GPU admission
+VRAM budget environment variables remain for the example-repo model runner. GPU admission
 sums declared GPU reservation peaks against cached device total minus the safety margin,
 deduplicating job and holder scopes by reservation ID and excluding the current reservation
 on its in-scope recheck. There is no sampled runtime VRAM enforcement.
@@ -62,7 +62,7 @@ There is no CPU-set allocator, resource ledger, sampled monitor or peak persiste
 
 `--manifest`, `--check-only`, `--job-id`, `--slot julia-compile` and `status`
 retain their invocation forms. DENY is 69, recovery HOLD is 70, flock timeout is 75.
-The inherited admission receipt and its digest remain available to polysearch's gate;
+The inherited admission receipt and its digest remain available to example-search's gate;
 each scope exposes its own cgroup v2 pids.peak. CPU_IDS is compatibility metadata,
 not exclusive affinity. Thread-count environment variables remain bounded.
 
@@ -180,7 +180,7 @@ cgroup population and retains locks on unconfirmed cleanup; it does not classify
 processes or automatically kill a workload because of this new dxg observation.
 `status` reads slot holders from lslocks and the owner state without taking locks.
 
-`resource-policy.toml` also retains capacity/partition values read by firedancer's
+`resource-policy.toml` also retains capacity/partition values read by example-repo's
 jq_capacity.py and the resident-service partition helper. These values are not an
 aggregate reservation ledger in this runner. The Python helper remains resident-service
 code; runner tests read its state path without loading CUDA.

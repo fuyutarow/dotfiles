@@ -5,7 +5,7 @@ This is the F3 ledger for the initial v2609.1.0 forge. Append on reforge; do not
 ## 0. Existence gate
 
 - Knowledge artifact: the ITERATION_PLAN row, which makes each test a crucial test between named rivals, sized to about 2 min.
-- Blocking failure removed (2026-09-27, firedancer, live session):
+- Blocking failure removed (2026-09-27, research project, live session):
   - A 12-arena battery ran about 1.5 h on an unregistered harness, then was retracted.
   - A permute arm took 1,873 s.
   - Earlier O(n²) runs took 30–120 min.
@@ -60,7 +60,7 @@ Gaps this skill fills:
 
 ### Scope, source, and acceptance
 
-- User request: postmortem the supplied firedancer reports and distill the lessons into skills.
+- User request: postmortem the supplied research project reports and distill the lessons into skills.
 - Author/acceptor: codex-ac1c61c6aaf5c510. Audit: `postmortem-2026-09-27.md`.
 - Transition: bounded episode reports → inspect planning failures → revise the existing iteration
   manual/template → check whether counterexamples still permit invalid planning or inference.
@@ -444,7 +444,7 @@ characters, unchanged ceiling. `git diff --check` passes. Driver, evidence and t
 prose warnings. Scoped existing debt: fleet core18/reference70 (down from19/76), section core3/
 reference80, forge core15/reference85 plus2 long cells, orchestration reference13. These existing
 prose-cleanup scopes are deferred; the delta adds no warning. No package, proof, GPU kernel, actual
-Firedancer run, hook enforcement, or runtime schema was changed.
+research project run, hook enforcement, or runtime schema was changed.
 
 **Deployment receipt.** `mise exec -- bun test agents/claude/hooks/tests/assign-lib.test.ts`:
 17 pass / 0 fail, including project override and shipped fleet-policy fallback loading.
@@ -511,7 +511,7 @@ postmortem. Control-plane source: attachment6b1fd301-c829-4dba-afad-72e3aee808cd
 SHA2561f7d95fa092e1c1934660f3800d60ef9832cbb46e1a0fb1d1e492f40d68758c0.
 The source includes an actor retrospective, not an independently verified single-cause account.
 Current local old-name absence contradicts treating the retired planning skill as presently installed;
-which version the historical executor loaded remains unknown. No live Firedancer files/jobs were changed.
+which version the historical executor loaded remains unknown. No live research project files/jobs were changed.
 
 **Design replacement.** Replace the309-line accumulated core with a178-line operating loop:
 start from current goal/evidence, cut one consumed result, execute by observed event, scale useful
@@ -604,7 +604,7 @@ process mechanism is introduced. Core remains short and floor-clean; no real thr
 concepts behind anomaly→abduction→rivals→prediction→discrimination→exclusion→candidate revision,
 and then explicitly required domain-agnostic science/engineering use. The new bounded episode
 is recorded in `tests/postmortem-2026-09-27-scientific-loop.md` with its digest and limits.
-Reported Firedancer scores/causes are third-party evidence, not rerun or certified by this forge.
+Reported research project scores/causes are third-party evidence, not rerun or certified by this forge.
 Soks source commit4971082d182592ee9daafda885568d519b812126 and exact position/claim IDs are
 recorded once in `references/scientific-loop.md`. Root read positions, relevant ledgers and
 source-evidence captures; no newly fetched or otherwise unread primary source is claimed read.
@@ -646,7 +646,7 @@ not only f(x,h). The first fresh bridge check still overclaimed causal localizat
 success. Root added a constant-output counterexample and required independent localization evidence.
 A second actual artifact5454c1665db3ef2eba6d4b922a87d7049f210e024538dbb17e74ea815096578c
 correctly derived the fair-independent-label1/2limit and kept the perfect oracle diagnostic-only.
-This elementary countermodel was root-checked, not proof-assistant certified or a claim about Firedancer.
+This elementary countermodel was root-checked, not proof-assistant certified or a claim about research project.
 
 After the user's domain correction, a fresh transfer worker read the generalized reference/template
 and produced an engineering coating-process and scientific biodiversity-monitoring plan. Artifact:
@@ -660,7 +660,7 @@ R&D throughput gain or general domain-transfer reliability is claimed from this 
 Strong Inference request without stealing standalone hypothesis generation/proof ownership.
 Target floor: both changed skills zero core/reference prose warnings. Collection floor passes:
 73skills/64,439charged characters, ceiling unchanged. Index and diff checks pass. Soks and live
-Firedancer repositories remain untouched. Commit, push and source-link verification close delivery,
+research project repositories remain untouched. Commit, push and source-link verification close delivery,
 not scientific efficacy; source provenance and operational checks remain distinct.
 
 Deployment: `mise run link:skills` and `mise run lint:skills-wiring` pass. The canonical source
@@ -714,7 +714,7 @@ this as an unqualified all-pass behavior trial. Existing ETA rules already cover
 **Verification.** F11 and S50–S53 cover invocation, true waiting, status-only requests and repeated
 finding credit. Target floor zero core/reference warnings. Collection floor passes73skills/
 64,439charged characters with unchanged ceiling and listing. `git diff --check` passes. No live
-Firedancer code, job, source corpus or runtime enforcement changed. This ships an instruction/
+research project code, job, source corpus or runtime enforcement changed. This ships an instruction/
 acceptance correction with measured limits, not a claim that prose alone guarantees initiative.
 
 ## 16. Related-skill composition — v2609.5.0
@@ -836,7 +836,7 @@ this cannot certify GPU cleanup or P7 timeout enforcement. Fixture: /tmp/parent-
 The NEW arm read the initial revised core/C0; later review clarifications tightened scientific
 scope and preauthorized-branch guards. Those final clauses were statically reviewed, not replayed
 as new scientific tasks. S72–S76 and coordination-cases cover their required decisions.
-No live Firedancer change or real discovery/time measurement was made. Runtime automatic
+No live research project change or real discovery/time measurement was made. Runtime automatic
 enforcement of parent intervention remains unverified; a written rule is not a runtime guard.
 
 ## 20. Reorganize useful-work selection — v2609.9.0
@@ -999,7 +999,7 @@ warm parallel reuse, required independent review or justified workflow amortizat
 
 ## 2026-10-01 v2610.6.0 — sizing becomes a required plan/ETA step
 
-Failure: the owner asked for scrum poker repeatedly (15:2x and 18:0x JST, firedancer). The executor published lone point
+Failure: the owner asked for scrum poker repeatedly (15:2x and 18:0x JST, research project). The executor published lone point
 tables, which is the pseudo-poker failure already recorded in postmortem-2026-10-01 line 33, and skipped sizing otherwise.
 Structural cause: SKILL.md said "poker is optional", and no admission or report step required sizing, so the executor could
 always skip it. Change: SKILL.md now has a lookup keyed by the available estimators (poker vs labeled SOLO ESTIMATE), required
@@ -1009,7 +1009,7 @@ stands. Description is unchanged ("planning poker / スクラムポーカー" al
 
 ## 2026-10-01 v2610.7.0 — plan-time staffing by dependency and write scope
 
-Failure (same day, firedancer): after the sizing fix, the executor queued P1–P8 on one builder and reported a summed ETA
+Failure (same day, research project): after the sizing fix, the executor queued P1–P8 on one builder and reported a summed ETA
 (22:00–24:00). P6 (13 pt) had no output dependency and wrote a disjoint file, but it was staffed only after the owner objected.
 Cause split: (a) executor violation of the existing rule "Admit all purpose-qualified work that fits"; (b) structural gap. The skill
 had event-time rows ("critical work waits behind a worker's older assignment") but no plan-time step that turns sizes into
@@ -1018,7 +1018,7 @@ by dependency and write scope, directly after sizing; the ETA is the longest sta
 
 ## 2026-10-02 — v2610.8.0: RETRIEVE / PREDICTION / PATH TRACE made card fields
 
-Incident (firedancer, firefly-scan-recall, findings finding2610_0212mhvxk, finding2610_0213wcmst, finding2610_0218cqj1e):
+Incident (research project, firefly-scan-recall, findings finding2610_0212mhvxk, finding2610_0213wcmst, finding2610_0218cqj1e):
 tickets reached dispatch without retrieving the lineage mechanism (a head-choice search was built where next-symbol's fixed
 offset associations already held 0.999), without tracing the path to the scored bytes (the teacher kept only the low byte of a
 2-byte symbol, so symbol accuracy was 0.0 by construction), and without isolating a selector (two heads tied at the credit

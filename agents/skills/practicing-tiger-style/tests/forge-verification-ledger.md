@@ -329,16 +329,16 @@ Tiger still owns a consequential design's cost, semantic-preservation,
 negative-case, and acceptance rows. Experimental-score validity, label leakage,
 footing, and historical regression now belong to
 `validating-experimental-evidence`. A T4 performance observation cites its
-canonical polysearch finding/disposition; a quarantined or incomparable score
+canonical records store finding/disposition; a quarantined or incomparable score
 cannot close the row. No benchmark schema or alternative validator is authored
-here. This split follows the user's polysearch-only correction.
+here. This split follows the user's records store-only correction.
 
 Target `skill-check.ts` exited 0 with 0 FAIL/0 WARN. Its existing trigger set
 adds C6 for the ordered co-fire. No runtime effect is claimed from this edit.
 
 ## Reforge v2609.3.1 — 2026-09-27 dependent obligation checks
 
-**Source.** User-supplied firedancer report attachment `875d0044-b118-42bb-8ad6-af454d31e9d5`,
+**Source.** User-supplied research project report attachment `875d0044-b118-42bb-8ad6-af454d31e9d5`,
 L832–852 and L889–907. Full bounded audit/digest and overlap limits live in
 `planning-experiment-iterations`, `tests/postmortem-2026-09-27-followup.md`.
 The dense-allocation failure and later sparse-layout change are reported, not independently rerun.

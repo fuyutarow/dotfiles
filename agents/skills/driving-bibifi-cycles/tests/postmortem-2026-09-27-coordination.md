@@ -1,6 +1,6 @@
 # Postmortem — delegation without microticket coordination
 
-Scope: frozen user-supplied outward reports from Firedancer, ending at 15:13 JST.
+Scope: frozen user-supplied outward reports from research project, ending at 15:13 JST.
 Source: attachment `03163da7-b27e-41bd-9508-4fee29345130/Pasted text.txt`, 1,428 lines.
 SHA-256: `63a3697a430da04f2be1fe4ef03a2352a78f380e5ebb6676c3737609d8c587b2`.
 This audits the reported control plane. It does not reproduce code, runs, resource peaks or theorem claims.

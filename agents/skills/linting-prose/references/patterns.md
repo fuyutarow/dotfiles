@@ -182,7 +182,7 @@ project — so C7's "undefined" never fires; the violation is that the DECLARED 
 
 **Greppable subset → the external prh dict** (`prh-external.yml`, loaded by
 `textlintrc-external.json`). Any `[A-Z]{1,3}[0-9]{4}_[0-9]{2,3}` ID, any `[A-Z]{3,}_[A-Z_]{3,}`
-verdict enum, `receipt:`, and `PASS`-as-verdict fire deterministically (proven on QOED
+verdict enum, `receipt:`, and `PASS`-as-verdict fire deterministically (proven on consumer repository
 `RESEARCH_STATE.md`) — these are HARD. House dichotomies are NOT greppable — VIBE only.
 
 ### C8 audit-report theater (house half)
@@ -199,11 +199,11 @@ non-specialist vocabulary (3MT: avoid unnecessary jargon, gloss key terms) are V
 
 ## F-lifecycle
 
-Layer: the document over time (declared novel — no canon, no tool). Tier: VIBE. Source: the QOED
+Layer: the document over time (declared novel — no canon, no tool). Tier: VIBE. Source: the consumer repository
 71-finding audit, where append-only self-correction was the second-largest failure mode.
 
 - **Retracted claim left standing.** A claim retracted or superseded in the body but kept in a
-  summary table cell, a section heading, or an abstract. QOED `R2606_081`: the body concludes
+  summary table cell, a section heading, or an abstract. consumer repository `R2606_081`: the body concludes
   "PO11 = 唯一ギャップ was wrong", the summary table and the `## 唯一のギャップ PO11` heading keep the
   retracted framing — a reader who reads only the table inherits the dead claim. **Fix: the
   retraction must reach every surface** (table, heading, abstract), or the claim is not retracted.
@@ -298,7 +298,7 @@ Use when the reviewed text is an agent's own prose audit, status update, or repa
 - Rebuttals answer the objection in the first sentence, then give evidence.
 - Submission-document headers survive the titles-only test.
 - READMEs: the front door states scope in 2–3 sentences of the reader's vocabulary; internal record
-  IDs go in a footnote, never as the load-bearing scope statement (QOED README failure).
+  IDs go in a footnote, never as the load-bearing scope statement (consumer repository README failure).
 - **Notation hygiene.** One symbol per object; spell out each acronym + gloss at first use, then
   abbreviate; never bare-emit notation the reader cannot pause on (worst in a spoken script).
 - **Disclosure of names.** Never print an unconfirmed proper name or a claimed *current* collaboration;

@@ -29,7 +29,7 @@ Do not attribute every elapsed delay to kernel design: the episode also contains
 
 No new skill or runtime scheduler is introduced. Primitive catalogs, device legality, parallel
 design, measurement and evidence interpretation have separate homes inside/among their existing owners.
-Changes to launch/resource enforcement or Firedancer implementation are outside this revision.
+Changes to launch/resource enforcement or research project implementation are outside this revision.
 
 ## Primary-source checks (2026-09-30)
 

@@ -631,7 +631,7 @@ async function main(): Promise<void> {
   // (Supersedes HOOK-2's language-filter check: a filter only exists inside a bespoke body.)
   // HOOK-1c: the commit gate judges only what is being committed. `fmt:staged` fixes the staged
   // files in place (refusing any that also carry unstaged hunks); a whole-tree `fmt:check` there
-  // refused every session's commit on any session's WIP — firedancer 2026-09-25, four blocks
+  // refused every session's commit on any session's WIP — research project 2026-09-25, four blocks
   // across ~20 sessions, 10–20 min each. Whole-tree gates stay in `check` and pre-push.
   for (const hook of GATE_HOOKS) {
     // The gate is DECLARED in mise.toml as `hook:<event>` so one file answers "what runs at commit"
@@ -649,7 +649,7 @@ async function main(): Promise<void> {
       .join("\n")
       .replaceAll(/'[^'\n]*'|"[^"\n]*"/gu, " ");
     // Everything the gate EXECUTES must be `mise run <verbs>`, or the shim's own plumbing (the
-    // `command -v mise` guard, echo, exit). A direct `polysearch hook pre-commit` or
+    // `command -v mise` guard, echo, exit). A direct `records store hook pre-commit` or
     // `soks-govern … author-check` is the same disease as a hook:* task: `mise run check` does not
     // run it, so the manual gate and the commit gate differ. Put it in a `lint:*` subtask.
     const PLUMBING = new Set([

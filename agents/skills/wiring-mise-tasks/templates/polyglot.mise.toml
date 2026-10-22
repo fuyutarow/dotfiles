@@ -1,7 +1,7 @@
 # <repo> — mise task runner。未完成の TEMPLATE fragment: そのまま実行用に配らない。
 # 文法と動詞契約の正本は
 # wiring-mise-tasks/SKILL.md。写しを直すな、正本を直してから配れ。
-# 多言語合成の裁定 = wiring-mise-tasks/references/recipes.md §6 (qoed 前例)。
+# 多言語合成の裁定 = wiring-mise-tasks/references/recipes.md §6 (consumer repository 前例)。
 # 各セルの中身は単言語 template から移植し、TeX は compiling-latex の
 # latex:* template に委ねて check が latex:check を集約する。
 # Repository-owned helpers: copy the contract tools under tools/ and pin bun in [tools].

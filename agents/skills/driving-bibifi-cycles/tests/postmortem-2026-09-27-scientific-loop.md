@@ -26,7 +26,7 @@ The reported later decomposition assigns the correct votes to round2TM and error
 That narrows icr's next candidate to a checked egress change; it does not settle a5 or the remaining khop deficit.
 For a5, read access plus closure is a separate bundle. Its success does not validate the icr story.
 The next proposal carries scoped deltas and smallest real-path checks, not “architecture proven.”
-This is an operational reconstruction of reported evidence, not independently reproduced Firedancer results.
+This is an operational reconstruction of reported evidence, not independently reproduced research project results.
 
 ## What changed in the skill design
 
@@ -63,4 +63,4 @@ The candidate owner emits unranked hypotheses; test selection and validation do 
 Tool-backed exercise: fresh OLD/NEW agents get one frozen synthetic evidence packet and actually write the
 four-table plan, a countermodel to an unsupported deduction, and a minimal candidate delta. No numeric run.
 Expected criteria above are withheld. Root reads back artifacts and bindings; this tests reasoning/production
-of a scoped scientific plan, not actual experimental throughput or the truth of the Firedancer mechanisms.
+of a scoped scientific plan, not actual experimental throughput or the truth of the research project mechanisms.

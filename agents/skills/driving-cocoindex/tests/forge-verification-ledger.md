@@ -16,7 +16,7 @@ on disk and were reused rather than re-run from scratch. Wave 2: 6/6 agents comp
 official-docs, live-trial, host-reality, mcp-wiring, framework-versions, siblings.
 
 **Live-trial protocol** (starlette corpus, 100 files, 1205→1206 chunks, macOS, shared daemon
-also serving `qoed`): (a) head-to-head — 6 natural-language queries run through both
+also serving `consumer repository`): (a) head-to-head — 6 natural-language queries run through both
 `ccc search` and `rg`, each independently verdicted ccc-wins / rg-wins / tie, plus one
 adversarial exhaustive-enumeration query; (b) staleness proof — append a marker function,
 confirm a miss with zero reindex, confirm the miss persists after a 16s wait with no watcher
@@ -184,7 +184,7 @@ multilingual-e5-small on every margin; it is ccc's own curated Multi-Lingual tie
 code score 0.80 > arctic's 0.67; its empty-string `query` prompt keeps `query_params`
 valid). End-to-end verification on the same md corpus: all four probes recovered or
 improved — JA→JA real truth #2 (was absent), plant #1+#2 with a clear gap, EN→JA #1+#2
-(was absent), EN→EN control improved to #1 (before/after table → catalog). qoed reset +
+(was absent), EN→EN control improved to #1 (before/after table → catalog). consumer repository reset +
 rebuilt (11,962 chunks, ~7 min); JA/EN twin concept queries now converge (3 of top-4
 shared) on the real code corpus — overlap-based sanity, not hand-scored ground truth.
 [UNVERIFIED at ranking level] flags cleared; code-switch craft retained for unswapped
@@ -400,7 +400,7 @@ duplicated here); this entry records the five MECHANISM findings and their evide
 
 4. **Registered projects must be enumerated, never recalled.** Verified this session: `fd -H
    --full-path '\.cocoindex_code/settings\.yml$' ~` found exactly 5 real project registrations
-   — `dotfiles`, `Workspace/{firedancer,beateater,qoed}`, `DPP/min-sys-dpp-mvp` — the last
+   — `dotfiles`, `Workspace/{research project,beateater,consumer repository}`, `DPP/min-sys-GPU project` — the last
    confirmed on-disk with a 32,526,336-byte (32 MB) `target_sqlite.db` dated 2026-07-17. Three
    remembered search roots (`~/dotfiles`, `~/Workspace`, `/mnt/g`) would have silently skipped
    it; `/mnt/g` itself holds zero registrations under this probe. `$HOME/.cocoindex_code` is
@@ -409,18 +409,18 @@ duplicated here); this entry records the five MECHANISM findings and their evide
    requirement correctly excludes it. `ccc-swap.ts`'s own `discover` subcommand already
    mechanizes this exact walk. → SKILL.md CC5, operations.md §6c.
 
-5. **A rotted smoke anchor fabricated a regression.** `qoed`'s recorded end-to-end smoke
+5. **A rotted smoke anchor fabricated a regression.** `consumer repository`'s recorded end-to-end smoke
    (「境界条件の正規化」 → `\section{適用境界}` in
    `papers/P2606_003-sok_randomized_metrology/main.tex`) died silently when commit `7d915ed`
    ("fix: 降格済み文書を意味検索の索引から外し、漏れを gate で止める" — independently confirmed
-   via `git show 7d915ed` in `~/Workspace/qoed`: Tue Jul 28 14:56:24 2026 +0900, author
+   via `git show 7d915ed` in `~/Workspace/consumer repository`: Tue Jul 28 14:56:24 2026 +0900, author
    fuyutarow) added `papers/P2606_003-sok_randomized_metrology/**` to
    `.cocoindex_code/settings.yml`'s generated `exclude_patterns` block (16 demoted directories,
    index 1021→973 files per the commit message) as an authority-gate cleanup unrelated to any
    embedding model. Confirmed live: the file is still on disk but the current index holds zero
    chunks matching that path (`SELECT COUNT(*) FROM code_chunks_vec_auxiliary a JOIN
    code_chunks_vec_rowids r ON r.rowid=a.rowid WHERE a.value00 LIKE 'papers/P2606_003%'` = 0,
-   run against qoed's live `target_sqlite.db`). Two days later the missing hit was read as a
+   run against consumer repository's live `target_sqlite.db`). Two days later the missing hit was read as a
    candidate-model regression and triggered a same-day revert. → SKILL.md CC6, operations.md
    §6e.
 
@@ -493,7 +493,7 @@ a supervised daemon is stated so its silence is not read as evidence.
 
 **Not verified.** The ceilings are provisional: 4G/6G was sized from the pre-change 4.85 GiB
 peak, and the observed drop to 1.0 GiB is mostly the backpressure change, not the ceiling
-biting. A full `firedancer` index under the new settings has not completed, so the tightened
+biting. A full `research project` index under the new settings has not completed, so the tightened
 values are deferred. `OPENBLAS_NUM_THREADS` timing for numpy (imported before the `envs:`
 overlay runs) is UNVERIFIED and no rule depends on it. The macOS LAZY-SPAWN path was reasoned
 from the same source but not exercised on a Mac this session.
@@ -550,7 +550,7 @@ above. They found real defects; every one below was independently re-verified be
    Tightening `COCOINDEX_MAX_INFLIGHT_COMPONENTS` makes it worse — the knob is daemon-wide.
 9. Observed live during the audit: an out-of-band `uv tool upgrade` (0.2.40→0.2.41 at 14:18:26)
    changed the binary under the running daemon; the next handshake's version-mismatch path
-   restarted it (`NRestarts` 0→1) and discarded a ~40-minute in-flight firedancer index. On-disk
+   restarted it (`NRestarts` 0→1) and discarded a ~40-minute in-flight research project index. On-disk
    state survived. Supervision widens this blast radius by keeping one daemon loaded with many
    projects. The install is UNPINNED — already flagged in `catalog.md`.
 10. `IOSchedulingClass=idle` is inert here (every block device runs the `none` scheduler, which

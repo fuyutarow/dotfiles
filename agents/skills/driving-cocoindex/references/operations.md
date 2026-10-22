@@ -66,7 +66,7 @@ ibm-granite/granite-embedding-311m-multilingual-r2`, `indexing_params: {}`,
   export `COCOINDEX_CODE_DB_PATH_MAPPING=$HOME=$HOME/.cache/cocoindex-code/db`, so the DBs and
   repo-retrieve's `INDEXED_AT` live at `~/.cache/cocoindex-code/db/<path under $HOME>/`. Reason:
   an in-repo DB is rewritten on every commit, and every tool that walks the repo pays for it
-  (firedancer: polysearch landing 21–36 s vs 0.65–0.88 s). Client and daemon MUST carry the same
+  (research project: records store landing 21–36 s vs 0.65–0.88 s). Client and daemon MUST carry the same
   value — `mise run doctor` (`ccc-db-map`) compares them; `ccc-swap.ts relocate` moves old DBs.
 - Appends a self-`.gitignore` block that un-ignores its own settings file, so only `settings.yml`
   is ever committed and the DB artifacts stay untracked:
@@ -434,12 +434,12 @@ fd -H            --full-path '\.cocoindex_code/settings\.yml$' ~   # 5  — WRON
 fd -H --no-ignore --full-path '\.cocoindex_code/settings\.yml$' ~   # 8  — correct
 ```
 
-The three the default walk hid were `ARTS/qinfogeo`, `Workspace/correo`, and a qoed worktree.
+The three the default walk hid were `ARTS/qinfogeo`, `Workspace/correo`, and a consumer repository worktree.
 This is not a footnote: the first draft of THIS rule shipped the 5-hit command and reported 5 as
 the fleet size — the enumeration rule under-enumerated, and the miss it hid was the worst case
 on the host. `ARTS/qinfogeo` was found stuck at **dim 384 with 87,560 chunks, last indexed
 2026-04-10** — it slept through the 2026-07-17 move to dim 768 and had been answering from a
-stale-dimension index for three and a half months. A second earlier miss, `DPP/min-sys-dpp-mvp`
+stale-dimension index for three and a half months. A second earlier miss, `DPP/min-sys-GPU project`
 (32,526,336-byte index), came from searching 3 remembered roots instead of `$HOME`.
 
 No command warns that a registered project was left behind; it just keeps serving a
@@ -472,7 +472,7 @@ specifically, not just the directory name, already excludes it.
 
 A recorded end-to-end smoke (a query plus its expected top hit) is a claim about the CURRENT
 index, not a fixed constant, and nothing marks it stale when the corpus changes under it.
-Confirmed this session: qoed's smoke (「境界条件の正規化」 → `\section{適用境界}`) died when
+Confirmed this session: consumer repository's smoke (「境界条件の正規化」 → `\section{適用境界}`) died when
 commit `7d915ed` ("fix: 降格済み文書を意味検索の索引から外し、漏れを gate で止める", 2026-07-28
 14:56 JST, confirmed via `git show`) added the smoke's target document to `settings.yml`'s
 `exclude_patterns` as part of an unrelated authority-gate cleanup — the file stayed on disk but

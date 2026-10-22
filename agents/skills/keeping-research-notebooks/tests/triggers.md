@@ -20,13 +20,13 @@ Rerun after any description or cut edit.
 | "Our notebook repo has Project.toml, src/ and test/ at the root — is that right?" | FIRE: homes §0 predicate; move the package under `packages/`. CO-FIRE `writing-julia` PK0 for the workspace root. |
 | 「論文の図は手元で作った PNG を papers に置いていい？」 | FIRE: homes §1 paper-figure row; the figure comes from a run artifact cited by run id. |
 | 「複数パッケージと論文を一つのリポジトリで管理したい。構成は？」 | FIRE: homes §0. |
-| 「julia の新規プロジェクトを立ち上げたい。polysearch も導入したい」 | CO-FIRE: `wiring-repositories` first; its CLASSIFY reads homes §0 before any manifest. `driving-polysearch` for `polysearch init`. |
+| 「julia の新規プロジェクトを立ち上げたい。records store も導入したい」 | CO-FIRE: `wiring-repositories` first; its CLASSIFY reads homes §0 before any manifest. `records-store CLI owner` for `records-store CLI init`. |
 
 ## Near-miss no-fire
 
 | Ask | Route |
 |---|---|
-| 「polysearch record finding の --verdict が拒否された」 | `driving-polysearch` alone. |
+| 「records-store finding の --verdict が拒否された」 | `records-store CLI owner` alone. |
 | "jj rebase left conflicts; how do I resolve them?" | `driving-jujutsu` alone. |
 | 「mise の commit タスクの中身を書いて」 | `wiring-mise-tasks`. |
 | "Set up a new repo with jj, mise and hooks" | `wiring-repositories`. |
@@ -43,6 +43,6 @@ Rerun after any description or cut edit.
 
 | Ask | Order |
 |---|---|
-| "Add a revision that fixes the kernel, then run the official benchmark" | `implementing-and-debugging` and the language skill for the fix; HERE for N5 bump and N3 launch; `driving-polysearch` for the records. |
-| 「結果を finding に書いて commit して」 (notebook repo) | `driving-polysearch` writes the record; HERE for N4 landing; `driving-jujutsu` only for a jj failure; `driving-git` defers in a house jj repo. |
+| "Add a revision that fixes the kernel, then run the official benchmark" | `implementing-and-debugging` and the language skill for the fix; HERE for N5 bump and N3 launch; `records-store CLI owner` for the records. |
+| 「結果を finding に書いて commit して」 (notebook repo) | `records-store CLI owner` writes the record; HERE for N4 landing; `driving-jujutsu` only for a jj failure; `driving-git` defers in a house jj repo. |
 | "Is this new revision a regression, and may we keep measuring it?" | HERE for the N5 LINEAGE row and measurability; `validating-experimental-evidence` for the claim. |

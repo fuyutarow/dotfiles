@@ -9,7 +9,7 @@ EXTEND, not a new skill: the artifact is a LaTeX source and its build, which thi
 a sibling would charge the listing again (F4).
 
 **Source.** Practice, one manuscript (revtex4-2 twocolumn, 1265-line main file plus a
-516-line personal macro file, upLaTeX + dvipdfmx), cleaned in QINotebook on 2026-10-01.
+516-line personal macro file, upLaTeX + dvipdfmx), cleaned in notebook repository on 2026-10-01.
 Every row of §2 Traps is an observed failure of a rewrite that looked harmless:
 
 | Trap | Observation |
@@ -52,7 +52,7 @@ venue rules applied by stage (§1, §4) → notation fixed in `notation.tex` + `
 `lint --contract` exit 0 (MC6) → a packaging copy proven by `boxes` (§3). EXTEND, not a sibling:
 same artifact (the manuscript source), same owner.
 
-**Source.** Survey of 2026-10-01 in the QINotebook session scratchpad (`survey/`): S1-math,
+**Source.** Survey of 2026-10-01 in the notebook repository session scratchpad (`survey/`): S1-math,
 S2-canon, S3-venue, S4-floats, S5-build, S6-ai, VERIFY2-FINDINGS (V2#1–V2#25), and SYNTHESIS
 §C/§D (22 LOOKUP rows D1–D22). Grades: A = manual/publisher/arXiv/LaTeX Project, B = package
 author or LaTeX-team answer. The scratchpad is not durable; the soks units U6 (journal source

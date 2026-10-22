@@ -33,7 +33,7 @@ In a notebook, this topology is fixed before any manifest is written:
 | member test project | `packages/<Name>.jl/test/Project.toml`; include it in the member's workspace using the [package skeleton](../../../../presets/julia/Project.toml) (PK5) |
 | separately locked env | `envs/<slug>/Project.toml` + its own `Manifest.toml`, outside the workspace; members via `[sources]` paths; `--project=envs/<slug>` |
 | interactive or task command | `--project=packages`, or `--project=packages/<Name>.jl` for one member |
-| recorded run (launcher argv) | `--project=packages` only: `polysearch run --reproduce` restores a workspace root only from the repo root or the named dir |
+| recorded run (launcher argv) | `--project=packages` only: `records store run --reproduce` restores a workspace root only from the repo root or the named dir |
 | member `[compat] julia` | the runtime line pinned in `mise.toml` `[tools]` (PK3 profile table); never below `"1.12"` |
 | test | through a member: `--project=packages/<Name>.jl` with `Pkg.test()`, or `Pkg.test("<Name>")` at `packages`; bare `Pkg.test()` at the nameless root fails |
 | repo root | nothing Julia; the root-deny list is homes §0's |

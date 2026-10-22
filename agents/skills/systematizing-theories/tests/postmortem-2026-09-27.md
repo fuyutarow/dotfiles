@@ -5,7 +5,7 @@
 - AUDIT_ID: theory-maintenance-5a68f6e4-20260927.
 - Source: user attachment `5a68f6e4-68bf-4e1a-b41d-e064111ee235`, `Pasted text.txt`, 1,305 lines.
 - SHA256: `1bd3826906a55b21161de9bdaebf7db3f02b07334ce887d42b1c01d72705bb2c`.
-- Report author: `firedancer-agt_eraw`; auditor: Codex task `codex-ac1c61c6aaf5c510`.
+- Report author: `researcher`; auditor: Codex task `codex-ac1c61c6aaf5c510`.
 - Boundary: supplied outward reports ending around 13:09 JST; explicitly bounded historical audit.
 - Complete run denominator, raw experimental receipts, proof texts and terminal research status: NOT-EVIDENCED.
 - AUDITABILITY: UNAUDITABLE for complete research-process causality; reported transitions are inspectable.
@@ -65,4 +65,4 @@ PROCESS_REPAIR to skill owners: adopt statement-level theory maps and bounded ch
 EVIDENCE_RECOVERY to the research owner: join exact old statements, proofs and findings before accepting the new derivation tree.
 RAW_SECTION_CONTENT_INCLUDED: NO
 
-These are non-enacting recommendations. No Firedancer theorem, programme or result is modified by this audit.
+These are non-enacting recommendations. No research project theorem, programme or result is modified by this audit.

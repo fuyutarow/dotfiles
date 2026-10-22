@@ -65,7 +65,7 @@ measuring.md, debugging.md (post-editor-fix #1).
   defaults, DI+AutoEnzyme-on-GPU robustness: carried as explicit UNVERIFIED in
   differentiating-kernels.md §9 — do not promote without re-verification.
 
-## Reforge v2607.2.0 (2026-07-23) — firedancer fd_evaluate graph-cache postmortem
+## Reforge v2607.2.0 (2026-07-23) — research project fd_evaluate graph-cache postmortem
 
 **敗因 (source failure, 検収4)**: `fd_evaluate`'s GPU path cached a captured CUDA graph +
 scratch buffers keyed on the evaluation input `Xte`'s identity ALONE. A captured graph binds
@@ -202,7 +202,7 @@ reforge; that queue was missed. This edit pays down SKILL.md debt from 25 to 0 l
 0 long prose sentences. Untouched legacy references still contain 208 long sentences; queue them
 for a dedicated prose reforge before another feature addition. This waiver does not excuse new debt.
 
-## Reforge v2609.2.0 (2026-09-24) — firedancer FireOps work-budget incident
+## Reforge v2609.2.0 (2026-09-24) — research project FireOps work-budget incident
 
 **Incident.** A superposed-rounds learner's GPU path passed every correctness gate (prediction
 equality, CPU/GPU bit identity, value bound, causality) while running about four orders of
@@ -216,7 +216,7 @@ because the cause had been named by analogy to an old launch-overhead record.
 | Cause | Rule |
 |---|---|
 | No ops/bytes budget before code or dispatch; targets anchored to the slow predecessor (10× CPU, then ≥1e4 tokens/s) | GKB §0 block and its "if… then" table |
-| GK0's broadcast preference produced an O(L²) pairwise mask with Int64 `[L,L,B,I]` intermediates where an O(L) last-occurrence scan answers the question (`FireOps.causal_latest`, firedancer `packages/FireOps.jl/src/FireOps.jl:704-764`) | COMPLEXITY-PRESERVING predicate in §1 |
+| GK0's broadcast preference produced an O(L²) pairwise mask with Int64 `[L,L,B,I]` intermediates where an O(L) last-occurrence scan answers the question (`FireOps.causal_latest`, research project `packages/FireOps.jl/src/FireOps.jl:704-764`) | COMPLEXITY-PRESERVING predicate in §1 |
 | The conceptual unit (1,312 instances) was the computation unit; the match depends on ~72 distinct (Q, K, δ, ε) tuples | GKB "dependency factoring" row |
 | Named broadcast temporaries, Int64 small indices, `similar` inside the chunk loop | existing `host-performance.md` §2, plus rows in the §1 predicate table |
 | "launch-overhead-bound" asserted without counting launches | `measuring.md` §11 |
@@ -238,7 +238,7 @@ arithmetic and code, not from a benchmark of the rules themselves.
 
 ## 2026-09-25 — GKR: step-level device residency (v2609.3.0)
 
-**Incident.** firedancer's firefly edition block
+**Incident.** research project's firefly edition block
 (`ModelRegistry.Firefly_SuperposedRounds`, revisions 3–9) ran an online learning step at
 1,703 tokens/s: 0.049% of its 3.46M tokens/s paper bound (finding2609_2521bj7rk, run2609_2521z63qp).
 The per-stage profile:
@@ -369,7 +369,7 @@ Artifacts (SHA256): OLD085f4732396d6436b2cbe32b8c7db6e9a3924dfc33caa6222be5e4878
 NEW-first686be92512528a99d74045fa2ee060260882f348008cd5181e4e4894f587bcf1;
 NEW-repeat84c72c5e4260922f8442f7d67e6de1c9f99d16d268a963a9bbc838a90199af5b.
 The repeat is not a fresh blind success. No CUDA code was executed, no performance gain measured,
-and no Firedancer implementation/launch policy changed. Documentation snippets are not GPU-runtime receipts.
+and no research project implementation/launch policy changed. Documentation snippets are not GPU-runtime receipts.
 
 PROSE-DEBT waiver,2026-09-30: core warnings zero; reference long-sentence count208→204 over the
 scoped edit, including the new design reference. Retain older detailed reference prose and dated
@@ -400,7 +400,7 @@ now says so instead of claiming the rule exists.
 
 ## 2026-10-02 — launch contract: typed shape, in-loop transfer budget, typed stage outcome, v2610.2.0
 
-Incidents (firedancer, RTX 3060, 2026-10-02): (1) finding2610_0201z2dy4: a per-pass decide kernel launched
+Incidents (research project, RTX 3060, 2026-10-02): (1) finding2610_0201z2dy4: a per-pass decide kernel launched
 with `ndrange = 1` (`_one(be)`) in the learning-pass loop scanned frontier cells x live names x coordinates
 serially, ~1e9 ops at ~100 ns = 92% of a train call; no code declared a work bound, so no test caught it.
 (2) finding2610_02010tndj: a blocking `copyto!` of a device flag every 4 rounds cost 16-23% of round time,
@@ -413,5 +413,5 @@ way to check the bound. Homes: `execution-design.md` § Launch contract (shape t
 cases. No description edit, no new reference file. The skill's script floor owns no check of these rules; they
 are enforced by the consumer's tests (bound/time/transfer-count/outcome), not by skill-check.
 Not verified here: no CUDA code was run and no speedup is claimed; the three incidents are cited from the
-firedancer records, not re-measured.
+research project records, not re-measured.
 skill-check 2026-10-02: 0 FAIL, 2 WARN (references long-sentence debt 205; 4 long sentences in core). PROSE-DEBT waiver 2026-10-02: reference count was 204 at 2026-09-30 and later edits were not re-baselined; the new rules are tables plus short paragraphs. Whether the 4 core long sentences predate this edit was not checked against HEAD. Older reference prose stays out of scope.

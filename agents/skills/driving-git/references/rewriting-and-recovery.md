@@ -28,7 +28,7 @@ For removal/expiry, §3 and `storage-and-cleanup.md` §2 override an in-reposito
 Draft the freeze notice for external collaborators; send it only when communication is authorized.
 
 A rewrite that removes a blob must remove it from every commit that carries it. `git revert` of
-the adding commit leaves the blob reachable and the push still fails (firedancer, 2026-09-21).
+the adding commit leaves the blob reachable and the push still fails (research project, 2026-09-21).
 Rewrite the range, do not revert.
 
 **Freeze notice** — the text is the artifact. It carries:

@@ -2,10 +2,10 @@
 
 ## Evidence boundary
 
-- AUDIT_ID: firedancer-cf131ebf-20260927.
+- AUDIT_ID: research project.
 - Source: attachment `cf131ebf-8415-40e2-b84e-8a8b6c1ace00`, `Pasted text.txt`, 1,601 lines.
 - SHA256: `9df1c533de6a148ba11529675efbfd96db211d5b971cb64e1cd0c787817d521e`.
-- Report author: `firedancer-agt_eraw`; auditor: Codex task `codex-ac1c61c6aaf5c510`.
+- Report author: `researcher`; auditor: Codex task `codex-ac1c61c6aaf5c510`.
 - Boundary: supplied outward reports ending around 14:00 JST; an explicitly bounded historical audit.
 - Terminal episode status, complete run denominator, raw results, actual briefs and safety rejections: NOT-EVIDENCED.
 - AUDITABILITY: UNAUDITABLE for complete process causality; reported statements and changes are inspectable.
@@ -64,4 +64,4 @@ PROCESS_REPAIR to theory, Tiger and orchestration owners: apply the scoped chang
 EVIDENCE_RECOVERY to the research owner: inspect raw briefs, effective scopes, test predicates and runtime write effects.
 RAW_SECTION_CONTENT_INCLUDED: NO
 
-This audit changes no Firedancer code, theorem, measurement, record status, runtime permission or live job.
+This audit changes no research project code, theorem, measurement, record status, runtime permission or live job.

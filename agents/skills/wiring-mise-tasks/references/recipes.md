@@ -13,7 +13,7 @@
 | Grade | Meaning |
 |---|---|
 | **skill-endorsed** | the owner `writing-<lang>` skill states the command/flag |
-| **corpus-observed** | converged practice in ≥2 of the 5 house repos (beateater · correo · qoed · xoria · dotfiles) |
+| **corpus-observed** | converged practice in ≥2 of the 5 house repos (beateater · correo · consumer repository · xoria · dotfiles) |
 | **probe-verified** | flag semantics confirmed live via `--help` at snapshot date |
 | **synthesized** | no precedent existed; constructed from probes — lowest grade, re-verify on first real use |
 | **ruling** | house decision where sources conflict — engineered, not measured |
@@ -27,10 +27,10 @@
 | fmt:check | `julia --project=. -m Runic --check .` | corpus-observed ×3 |
 | lint | see RULING below | — |
 | test | `julia --project=. -e 'using Pkg; Pkg.test()'` | corpus-observed (beateater); see RULING |
-| up | `julia --project=. -e 'using Pkg; Pkg.update()'` | corpus-observed ×2 (beateater copied qoed verbatim; skill silent) |
+| up | `julia --project=. -e 'using Pkg; Pkg.update()'` | corpus-observed ×2 (beateater copied consumer repository verbatim; skill silent) |
 
 **RULING — lint has two declared tiers.** writing-julia's JG2/JG3 demand Aqua `test_all` +
-ExplicitImports + JET as three distinct artifacts; qoed implements all three (`lint:aqua` /
+ExplicitImports + JET as three distinct artifacts; consumer repository implements all three (`lint:aqua` /
 `lint:imports` / `lint:jet`). beateater/xoria instead alias `lint` → `fmt:check` and say so in the
 task description (「JET/Aqua等の追加は依存最小方針により見送り」). Both are legal states:
 **starter** (fmt:check reuse, deferral WRITTEN in the description) for pre-package exploratory
@@ -57,8 +57,8 @@ A backtrace after a sibling gate failed in the same `mise run check` is mise's S
 
 **RULING — test's token must resolve even when the suite is blocked.** Three observed shapes:
 plain `Pkg.test()` (beateater, the default); direct smoke script (xoria's
-`julia --project=poc poc/test/smoke.jl`, legal for poc-shaped repos); blocked-with-pointer (qoed:
-body prints the focused `test:*` menu and `exit 2`). The qoed shape is the sanctioned way to
+`julia --project=poc poc/test/smoke.jl`, legal for poc-shaped repos); blocked-with-pointer (consumer repository:
+body prints the focused `test:*` menu and `exit 2`). The consumer repository shape is the sanctioned way to
 retire an expensive suite: the TOKEN stays resolvable, the body becomes a signpost. Deleting the
 task instead is a contract violation the gate will catch.
 
@@ -103,7 +103,7 @@ the contract verbs still resolve via mise. Reciprocal note landed in writing-rus
 | test | `uv run pytest` | skill-endorsed (PG4) + corpus (beateater oracle:test shape) |
 | up | `uv lock --upgrade && uv sync` | skill-endorsed ("only `uv lock --upgrade` moves it") + probe-verified; two-step is inherent — lock moves pins, sync materializes |
 
-Boundary condition (qoed precedent): a NON-uv-managed `scripts/` dir in a Julia-primary repo may
+Boundary condition (consumer repository precedent): a NON-uv-managed `scripts/` dir in a Julia-primary repo may
 run bare `ruff` installed via brew — writing-python's `uv run` prefix rule is scoped to genuinely
 uv-managed projects (no pyproject.toml/uv.lock → nothing to pin against). Declare which side the
 repo is on in the task description.
@@ -112,24 +112,24 @@ repo is on in the task description.
 
 | Verb | Body | Grade |
 |---|---|---|
-| setup | `bun install --frozen-lockfile` | corpus-observed (qoed) + probe-verified |
-| fmt | `bunx biome format --write .` | corpus-observed (qoed shape) |
+| setup | `bun install --frozen-lockfile` | corpus-observed (consumer repository) + probe-verified |
+| fmt | `bunx biome format --write .` | corpus-observed (consumer repository shape) |
 | fmt:check | `bunx biome format .` | probe-verified (no `--write` = report-only, dotfiles shape) |
-| lint | `bunx biome lint .` | corpus-observed (qoed lint:json) |
+| lint | `bunx biome lint .` | corpus-observed (consumer repository lint:json) |
 | test | `bun test` | corpus-observed (dotfiles test:hooks) + probe-verified |
 | up | `bun update` | **synthesized** — zero corpus precedent; probe: respects package.json semver ranges, rewrites bun.lock; `--latest` jumps ranges; `bun outdated` is the read-only companion. Re-grade on first real use |
 
 **RULING — fmt/lint separation.** `biome check` (formatter+linter+import-sort in one) is
 deliberately NOT the house shape — fmt and lint stay separate tasks, same split as ruff and rumdl
-(qoed lint:json description states this). **RULING — config home.** Committed `biome.json` is the
-preferred home (qoed); CLI-flag pinning (`--indent-style=space --indent-width=2`, dotfiles) is the
+(consumer repository lint:json description states this). **RULING — config home.** Committed `biome.json` is the
+preferred home (consumer repository); CLI-flag pinning (`--indent-style=space --indent-width=2`, dotfiles) is the
 fallback for config-averse repos. One repo picks ONE — both at once guarantees drift.
 
 ## §4b Markdown — the cross-cutting cell (every repo)
 
 | Verb | Body | Grade |
 |---|---|---|
-| fmt:md | `rumdl fmt` (config = `.rumdl.toml`) | corpus-observed ×4 (beateater · qoed · xoria · dotfiles — the one cell every repo shares) |
+| fmt:md | `rumdl fmt` (config = `.rumdl.toml`) | corpus-observed ×4 (beateater · consumer repository · xoria · dotfiles — the one cell every repo shares) |
 | lint:md | `rumdl check` | corpus-observed ×4; structural-defects-only configs keep the gate green at adoption |
 
 No owner skill exists for Markdown tooling — the corpus convergence IS the authority here;
@@ -169,7 +169,7 @@ Recorded so an audit doesn't re-discover them as news; fixing them is repo work,
   `lint:harness-scope`, `lint:skills-*`. `hook:*` names are exempt (§8).
 - xoria: missing `up`/`u` — the 2026-07-17 incident (`m up` → no task found) that forged this skill.
 - correo: no aliases beyond `f`; no `setup` (waivable by design).
-- qoed: aliases `l`/`t`/`c` missing; harness/ Rust crate has no clippy/test task (gap vs both
+- consumer repository: aliases `l`/`t`/`c` missing; harness/ Rust crate has no clippy/test task (gap vs both
   writing-rust RG2/RG3 and correo's quartet).
 
 ## §8 Running tasks from a git hook — three mise facts (measured 2026-09-22, mise 2026.9.12)
@@ -188,12 +188,12 @@ contract verbs) is `wiring-repositories` HOOK-1; this section only says how mise
 J1 (2026-10-08): under `PRECOMMIT_VCS=jj`, this verb verifies selected immutable snapshot
 bytes in a temporary candidate tree and refuses changes with a format-and-retry instruction.
 It never stages or invokes Git in jj mode. The consumer variables and candidate-tree rule live
-in [SKILL.md](../SKILL.md#j1-pre-commit-interface--dotfiles-firedancer-and-polysearch).
+in [SKILL.md](../SKILL.md#j1-pre-commit-interface--dotfiles-research project store).
 The measured Git-index cases below remain the `TODO(J1)` migration fallback.
 
 | Fact | Consequence | Measured |
 |---|---|---|
-| A whole-tree `fmt:check` in the commit gate reads every session's worktree | any session's unstaged or untracked WIP refuses every session's commit | firedancer 2026-09-25: 4 blocks across ~20 sessions, 10–20 min each |
+| A whole-tree `fmt:check` in the commit gate reads every session's worktree | any session's unstaged or untracked WIP refuses every session's commit | research project 2026-09-25: 4 blocks across ~20 sessions, 10–20 min each |
 | Re-adding a whole partially staged file commits its unstaged hunks | `fmt:staged` REFUSES such a file untouched | dotfiles 2026-09-22 (`wiring-repositories` ledger §9) |
 | `git commit -- <paths>` runs the hook against a temporary index (`GIT_INDEX_FILE`) | re-stage with `git add` from the hook's own environment | `tests/fmt-staged.test.ts`, real commit |
 | Bare `rustfmt` parses as edition 2015 | pass `--edition` = the Cargo.toml edition | `rustfmt 1.9.0`: `async fn` → E0670 without it |

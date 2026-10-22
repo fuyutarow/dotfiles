@@ -2,7 +2,7 @@
 
 ## 2026-10-03 — cold start of per-commit snapshot runs (setup.md §3.5.0)
 
-**Trigger:** firedancer's launcher ran every registered run from a fresh `arena-snapshots/<key>` directory; each run spent 8–10 min
+**Trigger:** research project's launcher ran every registered run from a fresh `arena-snapshots/<key>` directory; each run spent 8–10 min
 recompiling the local workspace packages (measured: warm `import ModelRegistry` 0.14 s, cold run 556 s). The skill's TTFX map had no
 row for path-keyed package-image rejection. **Change:** a LOOKUP table keyed by the observation (new path per commit, slots, sync,
 heavy workload, GPU first call, dependency import). **Evidence:** stable path → 133 s per run; the canonical-bind-path row matches the
@@ -644,7 +644,7 @@ routing cut, reference-index row, §9 checklist block, verify one-liner, descrip
 `device ownership/デバイスの型`, version; `references/nn-stack.md` one-line pointer (Lux stays there);
 `tests/trigger-set.md` six fire, six near-miss, one co-fire order row.
 
-**Gate seen red.** Fixture run (`mise exec julia@1.13`, `envs/gpu` of firedancer, CPU only): good state,
+**Gate seen red.** Fixture run (`mise exec julia@1.13`, `envs/gpu` of research project, CPU only): good state,
 source and receipts pass 5/5; negatives fail as intended (device not a type parameter, no device field,
 `select_exec(vram_bytes)`, `Array` in a round loop, receipts without device). On the real
 firefly-stream-mp sources the source check reports 6 hits: `select_exec` twice, `_fw_merge!`'s `collect`
@@ -687,7 +687,7 @@ differs); the house ruling as row 5's source (a ruling is a valid source for a c
 no-arbitrary-constraints rule); SKILL.md §9 checklist restating §10.10 (house checklist convention, as the
 reviewer noted).
 
-**Gate seen red, rerun** (`mise exec julia@1.13`, firedancer `envs/gpu`, CPU only). Good fixtures 6/6 pass
+**Gate seen red, rerun** (`mise exec julia@1.13`, research project `envs/gpu`, CPU only). Good fixtures 6/6 pass
 (`collect(1:10)` and `execute_step(s, budget)` not flagged). Negatives all fail: `CuArray{Float32}(undef,n)`,
 `Vector{Int}(undef,n)`, `select_exec(vram_bytes)`, `GPUExec(budget.vram)`, `Array` in a boundary's loop,
 state device not a type parameter, 20-deep state, 60 calls vs max 1, undeclared `_step!`, receipts

@@ -141,7 +141,7 @@ behavior-preserving steps AND that current behavior *cannot* be characterized be
 and even then, replace behind a facade with the old system as live fallback. → `references/strategy.md`.
 *Artifact*: a migration sequence of green commits (no long-lived branch); a rewrite is named as a bet.
 
-**FULL-TREE claim gate** (added 2026-07-22, firedancer postmortem): declaring a reorganization
+**FULL-TREE claim gate** (added 2026-07-22, research project postmortem): declaring a reorganization
 "full/全面" imposes two extra artifacts BEFORE the first move: (1) an **extension-blind inventory**
 (`find . -type f` with NO name filters — filtering by extension is how .mjs/.bin strays survive a
 "complete" sweep), and (2) a **written completion criterion** (what zero-state proves done: e.g.

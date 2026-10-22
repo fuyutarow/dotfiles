@@ -50,7 +50,7 @@ Japanese), and corpus artifacts quoted as evidence (mise.toml header comments st
 
 Forging incident (2026-07-17): `m up` (= `mise run up`) died in xoria — the one workspace repo
 with no `up` task. The convention existed only as hand-copied header comments across five
-mise.tomls (「命名規則(qoed/correoと同一)」…), with no SSOT and no gate — exactly the drift this
+mise.tomls (「命名規則(consumer repository/correoと同一)」…), with no SSOT and no gate — exactly the drift this
 skill now closes.
 
 ## The verb contract
@@ -133,7 +133,7 @@ valid. Exhausted retries name the push race and competing commit. The installed 
 itself require Git for remote operations.
 
 When `PRECOMMIT_VCS` is unset, a migrating consumer keeps its old Git-index/ tracked-file path.
-Mark each fallback `TODO(J1)` and remove it after firedancer and polysearch adopt this interface.
+Mark each fallback `TODO(J1)` and remove it after research project and records store adopt this interface.
 Missing or malformed jj variables must fail closed; never silently use the Git fallback.
 
 ## The grammar
@@ -147,7 +147,7 @@ Missing or malformed jj variables must fail closed; never silently use the Git f
    (`banned`, `records`, `claims`, `taxonomy`). Two or more siblings on one object → namespace
    them (`lint:*`, `slides:*`, `papers:*`).
 5. Polyglot: repo-level verbs are depends-only; language bodies live in `<verb>:<lang>` subtasks
-   (`references/recipes.md` §6, qoed exemplar).
+   (`references/recipes.md` §6, consumer repository exemplar).
 6. Git hooks: `hook:<event>` is the task a `.githooks/<event>` shim runs. Its name repeats git's
    hook name verbatim — the one place a hyphen is allowed; `mise-contract` exempts exactly those.
    Its shape is `wiring-repositories` HOOK-1. It composes verbs already in `check`, so rule 3
@@ -244,7 +244,7 @@ FIRES:
 | "add a test task to this repo's task runner" | verb contract, no "mise" keyword needed |
 | 「全リポで `mise run f` が効くか監査して」 | multi-repo audit — the fan-out case |
 | 「pre-commit で整形チェックに止められる。in place で直してほしい」 | `fmt:staged` + `hook:pre-commit` shape (with `wiring-repositories` HOOK-1c) |
-| 「このプロジェクトのタスク体系を qoed と揃えたい」 | contract adoption, no headline keyword |
+| 「このプロジェクトのタスク体系を consumer repository と揃えたい」 | contract adoption, no headline keyword |
 | 「jj のリポで `mise run commit` が無いと言われる」 | jj verbs — copy the template block |
 
 Co-fire:
@@ -279,7 +279,7 @@ MUST NOT fire (route):
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/repository-presets.md` | jj-first setup, repository tool authority, optional SDK portability and gate lanes | adopting the coralbase-derived repo-local patterns |
+| `references/repository-presets.md` | jj-first setup, repository tool authority, optional SDK portability and gate lanes | adopting the reference checker-derived repo-local patterns |
 | `references/recipes.md` | per-cell provenance grades, the lint-tier / test-blocked / clippy-location / biome-config rulings, polyglot composition, known corpus deviations, dated tool versions | before deviating from a matrix cell; before an audit; any "why this body?" question |
 | `templates/*.mise.toml` | copy-out fragments; runtime versions and project scopes must be filled | scaffolding a repo, before materialization and verification |
 | `scripts/mise-contract.ts` | source for repository-owned checker copies; the producer repo runs its own source locally | after every mise.toml edit; per-repo in audits |

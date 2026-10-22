@@ -4,7 +4,7 @@
 
 Author/acceptor: Codex task `codex-ac1c61c6aaf5c510`.
 User explicitly requests theory-systematization skill work, incremental finding-driven updates,
-and practical concept split/merge across relevant skills. This is authorized authoring, not a request to alter Firedancer.
+and practical concept split/merge across relevant skills. This is authorized authoring, not a request to alter research project.
 
 ```text
 selected theory + located definitions/assumptions/results

@@ -25,13 +25,13 @@ The sources are two user-supplied attachments dated 2026-09-25:
 `A2=df42fc48-7fb1-4291-8187-efd90d8bf199`. These are a still-live episode,
 not a frozen terminal research audit. Line numbers below refer to A1 unless
 prefixed `A2:`. Do not infer that a planned check later passed. A read-only look at the live
-firedancer checkout found no root `AGENTS.md`/`CLAUDE.md` and found commit
+research project checkout found no root `AGENTS.md`/`CLAUDE.md` and found commit
 `91a4a35fa` adding `Arena.stream`/`Arena.contract` after the attachment; no
 runtime test of that commit was performed in this forge.
 
 | Observed process failure | Source locus | Corrective owner / artifact |
 |---|---|---|
-| Registered Arena was bypassed by direct stream calls; parameters diverged and leaderboard binding was null. The same episode reported a manually shortened SimpleLogic run. | attachment 738–756 | EV0/EV1 canonical target launch and executed-input attestation. Polysearch/Arena must enforce; skill prose cannot. |
+| Registered Arena was bypassed by direct stream calls; parameters diverged and leaderboard binding was null. The same episode reported a manually shortened SimpleLogic run. | attachment 738–756 | EV0/EV1 canonical target launch and executed-input attestation. records store/Arena must enforce; skill prose cannot. |
 | A very high electricity score contradicted a reported ceiling. A1 had only a leakage suspicion; A2 reports that the score stayed 1.0 after label permutation. | 633–680; A2:544–549 | EV2 rejects this run as contaminated under the reported null protocol. The precise leak path remains unknown; this forge did not inspect its raw control. |
 | Tape-era leader was called a regression, then an ineligible oracle, then a transferable local mechanism; the old benchmark contract and concept eligibility were not classified before the claim. | 177–238, 702–736 | EV4 separates old artifact eligibility, mechanism transfer, replacement obligation, and current matched result. |
 | A top-K experiment also changed family size 528→4,410, yet its result was used to reject a load hypothesis. | 533–537 | EV3 confound table; the run does not isolate top-K's effect. |
@@ -56,7 +56,7 @@ The conditional theorem and proposed egress remedy remain unverified in this for
 | Permuted targets generate a null under an independence hypothesis | author-confirmed | [scikit-learn permutation_test_score](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.permutation_test_score.html), consulted 2026-09-25. It does not prescribe a universal majority threshold. |
 | Progressive validation predicts before learning the revealed label | author-confirmed | [River multiclass example](https://riverml.xyz/0.14.0/introduction/getting-started/multiclass-classification/), consulted 2026-09-25. Applicability is online test-then-train only. |
 | Arena bypass, numerical outcomes, label-null report, claim reversals, concurrent interference | user-supplied third-party report | A1/A2 loci above; no raw numerical rerun or proof kernel receipt inspected here. |
-| EV0–EV4 gates, exact perturbation, status policy | skill-supplied | General operating contract derived from failure classes; polysearch owns executable schema. |
+| EV0–EV4 gates, exact perturbation, status policy | skill-supplied | General operating contract derived from failure classes; records store owns executable schema. |
 
 The source actor and the model share the dominant error: a plausible number is
 promoted before the effective contract, leakage controls, and scope are checked.
@@ -71,7 +71,7 @@ ticket counts, and even a telescoping identity are not learning by themselves.
 
 ## F2 sibling cuts and F4 standing
 
-One claim has one canonical `EVIDENCE DISPOSITION` in its polysearch finding.
+One claim has one canonical `EVIDENCE DISPOSITION` in its records store finding.
 DRS owns intent, receipt, and learning;
 OA owns dispatch and resources; Tiger owns the high-consequence design ledger;
 type-contracts owns invariant placement; Git owns worktree operations; configuration
@@ -95,7 +95,7 @@ semantic home for those rules.
   and downstream scientific throughput were not measured.
 - Two read-only Terra adversarial audits found a pre-run EV0 bypass, bare V0
   collision, current-concept omission, a stale OA P10 gate, and a shadow Bun
-  validator. The final files resolve those findings. Polysearch/Arena target
+  validator. The final files resolve those findings. records store/Arena target
   refusal and schema changes are **not implemented by this skill**; missing
   target enforcement remains `INSTRUMENT_REPAIR`, not a PASS.
 
@@ -105,10 +105,10 @@ claimed here in advance.
 ## 2026-09-25 correction — remove the shadow validator
 
 The editor initially added a Bun `evidence-check.ts`, JSON example, and skill-local tests.
-The user identified the ownership error: polysearch is the sole executable schema and
+The user identified the ownership error: records store is the sole executable schema and
 promotion-gate owner. Those three files were deleted before shipping. This skill
-now owns semantic predicates only and cites canonical polysearch hypothesis/run/finding
-records. Any missing field or refusal belongs to polysearch/Arena implementation,
+now owns semantic predicates only and cites canonical records store hypothesis/run/finding
+records. Any missing field or refusal belongs to records store/Arena implementation,
 not a parallel validator inside dotfiles. The earlier ten Bun test passes were for
 the withdrawn code and are **not** acceptance evidence for the final skill.
 
@@ -255,10 +255,10 @@ The fixture tests actual artifact-producing interpretation, not the target launc
 
 Target floor passes with zero evidence/BIBIFI prose warnings. Section existing core3/reference80
 and orchestration reference13remain unchanged scoped debt. Collection stays73skills/64,388chars;
-no listing increase. `git diff --check` passes. No live Firedancer code, jobs or records were modified.
+no listing increase. `git diff --check` passes. No live research project code, jobs or records were modified.
 
 Deployment checks: central link:skills and lint:skills-wiring pass; existing source-linked Codex
-and Claude skill paths now expose this revision. No claim that a running Firedancer worker reloaded
+and Claude skill paths now expose this revision. No claim that a running research project worker reloaded
 it follows from those checks. Commit/push are part of this user-authorized delivery.
 
 ## 2026-09-30 — normalized performance footing, v2609.1.6

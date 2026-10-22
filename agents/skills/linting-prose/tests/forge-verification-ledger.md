@@ -43,8 +43,8 @@ future reforge; never overwrite.
 
 ## 2026-07-04 reforge #3 (v2607.4.0)
 
-**Motivation (highest-grade source: an observed production failure).** The QOED research repo
-(`/home/fuyu/Workspace/qoed`) was audited by a 7-agent fleet → 71 findings. Three failure systems,
+**Motivation (highest-grade source: an observed production failure).** The consumer repository research repo
+(`/home/fuyu/Workspace/consumer repository`) was audited by a 7-agent fleet → 71 findings. Three failure systems,
 none of which the incumbent `grounding-prose` fully covered:
 1. internal-ledger register exported to every reader class (C9 — incumbent covered this, its crown jewel);
 2. **append-only self-correction** — retracted claims left standing in tables/headings/self line-refs
@@ -72,7 +72,7 @@ shaped the design:
 solo keeps them coherent. machine-floor.md + assets + this ledger drafted in the same context.
 
 **Machine-floor probe (proven, not assumed).** `bunx textlint` installed with the presets + the C9
-prh dict was run over five QOED files:
+prh dict was run over five consumer repository files:
 - `RESEARCH_STATE.md`: prh fired 10× on `PASS`/verdict enums, plus `no-successive-word`, `max-kanji`.
 - `R2606_081` (the lifecycle exemplar): 97 findings incl. `sentence-length` ×52, `no-ai-list-formatting`
   ×16, `no-ai-colon-continuation` ×4.
@@ -82,14 +82,14 @@ The `--external` C9 set (`[A-Z]{3,}_[A-Z_]{3,}`, `[A-Z]{1,3}[0-9]{4}_[0-9]{2,3}`
 to fire on the verdict-enum table; a clean paragraph passes.
 
 **De-risk of the VIBE tier (critique's #1 concern — can an LLM stably judge L3/L4?):** partially
-pre-answered by the QOED audit — 7 independent agents converged on register-export + lifecycle with
+pre-answered by the consumer repository audit — 7 independent agents converged on register-export + lifecycle with
 quoted evidence (high inter-agent agreement). The VERIFY forward-test (below) closes the rest with
 the 71-finding corpus as ground truth.
 
 ### #3 verification findings (7 Opus lenses, refutation-first, read-only)
 
 **Forward-test result (the critique's #1 de-risk — can the SKILL ALONE make an executor catch the
-VIBE failures?): BOTH PASSED.** A fresh agent given only SKILL.md + patterns.md, auditing QOED
+VIBE failures?): BOTH PASSED.** A fresh agent given only SKILL.md + patterns.md, auditing consumer repository
 `RESEARCH_STATE.md`, caught the register-export and thesis curse-of-knowledge failures via F-register
 + rewrite-ledger #11; another, auditing `R2606_081`, caught the append-only self-correction (a claim
 retracted in the body but kept in the summary table + heading) via F-lifecycle. The VIBE tier works
@@ -102,7 +102,7 @@ from the skill text alone.
 | major | architecture / comparative | `--external` was a fictional textlint flag (referenced 4×); the C9 register set was always-on and false-positived on internal working docs | Split into two configs (`textlintrc.json` base + `textlintrc-external.json`) and two prh dicts (`prh-house.yml` always-on + `prh-external.yml` C9). Proven: internal doc → base 0 hits, external 3 hits |
 | major | comparative | F-L4 claimed conclusion-first/BLUF while the description disclaimed "document structure → designing-presentations" — a self-race on ask "結論が埋もれてる" | Narrowed the disclaimer to "deck structure, section order, slide ownership"; the family clause now reads "document logic" — prose-level conclusion placement is claimed, deck structure routes out |
 | major | comparative / sibling | machine-floor.md called `check-prose-grounding.sh` "retired/SUPERSEDED" while it was still the only wired gate (mise `lint:prose-grounding`) — false in-repo | Resolved in the FIX ripple: retire the script + rewire the mise task to `bunx textlint`, making the claim true before ship |
-| minor | bloat / spec-fidelity | description grew past 1500; "grounding" trigger dropped (would orphan); terminology-table "every house term" overclaim; ≤3 and ≤100 numbers restated (second home); prh "two roles" mislabeled; QOED coined-labels shipped as unfenced graveyard | description → 1486 with "grounding" re-added; overclaim softened to "anchored, declared, or defined inline"; numbers one-homed; prh section rewritten as two dicts; QOED entries fenced as ⚠ PER-REPO EXAMPLES |
+| minor | bloat / spec-fidelity | description grew past 1500; "grounding" trigger dropped (would orphan); terminology-table "every house term" overclaim; ≤3 and ≤100 numbers restated (second home); prh "two roles" mislabeled; consumer repository coined-labels shipped as unfenced graveyard | description → 1486 with "grounding" re-added; overclaim softened to "anchored, declared, or defined inline"; numbers one-homed; prh section rewritten as two dicts; consumer repository entries fenced as ⚠ PER-REPO EXAMPLES |
 | critical | architecture / sibling / comparative | STALE-DIR — the rename's other half was undone: `grounding-prose/` still shipped an active SKILL.md, racing linting-prose on every prose ask; 9+ sibling pointers (incl. a double-stale `auditing-audience-facing-prose` in prompting-llms, and the `detect-audit-theater.sh` grep) still named the dead skill | Resolved in the FIX ripple (below): retire `grounding-prose/` + `check-prose-grounding.sh`; rewrite all sibling pointers to `linting-prose`; add `linting-prose` to the Stop-hook grep; `mise run link:skills` |
 
 **No `既製=皆無` overclaim** (spec-fidelity lens confirmed): every "no off-the-shelf" claim is scoped
@@ -187,9 +187,9 @@ this skill; the deterministic floor passed it. 15-agent web/GitHub/npm survey + 
 Open: `sudachidict-full`/NEologd + collocation-PMI or LM-surprisal (rinna/japanese-gpt2) would lift
 precision — heavier, not shipped. EN machine floor still unpackaged (prior finding, still OPEN).
 
-## 2026-07-04 consuming-repo finding (QOED) — dearu-register false positive
+## 2026-07-04 consuming-repo finding (consumer repository) — dearu-register false positive
 
-A consuming session (QOED, である体 research records) exercised the shipped floor and correctly
+A consuming session (consumer repository, である体 research records) exercised the shipped floor and correctly
 diagnosed a defect I shipped, verified here empirically:
 
 | Severity | Finding | Verification | Resolution |
@@ -206,7 +206,7 @@ house-wide style decision, not per-edit), and surfaced that the repo's own `mise
 points at a non-existent `scripts/textlintrc-research.json` and silently passes via `|| true` — a
 real harness defect ON THE CONSUMING SIDE (fix: repoint it at this skill's `textlintrc-research.json`).
 
-## 2026-07-04 incident — code-mixing (ルー語) passed a green floor (QOED R2607_021)
+## 2026-07-04 incident — code-mixing (ルー語) passed a green floor (consumer repository R2607_021)
 
 Symptom: a consuming session, following this skill mechanically (audience line declared, floor
 green, five-slot report), generated NEW prose at 15 latin tokens/100 JA chars — "cite する",
@@ -243,7 +243,7 @@ REVERSED within hours. Owner's one-line refutation: 根付いているカタカ�
 |---|---|
 | Violated the skill's own DECLARED READER law: substituted a 2006 general-public/公共文書 list for the actual 2026 reader's vocabulary | dict flags ツール→道具, バリアフリー→障壁なし, ガバナンス→統治 — the official JPX term is コーポレートガバナンス・コード |
 | 20-year staleness: the list's own design is 理解度-stratified for 2004-06 readers; many entries have since rooted | インフラ→社会基盤, コミュニティー→地域社会 are standard 2026 vocabulary |
-| A noisy floor is a dead floor (the QOED `\|\| true` lesson) — blanket adoption would train consumers to ignore the external config | — |
+| A noisy floor is a dead floor (the consumer repository `\|\| true` lesson) — blanket adoption would train consumers to ignore the external config | — |
 
 Mechanism note (vs pendulum): reversal on NEW cited evidence (rooted-word hits), not mood. The
 ADOPT>CONFIGURE>AUTHOR ladder survives — but ADOPT is also reader-gated: an established dictionary

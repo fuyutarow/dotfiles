@@ -178,7 +178,7 @@ exact-patch pin rule are dated facts — `references/layers.md` §2.
    | Class | Predicate | Then |
    |---|---|---|
    | scratch | never cloned, shared, or written by a second session | `jj git init --colocate` and nothing else. Say so and stop |
-   | notebook | `keeping-research-notebooks` homes §0 class predicate (holds, or is to adopt, a polysearch records store) | read homes §0 BEFORE laying any manifest; its root-deny list and `packages/` layout bind every later layer |
+   | notebook | `keeping-research-notebooks` homes §0 class predicate (holds, or is to adopt, a records store records store) | read homes §0 BEFORE laying any manifest; its root-deny list and `packages/` layout bind every later layer |
    | plain | otherwise | the language owner's default package layout applies |
 2. **ADMIT (S1)** — walk the layer table. For each YES, write the failure it prevents. That list
    is the scaffold plan, and it goes in the commit message.
@@ -212,7 +212,7 @@ FIRES:
 | "set up a new repo for this project, Julia plus a Rust harness" | polyglot admission and order; manifests route to their owners |
 | "Set up a Tauri-like repo with Cargo and pnpm manifests at root" | Declare both manager scopes; layers.md §3 permits coexisting roots |
 | 「この repo、hook が効いてない気がする。配線見て」 | S2 rows 2–3, machine-detectable |
-| 「qoed に同じ配線を入れたい」 (existing repo, wiring named by comparison) | S1 audit — which layers are missing, which accreted |
+| 「consumer repository に同じ配線を入れたい」 (existing repo, wiring named by comparison) | S1 audit — which layers are missing, which accreted |
 | "why does semantic search never find anything in .claude/?" | S2 row 4 — the ordering, owned here even though `ccc init` is not |
 | 「使ってない hook とか tool が溜まってる。棚卸しして」 | S1 ADMISSION run backwards |
 | 「他のセッションの作業中ファイルのせいで commit が通らない」 | HOOK-1c — the commit gate reads the whole tree |

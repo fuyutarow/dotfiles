@@ -5,7 +5,7 @@ description: >-
   and gates when a model change may be measured. Use for 研究リポジトリ, ノートブック,
   置き場所, どこに置く, ディレクトリ構成 (新規リポ含む), 論文の置き場と図の出所, 一元的な入口, launcher dry-run, 単一コミッタ, agents committing
   to a shared checkout, run dir landing, edition / revision, conformance / acceptance
-  rows, 系譜, 劣後, 登録漏れ, scratchpad 禁止. Cuts: store CLI → driving-polysearch;
+  rows, 系譜, 劣後, 登録漏れ, scratchpad 禁止. Cuts: store CLI → records-store CLI owner;
   jj/git commands → driving-jujutsu / driving-git; task bodies → wiring-mise-tasks;
   repo layers → wiring-repositories; Julia → writing-julia; evidence meaning →
   validating-experimental-evidence; documents → governing-research-documentation.
@@ -52,7 +52,7 @@ Read each binding from the repo before the first act. A missing binding is a fin
 
 | Binding | Read it from | Command |
 |---|---|---|
-| Write gate and path classes | the gate config's `declared.*` keys | `polysearch doctor`; read `polysearch.json` |
+| Write gate and path classes | the gate config's `declared.*` keys | run the store's doctor command; read its config file |
 | Commit verb | the repo's `commit` task | `mise tasks`; body per `wiring-mise-tasks` |
 | Launch verb | the repo's single launcher task | `mise tasks`; then its `--dry-run` |
 | Edition ledgers | catalog file, per-edition versions ledger, digest checker CLI | `rr about` where ccc is wired; else read the task list and the registry dir |
@@ -74,10 +74,10 @@ N3 and N4 detail: `references/launch-and-land.md`. N5 detail: `references/editio
 
 | Artifact kind | HOME | ENTRY | Semantics owner |
 |---|---|---|---|
-| claim, run, measurement, hypothesis, finding | RECORDS STORE | its typed commands; runs only through the launcher | `driving-polysearch`; meaning `validating-experimental-evidence` |
+| claim, run, measurement, hypothesis, finding | RECORDS STORE | its typed commands; runs only through the launcher | `records-store CLI owner`; meaning `validating-experimental-evidence` |
 | library or model code | a package under `packages/`, as an EDITION REVISION | working-copy edit, landed by the COMMITTER | the language skill |
 | shared device primitive | the shared-primitive library, additive only | new public name plus oracle test | language skill; device design `optimizing-julia-gpu-kernels` |
-| experiment runner code | an apparatus record | the store's apparatus command | `driving-polysearch` |
+| experiment runner code | an apparatus record | the store's apparatus command | `records-store CLI owner` |
 | benchmark semantics, literature values | the benchmark package | schema-validated data plus its tests | `validating-experimental-evidence` |
 | research document, report, plan | the document portfolio | DOC ADMISSION | `governing-research-documentation` |
 | paper or slide source | `deliverables/papers/<dir>/`, `deliverables/slides/<dir>/` | working-copy edit, landed by the COMMITTER | dir name `compiling-latex`; argument `arguing-research-papers`; deck `designing-presentations` |
@@ -105,7 +105,7 @@ N3 and N4 detail: `references/launch-and-land.md`. N5 detail: `references/editio
 | Ask | Route |
 |---|---|
 | A repo with no write gate, no records store and no launcher, and none being adopted | `driving-jujutsu` or `driving-git` alone |
-| Records-store flags, record schema, cause roles | `driving-polysearch` alone |
+| Records-store flags, record schema, cause roles | `records-store CLI owner` alone |
 | A jj conflict, rebase or op-log recovery with no multi-writer question | `driving-jujutsu` alone |
 | Write or rename the commit or launch task body | `wiring-mise-tasks` |
 | What a measured number licenses: leak, footing, regression claim | `validating-experimental-evidence` |
@@ -118,7 +118,7 @@ The full fire/no-fire set is `tests/triggers.md`; desk-check it after any descri
 
 | Sibling | Cut |
 |---|---|
-| `driving-polysearch` | **PURPOSE:** the store's CLI and record model → there. WHERE an artifact goes and which ENTRY admits it → here. Its `run --exec` is the primitive a launcher wraps; where a launcher exists, use only the launcher. |
+| `records-store CLI owner` | **PURPOSE:** the store's CLI and record model → there. WHERE an artifact goes and which ENTRY admits it → here. Its `run --exec` is the primitive a launcher wraps; where a launcher exists, use only the launcher. |
 | `driving-jujutsu` | **PURPOSE:** jj commands → there. WHO commits WHAT, WHEN in a multi-writer notebook → here. |
 | `driving-git` | **PURPOSE:** git commands and the git-only shared-checkout protocol → there. Notebook landing and the single COMMITTER → here. A repo whose gate validates one tree takes no worktree. |
 | `wiring-mise-tasks` | **CARDINALITY:** the commit verb and any task's naming and body shape → there. Their use as the only ENTRY, and launcher preconditions → here. |

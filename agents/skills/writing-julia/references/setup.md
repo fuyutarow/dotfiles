@@ -226,7 +226,7 @@ local-stack recompile whenever the snapshot PATH changes. Diagnose first: in a f
 | GPU first call still slow after warm imports | CUDA.jl ≥ 6.3 with GPUCompiler 2 stores GPU inference in package images; PTX/SASS are not cached | A small GPU `@compile_workload` (opt-in, CUDA functional) cuts it; for seconds-scale loops add a commit-pinned resident worker (no Revise, restart per commit, RSS/VRAM caps) |
 | Import of the frozen dependency layer (~5–10 s) dominates | — | Last resort: sysimage of the dependency layer only (never the local packages); not `juliac --trim` for dynamic GPU/AD graphs |
 
-Source: firedancer launcher, 2026-10-03 — registered run 556 s → 133 s after path stabilization; advice cross-checked with Codex (gpt-6.1-sol) and Grok, both ranking the canonical bind path first.
+Source: research project launcher, 2026-10-03 — registered run 556 s → 133 s after path stabilization; advice cross-checked with Codex (gpt-6.1-sol) and Grok, both ranking the canonical bind path first.
 
 ### 3.5.1 Shipping a `.so` / shared library — two routes
 

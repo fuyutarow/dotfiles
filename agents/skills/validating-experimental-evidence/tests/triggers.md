@@ -17,7 +17,7 @@ running or repairing the target is a co-fire or handoff.
 | 「top-K で悪化したから H-load は棄却？同時に family も8倍になった」 | EV3 confound: contrast valid as an observation, not a causal rejection. |
 | “It beats Transformer but misses recency; the Transformer only has a forward path” | EV3 same-stream floor and trainability footing; withhold the win claim. |
 | 「最後の一問が n から落ちていたが、基準線と比較してしまった」 | EV1 scored-tail assertion plus EV3 matched rerun. |
-| “polysearch run has no arena id or contract digest, but the leaderboard accepted a score” | EV0 refuses the official claim; polysearch owns the missing runtime rejection. |
+| “records store run has no arena id or contract digest, but the leaderboard accepted a score” | EV0 refuses the official claim; records store owns the missing runtime rejection. |
 
 ## Near-miss no-fire
 
@@ -28,9 +28,9 @@ running or repairing the target is a co-fire or handoff.
 | “Which hypothesis should we test next and what threshold should we precommit?” | `driving-bibifi-cycles` for bounded iterations; `acting-on-hypotheses` for a costly bet; section admission remains `directing-research-sections`. |
 | 「修了した研究 episode 全体の process audit を出して」 | `auditing-research-processes`; this skill may supply validity rows. |
 | “Write the paper's contribution claim from a finished result” | `arguing-research-papers`; this skill can qualify the cited result first. |
-| 「登録済み土俵の test を一回走らせて。結果の解釈はまだ不要」 | Domain executor uses EV0's registered binding and preserves the polysearch run; no disposition yet. |
+| 「登録済み土俵の test を一回走らせて。結果の解釈はまだ不要」 | Domain executor uses EV0's registered binding and preserves the records store run; no disposition yet. |
 | “Decide whether a label-visibility rule belongs in a parser or state API” | `designing-type-contracts` after the required information flow is fixed. |
-| “Add a Bun script inside the skill to validate polysearch findings” | `NO-FIRE`: schema and refusal belong to polysearch; this skill may supply semantic negative cases. |
+| “Add a Bun script inside the skill to validate records store findings” | `NO-FIRE`: schema and refusal belong to records store; this skill may supply semantic negative cases. |
 
 ## Ordered co-fire
 

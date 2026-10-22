@@ -47,7 +47,7 @@ repository, not global house requirements:
 | `--require-aggressive` / `requireAggressive` | `settings.activate_aggressive = true` |
 | `--require-min-version` / `requireMinVersion` | A YYYY.M.D-shaped `min_version` |
 
-Coralbase wave-a's tool policy maps to:
+reference checker wave-a's tool policy maps to:
 
 ```sh
 bun tools/mise-contract.ts --tools --task-directory mise/tasks --require-pinned \
@@ -62,7 +62,7 @@ both `package.json` and the lockfile so a stale lock cannot preserve a removed a
 
 ## Static coverage and reference differences
 
-The generic shell inspection is ported from coralbase's `scripts/tools-contract.ts`.
+The generic shell inspection is ported from reference checker's `scripts/tools-contract.ts`.
 It handles command substitutions, pipelines, assignments, env/fnox wrappers, shell
 `-c` bodies, and literal npm runners. Quoted JavaScript/JSON stays argument data.
 This is a bounded static audit, not a complete shell interpreter.
@@ -81,10 +81,10 @@ result as proof about dynamic commands.
 Intentional generalizations: root task run bodies and arbitrary TOML includes are
 inspected even without the directory restriction; locked runtime dependencies are
 accepted alongside devDependencies; common runtime executable aliases are accepted.
-The full CLI retains verb/body/house-pin rules that coralbase's tool-only audit lacks.
-Invalid npm locks deliberately grant no bin authority: coralbase reports the lock error but still adds its bin names, while this checker also reports each use of the unauthorized bin. The verdict is FAIL in both; finding counts can therefore differ.
+The full CLI retains verb/body/house-pin rules that reference checker's tool-only audit lacks.
+Invalid npm locks deliberately grant no bin authority: reference checker reports the lock error but still adds its bin names, while this checker also reports each use of the unauthorized bin. The verdict is FAIL in both; finding counts can therefore differ.
 Malformed input can be an environment failure at the CLI boundary rather than a
-coralbase finding string. Compare the tool-only APIs when comparing finding counts.
+reference checker finding string. Compare the tool-only APIs when comparing finding counts.
 
 Regression fixtures live in `tests/mise-contract-tools.test.ts`; they create all
 repository data under the OS temporary directory. The release comparison uses a

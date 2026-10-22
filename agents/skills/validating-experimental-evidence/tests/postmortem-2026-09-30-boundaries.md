@@ -50,7 +50,7 @@ The real runner accepted both 60-second and 2700-second manifests in read-only c
 It has no trusted upper task-budget input. Its ADMIT proves feasibility of the supplied envelope, not authority to spend it.
 The skill requires comparison with the upper budget before execution and expressly disclaims mechanical enforcement of that join.
 This reforge changes that decision contract; it does not add a trusted-budget service or certify production enforcement.
-No Firedancer jobs, implementation, records or scientific corpus were changed.
+No research project jobs, implementation, records or scientific corpus were changed.
 
 ## Verification
 

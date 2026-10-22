@@ -146,10 +146,10 @@ The Director and PI charters are graded **author-confirmed**: they transcribe th
 form. The Observer section's grades are **split per row** (table above) rather than blanket-set,
 per this forge's own §1 discipline: the base tap/intent split and the addressee-exception closure
 are **author-confirmed**, sourced from the orderer's own 2026-09-02 ruling and a later verbatim
-correction, both relayed by the Director (`firedancer-dtr_vdrt`) from an Observer-side memory
+correction, both relayed by the Director (`director`) from an Observer-side memory
 file (`observer-tapping-vs-intent-routing.md`) this forge has not itself read. The
 Director-must-not-be-tapped-for-others'-information refinement is **needs-verification** — it is
-`firedancer-obs_e2zp`'s own self-correction, Director-endorsed but not yet orderer-confirmed; the
+`observer`'s own self-correction, Director-endorsed but not yet orderer-confirmed; the
 Director has said it will seek that confirmation. The PI charter's commit-hygiene note is graded
 **author-confirmed-via-coordination** — relayed by the Director as direct orderer guidance
 (2026-09-04, evidenced by an observed 59-and-growing uncommitted-item count), not a verbatim

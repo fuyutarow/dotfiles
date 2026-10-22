@@ -57,14 +57,14 @@ second benchmark doctrine.
 ## Decisions not promoted into shared skill rules
 
 The later report proposes one generated edition manifest, a single acceptance
-suite, and changes to a research-record CLI. Those are target-repository design
+suite, and changes to a research record CLI. Those are target-repository design
 candidates. Their schemas, runtime cost, ownership and failure cases were not
 verified here. A local unit test remains useful; only a claim about the official
 path requires an official-path witness. Do not make every code commit wait for a
 full benchmark suite by copying this proposal into a global skill.
 
 The reported commit-script failure, search-router denials, actor duplication, and
-research-record lifecycle defects require domain implementation or harness
+research record lifecycle defects require domain implementation or harness
 repair with reproducing cases. The skill changes identify the correct boundary;
 they do not repair those executables. A user-supplied transcript is not a fresh
 runtime probe of any present tool.

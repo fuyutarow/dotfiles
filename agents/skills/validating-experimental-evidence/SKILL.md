@@ -5,7 +5,7 @@ description: >-
   baseline/基準線, leakage/ラベル漏れ, prequential tests, implausible scores, confounded
   ablations/交絡, regression/退行, normalized efficiency/MFU/η comparisons/無次元効率,
   registry bypass, or stale executed code.
-  Owns EVIDENCE DISPOSITION meaning; polysearch owns schema and promotion gates.
+  Owns EVIDENCE DISPOSITION meaning; records store owns schema and promotion gates.
   Work selection→driving-bibifi-cycles; section run admission→directing-research-sections;
   costly test threshold→acting-on-hypotheses;
   dispatch/resources→orchestrating-agents; risk ledger→practicing-tiger-style;
@@ -44,7 +44,7 @@ specific repair. It does not block unrelated exploratory work.
 This skill owns the *meaning* of measurement validity and comparability. It does not launch
 the run, choose a research bet, allocate resources, or implement the target's gate.
 GPU design/profiling belongs to `optimizing-julia-gpu-kernels`; EV3 qualifies what those measurements can compare.
-In polysearch-backed research, **polysearch owns the question/hypothesis/run/finding
+In records store-backed research, **records store owns the question/hypothesis/run/finding
 schema and promotion gates**. Arena owns its registered stream and scoring contract.
 Do not create a sidecar card, validator, or second result store in this skill.
 
@@ -106,8 +106,8 @@ Add no new record schema.
 
 ## Canonical recording and verification
 
-Record the disposition in the existing polysearch finding and its joined run,
-hypothesis, candidate, and Arena contract. If polysearch cannot represent or reject
+Record the disposition in the existing records store finding and its joined run,
+hypothesis, candidate, and Arena contract. If records store cannot represent or reject
 a required state, mark the result `UNKNOWN` or `INSTRUMENT_REPAIR`.
 Fix its schema or launch gate there. Never claim this SKILL.md enforces a runtime rule.
 In another research system, use its one canonical evidence ledger. Verify with the
@@ -123,7 +123,7 @@ The disposition judgment stays SOLO; receipts may be collected in parallel.
 | Admit/register one granted section's run or commit learning | `directing-research-sections`; it consumes this disposition, never delegates its authority |
 | Agent roles, write-set isolation, CPU/GPU admission, status | `orchestrating-agents`; this skill supplies validity, not a fleet |
 | Decide where a prediction-time label invariant lives in a type, parser, or state API | `designing-type-contracts` after this skill states the information-flow requirement |
-| Implement a benchmark adapter, runner, leak test, polysearch schema, or promotion gate | Follow repository instructions and the language owner; this skill supplies the negative cases |
+| Implement a benchmark adapter, runner, leak test, records store schema, or promotion gate | Follow repository instructions and the language owner; this skill supplies the negative cases |
 | Effective configuration/signature authority of a registry file | `governing-configuration-systems`; its contract can feed EV0 |
 | Consequential architecture/release risk | `practicing-tiger-style`; link this disposition into T2/T4 |
 | Frozen terminal research-process audit | `auditing-research-processes`; this skill can validate its measurement rows |

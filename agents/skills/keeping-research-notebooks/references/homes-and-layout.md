@@ -1,13 +1,13 @@
 # Homes and layout — gate N1 detail
 
 > Scope: where each artifact kind lives, how to read a repo's own bindings, and the identifier scheme.
-> Record operation is `driving-polysearch`'s. Layer wiring is `wiring-repositories`'.
+> Record operation is `records-store CLI owner`'s. Layer wiring is `wiring-repositories`'.
 
 ## §0 Top-level layout — the house layout of a notebook repo
 
 | Class predicate (the ONE definition; siblings cite this row) | Class |
 |---|---|
-| the repo holds, or is being scaffolded to adopt, a records store (`polysearch.json`) | notebook |
+| the repo holds, or is being scaffolded to adopt, a records store (its config file) | notebook |
 | otherwise | plain: the language owner's default layout; this § does not apply |
 
 In a notebook, a research project is a set of member packages plus its papers; it is not a dir of its own.
@@ -23,7 +23,7 @@ In an existing repo, the gate config's declared paths (§2) list what exists; th
 | `envs/<slug>/` | an execution env with its own lock, for a resolution the workspace cannot share | the first such env | `writing-julia` PK0 notebook row |
 | `deliverables/papers/<dir>/` | one paper's source and build dir | the first paper | dir name: `compiling-latex`; argument: `arguing-research-papers` |
 | `deliverables/slides/<dir>/` | one deck's source | the first deck | dir name: `compiling-latex`; deck: `designing-presentations` |
-| records-store root | records and run dirs (tracked; landed by N4) | at scaffold, after VCS init (`polysearch init --help`; no skill documents init yet) | records: `driving-polysearch` |
+| records-store root | records and run dirs (tracked; landed by N4) | at scaffold, after VCS init (consult the store CLI's init help; no skill documents init yet) | records: records-store CLI owner |
 | document portfolio root | governed research documents | the first admitted document | `governing-research-documentation` |
 | `data/` (ignored) | large bytes (§5) | the first large file | — |
 | archive path | frozen retired material (§1 row) | the first retirement | — |
@@ -35,7 +35,7 @@ In an existing repo, the gate config's declared paths (§2) list what exists; th
 | a dir is declared but holds nothing | do not declare it yet; an empty dir does not survive a clone, so the gate reports it absent there |
 | `Pkg.generate` would write to the repo root | generate at `packages/<Name>.jl/` instead (`writing-julia` PK2 notebook row) |
 | a DrWatson project is proposed | refuse; the records store is the experiment layer (`writing-julia` setup.md §3.4) |
-| a recorded run selects a Julia env | `--project=packages`, never a member path: `polysearch run --reproduce` restores a workspace root only from the repo root's or the named dir's tracked files |
+| a recorded run selects a Julia env | `--project=packages`, never a member path: `records store run --reproduce` restores a workspace root only from the repo root's or the named dir's tracked files |
 
 ## §1 Homes, expanded
 
@@ -68,13 +68,13 @@ Do not create a directory to fill the gap.
 |---|---|---|---|
 | Declared project paths | gate config `declared.project_files` | read the gate config | target path outside every entry |
 | Control paths | gate config `declared.control_paths` plus the gate's reserved paths | read the gate config | an agent plans to edit one |
-| Protocol dirs | the records store root and its kind subdirs | `polysearch doctor` | a raw write is planned there |
-| Store health | gate health checks | `polysearch doctor` | a check fails on a path you touch |
+| Protocol dirs | the records store root and its kind subdirs | `records store doctor` | a raw write is planned there |
+| Store health | gate health checks | `records store doctor` | a check fails on a path you touch |
 | Commit verb | `commit` task | `mise tasks` | absent: route to `wiring-mise-tasks` |
 | Launch verb | the one launcher task | `mise tasks`; its `--help` | two launch paths exist |
 | Edition registries | catalog, versions ledger, model registry, checker | `rr about` on "edition catalog", "code digest checker" where ccc is wired; else the task list and registry dir | a registry has no checker |
 | Rulings | memory index | read the memory index | a ruling sits only in a report |
-| Records store root | the gate config's protocol directory | `polysearch doctor` | no store and none being adopted: this skill does not apply (a repo being scaffolded to adopt one takes §0) |
+| Records store root | the gate config's protocol directory | `records store doctor` | no store and none being adopted: this skill does not apply (a repo being scaffolded to adopt one takes §0) |
 | Knowledge repo | the repo's knowledge-distillation hook or memory index | read `.claude/settings.json` hooks; the memory index | a primary source read with no distillation entry |
 
 Repo instruction files can be stale.

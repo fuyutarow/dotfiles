@@ -201,7 +201,7 @@ domain/plain executorへ渡す。複数独立方向の配分・再開・撤退�
 
 ## 2026-07-23: GB110 ポストモーテム(完成宣言4回棄却)の統合(第4次)
 
-出自: firedancer GB110、5巡。「発射できる」という完成宣言が第三者監査に4回連続で棄却された
+出自: research project GB110、5巡。「発射できる」という完成宣言が第三者監査に4回連続で棄却された
 (5巡目で通過)。各巡で監督は煙テストの通過を根拠に完成と判断したが、監査は毎回、実物の
 破れを保存物の照合で発見した。極めつけ: 煙の「主指標と min(best,final) が別値」という
 観測を是正の実証と読んだが、その観測は**バグ(GPU cache の汚染)でも出る**ものだった。また、
@@ -274,7 +274,7 @@ F3 desk-check(name + description のみで判定):
 
 ## 2026-07-23: 第5次ポストモーテム(workerへの判断の委任・一枚岩の発注)の統合
 
-出自: firedancer、発注者の指摘「sonnetにworker以上の判断を委ねている・40分級の負荷」。
+出自: research project、発注者の指摘「sonnetにworker以上の判断を委ねている・40分級の負荷」。
 実測: 一枚岩の委任8回・workerの判断の漏れがsol監査1巡の往復を生成・監視待ちの空転6回以上・
 出力上限での腕の死亡1回。
 
@@ -361,7 +361,7 @@ sol を起草者とする全面改鋳を実施。拘束: 保全原則(12門・LA
 > 同日深夜の第2次ポストモーテム(速度の注意4回)で P7〜P9 を追加。実測: 判定に関わらない
 > 走行を遅い装置に置いて2時間浪費・測定条件の不一致で比較実験を1周再走・補助変数の
 > 連動を見落として判別実験が1回無効化。同日さらに P10 を追加(2026-07-22、実測: 同一の
-> 束ねを 1 日に 3 回再構築)。firedancer GB110(2026-07-23)の第4次ポストモーテムで LAW(2)
+> 束ねを 1 日に 3 回再構築)。research project GB110(2026-07-23)の第4次ポストモーテムで LAW(2)
 > の検収定義・P4・P8 を強化: 実測、「発射できる」の完成宣言が第三者監査に4回連続棄却
 > (5巡目で通過) ── 主因は検収の試験設計(主張が偽でも出得る観測を採択の根拠にしていた)。
 > 2026-07-23 P0 実測: プローブ検収で帰着照合を怠り、既知帰着を発注者が検出・照合一発で判明した事故と、逆に六クエリ battery が降格二件を一時間で決めた成功。
@@ -383,7 +383,7 @@ sol を起草者とする全面改鋳を実施。拘束: 保全原則(12門・LA
 ### 進捗ストール(移設)
 
 > **Version**: v2607.6.0 (2026-07-24 — 配役の一次錨の蒸留: 公式の並列subagent適性と枠消費の verbatim 引用を配役表へ(「Fable=Director/Sonnet=Executor」は公式推奨でなく third-party 格と裁定)+LAW(2)に全力実務の宣言(唯一の例外)。新規 P-gate・委任契約項目ゼロ(数え上げ12不変)。sol 査読2巡の記録は台帳。v2607.5.0=健全化の窓の蒸留: 実測値の体制の併記の義務+全数宣言の3層検査(P6)・worker停止の再開の定型(委任契約)。v2607.4.0=2026-07-23 進捗ストールのポストモーテム蒸留: 監査の欠け2級分類(P4)・終了条項と理論の消費者条項(委任契約)・覆せる既定(LAW(2))・達成級の語の土俵の名指し(P6))
->   ボトルネック化し「進捗ストール」の指摘——うち2件は既定で進められる種類だった)
+> ボトルネック化し「進捗ストール」の指摘——うち2件は既定で進められる種類だった)
 | P4 ROUND-TRIP ECONOMY | **RETIRED runtime copy**。2026-07-23の監査往復観測のprovenanceだけを残す。現行のrepair path、二巡での仕様差し戻し、監査briefは`references/delegation-contracts.md` §4–§5がSOLE home | 現行P4へのpointer |
 | 指示書の自己完結 | 起草担当へ自己完結の指示書を渡す。指示書には目標・根拠資料・数値や事実の錨・**完成の定義(何が出来たら完了か)と検収の試験(検収者が実行する判定手続き)**・「証明や確認ができない箇所はごまかさず明記せよ」を含める。**成果物に載る数値を生む実行体には、独立の自己検定を2つ以上内蔵させる**(別法の再計算・極限や次元の検査・既測との突き合わせ。2026-07-22 実測: 目視と注釈を生き延びた係数の誤りを異種の監査だけが発見、同夜の自己検定は4件の誤りを機械で捕獲)。**規模の大きい新規実装は一枚岩で渡さず、共通の土台を固定して並列の腕に分解する。時間予算(超えたら中間の報告か中断)も指示書に書く**(2026-07-22 実測: 分解を怠った実装委任1件だけが44分無音、他の委任は全て速く着地)。独立な起草は並列に発射する(独立 = 互いの出力・結論を渡さない)。**長い走行を発射する腕の指示書には終了条項を必ず含める: 発射後は切り離しの確認と PID の報告をもって退出、子守り(完了までのポーリング常駐)の禁止**(2026-07-23実測: 終了条項なしの腕が走行の子守りで1h13m・38万トークンを消費)。**理論・相談の発注書には「消費する建造の名前と着地予定」の欄を必須とする——2つの建造以内に実験が消費できない理論は発注しない**(2026-07-23実測: 消費者の遠い理論発注が並走し、決定的経路の実装が痩せて発注者が進捗ストールを検出)。**workerが通知待ちや無進捗で停止したら、SendMessageの定型(「出力を自分でpoll/tailし、プロセスの終了はBashのループで待ち、最終報告まで完走。停止は報告の提出時のみ」)で即座に再開する——散文の禁止では再発する(2026-07-23〜24実測: 指示書に明記しても4例再発。恒久の是正はハーネス側の機構であり、蒸留でなく鍛錬の課題として記録)** | 指示書内にこれらの要素(終了条項・消費者の欄を含む)が明記されている/停止の再開はSendMessageの記録 |
 
@@ -564,7 +564,7 @@ driving-* 系の鍛え直し課題として記録する。
 判定軸: (a) 他の腕が出さなかった主張の件数、(b) 各主張に所在が付くか、(c) 直近性、
 (d) 検証可能な具体の誤り率。(a) が baseline 以下、または (b) が満たせないなら昇格しない。
 
-## §長走行の消失(2026-07-25、firedancer)
+## §長走行の消失(2026-07-25、research project)
 
 ### 事象
 
@@ -600,7 +600,7 @@ driving-* 系の鍛え直し課題として記録する。
 どう待つかは `driving-codex` の持ち場である(sibling cut: 一回の呼び出しの正しさはあちら)。
 本台帳には事象のみ記録し、当該 skill への蒸留は未実施として残す。
 
-## §規則の不適用の反復(2026-07-25、firedancer)
+## §規則の不適用の反復(2026-07-25、research project)
 
 ### 観測
 
@@ -662,7 +662,7 @@ P0 GROUNDING(意味検索の先行)、P6(測定の体制の併記)。
 
 **検証**: 門の数は編集前後とも12(番号つき10 + 非番号2)。行の追加のみで門を新設していない。
 
-**出自**: notes/postmortem/数値の接合-2026-07-25.md(firedancer)。
+**出自**: notes/postmortem/数値の接合-2026-07-25.md(research project)。
 
 ## §接地の強制 — 2026-07-25(罰点方式を却下した記録)
 
@@ -681,7 +681,7 @@ FIRST_NUDGE_AT=3 を導入し、初回だけ早く、以後は stride 8 に戻�
 |---|---|
 | 1 | 罰を受ける主体が存在しない。subagent は task 終了で消え、次の腕は前の腕の点数を知らない |
 | 2 | 発火点が最も弱い。JG4→JG5 の教訓は「行為の瞬間に発火し artifact を要求する規則だけが載荷する」。事後の採点はその逆で、JG4 と同じ運命をたどる |
-| 3 | Goodhart が確実に起きる。減点回避のための儀式的 `ccc search` が3本走り、**接地の偽の証拠**を製造する。firedancer の V1〜V4 が購入0件を0件と照合して全 PASS した形と同型で、ccc を使わないより悪い |
+| 3 | Goodhart が確実に起きる。減点回避のための儀式的 `ccc search` が3本走り、**接地の偽の証拠**を製造する。research project の V1〜V4 が購入0件を0件と照合して全 PASS した形と同型で、ccc を使わないより悪い |
 
 **採った機構**: 助言ではなく**返り値 schema の必須欄**。ccc 登録 repo の腕には
 `cccQueries: {query, hits:[file:line]}[]` を required で置く。腕は battery を回さない限り
@@ -720,7 +720,7 @@ FIRST_NUDGE_AT=3 を導入し、初回だけ早く、以後は stride 8 に戻�
 **本日3度目の同型**(GB118 の購入0件の対照の不在への査読の指摘、GB119 の空虚な通過、本件)。
 2件目の指摘を受けた直後に3件目を作った。門の数は編集前後とも12。
 
-**出自**: notes/postmortem/PoCの無効化-2026-07-26.md(firedancer)。
+**出自**: notes/postmortem/PoCの無効化-2026-07-26.md(research project)。
 
 ## 2026-07-27 — v2607.10.0 cognitive-heterogeneity reforge
 
@@ -863,7 +863,7 @@ Allowed claim:
 
 ### 出自
 
-firedancerで実測した7例。定理の引用0本、T38の引用0件、親目標6日FAILで後継0件、
+research projectで実測した7例。定理の引用0本、T38の引用0件、親目標6日FAILで後継0件、
 裁定文書が4日前の記録を再導出、GB31の実測が10日間本線へ渡らず、GB96の是正が4日で失効、
 系譜の正本が14世代空白。
 
@@ -1289,13 +1289,13 @@ the skill change's effect on LEARN/hour. The collection's Experimental/Formal
 knowledge-throughput objective is applied as a criterion for fewer blocked or
 invalid receipts, not a fixed quota of agents or periodic reports.
 
-The user rejected the first draft's skill-local Bun validator. Polysearch owns
+The user rejected the first draft's skill-local Bun validator. records store owns
 the executable evidence schema and target refusal; this skill reads only the
 canonical finding's locus/digest when an orchestration decision needs it.
 Target `skill-check.ts` exited 0 with no structural failure. **PROSE-DEBT waiver
 (2026-09-25):** 12 long reference sentences remain from older material; the
 new owner/dispatch cut adds no core warning. Runtime enforcement remains an
-open polysearch/resource-control implementation task, not a claimed skill effect.
+open records store/resource-control implementation task, not a claimed skill effect.
 
 ## 2026-09-26 — canonical hand-back receipt
 

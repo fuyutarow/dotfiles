@@ -239,7 +239,7 @@ position: the next reforge).
 
 ## 2026-09-23 — the void: facts Cargo already computes (その手があったか row + project.md §)
 
-**Observed failure, in the field.** In `polysearch-rs` (a release-cadence Rust CLI) the same package
+**Observed failure, in the field.** In `records-store implementation` (a release-cadence Rust CLI) the same package
 version was hand-written in THREE places — `Cargo.toml`'s `version`, and two `const` initializers in
 `src/common/generation.rs` — each rewritten by its own regex in the release script. The test in
 `generation_tests.rs` that looked like an agreement check was circular: it round-tripped each

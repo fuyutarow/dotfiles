@@ -16,7 +16,7 @@ description: >-
 
 # Governing research documentation
 
-> **Version**: v2609.0.0 (2026-09-26) — reverse lineage for research-record completeness.
+> **Version**: v2609.0.0 (2026-09-26) — reverse lineage for research record completeness.
 
 **Atomic build.** Ship the authority contract, profile, templates, floor, regressions, trigger matrix,
 and forge ledger in one change. Run from this Skill directory; success prints nothing:

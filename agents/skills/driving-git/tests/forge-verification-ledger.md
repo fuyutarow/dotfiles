@@ -29,7 +29,7 @@ owns the transition above. **Re-run the semantic battery when the index is healt
 
 | Source | Class (`distilling.md` §1) | Engine |
 |---|---|---|
-| firedancer session interview (2026-09-21, 7 incidents, 5 proposed rules) | **Live SESSION** — highest grade | captured verbatim while the transcript existed |
+| research project session interview (2026-09-21, 7 incidents, 5 proposed rules) | **Live SESSION** — highest grade | captured verbatim while the transcript existed |
 | git 2.55.0 man pages (local) + RelNotes 2.50–2.55 (raw `.adoc`) | Official DOCS | fetched at build; every URL in `references/config.md` §5 |
 | Evans / GitButler / Chacon / git-absorb / filter-repo / conventionalcommits / trunkbaseddevelopment | practitioner corpus | one read-only harvest agent; graded per claim |
 | Claude Code docs (worktrees, permissions, settings-reference) | Official DOCS | one read-only harvest agent |
@@ -145,7 +145,7 @@ Protocol: read ONLY `name:` + `description:`; answer fire / no-fire / co-fire. R
 | F3 | 「間違えて alpha に直接コミットしちゃった、戻したい」 | FIRE | ✓ (間違えて main にコミットした — `alpha` vs `main`: the doublet says main; "コミット" + "戻したい" still land) |
 | F4 | "my push has been hanging for twenty minutes, no output" | FIRE | ✓ (push が固まる is JA; EN "push" + LAW sentence "a silent push is a failed push") |
 | F5 | 「800MB の jls が履歴に入った。消して」 | FIRE | ✓ (巨大ファイルを履歴から消す) |
-| F6 | 「firedancer、他のセッションも触ってるけど commit して大丈夫?」 | FIRE | ✓ (複数セッションで同じ repo) |
+| F6 | 「research project、他のセッションも触ってるけど commit して大丈夫?」 | FIRE | ✓ (複数セッションで同じ repo) |
 | F7 | "which commit broke the test?" | FIRE | ✓ (verbatim in description) |
 | F8 | 「git checkout って今使っていいんだっけ」 | FIRE | ✓ (verbatim) |
 | F9 | 「昨日やった作業が見当たらない」 (no git keyword) | FIRE, weakly | △ — "消えたコミットの復元" needs コミット; a user who says 作業 may not trigger. Accepted: the recovery ladder is reachable once any git verb appears; not worth the listing chars |
@@ -302,5 +302,5 @@ The original semantic existence-battery residual remains; this revision extends 
 
 ## 8. 2026-10-01 — jj repos deny agents git (v2609.2.2)
 
-Source: User decision 2026-10-01: 「new projectにおいては jjにしたい。それが私たちのsuiteです」. Precedent: firedancer (jj since 2026-09-30) and dotfiles (jj since 2026-10-01) — colocated `.jj/` + `.git/`, `.claude/settings.json` denying `Bash(git:*)` / `Bash(command git:*)` / `Bash(env git:*)`, commits through `mise run commit` (scripts/jj-commit.ts).
+Source: User decision 2026-10-01: 「new projectにおいては jjにしたい。それが私たちのsuiteです」. Precedent: research project (jj since 2026-09-30) and dotfiles (jj since 2026-10-01) — colocated `.jj/` + `.git/`, `.claude/settings.json` denying `Bash(git:*)` / `Bash(command git:*)` / `Bash(env git:*)`, commits through `mise run commit` (scripts/jj-commit.ts).
 Routing only: the `driving-jujutsu` row states that a house jj repo denies agents git, so every agent job there is theirs; the jj-migration fire row also points at `wiring-repositories` JJ-1..3. skill-check: clean.

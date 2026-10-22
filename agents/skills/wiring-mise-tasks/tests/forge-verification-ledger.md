@@ -8,7 +8,7 @@ and is desk-checked after every description edit.
 
 8 read-only sonnet lenses, 2026-07-17: 4 language recipe extractors (writing-julia/-rust/-python
 +running-python-tools/-typescript vs the 5-repo corpus), 1 sibling mapper (compiling-latex), 1
-mise CLI facts prober, 1 drift-matrix runner, 1 qoed `mise:refs` gate dissection. 543k tokens,
+mise CLI facts prober, 1 drift-matrix runner, 1 consumer repository `mise:refs` gate dissection. 543k tokens,
 104 tool calls, 0 errors. Full returns: session workflow `wf_2d6aa6dd-edd` journal.
 
 Load-bearing harvest facts (each grounded in a command + output in the journal):
@@ -17,7 +17,7 @@ Load-bearing harvest facts (each grounded in a command + output in the journal):
   path; empty dir → `[]` exit 0; JSON is pure on stdout (upgrade nag → stderr).
 - Bare `mise <token>` shadows BUILT-INS: `mise fmt` = mise's own config formatter (observed),
   `i`/`t`/`r` are built-in aliases → the contract is phrased over `mise run`.
-- qoed `mise:refs` (regex approach) has a CONFIRMED bug: bare hyphenated headers
+- consumer repository `mise:refs` (regex approach) has a CONFIRMED bug: bare hyphenated headers
   (`[tasks.link-dots]`) are invisible to its header regex while its reference regex DOES match
   hyphens — false-positive stale refs; also misses file-based tasks, depends=, alt configs.
   → resolution-based gate ruled strictly more robust for token-existence checking.
@@ -28,7 +28,7 @@ Load-bearing harvest facts (each grounded in a command + output in the journal):
 |---|---|---|---|
 | beateater | 0 fail | — (12/12, sole full compliance) | clean |
 | correo | 0 fail | setup i l t u c | clean |
-| qoed | 0 fail | l t c | clean (73 tasks, colon-only) |
+| consumer repository | 0 fail | l t c | clean (73 tasks, colon-only) |
 | xoria | **1 fail: up** (the forging incident) | u | clean |
 | dotfiles | **3 fail: fmt:check test check** | setup i l t u c | 5 hyphen names: link-dots check-tools cc:install-mcp lint:skills-index wsl:fix-gitexe |
 
@@ -42,7 +42,7 @@ temp dir (rust: 2 deliberate WAIVEs, 0 warns).
 | Content class | Grade | Notes |
 |---|---|---|
 | mise CLI behavior (JSON schema, built-in shadowing, empty-dir, exit codes) | probe-verified | live probes 2026-07-17, mise 2026.7.5; re-verify on reforge — mise moves fast |
-| Verb contract + grammar rules 1–5 | corpus-observed + constructed | grammar text existed as hand-copied header comments in 5 mise.tomls (qoed's the fullest); HARD/SOFT tiering, family-closure waivers, and `mise run`-phrasing are THIS skill's operationalization — engineered, not measured |
+| Verb contract + grammar rules 1–5 | corpus-observed + constructed | grammar text existed as hand-copied header comments in 5 mise.tomls (consumer repository's the fullest); HARD/SOFT tiering, family-closure waivers, and `mise run`-phrasing are THIS skill's operationalization — engineered, not measured |
 | Recipe cells | graded per-cell in references/recipes.md §0 | skill-endorsed / corpus-observed / probe-verified / synthesized (`bun update` is the only synthesized cell) |
 | Rulings (lint tiers, blocked test, clippy location, biome config home) | ruling (constructed) | house decisions over documented conflicts — sources named in recipes.md |
 | Sibling-cut claims about compiling-latex | author-confirmed | its SKILL.md read in harvest; reciprocal pointer landed in its Core Decisions (same commit) |
@@ -61,10 +61,10 @@ by the editor and re-proven red→green. Full lens returns: session workflow `wf
 | MAJOR | gate-attack | `depends = ["task args"]`/array-form entries corrupted floor 3 into garbage warnings | jq normalization (`if type=="array" then .[0] else split(" ")[0]`); attack re-run clean |
 | MAJOR | gate-attack | stderr swallowed → `mise trust` failures indistinguishable from broken toolchain | stderr captured + surfaced with a `mise trust` hint |
 | MAJOR | self-contradiction | polyglot template's `lint` was the exact "silent starter" its own ruling forbids | written deferral added (description + comment citing recipes §1) |
-| MAJOR | self-contradiction | recipes §6 rule 1 (depends-only for ALL verbs) contradicted qoed itself and the template | rule amended to fmt/lint aggregates + primary-language bodies for setup/test/up (corpus-true) |
+| MAJOR | self-contradiction | recipes §6 rule 1 (depends-only for ALL verbs) contradicted consumer repository itself and the template | rule amended to fmt/lint aggregates + primary-language bodies for setup/test/up (corpus-true) |
 | MAJOR | self-contradiction | rumdl cells shipped in templates with no graded home | §4b Markdown cell added (corpus-observed ×4) |
 | MAJOR | architecture | Scope banner banned flag facts from the body while the matrix carries them | banner rewritten: matrix = declared synced seam (agrees in substance, no byte-diff) |
-| MAJOR | architecture + bloat | check-aggregation rule argued in BOTH SKILL.md grammar 3 and recipes §6.2; TeX check-wiring argued twice | both recipes passages demoted to pointers; unique facts (qoed 34-task aggregate) kept |
+| MAJOR | architecture + bloat | check-aggregation rule argued in BOTH SKILL.md grammar 3 and recipes §6.2; TeX check-wiring argued twice | both recipes passages demoted to pointers; unique facts (consumer repository 34-task aggregate) kept |
 | MAJOR | sibling-cuts | writing-rust's project.md names xtask "the Rust-native pattern" for the same territory — unrecorded conflict | mise-vs-xtask RULING added to recipes §2 + reciprocal line landed in writing-rust project.md |
 | MAJOR | trigger | bare "Rust" in a scaffold ask co-fires writing-rust; TeX cut's "latexmk" token risked co-fire on pure build crashes | description cuts rescoped: "language merely NAMED while scaffolding stays here"; "bare latexmk/chktex problem stays there alone"; co-fire order made explicit (FIRST) |
 | MINOR ×5 | gate-attack | reasonless waive accepted; multi-token waive silently partial; typo'd waiver inert without notice; multi-repo run aborted on first ENV error; SSOT disclaimer too narrow | reason (` -- `) now REQUIRED + WARN; one-token-per-line documented; dead-waiver WARN added; per-repo ENV continue + exit 2 at end; disclaimer widened with seam note |
@@ -159,9 +159,9 @@ Their local version commands, lint and typecheck passed; no global runtime confi
 
 ## 2026-09-25 — `fmt:staged` (v2609.2.0)
 
-Owner request, relayed by firedancer-agt_eraw: the commit gate should fix formatting in place, not
+Owner request, relayed by researcher: the commit gate should fix formatting in place, not
 refuse on a lint check. Measured blocker: `hook:pre-commit = ["fmt:check", "lint"]` checked the
-whole tree, so in firedancer any session's WIP refused every session's commit (4 blocks across ~20
+whole tree, so in research project any session's WIP refused every session's commit (4 blocks across ~20
 sessions, 10–20 min each). The hook SHAPE rule is `wiring-repositories` HOOK-1c (its ledger §10).
 
 New SOFT verb `fmt:staged`, body `scripts/fmt-staged.ts`: formats only the staged files, refuses a
@@ -179,7 +179,7 @@ the whole-tree `fmt:check`. skill-check WARN counts equal HEAD (SKILL.md 11, ref
 
 ## 2026-10-01 — jj verbs `commit` / `pull` (v2610.1.0)
 
-Source: User decision 2026-10-01: 「new projectにおいては jjにしたい。それが私たちのsuiteです」. Precedent: firedancer (jj since 2026-09-30) and dotfiles (jj since 2026-10-01) — colocated `.jj/` + `.git/`, `.claude/settings.json` denying `Bash(git:*)` / `Bash(command git:*)` / `Bash(env git:*)`, commits through `mise run commit` (scripts/jj-commit.ts).
+Source: User decision 2026-10-01: 「new projectにおいては jjにしたい。それが私たちのsuiteです」. Precedent: research project (jj since 2026-09-30) and dotfiles (jj since 2026-10-01) — colocated `.jj/` + `.git/`, `.claude/settings.json` denying `Bash(git:*)` / `Bash(command git:*)` / `Bash(env git:*)`, commits through `mise run commit` (scripts/jj-commit.ts).
 
 - `commit` / `pull` are HARD only where `.jj/` exists; a git-only repo is not asked (no WARN flood across the existing repos).
 - Test added: `a jj repo (.jj/ present) must resolve commit and pull; a git-only repo is not asked` — red on a fixture without the tasks, green with them; 15/15 pass. dotfiles: `OK commit (jj repo)`, `OK pull (jj repo)`, 0 hard.

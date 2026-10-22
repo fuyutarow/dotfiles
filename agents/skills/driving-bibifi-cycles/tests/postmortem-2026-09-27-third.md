@@ -2,10 +2,10 @@
 
 ## Frozen evidence boundary
 
-- AUDIT_ID: firedancer-third-98bfb11c-20260927.
+- AUDIT_ID: research project.
 - Source: attachment `98bfb11c-6e50-41df-8916-a72f40f2901d`, `Pasted text.txt`, 1,258 lines.
 - SHA256: `6847afb2ec2d494e082eecb730d72bd184e1b977fbf0384d29784108102f95b1`.
-- Author: `firedancer-agt_eraw`; auditor: Codex task `codex-ac1c61c6aaf5c510`.
+- Author: `researcher`; auditor: Codex task `codex-ac1c61c6aaf5c510`.
 - Boundary: supplied outward reports through 12:08 JST; explicitly bounded snapshot, not a terminal research episode.
 - Terminal state, complete denominator, raw receipts, and full programme/director actor identities: NOT-EVIDENCED.
 - AUDITABILITY: UNAUDITABLE for complete process causality; reported reasoning and skill gaps can be inspected.
@@ -71,6 +71,6 @@ itself an authority update. One actual repository policy change is inspected sep
 
 RAW_SECTION_CONTENT_INCLUDED: NO
 
-The edit does not modify Firedancer, execute experiments, retract runs, validate external theorems,
+The edit does not modify research project, execute experiments, retract runs, validate external theorems,
 repair its launcher, or recover its datasets. Target enforcement remains with its owners.
 Static tests and review receipts live in the existing forge ledgers.

@@ -2,7 +2,7 @@
 
 Frozen source: attachment `a5506c8a-0f0c-4868-88ac-aef50d7cfba0/Pasted text.txt`, 1,179 lines.
 SHA-256: `d9f9ecce4e88ca7389de7d366e6f8610eedf0b42b1e18a778537c1cb37568528`.
-Scope: reported Firedancer operation through 17:24 JST; no raw code or scientific runs reproduced.
+Scope: reported research project operation through 17:24 JST; no raw code or scientific runs reproduced.
 Reported test counts, GPU usage, timings and causes remain third-party evidence, not verified measurements here.
 
 ## Observations and design faults

@@ -94,7 +94,7 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
   added to this description as literal tokens; Reactant no-fire row added. Reciprocal edits
   landed in writing-julia (routing row, description cut, trigger rows) same commit.
 - 2026-07-23 v2607.2.0: added a FIRES row for the CAPTURE-PINS-ADDRESSES class ("graph
-  capture のキャッシュが古い結果を返す") — distilled from the firedancer fd_evaluate
+  capture のキャッシュが古い結果を返す") — distilled from the research project fd_evaluate
   graph-cache postmortem (検収4). The ask already carries "CUDA Graph"/"CUDA"/"GPU" tokens
   matched by the existing description surface (`CUDA.jl`, `GPU カーネル`) — no description
   edit needed; description-token consistency re-checked against the new row per the

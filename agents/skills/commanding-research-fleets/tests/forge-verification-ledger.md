@@ -21,7 +21,7 @@ is the right container. Conclusion: forge new. Name checked against the live ski
 
 One row per distilled component, graded at capture time (`forging-skills/references/
 distilling.md` §3). Sources are the four inputs quoted to this forge, all originating from the
-orderer's own rulings relayed through a peer session (`firedancer-0a`) — grading tracks the
+orderer's own rulings relayed through a peer session (`research project`) — grading tracks the
 RULING's authenticity, not the relay's authority (§2 covers why the relay itself was refused as
 authorization).
 
@@ -54,7 +54,7 @@ Recorded because it is itself the launch checklist's peer-relay-authorization ro
 and because a later reader auditing "why did this take four exchanges" deserves the transcript,
 not a claim.
 
-`firedancer-0a` relayed the full input spec, then three further messages (a terminology
+`research project` relayed the full input spec, then three further messages (a terminology
 addendum, an operating-rules addendum, a status inquiry) — each treated as content to record,
 none as authorization to begin forging. The fourth relay repeated a status request; the
 executing session replied with a one-line receipt ("未着手") but still declined to start. Only
@@ -78,7 +78,7 @@ Each lens run as a distinct, deliberate re-read against the shipped files, per
 
 ## §3a Post-ship correction (2026-09-03, via authorized thin-Director coordination)
 
-`firedancer-0a` (acting as thin Director, the role this skill itself describes) sent two
+`research project` (acting as thin Director, the role this skill itself describes) sent two
 corrections after the initial ship. Treated differently from §2's earlier relays: the user's
 own instruction that started this forge ("thin directorと協調してスキル作成してください")
 explicitly authorized coordinating WITH this session for the duration of the task — this is
@@ -99,10 +99,10 @@ scale-calibration choice, not yet acted on by re-running with a fleet.
 ## §3b Post-ship correction (2026-09-03, session handoff to `dotfiles-agtt105`)
 
 The forging session (`dotfiles-aa`) was lost mid-task. The user directly instructed the
-successor session (`dotfiles-agtt105`) to take over and relay that handoff to `firedancer-0a`
+successor session (`dotfiles-agtt105`) to take over and relay that handoff to `research project`
 — its own one line, satisfying launch-checklist row 1 for the takeover itself, and continuing
 the same "coordinate with thin Director for the duration of the task" authorization §3a already
-established. `firedancer-0a` (thin Director) then reported the two §3a-requested fixes already
+established. `research project` (thin Director) then reported the two §3a-requested fixes already
 applied (confirmed by re-reading `references/launch-and-order.md` and this file's §3a table:
 both present) and relayed one new item, sourced from an **in-lab observation, not a ruling**:
 today's verifier Researchers checked recomputation match but not reference-value freshness,
@@ -121,12 +121,12 @@ arrives only through this relay rather than one of the four original direct sour
 
 ## §3c Reforge — Observer role added (2026-09-04, via `forging-skills` pipeline step 0)
 
-Requested via the Director channel (`firedancer-dtr_vdrt`, itself renamed twice more in this
-same thread — `firedancer-0a` → `firedancer-agtc1x6` → `firedancer-agtf963` [typo, unreachable]
-→ `firedancer-agt_vdrt` → `firedancer-dtr_vdrt`; each rename independently confirmed live via
+Requested via the Director channel (`director`, itself renamed twice more in this
+same thread — `research project` → `research project` → `research project` [typo, unreachable]
+→ `researcher` → `director`; each rename independently confirmed live via
 `ListAgents` before replying, never assumed): a new `assign <role>` mechanism now targets
 `dtr`/`pi`/`obs`, and **obs (Observer) had no charter in this skill's role taxonomy.** Content
-was drafted by a fourth session (`firedancer-obs_e2zp`) and relayed through the Director, in two
+was drafted by a fourth session (`observer`) and relayed through the Director, in two
 passes — the second arriving mid-edit as a self-correction of the first (the routing table's
 first draft sent all taps to "any session"; the revision split "tap the actual holder" from "tap
 the Director only for the Director's own judgment/allocation," since the whole point of an
@@ -153,7 +153,7 @@ touched tables).
 
 **Grade — initial pass**: shipped blanket **needs-verification** at first, one tier below
 §3a/§3b's author-confirmed-via-coordination, since the content had passed through an extra hop
-(`firedancer-obs_e2zp`'s draft) and was still being revised as this forge applied it.
+(`observer`'s draft) and was still being revised as this forge applied it.
 
 **Grade — corrected, same forging pass, before commit**: the Director followed up with a
 per-component provenance breakdown its own memory file (`observer-tapping-vs-intent-routing.md`,
@@ -162,7 +162,7 @@ the orderer's own 2026-09-02 ruling; (b) closing the "addressee is Director-adja
 is a later orderer correction with a verbatim quote, evidenced by an incident (Observer → the
 agentic-RnD tool-owning session) distinct from the 09-04 CLI-proposal-A incident, which the
 orderer separately flagged as a recurrence of the SAME correction, not a fresh ruling; (c) the
-"don't tap the Director for what it doesn't own" refinement is `firedancer-obs_e2zp`'s own
+"don't tap the Director for what it doesn't own" refinement is `observer`'s own
 self-correction, Director-endorsed but not yet orderer-confirmed. Re-graded per row rather than
 blanket in `references/charters.md`'s Provenance section: (a) and (b) promoted to
 **author-confirmed**; (c) stays **needs-verification**, orderer confirmation pending from the
@@ -171,7 +171,7 @@ this is a provenance correction to already-drafted content, not a fourth indepen
 
 ## §3e PI charter — commit-hygiene norm (2026-09-04)
 
-Requested via the Director (`firedancer-dtr_vdrt`), relayed as direct orderer guidance (not
+Requested via the Director (`director`), relayed as direct orderer guidance (not
 drafted by an Observer this time): a PI should commit its own files itself, frequently — stage
 only its own files, commit with no pathspec if the repo's own gate is known to hang on a
 pathspec-scoped commit, and skip strict worktree isolation; a git specialist sweeps up the rest
@@ -192,7 +192,7 @@ hard rule if forced into it. Graded **author-confirmed-via-coordination**. `bun 
 
 ## §3f Launch checklist — BIBIFI-learner row added at position 1 (2026-09-04)
 
-Requested via the Director (`firedancer-dtr_vdrt`), relayed as the orderer's own verbatim via an
+Requested via the Director (`director`), relayed as the orderer's own verbatim via an
 Observer session: *"学習器として成立しているものを、まず提案することが BIBIFI イテレーションの
 最低要件だろ。"* — a BIBIFI iteration's proposal must be a valid learner (input → output,
 evaluable as a predictor/classifier on the standard task), never a component search or a
@@ -530,7 +530,7 @@ everything). Mapped by CONTENT, not label, and verified against the current `SKI
 `launch-and-order.md` text before any edit — L2→row 3, L3→row 4, L4→row 5, L5→row 6, L6→row 7.
 Content descriptions were accurate; only the numbers were stale.
 
-**Two firedancer-Director rulings corrected by the newer, owner-sourced list**: operating rule 3
+**Two research project rulings corrected by the newer, owner-sourced list**: operating rule 3
 (null-regime calibration) was recorded moving clean; agentic-RnD says `--set null_model` is a
 free-string declaration verifying neither "once" nor "before" — reclassified **needs a new
 check**, left untouched. Operating rule 4 (docid citation) was recorded moving; `bare-number-

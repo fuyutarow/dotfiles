@@ -1,11 +1,11 @@
-# Follow-up postmortem — firedancer reports through 10:55 JST
+# Follow-up postmortem — research project reports through 10:55 JST
 
 ## Frozen scope and auditability
 
-- AUDIT_ID: firedancer-followup-875d0044-20260927.
+- AUDIT_ID: research project.
 - Source: user attachment `875d0044-b118-42bb-8ad6-af454d31e9d5`, `Pasted text.txt`, 1,387 lines.
 - SHA256: `c43c7d5de6113824f645bcc2ab20943777d5270b556d23e37294e91a4c494bba`.
-- Episode author: `firedancer-agt_eraw`; auditor: current Codex task `codex-ac1c61c6aaf5c510`.
+- Episode author: `researcher`; auditor: current Codex task `codex-ac1c61c6aaf5c510`.
 - Boundary: supplied outward reports ending after 10:55 JST, explicitly bounded for this audit.
 - Terminal state, complete run denominator, raw receipts, and programme/director actor identities: NOT-EVIDENCED.
 - AUDITABILITY: UNAUDITABLE for complete process causality; the report's assertions and internal reasoning are inspectable.
@@ -67,7 +67,7 @@ not a substitute for the absent original user instructions.
 | Type | Recipient | Non-enacting proposal |
 |---|---|---|
 | PROCESS_REPAIR | Owners of planning, evidence validation, and Tiger skills | Apply the bounded changes above; keep launch/schema enforcement in the target project |
-| EVIDENCE_RECOVERY | Firedancer's canonical evidence owner | Inspect raw bindings and correction read-backs before reusing affected historical scores |
+| EVIDENCE_RECOVERY | research project's canonical evidence owner | Inspect raw bindings and correction read-backs before reusing affected historical scores |
 
 RAW_SECTION_CONTENT_INCLUDED: NO
 

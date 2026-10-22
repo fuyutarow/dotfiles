@@ -33,7 +33,7 @@ Then every session obeys all of these, and a peer that does not is a finding, no
 
 | # | Rule | Observable |
 |---|---|---|
-| S1 | **`git-check state` before any job that reads tracked files**, and before every commit | `op=none`, branch as expected. A paused rebase in a shared checkout has the working tree at a foreign commit; a compute job launched then loads the wrong code (firedancer 2026-09-21: the runner ran an old version, the run failed) |
+| S1 | **`git-check state` before any job that reads tracked files**, and before every commit | `op=none`, branch as expected. A paused rebase in a shared checkout has the working tree at a foreign commit; a compute job launched then loads the wrong code (research project 2026-09-21: the runner ran an old version, the run failed) |
 | S2 | **A paused operation is a global stop.** Nobody commits, launches, or `gc`s until its owner continues/aborts, or announces a hand-over | `op=…` in `git-check state`; the announcement text |
 | S3 | **Commits are path-enumerated** — `git commit -- <paths>` — never `-a`, never a pathspec built from `git status`, so a peer's untracked files cannot enter your commit | `git-check staged` output in the turn |
 | S4 | **Taking over a peer's paused rebase is announced first**, then finished by ITS OWNER'S plan (`git rebase --edit-todo` shows it), never re-planned mid-way | the announcement; `git status` shows `interactive rebase in progress; onto …` |
@@ -42,7 +42,7 @@ Then every session obeys all of these, and a peer that does not is a finding, no
 | S7 | **Hooks are the repo's, not yours**: a pre-commit that refuses because a PEER's checkout changed file modes is reported to the peer, not bypassed with `--no-verify` | the report |
 | S8 | **Rewrite of the shared branch** = G3 shared row: approval, freeze notice, tag, `range-diff`, lease push, landed notice | `rewriting-and-recovery.md` §1 |
 
-## 3. The measured incidents behind the rules (firedancer, 2026-09-21; ledger §1)
+## 3. The measured incidents behind the rules (research project, 2026-09-21; ledger §1)
 
 | Incident | Rule |
 |---|---|

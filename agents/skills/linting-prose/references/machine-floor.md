@@ -7,7 +7,7 @@ lives in `patterns.md`; this file lives in `machine-floor.md`.
 > **Why a floor at all — and why not our own.** The retired `grounding-prose` shipped a
 > hand-maintained bash denylist (`check-prose-grounding.sh`). Everything it did at the word/sentence
 > level, `textlint` presets already do — with morphological analysis the regex could not. It was a
-> degraded self-textlint. A denylist loses to coinage by construction (QOED: 11 banned tokens vs 68
+> degraded self-textlint. A denylist loses to coinage by construction (consumer repository: 11 banned tokens vs 68
 > controlled-vocabulary entries, and `PASS` still appeared 314 times). So the floor is delegated; the
 > skill configures it and spends its own effort on the layers no linter reaches.
 
@@ -33,7 +33,7 @@ The floor ships THREE JA configs; run all via `scripts/lint-floor.ts` (`LINT_PRO
 The choice is not cosmetic: `preset-ja-technical-writing` sets `no-mix-dearu-desumasu` with
 `preferInBody = ですます` by DEFAULT, so the base config **false-positives EVERY である sentence** in
 a dearu-style doc (verified: a pure である体 record → 2 spurious errors; caught by a consuming repo,
-QOED, on its internal research records).
+consumer repository, on its internal research records).
 
 | Config | Body register | Use for |
 |---|---|---|
@@ -97,13 +97,13 @@ as a SUGGESTION, not a blocker. It does not judge topic-sentence presence; that 
 **Two prh dicts, so the noisy register set never fires on internal docs.**
 - `prh-house.yml` (always on, via `textlintrc.json`): (1) 表記ゆれ / terminology normalization
   — the portable part; (2) the coined-label graveyard — a repo's KNOWN bad coinage, seeded per repo
-  (the shipped entries are QOED examples, fenced and meant to be replaced; the QOED
+  (the shipped entries are consumer repository examples, fenced and meant to be replaced; the consumer repository
   `check_banned_labels.jl` generalization). Detect-only for coinage.
 - `prh-external.yml` (added by `textlintrc-external.json`, ONLY for external-register docs):
   the C9 register set the presets do NOT carry — ledger IDs `[A-Z]{1,3}[0-9]{4}_[0-9]{2,3}`, verdict
   enums `[A-Z]{3,}_[A-Z_]{3,}`, `receipt:`, `PASS`-as-verdict. These legitimately appear in internal
   working docs, so they are gated behind the external config, never the base one. Proven to fire on
-  QOED `RESEARCH_STATE.md`; see `tests/forge-verification-ledger.md`.
+  consumer repository `RESEARCH_STATE.md`; see `tests/forge-verification-ledger.md`.
 
 ## Wiring the gate (mise/CI/hook) — moved from SKILL.md at reforge #4
 
@@ -116,7 +116,7 @@ Willpower is not a harness; the floor is only real when it is in the command you
 - **Prove it fires**: inject a known-bad string, watch it FAIL, revert. A rule never seen red is
   decoration.
 - A check not in the aggregate command is not enforced; a noisy misconfigured floor gets
-  `|| true`-ignored and is equally dead (the QOED lesson — see ledger).
+  `|| true`-ignored and is equally dead (the consumer repository lesson — see ledger).
 - The Stop hook `detect-audit-theater.ts` co-polices the agent's own turn text; scripts own the
   greppable tier — never spawn an agent to run the lint.
 
@@ -141,9 +141,9 @@ Willpower is not a harness; the floor is only real when it is in the command you
 - **LaTeX caveat:** Vale is NOT first-class TeX. For `.tex` sources use `textidote` or
   `misc0110/Paper-Linter`, or the textlint LaTeX plugin.
 
-## The anti-auto-substitution rule (from the QOED postmortem)
+## The anti-auto-substitution rule (from the consumer repository postmortem)
 
-**NEVER let a fixer rewrite blind.** QOED's denylist auto-replacement drove the substitution INTO
+**NEVER let a fixer rewrite blind.** consumer repository's denylist auto-replacement drove the substitution INTO
 words and code — producing the non-word `非飽和iciency` (deficiency → 非飽和 mid-token) and
 translating the code identifier `find_violator_scf` → `find_違反点_scf`, so grep no longer reached
 the implementation. Consequences for this skill:
@@ -203,7 +203,7 @@ is how a noisy MIX detection becomes a zero-FP HARD rule for that specific term.
 **ルー語 / 外来語 濫用 (English/katakana over-mixing).** No clean off-the-shelf overuse detector.
 Off-the-shelf, verified: `@textlint-ja/preset-foreign-language-writing` is katakana *spelling*
 orthography (WIP), not overuse; `textlint-rule-ja-sudachi-synonym-suggestion` nudges katakana→和語
-but is a noisy VIBE suggester. House floor (ALWAYS ON since 2026-07-04, QOED R2607_021 incident —
+but is a noisy VIBE suggester. House floor (ALWAYS ON since 2026-07-04, consumer repository R2607_021 incident —
 a generated doc hit 15 latin/100字 with "cite する / deliverable である / moat" and the floor was
 green): **prh role 3** in `prh-house.yml` HARD-catches verb calques (`/[a-zA-Z]{2,} ?する/`) and
 exact-equivalent nouns (deliverable/framing/moat); **`scripts/codemix-flag.py`** (zero-dep) flags

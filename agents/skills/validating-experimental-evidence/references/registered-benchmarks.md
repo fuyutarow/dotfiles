@@ -90,7 +90,7 @@ Missing identity stays unknown; never fill it from a similar score or nearby com
 A `promoted` flag is a claim to reconcile against EV0–EV4, not evidence that they passed.
 
 Before promoting an exploratory number, keep its invocation, input, and effective
-parameters in polysearch's run record. Keep the environment and raw output there too.
+parameters in records store's run record. Keep the environment and raw output there too.
 Recompute its digest independently. Retain two different self-checks for a numerical
 executor. Add an independent oracle or recomputation that could reject a false claim.
 A reproduction cites the canonical run and matches its discrete output exactly
@@ -128,7 +128,7 @@ correction and rerun; suspend comparisons to the truncated run.
 For a tiny sample, report scored count and the minimum useful denominator
 before interpreting a passed prediction.
 
-Record these checks in the canonical polysearch run/finding. Its schema and target
+Record these checks in the canonical records store run/finding. Its schema and target
 launcher, not a skill-local file, must reject missing binding or a forbidden override.
 If that gate is absent, mark the official claim `INSTRUMENT_REPAIR` and send the
-implementation request to polysearch. Do not invent a second validator here.
+implementation request to records store. Do not invent a second validator here.

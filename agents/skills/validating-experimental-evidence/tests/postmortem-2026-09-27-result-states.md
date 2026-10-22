@@ -3,7 +3,7 @@
 Source: `f8e7b9b0-a667-4a68-aa2e-bbd15a60ade1/Pasted text.txt`,1,392lines, ending19:18JST.
 SHA-256: `163ff5c9b460fa43c9125810842b881a8149e1e33ad3f7deeb1928092ff4bb20`.
 Bounded audit of outward reports; earlier18:01 retrospective overlaps prior packets and is not new independent evidence.
-No Firedancer run, implementation, claimed speedup or scientific cause is reproduced by this skill reforge.
+No research project run, implementation, claimed speedup or scientific cause is reproduced by this skill reforge.
 
 | Locus | Reported observation | Supported finding / limitation |
 |---|---|---|

@@ -147,7 +147,7 @@ needs sudachipy via uvx; codemix keeps pair coherence, G3 deny-gate unfillable).
 
 ## Reforge 2026-07-28 — subprocess detection facts (field-driven)
 
-Trigger: a house script (`qoed/scripts/check_p1_oracle.ts`, a mise `test:banded` body moved out
+Trigger: a house script (`consumer repository/scripts/check_p1_oracle.ts`, a mise `test:banded` body moved out
 of TOML under wiring-mise-tasks' BODY-IS-DECLARATION) was written against BG2 from memory rather
 than from facts §3. Two defects shipped and were caught by running it, not by review.
 

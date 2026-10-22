@@ -12,7 +12,7 @@ Editor-signed spec: eraw, 2026-10-01 (session scratchpad `nbskill/SPEC.md`). For
 
 Ownership void (sibling harvest `012f34.md` §2, voids 2–8): edition/revision discipline; the launcher verb as sole run entry;
 the single-committer protocol under jj; the repo-level directory convention; the scratchpad/agent-state ban;
-the retention-home map; the run-landing commit ledger. Void 1 (record taxonomy, store operation) belongs to `driving-polysearch`.
+the retention-home map; the run-landing commit ledger. Void 1 (record taxonomy, store operation) belongs to `records-store CLI owner`.
 The sibling sweep was lexical (`repo-retrieve literal`); no ccc concept battery ran over `agents/skills`. Residual: a void may be
 partially covered by a sibling's prose that a lexical sweep missed. The two verifier lenses (§5) read the siblings' boundary text.
 
@@ -29,12 +29,12 @@ A repo-local skill for one repo's literal bindings remains possible; it is not p
 | `nbskill/c64da2.md` — repo conventions, topology, homes, lifecycle, mechanical vs prose | live repo harvest with loci | author-confirmed (repo files) | homes, path classes, launcher, committer, ids |
 | `nbskill/596f8b.md` — edition/revision/shared-library/benchmark checklists | live repo harvest with loci | author-confirmed (repo files) | editions.md §2–§5 |
 | `nbskill/012f34.md` — sibling scope map, voids, collisions, budget | sibling SKILL.md reads | author-confirmed for read lines; lexical-only for absence | cuts, voids, budget |
-| `nbskill/18a531.md` — polysearch harvest | owned by `driving-polysearch` | pointer only | nothing restated |
+| `nbskill/18a531.md` — records store harvest | owned by `records-store CLI owner` | pointer only | nothing restated |
 | 2026-10-01 incidents (§2) | live session failures | highest grade (observed) | N3, N4, N5 predicates |
 | Generic shape of N1–N5 | spec | skill-supplied | gate structure |
 | §5 recovery rows for snapshot cap, divergent change | jj semantics per `driving-jujutsu` | third-party (sibling skill) | launch-and-land §5 |
 
-## §2 Incidents (2026-10-01, firedancer) — the evidence the gates encode
+## §2 Incidents (2026-10-01, research project) — the evidence the gates encode
 
 | Incident | Cost | Gate |
 |---|---|---|
@@ -82,12 +82,12 @@ Major findings and fixes:
 | N5 row dropped registration completeness, rows (a)–(d), diagnostics rule, `--worktree` | N5 cell now carries them |
 | Dry-run table invented fields (`status`, digest, commit, cause) | reduced to `ok`, `modelCode`, slug, revision; others "if printed" |
 | "cause id resolves to a hypothesis" stated as a launcher check (unverified in the harvest) | "launcher exit status if it checks; else read by hand" |
-| Partial firedancer edition-name ban list | replaced by "obey the repo registry header's list" |
+| Partial research project edition-name ban list | replaced by "obey the repo registry header's list" |
 | N1 "inside a declared path" contradicts records, memory, large bytes | N1 predicate per class |
 | No cut against `driving-git` on shared-checkout commits (F5 lost to it) | routing row added; description token `agents committing to a shared checkout` |
 | LINEAGE collided with validating EV4 and the LAW claimed "regression" | token renamed PREDECESSOR ROW (acceptance guard); LAW defers the claim to EV4; eligibility per EV1–EV3 |
 | N5(a) overlapped EV0/EV2; F8 fired validating only | description token `conformance / acceptance rows`; cut row splits existence/green (here) from what rows assert (there); F8 is a co-fire |
-| `driving-polysearch` teaches `run --exec` directly, racing N3 | cut row: `run --exec` is the primitive a launcher wraps; use the launcher where one exists |
+| `records-store CLI owner` teaches `run --exec` directly, racing N3 | cut row: `run --exec` is the primitive a launcher wraps; use the launcher where one exists |
 
 Minor fixes: memory is never a claim; teeth folded into each row; N4 "only" and cadence restored; crashed-commit row checks divergence first;
 staged-set check marked unverified under jj; retention-homes binding rows added; "SOLE home" labels changed to "detail";
@@ -101,7 +101,7 @@ Open items (owner-named deferrals):
 |---|---|
 | `driving-git` has no reciprocal row; brief limited edits to five siblings | dotfiles editor |
 | `wiring-mise-tasks` has no reciprocal row; same reason | dotfiles editor |
-| `driving-polysearch` should say the launcher wraps `run --exec` (its function map, P3 row, and a trigger row) | polysearch-rs session |
+| `records-store CLI owner` should say the launcher wraps `run --exec` (its function map, P3 row, and a trigger row) | records-store implementation session |
 | jj-era equivalent of a staged-diff check before landing is unverified | the commit task's owner |
 | The launcher exits 0 with `modelCode:null` on an unknown slug; fix plus negative test | the repo's launcher owner |
 | F3 solo-tier waiver does not apply; but no live `run_eval` or installed-session trigger test ran | next reforge |
@@ -121,7 +121,7 @@ Open items (owner-named deferrals):
 
 ## §7 2026-10-01 — v2610.2.0: top-level layout (homes §0) and paper homes
 
-**Incident.** The executor was asked to start a Julia project with polysearch in an empty dir.
+**Incident.** The executor was asked to start a Julia project with records store in an empty dir.
 It fired `wiring-repositories` and `writing-julia` but not this skill. Following `writing-julia` PK2, it put
 one package at the repo root (`Project.toml`, `Manifest.toml`, `src/`, `test/`). The owner said the repo
 will hold several projects and papers. Neither the reference notebook (root workspace manifest only, no
@@ -164,15 +164,15 @@ The lenses returned 46 findings. Fixed:
 - the checklist's `--project=.`;
 - compiling-latex's paper-dir parent.
 
-Verified in code: `polysearch run --reproduce` restores a workspace root only from the repo root's `HEAD:Project.toml`.
-The code is `materialize_workspace_root` in polysearch-rs `src/adapters/cli/run_cli/reproduce.rs`.
+Verified in code: `records store run --reproduce` restores a workspace root only from the repo root's `HEAD:Project.toml`.
+The code is `materialize_workspace_root` in records-store implementation `src/adapters/cli/run_cli/reproduce.rs`.
 A recorded run must therefore use `--project=packages`.
 Floor: prose-debt WARN counts equal the pre-edit copies for all five skills.
 
 | Deferred | Owner |
 |---|---|
-| `run --reproduce` should find the nearest enclosing workspace root, not only the repo root | polysearch-rs |
-| `driving-polysearch` documents no `polysearch init` / gate-config setup act | polysearch-rs session |
+| `run --reproduce` should find the nearest enclosing workspace root, not only the repo root | records-store implementation |
+| `records-store CLI owner` documents no `records-store CLI init` / gate-config setup act | records-store implementation session |
 | No skill scaffolds the one launcher N3 requires; the first-run state is undefined | next reforge here + `wiring-mise-tasks` |
 | Runner file home: §1 denies a runner under `packages`, yet `run --exec --code` needs a repo-relative file | next reforge here |
 | Paper-figure build recipe (artifact path, figure task, receipt format) | next reforge here |
@@ -180,5 +180,5 @@ Floor: prose-debt WARN counts equal the pre-edit copies for all five skills.
 | Id grammars disagree (`{yymm}_{seq}` / `{type}{YYMM}-` / no YYMM) | collection editor |
 | ~~Members' `[compat] julia = "1.11"` vs `[workspace]` needing 1.12~~ RESOLVED 2026-10-01: writing-julia v2610.2.0 keys `[compat] julia` by profile (PK3); a notebook member uses the pinned runtime line | `writing-julia` |
 | `wiring-check.ts` cannot detect a root manifest in a notebook repo | `wiring-repositories` next reforge |
-| Records store as an S1 layer row (order after VCS init; polysearch not in `[tools]`; `research_record/.agent-state` ignore rule) | `wiring-repositories` next reforge |
+| Records store as an S1 layer row (order after VCS init; records store not in `[tools]`; `research_record/.agent-state` ignore rule) | `wiring-repositories` next reforge |
 | No-fire rows for paper naming and design reports may co-fire here through 置き場 tokens | next description edit |

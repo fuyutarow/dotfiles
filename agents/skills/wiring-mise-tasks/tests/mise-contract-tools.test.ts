@@ -16,7 +16,7 @@ afterEach(async () => {
   );
 });
 const allowed = new Set(["bun", "bunx", "mise", "sui", "fnox", "oxfmt"]);
-test("coralbase template interpolation counterexample", () => {
+test("reference checker template interpolation counterexample", () => {
   expect(sourceFindings(templateCounterexample.source, allowed)).toEqual(
     templateCounterexample.toolsContract,
   );
@@ -257,7 +257,7 @@ test("real mise integration fails on a split task's undeclared command", async (
     "mise/tasks/check.toml:probe: undeclared command rogue",
   );
 });
-test("real mise integration rejects the coralbase template counterexample", async () => {
+test("real mise integration rejects the reference checker template counterexample", async () => {
   const result = await cli(
     await fixture({ source: templateCounterexample.source }),
     "--tools",

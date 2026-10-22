@@ -48,7 +48,7 @@ depends = ["fmt:check"]
 
 [tasks.test]
 alias = "t"
-description = "Julia側テスト (Pkg.test)。重くなったら qoed 方式: 本体を exit 2 の案内板にして test:* へ分割 (トークンは残す)"
+description = "Julia側テスト (Pkg.test)。重くなったら consumer repository 方式: 本体を exit 2 の案内板にして test:* へ分割 (トークンは残す)"
 run = "julia --project=. -e 'using Pkg; Pkg.test()'"
 
 [tasks.up]

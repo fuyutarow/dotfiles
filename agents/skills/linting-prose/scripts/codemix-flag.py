@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Code-mixing (ルー語) ratio flagger — MIX tier. Zero dependencies.
 
-WHY (2026-07-04, QOED R2607_021): a generated JA document reached 15 latin tokens per 100
+WHY (2026-07-04, consumer repository R2607_021): a generated JA document reached 15 latin tokens per 100
 Japanese chars in prose ("cite する", "deliverable である", "moat を主張しない") and the floor was
 GREEN — no code-mixing signal existed. This script flags paragraphs whose latin-token density
 exceeds a threshold, AFTER stripping code spans/fences, URLs, §refs, and ledger IDs.

@@ -136,7 +136,7 @@ function dependencyName(value: unknown): string | undefined {
 // Both come from one measured failure. `[tools]` pinning had been routed OUT of this skill
 // as "model-native"; the consequence, censused across three repos on 2026-07-25, was that
 // EVERY one of them invoked a runtime from a task body while declaring none of it — dotfiles
-// and beateater had no [tools] section at all, qoed declared julia only. `mise run` then
+// and beateater had no [tools] section at all, consumer repository declared julia only. `mise run` then
 // depends on whatever the machine happens to have, which is the exact opposite of what mise
 // is for. The task graph's soundness is NOT separable from the runtime declaration: a body
 // that says `bun x` is only correct if [tools] says bun.
@@ -581,7 +581,7 @@ export function commandFindings(
   return findings;
 }
 
-// Binding resolution is deliberately outside coverage, as in coralbase's checker.
+// Binding resolution is deliberately outside coverage, as in reference checker's checker.
 type SourceToken = {
   text: string;
   kind: "word" | "string" | "template" | "punct";

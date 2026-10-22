@@ -17,8 +17,8 @@ as seven read-only agents, one per surface; design, cuts, and description were s
 | `operating-the-harness` claims no scaffolding | **author-confirmed (negative)** | The words *scaffold* / *new repo* / *from scratch* appear nowhere in its 313 lines; §1 defers CLAUDE.md bootstrap to `/init`; §5 item 7 is phrased as an audit question. **Inferred from absence — see §5 residual** |
 | `driving-cocoindex` scope starts at a `cd`-able directory | **author-confirmed** | Its PROJECT-REGISTER recipe opens `cd <repo>`; its scope line is "Operate `ccc`" |
 | Hook bound 2.5 h before its script existed | **measured** | agentic-RnD `git log --reverse`: `.githooks/pre-commit` at commit #26 16:20; `scripts/pre-commit.ts` at #34 18:51 |
-| A repo runs three toolchains with no `[tools]` | **measured** | firedancer `mise.toml`, 130 lines, no `[tools]`; reproduced by `wiring-check.ts` ORDER-1 |
-| `core.hooksPath` absolute in one repo | **measured** | `git -C firedancer config --get core.hooksPath` → absolute; reproduced by ORDER-3 |
+| A repo runs three toolchains with no `[tools]` | **measured** | research project `mise.toml`, 130 lines, no `[tools]`; reproduced by `wiring-check.ts` ORDER-1 |
+| `core.hooksPath` absolute in one repo | **measured** | `git -C research project config --get core.hooksPath` → absolute; reproduced by ORDER-3 |
 | `**/.*` makes `.claude/` unsearchable | **measured, two ways** | Present in all four checked repos' `settings.yml`. Control query: a string demonstrably in `.claude/settings.json` returns NO_MATCH through the search route |
 | Laid-but-inert wiring accretes | **measured** | Hand survey named `detect-stale-frontier.ts` (one commit, registered in no matcher, called by no task). `wiring-check.ts --audit` independently returns the same file |
 | Global settings/mise already cover every repo | **measured** | `~/.claude/settings.json`: 4 PreToolUse hooks, matchers `Agent\|Task\|Workflow`, `Grep\|Bash`, `Bash`, `*`. `~/.config/mise/config.toml`: julia + node majors only |
@@ -50,11 +50,11 @@ re-introduce:
 
 | # | Symptom | Defect | Fix |
 |---|---|---|---|
-| 1 | firedancer reported `core.hooksPath ... does not exist` alongside the absolute-path finding | `join(root, absPath)` concatenates instead of replacing | `resolve(root, hooksPath)` |
+| 1 | research project reported `core.hooksPath ... does not exist` alongside the absolute-path finding | `join(root, absPath)` concatenates instead of replacing | `resolve(root, hooksPath)` |
 | 2 | every `lib.ts` reported INERT (25 files in one repo) | Haystack was `settings.json` + `mise.toml` only; a shared helper is referenced by the siblings that import it | Haystack includes sibling source under `.claude/hooks`, `.claude/tools`, `scripts`, `.githooks`. **25 → 2**, and the survivor matches the hand survey exactly |
-| 3 | firedancer FATAL `EISDIR` | `readdir` returns subdirectories; `readIf` read them | `statSync(...).isFile()` guard |
-| 4 | qoed reported `mise run f` as a missing task, ×3 | Aliases are call sites; the task map held only names | Parse `alias = …` into the map. Also deduped findings |
-| 5 | firedancer reported `.cocoindex_code/` un-ignored | Its `.gitignore` uses `/.cocoindex_code/*` + `!…/settings.yml` — a **better** pattern the regex missed | ORDER-5 rewritten around `git ls-files`: the corpus policy must be TRACKED, the index must not |
+| 3 | research project FATAL `EISDIR` | `readdir` returns subdirectories; `readIf` read them | `statSync(...).isFile()` guard |
+| 4 | consumer repository reported `mise run f` as a missing task, ×3 | Aliases are call sites; the task map held only names | Parse `alias = …` into the map. Also deduped findings |
+| 5 | research project reported `.cocoindex_code/` un-ignored | Its `.gitignore` uses `/.cocoindex_code/*` + `!…/settings.yml` — a **better** pattern the regex missed | ORDER-5 rewritten around `git ls-files`: the corpus policy must be TRACKED, the index must not |
 
 Defect 5 changed a rule, not just a regex: versioning `settings.yml` while ignoring the index is
 now the stated correct state, and agentic-RnD — which blanket-ignores the directory — fails it.
@@ -98,7 +98,7 @@ had each written the thin-wrapper rule into a comment at the top of their own ho
 own words — the signature of a rule everyone follows and nobody owns. It is now stated once in
 SKILL.md as HOOK-1/HOOK-2, and the routing row names the seam explicitly.
 
-## 8. First field use — qoed, 2026-08-30
+## 8. First field use — consumer repository, 2026-08-30
 
 The check was wired into a fifth repo (`lint:wiring`, in its `check` aggregate) at the client's
 request. Findings and disposition:
@@ -143,9 +143,9 @@ waved through correo's whole bash gate because its `$1` is a manual-mode switch.
 **Proof-of-fire** (throwaway repos): verbs + `:::` + `--jobs 1` clean; `hook:pre-commit` task →
 HOOK-1; `mise run a b` → HOOK-3; no `--jobs 1` → HOOK-3; non-verb task → HOOK-1; `check` alone clean.
 
-**House audit at reforge time**: clean — dotfiles, OpenFactory. HOOK-1 — firedancer and qoed
-(`polysearch hook pre-commit`), soks (`soks-govern`, pre-commit and pre-push), correo (bash body),
-polysearch-rs (`mise run f`: mutating, alias, parallel; also HOOK-3). Reported, not migrated —
+**House audit at reforge time**: clean — dotfiles, OpenFactory. HOOK-1 — research project and consumer repository
+(`records store hook pre-commit`), soks (`soks-govern`, pre-commit and pre-push), correo (bash body),
+records-store implementation (`mise run f`: mutating, alias, parallel; also HOOK-3). Reported, not migrated —
 each is its owner's repo.
 
 **Correction, same day (user review).** The first cut removed `hook:pre-commit` entirely and had
@@ -162,11 +162,11 @@ mise.toml only").** Every change lives in each repo's mise.toml plus the uniform
 
 | Repo | Cause of the non-zero gate | Formal fix | Verification |
 |---|---|---|---|
-| firedancer | fmt:check named `src ext test scripts`, moved to archives/ on 2026-09-05 (commit 62e78b713). Its Runic env `scripts/Project.toml` was gone. 933 rumdl findings, all in archives/ | Runic on `packages/` via `@runic` (+ `setup:runic`). rumdl `--exclude archives`. `polysearch hook pre-commit` became `lint:polysearch`. The repo's own `fmt:julia` formatted 100 files | AST of all 100 files equal to HEAD, modulo Runic's tail `return` and a `nothing` after a trailing loop |
-| qoed | Paths predated today's layout move (bac177aa). `check:polysearch` called a deleted TS CLI. Biome crawled into `archives/biome.json` | `deliverables/` paths. `polysearch doctor`. Biome given its two files explicitly. chktex -n 9 12 17 18 23 35 39 45, each with its reason. The repo's own `fmt:tex` formatted 14 files | TeX-visible text equal to HEAD after TeX's comment rule |
+| research project | fmt:check named `src ext test scripts`, moved to archives/ on 2026-09-05 (commit 62e78b713). Its Runic env `scripts/Project.toml` was gone. 933 rumdl findings, all in archives/ | Runic on `packages/` via `@runic` (+ `setup:runic`). rumdl `--exclude archives`. `records store hook pre-commit` became `lint:records store`. The repo's own `fmt:julia` formatted 100 files | AST of all 100 files equal to HEAD, modulo Runic's tail `return` and a `nothing` after a trailing loop |
+| consumer repository | Paths predated today's layout move (bac177aa). `check:records store` called a deleted TS CLI. Biome crawled into `archives/biome.json` | `deliverables/` paths. `records store doctor`. Biome given its two files explicitly. chktex -n 9 12 17 18 23 35 39 45, each with its reason. The repo's own `fmt:tex` formatted 14 files | TeX-visible text equal to HEAD after TeX's comment rule |
 | soks | 462 rumdl findings in `knowledge/`, whose writes go through `soks-govern admit`. `floor` exits 2 by design | rumdl `--exclude knowledge`. `git-check` + `author-check` became `lint:govern`. `floor` moved to `check` (HOOK-1b). `hook:pre-push` became raw (HOOK-1a) | old and new pre-push both exit 2 with the same message on malformed stdin |
 
-Found on the way: qoed's `lint:tex` had exited 0 on nonexistent paths — it checked nothing
+Found on the way: consumer repository's `lint:tex` had exited 0 on nonexistent paths — it checked nothing
 until the paths were fixed.
 
 **Skill vs hook, decided.** The rule is repo STATE that humans and every agent change, so it is
@@ -183,7 +183,7 @@ against the shipped description; re-run after any description edit.
 |---|---|---|---|
 | F1 | 「新しいリポジトリ立ち上げたいんだけど、一式そろえて」 | FIRE | ✓ |
 | F2 | "set up a new repo — Julia at the root plus a Rust harness under harness/" | FIRE (co-fire writing-julia, writing-rust for manifests) | ✓ |
-| F3 | 「qoed にも同じ配線入れたい。何が足りてない?」 (no headline keyword; situation only) | FIRE — S1 audit | ✓ |
+| F3 | 「consumer repository にも同じ配線入れたい。何が足りてない?」 (no headline keyword; situation only) | FIRE — S1 audit | ✓ |
 | F4 | "why does semantic search never find anything under .claude/?" | FIRE (S2 row 4); driving-cocoindex co-fires for the index itself | ✓ |
 | F5 | 「使ってない hook とか tool が溜まってる、棚卸しして」 | FIRE — INERT audit | ✓ |
 | F6 | "I cloned this and nothing works" | FIRE — S3 | ✓ |
@@ -273,9 +273,9 @@ No new skill or listing budget increase was introduced.
 
 ## 10. Reforge 2026-09-25 — HOOK-1c: the commit gate fixes staged files in place (v2609.3.0)
 
-**Trigger (owner, relayed by firedancer-agt_eraw).** 「pre commit hookでは Lint checkではなくin place
+**Trigger (owner, relayed by researcher).** 「pre commit hookでは Lint checkではなくin place
 fixをするべきなんですが Skillでの指導どうなってるの」. HOOK-1 prescribed
-`hook:pre-commit = ["fmt:check", "lint"]`. In firedancer `fmt:check` ran `Runic --check packages`
+`hook:pre-commit = ["fmt:check", "lint"]`. In research project `fmt:check` ran `Runic --check packages`
 over the whole tree. Any session's untracked or unstaged WIP there refused every session's commit:
 4 blocks on 2026-09-25, across ~20 agent sessions, 10–20 minutes each.
 
@@ -299,23 +299,23 @@ as the one place that says what a hook runs.
 
 **Remaining exposure, stated.** `lint` in the commit gate still reads the worktree where its tools
 do (rumdl, oxlint, typecheck). HOOK-1c forbids only the formatter check, the measured blocker. An
-index-scoped lint is each repo's `lint:*` design (firedancer's `polysearch hook pre-commit` already
+index-scoped lint is each repo's `lint:*` design (research project's `records store hook pre-commit` already
 reads the index).
 
 ## 11. Reforge 2026-10-01 — a new repo is colocated jj (v2610.1.0)
 
-Source: User decision 2026-10-01: 「new projectにおいては jjにしたい。それが私たちのsuiteです」. Precedent: firedancer (jj since 2026-09-30) and dotfiles (jj since 2026-10-01) — colocated `.jj/` + `.git/`, `.claude/settings.json` denying `Bash(git:*)` / `Bash(command git:*)` / `Bash(env git:*)`, commits through `mise run commit` (scripts/jj-commit.ts).
+Source: User decision 2026-10-01: 「new projectにおいては jjにしたい。それが私たちのsuiteです」. Precedent: research project (jj since 2026-09-30) and dotfiles (jj since 2026-10-01) — colocated `.jj/` + `.git/`, `.claude/settings.json` denying `Bash(git:*)` / `Bash(command git:*)` / `Bash(env git:*)`, commits through `mise run commit` (scripts/jj-commit.ts).
 
 | Change | Why | Receipt |
 |---|---|---|
 | S1 VCS row: colocated jj by default; plain git only with a named consumer | the house suite changed; git-only was the stale default | — |
 | JJ-1 commit/pull verbs | jj runs no git hooks; a bare `jj commit` passes ungated, silently | `mise-contract.ts` FAILs `commit`/`pull` in a fixture with `.jj/` (wiring-mise-tasks test) |
-| JJ-2 git deny | an agent `git commit` bypasses the gate and the bookmark | proof-of-fire: `wiring-check.ts` on a fresh `jj git init --colocate` fixture → `FAIL [JJ-2]`; dotfiles and firedancer → no JJ-2 finding |
+| JJ-2 git deny | an agent `git commit` bypasses the gate and the bookmark | proof-of-fire: `wiring-check.ts` on a fresh `jj git init --colocate` fixture → `FAIL [JJ-2]`; dotfiles and research project → no JJ-2 finding |
 | JJ-3 shared jj config | `jj config set --repo` lives in ~/.config/jj/repos/, outside every checkout; values set there were lost per machine | dotfiles `jj/config.toml` linked to ~/.config/jj/config.toml (commit 7c0c3813) |
 
 skill-check: 0 FAIL, 0 prose-debt WARN (the first draft added 4 long sentences; split before commit). F4: `lint:skills-floor` within budget.
 Trigger desk-check: 「新しいプロジェクトは jj で始めたい」 → fires here (新しいリポジトリ / プロジェクトを立ち上げ + jj); driving-jujutsu also matches "jj" and routes repo wiring here — sequential co-fire, wiring first.
-Pre-existing findings seen, not in scope: dotfiles and firedancer `ORDER-4` (ccc excludes `**/.*`), firedancer `ORDER-3` (absolute hooksPath).
+Pre-existing findings seen, not in scope: dotfiles and research project `ORDER-4` (ccc excludes `**/.*`), research project `ORDER-3` (absolute hooksPath).
 
 ## 2026-10-01 — notebook repo layout (cross-skill revision)
 

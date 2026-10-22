@@ -1,7 +1,7 @@
 # catalog.md — dated perishables, ccc (cocoindex-code) & the cocoindex framework
 
 > Everything below rots. Verified 2026-07-12/13 via live-trial (starlette corpus, this host's
-> `qoed` project) + raw API calls (`gh api`, `curl pypi.org/pypi/.../json`, local `--help`/
+> `consumer repository` project) + raw API calls (`gh api`, `curl pypi.org/pypi/.../json`, local `--help`/
 > `ccc doctor`) — deliberately NOT WebFetch-summarized pages (one caught a 2026→2025 date
 > hallucination, see Provenance hygiene at bottom). On reforge, re-run the same raw-API/
 > `--help`/`ccc doctor` probes instead of trusting this snapshot. Durable rules (PROJECT-BY-CWD,
@@ -36,7 +36,7 @@ on the flag). Consider pinning if drift risk matters more than staying current.
 **The ccc MCP server is no longer registered anywhere on this machine.** Two registrations
 existed and both are gone: `~/.claude.json` → project `/home/fuyu/ARTS/qinfogeo` (local scope,
 spawned via `uvx --prerelease=explicit --with 'cocoindex>=1.0.0a16' cocoindex-code@latest`) and
-`/home/fuyu/Workspace/qoed/.mcp.json` (project scope, committed, spawned via `ccc mcp`). Three
+`/home/fuyu/Workspace/consumer repository/.mcp.json` (project scope, committed, spawned via `ccc mcp`). Three
 orphaned server processes — 3d09h old, parents long dead — were reaped with them.
 
 Why it went, measured rather than assumed: it exposed **zero tools** to a live session; the
@@ -50,11 +50,11 @@ The decisive argument is not the failures, it is duplication of a **guarded** ca
 which owns query-shape declaration, index freshness on `concept`, the ≥3-paraphrase `battery`
 gate, and the Serena hand-off. The MCP `search` tool answered the same questions with **none** of
 those gates and never passed through the hook, whose matcher is `Grep|Bash`. Verified after
-removal: `rr about` in qoed still returns its anchor at rank 1 / 0.900 — the router
+removal: `rr about` in consumer repository still returns its anchor at rank 1 / 0.900 — the router
 never went through MCP.
 
 Restore (if a future need is argued): qinfogeo `claude mcp add cocoindex-code -- uvx
---prerelease=explicit --with 'cocoindex>=1.0.0a16' cocoindex-code@latest`; qoed re-add
+--prerelease=explicit --with 'cocoindex>=1.0.0a16' cocoindex-code@latest`; consumer repository re-add
 `"cocoindex-code": {"command": "ccc", "args": ["mcp"]}` to its `.mcp.json`. Do NOT restore
 without also deciding how the router's gates apply to the MCP surface — otherwise the unguarded
 door is simply reopened.
@@ -101,7 +101,7 @@ bottleneck; the CC1 registration gate is (unregistered cwd exits before any of t
 | Incremental reindex (9 files changed)             | 1.022s                                                                  |                                                                                         |
 | Full from-scratch rebuild                         | ~5–8s / 100 files                                                       |                                                                                         |
 | DB size, starlette trial                          | 13MB (`target_sqlite.db`, 100 files/1205 chunks)                        | dir total 18M                                                                           |
-| DB size, `qoed` (real project)                    | 88M total — `cocoindex.db/` 44M + `target_sqlite.db` 45M (46,071,808 B) | 853 files / 11,962 chunks                                                               |
+| DB size, `consumer repository` (real project)                    | 88M total — `cocoindex.db/` 44M + `target_sqlite.db` 45M (46,071,808 B) | 853 files / 11,962 chunks                                                               |
 
 **Head-to-head, 6 queries, `ccc search` vs `rg`** (starlette corpus, clean HEAD, verdicts are
 this trial's, not a general law — re-run for other corpora):
@@ -129,7 +129,7 @@ concrete case for ccc grep's AST/structural, whitespace-invariant matching.
 ## Daemon resource footprint — before/after supervision (2026-08-08, this host)
 
 Host: WSL2, 12 logical CPUs, 58 GiB RAM, RTX 3060 12 GiB, `granite-311m-multilingual-r2` on CPU.
-The "before" column is an unsupervised daemon indexing `firedancer` + `dotfiles`; the "after" is
+The "before" column is an unsupervised daemon indexing `research project` + `dotfiles`; the "after" is
 the same work under `ccc-daemon.service`. Procedure and the unit → `operations.md` §3a.
 
 |                        | before (LAZY-SPAWN, no ceiling)         | after (SUPERVISED)                     |
@@ -145,7 +145,7 @@ the same work under `ccc-daemon.service`. Procedure and the unit → `operations
 Ceilings in the unit as shipped: `CPUQuota=300%`, `MemoryHigh=4G`, `MemoryMax=6G`,
 `MemorySwapMax=0`, `TasksMax=256`, `OOMPolicy=kill`. Provisional — the 4G/6G pair was sized from
 the 4.85 GiB "before" peak, and the RSS drop is mostly `COCOINDEX_MAX_INFLIGHT_COMPONENTS` 1024→64
-rather than the ceiling biting, so re-measure after a full `firedancer` index and tighten.
+rather than the ceiling biting, so re-measure after a full `research project` index and tighten.
 
 The occasion: a client died at 01:27 with `BrokenPipeError`; its index kept running until 03:07 at
 roughly 6 cores while six concurrent Julia processes got ~30 % each and load average sat at 17 on
@@ -276,14 +276,14 @@ symlink-prune queries land at ranks 23–244 — so it cannot serve as ccc's GLO
 NVIDIA Nemotron-3-Embed rejected upstream: 1B/8B decoder-embedders, GPU-required, no CPU
 backend, no isolated JA evidence.
 
-Reindex under ccc's daemon: ~100 chunks/s — qoed 16,090 / 159s, beateater 12,551 / 161s,
-min-sys-dpp-mvp 3,649 / 32s.
+Reindex under ccc's daemon: ~100 chunks/s — consumer repository 16,090 / 159s, beateater 12,551 / 161s,
+min-sys-GPU project 3,649 / 32s.
 
-**End-to-end smoke anchor (qoed), current**: the JA query 「境界条件の正規化」 returns
+**End-to-end smoke anchor (consumer repository), current**: the JA query 「境界条件の正規化」 returns
 `docs/records/R2607_038-three_master_theorems_program.md:159-165` at rank 1 / **0.900** on the
 current (incumbent) index — verified live this session via `rr about`. This replaces
 the prior anchor (`\section{適用境界}` in `papers/P2606_003-sok_randomized_metrology/main.tex`,
-last recorded at 0.90): that document was excluded from qoed's index by commit `7d915ed`
+last recorded at 0.90): that document was excluded from consumer repository's index by commit `7d915ed`
 ("fix: 降格済み文書を意味検索の索引から外し、漏れを gate で止める"), dated **2026-07-28** — two
 days before the exclusion's effect was misread as a 2026-07-30 model regression during the
 bekko trial (§ below). A smoke anchor's target document is a corpus-scoping dependency, not a
@@ -327,7 +327,7 @@ a25m won Japanese notes and was statistically indistinguishable on code (Δ −0
 below what 65 queries can resolve) — it did not repeat the ruri-v3 failure above (ruri lost 43%
 of code; a8m is dominated by a25m on both halves). Threshold was pre-registered before the run —
 adopt-candidate if code degrades ≤5%, reject at >10% — and a25m passed it. Three items were
-flagged as unmeasured before adoption: (1) confirmation on a second registered corpus (qoed /
+flagged as unmeasured before adoption: (1) confirmation on a second registered corpus (consumer repository /
 beateater are different material — LaTeX and prose, not this repo's JA-notes+code mix), (2) the
 code half's ceiling was suspiciously high (0.85 for both models — identifier leakage from
 comment into code may have been compressing the difference), (3) reindex throughput and
@@ -335,17 +335,17 @@ Matryoshka truncation under ccc's daemon were untested. The pre-registered thres
 table both said adopt-candidate; the swap went ahead the same day.
 
 **What happened next, and why it does NOT settle the question.**
-`ccc reset --force && ccc index` ran across registered projects, and the recorded qoed
+`ccc reset --force && ccc index` ran across registered projects, and the recorded consumer repository
 end-to-end smoke — 「境界条件の正規化」 → `\section{適用境界}` — was read as FAILED: the target
 string no longer appeared anywhere in the top 30 (incumbent, recorded earlier: rank 1 @ 0.90),
 and the top-10 score spread had collapsed to 0.519–0.480. bekko was reverted the same day on
 this basis. Evidence for the observation itself: `cocoindex/global_settings.yml`'s model-history
-comment (this repo, dated entries — the qoed numbers above are copied from it verbatim, not
+comment (this repo, dated entries — the consumer repository numbers above are copied from it verbatim, not
 re-measured here).
 
 That basis was **CONFOUNDED and does not support any verdict about bekko.**
 `\section{適用境界}` lives in `papers/P2606_003-sok_randomized_metrology/main.tex:397` (this
-repo — confirmed via `rr text`). qoed's own `.cocoindex_code/settings.yml` excludes
+repo — confirmed via `rr text`). consumer repository's own `.cocoindex_code/settings.yml` excludes
 `papers/P2606_003-sok_randomized_metrology/**` inside a generated "demoted document" block, an
 authority-gate cleanup that landed in commit `7d915ed` ("fix: 降格済み文書を意味検索の索引から外し、
 漏れを gate で止める"), dated **2026-07-28 14:56 JST — two days before the bekko swap**. The
@@ -396,7 +396,7 @@ run.
 | Voyage/Bedrock LiteLLM encoding-format breakage (fixed v0.2.31)                                                                                                                                                                           | CONSENSUS only                                            | summarized WebFetch of issues/releases, not reproduced                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Dart file-type gap / watchdog-based auto-reindex requested                                                                                                                                                                                | CONSENSUS only                                            | summarized WebFetch of issues page                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `ccc reset` (no `--all`) followed by unexpected auto-rebuild on next daemon poke                                                                                                                                                          | observed, **UNVERIFIED mechanism**                        | could not disambiguate background auto-rebuild vs. an implicit ensure-index side-effect of repeated status polls — do not rely on this behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Smoke-anchor rot: a corpus-scoping change (excluding a document from `settings.yml`) silently invalidates a recorded end-to-end smoke anchor, which then misreads as a MODEL regression on the next unrelated swap that happens to use it | **HIGH**                                                  | reproduced this session: qoed commit `7d915ed` (2026-07-28) excluded the 2026-07-17 smoke anchor's target document from the index, 2 days before that anchor was used to gate the 2026-07-30 bekko swap and reverted it; the SAME anchor also fails against the CURRENT incumbent index (verified live), proving the anchor had rotted, not the model — rule: a smoke anchor is a corpus-scoping dependency, not a fixed constant; re-verify it resolves under the CURRENT index before trusting a pass/fail verdict measured against it, and record which file the anchor depends on so a future exclusion is traceable |
+| Smoke-anchor rot: a corpus-scoping change (excluding a document from `settings.yml`) silently invalidates a recorded end-to-end smoke anchor, which then misreads as a MODEL regression on the next unrelated swap that happens to use it | **HIGH**                                                  | reproduced this session: consumer repository commit `7d915ed` (2026-07-28) excluded the 2026-07-17 smoke anchor's target document from the index, 2 days before that anchor was used to gate the 2026-07-30 bekko swap and reverted it; the SAME anchor also fails against the CURRENT incumbent index (verified live), proving the anchor had rotted, not the model — rule: a smoke anchor is a corpus-scoping dependency, not a fixed constant; re-verify it resolves under the CURRENT index before trusting a pass/fail verdict measured against it, and record which file the anchor depends on so a future exclusion is traceable |
 
 ## Provenance hygiene
 

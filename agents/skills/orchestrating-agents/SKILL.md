@@ -296,7 +296,7 @@ P5はP2へ吸収済みであり、この番号を別のgateへ再利用しない
 | P10 ARTIFACT-REUSE | 分単位以上の中間生成物は初回に保存し、指紋一致時だけ再利用する。更新・仕様変更・破損で失効させる。 | 同 reference P10。manifest、digest、input fingerprint、再構築理由。 |
 
 P8/P9 の番号は再利用しない。比較条件、交絡、漏れ、退行、証拠の採否は
-`validating-experimental-evidence` に移した。本skillはpolysearchの正本findingにある
+`validating-experimental-evidence` に移した。本skillはrecords storeの正本findingにある
 `EVIDENCE DISPOSITION` のlocus/digestをdispatch、visibility、acceptanceの入力として受ける。
 
 ### P1 change boundary

@@ -55,7 +55,7 @@ still on disk, so it is re-read into the commit.
 |---|---|
 | `git rm --cached -- <paths>` then `git commit --amend --no-edit` | `git ls-tree -r -l HEAD \| sort -k4 -n \| tail` |
 
-Never derive a pathspec from a regex over `git status`. The firedancer incident matched
+Never derive a pathspec from a regex over `git status`. The research project incident matched
 `artifact` against `runs/artifacts/*.jls` and committed 3.9 GB. Enumerate, then stat.
 
 Secrets: a `.env` or key that reaches ANY remote is compromised. Rotate first, then rewrite
@@ -120,7 +120,7 @@ Confirm the process belongs to this operation before terminating it; a name matc
 ## 9. Prove a rewrite changed only what it should
 
 `git range-diff <base> <old-tip> <new-tip>` (or `<old>...<new>`). `=` rows are byte-identical
-patches. `!` rows show the interdiff. The firedancer 17-commit blob removal should have been
+patches. `!` rows show the interdiff. The research project 17-commit blob removal should have been
 verified this way instead of by `ls-tree` size scans. Also the receipt for §4 and §5.
 
 ## 10. Find which commit broke it

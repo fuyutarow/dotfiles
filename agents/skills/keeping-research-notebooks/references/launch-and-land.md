@@ -8,7 +8,7 @@
 | Precondition | How it is checked | On failure |
 |---|---|---|
 | runner, params and resource manifest are committed as-is | the launcher compares the working copy to a commit | land them through the COMMITTER, then relaunch |
-| the benchmark is registered in the records store | the launcher looks it up, if it does | register it first; see `driving-polysearch` |
+| the benchmark is registered in the records store | the launcher looks it up, if it does | register it first; see `records-store CLI owner` |
 | the cause is a hypothesis with frozen predictions | launcher exit status if it checks; else read the hypothesis record by hand | write the hypothesis first; never launch causeless |
 | params use only the keys the runner reads | the launcher's params schema, if it has one | remove the key or teach the runner, in a REVISION |
 | the model slug is in every registry the launcher reads | the dry-run (§2) | complete registration; `references/editions.md` §2 |

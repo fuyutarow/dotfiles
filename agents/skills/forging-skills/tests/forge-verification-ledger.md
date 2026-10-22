@@ -326,9 +326,9 @@ new `validating-experimental-evidence` skill replaces OA's P8/P9 semantic conten
 in the same commit, so this mission does not authorize a second measurement owner.
 
 The first draft of the new skill included a Bun checker and JSON card. The user
-identified that as a second executable authority beside polysearch. The editor
+identified that as a second executable authority beside records store. The editor
 removed them before shipping; the skill now owns only semantic judgment and
-routes machine rejection to polysearch/Arena. This correction is part of F2's
+routes machine rejection to records store/Arena. This correction is part of F2's
 one-home proof, not a reason to add another plugin or schema.
 
 Target `skill-check.ts` exited 0 with no structural FAIL. The collection floor
@@ -346,7 +346,7 @@ existing fire/no-fire cases and added no domain-meaning claim.
 
 ## 2026-09-27 — sequential verification for execution-loop skills
 
-Observed source: user supplied a later Firedancer report after repeated BIBIFI reforges; actor
+Observed source: user supplied a later research project report after repeated BIBIFI reforges; actor
 reports still showed long component tickets, repeated admission queues, development freezes and
 incomplete code binding. Root-signed change to verifying.md: a one-shot plan answer cannot verify
 an event-driven coordination manual. Freeze a multi-event fixture, deliver events separately to

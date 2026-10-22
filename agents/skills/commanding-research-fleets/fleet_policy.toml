@@ -15,7 +15,7 @@
 # session, not a second copy of the charter: keep entries short and point back at the
 # charter doc rather than restating it, so the two never drift apart.
 #
-# Content below is the Director's (firedancer-dtr_vdrt, 2026-09-02), migrated verbatim
+# Content below is the Director's (director, 2026-09-02), migrated verbatim
 # 2026-09-07 from the retired agents/claude/hooks/assign-roles.toml — not invented here,
 # not reworded in the move. A project that wants different charter text places its own
 # fleet_policy.toml at its own root; it never edits this shipped copy to do so.

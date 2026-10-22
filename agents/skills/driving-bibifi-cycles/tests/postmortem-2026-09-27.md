@@ -1,12 +1,12 @@
-# Bounded postmortem — firedancer reports, 2026-09-27
+# Bounded postmortem — research project reports, 2026-09-27
 
 ## Evidence boundary
 
 - AUDIT_ID: planning-iterations-20260927
-- EPISODE_ID: firedancer-agt_eraw-reports-0900-1020
+- EPISODE_ID: researcher-reports-0900-1020
 - EPISODE_STATUS: NOT-EVIDENCED as terminal; admitted as an explicitly bounded historical excerpt.
 - AUDITOR_INSTANCE_ID: codex-ac1c61c6aaf5c510 (current task, not the report author).
-- EPISODE_AUTHOR_INSTANCE_ID: firedancer-agt_eraw (attachment header).
+- EPISODE_AUTHOR_INSTANCE_ID: researcher (attachment header).
 - PROGRAMME_SUPERVISOR_INSTANCE_ID / SECTION_DIRECTOR_INSTANCE_ID: NOT-EVIDENCED.
 - EVIDENCE_PACKET_LOCUS: user-supplied `Pasted text.txt`, attachment `3fb2e418-919c-4a10-bf7a-b98b79f35451`.
 - EVIDENCE_PACKET_SHA256: `e48513501f738ff18b3ca60f5a5ff6fef836c7c23bfa5543bb9ff5f7f288697b`.

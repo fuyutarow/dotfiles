@@ -35,7 +35,7 @@ import {
   selected,
   type JjPrecommit,
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
-import { RENDER_INPUTS } from "./render-source.ts";
+import { RENDER_INPUTS, restoreRenderDependencies } from "./render-source.ts";
 
 type Os = "mac" | "wsl" | "linux";
 type Roots = { repo: string; home: string; os: Os };
@@ -586,6 +586,12 @@ export async function candidateFindings(
     await writeFile(dest, "");
   }
   await exportCandidate(context, repo, copied);
+  // The candidate owns these manifests and lockfile; never borrow live node_modules.
+  if (copied.has("tools/agx-worker/src/next/cli.ts")) {
+    const dependencyError = await restoreRenderDependencies(repo);
+    if (dependencyError !== undefined)
+      return [`FATAL: live-refs candidate ${dependencyError.message}`];
+  }
   const link = async (source: string, destination: string): Promise<void> => {
     const dest = join(targetHome, destination);
     if ((await lstatMaybe(dest)) !== undefined) return;

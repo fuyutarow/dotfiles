@@ -1,7 +1,8 @@
 // Immutable render inputs, shared by link:dots, render-home and doctor's reference render.
-// Zero-dep: a fresh host renders before node_modules is restored. No argv boundary.
+// Zero-install imports. The exported roster CLI restores its own locked dependencies.
+// No live checkout dependencies or node_modules links enter an immutable export.
 import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
@@ -12,9 +13,14 @@ export const RENDER_INPUTS = [
   "agents/claude/CLAUDE.md",
   "agents/hooks",
   "agents/models",
-  "tools/shared/src/attempt.ts",
-  "tools/shared/src/narrow.ts",
-  "tools/shared/src/zod.ts",
+  "tools/agx-worker/src",
+  "tools/agx-worker/package.json",
+  "tools/shared/src",
+  "tools/shared/package.json",
+  "package.json",
+  "bun.lock",
+  // Required by the root package's workspace declaration, including frozen installs.
+  "tools/agx-usehooks/package.json",
   "tools/tool-tiers/src/tool-commands.ts",
   "tools/tool-tiers/src/tool-commands.tsv",
   "Brewfile.core",
@@ -92,6 +98,61 @@ export async function renderRefusal(
   return new Error(
     `uncommitted render inputs: ${JSON.stringify(paths)}; refusing to render $HOME. Commit them first, or use mise run link:dots -- --from-working-copy for an explicit local render\nDOTFILES_RENDER_REFUSAL_V1=${JSON.stringify({ reason: "foreign-wip", paths })}`,
   );
+}
+
+/** Restore only inside a disposable export, using its own lockfile and the local cache.
+ * Callers own cleanup and must not pass the real checkout. No network or lifecycle scripts. */
+export async function restoreRenderDependencies(
+  root: string,
+): Promise<Error | undefined> {
+  const installed = await attempt(async () => {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "install",
+        "--frozen-lockfile",
+        "--offline",
+        "--production",
+        "--ignore-scripts",
+        "--no-progress",
+      ],
+      {
+        timeout: 60_000,
+        killSignal: "SIGKILL",
+        cwd: root,
+        // Doctor renders into a scratch HOME; package cache belongs to the operator.
+        env: {
+          ...process.env,
+          BUN_INSTALL_CACHE_DIR:
+            process.env.BUN_INSTALL_CACHE_DIR ??
+            join(
+              process.env.COMMAND_TARGET_HOME ?? homedir(),
+              ".bun/install/cache",
+            ),
+        },
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const [out, err, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    if (code !== 0)
+      return new Error(
+        `render dependencies: frozen install exited ${code}: ${(err + out).slice(0, 4000)}`,
+      );
+    return null;
+  });
+  if (!installed.ok) {
+    return new Error(errorMessage(installed.error));
+  }
+  if (installed.value instanceof Error) {
+    return installed.value;
+  }
+  return undefined;
 }
 
 export type RenderSource = {
@@ -173,6 +234,19 @@ export async function prepareRenderSource(
   if (failure instanceof Error) {
     await release();
     return failure;
+  }
+  // Older pinned revisions may predate the CLI adapter. Do not install dependencies
+  // unless that revision actually exports the CLI and its root package contract.
+  if (
+    paths.includes("tools/agx-worker/src/next/cli.ts") &&
+    paths.includes("package.json") &&
+    paths.includes("bun.lock")
+  ) {
+    const dependencyError = await restoreRenderDependencies(scratch);
+    if (dependencyError !== undefined) {
+      await release();
+      return dependencyError;
+    }
   }
   return { root: scratch, description: `commit ${commit}`, release };
 }

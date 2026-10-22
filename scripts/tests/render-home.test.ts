@@ -6,6 +6,7 @@
 // truncated render or a silently-dropped private rule is the damage to prevent.
 import { describe, expect, test } from "bun:test";
 import {
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -15,13 +16,30 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { brewPrefix } from "../core-tools.ts";
 import { HooksConfigSchema } from "../hook-registry.ts";
 
-import { ROUTING_OBJECTIVE } from "../../agents/models/roster.ts";
+const productionRoster = Bun.spawnSync(
+  [
+    process.execPath,
+    "--no-install",
+    join(import.meta.dir, "../../tools/agx-worker/src/next/cli.ts"),
+    "roster",
+    "--json",
+  ],
+  { env: { ...process.env, DISPATCH_ROSTER_PATH: undefined }, timeout: 10_000 },
+);
+expect(productionRoster.exitCode, productionRoster.stderr.toString()).toBe(0);
+const ROSTER_JSON = productionRoster.stdout.toString();
+const objective = jsonOf(z.object({ objective: z.string() })).safeParse(
+  ROSTER_JSON,
+);
+expect(objective.success).toBe(true);
+if (!objective.success) process.exit(1);
+const ROUTING_OBJECTIVE = objective.data.objective;
 
 const SCRIPT = join(import.meta.dir, "..", "render-home.ts");
 const ROOT = join(import.meta.dir, "..", "..");
@@ -33,8 +51,15 @@ const ROUTE_BIAS = [
 
 function run(env: Record<string, string>): { out: string; code: number } {
   const proc = Bun.spawnSync([process.execPath, SCRIPT], {
-    env: { ...process.env, ...env },
+    env: {
+      ...process.env,
+      BUN_INSTALL_CACHE_DIR:
+        process.env.BUN_INSTALL_CACHE_DIR ??
+        join(homedir(), ".bun/install/cache"),
+      ...env,
+    },
     maxBuffer: 4 * 1024 * 1024,
+    timeout: 25_000,
   });
   return {
     out: proc.stdout.toString() + proc.stderr.toString(),
@@ -44,7 +69,7 @@ function run(env: Record<string, string>): { out: string; code: number } {
 
 /** The other inputs render-home.ts reads, as minimal fixtures: an empty-hooks codex file, a
  * CLAUDE.md that is only the roster markers, the real roster, and a one-hook registry. */
-function writeOtherInputs(dir: string): void {
+function writeOtherInputs(dir: string, productionCli = false): void {
   mkdirSync(join(dir, "agents", "codex"), { recursive: true });
   writeFileSync(
     join(dir, "agents", "codex", "hooks.json"),
@@ -59,12 +84,42 @@ function writeOtherInputs(dir: string): void {
     join(dir, "agents", "models", "dispatch-roster.toml"),
     readFileSync(join(ROOT, "agents", "models", "dispatch-roster.toml")),
   );
+  if (productionCli) {
+    for (const path of [
+      "tools/agx-worker/src",
+      "tools/agx-worker/package.json",
+      "tools/shared/src",
+      "tools/shared/package.json",
+      "package.json",
+      "bun.lock",
+      "tools/agx-usehooks/package.json",
+    ]) {
+      const target = join(dir, path);
+      mkdirSync(join(target, ".."), { recursive: true });
+      cpSync(join(ROOT, path), target, {
+        recursive: true,
+        force: false,
+        errorOnExist: true,
+      });
+    }
+  } else {
+    writeRosterCli(
+      dir,
+      `process.stdout.write(${JSON.stringify(ROSTER_JSON)});`,
+    );
+  }
   mkdirSync(join(dir, "agents", "hooks"), { recursive: true });
   writeFileSync(join(dir, "agents", "hooks", "gate.ts"), "// fixture\n");
   writeFileSync(
     join(dir, "agents", "hooks", "hooks.toml"),
     '[[hook]]\nslug = "gate"\nscript = "gate.ts"\nevent = "PreToolUse"\nmatcher = "Bash"\nfail_closed = true\nvendors = ["claude", "codex"]\n',
   );
+}
+
+function writeRosterCli(dir: string, code: string): void {
+  const path = join(dir, "tools/agx-worker/src/next/cli.ts");
+  mkdirSync(join(path, ".."), { recursive: true });
+  writeFileSync(path, code);
 }
 
 const GATE = {
@@ -79,14 +134,14 @@ const GATE = {
 };
 
 /** A dotfiles fixture: the committed base settings plus the other inputs. */
-function makeDotfiles(base: object): string {
+function makeDotfiles(base: object, productionCli = false): string {
   const dir = mkdtempSync(join(tmpdir(), "render-settings-dotfiles-"));
   mkdirSync(join(dir, "agents", "claude"), { recursive: true });
   writeFileSync(
     join(dir, "agents", "claude", "settings.json"),
     `${JSON.stringify(base, null, 2)}\n`,
   );
-  writeOtherInputs(dir);
+  writeOtherInputs(dir, productionCli);
   return dir;
 }
 
@@ -623,8 +678,22 @@ describe("render-home: the rest of the rendered half", () => {
 
 describe("render-home: committed jj inputs", () => {
   function committedFixture() {
-    const dotfiles = makeDotfiles({ model: "committed-model" });
+    const dotfiles = makeDotfiles({ model: "committed-model" }, true);
     const home = makeHome();
+    writeFileSync(join(dotfiles, ".gitignore"), "node_modules/\n");
+    const install = Bun.spawnSync(
+      [
+        process.execPath,
+        "install",
+        "--frozen-lockfile",
+        "--offline",
+        "--production",
+        "--ignore-scripts",
+        "--no-progress",
+      ],
+      { cwd: dotfiles, timeout: 60_000 },
+    );
+    expect(install.exitCode, install.stderr.toString()).toBe(0);
     const config = join(home, "jj-config.toml");
     writeFileSync(
       config,
@@ -676,11 +745,14 @@ describe("render-home: committed jj inputs", () => {
 
   test("a pinned landed commit renders its bytes even after clean alpha advances", () => {
     const f = committedFixture();
+    const original = run(f.env);
+    expect(original.code, original.out).toBe(0);
+    const originalPolicy = readFileSync(join(f.home, ".claude/CLAUDE.md"));
     writeFileSync(
       join(f.dotfiles, "agents/claude/settings.json"),
       '{"model":"newer-model"}\n',
     );
-    const rosterCode = join(f.dotfiles, "agents/models/roster.ts");
+    const rosterCode = join(f.dotfiles, "scripts/render-home.ts");
     writeFileSync(
       rosterCode,
       readFileSync(rosterCode, "utf8").replaceAll(
@@ -688,10 +760,26 @@ describe("render-home: committed jj inputs", () => {
         "Newer renderer:",
       ),
     );
+    const publicCli = join(f.dotfiles, "tools/agx-worker/src/next/public.ts");
+    writeFileSync(
+      publicCli,
+      readFileSync(publicCli, "utf8").replace(
+        "objective: ROUTING_OBJECTIVE",
+        'objective: "newer CLI objective"',
+      ),
+    );
+    const rosterPath = join(f.dotfiles, "agents/models/dispatch-roster.toml");
+    writeFileSync(
+      rosterPath,
+      readFileSync(rosterPath, "utf8").replace("2026-10-08", "2026-10-09"),
+    );
     f.jj(["commit", "-m", "newer alpha inputs"]);
     f.jj(["bookmark", "set", "alpha", "-r", "@-"]);
     const result = run({ ...f.env, DOTFILES_RENDER_REV: f.commit });
     expect(result.code, result.out).toBe(0);
+    expect(readFileSync(join(f.home, ".claude/CLAUDE.md"))).toEqual(
+      originalPolicy,
+    );
     expect(result.out).toContain(`render source: commit ${f.commit}`);
     expect(readDest(f.home).model).toBe("committed-model");
     expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
@@ -700,13 +788,59 @@ describe("render-home: committed jj inputs", () => {
     expect(
       readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8"),
     ).not.toContain("Newer renderer:");
+    const pinned = readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8");
+    expect(pinned).toContain(ROUTING_OBJECTIVE);
+    expect(pinned).not.toContain("newer CLI objective");
+    expect(pinned).toContain("sourced snapshot 2026-10-08");
     expect(run(f.env).code).toBe(0);
+    expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
+      "newer CLI objective",
+    );
+    expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
+      "sourced snapshot 2026-10-09",
+    );
     expect(readDest(f.home).model).toBe("newer-model");
     expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
       "Newer renderer:",
     );
     cleanup(f.dotfiles, f.home);
-  }, 15_000);
+  }, 30_000);
+
+  test("dirty CLI inputs refuse; a failed frozen install preserves deployed bytes", () => {
+    const f = committedFixture();
+    using _cleanup = {
+      [Symbol.dispose]: () => {
+        cleanup(f.dotfiles, f.home);
+      },
+    };
+    const first = run(f.env);
+    expect(first.code, first.out).toBe(0);
+    const paths = [
+      ".claude/settings.json",
+      ".codex/hooks.json",
+      ".claude/CLAUDE.md",
+      ".config/dotfiles/brew-prefix",
+    ].map((path) => join(f.home, path));
+    const before = paths.map((path) => ({ path, bytes: readFileSync(path) }));
+    const cliPath = join(f.dotfiles, "tools/agx-worker/src/next/cli.ts");
+    writeFileSync(
+      cliPath,
+      `${readFileSync(cliPath, "utf8")}\n// changed CLI input\n`,
+    );
+    const dirty = run(f.env);
+    expect(dirty.code, dirty.out).toBe(1);
+    expect(dirty.out).toContain("uncommitted render inputs");
+    expect(dirty.out).toContain("tools/agx-worker/src/next/cli.ts");
+    writeFileSync(join(f.dotfiles, "bun.lock"), "invalid lockfile\n");
+    f.jj(["commit", "-m", "invalid frozen dependencies"]);
+    f.jj(["bookmark", "set", "alpha", "-r", "@-"]);
+    const failed = run(f.env);
+    expect(failed.code, failed.out).toBe(1);
+    expect(failed.out).toContain("render dependencies: frozen install exited");
+    for (const { path, bytes } of before) {
+      expect(readFileSync(path)).toEqual(bytes);
+    }
+  }, 30_000);
 
   test("dirty hooks refuse before links or renders; an explicit local override renders them", () => {
     const f = committedFixture();
@@ -751,5 +885,76 @@ describe("render-home: committed jj inputs", () => {
     expect(deployed.code).toBe(1);
     expect(deployed.out).toContain("cannot be combined");
     cleanup(f.dotfiles, f.home);
-  }, 15_000);
+  }, 30_000);
+});
+
+// Frozen before replacing the direct-import renderer. Includes markers and provenance.
+describe("render-home: public roster JSON", () => {
+  test("production roster block is byte-identical to the original renderer", () => {
+    const home = makeHome();
+    using _cleanup = {
+      [Symbol.dispose]: () => {
+        cleanup(home);
+      },
+    };
+    const result = run({
+      HOME: home,
+      DOTFILES: ROOT,
+      DOTFILES_RENDER_FROM_WORKING_COPY: "1",
+      CLAUDE_SETTINGS_PRIVATE: join(home, "missing.json"),
+      DISPATCH_ROSTER_PATH: "/must-not-use-live-roster",
+    });
+    expect(result.code, result.out).toBe(0);
+    const md = readFileSync(join(home, ".claude/CLAUDE.md"), "utf8");
+    const block = md.slice(
+      md.indexOf("<!-- roster:begin -->"),
+      md.indexOf("<!-- roster:end -->") + "<!-- roster:end -->".length,
+    );
+    expect(Buffer.from(block)).toEqual(
+      readFileSync(join(import.meta.dir, "fixtures/render-home-roster.md")),
+    );
+    expect(readFileSync(SCRIPT, "utf8")).not.toMatch(
+      /from\s+["']\.\.\/agents\/models\//u,
+    );
+  });
+
+  for (const [name, code] of [
+    [
+      "non-zero exit",
+      'process.stderr.write("roster unavailable"); process.exit(7);',
+    ],
+    ["invalid JSON", 'process.stdout.write("not JSON");'],
+    ["invalid JSON shape", 'process.stdout.write("{}");'],
+    [
+      "missing objective",
+      `process.stdout.write(${JSON.stringify(ROSTER_JSON.replace(/,"objective":.*\}\n?$/u, "}\n"))});`,
+    ],
+    ["timeout", "await Bun.sleep(60_000);"],
+  ] as const) {
+    test(`roster CLI ${name} preserves every deployed file`, () => {
+      const dotfiles = makeDotfiles({ model: "opus" });
+      const home = makeHome();
+      using _cleanup = {
+        [Symbol.dispose]: () => {
+          cleanup(dotfiles, home);
+        },
+      };
+      const first = run({ HOME: home, DOTFILES: dotfiles });
+      expect(first.code, first.out).toBe(0);
+      const paths = [
+        ".claude/settings.json",
+        ".codex/hooks.json",
+        ".claude/CLAUDE.md",
+        ".config/dotfiles/brew-prefix",
+      ].map((path) => join(home, path));
+      const before = paths.map((path) => ({ path, bytes: readFileSync(path) }));
+      writeRosterCli(dotfiles, code);
+      const failed = run({ HOME: home, DOTFILES: dotfiles });
+      expect(failed.code, failed.out).toBe(1);
+      expect(failed.out).toContain("FATAL:");
+      for (const { path, bytes } of before) {
+        expect(readFileSync(path)).toEqual(bytes);
+      }
+    }, 15_000);
+  }
 });

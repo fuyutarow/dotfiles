@@ -1,8 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  symlink,
+  writeFile,
+  readFile,
+  rm,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findings } from "../live-refs.ts";
+import { findings, candidateFindings } from "../live-refs.ts";
 
 async function fixture(): Promise<{ home: string; repo: string }> {
   const root = await mkdtemp(join(tmpdir(), "live-refs-"));
@@ -119,6 +126,66 @@ async function fixture(): Promise<{ home: string; repo: string }> {
 }
 
 describe("live repo references", () => {
+  test("candidate restores locked dependencies offline without installing into the checkout", async () => {
+    const { home, repo } = await fixture();
+    await using _cleanup = {
+      [Symbol.asyncDispose]: () =>
+        rm(join(repo, ".."), { recursive: true, force: true }),
+    };
+    const root = join(import.meta.dir, "../..");
+    for (const path of [
+      "package.json",
+      "bun.lock",
+      "tools/agx-usehooks/package.json",
+    ]) {
+      await mkdir(join(repo, path, ".."), { recursive: true });
+      await writeFile(join(repo, path), await readFile(join(root, path)));
+    }
+    const lockBefore = await readFile(join(repo, "bun.lock"));
+    await writeFile(join(repo, ".gitignore"), "node_modules/\n");
+    await mkdir(join(repo, "tools/agx-worker/src/next"), { recursive: true });
+    await writeFile(
+      join(repo, "tools/agx-worker/src/next/cli.ts"),
+      'import { cli } from "cleye"; process.stdout.write(typeof cli);\n',
+    );
+    await mkdir(join(repo, "scripts"), { recursive: true });
+    await writeFile(
+      join(repo, "scripts/render-home.ts"),
+      `
+      import { join } from "node:path";
+      const cli = Bun.spawnSync([process.execPath, "--no-install", join(import.meta.dir, "../tools/agx-worker/src/next/cli.ts"), "roster", "--json"], { timeout: 10000 });
+      if (cli.exitCode !== 0 || cli.stdout.toString() !== "function") process.exit(1);
+      for (const path of [".claude/settings.json", ".codex/hooks.json"]) await Bun.write(join(process.env.HOME, path), "{}");
+    `,
+    );
+    const config = join(home, "jj-config.toml");
+    await writeFile(
+      config,
+      '[user]\nname = "Live Refs Test"\nemail = "live-refs@example.test"\n',
+    );
+    const jj = (args: string[]) => {
+      const result = Bun.spawnSync(["jj", "--no-pager", ...args], {
+        cwd: repo,
+        env: { ...process.env, JJ_CONFIG: config },
+        timeout: 30000,
+      });
+      expect(result.exitCode, result.stderr.toString()).toBe(0);
+      return result.stdout.toString().trim();
+    };
+    jj(["git", "init", "--colocate"]);
+    const rev = jj(["log", "--no-graph", "-r", "@", "-T", "commit_id"]);
+    const result = await candidateFindings(
+      { root: repo, base: rev, rev, paths: ["."] },
+      home,
+      "linux",
+    );
+    expect(result.filter((line) => line.startsWith("FATAL:"))).toEqual([]);
+    expect(
+      await Bun.file(join(repo, "node_modules/cleye/package.json")).exists(),
+    ).toBe(false);
+    expect(await readFile(join(repo, "bun.lock"))).toEqual(lockBefore);
+  }, 30000);
+
   test("passes when links, deployed and declared commands, hook registry, and bin targets exist", async () => {
     const { home, repo } = await fixture();
     expect(await findings({ home, repo, os: "linux" })).toEqual([]);

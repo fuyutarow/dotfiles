@@ -27,10 +27,6 @@ const RUN = z.looseObject({
 const TAIL_BYTES = 256 * 1024;
 const MAX_TAIL_BYTES = 8 * 1024 * 1024;
 const WINDOW_SECONDS = 7 * 24 * 60 * 60;
-const AGX_WORKER_CLI = join(
-  import.meta.dir,
-  "../../agx-worker/src/next/cli.ts",
-);
 const ROSTER_TIMEOUT_MS = 2_000;
 const ROSTER = z.looseObject({
   auto: z.looseObject({
@@ -47,8 +43,10 @@ async function readJevPrices(
   cliPath: string,
 ): Promise<Result<{ input: number; output: number } | null, unknown>> {
   return fromAsyncThrowable(async () => {
+    const command = Bun.which(cliPath);
+    if (command === null) return null;
     const processHandle = Bun.spawn({
-      cmd: [process.execPath, cliPath, "roster", "--json"],
+      cmd: [command, "roster", "--json"],
       stdout: "pipe",
       stderr: "pipe",
       timeout: ROSTER_TIMEOUT_MS,
@@ -119,7 +117,7 @@ async function parseTail(
 export async function readJevUsage(
   now = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000),
   path = join(stateDir(), "runs.jsonl"),
-  rosterCliPath = AGX_WORKER_CLI,
+  rosterCliPath = "agx-worker",
 ): Promise<Result<JevUsage | undefined, string>> {
   const info = await stat(path).catch(() => null);
   if (info === null || !info.isFile()) return ok(undefined);

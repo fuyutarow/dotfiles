@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.3 — 2026-10-23
+
+- Resolve Jev roster prices from agx-worker on PATH instead of dotfiles sources.
+
 ## 0.21.2 — 2026-10-23
 
 - Resolve worker progress from the configured agx state directory

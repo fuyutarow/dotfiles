@@ -7,7 +7,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import {
   adaptAgxStatus,
@@ -79,7 +79,7 @@ async function fixture(name: string) {
   };
   await writeFile(env.AGX_STATUS_FILE, JSON.stringify(status));
   await writeFile(
-    join(bin, "agx"),
+    join(home, "agx"),
     `#!${process.execPath}
 import { appendFileSync } from "node:fs";
 appendFileSync(process.env.AGX_CALLS, JSON.stringify(process.argv.slice(2)) + "\\n");
@@ -87,7 +87,20 @@ process.stdout.write(await Bun.file(process.env.AGX_STATUS_FILE).text());
 process.exit(Number(process.env.AGX_STATUS_EXIT ?? 0));
 `,
   );
-  await chmod(join(bin, "agx"), 0o755);
+  await chmod(join(home, "agx"), 0o755);
+  await writeFile(
+    join(bin, "mise"),
+    `#!${process.execPath}
+const args = process.argv.slice(2);
+const expected = ${JSON.stringify(["-C", resolve(import.meta.dir, "../../.."), "exec", "--", "agx", "status", "--json", "--cwd"])};
+if (args.length !== 9 || expected.some((value, index) => args[index] !== value)) process.exit(91);
+const child = Bun.spawn([${JSON.stringify(join(home, "agx"))}, ...args.slice(5)], {
+  env: process.env, stdin: "ignore", stdout: "inherit", stderr: "inherit",
+});
+process.exit(await child.exited);
+`,
+  );
+  await chmod(join(bin, "mise"), 0o755);
   return env;
 }
 async function cache(
@@ -121,9 +134,10 @@ test("missing owner cache stays unknown without invoking agx or creating files",
   expect(await Bun.file(ownerStatePath(env)).exists()).toBe(false);
 });
 
-test("collector invokes exactly agx status --json --cwd and adapts all supplied counts", async () => {
+test("collector invokes the dotfiles mise pin without agx on PATH and adapts all supplied counts", async () => {
   const env = await fixture("adapter");
   const cwd = join(root, "repository with spaces");
+  expect(Bun.which("agx", { PATH: env.PATH })).toBeNull();
   const result = await collectAgxStatus(cwd, env);
   expect(result.isOk()).toBe(true);
   if (result.isErr()) return;
@@ -219,7 +233,7 @@ test("failed commands, malformed JSON, and unsupported schemas never become obse
     );
   }
   expect(failure(await collectAgxStatus(root, { ...env, PATH: "" }))).toContain(
-    "no agx on PATH",
+    "no mise on PATH",
   );
 });
 

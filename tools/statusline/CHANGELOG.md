@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.5 — 2026-10-23
+
+- Resolve the agx status collector through the dotfiles mise pin.
+
 ## 0.21.4 — 2026-10-23
 
 - Resolve Jev roster through the dotfiles mise pin from any working directory.

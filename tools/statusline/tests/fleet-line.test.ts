@@ -1,5 +1,12 @@
 import { afterAll, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { workspaceCounts, doctorFindings } from "../src/agx-snapshot.ts";
@@ -217,8 +224,10 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
       .map((row) => JSON.stringify(row))
       .join("\n") + "\n",
   );
-  const folded = await run(
-    `import {list} from ${JSON.stringify(join(import.meta.dir, "../../agx-worker/src/next/run.ts"))}; await list({json:true, summary:true});`,
+  // Captured agx-worker ls --json --summary shape for the records above.
+  const folded = await readFile(
+    join(import.meta.dir, "fixtures/fleet-folded-runs.json"),
+    "utf8",
   );
   const doctorOutput = JSON.stringify({
     kinds: { orphaned: 1, unjudged: 1 },

@@ -1,5 +1,5 @@
 import { open, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   err,
   fromAsyncThrowable,
@@ -40,13 +40,14 @@ const ROSTER = z.looseObject({
 export type JevUsage = { costUsd: number | undefined };
 
 async function readJevPrices(
-  cliPath: string,
+  commandPrefix: readonly [string, ...string[]],
 ): Promise<Result<{ input: number; output: number } | null, unknown>> {
   return fromAsyncThrowable(async () => {
-    const command = Bun.which(cliPath);
+    const [executable, ...args] = commandPrefix;
+    const command = Bun.which(executable);
     if (command === null) return null;
     const processHandle = Bun.spawn({
-      cmd: [command, "roster", "--json"],
+      cmd: [command, ...args, "roster", "--json"],
       stdout: "pipe",
       stderr: "pipe",
       timeout: ROSTER_TIMEOUT_MS,
@@ -117,7 +118,14 @@ async function parseTail(
 export async function readJevUsage(
   now = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000),
   path = join(stateDir(), "runs.jsonl"),
-  rosterCliPath = "agx-worker",
+  rosterCommand: readonly [string, ...string[]] = [
+    "mise",
+    "-C",
+    resolve(import.meta.dir, "../../.."),
+    "exec",
+    "--",
+    "agx-worker",
+  ],
 ): Promise<Result<JevUsage | undefined, string>> {
   const info = await stat(path).catch(() => null);
   if (info === null || !info.isFile()) return ok(undefined);
@@ -145,7 +153,7 @@ export async function readJevUsage(
   })().catch(() => null);
   if (result === null) return err("Jev usage unavailable");
   if (!result.known) return ok(undefined);
-  const prices = await readJevPrices(rosterCliPath);
+  const prices = await readJevPrices(rosterCommand);
   if (prices.isErr() || prices.value === null)
     return err("Jev price unavailable");
   const costUsd =

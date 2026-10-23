@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { jevUsageSegment, readJevUsage } from "../src/jev-usage.ts";
 import { ESC } from "../src/ansi.ts";
 
@@ -63,10 +63,15 @@ test("reads seven-day Jev response usage and prices spend", async () => {
   const oldCost = (900_000 * inputPrice + 300_000 * outputPrice) / 1_000_000;
   const cli = await fakeCli(
     root,
-    `if (JSON.stringify(process.argv.slice(2)) !== '["roster","--json"]') process.exit(1);
+    `if (JSON.stringify(process.argv.slice(2)) !== '["exec","--","agx-worker","roster","--json"]') process.exit(1);
 process.stdout.write(${JSON.stringify(JSON.stringify(roster))});`,
   );
-  const usage = await readJevUsage(now, runLog, cli);
+  const usage = await readJevUsage(now, runLog, [
+    cli,
+    "exec",
+    "--",
+    "agx-worker",
+  ]);
   expect(usage.isOk()).toBe(true);
   if (usage.isOk()) {
     expect(usage.value?.costUsd).toBe(oldCost);
@@ -91,7 +96,7 @@ test.each([
     );
     const runLog = await usageLog(root);
     if (source !== undefined) await fakeCli(root, source);
-    const usage = await readJevUsage(now, runLog, join(root, "agx-worker"));
+    const usage = await readJevUsage(now, runLog, [join(root, "agx-worker")]);
     expect(usage.isErr()).toBe(true);
     if (usage.isErr()) {
       expect(usage.error).toBe("Jev price unavailable");
@@ -101,6 +106,53 @@ test.each([
     }
   },
 );
+
+test("uses the dotfiles mise pin from an arbitrary cwd without agx on PATH", async () => {
+  const root = await mkdtemp(join(tmpdir(), "statusline-jev-"));
+  roots.push(root);
+  const runLog = await usageLog(root);
+  const expectedArgs = [
+    "-C",
+    resolve(import.meta.dir, "../../.."),
+    "exec",
+    "--",
+    "agx-worker",
+    "roster",
+    "--json",
+  ];
+  await writeFile(
+    join(root, "mise"),
+    `#!${process.execPath}
+if (JSON.stringify(process.argv.slice(2)) !== ${JSON.stringify(JSON.stringify(expectedArgs))}) process.exit(1);
+process.stdout.write('{"auto":{"jev":{"price_per_mtok_input":0.5,"price_per_mtok_output":2}}}');`,
+    { mode: 0o755 },
+  );
+  const modulePath = resolve(import.meta.dir, "../src/jev-usage.ts");
+  const child = Bun.spawn({
+    cmd: [
+      process.execPath,
+      "--eval",
+      `import { readJevUsage } from ${JSON.stringify(modulePath)};
+const now = Temporal.Instant.from("2026-10-09T00:00:00Z").epochMilliseconds / 1000;
+const usage = await readJevUsage(now, ${JSON.stringify(runLog)});
+if (usage.isErr()) throw new Error(usage.error);
+process.stdout.write(JSON.stringify(usage.value));`,
+    ],
+    cwd: root,
+    env: { ...process.env, PATH: root },
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 4_000,
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  expect(stdout).toBe(JSON.stringify({ costUsd: 1.05 }));
+});
 
 test.each([
   [0, "Jev 7d spend $0"],

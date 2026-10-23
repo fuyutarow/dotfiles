@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.4 — 2026-10-23
+
+- Resolve Jev roster through the dotfiles mise pin from any working directory.
+
 ## 0.21.3 — 2026-10-23
 
 - Resolve Jev roster prices from agx-worker on PATH instead of dotfiles sources.

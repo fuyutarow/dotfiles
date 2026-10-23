@@ -310,6 +310,8 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   // jj reads every conf.d/*.toml beside its user config; `jj config set --user` writes config.toml
   // (TOOL_OWNED below) — but conf.d when config.toml is missing, hence the empty file (measured).
   ["all", "jj/config.toml", ".config/jj/conf.d/dotfiles.toml"],
+  // The sole global mise tool pin is the A-class agx suite (INV-6).
+  ["all", "mise/dotfiles.toml", ".config/mise/conf.d/dotfiles.toml"],
 
   // --- lazygit (config dir differs by OS) ---
   [
@@ -922,6 +924,9 @@ export function surfaces(): Surface[] {
       } satisfies Surface,
       src === "agents/agx/agx.toml"
         ? { consumer: "agx-worker", verify: "agx worker check" }
+        : {},
+      src === "mise/dotfiles.toml"
+        ? { verify: "mise run test:mise-scope" }
         : {},
     ),
   );

@@ -48,8 +48,8 @@ unset _zshenv_tzf _zshenv_tz
 #
 # ── NO IMPLICIT GLOBAL TOOLCHAIN (INV-6) ─────────────────────────────────────
 # A managed tool is reachable where a config DECLARES it, or not at all. There is no
-# global default version anywhere: `~/.config/mise/config.toml` declares no [tools], and
-# nothing here may reintroduce one.
+# global default version for toolchains in mise/config.toml or mise/conf.d/*.toml.
+# The sole named exception is the A-class agx suite pin declared in mise/dotfiles.toml.
 #
 # mise ships TWO delivery paths and they are not interchangeable:
 #   `mise activate` (zsh/zshrc) — per-directory, declaration-driven → INTERACTIVE shells

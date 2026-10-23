@@ -292,7 +292,8 @@ Claude and Codex lives in [`AGENTS.md`](AGENTS.md).
    profiles, never zshenv.
 5. **Fail loudly, never silently.** `rm` is disabled; `mv` / `cp` abort on overwrite (see above).
 6. **No implicit global toolchain.** A managed tool is reachable where a config _declares_ it,
-   or not at all: no global default version, and no second version manager hooking a login
+   or not at all: no global default version for toolchains (the sole named exception is the
+   A-class agx suite pin declared in `mise/dotfiles.toml`), and no second version manager hooking a login
    shell. mise's two delivery paths stay apart — `mise activate` serves interactive shells
    per-directory; the shim directory serves _only_ non-interactive ones (`ssh host 'cmd'`
    never reads `.zshrc`, so it has no other way to reach a declared tool). Merging them puts a

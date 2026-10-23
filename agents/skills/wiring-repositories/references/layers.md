@@ -27,7 +27,7 @@ Measured 2026-08-30. Re-declaring any of these creates a second arguing home tha
 
 | Surface | Already global | Consequence for a new repo |
 |---|---|---|
-| global mise `[tools]` | **none** (re-measured 2026-09-12; `[settings] idiomatic_version_file_enable_tools=[]` only) | Every managed runtime a repo invokes (`julia`, `node`, `bun`, `rust`, `uv`) **must** be declared in that repo's `mise.toml`. The `julia`/`node` majors measured global on 2026-08-30 were an INV-6 violation. dotfiles `test:mise-scope` §6 had failed on them since 2026-08-23. Removed 2026-09-12; research project, the one repo that leaned on them, now declares `julia = "1.12"` |
+| global mise `[tools]` | Only the A-class agx suite pin declared in `mise/dotfiles.toml` (owner decision 2026-10-23); no global default version for toolchains (INV-6) | Every managed runtime a repo invokes (`julia`, `node`, `bun`, `rust`, `uv`) **must** be declared in that repo's `mise.toml`. The `julia`/`node` majors measured global on 2026-08-30 were an INV-6 violation. dotfiles `test:mise-scope` §6 had failed on them since 2026-08-23. Removed 2026-09-12; research project, the one repo that leaned on them, now declares `julia = "1.12"` |
 | global Claude PreToolUse | dispatch-contract, search-route, supervised-execution, goal-kernel; matchers `Agent\|Task\|Workflow`, `Grep\|Bash`, `Bash`, `*` | Every repo inherits all four. Repo-local carries only repo-specific rules |
 | global lifecycle hooks | SessionStart / SessionEnd / PreCompact / Stop / PostToolUse, plus the statusline | Inherited; never re-registered per repo |
 | `autoMode.environment` | scoped **by name** to one trusted repo | **Not** a template. A new repo inherits none of its entries |

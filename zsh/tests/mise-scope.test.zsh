@@ -60,6 +60,47 @@ live_refs() {
   done < $f
 }
 
+# Section 6 is callable alone with a temporary XDG_CONFIG_HOME, without login-shell probes.
+# Parse TOML rather than matching text: comments and quoted/dotted keys must retain meaning.
+check_global_mise_tools() {
+  bun -e '
+    import { existsSync, readdirSync } from "node:fs";
+    import { join } from "node:path";
+    const dir = process.argv[1];
+    const conf = join(dir, "conf.d");
+    const files = [join(dir, "config.toml"),
+      ...(existsSync(conf) ? readdirSync(conf).filter(name => name.endsWith(".toml")).sort()
+        .map(name => join(conf, name)) : [])];
+    let pins = 0;
+    let failed = false;
+    for (const file of files) {
+      if (!existsSync(file)) continue;
+      try {
+        const config = Bun.TOML.parse(await Bun.file(file).text());
+        if (config.tools === undefined) continue;
+        if (config.tools === null || typeof config.tools !== "object" || Array.isArray(config.tools))
+          throw new Error("[tools] must be a table");
+        for (const [key, version] of Object.entries(config.tools)) {
+          if (key !== "github:fuyutarow/agx" || version !== "1.3.0" || ++pins > 1) {
+            process.stdout.write(`[FAIL] ${file}: forbidden global tool row ${key} = ${JSON.stringify(version)} (INV-6)\n`);
+            failed = true;
+          }
+        }
+      } catch (error) {
+        process.stdout.write(`[FAIL] ${file}: ${error instanceof Error ? error.message : String(error)}\n`);
+        failed = true;
+      }
+    }
+    if (!failed) process.stdout.write("[PASS] global mise config: no toolchain defaults; only the optional agx 1.3.0 suite pin\n");
+    process.exit(failed ? 1 : 0);
+  ' "${XDG_CONFIG_HOME:-$HOME/.config}/mise"
+}
+
+if [[ ${1:-} == --global-config-only ]]; then
+  check_global_mise_tools
+  exit $?
+fi
+
 typeset -g BASE=/usr/bin:/bin:/usr/sbin:/sbin
 
 # --- 1. the non-interactive contract: the shim dir IS delivered -----------------------------
@@ -118,18 +159,11 @@ n=$(count_path $SHIMS "$out")
 [[ $n == 1 ]] && ok "non-interactive: shim dir appears exactly once on re-entry" \
               || bad "non-interactive: shim dir appears $n times (strip-then-prepend broken)"
 
-# --- 6. no global default version anywhere ---------------------------------------------------
-# The other way to get an implicit global: declare it. `mise use -g` writes [tools] into the
-# global config, at which point every squatting shim starts silently WORKING — which is worse
-# than today's honest failure, because the version is then chosen by nobody.
-typeset -g GCFG=${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml
-if [[ -f $GCFG && -s $GCFG ]]; then
-  gcontent="$(<$GCFG)"
-  [[ $gcontent == *'[tools]'* ]] && bad "global mise config declares [tools] — implicit global toolchain" \
-                                 || ok "global mise config declares no [tools]"
-else
-  ok "global mise config declares nothing (absent or empty)"
-fi
+# --- 6. no global toolchain defaults; only the named A-class agx suite pin --------------------
+# config.toml and every conf.d/*.toml count. Absent files and an empty [tools] table are OK.
+# The sole operator exception is declared in mise/dotfiles.toml; extra or different pins fail.
+check_global_mise_tools && ok "global mise tool scope obeys INV-6" \
+                        || bad "global mise tool scope violates INV-6"
 [[ -e $HOME/.tool-versions ]] && bad "~/.tool-versions exists — a global default by another name" \
                               || ok "no ~/.tool-versions"
 

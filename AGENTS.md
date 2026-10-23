@@ -47,12 +47,15 @@ their executable details.
   globally or remove existing experiment runtimes while migrating core utilities.
 - A mise-managed tool is reachable only where declared. Never use `mise use -g`, add a
   second login-shell version manager, or expose mise shims on interactive PATH.
+  Toolchains have no global default version; the sole named INV-6 exception is the
+  A-class agx suite pin declared in `mise/dotfiles.toml`.
   `mise activate` serves interactive per-directory shells; the shim directory serves only
   non-interactive shells. Homebrew-managed core Bun/uv remain available in every cwd.
   Verify scope changes with `mise run test:mise-scope`.
 - Machine-wide operator tools (A) are installed from the pinned root package through
-  `bun install` / `bun link`. Repository contract tools (B) are copied and pinned in each
-  consumer and updated only by explicit pull. Consumer gates must work on a fresh clone:
+  `bun install` / `bun link`, except the released agx suite pin above. Repository contract
+  tools (B) are copied and pinned in each consumer and updated only by explicit pull.
+  Consumer gates must work on a fresh clone:
   they must not depend on an A tool, symlink to dotfiles, or name a dotfiles checkout path.
   README's Tool installation kinds owns the classification inventory.
 - Named repo CLIs use root `package.json` bin entries and `bun link` (`mise run deps`),

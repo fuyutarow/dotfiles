@@ -164,7 +164,8 @@ answer.
 | repo-local `.claude/skills/` | a procedure repeats across sessions **in this repo only** | `forging-skills` |
 
 **The global-inheritance rule.** Global settings already wire four PreToolUse hooks for every
-repo, plus the session-lifecycle set. The global mise config pins **no** tools. INV-6 rules:
+repo, plus the session-lifecycle set. INV-6 permits no global default version for toolchains;
+the sole named exception is the A-class agx suite pin declared in `mise/dotfiles.toml`. INV-6 rules:
 a runtime is reachable where a repo's `mise.toml` declares it, or not at all. So every runtime
 a repo invokes is declared repo-locally; nothing sits above it to re-declare. What IS global
 (hooks, lifecycle, statusline) a repo-local file must not re-declare: a second arguing home

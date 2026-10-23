@@ -15,13 +15,24 @@
 // FAIL CLOSED: an unreadable roster or any hook error denies; run.sh also denies when bun is
 // missing.
 
+import { resolve } from "node:path";
 import { attempt, errorMessage, type Attempt } from "../../hooks/attempt.ts";
 import { strAt } from "../../hooks/narrow.ts";
 import { jsonOf, z } from "../../hooks/zod.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 const ROSTER_FILE = "agents/models/dispatch-roster.toml";
-const ROSTER_CLI = "agx-worker";
+const DOTFILES_ROOT = resolve(import.meta.dir, "../../..");
+const ROSTER_CLI = [
+  "mise",
+  "-C",
+  DOTFILES_ROOT,
+  "exec",
+  "--",
+  "agx-worker",
+  "roster",
+  "--json",
+];
 const ROSTER_TIMEOUT_MS = 2000;
 const ENTRY = "`agx worker run <ticket>` or `agx-worker run <ticket>`";
 
@@ -62,8 +73,8 @@ async function main(): Promise<void> {
   const tool = strAt(payload, "tool_name") ?? "";
   if (tool !== "Agent" && tool !== "Task" && tool !== "Workflow") return;
 
-  // The installed CLI owns the roster contract; resolve it through PATH like other callers.
-  const command = [ROSTER_CLI, "roster", "--json"];
+  // The dotfiles pin owns the CLI version regardless of the caller's working directory.
+  const command = ROSTER_CLI;
   const loaded = await (async (): Promise<Attempt<string>> => {
     const spawned = await attempt(async () => {
       const child = Bun.spawn(command, {

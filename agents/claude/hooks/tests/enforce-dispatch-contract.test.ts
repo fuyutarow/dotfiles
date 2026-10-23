@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { at, obj, parseJson, strAt } from "../../../hooks/narrow.ts";
 const AGX_CONFIG = join(import.meta.dir, "../../../../agents/agx/agx.toml");
 import { runHook } from "./helpers.ts";
@@ -45,6 +45,8 @@ afterAll(() => {
 const fixtureBin = join(scratch, "bin");
 mkdirSync(fixtureBin);
 const fixtureCli = join(fixtureBin, "agx-worker");
+const fixtureMise = join(fixtureBin, "mise");
+const dotfilesRoot = resolve(import.meta.dir, "../../../../");
 const realCli = Bun.which("agx-worker") ?? "";
 writeFileSync(
   fixtureCli,
@@ -61,6 +63,18 @@ exec "$DISPATCH_ROSTER_REAL_CLI" "$@"
 `,
 );
 chmodSync(fixtureCli, 0o755);
+writeFileSync(
+  fixtureMise,
+  `#!/bin/sh
+if [ "$#" -ne 7 ] || [ "$1" != "-C" ] || [ "$2" != "$DISPATCH_DOTFILES_ROOT" ] || [ "$3 $4 $5 $6" != "exec -- agx-worker roster" ] || [ "$7" != "--json" ]; then
+  printf '%s\\n' "unexpected mise arguments: $*" >&2
+  exit 9
+fi
+shift 5
+exec "$DISPATCH_ROSTER_FIXTURE_CLI" "$@"
+`,
+);
+chmodSync(fixtureMise, 0o755);
 const dispatchHook = (
   tool: string,
   input: Record<string, unknown> = {},
@@ -72,6 +86,8 @@ const dispatchHook = (
     call(tool, input),
     {
       PATH: `${fixtureBin}${delimiter}${process.env.PATH ?? ""}`,
+      DISPATCH_DOTFILES_ROOT: dotfilesRoot,
+      DISPATCH_ROSTER_FIXTURE_CLI: fixtureCli,
       DISPATCH_ROSTER_REAL_CLI: realCli,
       AGX_CONFIG,
       ...env,
@@ -174,6 +190,17 @@ describe("enforce-dispatch-contract", () => {
     expect(d.decision).toBe("deny");
     expect(d.reason).toContain("agx-worker roster --json");
     expect(d.reason).toContain("cannot read roster");
+  });
+
+  test("missing mise fails closed like an unreadable roster", () => {
+    const result = runHook(HOOK, call("Agent"), {
+      PATH: join(scratch, "empty-path"),
+    });
+    expect(result.code).toBe(0);
+    const d = decisionOf(result.stdout);
+    expect(d.decision).toBe("deny");
+    expect(d.reason).toContain("cannot read roster");
+    expect(d.reason).toContain("mise");
   });
 
   test("the hook has no agents/models import", () => {

@@ -2,7 +2,6 @@ import { attempt, errorMessage } from "../tools/shared/src/attempt.ts";
 // Suite-level diagnostic composition; the suite entry remains process-only.
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "../tools/shared/src/cli.ts";
-import cliPackage from "../tools/agx/package.json" with { type: "json" };
 import { mkdir, rename, writeFile, unlink } from "node:fs/promises";
 import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
 import { join } from "node:path";
@@ -10,19 +9,32 @@ import { DoctorRecord } from "../tools/shared/src/doctor-record.ts";
 import { jsonOf } from "../tools/shared/src/zod.ts";
 
 const cliArgv = () => process.argv.slice(2);
-const cli = standardCli(cleyeCli, cliPackage, cliArgv);
+const cli = standardCli(cleyeCli, { version: "1.0.0" }, cliArgv);
+const dotfilesRoot = join(import.meta.dir, "..");
 
 async function runDoctor(json: boolean): Promise<number> {
   const targets = ["agx-worker", "agx-ws", "agx-ticket"];
   const results = await Promise.all(
     targets.map(async (target) => {
       const result = await attempt(async () => {
-        const child = Bun.spawn([target, "doctor", "--quiet"], {
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-          timeout: 30_000,
-        });
+        const child = Bun.spawn(
+          [
+            "mise",
+            "-C",
+            dotfilesRoot,
+            "exec",
+            "--",
+            target,
+            "doctor",
+            "--quiet",
+          ],
+          {
+            stdin: "ignore",
+            stdout: "pipe",
+            stderr: "pipe",
+            timeout: 30_000,
+          },
+        );
         const [stdout, stderr, exitCode] = await Promise.all([
           new Response(child.stdout).text(),
           new Response(child.stderr).text(),

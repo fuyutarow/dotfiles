@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { readCodexHostDeclaration } from "../tools/agx-worker/src/workers/codex-host.ts";
+import { readCodexHostDeclaration } from "./agx-host-declaration.ts";
 
 type ProbeSet = Readonly<{
   isContainer: () => boolean;

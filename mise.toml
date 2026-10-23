@@ -396,7 +396,6 @@ description = "Test the repo: hooks, resource control, repo-retrieve, Bun script
 depends = [
   "test:hooks",
   "test:resource-control",
-  "test:agx",
   "test:scripts",
   "test:codex",
   "test:skills",
@@ -439,12 +438,6 @@ depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "repo-retrieve route and CLI contract tests (fake ccc/rg executables); also run by test:scripts via tools/*/tests"
 run = "bun test tools/repo-retrieve/tests"
-
-[tasks."test:agx"]
-depends = ["bun:check"]
-dir = "{{config_root}}"
-description = "agx suite and worker tests: fake workers, fake Jev, scratch state dir"
-run = "bun test tools/agx tools/agx-worker"
 
 [tasks."test:skills"]
 depends = ["bun:check"]

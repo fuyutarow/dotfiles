@@ -32,7 +32,7 @@ const state = {
   attemptAt: 1,
   sampledAt: 1,
   paused: true as const,
-  devices: [{ id: 0, totalMiB: 1024, usedMiB: 0, utilPct: 0 }],
+  devices: [{ id: 0, totalMiB: 3072, usedMiB: 0, utilPct: 0 }],
   processes: [],
   samples: [],
 };
@@ -864,7 +864,7 @@ test("ordinary sampler publication correlates an unresolved holder without drive
   const slotDirectory = join(f.root, "slots");
   await fs.mkdir(slotDirectory);
   const xml = `<nvidia_smi_log><gpu id="fake-device"><minor_number>0</minor_number>
-<fb_memory_usage><total>1024 MiB</total><used>1 MiB</used></fb_memory_usage>
+<fb_memory_usage><total>3072 MiB</total><used>1 MiB</used></fb_memory_usage>
 <utilization><gpu_util>0 %</gpu_util></utilization>
 <processes><process_info><pid>123</pid><used_memory>1 MiB</used_memory></process_info>
 <process_info><pid>456</pid><used_memory>0 MiB</used_memory></process_info></processes>

@@ -1,15 +1,7 @@
 #!/usr/bin/env bun
 // Consumer: humans and agents running one RAM-bounded command; Linux fails closed.
 import { createHash, randomUUID } from "node:crypto";
-import {
-  mkdir,
-  opendir,
-  readFile,
-  readdir,
-  readlink,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, opendir, readFile, readdir, readlink } from "node:fs/promises";
 import { availableParallelism, homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
@@ -194,8 +186,7 @@ type GpuAdmissionOptions = {
   currentReservationId?: string;
   now?: () => number;
   sleep?: (milliseconds: number) => Promise<void>;
-  // Only scope-entry runs beneath the shared ccc handoff lock. Check-only must
-  // never infer release from a stale sampler row.
+  // Compatibility for scope-entry callers; this no longer authorizes holder exclusion.
   cccHandoffHeld?: boolean;
   cccSupervisor?: () => Promise<
     { pid: number; startedAt: number } | null | undefined
@@ -566,6 +557,18 @@ async function policy() {
     .object({
       schema: z.literal(1),
       gpu_max_concurrent_jobs: positive.max(1024),
+      gpu_partition_device: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .default(0),
+      gpu_partition_ccc_mib: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .default(0),
       // Preserve the established policy default for older policy files.
       gpu_safety_mib: positive
         .max(1024 * 1024)
@@ -670,15 +673,14 @@ async function cccSupervisor(): Promise<{
   return { pid, startedAt: started.value.epochMilliseconds };
 }
 
-// The lock is the release acknowledgement; local absence alone is not. Bind
-// that acknowledgement to the sampled child of the same supervisor incarnation.
-async function yieldedCccWorker(
+// Recognize only a live, sample-correlated child of the current ccc supervisor.
+// Absence or PID reuse is never release proof.
+async function residentCccWorker(
   state: GpuState,
   pid: number,
   procRoot: string,
   options: GpuAdmissionOptions,
 ) {
-  if (options.cccHandoffHeld !== true) return false;
   const parsed = GpuProcessIdentitySchema.safeParse(state.processIdentity);
   if (!parsed.success) return false;
   const identity = parsed.data;
@@ -735,15 +737,39 @@ async function yieldedCccWorker(
     boot.value?.trim() !== identity.bootId.value.trim()
   )
     return false;
-  const current = await optionalText(join(procRoot, String(pid), "stat"));
-  if (current.isErr()) return false;
-  if (current.value === undefined) return true;
-  const startTime = procStartTime(current.value);
+  const base = join(procRoot, String(pid));
+  const before = await optionalText(join(base, "stat"));
+  const [cgroup, holderStatus] = await Promise.all([
+    optionalText(join(base, "cgroup")),
+    optionalText(join(base, "status")),
+  ]);
+  const after = await optionalText(join(base, "stat"));
+  if (before.isErr() || after.isErr() || cgroup.isErr() || holderStatus.isErr())
+    return false;
+  const processStatus = holderStatus.value;
+  if (
+    before.value === undefined ||
+    after.value === undefined ||
+    processStatus === undefined
+  )
+    return false;
   return (
-    current.value.startsWith(`${pid} (`) &&
-    startTime !== undefined &&
-    /^\d+$/u.test(startTime) &&
-    startTime !== row.local.starttime
+    procStartTime(before.value) === row.local.starttime &&
+    procStartTime(after.value) === row.local.starttime &&
+    Number(parent.exec(before.value)?.[1]) === supervisor.value.pid &&
+    Number(parent.exec(after.value)?.[1]) === supervisor.value.pid &&
+    procState(before.value) !== "Z" &&
+    procState(after.value) !== "Z" &&
+    /^Pid:\s+(\d+)$/mu.exec(processStatus)?.[1] === String(pid) &&
+    /^Tgid:\s+(\d+)$/mu.exec(processStatus)?.[1] === String(pid) &&
+    /^NSpid:\s+(\d+)\s*$/mu.exec(processStatus)?.[1] === String(pid) &&
+    cgroup.value
+      ?.split("\n")
+      .some(
+        (line) =>
+          line.startsWith("0::/") &&
+          line.slice(4).split("/").includes("ccc-daemon.service"),
+      ) === true
   );
 }
 
@@ -834,6 +860,13 @@ export async function gpuAdmissionRefusal(
   if (device === undefined)
     return `GPU device ${deviceRequest.gpu_id} capacity unavailable; evidence=${gpuStatePath()}`;
 
+  const config = await policy();
+  if (config.isErr())
+    return `GPU partition policy unavailable: ${config.error.message}`;
+  const cccBytes =
+    config.value.gpu_partition_device === deviceRequest.gpu_id
+      ? config.value.gpu_partition_ccc_mib * 1024 ** 2
+      : 0;
   const scopes = new Map<string, number>();
   const admittedScopes = new Set<string>();
   for (const entry of procEntries.value) {
@@ -911,7 +944,10 @@ export async function gpuAdmissionRefusal(
     sample: typeof sampled,
     pid: number,
   ): Promise<string | undefined> {
-    if (await yieldedCccWorker(sample, pid, procRoot, options))
+    if (
+      cccBytes > 0 &&
+      (await residentCccWorker(sample, pid, procRoot, options))
+    )
       return undefined;
     const base = join(procRoot, String(pid));
     const statPath = join(base, "stat");
@@ -985,9 +1021,10 @@ export async function gpuAdmissionRefusal(
         reservationId !== options.currentReservationId,
     )
     .reduce((sum, [, bytes]) => sum + bytes, 0);
-  const ceiling = device.totalMiB * 1024 ** 2 - safetyMiB * 1024 ** 2;
+  const ceiling =
+    device.totalMiB * 1024 ** 2 - safetyMiB * 1024 ** 2 - cccBytes;
   if (deviceRequest.vram_peak_bytes + admittedBytes > ceiling)
-    return `GPU VRAM budget exceeded gpu=${deviceRequest.gpu_id} requested=${deviceRequest.vram_peak_bytes} admitted=${admittedBytes} total=${device.totalMiB * 1024 ** 2} safety_margin=${safetyMiB}MiB; evidence=${gpuStatePath()}`;
+    return `GPU VRAM budget exceeded gpu=${deviceRequest.gpu_id} requested=${deviceRequest.vram_peak_bytes} admitted=${admittedBytes} total=${device.totalMiB * 1024 ** 2} safety_margin=${safetyMiB}MiB ccc_partition=${cccBytes}; evidence=${gpuStatePath()}`;
   return undefined;
 }
 // flock itself owns locking and waiting. The availability probe is advisory: the actual
@@ -997,18 +1034,7 @@ async function poolSlot(directory: string, pool: string, capacity: number) {
     join(directory, `${pool}.${n}`),
   );
   for (const path of candidates) {
-    // GPU selection must not briefly reserve an exclusive research slot before
-    // announcing the want and receiving ccc's release acknowledgment.
-    const mode = pool.startsWith("gpu.") ? ["--shared"] : [];
-    const probe = await output([
-      "flock",
-      ...mode,
-      "-n",
-      "-E",
-      "75",
-      path,
-      "true",
-    ]);
+    const probe = await output(["flock", "-n", "-E", "75", path, "true"]);
     if (probe.code === 0) return ok(path);
     if (probe.code !== 75)
       return err(new Error(`flock probe failed: ${probe.stderr.trim()}`));
@@ -1025,15 +1051,6 @@ function lock(path: string, wait: number, conflict: number, command: string[]) {
     String(wait),
     path,
     ...command,
-  ];
-}
-// Research keeps shared ownership until its slot and all scoped descendants exit.
-// ccc owns the same lock exclusively through CUDA process exit, acknowledging release.
-export function cccHandoffLock(root: string, wait: number, command: string[]) {
-  return [
-    "flock",
-    "--shared",
-    ...lock(join(root, "ccc-gpu.lock"), wait, 75, command).slice(1),
   ];
 }
 async function cpuIds(count: number) {
@@ -1133,11 +1150,7 @@ async function run(
   report(recovery.message);
   const config = await policy();
   if (config.isErr()) return err(config.error);
-  // A live GPU admission check belongs inside scope-entry, after the runner
-  // has announced its want and acquired the CCC handoff lock. Before handoff,
-  // CCC is still the legitimate GPU owner and can make this check refuse the
-  // very request that would ask it to release the device. Check-only has no
-  // handoff or scope-entry, so retain its immediate read-only admission check.
+  // Scope-entry rechecks immediately before launch; check-only has no scope entry.
   if (manifest.device.kind === "gpu" && checkOnly) {
     const refusal = await gpuAdmissionRefusal(
       manifest.device,
@@ -1254,11 +1267,6 @@ async function run(
     if (slot.isErr()) return err(slot.error);
     argv = lock(slot.value, wait, 75, argv);
   }
-  await using handoffCleanup = new AsyncDisposableStack();
-  let want: string | undefined;
-  handoffCleanup.defer(async () => {
-    if (want !== undefined) await unlink(want);
-  });
   if (manifest.device.kind === "gpu") {
     const slot = await poolSlot(
       slots,
@@ -1267,12 +1275,6 @@ async function run(
     );
     if (slot.isErr()) return err(slot.error);
     argv = lock(slot.value, wait, 75, argv);
-    argv = cccHandoffLock(root, wait, argv);
-    const wants = join(root, "gpu-wants");
-    await mkdir(wants, { recursive: true, mode: 0o700 });
-    const marker = join(wants, reservationId);
-    await writeFile(marker, String(process.pid), { flag: "wx", mode: 0o600 });
-    want = marker;
   }
   argv = lock(identity, 0, 69, argv);
   if (manifest.device.kind === "gpu") {

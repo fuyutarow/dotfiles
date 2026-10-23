@@ -51,7 +51,7 @@ async function fixture({ parent = 456, startedAt = 900 } = {}) {
     attemptAt: 1000,
     sampledAt: 1000,
     paused: true,
-    devices: [{ id: 0, totalMiB: 1024, usedMiB: 100, utilPct: 0 }],
+    devices: [{ id: 0, totalMiB: 12288, usedMiB: 100, utilPct: 0 }],
     processes: [{ pid: 123, usedMiB: 100 }],
     samples: [
       { ts: 1000, nextTs: 61000, utilPct: 0, memUsedGiB: 0.1, memTotalGiB: 1 },
@@ -68,6 +68,16 @@ async function fixture({ parent = 456, startedAt = 900 } = {}) {
       omittedProcesses: 0,
     },
   };
+  await mkdir(join(root, "123/task/123"), { recursive: true });
+  await Bun.write(join(root, "123/stat"), stat("100", parent));
+  await Bun.write(
+    join(root, "123/status"),
+    `State:\tS\nPid:\t123\nTgid:\t123\nNSpid:\t123\n`,
+  );
+  await Bun.write(
+    join(root, "123/cgroup"),
+    "0::/user.slice/ccc-daemon.service\n",
+  );
   return {
     root,
     state,
@@ -81,54 +91,57 @@ async function fixture({ parent = 456, startedAt = 900 } = {}) {
   };
 }
 
-test("handoff-held admission excludes the yielded ccc worker and retains the VRAM budget", async () => {
+test("resident ccc admission recognizes the live partitioned ccc worker and retains the VRAM budget", async () => {
   await using f = await fixture();
   expect(await gpuAdmissionRefusal(request, 512, f.options)).toBeUndefined();
   expect(
     await gpuAdmissionRefusal(
-      { ...request, vram_peak_bytes: 513 * 1024 ** 2 },
+      { ...request, vram_peak_bytes: 10000 * 1024 ** 2 },
       512,
       f.options,
     ),
   ).toContain("GPU VRAM budget exceeded");
 });
 
-test("handoff-held admission warns without refusing about a sampled parent mismatch", async () => {
+test("resident ccc admission warns without refusing about a sampled parent mismatch", async () => {
   await using f = await fixture({ parent: 789 });
   expect(await advisoryAdmission(request, 512, f.options)).toContain(
-    "absent-or-pid-namespace-mismatch",
+    "ownership unverified pid=123",
   );
 });
 
-test("handoff-held admission warns without refusing about a supervisor restarted after the sample", async () => {
+test("resident ccc admission warns without refusing about a supervisor restarted after the sample", async () => {
   await using f = await fixture({ startedAt: 1001 });
   expect(await advisoryAdmission(request, 512, f.options)).toContain(
-    "absent-or-pid-namespace-mismatch",
+    "ownership unverified pid=123",
   );
 });
 
-test("check-only admission warns without refusing about the yielded ccc worker without the handoff lock", async () => {
+test("live ccc recognition does not depend on the legacy handoff flag", async () => {
   await using f = await fixture();
   expect(
     await advisoryAdmission(request, 512, {
       ...f.options,
       cccHandoffHeld: false,
     }),
-  ).toContain("absent-or-pid-namespace-mismatch");
+  ).toBe("");
 });
 
-test("handoff-held admission excludes a reused ccc worker PID and warns without refusing about a still-live worker", async () => {
+test("resident ccc admission warns without refusing about a reused PID and a live worker with unreadable status", async () => {
   await using f = await fixture();
   await mkdir(join(f.root, "123/task/123"), { recursive: true });
   await Bun.write(join(f.root, "123/stat"), stat("200"));
-  expect(await gpuAdmissionRefusal(request, 512, f.options)).toBeUndefined();
+  expect(await advisoryAdmission(request, 512, f.options)).toContain(
+    "ownership unverified pid=123",
+  );
   await Bun.write(join(f.root, "123/stat"), stat("100"));
+  await rm(join(f.root, "123/status"));
   expect(await advisoryAdmission(request, 512, f.options)).toContain(
     "status-unreadable-or-gone",
   );
 });
 
-test("handoff-held admission warns without refusing about an unrelated absent holder", async () => {
+test("resident ccc admission warns without refusing about an unrelated absent holder", async () => {
   await using f = await fixture();
   f.state.processes.push({ pid: 789, usedMiB: 1 });
   expect(await advisoryAdmission(request, 512, f.options)).toContain(
@@ -136,7 +149,7 @@ test("handoff-held admission warns without refusing about an unrelated absent ho
   );
 });
 
-test("handoff supervisor lookup parses precise systemd UTC timestamps and warns without refusing", async () => {
+test("ccc supervisor lookup parses precise systemd UTC timestamps and warns without refusing", async () => {
   await using f = await fixture();
   const bin = join(f.root, "bin");
   await mkdir(bin);
@@ -192,7 +205,7 @@ process.stdout.write(await gpuAdmissionRefusal(${JSON.stringify(request)}, 512, 
     expect(warning).toStartWith(
       "WARN GPU holder check is advisory, not refusing: ",
     );
-    expect(warning).toContain("absent-or-pid-namespace-mismatch");
+    expect(warning).toContain("ownership unverified pid=123");
   }
 });
 
@@ -202,7 +215,7 @@ for (const invalid of [
   "sample-mismatch",
   "supervisor-unavailable",
 ])
-  test(`handoff-held admission warns without refusing for ${invalid}`, async () => {
+  test(`resident ccc admission warns without refusing for ${invalid}`, async () => {
     await using f = await fixture();
     if (invalid === "missing-identity") f.state.processIdentity = undefined;
     if (invalid === "different-boot")
@@ -216,6 +229,26 @@ for (const invalid of [
         ? { ...f.options, cccSupervisor: () => Promise.resolve(undefined) }
         : f.options;
     expect(await advisoryAdmission(request, 512, options)).toContain(
-      "absent-or-pid-namespace-mismatch",
+      "ownership unverified pid=123",
     );
   });
+
+// The standing ccc budget remains reserved even between daemon incarnations.
+test("standing ccc partition is reserved even with no sampled holders", async () => {
+  await using f = await fixture();
+  f.state.processes = [];
+  expect(
+    await gpuAdmissionRefusal(
+      { gpu_id: 0, vram_peak_bytes: 9728 * 1024 ** 2 },
+      512,
+      f.options,
+    ),
+  ).toBeUndefined();
+  expect(
+    await gpuAdmissionRefusal(
+      { gpu_id: 0, vram_peak_bytes: 9728 * 1024 ** 2 + 1 },
+      512,
+      f.options,
+    ),
+  ).toContain("ccc_partition=2147483648");
+});

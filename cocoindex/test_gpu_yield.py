@@ -3,7 +3,6 @@
 import fcntl
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -15,11 +14,7 @@ from ccc_gpu_yield import (
     YieldGuard,
     batch_limit_for_partition,
     configure_partition,
-    elastic_allocator_cap_bytes,
     install,
-    partition_has_room,
-    prepare_partition,
-    resize_allocator_cap,
     state_directory,
 )
 
@@ -90,103 +85,23 @@ def test_batch_default_and_override_are_bounded_by_partition(monkeypatch):
     assert batch_limit_for_partition(1109, 512) == 0
 
 
-@pytest.mark.parametrize("slot", [0, 1, 2, 9])
-def test_held_research_slot_yields_and_all_free_slots_resume(tmp_path, slot):
+@pytest.mark.parametrize("slot", ["gpu.0", "gpu.0.0", "gpu.9"])
+def test_gpu_batch_serves_with_research_want_and_held_slot(tmp_path, slot):
     slots = tmp_path / "slots"
     slots.mkdir()
-    with subprocess.Popen(
-        [
-            "flock",
-            "-F",
-            "-n",
-            str(slots / f"gpu.{slot}"),
-            sys.executable,
-            "-u",
-            "-c",
-            "import sys; print('held', flush=True); sys.stdin.read()",
-        ],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    ) as research:
-        try:
-            assert research.stdout.readline() == b"held\n"
-            calls = []
-            waits = []
-
-            def wait(seconds):
-                waits.append(seconds)
-                assert calls == []
-                status = json.loads((tmp_path / "ccc-gpu-status.json").read_text())
-                assert status["deferring"] is True
-                assert "research GPU slot" in status["reason"]
-                research.communicate(timeout=5)
-                assert research.returncode == 0
-
-            guard = YieldGuard(tmp_path, Policy(), wait=wait, gpu_slots=3)
-            assert guard.run(lambda: calls.append("cuda") or "result") == "result"
-            assert calls == ["cuda"]
-            assert waits == [1.0]
-            assert guard.run(lambda: "resumed") == "resumed"
-            assert waits == [1.0]
-        finally:
-            if research.poll() is None:
-                research.kill()
-                research.communicate(timeout=5)
-
-
-def test_gpu_batch_holds_shared_slots_until_return(tmp_path):
-    guard = YieldGuard(tmp_path, Policy(), gpu_slots=3)
-
-    def gpu():
-        for n in range(3):
-            with (
-                (tmp_path / "slots" / f"gpu.{n}").open("a+") as research,
-                pytest.raises(BlockingIOError),
-            ):
-                fcntl.flock(research, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return "cuda"
-
-    assert guard.run(gpu) == "cuda"
-    for n in range(3):
-        with (tmp_path / "slots" / f"gpu.{n}").open("a+") as research:
-            fcntl.flock(research, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-
-def test_elastic_allocator_cap_tracks_free_space():
-    mib = 1024**2
-    gib = 1024**3
-    assert (
-        elastic_allocator_cap_bytes(10 * gib, 1 * gib, 2048, 512)
-        == 11 * gib - 512 * mib
-    )
-    for free in (None, -1, 100 * mib):
-        assert elastic_allocator_cap_bytes(free, 0, 2048, 512) is None
-
-
-def test_allocator_cap_is_resized_from_mocked_free_vram():
-    mib = 1024**2
-    gib = 1024**3
-    fractions = []
-    free_samples = iter([10 * gib, 3 * gib, 0])
-    torch = SimpleNamespace(
-        cuda=SimpleNamespace(
-            empty_cache=lambda: None,
-            memory_reserved=lambda _device: 1 * gib,
-            get_device_properties=lambda _device: SimpleNamespace(
-                total_memory=12 * gib
-            ),
-            set_per_process_memory_fraction=lambda fraction, _device: fractions.append(
-                fraction
-            ),
+    wants = tmp_path / "gpu-wants"
+    wants.mkdir()
+    (wants / "research").write_text(str(os.getpid()))
+    waits = []
+    with (slots / slot).open("a+") as research:
+        fcntl.flock(research, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        guard = YieldGuard(tmp_path, Policy(), wait=waits.append)
+        assert guard.run(lambda: "cuda") == "cuda"
+        assert waits == []
+        assert (
+            json.loads((tmp_path / "ccc-gpu-status.json").read_text())["deferring"]
+            is False
         )
-    )
-    caps = [
-        resize_allocator_cap(torch, lambda _device: next(free_samples), 0, 2048, 512)
-        for _ in range(3)
-    ]
-    assert caps == [11 * gib - 512 * mib, 4 * gib - 512 * mib, None]
-    assert fractions == [caps[0] / (12 * gib), caps[1] / (12 * gib)]
 
 
 def test_unavailable_gpu_waits_then_runs_gpu_only(tmp_path):
@@ -206,19 +121,6 @@ def test_unavailable_gpu_waits_then_runs_gpu_only(tmp_path):
     assert status["deferring"] is False
 
 
-def test_partition_setup_waits_without_selecting_cpu(tmp_path, monkeypatch):
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
-    waits = []
-    results = iter(["unavailable", "cuda"])
-    guard = YieldGuard(tmp_path, Policy(), wait=waits.append)
-    assert prepare_partition(guard, lambda _service: next(results)) == "cuda"
-    assert waits == [1.0]
-    assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"
-
-    with pytest.raises(RuntimeError, match="requires CUDA"):
-        prepare_partition(guard, lambda _service: "cpu")
-
-
 def test_partition_probe_waits_without_selecting_cpu(monkeypatch):
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
     apply_calls = []
@@ -234,10 +136,6 @@ def test_partition_probe_waits_without_selecting_cpu(monkeypatch):
     assert configure_partition("ccc", probe, apply, 2048, 0) == "unavailable"
     assert probe_calls == [0] and apply_calls == []
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"
-
-    assert not partition_has_room(lambda _device: None, 2048, 0)
-    assert not partition_has_room(lambda _device: 1535 * 1024**2, 2048, 0)
-    assert partition_has_room(lambda _device: 1536 * 1024**2, 2048, 0)
 
 
 def test_partition_probe_success_and_apply_race_preserve_cuda_visibility(monkeypatch):
@@ -323,8 +221,7 @@ def test_embedder_batches_on_gpu_and_keeps_model_resident(tmp_path, monkeypatch)
         return "cuda"
 
     guard = YieldGuard(tmp_path, Policy(batch_size=8, max_batch_size=10))
-    refreshes = []
-    install(guard, available, lambda: refreshes.append("checked") is None)
+    install(guard, available)
     embedder = Embedder()
     loaded = embedder._get_model()
     assert embedder._device is None
@@ -334,10 +231,9 @@ def test_embedder_batches_on_gpu_and_keeps_model_resident(tmp_path, monkeypatch)
     assert events == [(8, "document"), (1, "document")]
     assert model_moves == [{"device": "cuda:0", "dtype": "float16"}]
     assert partition_calls == ["ccc"]
-    assert refreshes == ["checked", "checked"]
 
 
-def test_embedder_waits_for_research_then_embeds_only_on_cuda(tmp_path, monkeypatch):
+def test_embedder_serves_during_research_only_on_cuda(tmp_path, monkeypatch):
     slots = tmp_path / "slots"
     slots.mkdir()
     devices = []
@@ -366,7 +262,7 @@ def test_embedder_waits_for_research_then_embeds_only_on_cuda(tmp_path, monkeypa
         guard = YieldGuard(tmp_path, Policy(), wait=wait)
         install(guard, lambda _service: "cuda")
         assert Embedder()._get_model().encode(["chunk"]) == [["chunk"]]
-        assert waits == [1.0]
+        assert waits == []
         assert devices == ["cuda:0"]
         assert moves == [{"device": "cuda:0", "dtype": "float16"}]
 

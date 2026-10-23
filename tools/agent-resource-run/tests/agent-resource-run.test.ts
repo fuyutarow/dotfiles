@@ -343,7 +343,7 @@ test("GPU VRAM guard sums admitted job peaks against device total and safety mar
   const state = {
     schema: 1 as const,
     attemptAt: 1,
-    devices: [{ id: 0, totalMiB: 1024, usedMiB: 300, utilPct: 0 }],
+    devices: [{ id: 0, totalMiB: 3072, usedMiB: 300, utilPct: 0 }],
     processes: [{ pid, usedMiB: 300 }],
     samples: [],
   };

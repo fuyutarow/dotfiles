@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.19 — 2026-10-23
+
+- Keep ccc serving alongside GPU research within its standing partition
+
 ## 1.5.18 — 2026-10-23
 
 - Generalize consumer identifiers in compatibility fixtures

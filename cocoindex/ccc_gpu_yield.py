@@ -1,20 +1,15 @@
-"""Run every ccc embedding batch on an elastic, GPU-only allocator partition.
+"""Run ccc embedding batches within its standing GPU partition alongside research.
 
-The supervised GPU process exits on a research want, releasing its entire CUDA context.
-The standing partition is the floor; ccc borrows currently free VRAM only while all research
-GPU flock slots are free. A transiently unavailable partition, research slot, window, duty
-slot, or headroom budget delays the batch; there is deliberately no CPU embedding path. The model
-remains on CUDA between batches.
+Unavailable capacity, windows and duty ceilings delay batches without CPU fallback.
+The model remains on CUDA between batches; research reservations never stop ccc.
 """
 
-import fcntl
 import json
 import logging
 import os
 import threading
 import time
-from collections.abc import Callable, Iterator
-from contextlib import ExitStack, contextmanager
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -29,7 +24,7 @@ MIB = 1024 * 1024
 
 
 def state_directory() -> Path:
-    """Use arr-thin's runtime root; no private fallback that could miss research locks."""
+    """Use the runner runtime root for ccc status reporting."""
     runtime = os.environ.get("XDG_RUNTIME_DIR")
     if runtime is None or not Path(runtime).is_absolute():
         raise ValueError("XDG_RUNTIME_DIR must name the user runtime directory")
@@ -43,50 +38,6 @@ def batch_limit_for_partition(
     """Bound batches by model weights, CUDA context, and per-chunk workspace."""
     remaining_mib = partition_mib - context_allowance_mib - MODEL_WEIGHTS_MIB
     return max(0, remaining_mib // CHUNK_WORKSPACE_MIB)
-
-
-def elastic_allocator_cap_bytes(
-    free_bytes: int | None,
-    allocator_reserved_bytes: int,
-    standing_partition_mib: int,
-    safety_margin_mib: int,
-) -> int | None:
-    """Return a safe allocator cap or None when even the standing floor is unavailable.
-
-    ``free_bytes + allocator_reserved_bytes`` is the ccc process's current allocation plus
-    device headroom. The configured safety margin is removed before expanding above the
-    standing partition. Call only while holding shared locks on all research GPU slots;
-    unknown device headroom denies the batch.
-    """
-    floor = standing_partition_mib * MIB
-    if free_bytes is None or free_bytes < 0 or allocator_reserved_bytes < 0:
-        return None
-    safe_upper_bound = free_bytes + allocator_reserved_bytes - safety_margin_mib * MIB
-    return safe_upper_bound if safe_upper_bound >= floor else None
-
-
-def resize_allocator_cap(
-    torch,
-    probe_free_bytes: Callable[[int], int | None],
-    device: int,
-    standing_partition_mib: int,
-    safety_margin_mib: int,
-) -> int | None:
-    """Apply the current elastic cap and return it, or None when the standing floor is unsafe."""
-    torch.cuda.empty_cache()
-    free_bytes = probe_free_bytes(device)
-    allocator_reserved_bytes = int(torch.cuda.memory_reserved(0))
-    cap_bytes = elastic_allocator_cap_bytes(
-        free_bytes,
-        allocator_reserved_bytes,
-        standing_partition_mib,
-        safety_margin_mib,
-    )
-    if cap_bytes is None:
-        return None
-    total_bytes = int(torch.cuda.get_device_properties(0).total_memory)
-    torch.cuda.set_per_process_memory_fraction(cap_bytes / total_bytes, 0)
-    return cap_bytes
 
 
 def configure_partition(
@@ -115,19 +66,6 @@ def configure_partition(
     else:
         os.environ["CUDA_VISIBLE_DEVICES"] = previous_visibility
     return "unavailable"
-
-
-def partition_has_room(
-    probe_free_bytes: Callable[[int], int | None],
-    partition_mib: int,
-    device: int,
-    context_allowance_mib: int = DEFAULT_CONTEXT_ALLOWANCE_MIB,
-) -> bool:
-    """Check the allocator share after the CUDA context has already been created."""
-    if partition_mib <= context_allowance_mib:
-        return False
-    free = probe_free_bytes(device)
-    return free is not None and free >= (partition_mib - context_allowance_mib) * MIB
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,45 +138,12 @@ class YieldGuard:
         directory: Path,
         policy: Policy,
         wait: Callable[[float], None] = time.sleep,
-        gpu_slots: int = 1,
     ) -> None:
-        if gpu_slots < 1:
-            raise ValueError("research GPU slot count must be positive")
         self.directory = directory
-        self.gpu_slots = gpu_slots
         self.policy = policy
         self.wait = wait
         self.serial = threading.Lock()
         self.next_gpu_at = 0.0
-        self.release_requested = threading.Event()
-
-    @contextmanager
-    def research_slots_idle(self) -> Iterator[bool]:
-        """Non-blocking LOCK_SH probes of arr-thin's slots/gpu.<n> LOCK_EX locks.
-
-        Keep shared locks until the GPU call returns so research cannot acquire a slot
-        between the probe and the call. Never unlink slot files: flock locks the inode.
-        Include older slot files too, so a capacity decrease cannot hide a live job.
-        Filesystem/probe failures deny GPU use, just like an occupied slot.
-        """
-        with ExitStack() as locks:
-            try:
-                slots = self.directory / "slots"
-                slots.mkdir(mode=0o700, parents=True, exist_ok=True)
-                paths = {slots / f"gpu.{n}" for n in range(self.gpu_slots)}
-                paths.update(
-                    path
-                    for path in slots.iterdir()
-                    if path.name.startswith("gpu.") and path.name[4:].isdigit()
-                )
-                for path in sorted(paths):
-                    handle = locks.enter_context(path.open("a+"))
-                    fcntl.flock(handle, fcntl.LOCK_SH | fcntl.LOCK_NB)
-            except OSError:
-                locks.close()
-                yield False
-                return
-            yield True
 
     def status(self, reason: str | None) -> None:
         value = json.dumps(
@@ -269,8 +174,6 @@ class YieldGuard:
         """Serialize GPU calls and wait on every admission failure; never fall back to CPU."""
         with self.serial:
             while True:
-                if self.release_requested.is_set():
-                    os._exit(0)
                 reason = self._wait_reason()
                 if reason is not None:
                     self.status(reason)
@@ -279,14 +182,7 @@ class YieldGuard:
                 self.status(None)
                 start = time.monotonic()
                 try:
-                    with self.research_slots_idle() as idle:
-                        if not idle:
-                            self.status("research GPU slot held or unreadable; waiting")
-                        else:
-                            result = gpu()
-                    if not idle:
-                        self.wait(self.policy.wait_seconds)
-                        continue
+                    result = gpu()
                 except GpuUnavailable:
                     elapsed = time.monotonic() - start
                     self._record_duty(elapsed)
@@ -307,26 +203,9 @@ class GpuUnavailable(RuntimeError):
     """The ccc partition is temporarily unavailable; retry on GPU later."""
 
 
-def prepare_partition(guard: YieldGuard, apply_partition: Callable[[str], str]) -> str:
-    """Wait for the ccc partition before importing Torch or starting the daemon."""
-
-    def prepare() -> str:
-        result = apply_partition("ccc")
-        if result == "cuda":
-            return result
-        if result != "unavailable":
-            raise RuntimeError(
-                f"ccc requires CUDA; partition setup returned {result!r}"
-            )
-        raise GpuUnavailable
-
-    return guard.run(prepare)
-
-
 def install(
     guard: YieldGuard,
     apply_partition: Callable[[str], str],
-    refresh_allocator: Callable[[], bool] | None = None,
 ) -> None:
     """Adapt CocoIndex's embedder while preserving its configured memo identity."""
     from cocoindex.ops.sentence_transformers import SentenceTransformerEmbedder
@@ -357,8 +236,6 @@ def install(
                         if apply_partition("ccc") != "cuda":
                             raise GpuUnavailable
                         partition_ready = True
-                    if refresh_allocator is not None and not refresh_allocator():
-                        raise GpuUnavailable
                     if not model_on_gpu:
                         model.to(device="cuda:0", dtype=torch.float16)
                         model_on_gpu = True

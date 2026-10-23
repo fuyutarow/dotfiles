@@ -24,24 +24,19 @@ supports concurrent jobs. By default, the runner reads the
 in this checkout). `AGENT_RESOURCE_POLICY` selects a caller-supplied policy instead
 and must be an absolute path.
 
-Before taking a GPU slot, research writes a unique want file under
-`$XDG_RUNTIME_DIR/agent-resource/gpu-wants/` and waits with `flock --shared -w`
-on `agent-resource/ccc-gpu.lock`. The ccc supervisor holds that lock exclusively
-through the exit of its GPU daemon child. It watches wants with inotify, asks the
-child to finish its current batch, and releases ownership only after process exit
-has destroyed the CUDA context and VRAM allocations. There is no grace timer.
-The research process retains shared ownership through slot release and scope
-cleanup; its want is removed afterward. Multiple research jobs can hold shared
-ownership concurrently. A timeout returns 75 and removes the caller's want.
+ccc and research share the GPU within separate declared budgets. Research takes only
+its own job slot; it writes no ccc want and never waits on `ccc-gpu.lock`. The ccc
+supervisor keeps its daemon running regardless of research wants or occupied slots.
+ccc's allocator stays within its standing partition minus its context allowance;
+it does not borrow research VRAM. Research admission subtracts the configured ccc
+partition on its device as well as the safety margin, including when ccc is absent.
 
-ccc defers embeddings during research instead of moving them to CPU. Its supervisor
-resumes the GPU child only when both wants and held slots are absent. Supervised
-clients cannot lazily spawn another daemon; requests during the handoff can fail
-and should be retried after research. An abruptly killed runner can leave a want
-file: this fails closed. Remove that file only after verifying its recorded PID
-and research scope have exited. Never unlink lock files, which would split ownership
-across different inodes. Operator stops still belong to systemd; deployment only
-enables the service and never starts it.
+A sampled ccc holder is recognized without a warning when its correlated identity
+and boot match a still-live child of the current supervisor in `ccc-daemon.service`,
+with matching local start time and PID namespace. Other holder identities produce
+advisory warnings and never refuse admission. The legacy `cccHandoffHeld` caller
+option supplies no proof or permission. Operator stops and restart policy still
+belong to systemd; deployment only enables the service and never starts it.
 
 Every command runs in its own `systemd-run --user --scope --collect` scope with
 MemoryMax, MemoryHigh, zero swap, CPUQuota, TasksMax, RuntimeMaxSec and OOMPolicy=kill.
@@ -55,7 +50,7 @@ retains the slots and retries until the cgroup is empty or removed. A cleanup er
 never authorizes another job.
 The runner returns the command's exit status, including scope OOM and walltime kills.
 VRAM budget environment variables remain for the example-repo model runner. GPU admission
-sums declared GPU reservation peaks against cached device total minus the safety margin,
+sums declared GPU reservation peaks against cached device total minus the safety margin and ccc partition,
 deduplicating job and holder scopes by reservation ID and excluding the current reservation
 on its in-scope recheck. There is no sampled runtime VRAM enforcement.
 There is no CPU-set allocator, resource ledger, sampled monitor or peak persistence.
@@ -116,7 +111,7 @@ job identity; fresh `HOLD RECOVER_VERDICT`; recorded `GPU stall recorded since` 
 unreadable/invalid process, task, or confirmation evidence; unavailable GPU owner or
 device capacity; or `GPU VRAM budget exceeded`. Repair
 or investigate those conditions instead. The last case is a live sum of declared
-reservations against cached declared device total minus the policy safety margin; it is
+reservations against cached declared device total minus the policy safety margin and ccc partition; it is
 not a measurement of temporarily usable runtime VRAM, and this runner has no separate
 ``usable VRAM`` retry diagnostic. DENY 69 and flock timeout 75 retain their separate
 meanings.
@@ -177,8 +172,8 @@ never supplies an admission receipt. Malformed metadata fails the owner-state sc
 does not establish holder identity. Sample correlation describes the retained observation, not
 proof that an old or paused sample describes the current driver.
 
-These are admission-time checks (`--check-only` and the scope-entry recheck after CCC
-handoff), not a continuous Z/D monitor. A cached zombie holder outside an admitted GPU
+These are admission-time checks (`--check-only` and the scope-entry recheck before
+command launch), not a continuous Z/D monitor. A cached zombie holder outside an admitted GPU
 scope produces an advisory warning; being Z alone does not refuse admission. During
 execution, systemd owns resource limits and deadlines. On cleanup, the controller checks
 cgroup population and retains locks on unconfirmed cleanup; it does not classify Z/D

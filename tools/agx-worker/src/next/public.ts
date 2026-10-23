@@ -1,10 +1,7 @@
 import { attempt, errorMessage } from "../../../shared/src/attempt.ts";
 import { parseNextTicket } from "./ticket.ts";
 import { route } from "./route.ts";
-import {
-  loadRoster,
-  ROUTING_OBJECTIVE,
-} from "../../../../agents/models/roster.ts";
+import { loadRoster, ROUTING_OBJECTIVE } from "../roster/index.ts";
 
 const oneLine = (reason: string): string => reason.replaceAll(/[\r\n]+/gu, " ");
 
@@ -30,7 +27,7 @@ export async function roster(ticketPath?: string): Promise<number> {
     process.stdout.write(`${JSON.stringify(row)}\n`);
     return 0;
   }
-  const loaded = await loadRoster(process.env.DISPATCH_ROSTER_PATH);
+  const loaded = await loadRoster();
   if (!loaded.ok) {
     process.stderr.write(`agx worker roster: ${oneLine(loaded.error)}\n`);
     return 1;

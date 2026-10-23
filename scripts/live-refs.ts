@@ -622,6 +622,7 @@ export async function candidateFindings(
       env: {
         ...process.env,
         HOME: targetHome,
+        AGX_CONFIG: join(repo, "agents/agx/agx.toml"),
         DOTFILES: repo,
         COMMAND_TARGET_HOME: targetHome,
         CLAUDE_SETTINGS_PRIVATE:

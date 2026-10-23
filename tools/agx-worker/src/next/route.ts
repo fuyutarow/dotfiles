@@ -8,7 +8,8 @@ import {
   routeFilterLabel,
   ROUTING_OBJECTIVE,
   type Choice,
-} from "../../../../agents/models/roster.ts";
+  type LoadRosterOptions,
+} from "../roster/index.ts";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { exitWithError } from "./exit.ts";
 import { readRouteUsage } from "./usage.ts";
@@ -31,9 +32,9 @@ export async function route(
   capabilities: readonly string[] = [],
   timeoutS = 600,
   maskedRows: readonly string[] = [],
+  rosterOptions: LoadRosterOptions = {},
 ): Promise<Choice> {
-  const rosterPath = process.env.DISPATCH_ROSTER_PATH;
-  const loaded = await loadRoster(rosterPath);
+  const loaded = await loadRoster(rosterOptions);
   if (!loaded.ok)
     return exitWithError(
       `agx: cannot read dispatch roster: ${loaded.error}\n`,

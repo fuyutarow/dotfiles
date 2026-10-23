@@ -1,5 +1,9 @@
 # Changelog
 
+## 10.0.1 — 2026-10-23
+
+- Move roster consumers into the worker-owned roster module.
+
 ## 10.0.0 — 2026-10-23
 
 - Unify worker state under AGX_STATE_DIR and agx with read-only legacy-v1 imports and explicit migration refusals

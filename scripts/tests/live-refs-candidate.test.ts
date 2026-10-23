@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { LINKS } from "../config-registry.ts";
 import { RENDER_INPUTS } from "../render-source.ts";
+import { jsonOf, z } from "../../agents/hooks/zod.ts";
 
 test("candidate render includes imported siblings and refuses an unselected declaration update", async () => {
   const root = await mkdtemp(join(tmpdir(), "live-refs-commit-fixture-"));
@@ -24,7 +25,8 @@ test("candidate render includes imported siblings and refuses an unselected decl
   const rev = join(root, "rev");
   const bin = join(root, "bin");
   const home = join(root, "home");
-  for (const dir of [base, bin, join(home, ".claude")])
+  const config = join(root, "empty-config");
+  for (const dir of [base, bin, config, join(home, ".claude")])
     await mkdir(dir, { recursive: true });
   for (const path of RENDER_INPUTS) {
     const dest = join(base, path);
@@ -36,6 +38,7 @@ test("candidate render includes imported siblings and refuses an unselected decl
       source.startsWith("@google-drive/") ||
       source.startsWith("agents/hooks") ||
       source.startsWith("agents/models") ||
+      source === "agents/agx/agx.toml" ||
       source === "zsh/timezone"
     )
       continue;
@@ -66,7 +69,16 @@ test("candidate render includes imported siblings and refuses an unselected decl
   });
   await writeFile(join(base, settings), oldSettings);
   await writeFile(join(base, "agents/codex/hooks.json"), "{}");
-  await writeFile(join(base, "package.json"), "{}");
+  const manifest = jsonOf(z.record(z.string(), z.unknown())).safeParse(
+    await readFile(join(base, "package.json"), "utf8"),
+  );
+  expect(manifest.success).toBe(true);
+  if (!manifest.success) return;
+  // Keep the frozen dependency graph, without unrelated installed command targets.
+  await writeFile(
+    join(base, "package.json"),
+    JSON.stringify({ ...manifest.data, bin: {} }),
+  );
   for (const path of [
     "agents/commands/fixture.md",
     "agents/skills/fixture/SKILL.md",
@@ -123,6 +135,8 @@ else process.exit(2);
           ...process.env,
           PATH: `${bin}:${process.env.PATH}`,
           HOME: home,
+          AGX_CONFIG: undefined,
+          XDG_CONFIG_HOME: config,
           PRECOMMIT_VCS: "jj",
           PRECOMMIT_REV: "a".repeat(40),
           PRECOMMIT_BASE: "b".repeat(40),

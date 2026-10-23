@@ -87,7 +87,8 @@ test("check and run report writes, home, mise, live workspace and premises toget
     ...inheritedEnv(),
     PATH: `${bin}:${process.env.PATH}`,
     AGX_STATE_DIR: state,
-    DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
+    AGX_CONFIG: new URL("../../src/roster/policy.example.toml", import.meta.url)
+      .pathname,
   };
   for (const command of ["check", "run"]) {
     const child = Bun.spawn(
@@ -155,7 +156,8 @@ test("check warns only about overlapping runs whose ticket or workspace shares t
   const env = {
     ...inheritedEnv(),
     AGX_STATE_DIR: state,
-    DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
+    AGX_CONFIG: new URL("../../src/roster/policy.example.toml", import.meta.url)
+      .pathname,
   };
   const child = Bun.spawn(
     [
@@ -261,7 +263,10 @@ process.exit(75);
           ...inheritedEnv(),
           PATH: `${bin}:${process.env.PATH}`,
           AGX_STATE_DIR: state,
-          DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
+          AGX_CONFIG: new URL(
+            "../../src/roster/policy.example.toml",
+            import.meta.url,
+          ).pathname,
         },
         stdout: "pipe",
         stderr: "pipe",

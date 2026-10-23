@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { z } from "../../../../agents/hooks/zod.ts";
+import { z } from "../../../shared/src/zod.ts";
+import { attempt, errorMessage } from "../../../shared/src/attempt.ts";
+
+import { generationExclusivityError } from "./generation.ts";
 
 const RouteSchema = z.enum(["codex", "claude"]);
 const ChoiceSchema = z.strictObject({
@@ -160,13 +163,17 @@ export async function loadRoster(
     const catalogRaw = await parseToml(
       options.catalogPath ?? join(import.meta.dir, "catalog.toml"),
     );
-    const policyRaw = await parseToml(
-      options.policyPath ?? policyPathFromEnvironment(),
-    );
+    const policyPath = options.policyPath ?? policyPathFromEnvironment();
+    const policyRaw = await attempt(() => parseToml(policyPath));
+    if (!policyRaw.ok)
+      return {
+        ok: false,
+        error: `cannot read policy ${JSON.stringify(policyPath)}; example: ${join(import.meta.dir, "policy.example.toml")}: ${errorMessage(policyRaw.error).replaceAll(/[\r\n]+/gu, " ")}`,
+      };
     const catalogResult = CatalogSchema.safeParse(catalogRaw);
     if (!catalogResult.success)
       return { ok: false, error: catalogResult.error.message };
-    const policyResult = PolicySchema.safeParse(policyRaw);
+    const policyResult = PolicySchema.safeParse(policyRaw.value);
     if (!policyResult.success)
       return { ok: false, error: policyResult.error.message };
 
@@ -224,6 +231,9 @@ export async function loadRoster(
     const rosterResult = RosterSchema.safeParse(value);
     if (!rosterResult.success)
       return { ok: false, error: rosterResult.error.message };
+    const generationError = generationExclusivityError(rosterResult.data);
+    if (generationError !== undefined)
+      return { ok: false, error: generationError };
     return { ok: true, value: rosterResult.data };
   }).then(
     (result) => result,

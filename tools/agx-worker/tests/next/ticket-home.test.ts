@@ -117,10 +117,13 @@ test.each([
       JJ_USER: "Fixture",
       JJ_EMAIL: "fixture@example.invalid",
       AGX_STATE_DIR: join(parent, "state"),
-      DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
       AGX_WORKER_BIN: join(parent, "worker.ts"),
       AGX_TMP_ROOT: join(parent, "tmp"),
       JEV_URL: "http://127.0.0.1:1/choice",
+      AGX_CONFIG: new URL(
+        "../../src/roster/policy.example.toml",
+        import.meta.url,
+      ).pathname,
     };
     const command = async (args: string[], cwd = root) => {
       const child = Bun.spawn(args, {
@@ -282,7 +285,8 @@ async function fixture(home = "tickets") {
     GIT_WORK_TREE: undefined,
     GIT_INDEX_FILE: undefined,
     AGX_STATE_DIR: join(root, "state"),
-    DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
+    AGX_CONFIG: new URL("../../src/roster/policy.example.toml", import.meta.url)
+      .pathname,
   };
   const invoke = async (args: string[], cwd = root) => {
     const child = Bun.spawn([process.execPath, CLI, ...args, "--cd", cwd], {
@@ -408,7 +412,8 @@ test("check accepts an absolute home declared on the repository trunk", async ()
     JJ_USER: "Fixture",
     JJ_EMAIL: "fixture@example.invalid",
     AGX_STATE_DIR: join(parent, "state"),
-    DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
+    AGX_CONFIG: new URL("../../src/roster/policy.example.toml", import.meta.url)
+      .pathname,
   };
   const jj = async (args: string[]) => {
     const child = Bun.spawn(["jj", ...args], {

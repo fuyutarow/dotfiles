@@ -101,10 +101,10 @@ const fixture = async (ticketName = "pin") => {
           JEV_URL: "http://127.0.0.1:1/choice",
           AGX_WORKER_BIN: worker,
           TYPESAFE_API_KEY: "test-key",
-          DISPATCH_ROSTER_PATH: join(
-            process.cwd(),
-            "agents/models/dispatch-roster.toml",
-          ),
+          AGX_CONFIG: new URL(
+            "../../src/roster/policy.example.toml",
+            import.meta.url,
+          ).pathname,
           AGX_DISPATCHER_SESSION: "dispatcher",
         },
         timeout: 10_000,

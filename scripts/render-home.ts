@@ -3,7 +3,7 @@
 //   ~/.claude/settings.json  <- agents/claude/settings.json + ~/.claude/settings.private.json
 //                               + zsh/timezone (env.TZ) + agents/hooks/hooks.toml (claude)
 //   ~/.codex/hooks.json      <- agents/codex/hooks.json + agents/hooks/hooks.toml (codex)
-//   ~/.claude/CLAUDE.md      <- agents/claude/CLAUDE.md + agents/models/dispatch-roster.toml
+//   ~/.claude/CLAUDE.md      <- agents/claude/CLAUDE.md + worker catalog + agents/agx/agx.toml
 //                                (including the rendered worker command policy)
 // Consumer: scripts/link-dots.ts (and therefore `mise run link:dots` + the post-merge hook), and
 // `mise run doctor`, which renders into a scratch HOME and compares. Output is verdict lines.
@@ -485,7 +485,13 @@ if (!md.ok) fatal(`FATAL: cannot read ${mdPath} — ${errorMessage(md.error)}`);
 const rosterRead = await attempt(async () => {
   const child = Bun.spawn(ROSTER_COMMAND, {
     cwd: dotfiles,
-    env: { ...process.env, DISPATCH_ROSTER_PATH: undefined },
+    // Rendering uses declarations from this source tree, before operator deployment.
+    // Runtime invocations retain their own AGX_CONFIG/XDG policy discovery.
+    env: {
+      ...process.env,
+      AGX_CONFIG: join(dotfiles, "agents/agx/agx.toml"),
+      DISPATCH_ROSTER_PATH: undefined,
+    },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -516,7 +522,7 @@ if (b < 0 || e < b)
   fatal(`FATAL: markers ${BEGIN} … ${END} not found in ${mdPath}`);
 outputs.push({
   dest: `${home}/.claude/CLAUDE.md`,
-  // The CLI still reads dispatch-roster.toml; retain the accurate upstream provenance bytes.
+  // Keep the legacy provenance bytes: the catalog and declared policy preserve that roster.
   text: `${md.value.slice(0, b)}${BEGIN}\n<!-- RENDERED from agents/models/dispatch-roster.toml by scripts/render-home.ts — edit the roster or renderer, then \`mise run link:dots\`. -->\n${rosterPolicy(roster.data)}\n${roster.data.objective}\n${END}${md.value.slice(e + END.length)}`,
   from: `${mdPath} + agx-worker roster --json`,
 });

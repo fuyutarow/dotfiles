@@ -8,7 +8,7 @@ import {
   exhaustionPolicy,
   loadRoster,
   routeFilterLabel,
-} from "../../../../agents/models/roster.ts";
+} from "../roster/index.ts";
 import { parseNextTicket, writeGlob } from "./ticket.ts";
 import { ticketContext, ticketPlacement } from "./ticket-home.ts";
 import { foldedRuns, runningWorkspaceRun } from "./store.ts";
@@ -314,11 +314,11 @@ export async function preflight(
       `cannot supersede unknown run ${supersedes}`,
       "select an existing run id from agx worker ls",
     );
-  const loaded = await loadRoster(process.env.DISPATCH_ROSTER_PATH);
+  const loaded = await loadRoster();
   if (!loaded.ok)
     add(
       `cannot read dispatch roster: ${loaded.error}`,
-      "repair DISPATCH_ROSTER_PATH or its roster",
+      "repair AGX_CONFIG or its policy",
     );
   const pinned =
     continuationId === undefined

@@ -3,10 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
-import {
-  loadRoster,
-  ROUTING_OBJECTIVE,
-} from "../../../agents/models/roster.ts";
+import { loadRoster, ROUTING_OBJECTIVE } from "../src/roster/index.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const ENTRY = fileURLToPath(new URL("../src/next/cli.ts", import.meta.url));
@@ -15,6 +12,11 @@ const FullRosterView = jsonOf(z.looseObject({ objective: z.string() }));
 
 async function invoke(...args: string[]) {
   const child = Bun.spawn([process.execPath, ENTRY, ...args], {
+    env: {
+      ...process.env,
+      AGX_CONFIG: new URL("../src/roster/policy.example.toml", import.meta.url)
+        .pathname,
+    },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -28,7 +30,10 @@ async function invoke(...args: string[]) {
 }
 
 test("agx worker roster --json prints the validated roster value", async () => {
-  const loaded = await loadRoster();
+  const loaded = await loadRoster({
+    policyPath: new URL("../src/roster/policy.example.toml", import.meta.url)
+      .pathname,
+  });
   expect(loaded.ok).toBe(true);
   if (!loaded.ok) return;
 
@@ -48,7 +53,10 @@ test("agx worker roster --json prints the validated roster value", async () => {
 });
 
 test("roster TICKET emits one selected row without starting a worker or changing records", async () => {
-  const loaded = await loadRoster();
+  const loaded = await loadRoster({
+    policyPath: new URL("../src/roster/policy.example.toml", import.meta.url)
+      .pathname,
+  });
   expect(loaded.ok).toBe(true);
   if (!loaded.ok) return;
   const selected = loaded.value.choice.find(
@@ -83,10 +91,8 @@ test("roster TICKET emits one selected row without starting a worker or changing
       ...process.env,
       HOME: root,
       AGX_STATE_DIR: join(root, "state"),
-      DISPATCH_ROSTER_PATH: join(
-        import.meta.dir,
-        "../../../agents/models/dispatch-roster.toml",
-      ),
+      AGX_CONFIG: new URL("../src/roster/policy.example.toml", import.meta.url)
+        .pathname,
       JEV_URL: server.url.href,
       TYPESAFE_API_KEY: "fixture",
     },
@@ -122,7 +128,12 @@ test("renamed worker CLI reads pre-rename records byte for byte", async () => {
   const path = join(root, "records.jsonl");
   await writeFile(path, original);
   const child = Bun.spawn([process.execPath, ENTRY, "ls", "--all", "--json"], {
-    env: { ...process.env, AGX_STATE_DIR: root },
+    env: {
+      ...process.env,
+      AGX_CONFIG: new URL("../src/roster/policy.example.toml", import.meta.url)
+        .pathname,
+      AGX_STATE_DIR: root,
+    },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -143,4 +154,29 @@ test("renamed worker CLI reads pre-rename records byte for byte", async () => {
     expect(rows.data.every((row) => row.state === "ended")).toBe(true);
   }
   expect(await Bun.file(path).text()).toBe(original);
+});
+
+test("missing policy refuses with one line naming the path and example", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agx-missing-policy-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
+  };
+  const policyPath = join(root, "missing.toml");
+  const child = Bun.spawn([process.execPath, ENTRY, "roster", "--json"], {
+    env: { ...process.env, AGX_CONFIG: policyPath },
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 10000,
+  });
+  const [stdout, stderr, exit] = await Promise.all([
+    child.stdout.text(),
+    child.stderr.text(),
+    child.exited,
+  ]);
+  expect(exit).toBe(1);
+  expect(stdout).toBe("");
+  expect(stderr.trim().split("\n")).toHaveLength(1);
+  expect(stderr).toContain(policyPath);
+  expect(stderr).toContain("policy.example.toml");
 });

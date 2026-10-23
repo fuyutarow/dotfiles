@@ -95,10 +95,8 @@ console.log(JSON.stringify({ report: { summary: "done", changes: [], checks: [],
     JEV_URL: `http://127.0.0.1:${jev.port}/choice`,
     AGX_WORKER_BIN: worker,
     TYPESAFE_API_KEY: "test-key",
-    DISPATCH_ROSTER_PATH: join(
-      process.cwd(),
-      "agents/models/dispatch-roster.toml",
-    ),
+    AGX_CONFIG: new URL("../../src/roster/policy.example.toml", import.meta.url)
+      .pathname,
     AGX_DISPATCHER_SESSION: "fixture",
   };
   const launch = (resume = true, workspace = root) => {

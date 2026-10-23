@@ -145,6 +145,9 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   ["all", "tmux/tmux.conf", ".tmux.conf"],
   ["all", "herdr/config.toml", ".config/herdr/config.toml"],
 
+  // User policy is shared; host.toml and repos/ keep their machine-local owners.
+  ["all", "agents/agx/agx.toml", ".config/agx/agx.toml"],
+
   // --- claude code (user-level config; the repo's own project .claude/ is separate) ---
   // The statusline is tools/statusline (package `bin`, ~/.bun/bin/statusline); no link here.
   ["all", "agents/claude/hooks", ".claude/hooks"],
@@ -902,17 +905,26 @@ const topic = (src: string): string => src.split("/")[0] ?? src;
 
 /** Every surface: the link tables expanded with their kind's defaults, then the rest. */
 export function surfaces(): Surface[] {
-  const links = LINKS.map(([when, src, dst]): Surface => ({
-    kind: "link",
-    when,
-    sources: src.startsWith("@google-drive/") ? [] : [src],
-    deployed: `~/${dst}`,
-    consumer: src.startsWith("@google-drive/") ? "Google Drive" : topic(src),
-    writer: "human, in the repo",
-    verify: src.startsWith("@google-drive/")
-      ? `${DOCTOR} (google-drive)`
-      : `${DOCTOR} (links)`,
-  }));
+  const links = LINKS.map(([when, src, dst]): Surface =>
+    Object.assign(
+      {
+        kind: "link",
+        when,
+        sources: src.startsWith("@google-drive/") ? [] : [src],
+        deployed: `~/${dst}`,
+        consumer: src.startsWith("@google-drive/")
+          ? "Google Drive"
+          : topic(src),
+        writer: "human, in the repo",
+        verify: src.startsWith("@google-drive/")
+          ? `${DOCTOR} (google-drive)`
+          : `${DOCTOR} (links)`,
+      } satisfies Surface,
+      src === "agents/agx/agx.toml"
+        ? { consumer: "agx-worker", verify: "agx worker check" }
+        : {},
+    ),
+  );
   const attach: Surface = {
     kind: "link",
     when: "all",

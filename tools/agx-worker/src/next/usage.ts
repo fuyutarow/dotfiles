@@ -5,10 +5,7 @@ import {
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readCodexSubscriptionUsage } from "../../../shared/src/codex-subscription-usage.ts";
-import type {
-  RouteName,
-  WindowExhaustion,
-} from "../../../../agents/models/roster.ts";
+import type { RouteName, WindowExhaustion } from "../roster/index.ts";
 
 const MAX_AGE_MS = 15 * 60 * 1000;
 

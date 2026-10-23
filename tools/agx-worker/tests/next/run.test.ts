@@ -124,10 +124,10 @@ describe("agx-worker run", () => {
         TYPESAFE_API_KEY: "test-key",
         AGX_WORKER_BIN: worker,
         VERIFY_FIXTURE: "shared",
-        DISPATCH_ROSTER_PATH: join(
-          process.cwd(),
-          "agents/models/dispatch-roster.toml",
-        ),
+        AGX_CONFIG: new URL(
+          "../../src/roster/policy.example.toml",
+          import.meta.url,
+        ).pathname,
       };
       const invoke = (command: string) =>
         Bun.spawnSync(
@@ -401,10 +401,10 @@ describe("agx-worker run", () => {
       JEV_URL: `http://127.0.0.1:${jevPort}/choice`,
       AGX_WORKER_BIN: worker,
       TYPESAFE_API_KEY: "test-key",
-      DISPATCH_ROSTER_PATH: join(
-        process.cwd(),
-        "agents/models/dispatch-roster.toml",
-      ),
+      AGX_CONFIG: new URL(
+        "../../src/roster/policy.example.toml",
+        import.meta.url,
+      ).pathname,
       AGX_DISPATCHER_SESSION: "",
       CLAUDE_CODE_SESSION_ID: "claude-session",
     };
@@ -776,7 +776,7 @@ describe("agx-worker run", () => {
       ],
       {
         cwd: process.cwd(),
-        env: { ...process.env, AGX_STATE_DIR: join(root, "check-state") },
+        env: { ...workerEnv, AGX_STATE_DIR: join(root, "check-state") },
       },
     );
     expect(checked.exitCode).toBe(0);
@@ -828,10 +828,10 @@ describe("agx-worker run", () => {
       JEV_URL: `http://127.0.0.1:${jevPort}/choice`,
       AGX_WORKER_BIN: worker,
       TYPESAFE_API_KEY: "test-key",
-      DISPATCH_ROSTER_PATH: join(
-        process.cwd(),
-        "agents/models/dispatch-roster.toml",
-      ),
+      AGX_CONFIG: new URL(
+        "../../src/roster/policy.example.toml",
+        import.meta.url,
+      ).pathname,
     };
     const result = Bun.spawnSync(
       [

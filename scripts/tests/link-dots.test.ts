@@ -18,7 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { mkdir, symlink } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { LINKS } from "../config-registry.ts";
+import { LINKS, surfaces } from "../config-registry.ts";
 import {
   applies,
   assertRoots,
@@ -138,6 +138,51 @@ test("applies: every When names its OSes explicitly", () => {
   expect(applies("wsl", "linux")).toBe(false);
   expect(applies("mac", "mac")).toBe(true);
 });
+
+test.each(["mac", "wsl", "linux"] as const)(
+  "the user policy is declared and deployed verbatim on %s without touching host state",
+  (os) => {
+    const ctx: Ctx = { ...fixture("safe"), dotfiles: REPO, os };
+    const entry = LINKS.find(([, source]) => source === "agents/agx/agx.toml");
+    expect(entry).toEqual([
+      "all",
+      "agents/agx/agx.toml",
+      ".config/agx/agx.toml",
+    ]);
+    if (entry === undefined) return;
+    expect(applies(entry[0], os)).toBe(true);
+    const directory = join(ctx.home, ".config/agx");
+    mkdirSync(join(directory, "repos"), { recursive: true });
+    writeFileSync(join(directory, "host.toml"), "host fixture\n");
+    writeFileSync(join(directory, "repos/kept.toml"), "repo fixture\n");
+    const destination = join(ctx.home, entry[2]);
+    link(ctx, entry[1], destination);
+    expect(readlinkSync(destination)).toBe(join(REPO, entry[1]));
+    expect(readFileSync(destination, "utf8")).toBe(
+      readFileSync(
+        join(REPO, "tools/agx-worker/src/roster/policy.example.toml"),
+        "utf8",
+      ),
+    );
+    expect(readFileSync(join(directory, "host.toml"), "utf8")).toBe(
+      "host fixture\n",
+    );
+    expect(readFileSync(join(directory, "repos/kept.toml"), "utf8")).toBe(
+      "repo fixture\n",
+    );
+    expect(surfaces().filter((row) => row.sources.includes(entry[1]))).toEqual([
+      {
+        kind: "link",
+        when: "all",
+        sources: [entry[1]],
+        deployed: "~/.config/agx/agx.toml",
+        consumer: "agx-worker",
+        writer: "human, in the repo",
+        verify: "agx worker check",
+      },
+    ]);
+  },
+);
 
 test("the WSL systemd environment drop-in is registered and linked into XDG config", () => {
   const home = tmp("wsl-env-home-");
@@ -558,6 +603,7 @@ describe("CLI", () => {
             HOME: home,
             DOTFILES: REPO,
             COMMAND_TARGET_HOME: home,
+            AGX_CONFIG: join(home, ".config/agx/agx.toml"),
           },
           timeout: 60_000,
         },

@@ -8,6 +8,7 @@ import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
 
 export const RENDER_INPUTS = [
+  "agents/agx/agx.toml",
   "agents/claude/settings.json",
   "agents/codex/hooks.json",
   "agents/claude/CLAUDE.md",

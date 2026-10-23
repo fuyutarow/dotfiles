@@ -60,10 +60,8 @@ test("ended fixtures retain measured outcomes while routing omits ungraded raw h
     JEV_URL: `http://127.0.0.1:${server.port}/choice`,
     AGX_WORKER_BIN: join(import.meta.dir, "fixtures/outcome-worker.ts"),
     TYPESAFE_API_KEY: "test-key",
-    DISPATCH_ROSTER_PATH: join(
-      process.cwd(),
-      "agents/models/dispatch-roster.toml",
-    ),
+    AGX_CONFIG: new URL("../../src/roster/policy.example.toml", import.meta.url)
+      .pathname,
   };
   for (const [mode, outcome] of cases) {
     const ticket = join(root, `${mode}.md`);

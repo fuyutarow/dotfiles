@@ -1,8 +1,4 @@
-import {
-  exhaustionPolicy,
-  loadRoster,
-  type Choice,
-} from "../../../../agents/models/roster.ts";
+import { exhaustionPolicy, loadRoster, type Choice } from "../roster/index.ts";
 import { exitWithError } from "./exit.ts";
 import { foldedRuns } from "./store.ts";
 import { readRouteUsage } from "./usage.ts";
@@ -50,7 +46,7 @@ export async function pinContinuation(
         ? "it ended stopped and has no vendor session to continue"
         : "it has no vendor session to continue",
     );
-  const loaded = await loadRoster(process.env.DISPATCH_ROSTER_PATH);
+  const loaded = await loadRoster();
   if (!loaded.ok) return refuse(`cannot read dispatch roster: ${loaded.error}`);
   const row = loaded.value.choice.find((entry) => entry.id === previous.row);
   if (previous.outcome === "capacity") {

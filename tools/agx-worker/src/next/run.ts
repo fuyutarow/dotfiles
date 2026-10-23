@@ -26,7 +26,7 @@ import {
 import { leaseFor, type StopSignal } from "./lease.ts";
 import { route } from "./route.ts";
 import { pinContinuation } from "./continue.ts";
-import { routeFilterLabel } from "../../../../agents/models/roster.ts";
+import { routeFilterLabel } from "../roster/index.ts";
 import {
   earlyQuitRows,
   preflight,

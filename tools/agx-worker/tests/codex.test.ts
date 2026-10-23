@@ -196,6 +196,10 @@ function run(
     {
       env: {
         ...process.env,
+        AGX_CONFIG: new URL(
+          "../src/roster/policy.example.toml",
+          import.meta.url,
+        ).pathname,
         AGX_CODEX_HOST_FILE: join(dir, "no-host.toml"),
         ...env,
       },
@@ -612,7 +616,14 @@ describe("agx", () => {
         "luna-verify-1",
       ],
       {
-        env: { ...process.env, AGX_CODEX_BIN: bin },
+        env: {
+          ...process.env,
+          AGX_CONFIG: new URL(
+            "../src/roster/policy.example.toml",
+            import.meta.url,
+          ).pathname,
+          AGX_CODEX_BIN: bin,
+        },
         stdin: "ignore",
         timeout: 30_000,
       },
@@ -638,6 +649,13 @@ describe("agx", () => {
     const dir = scratch();
     const path = join(dir, "default.resource.json");
     const p = Bun.spawnSync(["bun", script, ...FULL, "--emit-envelope", path], {
+      env: {
+        ...process.env,
+        AGX_CONFIG: new URL(
+          "../src/roster/policy.example.toml",
+          import.meta.url,
+        ).pathname,
+      },
       stdin: "ignore",
       timeout: 30_000,
     });
@@ -679,7 +697,17 @@ describe("agx", () => {
         "--emit-envelope",
         path,
       ],
-      { stdin: "ignore", timeout: 30_000 },
+      {
+        env: {
+          ...process.env,
+          AGX_CONFIG: new URL(
+            "../src/roster/policy.example.toml",
+            import.meta.url,
+          ).pathname,
+        },
+        stdin: "ignore",
+        timeout: 30_000,
+      },
     );
     expect(p.exitCode).toBe(2);
     expect(existsSync(path)).toBe(false);
@@ -800,6 +828,10 @@ describe("agx", () => {
         {
           env: {
             ...process.env,
+            AGX_CONFIG: new URL(
+              "../src/roster/policy.example.toml",
+              import.meta.url,
+            ).pathname,
             AGX_CODEX_BIN: bin,
             AGX_CODEX_HOST_FILE: join(fixtureDir, "no-host.toml"),
           },
@@ -995,4 +1027,16 @@ describe("agx", () => {
     expect(r.code).toBe(2);
     expect(r.receipt.outcome).toBe("refused");
   });
+});
+
+test("missing worker policy names its path and example on one stderr line", () => {
+  const dir = scratch();
+  const { bin, log } = fakeCodex(dir);
+  const policyPath = join(dir, "missing.toml");
+  const result = run(FULL, { AGX_CODEX_BIN: bin, AGX_CONFIG: policyPath });
+  expect(result.code).toBe(2);
+  expect(result.stderr.trim().split("\n")).toHaveLength(1);
+  expect(result.stderr).toContain(policyPath);
+  expect(result.stderr).toContain("policy.example.toml");
+  expect(existsSync(log)).toBe(false);
 });

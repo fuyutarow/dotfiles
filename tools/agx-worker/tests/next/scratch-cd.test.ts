@@ -77,7 +77,10 @@ test.each([
           AGX_WORKER_BIN: join(import.meta.dir, "fixtures/outcome-worker.ts"),
           AGX_OUTCOME_FIXTURE: "ok",
           JEV_URL: "http://127.0.0.1:1/choice",
-          DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
+          AGX_CONFIG: new URL(
+            "../../src/roster/policy.example.toml",
+            import.meta.url,
+          ).pathname,
         },
         stdin: "ignore",
         stdout: "pipe",

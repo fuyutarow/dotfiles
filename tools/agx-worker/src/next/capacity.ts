@@ -1,4 +1,4 @@
-import type { Choice } from "../../../../agents/models/roster.ts";
+import type { Choice } from "../roster/index.ts";
 import type { FoldedRun } from "./run-state.ts";
 import { fromThrowable } from "neverthrow";
 

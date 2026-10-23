@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { GradeCounts, Graded } from "../../../../agents/models/roster.ts";
+import type { GradeCounts, Graded } from "../roster/index.ts";
 import { stateDir, type foldedRuns } from "./store.ts";
 
 type HistoryItem = {

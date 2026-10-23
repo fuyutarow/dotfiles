@@ -14,7 +14,7 @@
 //                   codex inherits config.toml. Optional model/effort flags only assert the row.
 //                   --resume THREAD continues that codex session in place of a fresh one: same flags,
 //                   the receipt, progress and cause handling are those of a fresh run.
-//                   --choice names a codex-route row of agents/models/dispatch-roster.toml (the roster
+//                   --choice names a codex-route row of the configured roster (the roster
 //                   choice a coordinator makes) and supplies its model and effort.
 //   C2  effects     one codex subprocess: none | read-only | workspace-write; explicit none maps
 //                   to danger-full-access. A host declaration or resource probe may also fall back
@@ -50,7 +50,7 @@ import cliPackage from "../../package.json" with { type: "json" };
 import { fromThrowable } from "neverthrow";
 import { jsonOf, jsonText, z } from "../../../shared/src/zod.ts";
 import { attempt, errorMessage } from "../../../shared/src/attempt.ts";
-import { loadRoster } from "../../../../agents/models/roster.ts";
+import { loadRoster } from "../roster/index.ts";
 import {
   lastError,
   progressWriter,
@@ -145,7 +145,7 @@ const argv = cli(
       choice: {
         type: String,
         description:
-          "a codex-route row of agents/models/dispatch-roster.toml (sets model and effort)",
+          "a codex-route row of the configured roster (sets model and effort)",
       },
       model: {
         type: String,
@@ -227,7 +227,11 @@ const runId =
 
 // Print the receipt (stdout, one line), save it, say the end on stderr, and exit. Never returns:
 // every caller's path ends here.
-function emit(outcome: Outcome, fields: Record<string, unknown>): never {
+function emit(
+  outcome: Outcome,
+  fields: Record<string, unknown>,
+  diagnostic?: string,
+): never {
   const receipt = {
     schema: 1,
     run_id: runId,
@@ -261,7 +265,8 @@ function emit(outcome: Outcome, fields: Record<string, unknown>): never {
     : { ...receipt, receipt_file: null };
   writeSync(1, `${JSON.stringify(shown)}\n`);
   say(
-    `${outcome} after ${elapsed()} s${saved.isOk() ? ` — receipt ${path}` : ` — receipt file not written (${saved.error})`}`,
+    diagnostic ??
+      `${outcome} after ${elapsed()} s${saved.isOk() ? ` — receipt ${path}` : ` — receipt file not written (${saved.error})`}`,
   );
   return process.exit(EXIT[outcome]);
 }
@@ -280,11 +285,14 @@ if (resume !== undefined && resume.trim() === "")
   refuse("--resume needs the codex thread id of the session to continue");
 if (choice !== undefined) {
   const roster = await loadRoster();
-  if (!roster.ok) refuse(`cannot read the dispatch roster: ${roster.error}`);
+  if (!roster.ok) {
+    const why = `cannot read the dispatch roster: ${roster.error}`;
+    emit("refused", { why }, why);
+  }
   const row = roster.value.choice.find((c) => c.id === choice);
   if (row?.route !== "codex")
     refuse(
-      `--choice '${choice}' is not a codex-route row of agents/models/dispatch-roster.toml (codex rows: ${roster.value.choice
+      `--choice '${choice}' is not a codex-route row of the configured roster (codex rows: ${roster.value.choice
         .filter((c) => c.route === "codex")
         .map((c) => c.id)
         .join(", ")}); a claude row runs through agx (run-claude.ts)`,

@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { escalationRow, sampleRow } from "../src/selection.ts";
-import { loadRoster } from "../../../agents/models/roster.ts";
+import { loadRoster } from "../src/roster/index.ts";
 
 describe("deterministic escalation", () => {
   test("restored Sol 6.1 measurements establish capability-preserving escalation", async () => {
-    const loaded = await loadRoster();
+    const loaded = await loadRoster({
+      policyPath: new URL("../src/roster/policy.example.toml", import.meta.url)
+        .pathname,
+    });
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     for (const [failedId, expectedId] of [["luna-low", "luna-medium"]]) {
@@ -149,7 +152,10 @@ describe("seeded row selection", () => {
   };
 
   test("default 0.5: 1000 seeds track all tempered probabilities", async () => {
-    const loaded = await loadRoster();
+    const loaded = await loadRoster({
+      policyPath: new URL("../src/roster/policy.example.toml", import.meta.url)
+        .pathname,
+    });
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     const temperature = loaded.value.auto.pick_temperature;

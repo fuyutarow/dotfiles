@@ -30,7 +30,14 @@ const productionRoster = Bun.spawnSync(
     "roster",
     "--json",
   ],
-  { env: { ...process.env, DISPATCH_ROSTER_PATH: undefined }, timeout: 10_000 },
+  {
+    env: {
+      ...process.env,
+      AGX_CONFIG: join(import.meta.dir, "../../agents/agx/agx.toml"),
+      DISPATCH_ROSTER_PATH: undefined,
+    },
+    timeout: 10_000,
+  },
 );
 expect(productionRoster.exitCode, productionRoster.stderr.toString()).toBe(0);
 const ROSTER_JSON = productionRoster.stdout.toString();
@@ -70,6 +77,11 @@ function run(env: Record<string, string>): { out: string; code: number } {
 /** The other inputs render-home.ts reads, as minimal fixtures: an empty-hooks codex file, a
  * CLAUDE.md that is only the roster markers, the real roster, and a one-hook registry. */
 function writeOtherInputs(dir: string, productionCli = false): void {
+  mkdirSync(join(dir, "agents", "agx"), { recursive: true });
+  writeFileSync(
+    join(dir, "agents", "agx", "agx.toml"),
+    readFileSync(join(ROOT, "agents", "agx", "agx.toml")),
+  );
   mkdirSync(join(dir, "agents", "codex"), { recursive: true });
   writeFileSync(
     join(dir, "agents", "codex", "hooks.json"),
@@ -768,7 +780,10 @@ describe("render-home: committed jj inputs", () => {
         'objective: "newer CLI objective"',
       ),
     );
-    const rosterPath = join(f.dotfiles, "agents/models/dispatch-roster.toml");
+    const rosterPath = join(
+      f.dotfiles,
+      "tools/agx-worker/src/roster/catalog.toml",
+    );
     writeFileSync(
       rosterPath,
       readFileSync(rosterPath, "utf8").replace("2026-10-08", "2026-10-09"),
@@ -890,6 +905,42 @@ describe("render-home: committed jj inputs", () => {
 
 // Frozen before replacing the direct-import renderer. Includes markers and provenance.
 describe("render-home: public roster JSON", () => {
+  for (const policy of [undefined, "/must-not-use-operator-policy"]) {
+    test(`production render uses repository policy with empty XDG and AGX_CONFIG=${policy}`, () => {
+      const home = makeHome();
+      const xdg = mkdtempSync(join(tmpdir(), "render-empty-config-"));
+      using _cleanup = {
+        [Symbol.dispose]: () => {
+          cleanup(home, xdg);
+        },
+      };
+      const { AGX_CONFIG: _operatorPolicy, ...env } = process.env;
+      const child = Bun.spawnSync([process.execPath, SCRIPT], {
+        env: {
+          ...env,
+          ...(policy === undefined ? {} : { AGX_CONFIG: policy }),
+          HOME: home,
+          XDG_CONFIG_HOME: xdg,
+          DOTFILES: ROOT,
+          DOTFILES_RENDER_FROM_WORKING_COPY: "1",
+          CLAUDE_SETTINGS_PRIVATE: join(home, "missing.json"),
+        },
+        timeout: 25_000,
+      });
+      expect(child.exitCode, child.stderr.toString()).toBe(0);
+      const md = readFileSync(join(home, ".claude/CLAUDE.md"), "utf8");
+      const block = md.slice(
+        md.indexOf("<!-- roster:begin -->"),
+        md.indexOf("<!-- roster:end -->") + "<!-- roster:end -->\n".length,
+      );
+      expect(Buffer.from(block)).toEqual(
+        readFileSync(join(import.meta.dir, "fixtures/render-home-roster.md")),
+      );
+      expect(existsSync(join(xdg, "agx/agx.toml"))).toBe(false);
+      expect(existsSync(join(home, ".config/agx/agx.toml"))).toBe(false);
+    });
+  }
+
   test("production roster block is byte-identical to the original renderer", () => {
     const home = makeHome();
     using _cleanup = {
@@ -908,7 +959,7 @@ describe("render-home: public roster JSON", () => {
     const md = readFileSync(join(home, ".claude/CLAUDE.md"), "utf8");
     const block = md.slice(
       md.indexOf("<!-- roster:begin -->"),
-      md.indexOf("<!-- roster:end -->") + "<!-- roster:end -->".length,
+      md.indexOf("<!-- roster:end -->") + "<!-- roster:end -->\n".length,
     );
     const original = readFileSync(
       join(import.meta.dir, "fixtures/render-home-roster.md"),

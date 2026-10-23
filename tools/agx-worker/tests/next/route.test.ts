@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { writeUsageSnapshot } from "../../../statusline/src/usage-snapshot.ts";
-import { ROUTING_OBJECTIVE } from "../../../../agents/models/roster.ts";
+import { ROUTING_OBJECTIVE } from "../../src/roster/index.ts";
 import { readRouteUsage } from "../../src/next/usage.ts";
 import { route } from "../../src/next/route.ts";
 import {
@@ -56,7 +56,7 @@ const RoutingRequest = z.looseObject({
   }),
 });
 
-const priorRoster = process.env.DISPATCH_ROSTER_PATH;
+const priorRoster = process.env.AGX_CONFIG;
 const priorUrl = process.env.JEV_URL;
 const priorHome = process.env.HOME;
 const priorStateDir = process.env.AGX_STATE_DIR;
@@ -68,14 +68,21 @@ async function isolateState() {
   roots.push(root);
   const home = join(root, "home");
   await mkdir(home, { recursive: true });
+  await writeFile(
+    join(root, "catalog.toml"),
+    await readFile(
+      new URL("../../src/roster/catalog.toml", import.meta.url),
+      "utf8",
+    ),
+  );
   const roster = await readFile(
-    new URL("../../../../agents/models/dispatch-roster.toml", import.meta.url),
+    new URL("../../src/roster/policy.example.toml", import.meta.url),
     "utf8",
   );
-  process.env.DISPATCH_ROSTER_PATH = join(root, "roster.toml");
+  process.env.AGX_CONFIG = join(root, "roster.toml");
   await writeFile(
-    process.env.DISPATCH_ROSTER_PATH,
-    roster.replace(/^routes = .*\n/mu, ""),
+    process.env.AGX_CONFIG,
+    roster.replace(/^allow = .*\n/mu, ""),
   );
   process.env.HOME = home;
   process.env.AGX_STATE_DIR = join(root, "state");
@@ -160,8 +167,8 @@ function appendStarted(row: string) {
 
 afterEach(async () => {
   await flushRunPublications();
-  if (priorRoster === undefined) delete process.env.DISPATCH_ROSTER_PATH;
-  else process.env.DISPATCH_ROSTER_PATH = priorRoster;
+  if (priorRoster === undefined) delete process.env.AGX_CONFIG;
+  else process.env.AGX_CONFIG = priorRoster;
   for (const server of servers.splice(0)) await server.stop(true);
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
@@ -216,8 +223,8 @@ describe("capability constrained routing", () => {
         await writeFile(
           path,
           (await readFile(path, "utf8")).replace(
-            "[auto]",
-            '[auto]\nroutes = ["codex"]',
+            "[route]",
+            '[route]\nallow = ["codex"]',
           ),
         );
         const server = startServer("sonnet-high", probabilities);
@@ -243,18 +250,26 @@ describe("capability constrained routing", () => {
   test("no eligible capability rows names the route filter", async () => {
     const { root } = await isolateState();
     const path = join(root, "roster.toml");
-    const original = await readFile(path, "utf8");
     await writeFile(
       path,
-      original
-        .replace("[auto]", '[auto]\nroutes = ["codex"]')
-        .replaceAll(/^tb4 = .*$/gmu, "tb4 = 0"),
+      (await readFile(path, "utf8")).replace(
+        "[route]",
+        '[route]\nallow = ["codex"]',
+      ),
+    );
+    const catalogPath = join(root, "catalog.toml");
+    await writeFile(
+      catalogPath,
+      (await readFile(catalogPath, "utf8")).replaceAll(
+        /^tb4 = .*$/gmu,
+        "tb4 = 0",
+      ),
     );
     const child = Bun.spawn(
       [
         process.execPath,
         "--eval",
-        `import { route } from ${JSON.stringify(new URL("../../src/next/route.ts", import.meta.url).pathname)}; await route("capability probe", ["long-tool-loop"]);`,
+        `import { route } from ${JSON.stringify(new URL("../../src/next/route.ts", import.meta.url).pathname)}; await route("capability probe", ["long-tool-loop"], 600, [], { catalogPath: ${JSON.stringify(join(root, "catalog.toml"))} });`,
       ],
       { env: process.env, stdout: "pipe", stderr: "pipe", timeout: 5000 },
     );
@@ -283,7 +298,7 @@ describe("capability constrained routing", () => {
         path,
         routes === undefined
           ? original
-          : original.replace("[auto]", `[auto]\nroutes = ${routes}`),
+          : original.replace("[route]", `[route]\nallow = ${routes}`),
       );
       const child = Bun.spawn(
         [
@@ -727,19 +742,25 @@ test("combined candidate rejects mixed Sol generations before Jev, even outside 
   const path = join(root, "roster.toml");
   await writeFile(
     path,
-    (await readFile(path, "utf8"))
-      .replace(
-        'id = "sol-low"\nroute = "codex"\nmodel = "gpt-6.1-sol"',
-        'id = "sol-low"\nroute = "claude"\nmodel = "gpt-6.0-sol"',
-      )
-      .replace("[auto]", '[auto]\nroutes = ["codex"]'),
+    (await readFile(path, "utf8")).replace(
+      "[route]",
+      '[route]\nallow = ["codex"]',
+    ),
+  );
+  const catalogPath = join(root, "catalog.toml");
+  await writeFile(
+    catalogPath,
+    (await readFile(catalogPath, "utf8")).replace(
+      'id = "sol-low"\nroute = "codex"\nmodel = "gpt-6.1-sol"',
+      'id = "sol-low"\nroute = "claude"\nmodel = "gpt-6.0-sol"',
+    ),
   );
   const server = startServer("sol-high");
   const child = Bun.spawn(
     [
       process.execPath,
       "--eval",
-      `import {route} from ${JSON.stringify(new URL("../../src/next/route.ts", import.meta.url).pathname)}; await route("mixed candidate");`,
+      `import {route} from ${JSON.stringify(new URL("../../src/next/route.ts", import.meta.url).pathname)}; await route("mixed candidate", [], 600, [], { catalogPath: ${JSON.stringify(join(root, "catalog.toml"))} });`,
     ],
     { env: process.env, stdout: "pipe", stderr: "pipe", timeout: 5000 },
   );

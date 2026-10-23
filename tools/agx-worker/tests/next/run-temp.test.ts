@@ -86,10 +86,8 @@ async function fixture(workerBody: string, verify: string | string[]) {
     AGX_WORKER_BIN: worker,
     AGX_TMP_ROOT: tempRoot,
     TYPESAFE_API_KEY: "test-key",
-    DISPATCH_ROSTER_PATH: join(
-      process.cwd(),
-      "agents/models/dispatch-roster.toml",
-    ),
+    AGX_CONFIG: new URL("../../src/roster/policy.example.toml", import.meta.url)
+      .pathname,
   };
   return { root, tempRoot, ticket, env };
 }
@@ -140,7 +138,7 @@ describe("agx worker run owns its temp space", () => {
       AGX_WORKER_BIN: f.env.AGX_WORKER_BIN,
       AGX_TMP_ROOT: f.env.AGX_TMP_ROOT,
       TYPESAFE_API_KEY: f.env.TYPESAFE_API_KEY,
-      DISPATCH_ROSTER_PATH: f.env.DISPATCH_ROSTER_PATH,
+      AGX_CONFIG: f.env.AGX_CONFIG,
     };
     const child = Bun.spawn(
       [process.execPath, CLI, "run", f.ticket, "--cd", f.root],

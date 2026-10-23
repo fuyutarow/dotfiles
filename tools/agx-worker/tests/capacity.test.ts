@@ -1,12 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { z } from "../../shared/src/zod.ts";
 import { decodedJson } from "./decode.ts";
 import { capacityMessage, MODEL_WAIT_MS } from "../src/workers/capacity.ts";
 import { CAPACITY_COOLDOWN_MS, capacityRows } from "../src/next/capacity.ts";
-import { loadRoster } from "../../../agents/models/roster.ts";
+import { loadRoster } from "../src/roster/index.ts";
 import { prepareTicketRepo } from "./ticket-repo.ts";
 import { runHealth } from "../src/next/health.ts";
 
@@ -46,7 +46,12 @@ const fixture = async () => {
 };
 const execute = async (args: string[], env: NodeJS.ProcessEnv) => {
   const child = Bun.spawn([process.execPath, ...args], {
-    env: { ...process.env, ...env },
+    env: {
+      ...process.env,
+      AGX_CONFIG: new URL("../src/roster/policy.example.toml", import.meta.url)
+        .pathname,
+      ...env,
+    },
     stdout: "pipe",
     stderr: "pipe",
     timeout: 8_000,
@@ -223,7 +228,10 @@ test("authentication failures remain worker errors rather than cooling a model",
 });
 
 test("cool-down expires at 300 seconds and covers effort variants of that vendor model", async () => {
-  const roster = await loadRoster();
+  const roster = await loadRoster({
+    policyPath: new URL("../src/roster/policy.example.toml", import.meta.url)
+      .pathname,
+  });
   expect(roster.ok).toBe(true);
   if (!roster.ok) return;
   const at = Temporal.Now.instant().epochMilliseconds;
@@ -281,7 +289,8 @@ test("real dispatch records capacity; fresh and continued dispatches cannot reus
     AGX_CAPACITY_FIXTURE: "sol-only",
     AGX_CAPACITY_LOG: join(f.root, "invocations.jsonl"),
     AGX_TMP_ROOT: join(f.root, "tmp"),
-    DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
+    AGX_CONFIG: new URL("../src/roster/policy.example.toml", import.meta.url)
+      .pathname,
     AGX_DISPATCHER_SESSION: "test-dispatcher",
     HOME: f.root,
   };

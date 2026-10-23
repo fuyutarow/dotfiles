@@ -472,9 +472,18 @@ const BEGIN = "<!-- roster:begin -->";
 const END = "<!-- roster:end -->";
 const mdPath = `${dotfiles}/agents/claude/CLAUDE.md`;
 // The installed command owns roster JSON; this tree still supplies its policy declarations.
-const ROSTER_COMMAND = ["agx-worker", "roster", "--json"];
+const ROSTER_COMMAND = [
+  "mise",
+  "-C",
+  dotfiles,
+  "exec",
+  "--",
+  "agx-worker",
+  "roster",
+  "--json",
+];
 const ROSTER_REMEDY =
-  "Run `mise install` / `mise run deps` to install agx-worker on PATH.";
+  "Run `mise install` in the dotfiles checkout, then `mise run deps` to install agx-worker on PATH.";
 const md = await attempt(() => readFileSync(mdPath, "utf8"));
 if (!md.ok) fatal(`FATAL: cannot read ${mdPath} — ${errorMessage(md.error)}`);
 const rosterRead = await attempt(async () => {

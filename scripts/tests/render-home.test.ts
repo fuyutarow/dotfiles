@@ -119,6 +119,7 @@ function writeOtherInputs(dir: string, productionCli = false): void {
       `process.stdout.write(${JSON.stringify(ROSTER_JSON)});`,
     );
   }
+  writeMiseCli(dir);
   mkdirSync(join(dir, "agents", "hooks"), { recursive: true });
   writeFileSync(join(dir, "agents", "hooks", "gate.ts"), "// fixture\n");
   writeFileSync(
@@ -136,6 +137,19 @@ function writeRosterCli(dir: string, code: string): void {
       `if (JSON.stringify(process.argv.slice(2)) !== '["roster","--json"]') throw new Error("unexpected roster arguments");\n` +
       `if (process.env.AGX_CONFIG !== process.cwd() + "/agents/agx/agx.toml" || process.env.DISPATCH_ROSTER_PATH !== undefined) throw new Error("unexpected roster environment");\n` +
       code,
+  );
+  chmodSync(path, 0o755);
+}
+
+function writeMiseCli(dir: string): void {
+  const path = join(dir, "bin/mise");
+  writeFileSync(
+    path,
+    "#!/bin/sh\n" +
+      'if [ -n "${MISE_ARGS-}" ]; then printf \'%s\\n\' "$@" > "$MISE_ARGS"; fi\n' +
+      'if [ -n "${MISE_CONTEXT-}" ]; then printf \'%s\\n%s\\n%s\\n\' "$PWD" "${AGX_CONFIG-}" "${DISPATCH_ROSTER_PATH-}" > "$MISE_CONTEXT"; fi\n' +
+      "shift 4\n" +
+      'exec "$@"\n',
   );
   chmodSync(path, 0o755);
 }
@@ -900,17 +914,41 @@ describe("render-home: committed jj inputs", () => {
 
 // Frozen before replacing the direct-import renderer. Includes markers and provenance.
 describe("render-home: public roster JSON", () => {
-  test("PATH fixture renders the frozen roster block without agx source", () => {
+  test("dotfiles-pinned mise renders the frozen roster block without agx source", () => {
     const dotfiles = makeDotfiles({ model: "opus" });
     const home = makeHome();
+    const argsFile = join(home, "mise-args.json");
+    const contextFile = join(home, "mise-context.txt");
     using _cleanup = {
       [Symbol.dispose]: () => {
         cleanup(dotfiles, home);
       },
     };
     expect(existsSync(join(dotfiles, "tools/agx-worker"))).toBe(false);
-    const result = run({ HOME: home, DOTFILES: dotfiles });
+    const result = run({
+      HOME: home,
+      DOTFILES: dotfiles,
+      MISE_ARGS: argsFile,
+      MISE_CONTEXT: contextFile,
+      AGX_CONFIG: "/must-not-use-operator-policy",
+      DISPATCH_ROSTER_PATH: "/must-not-use-live-roster",
+    });
     expect(result.code, result.out).toBe(0);
+    expect(readFileSync(argsFile, "utf8").trimEnd().split("\n")).toEqual([
+      "-C",
+      dotfiles,
+      "exec",
+      "--",
+      "agx-worker",
+      "roster",
+      "--json",
+    ]);
+    expect(readFileSync(contextFile, "utf8").split("\n")).toEqual([
+      dotfiles,
+      join(dotfiles, "agents/agx/agx.toml"),
+      "",
+      "",
+    ]);
     const md = readFileSync(join(home, ".claude/CLAUDE.md"), "utf8");
     const block = md.slice(md.indexOf("<!-- roster:begin -->"));
     expect(Buffer.from(block)).toEqual(
@@ -924,11 +962,12 @@ describe("render-home: public roster JSON", () => {
     expect(readFileSync(SCRIPT, "utf8")).not.toContain("tools/agx-worker");
   });
 
-  test("missing PATH command names the command and remedy before any write", () => {
+  test("missing agx-worker names the command and remedy before any write", () => {
     const dotfiles = makeDotfiles({ model: "opus" });
     const home = makeHome();
     const emptyPath = join(home, "empty-bin");
     mkdirSync(emptyPath);
+    symlinkSync(join(dotfiles, "bin/mise"), join(emptyPath, "mise"));
     using _cleanup = {
       [Symbol.dispose]: () => {
         cleanup(dotfiles, home);
@@ -940,6 +979,7 @@ describe("render-home: public roster JSON", () => {
       "FATAL: cannot load roster — agx-worker roster --json",
     );
     expect(result.out).toContain("mise install");
+    expect(result.out).toContain("in the dotfiles checkout");
     expect(result.out).toContain("mise run deps");
     for (const path of [
       ".claude/settings.json",

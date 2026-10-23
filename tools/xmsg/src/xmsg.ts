@@ -10,6 +10,11 @@ import {
   resolveRecipientSelector,
 } from "./recipient-prefix.ts";
 import { claudeReceipt } from "./claude-receipt.ts";
+import {
+  relayCheckCommand,
+  relayEvidence,
+  relayStatus,
+} from "./relay-status.ts";
 
 const unknownSender =
   "unknown (caller identity unavailable or inherited; use --from backend:<full-session-id>)";
@@ -20,10 +25,18 @@ function explicitSender(value: string): string | undefined {
   return match === null || id === undefined ? undefined : `${match[1]}:${id}`;
 }
 
-function unknown(reason: string): number {
+function unknown(reason: string, output = "", relaySessionId?: string): number {
   process.stderr.write(
     `xmsg: acceptance unknown (${reason}); do not resend without checking\n`,
   );
+  if (relaySessionId !== undefined) {
+    const evidence = relayEvidence(output);
+    const session = evidence.sessionId ?? relaySessionId;
+    process.stderr.write(
+      `xmsg: evidence: msg_id=${JSON.stringify(evidence.msgIds)} relay_session_id=${JSON.stringify(session)}\n` +
+        `xmsg: check before any resend: ${relayCheckCommand(session)}\n`,
+    );
+  }
   return 4;
 }
 
@@ -45,11 +58,15 @@ async function send(
 ): Promise<number> {
   // Only the first line is envelope metadata; never parse or strip the body.
   message = `from: ${sender}\n\n${message}`;
+  // Known even if the child times out before its first frame.
+  const relaySessionId = kind === "claude" ? crypto.randomUUID() : undefined;
   const args =
     kind === "codex"
       ? ["queue", "--thread", id, "--message", message]
       : [
           "--print",
+          "--session-id",
+          relaySessionId ?? "",
           "--model",
           "haiku",
           "--effort",
@@ -81,9 +98,19 @@ async function send(
   const result = await attempt(() =>
     Promise.all([child.exited, child.stdout.text()]),
   );
-  if (timeout.aborted) return unknown(`timed out after ${timeoutMs} ms`);
-  if (!result.ok) return unknown(errorMessage(result.error));
+  if (!result.ok)
+    return unknown(errorMessage(result.error), "", relaySessionId);
   const [code, output] = result.value;
+  const capturePath = process.env.XMSG_RELAY_CAPTURE;
+  if (kind === "claude" && capturePath !== undefined) {
+    const captured = await attempt(() => Bun.write(capturePath, output));
+    if (!captured.ok)
+      process.stderr.write(
+        `xmsg: relay capture failed: ${errorMessage(captured.error)}\n`,
+      );
+  }
+  if (timeout.aborted)
+    return unknown(`timed out after ${timeoutMs} ms`, output, relaySessionId);
   if (kind === "codex") {
     if (code !== 0) {
       process.stderr.write(
@@ -100,6 +127,8 @@ async function send(
   if (code !== 0)
     return unknown(
       `Claude relay process exited ${code}; inspect the Claude stderr above and check the recipient`,
+      output,
+      relaySessionId,
     );
   if (receipt?.accepted === "no-send") {
     process.stderr.write(
@@ -116,7 +145,11 @@ async function send(
     return 1;
   }
   if (receipt === undefined)
-    return unknown("no confirmed SendMessage tool_result");
+    return unknown(
+      "no confirmed SendMessage tool_result",
+      output,
+      relaySessionId,
+    );
   process.stdout.write(
     `xmsg: accepted for claude:${id} msg_id=${receipt.msgId}\n`,
   );
@@ -151,6 +184,11 @@ async function main(): Promise<number> {
           description:
             "Declared sender: codex:<full-UUID> or claude:<full-UUID>; no inherited environment inference",
         },
+        relay: {
+          type: String,
+          description:
+            "Relay session UUID to inspect without sending (status only)",
+        },
         message: {
           type: String,
           description: "Exact body below the sender envelope",
@@ -163,7 +201,7 @@ async function main(): Promise<number> {
       },
       help: {
         description:
-          "List discoverable recipients with xmsg list [--json], or send once to an existing session. List exits 0 complete, 3 incomplete. Send exit: 0 accepted, 1 rejected, 2 usage, 3 unreachable, 4 acceptance unknown.",
+          "List recipients with xmsg list [--json], send once with xmsg send, or inspect a Claude relay with xmsg status --relay <session-UUID>. List exits 0 complete, 3 incomplete. Send/status exit: 0 accepted, 1 rejected, 2 usage, 3 unreachable, 4 acceptance unknown.",
       },
     }),
   );
@@ -172,12 +210,28 @@ async function main(): Promise<number> {
     return 2;
   }
   const args = parsed.value;
+  if (args._.action === "status") {
+    const session = canonicalUuid(args.flags.relay ?? "");
+    if (
+      session === undefined ||
+      args._.length !== 1 ||
+      args.flags.to !== undefined ||
+      args.flags.from !== undefined ||
+      args.flags.message !== undefined ||
+      args.flags.json !== undefined
+    ) {
+      process.stderr.write("xmsg: usage: xmsg status --relay <session-UUID>\n");
+      return 2;
+    }
+    return relayStatus(session);
+  }
   if (args._.action === "list") {
     if (
       args._.length !== 1 ||
       args.flags.to !== undefined ||
       args.flags.from !== undefined ||
       args.flags.message !== undefined ||
+      args.flags.relay !== undefined ||
       !Number.isInteger(args.flags.timeoutMs) ||
       args.flags.timeoutMs < 1 ||
       args.flags.timeoutMs > 2_147_483_647
@@ -198,6 +252,7 @@ async function main(): Promise<number> {
   if (
     args._.action !== "send" ||
     args.flags.json !== undefined ||
+    args.flags.relay !== undefined ||
     args._.length !== 1 ||
     (kind === undefined && selector?.includes(":") === true) ||
     id === undefined ||

@@ -43,9 +43,10 @@ never accepted as a send receipt. Success requires `success: true` and a `msg_id
 | 4    | Acceptance unknown: timeout, failed Claude run, malformed/incomplete trace, multiple sends, or a called `SendMessage` without one correlated receipt |
 
 A Claude no-send result requires a zero exit, parseable stream records, and a final
-`result/success` record with a string `result` field. Each top-level tool use must
-have exactly one later result. Captured non-action metadata frames are accepted
-only for known shapes; unknown frame types or subtypes remain unknown. The diagnostic
+`result/success` record with `is_error: false`. Each top-level tool use must
+have exactly one later result. Non-action system and rate-limit metadata are ignored.
+Unknown fields in frames and content blocks are ignored; unknown action frame types
+remain unknown. The diagnostic
 says `no SendMessage attempted`; this differs from a called send with a missing or malformed receipt,
 which remains acceptance-unknown exit **4**. Model prose and absence of a success
 receipt alone never prove no-send. The top-level assistant/user roles must agree,
@@ -73,6 +74,32 @@ The default send deadline is 60 seconds; `--timeout-ms N` changes it. Required d
 the subsequent send share this single budget. A timeout can occur after
 the message was accepted. **Do not resend an unknown outcome without checking the recipient.**
 There are no automatic retries.
+
+## Check an unknown Claude relay
+
+Exit 4 prints observed message IDs (an empty list means none was observed), the relay
+session ID, and a copyable command:
+
+```sh
+xmsg status --relay '<relay-session-UUID>'
+```
+
+This read-only command reads the native relay transcript under
+`${CLAUDE_CONFIG_DIR:-~/.claude}/projects/*/<relay-session-UUID>.jsonl`.
+It does not resume Claude, call a model, or send another message. Exit 0 with
+`msg_id` confirms SendMessage acceptance; exit 1 confirms rejection; exit 4
+means evidence is still insufficient. Invalid flags or relay UUIDs exit 2.
+Acceptance confirms enqueue only, never reading or agreement by the recipient.
+A missing, ambiguous, malformed or oversized (over 16 MiB) transcript remains
+unknown; disabled persistence or a read-only home can prevent recovery. Never
+interpret missing evidence as permission to resend. Status uses the exact single
+SendMessage body and correlated tool result; relay prose is not evidence.
+
+The relay is assigned a UUID before launch, so even a timeout before the first
+stream frame has an exact inspection command. If a final result reports a session
+ID, the diagnostic uses that ID. Optional `XMSG_RELAY_CAPTURE=/path/stream.jsonl`
+writes raw Claude stdout after the child ends, including a timeout; it contains
+the full message body and is intended for explicit diagnostic capture.
 
 Accepted means enqueued, not read or replied. xmsg owns no broker, inbox, launch/delegation, or
 reply tracking. To arrange a reply, declare the sender's full address with --from; the

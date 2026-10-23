@@ -1,3 +1,15 @@
+const extra = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map((part) => extra(part));
+  const object = z.record(z.string(), z.unknown()).safeParse(value);
+  if (!object.success) return value;
+  return {
+    ...Object.fromEntries(
+      Object.entries(object.data).map(([key, part]) => [key, extra(part)]),
+    ),
+    future_field: { version: 42 },
+  };
+};
+
 import { afterAll, expect, test } from "bun:test";
 import { chmod, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -12,6 +24,7 @@ const envelope = (
   sender = "unknown (caller identity unavailable or inherited; use --from backend:<full-session-id>)",
 ) => `from: ${sender}\n\n${body}`;
 const msgId = "de2d35d2-4ad8-4bd3-a28d-21184c0218ca";
+const relayId = "cc6e829c-128f-4836-a11b-21b83b11bf12";
 const use = {
   type: "assistant",
   message: {
@@ -174,10 +187,20 @@ async function run(
     inventoryDelay?: number;
     discoveryDelay?: number;
     env?: Record<string, string | undefined>;
+    transcript?: string | undefined;
   } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), "xmsg-test-"));
   roots.push(root);
+  if (options.transcript !== undefined) {
+    await mkdir(join(root, ".claude", "projects", "fixture"), {
+      recursive: true,
+    });
+    await Bun.write(
+      join(root, ".claude", "projects", "fixture", `${relayId}.jsonl`),
+      options.transcript,
+    );
+  }
   let server: ReturnType<typeof Bun.serve> | undefined;
   if (options.threads !== undefined || options.codexError === true) {
     await mkdir(join(root, "app-server-control"));
@@ -281,6 +304,8 @@ process.exit(Number(process.env.XMSG_FAKE_EXIT ?? 0));
         CODEX_SESSION_ID: undefined,
         CLAUDE_CODE_SESSION_ID: undefined,
         CLAUDE_SESSION_ID: undefined,
+        CLAUDE_CONFIG_DIR: undefined,
+        XMSG_RELAY_CAPTURE: undefined,
         ...options.env,
         XMSG_FAKE_INVENTORY: options.inventory,
         XMSG_FAKE_INVENTORY_DELAY: String(options.inventoryDelay ?? 0),
@@ -1357,4 +1382,124 @@ test("Claude receipt for unenveloped body cannot accept an enveloped send", asyn
   expect(r.exit).toBe(4);
   expect(r.argv.at(-1)).toContain(JSON.stringify(envelope(message)));
   expect(r.stdout).not.toContain("accepted for");
+});
+
+test("additional fields in every stream frame and nested block preserve acceptance", async () => {
+  const r = await run({
+    output: stream(
+      ...[
+        ...nativeMetadata,
+        nativeThinking,
+        listUse,
+        listResult,
+        use,
+        accepted,
+        successfulEnd,
+      ].map((frame) => extra(frame)),
+    ),
+  });
+  expect(r.exit).toBe(0);
+  expect(r.stdout).toContain(`msg_id=${msgId}`);
+});
+
+test("minimal successful terminal frame ignores evolving telemetry", async () => {
+  const r = await run({
+    output: stream(use, accepted, {
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      session_id: relayId,
+      model_usage_since_last_result: {},
+    }),
+  });
+  expect(r.exit).toBe(0);
+});
+
+test("truncated stream retains message and relay evidence with an exact check command", async () => {
+  const r = await run({
+    output: stream(use, accepted, {
+      ...successfulEnd,
+      session_id: relayId,
+    }).slice(0, -8),
+  });
+  expect(r.exit).toBe(4);
+  expect(r.stderr).toContain(msgId);
+  expect(r.stderr).toMatch(/relay_session_id="[a-f0-9-]{36}"/u);
+  expect(r.stderr).toMatch(/xmsg status --relay '[a-f0-9-]{36}'/u);
+});
+
+test("unknown final result retains its session ID and observed message ID", async () => {
+  const r = await run({
+    output: stream(use, accepted, { ...errorEnd, session_id: relayId }),
+  });
+  expect(r.exit).toBe(4);
+  expect(r.stderr).toContain(`relay_session_id="${relayId}"`);
+  expect(r.stderr).toContain(msgId);
+  expect(r.stderr).toContain(`xmsg status --relay '${relayId}'`);
+});
+
+test.each([
+  { name: "accepted", frames: [use, accepted], exit: 0 },
+  {
+    name: "rejected",
+    frames: [use, result("denied", "send-1", true)],
+    exit: 1,
+  },
+  { name: "unknown", frames: [use], exit: 4 },
+])(
+  "status reads native transcript: $name without invoking a transport",
+  async ({ frames, exit }) => {
+    const transcript = stream(
+      {
+        type: "user",
+        sessionId: relayId,
+        message: { role: "user", content: "relay prompt" },
+      },
+      { type: "progress", sessionId: relayId, data: { arbitrary: true } },
+      ...frames.map((frame) => ({ ...frame, sessionId: relayId })),
+    );
+    const r = await run({ args: ["status", "--relay", relayId], transcript });
+    expect(r.exit).toBe(exit);
+    expect(r.called).toBe(false);
+    expect(r.stdout + r.stderr).toContain(`relay_session_id=${relayId}`);
+    if (exit === 0) expect(r.stdout).toContain(msgId);
+  },
+);
+
+test("status cannot infer delivery from missing or truncated transcript", async () => {
+  for (const transcript of [undefined, stream(use, accepted) + '{"type":']) {
+    const r = await run({ args: ["status", "--relay", relayId], transcript });
+    expect(r.exit).toBe(4);
+    expect(r.called).toBe(false);
+    expect(r.stderr).toContain("acceptance unknown");
+  }
+});
+
+test.each(
+  [
+    ["status"],
+    ["status", "--relay", "../escape"],
+    ["status", "--relay", relayId, "--to", "claude:peer"],
+    ["send", "--to", "claude:peer", "--message", "hello", "--relay", relayId],
+    ["list", "--relay", relayId],
+  ].map((args) => ({ args })),
+)(
+  "status/send flag boundaries reject without a transport: %j",
+  async ({ args }) => {
+    const r = await run({ args });
+    expect(r.exit).toBe(2);
+    expect(r.called).toBe(false);
+  },
+);
+
+test("additional metadata and final-result fields preserve a complete no-send result", async () => {
+  const r = await run({
+    output: stream(
+      ...[...nativeMetadata, listUse, listResult, successfulEnd].map((frame) =>
+        extra(frame),
+      ),
+    ),
+  });
+  expect(r.exit).toBe(3);
+  expect(r.stderr).toContain("no SendMessage attempted");
 });

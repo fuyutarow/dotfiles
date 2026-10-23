@@ -6,125 +6,14 @@ const Event = z.object({
   message: z.object({ role: z.string(), content: z.array(z.unknown()) }),
 });
 const StreamRecord = z.object({ type: z.string() }).loose();
-const ResultFrame = z
-  .object({
-    type: z.literal("result"),
-    subtype: z.literal("success"),
-    result: z.string(),
-    api_error_status: z.null(),
-    duration_api_ms: z.number(),
-    duration_ms: z.number(),
-    fast_mode_disabled_reason: z.string(),
-    fast_mode_state: z.string(),
-    first_content_frame_ms: z.number(),
-    is_error: z.literal(false),
-    modelUsage: z.object({}).loose(),
-    num_turns: z.number(),
-    permission_denials: z.array(z.unknown()),
-    queued_turn_count: z.number(),
-    result_index: z.number(),
-    safety_stops: z.number(),
-    session_id: z.string(),
-    stop_reason: z.string(),
-    subagent_stats: z.object({}).loose(),
-    terminal_reason: z.string(),
-    time_to_request_ms: z.number(),
-    total_cost_usd: z.number(),
-    ttft_ms: z.number(),
-    ttft_stream_ms: z.number(),
-    usage: z.object({}).loose(),
-    uuid: z.string(),
-  })
-  .strict();
-const MetadataFrame = z.union([
-  z
-    .object({
-      type: z.literal("system"),
-      subtype: z.literal("hook_started"),
-      hook_event: z.string(),
-      hook_id: z.string(),
-      hook_name: z.string(),
-      session_id: z.string(),
-      uuid: z.string(),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("system"),
-      subtype: z.literal("hook_response"),
-      exit_code: z.number(),
-      hook_event: z.string(),
-      hook_id: z.string(),
-      hook_name: z.string(),
-      outcome: z.string(),
-      output: z.string(),
-      session_id: z.string(),
-      stderr: z.string(),
-      stdout: z.string(),
-      uuid: z.string(),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("system"),
-      subtype: z.literal("init"),
-      session_id: z.string(),
-      uuid: z.string(),
-      additional_directories: z.array(z.unknown()).optional(),
-      agents: z.array(z.unknown()).optional(),
-      analytics_disabled: z.boolean().optional(),
-      apiKeySource: z.string().optional(),
-      capabilities: z.array(z.unknown()).optional(),
-      claude_code_version: z.string().optional(),
-      cwd: z.string().optional(),
-      fast_mode_disabled_reason: z.string().optional(),
-      fast_mode_state: z.string().optional(),
-      mcp_servers: z.array(z.unknown()).optional(),
-      memory_paths: z.object({}).loose().optional(),
-      messaging_socket_path: z.string().optional(),
-      model: z.string().optional(),
-      original_cwd: z.string().optional(),
-      output_style: z.string().optional(),
-      per_turn_effort_active: z.boolean().optional(),
-      permissionMode: z.string().optional(),
-      plugins: z.array(z.unknown()).optional(),
-      product_feedback_disabled: z.boolean().optional(),
-      skills: z.array(z.unknown()).optional(),
-      slash_commands: z.array(z.unknown()).optional(),
-      terminal_slash_commands: z.array(z.unknown()).optional(),
-      tools: z.array(z.unknown()).optional(),
-      view_mode: z.string().optional(),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("system"),
-      subtype: z.literal("thinking_tokens"),
-      estimated_tokens: z.number(),
-      estimated_tokens_delta: z.number(),
-      session_id: z.string(),
-      uuid: z.string(),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("system"),
-      subtype: z.literal("informational"),
-      content: z.string(),
-      level: z.string(),
-      session_id: z.string(),
-      uuid: z.string(),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("rate_limit_event"),
-      rate_limit_info: z.object({}).loose(),
-      session_id: z.string(),
-      uuid: z.string(),
-    })
-    .strict(),
-]);
+const ResultFrame = z.object({
+  type: z.literal("result"),
+  subtype: z.literal("success"),
+  is_error: z.literal(false),
+});
+const MetadataFrame = z.object({
+  type: z.enum(["system", "rate_limit_event"]),
+});
 const SendCall = z.object({
   type: z.literal("tool_use"),
   name: z.literal("SendMessage"),
@@ -297,7 +186,7 @@ export function claudeReceipt(
     else if (record.data.type === "assistant" || record.data.type === "user")
       return undefined;
     else if (MetadataFrame.safeParse(record.data).success) {
-      // Captured native metadata frames are non-action records; their values are ignored.
+      // Metadata is not delivery evidence; additional vendor fields are irrelevant.
     } else reader.traceConsistent = false;
   }
   if (
@@ -326,7 +215,8 @@ export function claudeReceipt(
     };
   }
   // More than one attempt/result may mean a duplicate send: never invite an automatic retry.
-  return reader.topLevelSendCalls === 1 &&
+  return reader.traceConsistent &&
+    reader.topLevelSendCalls === 1 &&
     reader.sends.size === 1 &&
     reader.receipts.length === 1
     ? reader.receipts[0]

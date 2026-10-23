@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 — 2026-10-23
+
+- Accept evolving Claude relay receipt frames and add read-only relay status checks
+
 ## 0.3.1 — 2026-10-23
 
 - Name failed Claude relay steps and retain correlated ListAgents evidence with recovery guidance

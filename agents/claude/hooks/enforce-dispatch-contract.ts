@@ -18,14 +18,10 @@
 import { attempt, errorMessage, type Attempt } from "../../hooks/attempt.ts";
 import { strAt } from "../../hooks/narrow.ts";
 import { jsonOf, z } from "../../hooks/zod.ts";
-import { resolve } from "node:path";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 const ROSTER_FILE = "agents/models/dispatch-roster.toml";
-const ROSTER_CLI = resolve(
-  import.meta.dir,
-  "../../../tools/agx-worker/src/next/cli.ts",
-);
+const ROSTER_CLI = "agx-worker";
 const ROSTER_TIMEOUT_MS = 2000;
 const ENTRY = "`agx worker run <ticket>` or `agx-worker run <ticket>`";
 
@@ -66,13 +62,8 @@ async function main(): Promise<void> {
   const tool = strAt(payload, "tool_name") ?? "";
   if (tool !== "Agent" && tool !== "Task" && tool !== "Workflow") return;
 
-  // The CLI honors DISPATCH_ROSTER_PATH; override the script only for boundary fixtures.
-  const command = [
-    process.execPath,
-    process.env.DISPATCH_ROSTER_CLI ?? ROSTER_CLI,
-    "roster",
-    "--json",
-  ];
+  // The installed CLI owns the roster contract; resolve it through PATH like other callers.
+  const command = [ROSTER_CLI, "roster", "--json"];
   const loaded = await (async (): Promise<Attempt<string>> => {
     const spawned = await attempt(async () => {
       const child = Bun.spawn(command, {

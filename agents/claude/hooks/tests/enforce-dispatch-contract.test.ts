@@ -1,12 +1,16 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { at, obj, parseJson, strAt } from "../../../hooks/narrow.ts";
-const ROSTER_PATH = join(
-  import.meta.dir,
-  "../../../models/dispatch-roster.toml",
-);
+const AGX_CONFIG = join(import.meta.dir, "../../../../agents/agx/agx.toml");
 import { runHook } from "./helpers.ts";
 
 // enforce-dispatch-contract: the Agent, Task and Workflow tools dispatch nothing. Every worker
@@ -38,16 +42,42 @@ const scratch = mkdtempSync(join(tmpdir(), "dispatch-roster-"));
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
-// The retired switch, put back on one row: strict loading must reject it, not ignore it.
-const WITH_ENABLED = join(scratch, "with-enabled.toml");
+const fixtureBin = join(scratch, "bin");
+mkdirSync(fixtureBin);
+const fixtureCli = join(fixtureBin, "agx-worker");
+const realCli = Bun.which("agx-worker") ?? "";
 writeFileSync(
-  WITH_ENABLED,
-  readFileSync(ROSTER_PATH, "utf8").replace(
-    'id = "sonnet-high"\nroute = "claude"\n',
-    'id = "sonnet-high"\nroute = "claude"\nenabled = true\n',
-  ),
+  fixtureCli,
+  `#!/bin/sh
+if [ "$1 $2" != "roster --json" ]; then exit 9; fi
+case "$DISPATCH_ROSTER_FIXTURE_MODE" in
+  failure) printf '%s' 'fixture failure' >&2; exit 7 ;;
+  retired-enabled) printf '%s' 'unknown key enabled' >&2; exit 2 ;;
+  invalid-json) printf '%s' 'not json'; exit 0 ;;
+  invalid-shape) printf '%s' '{}'; exit 0 ;;
+  timeout) exec sleep 5 ;;
+esac
+exec "$DISPATCH_ROSTER_REAL_CLI" "$@"
+`,
 );
-
+chmodSync(fixtureCli, 0o755);
+const dispatchHook = (
+  tool: string,
+  input: Record<string, unknown> = {},
+  env: Record<string, string> = {},
+  cwd?: string,
+) =>
+  runHook(
+    HOOK,
+    call(tool, input),
+    {
+      PATH: `${fixtureBin}${delimiter}${process.env.PATH ?? ""}`,
+      DISPATCH_ROSTER_REAL_CLI: realCli,
+      AGX_CONFIG,
+      ...env,
+    },
+    cwd,
+  );
 describe("enforce-dispatch-contract", () => {
   test.each([
     ["Agent", { subagent_type: "sonnet-high" }],
@@ -58,7 +88,7 @@ describe("enforce-dispatch-contract", () => {
   ])(
     "%s %o is denied with the agx worker entry points and the roster",
     (tool, input) => {
-      const d = decisionOf(runHook(HOOK, call(tool, input)).stdout);
+      const d = decisionOf(dispatchHook(tool, input).stdout);
       expect(d.decision).toBe("deny");
       expect(d.reason).toContain(`the ${tool} tool dispatches nothing`);
       expect(d.reason).toContain(
@@ -80,82 +110,70 @@ describe("enforce-dispatch-contract", () => {
     },
   );
 
-  test("a roster carrying the retired `enabled` switch fails to load, and the hook fails closed", () => {
+  test("a roster CLI rejection fails closed", () => {
     const d = decisionOf(
-      runHook(HOOK, call("Agent"), { DISPATCH_ROSTER_PATH: WITH_ENABLED })
-        .stdout,
+      dispatchHook(
+        "Agent",
+        {},
+        { DISPATCH_ROSTER_FIXTURE_MODE: "retired-enabled" },
+      ).stdout,
     );
     expect(d.decision).toBe("deny");
-    expect(d.reason).toContain(
-      "tools/agx-worker/src/next/cli.ts roster --json",
-    );
+    expect(d.reason).toContain("agx-worker roster --json");
     expect(d.reason).toContain("enabled");
   });
 
   test("production denial matches the captured original bytes from any cwd", () => {
-    const result = runHook(
-      HOOK,
-      call("Agent"),
-      { DISPATCH_ROSTER_PATH: ROSTER_PATH },
-      scratch,
-    );
+    const result = dispatchHook("Agent", {}, { AGX_CONFIG }, scratch);
     expect(result.code).toBe(0);
     expect(result.stdout).toBe(PRODUCTION_DENIAL);
   });
 
   test("unreadable roster fails closed through the CLI", () => {
-    const result = runHook(HOOK, call("Task"), {
-      DISPATCH_ROSTER_PATH: join(scratch, "missing.toml"),
-    });
+    const result = dispatchHook(
+      "Task",
+      {},
+      {
+        AGX_CONFIG: join(scratch, "missing.toml"),
+      },
+    );
     expect(result.code).toBe(0);
     const d = decisionOf(result.stdout);
     expect(d.decision).toBe("deny");
-    expect(d.reason).toContain("cli.ts roster --json");
+    expect(d.reason).toContain("agx-worker roster --json");
     expect(d.reason).toContain("missing.toml");
   });
 
   test.each([
-    [
-      "failure",
-      'process.stderr.write("fixture failure"); process.exit(7);',
-      "fixture failure",
-    ],
-    ["invalid-json", 'process.stdout.write("not json");', "JSON"],
-    ["invalid-shape", 'process.stdout.write("{}");', "invalid roster JSON"],
-    [
-      "timeout",
-      "Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);",
-      "ETIMEDOUT",
-    ],
-  ])(
-    "%s CLI fails closed and names the command",
-    (name, source, diagnostic) => {
-      const cli = join(scratch, name + ".ts");
-      writeFileSync(
-        cli,
-        'if (process.argv.slice(2).join(" ") !== "roster --json") process.exit(9);\n' +
-          source,
-      );
-      const started = performance.now();
-      const result = runHook(HOOK, call("Workflow"), {
-        DISPATCH_ROSTER_CLI: cli,
-      });
-      expect(performance.now() - started).toBeLessThan(4000);
-      expect(result.code).toBe(0);
-      const d = decisionOf(result.stdout);
-      expect(d.decision).toBe("deny");
-      expect(d.reason).toContain(cli + " roster --json");
-      expect(d.reason).toContain(diagnostic);
-    },
-  );
+    ["failure", "fixture failure"],
+    ["invalid-json", "JSON"],
+    ["invalid-shape", "invalid roster JSON"],
+    ["timeout", "ETIMEDOUT"],
+  ])("%s CLI fails closed and names the command", (name, diagnostic) => {
+    const started = performance.now();
+    const result = dispatchHook(
+      "Workflow",
+      {},
+      {
+        DISPATCH_ROSTER_FIXTURE_MODE: name,
+      },
+    );
+    expect(performance.now() - started).toBeLessThan(4000);
+    expect(result.code).toBe(0);
+    const d = decisionOf(result.stdout);
+    expect(d.decision).toBe("deny");
+    expect(d.reason).toContain("agx-worker roster --json");
+    expect(d.reason).toContain(diagnostic);
+  });
 
-  test("missing CLI fails closed", () => {
-    const cli = join(scratch, "missing-cli.ts");
+  test("missing command fails closed like an unreadable roster", () => {
     const d = decisionOf(
-      runHook(HOOK, call("Agent"), { DISPATCH_ROSTER_CLI: cli }).stdout,
+      runHook(HOOK, call("Agent"), { PATH: join(scratch, "empty-path") })
+        .stdout,
     );
     expect(d.decision).toBe("deny");
-    expect(d.reason).toContain(cli + " roster --json");
+    expect(d.reason).toContain("agx-worker roster --json");
+    expect(d.reason).toContain("cannot read roster");
   });
 
   test("the hook has no agents/models import", () => {
@@ -165,8 +183,7 @@ describe("enforce-dispatch-contract", () => {
 
   test("other tools pass untouched", () => {
     expect(
-      decisionOf(runHook(HOOK, call("Bash", { command: "ls" })).stdout)
-        .decision,
+      decisionOf(dispatchHook("Bash", { command: "ls" }).stdout).decision,
     ).toBeUndefined();
   });
 });

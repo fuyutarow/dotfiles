@@ -20,9 +20,25 @@
 # census matched inside quoted strings, and the false positive had been written up here as
 # deliberate non-compliance. mise-contract now strips echo/printf arguments before the census.
 # If a body ever really invokes uv or rust, it will FAIL again, and that FAIL will be true.
+[tool_alias]
+agx = "github:fuyutarow/agx"
+agx-worker = "github:fuyutarow/agx"
+agx-ws = "github:fuyutarow/agx"
+agx-ticket = "github:fuyutarow/agx"
+agx-status = "github:fuyutarow/agx"
+xmsg = "github:fuyutarow/agx"
+jex = "github:fuyutarow/agx"
+
 [tools]
 bun = "1.4.3"
 rumdl = "0.2.78"
+agx = { version = "1.2.1", version_prefix = "agx@", bin_path = "bin" }
+agx-worker = { version = "10.0.3", version_prefix = "agx-worker@", bin_path = "bin" }
+agx-ws = { version = "1.0.2", version_prefix = "agx-ws@", bin_path = "bin" }
+agx-ticket = { version = "2.0.2", version_prefix = "agx-ticket@", bin_path = "bin" }
+agx-status = { version = "1.0.1", version_prefix = "agx-status@", bin_path = "bin" }
+xmsg = { version = "0.4.1", version_prefix = "xmsg@", bin_path = "bin" }
+jex = { version = "0.3.1", version_prefix = "jex@", bin_path = "bin" }
 
 [tasks.accept]
 depends = ["bun:check"]

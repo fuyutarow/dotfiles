@@ -1,5 +1,5 @@
 // Immutable render inputs, shared by link:dots, render-home and doctor's reference render.
-// Zero-install imports. The exported roster CLI restores its own locked dependencies.
+// Roster data comes from the installed agx-worker command.
 // No live checkout dependencies or node_modules links enter an immutable export.
 import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -14,8 +14,6 @@ export const RENDER_INPUTS = [
   "agents/claude/CLAUDE.md",
   "agents/hooks",
   "agents/models",
-  "tools/agx-worker/src",
-  "tools/agx-worker/package.json",
   "tools/shared/src",
   "tools/shared/package.json",
   "package.json",

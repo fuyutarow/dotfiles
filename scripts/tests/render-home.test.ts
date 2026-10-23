@@ -97,8 +97,6 @@ function writeOtherInputs(dir: string, productionCli = false): void {
       `const child = Bun.spawnSync([${JSON.stringify(installed)}, ...process.argv.slice(2)], { env: process.env, stdout: "inherit", stderr: "inherit", timeout: 10_000 }); process.exit(child.exitCode);`,
     );
     for (const path of [
-      "tools/agx-worker/src",
-      "tools/agx-worker/package.json",
       "tools/shared/src",
       "tools/shared/package.json",
       "package.json",
@@ -830,7 +828,7 @@ describe("render-home: committed jj inputs", () => {
     cleanup(f.dotfiles, f.home);
   }, 30_000);
 
-  test("dirty CLI inputs refuse; a failed frozen install preserves deployed bytes", () => {
+  test("dirty renderer inputs refuse; an invalid unused lock does not affect installed roster rendering", () => {
     const f = committedFixture();
     using _cleanup = {
       [Symbol.dispose]: () => {
@@ -846,21 +844,20 @@ describe("render-home: committed jj inputs", () => {
       ".config/dotfiles/brew-prefix",
     ].map((path) => join(f.home, path));
     const before = paths.map((path) => ({ path, bytes: readFileSync(path) }));
-    const cliPath = join(f.dotfiles, "tools/agx-worker/src/next/cli.ts");
+    const rendererInput = join(f.dotfiles, "scripts/render-source.ts");
     writeFileSync(
-      cliPath,
-      `${readFileSync(cliPath, "utf8")}\n// changed CLI input\n`,
+      rendererInput,
+      `${readFileSync(rendererInput, "utf8")}\n// changed render source\n`,
     );
     const dirty = run(f.env);
     expect(dirty.code, dirty.out).toBe(1);
     expect(dirty.out).toContain("uncommitted render inputs");
-    expect(dirty.out).toContain("tools/agx-worker/src/next/cli.ts");
+    expect(dirty.out).toContain("scripts/render-source.ts");
     writeFileSync(join(f.dotfiles, "bun.lock"), "invalid lockfile\n");
     f.jj(["commit", "-m", "invalid frozen dependencies"]);
     f.jj(["bookmark", "set", "alpha", "-r", "@-"]);
     const failed = run(f.env);
-    expect(failed.code, failed.out).toBe(1);
-    expect(failed.out).toContain("render dependencies: frozen install exited");
+    expect(failed.code, failed.out).toBe(0);
     for (const { path, bytes } of before) {
       expect(readFileSync(path)).toEqual(bytes);
     }

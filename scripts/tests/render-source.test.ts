@@ -2,10 +2,16 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { RENDER_INPUTS } from "../render-source.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 const RESTORE = join(ROOT, "scripts/render-source.ts");
 const INPUTS = ["package.json", "bun.lock", "tools/agx-usehooks/package.json"];
+
+test("immutable render inputs do not include agx-worker source", () => {
+  expect(RENDER_INPUTS).not.toContain("tools/agx-worker/src");
+  expect(RENDER_INPUTS).not.toContain("tools/agx-worker/package.json");
+});
 
 test("offline restore uses the operator cache with a scratch HOME and preserves inputs", async () => {
   const scratch = await mkdtemp(join(tmpdir(), "render-deps-"));

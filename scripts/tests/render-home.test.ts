@@ -6,6 +6,7 @@
 // truncated render or a silently-dropped private rule is the damage to prevent.
 import { describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -22,23 +23,14 @@ import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { brewPrefix } from "../core-tools.ts";
 import { HooksConfigSchema } from "../hook-registry.ts";
 
-const productionRoster = Bun.spawnSync(
-  [
-    process.execPath,
-    "--no-install",
-    join(import.meta.dir, "../../tools/agx-worker/src/next/cli.ts"),
-    "roster",
-    "--json",
-  ],
-  {
-    env: {
-      ...process.env,
-      AGX_CONFIG: join(import.meta.dir, "../../agents/agx/agx.toml"),
-      DISPATCH_ROSTER_PATH: undefined,
-    },
-    timeout: 10_000,
+const productionRoster = Bun.spawnSync(["agx-worker", "roster", "--json"], {
+  env: {
+    ...process.env,
+    AGX_CONFIG: join(import.meta.dir, "../../agents/agx/agx.toml"),
+    DISPATCH_ROSTER_PATH: undefined,
   },
-);
+  timeout: 10_000,
+});
 expect(productionRoster.exitCode, productionRoster.stderr.toString()).toBe(0);
 const ROSTER_JSON = productionRoster.stdout.toString();
 const objective = jsonOf(z.object({ objective: z.string() })).safeParse(
@@ -63,6 +55,7 @@ function run(env: Record<string, string>): { out: string; code: number } {
       BUN_INSTALL_CACHE_DIR:
         process.env.BUN_INSTALL_CACHE_DIR ??
         join(homedir(), ".bun/install/cache"),
+      PATH: `${join(env.DOTFILES ?? ROOT, "bin")}:${process.env.PATH ?? ""}`,
       ...env,
     },
     maxBuffer: 4 * 1024 * 1024,
@@ -97,6 +90,12 @@ function writeOtherInputs(dir: string, productionCli = false): void {
     readFileSync(join(ROOT, "agents", "models", "dispatch-roster.toml")),
   );
   if (productionCli) {
+    const installed = Bun.which("agx-worker");
+    expect(installed, "agx-worker must be installed on PATH").not.toBeNull();
+    writeRosterCli(
+      dir,
+      `const child = Bun.spawnSync([${JSON.stringify(installed)}, ...process.argv.slice(2)], { env: process.env, stdout: "inherit", stderr: "inherit", timeout: 10_000 }); process.exit(child.exitCode);`,
+    );
     for (const path of [
       "tools/agx-worker/src",
       "tools/agx-worker/package.json",
@@ -129,9 +128,16 @@ function writeOtherInputs(dir: string, productionCli = false): void {
 }
 
 function writeRosterCli(dir: string, code: string): void {
-  const path = join(dir, "tools/agx-worker/src/next/cli.ts");
+  const path = join(dir, "bin/agx-worker");
   mkdirSync(join(path, ".."), { recursive: true });
-  writeFileSync(path, code);
+  writeFileSync(
+    path,
+    `#!${process.execPath}\n` +
+      `if (JSON.stringify(process.argv.slice(2)) !== '["roster","--json"]') throw new Error("unexpected roster arguments");\n` +
+      `if (process.env.AGX_CONFIG !== process.cwd() + "/agents/agx/agx.toml" || process.env.DISPATCH_ROSTER_PATH !== undefined) throw new Error("unexpected roster environment");\n` +
+      code,
+  );
+  chmodSync(path, 0o755);
 }
 
 const GATE = {
@@ -772,21 +778,13 @@ describe("render-home: committed jj inputs", () => {
         "Newer renderer:",
       ),
     );
-    const publicCli = join(f.dotfiles, "tools/agx-worker/src/next/public.ts");
-    writeFileSync(
-      publicCli,
-      readFileSync(publicCli, "utf8").replace(
-        "objective: ROUTING_OBJECTIVE",
-        'objective: "newer CLI objective"',
-      ),
-    );
-    const rosterPath = join(
-      f.dotfiles,
-      "tools/agx-worker/src/roster/catalog.toml",
-    );
+    const rosterPath = join(f.dotfiles, "agents/agx/agx.toml");
     writeFileSync(
       rosterPath,
-      readFileSync(rosterPath, "utf8").replace("2026-10-08", "2026-10-09"),
+      readFileSync(rosterPath, "utf8").replace(
+        'default = "luna-high"',
+        'default = "luna-medium"',
+      ),
     );
     f.jj(["commit", "-m", "newer alpha inputs"]);
     f.jj(["bookmark", "set", "alpha", "-r", "@-"]);
@@ -805,14 +803,11 @@ describe("render-home: committed jj inputs", () => {
     ).not.toContain("Newer renderer:");
     const pinned = readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8");
     expect(pinned).toContain(ROUTING_OBJECTIVE);
-    expect(pinned).not.toContain("newer CLI objective");
     expect(pinned).toContain("sourced snapshot 2026-10-08");
+    expect(pinned).toContain("| ● | `luna-high` |");
     expect(run(f.env).code).toBe(0);
     expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
-      "newer CLI objective",
-    );
-    expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
-      "sourced snapshot 2026-10-09",
+      "| ● | `luna-medium` |",
     );
     expect(readDest(f.home).model).toBe("newer-model");
     expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
@@ -905,6 +900,56 @@ describe("render-home: committed jj inputs", () => {
 
 // Frozen before replacing the direct-import renderer. Includes markers and provenance.
 describe("render-home: public roster JSON", () => {
+  test("PATH fixture renders the frozen roster block without agx source", () => {
+    const dotfiles = makeDotfiles({ model: "opus" });
+    const home = makeHome();
+    using _cleanup = {
+      [Symbol.dispose]: () => {
+        cleanup(dotfiles, home);
+      },
+    };
+    expect(existsSync(join(dotfiles, "tools/agx-worker"))).toBe(false);
+    const result = run({ HOME: home, DOTFILES: dotfiles });
+    expect(result.code, result.out).toBe(0);
+    const md = readFileSync(join(home, ".claude/CLAUDE.md"), "utf8");
+    const block = md.slice(md.indexOf("<!-- roster:begin -->"));
+    expect(Buffer.from(block)).toEqual(
+      Buffer.from(
+        readFileSync(
+          join(import.meta.dir, "fixtures/render-home-roster.md"),
+          "utf8",
+        ).replaceAll("agx-next/", "agx/"),
+      ),
+    );
+    expect(readFileSync(SCRIPT, "utf8")).not.toContain("tools/agx-worker");
+  });
+
+  test("missing PATH command names the command and remedy before any write", () => {
+    const dotfiles = makeDotfiles({ model: "opus" });
+    const home = makeHome();
+    const emptyPath = join(home, "empty-bin");
+    mkdirSync(emptyPath);
+    using _cleanup = {
+      [Symbol.dispose]: () => {
+        cleanup(dotfiles, home);
+      },
+    };
+    const result = run({ HOME: home, DOTFILES: dotfiles, PATH: emptyPath });
+    expect(result.code, result.out).toBe(1);
+    expect(result.out).toContain(
+      "FATAL: cannot load roster — agx-worker roster --json",
+    );
+    expect(result.out).toContain("mise install");
+    expect(result.out).toContain("mise run deps");
+    for (const path of [
+      ".claude/settings.json",
+      ".codex/hooks.json",
+      ".claude/CLAUDE.md",
+      ".config/dotfiles/brew-prefix",
+    ])
+      expect(existsSync(join(home, path))).toBe(false);
+  });
+
   for (const policy of [undefined, "/must-not-use-operator-policy"]) {
     test(`production render uses repository policy with empty XDG and AGX_CONFIG=${policy}`, () => {
       const home = makeHome();
@@ -934,7 +979,12 @@ describe("render-home: public roster JSON", () => {
         md.indexOf("<!-- roster:end -->") + "<!-- roster:end -->\n".length,
       );
       expect(Buffer.from(block)).toEqual(
-        readFileSync(join(import.meta.dir, "fixtures/render-home-roster.md")),
+        Buffer.from(
+          readFileSync(
+            join(import.meta.dir, "fixtures/render-home-roster.md"),
+            "utf8",
+          ).replaceAll("agx-next/", "agx/"),
+        ),
       );
       expect(existsSync(join(xdg, "agx/agx.toml"))).toBe(false);
       expect(existsSync(join(home, ".config/agx/agx.toml"))).toBe(false);
@@ -965,7 +1015,7 @@ describe("render-home: public roster JSON", () => {
       join(import.meta.dir, "fixtures/render-home-roster.md"),
       "utf8",
     ).replaceAll("agx-next/", "agx/");
-    expect(Buffer.from(`${block}\n`)).toEqual(Buffer.from(original));
+    expect(Buffer.from(block)).toEqual(Buffer.from(original));
     expect(readFileSync(SCRIPT, "utf8")).not.toMatch(
       /from\s+["']\.\.\/agents\/models\//u,
     );
@@ -1005,6 +1055,13 @@ describe("render-home: public roster JSON", () => {
       const failed = run({ HOME: home, DOTFILES: dotfiles });
       expect(failed.code, failed.out).toBe(1);
       expect(failed.out).toContain("FATAL:");
+      if (name === "non-zero exit") {
+        expect(failed.out).toContain(
+          "agx-worker roster --json exited 7: roster unavailable",
+        );
+        expect(failed.out).toContain("mise install");
+        expect(failed.out).toContain("mise run deps");
+      }
       for (const { path, bytes } of before) {
         expect(readFileSync(path)).toEqual(bytes);
       }

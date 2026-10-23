@@ -32,8 +32,7 @@
 //
 // NO FLAGS, ZERO-INSTALL IMPORTS — deliberate. With no argv read there is no Cleye boundary
 // to owe (writing-bun-scripts BG1). Local imports use the committed zod bundle rather than
-// node_modules. The roster CLI is a package command: working-copy renders use `mise run deps`,
-// while immutable exports restore dependencies from their own revision's lockfile. Inputs come
+// node_modules. The roster CLI is the installed agx-worker command on PATH. Inputs come
 // from the environment so tests can point it at fixtures:
 //   DOTFILES                  repo root            (default: this script's checkout)
 //   DOTFILES_RENDER_REV       landed commit        (default: alpha in a jj checkout)
@@ -472,14 +471,10 @@ validateCommandTargets(settings, codex.value);
 const BEGIN = "<!-- roster:begin -->";
 const END = "<!-- roster:end -->";
 const mdPath = `${dotfiles}/agents/claude/CLAUDE.md`;
-// One command constant: replace this adapter when the installed bin becomes authoritative.
-const ROSTER_COMMAND = [
-  process.execPath,
-  "--no-install",
-  join(dotfiles, "tools/agx-worker/src/next/cli.ts"),
-  "roster",
-  "--json",
-];
+// The installed command owns roster JSON; this tree still supplies its policy declarations.
+const ROSTER_COMMAND = ["agx-worker", "roster", "--json"];
+const ROSTER_REMEDY =
+  "Run `mise install` / `mise run deps` to install agx-worker on PATH.";
 const md = await attempt(() => readFileSync(mdPath, "utf8"));
 if (!md.ok) fatal(`FATAL: cannot read ${mdPath} — ${errorMessage(md.error)}`);
 const rosterRead = await attempt(async () => {
@@ -505,12 +500,14 @@ const rosterRead = await attempt(async () => {
   ]);
   if (code !== 0)
     return new Error(
-      `agx-worker roster --json exited ${code}: ${err.trim().slice(0, 4000)}`,
+      `agx-worker roster --json exited ${code}: ${err.trim().slice(0, 4000)}. ${ROSTER_REMEDY}`,
     );
   return out;
 });
 if (!rosterRead.ok)
-  fatal(`FATAL: cannot load roster — ${errorMessage(rosterRead.error)}`);
+  fatal(
+    `FATAL: cannot load roster — agx-worker roster --json: ${errorMessage(rosterRead.error)}. ${ROSTER_REMEDY}`,
+  );
 if (rosterRead.value instanceof Error)
   fatal(`FATAL: cannot load roster — ${rosterRead.value.message}`);
 const roster = jsonOf(RosterJson).safeParse(rosterRead.value);

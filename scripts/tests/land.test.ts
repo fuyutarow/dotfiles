@@ -22,7 +22,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, delimiter, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import {
@@ -87,16 +87,19 @@ async function writeToolChangelog(root: string, entry: string): Promise<void> {
     `# Changelog\n\n## ${entry}\n\n- entry\n\n## 1.0.0 — 2026-10-01\n\n- initial\n`,
   );
 }
-async function writeAgxLsFixture(root: string, source: string): Promise<void> {
-  const packageRoot = join(root, "tools/agx-worker");
-  await mkdir(join(packageRoot, "src"), { recursive: true });
-  await writeFile(
-    join(packageRoot, "package.json"),
-    JSON.stringify({ bin: { "agx-worker": "src/cli.ts" } }),
-  );
-  const cli = join(packageRoot, "src/cli.ts");
+async function writeAgxLsFixture(
+  root: string,
+  source: string,
+): Promise<string> {
+  const bin = join(root, "bin");
+  await mkdir(bin, { recursive: true });
+  const cli = join(bin, "agx-worker");
   await writeFile(cli, `#!${process.execPath}\n${source}\n`);
   await chmod(cli, 0o755);
+  return bin;
+}
+function pathWithFixture(bin: string): string {
+  return `${bin}${delimiter}${process.env.PATH ?? ""}`;
 }
 async function withProcessEnv<T>(
   values: Record<string, string>,
@@ -167,13 +170,17 @@ test("workspace listing reports its command and timeout duration", async () => {
   const workspace = join(root, "workspace");
   const state = join(root, "agx-state");
   await mkdir(workspace);
-  await writeAgxLsFixture(
+  const bin = await writeAgxLsFixture(
     root,
     "await Bun.sleep(2_000); process.stdout.write('[]\\n');",
   );
 
   await withProcessEnv(
-    { AGX_STATE_DIR: state, LAND_AGX_LS_TIMEOUT_MS: "50" },
+    {
+      AGX_STATE_DIR: state,
+      LAND_AGX_LS_TIMEOUT_MS: "50",
+      PATH: pathWithFixture(bin),
+    },
     async () => {
       const result = await workspacePreflightVerdicts(workspace, root);
       expect(result.isErr()).toBe(true);
@@ -191,18 +198,41 @@ test("workspace listing reports nonzero exit code and stderr", async () => {
   const workspace = join(root, "workspace");
   const state = join(root, "agx-state");
   await mkdir(workspace);
-  await writeAgxLsFixture(
+  const bin = await writeAgxLsFixture(
     root,
     "process.stderr.write('fixture failure'); process.exit(7);",
   );
 
-  await withProcessEnv({ AGX_STATE_DIR: state }, async () => {
+  await withProcessEnv(
+    { AGX_STATE_DIR: state, PATH: pathWithFixture(bin) },
+    async () => {
+      const result = await workspacePreflightVerdicts(workspace, root);
+      expect(result.isErr()).toBe(true);
+      if (result.isErr())
+        expect(result.error.message).toBe(
+          "agx worker ls --json failed with exit code 7: fixture failure",
+        );
+    },
+  );
+});
+
+test("workspace listing names the install remedy when agx-worker is missing", async () => {
+  const root = await mkdtemp(join(tmpdir(), "land-agx-ls-missing-"));
+  temporary.push(root);
+  const workspace = join(root, "workspace");
+  const state = join(root, "agx-state");
+  const bin = join(root, "empty-bin");
+  await mkdir(workspace);
+  await mkdir(bin);
+
+  await withProcessEnv({ AGX_STATE_DIR: state, PATH: bin }, async () => {
     const result = await workspacePreflightVerdicts(workspace, root);
     expect(result.isErr()).toBe(true);
-    if (result.isErr())
-      expect(result.error.message).toBe(
-        "agx worker ls --json failed with exit code 7: fixture failure",
-      );
+    if (result.isErr()) {
+      expect(result.error.message).toContain("agx-worker");
+      expect(result.error.message).toContain("mise install");
+      expect(result.error.message).toContain("mise run deps");
+    }
   });
 });
 
@@ -213,13 +243,17 @@ test("workspace preflight invokes the available listing query and filters its ro
   const state = join(root, "agx-state");
   const argsPath = join(root, "agx-args.json");
   await mkdir(workspace);
-  await writeAgxLsFixture(
+  const bin = await writeAgxLsFixture(
     root,
     `await Bun.write(process.env.LAND_AGX_LS_ARGS, JSON.stringify(process.argv.slice(2))); process.stdout.write(JSON.stringify([{id:'fixture-run',ticket:'fixture-ticket',workspace:${JSON.stringify(workspace)},judgment:{decision:'accept'}}]));`,
   );
 
   await withProcessEnv(
-    { AGX_STATE_DIR: state, LAND_AGX_LS_ARGS: argsPath },
+    {
+      AGX_STATE_DIR: state,
+      LAND_AGX_LS_ARGS: argsPath,
+      PATH: pathWithFixture(bin),
+    },
     async () => {
       const result = await workspacePreflightVerdicts(workspace, root);
       expect(result.isOk()).toBe(true);

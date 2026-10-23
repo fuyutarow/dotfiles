@@ -127,18 +127,7 @@ process.stdout.write(JSON.stringify(await gate.runConsumerGates(${JSON.stringify
 async function nextAgxRuns(
   root: string,
 ): Promise<Result<WorkspaceRun[], Error>> {
-  // Resolve the declaration in the selected tree, never an installed bin that may
-  // still point at an entry removed by this landing.
-  const packageRoot = join(root, "tools/agx-worker");
-  const manifest = jsonOf(
-    z.looseObject({ bin: z.looseObject({ "agx-worker": z.string() }) }),
-  ).safeParse(await readFile(join(packageRoot, "package.json"), "utf8"));
-  if (!manifest.success)
-    return err(
-      new Error(
-        `invalid agx-worker bin declaration: ${manifest.error.message}`,
-      ),
-    );
+  // agx is installed independently of dotfiles, so its PATH command is authoritative.
   const timeoutSetting = process.env[AGX_WORKER_LS_TIMEOUT_ENV];
   const timeoutMs =
     timeoutSetting === undefined
@@ -150,15 +139,20 @@ async function nextAgxRuns(
         `${AGX_WORKER_LS_TIMEOUT_ENV} must be a positive integer number of milliseconds`,
       ),
     );
-  const command = await runProcess(
-    [
-      process.execPath,
-      resolve(packageRoot, manifest.data.bin["agx-worker"]),
-      "ls",
-      "--json",
-    ],
-    { cwd: root, env: process.env, signal: AbortSignal.timeout(timeoutMs) },
+  const executed = await attempt(() =>
+    runProcess(["agx-worker", "ls", "--json"], {
+      cwd: root,
+      env: process.env,
+      signal: AbortSignal.timeout(timeoutMs),
+    }),
   );
+  if (!executed.ok)
+    return err(
+      new Error(
+        `agx-worker could not be started: ${errorMessage(executed.error)}; install it with mise install or mise run deps`,
+      ),
+    );
+  const command = executed.value;
   if (command.timedOut)
     return err(
       new Error(`agx worker ls --json timed out after ${timeoutMs} ms`),

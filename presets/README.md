@@ -46,6 +46,12 @@ check = ["bun test presets/demo/tests"]
 - An optional `createOnly = true` on a file mapping copies it only when its
   destination is absent. An existing destination is excluded from apply and
   diff, preserving project customization. The default replaces the file.
+- Optional `requiredJsonKeys = ["section.key"]` on a mapping checks those
+  dot-separated object paths against the same source JSON file. Source values
+  must exist; invalid declarations fail discovery before writes. `diff` and
+  `sync` report missing or different values (including their key paths) and exit
+  1, including for `createOnly` files. Additional consumer keys are ignored;
+  these checks never modify JSON. Missing or invalid consumer JSON also fails.
 - Optional `check = [commands]` records commands that prove the preset with its
   fixtures. Run them from the dotfiles root. These are verification metadata;
   list, apply, and diff do not execute them.
@@ -63,6 +69,13 @@ as a configuration surface covers new kinds without registry edits.
 oxlint runner.
 Dotfiles extends `typescript/tsconfig.json`, keeping its own include/exclude paths at the
 root. Consumers may tighten compiler options; weakening the preset is drift.
+
+TypeScript's `package.json` is created only when absent and then belongs to the
+consumer. Its manifest selects the house devDependency pins and `engines.bun`
+for key checks; their required values live only in the package template.
+Consumers retain their own name, bins, workspaces, type, dependencies and extra
+devDependencies. Fix reported package key drift in the consumer; sync preserves
+the package bytes.
 
 The TypeScript preset copies complete, self-contained oxlint configuration and
 its `house-plugin.js` into consumers. They own and commit those copies. Local

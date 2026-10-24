@@ -9,10 +9,11 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../../agents/hooks/attempt.ts";
-import { z } from "../../agents/hooks/zod.ts";
-import { discoverPresets } from "./manifests.ts";
+import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { discoverPresets, jsonKey } from "./manifests.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const PRESETS = join(ROOT, "presets");
@@ -160,13 +161,58 @@ async function applyOne(destination: string, content: string): Promise<void> {
   }
 }
 
+type JsonRequirement = { destination: string; key: string; expected: unknown };
+
+async function checkJsonFile(
+  destination: string,
+  requirements: JsonRequirement[],
+): Promise<boolean> {
+  const path = join(target, destination);
+  const content = await attempt(() => readFile(path, "utf8"));
+  const json = content.ok
+    ? jsonOf(z.record(z.string(), z.unknown())).safeParse(content.value)
+    : undefined;
+  if (json === undefined || !json.success) {
+    console.log(`preset: ${destination}: missing or invalid JSON object`);
+    return true;
+  }
+  let drift = false;
+  for (const requirement of requirements) {
+    const actual = jsonKey(json.data, requirement.key);
+    if (isDeepStrictEqual(actual, requirement.expected)) continue;
+    console.log(
+      `preset: ${destination}: ${requirement.key}: expected ${JSON.stringify(requirement.expected)}, found ${actual === undefined ? "missing" : JSON.stringify(actual)}`,
+    );
+    drift = true;
+  }
+  return drift;
+}
+
+async function checkJsonKeys(
+  requirements: JsonRequirement[],
+): Promise<boolean> {
+  let drift = false;
+  for (const destination of new Set(
+    requirements.map((item) => item.destination),
+  )) {
+    const changed = await checkJsonFile(
+      destination,
+      requirements.filter((item) => item.destination === destination),
+    );
+    drift = changed || drift;
+  }
+  return drift;
+}
+
 if (writes) {
   for (const [destination, content] of expected)
     await applyOne(destination, content);
-  process.exit(0);
+  process.exit(
+    action === "sync" && (await checkJsonKeys(preset.requirements)) ? 1 : 0,
+  );
 }
 
-let drift = false;
+let drift = await checkJsonKeys(preset.requirements);
 const scratch = await mkdtemp(join(tmpdir(), `preset-diff-${process.pid}-`));
 for (const [destination, content] of expected) {
   const destinationExists = await exists(destination);

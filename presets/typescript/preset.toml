@@ -4,7 +4,7 @@ files = [
   { source = "house-plugin.js", destination = "house-plugin.js" },
   { source = ".oxlintrc.json", destination = ".oxlintrc.json" },
   { source = "tsconfig.json", destination = "tsconfig.json" },
-  { source = "package.json", destination = "package.json" },
+  { source = "package.json", destination = "package.json", createOnly = true, requiredJsonKeys = ["devDependencies.@types/bun", "devDependencies.oxfmt", "devDependencies.oxlint", "devDependencies.oxlint-plugin-eslint", "devDependencies.oxlint-tsgolint", "engines.bun"] },
   { source = "zod.ts", destination = "zod.ts" },
   { source = "mise-tasks.toml", destination = "mise-tasks.toml" },
   { source = "require-bun.ts", destination = "require-bun.ts" },

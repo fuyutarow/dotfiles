@@ -1,7 +1,18 @@
 import { readdir } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { attempt, errorMessage } from "../../agents/hooks/attempt.ts";
-import { z } from "../../agents/hooks/zod.ts";
+import { jsonOf, z } from "../../agents/hooks/zod.ts";
+
+/** Dot-separated object keys; own properties only, never inherited values. */
+export function jsonKey(value: unknown, key: string): unknown {
+  let current = value;
+  for (const part of key.split(".")) {
+    const object = z.record(z.string(), z.unknown()).safeParse(current);
+    if (!object.success || !Object.hasOwn(object.data, part)) return undefined;
+    current = object.data[part];
+  }
+  return current;
+}
 
 const RelativePath = z
   .string()
@@ -19,11 +30,47 @@ const Manifest = z.strictObject({
         source: RelativePath,
         destination: RelativePath,
         createOnly: z.boolean().optional(),
+        requiredJsonKeys: z
+          .array(z.string().regex(/^[^.]+(?:\.[^.]+)*$/u))
+          .min(1)
+          .optional(),
       }),
     )
     .min(1),
   check: z.array(z.string().min(1)).optional(),
 });
+
+async function packageRequirements(
+  directory: string,
+  files: z.infer<typeof Manifest>["files"],
+) {
+  const requirements = [];
+  for (const file of files) {
+    if (file.requiredJsonKeys === undefined) continue;
+    const source = join(directory, file.source);
+    const json = jsonOf(z.record(z.string(), z.unknown())).safeParse(
+      await Bun.file(source).text(),
+    );
+    if (!json.success)
+      return {
+        ok: false,
+        error: `${source}: requiredJsonKeys needs a JSON object`,
+      } as const;
+    const selected = file.requiredJsonKeys.map((key) => ({
+      destination: file.destination,
+      key,
+      expected: jsonKey(json.data, key),
+    }));
+    const missing = selected.find((item) => item.expected === undefined);
+    if (missing !== undefined)
+      return {
+        ok: false,
+        error: `${source}: missing required JSON key: ${missing.key}`,
+      } as const;
+    requirements.push(...selected);
+  }
+  return { ok: true, requirements } as const;
+}
 
 /** Immediate preset directories are the catalog; support directories need no manifest. */
 export async function discoverPresets(root: string) {
@@ -69,7 +116,13 @@ export async function discoverPresets(root: string) {
         ok: false,
         error: `${path}: missing source: ${missing.source}`,
       } as const;
-    presets.push({ ...parsed.data, directory });
+    const required = await packageRequirements(directory, parsed.data.files);
+    if (!required.ok) return required;
+    presets.push({
+      ...parsed.data,
+      directory,
+      requirements: required.requirements,
+    });
   }
   return { ok: true, presets } as const;
 }

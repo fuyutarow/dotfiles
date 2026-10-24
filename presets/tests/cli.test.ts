@@ -18,6 +18,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import housePackage from "../typescript/package.json";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const scratch = await mkdtemp(join(tmpdir(), "preset-manifests-"));
@@ -180,11 +181,104 @@ describe("manifest preset CLI", () => {
     expect(drift.exit).toBe(1);
     expect(drift.stdout).toContain(".oxlintrc.json (target)");
     await writeFile(join(repo, "package.json"), '{"name":"custom"}\n');
-    expect((await run("sync", "typescript", "--to", repo)).exit).toBe(0);
+    const synced = await run("sync", "typescript", "--to", repo);
+    expect(synced.exit).toBe(1);
+    expect(synced.stdout).toContain("devDependencies.oxlint:");
     expect(await readFile(join(repo, "package.json"), "utf8")).toBe(
       '{"name":"custom"}\n',
     );
     expect(await readFile(join(repo, ".oxlintrc.json"), "utf8")).toBe(text);
+  });
+
+  test("consumer package identity survives apply, diff and sync with house keys", async () => {
+    const repo = await target();
+    const consumer = {
+      name: "consumer-cli",
+      bin: { consumer: "src/cli.ts", worker: "src/worker.ts" },
+      workspaces: ["packages/*"],
+      type: "module",
+      dependencies: { "type-flag": "4.5.0" },
+      devDependencies: { ...housePackage.devDependencies, extra: "1.0.0" },
+      engines: { ...housePackage.engines, node: ">=22" },
+    };
+    const bytes = JSON.stringify(consumer);
+    await writeFile(join(repo, "package.json"), bytes);
+    for (const action of ["apply", "diff", "sync"]) {
+      const result = await run(action, "typescript", "--to", repo);
+      expect(result.exit, result.stdout + result.stderr).toBe(0);
+      expect(await readFile(join(repo, "package.json"), "utf8")).toBe(bytes);
+    }
+  });
+
+  for (const key of Object.keys(housePackage.devDependencies)) {
+    for (const mode of ["changed", "missing"]) {
+      test(`${mode} house devDependency ${key} fails diff and sync`, async () => {
+        const repo = await target();
+        expect((await run("apply", "typescript", "--to", repo)).exit).toBe(0);
+        const devDependencies: Record<string, string> = {
+          ...housePackage.devDependencies,
+        };
+        if (mode === "changed") devDependencies[key] = "0.0.0";
+        else delete devDependencies[key];
+        const bytes = JSON.stringify({ ...housePackage, devDependencies });
+        await writeFile(join(repo, "package.json"), bytes);
+        for (const action of ["diff", "sync"]) {
+          const result = await run(action, "typescript", "--to", repo);
+          expect(result.exit).toBe(1);
+          expect(result.stdout).toContain(`devDependencies.${key}: expected`);
+          expect(await readFile(join(repo, "package.json"), "utf8")).toBe(
+            bytes,
+          );
+        }
+      });
+    }
+  }
+
+  for (const engines of [{}, { bun: ">=0.0.0" }, { bun: 143 }]) {
+    test(`nonconforming engines.bun ${JSON.stringify(engines)} fails diff and sync`, async () => {
+      const repo = await target();
+      expect((await run("apply", "typescript", "--to", repo)).exit).toBe(0);
+      const bytes = JSON.stringify({ ...housePackage, engines });
+      await writeFile(join(repo, "package.json"), bytes);
+      for (const action of ["diff", "sync"]) {
+        const result = await run(action, "typescript", "--to", repo);
+        expect(result.exit).toBe(1);
+        expect(result.stdout).toContain("engines.bun: expected");
+        expect(await readFile(join(repo, "package.json"), "utf8")).toBe(bytes);
+      }
+    });
+  }
+
+  test("invalid consumer JSON fails diff and sync as drift", async () => {
+    const repo = await target();
+    expect((await run("apply", "typescript", "--to", repo)).exit).toBe(0);
+    await writeFile(join(repo, "package.json"), "{invalid");
+    for (const action of ["diff", "sync"]) {
+      const result = await run(action, "typescript", "--to", repo);
+      expect(result.exit).toBe(1);
+      expect(result.stdout).toContain(
+        "package.json: missing or invalid JSON object",
+      );
+    }
+  });
+
+  test("invalid requirement sources fail discovery before any target writes", async () => {
+    const source = join(fixtureRoot, "presets/typescript/package.json");
+    const original = await readFile(source, "utf8");
+    for (const [bytes, diagnostic] of [
+      ["{invalid", "requiredJsonKeys needs a JSON object"],
+      ["{}", "missing required JSON key: devDependencies.@types/bun"],
+    ] as const) {
+      const repo = await target();
+      await writeFile(source, bytes);
+      const result = await run("apply", "typescript", "--to", repo);
+      await writeFile(source, original);
+      expect(result.exit).toBe(2);
+      expect(result.stderr).toContain(diagnostic);
+      expect(await Bun.file(join(repo, "house-plugin.js")).exists()).toBe(
+        false,
+      );
+    }
   });
 
   test("apply and sync refuse consumer symlinks before writing any files", async () => {

@@ -216,7 +216,7 @@ outside this scaffolding step.
 - `src/dataframe.ts`: `neverthrow`, `./host-load.ts`, `./storage.ts`, `./identity.ts`, `./rate-limits.ts`, `./jobs.ts`, `./dispatch-runs.ts`
 - `src/dispatch-runs.ts`: `./zod.ts`, `./core-runs.ts`, `./agx-snapshot.ts`, `./dispatch-display.ts`
 - `src/dispatch-warning.ts`: `node:os`, `./zod.ts`
-- `src/dispatch-state.ts`: `neverthrow`, `./zod.ts`, `./dispatch-display.ts`, `./dispatch-runs.ts`, `../../shared/src/agx-telemetry.ts`
+- `src/dispatch-state.ts`: `neverthrow`, `./zod.ts`, `./dispatch-display.ts`, `./dispatch-runs.ts`
 - `src/format.ts`: `./ansi.ts`, `./prompt-stamp.ts`, `./dataframe.ts`, `./model-context.ts`, `./rate-limits.ts`, `./jobs.ts`, `./dispatch-runs.ts`, `./host-load.ts`
 - `src/host-load.ts`: `node:child_process`, `node:fs`, `node:path`, `node:os`, `neverthrow`, `./storage.ts`, `./cgroup-memory.ts`, `./zod.ts`, `./ansi.ts`, `./bounded.ts`
 - `src/identity.ts`: `node:fs`, `node:net`, `neverthrow`, `./zod.ts`, `./bounded.ts`

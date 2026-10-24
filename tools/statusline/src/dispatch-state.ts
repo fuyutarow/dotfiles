@@ -1,10 +1,8 @@
-// Selection telemetry location only; worker state and progress come from C2 listing rows.
 import { fromThrowable } from "neverthrow";
 import { z } from "./zod.ts";
 import { actionLine } from "./dispatch-display.ts";
 import type { RouteRun } from "./dispatch-runs.ts";
 
-export { agxTelemetryDir as stateDir } from "../../shared/src/agx-telemetry.ts";
 // Consumer projection of released C2 fields, never the private writer's schema.
 const Progress = z.object({
   last: z.string().nullable(),

@@ -1,8 +1,4 @@
-import {
-  ENRICHMENT_TIMEOUT_MS,
-  execAsyncBounded,
-  execBounded,
-} from "./bounded.ts";
+import { execAsyncBounded } from "./bounded.ts";
 import { DIM, RST } from "./ansi.ts";
 import { pad2 } from "./prompt-stamp.ts";
 
@@ -48,50 +44,6 @@ function etimeSecs(etime: string): number | undefined {
   // "mm:ss" matches a=mm (b unset); "hh:mm:ss" matches a=hh, b=mm.
   const [hh, mm] = b === undefined ? [0, Number(a)] : [Number(a), Number(b)];
   return Number(dd ?? 0) * 86_400 + hh * 3_600 + mm * 60 + Number(last);
-}
-// Reparented to init AND still pointing at a Claude scratchpad: a driver (or a leaked helper)
-// that outlived its session. Counted, never judged — deciding which orphan is "real work" is
-// exactly the guess this segment exists to stop us making.
-export function scanOutOfHarness(): {
-  jobs: Admitted[];
-  orphans: number;
-  failed?: string; // set when `ps` itself failed: jobs/orphans are then unknown, not zero
-} {
-  // Tiger-Style bound (see the top-of-file note): a `ps` snapshot of the WHOLE process table
-  // has no reason to be instant on a heavily loaded host, and this call used to have no
-  // timeout at all.
-  // `etime`, not `etimes`: etimes (plain seconds) is a procps extension that macOS's BSD ps
-  // rejects ("etimes: keyword not found", exit 1), while etime exists in both — one call for
-  // both OSes, parsed by etimeSecs().
-  const rawResult = execBounded(
-    "ps",
-    "ps",
-    ["-eo", "ppid=,etime=,args="],
-    ENRICHMENT_TIMEOUT_MS,
-  );
-  // no ps / timed out: say so. This used to return an empty scan, which rendered as "no jobs".
-  if (rawResult.isErr())
-    return { jobs: [], orphans: 0, failed: rawResult.error.why };
-  const raw = rawResult.value;
-  const jobs: Admitted[] = [];
-  let orphans = 0;
-  for (const line of raw.split("\n")) {
-    // .match(), not RegExp.prototype.exec(): this file imports node:child_process, and the
-    // writing-bun-scripts floor (F4) fails any such file that also carries the token `exec(`.
-    const m = line.match(/^\s*(\d+)\s+([\d:-]+)\s+(\S.*)$/u);
-    if (m === null) continue;
-    const [, ppid, etime, args] = m;
-    // All three are non-optional capture groups, so a successful match always has them;
-    // this guard exists only for noUncheckedIndexedAccess, never actually taken.
-    if (ppid === undefined || etime === undefined || args === undefined)
-      continue;
-    const name = admittedName(args.split(/\s+/u));
-    const secs = etimeSecs(etime);
-    if (name !== null && name !== undefined && secs !== undefined)
-      jobs.push({ name, secs });
-    else if (ppid === "1" && args.includes("/scratchpad/")) orphans++;
-  }
-  return { jobs, orphans };
 }
 /** Render-path variant: the process-table scan is asynchronous and time bounded. */
 export async function scanOutOfHarnessAsync(): Promise<{

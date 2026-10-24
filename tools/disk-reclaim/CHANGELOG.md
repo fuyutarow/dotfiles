@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.5 — 2026-10-24
+
+- Remove unused busy directory scan and process type re-export
+
 ## 1.5.4 — 2026-10-24
 
 - Bound disk:free by its time budget instead of entry count and report partial payload deletions

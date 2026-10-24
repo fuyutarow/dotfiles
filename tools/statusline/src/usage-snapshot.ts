@@ -2,7 +2,6 @@ import type { Dataframe } from "./dataframe.ts";
 import {
   subscriptionUsagePath,
   SubscriptionUsageSnapshotSchema,
-  writeSubscriptionUsageSnapshot,
   type SubscriptionUsageSnapshot,
 } from "../../shared/src/subscription-usage.ts";
 import { readJsonAsync, writeCacheAsync } from "./bounded.ts";
@@ -76,15 +75,6 @@ function usageSnapshot(
       codex: { "7d": codexWindow },
     },
   };
-}
-
-// Compatibility API for existing subscription-routing callers; never used by a renderer.
-export function writeUsageSnapshot(
-  facts: RateFacts,
-  nowSeconds: number,
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
-  return writeSubscriptionUsageSnapshot(usageSnapshot(facts, nowSeconds), env);
 }
 
 /** The timer owns publication; absent windows retain the previous source observation. */

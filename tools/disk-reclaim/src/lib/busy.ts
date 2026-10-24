@@ -1,7 +1,4 @@
-import { readdirSync, readlinkSync } from "node:fs";
-import { join } from "node:path";
 import { fromThrowable } from "../../../shared/src/zod.ts";
-import { resolveProcRoot } from "./procs.ts";
 
 /** Exact process-name probe; missing pgrep mirrors the shell's false condition. */
 export function processBusy(
@@ -23,27 +20,4 @@ export function processBusy(
     .trim()
     .split(/\s+/u)
     .some((pid) => pid !== current);
-}
-
-/** Process working directories for cargo/rustc, or undefined when /proc is unavailable. */
-export function busyCwds(procDir = resolveProcRoot()): string[] | undefined {
-  const pids = fromThrowable(() => readdirSync(procDir))();
-  if (pids.isErr()) return undefined;
-  return pids.value
-    .filter((pid) => /^\d+$/u.test(pid))
-    .flatMap((pid) => {
-      const exe = fromThrowable(() =>
-        readlinkSync(join(procDir, pid, "exe"))
-          .split("/")
-          .at(-1),
-      )();
-      if (exe.isErr() || (exe.value !== "cargo" && exe.value !== "rustc"))
-        return [];
-      return fromThrowable(() =>
-        readlinkSync(join(procDir, pid, "cwd")),
-      )().match(
-        (cwd) => [cwd],
-        () => [],
-      );
-    });
 }

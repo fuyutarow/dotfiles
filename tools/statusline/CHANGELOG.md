@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.11 — 2026-10-24
+
+- Remove unused synchronous collectors and recovery entrypoint
+
 ## 0.21.10 — 2026-10-24
 
 - Read Jev seven-day spend from the pinned agx public usage statistics

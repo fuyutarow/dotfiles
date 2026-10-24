@@ -79,7 +79,9 @@ if (parsed.flags.migrateBrew === true || parsed.flags.dryRun === true) {
   process.exit(0);
 }
 
-const codexHostDeclaration = declareRentedCodexHost({
+// Host commands resolve the released agx pin through this checkout.
+await $`${MISE} trust ${DOTFILES}/mise.toml`;
+const codexHostDeclaration = await declareRentedCodexHost({
   home: homedir(),
   rented: parsed.flags.rented ?? false,
   hostname: hostname(),
@@ -99,7 +101,6 @@ say(
 
 // deps first: scripts/link-dots.ts imports Cleye from node_modules.
 say("repo dependencies");
-await $`${MISE} trust ${DOTFILES}/mise.toml`;
 await $`${MISE} run deps`.cwd(DOTFILES);
 
 say("linking dotfiles");

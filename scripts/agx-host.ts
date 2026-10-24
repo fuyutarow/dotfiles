@@ -1,16 +1,7 @@
-import {
-  closeSync,
-  chmodSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { readCodexHostDeclaration } from "./agx-host-declaration.ts";
+import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 
 type ProbeSet = Readonly<{
   isContainer: () => boolean;
@@ -24,16 +15,55 @@ type DeclarationOptions = Readonly<{
   date: string;
   probes: ProbeSet;
   say: (line: string) => void;
+  command?: readonly string[];
 }>;
 
 export type DeclarationResult = "written" | "existing" | "skipped" | "invalid";
 
-const RELATIVE_PATH = ".config/agx/host.toml";
+const HOST_COMMAND = [
+  "mise",
+  "-C",
+  join(import.meta.dir, ".."),
+  "exec",
+  "--",
+  "agx",
+  "worker",
+  "host",
+];
 
-function rejectPrototypeFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
+async function runHost(
+  home: string,
+  command: readonly string[],
+  args: string[],
+) {
+  const signal = AbortSignal.timeout(60_000);
+  const proc = Bun.spawn([...command, ...args], {
+    env: { ...process.env, HOME: home },
+    stdout: "pipe",
+    stderr: "pipe",
+    signal,
+  });
+  const [out, err, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return {
+    out,
+    err,
+    code: !signal.aborted && (code === 0 || code === 1) ? code : 2,
+  };
+}
+
+/** The released command owns path discovery, schema validation and diagnostics. */
+export async function checkAgxHost(
+  home: string,
+  command: readonly string[] = HOST_COMMAND,
+) {
+  return runHost(home, command, ["check", "--json"]);
+}
+
+function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
     process.stderr.write("unknown flag(s): --__proto__\n");
     process.exit(2);
@@ -63,15 +93,29 @@ export function hostDeclarationProbes(): ProbeSet {
   };
 }
 
-/** Write agx's self-isolation declaration only after every explicit gate is measured. */
-export function declareRentedCodexHost(
+/** Declare host isolation through agx only after every explicit gate is measured. */
+export async function declareRentedCodexHost(
   options: DeclarationOptions,
-): DeclarationResult {
-  const { home, rented, hostname, date, probes, say } = options;
-  const path = join(home, RELATIVE_PATH);
-  if (lstatSync(path, { throwIfNoEntry: false }) !== undefined) {
-    say(`existing ~/${RELATIVE_PATH}; left untouched`);
+): Promise<DeclarationResult> {
+  const {
+    home,
+    rented,
+    hostname,
+    date,
+    probes,
+    say,
+    command = HOST_COMMAND,
+  } = options;
+  const checked = await checkAgxHost(home, command);
+  if (checked.code === 0) {
+    say("existing agx host declaration; left untouched");
     return "existing";
+  }
+  if (checked.code !== 1) {
+    say(
+      `agx host check failed: ${(checked.err.trim() === "" ? checked.out : checked.err).trim()}`,
+    );
+    return "invalid";
   }
   if (!probes.isContainer()) {
     say(
@@ -90,30 +134,24 @@ export function declareRentedCodexHost(
     );
     return "skipped";
   }
-
-  const directory = join(home, ".config/agx");
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  chmodSync(directory, 0o700);
   const refusal = `unshare -U true exited ${unshare.code}${unshare.detail === "" ? "" : ` (${unshare.detail})`}`;
   const reason = `Rented Vast container ${hostname}; ${refusal}; measured ${date}.`;
-  const contents = `schema = 1\nunsandboxed_reason = ${JSON.stringify(reason)}\n`;
-  const fd = openSync(path, "wx", 0o600);
-  writeFileSync(fd, contents, "utf8");
-  closeSync(fd);
-  chmodSync(path, 0o600);
-
-  const validated = readCodexHostDeclaration(path);
-  if (validated.kind !== "valid") {
+  const declared = await runHost(home, command, [
+    "declare",
+    "--unsandboxed-reason",
+    reason,
+  ]);
+  if (declared.code !== 0) {
     say(
-      `generated agx host declaration failed validation: ${validated.kind === "invalid" ? validated.reason : path}`,
+      `agx host declare failed: ${(declared.err.trim() === "" ? declared.out : declared.err).trim()}`,
     );
     return "invalid";
   }
-  say(`wrote ~/${RELATIVE_PATH} (0600)`);
+  say(`wrote agx host declaration: ${declared.out.trim()}`);
   return "written";
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const parsed = cli(
     {
       name: "agx-host.ts",
@@ -127,9 +165,7 @@ function main(): void {
         },
         check: { type: Boolean, description: "check for a valid declaration" },
       },
-      help: {
-        description: "Write or check agx's Linux host declaration.",
-      },
+      help: { description: "Write or check agx's Linux host declaration." },
     },
     undefined,
     Bun.argv.slice(2),
@@ -148,24 +184,14 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
-  const path = join(home, RELATIVE_PATH);
   if (parsed.flags.check === true) {
-    const declaration = readCodexHostDeclaration(path);
-    if (declaration.kind === "valid") {
-      process.stdout.write("valid ~/".concat(RELATIVE_PATH, "\n"));
-      return;
-    }
-    process.stderr.write(
-      declaration.kind +
-        " ~/" +
-        RELATIVE_PATH +
-        (declaration.kind === "invalid" ? ": " + declaration.reason : "") +
-        "\n",
-    );
-    process.exitCode = 1;
+    const checked = await checkAgxHost(home);
+    process.stdout.write(checked.out);
+    process.stderr.write(checked.err);
+    process.exitCode = checked.code;
     return;
   }
-  const result = declareRentedCodexHost({
+  const result = await declareRentedCodexHost({
     home,
     rented: parsed.flags.rented ?? false,
     hostname: Bun.env.HOSTNAME ?? "unknown",
@@ -175,12 +201,13 @@ function main(): void {
       process.stdout.write(line + "\n");
     },
   });
-  if (result === "invalid") {
-    process.exitCode = 1;
-    return;
-  }
-  if (result === "existing" && readCodexHostDeclaration(path).kind !== "valid")
-    process.exitCode = 1;
+  if (result === "invalid") process.exitCode = 1;
 }
 
-if (import.meta.main) main();
+if (import.meta.main) {
+  const result = await attempt(main);
+  if (!result.ok) {
+    process.stderr.write(`FATAL: ${errorMessage(result.error)}\n`);
+    process.exitCode = 2;
+  }
+}

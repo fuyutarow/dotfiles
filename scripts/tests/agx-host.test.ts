@@ -1,82 +1,46 @@
 import { describe, expect, test } from "bun:test";
-import {
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtemp, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { declareRentedCodexHost } from "../agx-host.ts";
-import { readCodexHostDeclaration } from "../agx-host-declaration.ts";
+import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { checkAgxHost, declareRentedCodexHost } from "../agx-host.ts";
 
-const home = (): string => mkdtempSync(join(tmpdir(), "agx-host-"));
+const FIXTURE = join(import.meta.dir, "fixtures/agx-host/command.ts");
+const ROOT = join(import.meta.dir, "../..");
 
-describe("codex host declaration reader", () => {
-  test("accepts a valid declaration and trims its reason", () => {
-    const path = join(home(), "host.toml");
-    writeFileSync(path, 'schema = 1\nunsandboxed_reason = "  rented box  "\n');
-    expect(readCodexHostDeclaration(path)).toEqual({
-      kind: "valid",
-      declaration: { unsandboxedReason: "rented box" },
+async function setup(check = 1, declare = 0) {
+  const home = await mkdtemp(join(tmpdir(), "agx-host-"));
+  await Bun.write(join(home, "check.exit"), String(check));
+  await Bun.write(join(home, "declare.exit"), String(declare));
+  return home;
+}
+
+async function calls(home: string) {
+  return (await Bun.file(join(home, "calls.jsonl")).text())
+    .trim()
+    .split("\n")
+    .map((line) => {
+      const parsed = jsonOf(z.array(z.string())).safeParse(line);
+      expect(parsed.success).toBe(true);
+      return parsed.data;
     });
-  });
+}
 
-  test.each([
-    'schema = 1\nunsandboxed_reason = "unterminated',
-    'schema = 2\nunsandboxed_reason = "rented box"\n',
-    'schema = "1"\nunsandboxed_reason = "rented box"\n',
-    'schema = 1\nunsandboxed_reason = "  "\n',
-    "schema = 1\n",
-    "schema = 1\nunsandboxed_reason = 17\n",
-    'schema = 1\nunsandboxed_reason = "rented box"\nextra = true\n',
-  ])("rejects an invalid declaration: %s", (contents) => {
-    const path = join(home(), "host.toml");
-    writeFileSync(path, contents);
-    const result = readCodexHostDeclaration(path);
-    expect(result.kind).toBe("invalid");
-    if (result.kind === "invalid")
-      expect(result.reason).toContain(
-        `${path} is not a valid host declaration`,
-      );
-  });
-
-  test("reports a missing declaration as absent", () => {
-    expect(readCodexHostDeclaration(join(home(), "agx/host.toml"))).toEqual({
-      kind: "absent",
-    });
-  });
-
-  test("reports a legacy declaration with the same migration diagnostic", () => {
-    const root = home();
-    const path = join(root, "agx/host.toml");
-    const legacyPath = join(root, "codex-run/host.toml");
-    mkdirSync(join(root, "codex-run"));
-    writeFileSync(
-      legacyPath,
-      'schema = 1\nunsandboxed_reason = "rented box"\n',
-    );
-    expect(readCodexHostDeclaration(path)).toEqual({
-      kind: "invalid",
-      reason: `legacy host declaration found; run: mv "${legacyPath}" "${path}"`,
-    });
-  });
-});
-
-function run(
+async function run(
+  check = 1,
+  declare = 0,
   overrides: Partial<Parameters<typeof declareRentedCodexHost>[0]> = {},
 ) {
-  const root = home();
+  const home = await setup(check, declare);
   const lines: string[] = [];
-  const result = declareRentedCodexHost({
-    home: root,
+  const result = await declareRentedCodexHost({
+    home,
+    command: [process.execPath, FIXTURE],
     rented: true,
     hostname: "vast-box-17",
     date: "2026-10-08",
     probes: {
-      isContainer: () => true,
+      isContainer: (): boolean => true,
       unshareUserNamespace: () => ({
         code: 1,
         detail: "Operation not permitted",
@@ -87,30 +51,64 @@ function run(
     },
     ...overrides,
   });
-  return {
-    root,
-    lines,
-    result,
-    path: join(root, ".config/agx/host.toml"),
-  };
+  return { result, lines, calls: await calls(home) };
 }
 
-describe("rented codex host bootstrap", () => {
-  test("container + measured user namespace refusal + explicit rental writes a valid private declaration", () => {
-    const r = run();
+describe("released host command provisioning", () => {
+  test("absence plus all measured gates delegates declaration with one literal reason argument", async () => {
+    const r = await run();
     expect(r.result).toBe("written");
-    expect(r.lines).toEqual(["wrote ~/.config/agx/host.toml (0600)"]);
-    const declaration = readCodexHostDeclaration(r.path);
-    expect(declaration.kind).toBe("valid");
-    if (declaration.kind === "valid")
-      expect(declaration.declaration.unsandboxedReason).toContain(
-        "vast-box-17",
-      );
-    const text = readFileSync(r.path, "utf8");
-    expect(text).toContain("2026-10-08");
-    expect(text).toContain("unshare -U true exited 1");
-    expect(statSync(r.path).mode & 0o777).toBe(0o600);
-    expect(statSync(join(r.root, ".config/agx")).mode & 0o777).toBe(0o700);
+    expect(r.calls).toEqual([
+      ["check", "--json"],
+      [
+        "declare",
+        "--unsandboxed-reason",
+        "Rented Vast container vast-box-17; unshare -U true exited 1 (Operation not permitted); measured 2026-10-08.",
+      ],
+    ]);
+    expect(r.lines).toEqual([
+      "wrote agx host declaration: /owner/selected/declaration",
+    ]);
+  });
+
+  test("valid declaration is left untouched without probing", async () => {
+    const r = await run(0, 0, {
+      probes: {
+        isContainer: (): boolean => {
+          expect.unreachable("must not probe");
+        },
+        unshareUserNamespace: () => {
+          expect.unreachable("must not probe");
+        },
+      },
+    });
+    expect(r.result).toBe("existing");
+    expect(r.calls).toEqual([["check", "--json"]]);
+  });
+
+  test.each([2, 75])(
+    "exit %s refuses instead of treating it as absence",
+    async (code) => {
+      const r = await run(code, 0, {
+        probes: {
+          isContainer: (): boolean => {
+            expect.unreachable("must not probe invalid declaration");
+          },
+          unshareUserNamespace: () => {
+            expect.unreachable("must not probe");
+          },
+        },
+      });
+      expect(r.result).toBe("invalid");
+      expect(r.lines[0]).toContain("agx host check failed");
+      expect(r.calls).toEqual([["check", "--json"]]);
+    },
+  );
+
+  test("declare refusal (including concurrent create) surfaces as failure", async () => {
+    const r = await run(1, 2);
+    expect(r.result).toBe("invalid");
+    expect(r.lines[0]).toContain("declaration refused: existing entry");
   });
 
   test.each([
@@ -133,38 +131,57 @@ describe("rented codex host bootstrap", () => {
         },
       },
     ],
-  ] as const)(
-    "failed gate writes nothing and reports why: %s",
-    (reason, overrides) => {
-      const r = run(overrides);
-      expect(r.result).toBe("skipped");
-      expect(r.lines).toHaveLength(1);
-      expect(r.lines[0]).toContain(reason);
-      expect(() => lstatSync(r.path)).toThrow();
+  ] as const)("failed gate never declares: %s", async (reason, overrides) => {
+    const r = await run(1, 0, overrides);
+    expect(r.result).toBe("skipped");
+    expect(r.lines[0]).toContain(reason);
+    expect(r.calls).toEqual([["check", "--json"]]);
+  });
+});
+
+describe("mise release routing and CLI exit mapping", () => {
+  test.each([0, 1, 2])(
+    "check preserves released exit %s and JSON output",
+    async (code) => {
+      const home = await setup(code);
+      const mise = join(home, "mise");
+      // Fixture substituted for the driven binary; pass through the host arguments only.
+      await Bun.write(
+        mise,
+        `#!${process.execPath}\nconst args = process.argv.slice(2);\nif (JSON.stringify(args.slice(0, 8)) !== JSON.stringify(["-C", ${JSON.stringify(ROOT)}, "exec", "--", "agx", "worker", "host", "check"])) process.exit(99);\nconst child = Bun.spawn([${JSON.stringify(process.execPath)}, ${JSON.stringify(FIXTURE)}, ...args.slice(7)], { stdout: "inherit", stderr: "inherit" });\nprocess.exitCode = await child.exited;\n`,
+      );
+      await chmod(mise, 0o700);
+      const proc = Bun.spawn(
+        [process.execPath, join(ROOT, "scripts/agx-host.ts"), "--check"],
+        {
+          env: {
+            ...process.env,
+            HOME: home,
+            PATH: `${home}:${process.env.PATH ?? ""}`,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      const [out, err, exit] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      expect(err).toBe("");
+      expect(exit).toBe(code);
+      expect(
+        jsonOf(z.object({ status: z.string() })).safeParse(out).data?.status,
+      ).toBe(["valid", "absent", "invalid"][code]);
+      expect(await calls(home)).toEqual([["check", "--json"]]);
     },
   );
 
-  test("an existing declaration is left untouched", () => {
-    const root = home();
-    const path = join(root, ".config/agx/host.toml");
-    mkdirSync(join(root, ".config/agx"), { recursive: true });
-    writeFileSync(path, "owned by the user\n", { mode: 0o640 });
-    const lines: string[] = [];
-    const result = declareRentedCodexHost({
-      home: root,
-      rented: true,
-      hostname: "new-host",
-      date: "2026-10-08",
-      probes: {
-        isContainer: () => true,
-        unshareUserNamespace: () => ({ code: 1, detail: "denied" }),
-      },
-      say: (line) => {
-        lines.push(line);
-      },
-    });
-    expect(result).toBe("existing");
-    expect(lines).toEqual(["existing ~/.config/agx/host.toml; left untouched"]);
-    expect(readFileSync(path, "utf8")).toBe("owned by the user\n");
+  test("public check helper maps unexpected failures to exit 2", async () => {
+    const home = await setup(75);
+    expect((await checkAgxHost(home, [process.execPath, FIXTURE])).code).toBe(
+      2,
+    );
   });
 });

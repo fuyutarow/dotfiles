@@ -3,8 +3,8 @@
 //
 // THE ROSTER (read through agx-worker roster --json) is the one
 // home of what may be dispatched, and agx is the one entry point: Jev picks a row from the
-// brief, codex rows run `codex exec` (agx-worker), claude rows run `claude -p` (tools/agx-worker/src/workers/run-claude.ts,
-// run-claude.ts, bounded by the roster's [claude_run]). Every run is logged, shown on the statusline
+// brief, codex rows run `codex exec` and claude rows run `claude -p`, both through the released
+// agx-worker (claude runs are bounded by the roster's [claude_run]). Every run is logged, shown on the statusline
 // Run: row and gradable — none of which an Agent or Workflow call would be.
 //
 // History: until 2026-10-06 a claude row ran as the Agent tool (`subagent_type: "<id>"`) and the

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.6 — 2026-10-24
+
+- Consume released agx doctor findings through status JSON
+
 ## 0.21.5 — 2026-10-23
 
 - Resolve the agx status collector through the dotfiles mise pin.

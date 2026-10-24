@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { workspaceCounts, doctorFindings } from "../src/agx-snapshot.ts";
+import { workspaceCounts } from "../src/agx-snapshot.ts";
 import { seedAgxSnapshot } from "./helpers.ts";
 import { fleetLine } from "../src/fleet-line.ts";
 
@@ -64,21 +64,11 @@ const tsv = JSON.stringify({
 });
 
 test("doctor findings retain every source kind, omit zero counts, and require a good observation for ok", () => {
-  const findings = doctorFindings(
-    JSON.stringify({
-      kinds: { orphaned: 1, stale: 1 },
-      lost: 1,
-      total: 2,
-      complete: true,
-    }),
-    at,
-  );
-  expect(findings).toEqual({
+  const findings = {
     kinds: { orphaned: 1, stale: 1 },
     lost: 1,
     capturedAt: at,
-  });
-  expect(doctorFindings("bad", at)).toBeUndefined();
+  };
   expect(fleetLine({ runs: [], unreadable: 0, findings }, at)).toContain(
     "agx ws refresh 1",
   );
@@ -90,10 +80,7 @@ test("doctor findings retain every source kind, omit zero counts, and require a 
       {
         runs: [],
         unreadable: 0,
-        findings: doctorFindings(
-          JSON.stringify({ kinds: {}, lost: 0, total: 0, complete: true }),
-          at,
-        ),
+        findings: { kinds: {}, lost: 0, capturedAt: at },
       },
       at,
     ),
@@ -229,12 +216,6 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
     join(import.meta.dir, "fixtures/fleet-folded-runs.json"),
     "utf8",
   );
-  const doctorOutput = JSON.stringify({
-    kinds: { orphaned: 1, unjudged: 1 },
-    lost: 1,
-    total: 2,
-    complete: true,
-  });
   for (const [name, age] of [
     ["fresh", 0],
     ["old", 180],
@@ -248,7 +229,11 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
     if (age >= 0) {
       const capturedAt = at - age * 1000;
       const workspaces = workspaceCounts(tsv, capturedAt);
-      const findings = doctorFindings(doctorOutput, capturedAt);
+      const findings = {
+        kinds: { orphaned: 1, unjudged: 1 },
+        lost: 1,
+        capturedAt,
+      };
       seedAgxSnapshot(
         { HOME: home },
         {

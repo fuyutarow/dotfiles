@@ -57,6 +57,10 @@ const status = {
     stale: false,
   },
   findings: {
+    schema: 1,
+    findings: [],
+    total: 6,
+    complete: true,
     kinds: { orphaned: 2, unjudged: 4 },
     lost: 2,
     captured_at: at,
@@ -344,4 +348,43 @@ process.stdout.write(JSON.stringify(await readCoreRuns(process.env, "session", p
   expect(scan.actions).toEqual({ judge: 4, land: 2 });
   expect(scan.fleet).toEqual({ here: 1, other: 2 });
   expect(await Bun.file(env.AGX_CALLS).exists()).toBe(false);
+});
+
+test("C1 additive findings and incomplete observations retain owner facts", async () => {
+  const env = await fixture("doctor-contract");
+  const wire = {
+    ...status,
+    future: "additive",
+    findings: {
+      ...status.findings,
+      complete: false,
+      stale: false,
+      kinds: { "future.kind / arbitrary": 3 },
+      lost: 0,
+      members: "not consumed",
+    },
+  };
+  await writeFile(env.AGX_STATUS_FILE, JSON.stringify(wire));
+  const result = await collectAgxStatus(env.HOME, env);
+  const snapshot = result.match(
+    (value) => adaptAgxStatus(value),
+    (error) => expect.unreachable(error),
+  );
+  expect(snapshot.findings).toMatchObject({
+    kinds: { "future.kind / arbitrary": 3 },
+    lost: 0,
+    stale: true,
+  });
+  await writeFile(
+    env.AGX_STATUS_FILE,
+    JSON.stringify({ ...wire, findings: { ...wire.findings, schema: 2 } }),
+  );
+  expect(failure(await collectAgxStatus(env.HOME, env))).toContain(
+    "invalid schema-1 JSON",
+  );
+  await cache(env, env.HOME, { ...wire, schema: 2 });
+  expect((await readAgxSnapshotAsync(env, env.HOME)).runSource).toEqual({
+    kind: "unknown",
+    why: "invalid schema-1 agx status",
+  });
 });

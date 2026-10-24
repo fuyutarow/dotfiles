@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "findings": [
+    {
+      "tool": "agx-worker",
+      "object": "/fixture/repo/run",
+      "finding": "unjudged",
+      "remedy": "agx worker judge fixture accept|reject"
+    }
+  ],
+  "kinds": {
+    "unjudged": 1
+  },
+  "total": 1,
+  "lost": 0,
+  "complete": true,
+  "captured_at": 1700000000000,
+  "members": [
+    {
+      "tool": "agx-worker",
+      "exit": 1,
+      "complete": true
+    },
+    {
+      "tool": "agx-ws",
+      "exit": 0,
+      "complete": true
+    },
+    {
+      "tool": "agx-ticket",
+      "exit": 0,
+      "complete": true
+    }
+  ]
+}

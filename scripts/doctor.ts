@@ -1,3 +1,4 @@
+import { DoctorStatus } from "../tools/shared/src/doctor-record.ts";
 // `mise run doctor` — does THIS machine realize what the dotfiles declare? READ-ONLY: every check
 // compares a declared source of truth against the live machine and changes nothing. Consumer: a
 // human or agent reading verdict lines; each FAIL carries the command that repairs it.
@@ -82,7 +83,7 @@ import {
 import { configHome, declaredProvider } from "../agents/codex/runtime.ts";
 import { danglingRepoBins } from "./deps-prune.ts";
 import { obj } from "../agents/hooks/narrow.ts";
-import { jsonText } from "../agents/hooks/zod.ts";
+import { jsonOf, jsonText } from "../agents/hooks/zod.ts";
 import {
   drift,
   readDeclared,
@@ -2015,31 +2016,46 @@ export async function checkAgx(
   ctx: Ctx,
   probe: typeof run = run,
 ): Promise<Finding> {
-  const result = await probe(["bun", "scripts/agx-doctor.ts"], {
-    ms: 30_000,
-    cwd: ctx.dotfiles,
-  });
+  const result = await probe(
+    ["mise", "-C", ctx.dotfiles, "exec", "--", "agx", "status", "--json"],
+    {
+      ms: 30_000,
+      cwd: ctx.dotfiles,
+    },
+  );
   if (result.missing)
-    return fail("agx", "bun is not on PATH", "mise run install:tools");
-  if (result.timedOut)
-    return warn("agx", "agx worker doctor timed out after 30s");
-  const lines = result.out.split(/\r?\n/u).filter(Boolean);
-  if (result.code === 0) {
-    const summary = result.err.trim();
-    return pass("agx", summary !== "" ? summary : "fleet clean");
-  }
-  if (result.code === 1)
+    return fail("agx", "mise is not on PATH", "mise run install:tools");
+  if (result.timedOut) return warn("agx", "agx status timed out after 30s");
+  if (result.code !== 0)
+    return warn(
+      "agx",
+      result.err.trim() !== ""
+        ? result.err.trim()
+        : `agx status exited ${result.code}`,
+    );
+  const parsed = jsonOf(DoctorStatus).safeParse(result.out);
+  if (!parsed.success)
+    return warn("agx", "agx status returned invalid schema-1 doctor findings");
+  const findings = parsed.data.findings;
+  if (findings === null)
+    return warn("agx", "doctor findings unavailable; run agx doctor --json");
+  const lines = findings.findings.map((record) => JSON.stringify(record));
+  if (!findings.complete || findings.stale === true)
+    return {
+      ...warn(
+        "agx",
+        "doctor findings incomplete or stale; run agx doctor --json",
+      ),
+      lines,
+    };
+  if (findings.total > 0)
     return fail(
       "agx",
-      `${lines.length} fleet finding(s)`,
-      "bun scripts/agx-doctor.ts",
+      `${findings.total} fleet finding(s)`,
+      "agx doctor --json",
       lines,
     );
-  const detail = result.err.trim();
-  return warn(
-    "agx",
-    detail !== "" ? detail : `agx worker doctor exited ${result.code}`,
-  );
+  return pass("agx", "fleet clean");
 }
 
 type Check = {

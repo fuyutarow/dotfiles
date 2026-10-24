@@ -1,3 +1,4 @@
+import { DoctorFindings } from "../../shared/src/doctor-record.ts";
 import { resolve } from "node:path";
 import { readOwnerState } from "./owner-state.ts";
 import { jsonOf, z } from "./zod.ts";
@@ -15,17 +16,11 @@ const WorkspaceCountsSchema = () =>
 export type WorkspaceCounts = z.output<
   ReturnType<typeof WorkspaceCountsSchema>
 >;
-const FindingsSchema = () =>
-  z.object({
-    kinds: z.record(
-      z.string().regex(/^[a-z0-9-]+$/u),
-      z.number().int().nonnegative(),
-    ),
-    lost: z.number().int().nonnegative(),
-    capturedAt: z.number(),
-    stale: z.boolean().optional(),
-  });
-export type FleetFindings = z.output<ReturnType<typeof FindingsSchema>>;
+// Internal presentation names are derived from the shared CLI projection.
+export type FleetFindings = Omit<
+  z.output<typeof DoctorFindings>,
+  "schema" | "complete" | "captured_at"
+> & { capturedAt: number };
 
 const SessionCountsSchema = z.lazy(() =>
   z.object({
@@ -87,12 +82,7 @@ export const AgxStatusSchema = z.object({
       fleet_known: z.boolean().optional(),
     })
     .nullable(),
-  findings: FindingsSchema()
-    .omit({ capturedAt: true })
-    .extend({
-      captured_at: z.number(),
-    })
-    .nullable(),
+  findings: DoctorFindings.nullable(),
   judgments: z.object({
     by_session: z.record(z.string(), z.number().int().nonnegative()),
     repository: z.number().int().nonnegative(),
@@ -139,7 +129,7 @@ export function adaptAgxStatus(
             kinds: findings.kinds,
             lost: findings.lost,
             capturedAt: findings.captured_at,
-            stale: findings.stale,
+            stale: findings.stale === true || !findings.complete,
           },
   };
 }
@@ -164,13 +154,18 @@ export async function readAgxSnapshotAsync(
   const key = scoped ?? keys[0];
   const field = key === undefined ? undefined : owner?.fields[key];
   const parsed = AgxStatusSchema.safeParse(field?.value);
-  if (!parsed.success)
+  if (!parsed.success) {
+    const why =
+      field === undefined
+        ? "snapshot unavailable"
+        : "invalid schema-1 agx status";
     return {
       rows: undefined,
-      runSource: { kind: "unknown", why: "snapshot unavailable" },
+      runSource: { kind: "unknown", why },
       ageSeconds: undefined,
-      reason: "snapshot unavailable",
+      reason: why,
     };
+  }
   const snapshot = adaptAgxStatus(parsed.data);
   if (scoped === undefined) {
     if (snapshot.workspaces !== undefined) snapshot.workspaces.here = undefined;
@@ -198,22 +193,6 @@ export async function readAgxSnapshotAsync(
   return snapshot;
 }
 
-export function doctorFindings(
-  output: string,
-  capturedAt: number,
-): FleetFindings | undefined {
-  const parsed = jsonOf(
-    FindingsSchema()
-      .omit({ capturedAt: true })
-      .extend({
-        complete: z.literal(true),
-        total: z.number(),
-      }),
-  ).safeParse(output);
-  return parsed.success
-    ? { kinds: parsed.data.kinds, lost: parsed.data.lost, capturedAt }
-    : undefined;
-}
 export function workspaceCounts(
   output: string,
   capturedAt: number,

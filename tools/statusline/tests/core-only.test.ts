@@ -1,8 +1,9 @@
+import { seedAgxSnapshot } from "./helpers.ts";
 import { afterAll, afterEach, beforeEach, expect, test, spyOn } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { doctorFindings, workspaceCounts } from "../src/agx-snapshot.ts";
+import { workspaceCounts } from "../src/agx-snapshot.ts";
 import { agxRouteRunsAsync, routeLines } from "../src/dispatch-runs.ts";
 import { ok } from "neverthrow";
 import { render } from "../src/format.ts";
@@ -104,14 +105,23 @@ await writeFile(
   join(env.AGX_STATE_DIR, "workspace-verdicts.json"),
   JSON.stringify(workspace),
 );
-await writeFile(join(env.AGX_STATE_DIR, "doctor.json"), JSON.stringify(doctor));
+seedAgxSnapshot(
+  env,
+  {
+    output: JSON.stringify(listing),
+    capturedAt: at,
+    findings: { kinds: doctor.kinds, lost: doctor.lost, capturedAt: at },
+    workspaces: { ...workspace.counts, capturedAt: at },
+  },
+  cwd,
+);
 await writeFile(
   join(env.AGX_STATE_DIR, "records.jsonl"),
   "poison: renderer must not read this",
 );
 
 test("fixed core outputs are rendered verbatim; bf3bb781 has no working row and lost is doctor's zero", async () => {
-  expect(doctorFindings(JSON.stringify(doctor), at)?.lost).toBe(0);
+  expect(doctor.lost).toBe(0);
   expect(workspaceCounts(JSON.stringify(workspace), at)?.total).toBe(89);
   const scan = await agxRouteRunsAsync(env, "here", false, cwd);
   const out = render({
@@ -145,6 +155,7 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
     ...env,
     AGX_STATE_DIR: state,
     XDG_STATE_HOME: state,
+    STATUSLINE_OWNER_STATE: join(state, "owner.json"),
   };
   const codexSession = "01a15424-5f6d-7ce0-9244-eb632a37f579";
   const claudeSession = "47cecd33-9bd9-42b8-be16-8f17bb0bae76";
@@ -183,11 +194,13 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
       vendor_session: null,
     },
   ];
-  await writeFile(
-    join(state, "current-runs.json"),
-    JSON.stringify({
+  seedAgxSnapshot(
+    isolatedEnv,
+    {
       output: JSON.stringify({
-        runs: workers,
+        runs: workers.map((row) =>
+          Object.assign({}, row, { phase: "working" }),
+        ),
         summary: {
           running: 3,
           unattributed: 0,
@@ -199,8 +212,8 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
         },
       }),
       capturedAt: at,
-      exit: 0,
-    }),
+    },
+    cwd,
   );
 
   const scan = await readCoreRuns(isolatedEnv, codexSession, cwd);

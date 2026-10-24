@@ -57,7 +57,17 @@ export function seedAgxSnapshot(
     findings:
       findings === undefined
         ? null
-        : { ...findings, captured_at: findings.capturedAt },
+        : {
+            ...findings,
+            schema: 1,
+            findings: [],
+            complete: true,
+            total: Object.values(findings.kinds).reduce(
+              (sum, count) => sum + count,
+              0,
+            ),
+            captured_at: findings.capturedAt,
+          },
     judgments: { by_session: {}, repository: 0, land: 0, why: null },
   };
   const path = ownerStatePath(env);

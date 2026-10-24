@@ -1,3 +1,5 @@
+import { DoctorStatus } from "../../tools/shared/src/doctor-record.ts";
+import { jsonOf } from "../../tools/shared/src/zod.ts";
 // bun test for scripts/doctor.ts — spawned end-to-end against throwaway HOME / DOTFILES trees
 // (DOCTOR_ONLY narrows to the checks a fixture can drive); the real $HOME is never touched.
 // Each FAIL case is paired with its PASS twin so a check that always passes, or always fails,
@@ -82,45 +84,90 @@ function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-test("mise doctor has an agx fleet row and reports its findings", async () => {
+const c1Parsed = jsonOf(DoctorStatus).safeParse(
+  await Bun.file(
+    join(import.meta.dir, "fixtures/agx-status-schema1.json"),
+  ).text(),
+);
+const c1Status = c1Parsed.success
+  ? c1Parsed.data
+  : expect.unreachable(c1Parsed.error.message);
+const agxCtx: Ctx = {
+  home: "/fixture/home",
+  dotfiles: "/fixture/dotfiles",
+  isMac: false,
+  isWsl: false,
+  isCoreBox: false,
+};
+const probeResult = {
+  code: 0,
+  out: "",
+  err: "",
+  timedOut: false,
+  missing: false,
+};
+
+test("mise doctor reads findings through pinned status without refreshing", async () => {
   expect(CHECKS.some((check) => check.name === "agx")).toBe(true);
-  const ctx: Ctx = {
-    home: "/fixture/home",
-    dotfiles: "/fixture/dotfiles",
-    isMac: false,
-    isWsl: false,
-    isCoreBox: false,
-  };
-  const finding =
-    "agx-ws\trepo\tws_old\tunlanded-72h\tcd repo.ws/ws_old && mise run land";
-  const failed = await checkAgx(ctx, async (cmd, opts) => {
-    await Promise.resolve();
-    expect(cmd).toEqual(["bun", "scripts/agx-doctor.ts"]);
-    expect(opts.cwd).toBe(ctx.dotfiles);
-    return {
-      code: 1,
-      out: `${finding}\n`,
-      err: "summary\n",
-      timedOut: false,
-      missing: false,
-    };
+  const failed = await checkAgx(agxCtx, (cmd, opts) => {
+    expect(cmd).toEqual([
+      "mise",
+      "-C",
+      agxCtx.dotfiles,
+      "exec",
+      "--",
+      "agx",
+      "status",
+      "--json",
+    ]);
+    expect(opts.cwd).toBe(agxCtx.dotfiles);
+    return Promise.resolve({ ...probeResult, out: JSON.stringify(c1Status) });
   });
   expect(failed).toMatchObject({
     name: "agx",
     verdict: "FAIL",
-    lines: [finding],
+    detail: "1 fleet finding(s)",
+    lines: [JSON.stringify(c1Status.findings?.findings[0])],
   });
-  const clean = await checkAgx(ctx, async () => {
-    await Promise.resolve();
-    return {
-      code: 0,
-      out: "",
-      err: "agx worker doctor: 0 finding(s)\n",
-      timedOut: false,
-      missing: false,
-    };
-  });
+  const clean = await checkAgx(agxCtx, () =>
+    Promise.resolve({
+      ...probeResult,
+      out: JSON.stringify({
+        ...c1Status,
+        findings: { ...c1Status.findings, findings: [], total: 0 },
+      }),
+    }),
+  );
   expect(clean.verdict).toBe("PASS");
+});
+
+test.each([
+  { name: "null", findings: null },
+  { name: "incomplete", findings: { ...c1Status.findings, complete: false } },
+  { name: "stale", findings: { ...c1Status.findings, stale: true } },
+  { name: "unsupported", findings: { ...c1Status.findings, schema: 2 } },
+])("doctor $name findings remain visibly unavailable", async ({ findings }) => {
+  const result = await checkAgx(agxCtx, () =>
+    Promise.resolve({
+      ...probeResult,
+      out: JSON.stringify({ ...c1Status, findings }),
+    }),
+  );
+  expect(result.verdict).toBe("WARN");
+  expect(result.detail).toMatch(
+    /unavailable|incomplete or stale|invalid schema-1/u,
+  );
+});
+
+test.each([
+  { ...probeResult, out: "not JSON" },
+  { ...probeResult, out: JSON.stringify({ ...c1Status, schema: 2 }) },
+  { ...probeResult, code: 2, err: "fixture collection failed" },
+  { ...probeResult, timedOut: true },
+])("doctor status failure never becomes clean", async (response) => {
+  expect(
+    (await checkAgx(agxCtx, () => Promise.resolve(response))).verdict,
+  ).toBe("WARN");
 });
 
 function doctor(
@@ -638,12 +685,22 @@ describe("doctor", () => {
     const target = tmp("doctor-render-target-");
     mkdirSync(join(target, ".bun/bin"), { recursive: true });
     writeFileSync(join(target, ".bun/bin/statusline"), "#!/bin/sh\n");
+    // The scratch mise home deliberately has no installed tools. Supply the recorded
+    // roster response so this Bun-resolution test never downloads the agx suite.
+    const fixtureBin = join(scratch, "bin");
+    mkdirSync(fixtureBin);
+    writeFileSync(
+      join(fixtureBin, "mise"),
+      `#!${process.execPath}\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== ${JSON.stringify(JSON.stringify(["-C", REPO, "exec", "--", "agx-worker", "roster", "--json"]))}) process.exit(99);\nprocess.stdout.write(await Bun.file(${JSON.stringify(join(import.meta.dir, "fixtures/agx-roster-schema1.json"))}).text());\n`,
+      { mode: 0o755 },
+    );
     const privateOverlay = join(scratch, "missing-settings.private.json");
     const proc = Bun.spawnSync([BUN_EXEC, RENDER_HOME], {
       env: {
         ...process.env,
         HOME: scratch,
         COMMAND_TARGET_HOME: target,
+        PATH: `${fixtureBin}:${process.env.PATH ?? ""}`,
         DOTFILES: REPO,
         // This fixture checks Bun resolution against WIP code, explicitly into scratch HOME.
         DOTFILES_RENDER_FROM_WORKING_COPY: "1",

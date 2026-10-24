@@ -1,5 +1,4 @@
 import { z } from "./zod.ts";
-import type { Attempt } from "./attempt.ts";
 
 export const DoctorRecord = z.object({
   tool: z.string().min(1),
@@ -9,25 +8,25 @@ export const DoctorRecord = z.object({
 });
 export type DoctorRecord = z.output<typeof DoctorRecord>;
 
-/** Keep classifier inventory columns internal; publish one validated JSONL shape. */
-export function doctorOutput(lines: string[]): Attempt<string> {
-  const records: string[] = [];
-  for (const line of lines) {
-    const [tool, repo, object, finding, remedy] = line.split("\t");
-    const parsed = DoctorRecord.safeParse({
-      tool,
-      object:
-        repo === undefined || object === undefined
-          ? undefined
-          : `${repo}/${object}`,
-      finding,
-      remedy,
-    });
-    if (!parsed.success) return { ok: false, error: parsed.error };
-    records.push(JSON.stringify(parsed.data));
-  }
-  return {
-    ok: true,
-    value: records.length === 0 ? "" : `${records.join("\n")}\n`,
-  };
-}
+/** Projection of released C1 CLI JSON, not agx's private persistence format.
+ * Ignore additive fields and accept finding names introduced by the owner.
+ */
+export const DoctorFindings = z.object({
+  schema: z.literal(1),
+  kinds: z.record(z.string(), z.number().int().nonnegative()),
+  lost: z.number().int().nonnegative(),
+  complete: z.boolean(),
+  captured_at: z.number(),
+  stale: z.boolean().optional(),
+});
+
+/** Only the findings portion of agx status is consumed by dotfiles doctor. */
+export const DoctorStatus = z.object({
+  schema: z.literal(1),
+  findings: DoctorFindings.pick({ schema: true, complete: true, stale: true })
+    .extend({
+      findings: z.array(DoctorRecord),
+      total: z.number().int().nonnegative(),
+    })
+    .nullable(),
+});

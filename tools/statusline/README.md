@@ -251,21 +251,17 @@ can be checked independently of unrelated concurrent edits elsewhere in this rep
 
 ### Owner-published agx facts
 
-The agx and fleet rows read `current-runs.json`, `workspace-verdicts.json`, and
-`doctor.json` under the agx state directory. Run appends publish current rows and
-session counts; `agx ws gc` and successful workspace creation/removal publish verdicts;
-`agx worker doctor` publishes complete findings. Rendering never starts a refresh for
-these rows. Missing observations remain unknown and older observations retain
-their values. An idle file does not become stale just because time has passed:
-`current-runs.json` is stale only when its mtime precedes `records.jsonl`;
-`doctor.json` is stale only when it precedes the newer of `records.jsonl` and
-`workspace-verdicts.json`. A failed watch-mode read retains the last owner value
-and shows its original age. `agx-doctor.path` triggers a debounced singleton
-refresh after either diagnostic input changes.
+The sampler runs the pinned `agx status --json --cwd DIR` and caches the
+published CLI response. Rendering reads only that sampler cache. Agx owns refresh,
+aggregation, private storage, and freshness; dotfiles does not read or write agx's
+doctor files. `agx-doctor.service` runs `agx doctor --json` and accepts exits 0
+(clean) and 1 (findings). The path trigger and debounce timing remain unchanged.
 
-Workspace inventory totals remain available in `agx ws ls` and `agx worker doctor`. The statusline reads `records.jsonl` for completed-run judgments (the current-runs owner intentionally publishes only active and orphaned rows). `judge` counts unjudged runs that ended within the last 24 hours in the rendered dispatcher session. Without a session, it counts recent runs whose workspace belongs to the current repository, using the owner's repository roots and workspace membership; an unknown repository shows `judge n/a` with a reason. Missing, invalid and future end timestamps never count. Older history stays in `agx worker doctor`.
-
-`land` joins accepted runs to the current repository's `workspace-verdicts.json` lines and counts only `unlanded` verdicts whose workspace directory still exists. Counts are runs, not workspaces. A landed verdict or `landed` judgment clears the landing item; a missing verdict does not imply unlanded work. Rendering performs no refresh or synchronous filesystem calls for these actions.
+The shared `doctor-record.ts` adapter projects schema-1 findings from CLI JSON.
+Unknown finding strings and additive fields are tolerated. Unsupported schemas
+fail visibly. Missing findings remain unknown; incomplete findings are marked stale.
+Workspace counts, completed-run judgments, and landing actions come from the
+published status response, with repository/session scope supplied by agx.
 
 Prepared standalone rows use repository scope even when agent sessions are discovered. Prepared views carry an action-scope protocol marker so historical counters cannot survive in an older cached view; a selected session rebuilds its own actions.
 

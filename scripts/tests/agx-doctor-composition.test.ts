@@ -1,128 +1,102 @@
+// Released CLI compatibility, replacing tests of dotfiles-owned composition/storage.
 import { expect, test } from "bun:test";
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  DoctorFindings,
+  DoctorStatus,
+} from "../../tools/shared/src/doctor-record.ts";
 import { jsonOf, z } from "../../tools/shared/src/zod.ts";
-import { DoctorRecord } from "../../tools/shared/src/doctor-record.ts";
 
-const entry = join(import.meta.dir, "../agx-doctor.ts");
-async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "agx-doctor-compose-"));
-  const bin = join(root, "bin");
-  await mkdir(bin);
-  for (const tool of ["agx-worker", "agx-ws", "agx-ticket"]) {
-    const path = join(bin, tool);
-    await writeFile(
-      path,
-      `#!${process.execPath}\nconst tool=${JSON.stringify(tool)};\nif (JSON.stringify(process.argv.slice(2)) !== JSON.stringify(["doctor", "--quiet"]) || Object.hasOwn(process.env, "AGX_DOCTOR_QUIET")) { console.error("invalid doctor quiet transport"); process.exit(2); }\nif(process.env.MODE==="malformed" && tool==="agx-ws") {process.stdout.write("not json\\n");}\nelse if(process.env.MODE!=="clean" && !(process.env.MODE==="empty-failure" && tool==="agx-ws")) process.stdout.write(JSON.stringify({tool,object:tool+"-object",finding:"fixture",remedy:"repair"})+"\\n");\nprocess.exitCode=process.env.MODE==="clean"?0:(tool==="agx-ws" && process.env.MODE==="failure"?3:1);\n`,
-    );
-    await chmod(path, 0o755);
-  }
-  return {
-    root,
-    bin,
-    async [Symbol.asyncDispose]() {
-      await rm(root, { recursive: true, force: true });
-    },
-  };
-}
-async function invoke(
-  f: { root: string; bin: string },
-  mode: string,
-  env: NodeJS.ProcessEnv = {},
-  state = join(f.root, "state"),
-) {
-  const child = Bun.spawn([process.execPath, entry], {
-    env: {
-      ...process.env,
-      PATH: f.bin,
-      AGX_STATE_DIR: join(f.root, "state"),
-      MODE: mode,
-      ...env,
-    },
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: 5000,
-  });
-  const [out, err, exit] = await Promise.all([
-    child.stdout.text(),
-    child.stderr.text(),
-    child.exited,
-  ]);
-  const snapshot = jsonOf(
-    z.object({
-      complete: z.boolean(),
-      total: z.number(),
-      findings: z.array(z.string()),
-    }),
-  ).safeParse(await readFile(join(state, "doctor.json"), "utf8"));
-  expect(snapshot.success).toBe(true);
-  return {
-    out,
-    err,
-    exit,
-    snapshot: snapshot.success
-      ? snapshot.data
-      : { complete: false, total: 0, findings: [] },
-  };
-}
-test("diagnostic composition concatenates owner JSON Lines and preserves findings failure", async () => {
-  await using f = await fixture();
-  const result = await invoke(f, "findings");
-  expect(result.exit).toBe(1);
-  const lines = result.out.trim().split("\n");
-  expect(lines).toEqual(result.snapshot.findings);
-  expect(
-    lines.map((line) => jsonOf(DoctorRecord).safeParse(line).success),
-  ).toEqual([true, true, true]);
-  expect(result.snapshot).toMatchObject({ complete: true, total: 3 });
-});
-test("clean doctors produce an empty successful concatenation", async () => {
-  await using f = await fixture();
-  const result = await invoke(f, "clean");
-  expect(result.exit).toBe(0);
-  expect(result.out).toBe("");
-  expect(result.snapshot).toMatchObject({ complete: true, total: 0 });
-});
-test.each(["failure", "empty-failure", "malformed", "missing"])(
-  "doctor %s invalidates the previous complete snapshot and fails visibly",
-  async (mode) => {
-    await using f = await fixture();
-    expect((await invoke(f, "clean")).snapshot.complete).toBe(true);
-    if (mode === "missing") await rm(join(f.bin, "agx-ws"));
-    const result = await invoke(f, mode);
-    expect(result.exit).toBe(2);
-    expect(result.err).not.toBe("");
-    expect(result.snapshot.complete).toBe(false);
-  },
+const fixtureText = await Bun.file(
+  join(import.meta.dir, "fixtures/agx-status-schema1.json"),
+).text();
+const fixtureResult = jsonOf(DoctorStatus).safeParse(fixtureText);
+const fixture = fixtureResult.success
+  ? fixtureResult.data
+  : expect.unreachable(fixtureResult.error.message);
+const aggregateText = await Bun.file(
+  join(import.meta.dir, "fixtures/agx-doctor-schema1.json"),
+).text();
+const aggregateResult = jsonOf(z.record(z.string(), z.unknown())).safeParse(
+  aggregateText,
 );
+const aggregate = aggregateResult.success
+  ? aggregateResult.data
+  : expect.unreachable(aggregateResult.error.message);
 
-test.each(["xdg", "home"])(
-  "doctor snapshot follows the %s fallback with empty overrides",
-  async (fallback) => {
-    await using f = await fixture();
-    const home = join(f.root, "home");
-    const xdg = fallback === "xdg" ? join(f.root, "xdg") : "";
-    const state =
-      fallback === "xdg" ? join(xdg, "agx") : join(home, ".local/state/agx");
-    const result = await invoke(
-      f,
-      "clean",
-      { HOME: home, XDG_STATE_HOME: xdg, AGX_STATE_DIR: "" },
-      state,
-    );
-    expect(result.exit).toBe(0);
-    expect(result.snapshot.complete).toBe(true);
-    expect(await Bun.file(join(state, "legacy-v1/doctor.json")).exists()).toBe(
+test("recorded schema-1 CLI findings project owner counts and ignore unused fields", () => {
+  expect(DoctorFindings.safeParse(aggregate)).toMatchObject({
+    success: true,
+    data: {
+      schema: 1,
+      kinds: { unjudged: 1 },
+      lost: 0,
+      complete: true,
+      captured_at: 1700000000000,
+    },
+  });
+  expect(fixture.findings?.total).toBe(1);
+  expect(
+    DoctorFindings.safeParse({
+      ...aggregate,
+      members: "unused additive data",
+      findings: "unused by statusline",
+    }).success,
+  ).toBe(true);
+});
+test("additive fields and unknown finding strings survive both projections", () => {
+  const findings = {
+    ...aggregate,
+    kinds: { "future.kind / arbitrary": 7 },
+    future: true,
+  };
+  expect(DoctorFindings.safeParse(findings)).toMatchObject({
+    success: true,
+    data: { kinds: { "future.kind / arbitrary": 7 } },
+  });
+  expect(
+    DoctorStatus.safeParse({
+      ...fixture,
+      future: true,
+      findings: {
+        ...fixture.findings,
+        findings: [
+          {
+            tool: "future-tool",
+            object: "future-object",
+            finding: "future.kind / arbitrary",
+            remedy: "inspect",
+            extra: true,
+          },
+        ],
+      },
+    }),
+  ).toMatchObject({
+    success: true,
+    data: { findings: { findings: [{ finding: "future.kind / arbitrary" }] } },
+  });
+});
+test("null, incomplete and stale remain distinct from clean findings", () => {
+  expect(DoctorStatus.safeParse({ schema: 1, findings: null })).toMatchObject({
+    success: true,
+    data: { findings: null },
+  });
+  expect(
+    DoctorFindings.safeParse({ ...aggregate, complete: false, stale: true }),
+  ).toMatchObject({ success: true, data: { complete: false, stale: true } });
+});
+test.each([0, 2, "1", undefined])(
+  "unknown schema %s is rejected at each CLI boundary",
+  (schema) => {
+    expect(DoctorFindings.safeParse({ ...aggregate, schema }).success).toBe(
       false,
     );
+    expect(DoctorStatus.safeParse({ ...fixture, schema }).success).toBe(false);
+    expect(
+      DoctorStatus.safeParse({
+        ...fixture,
+        findings: { ...fixture.findings, schema },
+      }).success,
+    ).toBe(false);
   },
 );

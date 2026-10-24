@@ -10,8 +10,10 @@ Environment=PATH=%h/.bun/bin:%h/.local/bin:%h/.linuxbrew/bin:/home/linuxbrew/.li
 # input changes during this window and the run; doctor starts at most once/60s.
 # Keep StartLimitIntervalSec=0: a rate-limit rejection would disable the path.
 ExecStartPre=/usr/bin/sleep 60
-ExecStart=/usr/bin/env bun %h/dotfiles/scripts/agx-doctor.ts --json
+# Transitional until agx-doctor-deadline-1024 raises the per-member default; remove --timeout-ms when dotfiles pins that release.
+ExecStart=/usr/bin/env mise -C %h/dotfiles exec -- agx doctor --json --timeout-ms 60000
 SuccessExitStatus=1
-TimeoutStartSec=120s
+# Budget: 60s pre-delay + 3 x 60s member deadlines + 60s startup/publication margin.
+TimeoutStartSec=300s
 StandardOutput=journal
 StandardError=journal

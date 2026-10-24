@@ -468,7 +468,6 @@ if (argv[1] === 'commit' && process.env.LAND_CHECK_IGNORE === '1') {
  if (fs.existsSync(path.join(process.cwd(), 'git/ignore')) && fs.readFileSync(path.join(process.cwd(), 'git/ignore'), 'utf8').includes('INVALID-LINT')) { process.stderr.write('lint:ignore refused\\n'); process.exit(9); }
 }
 if (argv[1] === 'deps' || argv[1] === 'hook:post-merge') process.exit(0);
-if (argv[1] === 'usehooks:consumers') { process.stdout.write('PASS fixture consumer\\n'); process.exit(process.env.LAND_FAIL_CONSUMERS === '1' ? 1 : 0); }
 if (argv[1] === 'doctor') { process.stdout.write('PASS fixture healthy\\nRESULT: PASS · FAIL 0 · WARN 0 · PASS 1 · SKIP 0\\n'); process.exit(0); }
 if (argv[0] === 'show') { process.stdout.write(JSON.stringify({ judgment: process.env.LAND_NO_ACCEPT === '1' ? null : { kind: 'acceptance', accept: true } })); process.exit(0); }
 if (process.env.LAND_FAIL_COMMIT === '1' || argv[argv.indexOf('-m') + 1] === 'Fail queued') { if (process.env.LAND_NOISY_COMMIT === '1') writeSync(1, 'FAIL settings.json:4 → missing target retired.ts\\n' + 'fixture output\\n'.repeat(12000)); process.stderr.write('hook:pre-commit refused: fixture refusal\\n'); process.exit(9); }
@@ -940,40 +939,6 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     expect(result.stdout.toString()).toContain("[land] summary: LIVE");
   });
 
-  test("usehooks changes check consumers before commit and refuse hook errors", async () => {
-    const f = await fixture();
-    await mkdir(join(f.worker, "tools/agx-usehooks/src"), { recursive: true });
-    await writeFile(
-      join(f.worker, "tools/agx-usehooks/src/index.ts"),
-      "export const fixture = true;\n",
-    );
-    const refused = await f.land([], { LAND_FAIL_CONSUMERS: "1" });
-    expect(refused.exitCode).toBe(1);
-    const refusedLog = await f.log();
-    expect(refusedLog.some((args) => args[1] === "usehooks:consumers")).toBe(
-      true,
-    );
-    expect(refusedLog.some((args) => args[1] === "commit")).toBe(false);
-    expect(
-      await pathExists(join(f.main, "tools/agx-usehooks/src/index.ts")),
-    ).toBe(false);
-  });
-  test("passing consumer gate precedes land commit", async () => {
-    const f = await fixture();
-    await mkdir(join(f.worker, "tools/agx-usehooks/src"), { recursive: true });
-    await writeFile(
-      join(f.worker, "tools/agx-usehooks/src/index.ts"),
-      "export const fixture = true;\n",
-    );
-    const landed = await f.land();
-    expect(landed.exitCode).toBe(0);
-    const log = await f.log();
-    const consumer = log.findIndex((args) => args[1] === "usehooks:consumers");
-    expect(consumer).toBeGreaterThanOrEqual(0);
-    expect(log.findIndex((args) => args[1] === "commit")).toBeGreaterThan(
-      consumer,
-    );
-  });
   test("candidate gate code and its registry key land together", async () => {
     const f = await fixture();
     await mkdir(join(f.main, "scripts"), { recursive: true });

@@ -482,26 +482,6 @@ const landEnvironment = (root: string): NodeJS.ProcessEnv => ({
   ...process.env,
   MISE_TRUSTED_CONFIG_PATHS: root,
 });
-function usehooksConsumerGate(
-  root: string,
-  changed: string[],
-  alpha: string,
-): ResultAsync<string, Error> {
-  return safeTry(async function* () {
-    if (!changed.some((path) => path.startsWith("tools/agx-usehooks/")))
-      return ok("");
-    const consumers = await run(
-      root,
-      [process.env.LAND_MISE ?? "mise", "run", "usehooks:consumers"],
-      landEnvironment(root),
-    );
-    if (consumers.isErr()) {
-      yield* jj(root, ["restore", "--from", alpha, "--", ...filesets(changed)]);
-      return consumers;
-    }
-    return consumers;
-  });
-}
 const at = (cwd: string, rev: string, template = "commit_id") =>
   read(cwd, ["log", "--no-graph", "-r", rev, "-T", template]).map((text) =>
     text.trim(),
@@ -1325,12 +1305,6 @@ async function main(
           emit(`[land] consumers: ${line}`);
         if (!sharedConsumers.ok)
           return reject("consumer commit gate refused landing");
-        const consumers = yield* usehooksConsumerGate(
-          landerRoot,
-          changed,
-          alpha,
-        );
-        if (consumers !== "") emit(consumers.trimEnd());
         const before = yield* at(landerRoot, "@-");
         const committed = await run(
           landerRoot,

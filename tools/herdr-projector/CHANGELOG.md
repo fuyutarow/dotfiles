@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.15 — 2026-10-24
+
+- Recover live sidebar identities from current native footers and append-index titles, project observed remote-control state, and add a read-only dry run
+
 ## 0.1.14 — 2026-10-23
 
 - Use neutral repository names in projector fixtures

@@ -15,7 +15,7 @@ test("CLI caches unchanged cycles, invalidates inputs, and retries failed writes
     `#!${process.execPath}
 if (process.argv[2] === "agent") {
   process.stdout.write(await Bun.file(process.env.AGENTS_FILE).text());
-} else {
+} else if (process.argv[3] === "rename" || process.argv[3] === "report-metadata") {
   await Bun.write(process.env.CALLS_FILE, (await Bun.file(process.env.CALLS_FILE).text().catch(() => "")) + "apply\\n");
   process.exitCode = await Bun.file(process.env.FAIL_FILE).exists() ? 1 : 0;
 }
@@ -56,9 +56,13 @@ if (process.argv[2] === "agent") {
   const writeAgents = () =>
     Bun.write(agentsFile, JSON.stringify({ result: { agents } }));
   await writeAgents();
-  const cycle = async () => {
+  const cycle = async (args: string[] = []) => {
     const child = Bun.spawn(
-      [process.execPath, join(import.meta.dir, "../src/herdr-projector.ts")],
+      [
+        process.execPath,
+        join(import.meta.dir, "../src/herdr-projector.ts"),
+        ...args,
+      ],
       {
         env: {
           ...process.env,
@@ -81,6 +85,11 @@ if (process.argv[2] === "agent") {
     ]);
     return { stdout, stderr, exit };
   };
+  const preview = await cycle(["--dry-run"]);
+  expect(preview.exit).toBe(0);
+  expect(preview.stdout).toContain("wouldApply");
+  expect(await Bun.file(callsFile).exists()).toBe(false);
+  expect(await Bun.file(join(root, "herdr-projector")).exists()).toBe(false);
   expect((await cycle()).exit).toBe(0);
   expect(await readFile(callsFile, "utf8")).toBe("apply\napply\n");
   expect((await cycle()).stdout).toContain("unchanged");
@@ -107,7 +116,8 @@ if (process.argv[2] === "agent") {
   expect((await cycle()).stdout).toContain("unchanged");
   agents[0]!.agent_session = { value: "sid-1" };
   await writeAgents();
-  expect((await cycle()).stdout).not.toContain("unchanged");
+  // An untrusted non-UUID registration is erased before fingerprinting.
+  expect((await cycle()).stdout).toContain("unchanged");
   agents[0]!.tab_id = "new-tab";
   await writeAgents();
   await Bun.write(failFile, "fail");

@@ -36,6 +36,7 @@ export const AgentSchema = z.object({
     })
     .nullish(),
   cwd: z.string().optional(),
+  terminal_title_stripped: z.string().optional(),
   tokens: z.record(z.string(), z.string()).nullish(),
 });
 const ListSchema = z.object({
@@ -43,6 +44,66 @@ const ListSchema = z.object({
 });
 type Agent = z.output<typeof AgentSchema>;
 type PaneTitleBinding = { sessionId: string; title: CodexNativeTitleRead };
+
+/** Native session_index is an append log: a rename adds a newer exact-ID row. */
+export async function readProjectorTitle(
+  id: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<CodexNativeTitleRead> {
+  const strict = await readCodexNativeTitle(id, env);
+  if (
+    strict.kind === "known" ||
+    strict.reason !== "session ID is duplicated in index"
+  )
+    return strict;
+  const path = join(
+    env.CODEX_HOME ?? join(env.HOME ?? "", ".codex"),
+    "session_index.jsonl",
+  );
+  const file = Bun.file(path);
+  if (file.size > 2 * 1024 * 1024) return strict;
+  const text = await file.text().catch(() => "");
+  const Row = z.object({
+    id: z.string(),
+    thread_name: z.string().min(1).max(512),
+    updated_at: z.iso.datetime(),
+  });
+  const rows = [];
+  for (const line of text.trimEnd().split("\n")) {
+    const parsed = jsonOf(Row).safeParse(line);
+    if (!parsed.success) return strict;
+    if (parsed.data.id === id) rows.push(parsed.data);
+  }
+  rows.sort((a, b) => Temporal.Instant.compare(b.updated_at, a.updated_at));
+  const latest = rows[0];
+  if (latest === undefined || latest.thread_name.trim().length === 0)
+    return strict;
+  for (const character of latest.thread_name) {
+    const point = character.codePointAt(0) ?? 0;
+    if (
+      point <= 31 ||
+      (point >= 127 && point <= 159) ||
+      point === 0x2028 ||
+      point === 0x2029
+    )
+      return strict;
+  }
+  if (
+    rows.some(
+      (row) =>
+        row.updated_at === latest.updated_at &&
+        row.thread_name !== latest.thread_name,
+    )
+  )
+    return strict;
+  return {
+    kind: "known",
+    sessionId: id,
+    displayTitle: latest.thread_name,
+    sourceUpdatedAt: latest.updated_at,
+    observedAt: Temporal.Now.instant().toString(),
+  };
+}
 const RegisteredCodexSchema = z.object({
   source: z.literal("herdr:codex"),
   kind: z.literal("id"),
@@ -113,12 +174,12 @@ export function nativeFooterObservation(text: string):
   if (rows.length > 5 || rows.length < 2) return undefined;
   const controls = rows.at(-1)?.trim() ?? "";
   const shortcuts =
-    /^← for agents · \? for shortcuts(?:[ \t]+⚠ 1 warning · f2 to view)?$/u;
+    /^(?:← for agents · \? for shortcuts(?:[ \t]+⚠ [1-9]\d* warnings? · f2 to view)?|⚠ [1-9]\d* warnings? · f2 to view)$/u;
   const selection =
     /^New activity · (?:Earlier messages available\.[ \t]+)?\^c copy · enter copy & follow · esc clear$/u;
   if (!shortcuts.test(controls) && !selection.test(controls)) return undefined;
   const shape =
-    /^\s*([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}) · (GPT-[A-Za-z0-9.-]+) (minimal|low|medium|high|xhigh|max|ultra) · ((?:\/|~\/)[^·\r\n]+) · (Working|Ready|Idle|Done|Blocked)\s*$/u;
+    /^\s*([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}) · (GPT-[A-Za-z0-9.-]+) (minimal|low|medium|high|xhigh|max|ultra) · ((?:\/|~)[^·\r\n]*) · (Working|Ready|Idle|Done|Blocked)(?: · Main \[default\])?\s*$/u;
   const matches = rows.flatMap((row) => shape.exec(row)?.[1] ?? []);
   const match = shape.exec(rows.at(-2) ?? "");
   if (matches.length !== 1 || match === null) return undefined;
@@ -144,6 +205,7 @@ function nativeFooterCwd(
 ): string | undefined {
   if (isAbsolute(cwd)) return cwd;
   const home = env.HOME;
+  if (cwd.trim() === "~" && home !== undefined && isAbsolute(home)) return home;
   if (!cwd.startsWith("~/") || home === undefined || !isAbsolute(home))
     return undefined;
   return join(home, cwd.slice(2));
@@ -156,7 +218,9 @@ export async function bindNativeCodexFooters(
   apply: (args: string[]) => Promise<boolean>,
   env: NodeJS.ProcessEnv = process.env,
   titles: Map<string, PaneTitleBinding> = new Map(),
-  readTitle: typeof readCodexNativeTitle = readCodexNativeTitle,
+  readTitle: typeof readCodexNativeTitle = readProjectorTitle,
+  dryRun = false,
+  reasons: Map<string, string> = new Map(),
 ): Promise<Map<string, FleetSessionRead>> {
   const sessions = new Map<string, FleetSessionRead>();
   for (const agent of agents) {
@@ -173,12 +237,21 @@ export async function bindNativeCodexFooters(
     if (agent.pane_id === undefined) continue;
     const pane = agent.pane_id;
     const footer = nativeFooterObservation((await readTail(pane)) ?? "");
-    if (footer === undefined) continue;
+    if (footer === undefined) {
+      reasons.set(pane, "footer not visible");
+      continue;
+    }
     const cwd = nativeFooterCwd(footer.cwd, env);
     if (cwd === undefined) continue;
     const id = footer.id;
     const path = await codexRolloutPath(id, env);
-    if (path === undefined) continue;
+    if (path === undefined) {
+      reasons.set(pane, "no exact rollout");
+      process.stderr.write(
+        `herdr-projector: ${pane}: exact rollout lookup ${id} under ${env.CODEX_HOME ?? join(env.HOME ?? "", ".codex")}/sessions: missing, ambiguous or read limit\n`,
+      );
+      continue;
+    }
     const unknown = {
       na: true,
       why: "not observed by native footer projector",
@@ -230,10 +303,14 @@ export async function bindNativeCodexFooters(
       JSON.stringify(footer)
     )
       continue;
-    const written = await writeFleetSessionIfChanged(
-      { ...refreshed.data, model: footer.model, effort: footer.effort },
-      env,
-    );
+    const next = {
+      ...refreshed.data,
+      model: footer.model,
+      effort: footer.effort,
+    };
+    const written = dryRun
+      ? { ok: true, value: next }
+      : await writeFleetSessionIfChanged(next, env);
     if (!written.ok) continue;
     agent.agent_session = { value: id };
     sessions.set(id, written.value);
@@ -301,11 +378,218 @@ function unavailableLabel(agent: Agent, why: string): string {
   );
 }
 
+/** Only the owned statusline in the visible native footer, never an agx row. */
+export function claudeFooterObservation(
+  text: string,
+):
+  | { id: string; name: string; model: string; effort: string; rc: string }
+  | undefined {
+  if (text.length > 32 * 1024 || text.includes("\u001B")) return undefined;
+  const rows = text.trimEnd().split(/\r?\n/u);
+  if (
+    rows.length > 20 ||
+    !/^\s*⏵⏵ auto mode on(?: \(shift\+tab to cycle\)| · \d+ shells)?\s*$/u.test(
+      rows.at(-1) ?? "",
+    )
+  )
+    return undefined;
+  const matches = rows.flatMap((row, index) => {
+    if (
+      !/^\s*\S+@\S+:\d{2}-\d{2} \d{2}:\d{2}[+-]\d{2}\|/u.test(
+        rows[index - 1] ?? "",
+      )
+    )
+      return [];
+    const match =
+      /^\s*Claude \(stdin\) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| (🔗|rc:on|rc:off|rc:\?) \| Ctx: [^|]+ \| [^|]+ \| Session: ([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\s*$/u.exec(
+        row,
+      );
+    if (match === null) return [];
+    const [, name, model, effort, rc, id] = match;
+    if (
+      name === undefined ||
+      model === undefined ||
+      effort === undefined ||
+      rc === undefined ||
+      id === undefined
+    )
+      return [];
+    return [
+      {
+        id,
+        name: name.trim(),
+        model: model.trim(),
+        effort: effort.trim(),
+        rc: rc === "🔗" ? "rc:on" : rc,
+      },
+    ];
+  });
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+export async function nativeClaudeRc(
+  agent: Agent,
+  env: NodeJS.ProcessEnv,
+  readProcess = (pane: string) =>
+    run("herdr", ["pane", "process-info", "--pane", pane]),
+): Promise<string | undefined> {
+  const registeredId = agent.agent_session?.value;
+  if (
+    registeredId === undefined ||
+    agent.agent_session?.source !== "herdr:claude" ||
+    agent.pane_id === undefined
+  )
+    return undefined;
+  const ProcessInfo = jsonOf(
+    z.object({
+      result: z.object({
+        process_info: z.object({
+          foreground_processes: z.array(
+            z.object({ pid: z.number().int().positive(), name: z.string() }),
+          ),
+        }),
+      }),
+    }),
+  );
+  const info = ProcessInfo.safeParse(await readProcess(agent.pane_id));
+  for (const proc of info.data?.result.process_info.foreground_processes ??
+    []) {
+    if (proc.name !== "claude") continue;
+    const path = join(
+      env.CLAUDE_CONFIG_DIR ?? join(env.HOME ?? "", ".claude"),
+      "sessions",
+      `${proc.pid}.json`,
+    );
+    const native = jsonOf(
+      z.object({
+        pid: z.literal(proc.pid),
+        sessionId: z.literal(registeredId),
+        procStart: z.string(),
+        bridgeSessionId: z.string().min(1),
+      }),
+    ).safeParse(
+      await Bun.file(path)
+        .slice(0, 64 * 1024)
+        .text()
+        .catch(() => ""),
+    );
+    // Herdr owns the host process namespace; /proc here may be a worker's namespace.
+    const confirmed = ProcessInfo.safeParse(await readProcess(agent.pane_id));
+    if (
+      native.success &&
+      confirmed.data?.result.process_info.foreground_processes.some(
+        (current) => current.pid === proc.pid && current.name === "claude",
+      ) === true
+    )
+      return "rc:on";
+  }
+  return undefined;
+}
+
+export async function bindClaudePanes(
+  agents: Agent[],
+  remoteControl: Map<string, string>,
+  env: NodeJS.ProcessEnv = process.env,
+  readTail = (pane: string) =>
+    run("herdr", [
+      "pane",
+      "read",
+      pane,
+      "--source",
+      "visible",
+      "--format",
+      "text",
+      "--lines",
+      "20",
+    ]),
+): Promise<Map<string, FleetSessionRead>> {
+  const sessions = new Map<string, FleetSessionRead>();
+  for (const agent of agents) {
+    if (
+      agent.agent !== "claude" ||
+      agent.pane_id === undefined ||
+      agent.cwd === undefined
+    )
+      continue;
+    const nativeRc = await nativeClaudeRc(agent, env);
+    if (nativeRc !== undefined) remoteControl.set(agent.pane_id, nativeRc);
+    const observed = claudeFooterObservation(
+      (await readTail(agent.pane_id)) ?? "",
+    );
+    if (observed === undefined) continue;
+    const id = observed.id;
+    const path = join(
+      env.CLAUDE_CONFIG_DIR ?? join(env.HOME ?? "", ".claude"),
+      "projects",
+      agent.cwd.replaceAll(/[^a-zA-Z0-9]/gu, "-"),
+      `${id}.jsonl`,
+    );
+    const read = await attempt(() =>
+      Bun.file(path)
+        .slice(0, 128 * 1024)
+        .text(),
+    );
+    if (!read.ok) {
+      process.stderr.write(
+        `herdr-projector: ${agent.pane_id}: read ${path}: ${String(read.error)}\n`,
+      );
+      continue;
+    }
+    const Row = z.object({ sessionId: z.literal(id) });
+    if (
+      !read.value
+        .split("\n")
+        .slice(0, -1)
+        .some((line) => jsonOf(Row).safeParse(line).success)
+    )
+      continue;
+    if (
+      JSON.stringify(
+        claudeFooterObservation((await readTail(agent.pane_id)) ?? ""),
+      ) !== JSON.stringify(observed)
+    )
+      continue;
+    const existing = FleetSessionSchema.safeParse(
+      await readFleetSession(id, env),
+    );
+    const unknown = {
+      na: true,
+      why: "not in native footer",
+    } satisfies FleetSessionRead;
+    const nativeName = /^[a-z0-9]+(?:-[a-z0-9]+)*-agt_[a-z0-9]+$/u.test(
+      observed.name,
+    )
+      ? observed.name
+      : agent.terminal_title_stripped;
+    const parsed = FleetSessionSchema.safeParse({
+      schema: 1,
+      session_id: id,
+      vendor: "claude",
+      cwd: agent.cwd,
+      pane_id: agent.pane_id,
+      name: nativeName ?? (existing.success ? existing.data.name : unknown),
+      model: observed.model,
+      effort: observed.effort,
+      ctx: unknown,
+      rate: unknown,
+      updated_at: Temporal.Now.instant().toString(),
+    });
+    if (!parsed.success) continue;
+    agent.agent_session = { value: id };
+    if (observed.rc !== "rc:?" || !remoteControl.has(agent.pane_id))
+      remoteControl.set(agent.pane_id, observed.rc);
+    sessions.set(id, parsed.data);
+  }
+  return sessions;
+}
+
 export async function projectAgents(
   agents: Agent[],
   sessions: ReadonlyMap<string, FleetSessionRead>,
   apply: (args: string[]) => Promise<boolean>,
   titles: ReadonlyMap<string, PaneTitleBinding> = new Map(),
+  remoteControl: ReadonlyMap<string, string> = new Map(),
+  reasons: ReadonlyMap<string, string> = new Map(),
 ): Promise<number> {
   let updated = 0;
   for (const agent of agents) {
@@ -353,7 +637,7 @@ export async function projectAgents(
       titleBinding.title.kind === "known"
         ? titleBinding.title.displayTitle
         : undefined;
-    const why = sessionWhy(session);
+    const why = reasons.get(agent.pane_id) ?? sessionWhy(session);
     const name = nativeTitle ?? knownName ?? unavailableLabel(agent, why);
     const model =
       identity !== undefined && typeof identity.model === "string"
@@ -363,9 +647,8 @@ export async function projectAgents(
       identity !== undefined && typeof identity.effort === "string"
         ? identity.effort
         : "";
-    // Fleet-session records do not carry RC state, so never inherit a pane token
-    // that may have been written by an older projector or statusline.
-    const rc = "rc:?";
+    // Read observations for this pane; never recycle projector-owned display tokens.
+    const rc = remoteControl.get(agent.pane_id) ?? "rc:?";
 
     const renamed = await apply(["tab", "rename", agent.tab_id, name]);
     const reported = await apply([
@@ -410,7 +693,7 @@ export function nativeTitleCacheInputs(
     }));
 }
 
-async function project(): Promise<number> {
+async function project(dryRun = false): Promise<number> {
   const agents = await agentList();
   if (agents === undefined) {
     process.stderr.write(
@@ -421,11 +704,16 @@ async function project(): Promise<number> {
   const runtime = process.env.XDG_RUNTIME_DIR;
   let applied = true;
   const apply = async (args: string[]) => {
+    if (dryRun) {
+      process.stdout.write(`${JSON.stringify({ wouldApply: args })}\n`);
+      return true;
+    }
     const ok = await herdr(args);
     applied = applied && ok;
     return ok;
   };
   const titleBindings = new Map<string, PaneTitleBinding>();
+  const reasons = new Map<string, string>();
   const nativeSessions = await bindNativeCodexFooters(
     agents,
     (pane) =>
@@ -443,7 +731,12 @@ async function project(): Promise<number> {
     apply,
     process.env,
     titleBindings,
+    readProjectorTitle,
+    dryRun,
+    reasons,
   );
+  const remoteControl = new Map<string, string>();
+  const claudeSessions = await bindClaudePanes(agents, remoteControl);
   const cacheDir =
     runtime === undefined || runtime === ""
       ? undefined
@@ -474,6 +767,7 @@ async function project(): Promise<number> {
   );
   const sessions = new Map(results);
   for (const [id, session] of nativeSessions) sessions.set(id, session);
+  for (const [id, session] of claudeSessions) sessions.set(id, session);
   const identities = () =>
     [...sessions.entries()]
       .toSorted(([a], [b]) => a.localeCompare(b))
@@ -501,16 +795,30 @@ async function project(): Promise<number> {
           panes,
           identities: identities(),
           titles: nativeTitleCacheInputs(titleBindings),
+          remoteControl: [...remoteControl],
+          reasons: [...reasons],
         }),
       )
       .digest("hex");
-  if (applied && cached.success && cached.data.key === fingerprint()) {
+  if (
+    !dryRun &&
+    applied &&
+    cached.success &&
+    cached.data.key === fingerprint()
+  ) {
     process.stdout.write("herdr-projector: unchanged; projected 0 pane(s)\n");
     return 0;
   }
-  const result = await projectAgents(agents, sessions, apply, titleBindings);
+  const result = await projectAgents(
+    agents,
+    sessions,
+    apply,
+    titleBindings,
+    remoteControl,
+    reasons,
+  );
   // A failed mutation must be retried, and cache trouble must not block projection.
-  if (applied && cacheDir !== undefined && cachePath !== undefined) {
+  if (!dryRun && applied && cacheDir !== undefined && cachePath !== undefined) {
     await (async () => {
       const currentIds = new Set(
         agents.flatMap((agent) => agent.agent_session?.value ?? []),
@@ -529,7 +837,9 @@ async function project(): Promise<number> {
 }
 
 if (import.meta.main) {
-  if (
+  if (argv.length === 1 && argv[0] === "--dry-run") {
+    process.exitCode = await project(true);
+  } else if (
     argv.some(
       (arg) =>
         ["--help", "-h", "--version", "-V"].includes(arg) ||
@@ -540,6 +850,13 @@ if (import.meta.main) {
       name: "herdr-projector",
       parameters: [],
       strictFlags: true,
+      flags: {
+        dryRun: {
+          type: Boolean,
+          description:
+            "Read current panes and print proposed writes without applying them",
+        },
+      },
       help: {
         description: "Project fleet session identities onto Herdr panes.",
       },

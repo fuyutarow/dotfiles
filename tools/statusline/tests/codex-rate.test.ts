@@ -7,6 +7,16 @@ import {
   readCodexUsage,
   codexRateSegment,
 } from "../src/codex-rate.ts";
+import {
+  sampleCodexRate,
+  CODEX_CREDIT_REFRESH_INTERVAL_MS,
+} from "../src/codex-credit-sampler.ts";
+import { readCodexCreditBaseline } from "../../shared/src/codex-subscription-usage.ts";
+import {
+  codexCreditMemoFromSnapshot,
+  ownerSources,
+  type OwnerState,
+} from "../src/owner-state.ts";
 
 const roots: string[] = [];
 const ESC = String.fromCodePoint(27);
@@ -260,4 +270,147 @@ test("account usage survives newer empty sessions, pinned sessions, and null rat
       ).toBe(37);
     }
   }
+});
+
+const memoSnapshot = (computedAt: number): OwnerState => ({
+  schema: 1,
+  fields: {
+    codexRate: {
+      at: computedAt,
+      value: {
+        value: {
+          windows: [],
+          mtimeMs: computedAt,
+          creditMemo: {
+            baseline: { at: NOW * 1000 - 90000000, balance: 1300 },
+            computedAt,
+          },
+        },
+      },
+    },
+  },
+});
+const timedCredit = (balance: string, at: number) =>
+  JSON.stringify({
+    timestamp: Temporal.Instant.fromEpochMilliseconds(at).toString(),
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      rate_limits: sample(null, window(10080, 20, NOW + 604800), {
+        has_credits: true,
+        unlimited: false,
+        balance,
+      }),
+    },
+  });
+
+test("a sampler run with a fresh snapshot memo never invokes the forward scan", async () => {
+  const { root, file } = await fixture();
+  const nowMs = NOW * 1000;
+  await writeFile(
+    file,
+    timedCredit("1250", nowMs - 60000) +
+      "\n" +
+      timedCredit("1234", nowMs - 1000),
+  );
+  await setMtime(file, NOW);
+  let scans = 0;
+  const previous = memoSnapshot(nowMs - 1000);
+  const result = (
+    await sampleCodexRate(previous, root, nowMs, () => {
+      scans++;
+      return readCodexCreditBaseline(root, nowMs, AbortSignal.abort());
+    })
+  ).unwrapOr(undefined);
+  expect(scans).toBe(0);
+  expect(result?.creditChange).toEqual({ delta: -66, spanMs: 86400000 });
+  expect(result?.creditMemo).toEqual(codexCreditMemoFromSnapshot(previous));
+  const carried: OwnerState = {
+    schema: 1,
+    fields: { codexRate: { at: nowMs, value: { value: result } } },
+  };
+  expect(
+    (await ownerSources(Promise.resolve(carried)).codexRate()).unwrapOr(
+      undefined,
+    )?.creditMemo,
+  ).toEqual(result?.creditMemo);
+  expect(
+    (await readCodexRate(root, undefined, nowMs)).unwrapOr(undefined)
+      ?.creditChange,
+  ).toEqual({ delta: -16, spanMs: 59000 });
+});
+
+test("a stale sampler memo triggers exactly one bounded refresh beyond the tail", async () => {
+  const { root, file } = await fixture();
+  const nowMs = NOW * 1000;
+  const cutoff = nowMs - 86400000;
+  const day = Temporal.Instant.fromEpochMilliseconds(cutoff)
+    .toZonedDateTimeISO("UTC")
+    .toPlainDate()
+    .toString()
+    .replaceAll("-", "/");
+  const dir = join(root, day);
+  await mkdir(dir, { recursive: true });
+  const spanning = join(dir, "rollout-spanning.jsonl");
+  await writeFile(
+    spanning,
+    timedCredit("1400", cutoff) +
+      "\n" +
+      "x".repeat(300 * 1024) +
+      "\n" +
+      timedCredit("1234", nowMs - 1000),
+  );
+  await setMtime(spanning, NOW);
+  await writeFile(file, timedCredit("1234", nowMs - 1000));
+  await setMtime(file, NOW);
+  let scans = 0;
+  const rate = (
+    await sampleCodexRate(
+      memoSnapshot(nowMs - CODEX_CREDIT_REFRESH_INTERVAL_MS),
+      root,
+      nowMs,
+      async (path, at, signal) => {
+        scans++;
+        expect(signal.aborted).toBe(false);
+        return readCodexCreditBaseline(path, at, signal);
+      },
+    )
+  ).unwrapOr(undefined);
+  expect(scans).toBe(1);
+  expect(rate?.creditMemo?.computedAt).toBe(nowMs);
+  expect(rate?.creditChange).toEqual({ delta: -166, spanMs: 86400000 });
+});
+
+test("failed refresh keeps a covering memo; invalid snapshot memos are rejected", async () => {
+  const { root, file } = await fixture();
+  const nowMs = NOW * 1000;
+  await writeFile(file, timedCredit("1234", nowMs - 1000));
+  await setMtime(file, NOW);
+  const previous = memoSnapshot(nowMs - CODEX_CREDIT_REFRESH_INTERVAL_MS);
+  const rate = (
+    await sampleCodexRate(previous, root, nowMs, () =>
+      readCodexCreditBaseline(root, nowMs, AbortSignal.abort()),
+    )
+  ).unwrapOr(undefined);
+  expect(rate?.creditMemo).toEqual(codexCreditMemoFromSnapshot(previous));
+  expect(rate?.creditChange?.spanMs).toBe(86400000);
+  const invalid: OwnerState = {
+    schema: 1,
+    fields: {
+      codexRate: {
+        at: nowMs,
+        value: {
+          value: {
+            windows: [],
+            mtimeMs: nowMs,
+            creditMemo: {
+              baseline: { at: nowMs, balance: "NaN" },
+              computedAt: nowMs,
+            },
+          },
+        },
+      },
+    },
+  };
+  expect(codexCreditMemoFromSnapshot(invalid)).toBeUndefined();
 });

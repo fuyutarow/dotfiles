@@ -1,4 +1,4 @@
-import { open, readdir, stat, type FileHandle } from "node:fs/promises";
+import { open, opendir, stat, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { fromThrowable, jsonOf, z } from "./zod.ts";
 import type { SubscriptionUsageWindow } from "./subscription-usage.ts";
@@ -45,19 +45,34 @@ const CREDIT_EVENT = z.object({
 const CREDIT_HISTORY_DAYS = 8;
 const CREDIT_HISTORY_DIRECTORY_COUNT = CREDIT_HISTORY_DAYS + 3;
 const MAX_CREDIT_HISTORY_FILES = 32;
+const MAX_CREDIT_HISTORY_METADATA_FILES_PER_DAY = 1024;
+const MAX_CREDIT_HISTORY_DIRECTORY_ENTRIES = 1024;
 const MAX_CREDIT_HISTORY_FILE_BYTES = 256 * 1024;
 const MAX_CREDIT_HISTORY_BYTES = 4 * 1024 * 1024;
-const CREDIT_DELTA_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MAX_CREDIT_BASELINE_TAIL_BYTES = 4 * 1024 * 1024;
+const MAX_CREDIT_FORWARD_FILE_BYTES = 32 * 1024 * 1024;
+const MAX_CREDIT_FORWARD_BYTES = 64 * 1024 * 1024;
+const CREDIT_SCAN_CHUNK_BYTES = 256 * 1024;
+const MAX_CREDIT_SCAN_LINE_BYTES = 64 * 1024;
+export const CREDIT_DELTA_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_ACCOUNT_RATE_FILES = 64;
 const MAX_ACCOUNT_RATE_FILE_BYTES = 16 * 1024 * 1024;
 const MAX_ACCOUNT_RATE_TOTAL_BYTES = 32 * 1024 * 1024;
+const MAX_ACCOUNT_RATE_DIRECTORY_ENTRIES = 1024;
+const ACCOUNT_RATE_READ_CHUNK_BYTES = 256 * 1024;
+const MAX_ACCOUNT_RATE_LINE_BYTES = 8 * 1024 * 1024;
 const ACCOUNT_RATE_DAYS = 16;
 const ACCOUNT_RATE_DIRECTORY_COUNT = ACCOUNT_RATE_DAYS + 3;
 export type CodexAccountRate = {
   windows: { minutes: number; percent: number; reset?: number }[];
   credits?: string | undefined;
   creditChange?: { delta: number; spanMs: number } | undefined;
+  creditMemo?: CodexCreditMemo | undefined;
   mtimeMs: number;
+};
+export type CodexCreditMemo = {
+  baseline: { at: number; balance: number };
+  computedAt: number;
 };
 type Reading = { rate: CodexAccountRate; window?: SubscriptionUsageWindow };
 
@@ -175,7 +190,7 @@ async function readRollout(
   let fallback: Reading | undefined;
   let bytesRead = 0;
   while (end > 0) {
-    const start = Math.max(0, end - 256 * 1024);
+    const start = Math.max(0, end - ACCOUNT_RATE_READ_CHUNK_BYTES);
     const buffer = await readBlock(handle, start, end);
     if (buffer === null) return { failed: true, bytesRead };
     bytesRead += buffer.length;
@@ -185,7 +200,8 @@ async function readRollout(
     if (!discard) lines.push(last + suffix);
     // The first line may start in the preceding chunk. Never parse a partial line.
     suffix = start > 0 ? (lines.shift() ?? "") : "";
-    discard = (discard && !hasNewline) || suffix.length > 8 * 1024 * 1024;
+    discard =
+      (discard && !hasNewline) || suffix.length > MAX_ACCOUNT_RATE_LINE_BYTES;
     if (discard) suffix = "";
     const { selected, fallback: found } = selectLines(
       lines,
@@ -250,6 +266,17 @@ async function readCachedRollout(
   return result;
 }
 
+async function boundedDirectoryNames(path: string, limit: number) {
+  const names: string[] = [];
+  const directory = await opendir(path).catch(() => null);
+  if (directory === null) return names;
+  for await (const entry of directory) {
+    names.push(entry.name);
+    if (names.length >= limit) break;
+  }
+  return names;
+}
+
 async function rolloutPaths(root: string, nowMs: number): Promise<string[]> {
   const files: string[] = [];
   const today = Temporal.Instant.fromEpochMilliseconds(nowMs)
@@ -263,7 +290,10 @@ async function rolloutPaths(root: string, nowMs: number): Promise<string[]> {
       padDatePart(day.month),
       padDatePart(day.day),
     );
-    const names = await readdir(dir).catch(() => []);
+    const names = await boundedDirectoryNames(
+      dir,
+      MAX_ACCOUNT_RATE_DIRECTORY_ENTRIES,
+    );
     const candidates = names
       .filter((name) => name.startsWith("rollout-") && name.endsWith(".jsonl"))
       .toSorted((a, b) => b.localeCompare(a))
@@ -275,7 +305,12 @@ async function rolloutPaths(root: string, nowMs: number): Promise<string[]> {
 }
 
 type CreditSample = { at: number; balance: number | undefined };
-type RolloutSource = { path: string; mtimeMs: number; size: number };
+type RolloutSource = {
+  path: string;
+  mtimeMs: number;
+  size: number;
+  startedAtMs: number;
+};
 const FiniteCreditSample = z.object({ at: z.number(), balance: z.number() });
 
 async function creditRolloutsForDay(
@@ -289,7 +324,10 @@ async function creditRolloutsForDay(
     padDatePart(day.month),
     padDatePart(day.day),
   );
-  const names = await readdir(dir).catch(() => []);
+  const names = await boundedDirectoryNames(
+    dir,
+    MAX_CREDIT_HISTORY_DIRECTORY_ENTRIES,
+  );
   const paths = names
     .filter((name) => name.startsWith("rollout-") && name.endsWith(".jsonl"))
     .toSorted((a, b) => b.localeCompare(a))
@@ -298,8 +336,26 @@ async function creditRolloutsForDay(
   const sources = await Promise.all(
     paths.map(async (path) => {
       const info = await stat(path).catch(() => null);
+      const stamp = path.match(
+        /rollout-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/u,
+      );
+      const dayStartMs = day.toZonedDateTime("UTC").epochMilliseconds;
+      const startedAtMs =
+        stamp === null
+          ? dayStartMs
+          : fromThrowable(
+              () =>
+                Temporal.Instant.from(
+                  `${stamp[1]}T${stamp[2]}:${stamp[3]}:${stamp[4]}Z`,
+                ).epochMilliseconds,
+            )().unwrapOr(dayStartMs);
       return info !== null && info.isFile()
-        ? { path, mtimeMs: info.mtimeMs, size: info.size }
+        ? {
+            path,
+            mtimeMs: info.mtimeMs,
+            size: info.size,
+            startedAtMs,
+          }
         : null;
     }),
   );
@@ -334,20 +390,109 @@ function creditSampleFromLine(
   return { at, balance };
 }
 
+type CreditScan = {
+  pending: Buffer;
+  discard: boolean;
+  baseline: CreditSample | undefined;
+  crossed: boolean;
+};
+
+function scanCreditChunk(buffer: Buffer, scan: CreditScan, nowMs: number) {
+  const cutoff = nowMs - CREDIT_DELTA_WINDOW_MS;
+  let start = 0;
+  for (
+    let end = buffer.indexOf(10);
+    end !== -1;
+    end = buffer.indexOf(10, start)
+  ) {
+    const part = buffer.subarray(start, end);
+    const line =
+      !scan.discard &&
+      scan.pending.length + part.length <= MAX_CREDIT_SCAN_LINE_BYTES
+        ? Buffer.concat([scan.pending, part]).toString("utf8")
+        : "";
+    scan.pending = Buffer.alloc(0);
+    scan.discard = false;
+    start = end + 1;
+    const sample = creditSampleFromLine(line, nowMs);
+    if (sample === undefined) continue;
+    if (sample.at > cutoff) {
+      scan.crossed = true;
+      return;
+    }
+    if (
+      sample.balance !== undefined &&
+      (scan.baseline === undefined || sample.at > scan.baseline.at)
+    )
+      scan.baseline = sample;
+  }
+  const rest = buffer.subarray(start);
+  scan.discard ||=
+    scan.pending.length + rest.length > MAX_CREDIT_SCAN_LINE_BYTES;
+  scan.pending = scan.discard
+    ? Buffer.alloc(0)
+    : Buffer.concat([scan.pending, rest]);
+}
+
+async function creditBaselineFromRollout(
+  handle: FileHandle,
+  size: number,
+  length: number,
+  nowMs: number,
+  signal?: AbortSignal,
+) {
+  // Accept a baseline only after crossing the cutoff or reaching EOF.
+  // A capped prefix cannot establish the newest pre-cutoff sample.
+  const scan: CreditScan = {
+    pending: Buffer.alloc(0),
+    discard: false,
+    baseline: undefined,
+    crossed: false,
+  };
+  let bytesRead = 0;
+  while (bytesRead < length && !scan.crossed) {
+    signal?.throwIfAborted();
+    const buffer = await readBlock(
+      handle,
+      bytesRead,
+      Math.min(length, bytesRead + CREDIT_SCAN_CHUNK_BYTES),
+    );
+    if (buffer === null) return { samples: [], bytesRead: length };
+    bytesRead += buffer.length;
+    scanCreditChunk(buffer, scan, nowMs);
+  }
+  if (!scan.crossed && length < size) return { samples: [], bytesRead };
+  if (!scan.crossed) scanCreditChunk(Buffer.from("\n"), scan, nowMs);
+  return {
+    samples: scan.baseline === undefined ? [] : [scan.baseline],
+    bytesRead,
+  };
+}
+
 async function creditSamplesFromRollout(
   source: RolloutSource,
   nowMs: number,
   byteBudget: number,
+  forward = false,
+  signal?: AbortSignal,
 ): Promise<{ samples: CreditSample[]; bytesRead: number }> {
   const length = Math.min(
     source.size,
-    MAX_CREDIT_HISTORY_FILE_BYTES,
+    forward ? MAX_CREDIT_FORWARD_FILE_BYTES : MAX_CREDIT_HISTORY_FILE_BYTES,
     byteBudget,
   );
   if (length <= 0) return { samples: [], bytesRead: 0 };
   const fd = await open(source.path, "r").catch(() => null);
   if (fd === null) return { samples: [], bytesRead: 0 };
   await using handle = fd;
+  if (forward)
+    return await creditBaselineFromRollout(
+      handle,
+      source.size,
+      length,
+      nowMs,
+      signal,
+    );
   const buffer = Buffer.alloc(length);
   const result = await handle
     .read(buffer, 0, length, source.size - length)
@@ -369,24 +514,43 @@ async function creditSamplesFromRollout(
 async function readCreditHistory(
   root: string,
   nowMs: number,
-): Promise<Pick<CodexAccountRate, "credits" | "creditChange">> {
+  recentOnly = false,
+  signal?: AbortSignal,
+): Promise<Pick<CodexAccountRate, "credits" | "creditChange" | "creditMemo">> {
   const today = Temporal.Instant.fromEpochMilliseconds(nowMs)
     .toZonedDateTimeISO("UTC")
     .toPlainDate();
   const sources: RolloutSource[] = [];
-  for (let index = 0; index < CREDIT_HISTORY_DIRECTORY_COUNT; index++) {
-    const daySources = await creditRolloutsForDay(
-      root,
-      today.subtract({ days: index - 1 }),
-      MAX_CREDIT_HISTORY_FILES - sources.length,
+  const days = recentOnly
+    ? []
+    : await Promise.all(
+        Array.from({ length: CREDIT_HISTORY_DIRECTORY_COUNT }, (_, index) =>
+          creditRolloutsForDay(
+            root,
+            today.subtract({ days: index - 1 }),
+            MAX_CREDIT_HISTORY_METADATA_FILES_PER_DAY,
+          ),
+        ),
+      );
+  sources.push(...days.flat());
+  // The fast path preserves CR1's 32-file discovery instead of statting history.
+  const recentDirectoryCount = recentOnly ? CREDIT_HISTORY_DIRECTORY_COUNT : 0;
+  for (let index = 0; index < recentDirectoryCount; index++) {
+    sources.push(
+      ...(await creditRolloutsForDay(
+        root,
+        today.subtract({ days: index - 1 }),
+        MAX_CREDIT_HISTORY_FILES - sources.length,
+      )),
     );
-    sources.push(...daySources);
     if (sources.length >= MAX_CREDIT_HISTORY_FILES) break;
   }
+  signal?.throwIfAborted();
   sources.sort((a, b) => b.mtimeMs - a.mtimeMs);
   const samples: CreditSample[] = [];
   let remainingBytes = MAX_CREDIT_HISTORY_BYTES;
-  for (const source of sources) {
+  for (const source of sources.slice(0, MAX_CREDIT_HISTORY_FILES)) {
+    signal?.throwIfAborted();
     const result = await creditSamplesFromRollout(
       source,
       nowMs,
@@ -396,6 +560,45 @@ async function readCreditHistory(
     remainingBytes -= result.bytesRead;
     if (remainingBytes <= 0) break;
   }
+  const cutoff = nowMs - CREDIT_DELTA_WINDOW_MS;
+  // Recent sessions must not consume the slots reserved for cutoff candidates.
+  // Closed files need only their tails; files from a day touching/before the
+  // cutoff whose mtime is later may span it and need a bounded forward scan.
+  const closed = recentOnly
+    ? []
+    : sources.filter((source) => source.mtimeMs <= cutoff);
+  remainingBytes = MAX_CREDIT_BASELINE_TAIL_BYTES;
+  for (const source of closed.slice(0, MAX_CREDIT_HISTORY_FILES)) {
+    signal?.throwIfAborted();
+    const result = await creditSamplesFromRollout(
+      source,
+      nowMs,
+      remainingBytes,
+    );
+    samples.push(...result.samples);
+    remainingBytes -= result.bytesRead;
+    if (remainingBytes <= 0) break;
+  }
+  const spanning = recentOnly
+    ? []
+    : sources.filter(
+        (source) => source.startedAtMs <= cutoff && source.mtimeMs > cutoff,
+      );
+  remainingBytes = MAX_CREDIT_FORWARD_BYTES;
+  for (const source of spanning.slice(0, MAX_CREDIT_HISTORY_FILES)) {
+    signal?.throwIfAborted();
+    const result = await creditSamplesFromRollout(
+      source,
+      nowMs,
+      remainingBytes,
+      true,
+      signal,
+    );
+    samples.push(...result.samples);
+    remainingBytes -= result.bytesRead;
+    if (remainingBytes <= 0) break;
+  }
+  signal?.throwIfAborted();
   samples.sort((a, b) => a.at - b.at);
   const latest = samples.at(-1);
   if (latest === undefined || latest.balance === undefined)
@@ -406,7 +609,6 @@ async function readCreditHistory(
   });
   if (finiteSamples.length === 1)
     return { credits: String(Math.round(latest.balance)) };
-  const cutoff = nowMs - CREDIT_DELTA_WINDOW_MS;
   const baseline = finiteSamples
     .toReversed()
     .find((sample) => sample.at <= cutoff);
@@ -422,7 +624,19 @@ async function readCreditHistory(
           ? latest.at - covered.at
           : CREDIT_DELTA_WINDOW_MS,
     },
+    ...(baseline === undefined || recentOnly
+      ? {}
+      : { creditMemo: { baseline, computedAt: nowMs } }),
   };
+}
+
+/** Expensive bounded history refresh; only the sampler schedules this operation. */
+export async function readCodexCreditBaseline(
+  root: string,
+  nowMs: number,
+  signal?: AbortSignal,
+) {
+  return (await readCreditHistory(root, nowMs, false, signal)).creditMemo;
 }
 
 function padDatePart(value: number): string {
@@ -437,12 +651,13 @@ export async function readCodexSubscriptionUsage(
   root: string,
   nowMs: number,
   maxAgeMs: number,
+  recentOnly = false,
 ): Promise<{
   rate?: CodexAccountRate;
   window?: SubscriptionUsageWindow;
   reason: string;
 }> {
-  const creditHistory = await readCreditHistory(root, nowMs);
+  const creditHistory = await readCreditHistory(root, nowMs, recentOnly);
   const paths = await rolloutPaths(root, nowMs);
   const candidates: Source[] = [];
   // Bound concurrent metadata reads rather than serially waiting on thousands of old files.

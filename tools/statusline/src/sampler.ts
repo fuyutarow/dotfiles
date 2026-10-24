@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { cli } from "cleye";
 import { buildDataframe } from "./build-dataframe.ts";
 import { COLLECTOR_SOURCES } from "./collector-sources.ts";
+import { sampleCodexRate } from "./codex-credit-sampler.ts";
 import {
   discoverSessions,
   statusForSession,
@@ -252,6 +253,8 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
           ),
         );
     }
+    // History refresh has its own budget and completes before current-rate collection.
+    const codexRate = await sampleCodexRate(previous);
     await Promise.all([
       ...(
         [
@@ -265,7 +268,14 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
           "recoverHealth",
           "dispatchWarning",
         ] as const
-      ).map((key) => save(key, COLLECTOR_SOURCES[key])),
+      ).map((key) =>
+        save(
+          key,
+          key === "codexRate"
+            ? () => Promise.resolve(codexRate)
+            : COLLECTOR_SOURCES[key],
+        ),
+      ),
       ...[...roots].map((root) =>
         save(`repo:${root}`, () => COLLECTOR_SOURCES.repoState(root)),
       ),

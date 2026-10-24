@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.1 — 2026-10-24
+
+- Find Codex credit baselines across 24 hours in bounded rollout scans and render zero changes as ±0
+
 ## 0.22.0 — 2026-10-24
 
 - Show Codex credit balance and signed 24-hour change from bounded rollout history

@@ -201,6 +201,107 @@ test("short credit history labels the actual covered span", async () => {
   });
 });
 
+test("finds the newest pre-cutoff credit outside a spanning rollout's last 256 KiB", async () => {
+  const { root } = await fixture();
+  const cutoff = now - 86400000;
+  const day = Temporal.Instant.fromEpochMilliseconds(cutoff)
+    .toZonedDateTimeISO("UTC")
+    .toPlainDate()
+    .toString()
+    .replaceAll("-", "/");
+  const dir = join(root, day);
+  await mkdir(dir, { recursive: true });
+  const file = join(dir, "rollout-spanning.jsonl");
+  const padding =
+    JSON.stringify({ type: "response_item", data: "x".repeat(65536) }) + "\n";
+  await writeFile(
+    file,
+    [
+      creditEvent("1400", cutoff - 10000),
+      creditEvent("1300", cutoff),
+      creditEventWithStatus(
+        { has_credits: true, unlimited: false, balance: "NaN" },
+        cutoff,
+      ),
+      padding.repeat(5),
+      creditEvent("1250", now - 60000),
+      creditEvent("1234", now - 1000),
+    ].join("\n"),
+  );
+  // Enough newer files to exhaust the old global 32-file selection.
+  const today = Temporal.Instant.fromEpochMilliseconds(now)
+    .toZonedDateTimeISO("UTC")
+    .toPlainDate()
+    .toString()
+    .replaceAll("-", "/");
+  const recent = join(root, today);
+  await mkdir(recent, { recursive: true });
+  await Promise.all(
+    Array.from({ length: 40 }, (_, index) =>
+      writeFile(
+        join(recent, `rollout-z-${index}.jsonl`),
+        creditEvent("1234", now - 1000),
+      ),
+    ),
+  );
+  const result = await readCodexSubscriptionUsage(root, now, week);
+  expect(result.rate?.credits).toBe("1234");
+  expect(result.rate?.creditChange).toEqual({ delta: -66, spanMs: 86400000 });
+});
+
+test("a closed rollout supplies a newer baseline than a spanning rollout", async () => {
+  const { root, file } = await fixture();
+  const cutoff = now - 86400000;
+  const day = Temporal.Instant.fromEpochMilliseconds(cutoff)
+    .toZonedDateTimeISO("UTC")
+    .toPlainDate()
+    .toString()
+    .replaceAll("-", "/");
+  const dir = join(root, day);
+  await mkdir(dir, { recursive: true });
+  const spanning = join(dir, "rollout-spanning.jsonl");
+  await writeFile(
+    spanning,
+    creditEvent("1400", cutoff - 10000) +
+      "\n" +
+      creditEvent("1234", now - 1000),
+  );
+  const closed = join(dir, "rollout-closed.jsonl");
+  await writeFile(closed, creditEvent("1300", cutoff - 1000));
+  await utimes(closed, (cutoff - 500) / 1000, (cutoff - 500) / 1000);
+  await writeFile(file, creditEvent("1234", now - 1000));
+  expect(
+    (await readCodexSubscriptionUsage(root, now, week)).rate?.creditChange,
+  ).toEqual({ delta: -66, spanMs: 86400000 });
+});
+
+test("a forward byte cap keeps the real span rather than accepting an unproven prefix", async () => {
+  const { root, file } = await fixture();
+  const cutoff = now - 86400000;
+  const day = Temporal.Instant.fromEpochMilliseconds(cutoff)
+    .toZonedDateTimeISO("UTC")
+    .toPlainDate()
+    .toString()
+    .replaceAll("-", "/");
+  const dir = join(root, day);
+  await mkdir(dir, { recursive: true });
+  const spanning = join(dir, "rollout-capped.jsonl");
+  await writeFile(
+    spanning,
+    creditEvent("1400", cutoff - 10000) +
+      "\n" +
+      "x".repeat(32 * 1024 * 1024) +
+      "\n" +
+      creditEvent("1250", now - 60000) +
+      "\n" +
+      creditEvent("1234", now - 1000),
+  );
+  await writeFile(file, creditEvent("1234", now - 1000));
+  expect(
+    (await readCodexSubscriptionUsage(root, now, week)).rate?.creditChange,
+  ).toEqual({ delta: -16, spanMs: 59000 });
+});
+
 test.each(["unlimited", "absent"])(
   "a newest %s credit sample suppresses an older finite balance",
   async (state) => {

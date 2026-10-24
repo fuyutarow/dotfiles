@@ -123,6 +123,10 @@ export const RepoSchema = z
     del: z.number().optional(),
   })
   .transform((v) => ({ ...v, branch: v.branch, branchWhy: v.branchWhy }));
+export const CodexCreditMemoSchema = z.object({
+  baseline: z.object({ at: z.number(), balance: z.number() }),
+  computedAt: z.number(),
+});
 const RateSchema = z
   .object({
     windows: z.array(
@@ -139,15 +143,27 @@ const RateSchema = z
     ),
     mtimeMs: z.number(),
     credits: z.string().optional(),
+    creditMemo: CodexCreditMemoSchema.optional(),
     creditChange: z
       .object({ delta: z.number(), spanMs: z.number() })
       .optional(),
   })
-  .transform(({ credits, creditChange, ...v }) => ({
+  .transform(({ credits, creditChange, creditMemo, ...v }) => ({
     ...v,
     ...(credits === undefined ? {} : { credits }),
     ...(creditChange === undefined ? {} : { creditChange }),
+    ...(creditMemo === undefined ? {} : { creditMemo }),
   }));
+
+/** Validate the previous sampler-owned wire record before reusing its baseline. */
+export function codexCreditMemoFromSnapshot(snapshot: OwnerState | undefined) {
+  const parsed = resultSchema(RateSchema.optional()).safeParse(
+    snapshot?.fields.codexRate?.value,
+  );
+  return parsed.success
+    ? parsed.data.unwrapOr(undefined)?.creditMemo
+    : undefined;
+}
 
 export async function readOwnerState(
   env: NodeJS.ProcessEnv = process.env,

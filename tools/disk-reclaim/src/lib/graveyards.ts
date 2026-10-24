@@ -6,7 +6,8 @@ import {
   statfsSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { lstat, readdir } from "node:fs/promises";
+import { dirname, join, resolve, sep } from "node:path";
 import { fromThrowable } from "../../../shared/src/zod.ts";
 
 export type Graveyard = { readonly label: string; readonly path: string };
@@ -174,4 +175,67 @@ export function ripRecords(path: string): RipRecord[] {
     const time = ripTime(timestamp);
     return time === undefined ? [] : [{ time, original, destination }];
   });
+}
+
+export const UNKNOWN_RIP_BURIAL =
+  "burial time unknown: missing, unreadable, or invalid burial record";
+
+/** A mirrored parent is dated only when every payload below it has a record.
+ * Descendants of a recorded payload share its burial, never their source mtime.
+ */
+export async function ripBurialTime(
+  root: string,
+  path: string,
+  records = ripRecords(root),
+): Promise<number | undefined> {
+  const times = new Map<string, number>();
+  const containers = new Set<string>();
+  for (const record of records) {
+    const destination = resolve(record.destination);
+    if (!destination.startsWith(`${root}${sep}`)) continue;
+    times.set(
+      destination,
+      Math.max(times.get(destination) ?? -Infinity, record.time),
+    );
+    let parent = dirname(destination);
+    while (parent !== root && parent.startsWith(`${root}${sep}`)) {
+      containers.add(parent);
+      parent = dirname(parent);
+    }
+  }
+  let ancestor = path;
+  while (ancestor !== root && ancestor.startsWith(`${root}${sep}`)) {
+    const time = times.get(ancestor);
+    if (time !== undefined) {
+      const newer = records.filter((record) =>
+        resolve(record.destination).startsWith(`${path}${sep}`),
+      );
+      return Math.max(time, ...newer.map((record) => record.time));
+    }
+    ancestor = dirname(ancestor);
+  }
+  const descendantTimes = records
+    .filter((record) => resolve(record.destination).startsWith(`${path}${sep}`))
+    .map((record) => record.time);
+  let newest: number | undefined =
+    descendantTimes.length === 0 ? undefined : Math.max(...descendantTimes);
+  const pending = [path];
+  while (pending.length > 0) {
+    const entry = pending.pop();
+    if (entry === undefined) break;
+    const time = times.get(entry);
+    if (time !== undefined) {
+      newest = Math.max(newest ?? -Infinity, time);
+      continue;
+    }
+    if (entry !== root && !containers.has(entry)) return undefined;
+    const stat = await lstat(entry);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) return undefined;
+    pending.push(
+      ...(await readdir(entry))
+        .filter((name) => entry !== root || name !== ".record")
+        .map((name) => join(entry, name)),
+    );
+  }
+  return newest;
 }

@@ -146,7 +146,7 @@ describe("tmpfs target", () => {
     ).toBe("KEEP");
   });
 
-  test("plan identifies stale temp dirs and purges unconfigured RAM graveyards with inode counts", async () => {
+  test("plan identifies stale temp dirs and defers RAM graveyards to burial-aware expiry", async () => {
     const root = mkdtempSync(join(tmpdir(), "reclaim-tmpfs-fixture-"));
     roots.push(root);
     const graveyard = join(root, "graveyard-fuyu");
@@ -245,11 +245,10 @@ describe("tmpfs target", () => {
     expect(rows.find((row) => row.path === linked)?.verdict).toBe("KEEP");
     const graveyardRow = rows.find((row) => row.path === graveyard);
     expect(graveyardRow).toMatchObject({
-      verdict: "RECLAIM",
-      action: { kind: "delete", argv: [graveyard] },
+      verdict: "KEEP",
+      action: { kind: "command", argv: [] },
     });
-    expect(graveyardRow?.reason).toContain("2 inodes");
-    expect(graveyardRow?.bytes).not.toBeNull();
+    expect(graveyardRow?.reason).toContain("undo-window checks");
     const ramDestinationTarget = createTmpfsTarget({
       mounts: () => [{ path: root, type: "tmpfs" }],
       isOpen: (path) => path === opened,
@@ -270,15 +269,15 @@ describe("tmpfs target", () => {
         (row) => row.path === graveyard,
       ),
     ).toMatchObject({
-      verdict: "RECLAIM",
+      verdict: "KEEP",
     });
     if (graveyardRow !== undefined) {
       chmodSync(graveyard, 0o555);
       expect(
         await target.act(graveyardRow, { ...context, mode: "run" }),
-      ).toMatchObject({ ok: true });
+      ).toMatchObject({ ok: false });
       expect(existsSync(destination)).toBe(false);
-      expect(existsSync(graveyard)).toBe(false);
+      expect(existsSync(graveyard)).toBe(true);
     }
     const nested = join(root, "nested", "graveyard");
     mkdirSync(nested, { recursive: true });
@@ -299,8 +298,8 @@ describe("tmpfs target", () => {
     expect(
       (await nestedTarget.plan(context)).find((row) => row.path === nested),
     ).toMatchObject({
-      verdict: "RECLAIM",
-      action: { kind: "delete", argv: [nested] },
+      verdict: "KEEP",
+      action: { kind: "command", argv: [] },
     });
   });
 

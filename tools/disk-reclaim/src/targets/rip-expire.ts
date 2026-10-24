@@ -2,7 +2,12 @@ import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
-import { ripRecords, RIP_GRAVEYARD_MAX_BYTES } from "../lib/graveyards.ts";
+import {
+  ripRecords,
+  ripBurialTime,
+  UNKNOWN_RIP_BURIAL,
+  RIP_GRAVEYARD_MAX_BYTES,
+} from "../lib/graveyards.ts";
 import { removeTree } from "../lib/remove-tree.ts";
 import type { Candidate, Config } from "../model.ts";
 import type { Context, Target } from "./index.ts";
@@ -11,7 +16,8 @@ export const RIP_EXPIRY_BUDGET_MS = 120_000;
 const capacityReason = "oldest-first capacity expiry";
 type Payload = {
   candidate: Candidate;
-  time: number;
+  time: number | undefined;
+  hold: "undo" | "unknown" | undefined;
   selected: boolean;
   logical: number;
   pending: { path: string; counted: boolean }[];
@@ -26,6 +32,9 @@ type Expiry = {
   signal: AbortSignal;
   expired: number;
   freed: number;
+  now: number;
+  undoMs: number;
+  ageMs: number;
 };
 type Options = {
   config?: Pick<
@@ -76,6 +85,7 @@ async function enumerate(
   only: string | undefined,
   now: number,
   ageHours: number,
+  undoMs: number,
 ): Promise<Pick<Expiry, "payloads" | "overhead">> {
   if (!(await safeScope(root, only))) return { payloads: [], overhead: 0 };
   const rootStat = await fromAsyncThrowable(() => lstat(root))();
@@ -120,15 +130,22 @@ async function enumerate(
       resolve(only) === root ||
       path === resolve(only) ||
       inside(resolve(only), path);
-    const time = times.get(path) ?? stat.mtimeMs;
-    const old = now - time >= ageHours * 3_600_000;
+    const time = times.get(path);
+    const unknown = !metadata && time === undefined;
+    const undo = time !== undefined && now - time < undoMs;
+    const old = time !== undefined && now - time >= ageHours * 3_600_000;
+    let reason = "expiry rechecked before deletion";
+    if (metadata) reason = "required to restore kept graveyard entries";
+    else if (unknown) reason = UNKNOWN_RIP_BURIAL;
+    else if (undo) reason = "undo window: recorded burial is too recent";
+    let hold: Payload["hold"];
+    if (unknown) hold = "unknown";
+    else if (undo) hold = "undo";
     const candidate = {
       id: `rip graveyard: ${relative(root, path)}`,
       path,
-      verdict: metadata || !scoped ? "KEEP" : "RECLAIM",
-      reason: metadata
-        ? "required to restore kept graveyard entries"
-        : "expiry rechecked before deletion",
+      verdict: metadata || !scoped || unknown || undo ? "KEEP" : "RECLAIM",
+      reason,
       checks: [
         {
           name: "graveyard-entry",
@@ -141,12 +158,13 @@ async function enumerate(
       action: { kind: "delete", argv: ["removeTree", path] },
       result: null,
     } satisfies Candidate;
-    if (!metadata && scoped && old)
+    if (!metadata && scoped && old && !undo)
       candidate.reason = `older than ${ageHours}h`;
     payloads.push({
       candidate,
       selected: scoped,
       time,
+      hold,
       logical: stat.size,
       pending: directory ? [{ path, counted: true }] : [],
       identity: identity(stat),
@@ -155,7 +173,7 @@ async function enumerate(
   payloads.sort((a, b) =>
     a.time === b.time
       ? (a.candidate.path ?? "").localeCompare(b.candidate.path ?? "")
-      : a.time - b.time,
+      : (a.time ?? Infinity) - (b.time ?? Infinity),
   );
   return { payloads, overhead };
 }
@@ -253,7 +271,19 @@ export function createRipExpiryTarget(
           verdict: "ASK" as const,
           reason: "graveyard payload changed; retry next timer",
         };
-      const old = candidate.reason.startsWith("older than");
+      const burial = await ripBurialTime(root, candidate.path ?? root);
+      if (burial === undefined || state.now - burial < state.undoMs) {
+        row.hold = burial === undefined ? "unknown" : "undo";
+        return {
+          ...candidate,
+          verdict: "KEEP" as const,
+          reason:
+            burial === undefined
+              ? UNKNOWN_RIP_BURIAL
+              : "undo window: recorded burial is too recent",
+        };
+      }
+      const old = state.now - burial >= state.ageMs;
       if (!old && !(await overLimit(state)))
         return {
           ...candidate,
@@ -282,7 +312,7 @@ export function createRipExpiryTarget(
         verdict: "RECLAIM" as const,
         bytes: row.logical,
         reason: old
-          ? candidate.reason
+          ? `older than ${state.ageMs / 3_600_000}h`
           : `graveyard exceeds ${RIP_GRAVEYARD_MAX_BYTES} bytes; ${capacityReason}`,
       };
     })();
@@ -307,11 +337,15 @@ export function createRipExpiryTarget(
       env.RIP_GRAVEYARD ??
         join(env.XDG_DATA_HOME ?? join(home, ".local/share"), "graveyard"),
     );
+    const now = settings.now ?? Temporal.Now.instant().epochMilliseconds;
+    const undoMs =
+      (settings.config?.graveyard_pressure_undo_minutes ?? 10) * 60_000;
     const enumerated = await enumerate(
       root,
       settings.only,
-      settings.now ?? Temporal.Now.instant().epochMilliseconds,
+      now,
       settings.config?.graveyard_min_age_hours ?? 24,
+      undoMs,
     );
     const state: Expiry = {
       ...enumerated,
@@ -323,6 +357,9 @@ export function createRipExpiryTarget(
       deadline,
       expired: 0,
       freed: 0,
+      now,
+      undoMs,
+      ageMs: (settings.config?.graveyard_min_age_hours ?? 24) * 3_600_000,
     };
     if (ctx !== undefined) states.set(ctx, state);
     if (ctx?.mode === "run")
@@ -340,6 +377,20 @@ export function createRipExpiryTarget(
         state.payloads = state.payloads.filter((item) => item !== row);
       }
     }
+    await fromAsyncThrowable(() => overLimit(state))();
+    const shortfall = capacityShortfall(state);
+    if (shortfall !== null)
+      rows.push({
+        id: "rip graveyard capacity shortfall",
+        path: root,
+        verdict: "KEEP",
+        reason: shortfall,
+        checks: [],
+        bytes: null,
+        bytes_kind: "estimate",
+        action: { kind: "command", argv: [] },
+        result: null,
+      });
     return rows;
   }
 
@@ -367,6 +418,28 @@ export function createRipExpiryTarget(
       const state = states.get(ctx);
       if (candidate.path === null)
         return { ok: false, bytes_freed: 0, error: "missing graveyard path" };
+      if (state === undefined)
+        return {
+          ok: false,
+          bytes_freed: 0,
+          error: "missing graveyard expiry state; plan before acting",
+        };
+      if (candidate.verdict !== "RECLAIM")
+        return {
+          ok: false,
+          bytes_freed: 0,
+          error: "graveyard candidate is not reclaimable",
+        };
+      const burial = await ripBurialTime(state.root, candidate.path);
+      if (burial === undefined || state.now - burial < state.undoMs)
+        return {
+          ok: false,
+          bytes_freed: 0,
+          error:
+            burial === undefined
+              ? UNKNOWN_RIP_BURIAL
+              : "undo window: recorded burial is too recent",
+        };
       const result = await (options.remove ?? removeTree)(candidate.path, {
         uid: process.getuid?.() ?? 0,
         graveyard: true,
@@ -423,9 +496,12 @@ export function createRipExpiryTarget(
         ...(skipped.length === 0 ? {} : { skipped }),
       };
     },
-    finish: (ctx: Context) => {
+    finish: async (ctx: Context) => {
       const state = states.get(ctx);
       if (state === undefined) return;
+      await fromAsyncThrowable(() => overLimit(state))();
+      const shortfall = capacityShortfall(state);
+      if (shortfall !== null) ctx.log(shortfall);
       ctx.log(
         `graveyard expiry: ${state.expired} payloads expired, ${state.freed} bytes freed${expired(state) ? "; budget exhausted or cancelled; next timer continues oldest-first" : ""}`,
       );
@@ -433,6 +509,15 @@ export function createRipExpiryTarget(
     },
   } satisfies Target;
   return { target, candidates };
+}
+
+function capacityShortfall(state: Expiry): string | null {
+  if (state.knownBytes <= RIP_GRAVEYARD_MAX_BYTES) return null;
+  const held = (hold: Payload["hold"]) =>
+    state.payloads.filter((row) => row.hold === hold);
+  const undo = held("undo");
+  const unknown = held("unknown");
+  return `graveyard capacity shortfall: at least ${state.knownBytes - RIP_GRAVEYARD_MAX_BYTES} bytes over soft target; ${undo.length} undo-window payloads held (at least ${undo.reduce((sum, row) => sum + row.logical, 0)} bytes); ${unknown.length} unknown-burial payloads held (at least ${unknown.reduce((sum, row) => sum + row.logical, 0)} bytes)`;
 }
 
 const expiry = createRipExpiryTarget();

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.11 — 2026-10-24
+
+- Preserve the absolute rip undo window across reclaim paths
+
 ## 1.4.10 — 2026-10-23
 
 - Preserve workspaces until their runs are judged and accepted changes land

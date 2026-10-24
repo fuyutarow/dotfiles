@@ -166,7 +166,7 @@ test("an old large payload starts deletion after a bounded measurement slice", a
   ).toBe(false);
 });
 
-test("timer expires nested fresh rip payloads by ctime record order until bounded", async () => {
+test("timer expires nested eligible rip payloads by ctime record order until bounded", async () => {
   const root = await mkdtemp(join(tmpdir(), "timer-rip-nested-ctime-"));
   await using _cleanup = {
     [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
@@ -175,7 +175,7 @@ test("timer expires nested fresh rip payloads by ctime record order until bounde
   const parent = join(env.RIP_GRAVEYARD, "home/user/workspaces");
   await mkdir(parent, { recursive: true });
   // Names and mtimes deliberately disagree with record order. All entries are
-  // inside both the 24h retention period and the pressure undo window.
+  // inside the 24h retention period, but outside the absolute undo window.
   const names = ["z-oldest", "a-middle", "b-newest"];
   const sizes = [6, 5, 6].map((n) => n * 1024 ** 3);
   const now = Temporal.Now.zonedDateTimeISO();
@@ -203,7 +203,7 @@ test("timer expires nested fresh rip payloads by ctime record order until bounde
     await file.close();
     const mtime = now.subtract({ minutes: index + 1 }).epochMilliseconds / 1000;
     await utimes(path, mtime, mtime);
-    const time = now.subtract({ minutes: 3 - index });
+    const time = now.subtract({ minutes: 13 - index });
     const clock = time.toPlainTime().toString({ smallestUnit: "second" });
     const stamp = `${days[time.dayOfWeek - 1]} ${months[time.month - 1]} ${String(time.day).padStart(2, " ")} ${clock} ${time.year}`;
     records.push(`${stamp}\t/original/${name}\t${path}`);
@@ -322,7 +322,7 @@ test("capacity expiry ignores process evidence and preserves restore metadata", 
   });
 });
 
-test("an oversized sparse subtree cannot remain below the logical-byte ceiling", async () => {
+test("an oversized sparse subtree without a burial record is held", async () => {
   const root = await mkdtemp(join(tmpdir(), "rip-cap-oversized-"));
   await using _cleanup = {
     [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
@@ -335,9 +335,15 @@ test("an oversized sparse subtree cannot remain below the logical-byte ceiling",
   const rows = await purgeCandidates({ RIP_GRAVEYARD: root }, root, {
     ripOnly: true,
   });
-  expect(rows).toHaveLength(1);
-  expect(rows[0]).toMatchObject({ path: payload, verdict: "RECLAIM" });
-  expect(rows[0]?.reason).toContain("oldest-first capacity expiry");
+  expect(rows.find((row) => row.path === payload)).toMatchObject({
+    verdict: "KEEP",
+  });
+  expect(rows.find((row) => row.path === payload)?.reason).toContain(
+    "burial time unknown",
+  );
+  expect(
+    rows.find((row) => row.id === "rip graveyard capacity shortfall")?.reason,
+  ).toContain("1 unknown-burial payloads held");
 });
 
 test("timer work budgets retain progress and converge over two fresh runs", async () => {
@@ -356,7 +362,7 @@ test("timer work budgets retain progress and converge over two fresh runs", asyn
     const file = await open(path, "r+");
     await file.truncate((index === 1 ? 5 : 6) * 1024 ** 3);
     await file.close();
-    const time = Temporal.Now.instant().subtract({ minutes: 3 - index });
+    const time = Temporal.Now.instant().subtract({ minutes: 13 - index });
     records.push(`${time.toString()}\t/original/${name}\t${path}`);
     const mtime =
       Temporal.Now.instant().subtract({ hours: index + 1 }).epochMilliseconds /

@@ -32,6 +32,7 @@ import {
   type ProcFs,
 } from "./lib/procs.ts";
 import type { Context } from "./targets/index.ts";
+import { ripBurialTime, UNKNOWN_RIP_BURIAL } from "./lib/graveyards.ts";
 
 type Check = { name: string; ok: boolean; detail: string };
 type PlanRow = {
@@ -139,9 +140,22 @@ async function evaluate(
     ...config.repo_roots,
     ...config.delete_roots,
   ];
-  // The rip graveyard is a declared delete root below its own directory: it holds data
-  // that was already deleted, so the live-process and uid checks are the only gates there.
+  // Already-deleted data still has an absolute undo window.
   const inGraveyard = path !== graveyard && beneath(graveyard, path);
+  if (beneath(graveyard, path) || beneath(path, graveyard)) {
+    const burial = await ripBurialTime(
+      graveyard,
+      inGraveyard ? path : graveyard,
+    );
+    const outsideUndo =
+      burial !== undefined &&
+      Temporal.Now.instant().epochMilliseconds - burial >=
+        (config.graveyard_pressure_undo_minutes ?? 10) * 60_000;
+    let detail = "undo window: recorded burial is too recent";
+    if (burial === undefined) detail = UNKNOWN_RIP_BURIAL;
+    else if (outsideUndo) detail = "recorded burial is outside undo window";
+    add("graveyard-undo-window", outsideUndo, detail);
+  }
   const inRoot =
     inGraveyard || roots.some((root) => configuredRoot(path, [root]));
   let rootDetail = "outside scratch_roots, repo_roots, and delete_roots";

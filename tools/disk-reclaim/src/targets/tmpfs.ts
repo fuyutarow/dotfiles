@@ -82,6 +82,7 @@ function inspectTree(path: string, options: PlanOptions, cutoff?: number) {
     newestMtime: Number.NEGATIVE_INFINITY,
     owned: true,
     complete: false,
+    graveyard: false,
   };
   const started = performance.now();
   const pending = [{ path, depth: 0 }];
@@ -94,6 +95,8 @@ function inspectTree(path: string, options: PlanOptions, cutoff?: number) {
       return summary;
     const node = pending.pop();
     if (node === undefined || node.depth > 64) return summary;
+    if (isGraveyardPath(node.path, options))
+      return { ...summary, graveyard: true };
     const stat = lstatSync(node.path);
     summary.inodes += 1;
     summary.bytes += stat.blocks * 512;
@@ -288,6 +291,12 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
           bytes_freed: null,
           error: "tmpfs candidate is not reclaimable",
         };
+      if (isGraveyardPath(path, optionsFor(ctx)))
+        return {
+          ok: false,
+          bytes_freed: null,
+          error: "graveyard requires burial-aware expiry",
+        };
       // The stage's mount is measured once in plan and once in finish, never per candidate.
       const removed = await removeTree(path, {
         uid: uid(),
@@ -327,7 +336,8 @@ const isGraveyardPath = (path: string, options: PlanOptions) => {
   const name = basename(path);
   return (
     (options.ripGraveyard !== undefined &&
-      within(path, resolve(options.ripGraveyard))) ||
+      (within(path, resolve(options.ripGraveyard)) ||
+        within(resolve(options.ripGraveyard), path))) ||
     [...options.graveyardRoots].some((root) => within(path, root)) ||
     name === "graveyard" ||
     name.startsWith("graveyard-")
@@ -435,6 +445,17 @@ function planEntry(
       kind: "command",
       argv: [],
     });
+  if (isGraveyard)
+    return candidate(
+      path,
+      "KEEP",
+      "graveyard requires recorded burial and undo-window checks; use rip-expire",
+      null,
+      {
+        kind: "command",
+        argv: [],
+      },
+    );
   if (st.uid !== options.uid)
     return candidate(
       path,
@@ -476,6 +497,17 @@ function planEntry(
   const measurement = fromThrowable(() =>
     inspectTree(path, options, isGraveyard ? undefined : cutoff),
   )().unwrapOr(null);
+  if (measurement?.graveyard === true)
+    return candidate(
+      path,
+      "KEEP",
+      "contains a graveyard; use burial-aware expiry",
+      null,
+      {
+        kind: "command",
+        argv: [],
+      },
+    );
   if (measurement !== null && !measurement.owned)
     return candidate(
       path,
@@ -502,14 +534,6 @@ function planEntry(
         kind: "command",
         argv: [],
       },
-    );
-  if (isGraveyard)
-    return candidate(
-      path,
-      "RECLAIM",
-      `stale RAM-backed graveyard; permanent purge; ${measurement.inodes} inodes; ${measurement.bytes} bytes`,
-      measurement.bytes,
-      { kind: "delete", argv: [path] },
     );
   const reason = tempName.test(name)
     ? "stale mkdtemp-style directory; not open"

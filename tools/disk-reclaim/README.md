@@ -61,7 +61,8 @@ the shared state lock, then removes only paths beneath configured roots. Strict 
 the rip graveyard are also eligible delete paths, using `RIP_GRAVEYARD`, then `GRAVEYARD`, then
 `$XDG_DATA_HOME/graveyard` (default `~/.local/share/graveyard`). Within that already-deleted data,
 repo-store and listed-workspace refusals do not apply. Ownership, live-process, protected-root,
-symlink, immutable-attribute and filesystem-boundary checks remain in force. Outside it, delete refuses `/`, `$HOME`,
+symlink, immutable-attribute and filesystem-boundary checks remain in force. Recorded burial must
+also be outside the configured undo window; unknown burial times are held. Outside it, delete refuses `/`, `$HOME`,
 repo store roots, listed jj workspaces, symlink paths, and paths used by same-uid processes.
 Unreadable same-uid process information fails closed. During removal, each same-uid directory is made
 owner-readable, writable, and searchable before its children are visited; the traversal checks
@@ -71,8 +72,15 @@ traversal. A listed jj workspace must first be forgotten with `jj workspace forg
 through the `workspaces` target.
 
 The blind tier selects tmpfs, clean, builds, rust, toolchains, workspaces, scratch, `rip-expire`,
-and system (sudo). Rip expiry removes only entries in `RIP_GRAVEYARD` older than the configured
-24-hour retention. It leaves XDG Trash for owner approval. The graveyard location comes from
+and system (sudo). Rip expiry removes entries in `RIP_GRAVEYARD` older than the configured
+24-hour retention, or eligible entries in recorded oldest-first order to approach the soft
+10 GiB capacity target. Every rip reclaim path protects `graveyard_pressure_undo_minutes`
+(10 minutes), including age expiry when retention is configured shorter than that window.
+Missing, unreadable, or invalid burial records cause entries to be held and reported as unknown;
+source mtime never substitutes for recorded burial. If held entries prevent reaching the capacity
+target, plans and expiry summaries report the remaining byte shortfall and held payload counts
+and bytes. Incomplete size measurements are explicitly lower bounds. `.record` remains retained
+by rip expiry. It leaves XDG Trash for owner approval. The graveyard location comes from
 the `RIP_GRAVEYARD` environment setting exported by the shell setup. Workspaces runs before
 scratch; both share one liveness snapshot per plan and recheck facts under the lock. Judgment
 and host require owner selection, purge must be named, and vhdx/audit are plan-only.
@@ -89,13 +97,13 @@ session directories, systemd-private directories, scratchpads, configured protec
 oversized trees, and open or indeterminate paths are kept or asked. Removal calls direct
 recursive unlink/rmdir operations; it does not use `rip`, which would copy deleted entries and
 their inode use into a graveyard. Legacy `graveyard-*` directories and configured rip graveyards
-on tmpfs/ramfs are already-deleted data: the blind tier permanently purges them after ownership
-and process-use checks. Plans report bytes and inode entry counts (including the root directory).
+on tmpfs/ramfs are held by the tmpfs target and referred to `rip-expire`, which checks recorded
+burial and the undo window. Plans report bytes and inode entry counts (including the root directory).
 The action summary reports tmpfs inode and byte use before and
 after.
 Mount counters are read once per planning stage and once at completion, regardless of candidate
-count. Candidate rechecks share the stage's liveness snapshot. `tmpfs`, `rip-expire`, and `purge`
-act on smaller allocated-byte estimates first; ties preserve discovery order. `--only` limits
+count. Candidate rechecks share the stage's liveness snapshot. `tmpfs` and `purge` act on smaller
+allocated-byte estimates first; ties preserve discovery order. `rip-expire` acts oldest-first. `--only` limits
 these targets to an absolute subtree, retaining symlink and protected-ancestor refusals. Their
 summaries count files and directories actually removed and allocated bytes unlinked; mount free
 space is a separate observation that can be affected by concurrent writers. Cross-target path

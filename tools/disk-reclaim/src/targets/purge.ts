@@ -7,6 +7,8 @@ import {
   existingGraveyards,
   graveyardEntries,
   ripRecords,
+  ripBurialTime,
+  UNKNOWN_RIP_BURIAL,
 } from "../lib/graveyards.ts";
 import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
 import { countEntries } from "../lib/purge-progress.ts";
@@ -105,66 +107,83 @@ export async function purgeCandidates(
     const records = ripRecords(graveyard.path);
     const scope = await graveyardScope(graveyard.path, options.only);
     const entries = scope;
-    const entryCandidates = entries.map((entry) => {
-      checkScanDeadline(options.context);
-      const entryRecords = records.filter(
-        (record) =>
-          record.destination === entry ||
-          record.destination.startsWith(`${entry}${sep}`),
-      );
-      const stat = fromThrowable(() => lstatSync(entry))();
-      const mtime = stat.isOk() ? stat.value.mtimeMs : 0;
-      const newestTime =
-        entryRecords.length > 0
-          ? Math.max(...entryRecords.map((record) => record.time))
-          : mtime;
-      // rip already deleted this payload. Open fds retain their inode until close;
-      // process-use evidence (including unreadable processes) cannot block expiry.
-      const isRecent = now - newestTime < minAgeMs;
-      const insideUndoWindow = now - newestTime < undoWindowMs;
-      const ageMs = Math.max(0, now - newestTime);
-      let age: string;
-      if (ageMs < 60_000) age = `${Math.floor(ageMs / 1000)} seconds`;
-      else if (ageMs < 3_600_000) age = `${Math.floor(ageMs / 60_000)} minutes`;
-      else if (ageMs < 86_400_000)
-        age = `${Math.floor(ageMs / 3_600_000)} hours`;
-      else age = `${Math.floor(ageMs / 86_400_000)} days`;
-      const verdict =
-        isRecent &&
-        (!belowDenyLine || options.underPressure !== true || insideUndoWindow)
-          ? "KEEP"
-          : "RECLAIM";
-      let reason: string;
-      if (insideUndoWindow && isRecent)
-        reason = `undo window: rip'd ${age} ago`;
-      else if (isRecent && belowDenyLine && options.underPressure !== true)
-        reason =
-          "recent; host is below the deny line: rerun with --under-pressure to purge";
-      else if (isRecent && !belowDenyLine) reason = `recent: rip'd ${age} ago`;
-      else
-        reason = `older than ${options.config?.graveyard_min_age_hours ?? 24}h`;
-      const cache = scanCache(entry, "purge-allocated-v1", options.context);
-      const cached = z.number().nonnegative().safeParse(cache?.value);
-      const bytes = cached.success ? cached.data : size(entry, options.context);
-      if (!cached.success) cache?.save(bytes);
-      return {
-        id: `${graveyard.label}: ${entry.slice(graveyard.path.length + 1)}`,
-        path: entry,
-        verdict,
-        reason,
-        checks: [
-          {
-            name: "graveyard-entry",
-            ok: true,
-            detail: "top-level graveyard entry",
-          },
-        ],
-        bytes,
-        bytes_kind: "estimate" as const,
-        action: { kind: "delete" as const, argv: ["removeTree", entry] },
-        result: null,
-      } satisfies Candidate;
-    });
+    const entryCandidates = await Promise.all(
+      entries.map(async (entry) => {
+        checkScanDeadline(options.context);
+        const entryRecords = records.filter(
+          (record) =>
+            record.destination === entry ||
+            record.destination.startsWith(`${entry}${sep}`),
+        );
+        const stat = fromThrowable(() => lstatSync(entry))();
+        const mtime = stat.isOk() ? stat.value.mtimeMs : 0;
+        let newestTime: number | undefined = mtime;
+        if (
+          graveyard.label === "rip graveyard" &&
+          entry !== join(graveyard.path, ".record")
+        )
+          newestTime = await ripBurialTime(
+            resolve(graveyard.path),
+            entry,
+            records,
+          );
+        else if (entryRecords.length > 0)
+          newestTime = Math.max(...entryRecords.map((record) => record.time));
+        // rip already deleted this payload. Open fds retain their inode until close;
+        // process-use evidence (including unreadable processes) cannot block expiry.
+        const isRecent =
+          newestTime === undefined || now - newestTime < minAgeMs;
+        const insideUndoWindow =
+          newestTime !== undefined && now - newestTime < undoWindowMs;
+        const ageMs = Math.max(0, now - (newestTime ?? now));
+        let age: string;
+        if (ageMs < 60_000) age = `${Math.floor(ageMs / 1000)} seconds`;
+        else if (ageMs < 3_600_000)
+          age = `${Math.floor(ageMs / 60_000)} minutes`;
+        else if (ageMs < 86_400_000)
+          age = `${Math.floor(ageMs / 3_600_000)} hours`;
+        else age = `${Math.floor(ageMs / 86_400_000)} days`;
+        const verdict =
+          newestTime === undefined ||
+          insideUndoWindow ||
+          (isRecent && (!belowDenyLine || options.underPressure !== true))
+            ? "KEEP"
+            : "RECLAIM";
+        let reason: string;
+        if (newestTime === undefined) reason = UNKNOWN_RIP_BURIAL;
+        else if (insideUndoWindow) reason = `undo window: rip'd ${age} ago`;
+        else if (isRecent && belowDenyLine && options.underPressure !== true)
+          reason =
+            "recent; host is below the deny line: rerun with --under-pressure to purge";
+        else if (isRecent && !belowDenyLine)
+          reason = `recent: rip'd ${age} ago`;
+        else
+          reason = `older than ${options.config?.graveyard_min_age_hours ?? 24}h`;
+        const cache = scanCache(entry, "purge-allocated-v1", options.context);
+        const cached = z.number().nonnegative().safeParse(cache?.value);
+        const bytes = cached.success
+          ? cached.data
+          : size(entry, options.context);
+        if (!cached.success) cache?.save(bytes);
+        return {
+          id: `${graveyard.label}: ${entry.slice(graveyard.path.length + 1)}`,
+          path: entry,
+          verdict,
+          reason,
+          checks: [
+            {
+              name: "graveyard-entry",
+              ok: true,
+              detail: "top-level graveyard entry",
+            },
+          ],
+          bytes,
+          bytes_kind: "estimate" as const,
+          action: { kind: "delete" as const, argv: ["removeTree", entry] },
+          result: null,
+        } satisfies Candidate;
+      }),
+    );
     const recordPath = `${graveyard.path}/.record`;
     const recordCandidate = entryCandidates.find(
       (candidate) => candidate.path === recordPath,

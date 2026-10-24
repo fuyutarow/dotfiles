@@ -14,6 +14,7 @@ import {
 import { dirname, join } from "node:path";
 import { tempRoot as allocateTempRoot } from "../fixtures/temp.ts";
 import { purge, purgeRip } from "../../src/targets/purge.ts";
+import { ripExpiryCandidates } from "../../src/targets/rip-expire.ts";
 import { main as reclaimMain } from "../../src/reclaim.ts";
 import { purgeCandidates } from "../../src/targets/purge.ts";
 import {
@@ -62,6 +63,15 @@ async function purgeTty(
     Temporal.Now.instant().subtract({ hours: 48 }).epochMilliseconds / 1000;
   utimesSync(join(grave, "keep"), old, old);
   utimesSync(join(grave, "nested"), old, old);
+  writeFileSync(
+    join(grave, ".record"),
+    ["keep", "nested"]
+      .map(
+        (name) =>
+          `${Temporal.Instant.fromEpochMilliseconds(old * 1000).toString()}\t/original/${name}\t${join(grave, name)}`,
+      )
+      .join("\n"),
+  );
   let raw = "";
   let typed = false;
   const script = `const { main } = await import(${JSON.stringify(new URL("../../src/reclaim.ts", import.meta.url).href)}); const { purge } = await import(${JSON.stringify(new URL("../../src/targets/purge.ts", import.meta.url).href)}); process.exitCode = await main(["run", "purge", "--interactive"], [purge]);`;
@@ -201,6 +211,10 @@ test("blind rip expiry purges old rip entries only and leaves XDG Trash owner-on
     Temporal.Now.instant().subtract({ hours: 48 }).epochMilliseconds / 1000;
   utimesSync(oldRip, old, old);
   utimesSync(oldTrash, old, old);
+  writeFileSync(
+    join(grave, ".record"),
+    `${Temporal.Instant.fromEpochMilliseconds(old * 1000).toString()}\t/original\t${oldRip}\n`,
+  );
 
   const candidates = await purgeCandidates(
     {
@@ -239,6 +253,7 @@ test("blind rip expiry purges old rip entries only and leaves XDG Trash owner-on
       logs.push(line);
     },
   };
+  await ripExpiryCandidates({ RIP_GRAVEYARD: grave }, root, { context: ctx });
   const result =
     expired === undefined
       ? { ok: false, bytes_freed: null, error: "missing fixture candidate" }
@@ -490,7 +505,7 @@ test("old rip graveyard entry from a dead session is reclaimable", async () => {
   expect(candidate?.verdict).toBe("RECLAIM");
 });
 
-test("graveyard record time is used and missing records fall back to mtime", async () => {
+test("graveyard record time is used and missing records are held regardless of mtime", async () => {
   const root = tempRoot("disk-reclaim-record-grave-");
   const grave = join(root, "grave");
   const recorded = join(grave, "recorded");
@@ -515,9 +530,11 @@ test("graveyard record time is used and missing records fall back to mtime", asy
   expect(candidates.find((item) => item.path === recorded)?.verdict).toBe(
     "KEEP",
   );
-  expect(candidates.find((item) => item.path === fallback)?.verdict).toBe(
-    "RECLAIM",
-  );
+  expect(candidates.find((item) => item.path === fallback)).toMatchObject({
+    verdict: "KEEP",
+    reason:
+      "burial time unknown: missing, unreadable, or invalid burial record",
+  });
 });
 
 test("graveyard candidates include the declared rip and XDG trash content directories", () => {

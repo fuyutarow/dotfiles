@@ -26,6 +26,7 @@ import {
   wrap,
 } from "./receipt.ts";
 import { deleteApproved } from "./delete.ts";
+import { freeGraveyard, freeResult, freeExit, requestedBytes } from "./free.ts";
 import { ProgressReporter } from "./lib/progress.ts";
 import { readHeadroom } from "./storage.ts";
 import { registry, type Context, type Target } from "./targets/index.ts";
@@ -164,6 +165,17 @@ const parsedFlags = z.object({
   last: z.number().default(10),
 });
 const commands = [
+  command({
+    ...common,
+    name: "free",
+    parameters: ["[size...]"],
+    strictFlags: false,
+    flags: {},
+    help: {
+      description:
+        "Unlink SIZE of eligible rip graveyard payloads, oldest first; always JSON.",
+    },
+  }),
   command({
     ...common,
     name: "plan",
@@ -518,6 +530,25 @@ export async function main(
     argv,
   );
   process.removeListener("exit", usageExit);
+  if (parsed.command === "free") {
+    const input =
+      parsed._.length === 1 && Object.keys(parsed.unknownFlags).length === 0
+        ? String(parsed._[0])
+        : undefined;
+    const loaded = loadConfig();
+    let result = freeResult(requestedBytes(input));
+    const refusal = workerMutationRefusal();
+    if (requestedBytes(input) === null) {
+      result.errors.push(
+        "free requires exactly one positive SIZE with KiB/MiB/GiB/TiB or KB/MB/GB/TB; flags are not supported",
+      );
+    } else if (loaded.config === null || refusal !== null) {
+      result.outcome = "failed";
+      result.errors.push(refusal ?? loaded.error ?? "invalid config");
+    } else result = await freeGraveyard(input, { config: loaded.config });
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+    return freeExit(result);
+  }
   const validatedFlags = parsedFlags.safeParse(parsed.flags);
   if (!validatedFlags.success) return fail(validatedFlags.error.message);
   const f = validatedFlags.data;

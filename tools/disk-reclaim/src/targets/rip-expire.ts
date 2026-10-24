@@ -7,6 +7,7 @@ import {
   ripBurialTime,
   UNKNOWN_RIP_BURIAL,
   RIP_GRAVEYARD_MAX_BYTES,
+  ripGraveyardRoot,
 } from "../lib/graveyards.ts";
 import { removeTree } from "../lib/remove-tree.ts";
 import type { Candidate, Config } from "../model.ts";
@@ -80,12 +81,13 @@ async function expandContainer(path: string, pending: string[]): Promise<void> {
 }
 
 /** No payload recursion: split rip's mirrored parents using the restore record. */
-async function enumerate(
+export async function enumerateRipPayloads(
   root: string,
   only: string | undefined,
   now: number,
   ageHours: number,
   undoMs: number,
+  check: () => void = () => {},
 ): Promise<Pick<Expiry, "payloads" | "overhead">> {
   if (!(await safeScope(root, only))) return { payloads: [], overhead: 0 };
   const rootStat = await fromAsyncThrowable(() => lstat(root))();
@@ -99,6 +101,7 @@ async function enumerate(
   const containers = new Set<string>();
   const times = new Map<string, number>();
   for (const record of records) {
+    check();
     const destination = resolve(record.destination);
     if (!inside(root, destination)) continue;
     times.set(destination, Math.max(times.get(destination) ?? 0, record.time));
@@ -113,6 +116,7 @@ async function enumerate(
   let overhead = 0;
   const pending = [root];
   while (pending.length > 0) {
+    check();
     const path = pending.pop();
     if (path === undefined) break;
     const stat = await lstat(path);
@@ -333,14 +337,11 @@ export function createRipExpiryTarget(
         ? timeout
         : AbortSignal.any([timeout, ctx.signal]);
     const deadline = clock() + budgetMs;
-    const root = resolve(
-      env.RIP_GRAVEYARD ??
-        join(env.XDG_DATA_HOME ?? join(home, ".local/share"), "graveyard"),
-    );
+    const root = ripGraveyardRoot(env, home);
     const now = settings.now ?? Temporal.Now.instant().epochMilliseconds;
     const undoMs =
       (settings.config?.graveyard_pressure_undo_minutes ?? 10) * 60_000;
-    const enumerated = await enumerate(
+    const enumerated = await enumerateRipPayloads(
       root,
       settings.only,
       now,

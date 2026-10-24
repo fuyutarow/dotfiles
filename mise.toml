@@ -598,6 +598,11 @@ description = "Plan then apply safe disk-reclamation records, including expired 
 raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" --yes'
 
+[tasks."disk:free"]
+description = "Free SIZE of rip graveyard payloads now, oldest first, preserving the undo window; reports one JSON result."
+raw = true
+run = 'mise run bun:check >&2 && bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" free'
+
 
 # Remediation for what wsl:audit reports as "host process past 3600s CPU". Twice on r99 (2026-09-09
 # and 2026-09-22) sshd left per-connection `sshd -R` processes busy-looping after C: filled — 9 of

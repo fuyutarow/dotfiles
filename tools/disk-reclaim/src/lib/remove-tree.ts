@@ -44,6 +44,12 @@ export type RemoveTreeResult = {
 };
 export type RemoveTreeOptions = {
   uid: number;
+  /** Additional request budget; false refuses before visiting another entry. */
+  allowVisit?: () => boolean;
+  /** Revalidate request authority after preflight and before the first unlink. */
+  beforeUnlink?: () => Promise<boolean>;
+  /** Defaults to allocated blocks; owner free requests count logical unlinked bytes. */
+  bytesKind?: "allocated" | "logical";
   signal?: AbortSignal;
   owner?: (path: string) => { uid: number; name: string };
   immutable?: (path: string) => boolean | null;
@@ -393,7 +399,10 @@ export async function removeTree(
       errors.push({ path: entry.path, error: message(removed.error) });
       return false;
     }
-    bytesFreed += entry.stat.blocks * 512;
+    bytesFreed +=
+      options.bytesKind === "logical"
+        ? entry.stat.size
+        : entry.stat.blocks * 512;
     entriesDone += 1;
     writeProgress();
     return true;
@@ -420,6 +429,10 @@ export async function removeTree(
   };
   const visit = async (entry: string): Promise<boolean> => {
     if (options.signal?.aborted === true) return false;
+    if (options.allowVisit?.() === false) {
+      errors.push({ path: entry, error: "request entry budget exhausted" });
+      return false;
+    }
     inspected++;
     if (inspected % 128 === 0) await Bun.sleep(0);
     const statResult = fromThrowable(() => lstatSync(entry))();
@@ -509,6 +522,14 @@ export async function removeTree(
     return queueOrRemove({ path: entry, stat });
   };
   await visit(path);
+  if (
+    options.dryRun !== true &&
+    refused.length === 0 &&
+    errors.length === 0 &&
+    options.beforeUnlink !== undefined &&
+    !(await options.beforeUnlink())
+  )
+    errors.push({ path, error: "request authority changed before unlink" });
   if (options.dryRun !== true && refused.length === 0 && errors.length === 0) {
     const files = pending.filter(({ stat }) => !stat.isDirectory());
     const directories = pending

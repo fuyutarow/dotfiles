@@ -187,3 +187,40 @@ or WSL query step. Timeout exits 2 with the last step and captured output; it em
 JSONL plan. The installed bin reads its linked checkout, so workspace changes take effect only
 when that checkout is updated. Unknown unreadable processes remain ASK with PID, comm, and exe
 in the plan reason; an unavailable identity is named explicitly.
+
+`mise run disk:free -- SIZE` (or `disk-reclaim free SIZE`) unlinks eligible rip graveyard
+payloads immediately, ignoring the retention age R and capacity target C while preserving U.
+SIZE requires a positive finite number and KiB/MiB/GiB/TiB or KB/MB/GB/TB; fractional bytes
+round up, and values yielding nonfinite byte counts are invalid. No force or pressure flags
+are accepted. Scope uses exactly rip-expire's resolved `RIP_GRAVEYARD` or XDG data graveyard;
+stdout and stderr identify the root and filesystem. XDG Trash, caches, workspaces and Windows
+host reclamation are outside this command.
+
+A completed request-time discovery fixes the candidate set before waiting for the shared reclaim
+lock (at most 10 seconds, regardless of `RECLAIM_LOCK_WAIT_S`). Recorded burial orders eligible
+payloads oldest first, with path ids breaking ties. Unknown burial and entries younger than U
+are held. Foreign owners, protected paths and live or unknown process use are skipped; later
+eligible payloads are still attempted. Identity and burial are checked again under the lock.
+Payloads are indivisible selection units: removal preflights the whole payload and does not stop
+inside it just because SIZE was reached. Cancellation or a filesystem failure can still interrupt
+unlinking; only completed unlinks count. New candidates are never discovered during deletion.
+
+One `reclaim.free/1` JSON document reports `outcome` (`met`, `partial`, `busy`, `invalid`, `failed`),
+`requested_bytes`, `unlinked_bytes`, `free_delta_bytes`, `overshoot_bytes`, `shortfall_bytes`,
+`u_protected_bytes`, `earliest_eligible_at`, and `skip_counts` (payload counts, once per reason).
+`unlinked_bytes` sums logical sizes of entries actually unlinked, including directory entries;
+sparse files can therefore satisfy SIZE while releasing few blocks. The signed statfs available
+byte delta is measured separately and may reflect other writers, open files or hard links.
+It is never used to decide `met`. A partial result reports its shortfall and the earliest known
+U expiry (null if no known U-held burial); unknown burial has no invented eligibility time.
+`u_protected_bytes_complete=false` labels incomplete accounting as a lower bound.
+Busy includes the lock holder and elapsed wait, with zero unlinks. Exit codes are 0 only for met,
+1 for partial/failed, 2 for invalid SIZE, and 3 for busy.
+
+Each request has a 120-second cooperative work budget and 100,000 record/traversal visits,
+including discovery, U accounting, revalidation and removal. The work deadline also spans lock
+wait; the lock loop has its separate 10-second bound. Exhaustion during discovery performs no deletion; during preflight it retains that
+payload. Exhaustion during unlinking reports the bytes actually unlinked. System calls must
+return before a cooperative budget can stop work. Budget exhaustion and per-payload skips are
+reported, and no background continuation is launched. The worker mutation guard also applies
+to `free`; fixtures use temporary roots and state.

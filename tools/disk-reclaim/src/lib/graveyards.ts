@@ -180,6 +180,13 @@ export function ripRecords(path: string): RipRecord[] {
 export const UNKNOWN_RIP_BURIAL =
   "burial time unknown: missing, unreadable, or invalid burial record";
 
+export function ripGraveyardRoot(env = process.env, home = homedir()): string {
+  return resolve(
+    env.RIP_GRAVEYARD ??
+      join(env.XDG_DATA_HOME ?? join(home, ".local/share"), "graveyard"),
+  );
+}
+
 /** A mirrored parent is dated only when every payload below it has a record.
  * Descendants of a recorded payload share its burial, never their source mtime.
  */
@@ -187,10 +194,12 @@ export async function ripBurialTime(
   root: string,
   path: string,
   records = ripRecords(root),
+  check: () => void = () => {},
 ): Promise<number | undefined> {
   const times = new Map<string, number>();
   const containers = new Set<string>();
   for (const record of records) {
+    check();
     const destination = resolve(record.destination);
     if (!destination.startsWith(`${root}${sep}`)) continue;
     times.set(
@@ -221,6 +230,7 @@ export async function ripBurialTime(
     descendantTimes.length === 0 ? undefined : Math.max(...descendantTimes);
   const pending = [path];
   while (pending.length > 0) {
+    check();
     const entry = pending.pop();
     if (entry === undefined) break;
     const time = times.get(entry);

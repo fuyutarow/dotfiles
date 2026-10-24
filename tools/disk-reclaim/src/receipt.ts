@@ -41,8 +41,11 @@ export async function waitForLock(
   log: (text: string) => void = (text) => {
     process.stderr.write(`${text}\n`);
   },
+  boundedWaitS?: number,
 ) {
-  const waitS = Number(process.env.RECLAIM_LOCK_WAIT_S ?? "900");
+  const started = performance.now();
+  const waitS =
+    boundedWaitS ?? Number(process.env.RECLAIM_LOCK_WAIT_S ?? "900");
   if (!Number.isFinite(waitS) || waitS < 0)
     return {
       exit: 2,
@@ -57,7 +60,10 @@ export async function waitForLock(
   };
   const lock = await acquire(join(dir, "lock"), me, {
     waitMs: waitS * 1000,
-    pollMs: Math.max(1, Math.min(2000, waitS * 1000)),
+    pollMs: Math.max(
+      1,
+      Math.min(boundedWaitS === undefined ? 2000 : 10, waitS * 1000),
+    ),
     onWait: (h) => {
       log(
         `disk-reclaim: ${name} waits for ${h === undefined ? "a lock being taken" : `${h.what} (pid ${h.pid} on ${h.host}, since ${h.since})`}`,
@@ -70,6 +76,8 @@ export async function waitForLock(
     exit: 3,
     error: `lock stayed busy for ${waitS}s${lock === undefined ? "" : `, held by ${lock.what} (pid ${lock.pid} on ${lock.host}, since ${lock.since})`}`,
     release: null,
+    holder: lock ?? null,
+    elapsed_ms: performance.now() - started,
   };
 }
 export function outputPath(name: string, dir = stateDir()): string {

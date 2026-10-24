@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0 — 2026-10-24
+
+- Add disk:free to free graveyard space on demand without breaking the undo window
+
 ## 1.4.11 — 2026-10-24
 
 - Preserve the absolute rip undo window across reclaim paths

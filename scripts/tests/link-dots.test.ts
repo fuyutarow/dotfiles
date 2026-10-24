@@ -69,19 +69,19 @@ async function ownerFixture(): Promise<Ctx> {
     "statusline-sampler.service",
     "statusline-sampler.timer",
     "agx-doctor.service",
-    "agx-doctor.path",
+    "agx-doctor.timer",
   ])
     await symlink(join(REPO, "systemd", unit), join(directory, unit));
   return ctx;
 }
 
-test("doctor findings never make link deployment wait for the diagnostic verdict", async () => {
+test("doctor refresh deployment enables its timer without starting a collector", async () => {
   const calls: string[][] = [];
   const result = await deployStatuslineOwners(
     await ownerFixture(),
     (args) => {
       calls.push(args);
-      // A blocking doctor start would exceed the deployment's 10s deadline.
+      // Collector activation belongs to the timer, not the linking operation.
       return Promise.resolve(
         args[0] === "start" && !args.includes("--no-block")
           ? { code: 137, out: "" }
@@ -91,10 +91,13 @@ test("doctor findings never make link deployment wait for the diagnostic verdict
     true,
   );
   expect(result).toBeUndefined();
-  expect(calls).toContainEqual(["start", "--no-block", "agx-doctor.service"]);
+  expect(calls).toContainEqual(["stop", "agx-doctor.path"]);
+  expect(calls).toContainEqual(["enable", "agx-doctor.timer"]);
+  expect(calls.some((args) => args[0] === "start")).toBe(false);
   const unit = await Bun.file(join(REPO, "systemd/agx-doctor.service")).text();
   expect(unit).toMatch(/^SuccessExitStatus=1$/mu);
-  expect(unit).toMatch(/^ExecStartPre=\/usr\/bin\/sleep 60$/mu);
+  expect(unit).not.toContain("ExecStartPre=");
+  expect(unit).toContain("agx doctor --json --refresh");
   expect(unit).not.toContain("SuccessExitStatus=1 2");
 });
 
@@ -115,6 +118,61 @@ test.each([
     );
   },
 );
+
+test("fresh deployment skips the absent retired path; failed retirement stops deployment", async () => {
+  const ctx = await ownerFixture();
+  const calls: string[][] = [];
+  expect(
+    await deployStatuslineOwners(
+      ctx,
+      (args) => {
+        calls.push(args);
+        return Promise.resolve({
+          code: 0,
+          out:
+            args[0] === "show"
+              ? "LoadState=not-found\nActiveState=inactive\n"
+              : "",
+        });
+      },
+      true,
+    ),
+  ).toBeUndefined();
+  expect(calls.some((args) => args[0] === "stop")).toBe(false);
+  expect(calls).toContainEqual(["enable", "agx-doctor.timer"]);
+
+  calls.length = 0;
+  const failure = await deployStatuslineOwners(
+    ctx,
+    (args) => {
+      calls.push(args);
+      return Promise.resolve(
+        args[0] === "stop"
+          ? { code: 1, out: "retirement failed" }
+          : { code: 0, out: "LoadState=loaded\nActiveState=active\n" },
+      );
+    },
+    true,
+  );
+  expect(failure?.message).toContain("retirement failed");
+  expect(calls.some((args) => args[0] === "enable")).toBe(false);
+});
+
+test("retired path links are pruned without removing foreign links", async () => {
+  const ctx = await ownerFixture();
+  const directory = join(ctx.home, ".config/systemd/user");
+  mkdirSync(join(directory, "default.target.wants"));
+  for (const rel of ["agx-doctor.path", "default.target.wants/agx-doctor.path"])
+    symlinkSync(join(REPO, "systemd/agx-doctor.path"), join(directory, rel));
+  prune(ctx);
+  expect(isLink(join(directory, "agx-doctor.path"))).toBe(false);
+  expect(isLink(join(directory, "default.target.wants/agx-doctor.path"))).toBe(
+    false,
+  );
+  symlinkSync("/foreign/agx-doctor.path", join(directory, "agx-doctor.path"));
+  prune(ctx);
+  expect(isLink(join(directory, "agx-doctor.path"))).toBe(true);
+});
 
 describe("sshSupportsAttachMatch", () => {
   test.each([

@@ -16,7 +16,7 @@ const units = [
   "statusline-sampler.service",
   "statusline-sampler.timer",
   "agx-doctor.service",
-  "agx-doctor.path",
+  "agx-doctor.timer",
 ];
 const ownerProbe = (cmd: string[]) =>
   Promise.resolve({
@@ -62,33 +62,42 @@ test("registry links all owner units; owner deployment enables triggers without 
   };
   expect(await deployStatuslineOwners(ctx, probe, true)).toBeUndefined();
   expect(calls).toEqual([
+    [
+      "show",
+      "agx-doctor.path",
+      "--property=LoadState",
+      "--property=ActiveState",
+    ],
+    ["stop", "agx-doctor.path"],
     ["daemon-reload"],
     ["enable", "statusline-sampler.timer"],
-    ["enable", "agx-doctor.path"],
-    ["start", "--no-block", "agx-doctor.service"],
+    ["enable", "agx-doctor.timer"],
   ]);
   calls.length = 0;
   expect(
     await deployStatuslineOwners({ ...ctx, mode: "check" }, probe, true),
   ).toBeUndefined();
   expect(calls).toEqual([]);
-  const watcher = await readFile(
-    join(ctx.dotfiles, "systemd/agx-doctor.path"),
+  const timer = await readFile(
+    join(ctx.dotfiles, "systemd/agx-doctor.timer"),
     "utf8",
   );
-  expect(watcher).toContain("PathChanged=%h/.local/state/agx/records.jsonl");
-  expect(watcher).toContain(
-    "PathChanged=%h/.local/state/agx/workspace-verdicts.json",
-  );
-  expect(watcher).not.toContain(
-    "PathChanged=%h/.local/state/agx-next/doctor.json",
+  expect(timer).toContain("OnBootSec=60s");
+  expect(timer).toContain("OnUnitInactiveSec=60s");
+  expect(timer).toContain("Unit=agx-doctor.service");
+  expect(timer).toContain("WantedBy=timers.target");
+  expect(timer).not.toContain("PathChanged=");
+  expect(LINKS.some(([, source]) => source === "systemd/agx-doctor.path")).toBe(
+    false,
   );
   const service = await readFile(
     join(ctx.dotfiles, "systemd/agx-doctor.service"),
     "utf8",
   );
   expect(service).toContain("Type=oneshot");
-  expect(service).toContain("ExecStartPre=/usr/bin/sleep 60");
+  expect(service).not.toContain("ExecStartPre=");
+  expect(service).toContain("agx doctor --json --refresh");
+  expect(service).toContain("TimeoutStartSec=180s");
   expect(service).toContain("SuccessExitStatus=1");
 });
 

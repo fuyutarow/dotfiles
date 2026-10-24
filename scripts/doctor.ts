@@ -1064,7 +1064,7 @@ export async function checkStatuslineOwners(
   probe: typeof run = run,
 ): Promise<Finding> {
   const results = await Promise.all(
-    ["statusline-sampler.timer", "agx-doctor.path"].map(async (unit) => {
+    ["statusline-sampler.timer", "agx-doctor.timer"].map(async (unit) => {
       const active = await probe(["systemctl", "--user", "is-active", unit], {
         ms: 10_000,
       });
@@ -1121,7 +1121,7 @@ export async function checkStatuslineOwners(
     );
   return pass(
     "statusline-owners",
-    "sampler timer and agx input watcher active; collectors successful",
+    "sampler and agx refresh timers active; collectors successful",
   );
 }
 

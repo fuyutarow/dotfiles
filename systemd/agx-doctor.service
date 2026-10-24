@@ -1,18 +1,15 @@
 [Unit]
-Description=Refresh agx diagnostic state after owner inputs change
+Description=Refresh agx diagnostics through the public bounded refresh contract
 StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
 WorkingDirectory=%h/dotfiles
 Environment=PATH=%h/.bun/bin:%h/.local/bin:%h/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
-# Every activation waits 60s, including after failures. The singleton coalesces
-# input changes during this window and the run; doctor starts at most once/60s.
-# Keep StartLimitIntervalSec=0: a rate-limit rejection would disable the path.
-ExecStartPre=/usr/bin/sleep 60
-ExecStart=/usr/bin/env mise -C %h/dotfiles exec -- agx doctor --json
+# The timer bounds frequency; agx owns admission and cross-process coalescing.
+ExecStart=/usr/bin/env mise -C %h/dotfiles exec -- agx doctor --json --refresh
 SuccessExitStatus=1
-# Budget: 60s pre-delay + 3 x 60s default member deadlines + 60s startup/publication margin.
-TimeoutStartSec=300s
+# Budget: 125s whole-request deadline + 55s startup/publication margin.
+TimeoutStartSec=180s
 StandardOutput=journal
 StandardError=journal

@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh agx diagnostics on the public sixty-second polling cadence
+
+[Timer]
+OnBootSec=60s
+# Wait after completion: slow or failed refreshes never overlap or retry in a loop.
+OnUnitInactiveSec=60s
+AccuracySec=1s
+Unit=agx-doctor.service
+
+[Install]
+WantedBy=timers.target

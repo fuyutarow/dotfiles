@@ -26,6 +26,7 @@ import { LINKS } from "../config-registry.ts";
 import { applies, sshSupportsAttachMatch } from "../link-dots.ts";
 import {
   checkAgx,
+  checkStatuslineOwners,
   CHECKS,
   checkCccDbMap,
   checkCodexRemote,
@@ -106,6 +107,25 @@ const probeResult = {
   timedOut: false,
   missing: false,
 };
+
+test("owner health checks require the refresh timer and never probe the retired path", async () => {
+  const calls: string[][] = [];
+  const result = await checkStatuslineOwners(agxCtx, (cmd) => {
+    calls.push(cmd);
+    if (cmd.includes("agx-doctor.timer"))
+      return Promise.resolve({ ...probeResult, code: 3, out: "inactive\n" });
+    return Promise.resolve({ ...probeResult, out: "active\n" });
+  });
+  expect(result.verdict).toBe("FAIL");
+  expect(result.detail).toContain("agx-doctor.timer: inactive");
+  expect(calls).toContainEqual([
+    "systemctl",
+    "--user",
+    "is-active",
+    "agx-doctor.timer",
+  ]);
+  expect(calls.flat()).not.toContain("agx-doctor.path");
+});
 
 test("mise doctor reads findings through pinned status without refreshing", async () => {
   expect(CHECKS.some((check) => check.name === "agx")).toBe(true);

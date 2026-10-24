@@ -117,7 +117,7 @@ test.each(["linux", "wsl"] as const)(
       f.triggers.some((trigger) => trigger.unit === "prompt-archive.timer"),
     ).toBe(true);
     expect(
-      f.triggers.some((trigger) => trigger.unit === "agx-doctor.path"),
+      f.triggers.some((trigger) => trigger.unit === "agx-doctor.timer"),
     ).toBe(true);
     expect(
       f.triggers.every((trigger) => /\.(timer|path)$/u.test(trigger.unit)),

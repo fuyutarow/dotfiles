@@ -203,8 +203,8 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   ],
   [
     "not-mac",
-    "systemd/agx-doctor.path",
-    ".config/systemd/user/agx-doctor.path",
+    "systemd/agx-doctor.timer",
+    ".config/systemd/user/agx-doctor.timer",
   ],
   [
     "not-mac",
@@ -352,6 +352,9 @@ export const ETC_LINKS: readonly (readonly [string, string, string])[] = [
 // them). Until 2026-09-13 three .ts CLIs were hand-symlinked into ~/.local/bin; they are now
 // package.json `bin` entries that `bun link` (mise run deps) installs into ~/.bun/bin.
 export const RETIRED = [
+  // Private agx file watches were replaced by the public refresh timer.
+  ".config/systemd/user/agx-doctor.path",
+  ".config/systemd/user/default.target.wants/agx-doctor.path",
   // Previously linked to scripts/bun-exec.sh; core Bun is now Homebrew on every OS.
   ".local/bin/bun",
   // Linked until 2026-10-06; the tools WRITE these (measured), so they became TOOL_OWNED.

@@ -993,7 +993,7 @@ export async function deployStatuslineOwners(
     "statusline-sampler.service",
     "statusline-sampler.timer",
     "agx-doctor.service",
-    "agx-doctor.path",
+    "agx-doctor.timer",
   ]) {
     const target = await realpath(
       join(ctx.home, ".config/systemd/user", unit),
@@ -1006,11 +1006,28 @@ export async function deployStatuslineOwners(
         `${unit} is not the declared link; repair: mise run link:dots`,
       );
   }
+  // The old unit may still be loaded after linkAll prunes its retired links.
+  // Inspect before daemon-reload so an active private-file watch is stopped too.
+  // RETIRED removes its unit and enablement links (disabling it). Explicitly stop
+  // the loaded unit: disable --now fails when its removed source no longer exists.
+  const old = await probe([
+    "show",
+    "agx-doctor.path",
+    "--property=LoadState",
+    "--property=ActiveState",
+  ]);
+  const absent =
+    old.out.split("\n").includes("LoadState=not-found") &&
+    old.out.split("\n").includes("ActiveState=inactive");
+  if (old.code !== 0)
+    return new Error(
+      `cannot inspect retired agx-doctor.path (exit ${old.code}): ${old.out === "" ? "no output (systemctl may have timed out)" : old.out}; repair: mise run link:dots`,
+    );
   for (const args of [
+    ...(!absent ? [["stop", "agx-doctor.path"]] : []),
     ["daemon-reload"],
     ["enable", "statusline-sampler.timer"],
-    ["enable", "agx-doctor.path"],
-    ["start", "--no-block", "agx-doctor.service"],
+    ["enable", "agx-doctor.timer"],
   ]) {
     const result = await probe(args);
     if (result.code !== 0)
@@ -1019,7 +1036,7 @@ export async function deployStatuslineOwners(
       );
   }
   say(
-    "enabled: statusline-sampler.timer (5s after completion; agx worker doctor follows its inputs)",
+    "enabled: statusline-sampler.timer (5s after completion), agx-doctor.timer (60s after completion)",
   );
   return undefined;
 }

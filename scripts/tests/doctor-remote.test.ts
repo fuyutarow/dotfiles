@@ -1,50 +1,101 @@
 import { expect, test } from "bun:test";
-import {
-  codexRouteFinding,
-  managedWslConfigFinding,
-} from "../doctor-remote.ts";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import { checkCodexRoute, managedWslConfigFinding } from "../doctor-remote.ts";
 
-test("codex route passes when Codex starts in its default sandbox", () => {
-  expect(
-    codexRouteFinding("r99-u26", {
-      code: 0,
-      out: "",
-      err: "",
+const PROBE_FIXTURE = join(import.meta.dir, "fixtures/remote-agx-probe.ts");
+
+function fixtureRunner(
+  mode: "pass" | "fail" | "missing-agx",
+  seen: string[][],
+) {
+  return (cmd: readonly string[], _input: string | null, _ms: number) => {
+    seen.push([...cmd]);
+    const proc = spawnSync(process.execPath, [PROBE_FIXTURE, mode], {
+      encoding: "utf8",
+    });
+    return Promise.resolve({
+      code: proc.status ?? -1,
+      out: proc.stdout,
+      err: proc.stderr,
       timedOut: false,
-    }),
-  ).toEqual({
+    });
+  };
+}
+
+test("Codex route delegates to the remote pinned agx probe and renders success", async () => {
+  const seen: string[][] = [];
+  const result = await checkCodexRoute("r99-u26", fixtureRunner("pass", seen));
+  expect(seen).toEqual([
+    [
+      "ssh",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "ConnectTimeout=15",
+      "r99-u26",
+      'mise -C ~/dotfiles exec -- agx worker probe --vendor codex --sandbox workspace-write --cd "$HOME" --timeout-ms 30000 --json',
+    ],
+  ]);
+  expect(result).toEqual({
     name: "codex-route",
     verdict: "PASS",
-    detail: "codex exec starts with the workspace-write sandbox",
+    detail: "agx worker probe completed successfully (workspace-write)",
   });
 });
 
-test("codex route reports sandbox startup failures", () => {
-  expect(
-    codexRouteFinding("r99-u26", {
-      code: 1,
-      out: "",
-      err: "unshare: Operation not permitted",
-      timedOut: false,
-    }),
-  ).toEqual({
+test("Codex route renders an agx failure as FAIL with its diagnostic", async () => {
+  const result = await checkCodexRoute("r99-u26", fixtureRunner("fail", []));
+  expect(result).toEqual({
     name: "codex-route",
     verdict: "FAIL",
     detail:
-      "codex exec --sandbox workspace-write could not start (exit 1): unshare: Operation not permitted",
-    fix: "on r99-u26: verify the Codex sandbox prerequisites; only if the host itself is the isolation boundary, declare that in ~/.config/agx/host.toml",
+      "agx worker probe outcome failed (exit 1): Codex diagnostic failed; unshare: Operation not permitted",
+    fix: 'on r99-u26: verify the Codex sandbox prerequisites and ~/.config/agx/host.toml; rerun mise -C ~/dotfiles exec -- agx worker probe --vendor codex --sandbox workspace-write --cd "$HOME" --timeout-ms 30000 --json',
   });
 });
 
-test("codex route sends authentication failures to the login repair", () => {
+test("missing remote agx is FAIL with an installation repair", async () => {
+  const result = await checkCodexRoute(
+    "r99-u26",
+    fixtureRunner("missing-agx", []),
+  );
+  expect(result).toEqual({
+    name: "codex-route",
+    verdict: "FAIL",
+    detail:
+      "remote agx probe is unavailable (exit 127): mise: command not found",
+    fix: "on r99-u26: run mise run linux:init in ~/dotfiles, then verify mise -C ~/dotfiles exec -- agx worker probe --help",
+  });
+});
+
+test("invalid or successful-but-nonzero probe output cannot become PASS", async () => {
   expect(
-    codexRouteFinding("r99-u26", {
-      code: 1,
-      out: "",
-      err: "not logged in",
-      timedOut: false,
-    }).fix,
-  ).toBe("from the Mac: mise run auth:push -- r99-u26");
+    await checkCodexRoute("r99-u26", () =>
+      Promise.resolve({
+        code: 0,
+        out: "not JSON",
+        err: "",
+        timedOut: false,
+      }),
+    ),
+  ).toMatchObject({
+    verdict: "FAIL",
+    detail: "agx worker probe returned no valid JSON (exit 0): not JSON",
+  });
+  expect(
+    await checkCodexRoute("r99-u26", () =>
+      Promise.resolve({
+        code: 1,
+        out: '{"schema":1,"vendor":"codex","outcome":"success"}',
+        err: "",
+        timedOut: false,
+      }),
+    ),
+  ).toMatchObject({
+    verdict: "FAIL",
+    detail: "agx worker probe outcome success (exit 1): no diagnostic",
+  });
 });
 
 test("managed WSL block without its -code alias is FAIL with the repair task", () => {

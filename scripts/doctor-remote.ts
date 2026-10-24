@@ -22,6 +22,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { normalizeManagedWslConfig } from "./wsl-distro.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
@@ -127,21 +128,22 @@ async function checkSshCmd(host: string): Promise<Finding> {
       );
 }
 
-async function checkCodexRoute(host: string): Promise<Finding> {
-  // Match agx's codex-resource-probe command shape and the worker's startup flags. The helper has
-  // no remote diagnostic CLI, so run the probe over SSH. `agx worker run` defaults to workspace-write;
-  // ask Codex to execute `true` so PASS confirms the sandbox actually ran a command. Allow 30 s
-  // for the model response; the helper's 5 s resource-probe bound is too short for this check.
-  const r = await run(
-    [
-      ...SSH,
-      host,
-      "codex exec --skip-git-repo-check --sandbox workspace-write -c 'approval_policy=\"never\"' -- 'Run true with the shell tool and report success.'",
-    ],
+const CODEX_PROBE_TIMEOUT_MS = 30_000;
+const REMOTE_CODEX_PROBE =
+  'mise -C ~/dotfiles exec -- agx worker probe --vendor codex --sandbox workspace-write --cd "$HOME" --timeout-ms 30000 --json';
+
+type ProbeRunner = typeof run;
+
+export async function checkCodexRoute(
+  host: string,
+  runProbe: ProbeRunner = run,
+): Promise<Finding> {
+  const result = await runProbe(
+    [...SSH, host, REMOTE_CODEX_PROBE],
     null,
-    30_000,
+    CODEX_PROBE_TIMEOUT_MS,
   );
-  return codexRouteFinding(host, r);
+  return codexRouteFinding(host, result);
 }
 
 export function codexRouteFinding(
@@ -153,25 +155,62 @@ export function codexRouteFinding(
     timedOut: boolean;
   }>,
 ): Finding {
-  if (result.code === 0)
+  const parsedReport = jsonOf(
+    z.looseObject({
+      outcome: z.string(),
+      reason: z.string().optional(),
+      stderr: z.string().optional(),
+    }),
+  ).safeParse(result.out.trim());
+  const report = parsedReport.success ? parsedReport.data : undefined;
+
+  if (result.code === 0 && report?.outcome === "success")
     return finding(
       "codex-route",
       "PASS",
-      "codex exec starts with the workspace-write sandbox",
+      "agx worker probe completed successfully (workspace-write)",
     );
-  const stderr = result.err.trim();
-  const raw = stderr.length > 0 ? stderr : result.out.trim();
-  const detail = raw.length > 0 ? raw : "no diagnostic";
+
+  const transportOutput = `${result.err}\n${result.out}`.trim();
+  const missingAgx =
+    result.code === 127 ||
+    /(?:mise|agx):? (?:command )?not found|No such file or directory/iu.test(
+      transportOutput,
+    );
+  if (missingAgx)
+    return finding(
+      "codex-route",
+      "FAIL",
+      `remote agx probe is unavailable (exit ${result.code}): ${transportOutput.length > 0 ? transportOutput : "mise or agx is not installed/on PATH"}`,
+      `on ${host}: run mise run linux:init in ~/dotfiles, then verify mise -C ~/dotfiles exec -- agx worker probe --help`,
+    );
+
+  const raw = [report?.reason, report?.stderr, result.err.trim()]
+    .filter((detail) => detail !== undefined && detail.length > 0)
+    .join("; ");
+  let detail: string;
+  if (report === undefined) {
+    const output = result.out.trim();
+    let diagnostic = "no diagnostic";
+    if (raw.length > 0) diagnostic = raw;
+    else if (output.length > 0) diagnostic = output;
+    detail = `agx worker probe returned no valid JSON (exit ${result.code}): ${diagnostic}`;
+  } else {
+    const diagnostic = raw.length > 0 ? raw : "no diagnostic";
+    detail = `agx worker probe outcome ${report.outcome} (exit ${result.code}): ${diagnostic}`;
+  }
   const timedOut = result.timedOut ? ", timed out" : "";
   const authenticationFailure =
-    /not logged in|unauthorized|authentication/iu.test(raw);
+    /not logged in|unauthorized|authentication/iu.test(
+      `${raw}\n${transportOutput}`,
+    );
   return finding(
     "codex-route",
     "FAIL",
-    `codex exec --sandbox workspace-write could not start (exit ${result.code}${timedOut}): ${detail}`,
+    `${detail}${timedOut}`,
     authenticationFailure
       ? `from the Mac: mise run auth:push -- ${host}`
-      : `on ${host}: verify the Codex sandbox prerequisites; only if the host itself is the isolation boundary, declare that in ~/.config/agx/host.toml`,
+      : `on ${host}: verify the Codex sandbox prerequisites and ~/.config/agx/host.toml; rerun mise -C ~/dotfiles exec -- agx worker probe --vendor codex --sandbox workspace-write --cd "$HOME" --timeout-ms 30000 --json`,
   );
 }
 

@@ -501,7 +501,7 @@ describe("enforce-storage-headroom", () => {
     }
   });
 
-  test("allows named agx commands below the deny line", () => {
+  test("allows released agx worker commands below the deny line", () => {
     const { env } = cachedConfig(
       (c) => {
         drives(10, 10, 20)(c);
@@ -511,11 +511,15 @@ describe("enforce-storage-headroom", () => {
     );
     for (const subcommand of ["run", "check", "ls", "judge", "stats"]) {
       expect(
-        decisionOf(runHook(HOOK, bash(`agx ${subcommand}`), env).stdout),
+        decisionOf(runHook(HOOK, bash(`agx worker ${subcommand}`), env).stdout),
       ).toBeNull();
     }
     expect(
-      decisionOf(runHook(HOOK, bash("agx unknown"), env).stdout)
+      decisionOf(runHook(HOOK, bash("agx worker unknown"), env).stdout)
+        ?.permissionDecision,
+    ).toBe("deny");
+    expect(
+      decisionOf(runHook(HOOK, bash("agx run"), env).stdout)
         ?.permissionDecision,
     ).toBe("deny");
     expect(

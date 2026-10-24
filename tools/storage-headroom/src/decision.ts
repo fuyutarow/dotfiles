@@ -556,10 +556,11 @@ export function isRecoveryOrRead(command: string, cwd: string): boolean {
       const [sub = "", third = ""] = eff.args;
       if (eff.name === "cargo" && sub === "clean")
         return cargoCleanInProject(c);
-      // agx writes bounded run records; its worker still passes through the storage gate.
+      // The released worker commands write bounded records and remain available for recovery.
       if (
         eff.name === "agx" &&
-        ["run", "check", "ls", "judge", "stats"].includes(sub)
+        sub === "worker" &&
+        ["run", "check", "ls", "judge", "stats"].includes(third)
       )
         return true;
       if (eff.name === "disk-reclaim" || eff.name === "storage-headroom")

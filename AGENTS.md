@@ -113,6 +113,8 @@ their executable details.
 - Use ordinary agx tickets and capability routing for worker selection. Add no fixed model,
   effort or roster unless the task owner requires it. Do not infer hook enforcement on
   dispatch paths the active hook does not cover. Workers stay within their brief's scope.
+- Treat root `.agents/` as coordinator working state. Promote durable conclusions explicitly to
+  their owned tracked documentation; do not make a coordinator working file a record by tracking it.
 - Durable systemd worker dispatch must forward `CLAUDE_CODE_SESSION_ID` and
   `CODEX_SESSION_ID` with `-E`; use `agx worker run --session ID` when forwarding is unavailable.
   Preserve the naming, ownership and legacy-access rules declared by agx and described in

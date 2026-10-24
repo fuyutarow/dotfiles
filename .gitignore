@@ -2,9 +2,8 @@
 /.serena/
 /.agent-state/
 
-# Owner: AGX coordinators. Ticket inputs and coordinator handoffs are runtime state.
-/.agents/tickets/
-/.agents/handoff-*.md
+# Owner: AGX coordinators. The whole directory is coordinator working state; promote durable conclusions to owned docs.
+/.agents/
 
 # Owner: agent command framework. System command assets are tool-managed.
 /agents/commands/.system/

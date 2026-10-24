@@ -1,3 +1,4 @@
-# Owner decision (2026-10-23): agx is the A-class exception; see INV-6 in zsh/zshenv.
+# Owner decision (2026-10-25): the A-class agx suite follows latest without release-age delay.
+# INV-6 in zsh/zshenv; mise.lock records the version last adopted.
 [tools]
-"github:fuyutarow/agx" = "1.6.2"
+"github:fuyutarow/agx" = { version = "latest", minimum_release_age = "0" }

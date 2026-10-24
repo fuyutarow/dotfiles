@@ -23,7 +23,7 @@
 [tools]
 bun = "1.4.3"
 rumdl = "0.2.78"
-"github:fuyutarow/agx" = "1.6.2"
+"github:fuyutarow/agx" = { version = "latest", minimum_release_age = "0" }
 
 [tasks.accept]
 depends = ["bun:check"]
@@ -474,14 +474,15 @@ depends = ["bun:check"]
 description = "Terminal-state hygiene regression tests (real pty via zsh/zpty; the timeout IS an assertion — one guarded regression is a hang)"
 run = 'bun ~/dotfiles/scripts/test-zsh.ts'
 
-# INV-6: no global toolchain defaults; only the A-class agx suite pin in mise/dotfiles.toml.
+# INV-6: no global toolchain defaults; the A-class agx suite follows latest with no release-age delay.
+# mise/dotfiles.toml declares it; mise.lock records the version last adopted.
 # See zsh/zshenv. zsh again,
 # and again deliberately: the unit under test is a startup file whose behaviour is a function of
 # shell mode (`-o interactive`) and inherited PATH, and its last case needs a real login tty.
 # The timeout is an assertion here too — that last case boots the user's whole login chain.
 [tasks."test:mise-scope"]
 depends = ["bun:check"]
-description = "Toolchain-scope regression tests (INV-6): non-interactive shims only, no global toolchain defaults, sole A-class agx suite pin in mise/dotfiles.toml, no second login version manager"
+description = "Toolchain-scope regression tests (INV-6): non-interactive shims only, no global toolchain defaults, sole A-class agx suite follows latest without release-age delay, no second login version manager"
 run = 'bun ~/dotfiles/scripts/test-mise-scope.ts'
 
 # CI aggregate (wiring-mise-tasks contract). lint:prose is deliberately excluded, same as
@@ -658,7 +659,7 @@ run = "bun install --frozen-lockfile && bun link && bun scripts/deps-prune.ts"
 # its standalone installer except on WSL, where Brewfile.core declares the Homebrew formula. Never use
 # bun/npm for either.
 # An npm-installed claude self-updates by shelling out to `npm view`, and on a box where npm has
-# no global toolchain version (INV-6; only the A-class agx pin in mise/dotfiles.toml is global) that dies as
+# no global toolchain version (INV-6; only the A-class agx latest declaration is global) that dies as
 # "Unable to fetch latest version from npm registry" while the registry answers 200. That is how
 # topgrade's Claude Code step failed on r99 and not on the Mac (native since install) until
 # 2026-09-23. WSL updates Codex with the rest of Homebrew; other hosts retain Codex's standalone

@@ -70,7 +70,17 @@ check_global_mise_tools() {
     const declaration = process.argv[2];
     const allowedVersion = Bun.TOML.parse(await Bun.file(declaration).text())
       .tools?.["github:fuyutarow/agx"];
-    if (typeof allowedVersion !== "string") {
+    // Compare only the supported declaration shape, by value and independently of key order.
+    const normalize = value => {
+      if (typeof value === "string") return JSON.stringify([value, null]);
+      if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+      if (Object.keys(value).some(key => key !== "version" && key !== "minimum_release_age")) return undefined;
+      if (typeof value.version !== "string" ||
+          (value.minimum_release_age !== undefined && typeof value.minimum_release_age !== "string")) return undefined;
+      return JSON.stringify([value.version, value.minimum_release_age ?? null]);
+    };
+    const allowed = normalize(allowedVersion);
+    if (allowed === undefined) {
       process.stdout.write(`[FAIL] ${declaration}: missing agx version in [tools]\n`);
       process.exit(1);
     }
@@ -88,7 +98,7 @@ check_global_mise_tools() {
         if (config.tools === null || typeof config.tools !== "object" || Array.isArray(config.tools))
           throw new Error("[tools] must be a table");
         for (const [key, version] of Object.entries(config.tools)) {
-          if (key !== "github:fuyutarow/agx" || version !== allowedVersion || ++pins > 1) {
+          if (key !== "github:fuyutarow/agx" || normalize(version) !== allowed || ++pins > 1) {
             process.stdout.write(`[FAIL] ${file}: forbidden global tool row ${key} = ${JSON.stringify(version)} (INV-6)\n`);
             failed = true;
           }
@@ -98,7 +108,7 @@ check_global_mise_tools() {
         failed = true;
       }
     }
-    if (!failed) process.stdout.write(`[PASS] global mise config: no toolchain defaults; only the optional agx ${allowedVersion} suite pin\n`);
+    if (!failed) process.stdout.write(`[PASS] global mise config: no toolchain defaults; only the optional agx ${JSON.stringify(allowedVersion)} suite declaration\n`);
     process.exit(failed ? 1 : 0);
   ' "${XDG_CONFIG_HOME:-$HOME/.config}/mise" "$ROOT/mise/dotfiles.toml"
 }

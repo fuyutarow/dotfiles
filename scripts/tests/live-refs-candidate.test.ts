@@ -71,7 +71,8 @@ test("candidate render includes imported siblings and refuses an unselected decl
   // These declarations are render inputs too: the scratch HOME must not lose
   // the suite pin when a nested mise removes its caller's PATH activation.
   await mkdir(join(base, "mise"), { recursive: true });
-  const suitePin = '[tools]\n"github:fuyutarow/agx" = "1.3.1"\n';
+  const suitePin =
+    '[tools]\n"github:fuyutarow/agx" = { version = "latest", minimum_release_age = "0" }\n';
   await writeFile(join(base, "mise.toml"), suitePin);
   await writeFile(join(base, "mise/dotfiles.toml"), suitePin);
   const manifest = jsonOf(z.record(z.string(), z.unknown())).safeParse(

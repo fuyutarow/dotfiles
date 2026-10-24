@@ -133,8 +133,10 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 └── mise.toml    # the task runner (no justfile)
 ```
 
-The A-class `agx` suite is released from `fuyutarow/agx`, pinned by
-`"github:fuyutarow/agx"` in `mise.toml` and `mise/dotfiles.toml`, and its contracts live in that
+The A-class `agx` suite is released from `fuyutarow/agx` and follows the newest release.
+Both `mise.toml` and `mise/dotfiles.toml` declare
+`"github:fuyutarow/agx" = { version = "latest", minimum_release_age = "0" }`
+without release-age delay; `mise.lock` records the version last adopted. Its contracts live in that
 repository's [`contract/README.md`](https://github.com/fuyutarow/agx/blob/13b49ebd/contract/README.md).
 Dotfiles owns its statusline, hook, and landing integrations.
 

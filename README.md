@@ -134,9 +134,11 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ```
 
 The A-class `agx` suite is released from `fuyutarow/agx` and follows the newest release.
-Both `mise.toml` and `mise/dotfiles.toml` declare
+Its sole declaration is `mise/dotfiles.toml`, deployed as `~/.config/mise/conf.d/dotfiles.toml`:
 `"github:fuyutarow/agx" = { version = "latest", minimum_release_age = "0" }`
-without release-age delay; `mise.lock` records the version last adopted. Its contracts live in that
+without release-age delay. Neither repository `mise.toml` nor `mise.lock` records agx.
+The agx release procedure swaps the machine's version and checks `agx -V` in every consumer.
+Its contracts live in that
 repository's [`contract/README.md`](https://github.com/fuyutarow/agx/blob/13b49ebd/contract/README.md).
 Dotfiles owns its statusline, hook, and landing integrations.
 
@@ -244,7 +246,7 @@ Claude and Codex lives in [`AGENTS.md`](AGENTS.md).
    profiles, never zshenv.
 5. **Fail loudly, never silently.** `rm` is disabled; `mv` / `cp` abort on overwrite (see above).
 6. **No implicit global toolchain.** A managed tool is reachable where a config _declares_ it,
-   or not at all: no global default version for toolchains; the released agx pin is the explicit
+   or not at all: no global default version for toolchains; agx's single user-global declaration is the explicit
    exception described above. There is no second version manager hooking a login
    shell. mise's two delivery paths stay apart — `mise activate` serves interactive shells
    per-directory; the shim directory serves _only_ non-interactive ones (`ssh host 'cmd'`

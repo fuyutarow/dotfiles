@@ -7,6 +7,8 @@
 "https://api.github.com/repos/fuyutarow/agx/" = "https://api.github.com/repos/Fuyutarow/agx/"
 
 # Owner decision (2026-10-25): the A-class agx suite follows the newest GitHub release without
-# release-age delay. INV-6 in zsh/zshenv; mise.lock records the version last adopted.
+# release-age delay. This is its sole declaration, deployed user-global; no repository lock
+# records it. The agx release procedure swaps the machine's version and checks every consumer.
+# INV-6 in zsh/zshenv.
 [tools]
 "github:fuyutarow/agx" = { version = "latest", minimum_release_age = "0" }

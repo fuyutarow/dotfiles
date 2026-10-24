@@ -70,6 +70,14 @@ check_global_mise_tools() {
     const declaration = process.argv[2];
     const authored = Bun.TOML.parse(await Bun.file(declaration).text());
     const allowedVersion = authored.tools?.["github:fuyutarow/agx"];
+    const root = join(declaration, "../..");
+    for (const name of ["mise.toml", "mise.lock"]) {
+      const config = Bun.TOML.parse(await Bun.file(join(root, name)).text());
+      if (Object.hasOwn(config.tools ?? {}, "github:fuyutarow/agx")) {
+        process.stdout.write(`[FAIL] ${name}: agx must be declared only in user-global mise/dotfiles.toml, without a repository lock\n`);
+        process.exit(1);
+      }
+    }
     const replacements = authored.settings?.url_replacements;
     const agxApi = "https://api.github.com/repos/fuyutarow/agx/";
     const directAgxApi = "https://api.github.com/repos/Fuyutarow/agx/";
@@ -87,8 +95,8 @@ check_global_mise_tools() {
       return JSON.stringify([value.version, value.minimum_release_age ?? null]);
     };
     const allowed = normalize(allowedVersion);
-    if (allowed === undefined) {
-      process.stdout.write(`[FAIL] ${declaration}: missing agx version in [tools]\n`);
+    if (allowed !== JSON.stringify(["latest", "0"])) {
+      process.stdout.write(`[FAIL] ${declaration}: agx must follow latest without release-age delay\n`);
       process.exit(1);
     }
     const conf = join(dir, "conf.d");
@@ -183,7 +191,7 @@ n=$(count_path $SHIMS "$out")
 [[ $n == 1 ]] && ok "non-interactive: shim dir appears exactly once on re-entry" \
               || bad "non-interactive: shim dir appears $n times (strip-then-prepend broken)"
 
-# --- 6. no global toolchain defaults; only the named A-class agx suite pin --------------------
+# --- 6. no global toolchain defaults; agx is declared once, user-global, without a repo lock ---
 # config.toml and every conf.d/*.toml count. Absent files and an empty [tools] table are OK.
 # The sole operator exception is declared in mise/dotfiles.toml; extra or different pins fail.
 check_global_mise_tools && ok "global mise tool scope obeys INV-6" \

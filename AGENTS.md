@@ -48,9 +48,10 @@ their executable details.
 - A mise-managed tool is reachable only where declared. Never use `mise use -g`, add a
   second login-shell version manager, or expose mise shims on interactive PATH.
   Toolchains have no global default version; the sole named INV-6 exception is the
-  A-class agx suite declared `latest` with `minimum_release_age = "0"` in
-  `mise/dotfiles.toml`: it follows the newest release without release-age delay.
-  `mise.lock` records the version last adopted.
+  A-class agx suite declared once, user-global, as `latest` with `minimum_release_age = "0"`
+  in `mise/dotfiles.toml`: it follows the newest release without release-age delay.
+  No repository lock records agx; its release procedure swaps the machine's version and
+  checks `agx -V` in every consumer.
   `mise activate` serves interactive per-directory shells; the shim directory serves only
   non-interactive shells. Homebrew-managed core Bun/uv remain available in every cwd.
   Verify scope changes with `mise run test:mise-scope`.

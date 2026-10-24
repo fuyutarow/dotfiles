@@ -5,6 +5,23 @@ import { jsonOf, z } from "../../shared/src/zod.ts";
 import { err, fromAsyncThrowable, ok } from "neverthrow";
 import { gpuAdmissionRefusal } from "./agent-resource-run.ts";
 
+import {
+  DecisionRecord,
+  withDecision,
+  saveDecision,
+} from "./lib/decision-record.ts";
+class HealthRefusal extends Error {}
+const record = new DecisionRecord();
+record.stage = "scope-entry";
+record.outcome = "refuse";
+record.reason_code = "scope-enforcement-unavailable";
+record.branch = "scope-entry";
+const inheritedId = process.env.AGENT_RESOURCE_DECISION_ID;
+const decisionId =
+  inheritedId !== undefined && /^[a-f0-9-]{36}$/u.test(inheritedId)
+    ? inheritedId
+    : record.decision_id;
+
 async function main() {
   const command = jsonOf(z.array(z.string()).min(1)).safeParse(
     process.env.AGENT_RESOURCE_SCOPE_COMMAND,
@@ -55,7 +72,9 @@ async function main() {
     );
     if (refusal !== undefined) {
       process.stdout.write(`DENY ${refusal}\n`);
-      return err(new Error(refusal));
+      record.reason_code = "gpu-health-refused";
+      record.branch = refusal;
+      return err(new HealthRefusal(refusal));
     }
   }
   const root = `/sys/fs/cgroup${cgroup}`;
@@ -80,6 +99,7 @@ async function main() {
   const child = Bun.spawn(command.data, {
     env: {
       ...process.env,
+      AGENT_RESOURCE_DECISION_ID: undefined,
       AGENT_RESOURCE_SCOPE_COMMAND: undefined,
       AGENT_RESOURCE_SCOPE_LAUNCH: undefined,
     },
@@ -87,14 +107,27 @@ async function main() {
     stdout: "inherit",
     stderr: "inherit",
   });
+  record.launched = true;
+  record.stage = "command";
+  record.outcome = "admit";
+  record.reason_code = "admitted";
+  record.branch = "scope-command-spawned";
+  await saveDecision(record.snapshot(), decisionId);
   return ok(await child.exited);
 }
-const result = await fromAsyncThrowable(main)().andThen((value) => value);
+const result = await withDecision(record, () =>
+  fromAsyncThrowable(main)().andThen((value) => value),
+);
+if (result.isErr()) record.branch = String(result.error);
+await saveDecision(
+  record.snapshot(result.isOk() ? result.value : 69),
+  decisionId,
+);
 result.match(
   (code) => process.exit(code),
   (error) => {
     process.stderr.write(
-      `DENY scope enforcement unavailable: ${String(error)}\n`,
+      `DENY ${error instanceof HealthRefusal ? "scope health refusal" : "scope enforcement unavailable"}: ${String(error)}\n`,
     );
     process.exit(69);
   },

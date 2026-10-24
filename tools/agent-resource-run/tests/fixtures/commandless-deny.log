@@ -1,0 +1,2 @@
+RECOVER_VERDICT verdict=OK age=13s windows_available_mb=5335
+DENY GPU persistent dxg stall tgid=3691970 tid=3702270 leader_state=S task_state=D wchan=dxgvmb_send_sync_msg; observations=10 interval_ms>=3000; evidence=/proc/3691970/stat,/proc/3691970/task/3702270/stat,/proc/3691970/task/3702270/wchan

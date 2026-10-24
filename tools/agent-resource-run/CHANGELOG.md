@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.20 — 2026-10-24
+
+- Record bounded admission evidence and distinguish scope health refusals from workload exits
+
 ## 1.5.19 — 2026-10-23
 
 - Keep ccc serving alongside GPU research within its standing partition

@@ -31,6 +31,14 @@ import {
 } from "./lib/status-command.ts";
 import pkg from "../package.json" with { type: "json" };
 
+import {
+  DecisionRecord,
+  currentDecision,
+  withDecision,
+  saveDecision,
+  scopeEvidence,
+} from "./lib/decision-record.ts";
+
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);
 class UsageError extends Error {}
@@ -119,6 +127,12 @@ const failure = (
   message: string,
   report: (s: string) => void,
 ): ExecutionResult => {
+  const record = currentDecision();
+  if (record !== undefined) {
+    record.outcome = "refuse";
+    record.reason_code = code === 70 ? "recovery-hold" : "admission-refused";
+    record.branch = message;
+  }
   report(`${code === 70 ? "HOLD" : "DENY"} ${message}`);
   return { ok: false, exitCode: code, reason: "admission" };
 };
@@ -137,6 +151,13 @@ async function optionalText(
   path: string,
 ): Promise<Result<string | undefined, Error>> {
   const read = await fromAsyncThrowable(() => readFile(path, "utf8"))();
+  let readStatus = "read";
+  if (read.isErr()) readStatus = missing(read.error) ? "missing" : "unreadable";
+  currentDecision()?.read(
+    path,
+    read.isOk() ? read.value : undefined,
+    readStatus,
+  );
   if (read.isOk()) return ok(read.value);
   if (missing(read.error)) return ok(undefined);
   return err(asError(read.error));
@@ -784,6 +805,23 @@ export async function gpuAdmissionRefusal(
   const sleep =
     options.sleep ?? ((milliseconds: number) => Bun.sleep(milliseconds));
   const state = options.state ?? (await readGpuState());
+  currentDecision()?.observe({
+    utc: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
+    tgid: null,
+    tid: null,
+    starttime: null,
+    state: null,
+    wchan: null,
+    read_status: state === undefined ? "missing" : "read",
+    input: "cached",
+    sample_time:
+      state?.sampledAt === undefined
+        ? null
+        : Temporal.Instant.fromEpochMilliseconds(state.sampledAt).toString({
+            fractionalSecondDigits: 3,
+          }),
+    branch: "gpu-sampler",
+  });
   const candidates: DStateCandidate[] = [];
   // Inspect live process state independently of the sampler's paused/cache state.
   // This is host-wide: a dxg wait outside a runner scope can stall this GPU too.
@@ -1122,7 +1160,7 @@ async function stopScope(scope: string) {
     new Error(`scope cleanup failed for ${scope}: ${stopped.stderr.trim()}`),
   );
 }
-async function run(
+async function runDecision(
   manifest: ResourceManifest,
   command: string[],
   options: ExecuteOptions,
@@ -1212,6 +1250,7 @@ async function run(
   const threads = String(manifest.cpu_threads);
   const env = {
     ...process.env,
+    AGENT_RESOURCE_DECISION_ID: currentDecision()?.decision_id,
     AGENT_RESOURCE_ADMISSION_ID: admissionId,
     AGENT_RESOURCE_JOB_ID: manifest.job_id,
     AGENT_RESOURCE_ENFORCEMENT: "cgroup",
@@ -1302,22 +1341,66 @@ async function run(
   process.off("SIGTERM", interrupt);
   const interruptedResult = await interrupted;
   const stopped = await stopScope(scope);
+  const record = currentDecision();
+  const evidence =
+    record === undefined ? undefined : await scopeEvidence(record.decision_id);
+  if (record !== undefined && evidence !== undefined) {
+    record.stage = evidence.stage;
+    record.launched = evidence.launched;
+    record.outcome = evidence.outcome;
+    record.reason_code = evidence.reason_code;
+    record.branch = evidence.branch;
+    for (const observation of evidence.observations)
+      record.observe(observation);
+    record.omitted_observations += evidence.omitted_observations;
+  }
   if (interruptedResult?.isErr() === true) return err(interruptedResult.error);
   if (stopped.isErr()) return err(stopped.error);
   if (completed.isErr()) return err(completed.error);
   const code = completed.value;
-  if (code === 75)
+  if (code === 75 && record?.launched !== true)
     report(
       `HOLD job=${manifest.job_id} flock wait expired after ${wait}s code=75`,
     );
-  if (code === 69)
+  if (code === 69 && record?.launched !== true && evidence === undefined)
     report(`DENY job=${manifest.job_id} reservation not granted code=69`);
+  if (record !== undefined && evidence === undefined) {
+    record.outcome = "refuse";
+    record.reason_code = "reservation-not-granted";
+    record.branch = "launch-without-scope-evidence";
+  }
   report(`RELEASE job=${manifest.job_id} code=${code}`);
   if (code === 0) report(`PASS job=${manifest.job_id} code=0`);
   return ok({
     ok: code === 0,
     exitCode: code,
     ...(code === 0 ? {} : { reason: "command-exit" }),
+  });
+}
+async function run(
+  manifest: ResourceManifest,
+  command: string[],
+  options: ExecuteOptions,
+  checkOnly: boolean,
+): Promise<Result<ExecutionResult, Error>> {
+  const record = new DecisionRecord();
+  return withDecision(record, async () => {
+    const result = await fromAsyncThrowable(
+      () => runDecision(manifest, command, options, checkOnly),
+      asError,
+    )().andThen((value) => value);
+    if (result.isErr()) {
+      record.outcome = "refuse";
+      record.reason_code = record.launched
+        ? "cleanup-error"
+        : "admission-error";
+      if (record.launched) record.stage = "cleanup";
+      record.branch = result.error.message;
+    }
+    await saveDecision(
+      record.snapshot(result.isOk() ? result.value.exitCode : null),
+    );
+    return result;
   });
 }
 export function executeJob(

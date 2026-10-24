@@ -75,15 +75,15 @@ async function drain(reader: {
   }
 }
 async function writeToolPackage(root: string, version: string): Promise<void> {
-  await mkdir(join(root, "tools", "agx"), { recursive: true });
+  await mkdir(join(root, "tools", "release-fixture"), { recursive: true });
   await writeFile(
-    join(root, "tools", "agx", "package.json"),
-    `${JSON.stringify({ name: "agx", version }, null, 2)}\n`,
+    join(root, "tools", "release-fixture", "package.json"),
+    `${JSON.stringify({ name: "release-fixture", version }, null, 2)}\n`,
   );
 }
 async function writeToolChangelog(root: string, entry: string): Promise<void> {
   await writeFile(
-    join(root, "tools", "agx", "CHANGELOG.md"),
+    join(root, "tools", "release-fixture", "CHANGELOG.md"),
     `# Changelog\n\n## ${entry}\n\n- entry\n\n## 1.0.0 — 2026-10-01\n\n- initial\n`,
   );
 }
@@ -422,16 +422,16 @@ async function fixture() {
   await writeFile(join(main, "keep.txt"), "keep content\n");
   await writeFile(join(main, "untouched.ts"), "const untouched = true;\n");
   await writeFile(join(main, "remove.md"), "# Remove\n");
-  await mkdir(join(main, "tools/agx-worker/src/next"), { recursive: true });
+  await mkdir(join(main, "tools/fixture-worker/src/next"), { recursive: true });
   await writeFile(
-    join(main, "tools/agx-worker/package.json"),
+    join(main, "tools/fixture-worker/package.json"),
     JSON.stringify({ bin: { "agx-worker": "src/next/cli.ts" } }),
   );
   await writeFile(
-    join(main, "tools/agx-worker/src/next/cli.ts"),
+    join(main, "tools/fixture-worker/src/next/cli.ts"),
     '#!/usr/bin/env bun\nprocess.stdout.write("[]\\n");\n',
   );
-  await chmod(join(main, "tools/agx-worker/src/next/cli.ts"), 0o755);
+  await chmod(join(main, "tools/fixture-worker/src/next/cli.ts"), 0o755);
   await jj(main, ["commit", "-m", "base"]);
   await jj(main, ["bookmark", "set", "alpha", "-r", "@-"]);
   const origin = join(temp, "origin.git");
@@ -715,17 +715,20 @@ describe("land workspace", () => {
     const f = await fixture();
     const installed = join(dirname(f.main), "agx-worker");
     await mkdir(f.env.AGX_STATE_DIR, { recursive: true });
-    await symlink(join(f.main, "tools/agx-worker/src/next/cli.ts"), installed);
+    await symlink(
+      join(f.main, "tools/fixture-worker/src/next/cli.ts"),
+      installed,
+    );
     await rename(
-      join(f.worker, "tools/agx-worker/src/next/cli.ts"),
-      join(f.worker, "tools/agx-worker/src/next/moved.ts"),
+      join(f.worker, "tools/fixture-worker/src/next/cli.ts"),
+      join(f.worker, "tools/fixture-worker/src/next/moved.ts"),
     );
     await writeFile(
-      join(f.worker, "tools/agx-worker/package.json"),
+      join(f.worker, "tools/fixture-worker/package.json"),
       JSON.stringify({ bin: { "agx-worker": "src/next/moved.ts" } }),
     );
     await writeFile(
-      join(f.worker, "tools/agx-worker/src/next/moved.ts"),
+      join(f.worker, "tools/fixture-worker/src/next/moved.ts"),
       `#!/usr/bin/env bun
 import { appendFile } from 'node:fs/promises';
 await appendFile(process.env.LAND_EVENTS, JSON.stringify(['landed-ls', import.meta.path, ...process.argv.slice(2)]) + '\\n');
@@ -753,7 +756,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     expect(await pathExists(installed)).toBe(false);
     expect(
       await readFile(
-        join(lander, "tools/agx-worker/src/next/moved.ts"),
+        join(lander, "tools/fixture-worker/src/next/moved.ts"),
         "utf8",
       ),
     ).toContain("landed-ls");
@@ -780,7 +783,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
   test("landing does not invoke a failing post-push agx entry", async () => {
     const f = await fixture();
     await writeFile(
-      join(f.worker, "tools/agx-worker/src/next/cli.ts"),
+      join(f.worker, "tools/fixture-worker/src/next/cli.ts"),
       "#!/usr/bin/env bun\nprocess.stderr.write('fixture bookkeeping failure'); process.exit(9);\n",
     );
     const result = await f.land();
@@ -789,7 +792,10 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     expect(result.stdout.toString()).toContain("landed and pushed");
     expect(result.stdout.toString()).not.toContain("rollback:");
     expect(
-      await readFile(join(f.main, "tools/agx-worker/src/next/cli.ts"), "utf8"),
+      await readFile(
+        join(f.main, "tools/fixture-worker/src/next/cli.ts"),
+        "utf8",
+      ),
     ).toContain("fixture bookkeeping failure");
   });
 
@@ -1080,17 +1086,25 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       "alpha",
       f.worker,
     ]);
-    await mkdir(join(f.worker, "tools", "agx", ".changes"), {
+    await mkdir(join(f.worker, "tools", "release-fixture", ".changes"), {
       recursive: true,
     });
     await writeFile(
-      join(f.worker, "tools", "agx", ".changes", "worker-ticket.md"),
+      join(
+        f.worker,
+        "tools",
+        "release-fixture",
+        ".changes",
+        "worker-ticket.md",
+      ),
       "---\nbump: minor\n---\n\nAdd a worker-ticket feature\n",
     );
     await f.jj(f.worker, ["status"]);
-    await mkdir(join(f.main, "tools", "agx", ".changes"), { recursive: true });
+    await mkdir(join(f.main, "tools", "release-fixture", ".changes"), {
+      recursive: true,
+    });
     await writeFile(
-      join(f.main, "tools", "agx", ".changes", "prior-ticket.md"),
+      join(f.main, "tools", "release-fixture", ".changes", "prior-ticket.md"),
       "---\nbump: patch\n---\n\nFix a prior-ticket issue\n",
     );
     await applyToolChangesets(f.main, "2026-10-10");
@@ -1107,7 +1121,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         "show",
         "-r",
         "alpha",
-        "tools/agx/package.json",
+        "tools/release-fixture/package.json",
       ]),
     ).toContain('"version": "1.1.0"');
     expect(
@@ -1116,7 +1130,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         "show",
         "-r",
         "alpha",
-        "tools/agx/CHANGELOG.md",
+        "tools/release-fixture/CHANGELOG.md",
       ]),
     ).toContain("- Fix a prior-ticket issue");
     expect(
@@ -1125,11 +1139,11 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         "show",
         "-r",
         "alpha",
-        "tools/agx/CHANGELOG.md",
+        "tools/release-fixture/CHANGELOG.md",
       ]),
     ).toContain("- Add a worker-ticket feature");
     expect(result.stdout.toString()).toContain(
-      "agx 1.1.0 (1 changeset entries)",
+      "release-fixture 1.1.0 (1 changeset entries)",
     );
   });
 
@@ -1137,7 +1151,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     const f = await fixture();
     await writeToolPackage(f.main, "1.0.0");
     await writeToolChangelog(f.main, "1.0.0 — 2026-10-01");
-    await f.jj(f.main, ["commit", "-m", "add agx release fixture"]);
+    await f.jj(f.main, ["commit", "-m", "add generic release fixture"]);
     await f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
     await f.jj(f.main, ["workspace", "forget", "dotfiles-arm-worker"]);
     await rm(f.worker, { recursive: true, force: true });
@@ -1150,15 +1164,18 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       "alpha",
       f.worker,
     ]);
-    const change = "tools/agx/.changes/workspace-feature.md";
-    await mkdir(join(f.worker, "tools", "agx", ".changes"), {
+    const change = "tools/release-fixture/.changes/workspace-feature.md";
+    await mkdir(join(f.worker, "tools", "release-fixture", ".changes"), {
       recursive: true,
     });
     await writeFile(
       join(f.worker, change),
       "---\nbump: minor\n---\n\nAdd a workspace feature\n",
     );
-    await writeFile(join(f.worker, "tools", "agx", "src.ts"), "export {}\n");
+    await writeFile(
+      join(f.worker, "tools", "release-fixture", "src.ts"),
+      "export {}\n",
+    );
 
     const result = await f.land();
 
@@ -1169,9 +1186,9 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     const commit = (await f.log()).find((event) => event[1] === "commit");
     expect(commit).toBeDefined();
     const committedPaths = commit?.slice((commit?.lastIndexOf("--") ?? -1) + 1);
-    expect(committedPaths).toContain("tools/agx/src.ts");
-    expect(committedPaths).toContain("tools/agx/package.json");
-    expect(committedPaths).toContain("tools/agx/CHANGELOG.md");
+    expect(committedPaths).toContain("tools/release-fixture/src.ts");
+    expect(committedPaths).toContain("tools/release-fixture/package.json");
+    expect(committedPaths).toContain("tools/release-fixture/CHANGELOG.md");
     expect(committedPaths).not.toContain(change);
     expect(await f.jj(f.main, ["file", "list", "-r", "alpha"])).not.toContain(
       change,
@@ -1182,7 +1199,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         "show",
         "-r",
         "alpha",
-        "tools/agx/package.json",
+        "tools/release-fixture/package.json",
       ]),
     ).toContain('"version": "1.1.0"');
     expect(
@@ -1191,7 +1208,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         "show",
         "-r",
         "alpha",
-        "tools/agx/CHANGELOG.md",
+        "tools/release-fixture/CHANGELOG.md",
       ]),
     ).toContain("- Add a workspace feature");
   });
@@ -1200,8 +1217,8 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     const f = await fixture();
     await writeToolPackage(f.main, "1.0.0");
     await writeToolChangelog(f.main, "1.0.0 — 2026-10-01");
-    const change = "tools/agx/.changes/base-feature.md";
-    await mkdir(join(f.main, "tools", "agx", ".changes"), {
+    const change = "tools/release-fixture/.changes/base-feature.md";
+    await mkdir(join(f.main, "tools", "release-fixture", ".changes"), {
       recursive: true,
     });
     await writeFile(
@@ -1221,7 +1238,10 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       "alpha",
       f.worker,
     ]);
-    await writeFile(join(f.worker, "tools", "agx", "src.ts"), "export {}\n");
+    await writeFile(
+      join(f.worker, "tools", "release-fixture", "src.ts"),
+      "export {}\n",
+    );
 
     const result = await f.land();
 
@@ -1232,9 +1252,9 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     const commit = (await f.log()).find((event) => event[1] === "commit");
     expect(commit).toBeDefined();
     const committedPaths = commit?.slice((commit?.lastIndexOf("--") ?? -1) + 1);
-    expect(committedPaths).toContain("tools/agx/src.ts");
-    expect(committedPaths).toContain("tools/agx/package.json");
-    expect(committedPaths).toContain("tools/agx/CHANGELOG.md");
+    expect(committedPaths).toContain("tools/release-fixture/src.ts");
+    expect(committedPaths).toContain("tools/release-fixture/package.json");
+    expect(committedPaths).toContain("tools/release-fixture/CHANGELOG.md");
     expect(committedPaths).toContain(change);
     expect(await f.jj(f.main, ["file", "list", "-r", "alpha"])).not.toContain(
       change,
@@ -1245,7 +1265,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         "show",
         "-r",
         "alpha",
-        "tools/agx/package.json",
+        "tools/release-fixture/package.json",
       ]),
     ).toContain('"version": "1.0.1"');
     expect(
@@ -1254,7 +1274,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         "show",
         "-r",
         "alpha",
-        "tools/agx/CHANGELOG.md",
+        "tools/release-fixture/CHANGELOG.md",
       ]),
     ).toContain("- Add a base feature");
   });
@@ -1981,15 +2001,21 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     const f = await fixture();
     await writeToolPackage(f.worker, "1.0.0");
     await writeToolChangelog(f.worker, "1.0.0 — 2026-10-01");
-    await mkdir(join(f.worker, "tools", "agx", ".changes"), {
+    await mkdir(join(f.worker, "tools", "release-fixture", ".changes"), {
       recursive: true,
     });
     await writeFile(
-      join(f.worker, "tools", "agx", ".changes", "no-blank.md"),
+      join(f.worker, "tools", "release-fixture", ".changes", "no-blank.md"),
       "---\nbump: patch\n---\nAccept delimiters without a blank line\n",
     );
     await writeFile(
-      join(f.worker, "tools", "agx", ".changes", "no-delimiters.md"),
+      join(
+        f.worker,
+        "tools",
+        "release-fixture",
+        ".changes",
+        "no-delimiters.md",
+      ),
       "bump: patch\n\nAccept a delimiter-less changeset\n",
     );
     const result = await f.land();
@@ -2004,7 +2030,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         "show",
         "-r",
         "alpha",
-        "tools/agx/package.json",
+        "tools/release-fixture/package.json",
       ]),
     ).toContain('"version": "1.0.1"');
     expect(
@@ -2013,7 +2039,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         "show",
         "-r",
         "alpha",
-        "tools/agx/CHANGELOG.md",
+        "tools/release-fixture/CHANGELOG.md",
       ]),
     ).toContain("- Accept delimiters without a blank line");
     expect(
@@ -2022,7 +2048,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         "show",
         "-r",
         "alpha",
-        "tools/agx/CHANGELOG.md",
+        "tools/release-fixture/CHANGELOG.md",
       ]),
     ).toContain("- Accept a delimiter-less changeset");
   });

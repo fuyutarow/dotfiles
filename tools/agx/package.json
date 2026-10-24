@@ -1,9 +1,0 @@
-{
-  "name": "@dotfiles/agx",
-  "version": "1.2.1",
-  "private": true,
-  "type": "module",
-  "bin": {
-    "agx": "src/agx.ts"
-  }
-}

@@ -35,7 +35,11 @@ import {
   selected,
   type JjPrecommit,
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
-import { RENDER_INPUTS, restoreRenderDependencies } from "./render-source.ts";
+import {
+  RENDER_INPUTS,
+  renderNeedsDependencies,
+  restoreRenderDependencies,
+} from "./render-source.ts";
 
 type Os = "mac" | "wsl" | "linux";
 type Roots = { repo: string; home: string; os: Os };
@@ -589,7 +593,11 @@ export async function candidateFindings(
   }
   await exportCandidate(context, repo, copied);
   // The candidate owns these manifests and lockfile; never borrow live node_modules.
-  if (copied.has("tools/agx-worker/src/next/cli.ts")) {
+  if (
+    copied.has("package.json") &&
+    copied.has("bun.lock") &&
+    (await renderNeedsDependencies(repo))
+  ) {
     const dependencyError = await restoreRenderDependencies(repo);
     if (dependencyError !== undefined)
       return [`FATAL: live-refs candidate ${dependencyError.message}`];

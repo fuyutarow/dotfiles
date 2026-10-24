@@ -143,9 +143,9 @@ describe("live repo references", () => {
     }
     const lockBefore = await readFile(join(repo, "bun.lock"));
     await writeFile(join(repo, ".gitignore"), "node_modules/\n");
-    await mkdir(join(repo, "tools/agx-worker/src/next"), { recursive: true });
+    await mkdir(join(repo, "tools/render-fixture/src"), { recursive: true });
     await writeFile(
-      join(repo, "tools/agx-worker/src/next/cli.ts"),
+      join(repo, "tools/render-fixture/src/cli.ts"),
       'import { cli } from "cleye"; process.stdout.write(typeof cli);\n',
     );
     await mkdir(join(repo, "scripts"), { recursive: true });
@@ -153,8 +153,8 @@ describe("live repo references", () => {
       join(repo, "scripts/render-home.ts"),
       `
       import { join } from "node:path";
-      import "../tools/agx-worker/src/next/cli.ts";
-      const cli = Bun.spawnSync([process.execPath, "--no-install", join(import.meta.dir, "../tools/agx-worker/src/next/cli.ts"), "roster", "--json"], { timeout: 10000 });
+      import "../tools/render-fixture/src/cli.ts";
+      const cli = Bun.spawnSync([process.execPath, "--no-install", join(import.meta.dir, "../tools/render-fixture/src/cli.ts")], { timeout: 10000 });
       if (cli.exitCode !== 0 || cli.stdout.toString() !== "function") process.exit(1);
       for (const path of [".claude/settings.json", ".codex/hooks.json"]) await Bun.write(join(process.env.HOME, path), "{}");
     `,

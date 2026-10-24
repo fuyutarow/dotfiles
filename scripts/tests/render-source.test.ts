@@ -8,9 +8,10 @@ const ROOT = join(import.meta.dir, "../..");
 const RESTORE = join(ROOT, "scripts/render-source.ts");
 const INPUTS = ["package.json", "bun.lock"];
 
-test("immutable render inputs do not include agx-worker source", () => {
-  expect(RENDER_INPUTS).not.toContain("tools/agx-worker/src");
-  expect(RENDER_INPUTS).not.toContain("tools/agx-worker/package.json");
+test("immutable render inputs include shared adapters and root dependency declarations", () => {
+  expect(RENDER_INPUTS).toContain("tools/shared/src");
+  expect(RENDER_INPUTS).toContain("package.json");
+  expect(RENDER_INPUTS).toContain("bun.lock");
 });
 
 test("offline restore uses the operator cache with a scratch HOME and preserves inputs", async () => {

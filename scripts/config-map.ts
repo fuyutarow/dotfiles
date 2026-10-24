@@ -114,11 +114,6 @@ const EXCLUDED: readonly {
     why: "retained read-only owner evidence, not deployed configuration",
   },
   {
-    test: (p) =>
-      p === "tools/agx-worker/evidence/acpx-native-comparison-20261022.json",
-    why: "retained native compatibility evidence, not runtime configuration",
-  },
-  {
     test: (p) => p.includes(".example."),
     why: "an example, not a configuration",
   },

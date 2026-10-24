@@ -3,7 +3,7 @@
 // No live checkout dependencies or node_modules links enter an immutable export.
 import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
 
@@ -158,6 +158,33 @@ export type RenderSource = {
   release: () => Promise<void>;
 };
 
+/** Only the renderer's reachable imports require dependencies; unused manifests do not. */
+export async function renderNeedsDependencies(root: string): Promise<boolean> {
+  const pending = [join(root, "scripts/render-home.ts")];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const path = pending.pop();
+    if (path === undefined || visited.has(path)) continue;
+    visited.add(path);
+    const file = Bun.file(path);
+    if (!(await file.exists()) || !/\.[cm]?[jt]sx?$/u.test(path)) continue;
+    const source = await file.text();
+    const imports = Array.from(
+      source.matchAll(
+        /\b(?:import|export)\s+(?:type\s+)?[\w$*{},\s]*?\s+from\s*["']([^"']+)["']|\bimport\s*["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']\s*\)/gu,
+      ),
+      (match) => match[1] ?? match[2] ?? match[3],
+    )
+      .filter((specifier) => specifier !== undefined)
+      .filter((specifier) => !/^(?:node:|bun:|bun$)/u.test(specifier));
+    if (imports.some((specifier) => !specifier.startsWith("."))) return true;
+    pending.push(
+      ...imports.map((specifier) => resolve(dirname(path), specifier)),
+    );
+  }
+  return false;
+}
+
 export async function prepareRenderSource(
   root: string,
   fromWorkingCopy = false,
@@ -232,12 +259,11 @@ export async function prepareRenderSource(
     await release();
     return failure;
   }
-  // Older pinned revisions may predate the CLI adapter. Do not install dependencies
-  // unless that revision actually exports the CLI and its root package contract.
+  // Restore only dependencies actually imported by this revision's renderer.
   if (
-    paths.includes("tools/agx-worker/src/next/cli.ts") &&
     paths.includes("package.json") &&
-    paths.includes("bun.lock")
+    paths.includes("bun.lock") &&
+    (await renderNeedsDependencies(scratch))
   ) {
     const dependencyError = await restoreRenderDependencies(scratch);
     if (dependencyError !== undefined) {

@@ -639,17 +639,6 @@ function packageBinNames(text: string | undefined): string[] {
   return name === undefined ? [] : [name];
 }
 
-function agxRouterVerbs(text: string | undefined): string[] {
-  if (text === undefined) return [];
-  const tools = text.match(/\bconst\s+tools\s*=\s*\[([^\]]*)\]/u)?.[1];
-  return tools === undefined
-    ? []
-    : Array.from(
-        tools.matchAll(/["']([a-z][a-z0-9-]*)["']/gu),
-        (match) => match[1] ?? "",
-      );
-}
-
 function removalSearchPattern(name: string): string {
   const escaped = name.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   if (name === "jev")
@@ -733,17 +722,17 @@ function landRemovedCommands(
     );
     const removals = new Set<string>();
     for (const path of changedPaths) {
-      const isRouter = path === "tools/agx/src/agx.ts";
-      if (!isRouter && !path.endsWith("package.json")) continue;
+      if (!path.endsWith("package.json")) continue;
       const oldFile = beforePaths.has(path)
         ? yield* jj(root, ["file", "show", "-r", before, path])
         : undefined;
       const newFile = afterPaths.has(path)
         ? yield* jj(root, ["file", "show", "-r", after, path])
         : undefined;
-      const removed = isRouter
-        ? removedNames(agxRouterVerbs(oldFile), agxRouterVerbs(newFile))
-        : removedNames(packageBinNames(oldFile), packageBinNames(newFile));
+      const removed = removedNames(
+        packageBinNames(oldFile),
+        packageBinNames(newFile),
+      );
       for (const name of removed) removals.add(name);
     }
     return ok([...removals].toSorted());

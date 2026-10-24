@@ -920,7 +920,6 @@ describe("render-home: public roster JSON", () => {
         cleanup(dotfiles, home);
       },
     };
-    expect(existsSync(join(dotfiles, "tools/agx-worker"))).toBe(false);
     const result = run({
       HOME: home,
       DOTFILES: dotfiles,
@@ -955,7 +954,6 @@ describe("render-home: public roster JSON", () => {
         ).replaceAll("agx-next/", "agx/"),
       ),
     );
-    expect(readFileSync(SCRIPT, "utf8")).not.toContain("tools/agx-worker");
   });
 
   test("missing agx-worker names the command and remedy before any write", () => {

@@ -1,6 +1,6 @@
 // The dispatch roster (agents/models/dispatch-roster.toml), read and rendered in ONE place.
 // Consumers: the dispatch hook (agents/claude/hooks/enforce-dispatch-contract.ts), the codex worker's
-// `--choice` (tools/agx-worker/src/workers/codex.ts) and scripts/render-home.ts (which
+// `--choice` (released agx-worker) and scripts/render-home.ts (which
 // writes rosterPolicy into the deployed ~/.claude/CLAUDE.md).
 // Zero-install like the hooks: zod comes from agents/hooks/zod.ts (the committed bundle).
 import { readFile } from "node:fs/promises";
@@ -90,7 +90,7 @@ export const exhaustionPolicy = (
 export const routeFilterLabel = (auto: AutoPolicy): string =>
   `routes=${auto.routes === undefined ? "all (codex, claude)" : JSON.stringify(auto.routes)}`;
 
-// Bounds on a claude worker (run through tools/agx-worker/src/workers/run-claude.ts): a run has a budget and a
+// Bounds on a claude worker (run through the released agx-worker command): a run has a budget and a
 // turn limit, both stated, never the CLI's defaults.
 const ClaudeRunSchema = z.strictObject({
   max_budget_usd: z.number().gt(0),

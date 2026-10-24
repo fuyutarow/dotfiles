@@ -25,9 +25,6 @@ const PATTERNS = [
   "agents/skills/*/scripts/**/*.ts",
   "agents/goal-kernel/cli.ts",
   "tools/agent-resource-run/src/*.ts",
-  "tools/agx/src/*.ts",
-  "tools/agx-worker/src/*.ts",
-  "tools/agx-worker/src/workers/*.ts",
   "tools/serena-foreground/src/*.ts",
   "tools/smart-open/src/*.ts",
 ];

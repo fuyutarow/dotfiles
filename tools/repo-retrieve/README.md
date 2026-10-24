@@ -59,12 +59,13 @@ closes the pipe.
 index. They exit 3 and write a NO_INDEX diagnostic to stderr with daemon status, the recovery
 command, and the lexical routes that remain available. `--json` adds a stdout object with
 `status: "NO_INDEX"` and `verdict: "UNVERIFIED"`; it never reports an unverified answer as PASS.
-For a new project, from its root run `ccc init && repo-retrieve index`. For an already registered
-project, run `repo-retrieve index` to execute `ccc index` and record the freshness watermark. The
-index command waits for progress from `ccc status` or child output; `--timeout-ms` is the maximum
-time without observable progress. Use `repo-retrieve index --detach` to leave a background worker
-running, then `repo-retrieve index --status` to inspect completion. The worker records the
-watermark only after indexing succeeds and HEAD remains unchanged from the request.
+For first registration, follow [Bringing a new root into retrieval](#bringing-a-new-root-into-retrieval).
+For an already registered project, run `repo-retrieve index` to execute `ccc index` and record
+the freshness watermark. The index command waits for progress from `ccc status` or child output;
+`--timeout-ms` is the maximum time without observable progress. Use `repo-retrieve index --detach`
+to leave a background worker running, then `repo-retrieve index --status` to inspect completion.
+The worker records the watermark only after indexing succeeds and HEAD remains unchanged from the
+request.
 
 A successful foreground index also completes the prior request it captured, provided its
 verified watermark still matches current HEAD. The request retains its original `head` and
@@ -123,6 +124,40 @@ independent and unchanged. Reads remain bounded by the derived total-byte backst
 The existing `--accept-plan` override and advisory fallback time estimate remain unchanged.
 Project `.cocoindex_code/rr.toml` owns this setting; `retrieval.toml` configures definition
 retrieval and is not an index-policy source.
+
+## Bringing a new root into retrieval
+
+Run this procedure from the new repository root. `ccc init` registers the project and creates
+its ccc configuration directory. Before the first index, build an admission plan and save its
+JSONL stdout so the exact candidate set can be reviewed; the contributor report is on stderr:
+
+```sh
+ccc init
+rr index --plan > /tmp/<repo>-rr-plan.jsonl
+```
+
+An exit status of 4 means the current configuration is not designed for this content: the
+candidate corpus violates one or more admission limits, and ccc has not started. Read the plan's
+summary and the largest directory, extension, and kind contributors printed on stderr. The
+suggested exclude lines identify exact data files; inspect them and apply only exclusions that
+fit the intended corpus. Use `.cocoindex_code/settings.yml` for ccc's corpus matching and size
+selection (`include_patterns`, `exclude_patterns`, and `max_file_size`). Use
+`.cocoindex_code/rr.toml` for the retrieval admission budget (`max_est_chunks`,
+`max_data_share`, `max_seconds`, and the fallback `est_chunks_per_second`) and narrowly scoped
+`file_byte_allowances` for exact files that should exceed the ordinary byte ceiling. Do not use
+`--accept-plan`: revise the configuration so the selected corpus itself satisfies the gate.
+
+Keep `max_seconds` at the time budget the host can afford. Set `max_est_chunks` to cover the
+curated corpus while keeping it at or below the measured indexing rate multiplied by
+`max_seconds`; this bounds estimated full-rebuild work to that time. Re-run
+`rr index --plan > /tmp/<repo>-rr-plan.jsonl` after each configuration change and review both
+the saved plan and the contributor report. Repeat until it exits 0. Then run plain `rr index`
+to perform the gated index and record its freshness watermark. Confirm the final line is
+`RESULT: INDEXED` before relying on semantic retrieval.
+
+Worked example — `research-record-v2`: `settings.yml` curation reduced the estimate from 13,381
+to 5,794 chunks; `rr.toml` used `max_est_chunks = 6000`, `max_data_share = 0.32`, and
+`max_seconds = 600`. Plain `rr index` completed in 122.8 seconds.
 
 These are also the defaults when omitted. Chunks are estimates, `ceil(Unicode characters / 800)`
 per nonblank UTF-8 file; undecodable files remain in the matched file count with zero chunks,

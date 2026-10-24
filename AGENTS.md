@@ -122,8 +122,11 @@ their executable details.
   Preserve the naming, ownership and legacy-access rules declared by agx and described in
   README's invariants, rather than creating a second task/dispatch vocabulary here.
 - Declare repository searches through `rr` with the appropriate query shape; known-symbol
-  definitions/references belong to Serena. Do not bypass a blocked route. An empty result
-  does not prove absence.
+  definitions/references belong to Serena. Agents must never run `rr index --accept-plan` or
+  raw `ccc index`: both bypass the admission gate that protects the shared GPU and host. For
+  first registration and the gated indexing procedure, see
+  [Bringing a new root into retrieval](tools/repo-retrieve/README.md#bringing-a-new-root-into-retrieval).
+  Do not bypass a blocked route. An empty result does not prove absence.
 
 ## Publication, safety and verification
 

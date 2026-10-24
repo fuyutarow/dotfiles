@@ -915,7 +915,9 @@ function decidePayload(
       `filtered output is never an absence check. ` +
       `Known-symbol definitions/references go to Serena. The router may choose rg; ` +
       `the forbidden act is unclassified search, not lexical search. This is a policy ` +
-      `boundary: do not bypass it with Python, Node, shell loops, or another tool.`,
+      `boundary: do not bypass it with Python, Node, shell loops, or another tool. ` +
+      `For first registration and gated indexing of a new root, see ` +
+      `tools/repo-retrieve/README.md#bringing-a-new-root-into-retrieval.`,
   };
 }
 

@@ -45,20 +45,6 @@ export function offsetShort(z: Pick<Temporal.ZonedDateTime, "offset">): string {
 export const stampMDHMZ = (z: Temporal.ZonedDateTime): string =>
   `${stampMDHM(z)}${offsetShort(z)}`;
 
-/** "HH:MM+09" — a clock time with its offset, the stamp's shape. */
-export const clockHMZ = (z: Temporal.ZonedDateTime): string =>
-  `${clockHM(z)}${offsetShort(z)}`;
-
-/** Unix epoch seconds -> local wall clock, in this process's time zone. */
-export const localFromEpochSec = (s: number): Temporal.ZonedDateTime =>
-  Temporal.Instant.fromEpochMilliseconds(s * 1000).toZonedDateTimeISO(
-    Temporal.Now.timeZoneId(),
-  );
-
-/** Unix epoch seconds, now. */
-export const nowEpochSec = (): number =>
-  Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
-
 /** zsh %~ : leading $HOME -> ~ */
 export function tildePath(p: string, home = process.env.HOME ?? ""): string {
   if (p === home) return "~";
@@ -89,7 +75,3 @@ export function promptParts(
     cwd: tildePath(cwd),
   };
 }
-
-/** "user@host:MM-DD HH:MM+09|~/cwd" — uncolored. */
-export const promptHead = (p: PromptParts): string =>
-  `${p.user}@${p.host}:${p.stamp}|${p.cwd}`;

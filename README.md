@@ -104,11 +104,6 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── tools/       # repo CLIs and libraries, one directory each (release notes in .changes/, generated package.json semver + CHANGELOG.md, src/, tests/); parts import their own dir and tools/shared/
 │   ├── rr/          # rr (= repo-retrieve): declared query-shape router over ccc / rg / Serena; src/ (CLI, ccc adapters, python helpers), retrieval.toml, tests/
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
-│   ├── agx/        # agx suite entry: process router only, no state or decision logic
-│   ├── agx-worker/ # agx worker / agx-worker: dispatch, run, check, ls, judge, stats, roster, doctor; existing worker records
-│   ├── jex/        # jex Q FILE...: zero-shot multi-label yes/no classifier through the shared Jev client
-│   ├── agx-ws/     # agx ws / agx-ws: repo-agnostic jj workspace lifecycle
-│   ├── agx-ticket/ # agx ticket / agx-ticket: ticket issuance, derived listing and collection
 │   ├── storage-headroom/ # storage decisions (decide) and read-only headroom CLI; hooks adapt the verdict
 │   └── shared/      # code several tools import (Bash syntax parsing, hook path resolution, zod, attempt, narrow, typesafe-key, jev-client, sockets, model-orders, worker-env)
 ├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
@@ -130,7 +125,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
 │                #   and shared agent assets (commands/, skills/); other repos call task helpers
 │                #   through package.json bins instead of skill installation paths
-├── tools/       # repo CLIs (rr, agx suite, agent-resource-run, serena-foreground, smart-open, secrets-push, sui-keystore-merge) + shared TS modules
+├── tools/       # repo CLIs (rr, agent-resource-run, serena-foreground, smart-open, secrets-push, sui-keystore-merge) + shared TS modules
 ├── scripts/     # plumbing — config-registry.ts, link-dots.ts, check-tools.sh, shared tool lookup
 ├── Brewfile.core      # tools needed on every box
 ├── Brewfile.ondemand  # tools installed when first needed (OS guards stay here)
@@ -138,14 +133,10 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 └── mise.toml    # the task runner (no justfile)
 ```
 
-The `agx` command dispatches `agx worker`, `agx ticket`, `agx ws`, `agx status`, and `agx msg` to their `agx-*` bins on PATH. `agx-msg` is an alias for the existing `xmsg` tool.
-Each tool owns its help, decisions, and state. Suite help takes each description from that tool’s help.
-Accepted command forms are `agx <tool> ARGS` and `agx-<tool> ARGS`, where
-`<tool>` is `worker`, `ticket`, `ws`, `status`, or `msg`.
-`agx -V` prints only the suite version. The architecture
-of `tools/` (including the suite boundary, dispatch pipeline, capacity domain, oracle rule, and each
-invariant's check or planned ticket) lives in
-[`tools/spec/architecture.md`](tools/spec/architecture.md); each tool README links to it.
+The A-class `agx` suite is released from `fuyutarow/agx`, pinned by
+`"github:fuyutarow/agx"` in `mise.toml` and `mise/dotfiles.toml`, and its contracts live in that
+repository's [`contract/README.md`](https://github.com/fuyutarow/agx/blob/13b49ebd/contract/README.md).
+Dotfiles owns its statusline, hook, and landing integrations.
 
 ### Tool installation kinds
 
@@ -170,7 +161,6 @@ bin name has a classification.
 | `serena-foreground` | A | Agents invoke the Serena foreground adapter from any repository. |
 | `rr` | A | People and agents use the repository query router from any cwd. |
 | `repo-retrieve` | A | Alias for the machine-wide `rr` operator. |
-| `agx-msg` | A | Alias for the suite's `msg` tool; `xmsg` remains available. |
 | `smart-open` | A | Shell and operators open paths or URLs across repositories. |
 | `disk-reclaim` | A | Operators reclaim machine storage. |
 | `storage-headroom` | A | Operators inspect machine storage headroom. |
@@ -179,10 +169,6 @@ bin name has a classification.
 | `btmp` | A | Operators inspect the herdr backtrace map. |
 | `herdr-projector` | A | Operators project herdr session state machine-wide. |
 | `tool` | A | Operators look up the machine's declared tool tiers. |
-| `agx` | A | People and agents dispatch the machine-wide agx suite. |
-| `agx-status` | A | People and agents inspect combined run, workspace, ticket and doctor state across repositories. |
-| `agx-ws` | A | Alias for the machine-wide `agx ws` operator. |
-| `ws` | A | Short alias for the machine-wide workspace operator. |
 | `coredev` | A | Operators manage approved remote core development hosts. |
 | `sui-keystore-merge` | A | Operators merge local Sui keystore data. |
 | `jj-commit` | B | A consumer repository's commit task runs its pinned commit helper. |
@@ -199,22 +185,7 @@ bin name has a classification.
 | `gate-diagnostics-check` | B | A consumer repository checks its own gate diagnostics. |
 | `script-check` | B | A consumer repository validates its own scripts. |
 | `skill-check` | B | A consumer repository validates its own skills. |
-| `agx-ticket` | A | Operators issue and collect tickets across repositories. |
-| `tkt` | A | Short alias for the machine-wide ticket operator. |
 | `lint-ts-candidate` | B | A consumer repository's TypeScript lint gate uses its pinned checker. |
-| `jex` | A | People and agents classify files from any repository. |
-| `xmsg` | A | Operators send messages across agent sessions. |
-| `agx-worker` | A | People and agents dispatch and inspect work across repositories. |
-
-`jex Q FILE...` classifies files against yes/no questions in TOML; `--request` previews without sending.
-See [jex](tools/jex/README.md) for its JSON and exit contracts. Attach its output with
-`agx worker judge RUN accept|reject --evidence FILE` (repeatable): agx records SHA-256 and content
-without interpreting them. Use `jex` for oracle classification.
-
-`tools/agx-ticket/` (`agx ticket`, [spec](tools/spec/agx-ticket.md)) owns plain ticket issuance and collection across
-repositories: `agx ticket new` renders templates without overwriting, `agx ticket ls` derives run state and
-landing from agx-worker and jj, and `agx ticket gc --dry-run` previews collection of accepted, landed tickets.
-It keeps no state file; tickets default to `.agents/tickets` or `.agx.toml`'s `tickets` directory.
 
 Each tool change records its release intent in a generated `tools/<name>/.changes/<slug>.md`
 file. Run `mise run changeset -- <tool> <patch|minor|major> "<entry>"`; do not hand-write the file. Tickets do not edit
@@ -232,22 +203,12 @@ result. See [GPU sampler operations](tools/shared/GPU-SAMPLER.md) for freshness 
 `statusline-sampler.timer` refreshes statusline CPU, memory, storage, jobs, rates,
 session discovery and repository state five seconds after each completed sample.
 Rendering only reads files and the selected session PIDs under `/proc`.
-`agx-doctor.path` watches the run ledger and workspace verdicts, coalesces changes
-for one second, and refreshes diagnostics through a single `agx-doctor.service`.
-Both triggers are enabled by `mise run link:dots` and checked by `mise run doctor`.
+`agx-doctor.path` refreshes dotfiles diagnostics when agx observations change. `mise run link:dots`
+enables the local systemd consumers, and `mise run doctor` checks their activity and latest results.
 
-On Linux, `mise run link:dots` links and enables `ws-gc.timer`. Five minutes after boot and
-hourly thereafter it runs `agx ws gc --all --legacy`, with TSV output in
-`journalctl --user -u ws-gc.service`. It uses the existing empty, landed and idle land-temp
-classes; kept, live and unlanded workspaces remain protected. Abandoned workspaces require an
-explicit owner command with `--abandoned`; the timer never passes it. Unrecorded workspaces in
-the standard layout still require `--include-unrecorded`. `mise run doctor` fails when the
-timer is inactive or the service's last run failed. `agx ws doctor` counts workspace findings
-that this unattended command cannot collect, including abandoned and unrecorded workspaces.
-`agx-worker doctor`, `agx ws doctor`, and `agx ticket doctor` each emit JSON Lines with
-`tool`, `object`, `finding`, and `remedy`. `scripts/agx-doctor.ts` concatenates them, writes the
-machine snapshot consumed by statusline, and exits nonzero for findings or incomplete diagnostics.
-The systemd unit runs this composition directly; `agx worker doctor` forwards only to the worker doctor.
+On Linux, `mise run link:dots` links and enables `ws-gc.timer`, a dotfiles-owned consumer of the
+released agx workspace collection interface. `mise run doctor` checks the timer and latest result.
+The CLI and workspace contract are documented by the agx owner above.
 
 **Single sources of truth** — each fact has one home, so nothing drifts:
 
@@ -277,23 +238,12 @@ Claude and Codex lives in [`AGENTS.md`](AGENTS.md).
    exports `GRAVEYARD` (the variable read by `rm-improved` rip) and `RIP_GRAVEYARD` (used by repo
    tools) under `$XDG_DATA_HOME` or `~/.local/share`. The `rip` function refuses tmpfs/ramfs
    graveyards; linked `environment.d` settings cover systemd user services and `systemd-run --user`.
-   For durable `agx worker run` dispatches, carry the caller's session with
-   `systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run TICKET.md`.
-   Naming (owner decision, 2026-10-17): workers use `agt_<slug>` and workspaces use
-   `ws_<slug>`, where `<slug>` is lowercase ASCII words joined by hyphens
-   (`[a-z0-9]+(-[a-z0-9]+)*`); the underscore appears only after the prefix.
-   `agx ws add` and `agx ticket new` reject other slugs with a hyphenated suggestion. New `agx worker check`/`agx worker run`
-   dispatches apply the same rule to the ticket's `name` (or filename without `.md` when omitted),
-   suggesting `agx ticket new` to create a conforming ticket. Existing workspaces and tickets are not
-   renamed; workspace refresh/removal and `agx worker run --continue` retain legacy-name access.
-   Before dispatch, agx refuses a Git ref lock with no open holder that is older than 60 seconds.
-   It prints the lock path and age, then gives the `rip <path>` repair after confirming no holder.
    Bash SSH shells read the same prefix and export both variables. `brew shellenv` belongs in login
    profiles, never zshenv.
 5. **Fail loudly, never silently.** `rm` is disabled; `mv` / `cp` abort on overwrite (see above).
 6. **No implicit global toolchain.** A managed tool is reachable where a config _declares_ it,
-   or not at all: no global default version for toolchains (the sole named exception is the
-   A-class agx suite pin declared in `mise/dotfiles.toml`), and no second version manager hooking a login
+   or not at all: no global default version for toolchains; the released agx pin is the explicit
+   exception described above. There is no second version manager hooking a login
    shell. mise's two delivery paths stay apart — `mise activate` serves interactive shells
    per-directory; the shim directory serves _only_ non-interactive ones (`ssh host 'cmd'`
    never reads `.zshrc`, so it has no other way to reach a declared tool). Merging them puts a

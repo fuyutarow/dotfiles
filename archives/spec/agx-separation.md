@@ -1,3 +1,4 @@
+> Archived on 2026-10-24. The agx specifications are maintained by [fuyutarow/agx](https://github.com/fuyutarow/agx/blob/13b49ebd/contract/README.md).
 <!-- Consumer repository names and historical path components below are anonymized; example-* labels are not live source locators. -->
 
 # agx を dotfiles から分離するか — 設計判断 (2026-10-23)

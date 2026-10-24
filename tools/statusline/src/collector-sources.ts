@@ -12,7 +12,8 @@ import { repoStateAsync } from "./repo-state.ts";
 import { scanOutOfHarnessAsync } from "./jobs.ts";
 import { readHostLoadAsync } from "./host-load.ts";
 import { agxRouteRunsAsync } from "./dispatch-runs.ts";
-import { readDispatchWarningAsync } from "./dispatch-warning.ts";
+import { dispatchWarning } from "./dispatch-warning.ts";
+import { collectAgxRouting } from "./agx-collector.ts";
 import { diskReadingsAsync } from "./storage.ts";
 import { readCodexRate } from "./codex-rate.ts";
 import { readJevUsage } from "./jev-usage.ts";
@@ -44,7 +45,8 @@ export const COLLECTOR_SOURCES: Sources = {
   hostLoad: readHostLoadAsync,
   routes: async (sid, cwd) =>
     ok(await agxRouteRunsAsync(process.env, sid, false, cwd)),
-  dispatchWarning: readDispatchWarningAsync,
+  dispatchWarning: async () =>
+    (await collectAgxRouting()).map((stats) => dispatchWarning(stats)),
   storage: diskReadingsAsync,
   herdrReport: reportToHerdr,
   codexRate: readCodexRate,

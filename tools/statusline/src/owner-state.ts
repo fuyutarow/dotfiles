@@ -309,9 +309,14 @@ export function ownerSources(
         "recoverHealth",
         resultSchema(RecoverHealthSchema.optional()),
       )) ?? err("sampler unavailable"),
-    dispatchWarning: async () =>
-      (await read("dispatchWarning", resultSchema(z.string().optional()))) ??
-      ok(undefined),
+    dispatchWarning: async () => {
+      const error = (await pending)?.fields.dispatchWarning?.error;
+      if (error !== undefined) return err(error);
+      return (
+        (await read("dispatchWarning", resultSchema(z.string().optional()))) ??
+        ok(undefined)
+      );
+    },
     routes: () => Promise.resolve(undefined), // The builder adapts agx data from this owner cache.
     herdrReport: () => Promise.resolve(),
   };

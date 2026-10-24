@@ -15,7 +15,8 @@ import {
   AgxStatusSchema,
   readAgxSnapshotAsync,
 } from "../src/agx-snapshot.ts";
-import { collectAgxStatus } from "../src/agx-collector.ts";
+import { collectAgxRouting, collectAgxStatus } from "../src/agx-collector.ts";
+import routing from "./fixtures/agx-c5-1.5.0.json";
 import { ownerStatePath } from "../src/owner-state.ts";
 import { z } from "../src/zod.ts";
 import { decoded, decodedJson } from "./decode.ts";
@@ -79,15 +80,17 @@ async function fixture(name: string) {
     STATUSLINE_CACHE_ROOT: join(home, "cache"),
     XDG_STATE_HOME: join(home, "state"),
     AGX_STATUS_FILE: join(home, "status.json"),
+    AGX_ROUTING_FILE: join(home, "routing.json"),
     AGX_CALLS: join(home, "calls.jsonl"),
   };
   await writeFile(env.AGX_STATUS_FILE, JSON.stringify(status));
+  await writeFile(env.AGX_ROUTING_FILE, JSON.stringify(routing));
   await writeFile(
     join(home, "agx"),
     `#!${process.execPath}
 import { appendFileSync } from "node:fs";
 appendFileSync(process.env.AGX_CALLS, JSON.stringify(process.argv.slice(2)) + "\\n");
-process.stdout.write(await Bun.file(process.env.AGX_STATUS_FILE).text());
+process.stdout.write(await Bun.file(process.argv[2] === "worker" ? process.env.AGX_ROUTING_FILE : process.env.AGX_STATUS_FILE).text());
 process.exit(Number(process.env.AGX_STATUS_EXIT ?? 0));
 `,
   );
@@ -96,8 +99,10 @@ process.exit(Number(process.env.AGX_STATUS_EXIT ?? 0));
     join(bin, "mise"),
     `#!${process.execPath}
 const args = process.argv.slice(2);
-const expected = ${JSON.stringify(["-C", resolve(import.meta.dir, "../../.."), "exec", "--", "agx", "status", "--json", "--cwd"])};
-if (args.length !== 9 || expected.some((value, index) => args[index] !== value)) process.exit(91);
+const prefix = ${JSON.stringify(["-C", resolve(import.meta.dir, "../../.."), "exec", "--", "agx"])};
+if (prefix.some((value, index) => args[index] !== value)) process.exit(91);
+const command = args.slice(5);
+if (!(command.length === 4 && command[0] === "status" && command[1] === "--json" && command[2] === "--cwd") && JSON.stringify(command) !== JSON.stringify(["worker", "stats", "--routing", "--window", "24h"])) process.exit(91);
 const child = Bun.spawn([${JSON.stringify(join(home, "agx"))}, ...args.slice(5)], {
   env: process.env, stdin: "ignore", stdout: "inherit", stderr: "inherit",
 });
@@ -302,6 +307,13 @@ test("sampler publishes CLI state once per directory and retains failed collecti
   expect(calls).toContain(
     JSON.stringify(["status", "--json", "--cwd", env.HOME]),
   );
+  expect(
+    calls.filter(
+      (line) =>
+        line ===
+        JSON.stringify(["worker", "stats", "--routing", "--window", "24h"]),
+    ),
+  ).toHaveLength(1);
   expect((await readAgxSnapshotAsync(env, env.HOME)).repositoryJudgments).toBe(
     5,
   );
@@ -388,3 +400,77 @@ test("C1 additive findings and incomplete observations retain owner facts", asyn
     why: "invalid schema-1 agx status",
   });
 });
+
+test("C5 collector uses the pinned routing command and rejects unavailable observations", async () => {
+  const env = await fixture("routing-contract");
+  const collected = await collectAgxRouting(env);
+  expect(collected.isOk()).toBe(true);
+  expect(
+    collected.match(
+      (value) => value.jev,
+      () => null,
+    ),
+  ).toEqual({
+    denominator: routing.jev.denominator,
+    codex_pick_count: routing.jev.codex_pick_count,
+    codex_share: routing.jev.codex_share,
+  });
+  expect(await readFile(env.AGX_CALLS, "utf8")).toBe(
+    JSON.stringify(["worker", "stats", "--routing", "--window", "24h"]) + "\n",
+  );
+  const failed = async (extra: NodeJS.ProcessEnv = {}) =>
+    (await collectAgxRouting({ ...env, ...extra })).match(
+      () => null,
+      (error) => error,
+    );
+  expect(await failed({ AGX_STATUS_EXIT: "7" })).toContain("exit 7");
+  expect(await failed({ PATH: "" })).toContain("no mise on PATH");
+  for (const text of [
+    "broken",
+    JSON.stringify({ ...routing, schema: 2 }),
+    JSON.stringify({ ...routing, jev: { ...routing.jev, denominator: null } }),
+  ]) {
+    await writeFile(env.AGX_ROUTING_FILE, text);
+    expect(await failed()).toContain("invalid schema-1 JSON");
+  }
+});
+
+test.each([false, true])(
+  "warning cache renders without processes, network or writes (failed collection: %s)",
+  async (failed) => {
+    const env = await fixture(`warning-render-${failed}`);
+    await writeFile(
+      ownerStatePath(env),
+      JSON.stringify({
+        schema: 1,
+        fields: {
+          dispatchWarning: {
+            at,
+            value: { value: "codex 0/5 picks ⚠" },
+            ...(failed ? { error: "agx routing stats unavailable" } : {}),
+          },
+        },
+      }),
+    );
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--preload",
+        join(import.meta.dir, "no-process-preload.ts"),
+        "--eval",
+        `import { buildDataframe } from ${JSON.stringify(join(import.meta.dir, "../src/build-dataframe.ts"))};
+const frame = await buildDataframe({ cwd: process.env.HOME });
+process.stdout.write(frame.dispatchWarning ?? "absent");`,
+      ],
+      { env, stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: 5000 },
+    );
+    const [out, err, exit] = await Promise.all([
+      child.stdout.text(),
+      child.stderr.text(),
+      child.exited,
+    ]);
+    expect(exit, err).toBe(0);
+    expect(out).toBe(failed ? "absent" : "codex 0/5 picks ⚠");
+    expect(await Bun.file(env.AGX_CALLS).exists()).toBe(false);
+  },
+);

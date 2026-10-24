@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "observation": {
+    "start": "2026-10-23T05:24:16.591Z",
+    "end": "2026-10-24T05:24:16.591Z",
+    "window": "24h",
+    "duration_ms": 86400000,
+    "interval": "[start,end)"
+  },
+  "host": "R99-U26",
+  "jev": {
+    "pick_count": 14,
+    "denominator": 14,
+    "codex_pick_count": 14,
+    "codex_share": 1
+  },
+  "fallback_count": 0,
+  "routes": {
+    "codex": {
+      "state": "unknown",
+      "configured": true,
+      "executable": "present",
+      "sandbox": "unknown",
+      "reason": "executable presence is not an execution or sandbox probe",
+      "subscription": {
+        "available": true,
+        "exhausted": false,
+        "usage_status": "fresh",
+        "preference": "pace",
+        "windows": {
+          "7d": {
+            "used_percent": 35,
+            "resets_at": 1793406116,
+            "window_seconds": 604800,
+            "elapsed_fraction": 0.02999436342605838,
+            "pace": 0.3200056365739416,
+            "status": "fresh"
+          }
+        },
+        "source_reason": "fresh statusline snapshot"
+      }
+    },
+    "claude": {
+      "state": "unavailable",
+      "configured": false,
+      "executable": "present",
+      "sandbox": "unknown",
+      "reason": "executable presence is not an execution or sandbox probe",
+      "subscription": {
+        "available": true,
+        "exhausted": false,
+        "usage_status": "unknown",
+        "preference": "neutral",
+        "windows": {
+          "7d": {
+            "used_percent": null,
+            "resets_at": null,
+            "window_seconds": 604800,
+            "elapsed_fraction": null,
+            "pace": null,
+            "status": "unknown"
+          },
+          "5h": {
+            "used_percent": null,
+            "resets_at": null,
+            "window_seconds": 18000,
+            "elapsed_fraction": null,
+            "pace": null,
+            "status": "unknown"
+          }
+        }
+      }
+    }
+  },
+  "coverage": {
+    "status": "partial",
+    "journal_present": true,
+    "trailing_partial_record": false,
+    "first_recorded_at": "2026-10-24T04:41:05.261766706Z",
+    "history_complete": false,
+    "legacy": "unknown",
+    "unknown": [
+      "pre-journal selections and legacy host attribution",
+      "journal retention or deletion",
+      "execution and sandbox capability"
+    ],
+    "subscription_max_age_ms": 900000
+  }
+}

@@ -20,6 +20,7 @@ import {
 import { z } from "../src/zod.ts";
 import { version } from "../package.json";
 import { hasBareUnavailable } from "../src/ansi.ts";
+import routing from "./fixtures/agx-c5-1.5.0.json";
 
 const GOLDEN = join(import.meta.dir, "golden");
 setDefaultTimeout(30000);
@@ -73,25 +74,26 @@ const fixtures = [
 
 const FULL_INPUT = fixtures[4] ?? "";
 const HOST = "fixture-host";
-const runLine = (
-  at: number,
-  route: "codex" | "claude",
-  source = "jev",
+const routingFor = (
+  denominator = 5,
+  codexPickCount = 0,
+  state = "available",
   host = HOST,
-): string =>
-  JSON.stringify({
-    kind: "run",
-    host,
-    started_at: Temporal.Instant.fromEpochMilliseconds(at).toString(),
-    pick: { source, choice: route === "codex" ? "luna-high" : "sonnet-medium" },
-    stats: { route },
-  });
-const recent = (n: number, route: "codex" | "claude" = "claude"): string =>
-  Array.from({ length: n }, (_, i) =>
-    runLine(NOW - (i + 1) * 60_000, route),
-  ).join("\n");
-const cacheFor = (host = HOST, available = true): string =>
-  JSON.stringify({ host, available });
+) => ({
+  ...routing,
+  host,
+  jev: {
+    ...routing.jev,
+    pick_count: denominator,
+    denominator,
+    codex_pick_count: codexPickCount,
+    codex_share: denominator === 0 ? null : codexPickCount / denominator,
+  },
+  routes: { ...routing.routes, codex: { ...routing.routes.codex, state } },
+});
+const seedRouting = (state: string, value: unknown) => {
+  writeFileSync(join(state, "routing-c5.json"), JSON.stringify(value));
+};
 const progressFor = (session: string): string =>
   JSON.stringify({
     schema: 1,
@@ -133,83 +135,61 @@ const extraWorker = (
 const AGX_FIXTURE_RUNNER =
   'const fs=require("node:fs");const path=require("node:path");const dir=path.join(process.env.AGX_STATE_DIR??"","active");const rows=fs.readdirSync(dir).sort().filter((name)=>name.endsWith(".json")&&!name.endsWith(".progress.json")).map((name)=>{const marker=JSON.parse(fs.readFileSync(path.join(dir,name),"utf8"));let alive=true;try{process.kill(marker.pid,0)}catch{alive=false}const progressPath=path.join(dir,`${marker.run_id}.progress.json`);let progress;try{progress=JSON.parse(fs.readFileSync(progressPath,"utf8"))}catch{}return{id:marker.run_id,ticket:marker.label,row:marker.choice,state:alive?"running":"ended",outcome:alive?null:"lost",health:alive?null:"orphaned",exit:null,cwd:marker.cwd,workspace:marker.cwd,writes:[],judgment:null,report_path:null,dispatcher_session:marker.dispatcher_session??null,vendor_session:marker.worker_session??progress?.session??null,started_at:marker.started_at,continues:marker.pick_source==="resume"?"previous":null,verify:[],last_progress_path:fs.existsSync(progressPath)?progressPath:null,pick_source:marker.pick_source,phase:marker.phase,cost_usd:marker.cost_usd}});process.stdout.write(JSON.stringify(rows));';
 
-// Extra agx state on top of the base worker, written before both entries run.
+// Historical case titles stay stable for alpha failure-name comparison. Warning
+// cases now supply C5 responses; the owner has already scoped their host/window.
 const stateVariants: [string, (state: string) => void][] = [
   [
     "codex-share warning shown: five recent Jev picks, none codex, codex route available",
     (state) => {
-      writeFileSync(join(state, "runs.jsonl"), `${recent(5)}\n`);
-      writeFileSync(join(state, "route-capability.json"), cacheFor());
+      seedRouting(state, routingFor());
     },
   ],
   [
     "codex-share warning with six picks and one non-Jev pick ignored",
     (state) => {
-      writeFileSync(
-        join(state, "runs.jsonl"),
-        `${recent(6)}\n${runLine(NOW - 1000, "codex", "default")}\n`,
-      );
-      writeFileSync(join(state, "route-capability.json"), cacheFor());
+      seedRouting(state, { ...routingFor(6), fallback_count: 1 });
     },
   ],
   [
     "no warning: a codex pick is present",
     (state) => {
-      writeFileSync(
-        join(state, "runs.jsonl"),
-        `${recent(5)}\n${runLine(NOW - 1000, "codex")}\n`,
-      );
-      writeFileSync(join(state, "route-capability.json"), cacheFor());
+      seedRouting(state, routingFor(6, 1));
     },
   ],
   [
     "no warning: fewer than five picks",
     (state) => {
-      writeFileSync(join(state, "runs.jsonl"), `${recent(4)}\n`);
-      writeFileSync(join(state, "route-capability.json"), cacheFor());
+      seedRouting(state, routingFor(4));
     },
   ],
   [
     "no warning: picks older than 24 hours",
     (state) => {
-      writeFileSync(
-        join(state, "runs.jsonl"),
-        `${Array.from({ length: 5 }, () => runLine(NOW - 25 * 3_600_000, "claude")).join("\n")}\n`,
-      );
-      writeFileSync(join(state, "route-capability.json"), cacheFor());
+      seedRouting(state, routingFor(0));
     },
   ],
   [
     "no warning: route cache is for another host",
     (state) => {
-      writeFileSync(join(state, "runs.jsonl"), `${recent(5)}\n`);
-      writeFileSync(
-        join(state, "route-capability.json"),
-        cacheFor("elsewhere"),
-      );
+      seedRouting(state, routingFor(5, 0, "available", "elsewhere"));
     },
   ],
   [
     "no warning: codex route unavailable",
     (state) => {
-      writeFileSync(join(state, "runs.jsonl"), `${recent(5)}\n`);
-      writeFileSync(
-        join(state, "route-capability.json"),
-        cacheFor(HOST, false),
-      );
+      seedRouting(state, routingFor(5, 0, "unavailable"));
     },
   ],
   [
     "no warning: unreadable cache and log",
     (state) => {
-      writeFileSync(join(state, "runs.jsonl"), `${recent(5)}\n`);
-      writeFileSync(join(state, "route-capability.json"), "not json");
+      seedRouting(state, "invalid C5 response");
     },
   ],
   [
     "no warning: runs.jsonl missing",
     (state) => {
-      writeFileSync(join(state, "route-capability.json"), cacheFor());
+      seedRouting(state, routingFor(5, 0, "unknown"));
     },
   ],
   [
@@ -386,9 +366,11 @@ async function expectGolden(
       chmodSync(path, 0o755);
     };
     fake("git", "echo fixture-branch");
+    fake("mise", 'shift 5\nexec "$HOME/bin/agx" "$@"');
     fake(
       "agx",
       `if [ "$1" = "status" ]; then exec "${process.execPath}" -e 'process.stdout.write(await Bun.file(process.env.HOME + "/agx-status.json").text())'; fi
+if [ "$1" = "worker" ]; then exec "${process.execPath}" -e 'process.stdout.write(await Bun.file(process.env.AGX_STATE_DIR + "/routing-c5.json").text())'; fi
 exec "${process.execPath}" -e '${AGX_FIXTURE_RUNNER}'`,
     );
     fake(
@@ -444,6 +426,7 @@ exec "${process.execPath}" -e '${AGX_FIXTURE_RUNNER}'`,
         session: WORKER_SESSION,
       }),
     );
+    seedRouting(join(home, "state"), routingFor(0, 0, "unknown"));
     extraState?.(join(home, "state"));
     const seed = async () => {
       await writeFile(

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.9 — 2026-10-24
+
+- Project the routing warning from public agx routing statistics and hide unknown capability.
+
 ## 0.21.8 — 2026-10-24
 
 - Read Jev roster prices through the public agx worker roster command

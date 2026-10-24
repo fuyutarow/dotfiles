@@ -106,7 +106,6 @@
 3	tools/shared/src/typesafe-key.ts
 6	tools/statusline/src/bounded.ts
 3	tools/statusline/src/dispatch-runs.ts
-1	tools/statusline/src/dispatch-warning.ts
 10	tools/statusline/src/host-load.ts
 5	tools/statusline/src/identity.ts
 2	tools/statusline/src/storage.ts

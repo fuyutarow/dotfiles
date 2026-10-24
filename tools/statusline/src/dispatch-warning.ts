@@ -1,111 +1,35 @@
-// Codex-share warning, ported from agents/claude/dispatch-warning.ts (ef73a9c4) plus the reading
-// half of the old buildDataframe. Read-only: reads legacy runs.jsonl and route-capability.json records.
+// Consumer projection of C5 routing statistics; no owner state-file knowledge.
 import { hostname } from "node:os";
-import { join } from "node:path";
-import { err, ok, fromThrowable, type Result } from "neverthrow";
-import { readJson, readJsonAsync } from "./bounded.ts";
-import { stateDir } from "./dispatch-state.ts";
-import {
-  DEFAULT_JSONL_TAIL_BYTES,
-  readJsonlTail,
-  readJsonlTailSync,
-} from "../../shared/src/jsonl.ts";
-import { nowEpochSec } from "./prompt-stamp.ts";
-import { jsonOf, z } from "./zod.ts";
+import { z } from "./zod.ts";
 
-const CacheSchema = z.looseObject({
+export const RoutingStatsSchema = z.object({
+  schema: z.literal(1),
+  observation: z.object({
+    window: z.literal("24h"),
+    duration_ms: z.literal(86_400_000),
+  }),
   host: z.string(),
-  available: z.boolean(),
-});
-const RunSchema = z.looseObject({
-  kind: z.literal("run"),
-  host: z.string(),
-  started_at: z.string(),
-  pick: z.looseObject({ source: z.string() }),
-  route: z.enum(["codex", "claude"]).optional(),
-  stats: z
-    .looseObject({ route: z.enum(["codex", "claude"]).optional() })
-    .optional(),
+  jev: z.object({
+    denominator: z.number().int().nonnegative(),
+    codex_pick_count: z.number().int().nonnegative(),
+    codex_share: z.number().min(0).max(1).nullable(),
+  }),
+  routes: z.object({ codex: z.object({ state: z.string() }) }),
 });
 
 export function dispatchWarning(
-  log: string,
-  routeCache: string,
-  host: string,
-  now: number,
+  stats: z.output<typeof RoutingStatsSchema>,
+  host = hostname(),
 ): string | undefined {
-  const cache = jsonOf(CacheSchema).safeParse(routeCache);
-  if (!cache.success || cache.data.host !== host || !cache.data.available)
+  // C5 1.5.0 reports only unknown/unavailable. Only an affirmative public
+  // capability observation may enable this warning; eligibility is not proof.
+  if (
+    stats.host !== host ||
+    stats.routes.codex.state !== "available" ||
+    stats.jev.denominator < 5 ||
+    stats.jev.codex_pick_count !== 0 ||
+    stats.jev.codex_share !== 0
+  )
     return undefined;
-  const cutoff = now - 24 * 60 * 60 * 1000;
-  const picks = log
-    .split("\n")
-    .filter((line) => line !== "")
-    .flatMap((line) => {
-      const parsed = jsonOf(RunSchema).safeParse(line);
-      if (!parsed.success) return [];
-      const run = parsed.data;
-      const parsedAt = fromThrowable(
-        () => Temporal.Instant.from(run.started_at).epochMilliseconds,
-        (error) => error,
-      )();
-      const at = parsedAt.isOk() ? parsedAt.value : Number.NaN;
-      if (
-        run.host !== host ||
-        run.pick.source !== "jev" ||
-        !Number.isFinite(at) ||
-        at < cutoff ||
-        at > now
-      )
-        return [];
-      const route = run.route ?? run.stats?.route;
-      return route === undefined ? [] : [{ ...run, route }];
-    });
-  if (picks.length < 5 || picks.some((run) => run.route === "codex"))
-    return undefined;
-  return `codex 0/${picks.length} picks ⚠`;
-}
-
-/** The warning for this host from the on-disk state; undefined when either file is unusable. */
-export function readDispatchWarning(): string | undefined {
-  const state = stateDir();
-  const cache = readJson(join(state, "route-capability.json"), CacheSchema);
-  if (cache?.host !== hostname()) return undefined;
-  const log = fromThrowable(
-    () =>
-      readJsonlTailSync(join(state, "runs.jsonl"), DEFAULT_JSONL_TAIL_BYTES)
-        .text,
-  )();
-  return log.isOk()
-    ? dispatchWarning(
-        log.value,
-        JSON.stringify(cache),
-        hostname(),
-        nowEpochSec() * 1000,
-      )
-    : undefined;
-}
-// The sync reader stays for compatibility; buildDataframe uses this async counterpart.
-export async function readDispatchWarningAsync(): Promise<
-  Result<string | undefined, string>
-> {
-  const state = stateDir();
-  const cachePath = join(state, "route-capability.json");
-  const cache = await readJsonAsync(cachePath, CacheSchema);
-  if (cache === undefined) return err("dispatch warning unavailable");
-  if (cache.host !== hostname()) return ok(undefined);
-  const log = await readJsonlTail(
-    join(state, "runs.jsonl"),
-    DEFAULT_JSONL_TAIL_BYTES,
-  ).catch(() => null);
-  return log === null
-    ? err("dispatch warning unavailable")
-    : ok(
-        dispatchWarning(
-          log.text,
-          JSON.stringify(cache),
-          hostname(),
-          nowEpochSec() * 1000,
-        ),
-      );
+  return `codex ${stats.jev.codex_pick_count}/${stats.jev.denominator} picks ⚠`;
 }

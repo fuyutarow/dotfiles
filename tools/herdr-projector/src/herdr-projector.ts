@@ -239,6 +239,14 @@ export async function bindNativeCodexFooters(
     const footer = nativeFooterObservation((await readTail(pane)) ?? "");
     if (footer === undefined) {
       reasons.set(pane, "footer not visible");
+      await bindRegisteredCodex(
+        agent,
+        sessions,
+        titles,
+        reasons,
+        env,
+        readTitle,
+      );
       continue;
     }
     const cwd = nativeFooterCwd(footer.cwd, env);
@@ -336,6 +344,51 @@ export async function bindNativeCodexFooters(
     ]);
   }
   return sessions;
+}
+
+async function bindRegisteredCodex(
+  agent: Agent,
+  sessions: Map<string, FleetSessionRead>,
+  titles: Map<string, PaneTitleBinding>,
+  reasons: Map<string, string>,
+  env: NodeJS.ProcessEnv,
+  readTitle: typeof readCodexNativeTitle,
+): Promise<void> {
+  const registered = RegisteredCodexSchema.safeParse(agent.agent_session);
+  if (
+    !registered.success ||
+    agent.cwd === undefined ||
+    agent.pane_id === undefined
+  )
+    return;
+  const id = registered.data.value;
+  const path = await codexRolloutPath(id, env);
+  if (path === undefined) return;
+  const title = await readTitle(id, env);
+  const unknown = { na: true, why: "not in registered rollout" } as const;
+  const fallback = FleetSessionSchema.safeParse(
+    await readCodexNativeSession(
+      {
+        schema: 1,
+        vendor: "codex",
+        session_id: id,
+        cwd: agent.cwd,
+        pane_id: agent.pane_id,
+        name: unknown,
+        model: unknown,
+        effort: unknown,
+        ctx: unknown,
+        rate: unknown,
+        updated_at: Temporal.Now.instant().toString(),
+      },
+      env,
+      path,
+    ),
+  );
+  if (!fallback.success) return;
+  sessions.set(id, fallback.data);
+  titles.set(agent.pane_id, { sessionId: id, title });
+  reasons.delete(agent.pane_id);
 }
 
 async function agentList(): Promise<Agent[] | undefined> {
@@ -583,6 +636,40 @@ export async function bindClaudePanes(
   return sessions;
 }
 
+/** Same runtime surfaces as codex-remote doctor; never reads the declaration. */
+export async function nativeCodexRc(
+  env: NodeJS.ProcessEnv = process.env,
+  readArgs = (pid: number) => run("ps", ["-o", "args=", "-p", String(pid)]),
+): Promise<string> {
+  const directory = join(
+    env.CODEX_HOME ?? join(env.HOME ?? "", ".codex"),
+    "app-server-daemon",
+  );
+  const pid = jsonOf(z.object({ pid: z.number().int().positive() })).safeParse(
+    await Bun.file(join(directory, "app-server.pid"))
+      .text()
+      .catch(() => ""),
+  );
+  if (pid.success) {
+    const args = await readArgs(pid.data.pid);
+    if (args === undefined) return "daemon process unreadable";
+    if (/(?:^|\s)(?:\S*\/)?codex\s+app-server(?:\s|$)/u.test(args))
+      return args.split(/\s+/u).includes("--remote-control")
+        ? "rc:on"
+        : "rc:off";
+    return "managed daemon process not observed";
+  }
+  const settings = jsonOf(
+    z.object({ remoteControlEnabled: z.boolean() }),
+  ).safeParse(
+    await Bun.file(join(directory, "settings.json"))
+      .text()
+      .catch(() => ""),
+  );
+  if (!settings.success) return "daemon settings unreadable";
+  return settings.data.remoteControlEnabled ? "rc:on" : "rc:off";
+}
+
 export async function projectAgents(
   agents: Agent[],
   sessions: ReadonlyMap<string, FleetSessionRead>,
@@ -648,7 +735,11 @@ export async function projectAgents(
         ? identity.effort
         : "";
     // Read observations for this pane; never recycle projector-owned display tokens.
-    const rc = remoteControl.get(agent.pane_id) ?? "rc:?";
+    const isAgent = vendor === "claude" || vendor === "codex";
+    const rc = remoteControl.get(agent.pane_id);
+    const marker = isAgent && rc === "rc:on" ? "🔗" : "";
+    const unknownRc = isAgent && rc !== "rc:on" && rc !== "rc:off";
+    const displayRc = unknownRc ? "🔗?" : marker;
 
     const renamed = await apply(["tab", "rename", agent.tab_id, name]);
     const reported = await apply([
@@ -663,8 +754,11 @@ export async function projectAgents(
       `model=${model}`,
       "--token",
       `effort=${effort}`,
+      ...(displayRc !== ""
+        ? ["--token", `rc=${displayRc}`]
+        : ["--clear-token", "rc"]),
       "--token",
-      `rc=${rc}`,
+      `rc_reason=${unknownRc ? (rc ?? "remote-control observation unavailable") : ""}`,
       "--token",
       `fleet_session_id=${matchedSessionId ?? ""}`,
     ]);
@@ -736,6 +830,12 @@ async function project(dryRun = false): Promise<number> {
     reasons,
   );
   const remoteControl = new Map<string, string>();
+  const codexPanes = agents.filter((pane) => pane.agent === "codex");
+  const codexRc = codexPanes.length === 0 ? "" : await nativeCodexRc();
+  for (const agent of codexPanes) {
+    if (agent.pane_id === undefined) continue;
+    remoteControl.set(agent.pane_id, codexRc);
+  }
   const claudeSessions = await bindClaudePanes(agents, remoteControl);
   const cacheDir =
     runtime === undefined || runtime === ""

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.16 — 2026-10-24
+
+- Show compact applicable remote-control markers and recover registered Codex rollout metadata
+
 ## 0.1.15 — 2026-10-24
 
 - Recover live sidebar identities from current native footers and append-index titles, project observed remote-control state, and add a read-only dry run

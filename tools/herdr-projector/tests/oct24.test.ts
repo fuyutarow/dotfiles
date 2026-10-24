@@ -86,7 +86,7 @@ test("Oct 24 missing Claude registration recovers from pane footer and exact tra
   expect(calls[1]).toContain("fullname=firedancer-agt_0smx");
   expect(calls[1]).toContain("model=Opus 5.5");
   expect(calls[1]).toContain("effort=medium");
-  expect(calls[1]).toContain("rc=rc:on");
+  expect(calls[1]).toContain("rc=🔗");
   expect(
     await Bun.file(join(root, "fleet/sessions", `${id}.json`)).exists(),
   ).toBe(false);

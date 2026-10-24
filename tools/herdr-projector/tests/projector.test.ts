@@ -123,7 +123,7 @@ test("projects known identity metadata and labels unknown agents without model",
   expect(calls[1]).toContain("fullname=project-agt_abcd");
   expect(calls[1]).toContain("model=Opus 5.5");
   expect(calls[1]).toContain("effort=high");
-  expect(calls[1]).toContain("rc=rc:?");
+  expect(calls[1]).toContain("rc=🔗?");
   expect(calls[2]).toEqual([
     "tab",
     "rename",
@@ -251,7 +251,7 @@ test("missing session clears stale identity tokens and explains the missing file
   expect(calls[1]).toContain("fullname=codex · n/a(no session file)");
   expect(calls[1]).toContain("model=");
   expect(calls[1]).toContain("effort=");
-  expect(calls[1]).toContain("rc=rc:?");
+  expect(calls[1]).toContain("rc=🔗?");
   expect(calls[1]).toContain("fleet_session_id=");
 });
 
@@ -1278,7 +1278,7 @@ test("complete native footer cannot bind a missing or over-limit exact rollout",
   });
 });
 
-test("registration-only native reports cannot refresh prior fleet state without a footer", async () => {
+test("registered exact rollout supplies display metadata without refreshing fleet state", async () => {
   await using fixture = await nativeFixture();
   // This is a fresh list response whose source fields could have been written
   // by the projector on an earlier pass. The rollout and cwd match too, but
@@ -1322,9 +1322,10 @@ test("registration-only native reports cannot refresh prior fleet state without 
     apply,
     fixture.env,
   );
-  expect(sessions.get(footerThread)).toEqual({
-    na: true,
-    why: "native footer validation unavailable",
+  expect(sessions.get(footerThread)).toMatchObject({
+    model: "gpt-6-astra",
+    effort: "high",
+    session_id: footerThread,
   });
   expect(agents[0]?.agent_session?.value).toBe(footerThread);
   expect(calls).toEqual([]);
@@ -1337,11 +1338,11 @@ test("registration-only native reports cannot refresh prior fleet state without 
     "tab",
     "rename",
     "same-cwd-tab",
-    "codex · n/a(session unavailable)",
+    "codex · n/a(name unavailable)",
   ]);
-  expect(calls[1]).toContain("fleet_session_id=");
-  expect(calls[1]).toContain("model=");
-  expect(calls[1]).toContain("effort=");
+  expect(calls[1]).toContain(`fleet_session_id=${footerThread}`);
+  expect(calls[1]).toContain("model=gpt-6-astra");
+  expect(calls[1]).toContain("effort=high");
 });
 
 test("untrusted provenance receives no provisional display ID", async () => {

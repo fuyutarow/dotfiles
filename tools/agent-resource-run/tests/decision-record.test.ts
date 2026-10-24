@@ -151,17 +151,13 @@ for (const shape of [
       ],
       f.env,
     );
-    expect(result.exit, result.stdout + result.stderr).toBe(
-      shape === "commandless-admit" ? 0 : 69,
-    );
+    expect(result.exit, result.stdout + result.stderr).toBe(0);
     const rows = await records(f.root);
     expect(rows).toHaveLength(1);
     const record = rows[0]!;
-    expect(record.stage).toBe(checkOnly ? "precheck" : "scope-entry");
-    expect(record.launched).toBe(false);
-    expect(record.outcome).toBe(
-      shape === "commandless-admit" ? "admit" : "refuse",
-    );
+    expect(record.stage).toBe(checkOnly ? "precheck" : "command");
+    expect(record.launched).toBe(!checkOnly);
+    expect(record.outcome).toBe("admit");
     expect(record.decision_id).toMatch(/^[a-f0-9-]{36}$/u);
     expect(record.started_at).toEndWith("Z");
     expect(record.decided_at).toEndWith("Z");
@@ -190,6 +186,9 @@ for (const shape of [
         expect(observation.branch).toContain("wchan");
       }
       expect(record.branch).toContain("persistent dxg stall");
+      expect(record.reason_code).toBe("dxg-suspected");
+      expect(result.stderr).toContain("WARN dxg-suspected:");
+      expect(result.stdout).not.toContain("DENY");
     }
     expect(result.stderr).not.toContain("scope enforcement unavailable");
   });
@@ -273,3 +272,46 @@ test("record bytes, retained count and age are bounded", async () => {
       );
   }
 });
+
+for (const latch of ["set", "cleared"] as const)
+  test(`production owner file latch ${latch} during confirmation determines admission`, async () => {
+    await using f = await fixture();
+    await stalled(f.root, "123", "456");
+    const owner = {
+      schema: 1,
+      attemptAt: 1,
+      sampledAt: 1,
+      devices: [{ id: 0, totalMiB: 8192, usedMiB: 0, utilPct: 0 }],
+      processes: [],
+      samples: [],
+    };
+    await Bun.write(
+      join(f.root, "gpu-owner.json"),
+      JSON.stringify({
+        ...owner,
+        ...(latch === "cleared" ? { unresponsiveSince: 1 } : {}),
+      }),
+    );
+    await Bun.write(
+      join(f.root, "next-owner.json"),
+      JSON.stringify({
+        ...owner,
+        ...(latch === "set" ? { unresponsiveSince: 2 } : {}),
+      }),
+    );
+    const result = await invoke(
+      [runner, "--manifest", join(f.root, "manifest.json"), "--check-only"],
+      { ...f.env, ARR_RECORD_REPLACE_OWNER: "1" },
+    );
+    expect(result.exit, result.stdout + result.stderr).toBe(
+      latch === "set" ? 69 : 0,
+    );
+    const [record] = await records(f.root);
+    expect(record?.outcome).toBe(latch === "set" ? "refuse" : "admit");
+    expect(
+      record?.observations.some((row) => row.branch === "gpu-sampler-decision"),
+    ).toBe(true);
+    if (latch === "set")
+      expect(result.stdout).toContain("GPU stall recorded since 2");
+    else expect(record?.reason_code).toBe("dxg-suspected");
+  });

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gpuAdmissionRefusal } from "../src/agent-resource-run.ts";
 import { type GpuState, readGpuState } from "../../shared/src/gpu-samples.ts";
+import { DecisionRecord, withDecision } from "../src/lib/decision-record.ts";
 import { runGpuSampler } from "../../shared/src/gpu-sampler.ts";
 
 // Holder identity only contributes an advisory diagnostic, never a refusal.
@@ -162,7 +163,7 @@ for (const target of ["leader", "task"] as const)
         );
       });
       expect(
-        await gpuAdmissionRefusal(request, 512, {
+        await dxgAdvisory(request, 512, {
           procRoot: f.root,
           state,
           ...control.options,
@@ -178,7 +179,7 @@ for (const elapsed of [2999, 3000, 4500])
     await using f = await fixture();
     let now = 0;
     const sleeps: number[] = [];
-    const refusal = await gpuAdmissionRefusal(request, 512, {
+    const refusal = await dxgAdvisory(request, 512, {
       procRoot: f.root,
       state,
       now: () => now,
@@ -201,7 +202,7 @@ for (const scope of ["unmanaged.scope", "agent-resource-existing.scope"])
   test(`paused stale cache cannot mask a live dxg D-state in ${scope}`, async () => {
     await using f = await fixture(scope);
     const control = confirmation();
-    const refusal = await gpuAdmissionRefusal(request, 512, {
+    const refusal = await dxgAdvisory(request, 512, {
       procRoot: f.root,
       state,
       currentReservationId: "existing",
@@ -215,12 +216,12 @@ for (const scope of ["unmanaged.scope", "agent-resource-existing.scope"])
     expect(refusal).toContain(join(f.base, "wchan"));
   });
 
-test("Z leader with a distinct live dxg D-state task refuses with task evidence", async () => {
+test("Z leader with a distinct live dxg D-state task admits with advisory task evidence", async () => {
   await using f = await fixture();
   await fs.writeFile(join(f.base, "stat"), stat("Z"));
   const task = await addTask(f, "456");
   const control = confirmation();
-  const refusal = await gpuAdmissionRefusal(request, 512, {
+  const refusal = await dxgAdvisory(request, 512, {
     procRoot: f.root,
     state,
     ...control.options,
@@ -237,7 +238,7 @@ test("Z leader without a distinct D-state task does not refuse", async () => {
   await using f = await fixture();
   await fs.writeFile(join(f.base, "stat"), stat("Z"));
   expect(
-    await gpuAdmissionRefusal(request, 512, { procRoot: f.root, state }),
+    await dxgAdvisory(request, 512, { procRoot: f.root, state }),
   ).toBeUndefined();
 });
 
@@ -255,7 +256,7 @@ for (const transition of ["exit", "wake", "reuse"])
         );
     });
     expect(
-      await gpuAdmissionRefusal(request, 512, {
+      await dxgAdvisory(request, 512, {
         procRoot: f.root,
         state,
         ...control.options,
@@ -281,7 +282,7 @@ for (const transition of ["exit", "wake", "reuse"])
         );
     });
     expect(
-      await gpuAdmissionRefusal(request, 512, {
+      await dxgAdvisory(request, 512, {
         procRoot: f.root,
         state,
         ...control.options,
@@ -290,12 +291,12 @@ for (const transition of ["exit", "wake", "reuse"])
     expect(control.sleeps).toEqual([3000]);
   });
 
-test("confirmation evidence becoming inaccessible fails closed", async () => {
+test("confirmation evidence becoming inaccessible records advisory evidence", async () => {
   await using f = await fixture();
   const wchanPath = join(f.base, "wchan");
   const control = confirmation(async () => fs.rm(wchanPath, { force: true }));
   expect(
-    await gpuAdmissionRefusal(request, 512, {
+    await dxgAdvisory(request, 512, {
       procRoot: f.root,
       state,
       ...control.options,
@@ -306,13 +307,13 @@ test("confirmation evidence becoming inaccessible fails closed", async () => {
   expect(control.sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
 });
 
-test("leader confirmation with an extant stat missing its identity fails closed", async () => {
+test("leader confirmation with an extant stat missing its identity records advisory evidence", async () => {
   await using f = await fixture();
   const control = confirmation(async () =>
     fs.writeFile(join(f.base, "stat"), statWithoutStartTime("D")),
   );
   expect(
-    await gpuAdmissionRefusal(request, 512, {
+    await dxgAdvisory(request, 512, {
       procRoot: f.root,
       state,
       ...control.options,
@@ -324,7 +325,7 @@ test("leader confirmation with an extant stat missing its identity fails closed"
 });
 
 for (const target of ["task", "leader"] as const)
-  test(`task confirmation with an extant ${target} stat missing its identity fails closed`, async () => {
+  test(`task confirmation with an extant ${target} stat missing its identity records advisory evidence`, async () => {
     await using f = await fixture();
     await fs.writeFile(join(f.base, "stat"), stat("Z"));
     const task = await addTask(f, "456");
@@ -345,7 +346,7 @@ for (const target of ["task", "leader"] as const)
       ),
     );
     expect(
-      await gpuAdmissionRefusal(request, 512, {
+      await dxgAdvisory(request, 512, {
         procRoot: f.root,
         state,
         ...control.options,
@@ -355,7 +356,7 @@ for (const target of ["task", "leader"] as const)
   });
 
 for (const target of ["leader", "task", "task leader"] as const)
-  test(`post-wchan confirmation recheck with an extant malformed ${target} stat fails closed`, async () => {
+  test(`post-wchan confirmation recheck with an extant malformed ${target} stat records advisory evidence`, async () => {
     await using f = await fixture();
     let wchanPath = join(f.base, "wchan");
     let malformedPath = join(f.base, "stat");
@@ -407,7 +408,7 @@ for (const target of ["leader", "task", "task leader"] as const)
     };
     const control = confirmation();
     expect(
-      await gpuAdmissionRefusal(request, 512, {
+      await dxgAdvisory(request, 512, {
         procRoot: f.root,
         state,
         ...control.options,
@@ -421,7 +422,7 @@ test("no D/dxg candidate is the fast path", async () => {
   await fs.writeFile(join(f.base, "stat"), stat("S"));
   const control = confirmation();
   expect(
-    await gpuAdmissionRefusal(request, 512, {
+    await dxgAdvisory(request, 512, {
       procRoot: f.root,
       state,
       ...control.options,
@@ -436,7 +437,7 @@ test("leader and task candidates share nine bounded confirmation intervals", asy
   const control = confirmation(async () =>
     fs.writeFile(join(f.base, "stat"), stat("S")),
   );
-  const refusal = await gpuAdmissionRefusal(request, 512, {
+  const refusal = await dxgAdvisory(request, 512, {
     procRoot: f.root,
     state,
     ...control.options,
@@ -495,25 +496,25 @@ for (const transition of ["exit", "wake", "reuse"])
       },
     };
     expect(
-      await gpuAdmissionRefusal(request, 512, { procRoot: f.root, state }),
+      await dxgAdvisory(request, 512, { procRoot: f.root, state }),
     ).toBeUndefined();
   });
 
-test("live leader with an inaccessible task inventory fails closed", async () => {
+test("live leader with an inaccessible task inventory records advisory evidence", async () => {
   await using f = await fixture();
   await fs.writeFile(join(f.base, "stat"), stat("S"));
   const taskRoot = join(f.base, "task");
   await fs.rm(taskRoot, { recursive: true });
   await fs.writeFile(taskRoot, "not a directory");
   expect(
-    await gpuAdmissionRefusal(request, 512, { procRoot: f.root, state }),
+    await dxgAdvisory(request, 512, { procRoot: f.root, state }),
   ).toContain(
     `GPU task inventory unavailable tgid=123 leader_state=S; evidence=${taskRoot},${join(f.base, "stat")}`,
   );
 });
 
 for (const channel of ["", "0", "missing", "unreadable"])
-  test(`GPU holder D-state task with ${channel === "" ? "empty" : channel} wchan confirms before refusing`, async () => {
+  test(`GPU holder D-state task with ${channel === "" ? "empty" : channel} wchan confirms before advising`, async () => {
     await using f = await fixture();
     await fs.writeFile(join(f.base, "stat"), stat("Z"));
     const task = await addTask(f, "456");
@@ -522,9 +523,9 @@ for (const channel of ["", "0", "missing", "unreadable"])
     if (channel === "unreadable") await fs.mkdir(path); // EISDIR even as root.
     else if (channel !== "missing") await fs.writeFile(path, channel);
     const control = confirmation();
-    const refusal = await gpuAdmissionRefusal(request, 512, {
+    const refusal = await dxgAdvisory(request, 512, {
       procRoot: f.root,
-      state: { ...state, processes: [{ pid: 123, usedMiB: 1 }] },
+      state: retainedState(),
       ...control.options,
     });
     expect(refusal).toContain(
@@ -568,11 +569,14 @@ for (const { target, tie, channel } of unavailableChannelCases)
     await fs.writeFile(join(fdRoot, "1"), "not a symlink");
     if (tie === "dxg-fd") await fs.symlink("/dev/dxg", join(fdRoot, "2"));
     const control = confirmation();
-    const refusal = await gpuAdmissionRefusal(request, 512, {
+    const refusal = await dxgAdvisory(request, 512, {
       procRoot: f.root,
       state: {
         ...state,
         processes: tie === "sampled-holder" ? [{ pid: 123, usedMiB: 1 }] : [],
+        samples: retainedState().samples,
+        processIdentity:
+          tie === "sampled-holder" ? sampleIdentity() : undefined,
       },
       ...control.options,
     });
@@ -589,7 +593,7 @@ for (const { target, tie, channel } of unavailableChannelCases)
   });
 
 for (const target of ["leader", "task"] as const)
-  test(`unscoped unsampled ${target} with dxgvmb_send_sync_msg still refuses`, async () => {
+  test(`unscoped unsampled ${target} with dxgvmb_send_sync_msg still records advisory evidence`, async () => {
     await using f = await fixture();
     let wchanPath = join(f.base, "wchan");
     if (target === "task") {
@@ -599,7 +603,7 @@ for (const target of ["leader", "task"] as const)
     await fs.writeFile(wchanPath, "dxgvmb_send_sync_msg\n");
     const control = confirmation();
     expect(
-      await gpuAdmissionRefusal(request, 512, {
+      await dxgAdvisory(request, 512, {
         procRoot: f.root,
         state,
         ...control.options,
@@ -613,7 +617,7 @@ for (const processState of ["S", "R", "Z", "T", "t", "I", "X", "x"])
     await using f = await fixture();
     await fs.writeFile(join(f.base, "stat"), stat(processState));
     expect(
-      await gpuAdmissionRefusal(request, 512, { procRoot: f.root, state }),
+      await dxgAdvisory(request, 512, { procRoot: f.root, state }),
     ).toBeUndefined();
   });
 
@@ -621,7 +625,7 @@ test("known non-dxg D-state does not refuse GPU admission", async () => {
   await using f = await fixture();
   await fs.writeFile(join(f.base, "wchan"), "io_schedule\n");
   expect(
-    await gpuAdmissionRefusal(request, 512, { procRoot: f.root, state }),
+    await dxgAdvisory(request, 512, { procRoot: f.root, state }),
   ).toBeUndefined();
 });
 
@@ -629,7 +633,7 @@ test("process already exited after inventory is ignored", async () => {
   await using f = await fixture();
   await fs.rm(join(f.base, "stat"));
   expect(
-    await gpuAdmissionRefusal(request, 512, { procRoot: f.root, state }),
+    await dxgAdvisory(request, 512, { procRoot: f.root, state }),
   ).toBeUndefined();
 });
 
@@ -672,7 +676,7 @@ for (const transition of ["exit", "wake"])
       },
     };
     expect(
-      await gpuAdmissionRefusal(request, 512, { procRoot: f.root, state }),
+      await dxgAdvisory(request, 512, { procRoot: f.root, state }),
     ).toBeUndefined();
   });
 
@@ -702,7 +706,7 @@ test("admission inspection never spawns GPU tools or workload processes", async 
     },
   };
   expect(
-    await gpuAdmissionRefusal(request, 512, {
+    await dxgAdvisory(request, 512, {
       procRoot: f.root,
       state,
       ...control.options,
@@ -711,23 +715,23 @@ test("admission inspection never spawns GPU tools or workload processes", async 
   expect(control.sleeps).toEqual(Array.from({ length: 9 }, () => 3000));
   await fs.writeFile(join(f.base, "stat"), stat("S"));
   expect(
-    await gpuAdmissionRefusal(request, 512, { procRoot: f.root, state }),
+    await dxgAdvisory(request, 512, { procRoot: f.root, state }),
   ).toBeUndefined();
   expect(spawn).not.toHaveBeenCalled();
 });
 
-test("unreadable process inventory or stat fails closed", async () => {
+test("unreadable process inventory or stat records advisory evidence", async () => {
   await using f = await fixture();
   expect(
     await gpuAdmissionRefusal(request, 512, {
       procRoot: join(f.root, "absent"),
       state,
     }),
-  ).toContain("GPU process inventory unavailable");
+  ).toContain("GPU reservation capacity unavailable");
   await fs.rm(join(f.base, "stat"));
   await fs.mkdir(join(f.base, "stat"));
   expect(
-    await gpuAdmissionRefusal(request, 512, { procRoot: f.root, state }),
+    await dxgAdvisory(request, 512, { procRoot: f.root, state }),
   ).toContain("GPU process state unreadable pid=123");
 });
 
@@ -1102,4 +1106,112 @@ test("malformed metadata is rejected by the production reader and never grants a
     );
     expect(await readGpuState(path)).toBeUndefined();
   }
+});
+
+// Return the diagnostic only after proving the production gate admitted it.
+async function dxgAdvisory(...args: Parameters<typeof gpuAdmissionRefusal>) {
+  const record = new DecisionRecord();
+  const warning = spyOn(console, "error").mockImplementation(() => {});
+  using _restore = {
+    [Symbol.dispose]: () => {
+      warning.mockRestore();
+    },
+  };
+  const refusal = await withDecision(record, () =>
+    gpuAdmissionRefusal(...args),
+  );
+  expect(refusal).toBeUndefined();
+  expect(record.outcome).toBe("admit");
+  const lines = warning.mock.calls
+    .map(([line]) => String(line))
+    .filter((line) => line.startsWith("WARN dxg-suspected:"));
+  let observation: string | undefined;
+  if (record.reason_code !== "dxg-suspected") expect(lines).toHaveLength(0);
+  else {
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(record.branch);
+    observation = record.branch;
+  }
+  return observation;
+}
+
+for (const incident of ["set", "cleared", "unchanged"] as const)
+  test(`owner latch ${incident} is read after all confirmation intervals`, async () => {
+    await using f = await fixture();
+    const control = confirmation();
+    let reads = 0;
+    const initial = {
+      ...state,
+      ...(incident === "cleared" ? { unresponsiveSince: 1 } : {}),
+    };
+    const fresh = {
+      ...state,
+      ...(incident === "set" ? { unresponsiveSince: 2 } : {}),
+    };
+    const record = new DecisionRecord();
+    const refusal = await withDecision(record, () =>
+      gpuAdmissionRefusal(request, 512, {
+        procRoot: f.root,
+        ...control.options,
+        readState: () => {
+          reads++;
+          if (reads === 1) {
+            expect(control.sleeps).toHaveLength(0);
+            return Promise.resolve(initial);
+          }
+          expect(control.sleeps).toHaveLength(9);
+          return Promise.resolve(fresh);
+        },
+      }),
+    );
+    expect(reads).toBe(2);
+    if (incident === "set")
+      expect(refusal).toContain("GPU stall recorded since 2");
+    else expect(refusal).toBeUndefined();
+    expect(
+      record.observations.some((row) => row.branch === "gpu-sampler-decision"),
+    ).toBe(true);
+  });
+
+for (const target of ["leader", "task"] as const)
+  for (const identity of ["pid-only", "reused", "matched", "fd"] as const)
+    test(`${target} GPU tie ${identity} requires live identity`, async () => {
+      await using f = await fixture();
+      let wchanPath = join(f.base, "wchan");
+      if (target === "task") {
+        await fs.writeFile(join(f.base, "stat"), stat("S"));
+        wchanPath = (await addTask(f, "456")).wchanPath;
+      }
+      await fs.writeFile(wchanPath, "0");
+      const cached = retainedState();
+      if (identity === "pid-only") cached.processIdentity = undefined;
+      if (identity === "reused")
+        cached.processIdentity!.processes[0]!.local!.starttime = "99";
+      if (identity === "fd") {
+        cached.processIdentity = undefined;
+        await fs.mkdir(join(f.base, "fd"));
+        await fs.symlink("/dev/dxg", join(f.base, "fd", "1"));
+      }
+      const control = confirmation();
+      const observation = await dxgAdvisory(request, 512, {
+        procRoot: f.root,
+        state: cached,
+        ...control.options,
+      });
+      if (identity === "pid-only" || identity === "reused") {
+        expect(observation).toBeUndefined();
+        expect(control.sleeps).toHaveLength(0);
+      } else expect(observation).toContain("wait channel unavailable");
+    });
+
+test("persistent dxg advisory never overrides the declared VRAM capacity refusal", async () => {
+  await using f = await fixture();
+  const control = confirmation();
+  const refusal = await gpuAdmissionRefusal(
+    { gpu_id: 0, vram_peak_bytes: 8192 * 1024 ** 2 },
+    512,
+    { procRoot: f.root, state, ...control.options },
+  );
+  expect(control.sleeps).toHaveLength(9);
+  expect(refusal).toContain("GPU VRAM budget exceeded");
 });

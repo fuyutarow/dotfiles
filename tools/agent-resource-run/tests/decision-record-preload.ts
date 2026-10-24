@@ -11,9 +11,13 @@ const map = (path: string) =>
   path.startsWith("/proc/") ? join(root, path.slice(1)) : path;
 let clock = 0;
 performance.now = () => clock;
-Bun.sleep = (duration) => {
+Bun.sleep = async (duration) => {
   clock += Number(duration);
-  return Promise.resolve();
+  if (clock === 27000 && process.env.ARR_RECORD_REPLACE_OWNER === "1")
+    await fs.copyFile(
+      join(root, "next-owner.json"),
+      join(root, "gpu-owner.json"),
+    );
 };
 await mock.module("node:fs/promises", () => ({
   ...fs,

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0 — 2026-10-24
+
+- Make dxg suspicion advisory, re-read owner incidents at decision time, and require live sampler PID identity
+
 ## 1.5.20 — 2026-10-24
 
 - Record bounded admission evidence and distinguish scope health refusals from workload exits

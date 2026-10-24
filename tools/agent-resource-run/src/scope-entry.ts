@@ -59,8 +59,7 @@ async function main() {
       safetyMiB === undefined
     )
       return err(new Error("incomplete GPU admission receipt"));
-    // A live dxg candidate is confirmed by the shared bounded two-observation
-    // pass before this scope launches its command.
+    // Proc suspicion is advisory; recheck the owner incident before launch.
     const refusal = await gpuAdmissionRefusal(
       { gpu_id, vram_peak_bytes },
       safetyMiB,
@@ -110,8 +109,10 @@ async function main() {
   record.launched = true;
   record.stage = "command";
   record.outcome = "admit";
-  record.reason_code = "admitted";
-  record.branch = "scope-command-spawned";
+  if (record.reason_code !== "dxg-suspected") {
+    record.reason_code = "admitted";
+    record.branch = "scope-command-spawned";
+  }
   await saveDecision(record.snapshot(), decisionId);
   return ok(await child.exited);
 }

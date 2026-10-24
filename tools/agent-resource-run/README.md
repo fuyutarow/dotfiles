@@ -65,95 +65,49 @@ The runner does not retry a health denial, silently retry a launched command, or
 an unbounded admission loop. It performs admission confirmation only; caller retry and
 recovery remain caller responsibilities.
 
-## Bounded caller retry recipe
+## Caller launch boundary
 
-Use a separate, commandless `--check-only` invocation to decide whether to wait and
-try admission again. This is the one safe prelaunch boundary: `--check-only` rejects a
-command, so no underlying workload can have run in that invocation. Treat it as a
-retryable external-health denial only when **both** of these are true:
+A commandless `--check-only` invocation is the prelaunch boundary: it rejects a
+command, so no underlying workload can have run in that invocation. Proc suspicion
+admits work and requires no retry. A fresh owner incident requires operator recovery;
+see [GPU recovery](../shared/GPU-RECOVERY.md). Capacity and RAM HOLD remain unchanged.
 
-- It exits 69 and its runner-produced diagnostic begins `DENY GPU persistent dxg stall`
-  (either the `pid=` form or the `tgid=`/`tid=` form).
-- That same diagnostic contains `observations=10 interval_ms>=3000` and its evidence
-  paths. This is the runner's confirmed ten-observation dxg result, with every observation still stalled;
-  it does not prove continuous persistence between observations.
+`DENY` (69) and flock timeout (75) are status classes, not replay predicates. A
+normal launch passes through the command's exit status; callers must not blindly
+replay a command after either status. C1 decision records distinguish prelaunch
+refusal from launched command exits.
 
-For one caller operation, take at most five commandless admission probes:
+## GPU health admission
 
-1. Before the first probe, set one absolute deadline `D` that is no later than the
-   caller's walltime deadline. The caller must enforce `D` around every probe, wait,
-   and eventual launch; the manifest's `RuntimeMaxSec` is a per-launch limit, not a
-   replacement for this operation-wide deadline.
-2. Run `agent-resource-run --manifest "$manifest" --check-only` with no command. If it
-   admits, make exactly one normal launch invocation before `D` and do not put that
-   invocation in this retry loop.
-3. Only for the confirmed diagnostic above, and only while enough time remains before
-   `D`, wait before probes 2--5. Use base delays of 3, 6, 12, and 24 seconds,
-   respectively; multiply each by independently chosen jitter in `0.8..1.2`, then use
-   `min(30 seconds, jittered delay)`. Stop instead of sleeping or launching past `D`.
-4. Stop after five probes, any other result, or the deadline. Surface the diagnostic to
-   an operator; do not convert exhaustion into a command replay.
+The runner scans read-only `/proc/<tgid>/stat`, task stat and wait channels across
+visible processes. A readable dxg D-state candidate is observed ten times with nine
+shared delays of at least three seconds. Waking, disappearing, changing starttime or
+moving to a readable non-dxg channel discards the candidate. These samples do not
+prove continuous persistence or establish detector accuracy.
 
-`DENY` (69) and flock timeout (75) are status classes, not replay predicates. In a
-normal launch, the runner passes through the underlying command's exit status, so a
-workload may itself return 69 or 75. The launch path also emits unstructured
-human-readable output around scope entry and release. It exposes no machine-verifiable
-``launched`` or ``not launched`` field and `status` cannot reconstruct that outcome.
-Consequently, after any normal launch returns 69 or 75--including output that appears
-to be a scope-entry denial--the caller must report an unknown launch outcome and must
-not blindly replay the command. The same refusal applies when the caller did not retain
-the complete commandless `--check-only` diagnostic above.
+**Proc observations are advisory.** A suspected wait or unavailable proc evidence
+writes one `WARN dxg-suspected: ...` stderr line per admission check and records
+`reason_code: dxg-suspected` with the evidence in the C1 decision record. The job
+continues through owner and capacity checks. Unknown wait channels require either
+a sampled PID plus a matching live starttime, or a readable `/dev/dxg` fd;
+nonleader threads inherit the tie from their group. Numeric PID equality alone,
+process names, root ownership and unreadable fd inventories do not establish a tie.
 
-Do not retry any of the following as external-health recovery: invalid manifest, policy,
-slot, or job-id declarations (usage diagnostics); incomplete, invalid, unavailable, or
-mismatched admission receipts; unavailable Linux/user-systemd enforcement; duplicate
-job identity; fresh `HOLD RECOVER_VERDICT`; recorded `GPU stall recorded since` state;
-unreadable/invalid process, task, or confirmation evidence; unavailable GPU owner or
-device capacity; or `GPU VRAM budget exceeded`. Repair
-or investigate those conditions instead. The last case is a live sum of declared
-reservations against cached declared device total minus the policy safety margin and ccc partition; it is
-not a measurement of temporarily usable runtime VRAM, and this runner has no separate
-``usable VRAM`` retry diagnostic. DENY 69 and flock timeout 75 retain their separate
-meanings.
-
-A GPU-specific refusal uses live read-only `/proc/<tgid>/stat`,
-`/proc/<tgid>/task/<tid>/stat`, and `wchan` evidence, independent of
-`gpu-owner.json` being paused, stale, or missing `unresponsiveSince`. Every visible
-numeric thread-group entry and its numeric task entries are inspected, including work
-outside admitted scopes. A readable dxg candidate requires the same start-time identity
-to remain in D at a dxg wait channel across ten observations, separated by nine
-shared confirmation delays of at least three seconds each. A candidate that exits D,
-disappears, changes identity, or moves to a readable non-dxg wait at any observation is
-discarded. The observations do not prove continuous persistence between checks. A D-state leader reports its PID; a distinct D-state task reports
-its TGID, TID, revalidated leader and task states, wait channel, and evidence paths; this
-distinguishes a zombie leader from a live blocked task.
-
-A task whose initial wait channel is unreadable, empty, or zero is a different candidate.
-Across the same ten-observation confirmation window, both TGID and TID start-time
-identities must still match and the task must still be in D. Unknown-to-unknown refuses
-as persistent uncertain D with `observations=10` and interval evidence. A transition
-from an unknown wait channel to dxg uses mixed wait-channel evidence, with refusal
-only after all ten observations remain stalled. Unknown-to-readable-non-dxg, non-D, gone, or reused
-task/leader identities discard the candidate. The leader's initial unavailable-wchan branch
-retains its immediate fail-closed policy from the 1.5.12 scope; this task-only change does
-not alter it.
-
-Unreadable inventory/stat, malformed stat, or a task inventory that remains unavailable
-for a live thread group also fails closed. The fast path has neither a readable-dxg candidate
-nor a D-state task with an unavailable wait channel, so it does not sleep. A known non-dxg
-wait does not itself refuse GPU admission. This admission snapshot does not prove future
-driver health or prevent a stall that begins after the check.
-
-Recorded `unresponsiveSince` still refuses admission and names recorded GPU-holding
-PIDs and commands. Missing owner/capacity data also refuses admission; sample age or
-paused status alone does not. Holder identity checks are advisory; declared VRAM checks still enforce admission.
-The runner never invokes the GPU driver.
+After confirmation, the runner re-reads the sampler state immediately before its
+health decision. Only `unresponsiveSince` in that
+fresh read refuses for a host incident; a latch cleared since the initial read does
+not refuse, and a newly set latch does. Missing owner/device capacity data and excess
+declared VRAM still refuse. An unavailable process inventory still refuses because
+reservation capacity cannot be measured. Sample age and paused status alone do not refuse. The
+slot count, safety margin, ccc partition and RAM/recovery HOLD (exit 70) are unchanged.
+The runner never invokes the GPU driver. The sampler's episode data will inform
+revisiting this advisory policy if admitting work is measured to worsen a stall.
 
 Sampled-holder warnings include bounded provenance from the existing owner state.
 Holder identity alone never refuses admission: unresolved, reused, nested, outside,
 or unreceipted holders emit `WARN GPU holder check is advisory, not refusing: <reason>`
 and admission continues. WSL driver PIDs may not resolve in the Linux namespace.
-Admission rests on the slot count, declared VRAM budget and dxg stall check.
+Admission rests on the slot count, declared VRAM budget and fresh owner incident signal.
 Version 1 `processIdentity.sampleAt` must equal `sampledAt` and identify a retained
 sample; exactly one observation must match the reported `rawDriverPid`. The diagnostic
 reports capture times, local read/missing/reuse/permission status and local PID/TGID/NSpid
@@ -196,7 +150,7 @@ and independent scope task accounting. They require Linux and a live user manage
 The integration fixture preloads a test-only `/proc` inventory filter, restricting
 child runners to processes with that fixture's `XDG_RUNTIME_DIR`. This prevents real
 host stalls and other test sessions' receipts from contaminating fake-work tests.
-The dxg unit fixtures separately exercise host-wide refusal outside admitted scopes;
+The dxg unit fixtures separately exercise host-wide advisory evidence outside admitted scopes;
 production has no environment override for its `/proc` inventory.
 
 GPU admission rationale and the dated OSS comparison are documented in [docs/](docs/).

@@ -8,14 +8,15 @@ export function procFixture(
   comm = "sshd",
   denied: string[] = [],
   errorCode = "EACCES",
+  pid = 9999999,
 ) {
   const procRoot = join(root, "proc");
-  const base = join(procRoot, "9999999");
+  const base = join(procRoot, String(pid));
   mkdirSync(join(base, "fd"), { recursive: true });
   writeFileSync(join(base, "comm"), `${comm}\n`);
   writeFileSync(
     join(base, "stat"),
-    `9999999 (${comm}) S ${Array.from({ length: 18 }, () => "0").join(" ")} 123\n`,
+    `${pid} (${comm}) S ${Array.from({ length: 18 }, () => "0").join(" ")} 123\n`,
   );
   writeFileSync(
     join(base, "status"),
@@ -31,7 +32,7 @@ export function procFixture(
   symlinkSync("/elsewhere/data", join(base, "fd/3"));
   let scans = 0;
   const injectedError = (path: string): Error | null =>
-    denied.includes(path.slice(base.length + 1))
+    path.startsWith(`${base}/`) && denied.includes(path.slice(base.length + 1))
       ? Object.assign(new Error(`${errorCode}: ${path}`), { code: errorCode })
       : null;
   const fs: ProcFs = {

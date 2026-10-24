@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1 — 2026-10-24
+
+- Use the shared graveyard process rule for disk:free
+
 ## 1.5.0 — 2026-10-24
 
 - Add disk:free to free graveyard space on demand without breaking the undo window

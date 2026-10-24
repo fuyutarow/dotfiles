@@ -8,8 +8,7 @@ import type { Holder } from "../../shared/src/dir-lock.ts";
 import type { Config } from "./model.ts";
 import { errorMessage, stateDir, waitForLock } from "./receipt.ts";
 import { ripBurialTime, ripGraveyardRoot } from "./lib/graveyards.ts";
-import { protectedReason } from "./lib/protected.ts";
-import { collectProcesses, type OpenPaths } from "./lib/procs.ts";
+import type { OpenPaths } from "./lib/procs.ts";
 import { removeTree, type RemoveTreeOptions } from "./lib/remove-tree.ts";
 import { enumerateRipPayloads } from "./targets/rip-expire.ts";
 
@@ -46,7 +45,6 @@ type SkipReason =
   | "unknown_burial"
   | "u_protected"
   | "protected"
-  | "in_use"
   | "changed"
   | "unreadable"
   | "budget";
@@ -65,7 +63,7 @@ export type FreeResult = {
   u_protected_bytes: number;
   u_protected_bytes_complete: boolean;
   earliest_eligible_at: string | null;
-  skip_counts: Record<SkipReason, number>;
+  skip_counts: Record<SkipReason | "in_use", number>;
   lock_holder: Holder | null;
   lock_elapsed_ms: number;
   budget: {
@@ -102,7 +100,7 @@ export function freeResult(
       unknown_burial: 0,
       u_protected: 0,
       protected: 0,
-      in_use: 0,
+      in_use: 0, // Reserved for reclaim.free/1 compatibility; graveyards ignore process use.
       changed: 0,
       unreadable: 0,
       budget: 0,
@@ -336,22 +334,7 @@ export async function freeGraveyard(
         skip("foreign_uid", path);
         return;
       }
-      const processes = options.processes?.() ?? collectProcesses();
-      const protection = protectedReason(path, {
-        ownerTarget: "delete",
-        protectedPaths: options.config.protected ?? [],
-        processes,
-      });
-      if (protection !== null) {
-        skip(
-          /process|running/u.test(protection) ? "in_use" : "protected",
-          path,
-          protection,
-        );
-        return;
-      }
-      // Process collection may have taken time; do not act on stale burial or identity.
-      if (!(await unchanged(row, path))) return;
+      // Share rip-expire's graveyard process rule and static protection in removeTree.
       const removed = await removeTree(path, {
         uid: process.getuid?.() ?? 0,
         graveyard: true,
@@ -367,6 +350,7 @@ export async function freeGraveyard(
           : { immutable: options.immutable }),
         protection: {
           ownerTarget: "delete",
+          processes: options.processes?.(),
           protectedPaths: options.config.protected ?? [],
         },
       });

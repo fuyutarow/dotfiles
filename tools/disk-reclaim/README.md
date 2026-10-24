@@ -199,8 +199,10 @@ host reclamation are outside this command.
 A completed request-time discovery fixes the candidate set before waiting for the shared reclaim
 lock (at most 10 seconds, regardless of `RECLAIM_LOCK_WAIT_S`). Recorded burial orders eligible
 payloads oldest first, with path ids breaking ties. Unknown burial and entries younger than U
-are held. Foreign owners, protected paths and live or unknown process use are skipped; later
-eligible payloads are still attempted. Identity and burial are checked again under the lock.
+are held. Foreign owners and protected paths are skipped; later eligible payloads are still
+attempted. Process evidence uses rip-expire's shared graveyard removal rule: already-deleted
+payloads can be unlinked even with open files or unreadable process paths. Identity and burial
+are checked again under the lock.
 Payloads are indivisible selection units: removal preflights the whole payload and does not stop
 inside it just because SIZE was reached. Cancellation or a filesystem failure can still interrupt
 unlinking; only completed unlinks count. New candidates are never discovered during deletion.
@@ -208,6 +210,7 @@ unlinking; only completed unlinks count. New candidates are never discovered dur
 One `reclaim.free/1` JSON document reports `outcome` (`met`, `partial`, `busy`, `invalid`, `failed`),
 `requested_bytes`, `unlinked_bytes`, `free_delta_bytes`, `overshoot_bytes`, `shortfall_bytes`,
 `u_protected_bytes`, `earliest_eligible_at`, and `skip_counts` (payload counts, once per reason).
+The `skip_counts.in_use` key remains present and zero for `reclaim.free/1` compatibility.
 `unlinked_bytes` sums logical sizes of entries actually unlinked, including directory entries;
 sparse files can therefore satisfy SIZE while releasing few blocks. The signed statfs available
 byte delta is measured separately and may reflect other writers, open files or hard links.

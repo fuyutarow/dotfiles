@@ -1,11 +1,26 @@
 import { expect, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
-import { mkdtemp, mkdir, open, rm, writeFile, utimes } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  open,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+  utimes,
+} from "node:fs/promises";
 import { tmpdir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { freeGraveyard, freeExit, requestedBytes } from "../../src/free.ts";
 import { tryAcquire } from "../../../shared/src/dir-lock.ts";
 import { jsonText } from "../../../shared/src/zod.ts";
+import { collectProcesses } from "../../src/lib/procs.ts";
+import { removeTree } from "../../src/lib/remove-tree.ts";
+import { RIP_GRAVEYARD_MAX_BYTES } from "../../src/lib/graveyards.ts";
+import { createRipExpiryTarget } from "../../src/targets/rip-expire.ts";
+import type { Context } from "../../src/targets/index.ts";
+import { procFixture } from "../fixtures/procs.ts";
 
 const now = Temporal.Instant.from("2026-10-24T12:00:00Z").epochMilliseconds;
 const config = {
@@ -51,6 +66,36 @@ async function fixture() {
     },
     [Symbol.asyncDispose]: () => rm(temp, { recursive: true, force: true }),
   };
+}
+
+async function expireCapacity(
+  f: Awaited<ReturnType<typeof fixture>>,
+  processes: ReturnType<typeof collectProcesses>,
+) {
+  const expiry = createRipExpiryTarget({
+    remove: (path, options) =>
+      removeTree(path, {
+        ...options,
+        immutable: f.options.immutable,
+        protection: { ...options.protection, processes },
+      }),
+  });
+  const ctx: Context = { mode: "run", config, log: () => {} };
+  const candidates = await expiry.candidates(f.options.env, f.temp, {
+    now,
+    config,
+    context: ctx,
+  });
+  const selected: string[] = [];
+  for (const candidate of candidates) {
+    const row = await expiry.target.recheck(candidate, ctx);
+    if (row?.verdict !== "RECLAIM") continue;
+    expect(row.reason).toContain("oldest-first capacity expiry");
+    expect((await expiry.target.act(row, ctx)).ok).toBe(true);
+    selected.push(row.id);
+  }
+  await expiry.target.finish(ctx);
+  return selected;
 }
 
 test("free chooses oldest burial first; ties by stable id; stops after SIZE", async () => {
@@ -162,7 +207,7 @@ test("held reclaim lock returns busy within short bound, holder and elapsed, no 
   expect(existsSync(payload)).toBe(true);
 });
 
-test("protected and in-use payloads skip while later eligible payload is taken", async () => {
+test("protected payloads skip while the oldest open payload is reclaimed", async () => {
   await using f = await fixture();
   const protectedPath = await f.payload("protected", 1024, 900_000);
   const busy = await f.payload("busy", 1024, 800_000);
@@ -179,10 +224,86 @@ test("protected and in-use payloads skip while later eligible payload is taken",
     }),
   });
   expect(result.outcome).toBe("met");
-  expect(result.skip_counts).toMatchObject({ protected: 1, in_use: 1 });
+  expect(result.skip_counts).toEqual({
+    foreign_uid: 0,
+    unknown_burial: 0,
+    u_protected: 0,
+    protected: 1,
+    in_use: 0,
+    changed: 0,
+    unreadable: 0,
+    budget: 0,
+  });
   expect(existsSync(protectedPath)).toBe(true);
-  expect(existsSync(busy)).toBe(true);
-  expect(existsSync(next)).toBe(false);
+  expect(existsSync(busy)).toBe(false);
+  expect(existsSync(next)).toBe(true);
+});
+
+test("partial unreadable proc paths and an open fd match capacity expiry oldest-first", async () => {
+  const deleted = new Map<string, string[]>();
+  for (const mode of ["free", "capacity"]) {
+    await using f = await fixture();
+    const names = ["z-oldest", "a-middle", "b-newest"];
+    const records: string[] = [];
+    const paths: string[] = [];
+    for (const [index, name] of names.entries()) {
+      const path = join(f.root, name);
+      paths.push(path);
+      await mkdir(path);
+      const file = await open(join(path, "data"), "w");
+      await file.truncate(RIP_GRAVEYARD_MAX_BYTES / 2);
+      await file.close();
+      records.push(
+        `${Temporal.Instant.fromEpochMilliseconds(now - (30 - index) * 60_000).toString()}\t/original/${name}\t${path}`,
+      );
+    }
+    const record = records.join("\n");
+    await writeFile(join(f.root, ".record"), record);
+    const heldPath = join(f.root, names[0] ?? "", "data");
+    const held = await open(heldPath, "r");
+    await using _held = { [Symbol.asyncDispose]: () => held.close() };
+    // Inject EACCES rather than chmod so the fixture remains meaningful as root.
+    const unknown = procFixture(f.temp, "opaque-worker", ["cwd", "fd", "maps"]);
+    const reader = procFixture(f.temp, "reader", [], "EACCES", 9999998);
+    await symlink(heldPath, join(reader.base, "fd/4"));
+    const processes = collectProcesses({
+      procRoot: unknown.procRoot,
+      fs: unknown.fs,
+    });
+    const evidence = processes.openPaths(paths[0] ?? f.root);
+    expect(evidence.unknown).toHaveLength(3);
+    for (const via of ["cwd", "fd", "maps"])
+      expect(
+        evidence.unknown.some((detail) => detail.includes(` ${via}: EACCES`)),
+      ).toBe(true);
+    expect(evidence.open).toContainEqual({
+      pid: 9999998,
+      via: "fd/4",
+      path: heldPath,
+    });
+
+    if (mode === "free") {
+      const result = await freeGraveyard("6GiB", {
+        ...f.options,
+        processes: () => processes,
+      });
+      expect(result.outcome).toBe("met");
+      expect(result.skip_counts.in_use).toBe(0);
+      deleted.set(mode, result.deleted_payloads);
+    } else {
+      deleted.set(mode, await expireCapacity(f, processes));
+    }
+    // No age expiry: all are <24h old. Both commands remove the first two 5 GiB payloads.
+    expect(deleted.get(mode)).toEqual(
+      names.slice(0, 2).map((name) => `rip graveyard: ${name}`),
+    );
+    expect(existsSync(paths[0] ?? f.root)).toBe(false);
+    expect(existsSync(paths[1] ?? f.root)).toBe(false);
+    expect(existsSync(paths[2] ?? f.root)).toBe(true);
+    expect((await held.stat()).nlink).toBe(0);
+    expect(await readFile(join(f.root, ".record"), "utf8")).toBe(record);
+  }
+  expect(deleted.get("free")).toEqual(deleted.get("capacity"));
 });
 
 test("snapshot excludes later writers", async () => {

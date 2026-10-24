@@ -24,6 +24,7 @@ import {
   errorMessage,
   finalLine,
   freeBytes,
+  hasForegroundWaiter,
   now,
   outputPath,
   stateDir,
@@ -666,6 +667,7 @@ async function executeCandidates(
         })
       : indexes;
   for (const index of order) {
+    if (ctx.foregroundLockYielded?.() === true) break;
     if (ctx.signal?.aborted === true) break;
     const exit = await recheckAndAct(target, row, index, ctx, actions);
     if (exit === 0) continue;
@@ -687,30 +689,34 @@ async function executeTarget(
   const output = outputPath(target.name, dir);
   writeFileSync(output, "", { mode: 0o600 });
   const actions: ReceiptAction[] = [];
-  const receipt = (): ReceiptV2 => ({
-    schema: 2,
-    name: target.name,
-    target: target.name,
-    tier: target.tier,
-    command: [
-      "disk-reclaim",
-      "run",
-      target.name,
-      "--yes",
-      ...(options.underPressure === true ? ["--under-pressure"] : []),
-    ],
-    host: hostname(),
-    pid: process.pid,
-    started,
-    ended: now(),
-    exit: row.exit ?? 0,
-    free_before: before,
-    free_after: freeBytes(),
-    output,
-    actions,
-    headroom,
-    under_pressure: options.underPressure === true,
-  });
+  const receipt = (): ReceiptV2 => {
+    const lockYield = ctx.foregroundLockYieldReceipt?.();
+    return {
+      schema: 2,
+      name: target.name,
+      target: target.name,
+      tier: target.tier,
+      command: [
+        "disk-reclaim",
+        "run",
+        target.name,
+        "--yes",
+        ...(options.underPressure === true ? ["--under-pressure"] : []),
+      ],
+      host: hostname(),
+      pid: process.pid,
+      started,
+      ended: now(),
+      exit: row.exit ?? 0,
+      free_before: before,
+      free_after: freeBytes(),
+      output,
+      actions,
+      headroom,
+      under_pressure: options.underPressure === true,
+      ...(lockYield === undefined ? {} : { lock_yield: lockYield }),
+    };
+  };
   const ctx: Context = {
     ...options.context,
     mode: "run",
@@ -834,6 +840,7 @@ async function executeLocked(
     };
   let receipt: string | null = null;
   for (const [index, target] of targets.entries()) {
+    if (options.context.foregroundLockYielded?.() === true) break;
     if (options.context.signal?.aborted === true) break;
     const row = lockedPlan.targets[index];
     receipt = await executeTargetIfPresent(target, row, options, dir, receipt);
@@ -904,9 +911,30 @@ export async function run(
   options.context.reportProgress?.("lock", "lock", 0, 0, true);
   if (lock.release === null)
     return { exit: lock.exit, plan: preview.plan, error: lock.error };
+  const releaseLock = lock.release;
+  let yielded = false;
+  let lockYield: { payloads_completed: number; reason: string } | undefined;
+  const lockedOptions: EngineOptions = {
+    ...runOptions,
+    context: {
+      ...runOptions.context,
+      yieldForegroundLock: async (payloadsCompleted) => {
+        if (yielded || !(await hasForegroundWaiter(dir))) return false;
+        yielded = true;
+        lockYield = {
+          payloads_completed: payloadsCompleted,
+          reason: "foreground disk:free waiter",
+        };
+        releaseLock();
+        return true;
+      },
+      foregroundLockYielded: () => yielded,
+      foregroundLockYieldReceipt: () => lockYield,
+    },
+  };
   using _lock = { [Symbol.dispose]: lock.release };
   const execute = await fromAsyncThrowable(async () =>
-    executeLocked(targets, runOptions, dir),
+    executeLocked(targets, lockedOptions, dir),
   )();
   return execute.isOk()
     ? execute.value

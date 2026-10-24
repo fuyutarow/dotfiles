@@ -66,6 +66,19 @@ export type Context = {
   recordRecovery?:
     | ((candidate: Candidate, recovery: ReceiptAction["recovery"]) => void)
     | undefined;
+  /** Rip expiry may yield the run lock after a complete payload action. */
+  yieldForegroundLock?:
+    | ((payloadsCompleted: number) => boolean | Promise<boolean>)
+    | undefined;
+  foregroundLockYielded?: (() => boolean) | undefined;
+  foregroundLockYieldReceipt?:
+    | (() =>
+        | {
+            payloads_completed: number;
+            reason: string;
+          }
+        | undefined)
+    | undefined;
 };
 export type Availability = { available: boolean; skip_reason: string | null };
 export interface Target {

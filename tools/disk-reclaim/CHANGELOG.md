@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.2 — 2026-10-24
+
+- Yield the background expiry lock to a waiting disk:free
+
 ## 1.5.1 — 2026-10-24
 
 - Use the shared graveyard process rule for disk:free

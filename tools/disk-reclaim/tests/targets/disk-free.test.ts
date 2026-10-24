@@ -5,6 +5,7 @@ import {
   mkdir,
   open,
   readFile,
+  readdir,
   rm,
   symlink,
   writeFile,
@@ -14,13 +15,16 @@ import { tmpdir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { freeGraveyard, freeExit, requestedBytes } from "../../src/free.ts";
 import { tryAcquire } from "../../../shared/src/dir-lock.ts";
-import { jsonText } from "../../../shared/src/zod.ts";
+import { hasForegroundWaiter } from "../../src/receipt.ts";
+import { loadConfig, run } from "../../src/engine.ts";
+import { jsonOf, jsonText } from "../../../shared/src/zod.ts";
 import { collectProcesses } from "../../src/lib/procs.ts";
 import { removeTree } from "../../src/lib/remove-tree.ts";
 import { RIP_GRAVEYARD_MAX_BYTES } from "../../src/lib/graveyards.ts";
 import { createRipExpiryTarget } from "../../src/targets/rip-expire.ts";
 import type { Context } from "../../src/targets/index.ts";
 import { procFixture } from "../fixtures/procs.ts";
+import { ReceiptV2 } from "../../src/model.ts";
 
 const now = Temporal.Instant.from("2026-10-24T12:00:00Z").epochMilliseconds;
 const config = {
@@ -205,6 +209,130 @@ test("held reclaim lock returns busy within short bound, holder and elapsed, no 
   expect(result.lock_elapsed_ms).toBeGreaterThanOrEqual(50);
   expect(result.unlinked_bytes).toBe(0);
   expect(existsSync(payload)).toBe(true);
+  expect(await hasForegroundWaiter(f.options.state)).toBe(false);
+});
+
+test("rip expiry yields after one complete payload to a foreground free request", async () => {
+  await using f = await fixture();
+  const payloads: string[] = [];
+  for (let index = 0; index < 12; index += 1)
+    payloads.push(
+      await f.payload(`payload-${index}`, 1024 ** 3, 700_000 + index),
+    );
+  await writeFile(
+    join(f.root, ".record"),
+    payloads
+      .map(
+        (path, index) =>
+          `${Temporal.Instant.fromEpochMilliseconds(Temporal.Now.instant().epochMilliseconds - 700_000 - index).toString()}\t/original\t${path}`,
+      )
+      .join("\n"),
+  );
+  const loaded = loadConfig();
+  expect(loaded.config).not.toBeNull();
+  if (loaded.config === null) return;
+  const previousRoot = process.env.RIP_GRAVEYARD;
+  process.env.RIP_GRAVEYARD = f.root;
+  using _restoreEnv = {
+    [Symbol.dispose]: () => {
+      if (previousRoot === undefined) delete process.env.RIP_GRAVEYARD;
+      else process.env.RIP_GRAVEYARD = previousRoot;
+    },
+  };
+  const entered = Promise.withResolvers<void>();
+  const continueFirst = Promise.withResolvers<void>();
+  let pause = true;
+  const backgroundDeleted: string[] = [];
+  const expiry = createRipExpiryTarget({
+    remove: async (path, options) => {
+      if (pause) {
+        pause = false;
+        entered.resolve();
+        await continueFirst.promise;
+      }
+      const removed = await removeTree(path, {
+        ...options,
+        immutable: () => false,
+        protection: {
+          ...options.protection,
+          processes: { openPaths: () => ({ open: [], unknown: [] }) },
+        },
+      });
+      if (removed.ok) backgroundDeleted.push(path);
+      return removed;
+    },
+  });
+  const background = run([expiry.target], {
+    context: { mode: "plan", config: loaded.config, log: () => {} },
+    state: f.options.state,
+    yes: true,
+    explicit: ["rip-expire"],
+    headroom: { drives: [] },
+  });
+  await entered.promise;
+  const foregroundLocked = Promise.withResolvers<void>();
+  const backgroundPayload = payloads[11] ?? f.root;
+  const foregroundPayload = payloads[10] ?? f.root;
+  const foreground = freeGraveyard("1KiB", {
+    ...f.options,
+    processes: () => {
+      expect(backgroundDeleted).toEqual([backgroundPayload]);
+      expect(existsSync(foregroundPayload)).toBe(true);
+      foregroundLocked.resolve();
+      return { openPaths: () => ({ open: [], unknown: [] }) };
+    },
+  });
+  const waiterDeadline = performance.now() + 2_000;
+  while (
+    !(await hasForegroundWaiter(f.options.state)) &&
+    performance.now() < waiterDeadline
+  )
+    await Bun.sleep(5);
+  expect(await hasForegroundWaiter(f.options.state)).toBe(true);
+  continueFirst.resolve();
+  await foregroundLocked.promise;
+  const [backgroundResult, freeResult] = await Promise.all([
+    background,
+    foreground,
+  ]);
+  expect(backgroundResult.exit).toBe(0);
+  expect(freeResult.outcome).toBe("met");
+  expect(freeResult.deleted_payloads).toEqual(["rip graveyard: payload-10"]);
+  expect(backgroundDeleted).toEqual([backgroundPayload]);
+  expect(payloads.filter((path) => !existsSync(path))).toHaveLength(2);
+  expect(existsSync(backgroundPayload)).toBe(false);
+  expect(existsSync(foregroundPayload)).toBe(false);
+  expect(await hasForegroundWaiter(f.options.state)).toBe(false);
+  const receiptLine = (
+    await readFile(join(f.options.state, "log.jsonl"), "utf8")
+  )
+    .trim()
+    .split("\n")
+    .find((line) => line.includes('"name":"rip-expire"'));
+  expect(receiptLine).toBeString();
+  if (receiptLine === undefined) return;
+  const receipt = jsonOf(ReceiptV2).safeParse(receiptLine);
+  expect(receipt.success).toBe(true);
+  expect(receipt.success ? receipt.data.lock_yield : undefined).toEqual({
+    payloads_completed: 1,
+    reason: "foreground disk:free waiter",
+  });
+});
+
+test("stale foreground waiter is ignored and removed", async () => {
+  await using f = await fixture();
+  const waiters = join(f.options.state, "foreground-waiters");
+  await mkdir(waiters, { recursive: true });
+  await writeFile(
+    join(waiters, "2147483647-stale.json"),
+    JSON.stringify({
+      pid: 2147483647,
+      host: hostname(),
+      since: now.toString(),
+    }),
+  );
+  expect(await hasForegroundWaiter(f.options.state)).toBe(false);
+  expect(await readdir(waiters)).toEqual([]);
 });
 
 test("protected payloads skip while the oldest open payload is reclaimed", async () => {

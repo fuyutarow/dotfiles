@@ -5,11 +5,12 @@ import {
   readFileSync,
   statfsSync,
 } from "node:fs";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
-import { acquire } from "../../shared/src/dir-lock.ts";
-import { fromThrowable, jsonOf } from "../../shared/src/zod.ts";
+import { acquire, pidAlive } from "../../shared/src/dir-lock.ts";
+import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
 import {
   Receipt,
   ReclaimItemOutcome,
@@ -30,6 +31,44 @@ export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
         "reclaim",
       ),
   );
+}
+const Waiter = z.object({
+  pid: z.number().int().positive(),
+  host: z.string(),
+  since: z.string(),
+});
+type Waiter = z.output<typeof Waiter>;
+const waiterDir = (dir: string) => join(dir, "foreground-waiters");
+export async function registerForegroundWaiter(
+  dir = stateDir(),
+): Promise<() => Promise<void>> {
+  const path = waiterDir(dir);
+  await mkdir(path, { recursive: true, mode: 0o700 });
+  const waiter: Waiter = { pid: process.pid, host: hostname(), since: now() };
+  const file = join(path, `${process.pid}-${crypto.randomUUID()}.json`);
+  await writeFile(file, `${JSON.stringify(waiter)}\n`, {
+    flag: "wx",
+    mode: 0o600,
+  });
+  return async () => {
+    await rm(file, { force: true });
+  };
+}
+export async function hasForegroundWaiter(dir = stateDir()): Promise<boolean> {
+  const listed = await fromAsyncThrowable(() => readdir(waiterDir(dir)))();
+  if (listed.isErr()) return false;
+  for (const name of listed.value) {
+    const file = join(waiterDir(dir), name);
+    const contents = await fromAsyncThrowable(() => readFile(file, "utf8"))();
+    if (contents.isErr()) continue;
+    const parsed = jsonOf(Waiter).safeParse(contents.value);
+    if (!parsed.success) continue;
+    const waiter = parsed.data;
+    if (waiter.host === hostname() && pidAlive(waiter.pid)) return true;
+    if (waiter.host === hostname())
+      await fromAsyncThrowable(() => rm(file, { force: true }))();
+  }
+  return false;
 }
 export const freeBytes = (path = homedir()): number => {
   const s = statfsSync(path);

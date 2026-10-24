@@ -36,6 +36,8 @@ type Expiry = {
   now: number;
   undoMs: number;
   ageMs: number;
+  completedPayloads: number;
+  yielded: boolean;
 };
 type Options = {
   config?: Pick<
@@ -361,6 +363,8 @@ export function createRipExpiryTarget(
       now,
       undoMs,
       ageMs: (settings.config?.graveyard_min_age_hours ?? 24) * 3_600_000,
+      completedPayloads: 0,
+      yielded: false,
     };
     if (ctx !== undefined) states.set(ctx, state);
     if (ctx?.mode === "run")
@@ -377,6 +381,7 @@ export function createRipExpiryTarget(
         state.knownBytes -= row.logical;
         state.payloads = state.payloads.filter((item) => item !== row);
       }
+      if (state.yielded) break;
     }
     await fromAsyncThrowable(() => overLimit(state))();
     const shortfall = capacityShortfall(state);
@@ -489,6 +494,15 @@ export function createRipExpiryTarget(
             (row) => row.candidate.id !== candidate.id,
           );
         }
+        state.completedPayloads += 1;
+        if (
+          (await ctx.yieldForegroundLock?.(state.completedPayloads)) === true
+        ) {
+          state.yielded = true;
+          ctx.log(
+            `graveyard expiry yielded after ${state.completedPayloads} payload actions for a foreground disk:free waiter`,
+          );
+        }
       }
       return {
         ok: result.ok || (skipped.length > 0 && failures.length === 0),
@@ -500,11 +514,18 @@ export function createRipExpiryTarget(
     finish: async (ctx: Context) => {
       const state = states.get(ctx);
       if (state === undefined) return;
-      await fromAsyncThrowable(() => overLimit(state))();
+      if (!state.yielded) await fromAsyncThrowable(() => overLimit(state))();
       const shortfall = capacityShortfall(state);
       if (shortfall !== null) ctx.log(shortfall);
+      let continuation = "";
+      if (state.yielded)
+        continuation =
+          "; yielded to foreground disk:free; next timer continues oldest-first";
+      else if (expired(state))
+        continuation =
+          "; budget exhausted or cancelled; next timer continues oldest-first";
       ctx.log(
-        `graveyard expiry: ${state.expired} payloads expired, ${state.freed} bytes freed${expired(state) ? "; budget exhausted or cancelled; next timer continues oldest-first" : ""}`,
+        `graveyard expiry: ${state.expired} payloads expired, ${state.freed} bytes freed${continuation}`,
       );
       states.delete(ctx);
     },

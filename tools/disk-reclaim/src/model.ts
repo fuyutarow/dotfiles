@@ -176,6 +176,12 @@ export const ReceiptV2 = ReceiptV1.extend({
   actions: z.array(ReceiptAction),
   headroom: Headroom.optional(),
   under_pressure: z.boolean().optional(),
+  lock_yield: z
+    .object({
+      payloads_completed: z.number().int().nonnegative(),
+      reason: z.string(),
+    })
+    .optional(),
 });
 export type ReceiptV2 = z.output<typeof ReceiptV2>;
 // A schema-bearing future version must never silently fall back to v1.

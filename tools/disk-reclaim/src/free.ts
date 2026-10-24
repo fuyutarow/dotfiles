@@ -6,7 +6,12 @@ import { match } from "ts-pattern";
 import { z } from "../../shared/src/zod.ts";
 import type { Holder } from "../../shared/src/dir-lock.ts";
 import type { Config } from "./model.ts";
-import { errorMessage, stateDir, waitForLock } from "./receipt.ts";
+import {
+  errorMessage,
+  registerForegroundWaiter,
+  stateDir,
+  waitForLock,
+} from "./receipt.ts";
 import { ripBurialTime, ripGraveyardRoot } from "./lib/graveyards.ts";
 import type { OpenPaths } from "./lib/procs.ts";
 import { removeTree, type RemoveTreeOptions } from "./lib/remove-tree.ts";
@@ -280,6 +285,10 @@ export async function freeGraveyard(
       (row) => row.candidate.path !== join(root, ".record"),
     );
     for (const row of rows) await accountHeld(row);
+    const removeWaiter = await registerForegroundWaiter(
+      options.state ?? stateDir(env),
+    );
+    await using _waiter = { [Symbol.asyncDispose]: removeWaiter };
     const lock = await waitForLock(
       "free",
       options.state ?? stateDir(env),

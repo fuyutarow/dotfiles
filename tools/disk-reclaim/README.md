@@ -207,6 +207,13 @@ Payloads are indivisible selection units: removal preflights the whole payload a
 inside it just because SIZE was reached. Cancellation or a filesystem failure can still interrupt
 unlinking; only completed unlinks count. New candidates are never discovered during deletion.
 
+`disk:free` registers a foreground waiter while it waits for the shared lock. Background
+`rip-expire` checks live waiters only after a complete payload action; when one is present, it
+records `lock_yield` with the completed payload count and reason, releases the run lock, and ends
+that run. Ending the run keeps the existing plan and stage state out of a second lock interval;
+the next minute's run continues the oldest-first expiry. Stale waiter records are ignored and
+removed. Other lock holders do not yield, so `disk:free` retains its 10-second busy result.
+
 One `reclaim.free/1` JSON document reports `outcome` (`met`, `partial`, `busy`, `invalid`, `failed`),
 `requested_bytes`, `unlinked_bytes`, `free_delta_bytes`, `overshoot_bytes`, `shortfall_bytes`,
 `u_protected_bytes`, `earliest_eligible_at`, and `skip_counts` (payload counts, once per reason).

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.17 — 2026-10-24
+
+- Hide inapplicable Codex remote control on WSL and distinguish unknown status without a link glyph
+
 ## 0.1.16 — 2026-10-24
 
 - Show compact applicable remote-control markers and recover registered Codex rollout metadata

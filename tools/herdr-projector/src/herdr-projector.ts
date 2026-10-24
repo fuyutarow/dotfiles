@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
 import { mkdir, rename } from "node:fs/promises";
+import { release } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { attempt } from "../../shared/src/attempt.ts";
 import { standardCli } from "../../shared/src/cli.ts";
@@ -640,7 +641,12 @@ export async function bindClaudePanes(
 export async function nativeCodexRc(
   env: NodeJS.ProcessEnv = process.env,
   readArgs = (pid: number) => run("ps", ["-o", "args=", "-p", String(pid)]),
+  osRelease = release(),
 ): Promise<string> {
+  // Equivalent public OS read to doctor's ctx.isWsl (scripts/doctor.ts).
+  // Windows Desktop owns the native app-server on WSL, not this daemon.
+  if (/microsoft/iu.test(osRelease))
+    return "not applicable: Windows Desktop owns the native Codex app-server on WSL";
   const directory = join(
     env.CODEX_HOME ?? join(env.HOME ?? "", ".codex"),
     "app-server-daemon",
@@ -738,8 +744,12 @@ export async function projectAgents(
     const isAgent = vendor === "claude" || vendor === "codex";
     const rc = remoteControl.get(agent.pane_id);
     const marker = isAgent && rc === "rc:on" ? "🔗" : "";
-    const unknownRc = isAgent && rc !== "rc:on" && rc !== "rc:off";
-    const displayRc = unknownRc ? "🔗?" : marker;
+    const notApplicable =
+      isAgent && rc?.startsWith("not applicable: ") === true;
+    const unknownRc =
+      isAgent && !notApplicable && rc !== "rc:on" && rc !== "rc:off";
+    const displayRc =
+      unknownRc && (model !== "" || effort !== "") ? "rc?" : marker;
 
     const renamed = await apply(["tab", "rename", agent.tab_id, name]);
     const reported = await apply([
@@ -758,7 +768,7 @@ export async function projectAgents(
         ? ["--token", `rc=${displayRc}`]
         : ["--clear-token", "rc"]),
       "--token",
-      `rc_reason=${unknownRc ? (rc ?? "remote-control observation unavailable") : ""}`,
+      `rc_reason=${unknownRc || notApplicable ? (rc ?? "remote-control observation unavailable") : ""}`,
       "--token",
       `fleet_session_id=${matchedSessionId ?? ""}`,
     ]);

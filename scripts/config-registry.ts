@@ -744,7 +744,7 @@ const OTHER: readonly Surface[] = [
     sources: [".ws.toml"],
     deployed: "the checkout",
     consumer:
-      "agx ws add (readiness commands) and agx ws rm / gc (trunk revset)",
+      "agx ws add (readiness), rm / gc (trunk), and gc (regenerable caches)",
     writer: "human, in the repo",
     verify: "agx-ws --help",
   },

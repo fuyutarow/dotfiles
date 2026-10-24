@@ -139,6 +139,8 @@ type Options = {
   lockWaitS?: number;
   budgetMs?: number;
   clock?: () => number;
+  /** Override the real timer when driving the clock deterministically in tests. */
+  deadlineSignal?: AbortSignal;
   processes?: () => { openPaths: (path: string) => OpenPaths };
   owner?: RemoveTreeOptions["owner"];
   immutable?: RemoveTreeOptions["immutable"];
@@ -182,7 +184,7 @@ export async function freeGraveyard(
   const deadline = clock() + budgetMs;
   const exhausted = new AbortController();
   const signal = AbortSignal.any([
-    AbortSignal.timeout(budgetMs),
+    options.deadlineSignal ?? AbortSignal.timeout(budgetMs),
     exhausted.signal,
   ]);
   const allowVisit = (): boolean => {

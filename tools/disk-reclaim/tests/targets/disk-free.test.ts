@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import {
   mkdtemp,
   lstat,
@@ -524,17 +524,16 @@ test("time exhaustion inside unlinking reports the payload and actual bytes", as
     `2000-01-01T00:00:00Z\t/original\t${payload}\n2001-01-01T00:00:00Z\t/original\t${next}\n`,
   );
   const logs: string[] = [];
-  const start = performance.now();
   const result = await freeGraveyard("1GiB", {
     ...f.options,
     budgetMs: 1000,
-    // Move the injected monotonic clock to the deadline after the first unlink.
-    clock: () => (!existsSync(join(payload, "file-0")) ? 1000 : 0),
+    deadlineSignal: new AbortController().signal,
+    // Expire after an actual unlink, independent of time and directory order.
+    clock: () => (readdirSync(payload).length < names.length ? 1000 : 0),
     log: (line) => {
       logs.push(line);
     },
   });
-  expect(performance.now() - start).toBeLessThan(500);
   const remaining = await readdir(payload);
   expect(remaining.length).toBeGreaterThan(0);
   expect(remaining.length).toBeLessThan(names.length);

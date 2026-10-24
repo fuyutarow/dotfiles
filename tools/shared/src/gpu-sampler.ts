@@ -33,6 +33,12 @@ import {
   collectGpuProcessIdentity,
   type IdentityIo,
 } from "./gpu-process-identity.ts";
+import {
+  dxgEpisodeLogPath,
+  recordDxgEpisodes,
+  type DxgEpisodeOptions,
+  type DxgEpisodeIo,
+} from "./gpu-dxg-episodes.ts";
 
 const tag = (xml: string, name: string): string | undefined =>
   new RegExp(`<${name}>([^<]*)</${name}>`, "u").exec(xml)?.[1]?.trim();
@@ -256,6 +262,11 @@ export type SamplerOptions = {
   /** Test seam for lslocks; production resolves it through PATH. */
   lslocksPath?: string;
   now?: () => number;
+  /** Test seams for the bounded read-only dxg episode scan and log. */
+  dxgLogPath?: string;
+  dxgMaxTasks?: number;
+  dxgBudgetMs?: number;
+  dxgIo?: DxgEpisodeIo;
 };
 
 export type GpuSamplerCheckOptions = {
@@ -264,6 +275,23 @@ export type GpuSamplerCheckOptions = {
 };
 
 const pausedReason = "probe paused: GPU job admitted";
+
+function dxgOptions(
+  options: SamplerOptions,
+  statePath: string,
+): DxgEpisodeOptions {
+  return {
+    logPath: options.dxgLogPath ?? dxgEpisodeLogPath(statePath),
+    ...(options.procRoot === undefined ? {} : { procRoot: options.procRoot }),
+    ...(options.dxgMaxTasks === undefined
+      ? {}
+      : { maxTasks: options.dxgMaxTasks }),
+    ...(options.dxgBudgetMs === undefined
+      ? {}
+      : { budgetMs: options.dxgBudgetMs }),
+    ...(options.dxgIo === undefined ? {} : { io: options.dxgIo }),
+  };
+}
 
 /** Match agent-resource-run status: only lslocks rows on GPU slot files count. */
 export async function gpuSlotHeld(
@@ -601,12 +629,16 @@ export async function runGpuSampler(
     // Do not await exited after the deadline: an unkillable D-state process may never exit.
     const snapshot = await Promise.race([completed, timedOut]);
     if (snapshot === undefined || signal.aborted) {
+      const failedAt = clock();
+      await recordDxgEpisodes(dxgOptions(options, path), failedAt, false).catch(
+        () => {},
+      );
       const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
       const stallMisses = options.stallMisses ?? 2;
       const stalled = consecutiveProbeMisses >= stallMisses;
       await writeState(path, {
         ...pending,
-        attemptAt: clock(),
+        attemptAt: failedAt,
         consecutiveProbeMisses,
         ...(stalled
           ? {
@@ -620,6 +652,9 @@ export async function runGpuSampler(
     const at = clock();
     const first = snapshot.devices[0];
     if (first === undefined) {
+      await recordDxgEpisodes(dxgOptions(options, path), at, false).catch(
+        () => {},
+      );
       const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
       const stalled = consecutiveProbeMisses >= (options.stallMisses ?? 2);
       await writeState(path, {
@@ -642,6 +677,9 @@ export async function runGpuSampler(
       memUsedGiB: first.usedMiB / 1024,
       memTotalGiB: first.totalMiB / 1024,
     };
+    await recordDxgEpisodes(dxgOptions(options, path), at, true).catch(
+      () => {},
+    );
     const processIdentity = await collectGpuProcessIdentity(
       snapshot.processes,
       at,

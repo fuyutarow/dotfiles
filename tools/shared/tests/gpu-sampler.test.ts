@@ -10,6 +10,8 @@ import {
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { recordDxgEpisodes } from "../src/gpu-dxg-episodes.ts";
+import { jsonOf, z } from "../src/zod.ts";
 import {
   gpuReadFromState,
   readGpuState,
@@ -65,6 +67,63 @@ async function fixture(hang = false) {
       timeoutMs: hang ? 250 : 5000,
     },
   };
+}
+
+async function procThread(
+  procRoot: string,
+  tgid: number,
+  tid: number,
+  starttime: number,
+  state = "D",
+  wchan = "dxgvmb_send_sync_msg",
+) {
+  const leader = join(procRoot, String(tgid));
+  const task = join(leader, "task", String(tid));
+  await mkdir(task, { recursive: true });
+  const fields = [
+    state,
+    ...Array.from({ length: 18 }, () => "0"),
+    String(starttime),
+  ];
+  await writeFile(
+    join(task, "stat"),
+    `${tid} (fixture worker) ${fields.join(" ")}\n`,
+  );
+  await writeFile(join(task, "wchan"), `${wchan}\n`);
+  await writeFile(
+    join(task, "cgroup"),
+    "0::/user.slice/user@1000.service/app.slice/session-c11.scope\n",
+  );
+}
+const DxgTestLineSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("episode"),
+    episodeId: z.string(),
+    firstSeen: z.number(),
+    lastSeen: z.number(),
+    durationMs: z.number(),
+    tgid: z.number(),
+    tid: z.number(),
+    starttime: z.string(),
+    comm: z.string(),
+    unit: z.string().nullable(),
+    probeSucceeded: z.boolean(),
+    closed: z.boolean(),
+  }),
+  z.object({
+    kind: z.literal("scan"),
+    complete: z.boolean(),
+    probeSucceeded: z.boolean(),
+  }),
+]);
+async function dxgLog(path: string) {
+  return (await readFile(path, "utf8"))
+    .trim()
+    .split("\n")
+    .flatMap((line) => {
+      const parsed = jsonOf(DxgTestLineSchema).safeParse(line);
+      return parsed.success ? [parsed.data] : [];
+    });
 }
 
 test.skipIf(process.platform !== "linux")(
@@ -305,6 +364,11 @@ test("success and failure both persist the sixty-second cooldown across sampler 
     "slow sample",
   );
   expect(
+    (await dxgLog(join(failed.dir, "gpu-dxg-episodes.jsonl"))).some(
+      (line) => line.kind === "scan" && !line.probeSucceeded,
+    ),
+  ).toBe(true);
+  expect(
     (await readGpuState(failed.options.statePath))?.unresponsiveSince,
   ).toBeUndefined();
   expect(
@@ -511,6 +575,162 @@ test("dead owner and absent driver allow recovery without discarding cooldown", 
   );
   expect(await Bun.file(calls).text()).toBe("x");
 });
+
+test.skipIf(process.platform !== "linux")(
+  "dxg episode snapshots retain a long wait and its owner",
+  async () => {
+    const { options, dir } = await fixture();
+    const logPath = join(dir, "dxg.jsonl");
+    await procThread(options.procRoot, 100, 101, 700);
+    await recordDxgEpisodes(
+      { procRoot: options.procRoot, logPath },
+      1_000,
+      true,
+    );
+    await recordDxgEpisodes(
+      { procRoot: options.procRoot, logPath },
+      61_000,
+      false,
+    );
+    const episodes = (await dxgLog(logPath)).filter(
+      (line) => line.kind === "episode",
+    );
+    expect(episodes.at(-1)).toMatchObject({
+      firstSeen: 1_000,
+      lastSeen: 61_000,
+      durationMs: 60_000,
+      tgid: 100,
+      tid: 101,
+      starttime: "700",
+      comm: "fixture worker",
+      unit: "session-c11.scope",
+      probeSucceeded: false,
+      closed: false,
+    });
+  },
+);
+
+test.skipIf(process.platform !== "linux")(
+  "short repeated dxg waits form distinct episodes",
+  async () => {
+    const { options, dir } = await fixture();
+    const logPath = join(dir, "dxg.jsonl");
+    await procThread(options.procRoot, 200, 200, 800);
+    await recordDxgEpisodes({ procRoot: options.procRoot, logPath }, 100, true);
+    await writeFile(
+      join(options.procRoot, "200/task/200/wchan"),
+      "futex_wait\n",
+    );
+    await recordDxgEpisodes({ procRoot: options.procRoot, logPath }, 200, true);
+    await writeFile(join(options.procRoot, "200/task/200/wchan"), "dxg_wait\n");
+    await recordDxgEpisodes({ procRoot: options.procRoot, logPath }, 300, true);
+    const episodes = (await dxgLog(logPath)).filter(
+      (line) => line.kind === "episode",
+    );
+    expect(episodes.filter((line) => line.closed)).toHaveLength(1);
+    expect(episodes.at(-1)).toMatchObject({
+      firstSeen: 300,
+      lastSeen: 300,
+      closed: false,
+    });
+    expect(episodes.at(-1)?.episodeId).not.toBe(episodes[0]?.episodeId);
+  },
+);
+
+test.skipIf(process.platform !== "linux")(
+  "TID reuse with a different starttime closes the old episode",
+  async () => {
+    const { options, dir } = await fixture();
+    const logPath = join(dir, "dxg.jsonl");
+    await procThread(options.procRoot, 300, 301, 900);
+    await recordDxgEpisodes({ procRoot: options.procRoot, logPath }, 100, true);
+    await procThread(options.procRoot, 300, 301, 901);
+    await recordDxgEpisodes({ procRoot: options.procRoot, logPath }, 200, true);
+    const episodes = (await dxgLog(logPath)).filter(
+      (line) => line.kind === "episode",
+    );
+    expect(episodes.at(-2)).toMatchObject({ starttime: "900", closed: true });
+    expect(episodes.at(-1)).toMatchObject({
+      starttime: "901",
+      firstSeen: 200,
+      closed: false,
+    });
+  },
+);
+
+test.skipIf(process.platform !== "linux")(
+  "a complete scan closes an episode after its thread exits",
+  async () => {
+    const { options, dir } = await fixture();
+    const logPath = join(dir, "dxg.jsonl");
+    await procThread(options.procRoot, 400, 401, 1000);
+    await recordDxgEpisodes({ procRoot: options.procRoot, logPath }, 100, true);
+    await rm(join(options.procRoot, "400/task/401"), { recursive: true });
+    const scan = await recordDxgEpisodes(
+      { procRoot: options.procRoot, logPath },
+      250,
+      true,
+    );
+    expect(scan.complete).toBe(true);
+    expect((await dxgLog(logPath)).at(-1)).toMatchObject({
+      kind: "episode",
+      firstSeen: 100,
+      lastSeen: 100,
+      durationMs: 0,
+      closed: true,
+    });
+  },
+);
+
+test.skipIf(process.platform !== "linux")(
+  "count budget exhaustion is recorded as incomplete and does not close open episodes",
+  async () => {
+    const { options, dir } = await fixture();
+    const logPath = join(dir, "dxg.jsonl");
+    await procThread(options.procRoot, 500, 500, 1100);
+    await recordDxgEpisodes({ procRoot: options.procRoot, logPath }, 100, true);
+    await procThread(options.procRoot, 500, 501, 1101);
+    const scan = await recordDxgEpisodes(
+      { procRoot: options.procRoot, logPath, maxTasks: 1 },
+      200,
+      false,
+    );
+    expect(scan.complete).toBe(false);
+    expect(scan.reason).toBe("task count budget exhausted");
+    const log = await dxgLog(logPath);
+    expect(log.at(-2)).toMatchObject({
+      kind: "scan",
+      complete: false,
+      probeSucceeded: false,
+    });
+    expect(
+      log
+        .filter((line) => line.kind === "episode")
+        .every((line) => !line.closed),
+    ).toBe(true);
+  },
+);
+
+test.skipIf(process.platform !== "linux")(
+  "the sampler logs dxg with the existing successful GPU probe and makes one driver call",
+  async () => {
+    const { options, calls, dir } = await fixture();
+    await procThread(options.procRoot, 600, 601, 1200);
+    const logPath = join(dir, "dxg.jsonl");
+    expect(
+      await runGpuSampler({
+        ...options,
+        dxgLogPath: logPath,
+        now: () => 1_000_000,
+      }),
+    ).toBe("sampled");
+    expect(await readFile(calls, "utf8")).toBe("x");
+    expect((await dxgLog(logPath)).at(-1)).toMatchObject({
+      kind: "episode",
+      probeSucceeded: true,
+    });
+  },
+);
 
 const identityStatText = (pid: number) =>
   `${pid} (worker (nested)) S ${Array.from({ length: 18 }, () => "0").join(" ")} 12345 0`;

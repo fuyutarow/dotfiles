@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.2 — 2026-10-24
+
+- Record bounded dxg wait episodes with GPU sampler probes
+
 ## 0.19.1 — 2026-10-24
 
 - Remove unused local roster pricing helpers; retain generic cost formatting and token usage types

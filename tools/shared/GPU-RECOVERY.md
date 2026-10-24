@@ -5,6 +5,16 @@ Use this when GPU consumers stop responding, `gpu-owner.json` records
 driver. The sampler is the only component that runs `nvidia-smi`; do not run it
 manually during recovery. Never signal a stuck GPU process.
 
+The sampler also records read-only dxg wait observations beside its state in
+`gpu-dxg-episodes.jsonl` (normally `$XDG_STATE_HOME/gpu-dxg-episodes.jsonl`, or
+`~/.local/state/gpu-dxg-episodes.jsonl`). Each `scan` row records whether the
+`nvidia-smi` probe succeeded and whether the bounded `/proc` scan completed;
+an incomplete scan is not evidence that no dxg wait was present. `episode`
+rows include TGID, TID, starttime, comm, cgroup/unit, first and last observed
+times, observed duration, and open/closed state. Reused TIDs with a different
+starttime begin a separate episode. The log retains at most seven days and
+4096 rows / 2 MiB.
+
 `agent-resource-run` scans leaders and nonleader threads host-wide for readable
 dxg wait channels, including `dxgvmb_send_sync_msg`, and confirms these D-state
 observations after at least three seconds. An unavailable wait channel

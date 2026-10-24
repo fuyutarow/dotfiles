@@ -52,9 +52,14 @@ checksum = "sha256:d7a7d3eb216614544aab0cde2d8d9f2e4e87839bf5a30a1cd11d077f02d84
 url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.3/bun-windows-x64-baseline.zip"
 
 [[tools."github:fuyutarow/agx"]]
-version = "1.3.1"
+version = "1.5.0"
 backend = "github:fuyutarow/agx"
-specifiers = ["1.3.1"]
+specifiers = ["1.5.0"]
+
+[tools."github:fuyutarow/agx"."platforms.linux-x64"]
+checksum = "sha256:63af23797ac4c0be8e4fbc6037d0ae420c1fb87a57661709da269eb5366ecbc5"
+url = "https://github.com/fuyutarow/agx/releases/download/v1.5.0/agx-1.5.0-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/fuyutarow/agx/releases/assets/671231729"
 
 [[tools.rumdl]]
 version = "0.2.78"

@@ -6,6 +6,7 @@ Unreadable files abort the plan rather than silently undercounting the workload.
 
 import json
 import math
+import re
 import stat
 import sys
 from pathlib import Path, PurePath
@@ -60,17 +61,33 @@ def main() -> None:
             for parent in PurePath(path).parents
             if parent != PurePath(".")
         }
-        safe = []
-        for pattern in request["patterns"]:
-            candidate = build_matcher(
-                root,
-                settings.include_patterns,
-                [*settings.exclude_patterns, pattern],
-                settings.max_file_size,
+        patterns = request["patterns"]
+        # The caller supplies escaped exact paths, never general globs or
+        # negations. Enforce that contract before using a single union matcher.
+        literals = [re.sub(r"\\(.)", r"\1", pattern) for pattern in patterns]
+        for literal, pattern in zip(literals, patterns, strict=True):
+            escaped = "".join(
+                f"\\{char}" if char in "\\*?[]{}!" else char for char in literal
             )
-            safe.append(
-                all(candidate.is_dir_included(directory) for directory in directories)
-            )
+            if escaped != pattern:
+                raise ValueError(
+                    f"exclude suggestion must be an escaped exact path: {pattern}"
+                )
+        candidate = build_matcher(
+            root,
+            settings.include_patterns,
+            [*settings.exclude_patterns, *patterns],
+            settings.max_file_size,
+        )
+        pruned = {
+            directory.as_posix()
+            for directory in directories
+            if not candidate.is_dir_included(directory)
+        }
+        # An exact exclusion can prune only its own directory and descendants.
+        # Every ancestor is present, so its own path must appear in pruned.
+        # Preserve independent answers, including directory names like x.json.
+        safe = [literal not in pruned for literal in literals]
         print(json.dumps(safe))
         return
     matcher = build_matcher(
@@ -100,11 +117,7 @@ def main() -> None:
         blob = not stat.S_ISREG(metadata.st_mode)
         category = kind(absolute, "")
         chunks = math.ceil(size / 800)
-        if (
-            not blob
-            and size <= file_limit
-            and total_bytes <= limits["max_total_bytes"]
-        ):
+        if not blob and size <= file_limit and total_bytes <= limits["max_total_bytes"]:
             with absolute.open("rb") as stream:
                 # One extra byte detects growth after stat without reading a
                 # concurrently growing file to EOF. Oversized files aren't opened.

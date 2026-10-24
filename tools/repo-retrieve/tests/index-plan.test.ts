@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { cccPython } from "../src/ccc-scope.ts";
 import {
   computeIndexPlan,
   measuredEta,
@@ -88,6 +89,100 @@ async function cli(
 describe.skipIf(ccc === null)(
   "CCC-PLAN-GATE with installed ccc matcher",
   () => {
+    test("fresh ccc init registration plans and accepts without invoking a real indexer", async () => {
+      if (ccc === null) return;
+      const root = mkdtempSync(join(tmpdir(), "rr-plan-fresh-root-"));
+      roots.push(root);
+      writeFileSync(join(root, "notes.md"), "Primary research evidence.\n");
+      const init = Bun.spawn([ccc, "init", "-f"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 30_000,
+      });
+      const [, , code] = await Promise.all([
+        new Response(init.stdout).text(),
+        new Response(init.stderr).text(),
+        init.exited,
+      ]);
+      expect(code).toBe(0);
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      const interpreter = await cccPython(ccc);
+      expect(interpreter).not.toBeNull();
+      if (interpreter === null) return;
+      // The planner still uses installed ccc's matcher, but indexing is a
+      // disposable success stub. No daemon or real indexer can be invoked.
+      writeFileSync(
+        join(bin, "ccc"),
+        `#!${interpreter}\nimport sys\nfrom pathlib import Path\nif sys.argv[1] == 'index':\n    Path('fixture-index-called').write_text('yes')\n    Path('.cocoindex_code/fake_target.db').write_text('fixture artifact')\nelif sys.argv[1] == 'daemon':\n    print(str(Path.cwd()) + ' [idle]')\n`,
+      );
+      chmodSync(join(bin, "ccc"), 0o755);
+      const env = {
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        COCOINDEX_CODE_DB_PATH_MAPPING: "",
+      };
+      const plan = await cli(root, ["--plan"], env);
+      expect(plan.code).toBe(0);
+      expect(plan.stdout).toContain('"path":"notes.md"');
+      expect(await Bun.file(join(root, "fixture-index-called")).exists()).toBe(
+        false,
+      );
+      const accepted = await cli(root, ["--accept-plan"], env);
+      expect(accepted).toMatchObject({ code: 0 });
+      expect(await Bun.file(join(root, "fixture-index-called")).exists()).toBe(
+        true,
+      );
+      expect(
+        await Bun.file(
+          join(root, ".cocoindex_code", "RR_ACCEPTED_PLAN.json"),
+        ).exists(),
+      ).toBe(true);
+    }, 30_000);
+
+    test("large fresh-root exclude requests avoid the Cartesian scan and retain independent safety", async () => {
+      if (ccc === null) return;
+      const root = fixture();
+      const interpreter = await cccPython(ccc);
+      expect(interpreter).not.toBeNull();
+      if (interpreter === null) return;
+      const paths = Array.from(
+        { length: 32_000 },
+        (_, i) => `data/${i % 900}/${i}.json`,
+      );
+      paths.push("data/0/saved.json/paper.txt", "data/1/unsafe.json/paper.txt");
+      const patterns = paths.slice(0, 32_000);
+      patterns[17] = "data/0/saved.json";
+      patterns[25_000] = "data/1/unsafe.json";
+      const child = Bun.spawn(
+        [
+          interpreter,
+          join(import.meta.dir, "../src/ccc_plan.py"),
+          root,
+          "--validate-excludes",
+        ],
+        {
+          stdin: new Response(JSON.stringify({ patterns, paths })),
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 10_000,
+          env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+        },
+      );
+      const [out, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      expect(stderr).toBe("");
+      expect(code).toBe(0);
+      expect(out.trim()).toBe(
+        JSON.stringify(
+          patterns.map((_, i) => i !== 17 && i !== 25_000),
+        ).replaceAll(",", ", "),
+      );
+    }, 15_000);
+
     test("effective huge files, dumps and disguised blobs refuse before the index child; exclusions fix admission", async () => {
       if (ccc === null) return;
       const root = fixture();
@@ -323,6 +418,20 @@ describe.skipIf(ccc === null)(
       ).toBe(true);
     }, 30_000);
 
+    test("literal exclamation filenames cannot negate a different suggestion", async () => {
+      if (ccc === null) return;
+      const root = fixture();
+      writeFileSync(join(root, "!saved.json"), '{"value":1}');
+      mkdirSync(join(root, "saved.json"));
+      writeFileSync(join(root, "saved.json", "paper.txt"), "Primary evidence.");
+      const result = await computeIndexPlan(root, ccc);
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) return;
+      expect(
+        result.value.contributors.find((item) => item.kind === "data")?.exclude,
+      ).toBe("- '\\!saved.json'");
+    });
+
     test("elapsed time budget stops only the fixture client and repeats the contributor report", async () => {
       if (ccc === null) return;
       const root = fixture(true);
@@ -405,6 +514,53 @@ else:
     });
   },
 );
+
+test("exclude validation failures name timeout, subprocess and output causes even with empty stderr", async () => {
+  const cases = [
+    {
+      body: "process.exit(7)",
+      expected: ["subprocess failed", "exit 7", 'stderr=""'],
+    },
+    {
+      body: "process.stderr.write('matcher broke'); process.exit(9)",
+      expected: ["exit 9", "matcher broke"],
+    },
+    { body: "", expected: ["invalid validator output", "exit 0", 'stdout=""'] },
+    {
+      body: "process.stdout.write('not json')",
+      expected: ["invalid validator output", "not json"],
+    },
+    {
+      body: "process.stdout.write('[true]')",
+      expected: ["result count mismatch: expected 0, received 1"],
+    },
+    {
+      body: "await Bun.sleep(5000)",
+      timeout: 100,
+      expected: ["timed out after 100ms", "SIGTERM", 'stderr=""'],
+    },
+  ];
+  for (const item of cases) {
+    const root = fixture();
+    const interpreter = join(root, "python");
+    writeFileSync(
+      interpreter,
+      `#!/usr/bin/env bun\nif (process.argv.includes('--validate-excludes')) { ${item.body} }\n`,
+    );
+    chmodSync(interpreter, 0o755);
+    const fake = join(root, "ccc");
+    writeFileSync(fake, `#!${interpreter}\n`);
+    const result = await computeIndexPlan(root, fake, {
+      validationTimeoutMs: item.timeout ?? 5000,
+    });
+    expect(result.isErr()).toBe(true);
+    const message = result.isErr()
+      ? result.error.message
+      : "unexpected success";
+    expect(message).toContain("cannot validate exclude suggestions:");
+    for (const expected of item.expected) expect(message).toContain(expected);
+  }
+});
 
 test("content byte boundaries include equality and enforce aggregate bytes independently of chunk estimates", () => {
   const budget = {

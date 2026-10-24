@@ -84,9 +84,12 @@ export type IndexPlan = {
 
 const extension = (path: string) =>
   path.toLowerCase().endsWith(".min.js") ? path.slice(-7) : posix.extname(path);
-const escapeGlob = (path: string) => path.replaceAll(/[\\*?[\]{}]/gu, "\\$&");
+// Leading ! is ccc's exclusion negation operator, not a literal filename.
+const escapeGlob = (path: string) => path.replaceAll(/[\\*?[\]{}!]/gu, "\\$&");
 const directory = (file: PlanFile) =>
   posix.dirname(file.path).split("/").slice(0, 3).join("/");
+const contributorKey = (file: PlanFile) =>
+  `${directory(file)}\0${extension(file.path)}\0${file.kind}`;
 export function summarize(
   files: PlanFile[],
   budget: Budget,
@@ -139,17 +142,11 @@ export function summarize(
       share: totals.share,
     }),
   );
-  const contributors = aggregate(
-    (file) => `${directory(file)}\0${extension(file.path)}\0${file.kind}`,
-  ).map(({ name, ...totals }) => {
+  const groupedFiles = Map.groupBy(files, contributorKey);
+  const contributors = aggregate(contributorKey).map(({ name, ...totals }) => {
     const [dir = ".", ext = "", kindName = "text"] = name.split("\0");
     const kind: PlanFile["kind"] = kindName === "data" ? "data" : "text";
-    const matchingFiles = files.filter(
-      (file) =>
-        directory(file) === dir &&
-        extension(file.path) === ext &&
-        file.kind === kind,
-    );
+    const matchingFiles = groupedFiles.get(name) ?? [];
     // Exact paths ensure a data suggestion can never remove adjacent source or prose.
     const pattern = matchingFiles
       .map((file) => escapeGlob(file.path))
@@ -259,6 +256,7 @@ export function summarize(
 export async function computeIndexPlan(
   project: string,
   ccc: string,
+  options: { validationTimeoutMs?: number } = {},
 ): Promise<Result<IndexPlan, Error>> {
   const result = await attempt(async () => {
     const configFile = Bun.file(join(project, ".cocoindex_code", "rr.toml"));
@@ -289,7 +287,12 @@ export async function computeIndexPlan(
         }),
       ],
       cwd: project,
-      env: { ...process.env, RUST_LOG: "error", OTEL_SDK_DISABLED: "true" },
+      env: {
+        ...process.env,
+        PYTHONDONTWRITEBYTECODE: "1",
+        RUST_LOG: "error",
+        OTEL_SDK_DISABLED: "true",
+      },
       stdout: "pipe",
       stderr: "pipe",
       timeout: 120_000,
@@ -315,16 +318,17 @@ export async function computeIndexPlan(
     // A directory can itself end in '.json'. Ask ccc whether a proposed glob would
     // prune any ancestor of an included file; extension-scoping alone is insufficient.
     const dataItems = plan.contributors.filter((item) => item.kind === "data");
-    const dataPatterns = dataItems.flatMap((item) =>
-      files
-        .filter(
-          (file) =>
-            directory(file) === item.directory &&
-            extension(file.path) === item.extension &&
-            file.kind === "data",
-        )
-        .map((file) => escapeGlob(file.path)),
+    const groupedData = Map.groupBy(
+      files.filter((file) => file.kind === "data"),
+      contributorKey,
     );
+    const dataPatterns = dataItems.flatMap((item) =>
+      (groupedData.get(`${item.directory}\0${item.extension}\0data`) ?? []).map(
+        (file) => escapeGlob(file.path),
+      ),
+    );
+    const validationTimeoutMs = options.validationTimeoutMs ?? 120_000;
+    const validationSignal = AbortSignal.timeout(validationTimeoutMs);
     const validation = Bun.spawn({
       cmd: [
         python,
@@ -333,7 +337,12 @@ export async function computeIndexPlan(
         "--validate-excludes",
       ],
       cwd: project,
-      env: { ...process.env, RUST_LOG: "error", OTEL_SDK_DISABLED: "true" },
+      env: {
+        ...process.env,
+        PYTHONDONTWRITEBYTECODE: "1",
+        RUST_LOG: "error",
+        OTEL_SDK_DISABLED: "true",
+      },
       stdin: new Response(
         JSON.stringify({
           patterns: dataPatterns,
@@ -342,7 +351,7 @@ export async function computeIndexPlan(
       ),
       stdout: "pipe",
       stderr: "pipe",
-      timeout: 120_000,
+      signal: validationSignal,
     });
     const [validationOut, validationErr, validationCode] = await Promise.all([
       new Response(validation.stdout).text(),
@@ -351,13 +360,24 @@ export async function computeIndexPlan(
     ]);
     const safe = jsonOf(z.array(z.boolean())).safeParse(validationOut);
     if (
+      validationSignal.aborted ||
       validationCode !== 0 ||
       !safe.success ||
       safe.data.length !== dataPatterns.length
-    )
+    ) {
+      let reason = `subprocess failed`;
+      if (validationSignal.aborted)
+        reason = `timed out after ${validationTimeoutMs}ms`;
+      else if (validationCode === 0 && !safe.success)
+        reason = `invalid validator output: ${safe.error.message.slice(0, 2000)}`;
+      else if (validationCode === 0 && safe.success)
+        reason = `validator result count mismatch: expected ${dataPatterns.length}, received ${safe.data.length}`;
       return err(
-        new Error(`cannot validate exclude suggestions: ${validationErr}`),
+        new Error(
+          `cannot validate exclude suggestions: ${reason}; exit ${validationCode}; signal ${validation.signalCode ?? "none"}; stderr=${JSON.stringify(validationErr.slice(0, 2000))}; stdout=${JSON.stringify(validationOut.slice(0, 2000))}`,
+        ),
       );
+    }
     const safeByPath = new Map(
       dataPatterns.map((pattern, index) => [
         pattern,
@@ -365,14 +385,10 @@ export async function computeIndexPlan(
       ]),
     );
     for (const item of dataItems) {
-      const excludes = files
-        .filter(
-          (file) =>
-            directory(file) === item.directory &&
-            extension(file.path) === item.extension &&
-            file.kind === "data" &&
-            safeByPath.get(escapeGlob(file.path)) === true,
-        )
+      const excludes = (
+        groupedData.get(`${item.directory}\0${item.extension}\0data`) ?? []
+      )
+        .filter((file) => safeByPath.get(escapeGlob(file.path)) === true)
         .map((file) => `- '${escapeGlob(file.path).replaceAll("'", "''")}'`);
       item.exclude = excludes.length === 0 ? null : excludes.join("\n");
     }

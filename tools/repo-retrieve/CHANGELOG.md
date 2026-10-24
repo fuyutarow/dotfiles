@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.3 — 2026-10-25
+
+- Avoid Cartesian exclude-suggestion validation timeouts on new index roots and preserve subprocess failure causes
+
 ## 1.4.2 — 2026-10-23
 
 - Generalize benchmark attributions in retrieval docs and comments

@@ -1,9 +1,9 @@
 {
-  "maxListingChars": 55525,
-  "measuredOn": "2026-10-14",
-  "skillsAtMeasurement": 68,
-  "why": "A local ratchet over the static sum of active skill names and descriptions. This is a conservative character-footprint proxy, not measured per-turn tokens: host selection, truncation, invocation policy and tokenization affect observed listing cost. F4 in forging-skills owns membership and the retire/merge/shorten/raise decision. The shared floor compares the proxy against maxListingChars. A ceiling raise needs an explicit reason in the same reviewable change; recovered footprint may lower the ceiling.",
-  "evidenceAtMeasurement": "The scoped jj candidate admits nine official Sui packages (3,842 name+description chars) and retires the 213-character authored selector: 68 skills / 55,525 chars, excluding unrelated Tiger edits. The cap matches this candidate with no slack.",
+  "maxListingChars": 48326,
+  "measuredOn": "2026-10-24",
+  "skillsAtMeasurement": 54,
+  "why": "A local ratchet over the static sum of active in-house skill names and descriptions under agents/skills/. This is a conservative character-footprint proxy, not measured per-turn tokens: host selection, truncation, invocation policy and tokenization affect observed listing cost. F4 in forging-skills owns membership and the retire/merge/shorten/raise decision. The shared floor compares the proxy against maxListingChars. A ceiling raise needs an explicit reason in the same reviewable change; recovered footprint may lower the ceiling.",
+  "evidenceAtMeasurement": "The worktree floor after retiring the in-house session-messaging skill measures 54 active in-house skill directories and 48,326 name+description characters. The upstream driving-agx declaration is a third-party source/name pair and is not copied into this source-side floor; skills:sync remains with the coordinator. The cap matches the measured proxy with no slack.",
   "raises": [
     {
       "date": "2026-10-14",
@@ -166,6 +166,12 @@
       "from": 53867,
       "to": 50782,
       "reason": "Retire three runner/Jev skill manuals after their implementations moved into agents/routing-control and dispatch/Jev gained the single entrypoint agx. The active collection measures 57 skills and 50,782 name+description characters; the ceiling is lowered to that measured total. The archive index records the individual admission dates and retirement decisions."
+    },
+    {
+      "date": "2026-10-24",
+      "from": 55525,
+      "to": 48326,
+      "reason": "Re-pin the source-side floor to its worktree measurement after retiring the in-house session-messaging skill: 54 active in-house skill directories and 48,326 name+description characters. This replaces the stale 2026-10-14 total and includes any accumulated drift. The upstream driving-agx declaration is outside this floor because third-party skills are not copied into agents/skills; skills:sync remains with the coordinator."
     }
   ]
 }

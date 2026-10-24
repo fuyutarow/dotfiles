@@ -4,6 +4,12 @@ Skills retired from `agents/skills/`. Nothing here is linked into any agent (`mi
 only reads `agents/skills/`), so an archived skill never fires; the directory keeps the text
 reachable without `git log`.
 
+## 2026-10-24 upstream replacement
+
+| Skill | Archived | Why | Successor |
+|---|---|---|---|
+| [`driving-xmsg`](driving-xmsg/SKILL.md) | 2026-10-24 | Owner-requested retirement after agx 1.5.0 shipped its own messaging/dispatch skill; the in-house text is preserved outside discovery | `driving-agx` from `fuyutarow/agx`, declared in [`agents/skills.thirdparty.toml`](../../agents/skills.thirdparty.toml) |
+
 ## 2026-10-23 owner rule: no project names
 
 | Skill | Archived | Why | Successor |
@@ -23,7 +29,7 @@ The package contains only the historical manual and verification ledger, with no
 
 | Skill | Archived | Why | Successor |
 |---|---|---|---|
-| [`messaging-codex-sessions`](messaging-codex-sessions/SKILL.md) | 2026-10-21 | Owner-requested retirement; exact frozen source preserved, active Codex-only entrypoint removed | [`driving-xmsg`](../../agents/skills/driving-xmsg/SKILL.md) for existing Claude and Codex sessions. |
+| [`messaging-codex-sessions`](messaging-codex-sessions/SKILL.md) | 2026-10-21 | Owner-requested retirement; exact frozen source preserved, active Codex-only entrypoint removed | `driving-agx` from `fuyutarow/agx`, declared in [`agents/skills.thirdparty.toml`](../../agents/skills.thirdparty.toml), now owns the upstream messaging/dispatch guidance. |
 | [`operating-the-harness`](operating-the-harness/SKILL.md) | 2026-10-21 | Owner-requested retirement; callable guidance and mandatory invocation were removed | No replacement skill. Use each repository's declared configuration and executable checks; `scripts/harness/` retains the two shared checks. |
 
 The archived package retains the complete historical source, including copies of the two check

@@ -43,3 +43,7 @@ skill = "sui-move-project"
 [[skills]]
 source = "MystenLabs/skills"
 skill = "sui-build"
+
+[[skills]]
+source = "fuyutarow/agx"
+skill = "driving-agx"

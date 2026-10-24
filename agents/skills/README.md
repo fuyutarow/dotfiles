@@ -6,7 +6,8 @@ Retired manuals are listed in [the archive](../../archives/skills/README.md); th
 A reference to a retired skill means its archived contract, not automatic reactivation.
 
 The active collection contains in-house manuals only. This page is the human map;
-the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
+the canonical trigger definitions live in each skill's `SKILL.md` frontmatter. The upstream
+agx skill `driving-agx` is declared separately in [`agents/skills.thirdparty.toml`](../skills.thirdparty.toml).
 
 ## Collection design invariant
 
@@ -118,7 +119,6 @@ qualify the result, and revise the affected theory. These are feedback loops, no
 
 ### Agent harness
 
-- [`driving-xmsg`](driving-xmsg/) — Discover and message existing Claude or Codex sessions through xmsg; distinguish enqueue acceptance, unknown outcomes and observed replies.
 - [`forging-skills`](forging-skills/) — Create and reforge Agent Skills to the house bar: triggers, gates, sibling cuts, verification.
 - [`continuing-long-running-tasks`](continuing-long-running-tasks/) — Keep one evidence-linked task record trustworthy across compact, resume, and Codex/Claude handoff.
 - [`driving-antigravity`](driving-antigravity/) — Drive the Antigravity CLI (`agy`) as a headless worker: multi-vendor roster on one subscription, no per-call meter, unconfined by default.

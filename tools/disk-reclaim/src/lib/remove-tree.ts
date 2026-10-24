@@ -44,7 +44,7 @@ export type RemoveTreeResult = {
 };
 export type RemoveTreeOptions = {
   uid: number;
-  /** Additional request budget; false refuses before visiting another entry. */
+  /** Additional request budget; false stops before another visit or unlink. */
   allowVisit?: () => boolean;
   /** Revalidate request authority after preflight and before the first unlink. */
   beforeUnlink?: () => Promise<boolean>;
@@ -391,6 +391,10 @@ export async function removeTree(
     stat: Stats;
   }): Promise<boolean> => {
     if (options.signal?.aborted === true) return false;
+    if (options.allowVisit?.() === false) {
+      errors.push({ path: entry.path, error: "request work budget exhausted" });
+      return false;
+    }
     const removed = await fromAsyncThrowable(async () => {
       if (entry.stat.isDirectory()) await removeDir(entry.path);
       else await unlinkFile(entry.path);
@@ -430,7 +434,7 @@ export async function removeTree(
   const visit = async (entry: string): Promise<boolean> => {
     if (options.signal?.aborted === true) return false;
     if (options.allowVisit?.() === false) {
-      errors.push({ path: entry, error: "request entry budget exhausted" });
+      errors.push({ path: entry, error: "request work budget exhausted" });
       return false;
     }
     inspected++;

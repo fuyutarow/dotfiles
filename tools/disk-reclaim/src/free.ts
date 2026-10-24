@@ -19,7 +19,6 @@ import { enumerateRipPayloads } from "./targets/rip-expire.ts";
 
 export const FREE_LOCK_WAIT_S = 10;
 export const FREE_BUDGET_MS = 120_000;
-export const FREE_MAX_ENTRIES = 100_000;
 const units = new Map([
   ["KiB", 1024],
   ["MiB", 1024 ** 2],
@@ -73,11 +72,12 @@ export type FreeResult = {
   lock_elapsed_ms: number;
   budget: {
     time_ms: number;
-    entries: number;
+    entries: null;
     visited: number;
     exhausted: boolean;
   };
   deleted_payloads: string[];
+  partial_payloads: { path: string; unlinked_bytes: number }[];
   errors: string[];
 };
 export function freeResult(
@@ -114,11 +114,12 @@ export function freeResult(
     lock_elapsed_ms: 0,
     budget: {
       time_ms: FREE_BUDGET_MS,
-      entries: FREE_MAX_ENTRIES,
+      entries: null,
       visited: 0,
       exhausted: false,
     },
     deleted_payloads: [],
+    partial_payloads: [],
     errors: [],
   };
 }
@@ -137,7 +138,7 @@ type Options = {
   log?: (text: string) => void;
   lockWaitS?: number;
   budgetMs?: number;
-  maxEntries?: number;
+  clock?: () => number;
   processes?: () => { openPaths: (path: string) => OpenPaths };
   owner?: RemoveTreeOptions["owner"];
   immutable?: RemoveTreeOptions["immutable"];
@@ -176,21 +177,16 @@ export async function freeGraveyard(
   const undoMs =
     (options.config.graveyard_pressure_undo_minutes ?? 10) * 60_000;
   const budgetMs = options.budgetMs ?? FREE_BUDGET_MS;
-  const maxEntries = options.maxEntries ?? FREE_MAX_ENTRIES;
+  const clock = options.clock ?? (() => performance.now());
   result.budget.time_ms = budgetMs;
-  result.budget.entries = maxEntries;
-  const deadline = performance.now() + budgetMs;
+  const deadline = clock() + budgetMs;
   const exhausted = new AbortController();
   const signal = AbortSignal.any([
     AbortSignal.timeout(budgetMs),
     exhausted.signal,
   ]);
   const allowVisit = (): boolean => {
-    if (
-      signal.aborted ||
-      performance.now() >= deadline ||
-      result.budget.visited >= maxEntries
-    ) {
+    if (signal.aborted || clock() >= deadline) {
       result.budget.exhausted = true;
       exhausted.abort("disk:free request budget exhausted");
       return false;
@@ -207,8 +203,7 @@ export async function freeGraveyard(
     log(`disk:free: skipped ${JSON.stringify(path)}: ${detail}`);
   };
   const checkTime = (): void => {
-    if (performance.now() >= deadline)
-      exhausted.abort("disk:free time budget exhausted");
+    if (clock() >= deadline) exhausted.abort("disk:free time budget exhausted");
     signal.throwIfAborted();
   };
   const accountHeld = (row: Payload): void => {
@@ -275,7 +270,10 @@ export async function freeGraveyard(
     const rows = snapshot.payloads.filter(
       (row) => row.candidate.path !== join(root, ".record"),
     );
-    for (const row of rows) accountHeld(row);
+    for (const row of rows) {
+      checkTime();
+      accountHeld(row);
+    }
     const removeWaiter = await registerForegroundWaiter(
       options.state ?? stateDir(env),
     );
@@ -284,7 +282,14 @@ export async function freeGraveyard(
       "free",
       options.state ?? stateDir(env),
       log,
-      Math.min(options.lockWaitS ?? FREE_LOCK_WAIT_S, FREE_LOCK_WAIT_S),
+      Math.max(
+        0,
+        Math.min(
+          options.lockWaitS ?? FREE_LOCK_WAIT_S,
+          FREE_LOCK_WAIT_S,
+          (deadline - clock()) / 1000,
+        ),
+      ),
     );
     if (lock.release === null) {
       result.outcome = "busy";
@@ -294,6 +299,7 @@ export async function freeGraveyard(
       return;
     }
     using _lock = { [Symbol.dispose]: lock.release };
+    checkTime();
     const unchanged = async (row: Payload, path: string): Promise<boolean> => {
       check();
       const currentRoot = await lstat(root);
@@ -356,6 +362,15 @@ export async function freeGraveyard(
       });
       result.unlinked_bytes += removed.bytes_freed;
       if (removed.ok) result.deleted_payloads.push(row.candidate.id);
+      else if (removed.entries_removed > 0) {
+        result.partial_payloads.push({
+          path,
+          unlinked_bytes: removed.bytes_freed,
+        });
+        log(
+          `disk:free: partially deleted ${JSON.stringify(path)}: ${removed.bytes_freed} logical bytes unlinked`,
+        );
+      }
       const reasons = new Set<SkipReason>(
         removed.refused.map((refusal) =>
           refusal.reason === "entry is owned by another uid"

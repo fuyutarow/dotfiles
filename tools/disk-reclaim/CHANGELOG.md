@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.4 — 2026-10-24
+
+- Bound disk:free by its time budget instead of entry count and report partial payload deletions
+
 ## 1.5.3 — 2026-10-24
 
 - Reserve disk:free entry budget for eligible payloads and avoid walking undo-protected trees

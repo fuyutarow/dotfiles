@@ -221,8 +221,8 @@ The `skip_counts.in_use` key remains present and zero for `reclaim.free/1` compa
 Discovery uses recorded burials to order candidates before walking eligible payloads.
 Young payloads are counted without walking their contents. `u_protected_bytes` is a lower
 bound from their root metadata; `u_protected_bytes_complete` is false when held directories
-have unmeasured contents. The entry budget is reserved for eligible payload checks and removal;
-record processing and mirrored-parent discovery remain bounded by the request's time limit.
+have unmeasured contents. Record processing, mirrored-parent discovery, eligible payload
+checks and removal share the request's time limit.
 `unlinked_bytes` sums logical sizes of entries actually unlinked, including directory entries;
 sparse files can therefore satisfy SIZE while releasing few blocks. The signed statfs available
 byte delta is measured separately and may reflect other writers, open files or hard links.
@@ -232,10 +232,13 @@ U expiry (null if no known U-held burial); unknown burial has no invented eligib
 Busy includes the lock holder and elapsed wait, with zero unlinks. Exit codes are 0 only for met,
 1 for partial/failed, 2 for invalid SIZE, and 3 for busy.
 
-Each request has a 120-second cooperative work budget and 100,000 record/traversal visits,
-including discovery, U accounting, revalidation and removal. The work deadline also spans lock
+Each request has a 120-second cooperative work budget with no entry-count ceiling
+(`budget.entries: null`). `budget.visited` counts request checks and removal visits/unlink
+attempts for diagnostics; it does not limit work. The work deadline also spans lock
 wait; the lock loop has its separate 10-second bound. Exhaustion during discovery performs no deletion; during preflight it retains that
-payload. Exhaustion during unlinking reports the bytes actually unlinked. System calls must
+payload. Exhaustion during unlinking reports the bytes actually unlinked and lists the interrupted
+payload path and its unlinked bytes in `partial_payloads` (empty when no payload was partly
+deleted), with a stderr diagnostic. System calls must
 return before a cooperative budget can stop work. Budget exhaustion and per-payload skips are
 reported, and no background continuation is launched. The worker mutation guard also applies
 to `free`; fixtures use temporary roots and state.

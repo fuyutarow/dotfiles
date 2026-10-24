@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
 import {
   mkdtemp,
+  lstat,
   mkdir,
   open,
   readFile,
@@ -453,16 +454,108 @@ test("snapshot excludes later writers", async () => {
   expect(late).toBeDefined();
 });
 
-test("count budget stops eligible checks without deleting a younger candidate", async () => {
+test("one request deletes eligible payloads with more than 100000 entries", async () => {
+  await using f = await fixture();
+  const records: string[] = [];
+  const payloads: string[] = [];
+  for (const name of ["oldest", "next"]) {
+    const path = join(f.root, name);
+    payloads.push(path);
+    await mkdir(path);
+    for (let offset = 0; offset < 50_001; offset += 128)
+      await Promise.all(
+        Array.from({ length: Math.min(128, 50_001 - offset) }, (_, index) =>
+          writeFile(join(path, `entry-${offset + index}`), "x"),
+        ),
+      );
+    records.push(
+      `${Temporal.Instant.fromEpochMilliseconds(now - (name === "oldest" ? 800_000 : 700_000)).toString()}\t/original\t${path}`,
+    );
+  }
+  await writeFile(join(f.root, ".record"), records.join("\n"));
+  const bytes =
+    100_002 +
+    (await lstat(payloads[0] ?? f.root)).size +
+    (await lstat(payloads[1] ?? f.root)).size;
+  const result = await freeGraveyard(`${bytes / 1024}KiB`, f.options);
+  expect(result.outcome).toBe("met");
+  expect(result.unlinked_bytes).toBe(bytes);
+  expect(result.deleted_payloads).toEqual([
+    "rip graveyard: oldest",
+    "rip graveyard: next",
+  ]);
+  expect(result.budget.entries).toBeNull();
+  expect(result.budget.visited).toBeGreaterThan(100_000);
+  expect(result.budget.exhausted).toBe(false);
+  expect(result.partial_payloads).toEqual([]);
+  expect(result.errors).toEqual([]);
+  for (const path of payloads) expect(existsSync(path)).toBe(false);
+}, 120_000);
+
+test("time exhaustion between payloads keeps the younger candidate", async () => {
   await using f = await fixture();
   const first = await f.payload("old", 1024, 800_000);
   const second = await f.payload("next", 1024, 700_000);
-  const result = await freeGraveyard("1KiB", { ...f.options, maxEntries: 1 });
+  const start = performance.now();
+  const result = await freeGraveyard("2KiB", {
+    ...f.options,
+    budgetMs: 50,
+    clock: () => (existsSync(first) ? 0 : 50),
+  });
+  expect(performance.now() - start).toBeLessThan(500);
   expect(result.outcome).toBe("partial");
   expect(result.budget.exhausted).toBe(true);
-  expect(result.unlinked_bytes).toBe(0);
-  expect(existsSync(first)).toBe(true);
+  expect(result.unlinked_bytes).toBe(1024);
+  expect(result.deleted_payloads).toEqual(["rip graveyard: old"]);
+  expect(result.partial_payloads).toEqual([]);
+  expect(existsSync(first)).toBe(false);
   expect(existsSync(second)).toBe(true);
+});
+
+test("time exhaustion inside unlinking reports the payload and actual bytes", async () => {
+  await using f = await fixture();
+  const payload = join(f.root, "directory");
+  await mkdir(payload);
+  const names = Array.from({ length: 128 }, (_, index) => `file-${index}`);
+  for (const name of names) await writeFile(join(payload, name), "data");
+  const next = await f.payload("next", 1024, 700_000);
+  await writeFile(
+    join(f.root, ".record"),
+    `2000-01-01T00:00:00Z\t/original\t${payload}\n2001-01-01T00:00:00Z\t/original\t${next}\n`,
+  );
+  const logs: string[] = [];
+  const start = performance.now();
+  const result = await freeGraveyard("1GiB", {
+    ...f.options,
+    budgetMs: 1000,
+    // Move the injected monotonic clock to the deadline after the first unlink.
+    clock: () => (!existsSync(join(payload, "file-0")) ? 1000 : 0),
+    log: (line) => {
+      logs.push(line);
+    },
+  });
+  expect(performance.now() - start).toBeLessThan(500);
+  const remaining = await readdir(payload);
+  expect(remaining.length).toBeGreaterThan(0);
+  expect(remaining.length).toBeLessThan(names.length);
+  const unlinked = (names.length - remaining.length) * 4;
+  expect(result.outcome).toBe("partial");
+  expect(result.budget.exhausted).toBe(true);
+  expect(result.skip_counts.budget).toBe(1);
+  expect(result.unlinked_bytes).toBe(unlinked);
+  expect(result.partial_payloads).toEqual([
+    { path: payload, unlinked_bytes: unlinked },
+  ]);
+  expect(result.deleted_payloads).toEqual([]);
+  expect(
+    result.errors.some((error) => error.includes("budget exhausted")),
+  ).toBe(true);
+  expect(
+    logs.some(
+      (line) => line.includes("partially deleted") && line.includes(payload),
+    ),
+  ).toBe(true);
+  expect(existsSync(next)).toBe(true);
 });
 
 test("large young mirrored payloads never consume the eligible payload walk budget", async () => {
@@ -482,7 +575,7 @@ test("large young mirrored payloads never consume the eligible payload walk budg
     `${Temporal.Instant.fromEpochMilliseconds(now - 700_000).toString()}\t/source\t${older}`,
   );
   await writeFile(join(f.root, ".record"), records.join("\n"));
-  const result = await freeGraveyard("1KiB", { ...f.options, maxEntries: 128 });
+  const result = await freeGraveyard("1KiB", f.options);
   expect(result.outcome).toBe("met");
   expect(result.deleted_payloads).toEqual(["rip graveyard: z-eligible"]);
   expect(result.skip_counts.u_protected).toBe(12);
@@ -691,7 +784,7 @@ test("whole-payload preflight retains owned siblings when a child has foreign ui
   expect(existsSync(foreign)).toBe(true);
 });
 
-test("budget exhaustion during whole-payload preflight unlinks nothing", async () => {
+test("time exhaustion during whole-payload preflight unlinks nothing", async () => {
   await using f = await fixture();
   const payload = join(f.root, "directory");
   await mkdir(payload);
@@ -701,7 +794,16 @@ test("budget exhaustion during whole-payload preflight unlinks nothing", async (
     join(f.root, ".record"),
     `2000-01-01T00:00:00Z\t/original\t${payload}\n`,
   );
-  const result = await freeGraveyard("1KiB", { ...f.options, maxEntries: 5 });
+  let visits = 0;
+  const result = await freeGraveyard("1KiB", {
+    ...f.options,
+    budgetMs: 50,
+    clock: () => (visits >= 3 ? 50 : 0),
+    immutable: () => {
+      visits += 1;
+      return false;
+    },
+  });
   expect(result.outcome).toBe("partial");
   expect(result.budget.exhausted).toBe(true);
   expect(result.unlinked_bytes).toBe(0);

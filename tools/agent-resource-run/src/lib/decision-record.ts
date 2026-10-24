@@ -63,7 +63,8 @@ export class DecisionRecord {
   read(path: string, value: string | undefined, status: string) {
     const task = /\/(\d+)(?:\/task\/(\d+))?\/(stat|wchan)$/u.exec(path);
     if (task === null) return;
-    const tgid = task[1]!;
+    const tgid = task[1];
+    if (tgid === undefined) return;
     const tid = task[2] ?? tgid;
     const key = `${tgid}/${tid}`;
     const field = task[3];

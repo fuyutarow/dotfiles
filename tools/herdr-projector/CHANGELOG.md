@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.18 — 2026-10-24
+
+- Narrow the projector agent fixture before mutating session and tab data
+
 ## 0.1.17 — 2026-10-24
 
 - Hide inapplicable Codex remote control on WSL and distinguish unknown status without a link glyph

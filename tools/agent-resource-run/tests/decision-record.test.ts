@@ -140,7 +140,13 @@ for (const shape of [
     await using f = await fixture();
     const raw = await readFile(join(fixtures, `${shape}.log`), "utf8");
     const identity = /tgid=(\d+) tid=(\d+)/u.exec(raw);
-    if (identity !== null) await stalled(f.root, identity[1]!, identity[2]!);
+    if (identity !== null) {
+      const tgid = identity[1];
+      const tid = identity[2];
+      if (tgid === undefined || tid === undefined)
+        expect.unreachable("missing fixture process identity");
+      await stalled(f.root, tgid, tid);
+    }
     const checkOnly = shape !== "scope-entry-deny";
     const result = await invoke(
       [
@@ -154,7 +160,8 @@ for (const shape of [
     expect(result.exit, result.stdout + result.stderr).toBe(0);
     const rows = await records(f.root);
     expect(rows).toHaveLength(1);
-    const record = rows[0]!;
+    const record = rows[0];
+    if (record === undefined) expect.unreachable("missing decision record");
     expect(record.stage).toBe(checkOnly ? "precheck" : "command");
     expect(record.launched).toBe(!checkOnly);
     expect(record.outcome).toBe("admit");
@@ -260,7 +267,9 @@ test("record bytes, retained count and age are bounded", async () => {
     const directory = join(f.root, "agent-resource/decisions");
     const names = await readdir(directory);
     expect(names).toHaveLength(MAX_RECORDS);
-    const old = join(directory, names[0]!);
+    const recordName = names[0];
+    if (recordName === undefined) expect.unreachable("missing retained record");
+    const old = join(directory, recordName);
     const seconds =
       (Temporal.Now.instant().epochMilliseconds - RETENTION_MS - 1000) / 1000;
     await utimes(old, seconds, seconds);

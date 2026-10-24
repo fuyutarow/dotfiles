@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.1 — 2026-10-24
+
+- Replace non-null assertions with checked resource and test data access
+
 ## 1.6.0 — 2026-10-24
 
 - Make dxg suspicion advisory, re-read owner incidents at decision time, and require live sampler PID identity

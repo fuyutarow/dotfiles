@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4 — 2026-10-24
+
+- Narrow the single BTM row before returning it in integration coverage
+
 ## 0.2.3 — 2026-10-19
 
 - Add sampler-backed GPU details to the btm Herdr label

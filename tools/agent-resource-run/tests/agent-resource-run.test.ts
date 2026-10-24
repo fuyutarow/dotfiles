@@ -747,8 +747,9 @@ test.skipIf(!live)(
     expect(result.stdout).toContain("RELEASE job=");
     const unit = result.stderr.match(/agent-resource-[a-z0-9-]+\.scope/u)?.[0];
     expect(unit).toBeDefined();
+    if (unit === undefined) expect.unreachable("missing scope unit");
     const journal = Bun.spawn(
-      ["journalctl", "--user", "-u", unit!, "--no-pager", "-n", "20"],
+      ["journalctl", "--user", "-u", unit, "--no-pager", "-n", "20"],
       { stdout: "pipe", stderr: "pipe", timeout: 5000 },
     );
     const [log, errors, exit] = await Promise.all([

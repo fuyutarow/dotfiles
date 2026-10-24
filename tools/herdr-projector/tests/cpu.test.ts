@@ -114,11 +114,13 @@ if (process.argv[2] === "agent") {
     ),
   ).toMatchObject({ ok: true });
   expect((await cycle()).stdout).toContain("unchanged");
-  agents[0]!.agent_session = { value: "sid-1" };
+  const agent = agents[0];
+  if (agent === undefined) expect.unreachable("missing agent fixture");
+  agent.agent_session = { value: "sid-1" };
   await writeAgents();
   // An untrusted non-UUID registration is erased before fingerprinting.
   expect((await cycle()).stdout).toContain("unchanged");
-  agents[0]!.tab_id = "new-tab";
+  agent.tab_id = "new-tab";
   await writeAgents();
   await Bun.write(failFile, "fail");
   expect((await cycle()).exit).toBe(1);

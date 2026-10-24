@@ -93,6 +93,8 @@
     ],
     // `any` switches type checking off at the trust boundary; parse with zod instead.
     "typescript/no-explicit-any": "error",
+    // Narrow nullable values explicitly so missing data cannot hide behind an assertion.
+    "typescript/no-non-null-assertion": "error",
     "eslint-js/no-restricted-syntax": [
       "error",
       {

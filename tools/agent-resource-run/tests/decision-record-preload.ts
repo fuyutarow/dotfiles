@@ -1,12 +1,13 @@
 // Test-only proc/cgroup fixture and virtual confirmation clock. No real GPU or scope.
-import { mock } from "bun:test";
+import { expect, mock } from "bun:test";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 const read = fs.readFile;
 const directory = fs.readdir;
 const open = fs.opendir;
-const root = process.env.ARR_RECORD_FIXTURE_ROOT!;
+const root = process.env.ARR_RECORD_FIXTURE_ROOT;
+if (root === undefined) expect.unreachable("missing record fixture root");
 const map = (path: string) =>
   path.startsWith("/proc/") ? join(root, path.slice(1)) : path;
 let clock = 0;

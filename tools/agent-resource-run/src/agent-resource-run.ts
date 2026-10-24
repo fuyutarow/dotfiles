@@ -669,9 +669,9 @@ function samplerProvenance(state: GpuState, pid: number): string {
   const rows = identity.processes.filter(
     ({ rawDriverPid }) => rawDriverPid === pid,
   );
-  if (rows.length !== 1)
+  const row = rows[0];
+  if (rows.length !== 1 || row === undefined)
     return `${source} sampler_identity=row-unavailable omitted_processes=${identity.omittedProcesses} matching_rows=${rows.length}`;
-  const row = rows[0]!;
   if (
     identity.captureStartedAt > identity.captureFinishedAt ||
     row.captureStartedAt < identity.captureStartedAt ||
@@ -726,13 +726,14 @@ async function residentCccWorker(
   if (!parsed.success) return false;
   const identity = parsed.data;
   const rows = identity.processes.filter((row) => row.rawDriverPid === pid);
+  const row = rows[0];
   if (
     identity.sampleAt !== state.sampledAt ||
     rows.length !== 1 ||
+    row === undefined ||
     !state.samples.some(({ ts }) => ts === identity.sampleAt)
   )
     return false;
-  const row = rows[0]!;
   if (
     row.status !== "read" ||
     row.before.status !== "read" ||
@@ -1140,7 +1141,10 @@ async function poolSlot(directory: string, pool: string, capacity: number) {
     if (probe.code !== 75)
       return err(new Error(`flock probe failed: ${probe.stderr.trim()}`));
   }
-  return ok(candidates[process.pid % capacity]!);
+  const path = candidates[process.pid % capacity];
+  if (path === undefined)
+    return err(new Error(`no slot candidate for pool ${pool}`));
+  return ok(path);
 }
 function lock(path: string, wait: number, conflict: number, command: string[]) {
   return [

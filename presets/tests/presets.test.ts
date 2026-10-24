@@ -111,6 +111,7 @@ describe("oxlint preset", () => {
   const rules = [
     ["no-explicit-any", "typescript/no-explicit-any"],
     ["ban-ts-comment", "typescript/ban-ts-comment"],
+    ["no-non-null-assertion", "typescript/no-non-null-assertion"],
     ["no-throwing-parse", "eslint-js/no-restricted-syntax"],
   ] as const;
   for (const [name, rule] of rules) {

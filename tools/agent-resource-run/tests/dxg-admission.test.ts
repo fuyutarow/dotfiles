@@ -982,8 +982,10 @@ for (const status of [
     await fs.rm(f.base, { recursive: true });
     const cached = retainedState();
     const identity = sampleIdentity();
-    identity.processes[0]!.status = status;
-    identity.processes.push({ ...identity.processes[0]!, rawDriverPid: 456 });
+    const process = identity.processes[0];
+    if (process === undefined) expect.unreachable("missing process fixture");
+    process.status = status;
+    identity.processes.push({ ...process, rawDriverPid: 456 });
     cached.processIdentity = identity;
     const path = join(f.root, "gpu-owner.json");
     await fs.writeFile(path, JSON.stringify(cached));
@@ -1030,16 +1032,16 @@ for (const scenario of [
     await fs.rm(f.base, { recursive: true });
     const cached = retainedState();
     const identity = sampleIdentity();
+    const process = identity.processes[0];
+    if (process === undefined) expect.unreachable("missing process fixture");
     if (scenario === "old-sample") identity.sampleAt = 0;
-    if (scenario === "wrong-pid") identity.processes[0]!.rawDriverPid = 456;
+    if (scenario === "wrong-pid") process.rawDriverPid = 456;
     if (scenario === "omitted") {
       identity.processes = [];
       identity.omittedProcesses = 1;
     }
-    if (scenario === "duplicate")
-      identity.processes.push(identity.processes[0]!);
-    if (scenario === "invalid-window")
-      identity.processes[0]!.captureFinishedAt = 1;
+    if (scenario === "duplicate") identity.processes.push(process);
+    if (scenario === "invalid-window") process.captureFinishedAt = 1;
     cached.processIdentity = scenario === "legacy" ? undefined : identity;
     if (scenario === "no-retained-sample") cached.samples = [];
     const warning = await advisoryAdmission(request, 512, {
@@ -1073,8 +1075,12 @@ for (const scenario of ["outside", "admitted", "nested", "empty"] as const)
       `State:\tS\nPid:\t123\nTgid:\t123\nNSpid:\t${scenario === "nested" ? "900 123" : "123"}\n`,
     );
     const cached = retainedState();
-    if (scenario === "nested")
-      cached.processIdentity!.processes[0]!.local!.nspid = [900, 123];
+    if (scenario === "nested") {
+      const local = cached.processIdentity?.processes[0]?.local;
+      if (local === undefined)
+        expect.unreachable("missing local process fixture");
+      local.nspid = [900, 123];
+    }
     if (scenario === "empty") cached.processes = [];
     const warning = await advisoryAdmission(request, 512, {
       procRoot: f.root,
@@ -1185,8 +1191,12 @@ for (const target of ["leader", "task"] as const)
       await fs.writeFile(wchanPath, "0");
       const cached = retainedState();
       if (identity === "pid-only") cached.processIdentity = undefined;
-      if (identity === "reused")
-        cached.processIdentity!.processes[0]!.local!.starttime = "99";
+      if (identity === "reused") {
+        const local = cached.processIdentity?.processes[0]?.local;
+        if (local === undefined)
+          expect.unreachable("missing local process fixture");
+        local.starttime = "99";
+      }
       if (identity === "fd") {
         cached.processIdentity = undefined;
         await fs.mkdir(join(f.base, "fd"));

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.10 — 2026-10-24
+
+- Read Jev seven-day spend from the pinned agx public usage statistics
+
 ## 0.21.9 — 2026-10-24
 
 - Project the routing warning from public agx routing statistics and hide unknown capability.

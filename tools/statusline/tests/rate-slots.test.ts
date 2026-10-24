@@ -9,6 +9,7 @@ import {
 } from "../src/build-dataframe.ts";
 import { readCodexRate } from "../src/codex-rate.ts";
 import { readJevUsage } from "../src/jev-usage.ts";
+import jevFixture from "./fixtures/jev-usage-c6.json";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
 import { RATE_SOURCES, rateRow } from "../src/rate-limits.ts";
 import { ESC } from "../src/ansi.ts";
@@ -32,16 +33,6 @@ const rateEvent = (percent = 3) =>
           window_minutes: 10080,
           resets_at: now() + 604800,
         },
-      },
-    },
-  });
-const jevEvent = (at = now()) =>
-  JSON.stringify({
-    kind: "run",
-    started_at: Temporal.Instant.fromEpochMilliseconds(at * 1000).toString(),
-    pick: {
-      jev: {
-        response: { usage: { input_tokens: 900000, output_tokens: 300000 } },
       },
     },
   });
@@ -112,7 +103,7 @@ async function files() {
     root,
     dir,
     file: join(dir, "rollout-newest.jsonl"),
-    log: join(root, "runs.jsonl"),
+    log: join(root, "mise"),
   };
 }
 
@@ -182,13 +173,29 @@ test.each([...modes])("Jev slot: %s", async (mode) => {
       }),
     );
   if (mode === "unparseable") await writeFile(log, "{broken json}\n");
-  if (mode === "stale") await writeFile(log, jevEvent(now() - 8 * 86400));
+  if (mode === "stale")
+    await writeFile(
+      log,
+      `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify({ ...jevFixture, to: "2020-01-01T00:00:00Z" }))});`,
+      { mode: 0o755 },
+    );
   if (mode === "read error") {
-    await writeFile(log, jevEvent());
+    await writeFile(
+      log,
+      `#!${process.execPath}
+process.stdout.write(${JSON.stringify(JSON.stringify(jevFixture))});`,
+      { mode: 0o755 },
+    );
     await chmod(log, 0);
   }
   const source = () =>
-    readJevUsage(now(), mode === "missing" ? join(root, "missing") : log);
+    readJevUsage(
+      Temporal.Instant.from(jevFixture.captured_at).epochMilliseconds,
+      {
+        ...process.env,
+        PATH: mode === "missing" ? join(root, "missing") : root,
+      },
+    );
   if (mode === "read error") expect((await source()).isErr()).toBe(true);
   let jevSource = source;
   if (mode === "timeout") jevSource = () => new Promise(() => {});
@@ -244,7 +251,11 @@ test.each([...modes])("claude slot: %s", async (mode) => {
 test("all known provider values and resets remain in their slots", async () => {
   const { root, file, log } = await files();
   await writeFile(file, rateEvent());
-  await writeFile(log, jevEvent());
+  await writeFile(
+    log,
+    `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify(jevFixture))});`,
+    { mode: 0o755 },
+  );
   const text = await row(
     {
       rate_limits: {
@@ -254,7 +265,11 @@ test("all known provider values and resets remain in their slots", async () => {
     {
       sources: {
         codexRate: () => readCodexRate(root),
-        jevUsage: () => readJevUsage(now(), log),
+        jevUsage: () =>
+          readJevUsage(
+            Temporal.Instant.from(jevFixture.captured_at).epochMilliseconds,
+            { ...process.env, PATH: root },
+          ),
       },
     },
   );

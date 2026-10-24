@@ -432,7 +432,8 @@ test("finds Claude and Codex only in the selected cwd and builds recorded payloa
   expect(
     (await discoverSessions(cwd)).map((session) => session.vendor),
   ).toEqual(["claude"]);
-});
+  // This integration test writes 3000 fixtures and invokes several real CLIs.
+}, 30_000);
 
 test("no-session invocation renders shared rows and the explicit absence line", async () => {
   const { home, cwd } = await fixture();

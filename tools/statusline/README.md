@@ -141,6 +141,13 @@ Codex from `fields.codexRate`, and Jev from `fields.jevUsage`. No first-Codex-se
 lookup is performed by standalone rendering. A redraw every five seconds can display samples
 59 seconds old because `owner.json.view` is produced independently by the sampler.
 
+The Jev sampler makes one bounded call through the dotfiles mise pin to
+`agx worker stats --usage jev --window 7d` (C6). It displays the owner's
+`estimated_cost_usd` directly, without reconstructing usage or pricing. Unknown
+cost, collection failure, or observations older than five minutes produce n/a;
+an explicitly reported zero remains `$0`. C6 describes retained observations and
+effective catalog pricing, not complete history or a provider bill.
+
 Dispatch worker rows show the roster row, elapsed time, cost, worker/workspace name and ticket.
 Session IDs remain in the data and are omitted from worker rows. Legacy `agx-<slug>` worker names
 display as `agt_<slug>`. The bottom row is optional: it lists pending judgments from this session (`judge N (agx worker judge)`), accepted runs with an unlanded workspace verdict (`land N (mise run land)`), remedy-named doctor findings, and the running-worker count outside the exact selected dispatcher session or displayed session inventory. A selected watch session shows that session's workers; an unselected cwd inventory shows workers attributed to any displayed provider session. When the run cache is known to trail the state log, its age is shown immediately.

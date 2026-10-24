@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.4 — 2026-10-25
+
+- Derive aggregate index byte limits from project budgets
+
 ## 1.4.3 — 2026-10-25
 
 - Avoid Cartesian exclude-suggestion validation timeouts on new index roots and preserve subprocess failure causes

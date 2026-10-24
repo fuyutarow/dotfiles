@@ -592,6 +592,7 @@ test("content byte boundaries include equality and enforce aggregate bytes indep
       "\n",
     ),
   ).toContain("data-file limit 65536");
+  const dataBudget = { ...budget, max_data_share: 0.2 };
   const sources = Array.from({ length: 40 }, (_, i) => ({
     ...source,
     path: `src/${i}.ts`,
@@ -602,22 +603,64 @@ test("content byte boundaries include equality and enforce aggregate bytes indep
     summarize([...sources, { ...source, bytes: 1 }], budget).violations.join(
       "\n",
     ),
-  ).toContain("aggregate candidate bytes 40000001 > 40000000");
+  ).toContain(
+    "aggregate candidate bytes 40000001 > 40000000 (budget.max_est_chunks × 800)",
+  );
   const rows = Array.from({ length: 125 }, (_, i) => ({
     ...data,
     path: `data/${i}.json`,
     bytes: 64_000,
   }));
-  expect(summarize(rows, budget).violations).toEqual([]);
+  const dataShareSource = {
+    ...source,
+    path: "src/reference.ts",
+    est_chunks: 500,
+  };
+  expect(summarize([...rows, dataShareSource], dataBudget).violations).toEqual(
+    [],
+  );
   expect(
-    summarize([...rows, { ...data, bytes: 1 }], budget).violations.join("\n"),
-  ).toContain("aggregate data bytes 8000001 > 8000000");
+    summarize(
+      [...rows, { ...data, bytes: 1, est_chunks: 0 }, dataShareSource],
+      dataBudget,
+    ).violations.join("\n"),
+  ).toContain(
+    "aggregate data bytes 8000001 > 8000000 (budget.max_est_chunks × 800 × budget.max_data_share)",
+  );
   expect(
     summarize(
       [{ ...source, bytes: 3, est_chunks: 0, blob: true }],
       budget,
     ).violations.join("\n"),
   ).toContain("src/main.ts: binary/blob content");
+});
+
+test("aggregate byte limits follow the effective project budget", () => {
+  const budget = {
+    max_est_chunks: 200_000,
+    max_data_share: 0.3,
+    max_seconds: 600,
+    est_chunks_per_second: 50,
+  };
+  const sources = Array.from({ length: 161 }, (_, i) => ({
+    path: `src/${i}.ts`,
+    bytes: 1_000_000,
+    est_chunks: 1,
+    kind: "text" as const,
+  }));
+  expect(summarize(sources, budget).violations.join("\n")).toContain(
+    "aggregate candidate bytes 161000000 > 160000000 (budget.max_est_chunks × 800)",
+  );
+
+  const rows = Array.from({ length: 733 }, (_, i) => ({
+    path: `data/${i}.json`,
+    bytes: 65_536,
+    est_chunks: 0,
+    kind: "data" as const,
+  }));
+  expect(summarize(rows, budget).violations.join("\n")).toContain(
+    "aggregate data bytes 48037888 > 48000000 (budget.max_est_chunks × 800 × budget.max_data_share)",
+  );
 });
 
 test("measured ETA uses chunk deltas, ignores no advancement, and stops the client wait", async () => {
@@ -927,7 +970,9 @@ test("allowances preserve aggregate bytes, data bytes, chunks, share and blob ga
   expect(result.isErr()).toBe(false);
   if (result.isErr()) return;
   expect(result.value.violations.join("\n")).toContain("est_chunks");
-  expect(result.value.violations.join("\n")).toContain("binary/blob");
+  expect(result.value.violations.join("\n")).toContain(
+    "aggregate candidate bytes",
+  );
 });
 
 test("allowances reject directory and symlink aliases and never add excluded candidates", async () => {

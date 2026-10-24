@@ -113,9 +113,13 @@ rejected before indexing. Omission preserves the ordinary 1 MiB file / 64 KiB da
 ceilings. This permission never includes a file excluded by ccc's matcher, `.gitignore`,
 exclude patterns or `max_file_size`; configure ccc separately if its size exclusion is too
 small for the intended candidate. The planner and backend retain the same candidate set.
-Allowed files retain all file, byte, directory and chunk accounting, the 40 MB total and
-8 MB data aggregate ceilings, data share, content/blob checks, measured-time gates and
-existing resource-control integration. Reads remain bounded by the declared ceiling and total-byte backstop.
+Allowed files retain all file, byte, directory and chunk accounting, data share, content/blob
+checks, measured-time gates and existing resource-control integration. Aggregate byte
+backstops follow the effective `[index]` budget: total candidate bytes are limited to
+`max_est_chunks × 800`, and data bytes to that total multiplied by `max_data_share`. The
+defaults therefore remain 40,000,000 total bytes and 8,000,000 data bytes
+(`50,000 × 800`, then `× 0.20`). The ordinary 1 MiB file / 64 KiB data-file ceilings are
+independent and unchanged. Reads remain bounded by the derived total-byte backstop.
 The existing `--accept-plan` override and advisory fallback time estimate remain unchanged.
 Project `.cocoindex_code/rr.toml` owns this setting; `retrieval.toml` configures definition
 retrieval and is not an index-policy source.

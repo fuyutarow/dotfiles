@@ -6,14 +6,11 @@ import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { cccPython } from "./ccc-scope.ts";
 import { readIndexRate } from "./index-rate.ts";
 
-// Byte backstops complement ceil(chars / 800): binary files have zero chunks,
+// Per-file backstops complement ceil(chars / 800): binary files have zero chunks,
 // and a large dump must not disappear into a source-heavy data-share denominator.
-// Aggregate defaults follow the existing 50,000 chunks / 20% data conventions.
 const CONTENT_LIMITS = {
   max_file_bytes: 1_048_576,
   max_data_file_bytes: 65_536,
-  max_total_bytes: 50_000 * 800,
-  max_data_bytes: 50_000 * 800 * 0.2,
 };
 
 const BudgetSchema = z
@@ -56,6 +53,13 @@ const FileSchema = z.object({
 });
 export type PlanFile = z.infer<typeof FileSchema>;
 export type Budget = z.infer<typeof BudgetSchema>;
+const aggregateByteLimits = (budget: Budget) => {
+  const max_total_bytes = budget.max_est_chunks * 800;
+  return {
+    max_total_bytes,
+    max_data_bytes: max_total_bytes * budget.max_data_share,
+  };
+};
 type Totals = {
   files: number;
   bytes: number;
@@ -184,6 +188,7 @@ export function summarize(
   const dataBytes = files
     .filter((file) => file.kind === "data")
     .reduce((sum, file) => sum + file.bytes, 0);
+  const aggregateLimits = aggregateByteLimits(budget);
   const inadequate =
     "effective candidate remains included; .gitignore/exclude_patterns or max_file_size in .cocoindex_code/settings.yml must exclude it";
   for (const file of files) {
@@ -207,9 +212,9 @@ export function summarize(
         `${file.path}: dump/data candidate ${file.bytes} bytes > data-file limit ${allowance ?? CONTENT_LIMITS.max_data_file_bytes}; ${inadequate}`,
       );
   }
-  if (bytes > CONTENT_LIMITS.max_total_bytes)
+  if (bytes > aggregateLimits.max_total_bytes)
     violations.push(
-      `aggregate candidate bytes ${bytes} > ${CONTENT_LIMITS.max_total_bytes}; exclusions are inadequate; largest paths: ${files
+      `aggregate candidate bytes ${bytes} > ${aggregateLimits.max_total_bytes} (budget.max_est_chunks × 800); exclusions are inadequate; largest paths: ${files
         .toSorted((a, b) =>
           a.bytes === b.bytes
             ? a.path.localeCompare(b.path)
@@ -219,9 +224,9 @@ export function summarize(
         .map((file) => file.path)
         .join(", ")}`,
     );
-  if (dataBytes > CONTENT_LIMITS.max_data_bytes)
+  if (dataBytes > aggregateLimits.max_data_bytes)
     violations.push(
-      `aggregate data bytes ${dataBytes} > ${CONTENT_LIMITS.max_data_bytes}; exclusions are inadequate; exclude dump/data candidates`,
+      `aggregate data bytes ${dataBytes} > ${aggregateLimits.max_data_bytes} (budget.max_est_chunks × 800 × budget.max_data_share); exclusions are inadequate; exclude dump/data candidates`,
     );
   if (chunks > budget.max_est_chunks)
     violations.push(`est_chunks ${chunks} > ${budget.max_est_chunks}`);
@@ -283,6 +288,7 @@ export async function computeIndexPlan(
         "--limits",
         JSON.stringify({
           ...CONTENT_LIMITS,
+          ...aggregateByteLimits(budget),
           file_byte_allowances: budget.file_byte_allowances ?? {},
         }),
       ],
@@ -423,7 +429,7 @@ export function planReport(plan: IndexPlan): string {
       ? "PLAN WARNING: time estimate uses the configured fallback rate; the time budget is advisory until a measured host rate exists.\n"
       : "") +
     `BUDGET: ${JSON.stringify(plan.budget)}\n` +
-    `CONTENT LIMITS (bytes): ${JSON.stringify(CONTENT_LIMITS)}; blob content is refused at any size\n` +
+    `CONTENT LIMITS (bytes): ${JSON.stringify({ ...CONTENT_LIMITS, ...aggregateByteLimits(plan.budget) })}; blob content is refused at any size\n` +
     (plan.violations.length === 0
       ? "PLAN: within budget\n"
       : "PLAN REFUSED: " + plan.violations.join("; ") + "\n") +

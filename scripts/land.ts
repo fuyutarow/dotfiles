@@ -8,7 +8,6 @@ import {
   lstat,
   mkdir,
   mkdtemp,
-  readdir,
   readFile,
   realpath,
   rm,
@@ -36,7 +35,6 @@ import {
   filesets,
   validPath,
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
-import { dispatchLegacyStateDir } from "../tools/shared/src/dispatch-state.ts";
 import { registeredRepos } from "./workspace-repos.ts";
 import {
   enqueue,
@@ -52,8 +50,6 @@ import {
   landExit,
   landLiveness,
   landSummary,
-  ledgerAcceptances,
-  lifecycleJudgments,
   type LandReport,
 } from "./land-verdict.ts";
 
@@ -195,35 +191,7 @@ async function workspaceRuns(
   workspace: string,
   sourceRoot = resolve(import.meta.dir, ".."),
 ): Promise<Result<WorkspaceRun[], Error>> {
-  const lines = await workspaceLedgerLines();
   const target = await realpath(workspace);
-  const runs = new Map<string, WorkspaceRun>();
-  for (const line of lines) {
-    const parsed = jsonOf(
-      z.looseObject({
-        kind: z.literal("run"),
-        run_id: z.string(),
-        cwd: z.string().optional(),
-        workspace: z.string().optional(),
-        ticket: z.looseObject({ name: z.string() }).optional(),
-      }),
-    ).safeParse(line);
-    const matchesWorkspace = async (
-      path: string | undefined,
-    ): Promise<boolean> =>
-      path !== undefined &&
-      (await pathExists(path)) &&
-      (await realpath(path)) === target;
-    if (
-      parsed.success &&
-      ((await matchesWorkspace(parsed.data.cwd)) ||
-        (await matchesWorkspace(parsed.data.workspace)))
-    )
-      runs.set(parsed.data.run_id, {
-        run_id: parsed.data.run_id,
-        ticket: parsed.data.ticket?.name ?? parsed.data.run_id,
-      });
-  }
   const next = await nextAgxRuns(sourceRoot);
   if (next.isErr()) return next;
   const matchingNextRuns: WorkspaceRun[] = [];
@@ -236,28 +204,7 @@ async function workspaceRuns(
     )
       matchingNextRuns.push(entry);
   }
-  return ok(Array.from(runs.values()).concat(matchingNextRuns));
-}
-
-async function workspaceLedgerLines(): Promise<string[]> {
-  const state = dispatchLegacyStateDir();
-  if (!(await pathExists(state))) return [];
-  const archives = (await readdir(state))
-    .filter((name) => /^runs-\d{4}-\d{2}-\d{2}\.jsonl$/u.test(name))
-    .toSorted()
-    .map((name) => join(state, name));
-  const live = join(state, "runs.jsonl");
-  const ledgerPaths = (await pathExists(live)) ? [...archives, live] : archives;
-  return (
-    await Promise.all(ledgerPaths.map((path) => readFile(path, "utf8")))
-  ).flatMap((text) => text.split("\n"));
-}
-
-async function lifecycleLines(): Promise<string[]> {
-  const path = join(dispatchLegacyStateDir(), "lifecycle.jsonl");
-  return (await pathExists(path))
-    ? (await readFile(path, "utf8")).split("\n")
-    : [];
+  return ok(matchingNextRuns);
 }
 
 type WorkspaceJudgment = {
@@ -309,10 +256,8 @@ export function workspacePreflightVerdicts(
     const ticketByRun = new Map(
       runs.map((workspaceRun) => [workspaceRun.run_id, workspaceRun.ticket]),
     );
-    const judgments: WorkspaceJudgment[] = [
-      ...ledgerAcceptances(await workspaceLedgerLines()),
-      ...lifecycleJudgments(await lifecycleLines()),
-      ...runs.flatMap((entry, order) =>
+    const judgments: WorkspaceJudgment[] = runs
+      .flatMap((entry, order) =>
         entry.judgment === undefined || entry.judgment === null
           ? []
           : [
@@ -324,13 +269,13 @@ export function workspacePreflightVerdicts(
                 order: Number.MAX_SAFE_INTEGER + order,
               },
             ],
-      ),
-    ].flatMap((judgment, order) => {
-      const ticket = ticketByRun.get(judgment.run_id);
-      return ticket === undefined
-        ? []
-        : [{ ...judgment, ticket, kind: "acceptance", order }];
-    });
+      )
+      .flatMap((judgment, order) => {
+        const ticket = ticketByRun.get(judgment.run_id);
+        return ticket === undefined
+          ? []
+          : [{ ...judgment, ticket, kind: "acceptance", order }];
+      });
     const tickets = [
       ...new Set(runs.map((workspaceRun) => workspaceRun.ticket)),
     ];

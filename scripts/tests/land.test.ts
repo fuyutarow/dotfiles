@@ -2498,3 +2498,40 @@ test("land skips general consumer checks for changes outside shared surfaces", a
     "SKIP consumer gates: no shared surface changed",
   );
 });
+
+test("workspace preflight trusts listing judgments despite conflicting private legacy files", async () => {
+  const root = await mkdtemp(join(tmpdir(), "land-c2-only-"));
+  temporary.push(root);
+  const workspace = join(root, "workspace");
+  const state = join(root, "state");
+  await mkdir(workspace);
+  await mkdir(join(state, "legacy-v1"), { recursive: true });
+  await writeFile(
+    join(state, "legacy-v1", "runs.jsonl"),
+    JSON.stringify({
+      kind: "run",
+      run_id: "private-decoy",
+      cwd: workspace,
+      ticket: { name: "must-not-appear" },
+    }) + "\n",
+  );
+  await writeFile(
+    join(state, "legacy-v1", "lifecycle.jsonl"),
+    "invalid private state\n",
+  );
+  const bin = await writeAgxLsFixture(
+    root,
+    `process.stdout.write(JSON.stringify([{id: "public-run", ticket: "public-ticket", workspace: ${JSON.stringify(workspace)}, judgment: {decision: "reject"}, progress: null}]));`,
+  );
+  await withProcessEnv(
+    { AGX_STATE_DIR: state, PATH: pathWithFixture(bin) },
+    async () => {
+      const result = await workspacePreflightVerdicts(workspace, root);
+      expect(result.isOk()).toBe(true);
+      if (result.isOk())
+        expect(result.value).toEqual([
+          { ticket: "public-ticket", run_id: "public-run", accept: false },
+        ]);
+    },
+  );
+});

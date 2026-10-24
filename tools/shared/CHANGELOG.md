@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.0 — 2026-10-24
+
+- Remove retired agx worker-state schemas and retain only telemetry path resolution
+
 ## 0.18.4 — 2026-10-23
 
 - Resolve legacy ledger reads under the unified state directory.

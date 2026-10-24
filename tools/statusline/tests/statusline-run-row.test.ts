@@ -14,9 +14,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fromThrowable } from "neverthrow";
-import { serializeActiveMarker } from "../../shared/src/dispatch-state.ts";
+// Historical marker strings are fixture inputs only, never a production schema.
+const serializeActiveMarker = (value: unknown) => ({
+  success: true,
+  text: JSON.stringify(value),
+});
 import { agxJobRunsAsync, agxRouteRunsAsync } from "../src/dispatch-runs.ts";
-import { ProgressReaderSchema } from "../../shared/src/dispatch-state.ts";
+const FixtureObject = z.record(z.string(), z.unknown());
 import { decodedJson } from "./decode.ts";
 import {
   coreSnapshot,
@@ -142,6 +146,17 @@ const tokenLine = (
     },
   });
 
+function listedProgress(path: string) {
+  if (!existsSync(path)) return null;
+  const parsed = jsonOf(FixtureObject).safeParse(readFileSync(path, "utf8"));
+  if (!parsed.success) return null;
+  return {
+    ...parsed.data,
+    cost_usd: parsed.data.cost_usd ?? null,
+    session: parsed.data.session ?? null,
+  };
+}
+
 async function render(
   stateDir?: string,
   xdgStateHome?: string,
@@ -197,6 +212,15 @@ async function render(
               }
               return [
                 {
+                  progress: listedProgress(progressPath),
+                  elapsed_seconds: Math.max(
+                    0,
+                    Math.floor(
+                      Temporal.Now.instant()
+                        .since(Temporal.Instant.from(source.started_at))
+                        .total("seconds"),
+                    ),
+                  ),
                   id,
                   ticket: source.label,
                   state,
@@ -258,13 +282,13 @@ async function render(
 }
 
 describe("legacy enriched Run row", () => {
-  test("accepts the captured agx 4.5 ls sample including legacy optional fields", async () => {
+  test("accepts captured released agx 1.4.0 C2 rows", async () => {
     const dir = join(scratch, "captured-agx-ls-sample");
     const stateDir = join(dir, "state");
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(join(stateDir, "records.jsonl"), "");
     const rows = await Bun.file(
-      join(import.meta.dir, "fixtures", "agx-ls-sample.json"),
+      join(import.meta.dir, "fixtures", "agx-c2-1.4.0.json"),
     ).text();
     const env = isolatedStatuslineEnv({
       HOME: dir,
@@ -303,7 +327,7 @@ describe("legacy enriched Run row", () => {
   });
 
   test.each([false, true])(
-    "renders real sidecar turns and rollout cost (future field: %s)",
+    "renders released progress and cost (future field: %s)",
     async (future) => {
       const dir = join(scratch, `real-shaped-progress-${future}`);
       const session = "real-shaped-rollout-session";
@@ -326,13 +350,14 @@ describe("legacy enriched Run row", () => {
         progressPath,
       );
       const sidecar = decodedJson(
-        ProgressReaderSchema,
+        FixtureObject,
         await Bun.file(progressPath).text(),
       );
       writeFileSync(
         progressPath,
         JSON.stringify({
           ...sidecar,
+          cost_usd: 2.74,
           at: Temporal.Now.instant().toString(),
           ...(future ? { future_progress_field: { events: 84 } } : {}),
         }),
@@ -556,13 +581,21 @@ describe("legacy enriched Run row", () => {
     expect(line).toContain("working · no event yet");
   });
 
-  test("prices the latest live rollout token total for a Codex row", async () => {
+  test("uses the listed cost without consulting a Codex rollout", async () => {
     const dir = join(scratch, "rollout-cost");
     const session = "livecost-unique-session-20261009";
     marker(dir, "rollout", process.pid, "live codex", 10, SESSION, "luna-high");
     writeFileSync(
       join(dir, "active", "rollout.progress.json"),
-      progress("$ bun test", 1, session),
+      JSON.stringify({
+        schema: 1,
+        at: Temporal.Now.instant().toString(),
+        last: "$ bun test",
+        commands: 12,
+        files: 3,
+        session,
+        cost_usd: 0.14,
+      }),
     );
     const day = Temporal.Now.plainDateISO("UTC");
     const rolloutDir = join(
@@ -603,7 +636,7 @@ describe("legacy enriched Run row", () => {
     expect(line).not.toMatch(/\$\d/u);
   });
 
-  test("Run activity comes from the vendor Codex rollout", async () => {
+  test("Run activity comes from C2 despite a conflicting vendor rollout", async () => {
     const session = "fixture-run-activity";
     const cwd = "/home/fuyu/dotfiles-ws-hooksearch";
     const day = Temporal.PlainDate.from("2026-10-14");
@@ -639,6 +672,16 @@ describe("legacy enriched Run row", () => {
         SESSION,
         JSON.stringify([
           {
+            progress: {
+              last: "editing tools/shared/src/shape.ts",
+              at: Temporal.Now.instant().toString(),
+              commands: 2,
+              files: 1,
+              turns: null,
+              usage: null,
+              cost_usd: null,
+              session: null,
+            },
             id: "run-activity",
             ticket: "rollout worker",
             state: "running",
@@ -1501,6 +1544,16 @@ describe("legacy enriched Run row", () => {
       JSON.stringify([
         {
           ...orphanRow("claude-run", 30),
+          progress: {
+            last: "$ bun test tests/x.ts",
+            at: Temporal.Now.instant().toString(),
+            commands: 12,
+            files: 3,
+            turns: null,
+            usage: null,
+            cost_usd: null,
+            session: "claude-session",
+          },
           state: "running",
           row: "sonnet-high",
           ticket: "claude job",
@@ -1557,6 +1610,16 @@ describe("legacy enriched Run row", () => {
           capturedAt: Temporal.Now.instant().epochMilliseconds,
           output: JSON.stringify([
             {
+              progress: {
+                last: "$ state-contract-progress",
+                at: Temporal.Now.instant().toString(),
+                commands: 12,
+                files: 3,
+                turns: null,
+                usage: null,
+                cost_usd: null,
+                session: null,
+              },
               id: "state-contract-run",
               ticket: "state-contract",
               state: "running",

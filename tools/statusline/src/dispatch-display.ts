@@ -28,14 +28,20 @@ function doingText(
     return `${DIM}│${RST} ${phase ?? coreState}`;
   if (phase === undefined) {
     if (d === undefined) return `${DIM}│ no event yet${RST}`;
-    const age = d.ageSecs >= 60 ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}` : "";
-    return `${DIM}│${RST} ${displayAction(d.last)}${age} ${DIM}· ${d.commands} cmd · ${d.files} files${RST}`;
+    const age =
+      d.ageSecs !== undefined && d.ageSecs >= 60
+        ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}`
+        : "";
+    return `${DIM}│${RST} ${displayAction(d.last)}${age} ${DIM}· ${d.commands ?? "n/a"} cmd · ${d.files ?? "n/a"} files${RST}`;
   }
   if (phase !== "working") return `${DIM}│${RST} ${phase}`;
   if (d === undefined || d.last === "starting")
     return `${DIM}│${RST} working · no event yet`;
-  const age = d.ageSecs >= 60 ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}` : "";
-  const activity = `${displayAction(d.last)}${age} ${DIM}· ${d.commands} cmd · ${d.files} files${RST}`;
+  const age =
+    d.ageSecs !== undefined && d.ageSecs >= 60
+      ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}`
+      : "";
+  const activity = `${displayAction(d.last)}${age} ${DIM}· ${d.commands ?? "n/a"} cmd · ${d.files ?? "n/a"} files${RST}`;
   return `${DIM}│${RST} working · ${activity}`;
 }
 

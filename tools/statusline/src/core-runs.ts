@@ -1,3 +1,4 @@
+import { listingProgress } from "./dispatch-state.ts";
 import { basename } from "node:path";
 import { z, recoverInvalid } from "./zod.ts";
 import { readAgxSnapshotAsync } from "./agx-snapshot.ts";
@@ -25,6 +26,8 @@ export function resolveRunScope(
 
 const Row = z.lazy(() =>
   z.object({
+    progress: z.unknown().optional(),
+    cwd: recoverInvalid(z.string()),
     id: z.string(),
     ticket: z.string(),
     state: z.enum(["running", "ended"]),
@@ -100,7 +103,7 @@ export async function readCoreRuns(
       coreState: row.state,
       alive: row.state === "running",
       dispatcherSession: row.dispatcher_session ?? undefined,
-      doing: undefined,
+      doing: listingProgress(row.progress, row.cwd),
     });
   }
   return {

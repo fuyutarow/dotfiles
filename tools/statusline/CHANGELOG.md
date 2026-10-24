@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.7 — 2026-10-24
+
+- Read worker progress and state from released C2 listing fields
+
 ## 0.21.6 — 2026-10-24
 
 - Consume released agx doctor findings through status JSON

@@ -183,9 +183,9 @@ outside this scaffolding step.
 | src/build-dataframe.ts            |   544 | Orchestrate enrichment and short-TTL source caches                        |
 | src/cgroup-memory.ts              |    64 | Read cgroup v1/v2 memory limits and working sets                          |
 | src/dataframe.ts                  |    54 | Typed facts passed to rendering                                           |
-| src/dispatch-runs.ts              |   190 | Read dispatch markers/progress and render aligned worker rows             |
+| src/dispatch-runs.ts              |   102 | Adapt collected C2 listing rows for worker and Job display                 |
 | src/dispatch-warning.ts           |    84 | Codex-share warning from runs.jsonl and route-capability.json (read-only) |
-| src/dispatch-state.ts             |    55 | Read-only dispatch wire schemas and file locations                        |
+| src/dispatch-state.ts             |    46 | Project public C2 progress fields; preserve unknown values                 |
 | src/format.ts                     |   146 | Row assembly and prompt-head colors                                       |
 | src/host-load.ts                  |   537 | CPU/RAM/VRAM sampling, GPU lock/cache, Sys formatting                     |
 | src/identity.ts                   |   409 | Account, agent-name cache, Remote Control probe, herdr updates            |
@@ -207,9 +207,9 @@ outside this scaffolding step.
 - `src/build-dataframe.ts`: `node:fs/promises`, `node:path`, `neverthrow`, `./session-status.ts`, `./dataframe.ts`, `./identity.ts`, `./rate-limits.ts`, `./model-context.ts`, `./repo-state.ts`, `./jobs.ts`, `./host-load.ts`, `./dispatch-runs.ts`, `./dispatch-warning.ts`, `./render-cache.ts`, `./storage.ts`, `./zod.ts`, `./dispatch-state.ts`, `./bounded.ts`, `./codex-rate.ts`, `./jev-usage.ts`
 - `src/cgroup-memory.ts`:
 - `src/dataframe.ts`: `neverthrow`, `./host-load.ts`, `./storage.ts`, `./identity.ts`, `./rate-limits.ts`, `./jobs.ts`, `./dispatch-runs.ts`
-- `src/dispatch-runs.ts`: `node:fs`, `node:path`, `neverthrow`, `./zod.ts`, `./dispatch-state.ts`, `./ansi.ts`, `./jobs.ts`
+- `src/dispatch-runs.ts`: `./zod.ts`, `./core-runs.ts`, `./agx-snapshot.ts`, `./dispatch-display.ts`
 - `src/dispatch-warning.ts`: `node:fs`, `node:os`, `node:path`, `neverthrow`, `./bounded.ts`, `./dispatch-state.ts`, `./prompt-stamp.ts`, `./zod.ts`
-- `src/dispatch-state.ts`: `node:os`, `node:path`, `./zod.ts`
+- `src/dispatch-state.ts`: `neverthrow`, `./zod.ts`, `./dispatch-display.ts`, `./dispatch-runs.ts`, `../../shared/src/agx-telemetry.ts`
 - `src/format.ts`: `./ansi.ts`, `./prompt-stamp.ts`, `./dataframe.ts`, `./model-context.ts`, `./rate-limits.ts`, `./jobs.ts`, `./dispatch-runs.ts`, `./host-load.ts`
 - `src/host-load.ts`: `node:child_process`, `node:fs`, `node:path`, `node:os`, `neverthrow`, `./storage.ts`, `./cgroup-memory.ts`, `./zod.ts`, `./ansi.ts`, `./bounded.ts`
 - `src/identity.ts`: `node:fs`, `node:net`, `neverthrow`, `./zod.ts`, `./bounded.ts`
@@ -271,3 +271,10 @@ The anomaly suffix counts only workspace/ticket findings with clearing actions f
 remain available in `agx worker doctor`; they do not appear in that suffix.
 
 When `gpu-owner.json` has `unresponsiveSince` or a failed probe (`consecutiveProbeMisses > 0`), the GPU segment on Sys shows `⚠ GPU stalled since HH:MM JST · gpu-sampler --check` instead of a utilization average. The timestamp is the recorded stall onset, or the failed attempt time when no onset is recorded, always in Asia/Tokyo. Paused probes add no warning. This only reads owner state; it never runs `nvidia-smi`. The sampler prepares this display for the normal fast read path. Source ages name the stale owner and never create a bottom row on their own.
+
+Worker activity and run state come from the collector's released
+`agx worker ls --json` rows. `src/dispatch-state.ts` projects only C2 fields for
+rendering; missing counters remain `n/a`, while reported zero remains `0`.
+The renderer does not open agx active markers, per-run progress, interim returns,
+or vendor transcripts to fill missing worker facts. Historical marker strings in
+tests are adapted into public listing rows by fixture code only.

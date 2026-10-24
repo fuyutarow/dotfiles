@@ -44,10 +44,12 @@ Send rechecks uniqueness: qualified prefixes require complete selected-vendor in
 ambiguity exits 2 with sorted full candidates. Extend the prefix or select the intended full
 address. Unavailable required discovery exits 3. These resolution failures send nothing.
 
-A qualified full UUID bypasses discovery. Qualified opaque exact names use the native send
-path; UUID-shaped names require inventory, where exact names take precedence over prefixes.
-Names match literally, including spaces and punctuation; quote them. There is no fuzzy,
-substring or wildcard matching. Do not assume opaque-name uniqueness was checked locally.
+Codex qualified full UUIDs bypass discovery. Claude qualified UUIDs, including full UUIDs,
+require the live Claude inventory; xmsg resolves exactly one live registration to its unique
+native name before relay. Qualified opaque exact names use the native send path; UUID-shaped
+names require inventory, where exact names take precedence over prefixes. Names match
+literally, including spaces and punctuation; quote them. There is no fuzzy, substring or
+wildcard matching. Do not assume opaque-name uniqueness was checked locally.
 
 ## Send once and interpret the result
 
@@ -74,8 +76,8 @@ Discovery and send share this single deadline. There are no automatic retries.
 | 0 | Accepted for enqueue. Report acceptance; reading and replying remain unconfirmed. |
 | 1 | Transport rejection/error. Report the failure. |
 | 2 | Invalid usage, missing/invalid selector or ambiguity. Correct the selector or flags. |
-| 3 | CLI or required discovery unavailable/incomplete, or discovery exhausted the deadline before send. Report the diagnostic. |
-| 4 | Acceptance unknown: timeout, failed Claude run or missing confirmed tool result. Check the recipient before considering another send. |
+| 3 | CLI or required discovery failed or timed out before send. Report the diagnostic. |
+| 4 | Acceptance unknown: timeout, failed Claude run or missing tool result. Check before resending. |
 
 Codex uses a queue that may wait for the active response to finish. Exit 0 only confirms
 enqueue; it does not mean the coordinator was notified immediately and cannot satisfy a
@@ -84,6 +86,12 @@ Claude send uses a one-shot model
 relay with `ListAgents` and `SendMessage`; acceptance requires a correlated tool result for
 the unchanged text with `success: true` and a valid `msg_id`. Relay prose is not a receipt.
 The relay's target selection remains model-assisted.
+
+If exit 3 reports `did not select and send to a unique peer`, or `xmsg --version` is below
+0.4.1, suspect an old xmsg earlier on `PATH`. Check `command -v xmsg` and report the stale
+binary to whoever owns its install. That exit 3 means no `SendMessage` was attempted. For a
+Claude reply, copy the exact native `name` from `xmsg list --json` and resend once to
+`claude:<exact native name>`; this is recovery from a known no-send, not a duplicate.
 
 Known limit: `claude agents --json` can list an interactive session that the relay's
 `ListAgents` cannot reach. Such a send can exit 4 without a confirmed `SendMessage` result.
@@ -94,8 +102,11 @@ can also occur after acceptance. Never automatically resend an unknown outcome.
 
 When the task requests a reply and this sender's exact current backend-qualified address is
 supplied or verified, set `SENDER_ADDRESS` to that address and ask the recipient to send
-their reply to it. In the recipient's reply command, `REPLY_TO` is that supplied address
-and `SENDER_ADDRESS` is the recipient's own exact current address, if known:
+their reply to it. When asking a Claude session to reply, give `REPLY_TO` as
+`claude:<exact native name>` verified in the inventory. Give a Claude UUID form only when
+you know the recipient's xmsg is current (0.4.1 or later). In the recipient's reply command,
+`REPLY_TO` is that supplied address and `SENDER_ADDRESS` is the recipient's own exact
+current address, if known:
 
 ```sh
 xmsg send --to "$REPLY_TO" --from "$SENDER_ADDRESS" --message "$REPLY" --timeout-ms 60000

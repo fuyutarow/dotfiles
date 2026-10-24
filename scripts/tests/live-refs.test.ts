@@ -153,6 +153,7 @@ describe("live repo references", () => {
       join(repo, "scripts/render-home.ts"),
       `
       import { join } from "node:path";
+      import "../tools/agx-worker/src/next/cli.ts";
       const cli = Bun.spawnSync([process.execPath, "--no-install", join(import.meta.dir, "../tools/agx-worker/src/next/cli.ts"), "roster", "--json"], { timeout: 10000 });
       if (cli.exitCode !== 0 || cli.stdout.toString() !== "function") process.exit(1);
       for (const path of [".claude/settings.json", ".codex/hooks.json"]) await Bun.write(join(process.env.HOME, path), "{}");

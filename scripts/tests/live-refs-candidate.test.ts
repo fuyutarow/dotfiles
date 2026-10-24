@@ -69,6 +69,12 @@ test("candidate render includes imported siblings and refuses an unselected decl
   });
   await writeFile(join(base, settings), oldSettings);
   await writeFile(join(base, "agents/codex/hooks.json"), "{}");
+  // These declarations are render inputs too: the scratch HOME must not lose
+  // the suite pin when a nested mise removes its caller's PATH activation.
+  await mkdir(join(base, "mise"), { recursive: true });
+  const suitePin = '[tools]\n"github:fuyutarow/agx" = "1.3.1"\n';
+  await writeFile(join(base, "mise.toml"), suitePin);
+  await writeFile(join(base, "mise/dotfiles.toml"), suitePin);
   const manifest = jsonOf(z.record(z.string(), z.unknown())).safeParse(
     await readFile(join(base, "package.json"), "utf8"),
   );
@@ -133,8 +139,16 @@ else process.exit(2);
         cwd: root,
         env: {
           ...process.env,
-          PATH: `${bin}:${process.env.PATH}`,
+          PATH: [bin, ...(process.env.PATH ?? "").split(":")]
+            .filter(
+              (path) =>
+                !path.includes("/mise/installs/github-fuyutarow-agx/") &&
+                !path.endsWith("/mise/shims"),
+            )
+            .join(":"),
           HOME: home,
+          // Keep mise's ancestor discovery outside the operator's home tree.
+          TMPDIR: "/tmp",
           AGX_CONFIG: undefined,
           XDG_CONFIG_HOME: config,
           PRECOMMIT_VCS: "jj",

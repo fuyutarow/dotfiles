@@ -506,7 +506,9 @@ export async function candidateFindings(
   const copied = new Map(
     [...entries].filter(
       ([path]) =>
-        selected(RENDER_INPUTS, path) || path.endsWith("package.json"),
+        selected(RENDER_INPUTS, path) ||
+        ["mise.toml", "mise.lock", "mise/dotfiles.toml"].includes(path) ||
+        path.endsWith("package.json"),
     ),
   );
   const candidates = new Set(entries.keys());
@@ -622,6 +624,12 @@ export async function candidateFindings(
       env: {
         ...process.env,
         HOME: targetHome,
+        // The candidate's pins must reactivate tools after mise removes the
+        // caller's PATH activation. Its disposable HOME owns outputs, not installs.
+        MISE_DATA_DIR:
+          process.env.MISE_DATA_DIR ??
+          join(process.env.XDG_DATA_HOME ?? join(home, ".local/share"), "mise"),
+        MISE_TRUSTED_CONFIG_PATHS: repo,
         AGX_CONFIG: join(repo, "agents/agx/agx.toml"),
         DOTFILES: repo,
         COMMAND_TARGET_HOME: targetHome,

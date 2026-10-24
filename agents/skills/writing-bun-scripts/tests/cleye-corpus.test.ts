@@ -38,7 +38,6 @@ const CORPUS: CorpusEntry[] = [
     executable: "tools/agent-resource-run/src/agent-resource-run.ts",
     command: "status",
   },
-  { path: "scripts/agx-doctor.ts" },
   { path: "tools/herdr-btm/src/btmp.ts", cli: false },
   { path: "tools/herdr-projector/src/herdr-projector.ts" },
   { path: "tools/detect-japanese/src/cli.ts" },

@@ -89,6 +89,72 @@ async function cli(
 describe.skipIf(ccc === null)(
   "CCC-PLAN-GATE with installed ccc matcher",
   () => {
+    test("control density admits the inclusive 0.1% boundary; NUL and denser C0 or DEL remain blobs", async () => {
+      if (ccc === null) return;
+      const root = fixture();
+      const prose = "Research evidence and refutation conditions.\n".repeat(30);
+      const cases = [
+        { name: "stray", control: "\u0008", count: 1, blob: false },
+        { name: "dense", control: "\u0008", count: 2, blob: true },
+        { name: "del-stray", control: "\u007F", count: 1, blob: false },
+        { name: "del-dense", control: "\u007F", count: 2, blob: true },
+        { name: "mixed-dense", control: "\u0008\u007F", count: 1, blob: true },
+        { name: "nul", control: "\0", count: 1, blob: true },
+        { name: "whitespace", control: "\t\n\f\r", count: 100, blob: false },
+      ];
+      for (const item of cases) {
+        const controls = item.control.repeat(item.count);
+        const content = controls + prose.slice(0, 1000 - controls.length);
+        expect(Buffer.byteLength(content)).toBe(1000);
+        writeFileSync(join(root, `${item.name}.md`), content);
+      }
+      const result = await computeIndexPlan(root, ccc);
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) return;
+      for (const item of cases) {
+        expect(
+          result.value.files.find((file) => file.path === `${item.name}.md`),
+        ).toMatchObject({ blob: item.blob, kind: item.blob ? "data" : "text" });
+        expect(
+          result.value.violations.some((violation) =>
+            violation.startsWith(`${item.name}.md: binary/blob content;`),
+          ),
+        ).toBe(item.blob);
+      }
+    });
+
+    test("memo-shaped UTF-8 prose with one backspace is admitted with text chunk accounting", async () => {
+      if (ccc === null) return;
+      const root = fixture();
+      const prefix =
+        "# Abstract and mechanism\n研究報告 GPU results and refutation conditions.\n";
+      const paragraph =
+        "Causal update evidence and mechanism remain reproducible.\n";
+      const before = prefix + paragraph.repeat(40);
+      const memo = Buffer.concat([
+        Buffer.from(before).subarray(0, 1845),
+        Buffer.from([8]),
+        Buffer.from(paragraph.repeat(120)),
+      ]).subarray(0, 6441);
+      expect(memo.length).toBe(6441);
+      expect(memo[1845]).toBe(8);
+      expect(memo.filter((byte) => byte === 8).length).toBe(1);
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(memo);
+      writeFileSync(join(root, "memo-shaped.md"), memo);
+      const result = await computeIndexPlan(root, ccc);
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) return;
+      expect(result.value.violations).toEqual([]);
+      expect(
+        result.value.files.find((file) => file.path === "memo-shaped.md"),
+      ).toMatchObject({
+        bytes: 6441,
+        blob: false,
+        kind: "text",
+        est_chunks: Math.ceil(Array.from(text).length / 800),
+      });
+    });
+
     test("fresh ccc init registration plans and accepts without invoking a real indexer", async () => {
       if (ccc === null) return;
       const root = mkdtempSync(join(tmpdir(), "rr-plan-fresh-root-"));

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.5 — 2026-10-25
+
+- Admit sparse UTF-8 control bytes while retaining NUL and dense-control blob protection
+
 ## 1.4.4 — 2026-10-25
 
 - Derive aggregate index byte limits from project budgets

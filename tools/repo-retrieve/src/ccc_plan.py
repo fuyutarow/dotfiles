@@ -14,6 +14,13 @@ from pathlib import Path, PurePath
 from cocoindex_code.file_walk import build_matcher, iter_included_files
 from cocoindex_code.settings import load_project_settings
 
+# Inclusive tolerance for stray controls in otherwise valid UTF-8 text.
+# Measured 2026-10-25: ccc 0.2.42 indexed a 6,441-byte Markdown fixture with
+# one 0x08 as 7 chunks; it also indexed a NUL-bearing variant. This admission
+# policy intentionally rejects NULs and control density above 0.1% to protect
+# against binary content, rather than mirroring ccc's permissive decoding.
+MAX_CONTROL_BYTE_DENSITY = 0.001
+
 DATA_EXTENSIONS = {
     ".json",
     ".jsonl",
@@ -129,11 +136,14 @@ def main() -> None:
             except UnicodeDecodeError:
                 blob = True
                 text = ""
-            # UTF-8 decoding alone accepts NULs and other binary control bytes.
+            control_bytes = sum(
+                (byte < 32 and byte not in (9, 10, 12, 13)) or byte == 127
+                for byte in raw
+            )
             blob = (
                 blob
-                or any(byte < 32 and byte not in (9, 10, 12, 13) for byte in raw)
-                or b"\x7f" in raw
+                or b"\x00" in raw
+                or control_bytes > len(raw) * MAX_CONTROL_BYTE_DENSITY
             )
             category = "data" if blob else kind(absolute, text)
             chunks = math.ceil(len(text) / 800) if text.strip() else 0

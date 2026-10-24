@@ -164,6 +164,17 @@ per nonblank UTF-8 file; undecodable files remain in the matched file count with
 as ccc skips their content. Directory totals use non-overlapping buckets capped at three levels.
 Data share is the fraction of estimated chunks classified as data. Classification uses machine
 format extensions, notebook outputs, long lines, digit/punctuation density, and minification.
+For valid UTF-8, `MAX_CONTROL_BYTE_DENSITY = 0.001` permits stray control bytes
+at or below 0.1% of raw file bytes. Count C0 bytes (`0x00`–`0x1f`) except tab,
+LF, FF and CR, plus DEL (`0x7f`); any NUL independently makes the file a blob.
+On 2026-10-25, installed ccc 0.2.42 indexed a disposable 6,441-byte Markdown
+fixture containing one `0x08` at offset 1845 as one file and seven chunks.
+It also indexed the NUL variant. The planner is intentionally stricter than ccc
+for NUL and high control-byte density to protect against binary content. The
+0.1% admission threshold tolerates occasional corruption (including the measured
+case) while requiring at least 1,000 bytes per tolerated control byte. UTF-8
+decoding failures remain blobs; file and aggregate ceilings are unchanged.
+
 The configured chunks/s is a fallback estimate for a full rebuild, including files an incremental
 index might reuse. A completed index records ccc's persisted chunk count and elapsed time in the
 per-host `$XDG_STATE_HOME/repo-retrieve/<host>/index-rates.jsonl` file (default

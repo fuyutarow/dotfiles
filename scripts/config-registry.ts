@@ -536,7 +536,6 @@ const OTHER: readonly Surface[] = [
     when: "all",
     sources: [
       "tools/shared/package.json",
-      "tools/agx-usehooks/package.json",
       "tools/smart-open/package.json",
       "tools/repo-retrieve/package.json",
       "tools/agent-resource-run/package.json",
@@ -787,15 +786,6 @@ const OTHER: readonly Surface[] = [
     writer: "human, in the repo",
     verify:
       "bun test scripts/tests/consumer-gate.test.ts scripts/tests/land.test.ts",
-  },
-  {
-    kind: "in-place",
-    when: "all",
-    sources: ["tools/agx-usehooks/consumers.toml"],
-    deployed: "the checkout",
-    consumer: "agx-usehooks consumer typechecks and land's pre-commit gate",
-    writer: "human, in the repo",
-    verify: "mise run usehooks:consumers",
   },
   {
     kind: "in-place",

@@ -489,7 +489,7 @@ run = 'bun ~/dotfiles/scripts/test-mise-scope.ts'
 [tasks.check]
 alias = "c"
 description = "全gate集約 (CI): fmt:check + lint + test"
-depends = ["fmt:check", "lint", "test", "usehooks:consumers"]
+depends = ["fmt:check", "lint", "test"]
 
 # Single whole-tree, non-mutating check list used by tickets and hook:pre-commit.
 [tasks."gate:land"]
@@ -511,12 +511,6 @@ run = "bun scripts/changeset.ts"
 depends = ["bun:check"]
 description = "Validate every pending tool changeset with the shared schema"
 run = "bun scripts/lint-changesets.ts"
-
-[tasks."usehooks:consumers"]
-depends = ["bun:check"]
-dir = "{{config_root}}"
-description = "Read-only declared consumer typechecks against this workspace's agx-usehooks; absent consumers are SKIP"
-run = "bun tools/agx-usehooks/src/check-consumers.ts"
 
 # Device policy tasks are intentionally outside the CI aggregate: a connected, authorized
 # Pixel is required. `android:line:check` is a live-device audit, not a source-code gate.

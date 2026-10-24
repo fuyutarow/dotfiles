@@ -1,8 +1,0 @@
-[[consumers]]
-name = "firedancer"
-root = "~/Workspace/firedancer"
-hooks = ".agents/hooks"
-link_task = "link:agx-usehooks"
-link_path = "node_modules/agx-usehooks"
-# On r99-u26: bunx tsc --noEmit -p /home/fuyu/Workspace/firedancer
-command = ["bunx", "tsc", "--noEmit", "-p", "{root}"]

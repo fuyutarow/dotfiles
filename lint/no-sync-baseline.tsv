@@ -57,7 +57,6 @@
 19	scripts/wsl-capacity-recover.ts
 3	scripts/wsl-winget.ts
 36	tools/agent-resource-run/src/agent-resource-run.ts
-2	tools/agx-usehooks/src/runtime.ts
 5	tools/baseline/src/record.ts
 8	tools/disk-reclaim/src/delete.ts
 5	tools/disk-reclaim/src/engine.ts

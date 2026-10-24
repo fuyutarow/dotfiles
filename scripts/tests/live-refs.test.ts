@@ -133,11 +133,7 @@ describe("live repo references", () => {
         rm(join(repo, ".."), { recursive: true, force: true }),
     };
     const root = join(import.meta.dir, "../..");
-    for (const path of [
-      "package.json",
-      "bun.lock",
-      "tools/agx-usehooks/package.json",
-    ]) {
+    for (const path of ["package.json", "bun.lock"]) {
       await mkdir(join(repo, path, ".."), { recursive: true });
       await writeFile(join(repo, path), await readFile(join(root, path)));
     }

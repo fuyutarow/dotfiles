@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { prepareSkillCopy, sourceDigester } from "../skills-copy.ts";
 import { parseSkillLock } from "../skills-declaration.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "skills-sync.ts");
@@ -59,7 +60,28 @@ function run(
       rmSync(bin, { recursive: true, force: true });
     },
   };
-  const args = ["bun", SCRIPT, "--dotfiles", dotfiles, "--home", home];
+  writeFileSync(
+    join(bin, "build-count.ts"),
+    `
+const original = Bun.build;
+let count = 0;
+Bun.build = async (...args: Parameters<typeof Bun.build>) => {
+  count++;
+  return original(...args);
+};
+process.on("exit", () => console.error("BUILD_CALLS=" + count));
+`,
+  );
+  const args = [
+    "bun",
+    "--preload",
+    join(bin, "build-count.ts"),
+    SCRIPT,
+    "--dotfiles",
+    dotfiles,
+    "--home",
+    home,
+  ];
   if (inHouseOnly) args.push("--in-house-only");
   if (dryRun) args.push("--dry-run");
   const proc = Bun.spawnSync(args, {
@@ -75,7 +97,10 @@ function run(
     },
   });
   return {
-    out: proc.stdout.toString() + proc.stderr.toString(),
+    out:
+      proc.stdout.toString() +
+      proc.stderr.toString().replaceAll(/^BUILD_CALLS=\d+\n/gmu, ""),
+    builds: Number(proc.stderr.toString().match(/BUILD_CALLS=(\d+)/u)?.[1]),
     code: proc.exitCode ?? -1,
   };
 }
@@ -162,6 +187,8 @@ describe("skills:sync", () => {
     const calls = readFileSync(marker, "utf8");
     const again = run(dotfiles, home, marker, true);
     expect(again.code, again.out).toBe(0);
+    expect(again.builds).toBe(0);
+    expect(again.out).toContain("bundled entries: 0");
     expect(readFileSync(marker, "utf8")).toBe(calls);
   }, 120_000);
 
@@ -480,4 +507,78 @@ describe("skills:sync", () => {
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
     cleanup(dotfiles, home);
   });
+});
+
+test("source changes bundle only the owning skill; shared resolved inputs invalidate their importers", async () => {
+  const dotfiles = makeDotfiles([], ["alpha", "beta", "independent"]);
+  const home = makeHome();
+  using _fixtures = {
+    [Symbol.dispose]: () => {
+      cleanup(dotfiles, home);
+    },
+  };
+  mkdirSync(join(dotfiles, "agents/hooks"), { recursive: true });
+  mkdirSync(join(dotfiles, "tools/shared/src"), { recursive: true });
+  writeFileSync(
+    join(dotfiles, "agents/hooks/zod.ts"),
+    'export { value } from "../../tools/shared/src/zod.ts";\n',
+  );
+  const shared = join(dotfiles, "tools/shared/src/zod.ts");
+  writeFileSync(shared, 'export const value = "before";\n');
+  for (const name of ["alpha", "beta", "independent"]) {
+    const scripts = join(dotfiles, "agents/skills", name, "scripts");
+    mkdirSync(scripts);
+    writeFileSync(
+      join(scripts, "entry.ts"),
+      name === "independent"
+        ? 'console.log("independent");\n'
+        : 'import { value } from "../../../hooks/zod.ts"; console.log(value);\n',
+    );
+  }
+  const marker = join(home, "calls");
+  const first = run(dotfiles, home, marker, true);
+  expect(first.code, first.out).toBe(0);
+  expect(first.builds).toBe(6);
+  const second = run(dotfiles, home, marker, true);
+  expect(second.code, second.out).toBe(0);
+  expect(second.builds).toBe(0);
+  writeFileSync(
+    join(dotfiles, "agents/skills/alpha/resource.txt"),
+    "new resource\n",
+  );
+  const changed = run(dotfiles, home, marker, true);
+  expect(changed.code, changed.out).toBe(0);
+  expect(changed.out).toContain("prepared skill alpha (1 entries)");
+  expect(changed.out).not.toContain("prepared skill beta");
+  expect(changed.out).not.toContain("prepared skill independent");
+  expect(changed.builds).toBe(2);
+  writeFileSync(shared, 'export const value = "after";\n');
+  const sharedChange = run(dotfiles, home, marker, true);
+  expect(sharedChange.code, sharedChange.out).toBe(0);
+  expect(sharedChange.out).toContain("prepared skill alpha (1 entries)");
+  expect(sharedChange.out).toContain("prepared skill beta (1 entries)");
+  expect(sharedChange.out).not.toContain("prepared skill independent");
+  expect(sharedChange.builds).toBe(4);
+  // Independently prepare full trees and compare every resource and bundle in both homes.
+  for (const name of ["alpha", "beta", "independent"]) {
+    const full = join(home, "full", name);
+    expect(
+      (
+        await prepareSkillCopy(join(dotfiles, "agents/skills", name), full)
+      ).isOk(),
+    ).toBe(true);
+    const digest = sourceDigester();
+    for (const base of [".agents/skills", ".claude/skills"])
+      expect(await digest(join(home, base, name), [])).toBe(
+        await digest(full, []),
+      );
+  }
+  // A damaged deployment must never be trusted merely because source inputs are unchanged.
+  writeFileSync(join(home, ".claude/skills/beta/scripts/entry.ts"), "broken\n");
+  const repaired = run(dotfiles, home, marker, true);
+  expect(repaired.code, repaired.out).toBe(0);
+  expect(repaired.builds).toBe(2);
+  expect(
+    readFileSync(join(home, ".claude/skills/beta/scripts/entry.ts"), "utf8"),
+  ).toContain("after");
 });

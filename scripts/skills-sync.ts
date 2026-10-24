@@ -34,7 +34,12 @@ import {
   targetSkillNames,
 } from "./skills-install.ts";
 import { skillFiles } from "./skills-declaration.ts";
-import { prepareSkillCopy, unresolvedSkillImports } from "./skills-copy.ts";
+import {
+  prepareSkillCopy,
+  sourceDigester,
+  skillEntries,
+  unresolvedSkillImports,
+} from "./skills-copy.ts";
 
 const USAGE =
   "Usage: bun scripts/skills-sync.ts [--dry-run] [--in-house-only] [--dotfiles <path>] [--home <path>]\n";
@@ -54,7 +59,22 @@ function fail(line: string): void {
 const InHouseStateSchema = z.strictObject({
   version: z.literal(1),
   skills: z.record(z.string(), z.string()),
+  sources: z
+    .record(
+      z.string(),
+      z.object({
+        digest: z.string(),
+        inputs: z.array(z.string()),
+      }),
+    )
+    .optional(),
 });
+
+type PreparedSkills = string | { root: string; reused: Map<string, string> };
+function preparedSkill(prepared: PreparedSkills, name: string): string {
+  if (typeof prepared === "string") return resolve(prepared, name);
+  return prepared.reused.get(name) ?? resolve(prepared.root, name);
+}
 
 type InHouseState = z.infer<typeof InHouseStateSchema>;
 
@@ -218,12 +238,12 @@ async function syncInHouseClaude(
   names: readonly string[],
   cliVersion: string,
   dryRun: boolean,
-  prepared = resolve(root, "agents/skills"),
+  prepared: PreparedSkills = resolve(root, "agents/skills"),
 ): Promise<string | undefined> {
   const source = resolve(root, "agents/skills");
   const install = names.filter((name) => {
     const target = resolve(home, ".claude/skills", name);
-    return treeDigest(target) !== treeDigest(resolve(prepared, name));
+    return treeDigest(target) !== treeDigest(preparedSkill(prepared, name));
   });
   if (dryRun) {
     for (const name of names.toSorted())
@@ -278,7 +298,7 @@ async function syncInHouseClaude(
 
   for (const name of install)
     await cp(
-      resolve(prepared, name),
+      preparedSkill(prepared, name),
       resolve(stageHome, ".claude/skills", name),
       { recursive: true },
     );
@@ -348,7 +368,7 @@ async function syncInHouseCodex(
   cliVersion: string,
   dryRun: boolean,
   deferRemoval = false,
-  prepared = resolve(root, "agents/skills"),
+  prepared: PreparedSkills = resolve(root, "agents/skills"),
 ): Promise<string | undefined> {
   const loaded = loadInHouseState(home);
   if (loaded.isErr()) return loaded.error;
@@ -357,7 +377,7 @@ async function syncInHouseCodex(
     ...codexInHouseNamesFromLock(home, root),
   ]);
   const digests = new Map(
-    names.map((name) => [name, treeDigest(resolve(prepared, name))]),
+    names.map((name) => [name, treeDigest(preparedSkill(prepared, name))]),
   );
   if ([...digests.values()].some((digest) => digest === undefined))
     return "could not read a complete in-house skill tree";
@@ -426,9 +446,13 @@ async function syncInHouseCodex(
     if (missing.length > 0)
       return `skills CLI returned success without copy-installing: ${missing.join(", ")}`;
     for (const name of install)
-      await cp(resolve(prepared, name), resolve(home, ".agents/skills", name), {
-        recursive: true,
-      });
+      await cp(
+        preparedSkill(prepared, name),
+        resolve(home, ".agents/skills", name),
+        {
+          recursive: true,
+        },
+      );
   }
 
   if (stale.length > 0 && !deferRemoval) {
@@ -451,12 +475,16 @@ function recordInHouseState(
   home: string,
   root: string,
   names: readonly string[],
-  prepared = resolve(root, "agents/skills"),
+  prepared: PreparedSkills = resolve(root, "agents/skills"),
+  sources?: InHouseState["sources"],
 ): string | undefined {
   const skills = Object.fromEntries(
-    names.map((name) => [name, treeDigest(resolve(prepared, name)) ?? ""]),
+    names.map((name) => [
+      name,
+      treeDigest(preparedSkill(prepared, name)) ?? "",
+    ]),
   );
-  const writeError = writeInHouseState(home, { version: 1, skills });
+  const writeError = writeInHouseState(home, { version: 1, skills, sources });
   return writeError === undefined
     ? undefined
     : `could not record in-house skill state: ${writeError}`;
@@ -662,14 +690,48 @@ function main(): Promise<void> {
   }
 
   const run = async (): Promise<void> => {
-    const prepared = await mkdtemp(join(tmpdir(), "skills-sync-copies-"));
+    const preparedRoot = await mkdtemp(join(tmpdir(), "skills-sync-copies-"));
     await using _prepared = {
       [Symbol.asyncDispose]: async () => {
-        await rm(prepared, { recursive: true, force: true });
+        await rm(preparedRoot, { recursive: true, force: true });
       },
     };
+    const loaded = loadInHouseState(home);
+    if (loaded.isErr()) {
+      fail(`FATAL: ${loaded.error}`);
+      process.exitCode = 1;
+      return;
+    }
+    const prepared = { root: preparedRoot, reused: new Map<string, string>() };
+    const sources: NonNullable<InHouseState["sources"]> = {};
+    const digestSource = sourceDigester();
+    // Resolution/build configuration also invalidates previously discovered input lists.
+    const configuration = [resolve(import.meta.dir, "skills-copy.ts")];
+    for (const file of ["package.json", "bun.lock", "tsconfig.json"]) {
+      const path = resolve(dotfiles, file);
+      if (await Bun.file(path).exists()) configuration.push(path);
+    }
+    let bundled = 0;
     for (const name of inHouseNames) {
-      const target = resolve(prepared, name);
+      const source = resolve(dotfiles, "agents/skills", name);
+      const previous = loaded.value.sources?.[name];
+      const inputs = [...(previous?.inputs ?? []), ...configuration];
+      const digest = await digestSource(source, inputs);
+      const deployed = loaded.value.skills[name];
+      if (
+        previous !== undefined &&
+        digest !== undefined &&
+        previous.digest === digest &&
+        deployed !== undefined &&
+        [".agents/skills", ".claude/skills"].every(
+          (base) => treeDigest(resolve(home, base, name)) === deployed,
+        )
+      ) {
+        prepared.reused.set(name, resolve(home, ".agents/skills", name));
+        sources[name] = previous;
+        continue;
+      }
+      const target = resolve(preparedRoot, name);
       const built = await prepareSkillCopy(
         resolve(dotfiles, "agents/skills", name),
         target,
@@ -679,6 +741,17 @@ function main(): Promise<void> {
         process.exitCode = 1;
         return;
       }
+      const entries = await skillEntries(source);
+      bundled += entries.length;
+      print(`prepared skill ${name} (${entries.length} entries)`);
+      const sourceInputs = [...built.value.inputs, ...configuration];
+      const sourceDigest = await digestSource(source, sourceInputs);
+      if (sourceDigest === undefined) {
+        fail(`FATAL: cannot digest source inputs for ${name}`);
+        process.exitCode = 1;
+        return;
+      }
+      sources[name] = { digest: sourceDigest, inputs: built.value.inputs };
       const failures = await unresolvedSkillImports(target);
       if (failures.length > 0) {
         fail(`FATAL: ${failures.join("\n")}`);
@@ -686,6 +759,7 @@ function main(): Promise<void> {
         return;
       }
     }
+    print(`bundled entries: ${bundled}`);
     const stale = [...previousInHouseNames(home, dotfiles)].filter(
       (name) => !inHouseSet.has(name) && !names.includes(name),
     );
@@ -742,6 +816,7 @@ function main(): Promise<void> {
         dotfiles,
         inHouseNames,
         prepared,
+        sources,
       );
       if (stateError !== undefined) {
         fail(`FATAL: ${stateError}`);
@@ -890,6 +965,7 @@ function main(): Promise<void> {
       dotfiles,
       inHouseNames,
       prepared,
+      sources,
     );
     if (stateError !== undefined) {
       fail(`FATAL: ${stateError}`);

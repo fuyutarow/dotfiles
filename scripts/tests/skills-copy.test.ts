@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,6 +14,7 @@ import { skillFiles } from "../skills-declaration.ts";
 import {
   prepareSkillCopy,
   skillEntries,
+  sourceDigester,
   unresolvedSkillImports,
 } from "../skills-copy.ts";
 
@@ -78,4 +80,34 @@ test("the gate rejects an unbundled 2026-10-24 hooks/zod.ts copy", async () => {
   expect(
     readFileSync(join(source, "tests/probe-models.test.ts"), "utf8"),
   ).toContain("bun:test");
+});
+
+test("bundler input digest includes transitive resolved modules and dereferenced resources", async () => {
+  const home = mkdtempSync(join(tmpdir(), "skill-copy-inputs-"));
+  using _home = {
+    [Symbol.dispose]: () => {
+      rmSync(home, { recursive: true, force: true });
+    },
+  };
+  const source = join(root, "agents/skills/driving-grok");
+  const built = await prepareSkillCopy(source, join(home, "prepared"));
+  expect(built.isOk()).toBe(true);
+  if (built.isErr()) return;
+  expect(built.value.inputs).toContain(join(root, "agents/hooks/zod.ts"));
+  expect(built.value.inputs).toContain(join(root, "tools/shared/src/zod.ts"));
+  const extra = join(home, "extra.ts");
+  writeFileSync(extra, "first\n");
+  symlinkSync(extra, join(home, "prepared/linked-resource.txt"));
+  const resourceBefore = await sourceDigester()(join(home, "prepared"), []);
+  const inputs = [...built.value.inputs, extra];
+  const before = await sourceDigester()(source, inputs);
+  expect(before).toBeDefined();
+  expect(await sourceDigester()(source, inputs)).toBe(before);
+  writeFileSync(extra, "second\n");
+  expect(await sourceDigester()(join(home, "prepared"), [])).not.toBe(
+    resourceBefore,
+  );
+  expect(await sourceDigester()(source, inputs)).not.toBe(before);
+  rmSync(extra);
+  expect(await sourceDigester()(source, inputs)).toBeUndefined();
 });

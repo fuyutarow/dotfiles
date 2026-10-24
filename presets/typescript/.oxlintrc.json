@@ -56,6 +56,16 @@
     "eslint/require-await": "off",
     // Flags `export {}`, the idiom that makes a script a module so its top-level names stay file-scoped; its autofix removed it from scripts/tests/fake-codex.ts and two fixtures then redeclared each other (observed 2026-10-05).
     "unicorn/require-module-specifiers": "off",
+    // Type suppressions hide invalid operations from checking; reject them and exercise invalid input at runtime.
+    "typescript/ban-ts-comment": [
+      "error",
+      {
+        "ts-ignore": true,
+        "ts-expect-error": true,
+        "ts-nocheck": true,
+        "ts-check": false
+      }
+    ],
     // Dotfiles enables node/no-sync separately with root scanner options for its call-site exemption and baseline ratchet; ordinary lint must not reject the existing backlog. Tests deliberately exercise sync APIs.
     "node/no-sync": "off",
     // An explicit `undefined` ARGUMENT is not useless under TypeScript: a required `T | undefined` parameter needs it (the autofix dropped such arguments and broke 60+ calls, observed 2026-10-05). `return undefined` and `= undefined` stay errors.

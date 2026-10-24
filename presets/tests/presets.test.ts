@@ -110,6 +110,7 @@ describe("TypeScript preset", () => {
 describe("oxlint preset", () => {
   const rules = [
     ["no-explicit-any", "typescript/no-explicit-any"],
+    ["ban-ts-comment", "typescript/ban-ts-comment"],
     ["no-throwing-parse", "eslint-js/no-restricted-syntax"],
   ] as const;
   for (const [name, rule] of rules) {
@@ -124,7 +125,7 @@ describe("oxlint preset", () => {
             "--bun",
             "oxlint",
             "-c",
-            join(ROOT, ".oxlintrc.json"),
+            join(ROOT, "presets/typescript/.oxlintrc.json"),
             "--format",
             "json",
             scratchFile,
@@ -147,7 +148,11 @@ describe("oxlint preset", () => {
       expect((await run("good")).exit).toBe(0);
       const bad = await run("bad");
       expect(bad.exit).not.toBe(0);
-      if (name === "no-explicit-any")
+      if (name === "ban-ts-comment")
+        expect(
+          bad.diagnostics.filter((item) => JSON.stringify(item).includes(rule)),
+        ).toHaveLength(3);
+      if (name !== "no-throwing-parse")
         expect(
           bad.diagnostics.some((item) => JSON.stringify(item).includes(rule)),
         ).toBe(true);

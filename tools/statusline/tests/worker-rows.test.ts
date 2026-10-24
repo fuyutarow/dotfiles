@@ -7,7 +7,6 @@ import { seedAgxSnapshot } from "./helpers.ts";
 import { decodedJson } from "./decode.ts";
 import { z } from "../src/zod.ts";
 
-const CLI = join(import.meta.dir, "../../agx-worker/src/next/cli.ts");
 const SESSION = "worker-rows-dispatcher";
 const VENDOR = "01a1111b-7dab-7d61-8f9b-231c4cc9082b";
 
@@ -32,25 +31,6 @@ test("worker snapshot uses doctor's classification and hides vendor sessions", a
     clock,
     `Temporal.Now.instant = () => Temporal.Instant.from(${JSON.stringify(at)});\n`,
   );
-  const start = (id: string, modern: boolean, live = false) => {
-    const pid = live ? process.pid : 0;
-    return {
-      kind: "started",
-      id,
-      at,
-      ticket: id,
-      writes: [],
-      cwd: root,
-      workspace: root,
-      worker_name: id === "old-unit" ? "agx-x" : "agt_x",
-      workspace_name: "ws_x",
-      row: "terra-high",
-      dispatcher_session: SESSION,
-      vendor_session: VENDOR,
-      pid,
-      ...(modern ? { lease: { pid, start: null, unit: null } } : {}),
-    };
-  };
   const invoke = async (...args: string[]) => {
     const child = Bun.spawn([process.execPath, "--preload", clock, ...args], {
       env,
@@ -67,47 +47,26 @@ test("worker snapshot uses doctor's classification and hides vendor sessions", a
     ]);
     return { stdout, stderr, exit };
   };
-  await Bun.write(
-    join(root, "records.jsonl"),
-    [
-      start("legacy-import", false),
-      start("modern-lost", true),
-      start("old-unit", true, true),
-      start("new-unit", true, true),
-      start("ended-lost", true),
-      {
-        kind: "ended",
-        id: "ended-lost",
-        at,
-        exit: 1,
-        outcome: "lost",
-        report_path: null,
-        vendor_session: VENDOR,
-        returned: false,
-      },
-    ]
-      .map((event) => JSON.stringify(event))
-      .join("\n") + "\n",
-  );
-  const listing = await invoke(CLI, "ls", "--json", "--summary");
-  expect(listing.exit, listing.stderr).toBe(0);
-  const doctor = await invoke(CLI, "doctor");
-  expect(doctor.exit).toBe(1);
-  expect(doctor.stdout).not.toContain("legacy-import");
-  const findings = doctor.stdout
+  // Recorded from the dotfiles mise pin (agx release 1.3.1).
+  const listing = await Bun.file(
+    join(import.meta.dir, "fixtures/worker-rows-listing.json"),
+  ).text();
+  const doctor = await Bun.file(
+    join(import.meta.dir, "fixtures/worker-rows-doctor.jsonl"),
+  ).text();
+  const findings = doctor
     .trim()
     .split("\n")
     .map((line) => decodedJson(DoctorRecord, line));
-  expect(findings.some((record) => record.finding === "unjudged")).toBe(true);
   const doctorLost = findings.filter(
     (record) => record.finding === "orphaned",
   ).length;
-  expect(doctorLost).toBe(1);
+  expect(doctorLost).toBe(2);
   seedAgxSnapshot(env, {
-    output: listing.stdout,
+    output: listing,
     capturedAt: Temporal.Instant.from(at).epochMilliseconds,
     findings: {
-      kinds: { orphaned: 1 },
+      kinds: { orphaned: doctorLost },
       lost: doctorLost,
       capturedAt: Temporal.Instant.from(at).epochMilliseconds,
     },

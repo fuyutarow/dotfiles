@@ -1,0 +1,2 @@
+{"tool":"agx-worker","object":"/fixture/worker-rows/modern-lost","finding":"orphaned","remedy":"agx worker judge modern-lost accept|reject"}
+{"tool":"agx-worker","object":"/fixture/worker-rows/ended-lost","finding":"orphaned","remedy":"agx worker judge ended-lost accept|reject"}

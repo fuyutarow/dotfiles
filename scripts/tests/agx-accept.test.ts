@@ -9,9 +9,6 @@ afterEach(async () => {
     await rm(root, { recursive: true, force: true });
 });
 
-const shellQuote = (value: string): string =>
-  `'${value.replaceAll("'", "'\\''")}'`;
-
 test("composer refuses excess positional arguments", async () => {
   const result = await runProcess(
     [process.execPath, "scripts/agx-accept.ts", "ticket", "extra"],
@@ -47,83 +44,26 @@ test("composer presents the latest ticket run from fixture records and fake jj",
     join(runDir, "verify.log"),
     "ordinary output\n(fail) assertion failed\n",
   );
-  const records = [
-    {
-      kind: "started",
-      id: "run-earlier",
-      at: "2026-10-13T10:00:00Z",
-      ticket: "accept-fold",
-      writes: [],
-      cwd: workspace,
-      workspace,
-      row: "sol-high",
-      dispatcher_session: null,
-      vendor_session: null,
-      pid: 0,
-    },
-    {
-      kind: "ended",
-      id: "run-earlier",
-      at: "2026-10-13T10:01:00Z",
-      exit: 0,
-      report_path: null,
-      vendor_session: null,
-      verify: [],
-    },
-    {
-      kind: "started",
-      id: "run-latest",
-      at: "2026-10-14T10:00:00Z",
-      ticket: "accept-fold",
-      writes: [],
-      cwd: workspace,
-      workspace,
-      row: "terra-medium",
-      dispatcher_session: null,
-      vendor_session: null,
-      pid: 0,
-    },
-    {
-      kind: "ended",
-      id: "run-latest",
-      at: "2026-10-14T10:02:30Z",
-      exit: 1,
-      report_path: join(runDir, "report.json"),
-      vendor_session: null,
-      verify: [
-        { cmd: "bun test", exit: 1, log_path: join(runDir, "verify.log") },
-      ],
-    },
-    {
-      kind: "judged",
-      id: "run-latest",
-      at: "2026-10-14T10:03:00Z",
-      decision: "accept",
-      note: "accepted fixture",
-    },
-    {
-      kind: "started",
-      id: "run-active",
-      at: Temporal.Now.instant().subtract({ minutes: 5 }).toString(),
-      ticket: "hooksearch-active",
-      writes: [],
-      cwd: workspace,
-      workspace,
-      row: "luna-high",
-      dispatcher_session: null,
-      vendor_session: null,
-      pid: process.pid,
-    },
-  ];
-  await writeFile(
-    join(state, "records.jsonl"),
-    `${records.map((event) => JSON.stringify(event)).join("\n")}\n`,
-  );
-
-  const cli = join(process.cwd(), "tools/agx-worker/src/next/cli.ts");
+  // Public listing recorded from release 1.3.1 through the dotfiles mise pin.
+  const listing = (
+    await Bun.file(
+      join(import.meta.dir, "fixtures/agx-accept-runs.json"),
+    ).text()
+  )
+    .replaceAll("__ROOT__", root)
+    .replaceAll(
+      "__ACTIVE_AT__",
+      Temporal.Now.instant().subtract({ minutes: 5 }).toString(),
+    );
+  await writeFile(join(state, "listing.json"), listing);
   await writeFile(
     join(bin, "agx"),
-    `#!/bin/sh\nif [ "\${AGX_FAKE_LEGACY:-}" = "1" ]; then\n  exec ${shellQuote(process.execPath)} ${shellQuote(cli)} ls --json\nfi\n[ "$1" = worker ] || exit 2\nshift\nexec ${shellQuote(process.execPath)} ${shellQuote(cli)} "$@"\n`,
+    `#!${process.execPath}
+const args = process.argv.slice(2);
+if (JSON.stringify(args.slice(0, 3)) !== JSON.stringify(["worker", "ls", args[2]]) || args[3] !== "--json" || args.length !== 4) process.exit(2);
+const rows = await Bun.file(${JSON.stringify(join(state, "listing.json"))}).json();
+process.stdout.write(JSON.stringify(process.env.AGX_FAKE_LEGACY === "1" ? rows : rows.filter(row => row.ticket === args[2])));
+`,
   );
   await writeFile(
     join(bin, "jj"),
@@ -138,7 +78,7 @@ test("composer presents the latest ticket run from fixture records and fake jj",
       cwd: process.cwd(),
       env: {
         ...process.env,
-        AGX_NEXT_STATE_DIR: state,
+        AGX_STATE_DIR: state,
         PATH: `${bin}:${process.env.PATH ?? ""}`,
       },
     },
@@ -165,7 +105,7 @@ test("composer presents the latest ticket run from fixture records and fake jj",
       cwd: process.cwd(),
       env: {
         ...process.env,
-        AGX_NEXT_STATE_DIR: state,
+        AGX_STATE_DIR: state,
         PATH: `${bin}:${process.env.PATH ?? ""}`,
       },
     },
@@ -181,7 +121,7 @@ test("composer presents the latest ticket run from fixture records and fake jj",
       cwd: process.cwd(),
       env: {
         ...process.env,
-        AGX_NEXT_STATE_DIR: state,
+        AGX_STATE_DIR: state,
         PATH: `${bin}:${process.env.PATH ?? ""}`,
       },
     },
@@ -198,7 +138,7 @@ test("composer presents the latest ticket run from fixture records and fake jj",
       cwd: process.cwd(),
       env: {
         ...process.env,
-        AGX_NEXT_STATE_DIR: state,
+        AGX_STATE_DIR: state,
         AGX_FAKE_LEGACY: "1",
         PATH: `${bin}:${process.env.PATH ?? ""}`,
       },

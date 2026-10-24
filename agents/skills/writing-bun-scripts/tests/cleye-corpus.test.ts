@@ -19,8 +19,6 @@ const CORPUS: CorpusEntry[] = [
   { path: "agents/codex/codex-runtime.ts" },
   { path: "agents/codex/hooks/quote-command.ts" },
   { path: "agents/goal-kernel/cli.ts" },
-  { path: "tools/agx-worker/src/next/cli.ts", cli: true },
-  { path: "tools/agx-worker/src/workers/codex.ts" },
   { path: "scripts/deployment-selection.ts" },
   { path: "scripts/consumer-gate.ts" },
   { path: "scripts/guest-capacity-recover.ts" },
@@ -40,13 +38,10 @@ const CORPUS: CorpusEntry[] = [
     executable: "tools/agent-resource-run/src/agent-resource-run.ts",
     command: "status",
   },
-  { path: "tools/agx-ticket/src/tkt.ts" },
-  { path: "tools/agx-worker/src/dispatch.ts" },
   { path: "scripts/agx-doctor.ts" },
   { path: "tools/herdr-btm/src/btmp.ts", cli: false },
   { path: "tools/herdr-projector/src/herdr-projector.ts" },
   { path: "tools/detect-japanese/src/cli.ts" },
-  { path: "tools/jex/src/jex.ts" },
   { path: "tools/baseline/src/baseline.ts" },
   {
     path: "tools/coredev/src/coredev.ts",
@@ -88,7 +83,6 @@ const CORPUS: CorpusEntry[] = [
   { path: "agents/skills/directing-research/scripts/research-check.ts" },
   { path: "agents/skills/directing-research/scripts/research-run-check.ts" },
   { path: "agents/skills/driving-antigravity/scripts/probe-models.ts" },
-  { path: "tools/agx-worker/src/workers/run-claude.ts" },
   { path: "agents/skills/driving-git/scripts/git-check.ts" },
   { path: "agents/skills/driving-grok/scripts/probe-models.ts" },
   { path: "agents/skills/forging-novel-theses/scripts/gate-check.ts" },
@@ -128,6 +122,9 @@ const CORPUS: CorpusEntry[] = [
   { path: "scripts/box-init.ts" },
   { path: "scripts/changeset.ts" },
   { path: "scripts/agx-accept.ts" },
+  { path: "scripts/gate-changed.ts" },
+  { path: "tools/codex-thread-copy/src/codex-thread-copy.ts" },
+  { path: "tools/preset/src/preset.ts" },
   { path: "scripts/agx-host.ts" },
   { path: "scripts/config-map.ts" },
   { path: "scripts/tracked-files.ts" },
@@ -158,14 +155,9 @@ const CORPUS: CorpusEntry[] = [
     path: "tools/storage-headroom/src/storage-headroom.ts",
     unknownFlag: { exit: 2, message: "Unknown flag" },
   },
-  { path: "tools/agx-ws/src/ws.ts" },
   {
     path: "tools/statusline/src/statusline-main.ts",
     executable: "tools/statusline/src/statusline.ts",
-  },
-  {
-    path: "tools/xmsg/src/xmsg.ts",
-    unknownFlag: { exit: 1, message: "Unknown flag" },
   },
 ] satisfies readonly CorpusEntry[];
 
@@ -213,6 +205,20 @@ async function productionCleyeImportsIn(base: string): Promise<string[]> {
   })) {
     const path = `${base}/${file}`;
     if (path.includes("/tests/")) continue;
+    // The external suite is outside the dotfiles parser contract.
+    if (
+      [
+        "agx",
+        "agx-worker",
+        "agx-ws",
+        "agx-ticket",
+        "agx-status",
+        "agx-usehooks",
+        "xmsg",
+        "jex",
+      ].some((name) => path.startsWith(`tools/${name}/`))
+    )
+      continue;
     const source = await Bun.file(join(ROOT, path)).text();
     if (/\bfrom\s+["']cleye["']/u.test(source)) paths.push(path);
   }

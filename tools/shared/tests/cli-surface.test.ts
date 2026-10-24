@@ -74,6 +74,20 @@ async function run(
 for await (const packagePath of new Bun.Glob("tools/*/package.json").scan({
   cwd: ROOT,
 })) {
+  // Released suite CLIs own their acceptance tests in agx.
+  if (
+    [
+      "agx",
+      "agx-worker",
+      "agx-ws",
+      "agx-ticket",
+      "agx-status",
+      "agx-usehooks",
+      "xmsg",
+      "jex",
+    ].includes(packagePath.split("/")[1] ?? "")
+  )
+    continue;
   const decoded = PackageSchema.safeParse(
     await Bun.file(join(ROOT, packagePath)).text(),
   );
@@ -166,21 +180,3 @@ test("CLI template produces the same surface", async () => {
     expect((await run(entry, ["-Z"])).stderr).toContain("Unknown flag: -Z.");
   }
 });
-
-for (const command of [
-  ["worker", "doctor"],
-  ["worker", "dispatch"],
-  ["worker", "run"],
-  ["ws", "add"],
-  ["ticket", "new"],
-]) {
-  test(`agx ${command.join(" ")}: command help is environment-independent`, async () => {
-    const entry = join(ROOT, "tools/agx/src/agx.ts");
-    const args = [...command, "--help"];
-    const plain = await run(entry, args);
-    expect(plain.exit, plain.stderr).toBe(0);
-    expect(plain.stdout).not.toContain("\u001B");
-    for (const { tty, color } of environments)
-      expect(await run(entry, args, tty, color)).toEqual(plain);
-  });
-}

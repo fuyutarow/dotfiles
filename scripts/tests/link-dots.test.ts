@@ -159,10 +159,7 @@ test.each(["mac", "wsl", "linux"] as const)(
     link(ctx, entry[1], destination);
     expect(readlinkSync(destination)).toBe(join(REPO, entry[1]));
     expect(readFileSync(destination, "utf8")).toBe(
-      readFileSync(
-        join(REPO, "tools/agx-worker/src/roster/policy.example.toml"),
-        "utf8",
-      ),
+      readFileSync(join(REPO, entry[1]), "utf8"),
     );
     expect(readFileSync(join(directory, "host.toml"), "utf8")).toBe(
       "host fixture\n",

@@ -101,7 +101,6 @@ function writeOtherInputs(dir: string, productionCli = false): void {
       "tools/shared/package.json",
       "package.json",
       "bun.lock",
-      "tools/agx-usehooks/package.json",
     ]) {
       const target = join(dir, path);
       mkdirSync(join(target, ".."), { recursive: true });

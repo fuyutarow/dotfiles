@@ -5,9 +5,6 @@
     "bun": ">=1.4.3"
   },
   "type": "module",
-  "workspaces": [
-    "tools/agx-usehooks"
-  ],
   "description": "Repo-root graduation project (writing-bun-scripts BG3). Exists so repo .ts scripts may import pinned deps by bare specifier; the pin lives here and in bun.lock, never in the import string. Bun resolves dependencies from each script's real path, including skill scripts, so linked bins resolve from any cwd. Hooks stay zero-dep: they run before any install. Its `bin` entries are the repo's PATH commands: `bun link` (run by `mise run deps`) installs them into bun's global bin dir (~/.bun/bin), which zsh/zshenv puts on every shell's PATH. Nothing hand-symlinks a .ts into ~/.local/bin.",
   "bin": {
     "baseline": "tools/baseline/src/baseline.ts",
@@ -24,10 +21,6 @@
     "btmp": "tools/herdr-btm/src/btmp.ts",
     "herdr-projector": "tools/herdr-projector/src/herdr-projector.ts",
     "tool": "tools/tool-tiers/src/tool.ts",
-    "agx": "tools/agx/src/agx.ts",
-    "agx-msg": "tools/xmsg/src/xmsg.ts",
-    "agx-status": "tools/agx-status/src/status.ts",
-    "agx-ws": "tools/agx-ws/src/ws.ts",
     "coredev": "tools/coredev/src/coredev.ts",
     "sui-keystore-merge": "tools/sui-keystore-merge/src/sui-keystore-merge.ts",
     "jj-commit": "agents/skills/wiring-mise-tasks/scripts/jj-commit.ts",
@@ -44,11 +37,7 @@
     "gate-diagnostics-check": "scripts/harness/gate-diagnostics-check.ts",
     "script-check": "agents/skills/writing-bun-scripts/scripts/script-check.ts",
     "skill-check": "agents/skills/forging-skills/scripts/skill-check.ts",
-    "agx-ticket": "tools/agx-ticket/src/tkt.ts",
     "lint-ts-candidate": "agents/skills/wiring-mise-tasks/scripts/lint-ts-candidate.ts",
-    "jex": "tools/jex/src/jex.ts",
-    "xmsg": "tools/xmsg/src/xmsg.ts",
-    "agx-worker": "tools/agx-worker/src/next/cli.ts",
     "preset": "tools/preset/src/preset.ts",
     "codex-thread-copy": "tools/codex-thread-copy/src/codex-thread-copy.ts"
   },

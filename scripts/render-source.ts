@@ -18,8 +18,6 @@ export const RENDER_INPUTS = [
   "tools/shared/package.json",
   "package.json",
   "bun.lock",
-  // Required by the root package's workspace declaration, including frozen installs.
-  "tools/agx-usehooks/package.json",
   "tools/tool-tiers/src/tool-commands.ts",
   "tools/tool-tiers/src/tool-commands.tsv",
   "Brewfile.core",

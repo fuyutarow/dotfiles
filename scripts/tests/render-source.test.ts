@@ -6,7 +6,7 @@ import { RENDER_INPUTS } from "../render-source.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 const RESTORE = join(ROOT, "scripts/render-source.ts");
-const INPUTS = ["package.json", "bun.lock", "tools/agx-usehooks/package.json"];
+const INPUTS = ["package.json", "bun.lock"];
 
 test("immutable render inputs do not include agx-worker source", () => {
   expect(RENDER_INPUTS).not.toContain("tools/agx-worker/src");

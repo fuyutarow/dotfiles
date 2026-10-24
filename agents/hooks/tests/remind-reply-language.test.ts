@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { runHook, tempDir } from "./helpers.ts";
 import { jsonOf, z } from "../zod.ts";
@@ -22,6 +23,14 @@ describe("remind-reply-language", () => {
 
     expect(result.code).toBe(0);
     expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(
+      `${JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "UserPromptSubmit",
+          additionalContext: `[dotfiles:reply-language-reminder] ${CONTEXT}`,
+        },
+      })}\n`,
+    );
     expect(
       jsonOf(
         z.object({
@@ -42,6 +51,28 @@ describe("remind-reply-language", () => {
     });
   });
 
+  test("linked runtime emits the same reminder from an unrelated cwd", () => {
+    const home = homeWithSettings(JSON.stringify({ language: "japanese" }));
+    mkdirSync(join(home, ".agents"));
+    symlinkSync(join(import.meta.dir, ".."), join(home, ".agents", "hooks"));
+    const result = spawnSync(
+      "sh",
+      [join(home, ".agents", "hooks", "run.sh"), HOOK],
+      {
+        input: "{}",
+        env: { ...process.env, HOME: home },
+        cwd: home,
+        timeout: 10_000,
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toEqual(Buffer.alloc(0));
+    expect(result.stdout).toEqual(
+      Buffer.from(runHook(HOOK, {}, { HOME: home }).stdout),
+    );
+  });
+
   test("another or missing language produces no output", () => {
     for (const settings of [{ language: "english" }, {}]) {
       const home = homeWithSettings(JSON.stringify(settings));
@@ -58,6 +89,26 @@ describe("remind-reply-language", () => {
 
     expect(result.code).toBe(0);
     expect(result.stdout).toBe("");
-    expect(result.stderr.trim()).not.toBe("");
+    expect(result.stderr).toBe(
+      "[dotfiles:reply-language-reminder] malformed ~/.claude/settings.json\n",
+    );
+  });
+
+  test("invalid payloads and another event fail open before reading settings", () => {
+    const home = homeWithSettings("{");
+    for (const payload of ["{", "null", { cwd: "" }, { prompt: 1 }]) {
+      const result = runHook(HOOK, payload, { HOME: home });
+      expect(result.code).toBe(0);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe(
+        "[dotfiles:reply-language-reminder] invalid hook payload; fail open\n",
+      );
+    }
+    const result = runHook(HOOK, { hook_event_name: "Stop" }, { HOME: home });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe(
+      "[dotfiles:reply-language-reminder] wrong hook event; fail open\n",
+    );
   });
 });

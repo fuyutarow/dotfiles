@@ -132,6 +132,41 @@ async function appendAcceptance(
     `${JSON.stringify({ kind: "acceptance", run_id: runId, accept })}\n`,
   );
 }
+// Integration fixtures feed the released selector's current records contract.
+async function appendListingRun(
+  state: string,
+  workspace: string,
+  id: string,
+  ticket: string,
+  at: string,
+  decision?: "accept" | "reject",
+): Promise<void> {
+  await mkdir(state, { recursive: true });
+  const records = [
+    {
+      kind: "started",
+      id,
+      at,
+      ticket,
+      writes: ["keep.txt"],
+      cwd: workspace,
+      workspace,
+      row: "fixture",
+      dispatcher_session: null,
+      vendor_session: null,
+      continues: null,
+      pid: 0,
+    },
+    { kind: "ended", id, at, exit: 0, report_path: null, vendor_session: null },
+    ...(decision === undefined
+      ? []
+      : [{ kind: "judged", id, at, decision, note: "fixture judgment" }]),
+  ];
+  await appendFile(
+    join(state, "records.jsonl"),
+    records.map((record) => JSON.stringify(record)).join("\n") + "\n",
+  );
+}
 afterEach(async () => {
   for (const path of temporary.splice(0))
     await rm(path, { recursive: true, force: true });
@@ -245,7 +280,7 @@ test("workspace preflight invokes the available listing query and filters its ro
   await mkdir(workspace);
   const bin = await writeAgxLsFixture(
     root,
-    `await Bun.write(process.env.LAND_AGX_LS_ARGS, JSON.stringify(process.argv.slice(2))); process.stdout.write(JSON.stringify([{id:'fixture-run',ticket:'fixture-ticket',workspace:${JSON.stringify(workspace)},judgment:{decision:'accept'}}]));`,
+    `await Bun.write(process.env.LAND_AGX_LS_ARGS, JSON.stringify(process.argv.slice(2))); process.stdout.write(JSON.stringify([{id:'fixture-run',ticket:'fixture-ticket',workspace:${JSON.stringify(workspace)},started_at:'2026-10-24T00:00:00Z',judgment:{decision:'accept'}}]));`,
   );
 
   await withProcessEnv(
@@ -265,9 +300,88 @@ test("workspace preflight invokes the available listing query and filters its ro
         await readFile(argsPath, "utf8"),
       );
       expect(args.success).toBe(true);
-      if (args.success) expect(args.data).toEqual(["ls", "--json"]);
+      if (args.success)
+        expect(args.data).toEqual([
+          "ls",
+          "--json",
+          "--workspace",
+          await realpath(workspace),
+          "--all",
+        ]);
     },
   );
+});
+
+test("workspace preflight selects the newest run and its judgment from recorded newest-first rows", async () => {
+  const root = await mkdtemp(join(tmpdir(), "land-newest-run-"));
+  temporary.push(root);
+  const workspace = join(root, "workspace");
+  await mkdir(workspace);
+  const listing = await readFile(
+    join(import.meta.dir, "fixtures/land-workspace-runs-newest-first.json"),
+    "utf8",
+  );
+  const alias = join(root, "workspace-alias");
+  await symlink(workspace, alias);
+  const argsPath = join(root, "args.json");
+  const bin = await writeAgxLsFixture(
+    root,
+    `const args = process.argv.slice(2);
+await Bun.write(process.env.LAND_AGX_LS_ARGS, JSON.stringify(args));
+const rows = JSON.parse(${JSON.stringify(listing)}.replaceAll('__WORKSPACE__', process.env.LAND_TEST_WORKSPACE));
+rows[0].judgment = JSON.parse(process.env.LAND_TEST_NEW_JUDGMENT);
+rows[1].judgment = JSON.parse(process.env.LAND_TEST_OLD_JUDGMENT);
+if (process.env.LAND_TEST_REVERSE === '1') rows.reverse();
+// Thirty newer runs from other workspaces hide the target in an unscoped default listing.
+const decoys = Array.from({length: 30}, (_, i) => ({...rows[0], id: 'decoy-' + i, started_at: '2026-10-24T03:00:00Z', workspace: process.env.LAND_TEST_WORKSPACE + '-other'}));
+let selected = [...decoys, ...rows];
+if (args.includes('--workspace')) selected = selected.filter(row => row.workspace === args[args.indexOf('--workspace') + 1]);
+if (!args.includes('--all')) selected = selected.slice(0, 30);
+process.stdout.write(JSON.stringify(selected));`,
+  );
+  for (const reverse of ["0", "1"]) {
+    for (const [newer, older] of [
+      [{ decision: "accept" }, { decision: "reject" }],
+      [{ decision: "accept" }, null],
+      [{ decision: "reject" }, { decision: "accept" }],
+      [null, { decision: "accept" }],
+    ]) {
+      await withProcessEnv(
+        {
+          PATH: pathWithFixture(bin),
+          LAND_TEST_WORKSPACE: workspace,
+          LAND_AGX_LS_ARGS: argsPath,
+          LAND_TEST_NEW_JUDGMENT: JSON.stringify(newer),
+          LAND_TEST_OLD_JUDGMENT: JSON.stringify(older),
+          LAND_TEST_REVERSE: reverse,
+        },
+        async () => {
+          const result = await workspacePreflightVerdicts(alias, root);
+          expect(result.isOk()).toBe(true);
+          if (result.isOk())
+            expect(result.value).toEqual([
+              {
+                ticket: "repeat-ticket",
+                run_id: "newer-run",
+                accept: newer?.decision === "accept",
+              },
+            ]);
+          const args = jsonOf(z.array(z.string())).safeParse(
+            await readFile(argsPath, "utf8"),
+          );
+          expect(args.success).toBe(true);
+          if (args.success)
+            expect(args.data).toEqual([
+              "ls",
+              "--json",
+              "--workspace",
+              await realpath(workspace),
+              "--all",
+            ]);
+        },
+      );
+    }
+  }
 });
 
 test("removed command preflight lists fixture callers and honors callers-cleared", async () => {
@@ -1314,6 +1428,13 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       `${JSON.stringify({ kind: "run", run_id: "run-from-workspace", cwd: f.worker, ticket: { name: "landsplit" } })}\n`,
     );
     await writeFile(join(f.worker, "keep.txt"), "worker version\n");
+    await appendListingRun(
+      f.env.AGX_STATE_DIR,
+      f.worker,
+      "run-from-workspace",
+      "landsplit",
+      "2026-10-24T00:00:00Z",
+    );
     const refused = await f.land([], { LAND_NO_ACCEPT: "1" });
     expect(refused.exitCode).toBe(1);
     expect(refused.stdout.toString()).toContain(
@@ -1325,6 +1446,16 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       ),
     ).toBe(false);
     await appendAcceptance(state, "run-from-workspace");
+    await appendFile(
+      join(f.env.AGX_STATE_DIR, "records.jsonl"),
+      JSON.stringify({
+        kind: "judged",
+        id: "run-from-workspace",
+        at: "2026-10-24T00:01:00Z",
+        decision: "accept",
+        note: "fixture judgment",
+      }) + "\n",
+    );
     // A root-level ledger is not part of the read-only legacy ledger.
     await writeFile(
       join(f.env.AGX_STATE_DIR, "runs.jsonl"),
@@ -1345,7 +1476,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     expect((await f.log()).filter((event) => event[0] === "agx")).toEqual([]);
   });
 
-  test("accept judgment in an archived legacy ledger covers the latest workspace ticket lineage", async () => {
+  test("accept judgment in the listing covers the latest workspace ticket lineage", async () => {
     const f = await fixture();
     const state = join(f.main, "..", "agx-state", "legacy-v1");
     await mkdir(state, { recursive: true });
@@ -1375,6 +1506,21 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         .join("\n") + "\n",
     );
     await writeFile(join(f.worker, "keep.txt"), "workspace lineage change\n");
+    await appendListingRun(
+      f.env.AGX_STATE_DIR,
+      f.worker,
+      "landsplit-first",
+      "landsplit",
+      "2026-10-24T00:00:00Z",
+    );
+    await appendListingRun(
+      f.env.AGX_STATE_DIR,
+      f.worker,
+      "landsplit-resume",
+      "landsplit",
+      "2026-10-24T00:01:00Z",
+      "accept",
+    );
     const result = await f.land([], {
       LAND_JUDGMENTS: JSON.stringify({
         "landsplit-resume": {
@@ -1428,6 +1574,21 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       })}\n`,
     );
     await writeFile(join(f.worker, "keep.txt"), "accepted amended run\n");
+    await appendListingRun(
+      f.env.AGX_STATE_DIR,
+      f.worker,
+      "landsplit-stopped",
+      "landsplit",
+      "2026-10-24T00:00:00Z",
+    );
+    await appendListingRun(
+      f.env.AGX_STATE_DIR,
+      f.worker,
+      "landsplit-amended",
+      "landsplit",
+      "2026-10-24T00:01:00Z",
+      "accept",
+    );
     const result = await f.land();
     expect(
       result.exitCode,
@@ -1514,6 +1675,22 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         .join("\n") + "\n",
     );
     await writeFile(join(f.worker, "keep.txt"), "workspace lineage change\n");
+    await appendListingRun(
+      f.env.AGX_STATE_DIR,
+      f.worker,
+      "landsplit-first",
+      "landsplit",
+      "2026-10-24T00:00:00Z",
+      "accept",
+    );
+    await appendListingRun(
+      f.env.AGX_STATE_DIR,
+      f.worker,
+      "landsplit-resume",
+      "landsplit",
+      "2026-10-24T00:01:00Z",
+      "reject",
+    );
     const result = await f.land([], {
       LAND_JUDGMENTS: JSON.stringify({
         "landsplit-first": {
@@ -1548,6 +1725,13 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       `${JSON.stringify({ kind: "run", run_id: "reviewed-run", cwd: f.worker, ticket: { name: "reviewed" } })}\n`,
     );
     await writeFile(join(f.worker, "keep.txt"), "worker version\n");
+    await appendListingRun(
+      f.env.AGX_STATE_DIR,
+      f.worker,
+      "reviewed-run",
+      "reviewed",
+      "2026-10-24T00:00:00Z",
+    );
     const refused = await f.land(["--review", "independent-review"], {
       LAND_NO_ACCEPT: "1",
     });
@@ -2521,7 +2705,7 @@ test("workspace preflight trusts listing judgments despite conflicting private l
   );
   const bin = await writeAgxLsFixture(
     root,
-    `process.stdout.write(JSON.stringify([{id: "public-run", ticket: "public-ticket", workspace: ${JSON.stringify(workspace)}, judgment: {decision: "reject"}, progress: null}]));`,
+    `process.stdout.write(JSON.stringify([{id: "public-run", ticket: "public-ticket", workspace: ${JSON.stringify(workspace)}, started_at: "2026-10-24T00:00:00Z", judgment: {decision: "reject"}, progress: null}]));`,
   );
   await withProcessEnv(
     { AGX_STATE_DIR: state, PATH: pathWithFixture(bin) },

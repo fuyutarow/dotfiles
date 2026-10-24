@@ -62,6 +62,7 @@ const pathExists = (path: Parameters<typeof accessPath>[0]) =>
 type WorkspaceRun = {
   run_id: string;
   ticket: string;
+  started_at: string;
   workspace?: string;
   judgment?: { decision: "accept" | "reject" } | null;
 };
@@ -122,6 +123,7 @@ process.stdout.write(JSON.stringify(await gate.runConsumerGates(${JSON.stringify
 
 async function nextAgxRuns(
   root: string,
+  workspace: string,
 ): Promise<Result<WorkspaceRun[], Error>> {
   // agx is installed independently of dotfiles, so its PATH command is authoritative.
   const timeoutSetting = process.env[AGX_WORKER_LS_TIMEOUT_ENV];
@@ -136,11 +138,14 @@ async function nextAgxRuns(
       ),
     );
   const executed = await attempt(() =>
-    runProcess(["agx-worker", "ls", "--json"], {
-      cwd: root,
-      env: process.env,
-      signal: AbortSignal.timeout(timeoutMs),
-    }),
+    runProcess(
+      ["agx-worker", "ls", "--json", "--workspace", workspace, "--all"],
+      {
+        cwd: root,
+        env: process.env,
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+    ),
   );
   if (!executed.ok)
     return err(
@@ -164,6 +169,12 @@ async function nextAgxRuns(
       z.looseObject({
         id: z.string(),
         ticket: z.string(),
+        started_at: z
+          .string()
+          .refine(
+            (value) => timestampMilliseconds(value) !== undefined,
+            "started_at must be an instant",
+          ),
         workspace: z.string(),
         judgment: z
           .looseObject({ decision: z.enum(["accept", "reject"]) })
@@ -181,6 +192,7 @@ async function nextAgxRuns(
     parsed.data.map((entry) => ({
       run_id: entry.id,
       ticket: entry.ticket,
+      started_at: entry.started_at,
       workspace: entry.workspace,
       judgment: entry.judgment,
     })),
@@ -192,7 +204,7 @@ async function workspaceRuns(
   sourceRoot = resolve(import.meta.dir, ".."),
 ): Promise<Result<WorkspaceRun[], Error>> {
   const target = await realpath(workspace);
-  const next = await nextAgxRuns(sourceRoot);
+  const next = await nextAgxRuns(sourceRoot, target);
   if (next.isErr()) return next;
   const matchingNextRuns: WorkspaceRun[] = [];
   for (const entry of next.value) {
@@ -205,31 +217,6 @@ async function workspaceRuns(
       matchingNextRuns.push(entry);
   }
   return ok(matchingNextRuns);
-}
-
-type WorkspaceJudgment = {
-  run_id: string;
-  ticket: string;
-  kind: string;
-  accept?: boolean;
-  at?: string;
-  order: number;
-};
-
-function latestJudgment(
-  judgments: WorkspaceJudgment[],
-  ticket: string,
-): WorkspaceJudgment | undefined {
-  return judgments
-    .filter((judgment) => judgment.ticket === ticket)
-    .toSorted((left, right) => {
-      const leftAt = timestampMilliseconds(left.at);
-      const rightAt = timestampMilliseconds(right.at);
-      if (leftAt !== undefined && rightAt !== undefined && leftAt !== rightAt)
-        return leftAt - rightAt;
-      return left.order - right.order;
-    })
-    .at(-1);
 }
 
 function timestampMilliseconds(value: string | undefined): number | undefined {
@@ -253,42 +240,22 @@ export function workspacePreflightVerdicts(
 ): ResultAsync<WorkspacePreflightVerdict[], Error> {
   return safeTry(async function* () {
     const runs = yield* await workspaceRuns(workspace, sourceRoot);
-    const ticketByRun = new Map(
-      runs.map((workspaceRun) => [workspaceRun.run_id, workspaceRun.ticket]),
+    const newestFirst = runs.toSorted((left, right) =>
+      Temporal.Instant.compare(right.started_at, left.started_at),
     );
-    const judgments: WorkspaceJudgment[] = runs
-      .flatMap((entry, order) =>
-        entry.judgment === undefined || entry.judgment === null
-          ? []
-          : [
-              {
-                run_id: entry.run_id,
-                ticket: entry.ticket,
-                kind: "judged",
-                accept: entry.judgment.decision === "accept",
-                order: Number.MAX_SAFE_INTEGER + order,
-              },
-            ],
-      )
-      .flatMap((judgment, order) => {
-        const ticket = ticketByRun.get(judgment.run_id);
-        return ticket === undefined
-          ? []
-          : [{ ...judgment, ticket, kind: "acceptance", order }];
-      });
     const tickets = [
       ...new Set(runs.map((workspaceRun) => workspaceRun.ticket)),
     ];
     return ok(
       tickets.flatMap((ticket) => {
-        const latestRun = runs.findLast((entry) => entry.ticket === ticket);
+        const latestRun = newestFirst.find((entry) => entry.ticket === ticket);
         return latestRun === undefined
           ? []
           : [
               {
                 ticket,
                 run_id: latestRun.run_id,
-                accept: latestJudgment(judgments, ticket)?.accept === true,
+                accept: latestRun.judgment?.decision === "accept",
               },
             ];
       }),

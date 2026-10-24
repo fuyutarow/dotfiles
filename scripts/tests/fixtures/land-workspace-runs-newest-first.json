@@ -1,0 +1,18 @@
+[
+  {
+    "id": "newer-run",
+    "ticket": "repeat-ticket",
+    "workspace": "__WORKSPACE__",
+    "started_at": "2026-10-24T02:00:00.000Z",
+    "judgment": { "decision": "accept" },
+    "progress": null
+  },
+  {
+    "id": "older-run",
+    "ticket": "repeat-ticket",
+    "workspace": "__WORKSPACE__",
+    "started_at": "2026-10-24T01:00:00.000Z",
+    "judgment": { "decision": "reject" },
+    "progress": null
+  }
+]

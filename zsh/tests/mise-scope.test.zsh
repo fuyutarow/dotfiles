@@ -67,6 +67,13 @@ check_global_mise_tools() {
     import { existsSync, readdirSync } from "node:fs";
     import { join } from "node:path";
     const dir = process.argv[1];
+    const declaration = process.argv[2];
+    const allowedVersion = Bun.TOML.parse(await Bun.file(declaration).text())
+      .tools?.["github:fuyutarow/agx"];
+    if (typeof allowedVersion !== "string") {
+      process.stdout.write(`[FAIL] ${declaration}: missing agx version in [tools]\n`);
+      process.exit(1);
+    }
     const conf = join(dir, "conf.d");
     const files = [join(dir, "config.toml"),
       ...(existsSync(conf) ? readdirSync(conf).filter(name => name.endsWith(".toml")).sort()
@@ -81,7 +88,7 @@ check_global_mise_tools() {
         if (config.tools === null || typeof config.tools !== "object" || Array.isArray(config.tools))
           throw new Error("[tools] must be a table");
         for (const [key, version] of Object.entries(config.tools)) {
-          if (key !== "github:fuyutarow/agx" || version !== "1.3.0" || ++pins > 1) {
+          if (key !== "github:fuyutarow/agx" || version !== allowedVersion || ++pins > 1) {
             process.stdout.write(`[FAIL] ${file}: forbidden global tool row ${key} = ${JSON.stringify(version)} (INV-6)\n`);
             failed = true;
           }
@@ -91,9 +98,9 @@ check_global_mise_tools() {
         failed = true;
       }
     }
-    if (!failed) process.stdout.write("[PASS] global mise config: no toolchain defaults; only the optional agx 1.3.0 suite pin\n");
+    if (!failed) process.stdout.write(`[PASS] global mise config: no toolchain defaults; only the optional agx ${allowedVersion} suite pin\n`);
     process.exit(failed ? 1 : 0);
-  ' "${XDG_CONFIG_HOME:-$HOME/.config}/mise"
+  ' "${XDG_CONFIG_HOME:-$HOME/.config}/mise" "$ROOT/mise/dotfiles.toml"
 }
 
 if [[ ${1:-} == --global-config-only ]]; then

@@ -52,9 +52,9 @@ checksum = "sha256:d7a7d3eb216614544aab0cde2d8d9f2e4e87839bf5a30a1cd11d077f02d84
 url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.3/bun-windows-x64-baseline.zip"
 
 [[tools."github:fuyutarow/agx"]]
-version = "1.3.0"
+version = "1.3.1"
 backend = "github:fuyutarow/agx"
-specifiers = ["1.3.0"]
+specifiers = ["1.3.1"]
 
 [[tools.rumdl]]
 version = "0.2.78"

@@ -1471,16 +1471,14 @@ function indexCommand() {
         commandResult = err(indexResult.error);
         return;
       }
-      commandResult = indexResult.map(() => indexResult.value);
+      commandResult = indexResult.map((outcome) => outcome.exitCode);
+      // Only a completed index admits post-index work. In particular, a successful
+      // read-only plan also exits zero, but must never build or index the catalog.
+      if (indexResult.value.kind !== "indexed") return;
       // Warm the definition catalog too, so the first `definition` query after an index does not
       // pay the build. Its failure is reported, never turned into an index failure.
       const project = findRegisteredProject(process.cwd());
-      if (
-        indexResult.value === 0 &&
-        parsed.flags.detach !== true &&
-        project !== null &&
-        project !== ""
-      ) {
+      if (project !== null && project !== "") {
         const notes: string[] = [];
         const warmed = await fromAsyncThrowable(
           () => refreshCatalog(project, notes),

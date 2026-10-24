@@ -84,7 +84,9 @@ neither counts pending requests.
 
 Every `rr index` first plans the current file set with ccc's installed matcher and walker,
 including nested `.gitignore`, exclude pruning, and `max_file_size`. Run `rr index --plan`
-to inspect it without starting ccc or contacting the daemon. Stdout contains one JSONL record
+to inspect it using only the read-only matcher, without starting `ccc index`, refreshing the
+definition catalog, or contacting the daemon. This holds for both admitted (exit 0) and refused
+(exit 4) plans; only a completed real index warms the catalog. Stdout contains one JSONL record
 per matched file (`path`, `bytes`, `est_chunks`, `kind`), followed by a `type: "summary"` record.
 Stderr shows the ten largest directory/extension/kind contributors. Source and prose contributors
 are informational only; suggested exclude lines name exact files classified as data, and ccc's

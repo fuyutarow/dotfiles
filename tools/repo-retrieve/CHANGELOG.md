@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.6 — 2026-10-25
+
+- Keep index --plan read-only and warm the definition catalog only after completed indexing.
+
 ## 1.4.5 — 2026-10-25
 
 - Admit sparse UTF-8 control bytes while retaining NUL and dense-control blob protection

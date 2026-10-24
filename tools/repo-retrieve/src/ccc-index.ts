@@ -1119,11 +1119,18 @@ async function runChildToStderr(
 // freshness without ever observing an indexer run, and was deleted because that assertion could
 // not be verified -- see the file header). The only way to make the watermark fresh again is to
 // run `repo-retrieve index`, which reindexes AND records the result in one step.
+export type IndexOutcome =
+  | { kind: "plan"; exitCode: 0 | 4 }
+  | { kind: "refused"; exitCode: 4 }
+  | { kind: "detached"; exitCode: 0 }
+  | { kind: "indexed"; exitCode: 0 }
+  | { kind: "failed"; exitCode: number };
+
 export async function runIndexWrapper(
   timeoutMs = INDEX_STALL_MS,
   mode: "wait" | "detach" = "wait",
   options: { plan?: boolean; acceptPlan?: boolean } = {},
-): Promise<Result<number, Error>> {
+): Promise<Result<IndexOutcome, Error>> {
   const resolution = resolveRegisteredProject(process.cwd());
   if (resolution?.workspace !== null && resolution?.workspace !== undefined) {
     return err(
@@ -1147,9 +1154,10 @@ export async function runIndexWrapper(
   process.stderr.write(planReport(plan));
   if (options.plan === true) {
     writePlanJsonl(plan);
-    return ok(plan.violations.length === 0 ? 0 : 4);
+    return ok({ kind: "plan", exitCode: plan.violations.length === 0 ? 0 : 4 });
   }
-  if (plan.violations.length > 0 && options.acceptPlan !== true) return ok(4);
+  if (plan.violations.length > 0 && options.acceptPlan !== true)
+    return ok({ kind: "refused", exitCode: 4 });
   if (options.acceptPlan === true) {
     const accepted = await fromAsyncThrowable(
       () =>
@@ -1234,7 +1242,7 @@ export async function runIndexWrapper(
     process.stdout.write(
       `RESULT: INDEX_REQUESTED project=${project} head=${headLabel(head.value)} state=pending\n`,
     );
-    return ok(0);
+    return ok({ kind: "detached", exitCode: 0 });
   }
 
   // Read HEAD both before and after the (potentially long-running) `ccc index` child. If they
@@ -1281,7 +1289,7 @@ export async function runIndexWrapper(
         capturedRequest,
         expectedHead === undefined ? "failed" : "stale",
       );
-    return ok(certifiedRun.code);
+    return ok({ kind: "failed", exitCode: certifiedRun.code });
   }
   const head = certifiedRun.head;
   const dirty = await isWorkingTreeDirty(project);
@@ -1308,7 +1316,7 @@ export async function runIndexWrapper(
   if (currentHead.value === head)
     await markWorkerRequest(project, capturedRequest, "complete", head);
   else if (worker) await markWorkerRequest(project, capturedRequest, "stale");
-  return ok(0);
+  return ok({ kind: "indexed", exitCode: 0 });
 }
 
 export async function runIndexStatus(): Promise<Result<number, Error>> {

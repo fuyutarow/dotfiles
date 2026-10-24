@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   truncateSync,
@@ -85,6 +86,97 @@ async function cli(
   ]);
   return { stdout, stderr, code };
 }
+
+// Both the ccc entry point and its interpreter are isolated recording doubles.
+// Unexpected commands fail closed: this fixture cannot reach a real daemon.
+function recordingFixture(refused = false) {
+  const root = fixture();
+  const bin = join(root, ".fake-bin");
+  const home = join(root, ".home");
+  const log = join(root, ".invocations.jsonl");
+  mkdirSync(bin);
+  mkdirSync(home);
+  writeFileSync(log, "");
+  if (refused)
+    writeFileSync(
+      join(root, ".cocoindex_code/rr.toml"),
+      "[index]\nmax_est_chunks = 1\n",
+    );
+  const interpreter = join(bin, "python");
+  writeFileSync(
+    interpreter,
+    `#!${process.execPath}
+import { appendFileSync, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(log)}, JSON.stringify({cwd: process.cwd(), args}) + '\\n');
+const script = basename(args[0]);
+if (script === 'ccc_plan.py') {
+  console.log(args.includes('--validate-excludes') ? '[]' : JSON.stringify({path: 'source.ts', bytes: 14000, est_chunks: 18, kind: 'text'}));
+} else if (script === 'ccc_defs.py') {
+  const record = {name: 'calculateResult', kind: 'function', lang: 'typescript', file: 'source.ts', start: 1, end: 1, signature: 'calculateResult(input)', doc: '', body: '', public: true};
+  writeFileSync(args[2], JSON.stringify({files: {'source.ts': {records: [record], publics: []}}}));
+} else if (script === 'ccc' && args[1] === 'index') {
+  writeFileSync(join(process.cwd(), '.cocoindex_code/target_sqlite.db'), 'fixture');
+} else if (script === 'ccc' && args[1] === 'status') {
+  console.log('Files: 1\\nChunks: 18');
+} else if (script === 'ccc' && args[1] === 'daemon' && args[2] === 'status') {
+  console.log(process.cwd() + ' [idle]');
+} else {
+  console.error('Unexpected fixture command', args);
+  process.exitCode = 99;
+}
+`,
+  );
+  chmodSync(interpreter, 0o755);
+  writeFileSync(join(bin, "ccc"), `#!${interpreter}\n`);
+  chmodSync(join(bin, "ccc"), 0o755);
+  return {
+    root,
+    home,
+    env: {
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      HOME: home,
+      XDG_STATE_HOME: join(home, "state"),
+      COCOINDEX_CODE_DB_PATH_MAPPING: "",
+    },
+    calls: () => readFileSync(log, "utf8").trim().split("\n").filter(Boolean),
+  };
+}
+
+for (const refused of [false, true]) {
+  test(`--plan is read-only when ${refused ? "refused (exit 4)" : "admitted (exit 0)"}`, async () => {
+    const f = recordingFixture(refused);
+    const settingsBefore = readdirSync(join(f.root, ".cocoindex_code"));
+    const result = await cli(f.root, ["--plan"], f.env);
+    expect(result.code).toBe(refused ? 4 : 0);
+    expect(result.stdout).toContain('"type":"summary"');
+    // Exactly the enumeration and exclusion-safety matcher reads; no ccc verb,
+    // extractor, catalog build, watermark or persistent rate/request writes.
+    const calls = f.calls();
+    expect(calls.filter((call) => !call.includes("ccc_plan.py"))).toEqual([]);
+    expect(calls).toHaveLength(2);
+    expect(result.stderr).not.toContain("catalog");
+    expect(readdirSync(f.home)).toEqual([]);
+    expect(readdirSync(join(f.root, ".cocoindex_code"))).toEqual(
+      settingsBefore,
+    );
+  });
+}
+
+test("a completed foreground index still extracts and indexes only the definition catalog", async () => {
+  const f = recordingFixture();
+  const result = await cli(f.root, [], f.env);
+  expect(result.code).toBe(0);
+  expect(result.stdout).toContain("RESULT: INDEXED");
+  expect(result.stderr).toContain("catalog built: 1 definitions");
+  const calls = f.calls();
+  expect(calls.some((call) => call.includes("ccc_defs.py"))).toBe(true);
+  const indexes = calls.filter((call) => call.includes('"index"'));
+  expect(indexes).toHaveLength(2);
+  expect(indexes[0]).toContain(f.root);
+  expect(indexes[1]).toContain(join(f.home, ".cache/repo-retrieve/catalog"));
+});
 
 describe.skipIf(ccc === null)(
   "CCC-PLAN-GATE with installed ccc matcher",

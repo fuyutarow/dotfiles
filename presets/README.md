@@ -64,7 +64,7 @@ as a configuration surface covers new kinds without registry edits.
 ## Existing presets
 
 `typescript` copies `tsconfig.json`, `package.json`, `zod.ts`, `mise-tasks.toml`,
-`lint-oxlint.ts`, `.oxlintrc.json`, and its JS plugin. See
+`lint-oxlint.ts`, `.oxlintrc.json`, `house.oxlintrc.json`, and its JS plugin. See
 [the TypeScript README](typescript/README.md) for React opt-in and the checked
 oxlint runner.
 Dotfiles extends `typescript/tsconfig.json`, keeping its own include/exclude paths at the
@@ -77,12 +77,17 @@ Consumers retain their own name, bins, workspaces, type, dependencies and extra
 devDependencies. Fix reported package key drift in the consumer; sync preserves
 the package bytes.
 
-The TypeScript preset copies complete, self-contained oxlint configuration and
-its `house-plugin.js` into consumers. They own and commit those copies. Local
-ignores and React overrides use oxlint's own JSONC format. `preset diff` reports
-byte drift against the preset; `preset sync typescript` replaces only the oxlint
-config and plugin. Consumer lint reads its local files. Dotfiles itself extends
-the preset using a repository-local path.
+The TypeScript preset owns `house.oxlintrc.json` and `house-plugin.js`, copied to
+the consumer root and compared byte for byte by `preset diff`. The consumer owns
+`.oxlintrc.json`: apply creates it only when absent, with
+`"extends": ["./house.oxlintrc.json"]` and an empty `ignorePatterns` list.
+Put repository ignores and optional React overrides in that wrapper; its edits
+are excluded from drift checks and preserved by apply and sync.
+`preset sync typescript` refreshes the managed house config and plugin, creating
+the wrapper if absent. Consumers commit all three files and lint reads those
+local files. Existing consumers must add the extends entry to their wrapper
+when adopting the split. Dotfiles itself extends the house file using a
+repository-local path.
 
 `python` supplies uv project metadata, Ruff/Pyright settings, hooks, mise tasks,
 and optional examples. `rust` supplies Cargo workspace lints, build profiles,

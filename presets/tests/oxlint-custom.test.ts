@@ -18,8 +18,8 @@ await cp(
   join(scratch, "presets/typescript/dotfiles-plugin.js"),
 );
 await cp(
-  join(PRESET, ".oxlintrc.json"),
-  join(scratch, "presets/typescript/.oxlintrc.json"),
+  join(PRESET, "house.oxlintrc.json"),
+  join(scratch, "presets/typescript/house.oxlintrc.json"),
 );
 await cp(join(ROOT, ".oxlintrc.json"), join(scratch, ".oxlintrc.json"));
 await mkdir(join(scratch, "node_modules"));
@@ -44,7 +44,7 @@ const cases = jsonOf(
 ).safeParse(await Bun.file(join(PRESET, "fixtures.json")).text());
 if (!cases.success) expect.unreachable(cases.error.message);
 const configs = await Promise.all(
-  [join(PRESET, ".oxlintrc.json"), join(ROOT, ".oxlintrc.json")].map(
+  [join(PRESET, "house.oxlintrc.json"), join(ROOT, ".oxlintrc.json")].map(
     async (path) => {
       const parsed = Config.safeParse(
         Bun.JSONC.parse(await Bun.file(path).text()),

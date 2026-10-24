@@ -137,6 +137,7 @@ for (const file of files) {
     action === "sync" &&
     ![
       ".oxlintrc.json",
+      "house.oxlintrc.json",
       "house-plugin.js",
       "oxlint-plugin-eslint.d.ts",
     ].includes(relative(preset.directory, file.source))

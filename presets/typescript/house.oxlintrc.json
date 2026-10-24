@@ -1,0 +1,162 @@
+// Preset-managed house rules. Keep repository additions in .oxlintrc.json.
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "node"],
+  "jsPlugins": [
+    { "name": "house", "specifier": "./house-plugin.js" },
+    {
+      "name": "eslint-js",
+      "specifier": "oxlint-plugin-eslint"
+    }
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "error",
+    "perf": "error",
+    // Restrictions are opt-in through individual rules below.
+    "restriction": "off",
+    // Formatting belongs to oxfmt; naming style alone prevents no failure.
+    "style": "off",
+    // Unstable rules are deferred.
+    "nursery": "off"
+  },
+  "rules": {
+    "house/no-restricted-globals": [
+      "error",
+      {
+        "name": "Date",
+        "message": "Date is banned: use Temporal (bun >= 1.4 ships it; mise.toml pins bun \"1.4\"; `mise run doctor` bun-floor guards the runtime)."
+      }
+    ],
+    // 1109 hits. Requires DEEPLY readonly parameter types, which mutable library classes (Response, Subprocess, Bun.Glob) cannot satisfy, and disable comments are banned; revisit with a measured `allow` list.
+    "typescript/prefer-readonly-parameter-types": "off",
+    // 274 hits. A length threshold names no failure; nesting is limited by max-depth and size is a review judgment.
+    "eslint/max-lines-per-function": "off",
+    // 70 hits. A file-length threshold names no failure.
+    "eslint/max-lines": "off",
+    // 2 hits. A count threshold names no failure.
+    "eslint/max-classes-per-file": "off",
+    // 224 hits. The house style puts the reason for a constant or a branch on its own line.
+    "eslint/no-inline-comments": "off",
+    // 141 hits. The mechanical fix (Promise.all) runs deliberately serial work concurrently, which breaks resource admission (orchestrating-agents P7) and rate limits.
+    "eslint/no-await-in-loop": "off",
+    // 54 hits. Style: `_` marks intentionally unused bindings and foreign API names (`__proto__` guards).
+    "eslint/no-underscore-dangle": "off",
+    // 45 hits. Style; no failure prevented.
+    "eslint/no-negated-condition": "off",
+    // 45 hits. Style; no failure prevented (same as the eslint rule).
+    "unicorn/no-negated-condition": "off",
+    // 8 hits. Style; no failure prevented.
+    "eslint/sort-vars": "off",
+    // 3 hits, all the house pattern of a zod schema and its type sharing one name (`const Row = z…; type Row = z.output<typeof Row>`); tsc already rejects a real redeclaration.
+    "eslint/no-redeclare": "off",
+    // Duplicate of typescript/require-await, which is type-aware and stays on.
+    "eslint/require-await": "off",
+    // Flags `export {}`, the idiom that makes a script a module so its top-level names stay file-scoped; its autofix removed it from scripts/tests/fake-codex.ts and two fixtures then redeclared each other (observed 2026-10-05).
+    "unicorn/require-module-specifiers": "off",
+    // Type suppressions hide invalid operations from checking; reject them and exercise invalid input at runtime.
+    "typescript/ban-ts-comment": [
+      "error",
+      {
+        "ts-ignore": true,
+        "ts-expect-error": true,
+        "ts-nocheck": true,
+        "ts-check": false
+      }
+    ],
+    // Dotfiles enables node/no-sync separately with root scanner options for its call-site exemption and baseline ratchet; ordinary lint must not reject the existing backlog. Tests deliberately exercise sync APIs.
+    "node/no-sync": "off",
+    // An explicit `undefined` ARGUMENT is not useless under TypeScript: a required `T | undefined` parameter needs it (the autofix dropped such arguments and broke 60+ calls, observed 2026-10-05). `return undefined` and `= undefined` stay errors.
+    "unicorn/no-useless-undefined": [
+      "error",
+      {
+        "checkArguments": false,
+        "checkArrowFunctionBody": true
+      }
+    ],
+    // Nesting beyond two blocks hides the control flow; flatten with early returns, lookup tables or a named helper.
+    "eslint/max-depth": ["error", 2],
+    // No implicit truthiness: an empty string, 0 and null/undefined are different cases and each is tested explicitly.
+    "typescript/strict-boolean-expressions": [
+      "error",
+      {
+        "allowString": false,
+        "allowNumber": false,
+        "allowNullableObject": false,
+        "allowNullableBoolean": false,
+        "allowNullableString": false,
+        "allowNullableNumber": false,
+        "allowAny": false
+      }
+    ],
+    // `any` switches type checking off at the trust boundary; parse with zod instead.
+    "typescript/no-explicit-any": "error",
+    // Narrow nullable values explicitly so missing data cannot hide behind an assertion.
+    "typescript/no-non-null-assertion": "error",
+    "eslint-js/no-restricted-syntax": [
+      "error",
+      {
+        "selector": "SwitchStatement",
+        "message": "switch is banned: ts-pattern's match(..).exhaustive() where the file may import it, else an if/else chain or a lookup table."
+      },
+      {
+        "selector": "ConditionalExpression ConditionalExpression",
+        "message": "nested ternaries are banned: one level max; beyond that ts-pattern's match(), an if/else chain, or early returns."
+      },
+      {
+        "selector": "TryStatement",
+        "message": "try is banned (catch AND finally): errors as values — neverthrow's fromThrowable/fromAsyncThrowable where the file may import it, else agents/hooks/attempt.ts (Promise.try, zero-dep), or Promise.try(fn).then(ok, err) inline in a self-contained skill; cleanup via using / await using / DisposableStack, or promise.finally()."
+      },
+      {
+        "selector": "ThrowStatement",
+        "message": "throw is banned: no-try left nothing to catch it, so a throw is a crash path no type shows. Return the failure as a value — neverthrow's err()/errAsync() and Result where the file may import it, else a tagged union like agents/hooks/attempt.ts's Attempt; the entry point matches the result, prints the message and calls process.exit(code). Code that throws (a library, JSON.parse) is wrapped once with fromThrowable/attempt."
+      },
+      {
+        "selector": "CallExpression[callee.object.name='Promise'][callee.property.name='reject']",
+        "message": "Promise.reject is a throw by another name (no-throw): return errAsync()/a ResultAsync, or an Attempt-style tagged union."
+      },
+      {
+        "selector": "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdin'][callee.property.name=/^(on|once|addListener|prependListener|prependOnceListener)$/]",
+        "message": "a listener on process.stdin keeps the process alive after it has its answer: reclaim-purge printed '✅ purge 完了' and then hung (2026-10-06). Read one line with prompt() (null on EOF), all of stdin with Bun.stdin.text() (hooks: readStdinJson)."
+      },
+      {
+        "selector": "TSTypePredicate",
+        "message": "hand-written `x is T` guard is banned (writing-typescript): parse the value with a zod schema (safeParse) and use the parsed output; a guard drifts from the type it guards."
+      },
+      {
+        "selector": "BinaryExpression[operator='in']",
+        "message": "the `in` operator is banned (writing-typescript): a key probe is an unchecked shape claim. Parse the value with a zod schema (safeParse); for your own union use a discriminant tag; for a record's own key, Object.hasOwn(record, key)."
+      },
+      {
+        "selector": "TSAsExpression:not([typeAnnotation.typeName.name='const'])",
+        "message": "`as` cast is banned (writing-typescript): it asserts a type the compiler cannot verify. Parse with a zod schema, or use `satisfies` / inference. (`as const` is allowed.)"
+      },
+      {
+        "selector": "TSTypeAssertion",
+        "message": "`<T>value` cast is banned (writing-typescript): parse with a zod schema, or use `satisfies` / inference."
+      },
+      {
+        "selector": "CallExpression[callee.object.name='JSON'][callee.property.name='parse']:not(CallExpression[callee.object.name='z'][callee.property.name='codec'] *)",
+        "message": "JSON.parse is banned (zod first). Decode JSON text with zod in one step: `jsonOf(Schema).safeParse(text)` — jsonOf/jsonText from the repo's zod module (dotfiles: agents/hooks/zod.ts; another repo: its copy from presets/typescript/zod.ts). It returns the typed value, or a zod error that covers both bad JSON (code invalid_format) and the wrong shape: no try, no `unknown` round-trip, no annotation. For the raw JSON value use `jsonText` from the same module."
+      },
+      {
+        "selector": "CallExpression[callee.property.name='parse']:not([callee.object.name='JSON']):not([callee.object.object.name='Bun'])",
+        "message": "a throwing `.parse(...)` is banned (zod first): use `.safeParse(...)` and handle the failure as a value — `jsonOf(Schema).safeParse(text)` for JSON text, `Schema.safeParse(value)` otherwise. `jsonText.parse` and `jsonOf(..).parse` are the same throw. The one exemption is Bun's own text parsers (Bun.TOML.parse, Bun.YAML.parse — no safe variant): call one inside attempt() and pass its value to Schema.safeParse."
+      },
+      {
+        "selector": "CallExpression[callee.property.name='json'][arguments.length=0]:not([callee.object.name='z'])",
+        "message": "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` (the repo's zod module: dotfiles agents/hooks/zod.ts, elsewhere presets/typescript/zod.ts), so the body is validated where it enters."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["**/tests/**", "**/*.test.ts"],
+      "rules": {
+        // Tests deliberately exercise synchronous APIs.
+        "node/no-sync": "off"
+      }
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "extends": ["./presets/typescript/.oxlintrc.json"],
+  "extends": ["./presets/typescript/house.oxlintrc.json"],
   "jsPlugins": [
     {
       "name": "house",

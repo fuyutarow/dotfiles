@@ -159,12 +159,15 @@ describe("manifest preset CLI", () => {
     });
   });
 
-  test("typescript delivers a regular self-contained config and diff detects edits", async () => {
+  test("typescript preserves repo ignores and detects managed house rule edits", async () => {
     const repo = await target();
     expect(
       (await run("apply", "typescript", "--to", repo, "--dry-run")).exit,
     ).toBe(0);
     expect(await Bun.file(join(repo, ".oxlintrc.json")).exists()).toBe(false);
+    expect(await Bun.file(join(repo, "house.oxlintrc.json")).exists()).toBe(
+      false,
+    );
     expect((await run("apply", "typescript", "--to", repo)).exit).toBe(0);
     const text = await readFile(join(repo, ".oxlintrc.json"), "utf8");
     expect((await lstat(join(repo, ".oxlintrc.json"))).isSymbolicLink()).toBe(
@@ -173,13 +176,37 @@ describe("manifest preset CLI", () => {
     expect(text).toBe(
       await readFile(join(ROOT, "presets/typescript/.oxlintrc.json"), "utf8"),
     );
-    expect(text).not.toContain('"extends"');
+    expect(text).toContain('"./house.oxlintrc.json"');
     expect(text).not.toContain(ROOT);
+    const housePath = join(repo, "house.oxlintrc.json");
+    const house = await readFile(housePath, "utf8");
+    expect(house).toBe(
+      await readFile(
+        join(ROOT, "presets/typescript/house.oxlintrc.json"),
+        "utf8",
+      ),
+    );
+    expect((await lstat(housePath)).isSymbolicLink()).toBe(false);
+    expect(house).not.toContain('"ignorePatterns"');
     expect((await run("diff", "typescript", repo)).exit).toBe(0);
-    await writeFile(join(repo, ".oxlintrc.json"), text + "// local edit\n");
+    const local = text.replace(
+      '"ignorePatterns": []',
+      '"ignorePatterns": ["agents/hooks/vendor"]',
+    );
+    await writeFile(join(repo, ".oxlintrc.json"), local);
+    expect((await run("diff", "typescript", repo)).exit).toBe(0);
+    expect((await run("apply", "typescript", "--to", repo)).exit).toBe(0);
+    expect(await readFile(join(repo, ".oxlintrc.json"), "utf8")).toBe(local);
+    await writeFile(
+      housePath,
+      house.replace(
+        '"typescript/no-explicit-any": "error"',
+        '"typescript/no-explicit-any": "off"',
+      ),
+    );
     const drift = await run("diff", "typescript", repo);
     expect(drift.exit).toBe(1);
-    expect(drift.stdout).toContain(".oxlintrc.json (target)");
+    expect(drift.stdout).toContain("house.oxlintrc.json (target)");
     await writeFile(join(repo, "package.json"), '{"name":"custom"}\n');
     const synced = await run("sync", "typescript", "--to", repo);
     expect(synced.exit).toBe(1);
@@ -187,7 +214,8 @@ describe("manifest preset CLI", () => {
     expect(await readFile(join(repo, "package.json"), "utf8")).toBe(
       '{"name":"custom"}\n',
     );
-    expect(await readFile(join(repo, ".oxlintrc.json"), "utf8")).toBe(text);
+    expect(await readFile(join(repo, ".oxlintrc.json"), "utf8")).toBe(local);
+    expect(await readFile(housePath, "utf8")).toBe(house);
   });
 
   test("consumer package identity survives apply, diff and sync with house keys", async () => {

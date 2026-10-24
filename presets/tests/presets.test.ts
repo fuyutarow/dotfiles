@@ -126,7 +126,7 @@ describe("oxlint preset", () => {
             "--bun",
             "oxlint",
             "-c",
-            join(ROOT, "presets/typescript/.oxlintrc.json"),
+            join(ROOT, "presets/typescript/house.oxlintrc.json"),
             "--format",
             "json",
             scratchFile,

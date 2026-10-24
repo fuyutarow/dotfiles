@@ -65,7 +65,7 @@ test("standard React override scopes hook diagnostics to declared packages", asy
     await cp(join(ROOT, "presets/typescript", file), join(repo, file));
   await symlink(join(ROOT, "node_modules"), join(repo, "node_modules"));
   const base = Bun.JSONC.parse(
-    await Bun.file(join(ROOT, "presets/typescript/.oxlintrc.json")).text(),
+    await Bun.file(join(ROOT, "presets/typescript/house.oxlintrc.json")).text(),
   );
   const checked = Config.safeParse(base);
   if (!checked.success) expect.unreachable(checked.error.message);

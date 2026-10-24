@@ -5,14 +5,9 @@ pinned dependencies with `bun install`, and merge `mise-tasks.toml` into the
 consumer's mise configuration. Include `lint:ts` and `typecheck` in its check
 gate. `lint:ts:all` checks the whole tree deliberately.
 
-The preset copies the hand-written `.oxlintrc.json` and its `house-plugin.js`
-verbatim. The consumer owns and commits these files; lint reads its own config
-and plugin. Rule reasons live in entry messages and JSONC comments.
-Run `mise run preset -- diff typescript --to /path/to/repo` from dotfiles to
-compare copies. `sync typescript --to /path/to/repo` replaces only the oxlint
-config and `house-plugin.js`, preserving package, compiler, codec and task
-customizations. Review its diff before committing. No revision metadata or
-policy TOML is needed.
+See [oxlint ownership and sync](../README.md#existing-presets) for the managed
+house config and consumer wrapper contract. Rule reasons live in entry messages
+and JSONC comments in `house.oxlintrc.json`.
 
 To opt into React checks, edit the consumer's `.oxlintrc.json` and append a
 standard override for its package globs:
@@ -32,8 +27,7 @@ standard override for its package globs:
 }
 ```
 
-Other local ignores belong in `ignorePatterns` with a reason comment. Such edits
-appear in `preset diff`; applying or syncing the preset replaces them.
+Add local ignores to the wrapper's `ignorePatterns` with a reason comment.
 
 Dotfiles' root config extends the preset locally and adds its vendored-zod import
 restrictions. `dotfiles-plugin.js` gives those selectors a separate plugin identity

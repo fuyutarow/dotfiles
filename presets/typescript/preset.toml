@@ -2,7 +2,8 @@ name = "typescript"
 description = "Strict TypeScript compiler, package, codec, mise tasks, and standard oxlint configuration"
 files = [
   { source = "house-plugin.js", destination = "house-plugin.js" },
-  { source = ".oxlintrc.json", destination = ".oxlintrc.json" },
+  { source = "house.oxlintrc.json", destination = "house.oxlintrc.json" },
+  { source = ".oxlintrc.json", destination = ".oxlintrc.json", createOnly = true },
   { source = "tsconfig.json", destination = "tsconfig.json" },
   { source = "package.json", destination = "package.json", createOnly = true, requiredJsonKeys = ["devDependencies.@types/bun", "devDependencies.oxfmt", "devDependencies.oxlint", "devDependencies.oxlint-plugin-eslint", "devDependencies.oxlint-tsgolint", "engines.bun"] },
   { source = "zod.ts", destination = "zod.ts" },

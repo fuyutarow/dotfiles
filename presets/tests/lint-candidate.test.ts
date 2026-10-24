@@ -48,6 +48,7 @@ test.each([".", "tools"])(
         ...process.env,
         HOME: scratch,
         XDG_CONFIG_HOME: join(scratch, "config"),
+        MISE_CEILING_PATHS: scratch,
         MISE_STATE_DIR: join(scratch, "mise-state"),
         JJ_CONFIG: config,
         PATH: `${bin}:${process.env.PATH}`,

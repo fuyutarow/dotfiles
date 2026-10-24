@@ -20,8 +20,12 @@ import { parseJson, strAt } from "../../../hooks/narrow.ts";
 // enforce-background-waits: a long or waiting foreground Bash call is denied with the resend to make.
 
 const HOOK = join(import.meta.dir, "..", "enforce-background-waits.ts");
+const TEST_STATE = mkdtempSync(join(tmpdir(), "background-waits-tests-"));
 const decide = (tool_input: Record<string, unknown>): string => {
-  const env = { ...process.env };
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    CLAUDE_BASH_DURATIONS_DIR: TEST_STATE,
+  };
   delete env[AGX_WORKER_ENV];
   const p = Bun.spawnSync(["bun", HOOK], {
     stdin: new Blob([JSON.stringify({ tool_name: "Bash", tool_input })]),
@@ -72,6 +76,34 @@ describe("backgroundReason", () => {
       backgroundReason({ command: "echo untilsleep; cat sleepy.txt" }),
     ).toBeUndefined();
   });
+});
+
+describe("slow command attribution", () => {
+  test.each(["mise run land -- x", "bun test /tmp/test.ts", "mise install"])(
+    "keeps %s slow alone and inside a new compound",
+    (command) => {
+      const dir = mkdtempSync(join(tmpdir(), "background-slow-step-"));
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        CLAUDE_BASH_DURATIONS_DIR: dir,
+      };
+      delete env[AGX_WORKER_ENV];
+      const key = commandKey(command);
+      expect(key).toBeDefined();
+      if (key === undefined) return;
+      recordStart(dir, "slow", key, 0);
+      recordEnd(dir, "slow", 23_000);
+      for (const next of [
+        command,
+        `echo ready; ${command}; echo done`,
+        `echo ready | ${command}`,
+      ]) {
+        const output = decideWithEnv(next, env);
+        expect(output).toContain('"permissionDecision":"deny"');
+        expect(output).toContain(`\`${key}\` has taken 23 s here`);
+      }
+    },
+  );
 });
 
 describe("as a hook", () => {

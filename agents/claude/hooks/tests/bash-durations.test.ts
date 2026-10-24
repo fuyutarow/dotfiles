@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -28,6 +28,111 @@ const ordinarySessionEnv = (
   return env;
 };
 
+describe("duration attribution", () => {
+  test.each([
+    ['echo "$PATH" | slowcmd', 'echo "$PATH"'],
+    ['echo "$(slowcmd)"', 'echo "$PATH"'],
+    ['echo "$(/tmp/slowcmd)"', 'echo "$PATH"'],
+    ['echo "$PATH" | /tmp/slowcmd', 'echo "$PATH"'],
+    ["echo `slowcmd`", 'echo "$PATH"'],
+    ["cut -c1-300 /tmp/input | slowcmd", "cut -c1-300 /tmp/input"],
+    ["sed -i s/a/b/ /tmp/input | slowcmd", "sed -i s/a/b/ /tmp/input"],
+    ["slowcmd; echo done", "echo done"],
+    ["slowcmd; head /tmp/input", "head /tmp/input"],
+    ["slowcmd; cat /tmp/input | cut -c1-300", "cat /tmp/input | cut -c1-300"],
+  ])("%s does not lend its total to %s", (compound, cheap) => {
+    const dir = scratch();
+    const key = commandKey(compound);
+    expect(key).toBeDefined();
+    if (key === undefined) return;
+    recordStart(dir, "compound", key, 0);
+    recordEnd(dir, "compound", 15_000);
+    const cheapKey = commandKey(cheap);
+    expect(cheapKey).toBeDefined();
+    if (cheapKey === undefined) return;
+    const result = Bun.spawnSync(["bun", HOOK], {
+      stdin: new Blob([
+        JSON.stringify({ tool_name: "Bash", tool_input: { command: cheap } }),
+      ]),
+      env: ordinarySessionEnv({ CLAUDE_BASH_DURATIONS_DIR: dir }),
+      timeout: 30_000,
+    });
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    expect(result.stdout.toString()).toBe("");
+    expect(judgedMs(dir, cheapKey)).toBeUndefined();
+    // The measured whole compound remains slow, even though its parts are unmeasured.
+    expect(judgedMs(dir, key)).toBe(15_000);
+    const repeated = Bun.spawnSync(["bun", HOOK], {
+      stdin: new Blob([
+        JSON.stringify({
+          tool_name: "Bash",
+          tool_input: { command: compound },
+        }),
+      ]),
+      env: ordinarySessionEnv({ CLAUDE_BASH_DURATIONS_DIR: dir }),
+      timeout: 30_000,
+    });
+    expect(repeated.exitCode, repeated.stderr.toString()).toBe(0);
+    expect(repeated.stdout.toString()).toContain('"permissionDecision":"deny"');
+  });
+
+  test("ambiguous legacy samples cannot deny cheap calls; new single-command samples still count", () => {
+    const dir = scratch();
+    writeFileSync(
+      join(dir, "summary.json"),
+      JSON.stringify({
+        echo: [13590, 9822, 5204, 13777, 6871, 131, 146921, 340, 4924, 3869],
+        "cut -c1-300": [802, 585, 14887],
+        "sed -i": [1093, 1327, 118039],
+        "mise -C": [15525],
+        "bun test": [75148, 8347],
+        "mise run land": [45_000],
+      }),
+    );
+    for (const key of ["echo", "cut -c1-300", "sed -i", "mise -C"])
+      expect(judgedMs(dir, key), key).toBeUndefined();
+    expect(judgedMs(dir, "bun test")).toBeGreaterThan(5000);
+    expect(judgedMs(dir, "mise run land")).toBe(45_000);
+    recordStart(dir, "new-slow-sed", "sed -i", 0);
+    recordEnd(dir, "new-slow-sed", 12_000);
+    expect(judgedMs(dir, "sed -i")).toBe(12_000);
+  });
+
+  test("mise directory flags retain the task identity", () => {
+    expect(commandKey("mise -C /tmp/project run land -- x")).toBe(
+      "mise run land",
+    );
+    expect(commandKey("mise -C /tmp/project run deps")).toBe("mise run deps");
+    expect(commandKey("mise --cd=/tmp/project run land -- x")).toBe(
+      "mise run land",
+    );
+    expect(commandKey("mise -C/tmp/project run land -- x")).toBe(
+      "mise run land",
+    );
+    expect(commandKey("mise run task -- --cd x")).toBe("mise run task");
+  });
+
+  test("quoted separators are data and unsupported syntax retains the entire call", () => {
+    expect(stepKeys("echo 'hello; slowcmd' | cut -c1-300")).toEqual([
+      "echo",
+      "cut -c1-300",
+    ]);
+    const command = "case x in x) slowcmd;; esac; echo done";
+    expect(commandKey(command)).toBe(`unparsed:${command}`);
+  });
+
+  test("an old pending record cannot be promoted to trusted telemetry", () => {
+    const dir = scratch();
+    recordStart(dir, "old", "echo", 0);
+    writeFileSync(
+      join(dir, "pending", "old.json"),
+      JSON.stringify({ key: "echo", started: 0 }),
+    );
+    expect(recordEnd(dir, "old", 15_000)).toBeUndefined();
+    expect(judgedMs(dir, "echo")).toBeUndefined();
+  });
+});
+
 describe("commandKey", () => {
   test.each([
     ["mise run commit -- -m x --push -- a.ts", "mise run commit"],
@@ -44,7 +149,7 @@ describe("commandKey", () => {
     ["example-records leaderboard", "example-records leaderboard"],
     ["bunx --bun oxlint --type-aware x.ts", "bunx --bun --type-aware"],
     ["ls", "ls"],
-    ["/bin/cp -f a b", undefined],
+    ["/bin/cp -f a b", "exact:/bin/cp -f a b"],
     ["cd x", undefined],
     // a compound call is keyed by all its steps; an assignment-only step is no step (the 2026-10-06
     // miss: `cd … && f=… && sed … && bun test $f` had no key and ran 20 s in front)

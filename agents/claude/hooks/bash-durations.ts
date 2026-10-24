@@ -19,6 +19,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../hooks/zod.ts";
+import { parseShell } from "../../hooks/shell-syntax.ts";
 
 const KEEP = 10;
 
@@ -37,7 +38,14 @@ const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u;
 
 /** One step's key: `<up to 3 leading words> <up to 3 flags>`, env assignments dropped. */
 function stepKey(step: string): string | undefined {
-  const all = step.split(/\s+/u).filter((w) => w !== "" && !ASSIGNMENT.test(w));
+  let all = step.split(/\s+/u).filter((w) => w !== "" && !ASSIGNMENT.test(w));
+  // Directory selection is not a mise task. Previously every `mise -C … run TASK`
+  // collapsed to `mise -C`, making a slow land poison a later deps or inspection.
+  if (all[0] === "mise") {
+    while (all[1] === "-C" || all[1] === "--cd") all.splice(1, 2);
+    if (all[1]?.startsWith("--cd=") === true || /^-C./u.test(all[1] ?? ""))
+      all.splice(1, 1);
+  }
   const end = all.indexOf("--");
   const words = end === -1 ? all : all.slice(0, end);
   const firstFlag = words.findIndex((w) => w.startsWith("-"));
@@ -68,11 +76,16 @@ function stepKey(step: string): string | undefined {
  *  skipped. Owner 2026-10-06: `cd … && f=… && sed … && bun test …` ran 20 s in front because the
  *  first step was an assignment, so the call had no key at all. */
 export function stepKeys(command: string): string[] {
-  return command
-    .split(/&&|\|\||;|\n/u)
-    .map((s) => s.trim())
-    .filter((s) => s !== "" && !/^cd(?:\s|$)/u.test(s))
-    .map((s) => stepKey(s))
+  const parsed = parseShell(command);
+  // Unsupported syntax must retain the entire call's identity, never a guessed
+  // leading command that could inherit work hidden in that syntax.
+  if (parsed === undefined) return [`unparsed:${command}`];
+  return parsed.commands
+    .filter((c) => !c.header && c.words[0] !== "cd")
+    .map((c) => {
+      const raw = c.rawWords.join(" ");
+      return stepKey(raw) ?? (c.words.length > 0 ? `exact:${raw}` : undefined);
+    })
     .filter((k) => k !== undefined);
 }
 
@@ -85,7 +98,11 @@ export function commandKey(command: string): string | undefined {
 
 const Summary = z.record(z.string(), z.array(z.number()));
 type Summary = z.output<typeof Summary>;
-const Pending = z.object({ key: z.string(), started: z.number() });
+const Pending = z.object({
+  key: z.string(),
+  started: z.number(),
+  version: z.literal(2),
+});
 
 const readParsed = <T>(path: string, schema: z.ZodType<T>): T | undefined => {
   if (!existsSync(path)) return undefined;
@@ -111,7 +128,7 @@ export function recordStart(
   mkdirSync(join(dir, "pending"), { recursive: true });
   writeFileSync(
     pendingPath(dir, toolUseId),
-    JSON.stringify({ key, started: nowMs }),
+    JSON.stringify({ key, started: nowMs, version: 2 }),
   );
 }
 
@@ -130,14 +147,18 @@ export function recordEnd(
   // and PreToolUse hooks. Keep the wall-clock interval only as a compatibility fallback.
   const ms = Math.max(0, measuredMs ?? nowMs - pending.started);
   const summary: Summary = readParsed(summaryPath(dir), Summary) ?? {};
-  summary[pending.key] = [...(summary[pending.key] ?? []), ms].slice(-KEEP);
+  // Old samples lack provenance: pipelines and substitutions could have been
+  // stored as just `echo`, `cut …` or `sed -i`. Never mix those into new samples.
+  const key = `v2:${pending.key}`;
+  summary[key] = [...(summary[key] ?? []), ms].slice(-KEEP);
   writeFileSync(summaryPath(dir), `${JSON.stringify(summary)}\n`);
   return ms;
 }
 
 /** The median measured duration of `key` here, or undefined before its first measurement. */
 export function medianMs(dir: string, key: string): number | undefined {
-  const runs = (readParsed(summaryPath(dir), Summary) ?? {})[key];
+  const summary = readParsed(summaryPath(dir), Summary) ?? {};
+  const runs = summary[`v2:${key}`] ?? summary[key];
   if (runs === undefined || runs.length === 0) return undefined;
   const sorted = runs.toSorted((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -150,7 +171,19 @@ export function medianMs(dir: string, key: string): number | undefined {
  *  one slow run (`--all`, a cold cache) is enough to send the next call to the background — the
  *  error that costs the human a wait is the one to avoid. undefined before its first measurement. */
 export function judgedMs(dir: string, key: string): number | undefined {
-  const runs = (readParsed(summaryPath(dir), Summary) ?? {})[key];
+  const summary = readParsed(summaryPath(dir), Summary) ?? {};
+  // Keep legacy slow task histories (land, tests, installs), but retire ambiguous
+  // viewer/builtin keys. Newly measured slow single commands still count, even
+  // for these tools: this is a provenance boundary, not a permanent exemption.
+  if (
+    summary[`v2:${key}`] === undefined &&
+    !key.includes(" && ") &&
+    /^(?:echo|printf|sed|cat|cut|head|tail|wc|ls|mise -C|mise --cd)(?:\s|$)/u.test(
+      key,
+    )
+  )
+    return undefined;
+  const runs = summary[`v2:${key}`] ?? summary[key];
   const median = medianMs(dir, key);
   const latest = runs?.at(-1);
   if (median === undefined || latest === undefined) return undefined;

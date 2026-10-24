@@ -1,4 +1,5 @@
-# Owner decision (2026-10-25): the A-class agx suite follows latest without release-age delay.
+# Owner decision (2026-10-25): the A-class agx suite normally follows latest without release-age delay;
+# pinned to 1.6.3 until ls-remote lists it (2026-10-25).
 # INV-6 in zsh/zshenv; mise.lock records the version last adopted.
 [tools]
-"github:fuyutarow/agx" = { version = "latest", minimum_release_age = "0" }
+"github:fuyutarow/agx" = { version = "1.6.3", minimum_release_age = "0" }

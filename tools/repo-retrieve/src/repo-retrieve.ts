@@ -339,8 +339,15 @@ async function reportBusySearch(
     `daemon busy indexing ${project}: ${progress.filesListed} files listed, ${progress.filesAdded} added\n`,
   );
   process.stderr.write(
-    `RESULT: BUSY route=${route}; reindex running (pid ${indexPid ?? "unknown"}); retry after the index or use lexical routes rr text|regex|files\n`,
+    `RESULT: BUSY route=${route}; reindex running for project=${project} (pid ${indexPid ?? "unknown"}); retry after the index or use lexical routes rr text|regex|files\n`,
   );
+}
+
+function daemonIndexingActivity(output: string): string {
+  const projects = [...output.matchAll(/^\s+(.+) \[indexing\]\s*$/gmu)].map(
+    (match) => `project=${JSON.stringify(match[1])} state=indexing`,
+  );
+  return projects.length === 0 ? "none reported" : projects.join("; ");
 }
 
 async function classifyTimedOutSearch(
@@ -353,6 +360,9 @@ async function classifyTimedOutSearch(
   indexPid: number | null,
 ): Promise<Result<number, Error>> {
   if (indexing) {
+    process.stderr.write(
+      `DAEMON: indexing observed before search: ${daemonIndexingActivity(statusOutput)}\n`,
+    );
     await reportBusySearch(
       ccc,
       route,
@@ -377,27 +387,19 @@ async function classifyTimedOutSearch(
       ),
     asError,
   )();
-  if (timeoutStatus.isErr()) return err(timeoutStatus.error);
-  if (timeoutStatus.value.exitCode !== 0) {
+  const statusAvailable =
+    timeoutStatus.isOk() && timeoutStatus.value.exitCode === 0;
+  const observed = statusAvailable ? timeoutStatus.value.stdout : "";
+  if (observed.includes(`${project} [indexing]`)) {
     process.stderr.write(
-      `FATAL: could not read ccc daemon status after ${route} search timed out\n`,
+      `DAEMON: indexing observed at timeout: ${daemonIndexingActivity(observed)}\n`,
     );
-    return ok(timeoutStatus.value.exitCode);
-  }
-  if (timeoutStatus.value.stdout.includes(`${project} [indexing]`)) {
-    await reportBusySearch(
-      ccc,
-      route,
-      project,
-      timeoutStatus.value.stdout,
-      null,
-      timeoutMs,
-    );
+    await reportBusySearch(ccc, route, project, observed, null, timeoutMs);
     return ok(75);
   }
 
   process.stderr.write(
-    `FATAL: search child timed out after ${timeoutMs}ms: ${ccc}\n`,
+    `FATAL: search child timed out after ${timeoutMs}ms: ${ccc}; daemon-wide indexing observed before search: ${daemonIndexingActivity(statusOutput)}; at timeout: ${statusAvailable ? daemonIndexingActivity(observed) : "status unavailable"}\n`,
   );
   return ok(124);
 }
@@ -669,7 +671,7 @@ async function runCccSearch(
         : searchDeadline - Temporal.Now.instant().epochMilliseconds;
     if (remainingMs <= 0) {
       process.stderr.write(
-        `RESULT: BUSY route=${route}; reindex running (pid ${indexPid ?? "unknown"}); lexical routes work now: rr text|regex|files\n`,
+        `RESULT: BUSY route=${route}; reindex running for project=${project} (pid ${indexPid ?? "unknown"}); lexical routes work now: rr text|regex|files\n`,
       );
       return ok(75);
     }

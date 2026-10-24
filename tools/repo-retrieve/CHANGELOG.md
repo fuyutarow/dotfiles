@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.7 — 2026-10-25
+
+- Name the queried project in BUSY results and preserve daemon indexing observations on search timeout.
+
 ## 1.4.6 — 2026-10-25
 
 - Keep index --plan read-only and warm the definition catalog only after completed indexing.

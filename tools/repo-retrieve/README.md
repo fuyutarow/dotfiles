@@ -260,3 +260,21 @@ outranking the canonical one.
 ```sh
 mise run bench:definitions -- --cases ~/.local/share/repo-retrieve/bench/<name>.json
 ```
+
+## Search while another project indexes
+
+Semantic searches retain their configured child timeout while another project indexes.
+`RESULT: BUSY` (exit 75) names the queried project and is reserved for its own reindex;
+another project's indexing does not make a search BUSY. A search timeout (exit 124)
+reports daemon-wide indexing projects and states observed before the search and at the
+timeout boundary. These are observations, not proof of the cause; an unavailable second
+status probe is labeled explicitly and does not replace the original search timeout.
+
+An isolated ccc 0.2.42 CPU trial on 2026-10-25 observed a search on an idle project B
+exceed 20 seconds while project A indexed, versus a 1.82-second baseline. The rr search
+exceeded its 15-second child limit and returned exit 124. A subsequent small B reindex
+also failed to complete within 30 seconds while A remained indexing. These bounded
+observations do not establish an infinite hang or reproduce the production GPU setup.
+The installed daemon uses project-local index locks but shares the embedder and its
+batch runner queue across projects; rr cannot cancel one upstream job or guarantee
+cross-project embedding latency. No daemon restart is performed by a timed-out search.

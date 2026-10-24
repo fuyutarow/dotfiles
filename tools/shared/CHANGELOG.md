@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.1 — 2026-10-24
+
+- Remove unused local roster pricing helpers; retain generic cost formatting and token usage types
+
 ## 0.19.0 — 2026-10-24
 
 - Remove retired agx worker-state schemas and retain only telemetry path resolution

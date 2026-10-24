@@ -352,7 +352,7 @@ agent枠と計算資源を別々に扱う。独立した有益な仕事は利用
 
 ### 並列化の運び方 — 担い手ごとの起動形（SOLE home）
 
-担い手は `agents/models/dispatch-roster.toml` の一行を選ぶ（表は CLAUDE.md に生成済み）。
+担い手の選択は agx roster (`agx worker roster --json`) と capability routing に委ねる（表は CLAUDE.md に生成済み）。
 各 skill の本文は何を solo に残し何を並べるかだけを書き、起動形はこの表を指す。
 
 | 担い手 | 起動 | 並列にするとき | 受け取るもの |

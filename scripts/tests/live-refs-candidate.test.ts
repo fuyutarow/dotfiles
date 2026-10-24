@@ -37,7 +37,6 @@ test("candidate render includes imported siblings and refuses an unselected decl
     if (
       source.startsWith("@google-drive/") ||
       source.startsWith("agents/hooks") ||
-      source.startsWith("agents/models") ||
       source === "agents/agx/agx.toml" ||
       source === "zsh/timezone"
     )

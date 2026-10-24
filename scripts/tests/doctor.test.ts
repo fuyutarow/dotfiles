@@ -691,7 +691,7 @@ describe("doctor", () => {
     mkdirSync(fixtureBin);
     writeFileSync(
       join(fixtureBin, "mise"),
-      `#!${process.execPath}\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== ${JSON.stringify(JSON.stringify(["-C", REPO, "exec", "--", "agx-worker", "roster", "--json"]))}) process.exit(99);\nprocess.stdout.write(await Bun.file(${JSON.stringify(join(import.meta.dir, "fixtures/agx-roster-schema1.json"))}).text());\n`,
+      `#!${process.execPath}\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== ${JSON.stringify(JSON.stringify(["-C", REPO, "exec", "--", "agx", "worker", "roster", "--json"]))}) process.exit(99);\nprocess.stdout.write(await Bun.file(${JSON.stringify(join(import.meta.dir, "fixtures/agx-roster-schema1.json"))}).text());\n`,
       { mode: 0o755 },
     );
     const privateOverlay = join(scratch, "missing-settings.private.json");

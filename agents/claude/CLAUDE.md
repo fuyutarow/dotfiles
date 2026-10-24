@@ -6,7 +6,7 @@
   automatically restore its registration. Existing executable tools keep their own lifecycle.
 
 <!-- roster:begin -->
-<!-- The dispatch policy is rendered HERE at deploy time (scripts/render-home.ts, from agents/models/dispatch-roster.toml) into ~/.claude/CLAUDE.md. This file keeps only the markers: one writer per file. -->
+<!-- The dispatch policy is rendered HERE at deploy time (scripts/render-home.ts, from the agx roster (`agx worker roster --json`)) into ~/.claude/CLAUDE.md. This file keeps only the markers: one writer per file. -->
 <!-- roster:end -->
 - **Dispatch workers through agx.** Start durable work with `agx worker dispatch <ticket>`; use
   `agx worker check <ticket>`, `agx worker ls`, `agx worker judge <run> accept|reject`, and `agx worker stats` as needed.

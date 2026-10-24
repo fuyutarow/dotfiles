@@ -1,7 +1,7 @@
 ---
 name: opus-medium
 description: >-
-  Claude row of the dispatch roster (agents/models/dispatch-roster.toml): Opus at medium
+  Claude row of the agx roster (`agx worker roster --json`): Opus at medium
   effort. For an ambiguous spec, design judgment, factual accuracy, or a multi-repo change.
   Pick by the roster table; no justification line is required.
 model: opus

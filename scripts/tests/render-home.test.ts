@@ -23,7 +23,7 @@ import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { brewPrefix } from "../core-tools.ts";
 import { HooksConfigSchema } from "../hook-registry.ts";
 
-const productionRoster = Bun.spawnSync(["agx-worker", "roster", "--json"], {
+const productionRoster = Bun.spawnSync(["agx", "worker", "roster", "--json"], {
   env: {
     ...process.env,
     AGX_CONFIG: join(import.meta.dir, "../../agents/agx/agx.toml"),
@@ -68,7 +68,7 @@ function run(env: Record<string, string>): { out: string; code: number } {
 }
 
 /** The other inputs render-home.ts reads, as minimal fixtures: an empty-hooks codex file, a
- * CLAUDE.md that is only the roster markers, the real roster, and a one-hook registry. */
+ * CLAUDE.md that is only the roster markers, CLI output, and a one-hook registry. */
 function writeOtherInputs(dir: string, productionCli = false): void {
   mkdirSync(join(dir, "agents", "agx"), { recursive: true });
   writeFileSync(
@@ -84,14 +84,9 @@ function writeOtherInputs(dir: string, productionCli = false): void {
     join(dir, "agents", "claude", "CLAUDE.md"),
     "# policy\n\n<!-- roster:begin -->\n<!-- roster:end -->\n",
   );
-  mkdirSync(join(dir, "agents", "models"), { recursive: true });
-  writeFileSync(
-    join(dir, "agents", "models", "dispatch-roster.toml"),
-    readFileSync(join(ROOT, "agents", "models", "dispatch-roster.toml")),
-  );
   if (productionCli) {
-    const installed = Bun.which("agx-worker");
-    expect(installed, "agx-worker must be installed on PATH").not.toBeNull();
+    const installed = Bun.which("agx");
+    expect(installed, "agx must be installed on PATH").not.toBeNull();
     writeRosterCli(
       dir,
       `const child = Bun.spawnSync([${JSON.stringify(installed)}, ...process.argv.slice(2)], { env: process.env, stdout: "inherit", stderr: "inherit", timeout: 10_000 }); process.exit(child.exitCode);`,
@@ -126,12 +121,12 @@ function writeOtherInputs(dir: string, productionCli = false): void {
 }
 
 function writeRosterCli(dir: string, code: string): void {
-  const path = join(dir, "bin/agx-worker");
+  const path = join(dir, "bin/agx");
   mkdirSync(join(path, ".."), { recursive: true });
   writeFileSync(
     path,
     `#!${process.execPath}\n` +
-      `if (JSON.stringify(process.argv.slice(2)) !== '["roster","--json"]') throw new Error("unexpected roster arguments");\n` +
+      `if (JSON.stringify(process.argv.slice(2)) !== '["worker","roster","--json"]') throw new Error("unexpected roster arguments");\n` +
       `if (process.env.AGX_CONFIG !== process.cwd() + "/agents/agx/agx.toml" || process.env.DISPATCH_ROSTER_PATH !== undefined) throw new Error("unexpected roster environment");\n` +
       code,
   );
@@ -368,7 +363,7 @@ describe("render-home: base only", () => {
       "agx worker stats [--import-legacy]",
       "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run <ticket.md>",
       "agx worker run <ticket.md> --continue <run>",
-      "$XDG_STATE_HOME/agx/records.jsonl",
+      "[agx contract]",
       "Ticket time boxes: `timeout_s` defaults to 600 seconds",
     ])
       expect(policy).toContain(text);
@@ -736,7 +731,6 @@ describe("render-home: committed jj inputs", () => {
       "scripts/config-registry.ts",
       "scripts/core-tools.ts",
       "scripts/hook-registry.ts",
-      "agents/models/roster.ts",
       "agents/hooks/attempt.ts",
       "agents/hooks/narrow.ts",
       "agents/hooks/slugs.ts",
@@ -934,7 +928,8 @@ describe("render-home: public roster JSON", () => {
       dotfiles,
       "exec",
       "--",
-      "agx-worker",
+      "agx",
+      "worker",
       "roster",
       "--json",
     ]);
@@ -956,7 +951,7 @@ describe("render-home: public roster JSON", () => {
     );
   });
 
-  test("missing agx-worker names the command and remedy before any write", () => {
+  test("missing agx names the command and remedy before any write", () => {
     const dotfiles = makeDotfiles({ model: "opus" });
     const home = makeHome();
     const emptyPath = join(home, "empty-bin");
@@ -970,7 +965,7 @@ describe("render-home: public roster JSON", () => {
     const result = run({ HOME: home, DOTFILES: dotfiles, PATH: emptyPath });
     expect(result.code, result.out).toBe(1);
     expect(result.out).toContain(
-      "FATAL: cannot load roster — agx-worker roster --json",
+      "FATAL: cannot load roster — agx worker roster --json",
     );
     expect(result.out).toContain("mise install");
     expect(result.out).toContain("in the dotfiles checkout");
@@ -1025,7 +1020,7 @@ describe("render-home: public roster JSON", () => {
     });
   }
 
-  test("production roster block is byte-identical to the original renderer", () => {
+  test("production roster block matches the public CLI projection fixture", () => {
     const home = makeHome();
     using _cleanup = {
       [Symbol.dispose]: () => {
@@ -1091,7 +1086,7 @@ describe("render-home: public roster JSON", () => {
       expect(failed.out).toContain("FATAL:");
       if (name === "non-zero exit") {
         expect(failed.out).toContain(
-          "agx-worker roster --json exited 7: roster unavailable",
+          "agx worker roster --json exited 7: roster unavailable",
         );
         expect(failed.out).toContain("mise install");
         expect(failed.out).toContain("mise run deps");

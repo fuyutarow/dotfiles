@@ -2,9 +2,7 @@
 
 ## Current dispatch authority
 
-現在の worker roster の唯一の正本は
-[dispatch-roster.toml](../../../models/dispatch-roster.toml)、その構成契約は
-[dispatch-roster.contract.md](../../../models/dispatch-roster.contract.md) にある。
+現在の worker roster の唯一の正本は agx roster (`agx worker roster --json`) である。
 この参照には model 一覧、利用可否、固定配役、選択スコアを複製しない。
 
 通常の dispatch は caller 所有の ticket を `agx worker run <ticket>` に渡し、

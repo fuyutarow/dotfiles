@@ -13,7 +13,6 @@ export const RENDER_INPUTS = [
   "agents/codex/hooks.json",
   "agents/claude/CLAUDE.md",
   "agents/hooks",
-  "agents/models",
   "tools/shared/src",
   "tools/shared/package.json",
   "package.json",

@@ -124,7 +124,8 @@ export async function readJevUsage(
     resolve(import.meta.dir, "../../.."),
     "exec",
     "--",
-    "agx-worker",
+    "agx",
+    "worker",
   ],
 ): Promise<Result<JevUsage | undefined, string>> {
   const info = await stat(path).catch(() => null);

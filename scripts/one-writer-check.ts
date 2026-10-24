@@ -5,7 +5,7 @@
 //     (agents/claude/settings.json, agents/codex/hooks.json) — agents/hooks/hooks.toml owns those,
 //     and scripts/render-home.ts wires them into the DEPLOYED copy;
 //   - anything but the markers and their comment inside agents/claude/CLAUDE.md's roster block —
-//     agents/models/dispatch-roster.toml owns it, rendered into the deployed ~/.claude/CLAUDE.md;
+//     the agx roster (`agx worker roster --json`) supplies it via scripts/render-home.ts;
 //   - a symlink in $HOME at a path render-home.ts writes (the old layout: the deployed file then
 //     IS the declaration, and a tool writing it writes the repo).
 // Consumer: `mise run lint` and scripts/tests/hook-registry.test.ts. Verdict lines; every
@@ -87,7 +87,7 @@ if (b < 0 || e < b) {
     .filter((l) => l.trim() !== "" && !/^<!--.*-->$/u.test(l.trim()));
   if (inside.length > 0)
     violations.push(
-      `agents/claude/CLAUDE.md: ${inside.length} line(s) inside the roster block — dispatch-roster.toml owns it; leave only the markers`,
+      `agents/claude/CLAUDE.md: ${inside.length} line(s) inside the roster block — render-home.ts projects the agx roster; leave only the markers`,
     );
 }
 

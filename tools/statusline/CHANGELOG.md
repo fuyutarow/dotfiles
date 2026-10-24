@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.8 — 2026-10-24
+
+- Read Jev roster prices through the public agx worker roster command
+
 ## 0.21.7 — 2026-10-24
 
 - Read worker progress and state from released C2 listing fields

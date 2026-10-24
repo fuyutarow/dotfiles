@@ -9,6 +9,8 @@ const RESTORE = join(ROOT, "scripts/render-source.ts");
 const INPUTS = ["package.json", "bun.lock"];
 
 test("immutable render inputs include shared adapters and root dependency declarations", () => {
+  expect(RENDER_INPUTS).toContain("agents/agx/agx.toml");
+  expect(RENDER_INPUTS).not.toContain("agents/models");
   expect(RENDER_INPUTS).toContain("tools/shared/src");
   expect(RENDER_INPUTS).toContain("package.json");
   expect(RENDER_INPUTS).toContain("bun.lock");

@@ -32,7 +32,7 @@
 //
 // NO FLAGS, ZERO-INSTALL IMPORTS — deliberate. With no argv read there is no Cleye boundary
 // to owe (writing-bun-scripts BG1). Local imports use the committed zod bundle rather than
-// node_modules. The roster CLI is the installed agx-worker command on PATH. Inputs come
+// node_modules. The roster CLI is the installed `agx worker roster --json` on PATH. Inputs come
 // from the environment so tests can point it at fixtures:
 //   DOTFILES                  repo root            (default: this script's checkout)
 //   DOTFILES_RENDER_REV       landed commit        (default: alpha in a jj checkout)
@@ -101,17 +101,12 @@ const RosterChoice = z.object({
   price_out: z.number().optional(),
   use_for: z.string(),
 });
-const RosterJson = z
-  .object({
-    schema: z.literal(1),
-    as_of: z.string(),
-    default: z.string(),
-    choice: z.array(RosterChoice).min(1),
-    objective: z.string().min(1),
-  })
-  .refine((r) => r.choice.some((c) => c.id === r.default), {
-    message: "default must name a roster choice",
-  });
+const RosterJson = z.object({
+  as_of: z.string(),
+  default: z.string(),
+  choice: z.array(RosterChoice),
+  objective: z.string(),
+});
 type Choice = z.output<typeof RosterChoice>;
 type Roster = z.output<typeof RosterJson>;
 
@@ -162,7 +157,7 @@ function rosterPolicy(r: Roster): string {
     "  How to choose: describe the task, expected outcome, writable paths, and verification in the ticket. The router selects an available roster row and records it with the run.",
     "  Managed dispatch: `agx worker dispatch <ticket.md> [--ws SLUG] [--unit NAME] [--sandbox MODE] [--continue RUN_ID]` starts a durable worker run.",
     `  How to run: \`agx worker run <ticket.md> [--cd TREE] [--sandbox none|read-only|workspace-write] [--session ID]\`. Validate a ticket with \`agx worker check <ticket.md> [--cd TREE]\`. Use \`agx worker ls [--json]\` to inspect runs, \`agx worker judge <run> accept|reject [--note TEXT]\` to record a judgment, and \`agx worker stats [--import-legacy]\` for run statistics. Continue a session with \`agx worker run <ticket.md> --continue <run>\`. Durable runs use \`systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run <ticket.md>\`.`,
-    "  Ticket home: ticket files stay in the project that owns them and are passed to agx by path. Run records and judgments live in `$XDG_STATE_HOME/agx/records.jsonl` (or `~/.local/state/agx/records.jsonl` by default); `agx worker ls --json` reports each run's ticket, workspace, status, and judgment.",
+    "  Ticket home: ticket files stay in the project that owns them and are passed to agx by path. Use `agx worker ls --json` for run records and judgments; storage and configuration are owned by the [agx contract](https://github.com/fuyutarow/agx/blob/f8b5feb6c19d46d3de3bcf822f5f1bd2391a76af/contract/config.md).",
     "  Ticket time boxes: `timeout_s` defaults to 600 seconds. `--continue` resumes the selected run's vendor session. An interim `agx-return` is saved as run progress; the worker continues until its timeout or final return. `agx worker check` validates the ticket and its declared premises before dispatch.",
   ].join("\n");
 }
@@ -478,12 +473,13 @@ const ROSTER_COMMAND = [
   dotfiles,
   "exec",
   "--",
-  "agx-worker",
+  "agx",
+  "worker",
   "roster",
   "--json",
 ];
 const ROSTER_REMEDY =
-  "Run `mise install` in the dotfiles checkout, then `mise run deps` to install agx-worker on PATH.";
+  "Run `mise install` in the dotfiles checkout, then `mise run deps` to install agx on PATH.";
 const md = await attempt(() => readFileSync(mdPath, "utf8"));
 if (!md.ok) fatal(`FATAL: cannot read ${mdPath} — ${errorMessage(md.error)}`);
 const rosterRead = await attempt(async () => {
@@ -509,28 +505,27 @@ const rosterRead = await attempt(async () => {
   ]);
   if (code !== 0)
     return new Error(
-      `agx-worker roster --json exited ${code}: ${err.trim().slice(0, 4000)}. ${ROSTER_REMEDY}`,
+      `agx worker roster --json exited ${code}: ${err.trim().slice(0, 4000)}. ${ROSTER_REMEDY}`,
     );
   return out;
 });
 if (!rosterRead.ok)
   fatal(
-    `FATAL: cannot load roster — agx-worker roster --json: ${errorMessage(rosterRead.error)}. ${ROSTER_REMEDY}`,
+    `FATAL: cannot load roster — agx worker roster --json: ${errorMessage(rosterRead.error)}. ${ROSTER_REMEDY}`,
   );
 if (rosterRead.value instanceof Error)
   fatal(`FATAL: cannot load roster — ${rosterRead.value.message}`);
 const roster = jsonOf(RosterJson).safeParse(rosterRead.value);
 if (!roster.success)
-  fatal(`FATAL: invalid agx-worker roster JSON — ${roster.error.message}`);
+  fatal(`FATAL: invalid agx worker roster JSON — ${roster.error.message}`);
 const b = md.value.indexOf(BEGIN);
 const e = md.value.indexOf(END);
 if (b < 0 || e < b)
   fatal(`FATAL: markers ${BEGIN} … ${END} not found in ${mdPath}`);
 outputs.push({
   dest: `${home}/.claude/CLAUDE.md`,
-  // Keep the legacy provenance bytes: the catalog and declared policy preserve that roster.
-  text: `${md.value.slice(0, b)}${BEGIN}\n<!-- RENDERED from agents/models/dispatch-roster.toml by scripts/render-home.ts — edit the roster or renderer, then \`mise run link:dots\`. -->\n${rosterPolicy(roster.data)}\n${roster.data.objective}\n${END}${md.value.slice(e + END.length)}`,
-  from: `${mdPath} + agx-worker roster --json`,
+  text: `${md.value.slice(0, b)}${BEGIN}\n<!-- RENDERED from the agx roster (agx worker roster --json) by scripts/render-home.ts — edit operator policy or renderer, then \`mise run link:dots\`. -->\n${rosterPolicy(roster.data)}\n${roster.data.objective}\n${END}${md.value.slice(e + END.length)}`,
+  from: `${mdPath} + agx worker roster --json`,
 });
 
 // ── write ────────────────────────────────────────────────────────────────────────────────────

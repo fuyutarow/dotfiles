@@ -1,7 +1,7 @@
 // PreToolUse gate — the Agent, Task and Workflow tools dispatch nothing; every worker starts
 // through `agx worker run <ticket>` or `agx-worker run <ticket>`. matcher: Agent|Task|Workflow (settings.json: run.sh --fail-closed)
 //
-// THE ROSTER (read through agx-worker roster --json) is the one
+// THE ROSTER (read through agx worker roster --json) is the one
 // home of what may be dispatched, and agx is the one entry point: Jev picks a row from the
 // brief, codex rows run `codex exec` and claude rows run `claude -p`, both through the released
 // agx-worker (claude runs are bounded by the roster's [claude_run]). Every run is logged, shown on the statusline
@@ -21,7 +21,6 @@ import { strAt } from "../../hooks/narrow.ts";
 import { jsonOf, z } from "../../hooks/zod.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
-const ROSTER_FILE = "agents/models/dispatch-roster.toml";
 const DOTFILES_ROOT = resolve(import.meta.dir, "../../..");
 const ROSTER_CLI = [
   "mise",
@@ -29,7 +28,8 @@ const ROSTER_CLI = [
   DOTFILES_ROOT,
   "exec",
   "--",
-  "agx-worker",
+  "agx",
+  "worker",
   "roster",
   "--json",
 ];
@@ -54,7 +54,7 @@ const ChoiceSchema = z.object({
 const RosterJson = jsonOf(
   z.object({
     default: z.string(),
-    choice: z.array(ChoiceSchema).min(1),
+    choice: z.array(ChoiceSchema),
   }),
 );
 const num = (value: number | undefined): string =>
@@ -142,7 +142,7 @@ async function main(): Promise<void> {
       "Dispatch with `agx worker dispatch <ticket>` or `agx-worker dispatch <ticket>`. " +
       "For durable runs use `systemd-run --user --unit=agt_<slug> --collect -- agx worker dispatch …`; " +
       "continue with `agx worker run <ticket> --continue <run>` or `agx-worker run <ticket> --continue <run>`.\n" +
-      `Roster (${ROSTER_FILE}):\n${loaded.value}`,
+      `Roster (agx worker roster --json):\n${loaded.value}`,
   );
 }
 

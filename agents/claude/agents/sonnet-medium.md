@@ -1,7 +1,7 @@
 ---
 name: sonnet-medium
 description: >-
-  Claude row of the dispatch roster (agents/models/dispatch-roster.toml): Sonnet at medium
+  Claude row of the agx roster (`agx worker roster --json`): Sonnet at medium
   effort. For multi-step terminal or agentic work that a luna (`agx worker run`) worker does
   poorly — long tool loops, live edits — when sonnet-high is more than the task needs.
 model: sonnet

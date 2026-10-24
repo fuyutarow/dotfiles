@@ -424,7 +424,7 @@ export const RENDERED = [
   },
   {
     dest: ".claude/CLAUDE.md",
-    inputs: ["agents/claude/CLAUDE.md", "agents/models/dispatch-roster.toml"],
+    inputs: ["agents/claude/CLAUDE.md", "agents/agx/agx.toml"],
     machine: "",
     consumer: "Claude Code (user memory, read at session start)",
   },
@@ -716,20 +716,6 @@ const OTHER: readonly Surface[] = [
       "the storage-headroom, model-floor, and reply-language hooks (Claude Code, Codex)",
     writer: "human, in the repo",
     verify: "mise run test:hooks",
-  },
-  {
-    kind: "in-place",
-    when: "all",
-    sources: [
-      "agents/models/dispatch-roster.toml",
-      "agents/models/dispatch-roster.contract.md",
-    ],
-    deployed: "the checkout; rendered into ~/.claude/CLAUDE.md",
-    consumer:
-      "dispatch hook, agx-worker run/check/ls/judge/stats/roster, codex worker, render-home",
-    writer:
-      "human, in the repo (CONFIGURATION CONTRACT: dispatch-roster.contract.md)",
-    verify: `mise run test:hooks · test:agx · ${DOCTOR} (rendered)`,
   },
   {
     kind: "in-place",

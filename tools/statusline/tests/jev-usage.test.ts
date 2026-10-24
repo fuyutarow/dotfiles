@@ -63,14 +63,15 @@ test("reads seven-day Jev response usage and prices spend", async () => {
   const oldCost = (900_000 * inputPrice + 300_000 * outputPrice) / 1_000_000;
   const cli = await fakeCli(
     root,
-    `if (JSON.stringify(process.argv.slice(2)) !== '["exec","--","agx-worker","roster","--json"]') process.exit(1);
+    `if (JSON.stringify(process.argv.slice(2)) !== '["exec","--","agx","worker","roster","--json"]') process.exit(1);
 process.stdout.write(${JSON.stringify(JSON.stringify(roster))});`,
   );
   const usage = await readJevUsage(now, runLog, [
     cli,
     "exec",
     "--",
-    "agx-worker",
+    "agx",
+    "worker",
   ]);
   expect(usage.isOk()).toBe(true);
   if (usage.isOk()) {
@@ -116,7 +117,8 @@ test("uses the dotfiles mise pin from an arbitrary cwd without agx on PATH", asy
     resolve(import.meta.dir, "../../.."),
     "exec",
     "--",
-    "agx-worker",
+    "agx",
+    "worker",
     "roster",
     "--json",
   ];

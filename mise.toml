@@ -23,7 +23,9 @@
 [tools]
 bun = "1.4.3"
 rumdl = "0.2.78"
-"github:fuyutarow/agx" = { version = "1.6.3", minimum_release_age = "0" }
+# Follow the newest GitHub release without release-age delay; mise/dotfiles.toml bypasses the
+# stale mise-versions metadata for this repository only. mise.lock records the version last adopted.
+"github:fuyutarow/agx" = { version = "latest", minimum_release_age = "0" }
 
 [tasks.accept]
 depends = ["bun:check"]

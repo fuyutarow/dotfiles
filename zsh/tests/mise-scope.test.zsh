@@ -68,8 +68,15 @@ check_global_mise_tools() {
     import { join } from "node:path";
     const dir = process.argv[1];
     const declaration = process.argv[2];
-    const allowedVersion = Bun.TOML.parse(await Bun.file(declaration).text())
-      .tools?.["github:fuyutarow/agx"];
+    const authored = Bun.TOML.parse(await Bun.file(declaration).text());
+    const allowedVersion = authored.tools?.["github:fuyutarow/agx"];
+    const replacements = authored.settings?.url_replacements;
+    const agxApi = "https://api.github.com/repos/fuyutarow/agx/";
+    const directAgxApi = "https://api.github.com/repos/Fuyutarow/agx/";
+    if (replacements?.[agxApi] !== directAgxApi || Object.keys(replacements ?? {}).length !== 1) {
+      process.stdout.write(`[FAIL] ${declaration}: expected only the direct agx API URL replacement\n`);
+      process.exit(1);
+    }
     // Compare only the supported declaration shape, by value and independently of key order.
     const normalize = value => {
       if (typeof value === "string") return JSON.stringify([value, null]);

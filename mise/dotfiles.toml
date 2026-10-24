@@ -1,5 +1,12 @@
-# Owner decision (2026-10-25): the A-class agx suite normally follows latest without release-age delay;
-# pinned to 1.6.3 until ls-remote lists it (2026-10-25).
-# INV-6 in zsh/zshenv; mise.lock records the version last adopted.
+# Mise 2026.10.11+ uses mise-versions for GitHub release metadata, which can lag the upstream
+# release. Replace this repository's API URL with a case variant so mise queries GitHub directly.
+# This relies on mise's per-repository URL-replacement check in versions_host.rs:818 and
+# github_is_url_replaced in versions_host.rs:845-851. If `mise ls-remote` reports an agx release
+# older than the newest GitHub release, this bypass may have stopped working and needs review.
+[settings.url_replacements]
+"https://api.github.com/repos/fuyutarow/agx/" = "https://api.github.com/repos/Fuyutarow/agx/"
+
+# Owner decision (2026-10-25): the A-class agx suite follows the newest GitHub release without
+# release-age delay. INV-6 in zsh/zshenv; mise.lock records the version last adopted.
 [tools]
-"github:fuyutarow/agx" = { version = "1.6.3", minimum_release_age = "0" }
+"github:fuyutarow/agx" = { version = "latest", minimum_release_age = "0" }

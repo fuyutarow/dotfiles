@@ -453,7 +453,7 @@ test("snapshot excludes later writers", async () => {
   expect(late).toBeDefined();
 });
 
-test("count budget stops discovery without deleting a younger candidate", async () => {
+test("count budget stops eligible checks without deleting a younger candidate", async () => {
   await using f = await fixture();
   const first = await f.payload("old", 1024, 800_000);
   const second = await f.payload("next", 1024, 700_000);
@@ -463,6 +463,77 @@ test("count budget stops discovery without deleting a younger candidate", async 
   expect(result.unlinked_bytes).toBe(0);
   expect(existsSync(first)).toBe(true);
   expect(existsSync(second)).toBe(true);
+});
+
+test("large young mirrored payloads never consume the eligible payload walk budget", async () => {
+  await using f = await fixture();
+  const records: string[] = [];
+  for (let index = 0; index < 12; index += 1) {
+    const path = join(f.root, "home/user/workspaces", `young-${index}`);
+    await mkdir(path, { recursive: true });
+    for (let child = 0; child < 128; child += 1)
+      await writeFile(join(path, `file-${child}`), "young payload");
+    records.push(
+      `${Temporal.Instant.fromEpochMilliseconds(now - 1000 - index).toString()}\t/source\t${path}`,
+    );
+  }
+  const older = await f.payload("z-eligible", 1024, 700_000);
+  records.push(
+    `${Temporal.Instant.fromEpochMilliseconds(now - 700_000).toString()}\t/source\t${older}`,
+  );
+  await writeFile(join(f.root, ".record"), records.join("\n"));
+  const result = await freeGraveyard("1KiB", { ...f.options, maxEntries: 128 });
+  expect(result.outcome).toBe("met");
+  expect(result.deleted_payloads).toEqual(["rip graveyard: z-eligible"]);
+  expect(result.skip_counts.u_protected).toBe(12);
+  expect(result.budget.exhausted).toBe(false);
+  expect(result.budget.visited).toBeLessThan(128);
+  expect(result.u_protected_bytes_complete).toBe(false);
+  for (let index = 0; index < 12; index += 1)
+    expect(
+      (await readdir(join(f.root, "home/user/workspaces", `young-${index}`)))
+        .length,
+    ).toBe(128);
+});
+
+test("sequential distinct burials advance the held frontier without refreshing burial times", async () => {
+  await using f = await fixture();
+  const base = join(f.root, "home/user/workspaces");
+  await mkdir(base, { recursive: true });
+  const records: string[] = [];
+  // Actual local ctime record shape; interpret in the host zone as rip does.
+  for (const [name, time] of [
+    ["api15", "Sat Oct 24 16:27:33 2026"],
+    ["column-xor", "Sat Oct 24 16:28:03 2026"],
+    ["scanfield", "Sat Oct 24 16:30:36 2026"],
+  ]) {
+    const path = join(base, name ?? "");
+    await writeFile(path, "payload");
+    await utimes(path, 1, 1);
+    records.push(`${time}\t/source/${name}\t${path}`);
+  }
+  await writeFile(join(f.root, ".record"), records.join("\n"));
+  for (const [at, expected] of [
+    ["2026-10-24T16:35:00", "2026-10-24T16:37:33"],
+    ["2026-10-24T16:38:00", "2026-10-24T16:38:03"],
+    ["2026-10-24T16:40:30", "2026-10-24T16:40:36"],
+  ]) {
+    const result = await freeGraveyard("1KiB", {
+      ...f.options,
+      now: Temporal.PlainDateTime.from(at ?? "").toZonedDateTime(
+        Temporal.Now.timeZoneId(),
+      ).epochMilliseconds,
+    });
+    expect(result.earliest_eligible_at).toBe(
+      Temporal.PlainDateTime.from(expected ?? "")
+        .toZonedDateTime(Temporal.Now.timeZoneId())
+        .toInstant()
+        .toString(),
+    );
+  }
+  expect(await readFile(join(f.root, ".record"), "utf8")).toBe(
+    records.join("\n"),
+  );
 });
 
 for (const input of [
@@ -630,7 +701,7 @@ test("budget exhaustion during whole-payload preflight unlinks nothing", async (
     join(f.root, ".record"),
     `2000-01-01T00:00:00Z\t/original\t${payload}\n`,
   );
-  const result = await freeGraveyard("1KiB", { ...f.options, maxEntries: 12 });
+  const result = await freeGraveyard("1KiB", { ...f.options, maxEntries: 5 });
   expect(result.outcome).toBe("partial");
   expect(result.budget.exhausted).toBe(true);
   expect(result.unlinked_bytes).toBe(0);

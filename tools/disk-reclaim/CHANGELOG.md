@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.3 — 2026-10-24
+
+- Reserve disk:free entry budget for eligible payloads and avoid walking undo-protected trees
+
 ## 1.5.2 — 2026-10-24
 
 - Yield the background expiry lock to a waiting disk:free

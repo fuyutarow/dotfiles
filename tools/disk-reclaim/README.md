@@ -218,6 +218,11 @@ One `reclaim.free/1` JSON document reports `outcome` (`met`, `partial`, `busy`, 
 `requested_bytes`, `unlinked_bytes`, `free_delta_bytes`, `overshoot_bytes`, `shortfall_bytes`,
 `u_protected_bytes`, `earliest_eligible_at`, and `skip_counts` (payload counts, once per reason).
 The `skip_counts.in_use` key remains present and zero for `reclaim.free/1` compatibility.
+Discovery uses recorded burials to order candidates before walking eligible payloads.
+Young payloads are counted without walking their contents. `u_protected_bytes` is a lower
+bound from their root metadata; `u_protected_bytes_complete` is false when held directories
+have unmeasured contents. The entry budget is reserved for eligible payload checks and removal;
+record processing and mirrored-parent discovery remain bounded by the request's time limit.
 `unlinked_bytes` sums logical sizes of entries actually unlinked, including directory entries;
 sparse files can therefore satisfy SIZE while releasing few blocks. The signed statfs available
 byte delta is measured separately and may reflect other writers, open files or hard links.

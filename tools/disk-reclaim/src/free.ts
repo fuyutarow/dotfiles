@@ -1,5 +1,5 @@
 // Consumer: owner shell and machine callers; one versioned JSON result, stderr progress.
-import { lstat, readdir, realpath, statfs } from "node:fs/promises";
+import { lstat, realpath, statfs } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
 import { match } from "ts-pattern";
@@ -206,16 +206,12 @@ export async function freeGraveyard(
     result.skip_counts[reason] += 1;
     log(`disk:free: skipped ${JSON.stringify(path)}: ${detail}`);
   };
-  const measure = async (path: string): Promise<number> => {
-    check();
-    const stat = await lstat(path);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) return stat.size;
-    let bytes = stat.size;
-    for (const name of await readdir(path))
-      bytes += await measure(join(path, name));
-    return bytes;
+  const checkTime = (): void => {
+    if (performance.now() >= deadline)
+      exhausted.abort("disk:free time budget exhausted");
+    signal.throwIfAborted();
   };
-  const accountHeld = async (row: Payload): Promise<void> => {
+  const accountHeld = (row: Payload): void => {
     const path = row.candidate.path;
     if (path === null) return;
     if (row.hold === "unknown") skip("unknown_burial", path);
@@ -229,14 +225,9 @@ export async function freeGraveyard(
       Temporal.Instant.compare(eligible, result.earliest_eligible_at) < 0
     )
       result.earliest_eligible_at = eligible;
-    const measured = await fromAsyncThrowable(() => measure(path))();
-    if (measured.isOk()) {
-      result.u_protected_bytes += measured.value;
-      return;
-    }
-    result.u_protected_bytes_complete = false;
-    signal.throwIfAborted();
-    skip("unreadable", path, errorMessage(measured.error));
+    // Root metadata is a lower bound. Never spend the payload walk budget on U-held trees.
+    result.u_protected_bytes += row.logical;
+    if (row.pending.length > 0) result.u_protected_bytes_complete = false;
   };
   let filesystemPath = root;
   let before: number | undefined;
@@ -279,12 +270,12 @@ export async function freeGraveyard(
       now,
       0,
       undoMs,
-      check,
+      checkTime,
     );
     const rows = snapshot.payloads.filter(
       (row) => row.candidate.path !== join(root, ".record"),
     );
-    for (const row of rows) await accountHeld(row);
+    for (const row of rows) accountHeld(row);
     const removeWaiter = await registerForegroundWaiter(
       options.state ?? stateDir(env),
     );
@@ -318,13 +309,13 @@ export async function freeGraveyard(
         skip("changed", path);
         return false;
       }
-      const burial = await ripBurialTime(root, path, undefined, check);
+      const burial = await ripBurialTime(root, path, undefined, checkTime);
       if (burial === undefined) {
         skip("unknown_burial", path);
         return false;
       }
       if (now - burial < undoMs) {
-        await accountHeld({ ...row, hold: "undo", time: burial });
+        accountHeld({ ...row, hold: "undo", time: burial });
         return false;
       }
       if (burial !== row.time) {
@@ -388,6 +379,7 @@ export async function freeGraveyard(
     };
     for (const row of rows) {
       if (result.unlinked_bytes >= requested) break;
+      if (row.hold !== undefined) continue;
       check();
       await tryAct(row);
     }

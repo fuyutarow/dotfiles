@@ -14,7 +14,15 @@ const NOW = 1791496800;
 async function fixture(): Promise<{ root: string; file: string }> {
   const root = await mkdtemp(join(tmpdir(), "statusline-codex-"));
   roots.push(root);
-  const dir = join(root, "2026", "10", "09");
+  const day = Temporal.Instant.fromEpochMilliseconds(NOW * 1000)
+    .toZonedDateTimeISO("Asia/Tokyo")
+    .toPlainDate();
+  const dir = join(
+    root,
+    String(day.year),
+    String(day.month).padStart(2, "0"),
+    String(day.day).padStart(2, "0"),
+  );
   await mkdir(dir, { recursive: true });
   return { root, file: join(dir, "rollout-1.jsonl") };
 }

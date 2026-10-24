@@ -278,20 +278,17 @@ test("all known provider values and resets remain in their slots", async () => {
   expect(text).toContain(" | Jev 7d spend $0.04");
 });
 
-test("empty and credits-only Codex objects retain the slot", () => {
-  for (const credits of [undefined, "10"]) {
-    const text = plain(
-      rateRow({
-        rlModel: [],
-        codexRate: {
-          windows: [],
-          mtimeMs: now() * 1000,
-          ...(credits === undefined ? {} : { credits }),
-        },
-      }),
-    );
-    expectSlots(text, "codex");
-  }
+test("empty Codex retains its slot and finite credits render without windows", () => {
+  const absent = plain(rateRow({ rlModel: [] }));
+  expectSlots(absent, "codex");
+  const credits = plain(
+    rateRow({
+      rlModel: [],
+      codexRate: { windows: [], credits: "10", mtimeMs: now() * 1000 },
+    }),
+  );
+  expect(credits).toContain("codex credits 10");
+  expect(credits).not.toContain("codex n/a");
 });
 
 test("an empty rollout file keeps codex n/a", async () => {

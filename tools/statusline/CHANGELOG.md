@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.0 — 2026-10-24
+
+- Show Codex credit balance and signed 24-hour change from bounded rollout history
+
 ## 0.21.11 — 2026-10-24
 
 - Remove unused synchronous collectors and recovery entrypoint

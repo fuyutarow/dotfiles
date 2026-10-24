@@ -9,7 +9,7 @@ import {
 } from "./prompt-stamp.ts";
 import { ESC, RST, paceColor, pctFmt, roles } from "./ansi.ts";
 import type { Dataframe } from "./dataframe.ts";
-import { codexRateSegment } from "./provider-display.ts";
+import { codexCreditsSegment, codexRateSegment } from "./provider-display.ts";
 import { jevUsageSegment } from "./provider-display.ts";
 import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
 
@@ -276,7 +276,7 @@ export function rateRow(
           ...(df.codexWindowMinutes ?? [10080]),
           ...(df.codexRate?.windows.map((w) => w.minutes) ?? []),
         ]);
-        return [...windows]
+        const renderedWindows = [...windows]
           .toSorted((a, b) => a - b)
           .map((minutes) => {
             const window = df.codexRate?.windows.find(
@@ -290,23 +290,28 @@ export function rateRow(
                     0,
                     Temporal.Now.instant().epochMilliseconds - rate.mtimeMs,
                   );
+            let segment: string | undefined;
+            if (rate !== undefined && window !== undefined) {
+              segment = codexRateSegment(
+                { ...rate, windows: [window] },
+                undefined,
+                now,
+              );
+            } else if (rate !== undefined && rate.windows.length === 0) {
+              segment = codexCreditsSegment(rate);
+            }
             return field(
               `codex:${minutes}`,
               "codex",
-              observed(
-                window === undefined || rate === undefined
-                  ? undefined
-                  : codexRateSegment(
-                      { ...rate, windows: [window] },
-                      undefined,
-                      now,
-                    ),
-                df.codexRateWhy,
-                age > 30_000 ? age : 0,
-              ),
+              observed(segment, df.codexRateWhy, age > 30_000 ? age : 0),
             );
           })
           .join(roles.separator());
+        let credits: string | undefined;
+        if (df.codexRate !== undefined && df.codexRate.windows.length > 0)
+          credits = codexCreditsSegment(df.codexRate);
+        if (credits === undefined) return renderedWindows;
+        return `${renderedWindows}${roles.separator()}${credits}`;
       }
       return field(
         "jev",

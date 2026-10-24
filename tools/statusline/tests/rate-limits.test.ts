@@ -77,6 +77,24 @@ test("rate row prefixes Claude windows and appends Codex elapsed share and Jev t
   expect(stripAnsi(row)).not.toContain("cr ");
 });
 
+test("Codex credits follow its windows and show the signed 24h change", () => {
+  const row = stripAnsi(
+    rateRow(
+      {
+        rlModel: [],
+        codexRate: {
+          windows: [{ minutes: 10080, percent: 12 }],
+          credits: "1234",
+          creditChange: { delta: -56, spanMs: 24 * 60 * 60 * 1000 },
+          mtimeMs: 1791496800000,
+        },
+      },
+      1791496800,
+    ),
+  );
+  expect(row).toContain("· codex credits 1234 −56/24h");
+});
+
 test.each([
   [false, false],
   [true, false],

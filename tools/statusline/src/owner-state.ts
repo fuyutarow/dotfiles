@@ -139,10 +139,14 @@ const RateSchema = z
     ),
     mtimeMs: z.number(),
     credits: z.string().optional(),
+    creditChange: z
+      .object({ delta: z.number(), spanMs: z.number() })
+      .optional(),
   })
-  .transform(({ credits, ...v }) => ({
+  .transform(({ credits, creditChange, ...v }) => ({
     ...v,
     ...(credits === undefined ? {} : { credits }),
+    ...(creditChange === undefined ? {} : { creditChange }),
   }));
 
 export async function readOwnerState(

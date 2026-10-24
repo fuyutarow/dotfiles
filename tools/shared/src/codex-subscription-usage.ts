@@ -26,9 +26,37 @@ const Event = z.object({
     }),
   }),
 });
+const CREDIT_EVENT = z.object({
+  timestamp: z.iso.datetime({ offset: true }),
+  type: z.literal("event_msg"),
+  payload: z.object({
+    type: z.literal("token_count"),
+    rate_limits: z.object({
+      credits: z
+        .object({
+          has_credits: z.boolean().optional(),
+          unlimited: z.boolean().optional(),
+          balance: z.string().optional(),
+        })
+        .nullish(),
+    }),
+  }),
+});
+const CREDIT_HISTORY_DAYS = 8;
+const CREDIT_HISTORY_DIRECTORY_COUNT = CREDIT_HISTORY_DAYS + 3;
+const MAX_CREDIT_HISTORY_FILES = 32;
+const MAX_CREDIT_HISTORY_FILE_BYTES = 256 * 1024;
+const MAX_CREDIT_HISTORY_BYTES = 4 * 1024 * 1024;
+const CREDIT_DELTA_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MAX_ACCOUNT_RATE_FILES = 64;
+const MAX_ACCOUNT_RATE_FILE_BYTES = 16 * 1024 * 1024;
+const MAX_ACCOUNT_RATE_TOTAL_BYTES = 32 * 1024 * 1024;
+const ACCOUNT_RATE_DAYS = 16;
+const ACCOUNT_RATE_DIRECTORY_COUNT = ACCOUNT_RATE_DAYS + 3;
 export type CodexAccountRate = {
   windows: { minutes: number; percent: number; reset?: number }[];
-  credits?: string;
+  credits?: string | undefined;
+  creditChange?: { delta: number; spanMs: number } | undefined;
   mtimeMs: number;
 };
 type Reading = { rate: CodexAccountRate; window?: SubscriptionUsageWindow };
@@ -66,14 +94,16 @@ function fromLine(
       },
     ];
   });
-  if (windows.length === 0) return undefined;
   const credit = limits.credits;
+  const creditBalance = Number(credit?.balance);
   const credits =
     credit?.has_credits === true &&
     credit.unlimited === false &&
-    credit.balance !== undefined
-      ? String(Math.round(Number(credit.balance)))
+    credit.balance !== undefined &&
+    Number.isFinite(creditBalance)
+      ? String(Math.round(creditBalance))
       : undefined;
+  if (windows.length === 0 && credits === undefined) return undefined;
   const rate = {
     windows,
     mtimeMs: measuredAt,
@@ -134,18 +164,21 @@ async function readRollout(
   mtimeMs: number,
   nowMs: number,
   maxAgeMs: number,
+  byteLimit: number,
 ) {
   const fd = await open(path, "r").catch(() => null);
-  if (fd === null) return { failed: true };
+  if (fd === null) return { failed: true, bytesRead: 0 };
   await using handle = fd;
-  let end = size;
+  let end = Math.min(size, byteLimit);
   let suffix = "";
   let discard = false;
   let fallback: Reading | undefined;
+  let bytesRead = 0;
   while (end > 0) {
     const start = Math.max(0, end - 256 * 1024);
     const buffer = await readBlock(handle, start, end);
-    if (buffer === null) return { failed: true };
+    if (buffer === null) return { failed: true, bytesRead };
+    bytesRead += buffer.length;
     const lines = buffer.toString("utf8").split("\n");
     const hasNewline = lines.length > 1;
     const last = lines.pop() ?? "";
@@ -165,10 +198,11 @@ async function readRollout(
       (fallback === undefined || found.rate.mtimeMs > fallback.rate.mtimeMs)
     )
       fallback = found;
-    if (selected !== undefined) return { reading: selected, failed: false };
+    if (selected !== undefined)
+      return { reading: selected, failed: false, bytesRead };
     end = start;
   }
-  return { reading: fallback, failed: false };
+  return { reading: fallback, failed: false, bytesRead };
 }
 
 type Source = { path: string; size: number; mtimeMs: number };
@@ -182,6 +216,7 @@ async function readCachedRollout(
   source: Source,
   nowMs: number,
   maxAgeMs: number,
+  byteLimit: number,
 ) {
   const cached = readings.get(source.path);
   const window = cached?.reading.window;
@@ -194,13 +229,14 @@ async function readCachedRollout(
     window.resets_at !== null &&
     window.resets_at * 1000 > nowMs
   )
-    return { reading: cached.reading, failed: false };
+    return { reading: cached.reading, failed: false, bytesRead: 0 };
   const result = await readRollout(
     source.path,
     source.size,
     source.mtimeMs,
     nowMs,
     maxAgeMs,
+    byteLimit,
   );
   // Cache successful weekly facts only: a future or absent event must be reconsidered.
   if (result.reading?.window !== undefined) {
@@ -214,21 +250,183 @@ async function readCachedRollout(
   return result;
 }
 
-async function rolloutPaths(root: string): Promise<string[]> {
-  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+async function rolloutPaths(root: string, nowMs: number): Promise<string[]> {
   const files: string[] = [];
-  const directories: Promise<string[]>[] = [];
-  for (const entry of entries) {
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) directories.push(rolloutPaths(path));
-    else if (
-      entry.isFile() &&
-      entry.name.startsWith("rollout-") &&
-      entry.name.endsWith(".jsonl")
-    )
-      files.push(path);
+  const today = Temporal.Instant.fromEpochMilliseconds(nowMs)
+    .toZonedDateTimeISO("UTC")
+    .toPlainDate();
+  for (let index = 0; index < ACCOUNT_RATE_DIRECTORY_COUNT; index++) {
+    const day = today.subtract({ days: index - 1 });
+    const dir = join(
+      root,
+      String(day.year),
+      padDatePart(day.month),
+      padDatePart(day.day),
+    );
+    const names = await readdir(dir).catch(() => []);
+    const candidates = names
+      .filter((name) => name.startsWith("rollout-") && name.endsWith(".jsonl"))
+      .toSorted((a, b) => b.localeCompare(a))
+      .slice(0, MAX_ACCOUNT_RATE_FILES - files.length);
+    files.push(...candidates.map((name) => join(dir, name)));
+    if (files.length >= MAX_ACCOUNT_RATE_FILES) break;
   }
-  return files.concat((await Promise.all(directories)).flat());
+  return files;
+}
+
+type CreditSample = { at: number; balance: number | undefined };
+type RolloutSource = { path: string; mtimeMs: number; size: number };
+const FiniteCreditSample = z.object({ at: z.number(), balance: z.number() });
+
+async function creditRolloutsForDay(
+  root: string,
+  day: Temporal.PlainDate,
+  remaining: number,
+): Promise<RolloutSource[]> {
+  const dir = join(
+    root,
+    String(day.year),
+    padDatePart(day.month),
+    padDatePart(day.day),
+  );
+  const names = await readdir(dir).catch(() => []);
+  const paths = names
+    .filter((name) => name.startsWith("rollout-") && name.endsWith(".jsonl"))
+    .toSorted((a, b) => b.localeCompare(a))
+    .slice(0, remaining)
+    .map((name) => join(dir, name));
+  const sources = await Promise.all(
+    paths.map(async (path) => {
+      const info = await stat(path).catch(() => null);
+      return info !== null && info.isFile()
+        ? { path, mtimeMs: info.mtimeMs, size: info.size }
+        : null;
+    }),
+  );
+  return sources.filter((source) => source !== null);
+}
+
+function creditSampleFromLine(
+  line: string,
+  nowMs: number,
+): CreditSample | undefined {
+  if (!line.includes('"token_count"')) return undefined;
+  const parsed = jsonOf(CREDIT_EVENT).safeParse(line);
+  if (!parsed.success) return undefined;
+  const credit = parsed.data.payload.rate_limits.credits;
+  const rawBalance = Number(credit?.balance);
+  const balance =
+    credit?.has_credits === true &&
+    credit.unlimited === false &&
+    credit.balance !== undefined &&
+    Number.isFinite(rawBalance)
+      ? rawBalance
+      : undefined;
+  const at = fromThrowable(
+    () => Temporal.Instant.from(parsed.data.timestamp).epochMilliseconds,
+  )().unwrapOr(undefined);
+  if (
+    at === undefined ||
+    at > nowMs ||
+    nowMs - at > CREDIT_HISTORY_DAYS * 24 * 60 * 60 * 1000
+  )
+    return undefined;
+  return { at, balance };
+}
+
+async function creditSamplesFromRollout(
+  source: RolloutSource,
+  nowMs: number,
+  byteBudget: number,
+): Promise<{ samples: CreditSample[]; bytesRead: number }> {
+  const length = Math.min(
+    source.size,
+    MAX_CREDIT_HISTORY_FILE_BYTES,
+    byteBudget,
+  );
+  if (length <= 0) return { samples: [], bytesRead: 0 };
+  const fd = await open(source.path, "r").catch(() => null);
+  if (fd === null) return { samples: [], bytesRead: 0 };
+  await using handle = fd;
+  const buffer = Buffer.alloc(length);
+  const result = await handle
+    .read(buffer, 0, length, source.size - length)
+    .catch(() => null);
+  if (result === null) return { samples: [], bytesRead: 0 };
+  const lines = buffer
+    .subarray(0, result.bytesRead)
+    .toString("utf8")
+    .split("\n");
+  if (length < source.size) lines.shift();
+  const samples: CreditSample[] = [];
+  for (const line of lines) {
+    const sample = creditSampleFromLine(line, nowMs);
+    if (sample !== undefined) samples.push(sample);
+  }
+  return { samples, bytesRead: result.bytesRead };
+}
+
+async function readCreditHistory(
+  root: string,
+  nowMs: number,
+): Promise<Pick<CodexAccountRate, "credits" | "creditChange">> {
+  const today = Temporal.Instant.fromEpochMilliseconds(nowMs)
+    .toZonedDateTimeISO("UTC")
+    .toPlainDate();
+  const sources: RolloutSource[] = [];
+  for (let index = 0; index < CREDIT_HISTORY_DIRECTORY_COUNT; index++) {
+    const daySources = await creditRolloutsForDay(
+      root,
+      today.subtract({ days: index - 1 }),
+      MAX_CREDIT_HISTORY_FILES - sources.length,
+    );
+    sources.push(...daySources);
+    if (sources.length >= MAX_CREDIT_HISTORY_FILES) break;
+  }
+  sources.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const samples: CreditSample[] = [];
+  let remainingBytes = MAX_CREDIT_HISTORY_BYTES;
+  for (const source of sources) {
+    const result = await creditSamplesFromRollout(
+      source,
+      nowMs,
+      remainingBytes,
+    );
+    samples.push(...result.samples);
+    remainingBytes -= result.bytesRead;
+    if (remainingBytes <= 0) break;
+  }
+  samples.sort((a, b) => a.at - b.at);
+  const latest = samples.at(-1);
+  if (latest === undefined || latest.balance === undefined)
+    return { credits: undefined, creditChange: undefined };
+  const finiteSamples = samples.flatMap((sample) => {
+    const parsed = FiniteCreditSample.safeParse(sample);
+    return parsed.success ? [parsed.data] : [];
+  });
+  if (finiteSamples.length === 1)
+    return { credits: String(Math.round(latest.balance)) };
+  const cutoff = nowMs - CREDIT_DELTA_WINDOW_MS;
+  const baseline = finiteSamples
+    .toReversed()
+    .find((sample) => sample.at <= cutoff);
+  const covered = baseline ?? finiteSamples.at(0);
+  if (covered === undefined || covered === latest)
+    return { credits: String(Math.round(latest.balance)) };
+  return {
+    credits: String(Math.round(latest.balance)),
+    creditChange: {
+      delta: Math.round(latest.balance) - Math.round(covered.balance),
+      spanMs:
+        baseline === undefined
+          ? latest.at - covered.at
+          : CREDIT_DELTA_WINDOW_MS,
+    },
+  };
+}
+
+function padDatePart(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
 /** One account usage reader for agx and statusline, independent of the active session.
@@ -244,7 +442,8 @@ export async function readCodexSubscriptionUsage(
   window?: SubscriptionUsageWindow;
   reason: string;
 }> {
-  const paths = await rolloutPaths(root);
+  const creditHistory = await readCreditHistory(root, nowMs);
+  const paths = await rolloutPaths(root, nowMs);
   const candidates: Source[] = [];
   // Bound concurrent metadata reads rather than serially waiting on thousands of old files.
   for (let offset = 0; offset < paths.length; offset += 8192) {
@@ -264,17 +463,34 @@ export async function readCodexSubscriptionUsage(
   candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
   let fallback: Reading | undefined;
   let failed = false;
+  let remainingBytes = MAX_ACCOUNT_RATE_TOTAL_BYTES;
   for (const candidate of candidates) {
-    const result = await readCachedRollout(candidate, nowMs, maxAgeMs);
+    if (remainingBytes <= 0) break;
+    const result = await readCachedRollout(
+      candidate,
+      nowMs,
+      maxAgeMs,
+      Math.min(MAX_ACCOUNT_RATE_FILE_BYTES, remainingBytes),
+    );
+    remainingBytes -= result.bytesRead;
     failed ||= result.failed;
     const reading = result.reading;
     if (reading === undefined) continue;
     fallback ??= reading;
     if (reading.window !== undefined)
-      return { ...reading, reason: "fresh Codex 7d rollout rate event" };
+      return {
+        ...reading,
+        rate: { ...reading.rate, ...creditHistory },
+        reason: "fresh Codex 7d rollout rate event",
+      };
   }
   let reason = "no fresh Codex 7d rate event in rollout sources";
   if (candidates.length === 0) reason = "no fresh Codex rollout source";
   else if (failed) reason = "Codex rollout read failed";
-  return { ...(fallback === undefined ? {} : { rate: fallback.rate }), reason };
+  return {
+    ...(fallback === undefined
+      ? {}
+      : { rate: { ...fallback.rate, ...creditHistory } }),
+    reason,
+  };
 }

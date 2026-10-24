@@ -31,10 +31,56 @@ const event = (percent: number, at = now - 1000) =>
       },
     },
   });
+const creditEvent = (balance: string, at: number) =>
+  JSON.stringify({
+    timestamp: Temporal.Instant.fromEpochMilliseconds(at).toString(),
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      rate_limits: {
+        primary: null,
+        secondary: {
+          used_percent: 20,
+          window_minutes: 10080,
+          resets_at: Math.floor((now + week) / 1000),
+        },
+        credits: { has_credits: true, unlimited: false, balance },
+      },
+    },
+  });
+const creditEventWithStatus = (
+  credits:
+    | { has_credits?: boolean; unlimited?: boolean; balance?: string }
+    | undefined,
+  at: number,
+) =>
+  JSON.stringify({
+    timestamp: Temporal.Instant.fromEpochMilliseconds(at).toString(),
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      rate_limits: {
+        secondary: {
+          used_percent: 20,
+          window_minutes: 10080,
+          resets_at: Math.floor((now + week) / 1000),
+        },
+        ...(credits === undefined ? {} : { credits }),
+      },
+    },
+  });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "codex-account-"));
   roots.push(root);
-  const dir = join(root, "2026", "01", "01");
+  const day = Temporal.Instant.fromEpochMilliseconds(now)
+    .toZonedDateTimeISO(Temporal.Now.timeZoneId())
+    .toPlainDate();
+  const dir = join(
+    root,
+    String(day.year),
+    String(day.month).padStart(2, "0"),
+    String(day.day).padStart(2, "0"),
+  );
   await mkdir(dir, { recursive: true });
   return { root, file: join(dir, "rollout-account.jsonl") };
 }
@@ -97,6 +143,97 @@ test("missing source reports a reason", async () => {
     reason: "no fresh Codex rollout source",
   });
 });
+test("credit history uses the 24h baseline and returns the newest balance", async () => {
+  const root = await mkdtemp(join(tmpdir(), "codex-credit-history-"));
+  roots.push(root);
+  const today = Temporal.Instant.fromEpochMilliseconds(now)
+    .toZonedDateTimeISO(Temporal.Now.timeZoneId())
+    .toPlainDate();
+  const dir = join(
+    root,
+    String(today.year),
+    String(today.month).padStart(2, "0"),
+    String(today.day).padStart(2, "0"),
+  );
+  await mkdir(dir, { recursive: true });
+  const file = join(dir, "rollout-credit.jsonl");
+  await writeFile(
+    file,
+    [
+      creditEvent("1290", now - 25 * 60 * 60 * 1000),
+      creditEvent("1260", now - 12 * 60 * 60 * 1000),
+      creditEvent("1234", now - 1000),
+    ].join("\n"),
+  );
+  const result = await readCodexSubscriptionUsage(root, now, week);
+  expect(result.rate?.credits).toBe("1234");
+  expect(result.rate?.creditChange).toEqual({
+    delta: -56,
+    spanMs: 24 * 60 * 60 * 1000,
+  });
+});
+
+test("short credit history labels the actual covered span", async () => {
+  const root = await mkdtemp(join(tmpdir(), "codex-credit-short-history-"));
+  roots.push(root);
+  const today = Temporal.Instant.fromEpochMilliseconds(now)
+    .toZonedDateTimeISO(Temporal.Now.timeZoneId())
+    .toPlainDate();
+  const dir = join(
+    root,
+    String(today.year),
+    String(today.month).padStart(2, "0"),
+    String(today.day).padStart(2, "0"),
+  );
+  await mkdir(dir, { recursive: true });
+  const file = join(dir, "rollout-credit.jsonl");
+  await writeFile(
+    file,
+    [
+      creditEvent("1300", now - 9 * 60 * 60 * 1000),
+      creditEvent("1234", now - 1000),
+    ].join("\n"),
+  );
+  const result = await readCodexSubscriptionUsage(root, now, week);
+  expect(result.rate?.creditChange).toEqual({
+    delta: -66,
+    spanMs: 9 * 60 * 60 * 1000 - 1000,
+  });
+});
+
+test.each(["unlimited", "absent"])(
+  "a newest %s credit sample suppresses an older finite balance",
+  async (state) => {
+    const root = await mkdtemp(join(tmpdir(), "codex-credit-absence-"));
+    roots.push(root);
+    const today = Temporal.Instant.fromEpochMilliseconds(now)
+      .toZonedDateTimeISO(Temporal.Now.timeZoneId())
+      .toPlainDate();
+    const dir = join(
+      root,
+      String(today.year),
+      String(today.month).padStart(2, "0"),
+      String(today.day).padStart(2, "0"),
+    );
+    await mkdir(dir, { recursive: true });
+    const file = join(dir, "rollout-credit.jsonl");
+    await writeFile(
+      file,
+      [
+        creditEvent("1300", now - 25 * 60 * 60 * 1000),
+        creditEventWithStatus(
+          state === "unlimited"
+            ? { has_credits: true, unlimited: true, balance: "9999" }
+            : undefined,
+          now - 1000,
+        ),
+      ].join("\n"),
+    );
+    const result = await readCodexSubscriptionUsage(root, now, week);
+    expect(result.rate?.credits).toBeUndefined();
+    expect(result.rate?.creditChange).toBeUndefined();
+  },
+);
 test("an oversized unrelated line cannot hide the earlier usage event", async () => {
   const { root, file } = await fixture();
   await writeFile(

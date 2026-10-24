@@ -54,6 +54,25 @@ export function codexRateSegment(
   return parts.join(roles.separator());
 }
 
+export function codexCreditsSegment(rate: CodexRate): string | undefined {
+  if (rate.credits === undefined) return undefined;
+  const parts = [
+    roles.label("codex"),
+    roles.window("credits"),
+    roles.value(rate.credits, pctColor(0)),
+  ];
+  if (rate.creditChange !== undefined) {
+    const { delta, spanMs } = rate.creditChange;
+    const absolute = Math.abs(delta);
+    const change = delta < 0 ? `−${absolute}` : `+${absolute}`;
+    const hours = Math.floor(spanMs / 3_600_000);
+    const minutes = Math.floor((spanMs % 3_600_000) / 60_000);
+    const span = minutes === 0 ? `${hours}h` : `${hours}h${minutes}m`;
+    parts.push(roles.secondary(`${change}/${span}`));
+  }
+  return parts.join(" ");
+}
+
 export function jevUsageSegment(
   usage: JevUsage | undefined,
   why?: string,

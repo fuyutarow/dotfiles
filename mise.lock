@@ -52,29 +52,29 @@ checksum = "sha256:d7a7d3eb216614544aab0cde2d8d9f2e4e87839bf5a30a1cd11d077f02d84
 url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.3/bun-windows-x64-baseline.zip"
 
 [[tools."github:fuyutarow/agx"]]
-version = "1.6.1"
+version = "1.6.2"
 backend = "github:fuyutarow/agx"
-specifiers = ["1.6.1"]
+specifiers = ["1.6.2"]
 
 [tools."github:fuyutarow/agx"."platforms.linux-arm64"]
-checksum = "sha256:addf8780197860400f629b018e65d17ad7fd4d6479f640fd2bd1470c382b6816"
-url = "https://github.com/fuyutarow/agx/releases/download/v1.6.1/agx-1.6.1-linux-arm64.tar.gz"
-url_api = "https://api.github.com/repos/fuyutarow/agx/releases/assets/671853343"
+checksum = "sha256:788d7116ce5e80ea7a050005a4f5d169a2b8c564fd00bc5245bf3d3e7c7650a6"
+url = "https://github.com/fuyutarow/agx/releases/download/v1.6.2/agx-1.6.2-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/fuyutarow/agx/releases/assets/672175250"
 
 [tools."github:fuyutarow/agx"."platforms.linux-x64"]
-checksum = "sha256:72f33b362ea5834f84c0f636b8344767e7d489403cce9be8eebb297065d5b99b"
-url = "https://github.com/fuyutarow/agx/releases/download/v1.6.1/agx-1.6.1-linux-x64.tar.gz"
-url_api = "https://api.github.com/repos/fuyutarow/agx/releases/assets/671835145"
+checksum = "sha256:291f04f11e4aea81ea9e274c2cf074e05d2d1ddecd64e51447a379aab971a456"
+url = "https://github.com/fuyutarow/agx/releases/download/v1.6.2/agx-1.6.2-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/fuyutarow/agx/releases/assets/672165726"
 
 [tools."github:fuyutarow/agx"."platforms.macos-arm64"]
-checksum = "sha256:38e3870981ae5081f2e05efaa5f05e1d35dc4f4bd8dc01c855c18a3bfd3dbef7"
-url = "https://github.com/fuyutarow/agx/releases/download/v1.6.1/agx-1.6.1-darwin-arm64.tar.gz"
-url_api = "https://api.github.com/repos/fuyutarow/agx/releases/assets/671875558"
+checksum = "sha256:8e15fde45348d0aaeed869bd265fd56e4897782a26282cc9adf6385ffa99320f"
+url = "https://github.com/fuyutarow/agx/releases/download/v1.6.2/agx-1.6.2-darwin-arm64.tar.gz"
+url_api = "https://api.github.com/repos/fuyutarow/agx/releases/assets/672191252"
 
 [tools."github:fuyutarow/agx"."platforms.macos-x64"]
-checksum = "sha256:460103b5fc1eb1e39fbc144074cf90024e3d471b331d1e3783a46a50a1d2ec0a"
-url = "https://github.com/fuyutarow/agx/releases/download/v1.6.1/agx-1.6.1-darwin-x64.tar.gz"
-url_api = "https://api.github.com/repos/fuyutarow/agx/releases/assets/671865525"
+checksum = "sha256:6a36d16fb2d72e15e6531c3b5341668a019aaed22cd65d777e454fe5c571074c"
+url = "https://github.com/fuyutarow/agx/releases/download/v1.6.2/agx-1.6.2-darwin-x64.tar.gz"
+url_api = "https://api.github.com/repos/fuyutarow/agx/releases/assets/672184113"
 
 [[tools.rumdl]]
 version = "0.2.78"

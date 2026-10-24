@@ -23,7 +23,7 @@
 [tools]
 bun = "1.4.3"
 rumdl = "0.2.78"
-"github:fuyutarow/agx" = "1.6.1"
+"github:fuyutarow/agx" = "1.6.2"
 
 [tasks.accept]
 depends = ["bun:check"]

@@ -129,6 +129,42 @@ function cleanup(...paths: string[]): void {
 }
 
 describe("skills:sync", () => {
+  test("real in-house copies resolve without the checkout or a package installation in HOME", () => {
+    const dotfiles = join(import.meta.dir, "../..");
+    const home = makeHome();
+    using _home = {
+      [Symbol.dispose]() {
+        cleanup(home);
+      },
+    };
+    const marker = join(home, "cli-calls.log");
+    const result = run(dotfiles, home, marker, true);
+    expect(result.code, result.out).toBe(0);
+    for (const base of [".agents/skills", ".claude/skills"]) {
+      const skill = join(home, base, "driving-grok");
+      expect(lstatSync(skill).isSymbolicLink()).toBe(false);
+      const probe = Bun.spawnSync(
+        [
+          process.execPath,
+          "--no-install",
+          join(skill, "scripts/probe-models.ts"),
+          "--help",
+        ],
+        {
+          cwd: home,
+          env: { ...process.env, HOME: home, NO_COLOR: "1", FORCE_COLOR: "0" },
+          timeout: 10_000,
+        },
+      );
+      expect(probe.exitCode, probe.stderr.toString()).toBe(0);
+      expect(Bun.stripANSI(probe.stdout.toString())).toMatch(/usage/iu);
+    }
+    const calls = readFileSync(marker, "utf8");
+    const again = run(dotfiles, home, marker, true);
+    expect(again.code, again.out).toBe(0);
+    expect(readFileSync(marker, "utf8")).toBe(calls);
+  }, 120_000);
+
   test("installs only missing or out-of-date entries and reports undeclared lock entries", () => {
     const dotfiles = makeDotfiles([
       { source: "vendor/repo", skill: "alpha" },

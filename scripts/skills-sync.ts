@@ -14,6 +14,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -33,6 +34,7 @@ import {
   targetSkillNames,
 } from "./skills-install.ts";
 import { skillFiles } from "./skills-declaration.ts";
+import { prepareSkillCopy, unresolvedSkillImports } from "./skills-copy.ts";
 
 const USAGE =
   "Usage: bun scripts/skills-sync.ts [--dry-run] [--in-house-only] [--dotfiles <path>] [--home <path>]\n";
@@ -216,11 +218,12 @@ async function syncInHouseClaude(
   names: readonly string[],
   cliVersion: string,
   dryRun: boolean,
+  prepared = resolve(root, "agents/skills"),
 ): Promise<string | undefined> {
   const source = resolve(root, "agents/skills");
   const install = names.filter((name) => {
     const target = resolve(home, ".claude/skills", name);
-    return treeDigest(target) !== treeDigest(resolve(source, name));
+    return treeDigest(target) !== treeDigest(resolve(prepared, name));
   });
   if (dryRun) {
     for (const name of names.toSorted())
@@ -272,6 +275,13 @@ async function syncInHouseClaude(
   });
   if (invalid.length > 0)
     return `skills CLI did not stage matching Claude copies: ${invalid.join(", ")}`;
+
+  for (const name of install)
+    await cp(
+      resolve(prepared, name),
+      resolve(stageHome, ".claude/skills", name),
+      { recursive: true },
+    );
 
   const skillsRoot = resolve(home, ".claude/skills");
   mkdirSync(skillsRoot, { recursive: true });
@@ -338,6 +348,7 @@ async function syncInHouseCodex(
   cliVersion: string,
   dryRun: boolean,
   deferRemoval = false,
+  prepared = resolve(root, "agents/skills"),
 ): Promise<string | undefined> {
   const loaded = loadInHouseState(home);
   if (loaded.isErr()) return loaded.error;
@@ -346,10 +357,7 @@ async function syncInHouseCodex(
     ...codexInHouseNamesFromLock(home, root),
   ]);
   const digests = new Map(
-    names.map((name) => [
-      name,
-      treeDigest(resolve(root, "agents/skills", name)),
-    ]),
+    names.map((name) => [name, treeDigest(resolve(prepared, name))]),
   );
   if ([...digests.values()].some((digest) => digest === undefined))
     return "could not read a complete in-house skill tree";
@@ -358,6 +366,7 @@ async function syncInHouseCodex(
     const state = fromThrowable((path: string) => lstatSync(path))(target);
     return (
       loaded.value.skills[name] !== digests.get(name) ||
+      treeDigest(target) !== digests.get(name) ||
       state.isErr() ||
       state.value.isSymbolicLink() ||
       !state.value.isDirectory() ||
@@ -416,6 +425,10 @@ async function syncInHouseCodex(
     });
     if (missing.length > 0)
       return `skills CLI returned success without copy-installing: ${missing.join(", ")}`;
+    for (const name of install)
+      await cp(resolve(prepared, name), resolve(home, ".agents/skills", name), {
+        recursive: true,
+      });
   }
 
   if (stale.length > 0 && !deferRemoval) {
@@ -430,7 +443,7 @@ async function syncInHouseCodex(
   }
 
   if (deferRemoval) return undefined;
-  const writeError = recordInHouseState(home, root, names);
+  const writeError = recordInHouseState(home, root, names, prepared);
   return writeError;
 }
 
@@ -438,12 +451,10 @@ function recordInHouseState(
   home: string,
   root: string,
   names: readonly string[],
+  prepared = resolve(root, "agents/skills"),
 ): string | undefined {
   const skills = Object.fromEntries(
-    names.map((name) => [
-      name,
-      treeDigest(resolve(root, "agents/skills", name)) ?? "",
-    ]),
+    names.map((name) => [name, treeDigest(resolve(prepared, name)) ?? ""]),
   );
   const writeError = writeInHouseState(home, { version: 1, skills });
   return writeError === undefined
@@ -651,6 +662,30 @@ function main(): Promise<void> {
   }
 
   const run = async (): Promise<void> => {
+    const prepared = await mkdtemp(join(tmpdir(), "skills-sync-copies-"));
+    await using _prepared = {
+      [Symbol.asyncDispose]: async () => {
+        await rm(prepared, { recursive: true, force: true });
+      },
+    };
+    for (const name of inHouseNames) {
+      const target = resolve(prepared, name);
+      const built = await prepareSkillCopy(
+        resolve(dotfiles, "agents/skills", name),
+        target,
+      );
+      if (built.isErr()) {
+        fail(`FATAL: ${built.error}`);
+        process.exitCode = 1;
+        return;
+      }
+      const failures = await unresolvedSkillImports(target);
+      if (failures.length > 0) {
+        fail(`FATAL: ${failures.join("\n")}`);
+        process.exitCode = 1;
+        return;
+      }
+    }
     const stale = [...previousInHouseNames(home, dotfiles)].filter(
       (name) => !inHouseSet.has(name) && !names.includes(name),
     );
@@ -660,6 +695,7 @@ function main(): Promise<void> {
       inHouseNames,
       declaration.value.cli_version,
       false,
+      prepared,
     );
     if (claudeError !== undefined) {
       fail(`FATAL: ${claudeError}`);
@@ -674,6 +710,7 @@ function main(): Promise<void> {
       declaration.value.cli_version,
       false,
       true,
+      prepared,
     );
     if (codexError !== undefined) {
       fail(`FATAL: ${codexError}`);
@@ -700,7 +737,12 @@ function main(): Promise<void> {
         return;
       }
       removeStaleClaude(home, stale);
-      const stateError = recordInHouseState(home, dotfiles, inHouseNames);
+      const stateError = recordInHouseState(
+        home,
+        dotfiles,
+        inHouseNames,
+        prepared,
+      );
       if (stateError !== undefined) {
         fail(`FATAL: ${stateError}`);
         process.exitCode = 1;
@@ -843,7 +885,12 @@ function main(): Promise<void> {
       return;
     }
     removeStaleClaude(home, stale);
-    const stateError = recordInHouseState(home, dotfiles, inHouseNames);
+    const stateError = recordInHouseState(
+      home,
+      dotfiles,
+      inHouseNames,
+      prepared,
+    );
     if (stateError !== undefined) {
       fail(`FATAL: ${stateError}`);
       process.exitCode = 1;

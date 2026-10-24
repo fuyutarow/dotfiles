@@ -8,7 +8,8 @@ exclude = []
 max_task_chars = 6000
 timeout_ms = 20000
 no_egress = []
-pick_temperature = 1.0
+# No feedback loop: sampling adds noise; 0 picks Jev's most probable row (mode=argmax).
+pick_temperature = 0
 
 [route.jev]
 api = "typesafe"

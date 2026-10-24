@@ -72,55 +72,6 @@ export function landLiveness(
   return { live: deployPaths.length === 0, deployPaths };
 }
 
-export type LedgerAcceptance = {
-  run_id: string;
-  accept: boolean;
-  at?: string;
-  order: number;
-};
-
-export function ledgerAcceptances(lines: string[]): LedgerAcceptance[] {
-  const acceptanceSchema = z.looseObject({
-    kind: z.literal("acceptance"),
-    run_id: z.string(),
-    accept: z.boolean(),
-    at: z.string().optional(),
-  });
-  const judgments: LedgerAcceptance[] = [];
-  for (const [order, line] of lines.entries()) {
-    const parsed = jsonOf(acceptanceSchema).safeParse(line);
-    if (!parsed.success) continue;
-    judgments.push({
-      run_id: parsed.data.run_id,
-      accept: parsed.data.accept,
-      ...(parsed.data.at === undefined ? {} : { at: parsed.data.at }),
-      order,
-    });
-  }
-  return judgments;
-}
-
-export function lifecycleJudgments(lines: string[]): LedgerAcceptance[] {
-  const judgedSchema = z.looseObject({
-    type: z.literal("judged"),
-    run_id: z.string(),
-    decision: z.enum(["accept", "reject"]),
-    at: z.string().optional(),
-  });
-  const judgments: LedgerAcceptance[] = [];
-  for (const [order, line] of lines.entries()) {
-    const parsed = jsonOf(judgedSchema).safeParse(line);
-    if (!parsed.success) continue;
-    judgments.push({
-      run_id: parsed.data.run_id,
-      accept: parsed.data.decision === "accept",
-      ...(parsed.data.at === undefined ? {} : { at: parsed.data.at }),
-      order,
-    });
-  }
-  return judgments;
-}
-
 export function foreignWip(output: string): string[] | undefined {
   for (const line of output.split("\n")) {
     const marker = line.indexOf("DOTFILES_RENDER_REFUSAL_V1=");

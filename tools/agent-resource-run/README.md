@@ -3,6 +3,12 @@
 A thin Linux composition of flock and user systemd. The manifest schema lives in
 [orchestrating-agents P7](../../agents/skills/orchestrating-agents/references/measurement-and-resources.md).
 
+The required manifest is `schema`, `job_id`, `cpu_threads`, `processes`,
+`host_ram_peak_bytes`, `device`, `walltime_seconds` and `cleanup`. Narrative or
+compatibility fields (`run_class`, `memory_bound`, `scratch_bytes`, `child_fanout` and
+CPU-device GPU rationale fields) may be omitted; parsing supplies compatibility defaults.
+The host RAM hard limit remains required and must be positive.
+
 GPU admission uses the existing sum of declared VRAM reservations, less the configured safety
 margin and ccc partition. `gpu_max_concurrent_jobs` remains a parsed compatibility key and is
 ignored. The runner takes no per-device GPU count lock. Julia compilation is unthrottled by this

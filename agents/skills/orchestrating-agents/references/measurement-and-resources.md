@@ -82,7 +82,10 @@ workspace paths in the depot or project selection when the test targets are iden
 
 ### 資源envelope schema
 
-次のJSONを全欄必須とする。`child_fanout` は現在 `0` だけを受理する。nested agentは親の見込みに
+次のJSONはschema 1の完全形である。必須なのは `schema`、`job_id`、`cpu_threads`、`processes`、
+`host_ram_peak_bytes`、`device`、`walltime_seconds`、`cleanup`。`run_class`、`memory_bound`、
+`scratch_bytes`、`child_fanout` は任意で、未指定時はそれぞれ `test`、`unspecified`、`0`、`0` として
+互換出力を保つ。`child_fanout` を指定する場合は現在 `0` だけを受理する。nested agentは親の見込みに
 埋め込まず、別dispatchと別envelopeで予約する。上限不明のvendor-side fanoutは、このhostでは
 admission不能である。
 
@@ -108,6 +111,8 @@ admission不能である。
 ```
 
 `run_class` は `pilot | full | test | service`。CPUを選ぶ場合の `device` は次の形にする。
+CPU deviceの `gpu_status` と `rationale` は任意で、未指定時は `not-beneficial` と `unspecified`。
+`gpu_vram_peak_bytes` も任意で、これらのCPU device理由フィールドは実行器のadmissionには使わない。
 
 ```json
 {
@@ -118,8 +123,8 @@ admission不能である。
 }
 ```
 
-`gpu_status` は `compatible | incompatible | not-beneficial`。`compatible` では必要VRAMを必須にする。
-これらは呼出側がdevice選択の理由を記録する互換schemaである。実行器はGPU性能や空きVRAMを判定しない。
+`gpu_status` は `compatible | incompatible | not-beneficial`。これらは呼出側がdevice選択の理由を記録する
+互換schemaである。実行器はGPU性能や空きVRAMを判定しない。
 GPU primitiveと実行場所の判断は `optimizing-julia-gpu-kernels` が所有する。
 
 ### pilot前の算術上限

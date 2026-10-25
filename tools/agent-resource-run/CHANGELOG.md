@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.0 — 2026-10-25
+
+- Allow non-enforcing manifest fields to be omitted
+
 ## 1.10.0 — 2026-10-25
 
 - Set per-job MemoryHigh below MemoryMax using the declared resource policy fraction

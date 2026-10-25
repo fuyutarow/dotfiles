@@ -258,23 +258,97 @@ test.skipIf(!live)(
   15000,
 );
 
-test("manifest schema retains all P7 fields, bounds and compile slot extension", () => {
+test("minimal manifest is accepted and retains its hard-limit systemd properties", () => {
+  const minimal = {
+    schema: 1,
+    job_id: "minimal-manifest",
+    cpu_threads: 1,
+    processes: 8,
+    host_ram_peak_bytes: 128 * 1024 ** 2,
+    device: { kind: "cpu" },
+    walltime_seconds: 10,
+    cleanup: { mode: "term-then-kill", grace_seconds: 1 },
+  };
+  const parsed = validateManifest(minimal);
+  expect(parsed.isOk()).toBe(true);
+  if (parsed.isErr()) return;
+  const argv = buildSystemdLaunch(
+    parsed.value,
+    "agent-resource-minimal.scope",
+    ["true"],
+    0.9,
+  );
+  for (const value of [
+    `MemoryMax=${minimal.host_ram_peak_bytes}`,
+    `MemoryHigh=${Math.floor(minimal.host_ram_peak_bytes * 0.9)}`,
+    "MemorySwapMax=0",
+    "CPUQuota=100%",
+    "TasksMax=136",
+    "RuntimeMaxSec=10",
+    "OOMPolicy=kill",
+    "TimeoutStopSec=1",
+  ])
+    expect(argv).toContain(value);
+});
+test("old full manifest remains accepted with byte-identical systemd arguments", () => {
+  const oldFullManifest = manifest();
+  expect(validateManifest(oldFullManifest).isOk()).toBe(true);
+  expect(
+    JSON.stringify(
+      buildSystemdLaunch(
+        oldFullManifest,
+        "agent-resource-test.scope",
+        ["true"],
+        0.9,
+      ),
+    ),
+  ).toBe(
+    JSON.stringify([
+      "systemd-run",
+      "--user",
+      "--scope",
+      "--collect",
+      "--unit=agent-resource-test.scope",
+      "-p",
+      "MemoryMax=134217728",
+      "-p",
+      "MemoryHigh=120795955",
+      "-p",
+      "MemorySwapMax=0",
+      "-p",
+      "CPUQuota=100%",
+      "-p",
+      "TasksMax=136",
+      "-p",
+      "RuntimeMaxSec=10",
+      "-p",
+      "OOMPolicy=kill",
+      "-p",
+      "TimeoutStopSec=1",
+      "--",
+      "true",
+    ]),
+  );
+});
+test("missing or invalid host RAM hard limit remains rejected", () => {
+  const { host_ram_peak_bytes: _hardLimit, ...missingHardLimit } = manifest();
+  expect(validateManifest(missingHardLimit).isErr()).toBe(true);
+  expect(validateManifest(manifest({ host_ram_peak_bytes: 0 })).isErr()).toBe(
+    true,
+  );
+});
+test("manifest schema retains bounds and compile slot extension", () => {
   expect(validateManifest(manifest()).isOk()).toBe(true);
   expect(
     validateManifest(manifest({ compile_slots: ["julia-compile"] })).isOk(),
   ).toBe(true);
   const invalid = [
-    manifest({ host_ram_peak_bytes: 0 }),
     { ...manifest(), child_fanout: 1 },
     { ...manifest(), extra: 1 },
     manifest({ cpu_threads: 1025 }),
     manifest({ processes: 4097 }),
     manifest({ walltime_seconds: 86401 }),
     manifest({ compile_slots: ["julia-compile", "julia-compile"] }),
-    {
-      ...manifest(),
-      device: { kind: "cpu", gpu_status: "compatible", rationale: "test" },
-    },
   ];
   for (const value of invalid)
     expect(validateManifest(value).isErr()).toBe(true);

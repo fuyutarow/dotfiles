@@ -49,28 +49,22 @@ const jobId = z
   .min(1)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/u);
 const text = z.string().max(2000).trim().min(1);
-const cpuDevice = z
-  .strictObject({
-    kind: z.literal("cpu"),
-    gpu_status: z.enum(["compatible", "incompatible", "not-beneficial"]),
-    gpu_vram_peak_bytes: positive.optional(),
-    rationale: text,
-  })
-  .refine(
-    (d) => d.gpu_status !== "compatible" || d.gpu_vram_peak_bytes !== undefined,
-    {
-      message:
-        "device.gpu_vram_peak_bytes is required when gpu_status is compatible",
-    },
-  );
+const cpuDevice = z.strictObject({
+  kind: z.literal("cpu"),
+  gpu_status: z
+    .enum(["compatible", "incompatible", "not-beneficial"])
+    .default("not-beneficial"),
+  gpu_vram_peak_bytes: positive.optional(),
+  rationale: text.default("unspecified"),
+});
 const manifestSchema = z.strictObject({
   schema: z.literal(1),
   job_id: jobId,
-  run_class: z.enum(["pilot", "full", "test", "service"]),
+  run_class: z.enum(["pilot", "full", "test", "service"]).default("test"),
   cpu_threads: positive.max(1024),
   processes: positive.max(4096),
   host_ram_peak_bytes: positive,
-  memory_bound: text,
+  memory_bound: text.default("unspecified"),
   device: z.union([
     cpuDevice,
     z.strictObject({
@@ -79,8 +73,13 @@ const manifestSchema = z.strictObject({
       vram_peak_bytes: positive,
     }),
   ]),
-  scratch_bytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
-  child_fanout: z.literal(0),
+  scratch_bytes: z
+    .number()
+    .int()
+    .min(0)
+    .max(Number.MAX_SAFE_INTEGER)
+    .default(0),
+  child_fanout: z.literal(0).default(0),
   compile_slots: z.preprocess(
     (value) => value ?? undefined,
     z.array(z.literal("julia-compile")).max(1).optional(),

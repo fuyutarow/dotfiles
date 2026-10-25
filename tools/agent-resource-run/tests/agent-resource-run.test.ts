@@ -38,15 +38,22 @@ async function advisoryAdmission(
   return lines.join("\n");
 }
 
-const runtime = await mkdtemp(
-  join(process.env.AGX_TEST_RUNTIME_DIR ?? tmpdir(), "arr-test-"),
-);
+const runtimeBase = process.env.AGX_TEST_RUNTIME_DIR ?? "/tmp";
+const runtime = await mkdtemp(join(runtimeBase, "arr-test-"));
+afterAll(() => rm(runtime, { recursive: true, force: true }));
+const privateSocketPath = join(runtime, "systemd", "private");
+const privateSocketPathBytes = new TextEncoder().encode(
+  privateSocketPath,
+).byteLength;
+expect(
+  privateSocketPathBytes,
+  `AGENT_RESOURCE_TEST_RUNTIME_SOCKET_PATH_TOO_LONG: ${privateSocketPath} is ${privateSocketPathBytes} bytes; must be below 108 bytes. Set AGX_TEST_RUNTIME_DIR to a shorter writable base.`,
+).toBeLessThan(108);
 await symlink(`/run/user/${process.getuid?.()}/bus`, join(runtime, "bus"));
 await symlink(
   `/run/user/${process.getuid?.()}/systemd`,
   join(runtime, "systemd"),
 );
-afterAll(() => rm(runtime, { recursive: true, force: true }));
 const root = await mkdtemp(join(tmpdir(), "arr-thin-"));
 afterAll(() => rm(root, { recursive: true, force: true }));
 const runner = join(import.meta.dir, "../src/agent-resource-run.ts");

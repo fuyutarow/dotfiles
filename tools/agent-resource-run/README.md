@@ -3,23 +3,16 @@
 A thin Linux composition of flock and user systemd. The manifest schema lives in
 [orchestrating-agents P7](../../agents/skills/orchestrating-agents/references/measurement-and-resources.md).
 
-GPU jobs acquire one of the flock files at
-`$XDG_RUNTIME_DIR/agent-resource/slots/gpu.<n>`, with the count from
-`resource-policy.toml:gpu_max_concurrent_jobs`. Each acquisition waits at most
-`min(900, walltime_seconds)` seconds and returns 75 on timeout. Julia compilation is
-unthrottled by this runner and is bounded only by each job's own scope limits.
+GPU admission uses the existing sum of declared VRAM reservations, less the configured safety
+margin and ccc partition. `gpu_max_concurrent_jobs` remains a parsed compatibility key and is
+ignored. The runner takes no per-device GPU count lock. Julia compilation is unthrottled by this
+runner and is bounded only by each job's own scope limits.
 `compile_slots` and `--slot julia-compile` remain accepted compatibility no-ops.
 
-The declared default permits up to six concurrent GPU job scopes per
-`gpu.<gpu_id>` slot pool in this user's runtime directory. Different device IDs
-use separate pools; this is not a host-wide or cross-user GPU lock. Six is only a
-count ceiling: live admission sums the other jobs' declared VRAM reservations for
-the requested device, excludes the current reservation, and keeps the configured
-safety margin. A job is admitted only when that sum plus its own declared peak
-fits the available declared VRAM budget. Children count as part of their job;
-devices, process counts and leftover slot files do not increase the ceiling. The
-count is not a device or process limit and does not guarantee that a driver safely
-supports concurrent jobs. By default, the runner reads the
+Live admission sums the other jobs' declared VRAM reservations for the requested device,
+excludes the current reservation, and keeps the configured safety margin and ccc partition.
+A job is admitted only when that sum plus its own declared peak fits the available declared
+VRAM budget. By default, the runner reads the
 `resource-policy.toml` beside its source package (`tools/agent-resource-run/resource-policy.toml`
 in this checkout). `AGENT_RESOURCE_POLICY` selects a caller-supplied policy instead
 and must be an absolute path.
@@ -41,9 +34,9 @@ belong to systemd; deployment only enables the service and never starts it.
 Every command runs in its own `systemd-run --user --scope --collect` scope with
 MemoryMax, MemoryHigh, zero swap, CPUQuota, TasksMax, RuntimeMaxSec and OOMPolicy=kill.
 Before launch, the scope child verifies the effective RAM/swap ceiling and pids.peak.
-GPU slot locks are held by a separate systemd-owned holder scope, outside the caller's
-service cgroup. The holder launches the bounded job scope and stays alive while cleanup
-is confirmed, so stopping the caller cannot release a GPU slot while its job remains.
+For GPU jobs, a separate systemd-owned holder scope stays outside the caller's service
+cgroup. It launches the bounded job scope and stays alive while cleanup is confirmed,
+preserving holder lifetime independently of the caller. The per-job identity lock remains held through cleanup.
 The flock child retains its descriptors until systemd has stopped all descendants.
 If scope cleanup fails, times out, or leaves its cgroup populated, it reports HOLD,
 retains the slots and retries until the cgroup is empty or removed. A cleanup error
@@ -99,7 +92,7 @@ fresh read refuses for a host incident; a latch cleared since the initial read d
 not refuse, and a newly set latch does. Missing owner/device capacity data and excess
 declared VRAM still refuse. An unavailable process inventory still refuses because
 reservation capacity cannot be measured. Sample age and paused status alone do not refuse. The
-slot count, safety margin, ccc partition and RAM/recovery HOLD (exit 70) are unchanged.
+declared VRAM sum, safety margin, ccc partition and RAM/recovery HOLD (exit 70) are unchanged.
 The runner never invokes the GPU driver. The sampler's episode data will inform
 revisiting this advisory policy if admitting work is measured to worsen a stall.
 
@@ -107,7 +100,7 @@ Sampled-holder warnings include bounded provenance from the existing owner state
 Holder identity alone never refuses admission: unresolved, reused, nested, outside,
 or unreceipted holders emit `WARN GPU holder check is advisory, not refusing: <reason>`
 and admission continues. WSL driver PIDs may not resolve in the Linux namespace.
-Admission rests on the slot count, declared VRAM budget and fresh owner incident signal.
+Admission rests on the declared VRAM budget and fresh owner incident signal.
 Version 1 `processIdentity.sampleAt` must equal `sampledAt` and identify a retained
 sample; exactly one observation must match the reported `rawDriverPid`. The diagnostic
 reports capture times, local read/missing/reuse/permission status and local PID/TGID/NSpid

@@ -1,6 +1,5 @@
-# Runner policy. Six is the GPU job-count ceiling, including each job's surviving children.
-# Declared VRAM reservation admission still bounds concurrency; this count is not a
-# device/process count and makes no driver-concurrency safety guarantee.
+# Runner policy. gpu_max_concurrent_jobs is retained and parsed for compatibility only.
+# GPU admission is bounded by declared VRAM reservations, the safety margin and ccc partition.
 schema = 1
 gpu_max_concurrent_jobs = 6
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.0 — 2026-10-25
+
+- Remove fixed GPU job-count locks; keep VRAM-based admission
+
 ## 1.8.0 — 2026-10-25
 
 - Remove unused dispatch declaration parser and clarify launch-time admission

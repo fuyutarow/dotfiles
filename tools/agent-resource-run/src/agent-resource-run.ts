@@ -629,8 +629,6 @@ function runtimeDirectory() {
     );
   return ok(join(root, "agent-resource"));
 }
-export const gpuSlotPool = (gpuId: number) => `gpu.${gpuId}`;
-
 // Diagnostic only: local proc observations cannot establish the driver's namespace.
 function samplerProvenance(state: GpuState, pid: number): string {
   const sample = `sampled_at=${state.sampledAt ?? "unknown"}`;
@@ -1107,23 +1105,6 @@ export async function gpuAdmissionRefusal(
     return `GPU VRAM budget exceeded gpu=${deviceRequest.gpu_id} requested=${deviceRequest.vram_peak_bytes} admitted=${admittedBytes} total=${device.totalMiB * 1024 ** 2} safety_margin=${safetyMiB}MiB ccc_partition=${cccBytes}; evidence=${gpuStatePath()}`;
   return undefined;
 }
-// flock itself owns locking and waiting. The availability probe is advisory: the actual
-// acquisition below is atomic even when another caller takes this candidate first.
-async function poolSlot(directory: string, pool: string, capacity: number) {
-  const candidates = Array.from({ length: capacity }, (_, n) =>
-    join(directory, `${pool}.${n}`),
-  );
-  for (const path of candidates) {
-    const probe = await output(["flock", "-n", "-E", "75", path, "true"]);
-    if (probe.code === 0) return ok(path);
-    if (probe.code !== 75)
-      return err(new Error(`flock probe failed: ${probe.stderr.trim()}`));
-  }
-  const path = candidates[process.pid % capacity];
-  if (path === undefined)
-    return err(new Error(`no slot candidate for pool ${pool}`));
-  return ok(path);
-}
 function lock(path: string, wait: number, conflict: number, command: string[]) {
   return [
     "flock",
@@ -1340,16 +1321,6 @@ async function runDecision(
     AGENT_RESOURCE_SCOPE_LAUNCH: JSON.stringify({ argv: launch, scope }),
   };
   let argv = [process.execPath, join(import.meta.dir, "scope-controller.ts")];
-  const wait = Math.min(900, manifest.walltime_seconds);
-  if (manifest.device.kind === "gpu") {
-    const slot = await poolSlot(
-      slots,
-      gpuSlotPool(manifest.device.gpu_id),
-      config.value.gpu_max_concurrent_jobs,
-    );
-    if (slot.isErr()) return err(slot.error);
-    argv = lock(slot.value, wait, 75, argv);
-  }
   argv = lock(identity, 0, 69, argv);
   if (manifest.device.kind === "gpu") {
     argv = buildLockHolderLaunch(
@@ -1394,9 +1365,7 @@ async function runDecision(
   if (completed.isErr()) return err(completed.error);
   const code = completed.value;
   if (code === 75 && record?.launched !== true)
-    report(
-      `HOLD job=${manifest.job_id} flock wait expired after ${wait}s code=75`,
-    );
+    report(`HOLD job=${manifest.job_id} admission lock wait expired code=75`);
   if (code === 69 && record?.launched !== true && evidence === undefined)
     report(`DENY job=${manifest.job_id} reservation not granted code=69`);
   if (record !== undefined && evidence === undefined) {

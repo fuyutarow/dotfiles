@@ -15,7 +15,6 @@ import {
   buildLockHolderLaunch,
   buildSystemdLaunch,
   gpuAdmissionRefusal,
-  gpuSlotPool,
   validateManifest,
   type ResourceManifest,
 } from "../src/agent-resource-run.ts";
@@ -137,7 +136,7 @@ async function invoke(
 }
 const live = process.platform === "linux" && Bun.which("systemd-run") !== null;
 
-test("operator default permits up to six concurrent GPU jobs", async () => {
+test("legacy GPU job count remains parseable for compatibility", async () => {
   const parsed = z
     .object({
       schema: z.literal(1),
@@ -264,9 +263,7 @@ test("manifest schema retains all P7 fields, bounds and compile slot extension",
   for (const value of invalid)
     expect(validateManifest(value).isErr()).toBe(true);
 });
-test("GPU pool identity is the manifest device id, independent of compile slots", () => {
-  expect(gpuSlotPool(0)).toBe("gpu.0");
-  expect(gpuSlotPool(1)).toBe("gpu.1");
+test("GPU manifests remain independent of compile slots", () => {
   expect(
     validateManifest(
       manifest({
@@ -449,21 +446,21 @@ test("CLI retains version, help, unknown flag and malformed manifest exits", asy
 }, 30000);
 for (const stopMode of ["real-stop", "false-success"])
   test.skipIf(!live)(
-    `GPU slot remains held until a wrapper's surviving child and scope have ended (${stopMode})`,
+    `GPU holder retains the identity lock until a wrapper's surviving child and scope end (${stopMode})`,
     async () => {
       const f = await fixture(
         manifest({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 } }),
       );
       const events = join(f.dir, "scope-events");
-      const scopeFile = join(f.dir, "scope");
       const ready = join(f.dir, "child-ready");
+      const wrapperDone = join(f.dir, "wrapper-done");
       const wrapper = join(f.dir, "wrapper.ts");
       const child = join(f.dir, "child.ts");
       await Bun.write(
         child,
         `
       process.on('SIGTERM', async () => {
-        await Bun.sleep(250);
+        await Bun.sleep(1000);
         await Bun.write(${JSON.stringify(events)}, 'child-ended\\n');
         process.exit(0);
       });
@@ -475,10 +472,10 @@ for (const stopMode of ["real-stop", "false-success"])
       await Bun.write(
         wrapper,
         `
-      await Bun.write(${JSON.stringify(scopeFile)}, JSON.parse(process.env.AGENT_RESOURCE_ADMISSION_RECEIPT).scope_unit);
       // Bun closes unrelated descriptors: the child cannot retain the flock for us.
       Bun.spawn([process.execPath, ${JSON.stringify(child)}], {stdin:'ignore',stdout:'ignore',stderr:'ignore'}).unref();
       while (!(await Bun.file(${JSON.stringify(ready)}).exists())) await Bun.sleep(10);
+      await Bun.write(${JSON.stringify(wrapperDone)}, 'done');
     `,
       );
       const firstEnv: Record<string, string | undefined> = { ...f.env };
@@ -498,35 +495,46 @@ for (const stopMode of ["real-stop", "false-success"])
         firstEnv.PATH = `${bin}:${process.env.PATH}`;
       }
       const first = invoke(
-        ["--manifest", f.path, "--", process.execPath, wrapper],
-        firstEnv,
-      );
-      for (let n = 0; n < 300 && !(await Bun.file(ready).exists()); n++)
-        await Bun.sleep(10);
-      expect(await Bun.file(ready).exists()).toBe(true);
-      const second = invoke(
         [
           "--manifest",
           f.path,
           "--job-id",
-          `second-${crypto.randomUUID()}`,
+          "holder-lifetime",
           "--",
           process.execPath,
-          "-e",
-          `const fs=await import('node:fs/promises');
-       const scope=await Bun.file(${JSON.stringify(scopeFile)}).text();
-       const probe=Bun.spawn(['systemctl','--user','is-active',scope],{stdout:'pipe',stderr:'pipe'});
-       const [state,,code]=await Promise.all([probe.stdout.text(),probe.stderr.text(),probe.exited]);
-       if(code===0 || state.trim()==='deactivating') process.exit(42);
-       await fs.appendFile(${JSON.stringify(events)},'second-started\\n');`,
+          wrapper,
+        ],
+        firstEnv,
+      );
+      for (let n = 0; n < 300 && !(await Bun.file(wrapperDone).exists()); n++)
+        await Bun.sleep(10);
+      expect(await Bun.file(wrapperDone).exists()).toBe(true);
+      const duplicate = await invoke(
+        ["--manifest", f.path, "--job-id", "holder-lifetime", "--", "true"],
+        f.env,
+      );
+      expect(duplicate.exit, duplicate.stdout + duplicate.stderr).toBe(69);
+      expect(duplicate.stdout).toContain("already running");
+      const firstResult = await first;
+      expect(firstResult.exit, firstResult.stdout + firstResult.stderr).toBe(0);
+      if (stopMode === "false-success")
+        expect(firstResult.stderr).toContain("scope cgroup still populated");
+      const afterCleanup = await invoke(
+        [
+          "--manifest",
+          f.path,
+          "--job-id",
+          "holder-lifetime",
+          "--",
+          "/bin/sh",
+          "-c",
+          `echo second-started >> '${events}'`,
         ],
         f.env,
       );
-      const results = await Promise.all([first, second]);
-      for (const result of results)
-        expect(result.exit, result.stdout + result.stderr).toBe(0);
-      if (stopMode === "false-success")
-        expect(results[0]?.stderr).toContain("scope cgroup still populated");
+      expect(afterCleanup.exit, afterCleanup.stdout + afterCleanup.stderr).toBe(
+        0,
+      );
       expect(await Bun.file(events).text()).toBe(
         "child-ended\nsecond-started\n",
       );
@@ -669,14 +677,19 @@ test.skipIf(!live)(
   15000,
 );
 test.skipIf(!live)(
-  "two fake GPU jobs on one slot never overlap; status names the holder",
+  "seven in-budget GPU reservations are admitted together without count locks",
   async () => {
     const f = await fixture(
-      manifest({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 } }),
+      manifest({
+        device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1024 ** 3 },
+      }),
     );
-    const log = join(f.dir, "events");
-    const job = (name: string) =>
-      invoke(
+    const started = join(f.dir, "started");
+    const release = join(f.dir, "release");
+    await mkdir(started);
+    const jobs = Array.from({ length: 7 }, (_, index) => {
+      const name = `job-${index}`;
+      return invoke(
         [
           "--manifest",
           f.path,
@@ -685,51 +698,31 @@ test.skipIf(!live)(
           "--",
           "/bin/sh",
           "-c",
-          `[ "$AGENT_RESOURCE_VRAM_BYTES" = 1 ] || exit 42; echo start-${name} >> '${log}'; sleep 1; echo end-${name} >> '${log}'`,
+          `[ "$AGENT_RESOURCE_VRAM_BYTES" = 1073741824 ] || exit 42; touch '${started}/${name}'; while [ ! -e '${release}' ]; do sleep 0.02; done`,
         ],
         f.env,
       );
-    const first = job("a");
-    for (let n = 0; n < 100 && !(await Bun.file(log).exists()); n++)
-      await Bun.sleep(20);
-    const second = job("b");
-    const status = await invoke(["status"], f.env);
-    expect(status.exit, status.stderr).toBe(0);
-    expect(status.stdout).toContain("gpu.0");
-    expect(status.stdout).toContain("GPU_OWNER");
-    const results = await Promise.all([first, second]);
+    });
+    let names: string[] = [];
+    for (let n = 0; n < 400; n++) {
+      names = await readdir(started);
+      if (names.length === 7) break;
+      await Bun.sleep(25);
+    }
+    await Bun.write(release, "release");
+    const results = await Promise.all(jobs);
+    expect(names).toHaveLength(7);
     for (const result of results) expect(result.exit, result.stderr).toBe(0);
-    expect((await readFile(log, "utf8")).trim().split("\n")).toEqual([
-      "start-a",
-      "end-a",
-      "start-b",
-      "end-b",
-    ]);
+    const slotNames = await readdir(join(runtime, "agent-resource", "slots"));
+    expect(slotNames.filter((name) => /^gpu\.0\.\d+$/u.test(name))).toEqual([]);
   },
-  15000,
+  30000,
 );
 test.skipIf(!live)(
-  "flock queue timeout is 75 and duplicate job id remains DENY 69",
+  "duplicate job id remains DENY 69",
   async () => {
-    const f = await fixture(
-      manifest({
-        walltime_seconds: 1,
-        device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 },
-      }),
-    );
-    const locksRoot = join(runtime, "agent-resource");
-    await mkdir(join(locksRoot, "slots"), { recursive: true });
-    const blocker = Bun.spawn(
-      ["flock", "-F", join(locksRoot, "slots/gpu.0.0"), "sleep", "3"],
-      { stdout: "ignore", stderr: "ignore", timeout: 5000 },
-    );
-    await Bun.sleep(100);
-    const timed = await invoke(["--manifest", f.path, "--", "true"], f.env);
-    expect(timed.exit, timed.stderr).toBe(75);
-    expect(timed.stdout).toContain("flock wait expired");
-    await blocker.exited;
-    const marker = join(f.dir, "started");
     const a = await fixture(manifest());
+    const marker = join(a.dir, "started");
     const running = invoke(
       [
         "--manifest",

@@ -132,11 +132,9 @@ GPU primitiveと実行場所の判断は `optimizing-julia-gpu-kernels` が所�
 
 ### flock と systemd による実行
 
-Linux実行器はGPU slotの排他と、全jobのRAM ceilingを担う。
-GPU slotは `$XDG_RUNTIME_DIR/agent-resource/slots/gpu.<n>`（0始まり）であり、
-本数は `resource-policy.toml` の `gpu_max_concurrent_jobs` で決める。
-空いているslotを候補にし、競合時はflock自身が待つ。各待機は
-`flock -w min(900, walltime_seconds)` によって有限とし、timeoutはexit 75である。
+Linux実行器は全jobのRAM ceilingを担う。GPUの同時実行数を固定本数のslot lockで制限しない。
+`resource-policy.toml` の `gpu_max_concurrent_jobs` は互換性のためparseするが、admissionには使わない。
+GPU admissionは、既存のdeclared VRAM reservation合計から現在のreservationを除き、safety marginとccc partitionを差し引いた予算で決める。
 独自FIFO、CPU集合の予約、RAM/VRAM/scratchの合算台帳は持たない。
 同じjob_idの同時実行は別のflockで拒否する（DENY 69）。
 

@@ -58,21 +58,14 @@ raw結果は保持し、運転違反と科学的妥当性を分ける。無関�
 
 pilot、smoke、benchmark、test、本走、resident service のどれも「小さいから」を免除理由に
 しない。数値を生む subprocess、並列test、長走行、resident serviceを発射する前に、入力寸法から
-導いたmemory boundと一つの資源envelopeを凍結し、`agent-resource-run` の admission を通す。
-目的値や捕捉率に届かないことを理由に上限を実行中に上げない。上限で打ち切られた値は結果であり、
-OOMやswap stormは結果ではない。
+導いたmemory boundと資源上限を記録し、compute launch時に `agent-resource-run` の admission
+へ渡す。資源制限はdispatch時ではなく、実際のcompute launchを包むrunnerが適用する。
+dispatch hookはresource declarationを解析・要求しない。目的値や捕捉率に届かないことを理由に
+上限を実行中に上げない。上限で打ち切られた値は結果であり、OOMやswap stormは結果ではない。
 
-各Agent / Task dispatchは、prompt内に次のどちらかを**ちょうど一つ**持つ。
-
-```text
-RESOURCE-CLASS(NONCOMPUTE): <数値実験・benchmark・resident service・parallel test・nested fanoutを含まない理由>
-RESOURCE-ENVELOPE(/absolute/path/to/job.resource.json): agent-resource-run only
-```
-
-`NONCOMPUTE` は単なるread、設計、通常の局所編集、直列の軽い検査に限る。数値計算を「調査」と
-呼び替えたり、pilotを「計器」と呼んだりして使わない。envelopeを宣言した腕は、その計算を
-raw `julia` / `python` / test runnerで発射せず、指定pathを `agent-resource-run --manifest ... --`
-へ渡す。dispatch hookの実装は `agents/{claude,codex}/hooks/`、実行の正本は
+数値計算を「調査」と呼び替えたり、pilotを「計器」と呼んだりして、launch時のadmissionを
+迂回しない。compute commandは `agent-resource-run --manifest <path> -- <command>` で発射する。
+dispatch hookの実装は `agents/{claude,codex}/hooks/`、実行時のresource admissionの正本は
 `tools/agent-resource-run/src/agent-resource-run.ts` である。
 
 ### Julia compilation

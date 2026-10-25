@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.0 — 2026-10-25
+
+- Remove unused dispatch declaration parser and clarify launch-time admission
+
 ## 1.7.0 — 2026-10-25
 
 - Stop taking julia-compile slots; compile_slots and --slot julia-compile are accepted no-ops

@@ -46,7 +46,7 @@ async function fixture() {
   await Bun.write(join(root, "proc/self/status"), "Cpus_allowed_list:\t0-7\n");
   await Bun.write(
     join(root, "policy.toml"),
-    "schema=1\ngpu_max_concurrent_jobs=1\ngpu_safety_mib=512\n",
+    "schema=1\ngpu_max_concurrent_jobs=1\ngpu_safety_mib=512\nmemory_high_fraction=0.9\n",
   );
   await Bun.write(
     join(root, "gpu-owner.json"),

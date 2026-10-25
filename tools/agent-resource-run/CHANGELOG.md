@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.0 — 2026-10-25
+
+- Set per-job MemoryHigh below MemoryMax using the declared resource policy fraction
+
 ## 1.9.0 — 2026-10-25
 
 - Remove fixed GPU job-count locks; keep VRAM-based admission

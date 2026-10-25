@@ -143,7 +143,8 @@ GPU admissionは、既存のdeclared VRAM reservation合計から現在のreserv
 
 | property | manifestからの値 |
 |---|---|
-| MemoryMax / MemoryHigh | host_ram_peak_bytes（両方とも同じ値） |
+| MemoryMax | host_ram_peak_bytes |
+| MemoryHigh | floor(host_ram_peak_bytes × memory_high_fraction)。fractionは `tools/agent-resource-run/resource-policy.toml` が宣言し、0より大きく1未満。現在は0.9で、hard limitより先にreclaim/throttlingを始める余地を残す |
 | MemorySwapMax | 0 |
 | CPUQuota | cpu_threads × 100% |
 | TasksMax | min(65535, max(32, processes × (cpu_threads + 16))) |
@@ -151,7 +152,7 @@ GPU admissionは、既存のdeclared VRAM reservation合計から現在のreserv
 | OOMPolicy | kill |
 | TimeoutStopSec | cleanup.grace_seconds |
 
-scope内で実効memory.max、memory.high、memory.swap.maxとpids.peakの可読性を確認してから
+scope内で実効memory.maxとmemory.highがmanifest/policyの値をkernel page単位に丸めた値、memory.swap.maxが0であること、およびpids.peakの可読性を確認してから
 コマンドを起動する。ceilingを確認できなければDENY 69とし、直接実行にはfallbackしない。
 OOMとwalltimeの停止はsystemd/kernelが行い、子の終了コードをそのまま返す。
 独自monitor、process-group killer、RAM peakファイルへの永続化はない。

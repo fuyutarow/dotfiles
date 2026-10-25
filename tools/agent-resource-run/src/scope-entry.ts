@@ -4,6 +4,10 @@ import { readFile } from "node:fs/promises";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { err, fromAsyncThrowable, ok } from "neverthrow";
 import { gpuAdmissionRefusal } from "./agent-resource-run.ts";
+import {
+  effectiveMemoryLimitsMatch,
+  kernelPageSizeBytes,
+} from "./lib/cgroup-memory-limits.ts";
 
 import {
   DecisionRecord,
@@ -31,6 +35,7 @@ async function main() {
       scope_unit: z.string(),
       reservation_id: z.string(),
       host_ram_peak_bytes: z.number(),
+      memory_high_bytes: z.number(),
       gpu_safety_mib: z.number().optional(),
       device: z.object({
         kind: z.string(),
@@ -77,22 +82,31 @@ async function main() {
     }
   }
   const root = `/sys/fs/cgroup${cgroup}`;
-  const [max, high, swap, peak] = await Promise.all(
-    ["memory.max", "memory.high", "memory.swap.max", "pids.peak"].map((name) =>
-      readFile(`${root}/${name}`, "utf8"),
-    ),
-  );
+  const [memoryMax, memoryHigh, memorySwapMax, pidsPeak, smaps] =
+    await Promise.all([
+      readFile(`${root}/memory.max`, "utf8"),
+      readFile(`${root}/memory.high`, "utf8"),
+      readFile(`${root}/memory.swap.max`, "utf8"),
+      readFile(`${root}/pids.peak`, "utf8"),
+      readFile("/proc/self/smaps", "utf8"),
+    ]);
+  const pageSizeBytes = kernelPageSizeBytes(smaps);
   if (
-    Number(max) !== receipt.data.host_ram_peak_bytes ||
-    Number(high) !== receipt.data.host_ram_peak_bytes ||
-    Number(swap) !== 0 ||
-    !(Number(peak) >= 1)
+    pageSizeBytes === undefined ||
+    !effectiveMemoryLimitsMatch(
+      { memoryMax, memoryHigh, memorySwapMax, pidsPeak },
+      {
+        memoryMaxBytes: receipt.data.host_ram_peak_bytes,
+        memoryHighBytes: receipt.data.memory_high_bytes,
+      },
+      pageSizeBytes,
+    )
   )
     return err(
       new Error("scope RAM/swap ceiling or pids accounting unavailable"),
     );
   process.stdout.write(
-    `ADMIT job=${process.env.AGENT_RESOURCE_JOB_ID} scope=${receipt.data.scope_unit} ram=${max?.trim()}\n`,
+    `ADMIT job=${process.env.AGENT_RESOURCE_JOB_ID} scope=${receipt.data.scope_unit} ram=${memoryMax.trim()}\n`,
   );
   // bounded: the enclosing systemd scope owns RuntimeMaxSec, MemoryMax and TasksMax.
   const child = Bun.spawn(command.data, {

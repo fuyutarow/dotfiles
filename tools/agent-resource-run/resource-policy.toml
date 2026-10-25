@@ -3,6 +3,10 @@
 schema = 1
 gpu_max_concurrent_jobs = 6
 
+# Start reclaim/throttling at 90% of each job's hard RAM ceiling, leaving headroom
+# for reclaim before MemoryMax can trigger an OOM kill.
+memory_high_fraction = 0.9
+
 # Compatibility capacity declarations: example-repo envs/jq/jq_capacity.py reads these.
 # The thin runner does not reserve or aggregate these resources.
 min_host_ram_safety_gib = 4

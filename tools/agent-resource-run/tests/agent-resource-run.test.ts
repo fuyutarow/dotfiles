@@ -18,6 +18,10 @@ import {
   validateManifest,
   type ResourceManifest,
 } from "../src/agent-resource-run.ts";
+import {
+  effectiveMemoryLimitsMatch,
+  kernelPageSizeBytes,
+} from "../src/lib/cgroup-memory-limits.ts";
 
 // Holder identity only contributes an advisory diagnostic, never a refusal.
 async function advisoryAdmission(
@@ -93,7 +97,7 @@ async function fixture(m = manifest()) {
   const policy = join(dir, "policy.toml");
   await Bun.write(
     policy,
-    "schema=1\ngpu_max_concurrent_jobs=1\ngpu_safety_mib=512\n",
+    "schema=1\ngpu_max_concurrent_jobs=1\ngpu_safety_mib=512\nmemory_high_fraction=0.9\n",
   );
   if (m.device.kind === "gpu")
     await Bun.write(
@@ -127,12 +131,13 @@ async function fixture(m = manifest()) {
 async function invoke(
   args: string[],
   env: Record<string, string | undefined> = process.env,
+  timeout = 30000,
 ) {
   const child = Bun.spawn([process.execPath, runner, ...args], {
     env,
     stdout: "pipe",
     stderr: "pipe",
-    timeout: 30000,
+    timeout,
   });
   const [stdout, stderr, exit] = await Promise.all([
     child.stdout.text(),
@@ -143,11 +148,12 @@ async function invoke(
 }
 const live = process.platform === "linux" && Bun.which("systemd-run") !== null;
 
-test("legacy GPU job count remains parseable for compatibility", async () => {
+test("operator policy declares GPU concurrency and a sub-max memory-high fraction", async () => {
   const parsed = z
     .object({
       schema: z.literal(1),
       gpu_max_concurrent_jobs: z.number().int().min(1),
+      memory_high_fraction: z.number().gt(0).lt(1),
     })
     .safeParse(
       Bun.TOML.parse(
@@ -157,6 +163,9 @@ test("legacy GPU job count remains parseable for compatibility", async () => {
   expect(parsed.success).toBe(true);
   expect(parsed.success ? parsed.data.gpu_max_concurrent_jobs : undefined).toBe(
     6,
+  );
+  expect(parsed.success ? parsed.data.memory_high_fraction : undefined).toBe(
+    0.9,
   );
 });
 
@@ -417,15 +426,30 @@ test("GPU VRAM re-check deduplicates scopes sharing one reservation receipt", as
   expect(concurrent).toContain("GPU VRAM budget exceeded");
   expect(concurrent).toContain(`admitted=${7 * 1024 ** 3}`);
 });
-test("scope properties include RAM, zero swap, quota, tasks, walltime and OOM policy", () => {
+test("scope properties set MemoryHigh to the declared fraction below MemoryMax", async () => {
   const m = manifest();
-  const argv = buildSystemdLaunch(m, "agent-resource-test.scope", ["true"]);
+  const policy = Bun.TOML.parse(
+    await Bun.file(join(import.meta.dir, "../resource-policy.toml")).text(),
+  );
+  const parsedPolicy = z
+    .object({ memory_high_fraction: z.number().gt(0).lt(1) })
+    .safeParse(policy);
+  expect(parsedPolicy.success).toBe(true);
+  if (!parsedPolicy.success) return;
+  const fraction = parsedPolicy.data.memory_high_fraction;
+  const memoryHigh = Math.floor(m.host_ram_peak_bytes * fraction);
+  const argv = buildSystemdLaunch(
+    m,
+    "agent-resource-test.scope",
+    ["true"],
+    fraction,
+  );
   for (const value of [
     "--user",
     "--scope",
     "--collect",
     `MemoryMax=${m.host_ram_peak_bytes}`,
-    `MemoryHigh=${m.host_ram_peak_bytes}`,
+    `MemoryHigh=${memoryHigh}`,
     "MemorySwapMax=0",
     "CPUQuota=100%",
     "TasksMax=136",
@@ -433,6 +457,61 @@ test("scope properties include RAM, zero swap, quota, tasks, walltime and OOM po
     "OOMPolicy=kill",
   ])
     expect(argv).toContain(value);
+  expect(memoryHigh).toBeLessThan(m.host_ram_peak_bytes);
+});
+
+test("effective cgroup memory limits accept page-aligned readbacks", () => {
+  const pageSizeBytes = 4096;
+  const memoryMaxBytes = 128 * 1024 ** 2 + 1;
+  const memoryHighBytes = Math.floor(memoryMaxBytes * 0.9);
+  const roundedMax = Math.floor(memoryMaxBytes / pageSizeBytes) * pageSizeBytes;
+  const roundedHigh =
+    Math.floor(memoryHighBytes / pageSizeBytes) * pageSizeBytes;
+  expect(
+    kernelPageSizeBytes(
+      "00400000-00452000 r-xp 0 00:00 0\nKernelPageSize: 4 kB\n",
+    ),
+  ).toBe(pageSizeBytes);
+  expect(
+    effectiveMemoryLimitsMatch(
+      {
+        memoryMax: String(roundedMax),
+        memoryHigh: String(roundedHigh),
+        memorySwapMax: "0",
+        pidsPeak: "1",
+      },
+      { memoryMaxBytes, memoryHighBytes },
+      pageSizeBytes,
+    ),
+  ).toBe(true);
+  const roundedUpMax =
+    Math.ceil(memoryMaxBytes / pageSizeBytes) * pageSizeBytes;
+  const roundedUpHigh =
+    Math.ceil(memoryHighBytes / pageSizeBytes) * pageSizeBytes;
+  expect(
+    effectiveMemoryLimitsMatch(
+      {
+        memoryMax: String(roundedUpMax),
+        memoryHigh: String(roundedUpHigh),
+        memorySwapMax: "0",
+        pidsPeak: "1",
+      },
+      { memoryMaxBytes, memoryHighBytes },
+      pageSizeBytes,
+    ),
+  ).toBe(true);
+  expect(
+    effectiveMemoryLimitsMatch(
+      {
+        memoryMax: String(roundedMax),
+        memoryHigh: String(roundedMax),
+        memorySwapMax: "0",
+        pidsPeak: "1",
+      },
+      { memoryMaxBytes, memoryHighBytes },
+      pageSizeBytes,
+    ),
+  ).toBe(false);
 });
 test("CLI retains version, help, unknown flag and malformed manifest exits", async () => {
   const pkg = (await import("../package.json")).default;
@@ -456,7 +535,11 @@ for (const stopMode of ["real-stop", "false-success"])
     `GPU holder retains the identity lock until a wrapper's surviving child and scope end (${stopMode})`,
     async () => {
       const f = await fixture(
-        manifest({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 } }),
+        manifest({
+          host_ram_peak_bytes: 512 * 1024 ** 2,
+          cleanup: { mode: "term-then-kill", grace_seconds: 3 },
+          device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 },
+        }),
       );
       const events = join(f.dir, "scope-events");
       const ready = join(f.dir, "child-ready");
@@ -607,7 +690,7 @@ test.skipIf(!live)(
     const policy = join(f.dir, "policy-concurrent.toml");
     await Bun.write(
       policy,
-      "schema=1\ngpu_max_concurrent_jobs=2\ngpu_safety_mib=512\n",
+      "schema=1\ngpu_max_concurrent_jobs=2\ngpu_safety_mib=512\nmemory_high_fraction=0.9\n",
     );
     f.env.AGENT_RESOURCE_POLICY = policy;
     const marker = join(f.dir, "first-job-started");
@@ -754,6 +837,12 @@ test.skipIf(!live)(
   "RAM ceiling causes a scope OOM kill and passes through exit 137",
   async () => {
     const f = await fixture(manifest({ host_ram_peak_bytes: 96 * 1024 ** 2 }));
+    const oomPolicy = join(f.dir, "policy-oom.toml");
+    await Bun.write(
+      oomPolicy,
+      "schema=1\ngpu_max_concurrent_jobs=1\ngpu_safety_mib=512\nmemory_high_fraction=0.99\n",
+    );
+    f.env.AGENT_RESOURCE_POLICY = oomPolicy;
     const result = await invoke(
       [
         "--manifest",

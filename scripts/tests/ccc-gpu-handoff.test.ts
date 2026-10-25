@@ -46,7 +46,10 @@ process.exit(await child.exited);
   await chmod(join(bin, "systemctl"), 0o755);
   await chmod(join(bin, "systemd-run"), 0o755);
   const policy = join(root, "policy.toml");
-  await Bun.write(policy, "schema=1\ngpu_max_concurrent_jobs=1\n");
+  await Bun.write(
+    policy,
+    "schema=1\ngpu_max_concurrent_jobs=1\nmemory_high_fraction=0.9\n",
+  );
   const manifest = join(root, "manifest.json");
   await Bun.write(
     manifest,

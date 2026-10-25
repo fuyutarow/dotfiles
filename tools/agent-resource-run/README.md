@@ -33,10 +33,15 @@ belong to systemd; deployment only enables the service and never starts it.
 
 Every command runs in its own `systemd-run --user --scope --collect` scope with
 MemoryMax, MemoryHigh, zero swap, CPUQuota, TasksMax, RuntimeMaxSec and OOMPolicy=kill.
-Before launch, the scope child verifies the effective RAM/swap ceiling and pids.peak.
+`MemoryMax` is the manifest's `host_ram_peak_bytes`; `MemoryHigh` is its floor multiplied
+by `memory_high_fraction` from `resource-policy.toml` (currently 0.9), so reclaim and
+throttling begin below the hard limit. Before launch, the scope child verifies the
+effective MemoryMax, policy-derived MemoryHigh, zero swap and pids.peak. The effective
+cgroup memory limits are checked against page-aligned readback values from the kernel.
 For GPU jobs, a separate systemd-owned holder scope stays outside the caller's service
 cgroup. It launches the bounded job scope and stays alive while cleanup is confirmed,
-preserving holder lifetime independently of the caller. The per-job identity lock remains held through cleanup.
+preserving holder lifetime independently of the caller. The per-job identity lock remains
+held through cleanup.
 The flock child retains its descriptors until systemd has stopped all descendants.
 If scope cleanup fails, times out, or leaves its cgroup populated, it reports HOLD,
 retains the slots and retries until the cgroup is empty or removed. A cleanup error

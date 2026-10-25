@@ -596,6 +596,7 @@ async function policy() {
     .object({
       schema: z.literal(1),
       gpu_max_concurrent_jobs: positive.max(1024),
+      memory_high_fraction: z.number().gt(0).lt(1),
       gpu_partition_device: z
         .number()
         .int()
@@ -1133,7 +1134,11 @@ export function buildSystemdLaunch(
   manifest: ResourceManifest,
   scope: string,
   command: string[],
+  memoryHighFraction: number,
 ) {
+  const memoryHighBytes = Math.floor(
+    manifest.host_ram_peak_bytes * memoryHighFraction,
+  );
   const tasks = Math.min(
     65535,
     Math.max(32, manifest.processes * (manifest.cpu_threads + 16)),
@@ -1147,7 +1152,7 @@ export function buildSystemdLaunch(
     "-p",
     `MemoryMax=${manifest.host_ram_peak_bytes}`,
     "-p",
-    `MemoryHigh=${manifest.host_ram_peak_bytes}`,
+    `MemoryHigh=${memoryHighBytes}`,
     "-p",
     "MemorySwapMax=0",
     "-p",
@@ -1268,6 +1273,9 @@ async function runDecision(
     controller_pid: process.pid,
     cpu_ids: ids,
     host_ram_peak_bytes: manifest.host_ram_peak_bytes,
+    memory_high_bytes: Math.floor(
+      manifest.host_ram_peak_bytes * config.value.memory_high_fraction,
+    ),
     gpu_safety_mib: config.value.gpu_safety_mib,
     scratch_bytes: manifest.scratch_bytes,
     device: manifest.device,
@@ -1312,10 +1320,12 @@ async function runDecision(
         : undefined,
     AGENT_RESOURCE_SCOPE_COMMAND: JSON.stringify(command),
   };
-  const launch = buildSystemdLaunch(manifest, scope, [
-    process.execPath,
-    join(import.meta.dir, "scope-entry.ts"),
-  ]);
+  const launch = buildSystemdLaunch(
+    manifest,
+    scope,
+    [process.execPath, join(import.meta.dir, "scope-entry.ts")],
+    config.value.memory_high_fraction,
+  );
   const scopedEnv = {
     ...env,
     AGENT_RESOURCE_SCOPE_LAUNCH: JSON.stringify({ argv: launch, scope }),

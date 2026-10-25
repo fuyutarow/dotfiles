@@ -1,5 +1,13 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
-import { chmod, mkdtemp, mkdir, readFile, rm, symlink } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  symlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "../../shared/src/zod.ts";
@@ -526,16 +534,18 @@ for (const stopMode of ["real-stop", "false-success"])
     15000,
   );
 test.skipIf(!live)(
-  "all caller invocation shapes and job-id/slot flags still execute",
+  "compile slot compatibility forms launch without reading capacity or taking a slot",
   async () => {
-    const f = await fixture();
-    const slots = join(f.dir, "slots.toml");
-    await Bun.write(slots, "schema=1\njulia_compile=1\n");
-    for (const flags of [
-      [],
-      ["--job-id", `override-${crypto.randomUUID()}`],
-      ["--slot", "julia-compile"],
-    ]) {
+    const manifestForm = await fixture(
+      manifest({ compile_slots: ["julia-compile"] }),
+    );
+    const flagForm = await fixture();
+    const slots = join(manifestForm.dir, "slots.toml");
+    await Bun.write(slots, "this is deliberately invalid TOML");
+    for (const [f, flags] of [
+      [manifestForm, []],
+      [flagForm, ["--slot", "julia-compile"]],
+    ] as const) {
       const result = await invoke(
         ["--manifest", f.path, ...flags, "--", "/bin/sh", "-c", "exit 23"],
         { ...f.env, AGENT_RESOURCE_SLOTS: slots },
@@ -543,6 +553,18 @@ test.skipIf(!live)(
       expect(result.exit, result.stderr).toBe(23);
       expect(result.stdout).toContain("ADMIT job=");
       expect(result.stdout).toContain("RELEASE job=");
+      const names = await readdir(join(runtime, "agent-resource", "slots"));
+      expect(names.filter((name) => name.startsWith("julia-compile."))).toEqual(
+        [],
+      );
+    }
+    const f = manifestForm;
+    for (const flags of [[], ["--job-id", `override-${crypto.randomUUID()}`]]) {
+      const result = await invoke(
+        ["--manifest", f.path, ...flags, "--", "/bin/sh", "-c", "exit 23"],
+        f.env,
+      );
+      expect(result.exit, result.stderr).toBe(23);
     }
     expect(
       (await invoke(["--manifest", f.path, "--check-only"], f.env)).exit,

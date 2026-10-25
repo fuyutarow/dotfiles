@@ -6,9 +6,9 @@ A thin Linux composition of flock and user systemd. The manifest schema lives in
 GPU jobs acquire one of the flock files at
 `$XDG_RUNTIME_DIR/agent-resource/slots/gpu.<n>`, with the count from
 `resource-policy.toml:gpu_max_concurrent_jobs`. Each acquisition waits at most
-`min(900, walltime_seconds)` seconds and returns 75 on timeout. Named Julia compile
-slots use the same mechanism and the existing `~/.config/agent-resource/slots.toml`
-capacity declaration. No FIFO order is promised.
+`min(900, walltime_seconds)` seconds and returns 75 on timeout. Julia compilation is
+unthrottled by this runner and is bounded only by each job's own scope limits.
+`compile_slots` and `--slot julia-compile` remain accepted compatibility no-ops.
 
 The declared default permits up to six concurrent GPU job scopes per
 `gpu.<gpu_id>` slot pool in this user's runtime directory. Different device IDs

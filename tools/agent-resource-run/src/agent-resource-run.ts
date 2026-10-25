@@ -2,7 +2,6 @@
 // Consumer: humans and agents running one RAM-bounded command; Linux fails closed.
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, opendir, readFile, readdir, readlink } from "node:fs/promises";
-import { availableParallelism, homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
 import {
@@ -119,7 +118,6 @@ type ExecuteOptions = {
   cwd?: string;
   report?: (line: string) => void;
   manifestSource?: ManifestSource;
-  requestedSlots?: "julia-compile"[];
 };
 const reportLine = (line: string) => process.stdout.write(`${line}\n`);
 const failure = (
@@ -622,26 +620,6 @@ async function policy() {
       new UsageError(`invalid policy ${path}: ${parsed.error.message}`),
     );
   return ok(parsed.data);
-}
-async function compileCapacity() {
-  const path =
-    process.env.AGENT_RESOURCE_SLOTS ??
-    join(homedir(), ".config/agent-resource/slots.toml");
-  if (!isAbsolute(path))
-    return err(new UsageError("AGENT_RESOURCE_SLOTS must be absolute"));
-  const read = await optionalText(path);
-  if (read.isErr()) return err(read.error);
-  const raw = read.value;
-  if (raw === undefined)
-    return ok(Math.max(1, Math.floor(availableParallelism() / 6)));
-  const toml = fromThrowable(() => Bun.TOML.parse(raw))();
-  if (toml.isErr()) return err(new UsageError(`invalid slot TOML ${path}`));
-  const parsed = z
-    .strictObject({ schema: z.literal(1), julia_compile: positive.max(1024) })
-    .safeParse(toml.value);
-  if (!parsed.success)
-    return err(new UsageError(`invalid slot declaration ${path}`));
-  return ok(parsed.data.julia_compile);
 }
 function runtimeDirectory() {
   const root = process.env.XDG_RUNTIME_DIR;
@@ -1363,16 +1341,6 @@ async function runDecision(
   };
   let argv = [process.execPath, join(import.meta.dir, "scope-controller.ts")];
   const wait = Math.min(900, manifest.walltime_seconds);
-  if (
-    (options.requestedSlots?.length ?? 0) > 0 ||
-    (manifest.compile_slots?.length ?? 0) > 0
-  ) {
-    const capacity = await compileCapacity();
-    if (capacity.isErr()) return err(capacity.error);
-    const slot = await poolSlot(slots, "julia-compile", capacity.value);
-    if (slot.isErr()) return err(slot.error);
-    argv = lock(slot.value, wait, 75, argv);
-  }
   if (manifest.device.kind === "gpu") {
     const slot = await poolSlot(
       slots,
@@ -1578,8 +1546,6 @@ async function main() {
       parsed._.map(String),
       {
         manifestSource: manifestSourceFromBytes(path, bytes),
-        requestedSlots:
-          parsed.flags.slot === undefined ? [] : ["julia-compile"],
       },
       parsed.flags.checkOnly,
     )

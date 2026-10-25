@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.0 — 2026-10-25
+
+- Stop taking julia-compile slots; compile_slots and --slot julia-compile are accepted no-ops
+
 ## 1.6.1 — 2026-10-24
 
 - Replace non-null assertions with checked resource and test data access

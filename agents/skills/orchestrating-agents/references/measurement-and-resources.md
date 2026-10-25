@@ -75,15 +75,12 @@ raw `julia` / `python` / test runnerで発射せず、指定pathを `agent-resou
 へ渡す。dispatch hookの実装は `agents/{claude,codex}/hooks/`、実行の正本は
 `tools/agent-resource-run/src/agent-resource-run.ts` である。
 
-### Julia compile admission
+### Julia compilation
 
-Julia package compilation uses the host-wide `julia-compile` slot pool. A manifest that may
-precompile packages declares `"compile_slots": ["julia-compile"]`; a direct Julia command uses
-`agent-resource-run --manifest <envelope> --slot julia-compile -- julia …`. The host declaration
-is `~/.config/agent-resource/slots.toml` (`schema = 1`, `julia_compile = <positive count>`); absent
-that file, capacity is `max(1, floor(available host CPUs / 6))`. Slots are flock files under `$XDG_RUNTIME_DIR/agent-resource/slots/julia-compile.<n>`.
-`flock -w min(900, walltime_seconds)` bounds each acquisition; timeout exits 75.
-The kernel releases a lock when its last descriptor closes; FIFO ordering is not promised.
+Julia compilation is unthrottled by `agent-resource-run` and is bounded only by the job's own
+scope limits. The manifest field `compile_slots: ["julia-compile"]` and CLI flag
+`--slot julia-compile` remain accepted compatibility no-ops. The runner does not read
+`slots.toml` or acquire `julia-compile.<n>` locks.
 
 All Julia workers on one host use the same canonical project path and `JULIA_DEPOT_PATH`, including
 test runs launched from separate jj workspaces. This shares precompile caches and avoids repeating
@@ -178,7 +175,8 @@ GPUを保持するPIDとそのcommandを示す。欠落・古いsample・utiliza
 ### 発射とconsumer互換
 
 `--manifest <json>`、`--check-only`、`--job-id`、`--slot julia-compile`、`status` を保つ。
-manifestは上記schema 1のままである。`compile_slots: ["julia-compile"]` も引き続き受け付ける。
+manifestは上記schema 1のままである。`compile_slots: ["julia-compile"]` と
+`--slot julia-compile` は受理する互換性no-opで、コンパイルslot admissionは行わない。
 
 ```bash
 agent-resource-run --manifest /absolute/path/job.resource.json --check-only

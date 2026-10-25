@@ -178,10 +178,27 @@ case) while requiring at least 1,000 bytes per tolerated control byte. UTF-8
 decoding failures remain blobs; file and aggregate ceilings are unchanged.
 
 The configured chunks/s is a fallback estimate for a full rebuild, including files an incremental
-index might reuse. A completed index records ccc's persisted chunk count and elapsed time in the
+index might reuse. A completed substantial run appends its processed chunk count, elapsed time,
+start 1-minute load, available CPU count (`nproc`) and ccc version in the
 per-host `$XDG_STATE_HOME/repo-retrieve/<host>/index-rates.jsonl` file (default
-`~/.local/state/repo-retrieve/<host>/index-rates.jsonl`). Plans use the median of the latest nine
-rates when available and print whether the rate is measured or fallback. The time budget refuses a
+`~/.local/state/repo-retrieve/<host>/index-rates.jsonl`). The status interface exposes persisted
+counts rather than added/reprocessed work, so recordings use the nonnegative persisted-count
+delta (`workSource=persisted-count-delta`). A run starting with zero stored chunks (or no index
+artifacts) is a full rebuild; an unreadable baseline is unknown, never assumed zero. Incremental
+deltas are lower bounds and are excluded from full-index estimates even if large.
+
+`MIN_PROCESSED_CHUNKS=5000` and `MIN_ELAPSED_SECONDS=10` exclude small/no-op work and
+startup-dominated timings; only runs meeting both thresholds are appended. For estimation,
+require full rebuild provenance and both thresholds. Old records remain readable and untouched,
+but lack the provenance to qualify. Prefer records whose start load per CPU differs from current
+load per CPU by at most `LOAD_PER_CPU_BAND=0.5` (six load units on 12 CPUs). If none match,
+use qualifying full runs at other loads, explicitly reporting the mismatch. Take the median of
+the latest nine records in the selected pool, using processed chunks / elapsed seconds.
+Every plan prints one RATE HISTORY line identifying used records by JSONL line number and
+the named reason each other record was excluded. No qualifying record means the configured
+fallback, with an advisory warning; legacy rates alone cannot establish a trustworthy full-index
+rate. These thresholds favor bulk measurements without claiming that a rate alone proves work size.
+The time budget refuses a
 plan only when a measured historical rate is available; the fallback estimate is advisory.
 
 Exceeding any bound exits 4 before ccc starts, including with `--plan`. Invalid configuration or

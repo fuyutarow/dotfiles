@@ -73,6 +73,7 @@ export type IndexPlan = {
   data_share: number;
   est_seconds: number;
   rate_source: "measured" | "fallback";
+  rate_history?: string;
   chunks_per_second: number;
   violations: string[];
   directories: (Totals & { directory: string })[];
@@ -320,7 +321,8 @@ export async function computeIndexPlan(
       files.push(file.data);
     }
     const measuredRate = await readIndexRate();
-    const plan = summarize(files, budget, measuredRate);
+    const plan = summarize(files, budget, measuredRate.rate);
+    plan.rate_history = measuredRate.report;
     // A directory can itself end in '.json'. Ask ccc whether a proposed glob would
     // prune any ancestor of an included file; extension-scoping alone is insufficient.
     const dataItems = plan.contributors.filter((item) => item.kind === "data");
@@ -425,6 +427,7 @@ export function planReport(plan: IndexPlan): string {
         "\n";
   return (
     `PLAN: ${plan.total.files} files, ${plan.total.bytes} bytes, ${plan.total.est_chunks} est_chunks (ceil(chars / 800)); data ${(plan.data_share * 100).toFixed(1)}%; estimated GPU ${plan.est_seconds.toFixed(1)}s at ${plan.chunks_per_second.toFixed(2)} chunks/s (${plan.rate_source})\n` +
+    `${plan.rate_history ?? "RATE HISTORY: no history supplied"}\n` +
     (plan.rate_source === "fallback"
       ? "PLAN WARNING: time estimate uses the configured fallback rate; the time budget is advisory until a measured host rate exists.\n"
       : "") +

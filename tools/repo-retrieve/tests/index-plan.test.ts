@@ -942,7 +942,7 @@ test("rate medians ignore invalid samples and handle odd and even histories", ()
   expect(median([8, 2, 6, 4, 0, -1, NaN, Infinity])).toBe(5);
 });
 
-test("rate history is per host and plans use the median of the latest nine runs", async () => {
+test("rate history is per host and plans use the median of the latest nine qualifying runs", async () => {
   const stateHome = mkdtempSync(join(tmpdir(), "rr-index-rate-"));
   roots.push(stateHome);
   const path = indexRateFile({ XDG_STATE_HOME: stateHome }, "fixture-host");
@@ -951,8 +951,21 @@ test("rate history is per host and plans use the median of the latest nine runs"
     path,
   );
   for (const rate of [100, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-    await recordIndexRate(rate, 100, path);
-  expect(await readIndexRate(path)).toBe(5);
+    await recordIndexRate(
+      {
+        processedChunks: rate * 5_000,
+        elapsedSeconds: 5_000,
+        fullRebuild: true,
+        workSource: "persisted-count-delta",
+        startLoad1: 0,
+        nproc: 12,
+        cccVersion: "fixture",
+      },
+      path,
+    );
+  expect((await readIndexRate(path, { startLoad1: 0, nproc: 12 })).rate).toBe(
+    5,
+  );
 });
 
 // The production entry imports only the fake walk/settings modules below, never an indexer.

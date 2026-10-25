@@ -41,7 +41,7 @@ import {
   type Result,
 } from "neverthrow";
 import { resolveDbDir } from "./ccc-db-dir.ts";
-import { recordIndexRate } from "./index-rate.ts";
+import { hostLoad, processedWork, recordIndexRate } from "./index-rate.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
 import {
@@ -904,6 +904,18 @@ async function reindexCertified(
   expectedHead?: string | null,
   plan?: IndexPlan,
 ): Promise<Result<{ code: number; head: string | null }, Error>> {
+  const initial = await indexProgressSample(project);
+  const initialArtifacts = await hasIndexArtifacts(project);
+  const initialChunks =
+    initial.chunks ??
+    (initialArtifacts.isOk() && !initialArtifacts.value ? 0 : undefined);
+  const version = await runChildCaptured(
+    [ccc, "version"],
+    10_000,
+    false,
+    project,
+  );
+  const startLoad = hostLoad();
   const startedAt = Temporal.Now.instant().epochMilliseconds;
   let head: string | null = null;
   let certified = false;
@@ -1001,7 +1013,14 @@ async function reindexCertified(
     elapsedSeconds > 0
   ) {
     const recorded = await fromAsyncThrowable(
-      () => recordIndexRate(completedChunks / elapsedSeconds, elapsedSeconds),
+      () =>
+        recordIndexRate({
+          ...processedWork(initialChunks, completedChunks),
+          elapsedSeconds,
+          ...startLoad,
+          cccVersion:
+            version.exitCode === 0 ? version.stdout.trim() : "unknown",
+        }),
       asError,
     )();
     if (recorded.isErr())

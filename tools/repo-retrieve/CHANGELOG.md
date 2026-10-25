@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1 — 2026-10-25
+
+- Measure full-index throughput from substantial work and prefer comparable host load
+
 ## 1.5.0 — 2026-10-25
 
 - Add a read-only research-record-v1 Markdown view exporter

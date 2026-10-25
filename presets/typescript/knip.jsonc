@@ -1,0 +1,27 @@
+{
+  "$schema": "https://unpkg.com/knip@6.42.1/schema-jsonc.json",
+  // Like coralbase, an export used by its own file is not dead code.
+  "ignoreExportsUsedInFile": true,
+  "workspaces": {
+    ".": {
+      "entry": [
+        "**/*.{test,spec}.{ts,tsx,js,jsx}",
+        // Top-level task scripts are executable roots. Add each nested CLI explicitly below.
+        "scripts/*.ts"
+      ],
+      "project": ["**/*.{ts,tsx,js,jsx}"],
+      // These pinned tools are invoked by mise tasks and hooks, not package scripts.
+      "ignoreDependencies": [
+        "knip", // this wrapper invokes Knip directly, outside package scripts.
+        "oxlint", // lint tasks invoke its local CLI.
+        "oxlint-plugin-eslint", // oxlint loads the JavaScript rules plugin.
+        "oxlint-tsgolint", // oxlint's type-aware lint task invokes this backend.
+        "oxfmt" // format tasks invoke its local CLI.
+      ],
+      // mise is pinned and invoked outside npm package scripts.
+      "ignoreBinaries": ["mise"]
+    }
+  }
+  // For a monorepo, add coralbase-style workspace blocks, e.g.:
+  // "packages/*": { "entry": ["**/*.{test,spec}.ts"], "project": ["**/*.ts"] }
+}

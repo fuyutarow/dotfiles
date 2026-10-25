@@ -1,14 +1,16 @@
 name = "typescript"
-description = "Strict TypeScript compiler, package, codec, mise tasks, and standard oxlint configuration"
+description = "Strict TypeScript compiler, package, codec, knip, mise tasks, and standard oxlint configuration"
 files = [
   { source = "house-plugin.js", destination = "house-plugin.js" },
   { source = "house.oxlintrc.json", destination = "house.oxlintrc.json" },
   { source = ".oxlintrc.json", destination = ".oxlintrc.json", createOnly = true },
   { source = "tsconfig.json", destination = "tsconfig.json" },
-  { source = "package.json", destination = "package.json", createOnly = true, requiredJsonKeys = ["devDependencies.@types/bun", "devDependencies.oxfmt", "devDependencies.oxlint", "devDependencies.oxlint-plugin-eslint", "devDependencies.oxlint-tsgolint", "engines.bun"] },
+  { source = "package.json", destination = "package.json", createOnly = true, requiredJsonKeys = ["devDependencies.@types/bun", "devDependencies.knip", "devDependencies.oxfmt", "devDependencies.oxlint", "devDependencies.oxlint-plugin-eslint", "devDependencies.oxlint-tsgolint", "engines.bun"] },
+  { source = "knip.jsonc", destination = "knip.jsonc", createOnly = true },
   { source = "zod.ts", destination = "zod.ts" },
   { source = "mise-tasks.toml", destination = "mise-tasks.toml" },
   { source = "require-bun.ts", destination = "require-bun.ts" },
   { source = "lint-oxlint.ts", destination = "lint-oxlint.ts" },
+  { source = "lint-knip.ts", destination = "lint-knip.ts" },
 ]
-check = ["bun test presets/tests/presets.test.ts", "bun test presets/tests/cli.test.ts"]
+check = ["bun test presets/tests/presets.test.ts", "bun test presets/tests/cli.test.ts", "bun test presets/tests/knip.test.ts"]

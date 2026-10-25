@@ -9,7 +9,7 @@
 depends = ["lint:ts"]
 
 [tasks.check]
-depends = ["lint", "typecheck"]
+depends = ["lint", "lint:knip", "typecheck"]
 
 [tasks."hook:pre-commit"]
 depends = ["fmt:staged", "lint"]
@@ -22,6 +22,15 @@ run = "lint-ts-candidate"
 description = "oxlint --type-aware on every TypeScript/TSX file the config does not ignore"
 run = "bun lint-oxlint.ts --type-aware"
 
+[tasks."lint:knip"]
+description = "Fail on unused exports, files, dependencies, and binaries"
+run = "bun lint-knip.ts"
+
 [tasks.typecheck]
 description = "Type-check with bun check against tsconfig.json (requires Bun >= 1.4.3)"
 run = "bun require-bun.ts && bun check"
+
+# In a consumer's fix task, keep knip report-only so cleanup remains deliberate:
+# export/type fixes can leave declarations unused, dependency fixes can leave bun.lock stale,
+# and deleting files needs review.
+# run = "bun --no-env-file x --no-install --bun knip --no-progress --no-exit-code"

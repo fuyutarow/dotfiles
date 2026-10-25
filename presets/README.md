@@ -63,15 +63,16 @@ as a configuration surface covers new kinds without registry edits.
 
 ## Existing presets
 
-`typescript` copies `tsconfig.json`, `package.json`, `zod.ts`, `mise-tasks.toml`,
-`lint-oxlint.ts`, `.oxlintrc.json`, `house.oxlintrc.json`, and its JS plugin. See
-[the TypeScript README](typescript/README.md) for React opt-in and the checked
-oxlint runner.
+`typescript` copies `tsconfig.json`, `package.json`, create-only `knip.jsonc`,
+`zod.ts`, `mise-tasks.toml`, `lint-oxlint.ts`, `lint-knip.ts`, `.oxlintrc.json`,
+`house.oxlintrc.json`, and its JS plugin. See [the TypeScript README](typescript/README.md)
+for React opt-in, the checked oxlint runner, and the knip gate.
 Dotfiles extends `typescript/tsconfig.json`, keeping its own include/exclude paths at the
 root. Consumers may tighten compiler options; weakening the preset is drift.
 
 TypeScript's `package.json` is created only when absent and then belongs to the
-consumer. Its manifest selects the house devDependency pins and `engines.bun`
+consumer. Its manifest selects the house devDependency pins (including knip
+6.42.1) and `engines.bun`
 for key checks; their required values live only in the package template.
 Consumers retain their own name, bins, workspaces, type, dependencies and extra
 devDependencies. Fix reported package key drift in the consumer; sync preserves

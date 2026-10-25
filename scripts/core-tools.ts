@@ -1,12 +1,17 @@
-// Brewfile.core owns the package list; tools/tool-tiers owns its command map and this module checks prefixes.
+// Brewfile.core owns the package list; tool-tiers owns its command map; this checks prefixes.
 import { realpathSync } from "node:fs";
+import { homedir, hostname } from "node:os";
 import { join } from "node:path";
-import { hostname, homedir, release } from "node:os";
 import { LAND_HOSTS } from "./config-registry.ts";
 import {
   commandsForFormula,
   readToolCommandMap,
 } from "../tools/tool-tiers/src/tool-commands.ts";
+import {
+  currentToolHost,
+  parseBrewEntries,
+  type ToolHost,
+} from "../tools/tool-tiers/src/tool-tiers.ts";
 
 export const LINUXBREW = "/home/linuxbrew/.linuxbrew";
 
@@ -14,26 +19,27 @@ export async function coreCommands(
   root: string,
   options: { isWsl?: boolean } = {},
 ): Promise<string[]> {
-  const isWsl =
-    options.isWsl ??
-    (process.platform === "linux" && /microsoft/iu.test(release()));
+  const detectedHost = currentToolHost();
+  const host: ToolHost = {
+    ...detectedHost,
+    isWsl: options.isWsl ?? detectedHost.isWsl,
+  };
   const commandMap = readToolCommandMap();
-  const names = (await Bun.file(join(root, "Brewfile.core")).text())
-    .split("\n")
-    .flatMap((line) => {
-      const match = /^\s*(brew|cask) "([^"]+)"/u.exec(line);
-      const kind = match?.[1];
-      const name = match?.[2]?.split("/").at(-1);
+  const text = await Bun.file(join(root, "Brewfile.core")).text();
+  const names = parseBrewEntries(text, "core", host).flatMap(
+    ({ kind, name }) => {
+      const base = name.split("/").at(-1) ?? name;
       if (
-        name === undefined ||
-        (name === "codex" && !isWsl) ||
-        (kind === "cask" && !commandMap.has(name))
+        (base === "codex" && !host.isWsl) ||
+        (kind === "cask" && !commandMap.has(base))
       )
         return [];
       return commandsForFormula(name, commandMap);
-    });
+    },
+  );
   return [...new Set(names)];
 }
+
 export function brewPrefix(
   home = homedir(),
   host = hostname(),

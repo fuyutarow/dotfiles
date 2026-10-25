@@ -15,3 +15,5 @@ wl-clipboard	wl-copy wl-paste
 bubblewrap	bwrap
 texlive	bibtex chktex kpsewhich latexmk lualatex tlmgr
 codex	codex
+agx	agx
+dx	dx

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0 — 2026-10-25
+
+- Add a read-only research-record-v1 Markdown view exporter
+
 ## 1.4.7 — 2026-10-25
 
 - Name the queried project in BUSY results and preserve daemon indexing observations on search timeout.

@@ -278,3 +278,45 @@ observations do not establish an infinite hang or reproduce the production GPU s
 The installed daemon uses project-local index locks but shares the embedder and its
 batch runner queue across projects; rr cannot cancel one upstream job or guarantee
 cross-project embedding latency. No daemon restart is performed by a timed-out search.
+
+## Derived research-record-v1 text view
+
+`views/research-record-v1.ts` builds a regenerable Markdown view outside the frozen
+v1 store. Each `<full-hash>-<kind>.md` contains verbatim statement text and a short
+header with hash, kind, mode, explicit status/closing_condition, source object path
+and fragment id. Other metadata stays in the source store. The reader validates
+FORMAT, each fragment MANIFEST and canonical hashes, stream-hashes raw payloads,
+and never writes to the store. Run from any directory:
+
+```sh
+bun /path/to/dotfiles/tools/repo-retrieve/views/research-record-v1.ts \
+  --store "$HOME/Workspace/research-record-v1" \
+  --out "$HOME/.local/share/rr-views/research-record-v1-sharded-2" \
+  --kinds statement --shards 2
+```
+
+Use a fresh dedicated output when changing kinds or shard count; nothing is deleted.
+Repeated exports reuse byte-identical files. Optional `--shards N` (1–16) partitions
+all selected objects by `floor(first_hash_hex_digit * N / 16)` into `shard-01`, etc.
+Each shard is a separate ccc project: run `ccc init`, configure its own settings.yml
+and rr.toml with `max_seconds = 600`, then save `rr index --plan` before indexing.
+Include all statement files in each shard; no hash sampling or size exclusions are
+needed. For a canonical statement over the planner's per-file byte ceiling, declare
+its exact filename and byte size in `[index.file_byte_allowances]`; all chunk,
+aggregate-byte and time gates still apply. Choose the smallest shard count whose
+every plan fits. This preserves 100% coverage across the shard union.
+
+Stdout reports physical object occurrences by top-level kind (raw payloads separately),
+source bytes, selected occurrences, and output files/bytes. Nested run input kinds
+are not separate objects. Duplicate hashes share a file; sorted traversal chooses the
+last source path deterministically. Memory holds one fragment inventory and one record,
+while payload bytes stream. The view is derived data, not a v1 authority. Re-plan after
+regeneration. The measured 105.67 chunks/s rate came from a contended host; rate history
+must remain untouched. On 2026-10-25, the slim full view contained 54,078 statements
+(95,312,479 bytes). Two shards are the minimum at that measured rate: the exact
+126,296-chunk union exceeds one 600-second job. Groups `0–7` and `8–f` contain
+63,053 and 63,243 chunks. Use `max_est_chunks = 63399`, `max_data_share = 0.20`,
+`max_seconds = 600` and fallback `est_chunks_per_second = 105` for each shard.
+Register and plan each shard directory separately, then index sequentially when
+host load permits. Earlier full-view and three-shard directories are superseded;
+the final two-shard union retains every statement.

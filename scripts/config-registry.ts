@@ -310,7 +310,7 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   // jj reads every conf.d/*.toml beside its user config; `jj config set --user` writes config.toml
   // (TOOL_OWNED below) — but conf.d when config.toml is missing, hence the empty file (measured).
   ["all", "jj/config.toml", ".config/jj/conf.d/dotfiles.toml"],
-  // The sole global mise tool is the A-class agx suite, following latest without age delay (INV-6).
+  // INV-6 requires zero global mise tool rows; this declaration only supplies settings.
   ["all", "mise/dotfiles.toml", ".config/mise/conf.d/dotfiles.toml"],
 
   // --- lazygit (config dir differs by OS) ---

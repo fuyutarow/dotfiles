@@ -69,46 +69,34 @@ check_global_mise_tools() {
     const dir = process.argv[1];
     const declaration = process.argv[2];
     const authored = Bun.TOML.parse(await Bun.file(declaration).text());
-    const suites = ["agx", "dx"];
-    const allowedKeys = suites.map(suite => `github:fuyutarow/${suite}`);
-    if (Object.keys(authored.tools ?? {}).length !== allowedKeys.length) {
-      process.stdout.write(`[FAIL] ${declaration}: expected exactly the agx and dx suite declarations\n`);
+    const disabledTools = ["github:fuyutarow/agx", "github:fuyutarow/dx"];
+    if (Object.keys(authored.tools ?? {}).length !== 0) {
+      process.stdout.write(`[FAIL] ${declaration}: expected zero global tool rows\n`);
+      process.exit(1);
+    }
+    const configuredDisabled = authored.settings?.disable_tools;
+    if (!Array.isArray(configuredDisabled) ||
+        JSON.stringify([...configuredDisabled].sort()) !== JSON.stringify([...disabledTools].sort())) {
+      process.stdout.write(`[FAIL] ${declaration}: expected disable_tools for agx and dx\n`);
+      process.exit(1);
+    }
+    const replacements = authored.settings?.url_replacements ?? {};
+    if (Object.keys(replacements).some(key => /fuyutarow\/(agx|dx)\//i.test(key))) {
+      process.stdout.write(`[FAIL] ${declaration}: agx/dx URL replacements must be absent\n`);
       process.exit(1);
     }
     const root = join(declaration, "../..");
     for (const name of ["mise.toml", "mise.lock"]) {
       const config = Bun.TOML.parse(await Bun.file(join(root, name)).text());
-      if (allowedKeys.some(key => Object.hasOwn(config.tools ?? {}, key))) {
-        process.stdout.write(`[FAIL] ${name}: agx and dx must be declared only in user-global mise/dotfiles.toml, without a repository lock\n`);
+      if (disabledTools.some(key => Object.hasOwn(config.tools ?? {}, key))) {
+        process.stdout.write(`[FAIL] ${name}: agx and dx must not be pinned in a repository or lock\n`);
         process.exit(1);
       }
-    }
-    const replacements = authored.settings?.url_replacements;
-    if (Object.keys(replacements ?? {}).length !== suites.length || suites.some(suite =>
-      replacements?.[`https://api.github.com/repos/fuyutarow/${suite}/`] !==
-        `https://api.github.com/repos/Fuyutarow/${suite}/`)) {
-      process.stdout.write(`[FAIL] ${declaration}: expected only the direct agx and dx API URL replacements\n`);
-      process.exit(1);
-    }
-    // Compare only the supported declaration shape, by value and independently of key order.
-    const normalize = value => {
-      if (typeof value === "string") return JSON.stringify([value, null]);
-      if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
-      if (Object.keys(value).some(key => key !== "version" && key !== "minimum_release_age")) return undefined;
-      if (typeof value.version !== "string" ||
-          (value.minimum_release_age !== undefined && typeof value.minimum_release_age !== "string")) return undefined;
-      return JSON.stringify([value.version, value.minimum_release_age ?? null]);
-    };
-    const allowed = JSON.stringify(["latest", "0"]);
-    if (allowedKeys.some(key => normalize(authored.tools?.[key]) !== allowed)) {
-      process.stdout.write(`[FAIL] ${declaration}: agx and dx must follow latest without release-age delay\n`);
-      process.exit(1);
     }
     const conf = join(dir, "conf.d");
     const files = [join(dir, "config.toml"),
       ...(existsSync(conf) ? readdirSync(conf).filter(name => name.endsWith(".toml")).sort()
         .map(name => join(conf, name)) : [])];
-    const pins = new Map(allowedKeys.map(key => [key, 0]));
     let failed = false;
     for (const file of files) {
       if (!existsSync(file)) continue;
@@ -118,25 +106,15 @@ check_global_mise_tools() {
         if (config.tools === null || typeof config.tools !== "object" || Array.isArray(config.tools))
           throw new Error("[tools] must be a table");
         for (const [key, version] of Object.entries(config.tools)) {
-          const count = (pins.get(key) ?? 0) + 1;
-          if (!pins.has(key) || normalize(version) !== allowed || count > 1) {
-            process.stdout.write(`[FAIL] ${file}: forbidden global tool row ${key} = ${JSON.stringify(version)} (INV-6)\n`);
-            failed = true;
-          }
-          if (pins.has(key)) pins.set(key, count);
+          process.stdout.write(`[FAIL] ${file}: forbidden global tool row ${key} = ${JSON.stringify(version)} (INV-6)\n`);
+          failed = true;
         }
       } catch (error) {
         process.stdout.write(`[FAIL] ${file}: ${error instanceof Error ? error.message : String(error)}\n`);
         failed = true;
       }
     }
-    for (const [key, count] of pins) {
-      if (count !== 1) {
-        process.stdout.write(`[FAIL] global mise config: expected exactly one ${key} declaration, found ${count}\n`);
-        failed = true;
-      }
-    }
-    if (!failed) process.stdout.write(`[PASS] global mise config: no toolchain defaults; exactly agx and dx latest suite declarations without release-age delay\n`);
+    if (!failed) process.stdout.write(`[PASS] global mise config: zero tool rows; agx and dx disabled in the authored settings\n`);
     process.exit(failed ? 1 : 0);
   ' "${XDG_CONFIG_HOME:-$HOME/.config}/mise" "$ROOT/mise/dotfiles.toml"
 }
@@ -204,9 +182,8 @@ n=$(count_path $SHIMS "$out")
 [[ $n == 1 ]] && ok "non-interactive: shim dir appears exactly once on re-entry" \
               || bad "non-interactive: shim dir appears $n times (strip-then-prepend broken)"
 
-# --- 6. no global toolchain defaults; agx and dx are each declared once, without repo locks ---
-# config.toml and every conf.d/*.toml count; together they must declare each suite exactly once.
-# Only the operator exceptions in mise/dotfiles.toml are allowed; extra or different pins fail.
+# --- 6. no global tool rows; agx and dx are disabled against stale repository pins ------------
+# config.toml and every conf.d/*.toml count; any tool row violates INV-6.
 check_global_mise_tools && ok "global mise tool scope obeys INV-6" \
                         || bad "global mise tool scope violates INV-6"
 [[ -e $HOME/.tool-versions ]] && bad "~/.tool-versions exists — a global default by another name" \

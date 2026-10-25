@@ -68,13 +68,14 @@ test("candidate render includes imported siblings and refuses an unselected decl
   });
   await writeFile(join(base, settings), oldSettings);
   await writeFile(join(base, "agents/codex/hooks.json"), "{}");
-  // These declarations are render inputs too: the scratch HOME must not lose
-  // the suite pin when a nested mise removes its caller's PATH activation.
+  // The global settings declaration is a render input too, even though this
+  // fixture does not depend on a global tool row.
   await mkdir(join(base, "mise"), { recursive: true });
-  const suitePin =
-    '[tools]\n"github:fuyutarow/agx" = { version = "latest", minimum_release_age = "0" }\n';
-  await writeFile(join(base, "mise.toml"), suitePin);
-  await writeFile(join(base, "mise/dotfiles.toml"), suitePin);
+  await writeFile(join(base, "mise.toml"), "[tasks]\nfixture = 'true'\n");
+  await writeFile(
+    join(base, "mise/dotfiles.toml"),
+    '[settings]\ndisable_tools = ["github:fuyutarow/agx", "github:fuyutarow/dx"]\n',
+  );
   const manifest = jsonOf(z.record(z.string(), z.unknown())).safeParse(
     await readFile(join(base, "package.json"), "utf8"),
   );

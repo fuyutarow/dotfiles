@@ -1,16 +1,4 @@
-# Mise 2026.10.11+ uses mise-versions for GitHub release metadata, which can lag the upstream
-# release. Replace each suite's API URL with a case variant so mise queries GitHub directly.
-# This relies on mise's per-repository URL-replacement check in versions_host.rs:818 and
-# github_is_url_replaced in versions_host.rs:845-851. If `mise ls-remote` reports an agx or dx release
-# older than the newest GitHub release, this bypass may have stopped working and needs review.
-[settings.url_replacements]
-"https://api.github.com/repos/fuyutarow/agx/" = "https://api.github.com/repos/Fuyutarow/agx/"
-"https://api.github.com/repos/fuyutarow/dx/" = "https://api.github.com/repos/Fuyutarow/dx/"
-
-# Owner decision (2026-10-25): the A-class agx and dx suites follow the newest GitHub release
-# without release-age delay. This is their sole declaration, deployed user-global; no repository
-# lock records either. Each release procedure installs an explicit version and checks every consumer.
-# INV-6 in zsh/zshenv.
-[tools]
-"github:fuyutarow/agx" = { version = "latest", minimum_release_age = "0" }
-"github:fuyutarow/dx" = { version = "latest", minimum_release_age = "0" }
+[settings]
+# Stale repository pins (old workspace bases still carry "github:fuyutarow/agx" = "1.6.3")
+# must not reinstall these tools through mise. Homebrew owns both.
+disable_tools = ["github:fuyutarow/agx", "github:fuyutarow/dx"]

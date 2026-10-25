@@ -47,17 +47,14 @@ their executable details.
   globally or remove existing experiment runtimes while migrating core utilities.
 - A mise-managed tool is reachable only where declared. Never use `mise use -g`, add a
   second login-shell version manager, or expose mise shims on interactive PATH.
-  Toolchains have no global default version; the only named INV-6 exceptions are the
-  A-class agx and dx suites, each declared once, user-global, as `latest` with
-  `minimum_release_age = "0"` in `mise/dotfiles.toml`: they follow the newest release
-  without release-age delay. No repository declaration or lock records either suite;
-  their release procedures install an explicit version and check `agx -V` and
-  `mise exec -C <repo> -- dx --version`, respectively, in every consumer.
+  INV-6 allows no global tool rows. A-class agx and dx are Homebrew core tools from the
+  shared public tap; release procedures check `agx -V` and `dx --version` on PATH.
+  See [README's Tool installation kinds](README.md#tool-installation-kinds).
   `mise activate` serves interactive per-directory shells; the shim directory serves only
   non-interactive shells. Homebrew-managed core Bun/uv remain available in every cwd.
   Verify scope changes with `mise run test:mise-scope`.
 - Machine-wide operator tools (A) are installed from the pinned root package through
-  `bun install` / `bun link`, except the released agx and dx suites above. Repository contract
+  `bun install` / `bun link`, with agx and dx supplied by Homebrew core. Repository contract
   tools (B) are copied and pinned in each consumer and updated only by explicit pull.
   Consumer gates must work on a fresh clone:
   they must not depend on an A tool, symlink to dotfiles, or name a dotfiles checkout path.

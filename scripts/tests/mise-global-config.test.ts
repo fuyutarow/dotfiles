@@ -5,42 +5,21 @@ import { join, resolve } from "node:path";
 import { attempt } from "../../agents/hooks/attempt.ts";
 
 const root = resolve(import.meta.dir, "../..");
-const agx =
-  '"github:fuyutarow/agx" = { version = "latest", minimum_release_age = "0" }';
-const dx =
-  '"github:fuyutarow/dx" = { version = "latest", minimum_release_age = "0" }';
 
 test.each([
-  { name: "exactly both suites", main: `${agx}\n${dx}`, extra: "", exit: 0 },
+  { name: "no global tool rows", main: "", extra: "", exit: 0 },
+  { name: "one global tool row", main: 'node = "latest"', extra: "", exit: 1 },
   {
-    name: "both suites across config files and reordered fields",
-    main: agx,
-    extra:
-      '"github:fuyutarow/dx" = { minimum_release_age = "0", version = "latest" }',
+    name: "tool rows across config files are forbidden",
+    main: 'bun = "latest"',
+    extra: 'node = "latest"',
+    exit: 1,
+  },
+  {
+    name: "disable_tools is accepted as a setting",
+    main: "",
+    extra: "",
     exit: 0,
-  },
-  { name: "missing dx", main: agx, extra: "", exit: 1 },
-  { name: "missing agx", main: dx, extra: "", exit: 1 },
-  { name: "no suites", main: "", extra: "", exit: 1 },
-  {
-    name: "third global tool",
-    main: `${agx}\n${dx}\nnode = "latest"`,
-    extra: "",
-    exit: 1,
-  },
-  { name: "duplicate agx", main: `${agx}\n${dx}`, extra: agx, exit: 1 },
-  { name: "duplicate dx", main: `${agx}\n${dx}`, extra: dx, exit: 1 },
-  {
-    name: "dx release-age delay",
-    main: `${agx}\n"github:fuyutarow/dx" = "latest"`,
-    extra: "",
-    exit: 1,
-  },
-  {
-    name: "dx repository-style pin",
-    main: `${agx}\n${dx.replace('"latest"', '"0.1.6"')}`,
-    extra: "",
-    exit: 1,
   },
 ])("global mise scope: $name", async ({ main, extra, exit }) => {
   const fixture = await mkdtemp(join(tmpdir(), "mise-global-config-"));

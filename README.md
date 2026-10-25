@@ -133,13 +133,10 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 └── mise.toml    # the task runner (no justfile)
 ```
 
-The A-class `agx` and `dx` suites are released from `fuyutarow/agx` and `fuyutarow/dx`.
-Each is declared once in `mise/dotfiles.toml`, deployed as `~/.config/mise/conf.d/dotfiles.toml`,
-with `{ version = "latest", minimum_release_age = "0" }` to follow the newest release without
-release-age delay. The declaration also bypasses the mise-versions mirror for both suites so
-release discovery queries GitHub directly. Neither repository `mise.toml` nor `mise.lock`
-records either suite. Their release procedures install an explicit version and check `agx -V`
-and `mise exec -C <repo> -- dx --version`, respectively, in every consumer.
+The A-class `agx` and `dx` suites are Homebrew core tools installed from the shared public tap
+(`fuyutarow/tap/agx` and `fuyutarow/tap/dx`). Their release procedures install an explicit
+version and check `agx -V` and `dx --version` on PATH in every consumer. INV-6 allows no global
+mise tool rows.
 The agx contracts live in that
 repository's [`contract/README.md`](https://github.com/fuyutarow/agx/blob/13b49ebd/contract/README.md).
 Dotfiles owns its statusline, hook, and landing integrations.
@@ -150,7 +147,7 @@ There are two tool kinds, with separate install modes:
 
 - **A — operator tools** are called machine-wide by people or agents. Install the pinned root
   package dependencies with `bun install`, then expose its A bins with `bun link`. A machine has
-  one installed version of each. The released agx and dx suites use the global mise declaration above.
+  one installed version of each. Homebrew supplies agx and dx as described above.
 - **B — repository contract tools** are called by a repository's own commit flow or `mise run
   check`, and must work on a fresh clone. Copy their source into each consuming repository; that
   repository pins its copy and updates it only through an explicit pull. Consumers never symlink

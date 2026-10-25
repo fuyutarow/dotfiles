@@ -22,6 +22,16 @@ command = ["mise", "run", "lint:ts"]
 timeout_ms = 120000
 
 [[consumers]]
+name = "agx"
+root = "/home/fuyu/Workspace/agx"
+trunk = "alpha"
+surfaces = ["presets/typescript"]
+setup = ["bun", "install", "--frozen-lockfile"]
+# Run agx's TypeScript lint tasks without its full formatting and test suite.
+command = ["sh", "-c", "mise run lint:ts && mise run lint:all && mise run lint:knip"]
+timeout_ms = 180000
+
+[[consumers]]
 name = "polysearch-v1"
 root = "/home/fuyu/Workspace/polysearch-v1"
 surfaces = ["package-bins"]

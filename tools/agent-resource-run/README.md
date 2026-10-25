@@ -83,8 +83,12 @@ see [GPU recovery](../shared/GPU-RECOVERY.md). Capacity and RAM HOLD remain unch
 
 `DENY` (69) and flock timeout (75) are status classes, not replay predicates. A
 normal launch passes through the command's exit status; callers must not blindly
-replay a command after either status. C1 decision records distinguish prelaunch
-refusal from launched command exits.
+replay a command after either status. One compact JSON decision record captures
+the decision ID, systemd unit and invocation ID when a scope exists, stage,
+whether the command launched, reason, timestamp and final status. Its stage,
+launched flag and reason distinguish prelaunch refusal, scope-entry refusal,
+command exits and uncertain cleanup. The runner does not store per-process
+snapshots, rotate JSONL files or prune older decision records.
 
 ## GPU health admission
 
@@ -96,8 +100,8 @@ prove continuous persistence or establish detector accuracy.
 
 **Proc observations are advisory.** A suspected wait or unavailable proc evidence
 writes one `WARN dxg-suspected: ...` stderr line per admission check and records
-`reason_code: dxg-suspected` with the evidence in the C1 decision record. The job
-continues through owner and capacity checks. Unknown wait channels require either
+the compact reason `dxg-suspected`. The job continues through owner and capacity
+checks. Unknown wait channels require either
 a sampled PID plus a matching live starttime, or a readable `/dev/dxg` fd;
 nonleader threads inherit the tie from their group. Numeric PID equality alone,
 process names, root ownership and unreadable fd inventories do not establish a tie.

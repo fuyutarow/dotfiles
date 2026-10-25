@@ -1,7 +1,0 @@
-RECOVER_VERDICT verdict=OK age=39s windows_available_mb=8574
-Running as unit: agent-resource-holder-9ebfe080-9754-4d6d-bba0-05605d5c0b34.scope; invocation ID: 689ed24a450a4f56abca502606be4af9
-Running as unit: agent-resource-8587f95e-8d15-4a7e-ad98-a2c3b9859634.scope; invocation ID: 10d019e8591144cfbe6653d3eb37d471
-DENY GPU persistent dxg stall tgid=5278 tid=5279 leader_state=S task_state=D wchan=dxgvmb_send_sync_msg; observations=10 interval_ms>=3000; evidence=/proc/5278/stat,/proc/5278/task/5279/stat,/proc/5278/task/5279/wchan
-DENY scope enforcement unavailable: Error: GPU persistent dxg stall tgid=5278 tid=5279 leader_state=S task_state=D wchan=dxgvmb_send_sync_msg; observations=10 interval_ms>=3000; evidence=/proc/5278/stat,/proc/5278/task/5279/stat,/proc/5278/task/5279/wchan
-DENY job=integrate-kps-module-shapes-2-1024 reservation not granted code=69
-RELEASE job=integrate-kps-module-shapes-2-1024 code=69

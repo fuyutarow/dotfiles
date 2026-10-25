@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.0 — 2026-10-25
+
+- Replace per-process decision snapshots with compact launch records
+
 ## 1.12.0 — 2026-10-25
 
 - Allow same job labels concurrently and add opt-in output locking

@@ -1,63 +1,65 @@
 import { expect, test } from "bun:test";
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  stat,
-  utimes,
-} from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  DecisionRecord,
-  MAX_RECORD_BYTES,
-  MAX_RECORDS,
-  RETENTION_MS,
-  saveDecision,
-  DecisionRecordSchema,
-} from "../src/lib/decision-record.ts";
-import { jsonOf } from "../../shared/src/zod.ts";
+import { DecisionRecordSchema } from "../src/lib/decision-record.ts";
+import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const runner = join(import.meta.dir, "../src/agent-resource-run.ts");
 const preload = join(import.meta.dir, "decision-record-preload.ts");
 const fixtures = join(import.meta.dir, "fixtures");
-const procStat = (pid: string, state: string, start: string) =>
-  `${pid} (fixture worker) ${state} ${Array.from({ length: 18 }, () => "1").join(" ")} ${start} 23 24\n`;
+const invocationId = "00112233445566778899aabbccddeeff";
+
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "arr-record-"));
   const bin = join(root, "bin");
   await mkdir(bin);
-  await mkdir(join(root, "proc"));
-  // The commands exercise the actual controller/scope child with filesystem fixtures.
+  await mkdir(join(root, "proc/self"), { recursive: true });
   await Bun.write(
     join(bin, "systemctl"),
-    `#!${process.execPath}\nprocess.exit(0);\n`,
+    `#!${process.execPath}
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const root = process.env.ARR_RECORD_FIXTURE_ROOT;
+const args = process.argv.slice(2);
+if (args.includes("stop")) {
+  const path = join(root, "stop-count");
+  let count = 0;
+  try { count = Number(await readFile(path, "utf8")); } catch {}
+  count += 1;
+  await writeFile(path, String(count));
+  if (count === 2 && process.env.ARR_RECORD_FAIL_PARENT_STOP === "1") {
+    process.stderr.write("fixture parent scope stop failed");
+    process.exit(1);
+  }
+}
+if (args.includes("ControlGroup")) process.stdout.write("/fixture/scope\\n");
+process.exit(0);
+`,
   );
   await Bun.write(
     join(bin, "systemd-run"),
-    `#!${process.execPath}\nconst args=process.argv.slice(2); const child=Bun.spawn(args.slice(args.indexOf('--')+1),{stdin:'inherit',stdout:'inherit',stderr:'inherit'}); process.exit(await child.exited);\n`,
+    `#!${process.execPath}
+const args = process.argv.slice(2);
+const child = Bun.spawn(args.slice(args.indexOf("--") + 1), {
+  env: { ...process.env, INVOCATION_ID: "${invocationId}" },
+  stdin: "inherit",
+  stdout: "inherit",
+  stderr: "inherit",
+});
+process.exit(await child.exited);
+`,
   );
   await chmod(join(bin, "systemctl"), 0o755);
   await chmod(join(bin, "systemd-run"), 0o755);
-  await mkdir(join(root, "proc/self"));
   await Bun.write(join(root, "proc/self/status"), "Cpus_allowed_list:\t0-7\n");
+  await Bun.write(
+    join(root, "proc/self/smaps"),
+    "KernelPageSize:        4 kB\n",
+  );
   await Bun.write(
     join(root, "policy.toml"),
     "schema=1\ngpu_max_concurrent_jobs=1\ngpu_safety_mib=512\nmemory_high_fraction=0.9\n",
-  );
-  await Bun.write(
-    join(root, "gpu-owner.json"),
-    JSON.stringify({
-      schema: 1,
-      attemptAt: 1,
-      sampledAt: 1,
-      devices: [{ id: 0, totalMiB: 8192, usedMiB: 0, utilPct: 0 }],
-      processes: [],
-      samples: [],
-    }),
   );
   const manifest = {
     schema: 1,
@@ -67,7 +69,11 @@ async function fixture() {
     processes: 1,
     host_ram_peak_bytes: 1024 ** 2,
     memory_bound: "fixture",
-    device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 },
+    device: {
+      kind: "cpu",
+      gpu_status: "not-beneficial",
+      rationale: "record fixture",
+    },
     scratch_bytes: 0,
     child_fanout: 0,
     walltime_seconds: 5,
@@ -76,7 +82,6 @@ async function fixture() {
   await Bun.write(join(root, "manifest.json"), JSON.stringify(manifest));
   return {
     root,
-    manifest,
     env: {
       ...process.env,
       PATH: `${bin}:${process.env.PATH}`,
@@ -87,29 +92,27 @@ async function fixture() {
       BUN_OPTIONS: `--preload ${preload}`,
       AGENT_RESOURCE_ADMISSION_RECEIPT: undefined,
       AGENT_RESOURCE_DECISION_ID: undefined,
+      INVOCATION_ID: undefined,
     },
+    manifestPath: join(root, "manifest.json"),
     [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
   };
 }
-async function stalled(root: string, tgid: string, tid: string) {
-  await mkdir(join(root, "proc", tgid, "task", tid), { recursive: true });
-  await Bun.write(join(root, "proc", tgid, "stat"), procStat(tgid, "S", "100"));
-  await Bun.write(
-    join(root, "proc", tgid, "task", tid, "stat"),
-    procStat(tid, "D", "200"),
+
+async function invoke(
+  f: Awaited<ReturnType<typeof fixture>>,
+  args: string[],
+  overrides: Record<string, string | undefined> = {},
+) {
+  const child = Bun.spawn(
+    [process.execPath, runner, "--manifest", f.manifestPath, ...args],
+    {
+      env: { ...f.env, ...overrides },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 10000,
+    },
   );
-  await Bun.write(
-    join(root, "proc", tgid, "task", tid, "wchan"),
-    "dxgvmb_send_sync_msg\n",
-  );
-}
-async function invoke(argv: string[], env: Record<string, string | undefined>) {
-  const child = Bun.spawn([process.execPath, ...argv], {
-    env,
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: 10000,
-  });
   const [stdout, stderr, exit] = await Promise.all([
     child.stdout.text(),
     child.stderr.text(),
@@ -117,9 +120,11 @@ async function invoke(argv: string[], env: Record<string, string | undefined>) {
   ]);
   return { stdout, stderr, exit };
 }
+
 async function records(root: string) {
   const directory = join(root, "agent-resource/decisions");
   const names = await readdir(directory);
+  expect(names.every((name) => name.endsWith(".json"))).toBe(true);
   const rows = await Promise.all(
     names.map(async (name) => {
       const parsed = jsonOf(DecisionRecordSchema).safeParse(
@@ -131,196 +136,95 @@ async function records(root: string) {
   );
   return rows.filter((row) => row !== undefined);
 }
-for (const shape of [
-  "commandless-deny",
-  "commandless-admit",
-  "scope-entry-deny",
-])
-  test(`real log shape: ${shape} preserves decision and observation evidence`, async () => {
-    await using f = await fixture();
-    const raw = await readFile(join(fixtures, `${shape}.log`), "utf8");
-    const identity = /tgid=(\d+) tid=(\d+)/u.exec(raw);
-    if (identity !== null) {
-      const tgid = identity[1];
-      const tid = identity[2];
-      if (tgid === undefined || tid === undefined)
-        expect.unreachable("missing fixture process identity");
-      await stalled(f.root, tgid, tid);
-    }
-    const checkOnly = shape !== "scope-entry-deny";
-    const result = await invoke(
-      [
-        runner,
-        "--manifest",
-        join(f.root, "manifest.json"),
-        ...(checkOnly ? ["--check-only"] : ["--", "true"]),
-      ],
-      f.env,
-    );
-    expect(result.exit, result.stdout + result.stderr).toBe(0);
-    const rows = await records(f.root);
-    expect(rows).toHaveLength(1);
-    const record = rows[0];
-    if (record === undefined) expect.unreachable("missing decision record");
-    expect(record.stage).toBe(checkOnly ? "precheck" : "command");
-    expect(record.launched).toBe(!checkOnly);
-    expect(record.outcome).toBe("admit");
-    expect(record.decision_id).toMatch(/^[a-f0-9-]{36}$/u);
-    expect(record.started_at).toEndWith("Z");
-    expect(record.decided_at).toEndWith("Z");
-    expect(record.monotonic_span_ms).toBeGreaterThanOrEqual(0);
-    expect(record.omitted_observations).toBe(0);
-    const sampled = record.observations.find((row) => row.input === "cached");
-    expect(sampled?.sample_time).toBe("1970-01-01T00:00:00.001Z");
-    if (identity !== null) {
-      const observations = record.observations.filter(
-        (row) =>
-          row.tid === identity[2] && row.wchan === "dxgvmb_send_sync_msg",
-      );
-      expect(observations).toHaveLength(10);
-      for (const observation of observations) {
-        expect(observation).toMatchObject({
-          tgid: identity[1],
-          tid: identity[2],
-          starttime: "200",
-          state: "D",
-          wchan: "dxgvmb_send_sync_msg",
-          read_status: "read",
-          input: "live",
-          sample_time: null,
-        });
-        expect(observation.utc).toEndWith("Z");
-        expect(observation.branch).toContain("wchan");
-      }
-      expect(record.branch).toContain("persistent dxg stall");
-      expect(record.reason_code).toBe("dxg-suspected");
-      expect(result.stderr).toContain("WARN dxg-suspected:");
-      expect(result.stdout).not.toContain("DENY");
-    }
-    expect(result.stderr).not.toContain("scope enforcement unavailable");
-  });
 
-test("launched workload exit 69 stays a command exit, including through the controller", async () => {
-  await using f = await fixture();
-  const result = await invoke(
+async function expectFixture(
+  row: Awaited<ReturnType<typeof records>>[number] | undefined,
+  name: string,
+) {
+  if (row === undefined) expect.unreachable("missing decision record");
+  const parsedExpected = jsonOf(z.record(z.string(), z.unknown())).safeParse(
+    await readFile(join(fixtures, name), "utf8"),
+  );
+  if (!parsedExpected.success)
+    expect.unreachable(`invalid decision fixture ${name}`);
+  const expected = parsedExpected.data;
+  expect(row).toMatchObject(expected);
+  expect(Object.keys(row).toSorted()).toEqual(
     [
-      runner,
-      "--manifest",
-      join(f.root, "manifest.json"),
+      "decision_id",
+      "systemd_unit",
+      "invocation_id",
+      "stage",
+      "launched",
+      "reason",
+      "timestamp",
+      "final_status",
+    ].toSorted(),
+  );
+  expect(row.decision_id).toMatch(/^[a-f0-9-]{36}$/u);
+  expect(row.timestamp).toEndWith("Z");
+}
+
+test("commandless refusal writes one precheck decision", async () => {
+  await using f = await fixture();
+  const result = await invoke(f, ["--check-only"], {
+    AGENT_RESOURCE_ADMISSION_RECEIPT: "inherited reservation",
+  });
+  expect(result.exit).toBe(69);
+  const rows = await records(f.root);
+  expect(rows).toHaveLength(1);
+  await expectFixture(rows[0], "commandless-refusal.json");
+  expect(rows[0]?.systemd_unit).toBeNull();
+  expect(rows[0]?.invocation_id).toBeNull();
+});
+
+test("scope-entry refusal keeps its unit and invocation link", async () => {
+  await using f = await fixture();
+  const result = await invoke(f, ["--", "true"], {
+    ARR_SCOPE_MISMATCH: "1",
+  });
+  expect(result.exit, result.stdout + result.stderr).toBe(69);
+  const rows = await records(f.root);
+  expect(rows).toHaveLength(1);
+  await expectFixture(rows[0], "scope-entry-refusal.json");
+  expect(rows[0]?.systemd_unit).toMatch(/^agent-resource-[a-f0-9-]+\.scope$/u);
+  expect(rows[0]?.invocation_id).toBe(invocationId);
+});
+
+for (const code of [69, 75] as const)
+  test(`launched command exit ${code} remains a command outcome`, async () => {
+    await using f = await fixture();
+    const result = await invoke(f, [
       "--",
       process.execPath,
       "-e",
-      "process.exit(69)",
-    ],
-    f.env,
-  );
-  expect(result.exit, result.stdout + result.stderr).toBe(69);
-  expect(result.stdout).toContain("RELEASE job=record-fixture code=69");
-  expect(result.stdout + result.stderr).not.toContain(
-    "reservation not granted",
-  );
-  const [record] = await records(f.root);
-  expect(record).toMatchObject({
-    stage: "command",
-    launched: true,
-    outcome: "admit",
-    reason_code: "admitted",
-    exit_code: 69,
+      `process.exit(${code})`,
+    ]);
+    expect(result.exit, result.stdout + result.stderr).toBe(code);
+    expect(result.stdout).toContain(`RELEASE job=record-fixture code=${code}`);
+    expect(result.stdout).not.toContain("reservation not granted");
+    if (code === 75)
+      expect(result.stdout).not.toContain("admission lock wait expired");
+    const rows = await records(f.root);
+    expect(rows).toHaveLength(1);
+    await expectFixture(rows[0], `command-exit-${code}.json`);
+    expect(rows[0]?.systemd_unit).toMatch(
+      /^agent-resource-[a-f0-9-]+\.scope$/u,
+    );
+    expect(rows[0]?.invocation_id).toBe(invocationId);
   });
-});
 
-test("unreadable and missing observation fields are explicit without altering the refusal", () => {
-  const record = new DecisionRecord();
-  record.read("/proc/123/stat", undefined, "unreadable");
-  expect(record.observations[0]).toMatchObject({
-    tgid: "123",
-    tid: "123",
-    starttime: null,
-    state: null,
-    wchan: null,
-    read_status: "unreadable",
-    input: "live",
-    sample_time: null,
-  });
-});
-
-test("record bytes, retained count and age are bounded", async () => {
+test("cleanup uncertainty remains separate from the launched command result", async () => {
   await using f = await fixture();
-  const previous = process.env.XDG_STATE_HOME;
-  process.env.XDG_STATE_HOME = f.root;
-  using _restoreState = {
-    [Symbol.dispose]: () => {
-      if (previous === undefined) delete process.env.XDG_STATE_HOME;
-      else process.env.XDG_STATE_HOME = previous;
-    },
-  };
-  {
-    const record = new DecisionRecord();
-    for (let n = 0; n < 10000; n++)
-      record.read("/proc/123/stat", procStat("123", "D", "200"), "read");
-    expect(record.omitted_observations).toBeGreaterThan(0);
-    expect(Buffer.byteLength(JSON.stringify(record.snapshot()))).toBeLessThan(
-      MAX_RECORD_BYTES,
-    );
-    for (let n = 0; n < MAX_RECORDS + 2; n++)
-      await saveDecision(new DecisionRecord().snapshot());
-    const directory = join(f.root, "agent-resource/decisions");
-    const names = await readdir(directory);
-    expect(names).toHaveLength(MAX_RECORDS);
-    const recordName = names[0];
-    if (recordName === undefined) expect.unreachable("missing retained record");
-    const old = join(directory, recordName);
-    const seconds =
-      (Temporal.Now.instant().epochMilliseconds - RETENTION_MS - 1000) / 1000;
-    await utimes(old, seconds, seconds);
-    await saveDecision(new DecisionRecord().snapshot());
-    expect(await Bun.file(old).exists()).toBe(false);
-    for (const name of await readdir(directory))
-      expect((await stat(join(directory, name))).size).toBeLessThanOrEqual(
-        MAX_RECORD_BYTES,
-      );
-  }
+  const result = await invoke(
+    f,
+    ["--", process.execPath, "-e", "process.exit(0)"],
+    { ARR_RECORD_FAIL_PARENT_STOP: "1" },
+  );
+  expect(result.exit, result.stdout + result.stderr).toBe(70);
+  const rows = await records(f.root);
+  expect(rows).toHaveLength(1);
+  await expectFixture(rows[0], "cleanup-uncertain.json");
+  expect(rows[0]?.systemd_unit).toMatch(/^agent-resource-[a-f0-9-]+\.scope$/u);
+  expect(rows[0]?.invocation_id).toBe(invocationId);
 });
-
-for (const latch of ["set", "cleared"] as const)
-  test(`production owner file latch ${latch} during confirmation determines admission`, async () => {
-    await using f = await fixture();
-    await stalled(f.root, "123", "456");
-    const owner = {
-      schema: 1,
-      attemptAt: 1,
-      sampledAt: 1,
-      devices: [{ id: 0, totalMiB: 8192, usedMiB: 0, utilPct: 0 }],
-      processes: [],
-      samples: [],
-    };
-    await Bun.write(
-      join(f.root, "gpu-owner.json"),
-      JSON.stringify({
-        ...owner,
-        ...(latch === "cleared" ? { unresponsiveSince: 1 } : {}),
-      }),
-    );
-    await Bun.write(
-      join(f.root, "next-owner.json"),
-      JSON.stringify({
-        ...owner,
-        ...(latch === "set" ? { unresponsiveSince: 2 } : {}),
-      }),
-    );
-    const result = await invoke(
-      [runner, "--manifest", join(f.root, "manifest.json"), "--check-only"],
-      { ...f.env, ARR_RECORD_REPLACE_OWNER: "1" },
-    );
-    expect(result.exit, result.stdout + result.stderr).toBe(
-      latch === "set" ? 69 : 0,
-    );
-    const [record] = await records(f.root);
-    expect(record?.outcome).toBe(latch === "set" ? "refuse" : "admit");
-    expect(
-      record?.observations.some((row) => row.branch === "gpu-sampler-decision"),
-    ).toBe(true);
-    if (latch === "set")
-      expect(result.stdout).toContain("GPU stall recorded since 2");
-    else expect(record?.reason_code).toBe("dxg-suspected");
-  });

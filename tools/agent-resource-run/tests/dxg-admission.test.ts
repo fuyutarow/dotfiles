@@ -1127,16 +1127,14 @@ async function dxgAdvisory(...args: Parameters<typeof gpuAdmissionRefusal>) {
     gpuAdmissionRefusal(...args),
   );
   expect(refusal).toBeUndefined();
-  expect(record.outcome).toBe("admit");
   const lines = warning.mock.calls
     .map(([line]) => String(line))
     .filter((line) => line.startsWith("WARN dxg-suspected:"));
   let observation: string | undefined;
-  if (record.reason_code !== "dxg-suspected") expect(lines).toHaveLength(0);
+  if (record.reason !== "dxg-suspected") expect(lines).toHaveLength(0);
   else {
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain(record.branch);
-    observation = record.branch;
+    observation = lines[0];
   }
   return observation;
 }
@@ -1174,9 +1172,7 @@ for (const incident of ["set", "cleared", "unchanged"] as const)
     if (incident === "set")
       expect(refusal).toContain("GPU stall recorded since 2");
     else expect(refusal).toBeUndefined();
-    expect(
-      record.observations.some((row) => row.branch === "gpu-sampler-decision"),
-    ).toBe(true);
+    expect(record.reason).toBe("dxg-suspected");
   });
 
 for (const target of ["leader", "task"] as const)

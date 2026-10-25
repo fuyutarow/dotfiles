@@ -35,7 +35,7 @@ import {
   currentDecision,
   withDecision,
   saveDecision,
-  scopeEvidence,
+  readDecision,
 } from "./lib/decision-record.ts";
 
 const cliArgv = () => process.argv.slice(2);
@@ -128,9 +128,7 @@ const failure = (
 ): ExecutionResult => {
   const record = currentDecision();
   if (record !== undefined) {
-    record.outcome = "refuse";
-    record.reason_code = code === 70 ? "recovery-hold" : "admission-refused";
-    record.branch = message;
+    record.reason = code === 70 ? "recovery-hold" : "admission-refused";
   }
   report(`${code === 70 ? "HOLD" : "DENY"} ${message}`);
   return { ok: false, exitCode: code, reason: "admission" };
@@ -150,13 +148,6 @@ async function optionalText(
   path: string,
 ): Promise<Result<string | undefined, Error>> {
   const read = await fromAsyncThrowable(() => readFile(path, "utf8"))();
-  let readStatus = "read";
-  if (read.isErr()) readStatus = missing(read.error) ? "missing" : "unreadable";
-  currentDecision()?.read(
-    path,
-    read.isOk() ? read.value : undefined,
-    readStatus,
-  );
   if (read.isOk()) return ok(read.value);
   if (missing(read.error)) return ok(undefined);
   return err(asError(read.error));
@@ -810,25 +801,6 @@ export async function gpuAdmissionRefusal(
       ? readGpuState
       : () => Promise.resolve(options.state));
   const initialState = options.state ?? (await readState());
-  currentDecision()?.observe({
-    utc: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
-    tgid: null,
-    tid: null,
-    starttime: null,
-    state: null,
-    wchan: null,
-    read_status: initialState === undefined ? "missing" : "read",
-    input: "cached",
-    sample_time:
-      initialState?.sampledAt === undefined
-        ? null
-        : Temporal.Instant.fromEpochMilliseconds(
-            initialState.sampledAt,
-          ).toString({
-            fractionalSecondDigits: 3,
-          }),
-    branch: "gpu-sampler",
-  });
   const procEntries = await fromAsyncThrowable(() => readdir(procRoot))();
   async function dxgSuspicion(): Promise<string | undefined> {
     const candidates: DStateCandidate[] = [];
@@ -894,31 +866,13 @@ export async function gpuAdmissionRefusal(
   if (suspicion !== undefined) {
     const record = currentDecision();
     if (record !== undefined) {
-      record.reason_code = "dxg-suspected";
-      record.branch = suspicion;
+      record.reason = "dxg-suspected";
     }
     console.error(
       `WARN dxg-suspected: ${suspicion}; admitting subject to owner/capacity checks`,
     );
   }
   const fresh = await readState();
-  currentDecision()?.observe({
-    utc: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
-    tgid: null,
-    tid: null,
-    starttime: null,
-    state: null,
-    wchan: null,
-    read_status: fresh === undefined ? "missing" : "read",
-    input: "cached",
-    sample_time:
-      fresh?.sampledAt === undefined
-        ? null
-        : Temporal.Instant.fromEpochMilliseconds(fresh.sampledAt).toString({
-            fractionalSecondDigits: 3,
-          }),
-    branch: "gpu-sampler-decision",
-  });
   if (fresh === undefined)
     return `GPU owner state unavailable; evidence=${gpuStatePath()}`;
   if (fresh.unresponsiveSince !== undefined) {
@@ -1260,10 +1214,18 @@ async function runDecision(
   }
   if (checkOnly) {
     report(`ADMIT job=${manifest.job_id} check-only`);
+    const record = currentDecision();
+    if (record !== undefined) record.reason = "check-only";
     return ok({ ok: true, exitCode: 0 });
   }
   const reservationId = randomUUID();
   const scope = `agent-resource-${reservationId}.scope`;
+  const decision = currentDecision();
+  if (decision !== undefined) {
+    decision.systemd_unit = scope;
+    decision.stage = "scope-entry";
+    decision.reason = "scope-entry";
+  }
   const source = options.manifestSource ?? {
     path: "<in-memory>",
     sha256: digest(JSON.stringify(manifest)),
@@ -1366,16 +1328,14 @@ async function runDecision(
   const stopped = await stopScope(scope);
   const record = currentDecision();
   const evidence =
-    record === undefined ? undefined : await scopeEvidence(record.decision_id);
+    record === undefined ? undefined : await readDecision(record.decision_id);
   if (record !== undefined && evidence !== undefined) {
+    record.systemd_unit = evidence.systemd_unit ?? record.systemd_unit;
+    record.invocation_id = evidence.invocation_id;
     record.stage = evidence.stage;
     record.launched = evidence.launched;
-    record.outcome = evidence.outcome;
-    record.reason_code = evidence.reason_code;
-    record.branch = evidence.branch;
-    for (const observation of evidence.observations)
-      record.observe(observation);
-    record.omitted_observations += evidence.omitted_observations;
+    record.reason = evidence.reason;
+    record.final_status = evidence.final_status;
   }
   if (interruptedResult?.isErr() === true) return err(interruptedResult.error);
   if (stopped.isErr()) return err(stopped.error);
@@ -1386,10 +1346,18 @@ async function runDecision(
   if (code === 69 && record?.launched !== true && evidence === undefined)
     report(`DENY job=${manifest.job_id} reservation not granted code=69`);
   if (record !== undefined && evidence === undefined) {
-    record.outcome = "refuse";
-    record.reason_code = "reservation-not-granted";
-    record.branch = "launch-without-scope-evidence";
+    record.stage = "scope-entry";
+    record.reason =
+      code === 75 ? "admission-lock-timeout" : "reservation-not-granted";
   }
+  if (record !== undefined && record.launched) {
+    record.stage = "command";
+    if (code === 69) record.reason = "command-exit-69";
+    else if (code === 75) record.reason = "command-exit-75";
+    else if (code === 0) record.reason = "command-exit-0";
+    else record.reason = "command-exit";
+  }
+  if (record !== undefined) record.final_status = code;
   report(`RELEASE job=${manifest.job_id} code=${code}`);
   if (code === 0) report(`PASS job=${manifest.job_id} code=0`);
   return ok({
@@ -1410,17 +1378,15 @@ async function run(
       () => runDecision(manifest, command, options, checkOnly),
       asError,
     )().andThen((value) => value);
+    let finalStatus = 70;
+    if (result.isOk()) finalStatus = result.value.exitCode;
+    else if (result.error instanceof UsageError) finalStatus = 2;
     if (result.isErr()) {
-      record.outcome = "refuse";
-      record.reason_code = record.launched
-        ? "cleanup-error"
-        : "admission-error";
+      record.reason = record.launched ? "cleanup-uncertain" : "admission-error";
       if (record.launched) record.stage = "cleanup";
-      record.branch = result.error.message;
+      record.final_status = finalStatus;
     }
-    await saveDecision(
-      record.snapshot(result.isOk() ? result.value.exitCode : null),
-    );
+    await saveDecision(record.snapshot(finalStatus));
     return result;
   });
 }

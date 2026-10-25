@@ -15,21 +15,23 @@ import {
   saveDecision,
 } from "./lib/decision-record.ts";
 class HealthRefusal extends Error {}
-const record = new DecisionRecord();
-record.stage = "scope-entry";
-record.outcome = "refuse";
-record.reason_code = "scope-enforcement-unavailable";
-record.branch = "scope-entry";
 const inheritedId = process.env.AGENT_RESOURCE_DECISION_ID;
 const decisionId =
   inheritedId !== undefined && /^[a-f0-9-]{36}$/u.test(inheritedId)
     ? inheritedId
-    : record.decision_id;
+    : undefined;
+const record = new DecisionRecord(decisionId);
+record.stage = "scope-entry";
+record.reason = "scope-entry";
 
 async function main() {
   const command = jsonOf(z.array(z.string()).min(1)).safeParse(
     process.env.AGENT_RESOURCE_SCOPE_COMMAND,
   );
+  const invocationId = z
+    .string()
+    .regex(/^[a-f0-9]{32}$/u)
+    .safeParse(process.env.INVOCATION_ID);
   const receipt = jsonOf(
     z.object({
       scope_unit: z.string(),
@@ -44,8 +46,17 @@ async function main() {
       }),
     }),
   ).safeParse(process.env.AGENT_RESOURCE_ADMISSION_RECEIPT);
-  if (!command.success || !receipt.success)
+  record.invocation_id = invocationId.success ? invocationId.data : null;
+  if (receipt.success) record.systemd_unit = receipt.data.scope_unit;
+  await saveDecision(record.snapshot());
+  if (!command.success || !receipt.success) {
+    record.reason = "scope-enforcement-unavailable";
     return err(new Error("invalid scope payload"));
+  }
+  if (!invocationId.success) {
+    record.reason = "invocation-id-unavailable";
+    return err(new Error("systemd invocation ID unavailable"));
+  }
   const cgroup = (await readFile("/proc/self/cgroup", "utf8"))
     .split("\n")
     .find((line) => line.startsWith("0::"))
@@ -76,8 +87,7 @@ async function main() {
     );
     if (refusal !== undefined) {
       process.stdout.write(`DENY ${refusal}\n`);
-      record.reason_code = "gpu-health-refused";
-      record.branch = refusal;
+      record.reason = "gpu-health-refused";
       return err(new HealthRefusal(refusal));
     }
   }
@@ -122,22 +132,21 @@ async function main() {
   });
   record.launched = true;
   record.stage = "command";
-  record.outcome = "admit";
-  if (record.reason_code !== "dxg-suspected") {
-    record.reason_code = "admitted";
-    record.branch = "scope-command-spawned";
-  }
-  await saveDecision(record.snapshot(), decisionId);
-  return ok(await child.exited);
+  record.reason = "command-running";
+  await saveDecision(record.snapshot());
+  const code = await child.exited;
+  record.reason = `command-exit-${code}`;
+  record.final_status = code;
+  await saveDecision(record.snapshot());
+  return ok(code);
 }
 const result = await withDecision(record, () =>
   fromAsyncThrowable(main)().andThen((value) => value),
 );
-if (result.isErr()) record.branch = String(result.error);
-await saveDecision(
-  record.snapshot(result.isOk() ? result.value : 69),
-  decisionId,
-);
+if (result.isErr() && record.reason === "scope-entry")
+  record.reason = "scope-enforcement-unavailable";
+record.final_status = result.isOk() ? result.value : 69;
+await saveDecision(record.snapshot());
 result.match(
   (code) => process.exit(code),
   (error) => {

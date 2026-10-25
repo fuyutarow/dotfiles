@@ -85,7 +85,9 @@ workspace paths in the depot or project selection when the test targets are iden
 次のJSONはschema 1の完全形である。必須なのは `schema`、`job_id`、`cpu_threads`、`processes`、
 `host_ram_peak_bytes`、`device`、`walltime_seconds`、`cleanup`。`run_class`、`memory_bound`、
 `scratch_bytes`、`child_fanout` は任意で、未指定時はそれぞれ `test`、`unspecified`、`0`、`0` として
-互換出力を保つ。`child_fanout` を指定する場合は現在 `0` だけを受理する。nested agentは親の見込みに
+互換出力を保つ。`output_lock` は共有mutable outputを直列化する場合だけ指定する任意項目である。
+`child_fanout` は現在 `0` だけを受理する。nested agentは親の見込みに
+
 埋め込まず、別dispatchと別envelopeで予約する。上限不明のvendor-side fanoutは、このhostでは
 admission不能である。
 
@@ -93,6 +95,7 @@ admission不能である。
 {
   "schema": 1,
   "job_id": "stable-unique-id",
+  "output_lock": "shared-output-name",
   "run_class": "pilot",
   "cpu_threads": 2,
   "processes": 4,
@@ -141,7 +144,11 @@ Linux実行器は全jobのRAM ceilingを担う。GPUの同時実行数を固定�
 `resource-policy.toml` の `gpu_max_concurrent_jobs` は互換性のためparseするが、admissionには使わない。
 GPU admissionは、既存のdeclared VRAM reservation合計から現在のreservationを除き、safety marginとccc partitionを差し引いた予算で決める。
 独自FIFO、CPU集合の予約、RAM/VRAM/scratchの合算台帳は持たない。
-同じjob_idの同時実行は別のflockで拒否する（DENY 69）。
+`job_id` は識別用labelであり、同じ値のjobを並行実行できる。reservationの集計identityは
+実行ごとに異なる `reservation_id` とする。共有mutable outputを持つjobだけがmanifestの
+optional `output_lock` にfilesystem-safeなlock keyを指定する。同じkeyの別writerは
+flockで即時拒否され（DENY 69）、そのlockはGPU holderを含むscope cleanupまで保持する。
+他のadmission lockのbounded wait timeoutは従来どおり75である。
 
 コマンドは `systemd-run --user --scope --collect` により毎回固有のscopeで実行する。
 次のpropertyを設定する。

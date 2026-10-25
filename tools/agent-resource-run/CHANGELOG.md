@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.0 — 2026-10-25
+
+- Allow same job labels concurrently and add opt-in output locking
+
 ## 1.11.0 — 2026-10-25
 
 - Allow non-enforcing manifest fields to be omitted

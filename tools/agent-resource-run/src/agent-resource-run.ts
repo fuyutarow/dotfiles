@@ -60,7 +60,9 @@ const cpuDevice = z.strictObject({
 const manifestSchema = z.strictObject({
   schema: z.literal(1),
   job_id: jobId,
+  output_lock: jobId.optional(),
   run_class: z.enum(["pilot", "full", "test", "service"]).default("test"),
+
   cpu_threads: positive.max(1024),
   processes: positive.max(4096),
   host_ram_peak_bytes: positive,
@@ -1245,11 +1247,17 @@ async function runDecision(
   const root = runtime.value;
   const slots = join(root, "slots");
   await mkdir(slots, { recursive: true, mode: 0o700 });
-  await mkdir(join(root, "jobs"), { recursive: true, mode: 0o700 });
-  const identity = join(root, "jobs", manifest.job_id);
-  const available = await output(lock(identity, 0, 69, ["true"]));
-  if (available.code !== 0)
-    return ok(failure(69, `job=${manifest.job_id} already running`, report));
+  let outputLock: string | undefined;
+  if (manifest.output_lock !== undefined) {
+    const outputLocks = join(root, "output-locks");
+    await mkdir(outputLocks, { recursive: true, mode: 0o700 });
+    outputLock = join(outputLocks, manifest.output_lock);
+    const available = await output(lock(outputLock, 0, 69, ["true"]));
+    if (available.code !== 0)
+      return ok(
+        failure(69, `output_lock=${manifest.output_lock} already held`, report),
+      );
+  }
   if (checkOnly) {
     report(`ADMIT job=${manifest.job_id} check-only`);
     return ok({ ok: true, exitCode: 0 });
@@ -1330,7 +1338,7 @@ async function runDecision(
     AGENT_RESOURCE_SCOPE_LAUNCH: JSON.stringify({ argv: launch, scope }),
   };
   let argv = [process.execPath, join(import.meta.dir, "scope-controller.ts")];
-  argv = lock(identity, 0, 69, argv);
+  if (outputLock !== undefined) argv = lock(outputLock, 0, 69, argv);
   if (manifest.device.kind === "gpu") {
     argv = buildLockHolderLaunch(
       `agent-resource-holder-${randomUUID()}.scope`,

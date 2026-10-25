@@ -606,10 +606,11 @@ test("CLI retains version, help, unknown flag and malformed manifest exits", asy
 }, 30000);
 for (const stopMode of ["real-stop", "false-success"])
   test.skipIf(!live)(
-    `GPU holder retains the identity lock until a wrapper's surviving child and scope end (${stopMode})`,
+    `GPU holder retains the output lock until a wrapper's surviving child and scope end (${stopMode})`,
     async () => {
       const f = await fixture(
         manifest({
+          output_lock: "holder-lifetime",
           host_ram_peak_bytes: 512 * 1024 ** 2,
           cleanup: { mode: "term-then-kill", grace_seconds: 3 },
           device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 },
@@ -678,7 +679,9 @@ for (const stopMode of ["real-stop", "false-success"])
         f.env,
       );
       expect(duplicate.exit, duplicate.stdout + duplicate.stderr).toBe(69);
-      expect(duplicate.stdout).toContain("already running");
+      expect(duplicate.stdout).toContain(
+        "output_lock=holder-lifetime already held",
+      );
       const firstResult = await first;
       expect(firstResult.exit, firstResult.stdout + firstResult.stderr).toBe(0);
       if (stopMode === "false-success")
@@ -786,13 +789,7 @@ test.skipIf(!live)(
     for (let n = 0; n < 1000 && !(await Bun.file(marker).exists()); n++)
       await Bun.sleep(10);
     expect(await Bun.file(marker).exists()).toBe(true);
-    const secondManifest = manifest({
-      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: requestBytes },
-    });
-    const second = await invoke(
-      ["--manifest", f.path, "--job-id", secondManifest.job_id, "--", "true"],
-      f.env,
-    );
+    const second = await invoke(["--manifest", f.path, "--", "true"], f.env);
     expect(second.exit, second.stdout + second.stderr).toBe(69);
     expect(second.stdout).toContain("GPU VRAM budget exceeded");
     expect(second.stdout).toContain(`admitted=${requestBytes}`);
@@ -841,7 +838,7 @@ test.skipIf(!live)(
   15000,
 );
 test.skipIf(!live)(
-  "seven in-budget GPU reservations are admitted together without count locks",
+  "same-label GPU reservations remain distinct and are all counted",
   async () => {
     const f = await fixture(
       manifest({
@@ -858,11 +855,11 @@ test.skipIf(!live)(
           "--manifest",
           f.path,
           "--job-id",
-          `${name}-${crypto.randomUUID()}`,
+          "shared-reservation-label",
           "--",
           "/bin/sh",
           "-c",
-          `[ "$AGENT_RESOURCE_VRAM_BYTES" = 1073741824 ] || exit 42; touch '${started}/${name}'; while [ ! -e '${release}' ]; do sleep 0.02; done`,
+          `[ "$AGENT_RESOURCE_VRAM_BYTES" = 1073741824 ] || exit 42; printf '%s' "$AGENT_RESOURCE_RESERVATION_ID" > '${started}/${name}'; while [ ! -e '${release}' ]; do sleep 0.02; done`,
         ],
         f.env,
       );
@@ -873,9 +870,29 @@ test.skipIf(!live)(
       if (names.length === 7) break;
       await Bun.sleep(25);
     }
+    const reservationIds = await Promise.all(
+      names.map((name) => Bun.file(join(started, name)).text()),
+    );
+    const extraPath = join(f.dir, "over-budget-manifest.json");
+    await Bun.write(
+      extraPath,
+      JSON.stringify(
+        manifest({
+          job_id: "shared-reservation-label",
+          device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 5 * 1024 ** 3 },
+        }),
+      ),
+    );
+    const overBudget = await invoke(
+      ["--manifest", extraPath, "--", "true"],
+      f.env,
+    );
     await Bun.write(release, "release");
     const results = await Promise.all(jobs);
     expect(names).toHaveLength(7);
+    expect(new Set(reservationIds).size).toBe(7);
+    expect(overBudget.exit, overBudget.stdout + overBudget.stderr).toBe(69);
+    expect(overBudget.stdout).toContain(`admitted=${7 * 1024 ** 3}`);
     for (const result of results) expect(result.exit, result.stderr).toBe(0);
     const slotNames = await readdir(join(runtime, "agent-resource", "slots"));
     expect(slotNames.filter((name) => /^gpu\.0\.\d+$/u.test(name))).toEqual([]);
@@ -883,9 +900,58 @@ test.skipIf(!live)(
   30000,
 );
 test.skipIf(!live)(
-  "duplicate job id remains DENY 69",
+  "same job id label allows independent reservations to run concurrently",
   async () => {
     const a = await fixture(manifest());
+    const started = join(a.dir, "started");
+    await mkdir(started);
+    const first = invoke(
+      [
+        "--manifest",
+        a.path,
+        "--",
+        "/bin/sh",
+        "-c",
+        `touch '${started}/first'; sleep 3`,
+      ],
+      a.env,
+    );
+    for (
+      let n = 0;
+      n < 500 && !(await Bun.file(join(started, "first")).exists());
+      n++
+    )
+      await Bun.sleep(20);
+    const second = invoke(
+      [
+        "--manifest",
+        a.path,
+        "--",
+        "/bin/sh",
+        "-c",
+        `touch '${started}/second'; sleep 3`,
+      ],
+      a.env,
+    );
+    for (
+      let n = 0;
+      n < 500 && !(await Bun.file(join(started, "second")).exists());
+      n++
+    )
+      await Bun.sleep(20);
+    expect(await Bun.file(join(started, "second")).exists()).toBe(true);
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(firstResult.exit, firstResult.stdout + firstResult.stderr).toBe(0);
+    expect(secondResult.exit, secondResult.stdout + secondResult.stderr).toBe(
+      0,
+    );
+  },
+  15000,
+);
+test.skipIf(!live)(
+  "same output lock key refuses a concurrent writer with DENY 69",
+  async () => {
+    const a = await fixture(manifest({ output_lock: "shared-output" }));
     const marker = join(a.dir, "started");
     const running = invoke(
       [
@@ -894,15 +960,22 @@ test.skipIf(!live)(
         "--",
         "/bin/sh",
         "-c",
-        `touch '${marker}'; sleep 8`,
+        `touch '${marker}'; sleep 5`,
       ],
       a.env,
     );
     for (let n = 0; n < 500 && !(await Bun.file(marker).exists()); n++)
       await Bun.sleep(20);
-    expect(
-      (await invoke(["--manifest", a.path, "--", "true"], a.env)).exit,
-    ).toBe(69);
+    const secondManifest = await fixture(
+      manifest({ output_lock: "shared-output" }),
+    );
+    secondManifest.env.XDG_STATE_HOME = a.env.XDG_STATE_HOME;
+    const denied = await invoke(
+      ["--manifest", secondManifest.path, "--", "true"],
+      secondManifest.env,
+    );
+    expect(denied.exit, denied.stdout + denied.stderr).toBe(69);
+    expect(denied.stdout).toContain("output_lock=shared-output already held");
     expect((await running).exit).toBe(0);
   },
   15000,

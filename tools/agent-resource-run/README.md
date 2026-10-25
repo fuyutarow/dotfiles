@@ -46,8 +46,12 @@ effective MemoryMax, policy-derived MemoryHigh, zero swap and pids.peak. The eff
 cgroup memory limits are checked against page-aligned readback values from the kernel.
 For GPU jobs, a separate systemd-owned holder scope stays outside the caller's service
 cgroup. It launches the bounded job scope and stays alive while cleanup is confirmed,
-preserving holder lifetime independently of the caller. The per-job identity lock remains
-held through cleanup.
+preserving holder lifetime independently of the caller. `job_id` is a descriptive label,
+not a lock identity; each invocation gets a unique
+`reservation_id` for admission accounting. A manifest may set `output_lock` to a filesystem-safe
+key when its command writes shared mutable output. That key takes an exclusive flock; a concurrent
+writer with the same key is refused with DENY 69. The lock remains held through scope cleanup,
+including the GPU holder lifetime.
 The flock child retains its descriptors until systemd has stopped all descendants.
 If scope cleanup fails, times out, or leaves its cgroup populated, it reports HOLD,
 retains the slots and retries until the cgroup is empty or removed. A cleanup error
@@ -60,7 +64,8 @@ on its in-scope recheck. There is no sampled runtime VRAM enforcement.
 There is no CPU-set allocator, resource ledger, sampled monitor or peak persistence.
 
 `--manifest`, `--check-only`, `--job-id`, `--slot julia-compile` and `status`
-retain their invocation forms. DENY is 69, recovery HOLD is 70, flock timeout is 75.
+retain their invocation forms. DENY is 69, recovery HOLD is 70, and bounded admission-lock
+timeout is 75. Conflicting `output_lock` keys are refused immediately with 69.
 The inherited admission receipt and its digest remain available to example-search's gate;
 each scope exposes its own cgroup v2 pids.peak. CPU_IDS is compatibility metadata,
 not exclusive affinity. Thread-count environment variables remain bounded.

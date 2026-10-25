@@ -903,9 +903,9 @@ describe("render-home: committed jj inputs", () => {
   }, 30_000);
 });
 
-// Frozen before replacing the direct-import renderer. Includes markers and provenance.
+// Public roster fixture includes markers and render provenance.
 describe("render-home: public roster JSON", () => {
-  test("dotfiles-pinned mise renders the frozen roster block without agx source", () => {
+  test("PATH agx renders the frozen roster block without agx source or mise", () => {
     const dotfiles = makeDotfiles({ model: "opus" });
     const home = makeHome();
     const argsFile = join(home, "mise-args.json");
@@ -924,22 +924,8 @@ describe("render-home: public roster JSON", () => {
       DISPATCH_ROSTER_PATH: "/must-not-use-live-roster",
     });
     expect(result.code, result.out).toBe(0);
-    expect(readFileSync(argsFile, "utf8").trimEnd().split("\n")).toEqual([
-      "-C",
-      dotfiles,
-      "exec",
-      "--",
-      "agx",
-      "worker",
-      "roster",
-      "--json",
-    ]);
-    expect(readFileSync(contextFile, "utf8").split("\n")).toEqual([
-      dotfiles,
-      join(dotfiles, "agents/agx/agx.toml"),
-      "",
-      "",
-    ]);
+    expect(existsSync(argsFile)).toBe(false);
+    expect(existsSync(contextFile)).toBe(false);
     const md = readFileSync(join(home, ".claude/CLAUDE.md"), "utf8");
     const block = md.slice(md.indexOf("<!-- roster:begin -->"));
     expect(Buffer.from(block)).toEqual(
@@ -968,9 +954,8 @@ describe("render-home: public roster JSON", () => {
     expect(result.out).toContain(
       "FATAL: cannot load roster — agx worker roster --json",
     );
-    expect(result.out).toContain("mise install");
-    expect(result.out).toContain("in the dotfiles checkout");
-    expect(result.out).toContain("mise run deps");
+    expect(result.out).toContain("Install agx from the Homebrew core tools");
+    expect(result.out).toContain("ensure it is on PATH");
     for (const path of [
       ".claude/settings.json",
       ".codex/hooks.json",
@@ -1021,6 +1006,9 @@ describe("render-home: public roster JSON", () => {
     });
   }
 
+  // Refresh the snapshot from the installed PATH agx via a production render:
+  //   UPDATE_RENDER_HOME_ROSTER=1 TZ=UTC bun test scripts/tests/render-home.test.ts
+  // This is intentionally an explicit write mode; ordinary test runs only compare.
   test("production roster block matches the public CLI projection fixture", () => {
     const home = makeHome();
     using _cleanup = {
@@ -1041,10 +1029,13 @@ describe("render-home: public roster JSON", () => {
       md.indexOf("<!-- roster:begin -->"),
       md.indexOf("<!-- roster:end -->") + "<!-- roster:end -->\n".length,
     );
-    const original = readFileSync(
-      join(import.meta.dir, "fixtures/render-home-roster.md"),
-      "utf8",
-    ).replaceAll("agx-next/", "agx/");
+    const fixture = join(import.meta.dir, "fixtures/render-home-roster.md");
+    if (process.env.UPDATE_RENDER_HOME_ROSTER === "1")
+      writeFileSync(fixture, block);
+    const original = readFileSync(fixture, "utf8").replaceAll(
+      "agx-next/",
+      "agx/",
+    );
     expect(Buffer.from(block)).toEqual(Buffer.from(original));
     expect(readFileSync(SCRIPT, "utf8")).not.toMatch(
       /from\s+["']\.\.\/agents\/models\//u,
@@ -1089,8 +1080,9 @@ describe("render-home: public roster JSON", () => {
         expect(failed.out).toContain(
           "agx worker roster --json exited 7: roster unavailable",
         );
-        expect(failed.out).toContain("mise install");
-        expect(failed.out).toContain("mise run deps");
+        expect(failed.out).toContain(
+          "Install agx from the Homebrew core tools and ensure it is on PATH.",
+        );
       }
       for (const { path, bytes } of before) {
         expect(readFileSync(path)).toEqual(bytes);

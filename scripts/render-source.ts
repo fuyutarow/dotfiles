@@ -17,6 +17,7 @@ export const RENDER_INPUTS = [
   "tools/shared/package.json",
   "package.json",
   "bun.lock",
+  "tools/tool-tiers/src/tool-tiers.ts",
   "tools/tool-tiers/src/tool-commands.ts",
   "tools/tool-tiers/src/tool-commands.tsv",
   "Brewfile.core",

@@ -739,6 +739,7 @@ describe("render-home: committed jj inputs", () => {
       "tools/shared/src/attempt.ts",
       "tools/shared/src/narrow.ts",
       "tools/shared/src/zod.ts",
+      "tools/tool-tiers/src/tool-tiers.ts",
       "tools/tool-tiers/src/tool-commands.ts",
       "tools/tool-tiers/src/tool-commands.tsv",
       "Brewfile.core",

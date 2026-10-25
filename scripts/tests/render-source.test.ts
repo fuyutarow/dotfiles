@@ -1,12 +1,32 @@
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { RENDER_INPUTS } from "../render-source.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 const RESTORE = join(ROOT, "scripts/render-source.ts");
 const INPUTS = ["package.json", "bun.lock"];
+
+async function unlistedImports(modulePath: string): Promise<string[]> {
+  const source = await readFile(modulePath, "utf8");
+  const missing: string[] = [];
+  for (const match of source.matchAll(
+    /\bimport\s+(?:[\w$*{},\s]+?\s+from\s*)?["']([^"']+)["']/gu,
+  )) {
+    const specifier = match[1];
+    if (specifier === undefined || !specifier.startsWith(".")) continue;
+    const resolved = resolve(dirname(modulePath), specifier);
+    const relativePath = relative(ROOT, resolved);
+    const insideRepo = relativePath !== ".." && !relativePath.startsWith("../");
+    const listed = RENDER_INPUTS.some(
+      (input) => relativePath === input || relativePath.startsWith(`${input}/`),
+    );
+    if (insideRepo && !listed)
+      missing.push(`${relative(ROOT, modulePath)} -> ${relativePath}`);
+  }
+  return missing;
+}
 
 test("immutable render inputs include shared adapters and root dependency declarations", () => {
   expect(RENDER_INPUTS).toContain("agents/agx/agx.toml");
@@ -14,6 +34,16 @@ test("immutable render inputs include shared adapters and root dependency declar
   expect(RENDER_INPUTS).toContain("tools/shared/src");
   expect(RENDER_INPUTS).toContain("package.json");
   expect(RENDER_INPUTS).toContain("bun.lock");
+});
+
+test("static relative imports from every listed module are in the snapshot", async () => {
+  const modules = RENDER_INPUTS.filter((input) => input.endsWith(".ts")).map(
+    (input) => join(ROOT, input),
+  );
+  const missing: string[] = [];
+  for (const modulePath of modules)
+    missing.push(...(await unlistedImports(modulePath)));
+  expect(missing).toEqual([]);
 });
 
 test("offline restore uses the operator cache with a scratch HOME and preserves inputs", async () => {

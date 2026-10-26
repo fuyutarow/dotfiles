@@ -42,7 +42,8 @@ fi
 # login shell is an implicit global toolchain by construction. Measured before removal —
 # `fnm list` held nothing but `* system`, so `fnm env` prepended a PATH entry for zero
 # installed nodes and had accumulated 1672 stale dirs under ~/.local/state/fnm_multishells.
-# Node, if ever needed again, is declared in a project's mise.toml like every other tool.
+# Brewfile.core supplies Node only as Serena's TypeScript language-server runtime.
+# Projects that use Node still pin their own version in their mise.toml.
 # Do not reintroduce fnm, nvm, volta, or a `mise use -g`; `mise run test:mise-scope` fails.
 
 # Sheldon (load this last)

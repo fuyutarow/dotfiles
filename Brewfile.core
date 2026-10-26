@@ -42,6 +42,7 @@ if OS.linux? && HOMEBREW_PREFIX.to_s != "/home/linuxbrew/.linuxbrew"
 else
   brew "bun"        # declared core JS runtime everywhere: hooks, SSH commands and repo bins
 end
+brew "node"         # Serena's TypeScript language server requires Node.js and npm on PATH
 brew "uv"           # declared core Python runner everywhere; Python versions stay per repo
 brew "atuin"        # shell history (Ctrl+R)
 brew "lazygit"      # git TUI (lg)

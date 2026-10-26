@@ -20,6 +20,7 @@ import { host } from "./host.ts";
 import { vhdx } from "./vhdx.ts";
 import { audit } from "./audit.ts";
 import { tmpfs } from "./tmpfs.ts";
+import { miseConfigs } from "./mise-configs.ts";
 
 export type Context = {
   mode: "plan" | "run";
@@ -143,6 +144,13 @@ export const registry: Target[] = [
     description: {
       what: "superseded unpinned toolchain and CLI versions",
       why: "preserve current, pinned, and live versions",
+    },
+  },
+  {
+    ...miseConfigs,
+    description: {
+      what: "dead mise tracked, trusted, and ignored config records",
+      why: "keep stale workspace config records from accumulating",
     },
   },
   {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0 — 2026-10-26
+
+- Prune dead mise config records and report counts
+
 ## 1.5.6 — 2026-10-26
 
 - Read complete agx run inventory before workspace reclamation

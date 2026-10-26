@@ -25,6 +25,8 @@ export const ActionResult = z.object({
   ok: z.boolean(),
   bytes_freed: bytes,
   error: z.string().nullable(),
+  mise_configs_before: z.number().int().nonnegative().optional(),
+  mise_configs_after: z.number().int().nonnegative().optional(),
   skipped: z
     .array(
       z.object({
@@ -147,6 +149,8 @@ export const ReceiptAction = z.object({
   bytes_freed: bytes,
   ok: z.boolean(),
   error: z.string().nullable(),
+  mise_configs_before: z.number().int().nonnegative().optional(),
+  mise_configs_after: z.number().int().nonnegative().optional(),
   skipped: ActionResult.shape.skipped,
   recovery: z
     .object({

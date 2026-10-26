@@ -358,7 +358,7 @@ async function writeNativeTitleIndex(
   );
 }
 
-test("bound native title projects Unicode labels and leaves the fleet name canonical", async () => {
+test("bound native title preserves the canonical fleet name in projection", async () => {
   await using fixture = await nativeFixture();
   await fixture.rollout(footerThread);
   await writeNativeTitleIndex(fixture, footerThread, "レビュー 🧭");
@@ -389,12 +389,48 @@ test("bound native title projects Unicode labels and leaves the fleet name canon
     title: { kind: "known", displayTitle: "レビュー 🧭" },
   });
   await projectAgents(agents, sessions, apply, titles);
-  expect(calls[1]).toEqual(["tab", "rename", "tab", "レビュー 🧭"]);
-  expect(calls[2]).toContain("fullname=レビュー 🧭");
+  expect(calls[1]).toEqual(["tab", "rename", "tab", "canonical-agt_abcd"]);
+  expect(calls[2]).toContain("fullname=canonical-agt_abcd");
+  expect(calls.flat()).not.toContain("レビュー 🧭");
   expect(await readFleetSession(footerThread, fixture.env)).toMatchObject({
     name: "canonical-agt_abcd",
     session_id: footerThread,
   });
+});
+
+test("native title is the Codex projection fallback when fleet name is unavailable", async () => {
+  await using fixture = await nativeFixture();
+  await fixture.rollout(footerThread);
+  await writeNativeTitleIndex(fixture, footerThread, "レビュー 🧭");
+  const prior = session({
+    vendor: "codex",
+    session_id: footerThread,
+    pane_id: "pane",
+    name: { na: true, why: "fleet name unavailable" },
+  });
+  expect((await writeFleetSession(prior, fixture.env)).ok).toBe(true);
+
+  const agents = makeAgents();
+  const calls: string[][] = [];
+  const titles: NativeTitleBindings = new Map();
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const sessions = await bindNativeCodexFooters(
+    agents,
+    () => Promise.resolve(footer()),
+    apply,
+    fixture.env,
+    titles,
+  );
+  expect(titles.get("pane")).toMatchObject({
+    sessionId: footerThread,
+    title: { kind: "known", displayTitle: "レビュー 🧭" },
+  });
+  await projectAgents(agents, sessions, apply, titles);
+  expect(calls[1]).toEqual(["tab", "rename", "tab", "レビュー 🧭"]);
+  expect(calls[2]).toContain("fullname=レビュー 🧭");
 });
 
 test("registration-only identity cannot create a native title binding", async () => {
@@ -467,7 +503,7 @@ test("footer switch during native title I/O discards the pending label", async (
   expect(calls.some((args) => args.includes("--agent-session-id"))).toBe(true);
 });
 
-test("unavailable native title replaces a prior known label with fleet fallback", async () => {
+test("unavailable native title keeps the fleet name in projection", async () => {
   await using fixture = await nativeFixture();
   await fixture.rollout(footerThread);
   await writeNativeTitleIndex(fixture, footerThread, "previous title");
@@ -493,7 +529,8 @@ test("unavailable native title replaces a prior known label with fleet fallback"
     knownTitles,
   );
   await projectAgents(agents, known, apply, knownTitles);
-  expect(calls.some((args) => args.includes("previous title"))).toBe(true);
+  expect(calls.at(-2)).toEqual(["tab", "rename", "tab", "canonical-agt_abcd"]);
+  expect(calls.at(-1)).toContain("fullname=canonical-agt_abcd");
 
   await Bun.write(
     join(fixture.root, "session_index.jsonl"),
@@ -517,6 +554,7 @@ test("unavailable native title replaces a prior known label with fleet fallback"
   await projectAgents(agents, unavailable, apply, unavailableTitles);
   expect(calls.at(-2)).toEqual(["tab", "rename", "tab", "canonical-agt_abcd"]);
   expect(calls.at(-1)).toContain("fullname=canonical-agt_abcd");
+  expect(calls.flat()).not.toContain("previous title");
 });
 
 test("native title cache inputs react to source changes but ignore observation time", () => {

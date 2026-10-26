@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.19 — 2026-10-26
+
+- Prefer the fleet name over Codex's native thread title in pane projection
+
 ## 0.1.18 — 2026-10-24
 
 - Narrow the projector agent fixture before mutating session and tab data

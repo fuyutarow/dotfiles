@@ -731,7 +731,7 @@ export async function projectAgents(
         ? titleBinding.title.displayTitle
         : undefined;
     const why = reasons.get(agent.pane_id) ?? sessionWhy(session);
-    const name = nativeTitle ?? knownName ?? unavailableLabel(agent, why);
+    const name = knownName ?? nativeTitle ?? unavailableLabel(agent, why);
     const model =
       identity !== undefined && typeof identity.model === "string"
         ? identity.model

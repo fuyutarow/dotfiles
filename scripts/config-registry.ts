@@ -741,7 +741,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: [".ws.toml"],
+    sources: ["agx.toml"],
     deployed: "the checkout",
     consumer:
       "agx ws add (readiness), rm / gc (trunk), and gc (regenerable caches)",

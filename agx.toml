@@ -1,5 +1,6 @@
-# Read by ws (tools/jj-ws; spec: tools/spec/jj-ws.md). `ready` runs, in order, inside each
-# new workspace; `trunk` is the revset a change must be reachable from to count as landed.
+# Read by agx (agx ws; manual: `agx ws --help`). `ready` runs, in order, inside each new
+# workspace; `trunk` is the revset a change must be reachable from to count as landed.
+[ws]
 ready = ["mise trust -q", "bun install --frozen-lockfile"]
 trunk = "alpha"
 # agx ws gc reads this list; only rebuildable tool caches belong here, never worker results.

@@ -12,9 +12,10 @@ const ANSI = new RegExp(`${String.fromCodePoint(27)}\\[[0-9;]*m`, "gu");
 
 describe("statusline render golden", () => {
   test("fixed collector results keep the rendered rows unchanged", async () => {
+    const sessionId = "fixture-session";
     const parsed = ClaudeStatuslineInputSchema.safeParse({
       cwd: "/fixture/project",
-      session_id: "fixture-session",
+      session_id: sessionId,
       model: { display_name: "Opus" },
       context_window: { total_input_tokens: 1000, used_percentage: 25 },
       cost: { total_lines_added: 4, total_lines_removed: 2 },
@@ -94,10 +95,11 @@ describe("statusline render golden", () => {
             markerCostUsd: 0.03,
             secs: 90,
             alive: true,
-            dispatcherSession: currentDispatcherSession("fixture-session"),
+            dispatcherSession: currentDispatcherSession(sessionId),
             doing: undefined,
           },
         ],
+        sessionScope: sessionId,
         unreadable: 0,
       }),
     })

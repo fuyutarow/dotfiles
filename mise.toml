@@ -602,6 +602,11 @@ description = "Free SIZE of rip graveyard payloads now, oldest first, preserving
 raw = true
 run = 'mise run bun:check >&2 && bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" free'
 
+[tasks."disk:recover"]
+description = "Restore a mount's measured available bytes to --min-available from eligible graveyard payloads; use --yes to delete."
+raw = true
+run = 'mise run bun:check >&2 && bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" recover'
+
 
 # Remediation for what wsl:audit reports as "host process past 3600s CPU". Twice on r99 (2026-09-09
 # and 2026-09-22) sshd left per-connection `sshd -R` processes busy-looping after C: filled — 9 of

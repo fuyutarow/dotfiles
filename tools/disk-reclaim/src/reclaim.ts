@@ -27,6 +27,7 @@ import {
 } from "./receipt.ts";
 import { deleteApproved } from "./delete.ts";
 import { freeGraveyard, freeResult, freeExit, requestedBytes } from "./free.ts";
+import { recoverExit, recoverGraveyard } from "./recover.ts";
 import { ProgressReporter } from "./lib/progress.ts";
 import { readHeadroom } from "./storage.ts";
 import { registry, type Context, type Target } from "./targets/index.ts";
@@ -128,6 +129,18 @@ const flags = {
 const usageExit = (code: number) => {
   if (code === 1) process.exitCode = 2;
 };
+const durationMs = (value: string | undefined): number | undefined => {
+  if (value === undefined) return undefined;
+  const parsed = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/u.exec(value);
+  if (parsed === null) return NaN;
+  const scale: Record<string, number> = {
+    ms: 1,
+    s: 1000,
+    m: 60_000,
+    h: 3_600_000,
+  };
+  return Number(parsed[1]) * (scale[parsed[2] ?? ""] ?? NaN);
+};
 const common = { strictFlags: true, ignoreArgv: rejectPrototypeFlag };
 const planFlags = {
   on: flags.on,
@@ -174,6 +187,31 @@ const commands = [
     help: {
       description:
         "Unlink SIZE of eligible rip graveyard payloads, oldest first; always JSON.",
+    },
+  }),
+  command({
+    ...common,
+    name: "recover",
+    parameters: [],
+    flags: {
+      path: {
+        type: String,
+        description: "Mount path whose available bytes are measured",
+      },
+      minAvailable: {
+        type: String,
+        description: "Available-byte goal, for example 20GiB",
+      },
+      within: {
+        type: String,
+        description: "Maximum work duration (for example 2m)",
+      },
+      yes: flags.yes,
+      json: flags.json,
+    },
+    help: {
+      description:
+        "Restore a mount's measured available bytes using eligible graveyard payloads.",
     },
   }),
   command({
@@ -548,6 +586,55 @@ export async function main(
     } else result = await freeGraveyard(input, { config: loaded.config });
     process.stdout.write(`${JSON.stringify(result)}\n`);
     return freeExit(result);
+  }
+  if (parsed.command === "recover") {
+    const f = z
+      .object({
+        path: z.string().min(1),
+        minAvailable: z.string(),
+        within: z.string().optional(),
+        yes: z.boolean().default(false),
+        json: z.boolean().default(false),
+      })
+      .safeParse(parsed.flags);
+    const withinMs = f.success ? durationMs(f.data.within) : undefined;
+    const minAvailable = f.success ? f.data.minAvailable : undefined;
+    if (
+      !f.success ||
+      requestedBytes(minAvailable) === null ||
+      !Number.isFinite(withinMs ?? 1) ||
+      (withinMs !== undefined && withinMs <= 0)
+    )
+      return fail(
+        "recover requires --path <mount> and a positive --min-available <size>; --within accepts positive ms, s, m, or h durations",
+      );
+    const loaded = loadConfig();
+    const refusal = f.data.yes ? workerMutationRefusal() : null;
+    if (loaded.config === null || refusal !== null)
+      return fail(refusal ?? loaded.error ?? "invalid config");
+    const controller = new AbortController();
+    let cancelledWith: number | undefined;
+    const onInterrupt = () => {
+      cancelledWith = 130;
+      controller.abort("SIGINT");
+    };
+    const onTerminate = () => {
+      cancelledWith = 143;
+      controller.abort("SIGTERM");
+    };
+    process.once("SIGINT", onInterrupt);
+    process.once("SIGTERM", onTerminate);
+    const result = await recoverGraveyard(minAvailable, {
+      config: loaded.config,
+      path: f.data.path,
+      yes: f.data.yes,
+      signal: controller.signal,
+      ...(withinMs === undefined ? {} : { withinMs }),
+    });
+    process.removeListener("SIGINT", onInterrupt);
+    process.removeListener("SIGTERM", onTerminate);
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+    return cancelledWith ?? recoverExit(result);
   }
   const validatedFlags = parsedFlags.safeParse(parsed.flags);
   if (!validatedFlags.success) return fail(validatedFlags.error.message);

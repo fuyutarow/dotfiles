@@ -16,6 +16,7 @@ disk-reclaim run TARGET... --yes [--json] [--stop-on-error] [--fetch]
 disk-reclaim run --tier blind --yes
 disk-reclaim run rip-expire --only /absolute/graveyard/subtree --yes
 disk-reclaim run tmpfs --only /absolute/tmpfs/subtree --yes
+disk-reclaim recover --path /mount --min-available 20GiB [--within 2m] [--yes] [--json]
 disk-reclaim targets [--json]
 disk-reclaim receipts [--last N] [--json]
 disk-reclaim wrap NAME [--interactive] -- CMD...
@@ -31,6 +32,24 @@ takes a per-host lock and checks each record again immediately before the target
 or changed paths are skipped. Owner-only rows remain ASK until their item is supplied with
 `--approve <owner-item>`; XDG Trash uses `--approve xdg-trash`. `--yes` is the single-process
 equivalent of `plan | apply`.
+
+## Emergency available-space recovery
+
+`disk-reclaim recover --path <mount> --min-available <size> [--within <duration>] [--yes] [--json]`
+measures `statfs` available bytes on the requested path and considers only graveyard payloads
+whose recorded burial is already outside the configured undo window. Without `--yes` it reports
+the current shortfall and eligible candidates without deleting. With `--yes` it takes the shared
+reclaim lock, revalidates each candidate, removes one payload at a time, and stops as soon as
+measured available bytes reach the goal. It never deletes an undo-window payload; those paths and
+their `eligible_at` timestamps appear in the result. `--within` bounds work (ms, s, m, or h).
+Progress is written to stderr every five seconds and after each payload, including when stderr is
+not a TTY. JSON separates `unlinked_logical_bytes`, `allocated_estimate_bytes`,
+`available_before`, and `available_after`; only the measured available-byte goal selects the exit
+outcome. Exit 0 means met, 1 means `needs_more`, 2 means invalid input, 3 means lock busy, 4 means
+measurement or setup is unknown, and 130/143 represent cancellation. A detailed partial result is
+kept under the reclaim state `runs` directory and indexed by `disk-reclaim receipts`.
+`mise run disk:recover -- --path …` is the thin task
+entry. The existing `free` command and its `reclaim.free/1` schema retain their current meaning.
 
 Plan reads candidate data without deleting it and maintains a measurement cache under
 `$XDG_CACHE_HOME/disk-reclaim/scan-cache` (default: `~/.cache/disk-reclaim/scan-cache`); tests and

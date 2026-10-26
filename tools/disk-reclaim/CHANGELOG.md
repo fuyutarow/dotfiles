@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.0 — 2026-10-26
+
+- Add goal-based graveyard recovery by measured mount availability
+
 ## 1.7.0 — 2026-10-26
 
 - Drain expired graveyard payloads with bounded concurrent unlinks, pressure-scaled budgets and stderr progress

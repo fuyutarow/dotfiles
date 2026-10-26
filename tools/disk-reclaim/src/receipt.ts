@@ -5,7 +5,14 @@ import {
   readFileSync,
   statfsSync,
 } from "node:fs";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
@@ -134,6 +141,15 @@ export function writeReceipt(
   mkdirSync(dir, { recursive: true });
   const path = join(dir, "log.jsonl");
   appendFileSync(path, `${JSON.stringify(receipt)}\n`, { mode: 0o600 });
+  return path;
+}
+export async function writeReceiptAsync(
+  receipt: ReceiptV1 | ReceiptV2,
+  dir = stateDir(),
+): Promise<string> {
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, "log.jsonl");
+  await appendFile(path, `${JSON.stringify(receipt)}\n`, { mode: 0o600 });
   return path;
 }
 export function writeItemOutcomes(

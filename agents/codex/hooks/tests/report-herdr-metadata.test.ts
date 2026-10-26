@@ -17,8 +17,15 @@ import {
 } from "../../../../tools/shared/src/fleet-session.ts";
 import { projectAgents } from "../../../../tools/herdr-projector/src/herdr-projector.ts";
 import { jsonOf, z } from "../../../../tools/shared/src/zod.ts";
+import { codexAgentName, readHerdrPaneName } from "../herdr-identity.ts";
 
 const requestSchema = z.record(z.string(), z.unknown());
+const restoreEnvironment = (previous: Map<string, string | undefined>) => {
+  for (const [key, value] of previous) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+};
 
 function rollout(id: string, model: string, effort: string) {
   return [
@@ -65,6 +72,14 @@ test("Codex hook writes and reports the exact rollout session id", async () => {
       join(day, "rollout-sibling-thread.jsonl"),
       rollout("sibling-thread", "gpt-6-luna", "low"),
     ),
+    writeFile(
+      join(day, "rollout-slow-reply-thread.jsonl"),
+      rollout("slow-reply-thread", "gpt-6.1-sol", "medium"),
+    ),
+    writeFile(
+      join(day, "rollout-missing-reply-thread.jsonl"),
+      rollout("missing-reply-thread", "gpt-6.1-sol", "medium"),
+    ),
   ]);
 
   const bin = join(home, "bin");
@@ -87,16 +102,31 @@ test("Codex hook writes and reports the exact rollout session id", async () => {
       if (newline < 0) return;
       const parsed = jsonOf(requestSchema).safeParse(input.slice(0, newline));
       if (parsed.success && parsed.data.method === "pane.get") {
-        socket.end(
-          `${JSON.stringify({
-            result: {
-              pane: {
-                pane_id: "fixture-pane",
-                tokens: { fullname: "example-repo-agt_0mr6" },
-              },
-            },
-          })}\n`,
+        const paneRequest = jsonOf(z.object({ pane_id: z.string() })).safeParse(
+          parsed.data.params,
         );
+        if (!paneRequest.success) {
+          socket.end("{}\n");
+          return;
+        }
+        const paneId = paneRequest.data.pane_id;
+        if (paneId === "missing-pane") {
+          socket.end();
+          return;
+        }
+        const reply = `${JSON.stringify({
+          result: {
+            pane: {
+              pane_id: paneId,
+              tokens: { fullname: "example-repo-agt_0mr6" },
+            },
+          },
+        })}\n`;
+        if (paneId === "slow-pane")
+          setTimeout(() => {
+            socket.end(reply);
+          }, 350);
+        else socket.end(reply);
         return;
       }
       socket.end("{}\n");
@@ -117,7 +147,7 @@ test("Codex hook writes and reports the exact rollout session id", async () => {
   };
 
   const hook = join(import.meta.dir, "..", "report-herdr-metadata.ts");
-  const runHook = (threadId: string) =>
+  const runHook = (threadId: string, paneId = "fixture-pane") =>
     new Promise<{ status: number | null; stderr: string }>(
       (resolve, reject) => {
         const child = spawn(Bun.which("bun") ?? "bun", [hook], {
@@ -130,7 +160,7 @@ test("Codex hook writes and reports the exact rollout session id", async () => {
             XDG_RUNTIME_DIR: runtime,
             HERDR_ENV: "1",
             HERDR_SOCKET_PATH: socketPath,
-            HERDR_PANE_ID: "fixture-pane",
+            HERDR_PANE_ID: paneId,
             HERDR_ARGS_FILE: herdrArgs,
           },
           stdio: ["pipe", "ignore", "pipe"],
@@ -163,7 +193,7 @@ test("Codex hook writes and reports the exact rollout session id", async () => {
   expect(fleetSession).toMatchObject({
     session_id: "target-thread",
     vendor: "codex",
-    name: "example-repo-agt_0mr6",
+    name: codexAgentName("/fixture/example-repo", "target-thread"),
     model: "gpt-6.1-sol",
     effort: "medium",
     cwd: "/fixture/example-repo",
@@ -188,6 +218,37 @@ test("Codex hook writes and reports the exact rollout session id", async () => {
   expect(await readFile(herdrArgs, "utf8")).toBe(
     "pane report-agent-session --source dotfiles:codex-session --agent codex --agent-session-id target-thread fixture-pane\n",
   );
+
+  const readPaneName = (paneId: string) => {
+    const settings = {
+      HERDR_ENV: "1",
+      HERDR_SOCKET_PATH: socketPath,
+      HERDR_PANE_ID: paneId,
+    };
+    const previous = new Map(
+      Object.keys(settings).map((key) => [key, process.env[key]]),
+    );
+    Object.assign(process.env, settings);
+    return readHerdrPaneName().finally(() => {
+      restoreEnvironment(previous);
+    });
+  };
+
+  for (const [threadId, paneId] of [
+    ["slow-reply-thread", "slow-pane"],
+    ["missing-reply-thread", "missing-pane"],
+  ] as const) {
+    expect(await readPaneName(paneId)).toBeUndefined();
+    expect(await runHook(threadId, paneId)).toEqual({ status: 0, stderr: "" });
+    expect(
+      await readFleetSession(threadId, { XDG_RUNTIME_DIR: runtime }),
+    ).toMatchObject({
+      session_id: threadId,
+      vendor: "codex",
+      name: codexAgentName("/fixture/example-repo", threadId),
+      cwd: "/fixture/example-repo",
+    });
+  }
 
   expect(await runHook("missing-thread")).toEqual({ status: 0, stderr: "" });
   expect(await readFile(herdrArgs, "utf8")).toContain(

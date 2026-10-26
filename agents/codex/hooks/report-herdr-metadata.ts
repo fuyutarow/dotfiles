@@ -11,7 +11,7 @@ import {
   clearHerdrMetadata,
   reportToHerdr,
 } from "../../../tools/statusline/src/identity.ts";
-import { codexAgentName, readHerdrPaneName } from "./herdr-identity.ts";
+import { codexAgentName } from "./herdr-identity.ts";
 
 const reportValue = (value: string | undefined) =>
   value === undefined || value === "" ? "unknown" : value;
@@ -44,11 +44,10 @@ async function reportRequestedSession(
   // Unknown Codex facts must replace metadata left by a previous Claude occupant too.
   const model = reportValue(session.model?.name);
   const effort = reportValue(session.effort);
-  const paneName = await readHerdrPaneName();
   const name =
-    session.cwd === undefined || session.cwd === "" || paneName === undefined
+    session.cwd === undefined || session.cwd === ""
       ? undefined
-      : codexAgentName(session.cwd, requestedThread, paneName.name);
+      : codexAgentName(session.cwd, requestedThread);
   const key = new Bun.CryptoHasher("sha256")
     .update(
       JSON.stringify([

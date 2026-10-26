@@ -11,6 +11,7 @@ import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
 import { fromThrowable } from "neverthrow";
 import { renderRows, type DisplayRows } from "./row-state.ts";
 import { version } from "../package.json";
+import { statuslineColumns, wrapThroughSys } from "./wrap.ts";
 
 const SEP = ` ${DIM}|${RST} `;
 const BR = "⎇";
@@ -70,6 +71,8 @@ export function render(
     source?: "transcript" | "stdin";
     /** Prepared views add their source status when they are read, not when written. */
     includeRunSource?: boolean;
+    /** Terminal columns; defaults to Claude Code's documented COLUMNS environment value. */
+    columns?: number;
   } = {},
 ): string {
   const codex = options.codex === true;
@@ -260,6 +263,9 @@ export function render(
     "dispatch-warning": observed(""),
     recover: observed(""),
   } satisfies DisplayRows;
+  const columns = options.columns ?? statuslineColumns();
+  const wrap = (output: string) =>
+    columns === undefined ? output : wrapThroughSys(output, columns);
   if (options.layout !== undefined) {
     // Transcript snapshots select rows from this render, with the same field resolver and ages.
     if (options.layout === "snapshot")
@@ -273,7 +279,8 @@ export function render(
     if (options.layout === "location") return location;
     if (options.layout === "session") return session;
     if (options.layout === "shared") return shared;
-    return [location, session, shared].filter(Boolean).join("\n");
+    const output = [location, session, shared].filter(Boolean).join("\n");
+    return options.layout === "block" ? wrap(output) : output;
   }
-  return renderRows(rows);
+  return wrap(renderRows(rows));
 }

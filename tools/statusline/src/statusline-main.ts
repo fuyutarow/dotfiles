@@ -14,6 +14,7 @@ import { jsonText, z } from "./zod.ts";
 import { SessionStatusSchema, type SessionStatus } from "./session-status.ts";
 import { promptParts } from "./prompt-stamp.ts";
 import { coloredHead, render } from "./format.ts";
+import { statuslineColumns, wrapThroughSys } from "./wrap.ts";
 import { buildDataframe } from "./build-dataframe.ts";
 import { writeStatuslineFleetSession } from "./fleet-session.ts";
 import { runLive, type LiveFrame } from "./live.ts";
@@ -73,7 +74,9 @@ async function renderDiscovered(
       },
     );
     frame.routes = ok(await readCoreRuns(process.env, null, cwd, []));
-    return `${render(frame, { layout: "location" })}\n${DIM}no agent session in ${cwd}${RST}\n${render(frame, { layout: "shared" })}`;
+    const output = `${render(frame, { layout: "location" })}\n${DIM}no agent session in ${cwd}${RST}\n${render(frame, { layout: "shared" })}`;
+    const columns = statuslineColumns();
+    return columns === undefined ? output : wrapThroughSys(output, columns);
   }
   const blocks: string[] = [];
   let sharedFrame;
@@ -120,7 +123,9 @@ async function renderDiscovered(
         layout: "shared",
       }),
     );
-  return blocks.join("\n");
+  const output = blocks.join("\n");
+  const columns = statuslineColumns();
+  return columns === undefined ? output : wrapThroughSys(output, columns);
 }
 async function renderSelected(sessionId: string): Promise<void> {
   const ownerSnapshot = readOwnerState();

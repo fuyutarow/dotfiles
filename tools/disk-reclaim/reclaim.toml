@@ -18,6 +18,13 @@ graveyard_min_age_hours = 24
 graveyard_pressure_undo_minutes = 10
 ignore_unreadable_procs = ["sshd"]
 
+[collection_policy.class_rules.ownerless_cache]
+default_owner = "dotfiles"
+ttl_days = 14
+
+[collection_policy.class_rules.deregistered_index_db]
+ttl_days = 7
+
 [[regenerable_caches]]
 path = "~/.cache/sccache"
 class = "REGENERABLE"

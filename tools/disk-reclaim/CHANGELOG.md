@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.0 — 2026-10-27
+
+- Add typed collection policy loader for graveyard age and cache TTL rules
+
 ## 1.8.0 — 2026-10-26
 
 - Add goal-based graveyard recovery by measured mount availability

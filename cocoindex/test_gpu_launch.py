@@ -1,155 +1,174 @@
-"""Exercise ccc supervision and partitioned coexistence without CUDA."""
+"""Exercise ccc's fixed GPU reservation and direct systemd launch path."""
 
-import fcntl
+import importlib.util
 import os
 import runpy
 import select
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def line(process):
-    assert select.select([process.stdout], [], [], 5)[0], "child did not acknowledge"
-    return process.stdout.readline().strip()
-
-
-def test_deployed_launcher_selects_gpu_supervisor(monkeypatch, tmp_path):
-    handoff = ModuleType("gpu_handoff")
-    calls = []
-    handoff.supervise = lambda directory, command: (
-        calls.append((directory, command)) or 0
-    )
-    partition = ModuleType("gpu_partition")
-    partition.CONTEXT_ALLOWANCE = 512 * 1024**2
-    partition.MiB = 1024**2
-    partition._free_bytes = lambda _: 10 * 1024**3
-    partition.apply = lambda _: "cuda"
-    monkeypatch.setitem(sys.modules, "gpu_handoff", handoff)
-    monkeypatch.setitem(sys.modules, "gpu_partition", partition)
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
-    monkeypatch.setattr(sys, "argv", ["launcher"])
-    with pytest.raises(SystemExit) as exc:
-        runpy.run_path(str(ROOT / "cocoindex/ccc-daemon-launch.py"))
-    assert exc.value.code == 0
-    assert calls == [
-        (
-            tmp_path / "agent-resource",
-            [
-                sys.executable,
-                str(ROOT / "cocoindex/ccc-daemon-launch.py"),
-                "--gpu-worker",
-            ],
-        )
-    ]
-    assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"
-
-
-@pytest.mark.parametrize("free_bytes", [None, 10 * 1024**3])
-def test_gpu_worker_installs_adapter_before_daemon(monkeypatch, tmp_path, free_bytes):
-    import ccc_gpu_yield
+def _prepare_launcher(monkeypatch, tmp_path, daemon_result):
+    import ccc_gpu_only
 
     events = []
+    partition_calls = []
     partition = ModuleType("gpu_partition")
-    partition.CONTEXT_ALLOWANCE = 512 * 1024**2
-    partition.MiB = 1024**2
-    partition._free_bytes = lambda _: free_bytes
-    partition.apply = lambda _: events.append("cuda") or "cuda"
+    partition._free_bytes = lambda _: 10 * 1024**3
+    partition.apply = lambda service: partition_calls.append(service) or "cuda"
     monkeypatch.setitem(sys.modules, "gpu_partition", partition)
+
+    def install_adapter(admission, apply_partition):
+        events.append("adapter")
+        assert admission.directory == tmp_path / "agent-resource"
+        assert os.environ["COCOINDEX_RUN_GPU_IN_SUBPROCESS"] == "0"
+        assert apply_partition("ccc") == "cuda"
+
+    monkeypatch.setattr(ccc_gpu_only, "install", install_adapter)
     monkeypatch.setattr(
-        ccc_gpu_yield, "install", lambda *_args, **_kwargs: events.append("adapter")
+        ccc_gpu_only,
+        "ignore_research_signal",
+        lambda: events.append("ignore-research-signal"),
     )
+
     cli = ModuleType("cocoindex_code.cli")
-    cli.app = lambda: events.append("daemon") or 0
+    cli.app = lambda: events.append("daemon") or daemon_result
+    package = ModuleType("cocoindex_code")
+    package.__path__ = []
+    package.cli = cli
+    monkeypatch.setitem(sys.modules, package.__name__, package)
     monkeypatch.setitem(sys.modules, cli.__name__, cli)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    monkeypatch.setattr(sys, "argv", ["launcher", "--gpu-worker"])
+    monkeypatch.setattr(sys, "argv", ["launcher"])
+    return events, partition_calls
+
+
+def test_deployed_launcher_installs_gpu_adapter_before_daemon(
+    monkeypatch, tmp_path
+):
+    events, partition_calls = _prepare_launcher(monkeypatch, tmp_path, 0)
+
     with pytest.raises(SystemExit) as exc:
         runpy.run_path(str(ROOT / "cocoindex/ccc-daemon-launch.py"))
+
     assert exc.value.code == 0
-    assert events == ["adapter", "daemon"]
+    assert events == ["adapter", "ignore-research-signal", "daemon"]
+    assert partition_calls == ["ccc"]
 
 
-@pytest.mark.parametrize("research_before_start", [False, True])
-def test_research_want_and_held_slot_do_not_stop_or_withhold_daemon(
-    tmp_path, research_before_start
+def test_launcher_returns_daemon_exit_status_to_systemd(monkeypatch, tmp_path):
+    events, _ = _prepare_launcher(monkeypatch, tmp_path, 23)
+
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_path(str(ROOT / "cocoindex/ccc-daemon-launch.py"))
+
+    assert exc.value.code == 23
+    assert events == ["adapter", "ignore-research-signal", "daemon"]
+
+
+def test_embedder_waits_for_full_reservation_without_cpu_encode(
+    monkeypatch, tmp_path
 ):
-    directory = tmp_path / "agent-resource"
-    slots = directory / "slots"
-    wants = directory / "gpu-wants"
-    slots.mkdir(parents=True)
-    wants.mkdir()
-    with (slots / "gpu.0.0").open("a+") as research:
-        if research_before_start:
-            fcntl.flock(research, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            (wants / "research").write_text(str(os.getpid()))
-        supervisor = subprocess.Popen(
-            [
-                sys.executable,
-                "-u",
-                "-c",
-                "from pathlib import Path; import sys; from gpu_handoff import supervise; sys.exit(supervise(Path(sys.argv[1]),sys.argv[2:]))",
-                str(directory),
-                sys.executable,
-                "-u",
-                "-c",
-                "import sys; print('serving',flush=True); [print('served:'+x.strip(),flush=True) for x in sys.stdin]",
-            ],
-            cwd=ROOT / "cocoindex",
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            bufsize=0,
-        )
-        try:
-            assert line(supervisor) == b"serving"
-            fcntl.flock(research, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            (wants / "research").write_text(str(os.getpid()))
-            supervisor.stdin.write(b"query\n")
-            supervisor.stdin.flush()
-            assert line(supervisor) == b"served:query"
-            assert supervisor.poll() is None
-            assert not (directory / "ccc-gpu.lock").exists()
-            supervisor.terminate()
-            assert supervisor.wait(timeout=5) == 0
-        finally:
-            if supervisor.poll() is None:
-                supervisor.kill()
-            supervisor.communicate(timeout=5)
+    import ccc_gpu_only
+    from test_gpu_yield import install_embedder, install_torch
+
+    devices = []
+    model = SimpleNamespace(max_seq_length=512)
+    model.encode = lambda texts, **kwargs: (
+        devices.append(kwargs["device"]) or [[text] for text in texts]
+    )
+    Embedder = install_embedder(monkeypatch, model)
+    install_torch(monkeypatch)
+
+    free_bytes = [2047 * 1024**2]
+    apply_calls = []
+    waits = []
+
+    def wait(seconds):
+        waits.append(seconds)
+        free_bytes[0] = 2048 * 1024**2
+
+    admission = ccc_gpu_only.GpuAdmission(
+        tmp_path, ccc_gpu_only.Policy(), wait=wait
+    )
+    ccc_gpu_only.install(
+        admission,
+        lambda service: ccc_gpu_only.configure_partition(
+            service,
+            lambda _: free_bytes[0],
+            lambda name: apply_calls.append(name) or "cuda",
+            2048,
+            0,
+        ),
+    )
+
+    loaded = Embedder()._get_model()
+    assert loaded.encode(["chunk"]) == [["chunk"]]
+    assert loaded.device == "cuda:0"
+    assert devices == ["cuda:0"]
+    assert waits == [1.0]
+    assert apply_calls == ["ccc", "ccc"]
 
 
-def test_child_exit_status_returns_to_systemd(tmp_path):
-    from gpu_handoff import supervise
-
-    assert supervise(tmp_path, [sys.executable, "-c", "raise SystemExit(23)"]) == 23
+def test_ccc_ignores_research_yield_signal():
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-u",
+            "-c",
+            "import time; from ccc_gpu_only import ignore_research_signal; "
+            "ignore_research_signal(); print('serving', flush=True); time.sleep(30)",
+        ],
+        cwd=ROOT / "cocoindex",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    try:
+        assert select.select([process.stdout], [], [], 5)[0]
+        assert process.stdout.readline().strip() == "serving"
+        process.send_signal(signal.SIGUSR1)
+        time.sleep(0.05)
+        assert process.poll() is None
+    finally:
+        if process.poll() is None:
+            process.terminate()
+        process.communicate(timeout=5)
 
 
 def test_partition_keeps_1536_mib_allocator_cap(monkeypatch, tmp_path):
-    import importlib.util
-    from types import SimpleNamespace
-
+    import ccc_gpu_only
     from test_gpu_yield import install_embedder
 
     path = ROOT / "tools/agent-resource-run/gpu_partition.py"
     spec = importlib.util.spec_from_file_location("partition_under_test", path)
     partition = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(partition)
+
     fractions = []
     torch = ModuleType("torch")
     torch.float16 = "float16"
     torch.cuda = SimpleNamespace(
-        get_device_properties=lambda _: SimpleNamespace(total_memory=12288 * 1024**2),
+        OutOfMemoryError=type("FakeOutOfMemory", (RuntimeError,), {}),
+        is_available=lambda: True,
+        get_device_properties=lambda _: SimpleNamespace(
+            total_memory=12288 * 1024**2
+        ),
         set_per_process_memory_fraction=lambda fraction, device: fractions.append(
             (fraction, device)
         ),
     )
     monkeypatch.setitem(sys.modules, "torch", torch)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3")
     monkeypatch.setattr(
         partition,
         "_policy",
@@ -160,28 +179,33 @@ def test_partition_keeps_1536_mib_allocator_cap(monkeypatch, tmp_path):
     monkeypatch.setattr(
         partition.threading, "Thread", lambda **_: SimpleNamespace(start=lambda: None)
     )
-    monkeypatch.setitem(sys.modules, "gpu_partition", partition)
-    model = SimpleNamespace(
-        to=lambda **_: None,
-        encode=lambda texts, **_: [[text] for text in texts],
-    )
+
+    model = SimpleNamespace(max_seq_length=512)
+    model.encode = lambda texts, **_: [[text] for text in texts]
     Embedder = install_embedder(monkeypatch, model)
-    cli = ModuleType("cocoindex_code.cli")
+    admission = ccc_gpu_only.GpuAdmission(tmp_path, ccc_gpu_only.Policy())
+    partition_configured = False
 
-    def serve():
-        loaded = Embedder()._get_model()
-        for headroom in (10000, 11000):
-            free_mib[0] = headroom
-            assert loaded.encode(["chunk"] * 17) == [["chunk"]] * 17
-            assert all(fraction * 12288 <= 1536 for fraction, _ in fractions)
-        return 0
+    def grant_partition(service):
+        nonlocal partition_configured
+        if partition_configured:
+            return "cuda"
+        result = ccc_gpu_only.configure_partition(
+            service,
+            partition._free_bytes,
+            partition.apply,
+            2048,
+            0,
+        )
+        partition_configured = result == "cuda"
+        return result
 
-    cli.app = serve
-    monkeypatch.setitem(sys.modules, cli.__name__, cli)
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    monkeypatch.setattr(sys, "argv", ["launcher", "--gpu-worker"])
-    with pytest.raises(SystemExit) as exc:
-        runpy.run_path(str(ROOT / "cocoindex/ccc-daemon-launch.py"))
-    assert exc.value.code == 0
+    ccc_gpu_only.install(admission, grant_partition)
+    loaded = Embedder()._get_model()
+    for headroom in (10000, 11000):
+        free_mib[0] = headroom
+        assert loaded.encode(["chunk"] * 17) == [["chunk"]] * 17
+        assert all(fraction * 12288 <= 1536 for fraction, _ in fractions)
+
     assert fractions == [(1536 / 12288, 0)]
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"

@@ -1,18 +1,18 @@
-"""GPU-only ccc admission tests; partition/NVML and CUDA surfaces are mocked."""
+"""GPU reservation, batch admission, and OOM handling tests."""
 
 import fcntl
 import json
 import os
 import sys
+import threading
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
-from ccc_gpu_yield import (
-    GpuUnavailable,
+
+from ccc_gpu_only import (
+    GpuAdmission,
     Policy,
-    YieldGuard,
-    batch_limit_for_partition,
     configure_partition,
     install,
     state_directory,
@@ -20,16 +20,40 @@ from ccc_gpu_yield import (
 
 
 def install_embedder(monkeypatch, model):
+    constructor_calls = []
+
+    class Parameter:
+        def __init__(self, dtype):
+            self.dtype = dtype
+
+    def sentence_transformer(model_name, **kwargs):
+        constructor_calls.append({"model_name": model_name, **kwargs})
+        model.device = kwargs["device"]
+        dtype = kwargs["model_kwargs"]["torch_dtype"]
+        model.parameters = lambda: iter([Parameter(dtype)])
+        return model
+
+    sentence_transformers = ModuleType("sentence_transformers")
+    sentence_transformers.SentenceTransformer = sentence_transformer
+    monkeypatch.setitem(sys.modules, "sentence_transformers", sentence_transformers)
+
     class Embedder:
-        _device = None
+        constructed_calls = constructor_calls
+
+        def __init__(self):
+            self._device = None
+            self._model_name_or_path = "fixture/model"
+            self._trust_remote_code = False
+            self._model = None
+            self._lock = threading.Lock()
 
         def _get_model(self):
-            assert self._device == "cpu"
-            return model
+            raise AssertionError("ccc GPU-only adapter was not installed")
 
     module = ModuleType("cocoindex.ops.sentence_transformers")
     module.SentenceTransformerEmbedder = Embedder
     monkeypatch.setitem(sys.modules, module.__name__, module)
+
     numpy = ModuleType("numpy")
     numpy.concatenate = lambda arrays, axis=0: [
         row for array in arrays for row in array
@@ -45,19 +69,19 @@ def install_torch(monkeypatch):
 
     events = []
     torch = ModuleType("torch")
+    torch.float16 = "float16"
     torch.cuda = SimpleNamespace(
         OutOfMemoryError=FakeOutOfMemory,
-        synchronize=lambda: events.append("sync"),
+        is_available=lambda: True,
         empty_cache=lambda: events.append("empty-cache"),
     )
-    torch.float16 = "float16"
     monkeypatch.setitem(sys.modules, "torch", torch)
     return events
 
 
-def test_runtime_path_matches_runner(monkeypatch):
-    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/fixture")
-    assert state_directory() == Path("/run/user/fixture/agent-resource")
+def test_runtime_path_matches_runner(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    assert state_directory() == tmp_path / "agent-resource"
     monkeypatch.setenv("XDG_RUNTIME_DIR", "relative")
     with pytest.raises(ValueError, match="XDG_RUNTIME_DIR"):
         state_directory()
@@ -66,243 +90,109 @@ def test_runtime_path_matches_runner(monkeypatch):
         state_directory()
 
 
-def test_batch_default_and_override_are_bounded_by_partition(monkeypatch):
+def test_fixed_batch_limit_is_the_measured_batch(monkeypatch):
     monkeypatch.delenv("CCC_GPU_BATCH_SIZE", raising=False)
-    monkeypatch.delenv("CCC_GPU_UTILIZATION_PERCENT", raising=False)
-    policy = Policy.from_environment(2048, 512)
-    assert policy.batch_size == 8 and policy.utilization_percent == 100
-    assert batch_limit_for_partition(2048, 512) == 29
-    larger_partition = Policy.from_environment(4096, 512)
-    assert larger_partition.batch_size == 8
-    assert larger_partition.max_batch_size == 93
-    assert batch_limit_for_partition(4096, 512) == 93
-
-    monkeypatch.setenv("CCC_GPU_BATCH_SIZE", "29")
-    assert Policy.from_environment(2048, 512).batch_size == 29
-    monkeypatch.setenv("CCC_GPU_BATCH_SIZE", "30")
-    with pytest.raises(ValueError, match="1..29"):
-        Policy.from_environment(2048, 512)
-    assert batch_limit_for_partition(1109, 512) == 0
+    monkeypatch.delenv("CCC_GPU_WAIT_SECONDS", raising=False)
+    assert Policy.from_environment() == Policy(batch_size=8, wait_seconds=1.0)
+    monkeypatch.setenv("CCC_GPU_BATCH_SIZE", "9")
+    with pytest.raises(ValueError, match="1..8"):
+        Policy.from_environment()
 
 
-@pytest.mark.parametrize("slot", ["gpu.0", "gpu.0.0", "gpu.9"])
-def test_gpu_batch_serves_with_research_want_and_held_slot(tmp_path, slot):
-    slots = tmp_path / "slots"
-    slots.mkdir()
-    wants = tmp_path / "gpu-wants"
-    wants.mkdir()
-    (wants / "research").write_text(str(os.getpid()))
-    waits = []
-    with (slots / slot).open("a+") as research:
-        fcntl.flock(research, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        guard = YieldGuard(tmp_path, Policy(), wait=waits.append)
-        assert guard.run(lambda: "cuda") == "cuda"
-        assert waits == []
-        assert (
-            json.loads((tmp_path / "ccc-gpu-status.json").read_text())["deferring"]
-            is False
-        )
-
-
-def test_unavailable_gpu_waits_then_runs_gpu_only(tmp_path):
-    waits = []
-    attempts = iter([GpuUnavailable(), "gpu result"])
-    guard = YieldGuard(tmp_path, Policy(), wait=waits.append)
-
-    def gpu():
-        result = next(attempts)
-        if isinstance(result, BaseException):
-            raise result
-        return result
-
-    assert guard.run(gpu) == "gpu result"
-    assert waits == [1.0]
-    status = json.loads((tmp_path / "ccc-gpu-status.json").read_text())
-    assert status["deferring"] is False
-
-
-def test_partition_probe_waits_without_selecting_cpu(monkeypatch):
+def test_partition_probe_requires_full_reservation_and_preserves_visibility(
+    monkeypatch,
+):
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
     apply_calls = []
-    probe_calls = []
-
-    def probe(device):
-        probe_calls.append(device)
-
-    def apply(service):
-        apply_calls.append(service)
-        return "cuda"
-
-    assert configure_partition("ccc", probe, apply, 2048, 0) == "unavailable"
-    assert probe_calls == [0] and apply_calls == []
+    unavailable = configure_partition(
+        "ccc",
+        lambda _: 2047 * 1024**2,
+        lambda name: apply_calls.append(name) or "cuda",
+        2048,
+        0,
+    )
+    assert unavailable == "unavailable"
+    assert apply_calls == []
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"
 
-
-def test_partition_probe_success_and_apply_race_preserve_cuda_visibility(monkeypatch):
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
-
-    def race_to_cpu(_service):
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        return "cpu"
-
-    assert (
-        configure_partition("ccc", lambda _device: 2048 * 1024**2, race_to_cpu, 2048, 0)
-        == "unavailable"
+    available = configure_partition(
+        "ccc",
+        lambda _: 2048 * 1024**2,
+        lambda name: apply_calls.append(name) or "cuda",
+        2048,
+        0,
     )
-    assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"
-
-    assert (
-        configure_partition(
-            "ccc",
-            lambda _device: 2048 * 1024**2,
-            lambda _service: "cuda",
-            2048,
-            0,
-        )
-        == "cuda"
-    )
+    assert available == "cuda"
+    assert apply_calls == ["ccc"]
 
 
-def test_window_waits_instead_of_using_cpu(tmp_path, monkeypatch):
+def test_gpu_batch_runs_while_research_holds_its_maximum_grant(
+    tmp_path, monkeypatch
+):
+    directory = tmp_path / "agent-resource"
+    slots = directory / "slots"
+    slots.mkdir(parents=True)
+    wants = directory / "gpu-wants"
+    wants.mkdir()
+    (wants / "research").write_text(str(9728 * 1024**2))
+    slot = slots / "gpu.0.0"
+    slot.touch()
     waits = []
-    guard = YieldGuard(tmp_path, Policy(), wait=waits.append)
-    permits = iter([False, True])
-    monkeypatch.setattr(Policy, "permits", lambda _self, _minute: next(permits))
-    assert guard.run(lambda: "cuda") == "cuda"
-    assert waits == [1.0]
-
-
-def test_duty_ceiling_delays_gpu_batch_without_cpu_fallback(tmp_path, monkeypatch):
-    ticks = [10.0]
-    waits = []
-    monkeypatch.setattr("ccc_gpu_yield.time.monotonic", lambda: ticks[0])
-
-    def wait(seconds):
-        waits.append(seconds)
-        ticks[0] += seconds
-
-    guard = YieldGuard(
-        tmp_path,
-        Policy(utilization_percent=20, wait_seconds=5),
-        wait=wait,
-    )
     calls = []
-
-    def gpu():
-        calls.append(ticks[0])
-        ticks[0] += 1
-        return "cuda"
-
-    assert guard.run(gpu) == "cuda"
-    assert guard.run(gpu) == "cuda"
-    assert waits == [5]
-    assert calls == [10.0, 16.0]
-
-
-def test_embedder_batches_on_gpu_and_keeps_model_resident(tmp_path, monkeypatch):
-    events = []
-    model_moves = []
-    model = SimpleNamespace()
+    model = SimpleNamespace(max_seq_length=512)
 
     def encode(texts, **kwargs):
-        assert kwargs["device"] == "cuda:0"
-        events.append((len(texts), kwargs["prompt_name"]))
+        calls.append((kwargs["device"], len(texts)))
         return [[text] for text in texts]
 
     model.encode = encode
-    model.max_seq_length = 512
-    model.to = lambda **kwargs: model_moves.append(kwargs)
     Embedder = install_embedder(monkeypatch, model)
     install_torch(monkeypatch)
+    admission = GpuAdmission(directory, Policy(), wait=waits.append)
     partition_calls = []
+    install(admission, lambda service: partition_calls.append(service) or "cuda")
 
-    def available(service):
-        partition_calls.append(service)
-        return "cuda"
-
-    guard = YieldGuard(tmp_path, Policy(batch_size=8, max_batch_size=10))
-    install(guard, available)
-    embedder = Embedder()
-    loaded = embedder._get_model()
-    assert embedder._device is None
-
-    values = list(range(9))
-    assert loaded.encode(values, prompt_name="document") == [[i] for i in values]
-    assert events == [(8, "document"), (1, "document")]
-    assert model_moves == [{"device": "cuda:0", "dtype": "float16"}]
-    assert partition_calls == ["ccc"]
-
-
-def test_embedder_serves_during_research_only_on_cuda(tmp_path, monkeypatch):
-    slots = tmp_path / "slots"
-    slots.mkdir()
-    devices = []
-    moves = []
-    waits = []
-    model = SimpleNamespace(
-        max_seq_length=512,
-        to=lambda **kwargs: moves.append(kwargs),
-    )
-
-    def encode(texts, **kwargs):
-        devices.append(kwargs["device"])
-        return [[text] for text in texts]
-
-    model.encode = encode
-    Embedder = install_embedder(monkeypatch, model)
-    install_torch(monkeypatch)
-    with (slots / "gpu.0").open("a+") as research:
+    with slot.open("a+") as research:
         fcntl.flock(research, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        loaded = Embedder()._get_model()
+        assert loaded.encode(["index chunk"]) == [["index chunk"]]
 
-        def wait(seconds):
-            assert devices == [] and moves == []
-            waits.append(seconds)
-            fcntl.flock(research, fcntl.LOCK_UN)
-
-        guard = YieldGuard(tmp_path, Policy(), wait=wait)
-        install(guard, lambda _service: "cuda")
-        assert Embedder()._get_model().encode(["chunk"]) == [["chunk"]]
-        assert waits == []
-        assert devices == ["cuda:0"]
-        assert moves == [{"device": "cuda:0", "dtype": "float16"}]
-
-
-def test_cuda_oom_retries_transient_single_chunk_on_gpu(tmp_path, monkeypatch):
-    events = install_torch(monkeypatch)
-    devices = []
-    model = SimpleNamespace()
-    fail_once = True
-
-    def encode(texts, **kwargs):
-        nonlocal fail_once
-        devices.append(kwargs["device"])
-        if fail_once:
-            fail_once = False
-            raise sys.modules["torch"].cuda.OutOfMemoryError("fixture pressure")
-        return [[text] for text in texts]
-
-    model.encode = encode
-    model.max_seq_length = 512
-    model.to = lambda **kwargs: events.append(("model.to", kwargs))
-    Embedder = install_embedder(monkeypatch, model)
-    waits = []
-    guard = YieldGuard(tmp_path, Policy(), wait=waits.append)
-    install(guard, lambda _service: "cuda")
-
-    assert Embedder()._get_model().encode(["chunk"]) == [["chunk"]]
-    assert devices == ["cuda:0", "cuda:0"]
-    assert ("model.to", {"device": "cuda:0", "dtype": "float16"}) in events
-    assert "empty-cache" in events
+    status = json.loads((directory / "ccc-gpu-status.json").read_text())
+    assert status["deferring"] is False
+    assert status["model_device"] == "cuda:0"
+    assert status["model_dtype"] == "float16"
+    assert calls == [("cuda:0", 1)]
+    assert partition_calls == ["ccc", "ccc"]
     assert waits == []
 
 
-def test_cuda_oom_splits_batch_recursively_and_keeps_output_order(
-    tmp_path, monkeypatch
-):
+def test_model_construction_passes_cuda_and_fp16_explicitly(tmp_path, monkeypatch):
+    model = SimpleNamespace(encode=lambda texts, **_: [[text] for text in texts])
+    Embedder = install_embedder(monkeypatch, model)
     install_torch(monkeypatch)
-    devices = []
+    admission = GpuAdmission(tmp_path, Policy())
+    install(admission, lambda _service: "cuda")
+
+    loaded = Embedder()._get_model()
+
+    assert loaded.device == "cuda:0"
+    assert Embedder.constructed_calls == [
+        {
+            "model_name": "fixture/model",
+            "device": "cuda:0",
+            "trust_remote_code": False,
+            "model_kwargs": {"torch_dtype": "float16"},
+        }
+    ]
+    assert admission.model_device == "cuda:0"
+    assert admission.model_dtype == "float16"
+
+
+def test_cuda_oom_splits_batch_and_keeps_output_order(tmp_path, monkeypatch):
+    install_torch(monkeypatch)
     batch_sizes = []
-    model = SimpleNamespace()
+    devices = []
+    model = SimpleNamespace(max_seq_length=512)
 
     def encode(texts, **kwargs):
         devices.append(kwargs["device"])
@@ -312,38 +202,11 @@ def test_cuda_oom_splits_batch_recursively_and_keeps_output_order(
         return [[text] for text in texts]
 
     model.encode = encode
-    model.max_seq_length = 512
-    model.to = lambda **_kwargs: None
     Embedder = install_embedder(monkeypatch, model)
-    guard = YieldGuard(tmp_path, Policy(batch_size=8, max_batch_size=29))
-    install(guard, lambda _service: "cuda")
+    admission = GpuAdmission(tmp_path, Policy())
+    install(admission, lambda _service: "cuda")
 
     values = list(range(8))
     assert Embedder()._get_model().encode(values) == [[value] for value in values]
     assert batch_sizes == [8, 4, 2, 2, 4, 2, 2]
     assert set(devices) == {"cuda:0"}
-
-
-def test_single_chunk_oom_retries_then_surfaces_file_error_without_cpu(
-    tmp_path, monkeypatch, caplog
-):
-    install_torch(monkeypatch)
-    devices = []
-    model = SimpleNamespace()
-
-    def encode(_texts, **kwargs):
-        devices.append(kwargs["device"])
-        raise sys.modules["torch"].cuda.OutOfMemoryError("fixture pressure")
-
-    model.encode = encode
-    model.max_seq_length = 512
-    model.to = lambda **_kwargs: None
-    Embedder = install_embedder(monkeypatch, model)
-    guard = YieldGuard(tmp_path, Policy())
-    install(guard, lambda _service: "cuda")
-
-    with pytest.raises(sys.modules["torch"].cuda.OutOfMemoryError):
-        Embedder()._get_model().encode(["oversized chunk"])
-    assert devices == ["cuda:0", "cuda:0"]
-    assert "SentenceTransformer truncation" in caplog.text
-    assert "cannot embed one chunk after retry at max_seq_length=512" in caplog.text

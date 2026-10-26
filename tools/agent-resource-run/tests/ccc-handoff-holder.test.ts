@@ -233,8 +233,8 @@ for (const invalid of [
     );
   });
 
-// The standing ccc budget remains reserved even between daemon incarnations.
-test("standing ccc partition is reserved even with no sampled holders", async () => {
+// Research receives at most total VRAM minus the safety margin and fixed ccc reservation.
+test("maximum research grant cannot overlap the standing ccc partition", async () => {
   await using f = await fixture();
   f.state.processes = [];
   expect(
@@ -244,11 +244,12 @@ test("standing ccc partition is reserved even with no sampled holders", async ()
       f.options,
     ),
   ).toBeUndefined();
-  expect(
-    await gpuAdmissionRefusal(
-      { gpu_id: 0, vram_peak_bytes: 9728 * 1024 ** 2 + 1 },
-      512,
-      f.options,
-    ),
-  ).toContain("ccc_partition=2147483648");
+  const overlap = await gpuAdmissionRefusal(
+    { gpu_id: 0, vram_peak_bytes: 9728 * 1024 ** 2 + 1 },
+    512,
+    f.options,
+  );
+  expect(overlap).toContain("ccc_partition=2147483648");
+  expect(overlap).toContain("total=12884901888");
+  expect(overlap).toContain("safety_margin=512MiB");
 });

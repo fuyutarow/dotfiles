@@ -97,7 +97,7 @@ async function fixture(m = manifest()) {
   const policy = join(dir, "policy.toml");
   await Bun.write(
     policy,
-    "schema=1\ngpu_max_concurrent_jobs=1\ngpu_safety_mib=512\nmemory_high_fraction=0.9\n",
+    "schema=1\ngpu_max_concurrent_jobs=1\ngpu_safety_mib=512\ngpu_partition_device=0\ngpu_partition_ccc_mib=2048\nmemory_high_fraction=0.9\n",
   );
   if (m.device.kind === "gpu")
     await Bun.write(
@@ -146,7 +146,19 @@ async function invoke(
   ]);
   return { stdout, stderr, exit };
 }
-const live = process.platform === "linux" && Bun.which("systemd-run") !== null;
+async function userSystemdAvailable() {
+  if (Bun.which("systemctl") === null) return false;
+  const child = Bun.spawn(["systemctl", "--user", "show-environment"], {
+    stdout: "ignore",
+    stderr: "ignore",
+    timeout: 5000,
+  });
+  return (await child.exited) === 0;
+}
+const live =
+  process.platform === "linux" &&
+  Bun.which("systemd-run") !== null &&
+  (await userSystemdAvailable());
 
 test("operator policy declares GPU concurrency and a sub-max memory-high fraction", async () => {
   const parsed = z
@@ -415,6 +427,19 @@ test("GPU admission warns about an unadmitted zombie GPU holder without refusing
   expect(warning).toContain(`pid=${pid}`);
   expect(warning).toContain("state=ZOMBIE");
   expect(warning).toContain("cgroup");
+});
+test("full-device GPU request is refused at check-only with the ccc partition reserved", async () => {
+  const f = await fixture(
+    manifest({
+      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 12288 * 1024 ** 2 },
+    }),
+  );
+  const result = await invoke(["--manifest", f.path, "--check-only"], f.env);
+  expect(result.exit, result.stdout + result.stderr).toBe(69);
+  expect(result.stdout).toContain("GPU VRAM budget exceeded");
+  expect(result.stdout).toContain("total=12884901888");
+  expect(result.stdout).toContain("safety_margin=512MiB");
+  expect(result.stdout).toContain("ccc_partition=2147483648");
 });
 test("GPU VRAM guard sums admitted job peaks against device total and safety margin", async () => {
   const f = await fixture();
@@ -767,7 +792,7 @@ test.skipIf(!live)(
     const policy = join(f.dir, "policy-concurrent.toml");
     await Bun.write(
       policy,
-      "schema=1\ngpu_max_concurrent_jobs=2\ngpu_safety_mib=512\nmemory_high_fraction=0.9\n",
+      "schema=1\ngpu_max_concurrent_jobs=2\ngpu_safety_mib=512\ngpu_partition_device=0\ngpu_partition_ccc_mib=2048\nmemory_high_fraction=0.9\n",
     );
     f.env.AGENT_RESOURCE_POLICY = policy;
     const marker = join(f.dir, "first-job-started");
@@ -987,7 +1012,7 @@ test.skipIf(!live)(
     const oomPolicy = join(f.dir, "policy-oom.toml");
     await Bun.write(
       oomPolicy,
-      "schema=1\ngpu_max_concurrent_jobs=1\ngpu_safety_mib=512\nmemory_high_fraction=0.99\n",
+      "schema=1\ngpu_max_concurrent_jobs=1\ngpu_safety_mib=512\ngpu_partition_device=0\ngpu_partition_ccc_mib=2048\nmemory_high_fraction=0.99\n",
     );
     f.env.AGENT_RESOURCE_POLICY = oomPolicy;
     const result = await invoke(
@@ -1034,32 +1059,35 @@ test.skipIf(!live)(
   },
   10000,
 );
-test("recorded stall DENY contains evidence and GPU-holding pid/command", async () => {
-  const f = await fixture(
-    manifest({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 } }),
-  );
-  await Bun.write(
-    join(f.dir, "gpu-owner.json"),
-    JSON.stringify({
-      schema: 1,
-      attemptAt: Temporal.Now.instant().epochMilliseconds,
-      unresponsiveSince: Temporal.Now.instant().epochMilliseconds,
-      stallEvidence: "probe timed out twice",
-      devices: [],
-      processes: [{ pid: process.pid, usedMiB: null }],
-      samples: [],
-    }),
-  );
-  const result = await invoke(["--manifest", f.path, "--", "true"], f.env);
-  expect(result.exit, result.stderr).toBe(69);
-  for (const value of [
-    "probe timed out twice",
-    "gpu-owner.json",
-    String(process.pid),
-    "bun",
-  ])
-    expect(result.stdout).toContain(value);
-});
+test.skipIf(!live)(
+  "recorded stall DENY contains evidence and GPU-holding pid/command",
+  async () => {
+    const f = await fixture(
+      manifest({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 } }),
+    );
+    await Bun.write(
+      join(f.dir, "gpu-owner.json"),
+      JSON.stringify({
+        schema: 1,
+        attemptAt: Temporal.Now.instant().epochMilliseconds,
+        unresponsiveSince: Temporal.Now.instant().epochMilliseconds,
+        stallEvidence: "probe timed out twice",
+        devices: [],
+        processes: [{ pid: process.pid, usedMiB: null }],
+        samples: [],
+      }),
+    );
+    const result = await invoke(["--manifest", f.path, "--", "true"], f.env);
+    expect(result.exit, result.stderr).toBe(69);
+    for (const value of [
+      "probe timed out twice",
+      "gpu-owner.json",
+      String(process.pid),
+      "bun",
+    ])
+      expect(result.stdout).toContain(value);
+  },
+);
 
 test("fresh recovery HOLD retains exit 70", async () => {
   const f = await fixture();

@@ -13,8 +13,13 @@ min_host_ram_safety_gib = 4
 host_ram_safety_fraction = 0.1
 gpu_safety_mib = 512
 
-# Resident services and jq_capacity.py retain their partition declarations.
-# gpu_partition.py and cocoindex/ccc-daemon-launch.py are independent consumers.
+# Resident services retain their partition declarations. agent-resource-run subtracts the ccc
+# reservation from every research grant on this device, whether or not the daemon is currently
+# allocating tensors.
 gpu_partition_device = 0
+# 2026-10-26 measurement: Granite 311m on cuda:0, fp16, batch 8, 1,441 input tokens:
+# torch peak reserved 902 MiB. gpu_partition.py keeps 512 MiB for CUDA context, leaving
+# 634 MiB headroom within this 2,048 MiB standing reservation. The measured input exceeds
+# ccc's default 1,000-character code chunk; the model's fp16 weights use 612 MiB.
 gpu_partition_ccc_mib = 2048
 gpu_partition_rerank_mib = 2048

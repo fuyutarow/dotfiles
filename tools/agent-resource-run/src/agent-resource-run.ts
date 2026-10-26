@@ -598,9 +598,8 @@ async function policy() {
       gpu_partition_ccc_mib: z
         .number()
         .int()
-        .nonnegative()
-        .optional()
-        .default(0),
+        .min(1)
+        .max(1024 * 1024),
       // Preserve the established policy default for older policy files.
       gpu_safety_mib: positive
         .max(1024 * 1024)

@@ -42,10 +42,15 @@
 #     operator explicitly assigned GPU capacity to ccc indexing. Leaving the key unset keeps
 #     this shared file cross-platform: SentenceTransformers selects CUDA on WSL and the local
 #     accelerator on macOS. The current research repository index is rebuilt after this change.
+#   2026-10-26  device unset → cuda:0. Index and query embeddings now require CUDA explicitly.
+#     The managed daemon loads Granite in fp16 and holds the fixed ccc VRAM reservation declared
+#     in resource-policy.toml. Research admission subtracts that reservation; ccc does not yield
+#     to research. Non-CUDA hosts cannot use this shared embedding config.
 
 embedding:
   provider: sentence-transformers
   model: ibm-granite/granite-embedding-311m-multilingual-r2
+  device: cuda:0
   indexing_params: {}
   query_params:
     prompt_name: query

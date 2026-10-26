@@ -62,21 +62,15 @@ StartLimitBurst=8
 
 [Service]
 Type=simple
-# GPU-only launcher: uses the ccc partition from tools/agent-resource-run/resource-policy.toml.
-# The supervisor holds ccc-gpu.lock exclusively through GPU child exit. Research wants
-# trigger SIGUSR1: finish the current batch, exit, and release every CUDA allocation/context.
-# Research waits on that lock before acquiring a slot, with no release grace timer.
-# inotify resumes the GPU child when both wants and held slots are gone. Embeddings are
-# deferred during research (no CPU fallback). Idle weights are fp16; OOM splits batches.
-# Utilization is average CUDA duty time, not instantaneous SM utilization.
+# GPU-only launcher: holds the fixed ccc reservation from
+# tools/agent-resource-run/resource-policy.toml while the daemon is up. Research admission
+# subtracts this reservation, so ccc indexing and search continue during research jobs.
+# SentenceTransformer weights load as fp16; every encode is pinned to cuda:0. CUDA or partition
+# failures defer with a named status, and CUDA OOM retries only on CUDA or surfaces visibly.
 ExecStart=%h/.local/share/uv/tools/cocoindex-code/bin/python %h/dotfiles/cocoindex/ccc-daemon-launch.py
-Environment="CCC_GPU_UTILIZATION_PERCENT=100"
 Environment="CCC_GPU_BATCH_SIZE=8"
 Environment="CCC_GPU_WAIT_SECONDS=1"
 Environment="XDG_RUNTIME_DIR=%t"
-# Optional HH:MM-HH:MM host-local window, end exclusive, wrapping midnight supported.
-# Equal endpoints permit all day; utilization 0 disables GPU indexing entirely.
-Environment="CCC_GPU_WINDOW=00:00-00:00"
 Environment="COCOINDEX_RUN_GPU_IN_SUBPROCESS=0"
 Restart=always
 RestartSec=2

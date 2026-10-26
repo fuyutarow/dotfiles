@@ -132,7 +132,77 @@ if (remoteExists && ahead === "") {
 }
 if (parsed.flags.dryRun) process.exit(0);
 
-await run(
-  ["git", "push", "--remote", "origin", "-b", "alpha"],
-  "pushing alpha",
-);
+const expectedResult = await command([
+  "log",
+  "--no-graph",
+  "-r",
+  "alpha",
+  "-T",
+  "commit_id",
+]);
+if (expectedResult.exitCode !== 0) {
+  const stderr = expectedResult.stderr.trim();
+  die(
+    `reading alpha before push failed: ${stderr !== "" ? stderr : `jj exited ${expectedResult.exitCode}`}`,
+  );
+}
+const expected = expectedResult.stdout.trim();
+
+const pushResult = await command([
+  "git",
+  "push",
+  "--remote",
+  "origin",
+  "-b",
+  "alpha",
+]);
+const fetchResult = await command(["git", "fetch", "--remote", "origin"]);
+const actualResult = await command([
+  "log",
+  "--no-graph",
+  "-r",
+  "present(alpha@origin)",
+  "-T",
+  "commit_id",
+]);
+let actual = "(unavailable)";
+if (actualResult.exitCode === 0) {
+  const actualOutput = actualResult.stdout.trim();
+  actual = actualOutput === "" ? "(missing)" : actualOutput;
+}
+
+const failureDetails: string[] = [];
+if (pushResult.exitCode !== 0) {
+  const stderr = pushResult.stderr.trim();
+  const detail = stderr !== "" ? stderr : pushResult.stdout.trim();
+  failureDetails.push(
+    `push failed: ${detail !== "" ? detail : `jj exited ${pushResult.exitCode}`}`,
+  );
+}
+if (fetchResult.exitCode !== 0) {
+  const stderr = fetchResult.stderr.trim();
+  const detail = stderr !== "" ? stderr : fetchResult.stdout.trim();
+  failureDetails.push(
+    `fresh fetch failed: ${detail !== "" ? detail : `jj exited ${fetchResult.exitCode}`}`,
+  );
+}
+if (actualResult.exitCode !== 0) {
+  const detail = actualResult.stderr.trim();
+  failureDetails.push(
+    `reading alpha@origin failed: ${detail !== "" ? detail : `jj exited ${actualResult.exitCode}`}`,
+  );
+}
+if (
+  pushResult.exitCode !== 0 ||
+  fetchResult.exitCode !== 0 ||
+  actualResult.exitCode !== 0 ||
+  actual !== expected
+) {
+  const detail =
+    failureDetails.length === 0 ? "" : `; ${failureDetails.join("; ")}`;
+  die(
+    `push verification failed: expected alpha=${expected}, actual alpha@origin=${actual}${detail}`,
+  );
+}
+
+process.stdout.write(`verified commit ${expected} at alpha@origin\n`);

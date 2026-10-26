@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -21,6 +22,7 @@ function fixture(pushInitially = true) {
   const root = join(dir, "repo");
   const bin = join(dir, "bin");
   const remote = join(dir, "remote");
+  const pushNoopMarker = join(dir, "push-noop");
   mkdirSync(root);
   mkdirSync(bin);
   const binaries = [
@@ -34,8 +36,34 @@ function fixture(pushInitially = true) {
       binary,
       `${name} is required for jj push integration tests`,
     ).toBeTruthy();
-    if (binary !== null && binary !== undefined)
+    if (binary === null || binary === undefined) continue;
+    if (name !== "jj") {
       symlinkSync(binary, join(bin, name));
+      continue;
+    }
+    const wrapper = join(bin, name);
+    writeFileSync(
+      wrapper,
+      `#!/usr/bin/env bun
+import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+const args = Bun.argv.slice(2);
+if (
+  args[0] === "git" &&
+  args[1] === "push" &&
+  existsSync(${JSON.stringify(pushNoopMarker)})
+) {
+  process.stdout.write("Nothing changed\\n");
+  process.exit(0);
+}
+const result = spawnSync(${JSON.stringify(binary)}, args, {
+  env: process.env,
+  stdio: "inherit",
+});
+process.exit(result.status ?? 1);
+`,
+    );
+    chmodSync(wrapper, 0o755);
   }
   const config = join(dir, "jj.toml");
   writeFileSync(
@@ -104,6 +132,7 @@ function fixture(pushInitially = true) {
     jj,
     jjAt,
     push,
+    pushNoopMarker,
     remoteHead,
   };
 }
@@ -185,9 +214,34 @@ describe("jj push", () => {
     const r = f.push();
     expect(r.exitCode, r.stderr.toString()).toBe(0);
     expect(r.stdout.toString()).toContain("ahead commit");
-    expect(f.remoteHead()).toBe(
-      f.jj("log", "--no-graph", "-r", "alpha", "-T", "commit_id"),
+    const pushed = f.jj("log", "--no-graph", "-r", "alpha", "-T", "commit_id");
+    expect(r.stdout.toString()).toContain(
+      `verified commit ${pushed} at alpha@origin`,
     );
+    expect(f.remoteHead()).toBe(pushed);
+  });
+
+  test("fails when jj reports no change and a fresh fetch shows the old commit", () => {
+    const f = fixture();
+    writeFileSync(join(f.root, "ahead.txt"), "ahead\n");
+    f.jj("describe", "-m", "ahead commit");
+    f.jj("bookmark", "set", "alpha", "-r", "@");
+    const expected = f.jj(
+      "log",
+      "--no-graph",
+      "-r",
+      "alpha",
+      "-T",
+      "commit_id",
+    );
+    const actual = f.remoteHead();
+    writeFileSync(f.pushNoopMarker, "");
+
+    const result = f.push();
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toContain(`expected alpha=${expected}`);
+    expect(result.stderr.toString()).toContain(`actual alpha@origin=${actual}`);
+    expect(f.remoteHead()).toBe(actual);
   });
 
   test("nothing ahead is a successful no-op", () => {

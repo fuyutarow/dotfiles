@@ -8,7 +8,7 @@ description: >-
   Owns EVIDENCE DISPOSITION meaning; records store owns schema and promotion gates.
   Work selection→driving-bibifi-cycles; section run admission→directing-research-sections;
   costly test threshold→acting-on-hypotheses;
-  dispatch/resources→orchestrating-agents; risk ledger→practicing-tiger-style;
+  dispatch/resources→orchestrating-agents; TigerStyle→practicing-tiger-style;
   code fix→follow repository instructions and the relevant language/domain owner.
   English skill; respond in the user's language.
 ---
@@ -122,10 +122,10 @@ The disposition judgment stays SOLO; receipts may be collected in parallel.
 | Choose a costly selected hypothesis, threshold, or Commit/Pivot/Kill | `acting-on-hypotheses`; this skill later validates the raw target result |
 | Admit/register one granted section's run or commit learning | `directing-research-sections`; it consumes this disposition, never delegates its authority |
 | Agent roles, write-set isolation, CPU/GPU admission, status | `orchestrating-agents`; this skill supplies validity, not a fleet |
-| Decide where a prediction-time label invariant lives in a type, parser, or state API | `designing-type-contracts` after this skill states the information-flow requirement |
+| Decide where a prediction-time label invariant lives in a type, parser, or state API | `designing-by-contract` after this skill states the information-flow requirement |
 | Implement a benchmark adapter, runner, leak test, records store schema, or promotion gate | Follow repository instructions and the language owner; this skill supplies the negative cases |
 | Effective configuration/signature authority of a registry file | `governing-configuration-systems`; its contract can feed EV0 |
-| Consequential architecture/release risk | `practicing-tiger-style`; link this disposition into T2/T4 |
+| Consequential architecture/release risk | `practicing-tiger-style`; use this disposition when reviewing the applicable source rules |
 | Frozen terminal research-process audit | `auditing-research-processes`; this skill can validate its measurement rows |
 | Prove a theorem or judge faithfulness of its formal statement | `proving-theorems`; this skill only checks whether stated assumptions apply to a measured run |
 | Research document admission, retention, or authority | `governing-research-documentation`; it governs canonical records, not this verdict |

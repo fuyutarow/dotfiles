@@ -1,5 +1,50 @@
 # Forge verification ledger
 
+## 2026-10-26 — consolidation as designing-by-contract
+
+The user requested broad contract design rather than a type-only entrypoint.
+The skill now owns the complete invariant-to-enforcer decision across types, parsing, assertions,
+state transitions, runtime mediation, and effect/recovery boundaries.
+Classic DbC and execution enforcement remain distinct mechanisms.
+Full TigerStyle remains source-faithful with its own naming/formatting and other source prescriptions.
+
+The old package was renamed, not copied into a second active entrypoint.
+Operational callers and the catalog are migrated; historical observations below retain their old identities.
+No agents/openai.yaml metadata or nested agents/ directory is part of the package.
+
+Serial cases cover static construction, stale authorization, bypassing writers, expected errors,
+post-effect detection, provider recovery, generated clients, subtyping, disabled checks, and monitor limits.
+The directory-ban fixture is executed by repository/copy/sync tests; the other cases are scoped design reviews.
+No live selector accuracy, independent evaluation, or universal safety claim is made.
+
+Verification: source layout gate, target skill-check/rumdl, Codex format validators,
+collection index/floor, and the changed-code gate passed.
+The directory-ban execution tests passed: 20 tests, zero failures across doctor/copy/sync.
+`mise run skills:sync -- --in-house-only` deployed both tool homes; machine verification and direct cmp passed.
+The old active name is absent from both homes. These observations do not measure live selector efficacy.
+
+## 2026-10-26 — type safety and runtime residuals, v2609.1.1
+
+Consumer: the disk-reclaim negative-space review in this conversation.
+Observed gap: a recheck or a typed permission snapshot could be mistaken for prevention of a concurrent effect.
+The existing stable-predicate/expiring-authority distinction is retained; the handoff now names the owner
+and mechanism coupling authorization to the effect. `practicing-tiger-style` owns consequential runtime design.
+No new skill, maximal type requirement, or blanket revalidation policy is introduced.
+Exercise B is strengthened and E adds the concrete stale-deletion case.
+These are constructed serial design checks; actual filesystem-race prevention and live selector efficacy are unmeasured.
+Serial desk review of B/E requires the authoritative runtime owner and a revocation/interleaving check.
+Exercises A/C/D retain their scope: same-typed roles, deployed client compatibility, and external-effect recovery.
+No runtime prevention result or independent evaluator result is claimed.
+
+| Verification command | Observed result |
+|---|---|
+| `bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/designing-type-contracts` | Exit 0; one existing long-sentence reference warning. |
+| `uv run --no-project --with pyyaml python /home/fuyu/.codex/skills/.system/skill-creator/scripts/quick_validate.py agents/skills/designing-type-contracts` | Exit 0, Skill is valid. |
+| `rumdl check --no-exclude agents/skills/practicing-tiger-style agents/skills/designing-type-contracts` | Exit 0; no issues in 13 Markdown files. |
+| `mise run lint:skills-floor` | Exit 0; unchanged descriptions, listing budget passed. |
+
+Deployment scope and the dry-run result are recorded in the sibling Tiger revision ledger.
+
 ## 2026-09-23 — placement and signed function map
 
 Input: requested distillation of the admitted, bounded executable-specification-boundaries SoK.

@@ -1,6 +1,6 @@
 # Construction and verification boundaries
 
-## SOLE owner — D3 construction coverage
+## Construction coverage
 
 Inspect actual paths; do not equate a private field or a parser name with complete construction control.
 
@@ -10,14 +10,22 @@ Inspect actual paths; do not equate a private field or a parser name with comple
 | Deserialization, DB hydration, FFI, cache reload | Does it call the checked constructor or bypass it? | Route through checked conversion or explicitly revalidate before trusted use. |
 | Setters, interior mutation, writable aliases | Can the value become invalid after checking? | Preserve the predicate on mutation, freeze/copy, or reduce the claimed lifetime. |
 | Cast, brand assertion, `any`, unsafe conversion | Is the caller asserting rather than establishing a fact? | Isolate and document the assumption; do not count it as validation evidence. |
-| External authority or changing database fact | Can permission, existence, balance, or reservation expire? | Name a recheck or transaction at the use point. |
+| External authority or changing database fact | Can permission, existence, balance, or reservation expire? | Couple authorization to the effect under its authoritative owner; identify competing writers and any bypass. |
 
 “Check once” applies only while the same predicate remains preserved in the same trusted scope.
 Do not repeat stable checks on every internal call; do not skip checks after mutation or a new trust boundary.
 For schema transformations, distinguish accepted input from produced output; consumers receive the parsed output.
 Normalization is part of the contract: make trimming, coercion, unknown-key handling, and lossy conversion explicit.
 
-## SOLE owner — D4 derivation direction
+A parser can preserve a stable value predicate; it cannot freeze a permission or filesystem observation.
+For changing facts, identify the transaction, lock, reservation, or equivalent mechanism that rejects
+the forbidden transition at use. A recheck alone leaves a check/use race unless the execution model excludes it.
+Check revocation or a conflicting writer between planning and effect; do not claim prevention from post-effect detection.
+Keep uncovered writers or effect paths as residual obligations.
+This skill owns the enforcement decision across types, runtime ownership, concurrency, and recovery.
+Use `practicing-tiger-style` for an additional source-based style review, not a second contract authority.
+
+## Derivation direction
 
 | Existing authority / consumer | Design action | Verification |
 |---|---|---|
@@ -31,7 +39,7 @@ Record generator inputs/options/version when its output is relied upon.
 For independently deployed consumers, test the relevant old/new combinations and identify the compatibility direction.
 Do not infer deployment compatibility merely because all current source files compile together.
 
-## SOLE owner — D5 discriminating checks
+## Discriminating checks
 
 | Claimed guarantee | Positive control | Negative or boundary check |
 |---|---|---|
@@ -47,7 +55,7 @@ A heading-presence checker cannot establish semantic validity; do not build one 
 For compile-fail checks, retain the relevant diagnostic and a compiling control.
 For design-only work, present these as acceptance cases without claiming execution.
 
-## SOLE owner — residual obligations of state and effects
+## Obligations of state and effects
 
 | Observation | Consequence for the contract |
 |---|---|
@@ -57,5 +65,5 @@ For design-only work, present these as acceptance cases without claiming executi
 | A function returns `Result` | Do not infer purity, absence of other failures, rollback, or delivery guarantees. |
 | Replaying an effect can repeat a write | Hand delivery/recovery to the runtime owner; identify the relevant transaction/idempotency requirement. |
 
-Escalate only the unresolved recovery/resource question to `practicing-tiger-style` when consequences warrant it.
+Resolve runtime enforcement in this contract with the effect owner; retain unsupported guarantees explicitly.
 Do not mandate an outbox, workflow engine, or particular architecture for every boundary.

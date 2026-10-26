@@ -12,7 +12,7 @@
 | Needs | coercion, rich errors, JSON Schema/OpenAPI, strict/lax control | a domain representation preserving those predicates; repeat checks only when trust or validity changes |
 | Default | **pydantic v2** `BaseModel` (or `TypeAdapter` for a bare type) | `dataclass(slots=True)` — or `attrs` if you need validators/converters |
 
-Use `designing-type-contracts` when the predicate, construction coverage, or trust boundary is unsettled.
+Use `designing-by-contract` when the predicate, construction coverage, or trust boundary is unsettled.
 It owns the cross-language contract; this reference owns the Python validation-library choice.
 Reuse established facts only while mutation, reload, and external-state changes preserve them.
 Reading from your own database or calling an internal function does not by itself establish that condition.

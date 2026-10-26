@@ -1,5 +1,14 @@
 # Archived skills
 
+## 2026-10-26 TigerStyle reorganization
+
+The [former Tiger risk/conformance workflow](practicing-tiger-style-ledger/SKILL.md)
+is preserved as history. Its T0–T4 ledger and risk tiers are not upstream TigerStyle.
+The active `practicing-tiger-style` follows the complete pinned upstream guide.
+`designing-type-contracts` was renamed and expanded into
+[`designing-by-contract`](../../agents/skills/designing-by-contract/SKILL.md), the single
+owner of static and runtime invariant enforcement. The old name is not an active alias.
+
 Skills retired from `agents/skills/`. Nothing here is linked into any agent (`mise run link:skills`
 only reads `agents/skills/`), so an archived skill never fires; the directory keeps the text
 reachable without `git log`.

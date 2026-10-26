@@ -39,7 +39,7 @@ Formal Methods. `forging-skills` owns the admission test; activity counts alone 
 - [`designing-command-line-interfaces`](designing-command-line-interfaces/) — Design or audit a reusable CLI's contract: consumers, grammar, effects, stdout/stderr and machine route, outcomes, compatibility.
 - [`designing-developer-diagnostics`](designing-developer-diagnostics/) — Design developer-facing CLI/config/build diagnostics as observed failure, precise locus, safe recovery, and human-plus-machine receipt.
 - [`designing-version-schemes`](designing-version-schemes/) — Design versioning as a compatibility, chronology, and release-order contract; verify the target comparator and ranges.
-- [`designing-type-contracts`](designing-type-contracts/) — Assign invariants to types, parsers, and state APIs; check construction paths and name remaining runtime obligations.
+- [`designing-by-contract`](designing-by-contract/) — Design preconditions, postconditions, invariants, and enforcement through types, parsers, assertions, and runtime control.
 
 ### Research & thinking
 
@@ -128,7 +128,7 @@ qualify the result, and revise the affected theory. These are feedback loops, no
 
 ### Coding & proofs
 
-- [`practicing-tiger-style`](practicing-tiger-style/) — Risk-calibrated Tiger discipline for high-consequence code: bounds, invariants, and a checkable failure-mode ledger.
+- [`practicing-tiger-style`](practicing-tiger-style/) — Apply the complete pinned TigerStyle guide: Safety, Performance, and Developer Experience, including naming and formatting.
 - [`refactoring-code`](refactoring-code/) — Behavior-preserving structural change toward 責務分界/局所化; harshly refuses 場当たり churn; enforces the two hats and name-your-oracle.
 - [`writing-julia`](writing-julia/) — Write correct, fast Julia for research — reach for it before any Julia coding or numerics.
 - [`optimizing-julia-gpu-kernels`](optimizing-julia-gpu-kernels/) — Write and optimize CUDA.jl GPU kernels — or prove you shouldn't (vendor libs and fusion beat hand kernels).

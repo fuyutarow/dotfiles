@@ -80,7 +80,7 @@ style nit to clean up afterward.
 
 | Sibling | Cut |
 |---|---|
-| `designing-type-contracts` | **PURPOSE:** invariant placement and construction-path design → there. Python validation APIs, model idioms and library selection remain here. |
+| `designing-by-contract` | **PURPOSE:** invariant placement and construction-path design → there. Python validation APIs, model idioms and library selection remain here. |
 | governing-configuration-systems | **DECISIVE:** pyproject.toml or a Python parser's valid syntax, API, and implementation → HERE. A cross-format consumer/trust, effective-declaration, authority, or integrity contract → governing-configuration-systems. |
 | `running-python-tools` | PURPOSE cut (canonical phrasing OWNED HERE, mirrored there): "Writing/reviewing Python that will **LIVE in a repo** (project, module, kept script) → HERE. Invoking a Python-based tool or one-off snippet **NOW** (`uvx ruff`, `uv run --with pypdf`, `yt-dlp`, `jupyter`) → `running-python-tools`." PEP 723 single-file scripts: **authoring** the script → here; **invoking** it → there. Seam note: the two descriptions agree in substance — do not diff for byte-identity. |
 | Repository instructions and this language owner | Implement Python changes under repository instructions and apply the relevant Python guidance here (PG0–PG4). |

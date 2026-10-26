@@ -62,7 +62,7 @@ Run through `agent-resource-run`. P7 alone owns resource limits.
 | `wiring-repositories` | **BY ARTIFACT:** Julia package content → HERE. Repo layer set and polyglot roots → there. |
 | Repository instructions and this language owner | Implement and debug Julia code under repository instructions; Julia correctness is covered here. |
 | `refactoring-code` | **Co-fire:** it governs behavior preservation; Julia transforms and oracles here. |
-| `practicing-tiger-style` | **LANGUAGE:** Julia mechanism → HERE. Cross-language risk ledger → there. |
+| `practicing-tiger-style` | **LANGUAGE:** Julia mechanism → HERE. Source-faithful TigerStyle safety/performance/DX → there. |
 | `proving-theorems` | **PURPOSE:** formal theorem → there. Julia computation or experiment → HERE. |
 | `verifying-symbolic-identities` | **PURPOSE:** whether an identity holds, which exact-CAS tool decides it, its rung and RECEIPT → there. Packages for building or generating code, codegen, install/TTFX and the Julia it runs → HERE (JG gates co-fire). |
 | `optimizing-julia-gpu-kernels` | **DEVICE:** GPU path design, work/span mapping, timing and state oracle → there; compiling host-style code on a device is insufficient. Host types/packages and state/API device ownership (JG8) → HERE. |

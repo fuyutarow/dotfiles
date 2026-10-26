@@ -22,7 +22,7 @@ description: >-
 and forge ledger in one change. Run from this Skill directory; success prints nothing:
 
 ```bash
-for f in SKILL.md agents/openai.yaml \
+for f in SKILL.md \
   references/admission-and-lifecycle.md references/harness-integration.md \
   references/naming.md references/okf-rd-profile.md references/review-contract.md references/sources.md \
   assets/templates/canonical.template.md assets/templates/evidence.template.md \

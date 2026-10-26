@@ -29,7 +29,7 @@ running or repairing the target is a co-fire or handoff.
 | 「修了した研究 episode 全体の process audit を出して」 | `auditing-research-processes`; this skill may supply validity rows. |
 | “Write the paper's contribution claim from a finished result” | `arguing-research-papers`; this skill can qualify the cited result first. |
 | 「登録済み土俵の test を一回走らせて。結果の解釈はまだ不要」 | Domain executor uses EV0's registered binding and preserves the records store run; no disposition yet. |
-| “Decide whether a label-visibility rule belongs in a parser or state API” | `designing-type-contracts` after the required information flow is fixed. |
+| “Decide whether a label-visibility rule belongs in a parser or state API” | `designing-by-contract` after the required information flow is fixed. |
 | “Add a Bun script inside the skill to validate records store findings” | `NO-FIRE`: schema and refusal belong to records store; this skill may supply semantic negative cases. |
 
 ## Ordered co-fire

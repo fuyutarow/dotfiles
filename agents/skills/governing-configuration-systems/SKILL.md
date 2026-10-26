@@ -10,7 +10,7 @@ description: >-
   (generic configuration-contract design may co-fire); repository layer/wiring → wiring-repositories;
   language manifest/parser implementation → writing-*; cross-format consumer/trust/effective-declaration/
   integrity contract → HERE; R&D authority →
-  governing-research-documentation; high-consequence risk ledger → practicing-tiger-style.
+  governing-research-documentation; TigerStyle safety/performance/DX → practicing-tiger-style.
   English skill; respond in the user's language (default Japanese).
 ---
 
@@ -118,7 +118,7 @@ No harness means the same map, serial.
 
 | Ask | Route |
 |---|---|
-| “Which value invariant belongs in a type, parser, or state API?” | `designing-type-contracts`; this skill retains configuration authority, overrides, representation and integrity. Link its result into C4 when needed. |
+| “Which value invariant belongs in a type, parser, or state API?” | `designing-by-contract`; this skill retains configuration authority, overrides, representation and integrity. Link its result into C4 when needed. |
 | “Add one flag to this existing CLI config parser.” | Follow repository instructions and the language owner. |
 | “How do I configure Claude Code hooks, permissions, or MCP?” | Inspect the declared local configuration and executable checks. |
 | “Which config layers and tasks should this repository install?” | wiring-repositories. |

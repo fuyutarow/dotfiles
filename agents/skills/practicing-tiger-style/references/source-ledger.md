@@ -1,143 +1,56 @@
-# Source ledger
+# Source authority and coverage
 
-> **SOLE owner:** source identities, rule grades, regimes, and dispositions.
-> Effect claims belong to `evidence-and-limits.md`.
+## Current authority
 
-## SoK derivation — checked 2026-09-23
+- Guide: [TigerStyle at 0450c32](https://github.com/tigerbeetle/tigerbeetle/blob/0450c32b2c3c3ab6114f3402cc601341cc8192aa/docs/TIGER_STYLE.md).
+- Revision: `0450c32b2c3c3ab6114f3402cc601341cc8192aa`; retrieved 2026-10-26.
+- [Local guide](upstream-tiger-style.md): unchanged, 511 lines.
+- Guide SHA-256: `84c38b3e9fcbd554518a04e4d24c428bbf47130dd14b1cf03fb54c8d5dbea4f0`.
+- [Apache-2.0 license](upstream-tiger-style.LICENSE.txt): unchanged from the same revision.
+- License SHA-256: `0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594`.
+- The upstream root NOTICE URL returned HTTP 404 at retrieval.
+- [Coverage map](source-coverage.md): generated navigation over source headings and list items.
+  Every continuation, example, and non-list paragraph remains in the unchanged guide.
 
-Use the installed `soks` corpus as the synthesis authority.
-Resolve documents by `sok_id`; paths below are navigation labels relative to its root.
-The bounded position was updated at commit `1e37e99f4f8bfbb5a1d9ccb957c04775b2e76331`.
-That commit pins the cited state, not every subsequent corpus revision.
+The operational SKILL.md is an authored application guide, changed on 2026-10-26.
+The upstream capture is reproduced without edits under its bundled license.
+Its authorship, quotations, and original links remain intact.
+The summary and workflow are not additional TigerBeetle prescriptions.
 
-| Role | Identity | Corpus path |
-|---|---|---|
-| Position | `urn:uuid:01a0c8de-83f8-72d8-bf42-89b56c011da7` | `knowledge/sok-tigerstyle_methodology_and_evidence_boundary.md` |
-| Protocol | `urn:uuid:01a0c8de-83f8-72d8-bf42-89b35d24d8f2` | `knowledge/pro-tigerstyle_methodology_and_evidence_boundary.md` |
-| Claims | `urn:uuid:01a0c8de-83f8-72d8-bf42-89b404af7b8c` | `knowledge/led-tigerstyle_methodology_and_evidence_boundary.md` |
-| Architecture account | `urn:uuid:01a0cd01-fb82-77de-9c42-3d11b874fd1c` | `knowledge/evi-tigerbeetle_architecture_tigerstyle_and_system_boundaries.md` |
+## Interpretation rules
 
-The source set is bounded and the corpus documents remain draft.
-Do not inherit a scientific certification from structural admission.
-Verify the exact passage before making a new source claim; preserve the actual reading depth.
+Preserve the source's safety > performance > developer experience order and its full scope.
+Its strict local prescriptions include no recursion, startup-only allocation, average assertion density,
+function/line limits, zero dependencies, and Zig tooling. Preserve those prescriptions as written.
+Their use by one engineering team does not establish universal experimental effectiveness.
 
-| SoK claim | Operational rule | Grade / limitation |
-|---|---|---|
-| TIG-001 | Start from design goals and explicit contracts | Authored prescription; not an effectiveness result |
-| TIG-002, TIG-004 | Check applicability before adopting numeric quotas or bans | Bounded synthesis; no universal threshold |
-| TIG-003 | Exercise consequential error-handling paths | Adjacent failure evidence; not a TigerStyle intervention |
-| TIG-005 | Make no coding-agent improvement promise | Search-bounded missing evidence |
-| TIG-006 | Link workload, state, capacity, and execution decisions to checks | T0 map is `skill-supplied`; topology choices remain contextual |
+A full TigerStyle request covers all source sections. A named subset can stay scoped.
+For another repository/language, label literal compliance, inapplicability, or an explicit adaptation.
+Higher-priority user/project instructions prevail; do not silently replace the source rule.
+An adapted application is not literal compliance.
 
-TIG-006 is an editorial synthesis of TigerBeetle's self-description.
-It does not prove that TigerStyle alone caused that architecture or its performance.
+The source's performance figures express design ambition, not mandatory measured speedup.
+Its quoted observational failure study is not a causal test of TigerStyle.
+Its VOPR discussion does not make passing fuzzing a proof of no bugs.
 
-| Architecture source | Sections used |
-|---|---|
-| [ARCHITECTURE.md](https://github.com/tigerbeetle/tigerbeetle/blob/47aeb2212a255273dda508288412e537d11e4b7c/docs/ARCHITECTURE.md) | Systems Thinking; Static Memory Allocation; Determinism; Control Plane / Data Plane Separation; Synchronous Execution; Embracing Concurrency |
-The T0 decision map, end-to-end trace, and paid-job example are constructed adaptations.
-They are not quotations or official TigerStyle mandates.
+## Contract relationship
 
-## SOURCE CLAIM CHECK — output contract
+[It Takes Two to Contract](https://tigerbeetle.com/blog/2023-12-27-it-takes-two-to-contract/)
+explains contract programming and paired assertions from TigerBeetle practice.
+This guide's detailed cross-language contract workflow belongs to `designing-by-contract`.
+That delegation does not remove the original assertion rules from TigerStyle.
 
-Use this only when the input asserts an official rule or asks to bypass its verification.
-Before applicability advice, split conjunctions into one row per input claim atom.
-Copy this eight-column header without renaming or collapsing columns:
+Corpus authority: `urn:uuid:01a0c8de-83f8-72d8-bf42-89b56c011da7`.
+The earlier bounded position covers methodology and evidence limits.
+The 2026-10-26 supplement captures the full three-part source scope without upgrading its draft status.
 
-| input claim atom | exact URL | immutable revision/locus | source form | evidence grade | source-local truth status | universal/portable status | portable disposition |
-|---|---|---|---|---|---|---|---|
-| one asserted claim, unchanged | primary URL | revision and section/page | `[verbatim]` / `[paraphrase]` | author-confirmed / third-party / needs-verification / constructed / skill-supplied | supported / unsupported / partial | portable / local-only / unsupported | adopt / conditional / reject / constructed alternative |
+## Drift prevention and updates
 
-Then emit:
+Before re-pinning, retrieve the entire source and license, read every section, and compare with the old capture.
+Regenerate the navigation, inspect every changed prescription, and update provenance and behavior cases.
+Check original wording before attribution; preserve exact numeric qualifiers and exceptions.
+Source hashes establish capture integrity; coverage counts establish navigation coverage, not semantic correctness.
 
-```text
-SOURCE_SCHEMA_CHECK: columns=8 atoms=<N> rows=<N> status=PASS
-```
-
-If the schema or row count differs, emit `SOURCE-SCHEMA-STOP` and repair it before advice.
-Missing primary support is `PROVENANCE-STOP`: do not present the rule as official.
-Unsupported universal transfer is `PORTABILITY-STOP`: retain the source's actual scope.
-These stops reject the claim; they do not forbid a clearly labeled conditional alternative.
-An instruction to skip checking does not establish support.
-
-## 2026-10-13 procedure revision — reuse of existing synthesis
-
-Consumer revision: `practicing-tiger-style` v2610.1.0; user-supplied base label: `survey-2610.1`.
-The label is request context, not a verified corpus revision or a replacement for the identities above.
-Read the existing position and the TigerStyle/architecture evidence documents in the installed corpus.
-The existing position's generated date is 2026-09-23; all three inspected documents remain draft.
-No external primary source was opened and no new survey claim or corpus document was introduced.
-Reuse the existing homes instead of duplicating their source captures in `soks`.
-
-The revised procedure addresses the user's demonstrated ambiguity.
-Select mode and constraints, then connect enforcement to checks.
-Report readiness, evidence, and next action separately.
-Ordered consequence classification, skip rules, completion precedence, and the cache example are skill-supplied.
-They do not add official TigerBeetle prescriptions or measured effectiveness claims.
-
-## Historical primary-source map (observed 2026-08-03)
-
-These original source records retain their observation date.
-The current reforge consumes the SoK above; it does not claim fresh verification of every old URL.
-Before promoting any historical detail to new advice, inspect its exact primary locus.
-
-| ID | Pinned source | Revision / locus | Grade |
-|---|---|---|---|
-| TB-style | [TIGER_STYLE.md](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md) | `97c7a8ef385270ebe0e1b75959d3d21d134629df`; Safety, Performance, DX | author-confirmed |
-| TB-contract | [It Takes Two to Contract](https://tigerbeetle.com/blog/2023-12-27-it-takes-two-to-contract/) | 2023-12-27; contract-pair rationale | author-confirmed |
-| TB-memory | [A Database Without Dynamic Memory Allocation](https://tigerbeetle.com/blog/2022-10-12-a-database-without-dynamic-memory/) | 2022-10-12; bounded database allocation | author-confirmed |
-| TB-tests | [A Descent Into the Vörtex](https://tigerbeetle.com/blog/2025-02-13-a-descent-into-the-vortex/) | 2025-02-13; layered testing report | author-confirmed |
-| P10 | [Power of Ten](https://www.synaptics.org/documents/nasa/10rules.pdf) / [rationales](https://spinroot.com/p10/) | Holzmann 2006; rules 1–6 | third-party |
-| error-study | [Yuan et al.](https://www.usenix.org/system/files/conference/osdi14/osdi14-paper-yuan.pdf) | OSDI 2014, Finding 10–11 | third-party |
-| assertions-study | [Microsoft assertion study](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2006-54.pdf) | MSR-TR-2006-54 | third-party |
-
-The TigerBeetle source is an evolving Zig/database-team style, not a universal standard.
-Re-pin and re-read its revision before a source-rule change.
-
-## SOURCE CLAIM CHECK atomic map
-
-Emit one row per input atom using the header above.
-Each historical row identifies a source rule and its recorded locus.
-Do not transfer source-local truth into a universal disposition.
-
-| Rule atom | Exact source / locus | Form / grade | Source regime → portable disposition |
-|---|---|---|---|
-| R-bounds | [TB ll. 96–100](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L96-L100); [P10 p.2 Rule 2](https://spinroot.com/gerard/pdf/P10.pdf) | `[verbatim]`; author-confirmed / third-party | TB systems/P10 safety-C → conditional justified bound + overrun handling. |
-| R-contracts | [TB ll.115–118](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L115-L118); [contract article](https://tigerbeetle.com/blog/2023-12-27-it-takes-two-to-contract/) | `[verbatim]`; author-confirmed | TB high-impact boundary → conditionally seek independent paths, never mechanical duplication. |
-| R-negative | [TB ll.136–149](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L136-L149) | `[verbatim]`; author-confirmed | TB safety/testing → name accepted and consequential negative case; no arbitrary-input exhaustiveness. |
-| R-errors | [TB ll.104–107](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L104-L107), [ll.213–219](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L213-L219), [Yuan Finding 10](https://www.usenix.org/system/files/conference/osdi14/osdi14-paper-yuan.pdf) | `[verbatim]`; author-confirmed / third-party | TB/five systems → operational error gets visible handling; fail-fast only programmer error. |
-| R-allocation | [TB ll.151–156](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L151-L156); [allocation article](https://tigerbeetle.com/blog/2022-10-12-a-database-without-dynamic-memory/); [P10 p.2 Rule 3](https://spinroot.com/gerard/pdf/P10.pdf) | `[verbatim]` / `[paraphrase]`; author-confirmed / third-party | Fixed-capacity TB/P10 safety-C → observe/budget; pool only with reason. |
-| R-locality | [TB ll.158–175](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L158-L175); [P10 p.2 Rule 6](https://spinroot.com/gerard/pdf/P10.pdf) | `[verbatim]`; author-confirmed / third-party | Mutable systems/safety-C → conditional local auditability. |
-| R-performance | [TB ll.236–247](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L236-L247) | `[verbatim]`; author-confirmed | TB data plane → workload-specific resource estimate/measurement. |
-| R-debt-deps | [TB ll.64–79](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L64-L79), [ll.474–479](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L474-L479) | `[verbatim]`; author-confirmed | TB policy → conditional owner/expiry risk decision; reject literal zero mandate. |
-| R-assert-density | [TB ll.109–113](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L109-L113); [P10 p.2 Rule 5](https://spinroot.com/gerard/pdf/P10.pdf) | `[verbatim]`; author-confirmed / third-party | TB/Zig, safety-C → reject universal per-function count/filler assertions. |
-| R-recursion | [TB ll.90–94](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L90-L94); [P10 p.1 Rule 1](https://spinroot.com/gerard/pdf/P10.pdf) | `[verbatim]`; author-confirmed / third-party | TB/P10 local regime → require scoped depth/stack/work justification, no universal ban. |
-| R-static-only | [TB ll.151–156](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L151-L156); [P10 p.2 Rule 3](https://spinroot.com/gerard/pdf/P10.pdf) | `[verbatim]`; author-confirmed / third-party | Startup-sized manual allocation → PORTABILITY-STOP for universal mandate. |
-| R-function-70 | [TB ll.161–175](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L161-L175); [P10 p.2 Rule 4](https://spinroot.com/gerard/pdf/P10.pdf) | `[verbatim]`; author-confirmed / third-party | TB screen convention → reject portable LOC ceiling. |
-| R-performance-numbers | [TB ll.236–243](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L236-L243) | `[verbatim]`; author-confirmed | TB design philosophy → `1000x`/90% are not mandatory gates. |
-| R-zero | [TB ll.73–79](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L73-L79); [ll.474–479](https://github.com/tigerbeetle/tigerbeetle/blob/97c7a8ef385270ebe0e1b75959d3d21d134629df/docs/TIGER_STYLE.md#L474-L479) | `[verbatim]`; author-confirmed | TB policy → reject universal zero debt/dependencies mandate. |
-
-| Skill-supplied atom | Exact local locus | Form / grade | Disposition |
-|---|---|---|---|
-| T0 DESIGN | `references/architecture-decisions.md` | `[skill-supplied]` | Design section of the same ledger; not a universal architecture method. |
-| T1 CONSEQUENCE | `references/ledger-and-calibration.md` T1 | `[skill-supplied]` | scope/consequence record. |
-| T2 OBLIGATION | `references/ledger-and-calibration.md` T2 | `[skill-supplied]` | selected-requirement schema. |
-| T3 REVERSAL | `references/ledger-and-calibration.md` T3 | `[skill-supplied]` | conditional exception protocol. |
-| T4 EXTERNAL CHECK | `references/ledger-and-calibration.md` T4 and Completion | `[skill-supplied]` | scoped evidence assessment. |
-| Low/Medium/High tiering | `references/ledger-and-calibration.md` Risk classification | `[constructed]` | ordered consequence rules, not external authority. |
-| Tiger conformance ledger | `SKILL.md` LAW; `references/ledger-and-calibration.md` Ledger record | `[constructed]` | skill decision record, not source-authored. |
-
-| False-authority input atom | Source-local truth | Universal Rust/Julia status / disposition |
-|---|---|---|
-| one function, two asserts | TB/P10 average rule only | unsupported; `needs-verification`, reject fixed per-function count. |
-| 70 lines or fewer | TB-local screen convention; P10 says about 60 | unsupported; `needs-verification`, review local reasoning instead. |
-| recursion completely prohibited | TB/P10 local prescription | unsupported; `needs-verification`, require scoped depth/stack/work. |
-| zero allocation after initialization | TB/P10 local prescription | unsupported; `needs-verification`, budget/measure capacity. |
-| performance must be at least 1000× | no matching mandatory local rule | `PROVENANCE-STOP`; never a gate. |
-
-## Attribution and adjacent work
-
-Prefer independent paraphrase.
-Before substantial redistribution, inspect the source revision's license and notices.
-Do not copy community checklists or report formats without establishing permission.
-Community additions are **third-party**, never TigerBeetle rules.
+The former T0–T4 risk/conformance workflow is historical material in
+`archives/skills/practicing-tiger-style-ledger/`, indexed by the archive catalog.
+It is not an active TigerStyle requirement, and old verification results do not certify this rewrite.

@@ -1,197 +1,100 @@
 ---
 name: practicing-tiger-style
 description: >-
-  Applies Tiger Style to design, implementation, and review by defining what must stay true,
-  making state ownership and resource limits explicit, and checking consequential failures.
-  Use for Tigerレビュー or consequential state, concurrency, capacity, recovery,
-  and performance contracts, including prototype promotion and costly R&D.
-  Produces scoped design decisions or findings with checks and remaining uncertainty.
-  Bug diagnosis follows repository instructions and the relevant domain owner; language mechanisms to writing-*;
-  skill revision to forging-skills. Disposable sketches use ordinary domain checks.
-  English skill; respond in the user's language.
+  Applies TigerBeetle's TigerStyle faithfully across safety, performance, and developer
+  experience, including naming, variable scope, assertions, bounds, allocation, control flow,
+  cache invalidation, off-by-one errors, formatting, dependencies, and tooling.
+  Use for Tiger Style implementation, design, or review, including ordinary code and naming.
+  Preserve the pinned source rules and distinguish explicit adaptations from literal conformance.
+  Contract enforcement design uses designing-by-contract; language mechanics use writing-*.
+  Skill revision uses forging-skills. Respond in the user's language.
 ---
 
 # Practicing Tiger Style
 
-> **Version**: v2610.1.0 (2026-10-13) — explicit procedure, skips, and completion conditions.
+> Version: v2610.2.0 (2026-10-26). Authority: the pinned upstream guide, not a local risk framework.
 
-## Purpose — define, enforce, and try to break the contract
+Apply safety, performance, and developer experience in that order, preserving all three.
+TigerStyle covers concrete code as well as design. Naming and formatting are part of its scope.
 
-Start with what must stay true when the system is busy or failing.
-Then decide who owns state, how much work may exist, and what happens when an operation cannot finish.
-Check those decisions with a case that would expose their failure.
-The three commitments are explicit state ownership, bounded work, and defined failure behavior.
-Preserve required correctness when trading speed or convenience; estimate the work before tuning it.
+## Source and completeness
 
-```text
-required behavior and unacceptable loss
-  → state owners, resource bounds, and failure handling
-  → enforcement in the design/code
-  → checks of normal behavior and consequential violations
-```
+Read [the upstream guide](references/upstream-tiger-style.md) in full for an unqualified
+Tiger Style request or a full audit. For a specifically scoped request, read its relevant sections
+and keep the result scoped. [The coverage map](references/source-coverage.md) identifies every
+source rule and its original location; it is navigation, not a replacement for the source.
 
-**LAW:** every selected requirement must connect to an enforcement boundary and a check.
-An assertion count or a passing local test cannot establish a whole-system guarantee.
-The procedure and record below are this skill's adaptations of the existing synthesis.
-They are not an official TigerBeetle certification scheme.
+The guide is an unchanged Apache-2.0 source capture at commit
+`0450c32b2c3c3ab6114f3402cc601341cc8192aa`.
+[Source provenance](references/source-ledger.md) records hashes, licensing, coverage, and update policy.
+Do not silently follow a moving branch or substitute TigerBeetle architecture articles for TigerStyle.
 
-Respond in the user's language. Explain requirements in ordinary words.
-T0–T4 are record labels; knowing them is not a prerequisite for doing the work.
+## How to apply it
 
-## Choose the task mode
+1. Identify whether the user requested design, implementation, review, or explanation.
+   Inspect the affected code, project instructions, language, and execution model.
+2. Walk the applicable source sections below. For a full review, cover every section, including DX.
+   Distinguish a satisfied rule, a violation, an inapplicable rule, an explicit adaptation, and an untested claim.
+3. Make authorized changes or report findings with the rule's source locus and the actual code locus.
+   For a conflict, preserve what the source says and name the higher-priority project constraint.
+4. Run the relevant formatter, compiler/linter, and behavioral or boundary checks.
+   Report what was checked and what remains unknown. Planned checks are not executed evidence.
 
-Choose from the requested action, before selecting checks:
+These steps organize application; they are not additional TigerBeetle rules.
+No risk tier, T0–T4 ledger, fixed report schema, or new document is required.
 
-| Requested action | Mode | Required output and completion condition |
-|---|---|---|
-| Review or assess an existing design/code | Review | Inspect selected boundaries; report each finding, evidence, untested condition, and clearing check. Finish the review even if the implementation remains unverified. Do not edit the target. |
-| Design without implementation | Design | Propose enforcement and checks for every selected requirement; expose unresolved decisions and assumptions. Finish with design readiness, not runtime acceptance. |
-| Build, fix, optimize, or harden | Change | Follow repository instructions and the relevant domain owner when diagnosing failures. For new behavior, define the relevant contracts before implementation. Implement within authorization, run applicable checks, and report remaining gaps. |
+## Apply all source sections
 
-A request combining review and changes uses Change mode only for the authorized edits.
-History or explanation alone uses ordinary explanation or `systematizing-knowledge`.
-A disposable sketch outside an explicit Tiger request uses domain checks; no Tiger record.
-An explicit Tiger request can use the procedure at any risk tier.
-
-## Required procedure
-
-### 1. State the scope and what must not be lost
-
-Name the affected operation, its consumer, required result, and concrete failure consequence.
-Read its existing design/code, or mark proposed behavior and workload estimates for new work.
-Classify the consequence using the ordered rules in
-[ledger-and-calibration.md](references/ledger-and-calibration.md#risk-classification).
-Unknown consequences stay unknown; do not guess a tier or acceptance.
-
-### 2. Select the applicable constraints and decide enforcement
-
-Apply every matching row below within the affected operation.
-Skip a row only when its condition is absent.
-Record a short reason for skips; leave unresolved applicability open.
-This selection is recorded once, not once per obligation.
-
-| Condition present | Required design decision and check |
+| Source section | Obligations to retain |
 |---|---|
-| Mutable state or overlapping operations | Name allowed writers and ordering/ownership transfer. Check a conflicting, duplicate, or late completion as relevant. |
-| Queues, retries, allocation, or work sized by external input | Bound total queued, in-flight, retrying, and retained work. Name units and overflow handling. Check the limiting input or slow consumer across the whole path. |
-| An operation can fail, time out, or be cancelled | Distinguish internal contradiction from operational failure. Name propagation, bounded retry, rejection, or containment. Check the selected failure and cleanup. |
-| Writes/effects can survive a failed operation or restart | Define acknowledgment, replay, deduplication, or reconciliation. Check failure between the relevant steps and subsequent reads/use. |
-| A performance requirement or speed change is requested | Model dominant work/resources. Define speed and preserved behavior separately, then check both on the same workload. |
-| A consumer relies on replay or reproducibility | Specify what must repeat and control its time/randomness/I/O inputs. Check the required equivalence. |
-| An external dependency enforces a selected property | Inspect that dependency's contract and version at the boundary. Check the property there; do not infer it from the caller alone. |
+| Essence; why style; simplicity and elegance | Treat style as design serving the three ordered goals. Invest thought before implementation; simplicity requires revision. Preserve the source's exploratory and small-system perspective. |
+| Technical debt | Preserve the source's zero-debt policy and refusal to ship known showstoppers. A missing feature is preferable to an implemented feature that violates the design goals. |
+| Safety: control and bounds | Simple explicit control flow, no recursion, bounded loops/queues, explicit nonterminating-loop intent, fixed-width integers. |
+| Safety: assertions | Programmer errors versus operational errors; argument/result and pre/post/invariant assertions; average assertion density of at least two per function; paired checks on different paths; useful self-evident assertions; split predicates and explicit implications; compile-time relationships; positive and negative space; mental model and review before fuzzing. |
+| Safety: memory and locality | Startup-only allocation; smallest variable scopes and few live variables; functions at most 70 lines; hourglass shape; parent-owned branching/state with simple leaf helpers; strict compiler warnings. |
+| Safety: external interaction | Control the pace of external work; simplify compound branches, cover both sides, express invariants positively, handle all errors, explain why, and pass library options explicitly. |
+| Performance | Estimate network/disk/memory/CPU bandwidth and latency before choosing the design. Prioritize frequency-adjusted slow resources; separate control/data planes; batch work; make execution predictable; expose hot loops and primitive inputs rather than hoping for compiler optimization. |
+| DX: naming | Accurate nouns/verbs, snake_case, deliberate abbreviations and acronym spelling, units/qualifiers last, meaningful lifetime names, symmetric related names, caller-prefixed helpers, callbacks last, top-down source order, unambiguous shared vocabulary, names usable in prose, named ambiguous arguments, ordered dependencies, descriptive commits, and comments explaining why and how. |
+| DX: cache invalidation | Avoid duplicate state/aliases, preserve the source's large-value pointer and in-place construction rules, minimize scope and check/use distance, simplify interfaces, avoid suspension invalidating preconditions, initialize padding, and group allocation with cleanup. |
+| DX: off-by-one | Distinguish index/count/size and their conversions; choose division rounding deliberately. |
+| DX: style by the numbers | zig fmt, four-space indentation, a hard 100-column limit, formatter-driven wrapping, and braces except for a one-line if. |
+| DX: dependencies and tooling | Preserve the zero-dependencies policy apart from Zig, and the small standardized Zig toolbox, including Zig scripts. |
+| Last stage | Preserve experimentation, enjoyment, humility, and smallness; do not replace them with a compliance ceremony. |
 
-For each selected requirement, name the enforcement boundary, failure response, and observable check.
-For a new or changed design choice, also name the rejected alternative and sacrificed property.
-For an unchanged design, cite its existing boundary; do not invent rejected alternatives.
-Read [architecture-decisions.md](references/architecture-decisions.md) for a new design or a path crossing components.
-Trace such a path from admission to completion/recovery, including displaced queues and cleanup ownership.
+The table preserves source prescriptions; it does not make their numbers empirical laws.
+For exact exceptions, examples, wording, and numeric context, use the source and coverage map.
 
-### 3. Connect the requirement, enforcement, and evidence
+## Literal rules and explicit adaptations
 
-Keep one record in the existing design/review or inline response.
-For each selected requirement, record:
+In a TigerBeetle/Zig context, apply the source's actual prescriptions.
+Do not dilute “no recursion,” startup-only allocation, zero dependencies, or hard numeric limits into
+unspecified preferences. Do not inflate an average assertion-density rule into two assertions in every function.
+The performance discussion's 1000x and 90% figures are design motivation, not measured acceptance thresholds.
 
-| Requirement | Enforcement and failure response | Normal/violating check | Evidence and gap |
-|---|---|---|---|
-| Observable condition; justified limit if relevant | Design/code boundary and its responsible owner | Input/event and expected result | Planned or observed, implementation/workload identity, untested coverage |
+For another language or repository, honor the user's request and project policy.
+State any necessary mapping or departure: for example, Rust-required usize, a managed runtime,
+a repository formatter, or this repository's Bun tooling.
+A departure remains a departure from the literal source rule; record its reason and retained intent.
+Do not label adapted code as full literal TigerStyle conformance or silently erase the original rule.
+Do not impose Zig syntax on another language, add meaningless assertions, or rename stable APIs
+without considering compatibility and the authorized change scope.
 
-For check closure or exceptions, use
-[ledger-and-calibration.md](references/ledger-and-calibration.md).
-Compact prose may carry those fields; separate files and identifiers are unnecessary for a single local requirement.
-For several coupled requirements, use stable row IDs and link their dependencies in the same record.
+## Contract design and neighboring owners
 
-### 4. Check and report; stop at the task's output boundary
+TigerStyle's assertions, paired checks, positive/negative space, and check/use locality stay visible here
+because they are source rules.
+Use `designing-by-contract` when the task needs a detailed choice among types, parsers, assertions,
+and runtime enforcement. Refer to its contract instead of maintaining a second enforcement procedure here.
 
-In Design mode, specify checks without pretending to run an absent implementation.
-In Review mode, inspect supplied evidence and run authorized read-only checks when useful.
-In Change mode, execute the applicable checks against the changed implementation.
-Check normal behavior and a consequential violating event for each selected property.
-A proof or static inspection may replace execution only for the property it establishes.
-
-High-risk implemented boundaries need a check independent of the authoring path or context.
-Use an independently specified oracle, consumer validation, replay, or fault injection.
-A second agent is not required. Missing evidence stays open.
-Changed enforcement or assumptions reopen dependent checks; preserve old observations with their old identities.
-
-Report three separate things using the definitions in
-[ledger-and-calibration.md](references/ledger-and-calibration.md#completion-and-reporting):
-
-- **Design readiness:** DESIGN-READY or OPEN, with unresolved decisions.
-- **Implementation evidence:** PASS, ACCEPTED-WITH-EXCEPTIONS, OPEN, or STOP, scoped to selected requirements.
-- **Next action:** concrete implementation, repair, measurement, or handoff with its owner.
-
-A completed review can report OPEN or STOP. Neither means halt all authorized work.
-PASS requires observed support for every selected requirement and no waived obligation.
-Acceptance with exceptions must preserve the original unmet requirement.
-This procedure adds no deployment authority or user-approval requirement.
-
-## Conditional work and omissions
-
-| Work | Required only when | Otherwise |
-|---|---|---|
-| Full component trace | Ownership, capacity, or effects cross components | Cite the affected local boundary |
-| Cost model and speed comparison | Performance is a selected requirement | Omit performance work; still enforce selected capacity limits |
-| Recovery/replay checks | Failed work can leave state/effects that will be used later | State why whole-run discard or absence of persistent effects suffices |
-| Exception record | A responsible owner proposes accepting a specific unmet obligation | Write `exceptions: none`; skip T3 |
-| Source verification | Attribution, official mandates, or portable source rules are asserted | Reuse the existing synthesis; no fresh survey for routine application |
-| Research promotion record | A consumer starts relying on a new property | Omit stage paperwork |
-| Delegation | An independent factual uncertainty benefits from authorized delegation | Work serially; independence is about the check, not headcount |
-
-An exception is optional. Do not solicit one merely to make acceptance green.
-Use [source-ledger.md](references/source-ledger.md) for source claims and
-[evidence-and-limits.md](references/evidence-and-limits.md) for effect or universality claims.
-Use [rd-and-language-translation.md](references/rd-and-language-translation.md) at research promotion boundaries.
-Use [execution-model.md](references/execution-model.md) only for delegated fact collection.
-
-## Worked local review — a rebuildable disk cache
-
-Input: a retained cache has one writer, trusted source data, and atomic replacement.
-It has no external effect. The caller sets a 32 MiB load-allocation budget.
-The loader is isolated; an entry failure loses only rebuildable cache data and disposable work.
-The decoder allocates its full output without a limit; the size check runs afterward.
-
-Scope: one cache load; Medium because the stated losses are rebuildable and contained.
-Ownership, allocation, failure handling, and persisted cache contents apply.
-Replay determinism, speed comparison, and external-provider contracts do not apply.
-
-| Selected requirement | Inspected evidence / finding | Clearing check or remaining coverage |
-|---|---|---|
-| Only the cache writer replaces an entry | One writer and atomic replacement are given; ordering during load is untested | Load while replacing; observe only a complete old/new entry |
-| Load allocation stays within 32 MiB | Full output allocation precedes the check; this violates the budget for oversized output | Bound encoded/decoded allocation; check a valid entry and compressed expansion beyond budget |
-| Decode failure releases resources and reports failure | No failure/cleanup evidence supplied | Invalid entry rejects visibly, releases partial allocation, and allows rebuild |
-| A failed write cannot leave cache data trusted on later load | Atomic replacement is given; interrupted-write behavior is untested | Interrupt replacement, then load or visibly reject/rebuild the surviving entry |
-
-Finish with design readiness OPEN and implementation evidence STOP for allocation.
-Other untested properties remain OPEN. Assign the next action to the cache implementation owner.
-Aggregate evidence is STOP. `exceptions: none`.
-The review is complete; cache acceptance remains unresolved.
-The numbers are constructed example inputs, not Tiger thresholds.
-
-## Boundaries
-
-| Question | Owner / relationship |
+| Question | Owner |
 |---|---|
-| Root cause or observable behavior change | Follow repository instructions and the relevant domain owner; this skill adds the selected constraints |
-| Behavior-preserving structural change | `refactoring-code`; apply this procedure only to consequential boundaries |
-| Type/schema invariant placement or language mechanism | `designing-type-contracts` or `writing-*`; link their enforcement into the record |
-| General decomposition or deployment choice | Task/domain owner; this skill checks selected state/resource/failure constraints |
-| Configuration authority or integrity | `governing-configuration-systems`; consume its contract |
-| Untested expensive or hard-to-reverse bet | `acting-on-hypotheses` first; this skill checks execution integrity |
-| Benchmark validity or leakage | `validating-experimental-evidence`; consume its disposition |
-| Fleet resource admission or cross-actor priorities | `orchestrating-agents` or `codifying-doctrine` |
-| Skill wording, organization, or verification | `forging-skills` |
+| Full TigerStyle or source-faithful coding review, including naming | This skill |
+| Preconditions, postconditions, invariants, construction paths, and enforcement boundaries | designing-by-contract |
+| Language APIs, formatter commands, ownership syntax, and implementation | Repository instructions and writing-* |
+| Behavior-preserving restructuring | refactoring-code |
+| Benchmark footing, leakage, or score validity | validating-experimental-evidence |
+| Agent dispatch and shared compute admission | orchestrating-agents |
+| Skill content, source coverage, or reorganization | forging-skills |
 
-## Maintenance
-
-T1 records scope/consequence; T0 records design; T2 records obligations.
-T3 records exceptions only; T4 records observations and assessment.
-They are fields in one **Tiger conformance ledger**, not five mandatory sequential gates.
-Detailed schemas live in the references above.
-Selection and behavioral cases live in [tests/triggers.md](tests/triggers.md).
-Revision evidence lives in [tests/forge-verification-ledger.md](tests/forge-verification-ledger.md).
-
-Package check from the repository root:
-
-```sh
-skill-check agents/skills/practicing-tiger-style
-```
+See [behavior cases](tests/triggers.md) for known drift traps and
+[revision evidence](tests/forge-verification-ledger.md) for verification limits.

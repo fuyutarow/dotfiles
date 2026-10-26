@@ -12,8 +12,10 @@ emulate -L zsh
 setopt no_unset
 setopt extended_glob
 zmodload zsh/zpty || { print -r -- "[FAIL] zsh/zpty unavailable — cannot test tty behaviour"; exit 1 }
+zmodload zsh/datetime || { print -r -- "[FAIL] zsh/datetime unavailable — cannot time test cases"; exit 1 }
 
 typeset -g PASS=0 FAIL=0
+typeset -g CASE_STARTED_AT=$EPOCHREALTIME
 typeset -g ROOT=${0:A:h:h:h}
 [[ -f $ROOT/zsh/aliases.zsh ]] || { print -r -- "[FAIL] cannot locate zsh/aliases.zsh from $ROOT"; exit 1 }
 
@@ -24,10 +26,16 @@ typeset -g KEYS_OFF=$'\e[=0;1u'
 typeset -g RENDER=$'\e[?25h\e[?7h\e[0m\017\e(B'
 typeset -g ALT_OFF=$'\e[?1047l'
 
+case_time() {
+  local label=$1 elapsed
+  printf -v elapsed '%.3f' $(( EPOCHREALTIME - CASE_STARTED_AT ))
+  print -r -- "[TIME] ${elapsed}s case=$label"
+  CASE_STARTED_AT=$EPOCHREALTIME
+}
 # `return 0` is load-bearing: `(( PASS++ ))` yields the PRE-increment value, so the very first
 # `ok` would exit non-zero and the caller's `&& ok || bad` would then also run `bad`.
-ok()  { print -r -- "[PASS] $1"; (( PASS++ )); return 0 }
-bad() { print -r -- "[FAIL] $1"; (( FAIL++ )); return 0 }
+ok()  { case_time "$1"; print -r -- "[PASS] $1"; (( PASS++ )); return 0 }
+bad() { case_time "$1"; print -r -- "[FAIL] $1"; (( FAIL++ )); return 0 }
 want()    { [[ $3 == *"$2"* ]] && ok "$1" || bad "$1 (expected sequence absent)" }
 wantnot() { [[ $3 != *"$2"* ]] && ok "$1" || bad "$1 (forbidden sequence present)" }
 
@@ -119,7 +127,9 @@ rip_missing_tmp=$(mktemp -d) || exit 1
 mkdir -p "$rip_missing_tmp/bin"
 print -r -- '#!/bin/sh' "printf 'RM_CALLED\\n'" >| "$rip_missing_tmp/bin/rm"
 chmod +x "$rip_missing_tmp/bin/rm"
-out=$(pty_run "PATH=${(q)rip_missing_tmp}/bin:${(q)PATH}" \
+# Queue only the commands under test through the pty. Typing the expanded PATH while no
+# output is being drained can fill the terminal queues and block a later zpty -w on macOS.
+out=$(PATH="$rip_missing_tmp/bin:$PATH" pty_run \
               'whence() { return 1 }' \
               'rip; print -r -- STATUS=$?')
 want "rip refuses loudly when its binary is missing" \
@@ -149,7 +159,7 @@ chmod +x "$rip_guard_tmp/bin/stat"
 print -r -- 'keep' >| "$rip_guard_tmp/target"
 typeset rip_bin=${commands[rip]:-}
 typeset rip_path=${rip_bin:h}
-out=$(pty_run "PATH=${(q)rip_guard_tmp}/bin:${(q)rip_path}:$PATH" \
+out=$(PATH="$rip_guard_tmp/bin:$rip_path:$PATH" pty_run \
               'rehash' \
               "rip --graveyard ${(q)rip_guard_tmp}/graveyard ${(q)rip_guard_tmp}/target; print -r -- STATUS=\$?")
 want "rip reports an unsafe graveyard" 'rip:' "$out"
@@ -468,8 +478,9 @@ else
       print -r -- 'add-zsh-hook precmd _prompt_test_plugins'
     } >| "$tmp/.zshrc"
     # Explicit -f /dev/null ignores host tmux config and its status bar, hooks and keymaps.
+    # Prompt rendering does not depend on mise config; a global conf.d warning is a fake first screen row.
     tmux -L "$socket" -f /dev/null new-session -d -x 100 -y 20 -s prompt \
-      "env HOME=${(q)tmp} ZDOTDIR=${(q)tmp} XDG_CONFIG_HOME=${(q)tmp}/.config XDG_DATA_HOME=${(q)tmp}/.local/share XDG_CACHE_HOME=${(q)tmp}/.cache TERM=xterm-256color zsh -i" \
+      "env HOME=${(q)tmp} ZDOTDIR=${(q)tmp} XDG_CONFIG_HOME=${(q)tmp}/.config XDG_DATA_HOME=${(q)tmp}/.local/share XDG_CACHE_HOME=${(q)tmp}/.cache MISE_NO_CONFIG=1 TERM=xterm-256color zsh -i" \
       || { bad "$variant: tmux could not start zsh"; command rm -rf "$tmp"; continue }
     header_pattern='^[^@]+@[^:]+:[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}[+-][0-9]{2}([0-9]{2})?\|~[[:space:]]*$'
     screen_expect "startup has adjacent header and input" 1 '$ ' '2,1'

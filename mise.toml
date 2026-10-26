@@ -471,7 +471,7 @@ run = "bun test ./scripts/tests/doctor-live.ts"
 [tasks."test:zsh"]
 depends = ["bun:check"]
 description = "Terminal-state hygiene regression tests (real pty via zsh/zpty; the timeout IS an assertion — one guarded regression is a hang)"
-run = 'bun ~/dotfiles/scripts/test-zsh.ts'
+run = "bun scripts/test-zsh.ts"
 
 # INV-6: no global tool rows; mise/dotfiles.toml disables agx and dx to block stale repo pins.
 # See zsh/zshenv. zsh again,

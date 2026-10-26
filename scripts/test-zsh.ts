@@ -5,11 +5,10 @@ import { $ } from "bun";
 const to = Bun.which("timeout") ?? Bun.which("gtimeout");
 
 if (to === null) {
-  console.log(
-    "⚠️  no timeout(1) on PATH — running unbounded; a hang regression will block instead of failing",
+  console.error(
+    "[FAIL] timeout(1) is required to bound the terminal-hygiene regression suite",
   );
-  const res = await $`zsh zsh/tests/terminal-hygiene.test.zsh`.nothrow();
-  process.exit(res.exitCode ?? 1);
+  process.exit(1);
 }
 
 const res =

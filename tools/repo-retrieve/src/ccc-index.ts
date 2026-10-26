@@ -1408,7 +1408,9 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
     watermark.value.value.source === "index" &&
     builtHead === head.value &&
     artifacts.value;
+  if (head.value === null && fresh) gap = "0";
   let state = fresh ? "idle" : "stale";
+  if (request === null && fresh && head.value === null) state = "complete";
   if (request === null) {
     const requestPath = indexRequestPath(project);
     if (requestPath.isErr()) return err(requestPath.error);
@@ -1425,7 +1427,7 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
     if (request.head !== head.value) state = "stale";
   }
   process.stdout.write(
-    `RESULT: INDEX_STATUS project=${project} state=${state} daemon=${daemon} built=${headLabel(builtHead)} gap=${gap} reindex=${reindex} current=${headLabel(head.value)}` +
+    `RESULT: INDEX_STATUS project=${project} state=${state} daemon=${daemon} built=${head.value === null && fresh ? "none-verified" : headLabel(builtHead)} gap=${gap} reindex=${reindex} current=${headLabel(head.value)}` +
       (request === null
         ? ""
         : ` head=${headLabel(request.head)} requested=${headLabel(request.head)}`) +

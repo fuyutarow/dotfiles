@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.2 — 2026-10-26
+
+- Report verified no-HEAD indexes in status
+
 ## 1.5.1 — 2026-10-25
 
 - Measure full-index throughput from substantial work and prefer comparable host load

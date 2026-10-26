@@ -75,7 +75,9 @@ exclusive lock beside `INDEX_REQUEST.json`; an interrupted lock is reported for 
 inspection rather than expired automatically.
 
 `index --status` reports `complete` for a fulfilled request with a current index, or `idle`
-for a current index without a request. Pending, stale and malformed requests remain visible;
+for a current git-backed index without a request. A verified no-HEAD watermark with ccc index
+artifacts reports `complete` with `built=none-verified` and `gap=0`, matching concept/battery
+freshness. Pending, stale and malformed requests remain visible;
 `invalid` includes a remedy and never silently deletes the record. `reindex=running` requires
 an observed indexing daemon or a live recorded worker PID. An idle daemon without a live
 worker reports `not-running`; unavailable activity information reports `unknown`. Status is

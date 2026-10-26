@@ -1483,7 +1483,10 @@ describe("repo-retrieve route contract", () => {
   test("request reconciliation completes legacy current-head requests and leaves request-free indexes idle", () => {
     const { dir, head } = registerGitProject();
     expect(run(dir, ["index"]).code).toBe(0);
-    expect(run(dir, ["index", "--status"]).stdout).toContain("state=idle");
+    const idle = run(dir, ["index", "--status"]);
+    expect(idle.stdout).toBe(
+      `RESULT: INDEX_STATUS project=${dir} state=idle daemon=idle built=${head} gap=0 reindex=not-running current=${head}\n`,
+    );
     const path = join(dir, ".cocoindex_code", "INDEX_REQUEST.json");
     writeFileSync(
       path,
@@ -1807,6 +1810,33 @@ describe("repo-retrieve route contract", () => {
 
     const search = run(dir, ["concept", "--query", "x"]);
     expect(search.code).toBe(0);
+  });
+
+  test("status reports a verified no-HEAD index as complete, matching concept freshness", () => {
+    const dir = registerProject();
+    expect(run(dir, ["index"]).code).toBe(0);
+
+    const concept = run(dir, ["concept", "--query", "x"]);
+    const status = run(dir, ["index", "--status"]);
+
+    expect(concept.code).toBe(0);
+    expect(concept.stdout).toContain("RESULT: PASS route=concept engine=ccc");
+    expect(status.code).toBe(0);
+    expect(status.stdout).toContain(
+      "state=complete daemon=idle built=none-verified gap=0 reindex=not-running",
+    );
+  });
+
+  test("status does not report a no-HEAD watermark as indexed without ccc artifacts", () => {
+    const dir = registerProject();
+    writeWatermarkFile(dir, { head: null });
+
+    const status = run(dir, ["index", "--status"]);
+
+    expect(status.code).toBe(0);
+    expect(status.stdout).toContain("state=stale");
+    expect(status.stdout).not.toContain("state=complete");
+    expect(status.stdout).not.toContain("built=none-verified");
   });
 
   // --- Item 5 regression: a structural git mutation landing DURING an in-flight `ccc index`. --

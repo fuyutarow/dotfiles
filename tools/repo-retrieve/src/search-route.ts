@@ -36,7 +36,13 @@ const GREP_SEARCH =
 const GIT_GREP =
   /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*git(?:\s+-C\s+(?:"[^"]+"|'[^']+'|\S+))?\s+grep\b/u;
 const CCC_SEARCH =
-  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:(?:sudo|command|time|nice)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|timeout(?:\s+--\S+)*\s+\S+\s+)*(?:\S*\/)?ccc\s+(search|grep)\b/u;
+  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:(?:sudo|command|time|nice)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|timeout(?:\s+--\S+)*\s+\S+\s+)*(?:\S*\/)?ccc\s+(search|grep|index|init|mcp)\b/u;
+const CCC_INDEX_WRAPPER =
+  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:uvx|uv|bunx|npx)\b[^|;&]*\b(?:ccc|cocoindex-code)\s+(?:index|init|mcp)\b|(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:\S*\/)?python(?:3(?:\.\d+)?)?\b[^|;&]*\s-m\s+cocoindex_code(?:\.cli\s+(?:index|init|mcp))?\b/u;
+const CCC_INDEX_ACTIONS = new Set(["index", "init", "mcp"]);
+const PACKAGE_RUNNERS = new Set(["uvx", "uv", "bunx", "npx"]);
+const RR_INDEX_OVERRIDE =
+  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:(?:sudo|command|time|nice)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|timeout(?:\s+--\S+)*\s+\S+\s+)*(?:rr|repo-retrieve)\s+index\b[^|;&]*--accept-plan(?:=\S+)?/u;
 const FILE_ENUMERATION =
   /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(sudo\s+|command\s+|time\s+)*(?:\S*\/)?(fd|fdfind|tree)\b|(^|[|;&(]|&&|\|\|)\s*(sudo\s+)*(?:\S*\/)?find\b/u;
 const XARGS_SEARCH =
@@ -504,8 +510,38 @@ function commandSearches(c: ShellCommand, command: string): boolean {
   const eff = effective(c);
   if (eff === undefined) return false;
   const { name, args } = eff;
+  if (isIndexStart(eff)) return true;
   if (SEARCH_PROGRAMS.has(name) || ENUMERATORS.has(name)) return true;
-  if (name === "ccc" && (args[0] === "search" || args[0] === "grep"))
+  if (
+    name === "ccc" &&
+    (args[0] === "search" ||
+      args[0] === "grep" ||
+      CCC_INDEX_ACTIONS.has(args[0] ?? ""))
+  )
+    return true;
+  // uvx launches ccc's console script without naming `ccc` as the shell command.
+  // Match both `uvx ccc index` and `uvx --from cocoindex-code ccc index`.
+  if (
+    PACKAGE_RUNNERS.has(name) &&
+    args.some(
+      (arg, index) =>
+        (arg === "ccc" || arg === "cocoindex-code") &&
+        CCC_INDEX_ACTIONS.has(args[index + 1] ?? ""),
+    )
+  )
+    return true;
+  // The package's `python -m cocoindex_code` entry starts its MCP server; the
+  // `cli` module spelling is also covered when an action follows it.
+  if (
+    RUNTIMES.test(name) &&
+    args.some(
+      (arg, index) =>
+        arg === "-m" &&
+        (args[index + 1] === "cocoindex_code" ||
+          (args[index + 1] === "cocoindex_code.cli" &&
+            CCC_INDEX_ACTIONS.has(args[index + 2] ?? ""))),
+    )
+  )
     return true;
   const gitArgs = args[0] === "-C" ? args.slice(2) : args;
   if (name === "git" && gitArgs[0] === "grep") return true;
@@ -559,10 +595,27 @@ function isRawSearch(command: string | undefined, cwd: string): boolean {
     GREP_SEARCH.test(command) ||
     GIT_GREP.test(command) ||
     CCC_SEARCH.test(command) ||
+    CCC_INDEX_WRAPPER.test(command) ||
+    RR_INDEX_OVERRIDE.test(command) ||
     FILE_ENUMERATION.test(command) ||
     XARGS_SEARCH.test(command) ||
     NESTED_SHELL_SEARCH.test(command) ||
     (INLINE_RUNTIME.test(command) && FILE_SCAN_PRIMITIVE.test(command))
+  );
+}
+
+function hasIndexStart(command: string | undefined, cwd: string): boolean {
+  if (command === undefined || command === "") return false;
+  const parsed = parseShell(command, cwd);
+  if (parsed !== undefined)
+    return parsed.commands.some((segment) => {
+      const eff = effective(segment);
+      return eff !== undefined && isIndexStart(eff);
+    });
+  return (
+    CCC_INDEX_WRAPPER.test(command) ||
+    (CCC_SEARCH.test(command) && /\b(?:index|init|mcp)\b/u.test(command)) ||
+    RR_INDEX_OVERRIDE.test(command)
   );
 }
 
@@ -839,12 +892,76 @@ function rewrittenSearch(payload: unknown, project?: string): string {
   const eff = c === undefined ? undefined : effective(c);
   const scope =
     project === undefined ? "" : ` --project ${shellQuote(project)}`;
+  if (eff !== undefined && isIndexStart(eff)) return "rr index";
   if (eff !== undefined && ENUMERATORS.has(eff.name))
     return `${ROUTER_COMMAND} files '*'${scope}`;
   let query = strAt(payload, "tool_input", "pattern");
   if (eff !== undefined && SEARCH_PROGRAMS.has(eff.name))
     query = searchPattern(eff.args);
   return `${ROUTER_COMMAND} regex ${shellQuote(query ?? command)}${scope}`;
+}
+
+function isIndexStart(eff: { name: string; args: string[] }): boolean {
+  if (eff.name === "ccc") return CCC_INDEX_ACTIONS.has(eff.args[0] ?? "");
+  if (isRrAcceptPlan(eff)) return true;
+  if (PACKAGE_RUNNERS.has(eff.name))
+    return eff.args.some(
+      (arg, index) =>
+        ((arg === "ccc" || arg === "cocoindex-code") &&
+          CCC_INDEX_ACTIONS.has(eff.args[index + 1] ?? "")) ||
+        ((arg === "rr" || arg === "repo-retrieve") &&
+          eff.args[index + 1] === "index" &&
+          hasAcceptPlanFlag(eff.args.slice(index + 2))),
+    );
+  return (
+    RUNTIMES.test(eff.name) &&
+    eff.args.some(
+      (arg, index) =>
+        arg === "-m" &&
+        (eff.args[index + 1] === "cocoindex_code" ||
+          (eff.args[index + 1] === "cocoindex_code.cli" &&
+            CCC_INDEX_ACTIONS.has(eff.args[index + 2] ?? ""))),
+    )
+  );
+}
+
+function hasAcceptPlanFlag(args: string[]): boolean {
+  return args.some(
+    (arg) => arg === "--accept-plan" || arg.startsWith("--accept-plan="),
+  );
+}
+
+function isRrAcceptPlan(eff: { name: string; args: string[] }): boolean {
+  if (PACKAGE_RUNNERS.has(eff.name))
+    return eff.args.some(
+      (arg, index) =>
+        (arg === "rr" || arg === "repo-retrieve") &&
+        eff.args[index + 1] === "index" &&
+        hasAcceptPlanFlag(eff.args.slice(index + 2)),
+    );
+  if (
+    (eff.name === "rr" || eff.name === "repo-retrieve") &&
+    eff.args[0] === "index"
+  )
+    return hasAcceptPlanFlag(eff.args.slice(1));
+  if (
+    eff.name === "bun" &&
+    /(?:^|\/)repo-retrieve\.ts$/u.test(eff.args[0] ?? "") &&
+    eff.args[1] === "index"
+  )
+    return hasAcceptPlanFlag(eff.args.slice(2));
+  return false;
+}
+
+function hasRrAcceptPlan(command: string | undefined, cwd: string): boolean {
+  if (command === undefined || command === "") return false;
+  const parsed = parseShell(command, cwd);
+  if (parsed !== undefined)
+    return parsed.commands.some((segment) => {
+      const eff = effective(segment);
+      return eff !== undefined && isRrAcceptPlan(eff);
+    });
+  return RR_INDEX_OVERRIDE.test(command);
 }
 
 function decidePayload(
@@ -858,14 +975,11 @@ function decidePayload(
     };
   const tool = strAt(payload, "tool_name");
   if (tool !== "Grep" && tool !== "Bash") return undefined;
+  const command = strAt(payload, "tool_input", "command");
+  const cwd = strAt(payload, "cwd") ?? process.cwd();
+  const indexStart = tool === "Bash" && hasIndexStart(command, cwd);
 
-  if (
-    tool === "Bash" &&
-    !isRawSearch(
-      strAt(payload, "tool_input", "command"),
-      strAt(payload, "cwd") ?? process.cwd(),
-    )
-  ) {
+  if (tool === "Bash" && !indexStart && !isRawSearch(command, cwd)) {
     return undefined;
   }
 
@@ -873,9 +987,9 @@ function decidePayload(
   // authoritative judgment. This is checked before the ccc registration so a repo that is both
   // governed and ccc-registered falls to its own gate.
   const governed = governedRepo(startPath(payload));
-  if (governed !== null && governed !== "") return undefined;
+  if (!indexStart && governed !== null && governed !== "") return undefined;
 
-  if (!cccIsAvailable()) return undefined;
+  if (!indexStart && !cccIsAvailable()) return undefined;
   let project: string | null = null;
   for (const target of searchTargets(payload)) {
     const candidate = registeredProject(target);
@@ -884,7 +998,8 @@ function decidePayload(
       break;
     }
   }
-  if (project === null) return undefined;
+  if (project === null && !indexStart) return undefined;
+  const target = project ?? startPath(payload);
 
   if (!existsSync(ROUTER)) {
     return {
@@ -897,10 +1012,18 @@ function decidePayload(
 
   // SINGLE-AXIS: isRawSearch() is one boolean over alternative surfaces, not independent checks —
   // whichever surface matched, the caller owes the same single fix (declare a query shape).
+  if (indexStart) {
+    const override = hasRrAcceptPlan(command, cwd);
+    return {
+      reason: override
+        ? `search-route: agent use of rr index --accept-plan is denied for ${target}. Remove --accept-plan and make the admission plan pass first. Use rr index.`
+        : `search-route: raw ccc index entry points are denied for ${target}. Use rr index; it runs the exclusion admission plan before ccc.`,
+    };
+  }
   return {
     reason:
-      `search-route: raw ${tool} search is disabled in operational ccc project ${project}. ` +
-      `Rewrite: ${rewrittenSearch(payload, project)}. ` +
+      `search-route: raw ${tool} search is disabled in operational ccc project ${target}. ` +
+      `Rewrite: ${rewrittenSearch(payload, target)}. ` +
       `Declare the query shape through ${ROUTER_COMMAND}: ` +
       `${ROUTER_COMMAND} text '<exact text>'; ` +
       `${ROUTER_COMMAND} regex '<regex>'; ` +

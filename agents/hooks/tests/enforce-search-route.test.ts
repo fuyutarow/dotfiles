@@ -251,7 +251,8 @@ describe("enforce-search-route", () => {
       "ccc status",
       "ccc daemon status",
       "ccc doctor",
-      "ccc index",
+      "rr index",
+      "rr index --plan",
     ]) {
       const result = runHook(HOOK, bashPayload(project, command), withCcc());
       expect(result.code).toBe(0);
@@ -406,6 +407,78 @@ describe("enforce-search-route", () => {
         /(?:rr|repo-retrieve|bun \S*repo-retrieve\.ts) about '/u,
       );
     }
+  });
+
+  test("denies ccc index entry points through the live Bash hook and directs to rr index", () => {
+    const project = registerProject();
+    for (const command of [
+      "ccc index",
+      "ccc init",
+      "ccc mcp",
+      "ccc init && ccc index",
+      "COCOINDEX_CODE_LOG=warn ccc index",
+      "env COCOINDEX_CODE_LOG=warn ccc index",
+      "/usr/bin/env COCOINDEX_CODE_LOG=warn ccc init",
+      "timeout 20s ccc index",
+      "uvx ccc index",
+      "uvx --from cocoindex-code ccc index",
+      "uv run uvx --from cocoindex-code ccc index",
+      "python -m cocoindex_code.cli index",
+      "python3 -m cocoindex_code",
+      "sh -c 'ccc index'",
+      'bash -c "uvx ccc index"',
+    ]) {
+      const result = runHook(HOOK, bashPayload(project, command), withCcc());
+      const decision = decisionOf(result.stdout);
+      expect({
+        command,
+        code: result.code,
+        decision: decision?.permissionDecision,
+        reason: decision?.permissionDecisionReason,
+      }).toMatchObject({
+        command,
+        code: 0,
+        decision: "deny",
+      });
+      expect(decision?.permissionDecisionReason).toContain("rr index");
+    }
+  });
+
+  test("denies the human-only rr admission override at the agent hook entry point", () => {
+    const project = registerProject();
+    for (const command of [
+      "rr index --accept-plan",
+      "rr index --accept-plan=true",
+      "repo-retrieve index --accept-plan",
+      "env RR_LOG=debug rr index --accept-plan",
+      "timeout 20s repo-retrieve index --accept-plan",
+      "uv run rr index --accept-plan",
+      "bunx rr index --accept-plan",
+      "bun ~/.claude/hooks/repo-retrieve.ts index --accept-plan",
+      "sh -c 'rr index --accept-plan'",
+      'bash -c "env RR_LOG=debug rr index --accept-plan"',
+    ]) {
+      const result = runHook(HOOK, bashPayload(project, command), withCcc());
+      const decision = decisionOf(result.stdout);
+      expect({
+        command,
+        code: result.code,
+        decision: decision?.permissionDecision,
+      }).toEqual({ command, code: 0, decision: "deny" });
+      expect(decision?.permissionDecisionReason).toContain("rr index");
+      expect(decision?.permissionDecisionReason).toContain("--accept-plan");
+    }
+  });
+
+  test("denies raw ccc index even before ccc registration or outside a governed project", () => {
+    const cwd = tempDir("search-route-unregistered-index-");
+    const result = runHook(HOOK, bashPayload(cwd, "ccc index"), withCcc());
+    const decision = decisionOf(result.stdout);
+    expect({
+      code: result.code,
+      decision: decision?.permissionDecision,
+    }).toEqual({ code: 0, decision: "deny" });
+    expect(decision?.permissionDecisionReason).toContain("rr index");
   });
 
   test("denies obvious inline-runtime reimplementations of repository search", () => {

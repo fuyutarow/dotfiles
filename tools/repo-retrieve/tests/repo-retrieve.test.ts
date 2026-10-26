@@ -1462,6 +1462,29 @@ describe("repo-retrieve route contract", () => {
     expect(result.stdout).toContain(`head=${head}`);
   });
 
+  test("a rejected admission plan never invokes the ccc CLI index command", () => {
+    const dir = registerProject();
+    writeFileSync(
+      join(dir, ".cocoindex_code", "rr.toml"),
+      "[index]\nmax_est_chunks = 1\n",
+    );
+    const planFile = join(
+      tmpdir(),
+      `repo-retrieve-refused-${crypto.randomUUID()}.jsonl`,
+    );
+    writeFileSync(
+      planFile,
+      `${JSON.stringify({ path: "payload.json", bytes: 4096, est_chunks: 2, kind: "text" })}\n`,
+    );
+
+    const result = run(dir, ["index"], { FAKE_PLAN_FILE: planFile });
+
+    expect(result.code).toBe(4);
+    expect(result.stderr).toContain("est_chunks 2 > 1");
+    expect(result.log).not.toContain("ccc index");
+    expect(result.log).toBe("");
+  });
+
   test("index runs ccc index then records the watermark at the resulting HEAD, labelled verified", () => {
     const { dir, head } = registerGitProject();
 

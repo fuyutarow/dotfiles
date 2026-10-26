@@ -532,12 +532,8 @@ pp() {
     return 1
   fi
 
-  # Handle encoding for WSL
-  if $IS_WSL; then
-    bat "$1" | tee >(iconv -f UTF-8 -t UTF-16LE | clip.exe)
-  else
-    bat "$1" | copytoclipboard
-  fi
+  # The shared helper owns remote routing and native WSL encoding.
+  bat "$1" | copytoclipboard
 }
 
 alias s='bun ~/dotfiles/tools/statusline/src/host-load.ts'  # the statusline's Sys row (CPU · RAM · VRAM · Disk), now; was `start` until 2026-10-06

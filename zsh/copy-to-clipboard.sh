@@ -40,10 +40,37 @@ echo_back() {
   (printf '%s\n' "$data" > /dev/tty) 2> /dev/null || true
 }
 
-# Over SSH (incl. WSL-over-SSH): native tools target the SERVER, never the terminal CLIENT —
+# Mirror smart-open.ts pickForward / tools/shared/src/sockets.ts remoteForwards + fileKey:
+# an explicit SMART_OPEN_SOCKET (even empty) pins discovery; otherwise any non-symlink
+# socket named smart-open-<real user>--<nonempty alias>.sock in SMART_OPEN_SOCKET_DIR
+# (default /tmp) is a bound forward. Ordering by mtime is immaterial for this boolean.
+# Check on every copy: a herdr server started outside SSH cannot refresh its environment
+# on attach. Limit this additional signal to herdr panes, so a plain local shell remains local.
+# This is bound-forward discovery, not a receiver ACK; OSC 52 itself travels through herdr.
+herdr_remote_attached() {
+  [ "${HERDR_ENV:-}" = 1 ] || return 1
+  if [ "${SMART_OPEN_SOCKET+x}" = x ]; then
+    [ ! -L "$SMART_OPEN_SOCKET" ] && [ -S "$SMART_OPEN_SOCKET" ]
+    return
+  fi
+  clip_remote_user=$(id -un) || return 1
+  clip_remote_dir=${SMART_OPEN_SOCKET_DIR-/tmp}
+  [ -n "$clip_remote_dir" ] || clip_remote_dir=.
+  for clip_remote_socket in "$clip_remote_dir/smart-open-$clip_remote_user--"*.sock; do
+    [ "$clip_remote_socket" != "$clip_remote_dir/smart-open-$clip_remote_user--.sock" ] || continue
+    if [ ! -L "$clip_remote_socket" ] && [ -S "$clip_remote_socket" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Over SSH or in a remote-attached herdr pane: native tools target the SERVER, never the CLIENT —
 # route via OSC 52 so the copy lands where the human's terminal actually is. Needs an OSC
 # 52-capable terminal and, inside tmux, `set -g set-clipboard on` (tmux/clipboard.conf).
-if [ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ]; then
+# Herdr 0.9.5 forwards pane OSC 52 ClipboardWrite events to its foreground client by default
+# (upstream src/server/headless/notifications.rs); no clipboard configuration is required.
+if [ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ] || herdr_remote_attached; then
   echo_back
   osc52_copy
   exit "$tty_ok"

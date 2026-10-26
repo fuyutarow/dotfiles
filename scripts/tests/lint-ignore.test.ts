@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  copyFileSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -16,6 +17,7 @@ import {
   copyCloneSources,
   freshCloneGateFindings,
   ignoreFindings,
+  visiblePaths,
 } from "../lint-ignore.ts";
 
 const scratch: string[] = [];
@@ -100,6 +102,28 @@ test("clone copying preserves relative compatibility links and omits their enume
 
 test("declared ignore rules do not hide tracked files", () => {
   expect(ignoreFindings()).toEqual([]);
+});
+
+test("AGX ticket files stay hidden while agent sources remain visible", () => {
+  const root = temporary();
+  mkdirSync(join(root, ".agents/tickets"), { recursive: true });
+  mkdirSync(join(root, "agents/skills"), { recursive: true });
+  mkdirSync(join(root, "git"), { recursive: true });
+  copyFileSync(
+    join(import.meta.dir, "../../.gitignore"),
+    join(root, ".gitignore"),
+  );
+  writeFileSync(join(root, "git/ignore"), "# Owner: fixture\n");
+  writeFileSync(
+    join(root, ".agents/tickets/probe-ticket.md"),
+    "private ticket\n",
+  );
+  writeFileSync(join(root, "agents/skills/example.md"), "agent source\n");
+
+  const visible = visiblePaths(root);
+  expect(visible.error).toBeNull();
+  expect(visible.paths).not.toContain(".agents/tickets/probe-ticket.md");
+  expect(visible.paths).toContain("agents/skills/example.md");
 });
 
 test("a fresh clone stays clean after representative land-gate tasks", () => {

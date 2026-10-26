@@ -2,7 +2,8 @@
 /.serena/
 /.agent-state/
 
-# Owner: AGX coordinators. The whole directory is coordinator working state; promote durable conclusions to owned docs.
+# Owner: AGX coordinators. The whole directory is private runtime state; `.agents/tickets/` may name
+# hosts, tailnet IPs and private paths. Promote durable conclusions to owned docs.
 /.agents/
 
 # Owner: agent command framework. System command assets are tool-managed.

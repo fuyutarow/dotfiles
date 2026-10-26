@@ -97,3 +97,114 @@ Final receipts on 2026-10-10:
 - `mise run lint:config-map`: passed, 76 registered surfaces.
 - The new Claude and Codex paths resolve to the renamed package; the old Claude link was pruned.
 - The name-count and substituted-consumer paths succeeded; the failed-middle-stage probe exited 2.
+
+## 2026-10-15 — three-part operating outline, superseded
+
+The user requested revision and reorganization so the skill's outline is clear.
+The existing seven peer sections mixed tool boundaries, data interfaces and the learning cycle.
+Acceptance: make those three decisions visible at the start, preserve the nine major principles
+and their substantive quotations, and keep source interpretation separate from ordinary execution.
+
+The body now groups the instructions under small reusable tools, explicit data interfaces,
+and growth through prototypes and demonstrated needs. These headings are an operating grouping
+of the existing account. The source guide retains the nine-tenet mapping and ten lesser principles.
+The design/review starting point precedes the principles; checking and delivery follow them.
+The survey locator and discussion of supplied headings and creative information live in the source
+guide. Quotation fidelity remains qualified in both the entrypoint and the source explanation.
+Name, description, discovery policy and sibling ownership are unchanged.
+
+The entrypoint now makes quiet data channels and observable failed stages explicit.
+The CLI owner retains the detailed stdout/stderr and outcome contract.
+Shell guidance allows stage-status inspection or pipefail and accounts for intentional early
+consumer termination. This closes the documented gap between the earlier failure probe and the
+instructions an executor normally reads.
+
+Checks run on the working files:
+
+- `mise exec -- bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/practicing-unix-philosophy`:
+  exit 0. Length warnings remain in the body and source guide; review retained the supplied
+  quotations and explanatory passages. They are readability signals, not structural failures.
+- `mise run lint:skills-floor`: exit 0; 57 skills, 50,329 name-plus-description characters.
+- `mise run lint:skills-index`: exit 0; catalog complete.
+- Under `zsh -c 'setopt pipefail; …'`, the documented name-count example produced one alice
+  and two bob records; replacing `uniq -c` with `uniq` produced alice and bob once each.
+  The intermediate sorted stream was alice, bob, bob. All three commands exited 0.
+- With the same shell option, `printf "%s\n" bob | sort --no-such-option | uniq` emitted a
+  diagnostic and exited 2. `printf "" | LC_ALL=C sort | uniq` emitted nothing and exited 0.
+  These exercise the failure-versus-empty-result distinction on this host.
+
+Serial review also retained the indivisible-transaction exception, binary inspection/export,
+human-judgment interaction and required correctness in the supported scope.
+No independent evaluator, live selector test, or matched outcome improvement is claimed.
+
+Deployment check: `mise run lint:skills-wiring` exited 0 for the repository tree.
+`mise run skills:sync -- --in-house-only` exited 1 before copy installation:
+`claude plugin marketplace list --json` produced a pretty-printed JSON array, while
+`scripts/skills-sync.ts` attempted to parse only its last line (`]`). The marketplace already
+points at this checkout. The installed Claude plugin reads `agents/skills` from this checkout
+but is disabled at user scope. Its enabled state is outside this content revision.
+The selected Codex package is installed separately with the declaration's pinned installer:
+`mise exec -- bunx --bun --yes skills@1.5.22 add /home/fuyu/dotfiles/agents/skills --skill practicing-unix-philosophy -g --agent codex --copy -y`.
+
+## 2026-10-15 — preserve the author's nine-plus-ten outline
+
+The user challenged the three-part outline because it obscured the nine major principles and
+the lesser principles, and supplied a numbered practical account of the nine major principles.
+The three-part grouping above was this revision's editorial choice; it was not a reduction proved
+from the source or a replacement set of principles. It is superseded.
+
+Acceptance: expose all nine major principles in the source order, keep the ten lesser principles
+separately identifiable, and attach practical actions and qualifications to the relevant item.
+The body now follows that outline. Smallness is distinct from single purpose; portability from
+text data; reuse from script composition; noncaptive interfaces from filters.
+The three-systems account is subordinate to prototyping. Quiet output and useful common scope
+are subordinate to lesser principles 5 and 8. The source guide retains the detailed explanation
+of all ten lesser principles. The three-part taxonomy is removed from current instructions.
+
+The supplied modern examples are illustrations, not evidence of historical derivation or universal
+performance benefits. The revision retains contextual judgments about size, indivisible operations,
+performance, binary data, human interaction and stateful filters.
+No live selector accuracy or comparative outcome improvement is claimed.
+
+The affected-package skill checker, `mise run lint:skills-floor` and
+`mise run lint:skills-index` all exited 0. The collection remained 57 skills and 50,329
+name-plus-description characters. The heading inventory shows major principles 1–9 in order,
+followed by the separate lesser-principle section and its ten-entry table.
+Existing prose-length warnings remain; no runtime helper or pipeline example changed.
+
+## 2026-10-15 — make all ten lesser principles actionable
+
+The user requested decision and action guidance for every lesser principle, preserving the
+nine-plus-ten distinction. The body now has ten numbered lesser-principle sections with relevant
+conditions, actions and checks. The nine major-principle sections are unchanged from the previous
+installed copy. The source guide keeps the meaning table and points to the body for execution.
+No description, registration, runtime helper or sibling contract changed.
+
+Serial desk review covered these decisions:
+
+| Lesser item | Reviewed practical choice |
+|---|---|
+| 1 | Expose legitimate configuration changes while retaining required invariants. |
+| 2 | Keep optional work outside the essential core after comparing boundary costs. |
+| 3 | Choose concise readable names while preserving ecosystem and public naming contracts. |
+| 4 | Retain searchable sources and reusable data behind rendered information. |
+| 5 | Preserve clean data output and observable failures or meaningful waits. |
+| 6 | Separate independent work from dependencies and shared state before parallel execution. |
+| 7 | Try a useful new producer/consumer combination before adding a built-in feature. |
+| 8 | State supported scope, omissions and required correctness. |
+| 9 | Compare adoption and delivery burdens within that scope while retaining required guarantees. |
+| 10 | Give names and responsibilities coherent levels and one home without hiding data flow. |
+
+A supplied secondary summary mixed in shallow/dynamic binding, prototyping and script composition
+as lesser items 8–10, and asserted a master-precept pyramid. Rechecked
+[the author's §1.4](https://flylib.com/books/en/2.506.1.13/1/) and
+[the publisher preview](https://api.pageplace.de/preview/DT0400.9780080510347_A23526296/preview-9780080510347_A23526296.pdf),
+contents §§7.8–7.10: the retained items are the 90-percent solution, worse is better and hierarchy.
+The inspected outline does not establish the supplied master-precept pyramid; it is not adopted.
+The primary-text host and translation-fidelity limits stated above still apply.
+
+The affected-package checker, `mise run lint:skills-floor`, `mise run lint:skills-index` and
+`mise run lint:skills-wiring` exited 0. The listing remained 57 skills and 50,329 characters.
+Length warnings remain (13 body sentences and 12 source-guide sentences at this check).
+These are structural checks and serial content review, not live selector or matched outcome evidence.
+The unchanged pipeline example was not rerun for this instruction-only expansion.

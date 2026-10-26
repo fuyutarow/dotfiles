@@ -16,6 +16,9 @@ The Japanese quotations in this package come from the supplied text.
 The English chapter passages were inspected for their ideas and context.
 Do not claim verification of a particular published translation or invent its page numbers.
 The table below uses paraphrased labels, not a reproduction of the English tenet list.
+The canonical survey is `urn:uuid:01a12617-62e2-7590-a783-533a10598156`.
+The skill's operating outline preserves the nine major principles and ten lesser principles
+as distinct items. The instructions under each item adapt the survey to present-day decisions.
 
 ## The nine major principles: complete coverage
 
@@ -59,6 +62,8 @@ GUI events and error statuses as inputs.
 A sensor is not an exception to his broad model; neither is a GUI.
 A result may be a changed display, stored state or diagnostic.
 A standard-stream filter narrows this general model into a convenient program-to-program contract.
+
+> プログラムはデータを作らない。人間がつくる
 
 The claim that computers cannot originate information belongs to the author's account of creativity.
 Preserve its actual meaning before adapting it: inspect the source information and transformation.
@@ -105,6 +110,7 @@ The author's [§6.1](https://flylib.com/books/en/2.506.1.34/1/) discusses not on
 composition and scale, but the self-reinforcing tendency to absorb features when cooperation is hard.
 It also accepts a GUI for a destructive operation and a separate human interface above components.
 Calling the whole argument “all modality is bad” loses both the problem and the resolution.
+The supplied heading “心地よいモーダルを追求する” should therefore be read as avoiding captive interfaces.
 
 ## Three systems: preserve discovery, select features, find balance
 
@@ -147,18 +153,21 @@ These supplement the nine major principles.
 The author introduces them as unevenly shared cultural preferences in
 [§1.4](https://flylib.com/books/en/2.506.1.13/1/); do not give them all the same force.
 
-| Lesser principle, paraphrased | Distinct contribution | How to use it |
+| No. | Lesser principle, paraphrased | Distinct contribution |
 |---|---|---|
-| 利用者が環境を調整できる | Agency over policy and presentation. | Expose mechanisms and allow useful local choices. |
-| Kernelを軽く保つ | A limited central responsibility. | Keep optional functionality outside the irreducible core where practical. |
-| 短い小文字の名前 | Historical conventions and typing economy. | Follow established names; preserve intelligibility for the reader. |
-| 紙に依存せず情報を扱う | Electronic access and transformation. | Keep information searchable and usable by tools. |
-| 不要な出力を控える | A quiet compositional interface. | Keep routine chatter out of the data path; report failure and meaningful waits. |
-| 並行に考える | Independent work can proceed together. | Establish dependencies and resource bounds before execution. |
-| 組合せで用途を増やす | Novel applications from existing capabilities. | Evaluate new combinations and replaceable parts. |
-| よく使う範囲に集中する | Scope versus expensive rare requirements. | State useful supported scope and deliberate omissions. |
-| 普及できる簡素さを重視する | Availability and reach under practical constraints. | Prefer an accessible effective implementation over exclusive perfection. |
-| 階層で整理する | Names and containment make complexity navigable. | Organize coherent levels without conflating hierarchy with composition. |
+| 1 | 利用者が環境を調整できる | Agency over policy and presentation. |
+| 2 | Kernelを軽く保つ | A limited central responsibility. |
+| 3 | 短い小文字の名前 | Historical conventions and typing economy. |
+| 4 | 紙に依存せず情報を扱う | Electronic access and transformation. |
+| 5 | 不要な出力を控える | A quiet compositional interface. |
+| 6 | 並行に考える | Independent work can proceed together. |
+| 7 | 組合せで用途を増やす | Novel applications from existing capabilities. |
+| 8 | よく使う範囲に集中する | Scope versus expensive rare requirements. |
+| 9 | 普及できる簡素さを重視する | Availability and reach under practical constraints. |
+| 10 | 階層で整理する | Names and containment make complexity navigable. |
+
+Decision conditions, actions and checks for each item live in the skill's
+[operating instructions](../SKILL.md#ten-lesser-principles).
 
 For the scope principle, [§7.8](https://flylib.com/books/en/2.506.1.45/1/) explicitly excludes
 work such as heart transplants where the missing cases are unacceptable.

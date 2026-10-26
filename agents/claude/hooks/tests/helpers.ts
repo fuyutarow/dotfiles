@@ -18,9 +18,10 @@ export function runHook(
   payload: unknown,
   env: Record<string, string> = {},
   cwd?: string,
+  options: { inheritEnvironment?: boolean } = {},
 ): { code: number | null; stdout: string; stderr: string } {
   const childEnv: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...(options.inheritEnvironment === false ? {} : process.env),
     CLAUDE_HOOK_QUIET: "1",
     ...env,
   };

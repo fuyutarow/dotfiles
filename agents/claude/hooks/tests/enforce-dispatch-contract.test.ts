@@ -4,16 +4,23 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { delimiter, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { at, obj, parseJson, strAt } from "../../../hooks/narrow.ts";
-const AGX_CONFIG = join(import.meta.dir, "../../../../agents/agx/agx.toml");
+import {
+  HOMEBREW_AGX,
+  isolatedTestEnv,
+  TEST_TMPDIR,
+  testPathWithStub,
+} from "../../../../scripts/test-isolation.ts";
+const dotfilesRoot = realpathSync(resolve(import.meta.dir, "../../../../"));
+const AGX_CONFIG = join(dotfilesRoot, "agents/agx/agx.toml");
 const NO_USE_FOR_FIXTURE = join(
-  import.meta.dir,
-  "../../../../scripts/tests/fixtures/agx-roster-no-use-for.json",
+  dotfilesRoot,
+  "scripts/tests/fixtures/agx-roster-no-use-for.json",
 );
 import { runHook } from "./helpers.ts";
 
@@ -62,7 +69,7 @@ const call = (tool: string, input: Record<string, unknown> = {}) => ({
   tool_input: { prompt: "x", ...input },
 });
 
-const scratch = mkdtempSync(join(tmpdir(), "dispatch-roster-"));
+const scratch = mkdtempSync(join(TEST_TMPDIR, "dispatch-roster-"));
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
@@ -70,8 +77,9 @@ const fixtureBin = join(scratch, "bin");
 mkdirSync(fixtureBin);
 const fixtureCli = join(fixtureBin, "agx");
 const fixtureMise = join(fixtureBin, "mise");
-const dotfilesRoot = resolve(import.meta.dir, "../../../../");
-const realCli = Bun.which("agx") ?? "";
+expect(HOMEBREW_AGX, "agx must be installed in Homebrew PATH").toBeDefined();
+if (HOMEBREW_AGX === undefined) process.exit(1);
+const realCli = HOMEBREW_AGX;
 writeFileSync(
   fixtureCli,
   `#!/bin/sh
@@ -110,15 +118,15 @@ const dispatchHook = (
   runHook(
     HOOK,
     call(tool, input),
-    {
-      PATH: `${fixtureBin}${delimiter}${process.env.PATH ?? ""}`,
+    isolatedTestEnv(scratch, testPathWithStub(fixtureBin), {
       DISPATCH_DOTFILES_ROOT: dotfilesRoot,
       DISPATCH_ROSTER_FIXTURE_CLI: fixtureCli,
       DISPATCH_ROSTER_REAL_CLI: realCli,
       AGX_CONFIG,
       ...env,
-    },
-    cwd,
+    }),
+    cwd ?? dotfilesRoot,
+    { inheritEnvironment: false },
   );
 describe("enforce-dispatch-contract", () => {
   test.each([

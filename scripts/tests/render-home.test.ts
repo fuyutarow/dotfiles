@@ -4,7 +4,7 @@
 // Every fixture is a throwaway tmp tree passed via env; the real $HOME is never touched.
 // The cases that matter are the failure modes: this file carries every security hook, so a
 // truncated render or a silently-dropped private rule is the damage to prevent.
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import {
   chmodSync,
   cpSync,
@@ -12,25 +12,41 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  realpathSync,
   readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { resolve, join } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { brewPrefix } from "../core-tools.ts";
 import { HooksConfigSchema } from "../hook-registry.ts";
+import {
+  HOMEBREW_AGX,
+  isolatedTestEnv,
+  TEST_HOST_PATH,
+  TEST_TMPDIR,
+  testPathWithStub,
+} from "../test-isolation.ts";
 
-const productionRoster = Bun.spawnSync(["agx", "worker", "roster", "--json"], {
-  env: {
-    ...process.env,
-    AGX_CONFIG: join(import.meta.dir, "../../agents/agx/agx.toml"),
-    DISPATCH_ROSTER_PATH: undefined,
-  },
-  timeout: 10_000,
+const ROOT = realpathSync(resolve(import.meta.dir, "../.."));
+const CLI_HOME = mkdtempSync(join(TEST_TMPDIR, "render-home-cli-"));
+afterAll(() => {
+  rmSync(CLI_HOME, { recursive: true, force: true });
 });
+expect(HOMEBREW_AGX, "agx must be installed in Homebrew PATH").toBeDefined();
+if (HOMEBREW_AGX === undefined) process.exit(1);
+const productionRoster = Bun.spawnSync(
+  [HOMEBREW_AGX, "worker", "roster", "--json"],
+  {
+    cwd: ROOT,
+    env: isolatedTestEnv(CLI_HOME, TEST_HOST_PATH, {
+      AGX_CONFIG: join(ROOT, "agents/agx/agx.toml"),
+    }),
+    timeout: 10_000,
+  },
+);
 expect(productionRoster.exitCode, productionRoster.stderr.toString()).toBe(0);
 const ROSTER_JSON = productionRoster.stdout.toString();
 const objective = jsonOf(z.object({ objective: z.string() })).safeParse(
@@ -40,8 +56,7 @@ expect(objective.success).toBe(true);
 if (!objective.success) process.exit(1);
 const ROUTING_OBJECTIVE = objective.data.objective;
 
-const SCRIPT = join(import.meta.dir, "..", "render-home.ts");
-const ROOT = join(import.meta.dir, "..", "..");
+const SCRIPT = join(ROOT, "scripts/render-home.ts");
 const ROUTE_BIAS = [
   ["no", "codex", "row"],
   ["choose", "codex"],
@@ -49,15 +64,15 @@ const ROUTE_BIAS = [
 ].map((words) => words.join(" "));
 
 function run(env: Record<string, string>): { out: string; code: number } {
+  const dotfiles = env.DOTFILES ?? ROOT;
+  const home = env.HOME ?? CLI_HOME;
+  const path = env.PATH ?? testPathWithStub(join(dotfiles, "bin"));
   const proc = Bun.spawnSync([process.execPath, SCRIPT], {
-    env: {
-      ...process.env,
-      BUN_INSTALL_CACHE_DIR:
-        process.env.BUN_INSTALL_CACHE_DIR ??
-        join(homedir(), ".bun/install/cache"),
-      PATH: `${join(env.DOTFILES ?? ROOT, "bin")}:${process.env.PATH ?? ""}`,
+    cwd: ROOT,
+    env: isolatedTestEnv(home, path, {
+      DOTFILES: dotfiles,
       ...env,
-    },
+    }),
     maxBuffer: 4 * 1024 * 1024,
     timeout: 25_000,
   });
@@ -85,11 +100,9 @@ function writeOtherInputs(dir: string, productionCli = false): void {
     "# policy\n\n<!-- roster:begin -->\n<!-- roster:end -->\n",
   );
   if (productionCli) {
-    const installed = Bun.which("agx");
-    expect(installed, "agx must be installed on PATH").not.toBeNull();
     writeRosterCli(
       dir,
-      `const child = Bun.spawnSync([${JSON.stringify(installed)}, ...process.argv.slice(2)], { env: process.env, stdout: "inherit", stderr: "inherit", timeout: 10_000 }); process.exit(child.exitCode);`,
+      `const child = Bun.spawnSync([${JSON.stringify(HOMEBREW_AGX)}, ...process.argv.slice(2)], { env: process.env, stdout: "inherit", stderr: "inherit", timeout: 10_000 }); process.exit(child.exitCode);`,
     );
     for (const path of [
       "tools/shared/src",
@@ -159,7 +172,7 @@ const GATE = {
 
 /** A dotfiles fixture: the committed base settings plus the other inputs. */
 function makeDotfiles(base: object, productionCli = false): string {
-  const dir = mkdtempSync(join(tmpdir(), "render-settings-dotfiles-"));
+  const dir = mkdtempSync(join(TEST_TMPDIR, "render-settings-dotfiles-"));
   mkdirSync(join(dir, "agents", "claude"), { recursive: true });
   writeFileSync(
     join(dir, "agents", "claude", "settings.json"),
@@ -170,7 +183,7 @@ function makeDotfiles(base: object, productionCli = false): string {
 }
 
 function makeHome(): string {
-  const home = mkdtempSync(join(tmpdir(), "render-settings-home-"));
+  const home = mkdtempSync(join(TEST_TMPDIR, "render-settings-home-"));
   mkdirSync(join(home, ".bun", "bin"), { recursive: true });
   writeFileSync(join(home, ".bun", "bin", "statusline"), "#!/bin/sh\n");
   return home;
@@ -313,7 +326,7 @@ describe("render-home: base only", () => {
       statusLine: { type: "command", command: "~/.bun/bin/statusline" },
     });
     const live = makeHome();
-    const scratch = mkdtempSync(join(tmpdir(), "render-reference-"));
+    const scratch = mkdtempSync(join(TEST_TMPDIR, "render-reference-"));
     expect(run({ HOME: scratch, DOTFILES: dotfiles }).code).toBe(1);
     const r = run({
       HOME: scratch,
@@ -538,7 +551,7 @@ describe("render-home: failure modes", () => {
   });
 
   test("a missing base aborts rather than writing an empty settings file", () => {
-    const dotfiles = mkdtempSync(join(tmpdir(), "render-settings-nobase-"));
+    const dotfiles = mkdtempSync(join(TEST_TMPDIR, "render-settings-nobase-"));
     const home = makeHome();
     const { out, code } = run({ HOME: home, DOTFILES: dotfiles });
     expect(code).toBe(1);
@@ -548,7 +561,7 @@ describe("render-home: failure modes", () => {
   });
 
   test("a base that is not a JSON object aborts", () => {
-    const dotfiles = mkdtempSync(join(tmpdir(), "render-settings-arr-"));
+    const dotfiles = mkdtempSync(join(TEST_TMPDIR, "render-settings-arr-"));
     mkdirSync(join(dotfiles, "agents", "claude"), { recursive: true });
     writeFileSync(
       join(dotfiles, "agents", "claude", "settings.json"),
@@ -728,19 +741,6 @@ describe("render-home: committed jj inputs", () => {
     const dotfiles = makeDotfiles({ model: "committed-model" }, true);
     const home = makeHome();
     writeFileSync(join(dotfiles, ".gitignore"), "node_modules/\n");
-    const install = Bun.spawnSync(
-      [
-        process.execPath,
-        "install",
-        "--frozen-lockfile",
-        "--offline",
-        "--production",
-        "--ignore-scripts",
-        "--no-progress",
-      ],
-      { cwd: dotfiles, timeout: 60_000 },
-    );
-    expect(install.exitCode, install.stderr.toString()).toBe(0);
     const config = join(home, "jj-config.toml");
     writeFileSync(
       config,
@@ -776,7 +776,11 @@ describe("render-home: committed jj inputs", () => {
     function jj(args: string[]): string {
       const result = Bun.spawnSync(["jj", "--no-pager", ...args], {
         cwd: dotfiles,
-        env: { ...process.env, ...env },
+        env: isolatedTestEnv(
+          home,
+          testPathWithStub(join(dotfiles, "bin")),
+          env,
+        ),
         stdout: "pipe",
         stderr: "pipe",
         timeout: 30_000,
@@ -901,7 +905,12 @@ describe("render-home: committed jj inputs", () => {
     const links = Bun.spawnSync(
       [process.execPath, join(ROOT, "scripts/link-dots.ts")],
       {
-        env: { ...process.env, ...f.env },
+        cwd: ROOT,
+        env: isolatedTestEnv(
+          f.home,
+          testPathWithStub(join(f.dotfiles, "bin")),
+          f.env,
+        ),
         stdout: "pipe",
         stderr: "pipe",
         timeout: 30_000,
@@ -992,23 +1001,21 @@ describe("render-home: public roster JSON", () => {
   for (const policy of [undefined, "/must-not-use-operator-policy"]) {
     test(`production render uses repository policy with empty XDG and AGX_CONFIG=${policy}`, () => {
       const home = makeHome();
-      const xdg = mkdtempSync(join(tmpdir(), "render-empty-config-"));
+      const xdg = mkdtempSync(join(TEST_TMPDIR, "render-empty-config-"));
       using _cleanup = {
         [Symbol.dispose]: () => {
           cleanup(home, xdg);
         },
       };
-      const { AGX_CONFIG: _operatorPolicy, ...env } = process.env;
       const child = Bun.spawnSync([process.execPath, SCRIPT], {
-        env: {
-          ...env,
+        cwd: ROOT,
+        env: isolatedTestEnv(home, TEST_HOST_PATH, {
           ...(policy === undefined ? {} : { AGX_CONFIG: policy }),
-          HOME: home,
           XDG_CONFIG_HOME: xdg,
           DOTFILES: ROOT,
           DOTFILES_RENDER_FROM_WORKING_COPY: "1",
           CLAUDE_SETTINGS_PRIVATE: join(home, "missing.json"),
-        },
+        }),
         timeout: 25_000,
       });
       expect(child.exitCode, child.stderr.toString()).toBe(0);
@@ -1030,9 +1037,8 @@ describe("render-home: public roster JSON", () => {
     });
   }
 
-  // Refresh the snapshot from the installed PATH agx via a production render:
-  //   UPDATE_RENDER_HOME_ROSTER=1 TZ=UTC bun test scripts/tests/render-home.test.ts
-  // This is intentionally an explicit write mode; ordinary test runs only compare.
+  // Keep the public CLI projection fixture read-only during the test suite; refresh it only in a
+  // reviewed source change.
   test("production roster block matches the public CLI projection fixture", () => {
     const home = makeHome();
     using _cleanup = {
@@ -1054,8 +1060,6 @@ describe("render-home: public roster JSON", () => {
       md.indexOf("<!-- roster:end -->") + "<!-- roster:end -->\n".length,
     );
     const fixture = join(import.meta.dir, "fixtures/render-home-roster.md");
-    if (process.env.UPDATE_RENDER_HOME_ROSTER === "1")
-      writeFileSync(fixture, block);
     const original = readFileSync(fixture, "utf8").replaceAll(
       "agx-next/",
       "agx/",

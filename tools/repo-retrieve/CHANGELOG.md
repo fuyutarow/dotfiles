@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.3 — 2026-10-26
+
+- Reject unknown index flags before planning or indexing
+
 ## 1.5.2 — 2026-10-26
 
 - Report verified no-HEAD indexes in status

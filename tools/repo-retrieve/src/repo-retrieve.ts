@@ -83,6 +83,67 @@ import pkg from "../package.json" with { type: "json" };
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);
 
+const INDEX_BOOLEAN_FLAGS = new Set([
+  "--detach",
+  "--status",
+  "--plan",
+  "--accept-plan",
+  "--help",
+  "-h",
+]);
+const INDEX_VALUE_FLAGS = new Set(["--timeout-ms", "--timeoutMs"]);
+const INDEX_USAGE =
+  "Usage: rr index [-h|--help] [--timeout-ms|--timeoutMs <ms>] [--detach] [--status] [--plan] [--accept-plan]";
+
+function rejectUnknownIndexFlags(argv: string[]): boolean {
+  if (argv[0] !== "index") return false;
+  if (argv.slice(1).some((token) => token === "--help" || token === "-h"))
+    return false;
+  for (let index = 1; index < argv.length; index += 1) {
+    const token = argv[index] ?? "";
+    if (token === "--") break;
+    const [name] = token.split("=", 1);
+    if (INDEX_BOOLEAN_FLAGS.has(token)) continue;
+    if (INDEX_VALUE_FLAGS.has(name ?? "")) {
+      index += 1;
+      continue;
+    }
+    if (
+      [...INDEX_BOOLEAN_FLAGS].some(
+        (flag) => flag.startsWith("--") && token.startsWith(`${flag}=`),
+      )
+    ) {
+      continue;
+    }
+    if ([...INDEX_VALUE_FLAGS].some((flag) => token.startsWith(`${flag}=`))) {
+      continue;
+    }
+    if (token.startsWith("-")) {
+      process.stderr.write(
+        `Error: Unknown flag: ${name ?? token}.\n${INDEX_USAGE}\n`,
+      );
+      return true;
+    }
+  }
+  return false;
+}
+
+function rejectNestedVersion(argv: string[]): boolean {
+  const route = argv[0];
+  if (route === undefined || route.startsWith("-") || route === "index")
+    return false;
+  const versionFlag = argv
+    .slice(1)
+    .find((token) =>
+      ["--version", "-V"].includes(token.split("=", 1)[0] ?? ""),
+    );
+  if (versionFlag === undefined) return false;
+  process.stderr.write(
+    `Error: Unknown flag: ${versionFlag}.\nUse 'rr ${route} --help' to see accepted flags.\n`,
+  );
+  return true;
+}
+
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
 
@@ -1508,6 +1569,7 @@ async function main(): Promise<Result<number, Error>> {
   argumentError = undefined;
   commandResult = ok(0);
   const argv = normalizeNegativeNumericValues(cliArgv());
+  if (rejectUnknownIndexFlags(argv) || rejectNestedVersion(argv)) return ok(1);
   const missing = missingFlagValue(argv);
   if (missing !== undefined) return err(missing);
   await cli(

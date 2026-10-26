@@ -5,6 +5,11 @@ Part of the [tools/ architecture](../spec/architecture.md).
 The search router. The caller says WHAT it is looking for; the router picks the engine. In an
 operational ccc repo the `enforce-search-route` hook denies raw search and points here.
 
+`rr index` accepts `-h`/`--help`, `--timeout-ms`/`--timeoutMs`, `--detach`, `--status`, `--plan`,
+and `--accept-plan`. Unknown flags exit 1 with the accepted index flags before planning, starting
+`ccc`, or writing the index watermark. `--version` is a root option (`rr --version`); it is not an
+index or route flag.
+
 ```text
 rr text   '<exact>'          -> rg (fixed string)          old name: literal
 rr regex  '<re>'             -> rg (regex)                 old name: exhaustive

@@ -210,7 +210,7 @@ function fakeTools(): { bin: string; log: string } {
     python,
     `#!/bin/sh
 case "$1" in
-  */ccc_plan.py) if [ "\${3:-}" = --validate-excludes ]; then printf '[]'; elif [ -n "\${FAKE_PLAN_FILE:-}" ]; then cat "$FAKE_PLAN_FILE"; fi; exit 0 ;;
+  */ccc_plan.py) if [ -n "\${FAKE_PLAN_TRACE:-}" ]; then printf 'planner %s\n' "$*" >> "$FAKE_SEARCH_LOG"; fi; if [ "\${3:-}" = --validate-excludes ]; then printf '[]'; elif [ -n "\${FAKE_PLAN_FILE:-}" ]; then cat "$FAKE_PLAN_FILE"; fi; exit 0 ;;
   */ccc_scope.py) exit 1 ;;
 esac
 exec /bin/sh "$@"
@@ -366,6 +366,40 @@ describe("repo-retrieve route contract", () => {
     expect(result.code).toBe(0);
     expect(result.stdout.trim()).toBe(`rr ${pkg.version}`);
     expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/u);
+  });
+
+  test.each(["--version", "--bogus"])(
+    "index rejects %s before planning, ccc, or watermark writes",
+    (flag) => {
+      const dir = registerProject();
+      const result = run(dir, ["index", flag], { FAKE_PLAN_TRACE: "1" });
+
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain(`Error: Unknown flag: ${flag}.`);
+      expect(result.stderr).toContain("-h|--help");
+      expect(result.stderr).toContain("--timeout-ms");
+      expect(result.stderr).toContain("--timeoutMs");
+      expect(result.stderr).toContain("--detach");
+      expect(result.stderr).toContain("--status");
+      expect(result.stderr).toContain("--plan");
+      expect(result.stderr).toContain("--accept-plan");
+      expect(result.log).toBe("");
+      expect(existsSync(watermarkFilePath(dir))).toBe(false);
+    },
+  );
+
+  test("a nested version flag is not accepted by sibling routes", () => {
+    const result = run(registerProject(), [
+      "literal",
+      "--query",
+      "needle",
+      "--version",
+    ]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Unknown flag: --version");
+    expect(result.log).toBe("");
   });
 
   test("concept routes to ccc search without an implicit refresh", () => {

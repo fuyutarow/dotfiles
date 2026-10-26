@@ -683,6 +683,29 @@ describe("render-home: the rest of the rendered half", () => {
     cleanup(dotfiles, home);
   });
 
+  test("missing use_for renders as an en dash and present use_for text is retained", () => {
+    const fixture = readFileSync(
+      join(import.meta.dir, "fixtures/agx-roster-no-use-for.json"),
+      "utf8",
+    );
+    const dotfiles = makeDotfiles({ model: "opus" });
+    writeRosterCli(
+      dotfiles,
+      `process.stdout.write(${JSON.stringify(fixture)});`,
+    );
+    const home = makeHome();
+    const result = run({ HOME: home, DOTFILES: dotfiles });
+    expect(result.code, result.out).toBe(0);
+    const md = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
+    expect(md).toContain(
+      "| ● | `luna-low` | codex | 22 | – | – | $0.10/$0.01/$0.50 | 1x | – |",
+    );
+    expect(md).toContain(
+      "| ○ | `sonnet-low` | claude | 36 | – | – | —/—/— | — | fixture use_for text is retained |",
+    );
+    cleanup(dotfiles, home);
+  });
+
   test("an invalid registry aborts before ANY output is written", () => {
     const dotfiles = makeDotfiles({ model: "opus" });
     const home = makeHome();
@@ -732,6 +755,7 @@ describe("render-home: committed jj inputs", () => {
       "scripts/core-tools.ts",
       "scripts/hook-registry.ts",
       "agents/hooks/attempt.ts",
+      "agents/hooks/agx-roster.ts",
       "agents/hooks/narrow.ts",
       "agents/hooks/slugs.ts",
       "agents/hooks/zod.ts",

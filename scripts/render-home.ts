@@ -71,6 +71,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { AgxRosterChoiceSchema } from "../agents/hooks/agx-roster.ts";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonText, jsonOf, z } from "../agents/hooks/zod.ts";
 import { loadSlugs } from "../agents/hooks/slugs.ts";
@@ -88,26 +89,13 @@ import {
 
 // Dotfiles owns presentation of the public JSON, not agx's routing configuration.
 // Validate only the fields consumed here; additive CLI fields remain compatible.
-const RosterChoice = z.object({
-  id: z.string(),
-  route: z.string(),
-  aa_index: z.number().optional(),
-  tb4: z.number().optional(),
-  tb4_source: z.string().optional(),
-  scicode: z.number().optional(),
-  scicode_source: z.string().optional(),
-  price_in: z.number().optional(),
-  price_cached_in: z.number().optional(),
-  price_out: z.number().optional(),
-  use_for: z.string(),
-});
 const RosterJson = z.object({
   as_of: z.string(),
   default: z.string(),
-  choice: z.array(RosterChoice),
+  choice: z.array(AgxRosterChoiceSchema),
   objective: z.string(),
 });
-type Choice = z.output<typeof RosterChoice>;
+type Choice = z.output<typeof AgxRosterChoiceSchema>;
 type Roster = z.output<typeof RosterJson>;
 
 const num = (v: number | undefined): string => (v === undefined ? "–" : `${v}`);
@@ -137,7 +125,7 @@ function rosterTable(r: Roster): string {
     "| :-: | --- | --- | --: | --: | --: | --- | --: | --- |";
   const rows = r.choice.map(
     (c) =>
-      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route} | ${num(c.aa_index)} | ${num(c.tb4)}${c.tb4_source === undefined ? "" : ` ([AA](${c.tb4_source}))`} | ${num(c.scicode)}${c.scicode_source === undefined ? "" : ` ([AA](${c.scicode_source}))`} | ${price(c.price_in)}/${price(c.price_cached_in)}/${price(c.price_out)} | ${costMultiple(r, c) === undefined ? "—" : `${costMultiple(r, c)}x`} | ${c.use_for} |`,
+      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route} | ${num(c.aa_index)} | ${num(c.tb4)}${c.tb4_source === undefined ? "" : ` ([AA](${c.tb4_source}))`} | ${num(c.scicode)}${c.scicode_source === undefined ? "" : ` ([AA](${c.scicode_source}))`} | ${price(c.price_in)}/${price(c.price_cached_in)}/${price(c.price_out)} | ${costMultiple(r, c) === undefined ? "—" : `${costMultiple(r, c)}x`} | ${c.use_for ?? "–"} |`,
   );
   return [head, ...rows].join("\n");
 }

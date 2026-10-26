@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "as_of": "2026-10-26",
+  "default": "luna-low",
+  "choice": [
+    {
+      "id": "luna-low",
+      "route": "codex",
+      "aa_index": 22,
+      "price_in": 0.1,
+      "price_cached_in": 0.01,
+      "price_out": 0.5
+    },
+    {
+      "id": "sonnet-low",
+      "route": "claude",
+      "aa_index": 36,
+      "use_for": "fixture use_for text is retained"
+    }
+  ],
+  "objective": "fixture objective"
+}

@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import {
   cpSync,
   lstatSync,
+  existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -19,6 +21,26 @@ import {
 } from "../skills-copy.ts";
 
 const root = resolve(import.meta.dir, "../..");
+
+test("copy refuses an agents symlink before creating the deployment target", async () => {
+  const home = mkdtempSync(join(tmpdir(), "skill-copy-layout-"));
+  using _home = {
+    [Symbol.dispose]: () => {
+      rmSync(home, { recursive: true, force: true });
+    },
+  };
+  const source = join(home, "source");
+  const target = join(home, "prepared");
+  mkdirSync(source);
+  const metadata = join(home, "metadata");
+  mkdirSync(metadata);
+  symlinkSync(metadata, join(source, "agents"));
+  const result = await prepareSkillCopy(source, target);
+  expect(result.isErr()).toBe(true);
+  if (result.isErr())
+    expect(result.error).toContain("nested agents/ entries are forbidden");
+  expect(existsSync(target)).toBe(false);
+});
 
 test("every bundled skill entry resolves in isolated Claude and Codex homes", async () => {
   const home = mkdtempSync(join(tmpdir(), "skill-copy-imports-"));

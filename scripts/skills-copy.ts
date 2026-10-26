@@ -3,6 +3,7 @@ import { cp, readdir, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import { skillLayoutRefusal } from "./skills-declaration.ts";
 
 const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -64,8 +65,12 @@ export async function prepareSkillCopy(
   target: string,
 ): Promise<Result<{ inputs: string[] }, string>> {
   const prepared = await fromAsyncThrowable(async () => {
+    const sourceRefusal = skillLayoutRefusal(source);
+    if (sourceRefusal !== undefined) return err(sourceRefusal);
     const inputs = new Set<string>();
     await cp(source, target, { recursive: true, dereference: true });
+    const stagedRefusal = skillLayoutRefusal(target);
+    if (stagedRefusal !== undefined) return err(stagedRefusal);
     for (const entry of await skillEntries(source)) {
       const path = join(source, entry);
       const build = await Bun.build({

@@ -23,6 +23,7 @@ import { err, fromThrowable, ok } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
   homePathRefusals,
+  inHouseLayoutRefusals,
   parseDeclaration,
   skillCliArgs,
 } from "./skills-declaration.ts";
@@ -609,6 +610,15 @@ function main(): Promise<void> {
   const declaration = parseDeclaration(text.value);
   if (declaration.isErr()) {
     fail(`FATAL: ${declaration.error}`);
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+
+  const layoutRefusals = inHouseLayoutRefusals(
+    resolve(dotfiles, "agents/skills"),
+  );
+  if (layoutRefusals.length > 0) {
+    for (const refusal of layoutRefusals) fail(`FATAL: ${refusal}`);
     process.exitCode = 1;
     return Promise.resolve();
   }

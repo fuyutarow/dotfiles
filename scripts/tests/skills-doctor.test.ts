@@ -85,6 +85,16 @@ describe("skills-wiring repo lint", () => {
     cleanup(dotfiles, home);
   });
 
+  test("rejects a nested agents scaffold even when empty", () => {
+    const dotfiles = makeDotfiles(["alpha-skill"]);
+    const home = mkdtempSync(join(tmpdir(), "skills-doctor-layout-home-"));
+    mkdirSync(join(dotfiles, "agents/skills/alpha-skill/agents"));
+    const { out, code } = run(dotfiles, home);
+    expect(code).toBe(1);
+    expect(out).toContain("nested agents/ entries are forbidden");
+    cleanup(dotfiles, home);
+  });
+
   test("fails while a retired plugin manifest remains", () => {
     const dotfiles = makeDotfiles(["alpha-skill"]);
     mkdirSync(join(dotfiles, ".claude-plugin"), { recursive: true });

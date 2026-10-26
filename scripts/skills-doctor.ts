@@ -3,6 +3,8 @@ import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
+  inHouseLayoutRefusals,
+  skillLayoutRefusal,
   readDeclaration,
   skillFiles,
   thirdPartySkillFiles,
@@ -16,7 +18,7 @@ const SkillName = /^[a-z0-9][a-z0-9-]{0,63}$/u;
 
 function repoFindings(dotfiles: string): { count: number; findings: string[] } {
   const skillRoot = resolve(dotfiles, "agents/skills");
-  const findings: string[] = [];
+  const findings = inHouseLayoutRefusals(skillRoot);
   const entries = readdirSync(skillRoot, { withFileTypes: true }).filter(
     (entry) => entry.isDirectory() && !entry.name.startsWith("."),
   );
@@ -71,6 +73,8 @@ function copyFinding(
   if (state.isSymbolicLink()) return `${root}/${name} is a symlink`;
   if (!state.isDirectory()) return `${root}/${name} is not a directory`;
   const installedSkill = resolve(target, "SKILL.md");
+  const invalid = skillLayoutRefusal(target);
+  if (invalid !== undefined) return invalid;
   if (!existsSync(installedSkill))
     return `${root}/${name}/SKILL.md is missing or stale`;
   return readFileSync(installedSkill, "utf8") === expected

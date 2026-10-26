@@ -90,6 +90,26 @@ export function skillFiles(skillsDir: string): SkillFile[] {
     .map((path) => ({ path, content: readFileSync(path, "utf8") }));
 }
 
+/** In-house skills have no vendor-specific agents/ scaffold, including links or empty entries. */
+export function skillLayoutRefusal(skill: string): string | undefined {
+  const path = resolve(skill, "agents");
+  return pathExists(path)
+    ? `${path}: nested agents/ entries are forbidden in in-house skills; remove the vendor UI scaffold`
+    : undefined;
+}
+
+export function inHouseLayoutRefusals(skillsDir: string): string[] {
+  // sync-ok: Startup metadata admission must finish before any skill installation effects.
+  if (!existsSync(skillsDir)) return [];
+  // sync-ok: One shallow package-directory listing, with no payload traversal or hot-path work.
+  return readdirSync(skillsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .flatMap((entry) => {
+      const refusal = skillLayoutRefusal(resolve(skillsDir, entry.name));
+      return refusal === undefined ? [] : [refusal];
+    });
+}
+
 function frontmatterName(content: string): string | undefined {
   const block = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(content)?.[1];
   if (block === undefined) return undefined;

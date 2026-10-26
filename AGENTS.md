@@ -111,6 +111,9 @@ their executable details.
   `claude`/`anthropic` words. Keep tool/trigger keywords in third-person what-and-when
   descriptions. Read `forging-skills` before skill work. Retired skills are historical
   references indexed by `archives/skills/README.md`, not callable registrations to restore.
+- In-house skill packages must not contain a nested `agents/` entry. Do not generate
+  `agents/openai.yaml` or another vendor UI scaffold inside them. `lint:skills-wiring`
+  rejects this layout, and skill sync refuses it before copying or installing a package.
 - Use ordinary agx tickets and capability routing for worker selection. Add no fixed model,
   effort or roster unless the task owner requires it. Do not infer hook enforcement on
   dispatch paths the active hook does not cover. Workers stay within their brief's scope.

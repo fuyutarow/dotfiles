@@ -154,6 +154,24 @@ function cleanup(...paths: string[]): void {
 }
 
 describe("skills:sync", () => {
+  test("rejects a nested agents scaffold before any installation or plugin mutation", () => {
+    const dotfiles = makeDotfiles([]);
+    const home = makeHome();
+    const marker = join(home, "calls");
+    mkdirSync(join(dotfiles, "agents/skills/house-skill/agents"));
+    writeFileSync(
+      join(dotfiles, "agents/skills/house-skill/agents/openai.yaml"),
+      "interface: {}\n",
+    );
+    const { out, code } = run(dotfiles, home, marker, true);
+    expect(code).toBe(1);
+    expect(out).toContain("nested agents/ entries are forbidden");
+    expect(existsSync(marker)).toBe(false);
+    expect(existsSync(`${marker}.claude`)).toBe(false);
+    expect(existsSync(join(home, ".agents/skills/house-skill"))).toBe(false);
+    cleanup(dotfiles, home);
+  });
+
   test("real in-house copies resolve without the checkout or a package installation in HOME", () => {
     const dotfiles = join(import.meta.dir, "../..");
     const home = makeHome();

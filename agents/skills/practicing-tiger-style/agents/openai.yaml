@@ -1,4 +1,0 @@
-interface:
-  display_name: "Practicing Tiger Style"
-  short_description: "Define contracts, enforce bounds, check failures"
-  default_prompt: "Use $practicing-tiger-style to define what must stay true, decide state ownership, resource bounds, and failure handling, then check consequential violations. Report design readiness, implementation evidence, and next action separately."

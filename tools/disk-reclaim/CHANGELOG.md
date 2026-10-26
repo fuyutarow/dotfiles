@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.0 — 2026-10-26
+
+- Drain expired graveyard payloads with bounded concurrent unlinks, pressure-scaled budgets and stderr progress
+
 ## 1.6.0 — 2026-10-26
 
 - Prune dead mise config records and report counts

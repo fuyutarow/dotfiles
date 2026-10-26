@@ -411,13 +411,28 @@ export async function removeTree(
     writeProgress();
     return true;
   };
+  // Only incremental, already-deleted payloads may unlink during traversal.
+  // One shared pool bounds the entire tree, including deeply nested directories.
+  const inFlight = new Set<Promise<boolean>>();
+  const drain = async (): Promise<boolean> =>
+    (await Promise.all(inFlight)).every(Boolean);
   const queueOrRemove = async (entry: {
     path: string;
     stat: Stats;
   }): Promise<boolean> => {
-    if (options.incrementalGraveyard === true && options.graveyard === true)
+    if (options.incrementalGraveyard !== true || options.graveyard !== true) {
+      pending.push(entry);
+      return true;
+    }
+    if (entry.stat.isDirectory()) {
+      // All descendant unlinks finish before their parent directory is removed.
+      if (!(await drain())) return false;
       return removeEntry(entry);
-    pending.push(entry);
+    }
+    if (inFlight.size >= 24) await Promise.race(inFlight);
+    const removal = removeEntry(entry);
+    inFlight.add(removal);
+    void removal.then(() => inFlight.delete(removal));
     return true;
   };
   const visitChildren = async (
@@ -526,6 +541,7 @@ export async function removeTree(
     return queueOrRemove({ path: entry, stat });
   };
   await visit(path);
+  await drain();
   if (
     options.dryRun !== true &&
     refused.length === 0 &&

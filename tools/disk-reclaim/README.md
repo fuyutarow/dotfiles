@@ -169,8 +169,17 @@ for the graveyard workload. Measurements are reported alongside these predeclare
 Terminal progress uses reusable Clack taskLog groups in `tools/shared`. Concurrent scans
 each have a row; host actions name the host and lever; deletion combines path counters into
 its owning target row. Finished rows collapse to one-line results. Human progress is on stderr
-through the shared Clack adapter on a TTY; off-TTY progress is silent, leaving JSONL stdout
-unchanged. Cursor visibility and terminal input modes are untouched.
+through the shared Clack adapter on a TTY. During execution, each target also reports freed
+bytes, its current path, and the number of later targets every two seconds on stderr, including
+when output is piped. JSONL stdout stays unchanged; `--no-progress` suppresses these updates.
+Cursor visibility and terminal input modes are untouched.
+
+Rip expiry keeps payloads in oldest-first order and preserves the configured undo window.
+Within one payload, at most 24 file unlinks run concurrently; parent directories wait for
+descendant unlinks. The default stage budget is two minutes, extended to thirty minutes
+when `--under-pressure` is set or measured headroom is warn/deny. Explicit caller budgets
+remain unchanged. Age-expired payloads use a 250ms cooperative slice to estimate size before deletion;
+receipts report bytes actually unlinked.
 
 Unreadable live-process probes produce one stderr summary per cause and identify targets
 held back as ASK. Expected EACCES from exactly named systemd, sudo, su, and polkitd

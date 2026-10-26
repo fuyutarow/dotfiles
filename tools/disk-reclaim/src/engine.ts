@@ -682,6 +682,7 @@ async function executeTarget(
   row: TargetPlan,
   options: EngineOptions,
   dir: string,
+  targetsRemaining: number,
 ): Promise<string> {
   const headroom = options.headroom ?? readHeadroom();
   const started = now();
@@ -717,8 +718,25 @@ async function executeTarget(
       ...(lockYield === undefined ? {} : { lock_yield: lockYield }),
     };
   };
+  let currentPath = target.name;
+  let currentBytes = 0;
   const ctx: Context = {
     ...options.context,
+    reportProgress: (name, root, entries, bytes, done, phase, total) => {
+      if (phase === "delete") {
+        currentPath = root;
+        currentBytes = done === true ? 0 : bytes;
+      }
+      options.context.reportProgress?.(
+        name,
+        root,
+        entries,
+        bytes,
+        done,
+        phase,
+        total,
+      );
+    },
     mode: "run",
     targetName: target.name,
     headroom,
@@ -740,6 +758,23 @@ async function executeTarget(
       });
     },
   };
+  const progress = (): void => {
+    if (ctx.progress === false) return;
+    const freed = actions.reduce(
+      (sum, action) => sum + (action.bytes_freed ?? 0),
+      0,
+    );
+    ctx.log(
+      `progress: ${freed + currentBytes} bytes freed; current target ${target.name}: ${currentPath}; ${targetsRemaining} targets remaining`,
+    );
+  };
+  const heartbeat = setInterval(progress, 2000);
+  using _heartbeat = {
+    [Symbol.dispose]: () => {
+      clearInterval(heartbeat);
+    },
+  };
+  progress();
   const plannedFailure = row.exit === 1 ? row.skip_reason : null;
   row.exit = 0;
   ctx.reportProgress?.(target.name, target.name, 0, 0, false, "delete");
@@ -843,7 +878,14 @@ async function executeLocked(
     if (options.context.foregroundLockYielded?.() === true) break;
     if (options.context.signal?.aborted === true) break;
     const row = lockedPlan.targets[index];
-    receipt = await executeTargetIfPresent(target, row, options, dir, receipt);
+    receipt = await executeTargetIfPresent(
+      target,
+      row,
+      options,
+      dir,
+      receipt,
+      targets.length - index - 1,
+    );
   }
   const codes = new Set(lockedPlan.targets.map((t) => t.exit));
   let exit = 0;
@@ -868,10 +910,11 @@ async function executeTargetIfPresent(
   options: EngineOptions,
   dir: string,
   previous: string | null,
+  targetsRemaining: number,
 ): Promise<string | null> {
   if (row === undefined) return previous;
   if (row.exit === 1 && !row.available) return previous;
-  return executeTarget(target, row, options, dir);
+  return executeTarget(target, row, options, dir, targetsRemaining);
 }
 
 export async function run(

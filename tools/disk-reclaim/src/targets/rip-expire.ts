@@ -298,7 +298,8 @@ export function createRipExpiryTarget(
         };
       // Measure this payload immediately before its action, leaving most of the
       // budget for deletion. A huge payload may have only a lower-bound estimate:
-      // age or the overflow witness already authorizes its expiry, independently
+      // Age-expired trees get only 250ms: age already authorizes removal.
+      // The age or overflow witness authorizes expiry independently
       // of that estimate. Removal reports the bytes actually unlinked.
       state.knownBytes += stat.size - row.logical;
       row.logical = stat.size;
@@ -310,7 +311,7 @@ export function createRipExpiryTarget(
         row,
         state,
         false,
-        Math.min(state.deadline, clock() + 10_000),
+        Math.min(state.deadline, clock() + (old ? 250 : 10_000)),
       );
       check(state);
       return {
@@ -333,12 +334,19 @@ export function createRipExpiryTarget(
     settings: Options = {},
   ): Promise<Candidate[]> {
     const ctx = settings.context;
-    const timeout = AbortSignal.timeout(budgetMs);
+    // Urgent runs should drain at unlink throughput rather than repeat timer slices.
+    // Explicit test/caller budgets remain authoritative; timer defaults stay bounded.
+    const pressure =
+      ctx?.underPressure === true ||
+      ctx?.headroom?.drives.some((drive) => drive.state !== "ok") === true;
+    const stageBudgetMs =
+      options.budgetMs === undefined && pressure ? budgetMs * 15 : budgetMs;
+    const timeout = AbortSignal.timeout(stageBudgetMs);
     const signal =
       ctx?.signal === undefined
         ? timeout
         : AbortSignal.any([timeout, ctx.signal]);
-    const deadline = clock() + budgetMs;
+    const deadline = clock() + stageBudgetMs;
     const root = ripGraveyardRoot(env, home);
     const now = settings.now ?? Temporal.Now.instant().epochMilliseconds;
     const undoMs =
@@ -451,7 +459,21 @@ export function createRipExpiryTarget(
         graveyard: true,
         incrementalGraveyard: true,
         ...(state === undefined ? {} : { signal: state.signal }),
-        progress: false,
+        progress: {
+          entries: 0,
+          bytes: candidate.bytes ?? 0,
+          tty: ctx.progressTty === true,
+          onProgress: (entries, bytes, done) =>
+            ctx.reportProgress?.(
+              "rip-expire",
+              candidate.path ?? state.root,
+              entries,
+              bytes,
+              done,
+              "delete",
+              candidate.bytes ?? undefined,
+            ),
+        },
         protection: {
           ownerTarget: "delete",
           processes: { openPaths: () => ({ open: [], unknown: [] }) },

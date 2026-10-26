@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.6 — 2026-10-26
+
+- Read complete agx run inventory before workspace reclamation
+
 ## 1.5.5 — 2026-10-24
 
 - Remove unused busy directory scan and process type re-export

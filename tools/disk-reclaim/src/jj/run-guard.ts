@@ -9,7 +9,7 @@ const Runs = z.array(
     state: z.string(),
     started_at: z.string().optional(),
     cwd: z.string().nullable().optional(),
-    workspace: z.string().nullable().optional(),
+    workspace: z.string().nullable(),
     continues: z.string().nullable().optional(),
     end_commit: z.string().nullable().optional(),
     judgment: z.looseObject({ decision: z.string() }).nullable().optional(),
@@ -52,7 +52,7 @@ export async function runProtection(
   path: string,
   forgottenCommit?: string,
 ): Promise<string | null> {
-  const read = await command(["agx", "worker", "ls", "--json"], store);
+  const read = await command(["agx", "worker", "ls", "--all", "--json"], store);
   if (!read.ok)
     return `cannot read run inventory (${read.detail}); keep workspace`;
   const parsed = jsonOf(Runs).safeParse(read.stdout);

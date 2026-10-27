@@ -12,7 +12,11 @@ import {
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { tryAcquire } from "../../shared/src/dir-lock.ts";
+import { run } from "../src/engine.ts";
+import { hasForegroundWaiter } from "../src/receipt.ts";
 import { recoverExit, recoverGraveyard } from "../src/recover.ts";
+import { removeTree } from "../src/lib/remove-tree.ts";
+import { createRipExpiryTarget } from "../src/targets/rip-expire.ts";
 
 const now = Temporal.Instant.from("2026-10-24T12:00:00Z").epochMilliseconds;
 const config = {
@@ -110,6 +114,7 @@ test("open-deleted payload can leave available bytes unchanged and goal unmet", 
 
 test("long non-TTY wait emits five-second heartbeat to stderr logger", async () => {
   await using f = await fixture();
+  await f.payload("heartbeat-candidate", 1024);
   const stderr = spyOn(process.stderr, "write").mockImplementation(() => true);
   let measurements = 0;
   const result = await recoverGraveyard(
@@ -129,6 +134,133 @@ test("long non-TTY wait emits five-second heartbeat to stderr logger", async () 
   expect(result.outcome).toBe("needs_more");
   expect(process.stderr.isTTY).not.toBe(true);
   expect(lines).toContain("elapsed");
+});
+
+test("recover waits within its work budget and proceeds when the holder releases", async () => {
+  await using f = await fixture();
+  const path = await f.payload("candidate", 1024);
+  const holder = {
+    pid: process.pid,
+    host: hostname(),
+    what: "fixture-holder",
+    since: Temporal.Now.instant().toString(),
+  };
+  const lock = tryAcquire(join(f.temp, "state", "lock"), holder);
+  expect(lock.ok).toBe(true);
+  if (!lock.ok) return;
+  const lines: string[] = [];
+  const release = Bun.sleep(2_000).then(lock.release);
+  const started = performance.now();
+  const result = await recoverGraveyard(
+    "1KiB",
+    f.options({ withinMs: 10_000, log: (line: string) => lines.push(line) }),
+  );
+  await release;
+  expect(performance.now() - started).toBeGreaterThanOrEqual(1_900);
+  expect(lines.some((line) => line.includes("fixture-holder"))).toBe(true);
+  expect(result.deleted_payloads).toEqual([path]);
+  expect(result.errors).toEqual([]);
+  expect(await hasForegroundWaiter(join(f.temp, "state"))).toBe(false);
+});
+
+test("recover returns busy with holder and elapsed wait when within expires", async () => {
+  await using f = await fixture();
+  await f.payload("candidate", 1024);
+  const holder = {
+    pid: process.pid,
+    host: hostname(),
+    what: "fixture-holder",
+    since: Temporal.Now.instant().toString(),
+  };
+  const lock = tryAcquire(join(f.temp, "state", "lock"), holder);
+  expect(lock.ok).toBe(true);
+  if (!lock.ok) return;
+  const started = performance.now();
+  const result = await recoverGraveyard("1KiB", f.options({ withinMs: 250 }));
+  const elapsed = performance.now() - started;
+  lock.release();
+  expect(result.outcome).toBe("busy");
+  expect(recoverExit(result)).toBe(3);
+  expect(elapsed).toBeGreaterThanOrEqual(200);
+  const diagnostic = result.errors[0] ?? "";
+  expect(diagnostic).toMatch(/lock stayed busy for [\d.]+s/u);
+  expect(diagnostic).toContain("fixture-holder");
+  expect(await hasForegroundWaiter(join(f.temp, "state"))).toBe(false);
+});
+
+test("rip expiry yields its lock after one payload to a waiting recover", async () => {
+  await using f = await fixture();
+  const timerPayload = await f.payload("timer-first", 1024, 800_000);
+  const recoverPayload = await f.payload("recover-second", 1024, 700_000);
+  const previousRoot = process.env.RIP_GRAVEYARD;
+  process.env.RIP_GRAVEYARD = f.root;
+  using _restoreRoot = {
+    [Symbol.dispose]: () => {
+      if (previousRoot === undefined) delete process.env.RIP_GRAVEYARD;
+      else process.env.RIP_GRAVEYARD = previousRoot;
+    },
+  };
+  const entered = Promise.withResolvers<void>();
+  const continueFirst = Promise.withResolvers<void>();
+  let pause = true;
+  const timerDeleted: string[] = [];
+  const logs: string[] = [];
+  const expiry = createRipExpiryTarget({
+    remove: async (path, options) => {
+      if (pause) {
+        pause = false;
+        entered.resolve();
+        await continueFirst.promise;
+      }
+      const removed = await removeTree(path, {
+        ...options,
+        immutable: () => false,
+      });
+      if (removed.ok) timerDeleted.push(path);
+      return removed;
+    },
+  });
+  const state = join(f.temp, "state");
+  const timer = run([expiry.target], {
+    context: {
+      mode: "plan",
+      config,
+      log: (line) => {
+        logs.push(line);
+      },
+    },
+    state,
+    yes: true,
+    explicit: ["rip-expire"],
+    headroom: { drives: [] },
+  });
+  await entered.promise;
+  const foreground = recoverGraveyard(
+    "1KiB",
+    f.options({
+      withinMs: 10_000,
+      statfs: () => ({ bavail: 0, bsize: 1 }),
+    }),
+  );
+  const waiterDeadline = performance.now() + 2_000;
+  while (
+    !(await hasForegroundWaiter(state)) &&
+    performance.now() < waiterDeadline
+  )
+    await Bun.sleep(5);
+  const waiterRegistered = await hasForegroundWaiter(state);
+  continueFirst.resolve();
+  const [timerResult, recoverResult] = await Promise.all([timer, foreground]);
+  expect(waiterRegistered).toBe(true);
+  expect(timerResult.exit).toBe(0);
+  expect(timerDeleted).toEqual([timerPayload]);
+  expect(recoverResult.deleted_payloads).toEqual([recoverPayload]);
+  expect(existsSync(timerPayload)).toBe(false);
+  expect(existsSync(recoverPayload)).toBe(false);
+  expect(logs.some((line) => line.includes("foreground capacity waiter"))).toBe(
+    true,
+  );
+  expect(await hasForegroundWaiter(state)).toBe(false);
 });
 
 test("lock contention is busy exit 3 while work-window end is needs_more exit 1", async () => {

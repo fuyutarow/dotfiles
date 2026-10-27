@@ -966,7 +966,7 @@ export async function run(
         yielded = true;
         lockYield = {
           payloads_completed: payloadsCompleted,
-          reason: "foreground disk:free waiter",
+          reason: "foreground capacity waiter",
         };
         releaseLock();
         return true;

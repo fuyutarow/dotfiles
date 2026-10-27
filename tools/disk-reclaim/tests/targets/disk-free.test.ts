@@ -316,7 +316,7 @@ test("rip expiry yields after one complete payload to a foreground free request"
   expect(receipt.success).toBe(true);
   expect(receipt.success ? receipt.data.lock_yield : undefined).toEqual({
     payloads_completed: 1,
-    reason: "foreground disk:free waiter",
+    reason: "foreground capacity waiter",
   });
 });
 

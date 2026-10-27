@@ -8,6 +8,7 @@ import { removeTree, type RemoveTreeOptions } from "./lib/remove-tree.ts";
 import type { Config } from "./model.ts";
 import {
   errorMessage,
+  registerForegroundWaiter,
   stateDir,
   waitForLock,
   writeReceiptAsync,
@@ -69,17 +70,23 @@ async function unchanged(
   undoMs: number,
 ): Promise<boolean> {
   if (rootIdentity === null) return false;
-  const currentRoot = await lstat(root);
-  const current = await lstat(path);
-  const parent = await realpath(dirname(path));
-  if (
-    `${currentRoot.dev}:${currentRoot.ino}` !== rootIdentity ||
-    identity(current) !== row.identity ||
-    parent !== join(canonicalRoot, relative(root, dirname(path)))
-  )
-    return false;
-  const burial = await ripBurialTime(root, path);
-  return burial !== undefined && burial === row.time && now - burial >= undoMs;
+  const checked = await fromAsyncThrowable(async () => {
+    const currentRoot = await lstat(root);
+    const current = await lstat(path);
+    const parent = await realpath(dirname(path));
+    if (
+      `${currentRoot.dev}:${currentRoot.ino}` !== rootIdentity ||
+      identity(current) !== row.identity ||
+      parent !== join(canonicalRoot, relative(root, dirname(path)))
+    )
+      return false;
+    const burial = await ripBurialTime(root, path);
+    return (
+      burial !== undefined && burial === row.time && now - burial >= undoMs
+    );
+  })();
+  // A lock holder may remove this snapshot row while recover waits for the lock.
+  return checked.isOk() && checked.value;
 }
 
 type RecoveryContext = {
@@ -279,7 +286,8 @@ async function removeEligible(
 async function executeRecovery(
   context: RecoveryContext,
 ): Promise<RecoverResult> {
-  const { options, root, goal, result, log, fsStat, signal } = context;
+  const { options, root, goal, result, log, deadline, clock, fsStat, signal } =
+    context;
   const location = await locateFilesystem(options.path ?? root);
   if (location === null) {
     result.outcome = "unknown";
@@ -297,6 +305,11 @@ async function executeRecovery(
     await saveReceipt(context);
     return result;
   }
+  const removeWaiter =
+    options.yes === true
+      ? await registerForegroundWaiter(options.state ?? stateDir(context.env))
+      : async () => {};
+  await using _waiter = { [Symbol.asyncDispose]: removeWaiter };
   const snapshot = await snapshotCandidates(context);
   if (snapshot.error !== null) {
     result.outcome = "unknown";
@@ -310,11 +323,16 @@ async function executeRecovery(
     await saveReceipt(context);
     return result;
   }
+  const remainingWaitS = (deadline - clock()) / 1000;
+  const lockWaitS = Math.min(
+    options.lockWaitS ?? remainingWaitS,
+    remainingWaitS,
+  );
   const lock = await waitForLock(
     "recover",
     options.state ?? stateDir(context.env),
     log,
-    options.lockWaitS ?? 0,
+    Math.max(0, lockWaitS),
   );
   if (lock.release === null) {
     result.outcome = "busy";

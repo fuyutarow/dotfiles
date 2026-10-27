@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.2 — 2026-10-27
+
+- Wait for reclaim locks within the recovery deadline and yield expiry to capacity requests
+
 ## 1.9.1 — 2026-10-27
 
 - Accept the declared collection policy in the strict engine config loader.

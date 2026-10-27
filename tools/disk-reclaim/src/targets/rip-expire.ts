@@ -522,7 +522,7 @@ export function createRipExpiryTarget(
         ) {
           state.yielded = true;
           ctx.log(
-            `graveyard expiry yielded after ${state.completedPayloads} payload actions for a foreground disk:free waiter`,
+            `graveyard expiry yielded after ${state.completedPayloads} payload actions for a foreground capacity waiter`,
           );
         }
       }
@@ -542,7 +542,7 @@ export function createRipExpiryTarget(
       let continuation = "";
       if (state.yielded)
         continuation =
-          "; yielded to foreground disk:free; next timer continues oldest-first";
+          "; yielded to a foreground capacity request; next timer continues oldest-first";
       else if (expired(state))
         continuation =
           "; budget exhausted or cancelled; next timer continues oldest-first";

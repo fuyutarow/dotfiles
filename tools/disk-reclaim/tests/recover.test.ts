@@ -145,6 +145,51 @@ test("recover expires only payloads older than the collection age at available s
   expect(existsSync(older)).toBe(false);
 });
 
+test("recover rounds a fractional policy age up to integer milliseconds", async () => {
+  await using f = await fixture();
+  const policyPath = resolve(import.meta.dir, "../reclaim.toml");
+  const loaded = await loadCollectionPolicy(policyPath);
+  expect(loaded.isOk()).toBe(true);
+  if (loaded.isErr()) return;
+
+  const targetAgeMinutes = 437.300025;
+  const position =
+    (targetAgeMinutes - loaded.value.undoWindowMinutes) /
+    (loaded.value.graveyardMinAgeHours * 60 - loaded.value.undoWindowMinutes);
+  const availableGiB =
+    loaded.value.denyHeadroomGiB +
+    (loaded.value.recoverHeadroomGiB - loaded.value.denyHeadroomGiB) * position;
+  const availableBytes = availableGiB * 1024 ** 3;
+  const minimumAgeMinutes = loaded.value.graveyardMinAgeMinutesAt(
+    availableBytes / 1024 ** 3,
+  );
+  const exactMinimumAgeMs = minimumAgeMinutes * 60_000;
+  expect(Number.isInteger(exactMinimumAgeMs)).toBe(false);
+  const minimumAgeMs = Math.ceil(exactMinimumAgeMs);
+  const younger = await f.payload("fractional-young", 4096, minimumAgeMs - 1);
+  const older = await f.payload("fractional-old", 4096, minimumAgeMs + 1);
+
+  const result = await recoverGraveyard(
+    `${availableGiB + 1}GiB`,
+    f.options({
+      policyPath,
+      statfs: () => ({ bavail: availableBytes, bsize: 1 }),
+    }),
+  );
+
+  expect(result.errors).toEqual([]);
+  expect(result.eligible_payloads).toEqual([older]);
+  expect(result.eligible_at).toEqual([
+    {
+      path: younger,
+      eligible_at: Temporal.Instant.fromEpochMilliseconds(now + 1).toString(),
+    },
+  ]);
+  expect(result.deleted_payloads).toEqual([older]);
+  expect(existsSync(younger)).toBe(true);
+  expect(existsSync(older)).toBe(false);
+});
+
 test("recover returns an unknown outcome when the graveyard age policy is unreadable", async () => {
   await using f = await fixture();
   const path = await f.payload("kept-on-policy-error", 4096);
@@ -183,7 +228,7 @@ test("long non-TTY wait emits five-second heartbeat to stderr logger", async () 
       withinMs: 8_000,
       statfs: async () => {
         measurements += 1;
-        if (measurements === 2) await Bun.sleep(5_150);
+        if (measurements === 3) await Bun.sleep(5_150);
         return { bavail: 1000, bsize: 1 };
       },
     }),

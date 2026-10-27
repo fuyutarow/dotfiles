@@ -127,7 +127,7 @@ export async function purgeCandidates(
       continue;
     }
     const agePolicy = loadedAgePolicy.value;
-    const minAgeMs = agePolicy.minimumAgeMinutes * 60_000;
+    const minAgeMs = Math.ceil(agePolicy.minimumAgeMinutes * 60_000);
     const undoWindowMs = agePolicy.undoWindowMinutes * 60_000;
     const drive = driveForPath(graveyard.path, options.headroom);
     const belowDenyLine = drive?.state === "deny";

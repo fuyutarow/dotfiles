@@ -408,3 +408,85 @@ test("rip expiry returns an unreadable graveyard age policy as an ASK candidate"
   if (failure === undefined) return;
   expect(await target.recheck(failure, context)).toEqual(failure);
 });
+
+test("rip expiry uses a ceiled fractional policy age for deletion eligibility", async () => {
+  const root = await mkdtemp(join(tmpdir(), "rip-fractional-policy-age-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
+  };
+  const policyPath = resolve(import.meta.dir, "../../reclaim.toml");
+  const loaded = await loadCollectionPolicy(policyPath);
+  expect(loaded.isOk()).toBe(true);
+  if (loaded.isErr()) return;
+
+  const targetAgeMinutes = 437.300025;
+  const position =
+    (targetAgeMinutes - loaded.value.undoWindowMinutes) /
+    (loaded.value.graveyardMinAgeHours * 60 - loaded.value.undoWindowMinutes);
+  const availableGiB =
+    loaded.value.denyHeadroomGiB +
+    (loaded.value.recoverHeadroomGiB - loaded.value.denyHeadroomGiB) * position;
+  const availableBytes = availableGiB * 1024 ** 3;
+  const minimumAgeMinutes = loaded.value.graveyardMinAgeMinutesAt(
+    availableBytes / 1024 ** 3,
+  );
+  const exactMinimumAgeMs = minimumAgeMinutes * 60_000;
+  expect(Number.isInteger(exactMinimumAgeMs)).toBe(false);
+  const minimumAgeMs = Math.ceil(exactMinimumAgeMs);
+  const young = join(root, "fractional-young");
+  const old = join(root, "fractional-old");
+  await writeFile(young, "young fixture");
+  await writeFile(old, "old fixture");
+  await utimes(young, 1, 1);
+  await utimes(old, 1, 1);
+  await writeFile(
+    join(root, ".record"),
+    (
+      [
+        ["fractional-young", minimumAgeMs - 1],
+        ["fractional-old", minimumAgeMs + 1],
+      ] as const
+    )
+      .map(
+        ([name, age]) =>
+          `${Temporal.Instant.fromEpochMilliseconds(now - age).toString()}\t/original/${name}\t${join(root, name)}`,
+      )
+      .join("\n"),
+  );
+
+  const ctx: Context = { mode: "run", config, log: () => {} };
+  const { target, candidates } = createRipExpiryTarget({
+    availableBytes: () => availableBytes,
+    policyPath,
+  });
+  const rows = await candidates({ RIP_GRAVEYARD: root }, root, {
+    context: ctx,
+    config,
+    now,
+  });
+  const youngCandidate = rows.find((candidate) => candidate.path === young);
+  const oldCandidate = rows.find((candidate) => candidate.path === old);
+  expect(youngCandidate).toBeDefined();
+  expect(oldCandidate).toBeDefined();
+  if (youngCandidate === undefined || oldCandidate === undefined) return;
+
+  const youngChecked = await target.recheck(youngCandidate, ctx);
+  const oldChecked = await target.recheck(oldCandidate, ctx);
+  expect(youngChecked?.verdict).toBe("KEEP");
+  expect(oldChecked?.verdict).toBe("RECLAIM");
+  if (oldChecked?.verdict !== "RECLAIM") return;
+  expect((await target.act(oldChecked, ctx)).ok).toBe(true);
+  await target.finish(ctx);
+  expect(
+    await access(young).then(
+      () => true,
+      () => false,
+    ),
+  ).toBe(true);
+  expect(
+    await access(old).then(
+      () => true,
+      () => false,
+    ),
+  ).toBe(false);
+});

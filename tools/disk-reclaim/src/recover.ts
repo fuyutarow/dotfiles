@@ -189,13 +189,13 @@ async function snapshotCandidates(
       error: "graveyard root must be a real directory",
     };
   const canonicalRoot = await realpath(root);
-  const minimumAgeMs = agePolicy.minimumAgeMinutes * 60_000;
+  const minimumAgeMs = Math.ceil(agePolicy.minimumAgeMinutes * 60_000);
   const undoMs = agePolicy.undoWindowMinutes * 60_000;
   const enumerated = await enumerateRipPayloads(
     root,
     undefined,
     now,
-    agePolicy.minimumAgeMinutes / 60,
+    minimumAgeMs,
     undoMs,
   );
   const rows: Payload[] = [];

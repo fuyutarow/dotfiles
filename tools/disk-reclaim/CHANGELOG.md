@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.2 — 2026-10-27
+
+- Fix fractional graveyard age cutoffs in milliseconds
+
 ## 1.10.1 — 2026-10-27
 
 - Return graveyard age policy load failures as named outcomes

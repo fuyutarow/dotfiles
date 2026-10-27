@@ -724,3 +724,85 @@ test("purge reports an unreadable graveyard age policy as an ASK candidate", asy
   if (purge.recheck === undefined) return;
   expect(await purge.recheck(failure, context)).toEqual(failure);
 });
+
+test("purge keeps young payloads and deletes old ones at a fractional policy age", async () => {
+  const root = tempRoot("disk-reclaim-purge-fractional-age-");
+  const grave = join(root, "grave");
+  const procDir = join(root, "proc");
+  mkdirSync(grave, { recursive: true });
+  mkdirSync(procDir);
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const policyPath = resolve(import.meta.dir, "../../reclaim.toml");
+  const loaded = await loadCollectionPolicy(policyPath);
+  expect(loaded.isOk()).toBe(true);
+  if (loaded.isErr()) return;
+
+  const targetAgeMinutes = 437.300025;
+  const position =
+    (targetAgeMinutes - loaded.value.undoWindowMinutes) /
+    (loaded.value.graveyardMinAgeHours * 60 - loaded.value.undoWindowMinutes);
+  const availableGiB =
+    loaded.value.denyHeadroomGiB +
+    (loaded.value.recoverHeadroomGiB - loaded.value.denyHeadroomGiB) * position;
+  const availableBytes = availableGiB * 1024 ** 3;
+  const minimumAgeMinutes = loaded.value.graveyardMinAgeMinutesAt(
+    availableBytes / 1024 ** 3,
+  );
+  const exactMinimumAgeMs = minimumAgeMinutes * 60_000;
+  expect(Number.isInteger(exactMinimumAgeMs)).toBe(false);
+  const minimumAgeMs = Math.ceil(exactMinimumAgeMs);
+  const young = join(grave, "fractional-young");
+  const old = join(grave, "fractional-old");
+  writeFileSync(young, "young fixture");
+  writeFileSync(old, "old fixture");
+  utimesSync(young, 1, 1);
+  utimesSync(old, 1, 1);
+  writeFileSync(
+    join(grave, ".record"),
+    (
+      [
+        ["fractional-young", minimumAgeMs - 1],
+        ["fractional-old", minimumAgeMs + 1],
+      ] as const
+    )
+      .map(
+        ([name, age]) =>
+          `${Temporal.Instant.fromEpochMilliseconds(now - age).toString()}\t/original/${name}\t${join(grave, name)}`,
+      )
+      .join("\n"),
+  );
+
+  const rows = await purgeCandidates(
+    {
+      HOME: root,
+      RIP_GRAVEYARD: grave,
+      XDG_DATA_HOME: join(root, "xdg"),
+    },
+    root,
+    { now, policyPath, availableBytes: () => availableBytes },
+  );
+  const youngCandidate = rows.find((candidate) => candidate.path === young);
+  const oldCandidate = rows.find((candidate) => candidate.path === old);
+  expect(youngCandidate?.verdict).toBe("KEEP");
+  expect(oldCandidate?.verdict).toBe("RECLAIM");
+  if (oldCandidate === undefined) return;
+
+  const ctx: Context = {
+    mode: "run",
+    procDir,
+    explicit: false,
+    config: {
+      repo_roots: [],
+      repos: [],
+      scratch_roots: [],
+      delete_roots: [],
+      regenerable_ignored: [],
+      session_grace_hours: 24,
+      ignore_unreadable_procs: [],
+    },
+    log: () => {},
+  };
+  expect((await purge.act(oldCandidate, ctx)).ok).toBe(true);
+  expect(existsSync(young)).toBe(true);
+  expect(existsSync(old)).toBe(false);
+});

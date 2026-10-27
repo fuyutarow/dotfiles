@@ -92,7 +92,7 @@ export async function enumerateRipPayloads(
   root: string,
   only: string | undefined,
   now: number,
-  ageHours: number,
+  minimumAgeMs: number,
   undoMs: number,
   check: () => void = () => {},
 ): Promise<Pick<Expiry, "payloads" | "overhead">> {
@@ -144,7 +144,7 @@ export async function enumerateRipPayloads(
     const time = times.get(path);
     const unknown = !metadata && time === undefined;
     const undo = time !== undefined && now - time < undoMs;
-    const old = time !== undefined && now - time >= ageHours * 3_600_000;
+    const old = time !== undefined && now - time >= minimumAgeMs;
     let reason = "expiry rechecked before deletion";
     if (metadata) reason = "required to restore kept graveyard entries";
     else if (unknown) reason = UNKNOWN_RIP_BURIAL;
@@ -170,7 +170,7 @@ export async function enumerateRipPayloads(
       result: null,
     } satisfies Candidate;
     if (!metadata && scoped && old && !undo)
-      candidate.reason = `older than ${ageHours}h`;
+      candidate.reason = `older than ${minimumAgeMs / 3_600_000}h`;
     payloads.push({
       candidate,
       selected: scoped,
@@ -379,12 +379,13 @@ export function createRipExpiryTarget(
       ];
     }
     const agePolicy = loadedAgePolicy.value;
+    const minimumAgeMs = Math.ceil(agePolicy.minimumAgeMinutes * 60_000);
     const undoMs = agePolicy.undoWindowMinutes * 60_000;
     const enumerated = await enumerateRipPayloads(
       root,
       settings.only,
       now,
-      agePolicy.minimumAgeMinutes / 60,
+      minimumAgeMs,
       undoMs,
     );
     const state: Expiry = {
@@ -399,7 +400,7 @@ export function createRipExpiryTarget(
       freed: 0,
       now,
       undoMs,
-      ageMs: agePolicy.minimumAgeMinutes * 60_000,
+      ageMs: minimumAgeMs,
       completedPayloads: 0,
       yielded: false,
     };

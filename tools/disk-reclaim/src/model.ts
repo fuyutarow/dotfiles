@@ -1,5 +1,6 @@
 import { isAbsolute } from "node:path";
 import { z } from "../../shared/src/zod.ts";
+import { CollectionPolicyConfig } from "./policy.ts";
 
 const absolute = z.string().refine(isAbsolute, "expected an absolute path");
 const bytes = z.number().nonnegative().nullable();
@@ -209,6 +210,7 @@ export const Config = z.object({
   scratch_roots: z.array(absolute),
   delete_roots: z.array(absolute),
   regenerable_ignored: z.array(z.string()),
+  collection_policy: CollectionPolicyConfig.optional(),
   regenerable_caches: z
     .array(
       z.object({

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.1 — 2026-10-27
+
+- Accept the declared collection policy in the strict engine config loader.
+
 ## 1.9.0 — 2026-10-27
 
 - Add typed collection policy loader for graveyard age and cache TTL rules

@@ -268,6 +268,25 @@ test("state directory precedence and config declarations", () => {
   expect(config?.ignore_unreadable_procs).toEqual(["sshd"]);
   expect(config?.scratch_roots[0]).toMatch(/^\/tmp\/claude-\d+$/u);
 });
+test("engine loader accepts the real collection policy and remains strict", () => {
+  const loaded = loadConfig();
+  expect(loaded.error).toBeNull();
+  expect(loaded.config?.collection_policy?.class_rules.ownerless_cache).toEqual(
+    {
+      default_owner: "dotfiles",
+      ttl_days: 14,
+    },
+  );
+
+  const path = join(fixture(), "unknown-top-level.toml");
+  writeFileSync(
+    path,
+    `repo_roots = []\nrepos = []\nscratch_roots = []\nsession_grace_hours = 24\nunknown_top_level = true\n`,
+  );
+  const rejected = loadConfig(path);
+  expect(rejected.config).toBeNull();
+  expect(rejected.error).toContain("unknown_top_level");
+});
 test("minimal reclaim config defaults unreadable process exceptions to sshd", () => {
   const path = join(fixture(), "minimal.toml");
   writeFileSync(
@@ -275,6 +294,39 @@ test("minimal reclaim config defaults unreadable process exceptions to sshd", ()
     `repo_roots = []\nrepos = []\nscratch_roots = []\nsession_grace_hours = 24\n`,
   );
   expect(loadConfig(path).config?.ignore_unreadable_procs).toEqual(["sshd"]);
+});
+test("recover with the real config and no --yes leaves eligible payloads intact", () => {
+  const root = fixture();
+  const state = fixture();
+  const graveyard = join(root, "graveyard");
+  const payload = join(graveyard, "old-payload");
+  mkdirSync(graveyard, { recursive: true });
+  writeFileSync(payload, "eligible for recovery only with --yes");
+  writeFileSync(
+    join(graveyard, ".record"),
+    `2020-01-01T00:00:00Z\t/original\t${payload}\n`,
+  );
+  const result = invoke(
+    ["recover", "--path", root, "--min-available", "100TiB", "--json"],
+    join(state, "state"),
+    {
+      RECLAIM_CONFIG: resolve(import.meta.dir, "../reclaim.toml"),
+      RIP_GRAVEYARD: graveyard,
+    },
+  );
+  expect(result.exit).toBe(1);
+  expect(result.stderr).not.toContain("unrecognized_keys");
+  const parsed = jsonOf(
+    z.object({
+      eligible_payloads: z.array(z.string()),
+      deleted_payloads: z.array(z.string()),
+    }),
+  ).safeParse(result.stdout);
+  expect(parsed.success).toBe(true);
+  if (!parsed.success) return;
+  expect(parsed.data.eligible_payloads).toContain(payload);
+  expect(parsed.data.deleted_payloads).toEqual([]);
+  expect(existsSync(payload)).toBe(true);
 });
 test("delete prints a plan without --yes and leaves its candidate intact", () => {
   const root = fixture();

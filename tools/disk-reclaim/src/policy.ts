@@ -12,7 +12,7 @@ const CacheRule = z
   })
   .strict();
 
-const CollectionPolicyConfig = z
+export const CollectionPolicyConfig = z
   .object({
     class_rules: z
       .object({
@@ -24,6 +24,7 @@ const CollectionPolicyConfig = z
       .strict(),
   })
   .strict();
+export type CollectionPolicyConfig = z.output<typeof CollectionPolicyConfig>;
 
 const ReclaimConfig = z
   .object({

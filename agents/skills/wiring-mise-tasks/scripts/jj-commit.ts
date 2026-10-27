@@ -97,43 +97,10 @@ if (rootRun.exitCode !== 0)
 const root = rootRun.stdout.toString().trim();
 process.chdir(root);
 function isAgxWorkspace(workspaceRoot: string): boolean {
-  const workspaceList = Bun.spawnSync(["jj", "workspace", "list"], {
-    cwd: workspaceRoot,
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: 10_000,
-  });
-  if (workspaceList.exitCode !== 0)
-    die(
-      `cannot inspect jj workspaces: ${workspaceList.stderr.toString().trim()}`,
-      1,
-    );
-  const current = resolve(workspaceRoot);
-  const currentName = basename(current);
-  for (const line of workspaceList.stdout.toString().split("\n")) {
-    if (line.trim() === "") continue;
-    const separator = line.indexOf(":");
-    if (separator < 0) die(`cannot parse jj workspace entry: ${line}`, 1);
-    const name = line.slice(0, separator).trim();
-    const otherRoot = Bun.spawnSync(
-      ["jj", "workspace", "root", "--name", name],
-      { cwd: workspaceRoot, stdout: "pipe", stderr: "pipe", timeout: 10_000 },
-    );
-    if (otherRoot.exitCode !== 0)
-      die(
-        `cannot inspect jj workspace ${name}: ${otherRoot.stderr.toString().trim()}`,
-        1,
-      );
-    if (
-      resolve(otherRoot.stdout.toString().trim()) !== current &&
-      currentName.startsWith(
-        `${basename(resolve(otherRoot.stdout.toString().trim()))}-arm-`,
-      )
-    ) {
-      return true;
-    }
-  }
-  return false;
+  // Agx worker workspaces use <repo>-arm-<worker> roots. Classify only the current
+  // workspace: resolving every registered root lets unrelated stale or missing workspaces
+  // block a commit.
+  return /^.+-arm-.+$/u.test(basename(resolve(workspaceRoot)));
 }
 const agxWorkspace = isAgxWorkspace(root);
 const explicitBookmark = parsed.flags.bookmark !== "";

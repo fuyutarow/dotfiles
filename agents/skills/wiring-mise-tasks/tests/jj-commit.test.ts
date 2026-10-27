@@ -236,6 +236,120 @@ describe("jj gated commit (J1)", () => {
     expect(result.stderr.toString()).toContain("mise run land");
   });
 
+  test("unrelated missing and stale workspaces do not block a default commit", () => {
+    const f = fixture();
+    const missing = join(f.dir, "missing-workspace");
+    const stale = join(f.dir, "stale-workspace");
+    f.jj("workspace", "add", "--name", "missing-workspace", "-r", "@", missing);
+    f.jj("workspace", "add", "--name", "stale-workspace", "-r", "@", stale);
+    rmSync(missing, { recursive: true, force: true });
+
+    writeFileSync(join(stale, "selected.txt"), "stale workspace edit\n");
+    const staleStatus = Bun.spawnSync(["jj", "status"], {
+      cwd: stale,
+      env: f.env,
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 60_000,
+    });
+    expect(staleStatus.exitCode, staleStatus.stderr.toString()).toBe(0);
+    const staleRevision = Bun.spawnSync(
+      ["jj", "log", "--no-graph", "-r", "@", "-T", "commit_id"],
+      {
+        cwd: stale,
+        env: f.env,
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 60_000,
+      },
+    );
+    expect(staleRevision.exitCode, staleRevision.stderr.toString()).toBe(0);
+    f.jj(
+      "restore",
+      "--from",
+      f.base,
+      "--into",
+      staleRevision.stdout.toString().trim(),
+      "selected.txt",
+    );
+
+    writeFileSync(join(f.root, "selected.txt"), "default workspace edit\n");
+    const result = f.commit(["selected.txt"]);
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    const warningLines = result.stderr
+      .toString()
+      .split(/\r?\n/u)
+      .filter((line) => line.startsWith("jj-commit: warning:"));
+    expect(warningLines.length).toBeLessThanOrEqual(1);
+    if (warningLines.length === 1) {
+      expect(warningLines[0]).toContain("missing-workspace");
+      expect(warningLines[0]).toContain("stale-workspace");
+    }
+  });
+
+  test("a stale committing workspace still fails with the snapshot error", () => {
+    const f = fixture();
+    const stale = join(f.dir, "repo-arm-stale-test");
+    f.jj("workspace", "add", "--name", "stale-test", "-r", "@", stale);
+    writeFileSync(join(stale, "selected.txt"), "stale workspace edit\n");
+    const staleStatus = Bun.spawnSync(["jj", "status"], {
+      cwd: stale,
+      env: f.env,
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 60_000,
+    });
+    expect(staleStatus.exitCode, staleStatus.stderr.toString()).toBe(0);
+    const staleRevision = Bun.spawnSync(
+      ["jj", "log", "--no-graph", "-r", "@", "-T", "commit_id"],
+      {
+        cwd: stale,
+        env: f.env,
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 60_000,
+      },
+    );
+    expect(staleRevision.exitCode, staleRevision.stderr.toString()).toBe(0);
+    f.jj(
+      "restore",
+      "--from",
+      f.base,
+      "--into",
+      staleRevision.stdout.toString().trim(),
+      "selected.txt",
+    );
+
+    const result = Bun.spawnSync(
+      [
+        "mise",
+        "run",
+        "commit",
+        "--",
+        "-m",
+        "stale workspace commit",
+        "--bookmark",
+        "diag/stale",
+        "--",
+        "selected.txt",
+      ],
+      {
+        cwd: stale,
+        env: {
+          ...f.env,
+          MISE_TRUSTED_CONFIG_PATHS: stale,
+          PATH: `${f.bin}:/usr/bin:/bin`,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 60_000,
+      },
+    );
+    expect(result.exitCode, result.stderr.toString()).not.toBe(0);
+    expect(result.stderr.toString()).toContain("snapshot failed");
+    expect(result.stderr.toString()).toContain("The working copy is stale");
+  });
+
   test("passes the snapshot interface and preserves selected paths exactly", async () => {
     const f = fixture();
     mkdirSync(join(f.root, "notes"));

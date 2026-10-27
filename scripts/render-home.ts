@@ -3,8 +3,7 @@
 //   ~/.claude/settings.json  <- agents/claude/settings.json + ~/.claude/settings.private.json
 //                               + zsh/timezone (env.TZ) + agents/hooks/hooks.toml (claude)
 //   ~/.codex/hooks.json      <- agents/codex/hooks.json + agents/hooks/hooks.toml (codex)
-//   ~/.claude/CLAUDE.md      <- agents/claude/CLAUDE.md + worker catalog + agents/agx/agx.toml
-//                                (including the rendered worker command policy)
+//   ~/.claude/CLAUDE.md      <- agents/claude/CLAUDE.md (legacy empty markers omitted)
 // Consumer: scripts/link-dots.ts (and therefore `mise run link:dots` + the post-merge hook), and
 // `mise run doctor`, which renders into a scratch HOME and compares. Output is verdict lines.
 //
@@ -32,8 +31,7 @@
 //
 // NO FLAGS, ZERO-INSTALL IMPORTS — deliberate. With no argv read there is no Cleye boundary
 // to owe (writing-bun-scripts BG1). Local imports use the committed zod bundle rather than
-// node_modules. The roster CLI is the installed `agx worker roster --json` on PATH. Inputs come
-// from the environment so tests can point it at fixtures:
+// node_modules. Inputs come from the environment so tests can point it at fixtures:
 //   DOTFILES                  repo root            (default: this script's checkout)
 //   DOTFILES_RENDER_REV       landed commit        (default: alpha in a jj checkout)
 //   DOTFILES_RENDER_FROM_WORKING_COPY=1             explicit local render; forbidden with REV
@@ -54,7 +52,7 @@
 // that zone file gets none, as in zshenv; a name the zone database does not know refuses the render.
 //
 // ALL OR NOTHING: every output is computed before any is written, so a bad input (an unreadable
-// overlay, an invalid registry, a roster that does not load) leaves every deployed file as it was.
+// overlay, an invalid registry, unreadable guidance) leaves every deployed file as it was.
 // Each write is atomic (temp file + rename): these files carry every security hook.
 //
 // Exit: 0 rendered or already current · 1 an input is missing or invalid (nothing written).
@@ -71,9 +69,8 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
-import { AgxRosterChoiceSchema } from "../agents/hooks/agx-roster.ts";
 import { obj } from "../agents/hooks/narrow.ts";
-import { jsonText, jsonOf, z } from "../agents/hooks/zod.ts";
+import { jsonText } from "../agents/hooks/zod.ts";
 import { loadSlugs } from "../agents/hooks/slugs.ts";
 import { RENDERED } from "./config-registry.ts";
 import { brewPrefix } from "./core-tools.ts";
@@ -86,69 +83,6 @@ import {
   wire,
   commandFor,
 } from "./hook-registry.ts";
-
-// Dotfiles owns presentation of the public JSON, not agx's routing configuration.
-// Validate only the fields consumed here; additive CLI fields remain compatible.
-const RosterJson = z.object({
-  as_of: z.string(),
-  default: z.string(),
-  choice: z.array(AgxRosterChoiceSchema),
-  objective: z.string(),
-});
-type Choice = z.output<typeof AgxRosterChoiceSchema>;
-type Roster = z.output<typeof RosterJson>;
-
-const num = (v: number | undefined): string => (v === undefined ? "–" : `${v}`);
-function price(v: number | undefined): string {
-  if (v === undefined) return "—";
-  return `$${v.toFixed(v < 1 ? 2 : 0)}`;
-}
-
-const blended = (x: Choice): number | undefined =>
-  x.price_in === undefined || x.price_out === undefined
-    ? undefined
-    : x.price_in + x.price_out;
-
-/** How many times the cheapest row's blended price (input + output per 1M tokens) this row costs. */
-function costMultiple(r: Roster, c: Choice): number | undefined {
-  const own = blended(c);
-  const prices = r.choice.flatMap((row) => blended(row) ?? []);
-  if (own === undefined || prices.length === 0) return undefined;
-  const cheapest = Math.min(...prices);
-  return Math.round((own / cheapest) * 10) / 10;
-}
-
-/** The full roster, including routes excluded from auto-pick; the default is marked ●. */
-function rosterTable(r: Roster): string {
-  const head =
-    "| default | id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |\n" +
-    "| :-: | --- | --- | --: | --: | --: | --- | --: | --- |";
-  const rows = r.choice.map(
-    (c) =>
-      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route} | ${num(c.aa_index)} | ${num(c.tb4)}${c.tb4_source === undefined ? "" : ` ([AA](${c.tb4_source}))`} | ${num(c.scicode)}${c.scicode_source === undefined ? "" : ` ([AA](${c.scicode_source}))`} | ${price(c.price_in)}/${price(c.price_cached_in)}/${price(c.price_out)} | ${costMultiple(r, c) === undefined ? "—" : `${costMultiple(r, c)}x`} | ${c.use_for ?? "–"} |`,
-  );
-  return [head, ...rows].join("\n");
-}
-
-/** The dispatch policy that opens the deployed ~/.claude/CLAUDE.md: the rule, the table, and how
- * to choose and run. scripts/render-home.ts puts it between the roster markers at deploy time, so
- * the repo's agents/claude/CLAUDE.md holds only the markers — one writer per file. */
-function rosterPolicy(r: Roster): string {
-  return [
-    `- **Every worker starts with \`agx worker run <ticket>\`. The router chooses from the roster using the ticket, measured model evidence, and current operational availability.**`,
-    `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest priced row; sourced snapshot ${r.as_of}.`,
-    "",
-    ...rosterTable(r)
-      .split("\n")
-      .map((l) => (l === "" ? "" : `  ${l}`)),
-    "",
-    "  How to choose: describe the task, expected outcome, writable paths, and verification in the ticket. The router selects an available roster row and records it with the run.",
-    "  Managed dispatch: `agx worker dispatch <ticket.md> [--ws SLUG] [--unit NAME] [--sandbox MODE] [--continue RUN_ID]` starts a durable worker run.",
-    `  How to run: \`agx worker run <ticket.md> [--cd TREE] [--sandbox none|read-only|workspace-write] [--session ID]\`. Validate a ticket with \`agx worker check <ticket.md> [--cd TREE]\`. Use \`agx worker ls [--json]\` to inspect runs, \`agx worker judge <run> accept|reject [--note TEXT]\` to record a judgment, and \`agx worker stats [--import-legacy]\` for run statistics. Continue a session with \`agx worker run <ticket.md> --continue <run>\`. Durable runs use \`systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run <ticket.md>\`.`,
-    "  Ticket home: ticket files stay in the project that owns them and are passed to agx by path. Use `agx worker ls --json` for run records and judgments; storage and configuration are owned by the [agx contract](https://github.com/fuyutarow/agx/blob/f8b5feb6c19d46d3de3bcf822f5f1bd2391a76af/contract/config.md).",
-    "  Ticket time boxes: `timeout_s` defaults to 600 seconds. `--continue` resumes the selected run's vendor session. An interim `agx-return` is saved as run progress; the worker continues until its timeout or final return. `agx worker check` validates the ticket and its declared premises before dispatch.",
-  ].join("\n");
-}
 
 function print(line: string): void {
   process.stdout.write(`${line}\n`);
@@ -451,59 +385,17 @@ outputs.push({
 validateCommandTargets(settings, codex.value);
 
 // ── ~/.claude/CLAUDE.md ──────────────────────────────────────────────────────────────────────
-const BEGIN = "<!-- roster:begin -->";
-const END = "<!-- roster:end -->";
 const mdPath = `${dotfiles}/agents/claude/CLAUDE.md`;
-// The installed command owns roster JSON; this tree still supplies its policy declarations.
-const ROSTER_COMMAND = ["agx", "worker", "roster", "--json"];
-const ROSTER_REMEDY =
-  "Install agx from the Homebrew core tools and ensure it is on PATH.";
 const md = await attempt(() => readFileSync(mdPath, "utf8"));
 if (!md.ok) fatal(`FATAL: cannot read ${mdPath} — ${errorMessage(md.error)}`);
-const rosterRead = await attempt(async () => {
-  const child = Bun.spawn(ROSTER_COMMAND, {
-    cwd: dotfiles,
-    // Rendering uses declarations from this source tree, before operator deployment.
-    // Runtime invocations retain their own AGX_CONFIG/XDG policy discovery.
-    env: {
-      ...process.env,
-      AGX_CONFIG: join(dotfiles, "agents/agx/agx.toml"),
-      DISPATCH_ROSTER_PATH: undefined,
-    },
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: 10_000,
-    killSignal: "SIGKILL",
-  });
-  const [out, err, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  if (code !== 0)
-    return new Error(
-      `agx worker roster --json exited ${code}: ${err.trim().slice(0, 4000)}. ${ROSTER_REMEDY}`,
-    );
-  return out;
-});
-if (!rosterRead.ok)
-  fatal(
-    `FATAL: cannot load roster — agx worker roster --json: ${errorMessage(rosterRead.error)}. ${ROSTER_REMEDY}`,
-  );
-if (rosterRead.value instanceof Error)
-  fatal(`FATAL: cannot load roster — ${rosterRead.value.message}`);
-const roster = jsonOf(RosterJson).safeParse(rosterRead.value);
-if (!roster.success)
-  fatal(`FATAL: invalid agx worker roster JSON — ${roster.error.message}`);
-const b = md.value.indexOf(BEGIN);
-const e = md.value.indexOf(END);
-if (b < 0 || e < b)
-  fatal(`FATAL: markers ${BEGIN} … ${END} not found in ${mdPath}`);
 outputs.push({
   dest: `${home}/.claude/CLAUDE.md`,
-  text: `${md.value.slice(0, b)}${BEGIN}\n<!-- RENDERED from the agx roster (agx worker roster --json) by scripts/render-home.ts — edit operator policy or renderer, then \`mise run link:dots\`. -->\n${rosterPolicy(roster.data)}\n${roster.data.objective}\n${END}${md.value.slice(e + END.length)}`,
-  from: `${mdPath} + agx worker roster --json`,
+  // Keep the legacy declaration markers out of deployed guidance.
+  text: md.value.replace(
+    /<!-- roster:begin -->[\s\S]*?<!-- roster:end -->\n?/u,
+    "",
+  ),
+  from: mdPath,
 });
 
 // ── write ────────────────────────────────────────────────────────────────────────────────────

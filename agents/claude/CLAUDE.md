@@ -6,11 +6,10 @@
   automatically restore its registration. Existing executable tools keep their own lifecycle.
 
 <!-- roster:begin -->
-<!-- The dispatch policy is rendered HERE at deploy time (scripts/render-home.ts, from the agx roster (`agx worker roster --json`)) into ~/.claude/CLAUDE.md. This file keeps only the markers: one writer per file. -->
+<!-- Empty legacy markers satisfy the one-writer check; render-home omits this block. -->
 <!-- roster:end -->
-- **Dispatch workers through agx.** Start durable work with `agx worker dispatch <ticket>`; use
-  `agx worker check <ticket>`, `agx worker ls`, `agx worker judge <run> accept|reject`, and `agx worker stats` as needed.
-  Continue a vendor session with `agx worker dispatch <ticket> --continue <run>`.
+- **Dispatch workers through agx.** The installed `agx --help` is the only manual.
+- **Install or upgrade agx:** `brew install fuyutarow/tap/agx` / `brew upgrade fuyutarow/tap/agx`.
 - **Execution stays observable; durability is earned, not stolen.** A PreToolUse hook denies
   Bash that orphans work to init — `setsid` (bare), `nohup`, `disown`, a detacher inside a
   nested shell string, detached `tmux`/`screen` launches, and `at`/`batch`/`crontab` writes.

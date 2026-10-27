@@ -1,5 +1,4 @@
 // Immutable render inputs, shared by link:dots, render-home and doctor's reference render.
-// Roster data comes from the installed agx-worker command.
 // No live checkout dependencies or node_modules links enter an immutable export.
 import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -8,7 +7,6 @@ import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
 
 export const RENDER_INPUTS = [
-  "agents/agx/agx.toml",
   "agents/claude/settings.json",
   "agents/codex/hooks.json",
   "agents/claude/CLAUDE.md",

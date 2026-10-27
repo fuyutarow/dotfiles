@@ -23,9 +23,7 @@ import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { brewPrefix } from "../core-tools.ts";
 import { HooksConfigSchema } from "../hook-registry.ts";
 import {
-  HOMEBREW_AGX,
   isolatedTestEnv,
-  TEST_HOST_PATH,
   TEST_TMPDIR,
   testPathWithStub,
 } from "../test-isolation.ts";
@@ -35,34 +33,7 @@ const CLI_HOME = mkdtempSync(join(TEST_TMPDIR, "render-home-cli-"));
 afterAll(() => {
   rmSync(CLI_HOME, { recursive: true, force: true });
 });
-expect(HOMEBREW_AGX, "agx must be installed in Homebrew PATH").toBeDefined();
-if (HOMEBREW_AGX === undefined) process.exit(1);
-const productionRoster = Bun.spawnSync(
-  [HOMEBREW_AGX, "worker", "roster", "--json"],
-  {
-    cwd: ROOT,
-    env: isolatedTestEnv(CLI_HOME, TEST_HOST_PATH, {
-      AGX_CONFIG: join(ROOT, "agents/agx/agx.toml"),
-    }),
-    timeout: 10_000,
-  },
-);
-expect(productionRoster.exitCode, productionRoster.stderr.toString()).toBe(0);
-const ROSTER_JSON = productionRoster.stdout.toString();
-const objective = jsonOf(z.object({ objective: z.string() })).safeParse(
-  ROSTER_JSON,
-);
-expect(objective.success).toBe(true);
-if (!objective.success) process.exit(1);
-const ROUTING_OBJECTIVE = objective.data.objective;
-
 const SCRIPT = join(ROOT, "scripts/render-home.ts");
-const ROUTE_BIAS = [
-  ["no", "codex", "row"],
-  ["choose", "codex"],
-  ["when", "codex", "and", "claude", "rows", "are", "comparable"],
-].map((words) => words.join(" "));
-
 function run(env: Record<string, string>): { out: string; code: number } {
   const dotfiles = env.DOTFILES ?? ROOT;
   const home = env.HOME ?? CLI_HOME;
@@ -83,7 +54,7 @@ function run(env: Record<string, string>): { out: string; code: number } {
 }
 
 /** The other inputs render-home.ts reads, as minimal fixtures: an empty-hooks codex file, a
- * CLAUDE.md that is only the roster markers, CLI output, and a one-hook registry. */
+ * CLAUDE.md with empty legacy markers and a one-hook registry. */
 function writeOtherInputs(dir: string, productionCli = false): void {
   mkdirSync(join(dir, "agents", "agx"), { recursive: true });
   writeFileSync(
@@ -100,10 +71,6 @@ function writeOtherInputs(dir: string, productionCli = false): void {
     "# policy\n\n<!-- roster:begin -->\n<!-- roster:end -->\n",
   );
   if (productionCli) {
-    writeRosterCli(
-      dir,
-      `const child = Bun.spawnSync([${JSON.stringify(HOMEBREW_AGX)}, ...process.argv.slice(2)], { env: process.env, stdout: "inherit", stderr: "inherit", timeout: 10_000 }); process.exit(child.exitCode);`,
-    );
     for (const path of [
       "tools/shared/src",
       "tools/shared/package.json",
@@ -119,10 +86,7 @@ function writeOtherInputs(dir: string, productionCli = false): void {
       });
     }
   } else {
-    writeRosterCli(
-      dir,
-      `process.stdout.write(${JSON.stringify(ROSTER_JSON)});`,
-    );
+    writeRosterCli(dir, 'throw new Error("render must not call agx");');
   }
   writeMiseCli(dir);
   mkdirSync(join(dir, "agents", "hooks"), { recursive: true });
@@ -148,6 +112,7 @@ function writeRosterCli(dir: string, code: string): void {
 
 function writeMiseCli(dir: string): void {
   const path = join(dir, "bin/mise");
+  mkdirSync(join(path, ".."), { recursive: true });
   writeFileSync(
     path,
     "#!/bin/sh\n" +
@@ -362,26 +327,7 @@ describe("render-home: base only", () => {
     // A real file, never a symlink — the whole point of the change.
     expect(lstatSync(dest(home)).isSymbolicLink()).toBe(false);
     const policy = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
-    expect(policy).toContain(ROUTING_OBJECTIVE);
-    expect(policy.split(ROUTING_OBJECTIVE)).toHaveLength(2);
-    expect(policy).not.toContain("comparable-ticket tradeoff line");
-    expect(policy).not.toContain(
-      "when codex and claude rows are comparable, choose codex",
-    );
-    for (const text of [
-      "agx worker run <ticket.md>",
-      "agx worker check <ticket.md>",
-      "agx worker ls [--json]",
-      "agx worker judge <run> accept|reject",
-      "agx worker stats [--import-legacy]",
-      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run <ticket.md>",
-      "agx worker run <ticket.md> --continue <run>",
-      "[agx contract]",
-      "Ticket time boxes: `timeout_s` defaults to 600 seconds",
-    ])
-      expect(policy).toContain(text);
-    expect(policy).not.toMatch(/\bagx (?:dispatch|ticket|ps|ledger)\b/u);
-    expect(policy).not.toContain("RESOURCE-");
+    expect(policy).toBe("# policy\n\n");
     cleanup(dotfiles, home);
   });
 
@@ -665,60 +611,6 @@ describe("render-home: the rest of the rendered half", () => {
     cleanup(dotfiles, home);
   });
 
-  test("CLAUDE.md gets the roster between its markers; the repo template keeps only markers", () => {
-    const dotfiles = makeDotfiles({ model: "opus" });
-    const home = makeHome();
-    run({ HOME: home, DOTFILES: dotfiles });
-    const md = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
-    expect(md).toMatch(
-      /^# policy\n\n<!-- roster:begin -->\n<!-- RENDERED [^\n]*-->\n- \*\*Every worker starts with `agx worker run <ticket>`/u,
-    );
-    expect(md).toContain(
-      "| default | id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |",
-    );
-    expect(ROUTE_BIAS.every((phrase) => !md.includes(phrase))).toBe(true);
-    for (const command of [
-      "agx worker run <ticket.md>",
-      "agx worker check <ticket.md>",
-      "agx worker ls [--json]",
-      "agx worker judge <run> accept|reject",
-      "agx worker stats [--import-legacy]",
-      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx worker run <ticket.md>",
-      "agx worker run <ticket.md> --continue <run>",
-    ])
-      expect(md).toContain(command);
-    expect(md).not.toMatch(/\bagx (?:dispatch|ticket|ps|ledger)\b/u);
-    expect(md).not.toContain("RESOURCE-");
-    expect(md.endsWith("<!-- roster:end -->\n")).toBe(true);
-    expect(
-      readFileSync(join(dotfiles, "agents", "claude", "CLAUDE.md"), "utf8"),
-    ).toBe("# policy\n\n<!-- roster:begin -->\n<!-- roster:end -->\n");
-    cleanup(dotfiles, home);
-  });
-
-  test("missing use_for renders as an en dash and present use_for text is retained", () => {
-    const fixture = readFileSync(
-      join(import.meta.dir, "fixtures/agx-roster-no-use-for.json"),
-      "utf8",
-    );
-    const dotfiles = makeDotfiles({ model: "opus" });
-    writeRosterCli(
-      dotfiles,
-      `process.stdout.write(${JSON.stringify(fixture)});`,
-    );
-    const home = makeHome();
-    const result = run({ HOME: home, DOTFILES: dotfiles });
-    expect(result.code, result.out).toBe(0);
-    const md = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
-    expect(md).toContain(
-      "| ● | `luna-low` | codex | 22 | – | – | $0.10/$0.01/$0.50 | 1x | – |",
-    );
-    expect(md).toContain(
-      "| ○ | `sonnet-low` | claude | 36 | – | – | —/—/— | — | fixture use_for text is retained |",
-    );
-    cleanup(dotfiles, home);
-  });
-
   test("an invalid registry aborts before ANY output is written", () => {
     const dotfiles = makeDotfiles({ model: "opus" });
     const home = makeHome();
@@ -804,21 +696,17 @@ describe("render-home: committed jj inputs", () => {
       join(f.dotfiles, "agents/claude/settings.json"),
       '{"model":"newer-model"}\n',
     );
-    const rosterCode = join(f.dotfiles, "scripts/render-home.ts");
+    const renderer = join(f.dotfiles, "scripts/render-home.ts");
     writeFileSync(
-      rosterCode,
-      readFileSync(rosterCode, "utf8").replaceAll(
-        "How to run:",
-        "Newer renderer:",
+      renderer,
+      readFileSync(renderer, "utf8").replace(
+        "text: md.value.replace",
+        'text: "Newer renderer:" + md.value.replace',
       ),
     );
-    const rosterPath = join(f.dotfiles, "agents/agx/agx.toml");
     writeFileSync(
-      rosterPath,
-      readFileSync(rosterPath, "utf8").replace(
-        'default = "luna-high"',
-        'default = "luna-medium"',
-      ),
+      join(f.dotfiles, "agents/claude/CLAUDE.md"),
+      "# newer policy\n",
     );
     f.jj(["commit", "-m", "newer alpha inputs"]);
     f.jj(["bookmark", "set", "alpha", "-r", "@-"]);
@@ -829,28 +717,19 @@ describe("render-home: committed jj inputs", () => {
     );
     expect(result.out).toContain(`render source: commit ${f.commit}`);
     expect(readDest(f.home).model).toBe("committed-model");
-    expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
-      "How to run:",
+    expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toBe(
+      "# policy\n\n",
     );
-    expect(
-      readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8"),
-    ).not.toContain("Newer renderer:");
-    const pinned = readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8");
-    expect(pinned).toContain(ROUTING_OBJECTIVE);
-    expect(pinned).toContain("sourced snapshot 2026-10-08");
-    expect(pinned).toContain("| ● | `luna-high` |");
-    expect(run(f.env).code).toBe(0);
-    expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
-      "| ● | `luna-medium` |",
-    );
+    const latest = run(f.env);
+    expect(latest.code, latest.out).toBe(0);
     expect(readDest(f.home).model).toBe("newer-model");
-    expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
-      "Newer renderer:",
+    expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toStartWith(
+      "Newer renderer:# newer policy",
     );
     cleanup(f.dotfiles, f.home);
   }, 30_000);
 
-  test("dirty renderer inputs refuse; an invalid unused lock does not affect installed roster rendering", () => {
+  test("dirty renderer inputs refuse; an invalid unused lock does not affect guidance rendering", () => {
     const f = committedFixture();
     using _cleanup = {
       [Symbol.dispose]: () => {
@@ -936,110 +815,8 @@ describe("render-home: committed jj inputs", () => {
   }, 30_000);
 });
 
-// Public roster fixture includes markers and render provenance.
-describe("render-home: public roster JSON", () => {
-  test("PATH agx renders the frozen roster block without agx source or mise", () => {
-    const dotfiles = makeDotfiles({ model: "opus" });
-    const home = makeHome();
-    const argsFile = join(home, "mise-args.json");
-    const contextFile = join(home, "mise-context.txt");
-    using _cleanup = {
-      [Symbol.dispose]: () => {
-        cleanup(dotfiles, home);
-      },
-    };
-    const result = run({
-      HOME: home,
-      DOTFILES: dotfiles,
-      MISE_ARGS: argsFile,
-      MISE_CONTEXT: contextFile,
-      AGX_CONFIG: "/must-not-use-operator-policy",
-      DISPATCH_ROSTER_PATH: "/must-not-use-live-roster",
-    });
-    expect(result.code, result.out).toBe(0);
-    expect(existsSync(argsFile)).toBe(false);
-    expect(existsSync(contextFile)).toBe(false);
-    const md = readFileSync(join(home, ".claude/CLAUDE.md"), "utf8");
-    const block = md.slice(md.indexOf("<!-- roster:begin -->"));
-    expect(Buffer.from(block)).toEqual(
-      Buffer.from(
-        readFileSync(
-          join(import.meta.dir, "fixtures/render-home-roster.md"),
-          "utf8",
-        ).replaceAll("agx-next/", "agx/"),
-      ),
-    );
-  });
-
-  test("missing agx names the command and remedy before any write", () => {
-    const dotfiles = makeDotfiles({ model: "opus" });
-    const home = makeHome();
-    const emptyPath = join(home, "empty-bin");
-    mkdirSync(emptyPath);
-    symlinkSync(join(dotfiles, "bin/mise"), join(emptyPath, "mise"));
-    using _cleanup = {
-      [Symbol.dispose]: () => {
-        cleanup(dotfiles, home);
-      },
-    };
-    const result = run({ HOME: home, DOTFILES: dotfiles, PATH: emptyPath });
-    expect(result.code, result.out).toBe(1);
-    expect(result.out).toContain(
-      "FATAL: cannot load roster — agx worker roster --json",
-    );
-    expect(result.out).toContain("Install agx from the Homebrew core tools");
-    expect(result.out).toContain("ensure it is on PATH");
-    for (const path of [
-      ".claude/settings.json",
-      ".codex/hooks.json",
-      ".claude/CLAUDE.md",
-      ".config/dotfiles/brew-prefix",
-    ])
-      expect(existsSync(join(home, path))).toBe(false);
-  });
-
-  for (const policy of [undefined, "/must-not-use-operator-policy"]) {
-    test(`production render uses repository policy with empty XDG and AGX_CONFIG=${policy}`, () => {
-      const home = makeHome();
-      const xdg = mkdtempSync(join(TEST_TMPDIR, "render-empty-config-"));
-      using _cleanup = {
-        [Symbol.dispose]: () => {
-          cleanup(home, xdg);
-        },
-      };
-      const child = Bun.spawnSync([process.execPath, SCRIPT], {
-        cwd: ROOT,
-        env: isolatedTestEnv(home, TEST_HOST_PATH, {
-          ...(policy === undefined ? {} : { AGX_CONFIG: policy }),
-          XDG_CONFIG_HOME: xdg,
-          DOTFILES: ROOT,
-          DOTFILES_RENDER_FROM_WORKING_COPY: "1",
-          CLAUDE_SETTINGS_PRIVATE: join(home, "missing.json"),
-        }),
-        timeout: 25_000,
-      });
-      expect(child.exitCode, child.stderr.toString()).toBe(0);
-      const md = readFileSync(join(home, ".claude/CLAUDE.md"), "utf8");
-      const block = md.slice(
-        md.indexOf("<!-- roster:begin -->"),
-        md.indexOf("<!-- roster:end -->") + "<!-- roster:end -->\n".length,
-      );
-      expect(Buffer.from(block)).toEqual(
-        Buffer.from(
-          readFileSync(
-            join(import.meta.dir, "fixtures/render-home-roster.md"),
-            "utf8",
-          ).replaceAll("agx-next/", "agx/"),
-        ),
-      );
-      expect(existsSync(join(xdg, "agx/agx.toml"))).toBe(false);
-      expect(existsSync(join(home, ".config/agx/agx.toml"))).toBe(false);
-    });
-  }
-
-  // Keep the public CLI projection fixture read-only during the test suite; refresh it only in a
-  // reviewed source change.
-  test("production roster block matches the public CLI projection fixture", () => {
+describe("render-home: agx guidance", () => {
+  test("production guidance has two policy lines and preserves every other alpha byte", () => {
     const home = makeHome();
     using _cleanup = {
       [Symbol.dispose]: () => {
@@ -1051,70 +828,68 @@ describe("render-home: public roster JSON", () => {
       DOTFILES: ROOT,
       DOTFILES_RENDER_FROM_WORKING_COPY: "1",
       CLAUDE_SETTINGS_PRIVATE: join(home, "missing.json"),
+      AGX_CONFIG: "/must-not-use-operator-policy",
       DISPATCH_ROSTER_PATH: "/must-not-use-live-roster",
     });
     expect(result.code, result.out).toBe(0);
     const md = readFileSync(join(home, ".claude/CLAUDE.md"), "utf8");
-    const block = md.slice(
-      md.indexOf("<!-- roster:begin -->"),
-      md.indexOf("<!-- roster:end -->") + "<!-- roster:end -->\n".length,
+    const alpha = readFileSync(
+      join(import.meta.dir, "fixtures/render-home-claude-alpha.md"),
+      "utf8",
     );
-    const fixture = join(import.meta.dir, "fixtures/render-home-roster.md");
-    const original = readFileSync(fixture, "utf8").replaceAll(
-      "agx-next/",
-      "agx/",
+    const start = alpha.indexOf("<!-- roster:begin -->");
+    const end = alpha.indexOf("- **Execution stays observable;");
+    const lines = [
+      "- **Dispatch workers through agx.** The installed `agx --help` is the only manual.",
+      "- **Install or upgrade agx:** `brew install fuyutarow/tap/agx` / `brew upgrade fuyutarow/tap/agx`.",
+    ];
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    expect(Buffer.from(md)).toEqual(
+      Buffer.from(
+        alpha.slice(0, start) + lines.join("\n") + "\n" + alpha.slice(end),
+      ),
     );
-    expect(Buffer.from(block)).toEqual(Buffer.from(original));
-    expect(readFileSync(SCRIPT, "utf8")).not.toMatch(
-      /from\s+["']\.\.\/agents\/models\//u,
+    expect(md).not.toContain("roster:");
+    expect(md).not.toContain("| default |");
+    expect(md).not.toContain("sourced snapshot");
+  });
+
+  test("rendering never calls agx even when it would fail", () => {
+    const dotfiles = makeDotfiles({ model: "opus" });
+    const home = makeHome();
+    using _cleanup = {
+      [Symbol.dispose]: () => {
+        cleanup(dotfiles, home);
+      },
+    };
+    const called = join(home, "agx-called");
+    writeRosterCli(
+      dotfiles,
+      `Bun.write(${JSON.stringify(called)}, "called"); process.exit(7);`,
+    );
+    const result = run({ HOME: home, DOTFILES: dotfiles });
+    expect(result.code, result.out).toBe(0);
+    expect(existsSync(called)).toBe(false);
+    expect(readFileSync(join(home, ".claude/CLAUDE.md"), "utf8")).toBe(
+      "# policy\n\n",
     );
   });
 
-  for (const [name, code] of [
-    [
-      "non-zero exit",
-      'process.stderr.write("roster unavailable"); process.exit(7);',
-    ],
-    ["invalid JSON", 'process.stdout.write("not JSON");'],
-    ["invalid JSON shape", 'process.stdout.write("{}");'],
-    [
-      "missing objective",
-      `process.stdout.write(${JSON.stringify(ROSTER_JSON.replace(/,"objective":.*\}\n?$/u, "}\n"))});`,
-    ],
-    ["timeout", "await Bun.sleep(60_000);"],
-  ] as const) {
-    test(`roster CLI ${name} preserves every deployed file`, () => {
-      const dotfiles = makeDotfiles({ model: "opus" });
-      const home = makeHome();
-      using _cleanup = {
-        [Symbol.dispose]: () => {
-          cleanup(dotfiles, home);
-        },
-      };
-      const first = run({ HOME: home, DOTFILES: dotfiles });
-      expect(first.code, first.out).toBe(0);
-      const paths = [
-        ".claude/settings.json",
-        ".codex/hooks.json",
-        ".claude/CLAUDE.md",
-        ".config/dotfiles/brew-prefix",
-      ].map((path) => join(home, path));
-      const before = paths.map((path) => ({ path, bytes: readFileSync(path) }));
-      writeRosterCli(dotfiles, code);
-      const failed = run({ HOME: home, DOTFILES: dotfiles });
-      expect(failed.code, failed.out).toBe(1);
-      expect(failed.out).toContain("FATAL:");
-      if (name === "non-zero exit") {
-        expect(failed.out).toContain(
-          "agx worker roster --json exited 7: roster unavailable",
-        );
-        expect(failed.out).toContain(
-          "Install agx from the Homebrew core tools and ensure it is on PATH.",
-        );
-      }
-      for (const { path, bytes } of before) {
-        expect(readFileSync(path)).toEqual(bytes);
-      }
-    }, 15_000);
-  }
+  test("rendering succeeds without agx on PATH", () => {
+    const dotfiles = makeDotfiles({ model: "opus" });
+    const home = makeHome();
+    using _cleanup = {
+      [Symbol.dispose]: () => {
+        cleanup(dotfiles, home);
+      },
+    };
+    const emptyPath = join(home, "empty-bin");
+    mkdirSync(emptyPath);
+    const result = run({ HOME: home, DOTFILES: dotfiles, PATH: emptyPath });
+    expect(result.code, result.out).toBe(0);
+    expect(readFileSync(join(home, ".claude/CLAUDE.md"), "utf8")).toBe(
+      "# policy\n\n",
+    );
+  });
 });

@@ -4,7 +4,7 @@ schema = 1
 allow = ["codex"]
 on_window_exhausted = { codex = "continue", claude = "stop" }
 default = "luna-high"
-exclude = []
+exclude = ["luna-max", "terra-max", "sol-max", "astra-max"]
 max_task_chars = 6000
 timeout_ms = 20000
 no_egress = []

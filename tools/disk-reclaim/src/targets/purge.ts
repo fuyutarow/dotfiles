@@ -18,8 +18,11 @@ import type { Context, Target } from "./index.ts";
 import { fromThrowable, z } from "../../../shared/src/zod.ts";
 import { scanCache, checkScanDeadline } from "../lib/scan-cache.ts";
 import { ripExpiryCandidates } from "./rip-expire.ts";
+import { loadGraveyardAgePolicy } from "../graveyard-age.ts";
 export { purgeRip } from "./rip-expire.ts";
 import type { LivenessSnapshot } from "../liveness/facts.ts";
+
+type AvailableBytesProbe = (path: string) => number | Promise<number>;
 
 export const typedYes = (answer: string | null): boolean =>
   answer?.trim() === "yes";
@@ -88,20 +91,44 @@ export async function purgeCandidates(
     only?: string | undefined;
     now?: number;
     context?: Context;
+    availableBytes?: AvailableBytesProbe;
+    policyPath?: string;
   } = {},
 ): Promise<Candidate[]> {
   if (options.ripOnly === true) return ripExpiryCandidates(env, home, options);
   const now = options.now ?? Temporal.Now.instant().epochMilliseconds;
-  const minAgeMs =
-    (options.config?.graveyard_min_age_hours ?? 24) * 60 * 60 * 1000;
-  const undoWindowMs =
-    (options.config?.graveyard_pressure_undo_minutes ?? 10) * 60 * 1000;
   const candidates: Candidate[] = [];
   const graveyards = existingGraveyards(graveyardCandidates(env, home)).filter(
     (graveyard) =>
       options.ripOnly !== true || graveyard.label === "rip graveyard",
   );
   for (const graveyard of graveyards) {
+    const loadedAgePolicy = await loadGraveyardAgePolicy(graveyard.path, {
+      ...(options.availableBytes === undefined
+        ? {}
+        : { availableBytes: options.availableBytes }),
+      ...(options.policyPath === undefined
+        ? {}
+        : { policyPath: options.policyPath }),
+    });
+    if (loadedAgePolicy.isErr()) {
+      const detail = String(loadedAgePolicy.error);
+      candidates.push({
+        id: `graveyard age policy: ${graveyard.path}`,
+        path: null,
+        verdict: "ASK",
+        reason: `cannot load graveyard age policy: ${detail}`,
+        checks: [{ name: "graveyard age policy", ok: false, detail }],
+        bytes: null,
+        bytes_kind: "estimate",
+        action: { kind: "command", argv: [] },
+        result: null,
+      });
+      continue;
+    }
+    const agePolicy = loadedAgePolicy.value;
+    const minAgeMs = agePolicy.minimumAgeMinutes * 60_000;
+    const undoWindowMs = agePolicy.undoWindowMinutes * 60_000;
     const drive = driveForPath(graveyard.path, options.headroom);
     const belowDenyLine = drive?.state === "deny";
     const records = ripRecords(graveyard.path);
@@ -157,8 +184,7 @@ export async function purgeCandidates(
             "recent; host is below the deny line: rerun with --under-pressure to purge";
         else if (isRecent && !belowDenyLine)
           reason = `recent: rip'd ${age} ago`;
-        else
-          reason = `older than ${options.config?.graveyard_min_age_hours ?? 24}h`;
+        else reason = `older than ${agePolicy.minimumAgeMinutes / 60}h`;
         const cache = scanCache(entry, "purge-allocated-v1", options.context);
         const cached = z.number().nonnegative().safeParse(cache?.value);
         const bytes = cached.success
@@ -226,7 +252,8 @@ async function recheckPurge(
   ctx: Context,
   ripOnly: boolean,
 ): Promise<Candidate | null> {
-  if (candidate.path === null) return null;
+  if (candidate.path === null)
+    return candidate.id.startsWith("graveyard age policy:") ? candidate : null;
   // The restore record depends on KEEP siblings; only payload rows can be judged alone.
   const only =
     ripOnly || basename(candidate.path) === ".record"

@@ -10,13 +10,14 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tryAcquire } from "../../shared/src/dir-lock.ts";
 import { run } from "../src/engine.ts";
 import { hasForegroundWaiter } from "../src/receipt.ts";
 import { recoverExit, recoverGraveyard } from "../src/recover.ts";
 import { removeTree } from "../src/lib/remove-tree.ts";
 import { createRipExpiryTarget } from "../src/targets/rip-expire.ts";
+import { loadCollectionPolicy } from "../src/policy.ts";
 
 const now = Temporal.Instant.from("2026-10-24T12:00:00Z").epochMilliseconds;
 const config = {
@@ -101,6 +102,64 @@ test("undo-window candidates report paths, eligibility and shortfall without del
   expect(existsSync(path)).toBe(true);
 });
 
+test("recover expires only payloads older than the collection age at available space", async () => {
+  await using f = await fixture();
+  const policyPath = resolve(import.meta.dir, "../reclaim.toml");
+  const loaded = await loadCollectionPolicy(policyPath);
+  expect(loaded.isOk()).toBe(true);
+  if (loaded.isErr()) return;
+  const availableGiB = loaded.value.recoverHeadroomGiB;
+  const minimumAgeMs = Math.floor(
+    loaded.value.graveyardMinAgeMinutesAt(availableGiB) * 60_000,
+  );
+  const younger = await f.payload(
+    "younger-than-policy",
+    4096,
+    minimumAgeMs - 60_000,
+  );
+  const older = await f.payload(
+    "older-than-policy",
+    4096,
+    minimumAgeMs + 60_000,
+  );
+  const availableBytes = availableGiB * 1024 ** 3;
+  const goalGiB = availableGiB + 1;
+  const result = await recoverGraveyard(
+    `${goalGiB}GiB`,
+    f.options({
+      policyPath,
+      statfs: () => ({ bavail: availableBytes, bsize: 1 }),
+    }),
+  );
+  expect(result.eligible_payloads).toEqual([older]);
+  expect(result.eligible_at).toEqual([
+    {
+      path: younger,
+      eligible_at: Temporal.Instant.fromEpochMilliseconds(
+        now - minimumAgeMs + 60_000 + minimumAgeMs,
+      ).toString(),
+    },
+  ]);
+  expect(result.deleted_payloads).toEqual([older]);
+  expect(existsSync(younger)).toBe(true);
+  expect(existsSync(older)).toBe(false);
+});
+
+test("recover returns an unknown outcome when the graveyard age policy is unreadable", async () => {
+  await using f = await fixture();
+  const path = await f.payload("kept-on-policy-error", 4096);
+  const policyPath = join(f.temp, "missing-policy.toml");
+
+  const result = await recoverGraveyard("1KiB", f.options({ policyPath }));
+
+  expect(result.outcome).toBe("unknown");
+  expect(result.errors.join("\n")).toContain("graveyard age policy");
+  expect(result.errors.join("\n")).toContain("collection policy: cannot read");
+  expect(result.errors.join("\n")).toContain(policyPath);
+  expect(result.deleted_payloads).toEqual([]);
+  expect(existsSync(path)).toBe(true);
+});
+
 test("open-deleted payload can leave available bytes unchanged and goal unmet", async () => {
   await using f = await fixture();
   const path = await f.payload("held-open", 4096);
@@ -134,7 +193,7 @@ test("long non-TTY wait emits five-second heartbeat to stderr logger", async () 
   expect(result.outcome).toBe("needs_more");
   expect(process.stderr.isTTY).not.toBe(true);
   expect(lines).toContain("elapsed");
-});
+}, 10_000);
 
 test("recover waits within its work budget and proceeds when the holder releases", async () => {
   await using f = await fixture();
@@ -206,6 +265,7 @@ test("rip expiry yields its lock after one payload to a waiting recover", async 
   const timerDeleted: string[] = [];
   const logs: string[] = [];
   const expiry = createRipExpiryTarget({
+    availableBytes: () => 0,
     remove: async (path, options) => {
       if (pause) {
         pause = false;

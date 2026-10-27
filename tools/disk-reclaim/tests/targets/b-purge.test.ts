@@ -11,11 +11,13 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { tempRoot as allocateTempRoot } from "../fixtures/temp.ts";
 import { purge, purgeRip } from "../../src/targets/purge.ts";
 import { ripExpiryCandidates } from "../../src/targets/rip-expire.ts";
 import { main as reclaimMain } from "../../src/reclaim.ts";
+import { loadConfig } from "../../src/engine.ts";
+import { loadCollectionPolicy } from "../../src/policy.ts";
 import { purgeCandidates } from "../../src/targets/purge.ts";
 import {
   existingGraveyards,
@@ -324,6 +326,67 @@ function recentPurgeFixture(ageMinutes: number) {
   };
 }
 
+test("purge uses the collection age from the graveyard filesystem policy", async () => {
+  const root = tempRoot("disk-reclaim-policy-purge-");
+  const grave = join(root, "grave");
+  mkdirSync(grave, { recursive: true });
+  const policyPath = resolve(import.meta.dir, "../../reclaim.toml");
+  const loadedConfig = loadConfig(policyPath);
+  expect(loadedConfig.error).toBeNull();
+  expect(loadedConfig.config).not.toBeNull();
+  const loadedPolicy = await loadCollectionPolicy(policyPath);
+  expect(loadedPolicy.isOk()).toBe(true);
+  if (loadedConfig.config === null || loadedPolicy.isErr()) return;
+
+  const availableGiB =
+    (loadedPolicy.value.recoverHeadroomGiB +
+      loadedPolicy.value.denyHeadroomGiB) /
+    2;
+  const minimumAgeMinutes =
+    loadedPolicy.value.graveyardMinAgeMinutesAt(availableGiB);
+  const entries = [
+    ["younger", Math.floor(minimumAgeMinutes) - 1],
+    ["older", Math.ceil(minimumAgeMinutes) + 1],
+  ] as const;
+  const records: string[] = [];
+  const now = Temporal.Now.instant().epochMilliseconds;
+  for (const [name, ageMinutes] of entries) {
+    const entry = join(grave, name);
+    mkdirSync(entry);
+    writeFileSync(join(entry, "data"), "fixture");
+    const buriedAt = now - ageMinutes * 60_000;
+    records.push(
+      `${Temporal.Instant.fromEpochMilliseconds(buriedAt).toString()}\t/source\t${entry}`,
+    );
+  }
+  writeFileSync(join(grave, ".record"), records.join("\n"));
+
+  const rows = await purgeCandidates(
+    {
+      HOME: join(root, "home"),
+      RIP_GRAVEYARD: grave,
+      USER: "fixture",
+      XDG_DATA_HOME: join(root, "xdg"),
+    },
+    root,
+    {
+      config: loadedConfig.config,
+      now,
+      policyPath,
+      availableBytes: (path) => {
+        expect(path).toBe(grave);
+        return availableGiB * 1024 ** 3;
+      },
+    },
+  );
+  expect(rows.find((row) => row.path === join(grave, "younger"))?.verdict).toBe(
+    "KEEP",
+  );
+  expect(rows.find((row) => row.path === join(grave, "older"))?.verdict).toBe(
+    "RECLAIM",
+  );
+});
+
 test("recent graveyard entries use the injected deny state and pressure flag", async () => {
   const aboveDeny = recentPurgeFixture(30);
   const above = (
@@ -615,3 +678,49 @@ test("terminal no, empty answer and Escape abort without removing fixture entrie
     expect(existsSync(join(result.root, "grave/keep"))).toBe(true);
   }
 }, 30_000);
+
+test("purge reports an unreadable graveyard age policy as an ASK candidate", async () => {
+  const root = tempRoot("disk-reclaim-unreadable-policy-purge-");
+  const grave = join(root, "grave");
+  mkdirSync(grave);
+  const payload = join(grave, "old");
+  mkdirSync(payload);
+  writeFileSync(join(payload, "data"), "fixture");
+  writeFileSync(
+    join(grave, ".record"),
+    `2000-01-01T00:00:00Z\t/source\t${payload}\n`,
+  );
+  const policyPath = join(root, "missing-policy.toml");
+
+  const rows = await purgeCandidates(
+    { HOME: join(root, "home"), RIP_GRAVEYARD: grave, USER: "fixture" },
+    root,
+    { policyPath },
+  );
+
+  expect(rows).toHaveLength(1);
+  const failure = rows[0];
+  expect(failure?.path).toBeNull();
+  expect(failure?.verdict).toBe("ASK");
+  expect(failure?.reason).toContain("graveyard age policy");
+  expect(failure?.reason).toContain("collection policy: cannot read");
+  expect(failure?.reason).toContain(policyPath);
+  expect(rows.every((candidate) => candidate.verdict !== "RECLAIM")).toBe(true);
+  if (failure === undefined) return;
+  const context: Context = {
+    mode: "plan",
+    config: {
+      repo_roots: [],
+      repos: [],
+      scratch_roots: [],
+      delete_roots: [],
+      regenerable_ignored: [],
+      ignore_unreadable_procs: [],
+      session_grace_hours: 24,
+    },
+    log: () => {},
+  };
+  expect(purge.recheck).toBeDefined();
+  if (purge.recheck === undefined) return;
+  expect(await purge.recheck(failure, context)).toEqual(failure);
+});

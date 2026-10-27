@@ -54,7 +54,6 @@ export type CollectionPolicy = {
   graveyardMinAgeMinutesAt(availableGiB: number): number;
 };
 
-const defaultPolicyPath = resolve(import.meta.dir, "../reclaim.toml");
 const headroomPath = resolve(
   import.meta.dir,
   "../../../agents/hooks/storage-headroom.toml",
@@ -62,7 +61,8 @@ const headroomPath = resolve(
 
 /** Load the declared collection policy and its authoritative drive thresholds. */
 export async function loadCollectionPolicy(
-  path: string = defaultPolicyPath,
+  path: string = process.env.RECLAIM_CONFIG ??
+    resolve(import.meta.dir, "../reclaim.toml"),
 ): Promise<Result<CollectionPolicy, CollectionPolicyError>> {
   const file = await attempt(() => readFile(path, "utf8"));
   if (!file.ok)

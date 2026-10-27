@@ -3,6 +3,10 @@ import { dirname, join, relative } from "node:path";
 import { hostname } from "node:os";
 import { fromAsyncThrowable } from "neverthrow";
 import { enumerateRipPayloads } from "./targets/rip-expire.ts";
+import {
+  loadGraveyardAgePolicy,
+  type GraveyardAgePolicy,
+} from "./graveyard-age.ts";
 import { ripBurialTime, ripGraveyardRoot } from "./lib/graveyards.ts";
 import { removeTree, type RemoveTreeOptions } from "./lib/remove-tree.ts";
 import type { Config } from "./model.ts";
@@ -49,6 +53,7 @@ type Options = {
   ) =>
     | Promise<{ bavail: number; bsize: number; type?: number }>
     | { bavail: number; bsize: number; type?: number };
+  policyPath?: string;
   owner?: RemoveTreeOptions["owner"];
   immutable?: RemoveTreeOptions["immutable"];
   signal?: AbortSignal;
@@ -99,7 +104,6 @@ type RecoveryContext = {
   log: (line: string) => void;
   started: string;
   now: number;
-  undoMs: number;
   deadline: number;
   clock: () => number;
   fsStat: NonNullable<Options["statfs"]>;
@@ -170,8 +174,9 @@ async function locateFilesystem(
 
 async function snapshotCandidates(
   context: RecoveryContext,
+  agePolicy: GraveyardAgePolicy,
 ): Promise<CandidateSnapshot> {
-  const { root, now, undoMs, result } = context;
+  const { root, now, result } = context;
   const inspected = await fromAsyncThrowable(() => lstat(root))();
   if (inspected.isErr())
     return { rootStat: null, canonicalRoot: root, rows: [], error: null };
@@ -184,22 +189,30 @@ async function snapshotCandidates(
       error: "graveyard root must be a real directory",
     };
   const canonicalRoot = await realpath(root);
-  const rows = (
-    await enumerateRipPayloads(root, undefined, now, 0, undoMs)
-  ).payloads.filter((row) => row.candidate.path !== join(root, ".record"));
-  for (const row of rows) {
+  const minimumAgeMs = agePolicy.minimumAgeMinutes * 60_000;
+  const undoMs = agePolicy.undoWindowMinutes * 60_000;
+  const enumerated = await enumerateRipPayloads(
+    root,
+    undefined,
+    now,
+    agePolicy.minimumAgeMinutes / 60,
+    undoMs,
+  );
+  const rows: Payload[] = [];
+  for (const row of enumerated.payloads) {
     const path = row.candidate.path;
-    if (path === null) continue;
-    if (row.hold === "undo" && row.time !== undefined) {
+    if (path === null || path === join(root, ".record")) continue;
+    if (row.time !== undefined && now - row.time < minimumAgeMs) {
       result.eligible_at.push({
         path,
         eligible_at: Temporal.Instant.fromEpochMilliseconds(
-          row.time + undoMs,
+          row.time + minimumAgeMs,
         ).toString(),
       });
       continue;
     }
     if (row.hold === undefined) result.eligible_payloads.push(path);
+    rows.push(row);
   }
   return { rootStat, canonicalRoot, rows, error: null };
 }
@@ -208,6 +221,7 @@ async function removeEligible(
   context: RecoveryContext,
   filesystemPath: string,
   snapshot: CandidateSnapshot,
+  undoMs: number,
 ): Promise<void> {
   const {
     options,
@@ -216,7 +230,6 @@ async function removeEligible(
     result,
     log,
     now,
-    undoMs,
     deadline,
     clock,
     fsStat,
@@ -305,12 +318,35 @@ async function executeRecovery(
     await saveReceipt(context);
     return result;
   }
+  const graveyardLocation = await locateFilesystem(root);
+  if (graveyardLocation === null) {
+    result.outcome = "unknown";
+    result.errors.push("cannot locate a filesystem for the graveyard");
+    await saveReceipt(context);
+    return result;
+  }
+  const agePolicy = await loadGraveyardAgePolicy(graveyardLocation.path, {
+    availableBytes: async (path) => {
+      const filesystem = await fsStat(path);
+      return filesystem.bavail * filesystem.bsize;
+    },
+    ...(options.policyPath === undefined
+      ? {}
+      : { policyPath: options.policyPath }),
+  });
+  if (agePolicy.isErr()) {
+    result.outcome = "unknown";
+    result.errors.push(`graveyard age policy: ${String(agePolicy.error)}`);
+    await saveReceipt(context);
+    return result;
+  }
+  const resolvedAgePolicy = agePolicy.value;
   const removeWaiter =
     options.yes === true
       ? await registerForegroundWaiter(options.state ?? stateDir(context.env))
       : async () => {};
   await using _waiter = { [Symbol.asyncDispose]: removeWaiter };
-  const snapshot = await snapshotCandidates(context);
+  const snapshot = await snapshotCandidates(context, resolvedAgePolicy);
   if (snapshot.error !== null) {
     result.outcome = "unknown";
     result.errors.push(snapshot.error);
@@ -341,7 +377,12 @@ async function executeRecovery(
     return result;
   }
   using _lock = { [Symbol.dispose]: lock.release };
-  await removeEligible(context, filesystemPath, snapshot);
+  await removeEligible(
+    context,
+    filesystemPath,
+    snapshot,
+    resolvedAgePolicy.undoWindowMinutes * 60_000,
+  );
   if (signal.aborted) result.outcome = "cancelled";
   const after = await fsStat(filesystemPath);
   result.available_after = after.bavail * after.bsize;
@@ -384,8 +425,6 @@ export async function recoverGraveyard(
     return result;
   }
   const clock = options.clock ?? (() => performance.now());
-  const undoMs =
-    (options.config.graveyard_pressure_undo_minutes ?? 10) * 60_000;
   const context: RecoveryContext = {
     input: input ?? "",
     options,
@@ -396,7 +435,6 @@ export async function recoverGraveyard(
     log: options.log ?? ((line: string) => process.stderr.write(`${line}\n`)),
     started: Temporal.Now.instant().toString(),
     now: options.now ?? Temporal.Now.instant().epochMilliseconds,
-    undoMs,
     deadline: clock() + (options.withinMs ?? RECOVER_BUDGET_MS),
     clock,
     fsStat: options.statfs ?? defaultStatfs,
@@ -405,7 +443,11 @@ export async function recoverGraveyard(
   const operation = await fromAsyncThrowable(() => executeRecovery(context))();
   if (operation.isOk()) return operation.value;
   context.result.outcome = "unknown";
-  context.result.errors.push(errorMessage(operation.error));
+  context.result.errors.push(
+    operation.error instanceof Error
+      ? `${operation.error.name}: ${errorMessage(operation.error)}`
+      : errorMessage(operation.error),
+  );
   await fromAsyncThrowable(() => saveReceipt(context))();
   return context.result;
 }

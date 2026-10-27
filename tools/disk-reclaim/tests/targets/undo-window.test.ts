@@ -9,7 +9,9 @@ import {
   access,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { loadConfig } from "../../src/engine.ts";
+import { loadCollectionPolicy } from "../../src/policy.ts";
 import { createRipExpiryTarget } from "../../src/targets/rip-expire.ts";
 import { purgeCandidates } from "../../src/targets/purge.ts";
 import { deleteApproved } from "../../src/delete.ts";
@@ -46,53 +48,50 @@ for (const underPressure of [false, true]) {
         join(root, ".record"),
         `${Temporal.Instant.fromEpochMilliseconds(now - age).toString()}\t/original\t${payload}\n`,
       );
-      for (const retention of [0, 24]) {
-        const settings = { ...config, graveyard_min_age_hours: retention };
-        const rows = await purgeCandidates({ RIP_GRAVEYARD: root }, root, {
-          config: settings,
-          ripOnly: true,
-          now,
-          underPressure,
-        });
-        expect(rows.find((row) => row.path === payload)?.verdict).toBe(
-          age < 600_000 ? "KEEP" : "RECLAIM",
+      const rows = await purgeCandidates({ RIP_GRAVEYARD: root }, root, {
+        config,
+        ripOnly: true,
+        now,
+        underPressure,
+        availableBytes: () => 0,
+      });
+      expect(rows.find((row) => row.path === payload)?.verdict).toBe(
+        age < 600_000 ? "KEEP" : "RECLAIM",
+      );
+      const shortfall = rows.find(
+        (row) => row.id === "rip graveyard capacity shortfall",
+      );
+      if (age < 600_000) {
+        expect(shortfall?.reason).toContain(
+          "1 undo-window payloads held (at least 11811160064 bytes)",
         );
-        const shortfall = rows.find(
-          (row) => row.id === "rip graveyard capacity shortfall",
+        expect(shortfall?.reason).toMatch(
+          /at least 107374\d+ bytes over soft target/u,
         );
-        if (age < 600_000) {
-          expect(shortfall?.reason).toContain(
-            "1 undo-window payloads held (at least 11811160064 bytes)",
-          );
-          expect(shortfall?.reason).toMatch(
-            /at least 107374\d+ bytes over soft target/u,
-          );
-        } else expect(shortfall).toBeUndefined();
-        const purgeRows = await purgeCandidates({ RIP_GRAVEYARD: root }, root, {
-          config: settings,
-          now,
-          underPressure,
-          headroom: {
-            drives: [
-              {
-                label: "fixture",
-                path: root,
-                state: "deny",
-                free: 1,
-                total: 100,
-                deny_line: 10,
-                warn_line: null,
-                stop_line: null,
-              },
-            ],
-          },
-        });
-        expect(purgeRows.find((row) => row.path === payload)?.verdict).toBe(
-          age < 600_000 || (retention === 24 && !underPressure)
-            ? "KEEP"
-            : "RECLAIM",
-        );
-      }
+      } else expect(shortfall).toBeUndefined();
+      const purgeRows = await purgeCandidates({ RIP_GRAVEYARD: root }, root, {
+        config,
+        now,
+        underPressure,
+        availableBytes: () => 0,
+        headroom: {
+          drives: [
+            {
+              label: "fixture",
+              path: root,
+              state: "deny",
+              free: 1,
+              total: 100,
+              deny_line: 10,
+              warn_line: null,
+              stop_line: null,
+            },
+          ],
+        },
+      });
+      expect(purgeRows.find((row) => row.path === payload)?.verdict).toBe(
+        age < 600_000 ? "KEEP" : "RECLAIM",
+      );
       const logs: string[] = [];
       const ctx: Context = {
         mode: "run",
@@ -102,7 +101,9 @@ for (const underPressure of [false, true]) {
           logs.push(line);
         },
       };
-      const { target, candidates } = createRipExpiryTarget();
+      const { target, candidates } = createRipExpiryTarget({
+        availableBytes: () => 0,
+      });
       const row = (
         await candidates({ RIP_GRAVEYARD: root }, root, {
           context: ctx,
@@ -201,6 +202,105 @@ test("capacity expiry skips protected entries while retaining oldest-first eligi
   ).toContain("1 undo-window payloads held");
 });
 
+test("rip expiry timer resolves its age from engine config and filesystem space", async () => {
+  const root = await mkdtemp(join(tmpdir(), "rip-policy-age-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
+  };
+  const policyPath = resolve(import.meta.dir, "../../reclaim.toml");
+  const loadedConfig = loadConfig(policyPath);
+  expect(loadedConfig.error).toBeNull();
+  expect(loadedConfig.config).not.toBeNull();
+  const loadedPolicy = await loadCollectionPolicy(policyPath);
+  expect(loadedPolicy.isOk()).toBe(true);
+  if (loadedConfig.config === null || loadedPolicy.isErr()) return;
+
+  const relaxedMinutes = loadedPolicy.value.graveyardMinAgeMinutesAt(
+    loadedPolicy.value.recoverHeadroomGiB,
+  );
+  const policyNow = Temporal.Now.instant().epochMilliseconds;
+  const pressuredGiB =
+    (loadedPolicy.value.recoverHeadroomGiB +
+      loadedPolicy.value.denyHeadroomGiB) /
+    2;
+  const pressuredMinutes =
+    loadedPolicy.value.graveyardMinAgeMinutesAt(pressuredGiB);
+  expect(relaxedMinutes).toBe(loadedConfig.config.graveyard_min_age_hours * 60);
+  expect(pressuredMinutes).toBeLessThan(relaxedMinutes);
+  expect(pressuredMinutes).toBeGreaterThanOrEqual(
+    loadedPolicy.value.undoWindowMinutes,
+  );
+
+  const entries = [
+    ["younger", Math.floor(pressuredMinutes) - 1],
+    ["pressure-expired", Math.ceil(pressuredMinutes) + 1],
+    ["relaxed-expired", Math.ceil(relaxedMinutes) + 1],
+  ] as const;
+  const records: string[] = [];
+  for (const [name, ageMinutes] of entries) {
+    const path = join(root, name);
+    await writeFile(path, name);
+    const buriedAt = policyNow - ageMinutes * 60_000;
+    records.push(
+      `${Temporal.Instant.fromEpochMilliseconds(buriedAt).toString()}\t/original\t${path}`,
+    );
+  }
+  await writeFile(join(root, ".record"), records.join("\n"));
+
+  const previousRoot = process.env.RIP_GRAVEYARD;
+  process.env.RIP_GRAVEYARD = root;
+  using _restoreRoot = {
+    [Symbol.dispose]: () => {
+      if (previousRoot === undefined) delete process.env.RIP_GRAVEYARD;
+      else process.env.RIP_GRAVEYARD = previousRoot;
+    },
+  };
+  const target = createRipExpiryTarget({
+    policyPath,
+    availableBytes: (path) => {
+      expect(path).toBe(root);
+      return loadedPolicy.value.recoverHeadroomGiB * 1024 ** 3;
+    },
+  }).target;
+  const highSpaceContext: Context = {
+    mode: "plan",
+    config: loadedConfig.config,
+    log: () => {},
+  };
+  const highSpaceRows = await target.plan(highSpaceContext);
+  await target.finish?.(highSpaceContext);
+  expect(
+    highSpaceRows.find((row) => row.path === join(root, "younger"))?.verdict,
+  ).toBe("KEEP");
+  expect(
+    highSpaceRows.find((row) => row.path === join(root, "pressure-expired"))
+      ?.verdict,
+  ).toBe("KEEP");
+  expect(
+    highSpaceRows.find((row) => row.path === join(root, "relaxed-expired"))
+      ?.verdict,
+  ).toBe("RECLAIM");
+
+  const pressuredTarget = createRipExpiryTarget({
+    policyPath,
+    availableBytes: () => pressuredGiB * 1024 ** 3,
+  }).target;
+  const pressuredContext: Context = {
+    mode: "plan",
+    config: loadedConfig.config,
+    log: () => {},
+  };
+  const pressuredRows = await pressuredTarget.plan(pressuredContext);
+  await pressuredTarget.finish?.(pressuredContext);
+  expect(
+    pressuredRows.find((row) => row.path === join(root, "younger"))?.verdict,
+  ).toBe("KEEP");
+  expect(
+    pressuredRows.find((row) => row.path === join(root, "pressure-expired"))
+      ?.verdict,
+  ).toBe("RECLAIM");
+});
+
 test("a changed burial record is checked again before expiry", async () => {
   const root = await mkdtemp(join(tmpdir(), "rip-undo-recheck-"));
   await using _cleanup = {
@@ -275,4 +375,36 @@ test("explicit delete holds fresh and unknown rip entries including descendants"
       expect(await access(child).then(() => true)).toBe(true);
     }
   }
+});
+
+test("rip expiry returns an unreadable graveyard age policy as an ASK candidate", async () => {
+  const root = await mkdtemp(join(tmpdir(), "rip-unreadable-policy-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
+  };
+  const payload = join(root, "old-payload");
+  await writeFile(payload, "fixture");
+  await writeFile(
+    join(root, ".record"),
+    `2000-01-01T00:00:00Z\t/original\t${payload}\n`,
+  );
+  const policyPath = join(root, "missing-policy.toml");
+  const context: Context = { mode: "plan", config, log: () => {} };
+  const { target, candidates } = createRipExpiryTarget();
+
+  const rows = await candidates({ RIP_GRAVEYARD: root }, root, {
+    context,
+    now,
+    policyPath,
+  });
+
+  expect(rows).toHaveLength(1);
+  const failure = rows[0];
+  expect(failure?.path).toBeNull();
+  expect(failure?.verdict).toBe("ASK");
+  expect(failure?.reason).toContain("graveyard age policy");
+  expect(failure?.reason).toContain("collection policy: cannot read");
+  expect(failure?.reason).toContain(policyPath);
+  if (failure === undefined) return;
+  expect(await target.recheck(failure, context)).toEqual(failure);
 });

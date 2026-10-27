@@ -10,8 +10,11 @@ import {
   ripGraveyardRoot,
 } from "../lib/graveyards.ts";
 import { removeTree } from "../lib/remove-tree.ts";
+import { loadGraveyardAgePolicy } from "../graveyard-age.ts";
 import type { Candidate, Config } from "../model.ts";
 import type { Context, Target } from "./index.ts";
+
+type AvailableBytesProbe = (path: string) => number | Promise<number>;
 
 export const RIP_EXPIRY_BUDGET_MS = 120_000;
 const capacityReason = "oldest-first capacity expiry";
@@ -49,6 +52,8 @@ type Options = {
   context?: Context;
   only?: string | undefined;
   now?: number;
+  availableBytes?: AvailableBytesProbe;
+  policyPath?: string;
 };
 const identity = (stat: Awaited<ReturnType<typeof lstat>>): string =>
   `${stat.dev}:${stat.ino}:${stat.mtimeMs}:${stat.size}`;
@@ -190,6 +195,8 @@ export function createRipExpiryTarget(
     budgetMs?: number;
     clock?: () => number;
     remove?: typeof removeTree;
+    availableBytes?: AvailableBytesProbe;
+    policyPath?: string;
   } = {},
 ) {
   const budgetMs = options.budgetMs ?? RIP_EXPIRY_BUDGET_MS;
@@ -349,13 +356,35 @@ export function createRipExpiryTarget(
     const deadline = clock() + stageBudgetMs;
     const root = ripGraveyardRoot(env, home);
     const now = settings.now ?? Temporal.Now.instant().epochMilliseconds;
-    const undoMs =
-      (settings.config?.graveyard_pressure_undo_minutes ?? 10) * 60_000;
+    const availableBytes = settings.availableBytes ?? options.availableBytes;
+    const policyPath = settings.policyPath ?? options.policyPath;
+    const loadedAgePolicy = await loadGraveyardAgePolicy(root, {
+      ...(availableBytes === undefined ? {} : { availableBytes }),
+      ...(policyPath === undefined ? {} : { policyPath }),
+    });
+    if (loadedAgePolicy.isErr()) {
+      const detail = String(loadedAgePolicy.error);
+      return [
+        {
+          id: "rip graveyard age policy",
+          path: null,
+          verdict: "ASK",
+          reason: `cannot load graveyard age policy: ${detail}`,
+          checks: [{ name: "graveyard age policy", ok: false, detail }],
+          bytes: null,
+          bytes_kind: "estimate",
+          action: { kind: "command", argv: [] },
+          result: null,
+        },
+      ];
+    }
+    const agePolicy = loadedAgePolicy.value;
+    const undoMs = agePolicy.undoWindowMinutes * 60_000;
     const enumerated = await enumerateRipPayloads(
       root,
       settings.only,
       now,
-      settings.config?.graveyard_min_age_hours ?? 24,
+      agePolicy.minimumAgeMinutes / 60,
       undoMs,
     );
     const state: Expiry = {
@@ -370,7 +399,7 @@ export function createRipExpiryTarget(
       freed: 0,
       now,
       undoMs,
-      ageMs: (settings.config?.graveyard_min_age_hours ?? 24) * 3_600_000,
+      ageMs: agePolicy.minimumAgeMinutes * 60_000,
       completedPayloads: 0,
       yielded: false,
     };
@@ -426,7 +455,9 @@ export function createRipExpiryTarget(
       }),
     recheck: async (candidate: Candidate, ctx: Context) => {
       const state = states.get(ctx);
-      return state === undefined ? null : judge(candidate, state);
+      if (state === undefined)
+        return candidate.id === "rip graveyard age policy" ? candidate : null;
+      return judge(candidate, state);
     },
     act: async (candidate: Candidate, ctx: Context) => {
       const state = states.get(ctx);

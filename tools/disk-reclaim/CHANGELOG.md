@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.1 — 2026-10-27
+
+- Return graveyard age policy load failures as named outcomes
+
 ## 1.10.0 — 2026-10-27
 
 - Expire deregistered ccc index database artifacts after the collection TTL

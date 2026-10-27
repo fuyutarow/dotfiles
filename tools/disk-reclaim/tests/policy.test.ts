@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { loadGraveyardAgePolicy } from "../src/graveyard-age.ts";
 import { CollectionPolicyError, loadCollectionPolicy } from "../src/policy.ts";
 
 const config = `
@@ -90,6 +91,26 @@ test("rejects a missing class rule with its name", async () => {
         path,
         "collection_policy.class_rules.ownerless_cache",
       );
+    },
+  );
+});
+
+test("graveyard age resolution returns a named error when its policy cannot load", async () => {
+  await withPolicy(
+    config.replace("ttl_days = 7", "ttl_days = 7\nunknown = true"),
+    async (path) => {
+      const result = await loadGraveyardAgePolicy("/fixture/graveyard", {
+        availableBytes: () => 0,
+        policyPath: path,
+      });
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error).toBeInstanceOf(CollectionPolicyError);
+        if (result.error instanceof CollectionPolicyError)
+          expect(result.error.message).toContain(
+            "collection_policy.class_rules.deregistered_index_db",
+          );
+      }
     },
   );
 });

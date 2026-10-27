@@ -62,6 +62,12 @@ const manifestSchema = z.strictObject({
   job_id: jobId,
   output_lock: jobId.optional(),
   run_class: z.enum(["pilot", "full", "test", "service"]).default("test"),
+  admission_wait_s: z
+    .number()
+    .int()
+    .min(0)
+    .max(Number.MAX_SAFE_INTEGER)
+    .default(0),
 
   cpu_threads: positive.max(1024),
   processes: positive.max(4096),
@@ -92,7 +98,10 @@ const manifestSchema = z.strictObject({
     grace_seconds: positive.max(30),
   }),
 });
-export type ResourceManifest = z.output<typeof manifestSchema>;
+export type ResourceManifest = Omit<
+  z.output<typeof manifestSchema>,
+  "admission_wait_s"
+> & { admission_wait_s?: number };
 export function validateManifest(
   input: unknown,
 ): Result<ResourceManifest, Error> {
@@ -196,6 +205,7 @@ type GpuAdmissionOptions = {
   readState?: () => Promise<GpuState | undefined>;
   currentScope?: string;
   currentReservationId?: string;
+  admissionWaitS?: number;
   now?: () => number;
   sleep?: (milliseconds: number) => Promise<void>;
   // Compatibility for scope-entry callers; this no longer authorizes holder exclusion.
@@ -1056,9 +1066,27 @@ export async function gpuAdmissionRefusal(
     .reduce((sum, [, bytes]) => sum + bytes, 0);
   const ceiling =
     device.totalMiB * 1024 ** 2 - safetyMiB * 1024 ** 2 - cccBytes;
-  if (deviceRequest.vram_peak_bytes + admittedBytes > ceiling)
-    return `GPU VRAM budget exceeded gpu=${deviceRequest.gpu_id} requested=${deviceRequest.vram_peak_bytes} admitted=${admittedBytes} total=${device.totalMiB * 1024 ** 2} safety_margin=${safetyMiB}MiB ccc_partition=${cccBytes}; evidence=${gpuStatePath()}`;
-  return undefined;
+  const refusal = `GPU VRAM budget exceeded gpu=${deviceRequest.gpu_id} requested=${deviceRequest.vram_peak_bytes} admitted=${admittedBytes} total=${device.totalMiB * 1024 ** 2} safety_margin=${safetyMiB}MiB ccc_partition=${cccBytes}; evidence=${gpuStatePath()}`;
+  if (deviceRequest.vram_peak_bytes + admittedBytes <= ceiling)
+    return undefined;
+  const waitSeconds = options.admissionWaitS ?? 0;
+  if (waitSeconds === 0 || deviceRequest.vram_peak_bytes > ceiling)
+    return refusal;
+  const startedAt = now();
+  const deadline = startedAt + waitSeconds * 1000;
+  let lastRefusal = refusal;
+  while (now() < deadline) {
+    await sleep(Math.min(250, deadline - now()));
+    const recheck = await gpuAdmissionRefusal(deviceRequest, safetyMiB, {
+      ...options,
+      admissionWaitS: 0,
+    });
+    if (recheck === undefined) return undefined;
+    if (!recheck.startsWith("GPU VRAM budget exceeded")) return recheck;
+    lastRefusal = recheck;
+  }
+  const waitedSeconds = Math.max(0, (now() - startedAt) / 1000);
+  return `${lastRefusal}; waited=${waitedSeconds.toFixed(3)}s`;
 }
 function lock(path: string, wait: number, conflict: number, command: string[]) {
   return [
@@ -1178,6 +1206,7 @@ async function runDecision(
     const refusal = await gpuAdmissionRefusal(
       manifest.device,
       config.value.gpu_safety_mib,
+      { admissionWaitS: manifest.admission_wait_s ?? 0 },
     );
     if (refusal !== undefined) return ok(failure(69, refusal, report));
   }
@@ -1245,6 +1274,7 @@ async function runDecision(
       manifest.host_ram_peak_bytes * config.value.memory_high_fraction,
     ),
     gpu_safety_mib: config.value.gpu_safety_mib,
+    admission_wait_s: manifest.admission_wait_s ?? 0,
     scratch_bytes: manifest.scratch_bytes,
     device: manifest.device,
     started_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),

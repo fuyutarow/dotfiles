@@ -39,6 +39,12 @@ async function main() {
       host_ram_peak_bytes: z.number(),
       memory_high_bytes: z.number(),
       gpu_safety_mib: z.number().optional(),
+      admission_wait_s: z
+        .number()
+        .int()
+        .min(0)
+        .max(Number.MAX_SAFE_INTEGER)
+        .optional(),
       device: z.object({
         kind: z.string(),
         gpu_id: z.number().optional(),
@@ -82,6 +88,7 @@ async function main() {
       {
         currentScope: receipt.data.scope_unit,
         currentReservationId: receipt.data.reservation_id,
+        admissionWaitS: receipt.data.admission_wait_s ?? 0,
         cccHandoffHeld: true,
       },
     );

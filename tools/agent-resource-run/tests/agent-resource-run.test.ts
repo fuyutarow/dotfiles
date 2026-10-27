@@ -78,6 +78,7 @@ const manifest = (
   schema: 1,
   job_id: `test-${crypto.randomUUID()}`,
   run_class: "test",
+  admission_wait_s: 0,
   cpu_threads: 1,
   processes: 8,
   host_ram_peak_bytes: 128 * 1024 ** 2,
@@ -112,21 +113,17 @@ async function fixture(m = manifest()) {
         samples: [],
       }),
     );
-  return {
-    m,
-    path,
-    dir,
-    env: {
-      ...process.env,
-      AGENT_RESOURCE_POLICY: policy,
-      XDG_STATE_HOME: dir,
-      XDG_RUNTIME_DIR: runtime,
-      DBUS_SESSION_BUS_ADDRESS: `unix:path=/run/user/${process.getuid?.()}/bus`,
-      AGENT_RESOURCE_ADMISSION_RECEIPT: undefined,
-      AGENT_RESOURCE_SCOPE_LAUNCH: undefined,
-      BUN_OPTIONS: `--preload ${join(import.meta.dir, "proc-integration-preload.ts")}`,
-    },
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    AGENT_RESOURCE_POLICY: policy,
+    XDG_STATE_HOME: dir,
+    XDG_RUNTIME_DIR: runtime,
+    DBUS_SESSION_BUS_ADDRESS: `unix:path=/run/user/${process.getuid?.()}/bus`,
+    AGENT_RESOURCE_ADMISSION_RECEIPT: undefined,
+    AGENT_RESOURCE_SCOPE_LAUNCH: undefined,
+    BUN_OPTIONS: `--preload ${join(import.meta.dir, "proc-integration-preload.ts")}`,
   };
+  return { m, path, dir, env };
 }
 async function invoke(
   args: string[],
@@ -360,10 +357,15 @@ test("manifest schema retains bounds and compile slot extension", () => {
     manifest({ cpu_threads: 1025 }),
     manifest({ processes: 4097 }),
     manifest({ walltime_seconds: 86401 }),
+    manifest({ admission_wait_s: -1 }),
+    manifest({ admission_wait_s: 1.5 }),
     manifest({ compile_slots: ["julia-compile", "julia-compile"] }),
   ];
   for (const value of invalid)
     expect(validateManifest(value).isErr()).toBe(true);
+  const defaulted = validateManifest(manifest());
+  expect(defaulted.isOk()).toBe(true);
+  if (defaulted.isOk()) expect(defaulted.value.admission_wait_s).toBe(0);
 });
 test("GPU manifests remain independent of compile slots", () => {
   expect(
@@ -440,6 +442,169 @@ test("full-device GPU request is refused at check-only with the ccc partition re
   expect(result.stdout).toContain("total=12884901888");
   expect(result.stdout).toContain("safety_margin=512MiB");
   expect(result.stdout).toContain("ccc_partition=2147483648");
+});
+test("GPU VRAM admission admits a 4 GiB request after a 3 GiB holder releases", async () => {
+  const f = await fixture(
+    manifest({
+      admission_wait_s: 10,
+      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 4 * 1024 ** 3 },
+    }),
+  );
+  const procRoot = join(f.dir, "fake-proc");
+  const pid = 987654399;
+  const processDir = join(procRoot, String(pid));
+  const reads = join(f.dir, "proc-reads");
+  await mkdir(processDir, { recursive: true });
+  await holderIdentity(processDir, pid);
+  await Bun.write(
+    join(processDir, "cgroup"),
+    "0::/user.slice/agent-resource-holder.scope\n",
+  );
+  await Bun.write(
+    join(processDir, "environ"),
+    `AGENT_RESOURCE_ADMISSION_RECEIPT=${JSON.stringify({ reservation_id: "holder", device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 3 * 1024 ** 3 } })}\0`,
+  );
+  await Bun.write(
+    join(f.dir, "gpu-owner.json"),
+    JSON.stringify({
+      schema: 1,
+      attemptAt: 1,
+      devices: [{ id: 0, totalMiB: 8192, usedMiB: 3072, utilPct: 0 }],
+      processes: [],
+      samples: [],
+    }),
+  );
+  f.env.AGENT_RESOURCE_TEST_PROC_ROOT = procRoot;
+  f.env.AGENT_RESOURCE_TEST_PROC_READS = reads;
+  const bin = join(f.dir, "bin");
+  await mkdir(bin);
+  await Bun.write(
+    join(bin, "systemctl"),
+    `#!${process.execPath}\nprocess.exit(0);\n`,
+  );
+  await chmod(join(bin, "systemctl"), 0o755);
+  f.env.PATH = `${bin}:${process.env.PATH}`;
+  const pending = invoke(["--manifest", f.path, "--check-only"], f.env);
+  let waitingObserved = false;
+  for (let n = 0; n < 200; n++) {
+    if (
+      (await Bun.file(reads).exists()) &&
+      Number(await Bun.file(reads).text()) >= 2
+    ) {
+      waitingObserved = true;
+      break;
+    }
+    await Bun.sleep(10);
+  }
+  await rm(processDir, { recursive: true, force: true });
+  const result = await pending;
+  expect(waitingObserved).toBe(true);
+  expect(result.exit, result.stdout + result.stderr).toBe(0);
+  expect(result.stdout).toContain(`ADMIT job=${f.m.job_id} check-only`);
+});
+test("GPU VRAM admission wait expires with DENY 69 and elapsed seconds", async () => {
+  const f = await fixture(
+    manifest({
+      admission_wait_s: 1,
+      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 4 * 1024 ** 3 },
+    }),
+  );
+  const procRoot = join(f.dir, "fake-proc");
+  const pid = 987654398;
+  const processDir = join(procRoot, String(pid));
+  await mkdir(processDir, { recursive: true });
+  await holderIdentity(processDir, pid);
+  await Bun.write(
+    join(processDir, "cgroup"),
+    "0::/user.slice/agent-resource-holder.scope\n",
+  );
+  await Bun.write(
+    join(processDir, "environ"),
+    `AGENT_RESOURCE_ADMISSION_RECEIPT=${JSON.stringify({ reservation_id: "holder", device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 3 * 1024 ** 3 } })}\0`,
+  );
+  await Bun.write(
+    join(f.dir, "gpu-owner.json"),
+    JSON.stringify({
+      schema: 1,
+      attemptAt: 1,
+      devices: [{ id: 0, totalMiB: 8192, usedMiB: 3072, utilPct: 0 }],
+      processes: [],
+      samples: [],
+    }),
+  );
+  f.env.AGENT_RESOURCE_TEST_PROC_ROOT = procRoot;
+  const result = await invoke(["--manifest", f.path, "--check-only"], f.env);
+  expect(result.exit, result.stdout + result.stderr).toBe(69);
+  expect(result.stdout).toContain("GPU VRAM budget exceeded");
+  expect(result.stdout).toMatch(/waited=1(?:\.\d+)?s/u);
+});
+test("GPU VRAM refusal stays immediate when admission_wait_s is omitted", async () => {
+  const f = await fixture(
+    manifest({
+      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 4 * 1024 ** 3 },
+    }),
+  );
+  const { admission_wait_s: _wait, ...legacyManifest } = f.m;
+  await Bun.write(f.path, JSON.stringify(legacyManifest));
+  const procRoot = join(f.dir, "fake-proc");
+  const pid = 987654397;
+  const processDir = join(procRoot, String(pid));
+  const reads = join(f.dir, "proc-reads");
+  await mkdir(processDir, { recursive: true });
+  await holderIdentity(processDir, pid);
+  await Bun.write(
+    join(processDir, "cgroup"),
+    "0::/user.slice/agent-resource-holder.scope\n",
+  );
+  await Bun.write(
+    join(processDir, "environ"),
+    `AGENT_RESOURCE_ADMISSION_RECEIPT=${JSON.stringify({ reservation_id: "holder", device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 3 * 1024 ** 3 } })}\0`,
+  );
+  await Bun.write(
+    join(f.dir, "gpu-owner.json"),
+    JSON.stringify({
+      schema: 1,
+      attemptAt: 1,
+      devices: [{ id: 0, totalMiB: 8192, usedMiB: 3072, utilPct: 0 }],
+      processes: [],
+      samples: [],
+    }),
+  );
+  f.env.AGENT_RESOURCE_TEST_PROC_ROOT = procRoot;
+  f.env.AGENT_RESOURCE_TEST_PROC_READS = reads;
+  const result = await invoke(["--manifest", f.path, "--check-only"], f.env);
+  expect(result.exit, result.stdout + result.stderr).toBe(69);
+  expect(result.stdout).toContain("GPU VRAM budget exceeded");
+  expect(result.stdout).not.toContain("waited=");
+  expect(await Bun.file(reads).text()).toBe("1");
+});
+test("GPU request larger than the ceiling refuses immediately despite admission_wait_s", async () => {
+  const f = await fixture(
+    manifest({
+      admission_wait_s: 10,
+      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 6 * 1024 ** 3 },
+    }),
+  );
+  const reads = join(f.dir, "proc-reads");
+  await Bun.write(
+    join(f.dir, "gpu-owner.json"),
+    JSON.stringify({
+      schema: 1,
+      attemptAt: 1,
+      devices: [{ id: 0, totalMiB: 8192, usedMiB: 0, utilPct: 0 }],
+      processes: [],
+      samples: [],
+    }),
+  );
+  const procRoot = join(f.dir, "fake-proc");
+  f.env.AGENT_RESOURCE_TEST_PROC_ROOT = procRoot;
+  await mkdir(procRoot, { recursive: true });
+  f.env.AGENT_RESOURCE_TEST_PROC_READS = reads;
+  const result = await invoke(["--manifest", f.path, "--check-only"], f.env);
+  expect(result.exit, result.stdout + result.stderr).toBe(69);
+  expect(result.stdout).toContain("GPU VRAM budget exceeded");
+  expect(result.stdout).not.toContain("waited=");
+  expect(await Bun.file(reads).text()).toBe("1");
 });
 test("GPU VRAM guard sums admitted job peaks against device total and safety margin", async () => {
   const f = await fixture();

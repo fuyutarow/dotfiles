@@ -5,8 +5,10 @@ A thin Linux composition of flock and user systemd. The manifest schema lives in
 
 The required manifest is `schema`, `job_id`, `cpu_threads`, `processes`,
 `host_ram_peak_bytes`, `device`, `walltime_seconds` and `cleanup`. Narrative or
-compatibility fields (`run_class`, `memory_bound`, `scratch_bytes`, `child_fanout` and
-CPU-device GPU rationale fields) may be omitted; parsing supplies compatibility defaults.
+compatibility fields (`run_class`, `memory_bound`, `scratch_bytes`, `child_fanout`,
+`admission_wait_s` and CPU-device GPU rationale fields) may be omitted; parsing supplies
+compatibility defaults. `admission_wait_s` is a nonnegative integer number of seconds and defaults
+to 0, preserving immediate GPU capacity refusal.
 The host RAM hard limit remains required and must be positive.
 
 GPU admission uses the existing sum of declared VRAM reservations, less the configured safety
@@ -18,7 +20,10 @@ runner and is bounded only by each job's own scope limits.
 Live admission sums the other jobs' declared VRAM reservations for the requested device,
 excludes the current reservation, and keeps the configured safety margin and ccc partition.
 A job is admitted only when that sum plus its own declared peak fits the available declared
-VRAM budget. By default, the runner reads the
+VRAM budget. A positive `admission_wait_s` rechecks a request that fits the full available ceiling
+once other reservations clear, until it fits or the declared seconds expire. Expiry returns the
+existing GPU VRAM budget refusal with exit 69 and `waited=<seconds>`. A request larger than the
+full available ceiling refuses immediately because it cannot fit. By default, the runner reads the
 `resource-policy.toml` beside its source package (`tools/agent-resource-run/resource-policy.toml`
 in this checkout). `AGENT_RESOURCE_POLICY` selects a caller-supplied policy instead
 and must be an absolute path.

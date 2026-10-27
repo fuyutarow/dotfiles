@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.0 — 2026-10-27
+
+- Add bounded GPU VRAM admission waits
+
 ## 1.13.0 — 2026-10-25
 
 - Replace per-process decision snapshots with compact launch records

@@ -90,8 +90,8 @@ continuing with siblings. The no-`--yes` plan reports that nested store checks a
 traversal. A listed jj workspace must first be forgotten with `jj workspace forget`, or handled
 through the `workspaces` target.
 
-The blind tier selects tmpfs, clean, builds, rust, toolchains, workspaces, scratch, `rip-expire`,
-and system (sudo). Rip expiry removes entries in `RIP_GRAVEYARD` older than the configured
+The blind tier selects tmpfs, clean, `ccc-index-db`, builds, rust, toolchains, workspaces, scratch,
+`rip-expire`, and system (sudo). Rip expiry removes entries in `RIP_GRAVEYARD` older than the configured
 24-hour retention, or eligible entries in recorded oldest-first order to approach the soft
 10 GiB capacity target. Every rip reclaim path protects `graveyard_pressure_undo_minutes`
 (10 minutes), including age expiry when retention is configured shorter than that window.
@@ -104,6 +104,17 @@ the `RIP_GRAVEYARD` environment setting exported by the shell setup. Workspaces 
 scratch; both share one liveness snapshot per plan and recheck facts under the lock. Judgment
 and host require owner selection, purge must be named, and vhdx/audit are plan-only.
 `targets --json` lists their tiers and availability without scanning candidates.
+
+The `ccc-index-db` target walks `~/.cache/cocoindex-code/db` and acts only on ccc's named
+artifacts: `cocoindex.db`, `target_sqlite.db`, and `INDEXED_AT` (the list mirrors
+`tools/repo-retrieve/src/ccc-db-dir.ts`). It maps each artifact's directory back to the same
+relative project path under `$HOME`; a project is registered when that exact root has
+`.cocoindex_code/settings.yml`. A regular `.jj/repo` file marks a jj workspace pointer, which
+repo-retrieve resolves to its backing root rather than serving as an independent project. This
+artifact-level walk leaves nested workspace DBs independent of their registered parent. It keeps
+registered roots, recently touched artifacts, and artifacts with live readers; other artifacts
+are eligible after `collection_policy.class_rules.deregistered_index_db.ttl_days`, loaded through
+the shared policy loader.
 
 The `tmpfs` target reports inode and byte use for each detected tmpfs mount, then considers every
 top-level directory owned by the current user. The mkdtemp-style name remains a recognition signal,

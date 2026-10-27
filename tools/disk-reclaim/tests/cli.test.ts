@@ -95,9 +95,11 @@ test("registry exposes every production target with its contract tier", () => {
   expect(rows.map(({ name, tier }) => [name, tier])).toEqual([
     ["tmpfs", "blind"],
     ["clean", "blind"],
+    ["ccc-index-db", "blind"],
     ["builds", "blind"],
     ["rust", "blind"],
     ["toolchains", "blind"],
+    ["mise-configs", "blind"],
     ["workspaces", "blind"],
     ["scratch", "blind"],
     ["system", "sudo"],
@@ -113,9 +115,11 @@ test("every registered target survives plan and run smoke checks in a fixture HO
   const names = [
     "tmpfs",
     "clean",
+    "ccc-index-db",
     "builds",
     "rust",
     "toolchains",
+    "mise-configs",
     "workspaces",
     "scratch",
     "system",

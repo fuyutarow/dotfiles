@@ -21,6 +21,7 @@ import { vhdx } from "./vhdx.ts";
 import { audit } from "./audit.ts";
 import { tmpfs } from "./tmpfs.ts";
 import { miseConfigs } from "./mise-configs.ts";
+import { cccIndexDb } from "./ccc-index-db.ts";
 
 export type Context = {
   mode: "plan" | "run";
@@ -123,6 +124,13 @@ export const registry: Target[] = [
     description: {
       what: "regenerable package caches",
       why: "recover cache space",
+    },
+  },
+  {
+    ...cccIndexDb,
+    description: {
+      what: "deregistered or missing-project ccc index DB artifacts",
+      why: "expire unreachable workspace and throwaway indexes after the declared collection TTL",
     },
   },
   {

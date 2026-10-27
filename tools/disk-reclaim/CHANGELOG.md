@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.0 — 2026-10-27
+
+- Expire deregistered ccc index database artifacts after the collection TTL
+
 ## 1.9.2 — 2026-10-27
 
 - Wait for reclaim locks within the recovery deadline and yield expiry to capacity requests

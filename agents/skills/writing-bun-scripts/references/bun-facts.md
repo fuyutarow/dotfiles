@@ -211,3 +211,22 @@ Sharp edges (each is a rule):
   tsconfig, and wire `bunx typescript@<pin> tsc --noEmit` as a separate gate (never inline in
   the script's own execution path). Zero-config single files have no tsc story — the floor +
   tests + editor are the whole net. `[3p oneuptime 2026 + gh]`
+
+## §14 Workspace boundaries come from the dependency graph
+
+Package boundaries in a Bun workspace cannot be hidden by Bun's resolution; build them from
+the dependency graph and enforce them with a gate.
+
+1. Bun uses custom `package.json` `exports` conditions when passed through `--conditions` (or
+   `Bun.build({ conditions })`); they are not a boundary apps can rely on by default. Coralbase
+   made the rule a graph constraint: apps do not depend on core. [Bun module-resolution docs](https://bun.com/docs/runtime/module-resolution)
+2. Bun scans parent directories for `node_modules`, and a root-linked workspace dependency can
+   therefore resolve from nested paths in the repository. In coralbase, a TS2307 boundary test
+   passed falsely; splitting scripts and tools into separate workspaces fixed its scope.
+   [Bun module-resolution docs](https://bun.com/docs/runtime/module-resolution) · [Bun workspaces docs](https://bun.com/docs/pm/workspaces)
+3. Observed in coralbase, not confirmed in Bun docs: `imports` (`#…`) targets must stay inside
+   the owning package; a non-package directory such as `move/probes` cannot be a target. Bun's
+   [imports documentation](https://bun.com/docs/runtime/module-resolution) does not confirm this restriction.
+4. Observed in coralbase, not confirmed in Bun docs: Bun silently accepted workspace dependency
+   cycles, including `devDependencies`. Coralbase found three and added a gate over
+   `spec/package-graph.toml`.

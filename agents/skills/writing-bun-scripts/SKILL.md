@@ -15,7 +15,7 @@ description: >-
 
 # Writing Bun scripts — local automation in Bun TypeScript
 
-> **Version**: v2610.1.1 (2026-10-17) — package CLI version aliases, typed flag errors, and deterministic plain help.
+> **Version**: v2610.1.2 (2026-10-28) — Bun workspace package boundaries and graph gates.
 > Bun runtime facts remain pinned in `references/bun-facts.md`.
 > **Scope**: local automation scripts on this host — dotfiles scripts, skill `scripts/`, Claude
 > hooks, repo helpers. NORMATIVE, not descriptive: the 2026-07 bash→TS migration corpus (18
@@ -181,6 +181,6 @@ MUST NOT fire (route):
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/bun-facts.md` | DATED verified Bun facts: auto-install & the cwd trap, Bun.$ semantics + sharp edges, native spawn timeout API, bunx staleness, node-compat gaps, WSL quirks, --compile, perf reality, typecheck wiring, version pinning | before relying on any Bun feature not already encoded in the gates; any "does Bun support X?" |
+| `references/bun-facts.md` | DATED Bun facts and marked coralbase observations: auto-install & the cwd trap, Bun.$ semantics + sharp edges, native spawn timeout API, bunx staleness, node-compat gaps, WSL quirks, --compile, perf reality, typecheck wiring, version pinning, workspace boundaries | before relying on any Bun feature not already encoded in the gates; any "does Bun support X?" |
 | `scripts/script-check.ts` | the mechanical floor — run `script-check <file.ts …>`, never read into context | after every new/edited script; per-file in corpus audits |
 | `tests/forge-verification-ledger.md` | F3 artifact: harvest provenance, the corpus KEEP/REFACTOR baseline with receipts, fleet findings, proof-of-fire records | reforging; auditing this skill; starting the corpus refactor |

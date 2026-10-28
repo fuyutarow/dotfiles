@@ -47,8 +47,9 @@ function scan(
 export const createBuildsTarget = (
   root: () => string = () =>
     process.env.KONDO_DIR ?? process.env.HOME ?? homedir(),
-) =>
-  ({
+) => {
+  const completedPayloads = new WeakMap<Context, number>();
+  return {
     name: "builds",
     tier: "blind",
     fastFirst: true,
@@ -100,6 +101,16 @@ export const createBuildsTarget = (
       }
       return rows;
     },
-    act: deleteTree,
-  }) satisfies Target;
+    act: async (candidate, ctx) => {
+      const result = await deleteTree(candidate, ctx);
+      const completed = (completedPayloads.get(ctx) ?? 0) + 1;
+      completedPayloads.set(ctx, completed);
+      if ((await ctx.yieldForegroundLock?.(completed)) === true)
+        ctx.log(
+          `builds yielded after ${completed} payload actions for a foreground capacity waiter`,
+        );
+      return result;
+    },
+  } satisfies Target;
+};
 export const builds = createBuildsTarget();

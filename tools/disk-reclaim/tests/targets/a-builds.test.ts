@@ -1,7 +1,15 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
+import { run } from "../../src/engine.ts";
+import { createLivenessSnapshot } from "../../src/liveness/facts.ts";
 import { createBuildsTarget } from "../../src/targets/builds.ts";
 import { treeCandidate } from "../../src/targets/tree.ts";
 
@@ -28,6 +36,49 @@ const context = (repoRoots: string[], procDir: string) => ({
 });
 
 describe("builds target", () => {
+  test("completes every payload when no foreground waiter is registered", async () => {
+    const temp = tempRoot("reclaim-builds-run-");
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      rmSync(temp, { recursive: true, force: true });
+    });
+    const home = join(temp, "home");
+    const state = join(temp, "state");
+    const procDir = join(temp, "proc");
+    mkdirSync(home);
+    mkdirSync(procDir);
+    const payloads = [
+      join(home, "a", "node_modules"),
+      join(home, "b", "dist"),
+      join(home, "c", "build"),
+    ];
+    for (const [index, path] of payloads.entries()) {
+      mkdirSync(path, { recursive: true });
+      writeFileSync(join(path, "artifact"), "x".repeat(index + 1));
+    }
+    const logs: string[] = [];
+    const baseContext = context([], procDir);
+    const result = await run([createBuildsTarget(() => home)], {
+      context: {
+        ...baseContext,
+        log: (line) => {
+          logs.push(line);
+        },
+      },
+      headroom: { drives: [] },
+      state,
+      yes: true,
+      captureLiveness: (config) =>
+        createLivenessSnapshot(config, {
+          home,
+          procs: { procRoot: procDir },
+        }),
+    });
+    expect(result.exit).toBe(0);
+    expect(payloads.every((path) => !existsSync(path))).toBe(true);
+    expect(logs.some((line) => line.includes("builds yielded"))).toBe(false);
+  });
+
   test("preserves old kondo roots and age semantics while excluding Rust targets", async () => {
     const home = tempRoot("reclaim-builds-");
     using cleanup = new DisposableStack();

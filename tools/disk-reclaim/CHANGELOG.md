@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.4 — 2026-10-28
+
+- Yield builds runs to foreground reclaim waiters
+
 ## 1.10.3 — 2026-10-28
 
 - Match configured delete roots by whole path segment and allow launcher oracle subtrees

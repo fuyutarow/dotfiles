@@ -15,6 +15,7 @@ import type { Config, ReceiptV2 } from "./model.ts";
 import {
   errorMessage,
   now,
+  registerForegroundWaiter,
   stateDir,
   waitForLock,
   writeReceipt,
@@ -260,6 +261,8 @@ export async function deleteApproved(paths: string[], options: Options) {
   if (rows.some((row) => !row.allowed))
     return { exit: 2, rows, lines, refused: [] };
   const dir = options.state ?? stateDir();
+  const removeWaiter = await registerForegroundWaiter(dir);
+  await using _waiter = { [Symbol.asyncDispose]: removeWaiter };
   options.log?.("delete waits for the reclaim lock");
   const lock = await waitForLock("delete", dir, options.log);
   if (lock.release === null)

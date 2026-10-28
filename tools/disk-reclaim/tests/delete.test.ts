@@ -13,11 +13,14 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { loadConfig } from "../src/engine.ts";
+import { loadConfig, run } from "../src/engine.ts";
 import { deleteApproved } from "../src/delete.ts";
-import { readReceipts } from "../src/receipt.ts";
+import { hasForegroundWaiter, readReceipts } from "../src/receipt.ts";
 import { removeTree } from "../src/lib/remove-tree.ts";
+import { createLivenessSnapshot } from "../src/liveness/facts.ts";
 import { ReceiptV2 } from "../src/model.ts";
+import { createBuildsTarget } from "../src/targets/builds.ts";
+import type { Target } from "../src/targets/index.ts";
 import { procFixture } from "./fixtures/procs.ts";
 import { tempRoot } from "./fixtures/temp.ts";
 import { World } from "./jj/fixture.ts";
@@ -215,6 +218,134 @@ test("with --yes deletes under the lock and records freed bytes in a v2 receipt"
     ok: true,
   });
   expect(parsedReceipt.data.actions[0]?.bytes_freed).toBeGreaterThanOrEqual(0);
+});
+
+test("delete registers a foreground waiter and acquires the lock after builds yields", async () => {
+  const f = fixture();
+  const home = join(f.path, "build-home");
+  const scanCacheDir = join(f.path, "scan-cache");
+  mkdirSync(home);
+  mkdirSync(scanCacheDir);
+  const payloads = [
+    join(home, "a", "node_modules"),
+    join(home, "b", "dist"),
+    join(home, "c", "build"),
+  ];
+  for (const [index, path] of payloads.entries()) {
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, "artifact"), "x".repeat(index + 1));
+  }
+  const deleteTarget = join(f.path, "delete-target");
+  mkdirSync(deleteTarget);
+  writeFileSync(join(deleteTarget, "data"), "safe to remove");
+  const config = {
+    ...f.config,
+    repo_roots: [],
+    repos: [],
+    scratch_roots: [],
+    delete_roots: [f.path],
+    ignore_unreadable_procs: [],
+    protected: [],
+  };
+  const firstAct = Promise.withResolvers<void>();
+  const continueFirst = Promise.withResolvers<void>();
+  const acted: string[] = [];
+  const logs: string[] = [];
+  const deleteLogs: string[] = [];
+  let laterTargetStarted = false;
+  const baseTarget = createBuildsTarget(() => home);
+  const builds: Target = {
+    ...baseTarget,
+    act: async (candidate, context) => {
+      acted.push(candidate.path ?? "");
+      if (acted.length === 1) {
+        firstAct.resolve();
+        await continueFirst.promise;
+      }
+      return baseTarget.act(candidate, context);
+    },
+  };
+  const later: Target = {
+    name: "later",
+    tier: "blind",
+    available: (context) => {
+      if (context.mode === "run") laterTargetStarted = true;
+      return { available: true, skip_reason: null };
+    },
+    plan: () => [],
+    act: () => ({ ok: true, bytes_freed: 0, error: null }),
+  };
+  const background = run([builds, later], {
+    context: {
+      mode: "plan",
+      scanCacheDir,
+      procDir: f.procRoot,
+      config,
+      log: (line) => {
+        logs.push(line);
+      },
+    },
+    headroom: { drives: [] },
+    state: f.state,
+    yes: true,
+    captureLiveness: (currentConfig) =>
+      createLivenessSnapshot(currentConfig, {
+        home,
+        procs: { procRoot: f.procRoot },
+      }),
+  });
+  let foreground:
+    | Promise<Awaited<ReturnType<typeof deleteApproved>>>
+    | undefined;
+  await using _cleanup = {
+    [Symbol.asyncDispose]: async () => {
+      continueFirst.resolve();
+      if (foreground !== undefined) await foreground;
+      await background;
+    },
+  };
+  await firstAct.promise;
+  const deleteOperation = deleteApproved([deleteTarget], {
+    config,
+    yes: true,
+    state: f.state,
+    procRoot: f.procRoot,
+    graveyard: join(f.path, "graveyard"),
+    log: (line) => {
+      deleteLogs.push(line);
+    },
+  });
+  foreground = deleteOperation;
+  const waiterDeadline = performance.now() + 2_000;
+  while (
+    !(await hasForegroundWaiter(f.state)) &&
+    performance.now() < waiterDeadline
+  )
+    await Bun.sleep(5);
+  expect(await hasForegroundWaiter(f.state)).toBe(true);
+  continueFirst.resolve();
+  const [backgroundResult, deleteResult] = await Promise.all([
+    background,
+    deleteOperation,
+  ]);
+  expect(backgroundResult.exit).toBe(0);
+  expect(deleteResult.exit).toBe(0);
+  expect(existsSync(deleteTarget)).toBe(false);
+  expect(acted).toHaveLength(1);
+  expect(acted[0]).toBe(payloads[0]);
+  expect(payloads.slice(1).every((path) => existsSync(path))).toBe(true);
+  expect(laterTargetStarted).toBe(false);
+  expect(
+    logs.some((line) =>
+      line.includes(
+        "builds yielded after 1 payload actions for a foreground capacity waiter",
+      ),
+    ),
+  ).toBe(true);
+  expect(
+    deleteLogs.some((line) => line.includes("waits for the reclaim lock")),
+  ).toBe(true);
+  expect(await hasForegroundWaiter(f.state)).toBe(false);
 });
 
 test("removes arena-like read-only trees, files, non-searchable dirs, and symlinks without following them", async () => {

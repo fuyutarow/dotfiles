@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.4 — 2026-10-28
+
+- Ignore user ripgrep config for deterministic lexical routes while preserving rr-controlled hidden traversal
+
 ## 1.5.3 — 2026-10-26
 
 - Reject unknown index flags before planning or indexing

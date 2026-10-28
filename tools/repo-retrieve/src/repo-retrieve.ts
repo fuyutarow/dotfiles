@@ -573,7 +573,7 @@ function rgFlags(values: {
     );
   }
 
-  const flags: string[] = ["--color", "never"];
+  const flags: string[] = ["--color", "never", "--no-config"];
   if (values.ignoreCase === true) flags.push("--ignore-case");
   if (values.hidden === true) flags.push("--hidden");
   if (values.context !== undefined) {

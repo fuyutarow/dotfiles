@@ -1926,6 +1926,9 @@ describe("repo-retrieve route contract", () => {
 
     expect(result.code).toBe(0);
     expect(result.log).toContain("rg --fixed-strings");
+    expect(result.log).toContain(
+      "rg --fixed-strings --line-number --color never --no-config",
+    );
     expect(result.log).toContain("--glob *.ts");
     expect(result.log).toContain("-- TODO src");
     expect(result.stdout).toContain("RESULT: PASS route=literal engine=rg");
@@ -1940,8 +1943,64 @@ describe("repo-retrieve route contract", () => {
 
     expect(result.code).toBe(0);
     expect(result.log).toContain("rg --line-number");
+    expect(result.log).toContain("rg --line-number --color never --no-config");
     expect(result.log).not.toContain("--fixed-strings");
     expect(result.log).toContain("-- TODO|FIXME .");
+  });
+
+  test("literal ignores RIPGREP_CONFIG_PATH while --hidden stays opt-in", () => {
+    const project = registerProject();
+    const hiddenPath = ".rr1-hidden/only-match.txt";
+    const sentinel = "rr1-hidden-config-sentinel";
+    mkdirSync(join(project, ".rr1-hidden"));
+    writeFileSync(join(project, hiddenPath), `${sentinel}\n`);
+
+    const sandbox = tempDir("repo-retrieve-rg-config-");
+    const bin = join(sandbox, "bin");
+    mkdirSync(bin);
+    const rgPath = Bun.which("rg");
+    const gitPath = Bun.which("git");
+    expect(rgPath).not.toBeNull();
+    expect(gitPath).not.toBeNull();
+    if (rgPath === null || gitPath === null) return;
+    symlinkSync(rgPath, join(bin, "rg"));
+    symlinkSync(gitPath, join(bin, "git"));
+
+    const configPath = join(sandbox, "rg.conf");
+    writeFileSync(configPath, "--hidden\n");
+    const home = join(sandbox, "home");
+    const configHome = join(home, ".config");
+    const stateHome = join(home, "state");
+    const runtimeDir = join(home, "runtime");
+    mkdirSync(configHome, { recursive: true });
+    mkdirSync(stateHome);
+    mkdirSync(runtimeDir);
+    const childEnvironment = {
+      PATH: bin,
+      HOME: home,
+      XDG_CONFIG_HOME: configHome,
+      XDG_STATE_HOME: stateHome,
+      XDG_RUNTIME_DIR: runtimeDir,
+      RIPGREP_CONFIG_PATH: configPath,
+      COCOINDEX_CODE_DB_PATH_MAPPING: "",
+      REPO_RETRIEVE_AUTO_INDEX: "0",
+      REPO_RETRIEVE_INDEX_WORKER: "0",
+    };
+    const invoke = (args: string[]) =>
+      spawnSync(process.execPath, [ROUTER, ...args], {
+        cwd: project,
+        encoding: "utf8",
+        timeout: 10_000,
+        env: childEnvironment,
+      });
+
+    const withoutHidden = invoke(["literal", "--query", sentinel]);
+    expect(withoutHidden.status).toBe(1);
+    expect(withoutHidden.stdout).not.toContain(hiddenPath);
+
+    const withHidden = invoke(["literal", "--query", sentinel, "--hidden"]);
+    expect(withHidden.status).toBe(0);
+    expect(withHidden.stdout).toContain(hiddenPath);
   });
 
   test("regex -i passes case-insensitivity through to rg", () => {
@@ -1949,7 +2008,7 @@ describe("repo-retrieve route contract", () => {
 
     expect(result.code).toBe(0);
     expect(result.log).toContain(
-      "rg --line-number --color never --ignore-case",
+      "rg --line-number --color never --no-config --ignore-case",
     );
     expect(result.log).toContain("-- TODO|FIXME .");
   });
@@ -1995,6 +2054,7 @@ describe("repo-retrieve route contract", () => {
 
     expect(result.code).toBe(0);
     expect(result.log).toContain("rg --files");
+    expect(result.log).toContain("rg --files --color never --no-config");
     expect(result.log).toContain("--glob *.ts");
     expect(result.log).toContain("agents");
   });
@@ -2286,7 +2346,9 @@ describe("repo-retrieve route contract", () => {
     ]);
 
     expect(result.code).toBe(0);
-    expect(result.log).toContain("rg --files --color never --hidden cocoindex");
+    expect(result.log).toContain(
+      "rg --files --color never --no-config --hidden cocoindex",
+    );
   });
 
   test("short aliases collect repeatable queries, paths, and globs", () => {

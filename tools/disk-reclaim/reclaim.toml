@@ -2,7 +2,7 @@
 repo_roots = ["~/Workspace/*", "~/dotfiles"]
 repos = []
 scratch_roots = ["/tmp/claude-{uid}"]
-delete_roots = ["/tmp", "~/.cache"]
+delete_roots = ["/tmp", "~/.cache", "~/.local/state/agx/runs/*/launcher/*/oracle"]
 protected = [
   "~/.bun/install/global",
   "~/.bun/bin",

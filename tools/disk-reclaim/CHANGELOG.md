@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.3 — 2026-10-28
+
+- Match configured delete roots by whole path segment and allow launcher oracle subtrees
+
 ## 1.10.2 — 2026-10-27
 
 - Fix fractional graveyard age cutoffs in milliseconds

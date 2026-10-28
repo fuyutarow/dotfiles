@@ -83,6 +83,82 @@ test("refuses relative, root, HOME, repo root, outside-root, and symlink escape 
   expect(existsSync(join(repo, "data"))).toBe(true);
 });
 
+test("configured delete-root globs match whole segments and allow descendants", async () => {
+  const f = fixture();
+  const runs = join(f.path, "runs");
+  const oracle = join(runs, "a", "launcher", "b", "oracle");
+  mkdirSync(oracle, { recursive: true });
+  writeFileSync(join(oracle, "snapshot.bin"), "temporary fixture");
+  for (const path of [
+    join(runs, "a", "oracle"),
+    join(runs, "a"),
+    join(runs, "a", "launcher"),
+    join(runs, "a", "launcher", "b"),
+    join(runs, "a", "x", "launcher", "b", "oracle"),
+    join(runs, "a", "launcher", "b", "oraclex"),
+  ])
+    mkdirSync(path, { recursive: true });
+
+  const config = {
+    ...f.config,
+    delete_roots: [join(runs, "*", "launcher", "*", "oracle")],
+  };
+  for (const path of [oracle, join(oracle, "snapshot.bin")]) {
+    const result = await deleteApproved([path], {
+      config,
+      yes: false,
+      state: f.state,
+      procRoot: f.procRoot,
+    });
+    expect(
+      result.rows[0]?.checks.find((check) => check.name === "configured-root"),
+    ).toMatchObject({ ok: true });
+  }
+  for (const path of [
+    join(runs, "a", "oracle"),
+    join(runs, "a"),
+    join(runs, "a", "launcher"),
+    join(runs, "a", "launcher", "b"),
+    join(runs, "a", "x", "launcher", "b", "oracle"),
+    join(runs, "a", "launcher", "b", "oraclex"),
+  ]) {
+    const result = await deleteApproved([path], {
+      config,
+      yes: false,
+      state: f.state,
+      procRoot: f.procRoot,
+    });
+    expect(
+      result.rows[0]?.checks.find((check) => check.name === "configured-root"),
+    ).toMatchObject({ ok: false });
+  }
+  expect(existsSync(join(oracle, "snapshot.bin"))).toBe(true);
+});
+
+test("single-star delete roots still match descendants but not the wildcard parent", async () => {
+  const f = fixture();
+  const workspace = join(f.path, "Workspace");
+  const nested = join(workspace, "r", "x");
+  mkdirSync(nested, { recursive: true });
+  writeFileSync(join(nested, "data"), "temporary fixture");
+  const config = { ...f.config, delete_roots: [join(workspace, "*")] };
+
+  for (const [path, allowed] of [
+    [nested, true],
+    [workspace, false],
+  ] as const) {
+    const result = await deleteApproved([path], {
+      config,
+      yes: false,
+      state: f.state,
+      procRoot: f.procRoot,
+    });
+    expect(
+      result.rows[0]?.checks.find((check) => check.name === "configured-root"),
+    ).toMatchObject({ ok: allowed });
+  }
+});
+
 test("without --yes prints an allowed plan and preserves its target", async () => {
   const f = fixture();
   const target = join(f.path, "candidate");

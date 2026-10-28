@@ -85,13 +85,20 @@ const bytesAt = (path: string): number => {
 };
 function configuredRoot(path: string, roots: string[]): boolean {
   return roots.some((pattern) => {
-    const star = pattern.indexOf("*");
-    if (star < 0) return beneath(resolve(pattern), path);
-    const prefix = resolve(pattern.slice(0, star));
-    const tail = pattern.slice(star + 1).replaceAll("*", "");
-    if (!beneath(prefix, path)) return false;
-    const candidate = relative(prefix, path);
-    return candidate !== "" && (tail.length === 0 || path.includes(tail));
+    const root = resolve(pattern);
+    if (!pattern.includes("*")) return beneath(root, path);
+
+    const patternSegments = root.split(sep).filter((segment) => segment !== "");
+    const pathSegments = resolve(path)
+      .split(sep)
+      .filter((segment) => segment !== "");
+    if (pathSegments.length < patternSegments.length) return false;
+
+    return patternSegments.every((segment, index) => {
+      const candidate = pathSegments[index];
+      if (candidate === undefined) return false;
+      return segment === "*" ? candidate.length > 0 : segment === candidate;
+    });
   });
 }
 function symlinkPath(path: string): string | null {

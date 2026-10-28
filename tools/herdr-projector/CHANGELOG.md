@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.20 — 2026-10-28
+
+- Project running agx workers per matched fleet session
+
 ## 0.1.19 — 2026-10-26
 
 - Prefer the fleet name over Codex's native thread title in pane projection

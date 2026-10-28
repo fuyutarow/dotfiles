@@ -12,8 +12,10 @@ import {
 import { jsonOf } from "../../shared/src/zod.ts";
 import { readCodexNativeTitle } from "../../shared/src/codex-native-title.ts";
 import {
+  AGX_WORKER_TIMEOUT_MS,
   nativeTitleCacheInputs,
   projectAgents,
+  readAgxWorkers,
 } from "../src/herdr-projector.ts";
 import { AgentSchema } from "../src/herdr-projector.ts";
 import ownerList from "./owner-list-oct21.json" with { type: "json" };
@@ -254,6 +256,133 @@ test("missing session clears stale identity tokens and explains the missing file
   expect(calls[1]).toContain("--clear-token");
   expect(calls[1]).not.toContain("rc=rc?");
   expect(calls[1]).toContain("fleet_session_id=");
+});
+
+test("reads fake agx once and projects only running workers for each matched session", async () => {
+  expect(AGX_WORKER_TIMEOUT_MS).toBe(15_000);
+  const calls: string[][] = [];
+  const commandCalls: {
+    command: string;
+    args: string[];
+    timeout: number | undefined;
+  }[] = [];
+  const workers = await readAgxWorkers((command, args, timeout) => {
+    commandCalls.push({ command, args, timeout });
+    return Promise.resolve(
+      JSON.stringify([
+        {
+          state: "running",
+          dispatcher_session: "sid-1",
+          id: "w1",
+          ticket: "a",
+        },
+        {
+          state: "running",
+          dispatcher_session: "sid-1",
+          id: "w2",
+          ticket: "b",
+        },
+        {
+          state: "running",
+          dispatcher_session: "sid-other",
+          id: "w3",
+          ticket: "c",
+        },
+        {
+          state: "finished",
+          dispatcher_session: "sid-1",
+          id: "w4",
+          ticket: "d",
+        },
+      ]),
+    );
+  });
+  const sessions = ["sid-1", "sid-2"].map((id) =>
+    FleetSessionSchema.safeParse(
+      session({ session_id: id, vendor: id === "sid-1" ? "claude" : "codex" }),
+    ),
+  );
+  expect(sessions.every((parsed) => parsed.success)).toBe(true);
+  if (sessions[0]?.success !== true || sessions[1]?.success !== true) return;
+  await projectAgents(
+    [
+      {
+        agent: "claude",
+        pane_id: "pane-1",
+        tab_id: "tab-1",
+        agent_session: { value: "sid-1" },
+      },
+      {
+        agent: "codex",
+        pane_id: "pane-2",
+        tab_id: "tab-2",
+        agent_session: { value: "sid-2" },
+      },
+      { agent: "claude", pane_id: "pane-3", tab_id: "tab-3" },
+    ],
+    new Map([
+      ["sid-1", sessions[0].data],
+      ["sid-2", sessions[1].data],
+    ]),
+    (args) => Promise.resolve(calls.push(args)).then(() => true),
+    new Map(),
+    new Map(),
+    new Map(),
+    workers,
+  );
+  expect(commandCalls).toEqual([
+    {
+      command: "agx",
+      args: ["worker", "ls", "--json", "--running"],
+      timeout: AGX_WORKER_TIMEOUT_MS,
+    },
+  ]);
+  const reportFor = (pane: string) =>
+    calls.find((args) => args[0] === "pane" && args[2] === pane) ?? [];
+  expect(reportFor("pane-1")).toContain("workers=w:2");
+  expect(reportFor("pane-2")).toContain("--clear-token");
+  expect(reportFor("pane-2")).toContain("workers");
+  expect(reportFor("pane-3")).toContain("--clear-token");
+  expect(reportFor("pane-3")).toContain("workers");
+  expect(calls[0]).toEqual(["tab", "rename", "tab-1", "project-agt_abcd"]);
+});
+
+test.each([
+  ["missing agx", undefined],
+  ["nonzero agx exit", undefined],
+  ["agx timeout", undefined],
+  ["invalid JSON", "not JSON"],
+] as const)("reports unknown workers when %s", async (_reason, output) => {
+  const calls: string[][] = [];
+  let reads = 0;
+  const workers = await readAgxWorkers((command, args, timeout) => {
+    reads++;
+    expect(command).toBe("agx");
+    expect(args).toEqual(["worker", "ls", "--json", "--running"]);
+    expect(timeout).toBe(AGX_WORKER_TIMEOUT_MS);
+    return Promise.resolve(output);
+  });
+  const parsed = FleetSessionSchema.safeParse(session());
+  expect(parsed.success).toBe(true);
+  if (!parsed.success) return;
+  await projectAgents(
+    [
+      {
+        agent: "claude",
+        pane_id: "pane-1",
+        tab_id: "tab-1",
+        agent_session: { value: "sid-1" },
+      },
+    ],
+    new Map([["sid-1", parsed.data]]),
+    (args) => Promise.resolve(calls.push(args)).then(() => true),
+    new Map(),
+    new Map(),
+    new Map(),
+    workers,
+  );
+  expect(reads).toBe(1);
+  expect(calls[1]).toContain("workers=w:?");
 });
 
 const footerThread = "01a15424-5f6d-7ce0-9244-eb632a37f579";

@@ -43,6 +43,23 @@ export const AgentSchema = z.object({
 const ListSchema = z.object({
   result: z.object({ agents: z.array(AgentSchema) }),
 });
+const AgxWorkerRowsSchema = z.array(
+  z.object({
+    state: z.string(),
+    dispatcher_session: z.string().nullish(),
+  }),
+);
+// Real agx took 3.42 s at load 9 (2026-10-28); 15 s fits the 60 s projector period.
+export const AGX_WORKER_TIMEOUT_MS = 15_000;
+const HERDR_TIMEOUT_MS = 2500;
+const AGX_WORKER_ARGS = ["worker", "ls", "--json", "--running"];
+type AgxWorkerRow = z.output<typeof AgxWorkerRowsSchema>[number];
+export type AgxWorkerSnapshot =
+  | { available: true; rows: AgxWorkerRow[] }
+  | { available: false };
+const UNAVAILABLE_AGX_WORKERS = {
+  available: false,
+} satisfies AgxWorkerSnapshot;
 type Agent = z.output<typeof AgentSchema>;
 type PaneTitleBinding = { sessionId: string; title: CodexNativeTitleRead };
 
@@ -115,6 +132,7 @@ const RegisteredCodexSchema = z.object({
 async function run(
   command: string,
   args: string[],
+  timeoutMs = HERDR_TIMEOUT_MS,
 ): Promise<string | undefined> {
   const bin = Bun.which(command);
   if (bin === null) return undefined;
@@ -122,7 +140,7 @@ async function run(
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",
-    timeout: 2500,
+    timeout: timeoutMs,
     killSignal: "SIGKILL",
   });
   const [output, code] = await Promise.all([
@@ -156,6 +174,28 @@ async function boundedOutput(
     }
   });
   return result.ok ? result.value : undefined;
+}
+
+export async function readAgxWorkers(
+  command: typeof run = run,
+): Promise<AgxWorkerSnapshot> {
+  const output = await command("agx", AGX_WORKER_ARGS, AGX_WORKER_TIMEOUT_MS);
+  if (output === undefined) return { available: false };
+  const parsed = jsonOf(AgxWorkerRowsSchema).safeParse(output);
+  return parsed.success
+    ? { available: true, rows: parsed.data }
+    : { available: false };
+}
+
+function countRunningWorkers(
+  workers: AgxWorkerSnapshot,
+  sessionId: string,
+): number | undefined {
+  if (!workers.available) return undefined;
+  return workers.rows.filter(
+    (worker) =>
+      worker.state === "running" && worker.dispatcher_session === sessionId,
+  ).length;
 }
 
 /** Only the complete penultimate native status row, followed by native shortcuts.
@@ -683,7 +723,9 @@ export async function projectAgents(
   titles: ReadonlyMap<string, PaneTitleBinding> = new Map(),
   remoteControl: ReadonlyMap<string, string> = new Map(),
   reasons: ReadonlyMap<string, string> = new Map(),
+  workers?: AgxWorkerSnapshot,
 ): Promise<number> {
+  const workerSnapshot = workers ?? UNAVAILABLE_AGX_WORKERS;
   let updated = 0;
   for (const agent of agents) {
     if (agent.pane_id === undefined || agent.tab_id === undefined) continue;
@@ -750,6 +792,11 @@ export async function projectAgents(
       isAgent && !notApplicable && rc !== "rc:on" && rc !== "rc:off";
     const displayRc =
       unknownRc && (model !== "" || effort !== "") ? "rc?" : marker;
+    const workerCount =
+      matchedSessionId === undefined
+        ? undefined
+        : countRunningWorkers(workerSnapshot, matchedSessionId);
+    const workerToken = workerCount === undefined ? "w:?" : `w:${workerCount}`;
 
     const renamed = await apply(["tab", "rename", agent.tab_id, name]);
     const reported = await apply([
@@ -771,6 +818,9 @@ export async function projectAgents(
       `rc_reason=${unknownRc || notApplicable ? (rc ?? "remote-control observation unavailable") : ""}`,
       "--token",
       `fleet_session_id=${matchedSessionId ?? ""}`,
+      ...(matchedSessionId === undefined || workerToken === "w:0"
+        ? ["--clear-token", "workers"]
+        : ["--token", `workers=${workerToken}`]),
     ]);
     if (renamed && reported) updated++;
   }
@@ -798,6 +848,7 @@ export function nativeTitleCacheInputs(
 }
 
 async function project(dryRun = false): Promise<number> {
+  const workers = await readAgxWorkers();
   const agents = await agentList();
   if (agents === undefined) {
     process.stderr.write(
@@ -907,6 +958,14 @@ async function project(dryRun = false): Promise<number> {
           titles: nativeTitleCacheInputs(titleBindings),
           remoteControl: [...remoteControl],
           reasons: [...reasons],
+          workers: {
+            available: workers.available,
+            counts: workers.available
+              ? sessionIds
+                  .toSorted()
+                  .map((id) => [id, countRunningWorkers(workers, id)])
+              : [],
+          },
         }),
       )
       .digest("hex");
@@ -926,6 +985,7 @@ async function project(dryRun = false): Promise<number> {
     titleBindings,
     remoteControl,
     reasons,
+    workers,
   );
   // A failed mutation must be retried, and cache trouble must not block projection.
   if (!dryRun && applied && cacheDir !== undefined && cachePath !== undefined) {

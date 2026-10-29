@@ -137,10 +137,25 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
   // systemd removes its RuntimeDirectory even after a killed collector.
   const lock = process.env.STATUSLINE_SAMPLER_LOCK_DIR ?? `${path}.lock`;
   await mkdir(dirname(lock), { recursive: true });
-  const acquired = await mkdir(lock).then(
+  let acquired = await mkdir(lock).then(
     () => true,
     () => false,
   );
+  if (!acquired) {
+    const info = await stat(lock).catch(() => null);
+    if (
+      info !== null &&
+      Temporal.Now.instant().epochMilliseconds - info.mtimeMs > 60_000
+    ) {
+      // launchd runs only one instance of this job. A manual run during a stale
+      // lock can overlap a takeover; owner-state writes use atomic renames.
+      await rm(lock, { recursive: true, force: true });
+      acquired = await mkdir(lock).then(
+        () => true,
+        () => false,
+      );
+    }
+  }
   if (!acquired) return;
   await using _lockCleanup = {
     [Symbol.asyncDispose]: async () => {

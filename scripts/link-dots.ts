@@ -113,6 +113,7 @@ const PRUNE_DIRS = [
   ".claude/agents",
   ".local/bin",
   ".config/systemd/user",
+  "Library/LaunchAgents",
   ".codex",
   ".config",
   ".ssh/config.d",
@@ -959,6 +960,38 @@ export async function deployGpuSampler(
   return undefined;
 }
 
+async function deployMacStatusline(
+  ctx: Ctx,
+  probe: (args: string[]) => Promise<{ code: number; out: string }>,
+): Promise<Error | undefined> {
+  const plist = join(ctx.home, "Library/LaunchAgents/statusline-sampler.plist");
+  const target = await realpath(plist).catch(() => null);
+  const source = await realpath(
+    join(ctx.dotfiles, "launchd/statusline-sampler.plist"),
+  ).catch(() => null);
+  if (source === null || target !== source)
+    return new Error(
+      "statusline-sampler.plist is not the declared link; repair: mise run link:dots",
+    );
+  const domain = `gui/${process.getuid?.()}`;
+  const label = `${domain}/statusline-sampler`;
+  const loaded = await probe(["print", label]);
+  if (loaded.code === 0) {
+    const stopped = await probe(["bootout", label]);
+    if (stopped.code !== 0)
+      return new Error(
+        `launchctl bootout failed: ${stopped.out}; repair: mise run link:dots`,
+      );
+  }
+  const result = await probe(["bootstrap", domain, plist]);
+  if (result.code !== 0)
+    return new Error(
+      `launchctl bootstrap failed: ${result.out}; repair: mise run link:dots`,
+    );
+  say("loaded: statusline-sampler launchd agent (every 5s)");
+  return undefined;
+}
+
 /** Enable registry-linked triggers; activation belongs to deployDeclaredTriggers. */
 export async function deployStatuslineOwners(
   ctx: Ctx,
@@ -976,8 +1009,22 @@ export async function deployStatuslineOwners(
     return { code, out: `${out}${err}`.trim() };
   },
   available?: boolean,
+  launchProbe = async (args: string[]) => {
+    const child = Bun.spawn(["launchctl", ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 10_000,
+    });
+    const [out, err, code] = await Promise.all([
+      child.stdout.text(),
+      child.stderr.text(),
+      child.exited,
+    ]);
+    return { code, out: `${out}${err}`.trim() };
+  },
 ): Promise<Error | undefined> {
-  if (ctx.os === "mac" || ctx.mode === "check") return undefined;
+  if (ctx.mode === "check") return undefined;
+  if (ctx.os === "mac") return deployMacStatusline(ctx, launchProbe);
   const systemd =
     available ??
     (Bun.which("systemctl") !== null &&

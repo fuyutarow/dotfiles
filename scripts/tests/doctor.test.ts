@@ -172,6 +172,29 @@ const probeResult = {
   missing: false,
 };
 
+test("mac statusline owner reports loaded agent and failed or unavailable last exit", async () => {
+  const ctx = { ...agxCtx, isMac: true };
+  const check = CHECKS.find((entry) => entry.name === "statusline-owners");
+  expect(check?.applies(ctx)).toBeNull();
+  expect(check?.applies(agxCtx)).toBeNull();
+  const ok = await checkStatuslineOwners(ctx, (cmd) => {
+    expect(cmd[0]).toBe("launchctl");
+    return Promise.resolve({ ...probeResult, out: "last exit code = 0\n" });
+  });
+  expect(ok.verdict).toBe("PASS");
+  for (const result of [
+    { ...probeResult, out: "last exit code = 1\n" },
+    { ...probeResult, code: 1, err: "not found" },
+    { ...probeResult, out: "no exit status" },
+  ]) {
+    const failed = await checkStatuslineOwners(ctx, () =>
+      Promise.resolve(result),
+    );
+    expect(failed.verdict).toBe("FAIL");
+    expect(failed.fix).toBe("mise run link:dots");
+  }
+});
+
 test("owner health checks require the refresh timer and never probe the retired path", async () => {
   const calls: string[][] = [];
   const result = await checkStatuslineOwners(agxCtx, (cmd) => {

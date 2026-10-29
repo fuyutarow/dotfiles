@@ -75,6 +75,68 @@ async function ownerFixture(): Promise<Ctx> {
   return ctx;
 }
 
+test("mac sampler agent is linked, bootstrapped idempotently, and check is read-only", async () => {
+  const ctx = { ...fixture("safe"), dotfiles: REPO, os: "mac" as const };
+  const dir = join(ctx.home, "Library/LaunchAgents");
+  mkdirSync(dir, { recursive: true });
+  const plist = join(dir, "statusline-sampler.plist");
+  symlinkSync(join(REPO, "launchd/statusline-sampler.plist"), plist);
+  const calls: string[][] = [];
+  const launch = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve({ code: 0, out: "" });
+  };
+  expect(
+    await deployStatuslineOwners(ctx, undefined, undefined, launch),
+  ).toBeUndefined();
+  expect(calls.map((args) => args[0])).toEqual([
+    "print",
+    "bootout",
+    "bootstrap",
+  ]);
+  expect(calls[2]?.[2]).toBe(plist);
+  calls.length = 0;
+  expect(
+    await deployStatuslineOwners(
+      { ...ctx, mode: "check" },
+      undefined,
+      undefined,
+      launch,
+    ),
+  ).toBeUndefined();
+  expect(calls).toEqual([]);
+  const declaration = readFileSync(
+    join(REPO, "launchd/statusline-sampler.plist"),
+    "utf8",
+  );
+  expect(declaration).toContain("<integer>5</integer>");
+  expect(declaration).toContain("STATUSLINE_SAMPLER_LOCK_DIR");
+  expect(declaration).toContain("/opt/homebrew/bin");
+  expect(declaration).toContain("tools/statusline/src/sampler.ts");
+  expect(declaration).not.toContain("linuxbrew");
+});
+
+test("mac sampler reports bootstrap failure", async () => {
+  const ctx = { ...fixture("safe"), dotfiles: REPO, os: "mac" as const };
+  const dir = join(ctx.home, "Library/LaunchAgents");
+  mkdirSync(dir, { recursive: true });
+  symlinkSync(
+    join(REPO, "launchd/statusline-sampler.plist"),
+    join(dir, "statusline-sampler.plist"),
+  );
+  const error = await deployStatuslineOwners(
+    ctx,
+    undefined,
+    undefined,
+    (args) =>
+      Promise.resolve({
+        code: 1,
+        out: args[0] === "bootstrap" ? "denied" : "not loaded",
+      }),
+  );
+  expect(error?.message).toContain("denied");
+});
+
 test("doctor refresh deployment enables its timer without starting a collector", async () => {
   const calls: string[][] = [];
   const result = await deployStatuslineOwners(

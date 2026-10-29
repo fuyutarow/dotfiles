@@ -1068,6 +1068,32 @@ export async function checkStatuslineOwners(
   _ctx: Ctx,
   probe: typeof run = run,
 ): Promise<Finding> {
+  if (_ctx.isMac) {
+    const result = await probe(
+      ["launchctl", "print", `gui/${process.getuid?.()}/statusline-sampler`],
+      { ms: 10_000 },
+    );
+    const last = result.out.match(/last exit code = (\S+)/u)?.[1];
+    const detail = [result.err.trim(), result.out.trim()]
+      .filter(Boolean)
+      .join("; ");
+    if (
+      result.missing ||
+      result.timedOut ||
+      result.code !== 0 ||
+      last === undefined ||
+      last !== "0"
+    )
+      return fail(
+        "statusline-owners",
+        `statusline-sampler agent not loaded or last exit unhealthy: ${detail === "" ? "no result" : detail}`,
+        "mise run link:dots",
+      );
+    return pass(
+      "statusline-owners",
+      `statusline-sampler agent loaded; last exit ${last}`,
+    );
+  }
   const results = await Promise.all(
     ["statusline-sampler.timer", "agx-doctor.timer"].map(async (unit) => {
       const active = await probe(["systemctl", "--user", "is-active", unit], {
@@ -2162,7 +2188,7 @@ export const CHECKS: Check[] = [
   {
     name: "statusline-owners",
     run: checkStatuslineOwners,
-    applies: (c) => (c.isMac ? "Linux only" : null),
+    applies: always,
   },
   {
     name: "recover-health",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.5 — 2026-10-29
+
+- Recover stale sampler locks after interrupted runs on macOS.
+
 ## 0.22.4 — 2026-10-29
 
 - Show late worker counts only from recorded metadata on currently running runs.

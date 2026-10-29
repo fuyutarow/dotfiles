@@ -184,6 +184,11 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   // in ~/.config/systemd/user/ (systemd treats any symlink in the unit path as an enablement link),
   // so a disable leaves the unit `not-found`, not `disabled`. Re-run `mise run link:dots` after one.
   //
+  [
+    "mac",
+    "launchd/statusline-sampler.plist",
+    "Library/LaunchAgents/statusline-sampler.plist",
+  ],
   ["not-mac", "systemd/ws-gc.service", ".config/systemd/user/ws-gc.service"],
   ["not-mac", "systemd/ws-gc.timer", ".config/systemd/user/ws-gc.timer"],
   [
@@ -889,6 +894,12 @@ export function surfaces(): Surface[] {
         : {},
       src === "mise/dotfiles.toml"
         ? { verify: "mise run test:mise-scope" }
+        : {},
+      src === "launchd/statusline-sampler.plist"
+        ? {
+            consumer: "launchd user agent",
+            verify: `${DOCTOR} (links, statusline-owners)`,
+          }
         : {},
     ),
   );

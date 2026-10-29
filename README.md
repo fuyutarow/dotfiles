@@ -212,6 +212,7 @@ result. See [GPU sampler operations](tools/shared/GPU-SAMPLER.md) for freshness 
 
 `statusline-sampler.timer` refreshes statusline CPU, memory, storage, jobs, rates,
 session discovery and repository state five seconds after each completed sample.
+On macOS, `mise run link:dots` loads a fixed-rate five-second launchd agent (which does not overlap its own runs), and `mise run doctor` checks its last exit.
 Rendering only reads files and the selected session PIDs under `/proc`.
 `agx-doctor.path` refreshes dotfiles diagnostics when agx observations change. `mise run link:dots`
 enables the local systemd consumers, and `mise run doctor` checks their activity and latest results.

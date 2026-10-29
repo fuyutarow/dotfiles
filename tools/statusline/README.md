@@ -23,6 +23,11 @@ bun test tools/statusline/tests
 
 ## Unavailable values and Stop snapshots
 
+Session discovery uses `/proc` on Linux and `ps` plus `lsof` on macOS. The
+sampler records a `sessions` field with a null value and an error explaining a
+discovery failure; an empty array means discovery succeeded with no sessions.
+The macOS source does not currently validate process generations during rendering.
+
 Unavailable fields use the shared `Unavailable` type, with a required reason. Its only text
 renderer emits `n/a (<why>)`; the ANSI layer styles that text. Snapshot caches containing
 legacy bare `n/a` are rejected until the sampler replaces them.

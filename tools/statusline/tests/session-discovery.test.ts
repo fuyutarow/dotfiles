@@ -13,8 +13,72 @@ import { join } from "node:path";
 import {
   AgentSessionSchema,
   discoverSessions,
+  darwinProcessSource,
   payloadForSession,
 } from "../src/session-discovery.ts";
+
+test("Darwin source discovers live Claude and Codex using injected commands", async () => {
+  const { root, home, cwd } = await fixture();
+  const sessionsDir = join(home, ".claude/sessions");
+  const project = join(home, ".claude/projects", cwd.replaceAll("/", "-"));
+  await mkdir(sessionsDir, { recursive: true });
+  await mkdir(project, { recursive: true });
+  const socket = join(root, "socket");
+  await writeFile(socket, "socket");
+  await writeFile(
+    join(sessionsDir, "101.json"),
+    JSON.stringify({
+      sessionId: "claude-a",
+      cwd,
+      startedAt: 1792200000000,
+      messagingSocketPath: socket,
+    }),
+  );
+  await writeFile(join(project, "claude-a.jsonl"), "{}\n");
+  const rollout = join(root, "rollout-test.jsonl");
+  await writeFile(
+    rollout,
+    JSON.stringify({
+      type: "session_meta",
+      payload: { id: "codex-b", cwd, timestamp: "2026-10-17T10:00:00Z" },
+    }) + "\n",
+  );
+  const source = darwinProcessSource((args) => {
+    if (args[0] === "ps")
+      return Promise.resolve({
+        output:
+          " 101 /usr/bin/claude\n 102 /usr/bin/codex\n 103 /bin/sh -c codex\n",
+      });
+    if (args.includes("cwd"))
+      return Promise.resolve({ output: `p${args[3]}\nfcwd\nn${cwd}\n` });
+    return Promise.resolve({ output: `p102\nf7\nn${rollout}\n` });
+  });
+  const found = await discoverSessions(cwd, false, fs, source);
+  expect(found.map((row) => row.session_id).toSorted()).toEqual([
+    "claude-a",
+    "codex-b",
+  ]);
+  expect(found.map((row) => row.pid).toSorted((a, b) => a - b)).toEqual([
+    101, 102,
+  ]);
+  expect(
+    await discoverSessions(cwd, false, fs, {
+      rows: () => Promise.resolve([]),
+      files: () => Promise.resolve([]),
+    }),
+  ).toEqual([]);
+  let reason: string | undefined;
+  await discoverSessions(
+    cwd,
+    false,
+    fs,
+    darwinProcessSource(() => Promise.resolve({ error: "ps unavailable" })),
+    (error) => {
+      reason = error;
+    },
+  );
+  expect(reason).toBe("ps unavailable");
+});
 import { decodedJson } from "./decode.ts";
 import { z } from "../src/zod.ts";
 import { ESC } from "../src/ansi.ts";

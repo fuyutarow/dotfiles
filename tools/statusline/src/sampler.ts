@@ -210,9 +210,33 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
     };
     // Explicit payloads are scoped collector fixtures. Only the timer's no-argument
     // sample discovers the host; a fixture must not scan unrelated live rollouts.
-    const sessions =
-      payloads === undefined ? await discoverSessions(process.cwd(), true) : [];
-    persist("sessions", sessions);
+    let sourceError: string | undefined;
+    const discovery = await (
+      payloads === undefined
+        ? discoverSessions(
+            process.cwd(),
+            true,
+            undefined,
+            undefined,
+            (reason) => {
+              sourceError = reason;
+            },
+          )
+        : Promise.resolve([])
+    ).then(
+      (value) => ({ value, error: undefined }),
+      (error: unknown) => ({ value: [], error: String(error) }),
+    );
+    const sessions = discovery.value;
+    const error = discovery.error ?? sourceError;
+    if (error === undefined) persist("sessions", sessions);
+    else {
+      next.fields.sessions = {
+        at: Temporal.Now.instant().epochMilliseconds,
+        value: null,
+        error: `session discovery failed: ${error}`,
+      };
+    }
     const home = process.env.HOME ?? "";
     const roots = new Set<string>();
     const configuredRepository = process.env.STATUSLINE_REPOSITORY_ROOT;
@@ -235,9 +259,7 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
     // Health refresh has one caller under this lock and the systemd service's singleton.
     await refreshRecoverHealth();
     const nameIds = new Set([
-      ...sessions
-        .filter((session) => session.vendor === "claude")
-        .map((session) => session.session_id),
+      ...sessions.map((session) => session.session_id),
       ...(payloads ?? []).flatMap((payload) =>
         payload.sessionId === undefined ? [] : [payload.sessionId],
       ),

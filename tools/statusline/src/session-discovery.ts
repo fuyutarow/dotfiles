@@ -70,7 +70,11 @@ export async function sessionProcessMatches(session: {
   pid: number;
   process_generation?: string | undefined;
 }): Promise<boolean> {
-  if (process.platform !== "linux") return true;
+  if (
+    process.platform !== "linux" &&
+    process.env.STATUSLINE_PROC_ROOT === undefined
+  )
+    return true;
   if (session.process_generation === undefined) return false;
   const [command, generation] = await Promise.all([
     fs
@@ -89,12 +93,18 @@ export async function sessionProcessMatches(session: {
   return command !== "" && generation === session.process_generation;
 }
 
-async function processRows(io: DiscoveryFs) {
+async function processRows(
+  io: DiscoveryFs,
+  onFailure: (reason: string) => void,
+) {
   const bootId = await io
     .readFile(join(procRoot(), "sys/kernel/random/boot_id"), "utf8")
     .then((value) => value.trim())
     .catch(() => null);
-  const names = await io.readdir(procRoot()).catch(() => []);
+  const names = await io.readdir(procRoot()).catch((error: unknown) => {
+    onFailure(String(error));
+    return [];
+  });
   return Promise.all(
     names
       .filter((name) => /^[1-9]\d*$/u.test(name))
@@ -141,6 +151,108 @@ async function processRows(io: DiscoveryFs) {
         return result;
       }),
   );
+}
+
+type ProcessRow = NonNullable<Awaited<ReturnType<typeof processRows>>[number]>;
+export interface ProcessSource {
+  rows(): Promise<ProcessRow[]>;
+  files(pid: number): Promise<string[]>;
+  error?: string | undefined;
+}
+
+type CommandResult =
+  | { output: string; error?: undefined }
+  | { output?: undefined; error: string };
+async function commandOutput(args: string[]): Promise<CommandResult> {
+  const child = Bun.spawn(args, {
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 5000,
+  });
+  const [out, error, code] = await Promise.all([
+    child.stdout.text(),
+    child.stderr.text(),
+    child.exited,
+  ]);
+  if (code !== 0)
+    return { error: `${args[0]} failed (${code}): ${error.trim()}` };
+  return { output: out };
+}
+
+export function darwinProcessSource(run = commandOutput): ProcessSource {
+  const source: ProcessSource = {
+    async rows() {
+      const result = await run(["ps", "-axo", "pid=,command="]);
+      if (result.error !== undefined) {
+        source.error = result.error;
+        return [];
+      }
+      const output = result.output;
+      const candidates = output.split("\n").flatMap((line) => {
+        const match = /^\s*(\d+)\s+(\S+)(?:\s+(.*))?$/u.exec(line);
+        if (match === null) return [];
+        const command = basename(match[2] ?? "");
+        const args = (match[3] ?? "").split(/\s+/u);
+        const executable = /^(node|bun)(?:\.exe)?$/u.test(command)
+          ? basename(args[0] ?? "")
+          : command;
+        let vendor: "claude" | "codex" | undefined;
+        if (/^(claude|claude-code)(?:\.js)?$/u.test(executable))
+          vendor = "claude";
+        else if (/^(codex|codex-cli)(?:\.js)?$/u.test(executable))
+          vendor = "codex";
+        return vendor === undefined
+          ? []
+          : [
+              {
+                pid: Number(match[1]),
+                vendor,
+                server: args.includes("app-server"),
+              },
+            ];
+      });
+      return Promise.all(
+        candidates.map(async (candidate) => {
+          const listing = await run([
+            "lsof",
+            "-a",
+            "-p",
+            String(candidate.pid),
+            "-d",
+            "cwd",
+            "-Fn",
+          ]);
+          if (listing.error !== undefined) {
+            source.error = listing.error;
+            return null;
+          }
+          const cwd = listing.output
+            .split("\n")
+            .find((line) => line.startsWith("n"))
+            ?.slice(1);
+          if (cwd === undefined || cwd === "") {
+            source.error = `lsof did not return cwd for pid ${candidate.pid}`;
+            return null;
+          }
+          const canonical = await fs.realpath(cwd).catch(() => cwd);
+          return Object.assign(candidate, { cwd: canonical });
+        }),
+      ).then((rows) => rows.filter((row) => row !== null));
+    },
+    async files(pid) {
+      const result = await run(["lsof", "-a", "-p", String(pid), "-Fn"]);
+      if (result.error !== undefined) {
+        source.error = result.error;
+        return [];
+      }
+      let descriptor = false;
+      return result.output.split("\n").flatMap((line) => {
+        if (line.startsWith("f")) descriptor = /^f\d+$/u.test(line);
+        return descriptor && line.startsWith("n") ? [line.slice(1)] : [];
+      });
+    },
+  };
+  return source;
 }
 
 async function claudeSession(
@@ -203,12 +315,17 @@ async function codexSessions(
   generation: string | undefined,
   allCwds: boolean,
   io: DiscoveryFs,
+  source?: ProcessSource,
 ): Promise<AgentSession[]> {
   const fdRoot = join(procRoot(), String(pid), "fd");
-  const names = await io.readdir(fdRoot).catch(() => []);
-  const targets = await Promise.all(
-    names.map((name) => io.readlink(join(fdRoot, name)).catch(() => null)),
-  );
+  const targets =
+    source === undefined
+      ? await Promise.all(
+          (await io.readdir(fdRoot).catch(() => [])).map((name) =>
+            io.readlink(join(fdRoot, name)).catch(() => null),
+          ),
+        )
+      : await source.files(pid);
   // A Desktop app-server can own several sessions, independently of its own cwd.
   // Open descriptors are the liveness evidence; never enumerate the session store.
   const paths = [
@@ -287,9 +404,16 @@ export async function discoverSessions(
   cwdInput = process.cwd(),
   allCwds = false,
   io: DiscoveryFs = fs,
+  source: ProcessSource | undefined = process.platform === "darwin" &&
+  process.env.STATUSLINE_PROC_ROOT === undefined
+    ? darwinProcessSource()
+    : undefined,
+  onFailure: (reason: string) => void = () => {},
 ): Promise<AgentSession[]> {
   const cwd = (await resolved(cwdInput, io)) ?? cwdInput;
-  const processes = (await processRows(io)).filter(
+  const processes = (
+    await (source?.rows() ?? processRows(io, onFailure))
+  ).filter(
     (row) =>
       row !== null &&
       (allCwds || row.cwd === cwd || (row.vendor === "codex" && row.server)),
@@ -306,9 +430,17 @@ export async function discoverSessions(
         );
         return session === null ? [] : [session];
       }
-      return codexSessions(proc.pid, cwd, proc.process_generation, allCwds, io);
+      return codexSessions(
+        proc.pid,
+        cwd,
+        proc.process_generation,
+        allCwds,
+        io,
+        source,
+      );
     }),
   );
+  if (source?.error !== undefined) onFailure(source.error);
   return rows
     .flat()
     .toSorted((a, b) => {

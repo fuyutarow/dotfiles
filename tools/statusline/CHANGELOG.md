@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.3 — 2026-10-29
+
+- Discover live sessions on macOS and record discovery failures.
+
 ## 0.22.2 — 2026-10-26
 
 - Wrap statusline segments through Sys at terminal width

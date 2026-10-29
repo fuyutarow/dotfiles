@@ -51,8 +51,8 @@ Keep these tokens distinct:
 `jj status` and most ordinary `jj` commands may create a SNAPSHOT.
 
 To read an earlier state, use `jj --at-operation=<op> status`.
-To skip a snapshot, use `jj --ignore-working-copy status`.
-Interpret either output as recorded state.
+When a sandbox cannot write the target repository (for example, an agx worker reading another repo), use `jj --ignore-working-copy` for reads, including `log`, `file show -r <commit> <path>`, and `diff`. Plain jj snapshots the working copy and auto-imports colocated Git, taking `.jj/repo/git_import_export.lock`. These reads omit unsnapshotted working files and un-imported Git state. In jj 0.46.0, `--at-op=@` alone does not avoid the lock; explicitly use `--ignore-working-copy`.
+Interpret earlier-operation output as recorded state.
 
 ## Decision table
 

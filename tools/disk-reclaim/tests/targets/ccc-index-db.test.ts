@@ -5,6 +5,7 @@ import {
   mkdirSync,
   openSync,
   rmSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -34,8 +35,9 @@ const writePolicy = (path: string, ttlDays: number) => {
     `graveyard_min_age_hours = 24\ngraveyard_pressure_undo_minutes = 10\n\n[collection_policy.class_rules.ownerless_cache]\ndefault_owner = "dotfiles"\nttl_days = 14\n\n[collection_policy.class_rules.deregistered_index_db]\nttl_days = ${ttlDays}\n`,
   );
 };
-const testContext = (): Context => ({
+const testContext = (procDir: string): Context => ({
   mode: "plan",
+  procDir,
   config: (() => {
     const parsed = Config.safeParse({
       repo_roots: [],
@@ -60,6 +62,7 @@ describe("ccc index DB target", () => {
     const home = join(fixtureRoot, "matrix-home");
     const dbRoot = join(fixtureRoot, "matrix-db");
     const policyPath = join(fixtureRoot, "matrix-reclaim.toml");
+    const procDir = join(fixtureRoot, "matrix-proc");
     const registered = join(home, "Workspace", "registered");
     const workspace = join(home, "Workspace", "repo.ws", "ws_worker");
     const fresh = join(home, "Workspace", "fresh");
@@ -97,6 +100,12 @@ describe("ccc index DB target", () => {
     for (const path of [registeredDb, missingDb, workspaceDb, freshDb, liveDb])
       writeArtifact(path, path === freshDb ? 2 : 4);
     writePolicy(policyPath, 3);
+    mkdirSync(join(procDir, "123", "fd"), { recursive: true });
+    writeFileSync(
+      join(procDir, "123", "stat"),
+      `123 (reader) S ${"0 ".repeat(19)}`,
+    );
+    symlinkSync(liveDb, join(procDir, "123", "fd", "3"));
 
     const liveFd = openSync(liveDb, "r");
     using cleanup = new DisposableStack();
@@ -112,7 +121,7 @@ describe("ccc index DB target", () => {
       loadPolicy: () => loadCollectionPolicy(policyPath),
       now: () => now,
     });
-    const planned = await target.plan(testContext());
+    const planned = await target.plan(testContext(procDir));
     const byPath = new Map(
       planned.map((candidate): [string | null, (typeof planned)[number]] => [
         candidate.path,
@@ -139,6 +148,8 @@ describe("ccc index DB target", () => {
     const home = join(fixtureRoot, "registration-home");
     const dbRoot = join(fixtureRoot, "registration-db");
     const policyPath = join(fixtureRoot, "registration-reclaim.toml");
+    const procDir = join(fixtureRoot, "registration-proc");
+    mkdirSync(procDir, { recursive: true });
     const registered = join(home, "Workspace", "registered");
     const workspace = join(registered, ".ws", "ws_agent");
     const registeredDb = join(
@@ -177,7 +188,7 @@ describe("ccc index DB target", () => {
       loadPolicy: () => loadCollectionPolicy(policyPath),
       now: () => now,
     });
-    const planned = await target.plan(testContext());
+    const planned = await target.plan(testContext(procDir));
     const byPath = new Map(
       planned.map((candidate) => [candidate.path, candidate]),
     );

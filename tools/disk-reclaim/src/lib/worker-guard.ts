@@ -29,7 +29,7 @@ export function workerMutationRefusal(
   env: NodeJS.ProcessEnv = process.env,
 ): string | null {
   if (env[AGX_WORKER_ENV] !== AGX_WORKER_VALUE) return null;
-  const home = env.HOME ?? homedir();
+  const home = env["HOME"] ?? homedir();
   if (isSystemTmp(home) || isSystemTmp(stateDir(env))) return null;
   return "agx worker guard: mutating run and delete --yes commands require HOME or RECLAIM_STATE_DIR under the system tmp directory; run it from the owner's own shell, or set HOME to a tmp dir for tests";
 }

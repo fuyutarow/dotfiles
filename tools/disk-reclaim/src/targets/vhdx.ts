@@ -24,7 +24,7 @@ async function runningInWsl(): Promise<boolean> {
   ]);
   return isWslRuntime({
     platform: process.platform,
-    distroName: process.env.WSL_DISTRO_NAME,
+    distroName: process.env["WSL_DISTRO_NAME"],
     procVersion: versionResult.unwrapOr(""),
     interop,
   });

@@ -49,7 +49,7 @@ type CacheContext = Pick<Context, "mode" | "scanCacheDir" | "log"> & {
   onProbe?: (() => void) | undefined;
 };
 export function defaultScanCacheDir(): string {
-  const declared = process.env.XDG_CACHE_HOME;
+  const declared = process.env["XDG_CACHE_HOME"];
   return join(
     (declared === "" ? undefined : declared) ?? join(homedir(), ".cache"),
     "disk-reclaim",

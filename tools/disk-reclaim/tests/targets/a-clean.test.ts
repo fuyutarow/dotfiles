@@ -130,15 +130,15 @@ describe("clean target", () => {
   });
 
   test("default home resolution uses HOME", async () => {
-    const previous = process.env.HOME;
+    const previous = process.env["HOME"];
     const fixtureHome = tempRoot("reclaim-clean-home-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
-      if (previous === undefined) delete process.env.HOME;
-      else process.env.HOME = previous;
+      if (previous === undefined) delete process.env["HOME"];
+      else process.env["HOME"] = previous;
       rmSync(fixtureHome, { recursive: true, force: true });
     });
-    process.env.HOME = fixtureHome;
+    process.env["HOME"] = fixtureHome;
     mkdirSync(join(fixtureHome, ".cache/uv"), { recursive: true });
     expect(
       (await createCleanTarget().plan(context)).map(

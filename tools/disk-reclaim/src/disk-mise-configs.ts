@@ -123,9 +123,9 @@ export async function freeMiseConfigs(
       waitForLock("mise-configs", stateDir(), report, Math.min(10, ms / 1000)),
     fingerprint: async () => {
       const path = resolve(
-        process.env.MISE_STATE_DIR ??
+        process.env["MISE_STATE_DIR"] ??
           join(
-            process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"),
+            process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"),
             "mise",
           ),
       );
@@ -151,9 +151,9 @@ export async function freeMiseConfigs(
     },
     measure: async () => {
       const path = resolve(
-        process.env.MISE_STATE_DIR ??
+        process.env["MISE_STATE_DIR"] ??
           join(
-            process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"),
+            process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"),
             "mise",
           ),
       );

@@ -7,7 +7,7 @@ import { candidate } from "./fake-target.ts";
 import { procFixture } from "./procs.ts";
 import type { Target } from "../../src/targets/index.ts";
 
-const root = process.env.RECLAIM_FIXTURE_ROOT;
+const root = process.env["RECLAIM_FIXTURE_ROOT"];
 if (root === undefined) process.exit(2);
 const denied = Array.from({ length: 40 }, (_, i) => `fd/${i + 10}`);
 const fixture = procFixture(root, "worker", denied);
@@ -18,9 +18,9 @@ const targets: Target[] = ["probe", "peer"].map((name) => ({
   available: () => ({ available: true, skip_reason: null }),
   plan: async (ctx) => {
     ctx.reportActivity?.(name, "waiting for process inventory");
-    if (process.env.RECLAIM_FIXTURE_ERROR === "1")
+    if (process.env["RECLAIM_FIXTURE_ERROR"] === "1")
       return [candidate(name), candidate(name)];
-    await Bun.sleep(process.env.RECLAIM_FIXTURE_SLOW === "1" ? 10000 : 150);
+    await Bun.sleep(process.env["RECLAIM_FIXTURE_SLOW"] === "1" ? 10000 : 150);
     const snapshot = collectProcesses({
       procRoot: fixture.procRoot,
       fs: fixture.fs,
@@ -37,7 +37,7 @@ const targets: Target[] = ["probe", "peer"].map((name) => ({
   },
   act: () => ({ ok: false, bytes_freed: null, error: "read-only fixture" }),
 }));
-if (process.env.RECLAIM_FIXTURE_ABORT === "1")
+if (process.env["RECLAIM_FIXTURE_ABORT"] === "1")
   setTimeout(() => {
     process.kill(process.pid, "SIGINT");
   }, 200);

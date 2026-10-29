@@ -162,12 +162,12 @@ describe("toolchains target and version stores", () => {
 
   test("toolchains plans old VS Code versions except the newest and recent versions", async () => {
     const home = tempRoot("reclaim-toolchains-servers-");
-    const keepDays = process.env.KEEP_DAYS;
-    process.env.KEEP_DAYS = "2";
+    const keepDays = process.env["KEEP_DAYS"];
+    process.env["KEEP_DAYS"] = "2";
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
-      if (keepDays === undefined) delete process.env.KEEP_DAYS;
-      else process.env.KEEP_DAYS = keepDays;
+      if (keepDays === undefined) delete process.env["KEEP_DAYS"];
+      else process.env["KEEP_DAYS"] = keepDays;
       rmSync(home, { recursive: true, force: true });
     });
     const servers = join(home, ".vscode-server/cli/servers");

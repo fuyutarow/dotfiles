@@ -77,12 +77,12 @@ const removeWhenDead = (record: string): void => {
 test("reports dead records, prunes once with --configs, and records receipt counts", async () => {
   const root = fixture();
   const state = join(root, "state/mise");
-  const previousStateDir = process.env.MISE_STATE_DIR;
-  process.env.MISE_STATE_DIR = state;
+  const previousStateDir = process.env["MISE_STATE_DIR"];
+  process.env["MISE_STATE_DIR"] = state;
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
-    if (previousStateDir === undefined) delete process.env.MISE_STATE_DIR;
-    else process.env.MISE_STATE_DIR = previousStateDir;
+    if (previousStateDir === undefined) delete process.env["MISE_STATE_DIR"];
+    else process.env["MISE_STATE_DIR"] = previousStateDir;
   });
   const liveConfig = join(root, "live/mise.toml");
   const liveRoot = join(root, "live/project");

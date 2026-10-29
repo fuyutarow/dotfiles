@@ -25,26 +25,26 @@ afterAll(() => {
 });
 
 test("default cache follows XDG cache storage and ignores reclaim state", () => {
-  const previousCache = process.env.XDG_CACHE_HOME;
-  const previousState = process.env.RECLAIM_STATE_DIR;
+  const previousCache = process.env["XDG_CACHE_HOME"];
+  const previousState = process.env["RECLAIM_STATE_DIR"];
   using restore = new DisposableStack();
   restore.defer(() => {
-    if (previousCache === undefined) delete process.env.XDG_CACHE_HOME;
-    else process.env.XDG_CACHE_HOME = previousCache;
-    if (previousState === undefined) delete process.env.RECLAIM_STATE_DIR;
-    else process.env.RECLAIM_STATE_DIR = previousState;
+    if (previousCache === undefined) delete process.env["XDG_CACHE_HOME"];
+    else process.env["XDG_CACHE_HOME"] = previousCache;
+    if (previousState === undefined) delete process.env["RECLAIM_STATE_DIR"];
+    else process.env["RECLAIM_STATE_DIR"] = previousState;
   });
   const xdg = join(root, "xdg-cache");
   const state = join(root, "state");
-  process.env.XDG_CACHE_HOME = xdg;
-  process.env.RECLAIM_STATE_DIR = state;
+  process.env["XDG_CACHE_HOME"] = xdg;
+  process.env["RECLAIM_STATE_DIR"] = state;
   expect(defaultScanCacheDir()).toBe(join(xdg, "disk-reclaim"));
   scanCache(scanned, "default", { mode: "plan", log: () => {} }).save(
     "fixture",
   );
   expect(readdirSync(join(xdg, "disk-reclaim", "scan-cache"))).toHaveLength(1);
   expect(existsSync(join(state, "scan-cache"))).toBe(false);
-  process.env.XDG_CACHE_HOME = "";
+  process.env["XDG_CACHE_HOME"] = "";
   expect(defaultScanCacheDir()).toBe(join(homedir(), ".cache", "disk-reclaim"));
 });
 

@@ -4,11 +4,11 @@ import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
 import { runProtection } from "../../src/jj/run-guard.ts";
 
-const originalPath = process.env.PATH;
+const originalPath = process.env["PATH"];
 let root: string | undefined;
 
 afterEach(() => {
-  process.env.PATH = originalPath;
+  process.env["PATH"] = originalPath;
   if (root !== undefined) rmSync(root, { recursive: true, force: true });
   root = undefined;
 });
@@ -29,7 +29,7 @@ test("full agx inventory protects old unjudged runs and incomplete responses", a
     `#!${process.execPath}\nconst mode = await Bun.file(${JSON.stringify(modePath)}).text();\nif (mode === "fail") process.exit(1);\nif (mode === "omit") { process.stdout.write(JSON.stringify([{ id: "incomplete", workspace: ${JSON.stringify(path)}, judgment: null }])); process.exit(0); }\nconst runs = JSON.parse(await Bun.file(${JSON.stringify(runsPath)}).text());\nprocess.stdout.write(JSON.stringify(process.argv.includes("--all") ? runs : runs.slice(0, 30)));\n`,
   );
   chmodSync(join(bin, "agx"), 0o755);
-  process.env.PATH = `${bin}:${originalPath}`;
+  process.env["PATH"] = `${bin}:${originalPath}`;
 
   const runs: Record<string, unknown>[] = Array.from(
     { length: 31 },

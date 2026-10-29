@@ -56,7 +56,7 @@ export async function scratchProbe(
   signal?: AbortSignal,
 ): Promise<ProbeResult> {
   const env = { ...process.env };
-  delete env.DISK_SCRATCH_ACTION;
+  delete env["DISK_SCRATCH_ACTION"];
   return runProbe(
     [process.execPath, join(import.meta.dir, "disk-scratch-child.ts")],
     ms,

@@ -24,7 +24,7 @@ const paths = (home: string) => [
   `${home}/.julia/scratchspaces`,
 ];
 export const createCleanTarget = (
-  home: () => string = () => process.env.HOME ?? homedir(),
+  home: () => string = () => process.env["HOME"] ?? homedir(),
   isBusy: ProcessProbe = processBusy,
   bunGc: (homePath: string) => boolean | Promise<boolean> = (homePath) => {
     const result = Bun.spawnSync(["bun", "pm", "cache", "rm"], {

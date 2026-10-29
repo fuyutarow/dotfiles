@@ -350,7 +350,7 @@ test("worker mutating commands refuse non-tmp HOME and state before touching any
   const candidate = join(root, "candidate");
   mkdirSync(candidate);
   writeFileSync(join(candidate, "data"), "fixture");
-  const realHome = process.env.HOME ?? root;
+  const realHome = process.env["HOME"] ?? root;
   const testConfig = cliEnv(root);
   const workerEnv = {
     ...testConfig,

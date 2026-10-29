@@ -11,7 +11,7 @@ import { fromAsyncThrowable } from "neverthrow";
 async function checkMoveInner(path: string, graveyard: string) {
   const source = resolve(path);
   const destination = resolve(graveyard);
-  const home = resolve(process.env.HOME ?? "/");
+  const home = resolve(process.env["HOME"] ?? "/");
   if (
     source === "/" ||
     source === home ||

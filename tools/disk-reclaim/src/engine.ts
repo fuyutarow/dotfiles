@@ -40,7 +40,7 @@ const expand = (p: string) =>
     .replaceAll("{uid}", String(process.getuid?.() ?? 0));
 
 export function loadConfig(
-  path = process.env.RECLAIM_CONFIG ??
+  path = process.env["RECLAIM_CONFIG"] ??
     resolve(import.meta.dir, "../reclaim.toml"),
 ) {
   const raw = fromThrowable((): unknown =>
@@ -956,7 +956,8 @@ export async function run(
   options: EngineOptions,
 ): Promise<EngineResult> {
   const rawBudget =
-    (options.env ?? process.env).RECLAIM_RUN_BUDGET_S ?? String(RUN_BUDGET_S);
+    (options.env ?? process.env)["RECLAIM_RUN_BUDGET_S"] ??
+    String(RUN_BUDGET_S);
   const budget = Number(rawBudget);
   if (!/^\d+$/u.test(rawBudget) || !Number.isSafeInteger(budget) || budget <= 0)
     return {

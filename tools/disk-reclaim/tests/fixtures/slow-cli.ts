@@ -5,18 +5,21 @@ import type { Target } from "../../src/targets/index.ts";
 import { main } from "../../src/reclaim.ts";
 import { createLivenessSnapshot } from "../../src/liveness/facts.ts";
 
-const procRoot = process.env.RECLAIM_UNIT_PROC_ROOT;
-const ready = process.env.RECLAIM_SLOW_READY;
+const procRoot = process.env["RECLAIM_UNIT_PROC_ROOT"];
+const ready = process.env["RECLAIM_SLOW_READY"];
 if (procRoot === undefined || ready === undefined) process.exit(2);
 mkdirSync(dirname(ready), { recursive: true });
-const itemPaths = [process.env.RECLAIM_ITEM_ONE, process.env.RECLAIM_ITEM_TWO];
-const log = process.env.RECLAIM_ACT_LOG;
+const itemPaths = [
+  process.env["RECLAIM_ITEM_ONE"],
+  process.env["RECLAIM_ITEM_TWO"],
+];
+const log = process.env["RECLAIM_ACT_LOG"];
 const target: Target = {
   name: "slow",
   tier: "blind",
   available: () => ({ available: true, skip_reason: null }),
   plan: async (ctx) => {
-    if (process.env.RECLAIM_CANCEL_MODE === "delete")
+    if (process.env["RECLAIM_CANCEL_MODE"] === "delete")
       return itemPaths.flatMap((path, index) =>
         path === undefined
           ? []
@@ -58,7 +61,7 @@ const target: Target = {
   },
 };
 const args =
-  process.env.RECLAIM_CANCEL_MODE === "delete"
+  process.env["RECLAIM_CANCEL_MODE"] === "delete"
     ? ["run", "slow", "--yes"]
     : ["plan", "slow", "--json"];
 const result = await fromAsyncThrowable(() =>

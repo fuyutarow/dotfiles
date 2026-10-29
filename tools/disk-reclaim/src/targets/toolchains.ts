@@ -81,7 +81,7 @@ const retainedReleases = (
       ),
   );
 export const createToolchainsTarget = (
-  homePath: () => string = () => process.env.HOME ?? homedir(),
+  homePath: () => string = () => process.env["HOME"] ?? homedir(),
   rustupOptions?: {
     available: () => boolean;
     defaultToolchain: () => string | undefined;
@@ -123,9 +123,10 @@ export const createToolchainsTarget = (
       const home = homePath();
       const projects =
         options.projects ??
-        process.env.AUDIT_PROJECTS ??
+        process.env["AUDIT_PROJECTS"] ??
         join(home, "Workspace");
-      const keepDays = options.keepDays ?? Number(process.env.KEEP_DAYS ?? "2");
+      const keepDays =
+        options.keepDays ?? Number(process.env["KEEP_DAYS"] ?? "2");
       const nowSec =
         options.nowSec?.() ??
         Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);

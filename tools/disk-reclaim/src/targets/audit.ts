@@ -77,7 +77,7 @@ export async function auditCandidates(
   context?: Context,
 ): Promise<Candidate[]> {
   const rows: Candidate[] = [];
-  const staleDays = Number(env.STALE_DAYS ?? "180");
+  const staleDays = Number(env["STALE_DAYS"] ?? "180");
   const cutoff =
     Temporal.Now.instant().epochMilliseconds - staleDays * 86400_000;
   const homeEntries = fromThrowable(() => readdirSync(home))().unwrapOr([]);
@@ -147,7 +147,7 @@ export async function auditCandidates(
           ),
         )
       : measuredTreeBytes(path, context);
-  const projects = env.AUDIT_PROJECTS ?? join(home, "Workspace");
+  const projects = env["AUDIT_PROJECTS"] ?? join(home, "Workspace");
   const pins = projects
     .split(":")
     .flatMap((root) =>
@@ -307,8 +307,8 @@ export async function auditCandidates(
     });
   }
   const state =
-    env.RECLAIM_STATE_DIR ??
-    join(env.XDG_STATE_HOME ?? join(home, ".local/state"), "reclaim");
+    env["RECLAIM_STATE_DIR"] ??
+    join(env["XDG_STATE_HOME"] ?? join(home, ".local/state"), "reclaim");
   const log = join(state, "log.jsonl");
   if (existsSync(log)) {
     for (const line of readFileSync(log, "utf8")

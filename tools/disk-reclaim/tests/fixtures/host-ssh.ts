@@ -1,10 +1,10 @@
 // Fixture binary only: inspect SSH argv and return PowerShell protocol output.
 import { appendFileSync } from "node:fs";
-if (process.env.HOST_STUB_HANG_CONNECT === "1") await Bun.sleep(60_000);
+if (process.env["HOST_STUB_HANG_CONNECT"] === "1") await Bun.sleep(60_000);
 const args = Bun.argv.slice(2);
 const command = args.at(-1) ?? "";
 const encoded = /-EncodedCommand ([A-Za-z0-9+/=]+)$/u.exec(command)?.[1];
-const log = process.env.HOST_STUB_LOG;
+const log = process.env["HOST_STUB_LOG"];
 if (command === "exit 0" && log !== undefined) {
   appendFileSync(log, `${JSON.stringify(args)}\n`);
   process.exit(0);
@@ -23,8 +23,8 @@ if (
   process.exit(99);
 appendFileSync(log, `${JSON.stringify(args)}\n${wrapper}\n${script}\n`);
 process.stderr.write("disk-reclaim-step=lever npm-cache allocation scan\n");
-if (process.env.HOST_STUB_HANG === "1") await Bun.sleep(60_000);
-if (process.env.HOST_STUB_EMPTY === "1") process.exit(0);
+if (process.env["HOST_STUB_HANG"] === "1") await Bun.sleep(60_000);
+if (process.env["HOST_STUB_EMPTY"] === "1") process.exit(0);
 const snapshot = [
   "c_free=4294967296",
   "c_total=99999999999",

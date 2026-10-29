@@ -48,7 +48,7 @@ function scan(
 }
 const protection = (path: string, ctx: Context) =>
   protectedReason(path, {
-    home: process.env.HOME ?? homedir(),
+    home: process.env["HOME"] ?? homedir(),
     procDir: ctx.procDir,
     repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
     protectedPaths: ctx.config.protected ?? [],
@@ -56,7 +56,7 @@ const protection = (path: string, ctx: Context) =>
   });
 export const createBuildsTarget = (
   root: () => string = () =>
-    process.env.KONDO_DIR ?? process.env.HOME ?? homedir(),
+    process.env["KONDO_DIR"] ?? process.env["HOME"] ?? homedir(),
   discover: (root: string, ctx: Context) => string[] = (path, ctx) =>
     scan(path, 0, undefined, ctx),
   options: {

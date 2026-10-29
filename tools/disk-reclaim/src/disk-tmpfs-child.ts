@@ -18,7 +18,7 @@ const ctx: Context = {
   explicit: true,
   targetName: "tmpfs",
   config,
-  only: process.env.DISK_TMPFS_ONLY,
+  only: process.env["DISK_TMPFS_ONLY"],
   log: () => {},
 };
 const target = createTmpfsTarget();
@@ -46,7 +46,7 @@ const measure = async (path: string) => {
     error: null,
   };
 };
-const action = process.env.DISK_TMPFS_ACTION;
+const action = process.env["DISK_TMPFS_ACTION"];
 if (action === undefined) {
   const plan = await target.plan(ctx);
   const mounts = plan.filter((c) => c.id.startsWith("tmpfs-usage:"));

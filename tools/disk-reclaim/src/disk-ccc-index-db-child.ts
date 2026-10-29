@@ -58,7 +58,7 @@ const measure = async (path: string) => {
     error: null,
   };
 };
-const action = process.env.DISK_CCC_INDEX_DB_ACTION;
+const action = process.env["DISK_CCC_INDEX_DB_ACTION"];
 if (action === undefined) {
   const candidates = await target.plan(ctx);
   const rows = await Promise.all(

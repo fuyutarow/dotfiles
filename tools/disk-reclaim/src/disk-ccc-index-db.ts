@@ -56,7 +56,7 @@ export async function cccIndexDbProbe(
   signal?: AbortSignal,
 ): Promise<ProbeResult> {
   const env = { ...process.env };
-  delete env.DISK_CCC_INDEX_DB_ACTION;
+  delete env["DISK_CCC_INDEX_DB_ACTION"];
   return runProbe(
     [process.execPath, join(import.meta.dir, "disk-ccc-index-db-child.ts")],
     ms,

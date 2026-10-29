@@ -198,7 +198,7 @@ export function createLivenessSnapshot(
     probes?: Partial<LivenessProbes>;
   } = {},
 ): LivenessSnapshot {
-  const home = options.home ?? process.env.HOME ?? homedir();
+  const home = options.home ?? process.env["HOME"] ?? homedir();
   const capturedNow = options.now ?? Temporal.Now.instant().epochMilliseconds;
   const processes = new Map<number, ProcessSnapshot>();
   const facts = new Map<string, LivenessFacts>();

@@ -33,7 +33,7 @@ export function judgmentCandidates(
   } = {},
 ): Candidate[] {
   const result: Candidate[] = [];
-  const rustup = env.RUSTUP_HOME ?? join(home, ".rustup");
+  const rustup = env["RUSTUP_HOME"] ?? join(home, ".rustup");
   const toolchains = join(rustup, "toolchains");
   const toolchainNames = fromThrowable(() =>
     readdirSync(toolchains),

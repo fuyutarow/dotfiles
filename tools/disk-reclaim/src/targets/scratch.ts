@@ -133,7 +133,7 @@ const candidateBytes = async (
 };
 
 export function createScratchTarget(options: ScratchTargetOptions = {}) {
-  const home = options.home ?? (() => process.env.HOME ?? homedir());
+  const home = options.home ?? (() => process.env["HOME"] ?? homedir());
   const uid = options.uid ?? (() => process.getuid?.() ?? 0);
   const bytes = options.bytes ?? candidateBytes;
   const remove =

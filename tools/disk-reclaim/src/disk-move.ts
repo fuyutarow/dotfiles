@@ -44,10 +44,10 @@ export async function movePaths(
   probe = runProbe,
 ) {
   const graveyard = resolve(
-    process.env.GRAVEYARD ??
-      process.env.RIP_GRAVEYARD ??
+    process.env["GRAVEYARD"] ??
+      process.env["RIP_GRAVEYARD"] ??
       join(
-        process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"),
+        process.env["XDG_DATA_HOME"] ?? join(homedir(), ".local/share"),
         "graveyard",
       ),
   );

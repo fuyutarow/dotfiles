@@ -91,8 +91,8 @@ export function graveyardCandidates(
   env: Record<string, string | undefined>,
   home = homedir(),
 ): Graveyard[] {
-  const xdgData = env.XDG_DATA_HOME ?? join(home, ".local/share");
-  const ripGraveyard = env.RIP_GRAVEYARD;
+  const xdgData = env["XDG_DATA_HOME"] ?? join(home, ".local/share");
+  const ripGraveyard = env["RIP_GRAVEYARD"];
   return [
     ...(ripGraveyard === undefined
       ? []
@@ -182,8 +182,8 @@ export const UNKNOWN_RIP_BURIAL =
 
 export function ripGraveyardRoot(env = process.env, home = homedir()): string {
   return resolve(
-    env.RIP_GRAVEYARD ??
-      join(env.XDG_DATA_HOME ?? join(home, ".local/share"), "graveyard"),
+    env["RIP_GRAVEYARD"] ??
+      join(env["XDG_DATA_HOME"] ?? join(home, ".local/share"), "graveyard"),
   );
 }
 

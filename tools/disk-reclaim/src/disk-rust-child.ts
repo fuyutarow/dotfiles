@@ -72,7 +72,7 @@ async function act(action: string) {
     completedReason: "Rust target removal completed",
   });
 }
-if (process.env.DISK_RUST_ACTION === undefined) {
+if (process.env["DISK_RUST_ACTION"] === undefined) {
   const candidates = await target.plan(ctx);
   const rows = await Promise.all(
     candidates.map(async (candidate) => ({
@@ -83,5 +83,5 @@ if (process.env.DISK_RUST_ACTION === undefined) {
   );
   console.log(JSON.stringify(rows));
 } else {
-  console.log(JSON.stringify(await act(process.env.DISK_RUST_ACTION)));
+  console.log(JSON.stringify(await act(process.env["DISK_RUST_ACTION"])));
 }

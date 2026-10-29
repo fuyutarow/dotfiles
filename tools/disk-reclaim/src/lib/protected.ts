@@ -121,7 +121,7 @@ export function protectedReason(
   options: ProtectionOptions = {},
 ): string | null {
   const path = normalized(candidate);
-  const home = options.home ?? process.env.HOME ?? homedir();
+  const home = options.home ?? process.env["HOME"] ?? homedir();
   const homePath = normalized(home);
   const rustupToolchains = normalized(`${homePath}/.rustup/toolchains`);
   const protectedRoots = [

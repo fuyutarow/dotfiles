@@ -19,8 +19,8 @@ const ctx: Context = {
   explicit: true,
   targetName: "purge",
   config,
-  only: process.env.DISK_PURGE_ONLY,
-  underPressure: process.env.DISK_PURGE_UNDER_PRESSURE === "1",
+  only: process.env["DISK_PURGE_ONLY"],
+  underPressure: process.env["DISK_PURGE_UNDER_PRESSURE"] === "1",
   headroom: readHeadroom(),
   log: (message) => {
     process.stderr.write(`${message}\n`);
@@ -50,7 +50,7 @@ const measure = async (path: string) => {
     error: null,
   };
 };
-const action = process.env.DISK_PURGE_ACTION;
+const action = process.env["DISK_PURGE_ACTION"];
 if (action === undefined) {
   const candidates = await purge.plan(ctx);
   // Restore records must remain available while their payloads are rechecked.

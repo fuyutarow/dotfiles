@@ -31,7 +31,7 @@ function invoke(
   const result = Bun.spawnSync(tty ? pty : cmd, {
     env: {
       ...cliEnv(root),
-      PATH: process.env.PATH,
+      PATH: process.env["PATH"],
       RECLAIM_FIXTURE_ROOT: root,
       TERM: "xterm-256color",
       CI: "",

@@ -62,10 +62,10 @@ type Options = {
 const graveyardRoot = (options: Options): string =>
   resolve(
     options.graveyard ??
-      process.env.RIP_GRAVEYARD ??
-      process.env.GRAVEYARD ??
+      process.env["RIP_GRAVEYARD"] ??
+      process.env["GRAVEYARD"] ??
       join(
-        process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"),
+        process.env["XDG_DATA_HOME"] ?? join(homedir(), ".local/share"),
         "graveyard",
       ),
   );

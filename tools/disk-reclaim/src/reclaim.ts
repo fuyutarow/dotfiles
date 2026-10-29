@@ -316,8 +316,8 @@ function watchProgress(reporter: ProgressReporter): () => void {
 
 const progressIsTty = (json: boolean) =>
   !json &&
-  (process.env.CI ?? "") === "" &&
-  process.env.TERM !== "dumb" &&
+  (process.env["CI"] ?? "") === "" &&
+  process.env["TERM"] !== "dumb" &&
   process.stdout.isTTY &&
   process.stderr.isTTY;
 
@@ -740,8 +740,8 @@ export async function main(
   if (loaded.config === null) return fail(loaded.error ?? "invalid config");
   const progressTty =
     !f.json &&
-    (process.env.CI ?? "") === "" &&
-    process.env.TERM !== "dumb" &&
+    (process.env["CI"] ?? "") === "" &&
+    process.env["TERM"] !== "dumb" &&
     process.stdout.isTTY &&
     process.stderr.isTTY;
   const progressReporter = new ProgressReporter({ tty: progressTty });

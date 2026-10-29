@@ -36,7 +36,7 @@ import { tempRoot } from "./fixtures/temp.ts";
 // Never more than 50k payload entries coexist; cumulative workloads are 100k and 1M.
 const TMPFS_BOUND_MS = 240_000;
 const GRAVEYARD_BOUND_MS = 300_000;
-const scaleTest = test.skipIf(process.env.RECLAIM_SCALE !== "1");
+const scaleTest = test.skipIf(process.env["RECLAIM_SCALE"] !== "1");
 const dirs: string[] = [];
 const root = (prefix: string): string => {
   const path = tempRoot(prefix);
@@ -200,8 +200,8 @@ for (const scenario of ["foreign", "failure", "mixed"] as const) {
     const state = join(base, "state");
     const procDir = join(base, "proc");
     mkdirSync(procDir);
-    const previous = process.env.RIP_GRAVEYARD;
-    process.env.RIP_GRAVEYARD = graveyard;
+    const previous = process.env["RIP_GRAVEYARD"];
+    process.env["RIP_GRAVEYARD"] = graveyard;
     const result = await run([target], {
       context: {
         mode: "plan",
@@ -216,8 +216,8 @@ for (const scenario of ["foreign", "failure", "mixed"] as const) {
       yes: true,
       captureLiveness: () => quietLiveness,
     }).finally(() => {
-      if (previous === undefined) delete process.env.RIP_GRAVEYARD;
-      else process.env.RIP_GRAVEYARD = previous;
+      if (previous === undefined) delete process.env["RIP_GRAVEYARD"];
+      else process.env["RIP_GRAVEYARD"] = previous;
     });
     expect(result.exit).toBe(scenario === "foreign" ? 0 : 1);
     const receipts = readReceipts(10, state);
@@ -290,8 +290,8 @@ test("rip-expire handles equally old subtrees in path order and can be limited t
     only: join(graveyard, "tmp"),
   });
   expect(candidates.map((item) => item.path)).toEqual([join(graveyard, "tmp")]);
-  const previous = process.env.RIP_GRAVEYARD;
-  process.env.RIP_GRAVEYARD = graveyard;
+  const previous = process.env["RIP_GRAVEYARD"];
+  process.env["RIP_GRAVEYARD"] = graveyard;
   const result = await run([target], {
     context: {
       mode: "plan",
@@ -306,8 +306,8 @@ test("rip-expire handles equally old subtrees in path order and can be limited t
     yes: true,
     captureLiveness: () => quietLiveness,
   } satisfies EngineOptions).finally(() => {
-    if (previous === undefined) delete process.env.RIP_GRAVEYARD;
-    else process.env.RIP_GRAVEYARD = previous;
+    if (previous === undefined) delete process.env["RIP_GRAVEYARD"];
+    else process.env["RIP_GRAVEYARD"] = previous;
   });
   expect(result.exit).toBe(0);
   expect(acted.map((id) => id.split(": ")[1])).toEqual(["home", "tmp"]);

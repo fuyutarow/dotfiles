@@ -767,11 +767,11 @@ describe("disk parser and effect firewall", () => {
     const unknown = join(dir, "unknown");
     for (const path of [good, live, unknown]) await writeFile(path, "payload");
     const previous = {
-      graveyard: process.env.GRAVEYARD,
-      state: process.env.RECLAIM_STATE_DIR,
+      graveyard: process.env["GRAVEYARD"],
+      state: process.env["RECLAIM_STATE_DIR"],
     };
-    process.env.GRAVEYARD = graveyard;
-    process.env.RECLAIM_STATE_DIR = join(dir, "state");
+    process.env["GRAVEYARD"] = graveyard;
+    process.env["RECLAIM_STATE_DIR"] = join(dir, "state");
     const probe: typeof runProbe = async (argv, _timeout, env) => {
       if (argv[0] === "stat")
         return { out: "apfs\n", err: "", exit: 0, timedOut: false };
@@ -784,7 +784,7 @@ describe("disk parser and effect firewall", () => {
         );
         return { out: "", err: "", exit: 0, timedOut: false };
       }
-      const path = env?.DISK_MOVE_PATH;
+      const path = env?.["DISK_MOVE_PATH"];
       let verdict = "safe";
       let reason = "safe";
       if (path === live) {
@@ -804,10 +804,11 @@ describe("disk parser and effect firewall", () => {
     };
     using _env = {
       [Symbol.dispose]: () => {
-        if (previous.graveyard === undefined) delete process.env.GRAVEYARD;
-        else process.env.GRAVEYARD = previous.graveyard;
-        if (previous.state === undefined) delete process.env.RECLAIM_STATE_DIR;
-        else process.env.RECLAIM_STATE_DIR = previous.state;
+        if (previous.graveyard === undefined) delete process.env["GRAVEYARD"];
+        else process.env["GRAVEYARD"] = previous.graveyard;
+        if (previous.state === undefined)
+          delete process.env["RECLAIM_STATE_DIR"];
+        else process.env["RECLAIM_STATE_DIR"] = previous.state;
       },
     };
     const result = await movePaths(
@@ -2167,7 +2168,7 @@ test("toolchains adapter preserves selected rows and requires measured results",
         error: null,
       }),
     probe: (_argv: string[], _timeout: number, env?: NodeJS.ProcessEnv) => {
-      const isPlan = env?.DISK_TOOLCHAINS_REQUEST === "{}";
+      const isPlan = env?.["DISK_TOOLCHAINS_REQUEST"] === "{}";
       requests.push(isPlan ? "plan" : "/fixture/old");
       const out = isPlan
         ? candidates
@@ -2403,7 +2404,7 @@ test("real toolchains planner exposes retained versions through the disk adapter
       env?: NodeJS.ProcessEnv,
     ) => {
       const request = jsonOf(Request).safeParse(
-        env?.DISK_TOOLCHAINS_REQUEST ?? "{}",
+        env?.["DISK_TOOLCHAINS_REQUEST"] ?? "{}",
       );
       if (!request.success)
         return { out: "", err: "bad request", exit: 1, timedOut: false };
@@ -3781,11 +3782,11 @@ test.each([
     );
     await chmod(join(bin, "jj"), 0o755);
     await chmod(join(bin, "agx"), 0o755);
-    const oldPath = process.env.PATH;
-    process.env.PATH = `${bin}:${oldPath}`;
+    const oldPath = process.env["PATH"];
+    process.env["PATH"] = `${bin}:${oldPath}`;
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
-      process.env.PATH = oldPath;
+      process.env["PATH"] = oldPath;
     });
     const target = createWorkspacesTarget({
       runProtection: () => Promise.resolve(null),

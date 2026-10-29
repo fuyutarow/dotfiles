@@ -65,17 +65,17 @@ test("unchanged plan roots reuse persisted measurements without a second walk", 
 test("worker subtree cache uses XDG storage when no private cache root is supplied", async () => {
   const root = tempRoot("reclaim-worker-cache-");
   roots.push(root);
-  const previousCache = process.env.XDG_CACHE_HOME;
-  const previousState = process.env.RECLAIM_STATE_DIR;
+  const previousCache = process.env["XDG_CACHE_HOME"];
+  const previousState = process.env["RECLAIM_STATE_DIR"];
   using restore = new DisposableStack();
   restore.defer(() => {
-    if (previousCache === undefined) delete process.env.XDG_CACHE_HOME;
-    else process.env.XDG_CACHE_HOME = previousCache;
-    if (previousState === undefined) delete process.env.RECLAIM_STATE_DIR;
-    else process.env.RECLAIM_STATE_DIR = previousState;
+    if (previousCache === undefined) delete process.env["XDG_CACHE_HOME"];
+    else process.env["XDG_CACHE_HOME"] = previousCache;
+    if (previousState === undefined) delete process.env["RECLAIM_STATE_DIR"];
+    else process.env["RECLAIM_STATE_DIR"] = previousState;
   });
-  process.env.XDG_CACHE_HOME = join(root, "xdg-cache");
-  process.env.RECLAIM_STATE_DIR = join(root, "state");
+  process.env["XDG_CACHE_HOME"] = join(root, "xdg-cache");
+  process.env["RECLAIM_STATE_DIR"] = join(root, "state");
   const path = join(root, "tree");
   mkdirSync(join(path, "nested"), { recursive: true });
   writeFileSync(join(path, "nested", "entry"), "fixture");

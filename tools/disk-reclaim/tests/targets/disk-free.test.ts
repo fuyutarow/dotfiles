@@ -232,12 +232,12 @@ test("rip expiry yields after one complete payload to a foreground free request"
   const loaded = loadConfig();
   expect(loaded.config).not.toBeNull();
   if (loaded.config === null) return;
-  const previousRoot = process.env.RIP_GRAVEYARD;
-  process.env.RIP_GRAVEYARD = f.root;
+  const previousRoot = process.env["RIP_GRAVEYARD"];
+  process.env["RIP_GRAVEYARD"] = f.root;
   using _restoreEnv = {
     [Symbol.dispose]: () => {
-      if (previousRoot === undefined) delete process.env.RIP_GRAVEYARD;
-      else process.env.RIP_GRAVEYARD = previousRoot;
+      if (previousRoot === undefined) delete process.env["RIP_GRAVEYARD"];
+      else process.env["RIP_GRAVEYARD"] = previousRoot;
     },
   };
   const entered = Promise.withResolvers<void>();

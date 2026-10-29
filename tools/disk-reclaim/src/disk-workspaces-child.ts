@@ -38,7 +38,7 @@ const ctx: Context = {
   },
 };
 const target = createWorkspacesTarget({
-  fetch: process.env.DISK_WORKSPACES_FETCH === "1",
+  fetch: process.env["DISK_WORKSPACES_FETCH"] === "1",
 });
 const availability = await target.available(ctx);
 if (!availability.available)
@@ -71,7 +71,7 @@ const measure = async (path: string) => {
     error: null,
   };
 };
-const action = process.env.DISK_WORKSPACES_ACTION;
+const action = process.env["DISK_WORKSPACES_ACTION"];
 if (action === undefined) {
   const candidates = await target.plan(ctx);
   const rows = await Promise.all(

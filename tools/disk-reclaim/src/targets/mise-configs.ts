@@ -23,9 +23,9 @@ type MiseConfigsOptions = {
 
 const defaultStateDir = (): string =>
   resolve(
-    process.env.MISE_STATE_DIR ??
+    process.env["MISE_STATE_DIR"] ??
       join(
-        process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"),
+        process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"),
         "mise",
       ),
   );

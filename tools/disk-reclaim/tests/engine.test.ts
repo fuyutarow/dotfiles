@@ -525,11 +525,11 @@ test("busy lock waits briefly, returns 3 and never acts", async () => {
     what: "other",
     since: "now",
   });
-  const old = process.env.RECLAIM_LOCK_WAIT_S;
-  process.env.RECLAIM_LOCK_WAIT_S = "0.01";
+  const old = process.env["RECLAIM_LOCK_WAIT_S"];
+  process.env["RECLAIM_LOCK_WAIT_S"] = "0.01";
   const result = await run([fake.target], opts);
-  if (old === undefined) delete process.env.RECLAIM_LOCK_WAIT_S;
-  else process.env.RECLAIM_LOCK_WAIT_S = old;
+  if (old === undefined) delete process.env["RECLAIM_LOCK_WAIT_S"];
+  else process.env["RECLAIM_LOCK_WAIT_S"] = old;
   if (held.ok) held.release();
   expect(result.exit).toBe(3);
   expect(result.error).toContain("held by other");

@@ -56,7 +56,7 @@ async function judgmentProbe(
   signal?: AbortSignal,
 ): Promise<ProbeResult> {
   const env = { ...process.env };
-  delete env.DISK_JUDGMENT_ACTION;
+  delete env["DISK_JUDGMENT_ACTION"];
   return runProbe(
     [process.execPath, join(import.meta.dir, "disk-judgment-child.ts")],
     ms,

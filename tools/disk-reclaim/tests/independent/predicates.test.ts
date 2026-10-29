@@ -52,7 +52,7 @@ function fixture(procRoot?: string) {
     ...process.env,
     HOME: home,
     TMPDIR: dirname(root),
-    PATH: `${bin}:${process.env.PATH}`,
+    PATH: `${bin}:${process.env["PATH"]}`,
     XDG_CONFIG_HOME: join(home, "config"),
     XDG_CACHE_HOME: join(home, "cache"),
     XDG_STATE_HOME: join(home, "state"),

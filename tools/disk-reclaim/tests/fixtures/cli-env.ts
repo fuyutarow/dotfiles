@@ -39,7 +39,7 @@ export function cliEnv(
     ].join("\n"),
   );
   const inherited: NodeJS.ProcessEnv = { ...process.env };
-  delete inherited.WSL_DISTRO_NAME;
+  delete inherited["WSL_DISTRO_NAME"];
   const env = {
     ...inherited,
     HOME: home,

@@ -14,19 +14,19 @@ const fail = (message: string): never => {
 const loaded = loadConfig();
 const config = loaded.config ?? fail(loaded.error ?? "config unavailable");
 const root = ripGraveyardRoot(process.env, homedir());
-if (!(await safeScope(root, process.env.DISK_RIP_ONLY)))
+if (!(await safeScope(root, process.env["DISK_RIP_ONLY"])))
   fail("unverified graveyard scope");
 const rootStat = await lstat(root);
 if (!rootStat.isDirectory() || rootStat.isSymbolicLink())
   fail("unverified graveyard root");
-if (process.env.DISK_RIP_ONLY !== undefined)
-  await lstat(process.env.DISK_RIP_ONLY);
+if (process.env["DISK_RIP_ONLY"] !== undefined)
+  await lstat(process.env["DISK_RIP_ONLY"]);
 let yielded = false;
 const ctx: Context = {
   mode: "run",
   explicit: true,
   config,
-  only: process.env.DISK_RIP_ONLY,
+  only: process.env["DISK_RIP_ONLY"],
   log: (line) => {
     process.stderr.write(`${line}\n`);
   },
@@ -67,7 +67,7 @@ console.log(
       context: ctx,
       fingerprint,
       measure,
-      stopOnError: process.env.DISK_RIP_STOP === "1",
+      stopOnError: process.env["DISK_RIP_STOP"] === "1",
     }),
   ),
 );

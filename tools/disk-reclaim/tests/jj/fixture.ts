@@ -10,7 +10,7 @@ export class World {
   readonly root = tempRoot("reclaim-ws-");
   readonly repo = join(this.root, "repo");
   readonly remote = join(this.root, "remote.git");
-  private readonly previousConfig = process.env.JJ_CONFIG;
+  private readonly previousConfig = process.env["JJ_CONFIG"];
   readonly env = {
     ...process.env,
     HOME: join(this.root, "home"),
@@ -26,7 +26,7 @@ export class World {
       this.env.JJ_CONFIG,
       'user.name = "t"\nuser.email = "t@example.com"\n',
     );
-    process.env.JJ_CONFIG = this.env.JJ_CONFIG;
+    process.env["JJ_CONFIG"] = this.env.JJ_CONFIG;
     this.sh(this.root, "git", "init", "-q", "--bare", this.remote);
     this.sh(this.root, "jj", "git", "init", this.repo);
     for (const [name, text] of Object.entries({ a: "a\n", ...files }))
@@ -111,8 +111,8 @@ export class World {
     };
   }
   dispose() {
-    if (this.previousConfig === undefined) delete process.env.JJ_CONFIG;
-    else process.env.JJ_CONFIG = this.previousConfig;
+    if (this.previousConfig === undefined) delete process.env["JJ_CONFIG"];
+    else process.env["JJ_CONFIG"] = this.previousConfig;
     rmSync(this.root, { recursive: true, force: true });
   }
 }

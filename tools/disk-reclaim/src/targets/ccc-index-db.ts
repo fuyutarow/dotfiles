@@ -108,7 +108,7 @@ export function createCccIndexDbTarget(
     discoverArtifacts?: typeof discoverArtifacts;
   } = {},
 ): Target {
-  const home = options.home ?? (() => process.env.HOME ?? homedir());
+  const home = options.home ?? (() => process.env["HOME"] ?? homedir());
   const dbRoot =
     options.dbRoot ?? ((root) => join(root, ".cache/cocoindex-code/db"));
   const loadPolicy = options.loadPolicy ?? loadCollectionPolicy;

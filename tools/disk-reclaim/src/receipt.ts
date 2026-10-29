@@ -32,9 +32,9 @@ const nonEmpty = (s: string | undefined) => (s === "" ? undefined : s);
 const gib = (b: number) => `${(b / 2 ** 30).toFixed(1)}G`;
 export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
   return resolve(
-    nonEmpty(env.RECLAIM_STATE_DIR) ??
+    nonEmpty(env["RECLAIM_STATE_DIR"]) ??
       join(
-        nonEmpty(env.XDG_STATE_HOME) ?? join(homedir(), ".local/state"),
+        nonEmpty(env["XDG_STATE_HOME"]) ?? join(homedir(), ".local/state"),
         "reclaim",
       ),
   );
@@ -91,7 +91,7 @@ export async function waitForLock(
 ) {
   const started = performance.now();
   const waitS =
-    boundedWaitS ?? Number(process.env.RECLAIM_LOCK_WAIT_S ?? "900");
+    boundedWaitS ?? Number(process.env["RECLAIM_LOCK_WAIT_S"] ?? "900");
   if (!Number.isFinite(waitS) || waitS < 0)
     return {
       exit: 2,

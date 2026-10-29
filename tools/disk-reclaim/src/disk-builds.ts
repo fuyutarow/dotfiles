@@ -56,7 +56,7 @@ export async function buildsProbe(
   signal?: AbortSignal,
 ): Promise<ProbeResult> {
   const env = { ...process.env };
-  delete env.DISK_BUILDS_ACTION;
+  delete env["DISK_BUILDS_ACTION"];
   return runProbe(
     [process.execPath, join(import.meta.dir, "disk-builds-child.ts")],
     ms,

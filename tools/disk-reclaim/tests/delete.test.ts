@@ -513,9 +513,9 @@ test("refuses a listed jj workspace and advises forgetting it first", async () =
   const workspace = join(f.path, "workspace");
   const w = new World();
   using cleanup = new DisposableStack();
-  const previousPath = process.env.PATH;
+  const previousPath = process.env["PATH"];
   cleanup.defer(() => {
-    process.env.PATH = previousPath;
+    process.env["PATH"] = previousPath;
     w.dispose();
   });
   w.add("candidate", workspace);
@@ -526,7 +526,7 @@ test("refuses a listed jj workspace and advises forgetting it first", async () =
     `#!${process.execPath}\nprocess.stdout.write("[]");\n`,
   );
   chmodSync(join(bin, "agx"), 0o755);
-  process.env.PATH = `${bin}:${previousPath}`;
+  process.env["PATH"] = `${bin}:${previousPath}`;
   const result = await deleteApproved([workspace], {
     config: f.config,
     yes: true,

@@ -138,14 +138,14 @@ export const createRustTarget = (root?: () => string) =>
     tier: "blind",
     available: () => ({ available: true, skip_reason: null }),
     plan: async (ctx: Context) => {
-      const home = process.env.HOME ?? homedir();
+      const home = process.env["HOME"] ?? homedir();
       const roots =
         root === undefined
           ? [
-              ...(process.env.AUDIT_PROJECTS ?? join(home, "Workspace"))
+              ...(process.env["AUDIT_PROJECTS"] ?? join(home, "Workspace"))
                 .split(":")
                 .filter((path) => path !== ""),
-              process.env.KONDO_DIR ?? home,
+              process.env["KONDO_DIR"] ?? home,
             ]
           : [root()];
       const targets = [

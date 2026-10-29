@@ -61,7 +61,7 @@ const headroomPath = resolve(
 
 /** Load the declared collection policy and its authoritative drive thresholds. */
 export async function loadCollectionPolicy(
-  path: string = process.env.RECLAIM_CONFIG ??
+  path: string = process.env["RECLAIM_CONFIG"] ??
     resolve(import.meta.dir, "../reclaim.toml"),
 ): Promise<Result<CollectionPolicy, CollectionPolicyError>> {
   const file = await attempt(() => readFile(path, "utf8"));

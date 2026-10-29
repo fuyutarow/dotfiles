@@ -46,8 +46,8 @@ export type ProcOptions = {
 };
 export const resolveProcRoot = (root?: string): string =>
   root ??
-  process.env.RECLAIM_UNIT_PROC_ROOT ??
-  process.env.RECLAIM_TEST_PROC_ROOT ??
+  process.env["RECLAIM_UNIT_PROC_ROOT"] ??
+  process.env["RECLAIM_TEST_PROC_ROOT"] ??
   "/proc";
 export type ProcessSnapshot = {
   environSessionIds: Probe<string[]>;
@@ -301,7 +301,7 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
       openPaths: [...openPaths, ...mappedPaths],
     });
   }
-  if (process.env.RECLAIM_PROC_TRACE === "1" && pathUnknown.length > 0)
+  if (process.env["RECLAIM_PROC_TRACE"] === "1" && pathUnknown.length > 0)
     pathUnknown.forEach((item) => {
       traceUnknown(item, root, fs);
     });

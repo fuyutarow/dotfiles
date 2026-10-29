@@ -296,12 +296,12 @@ test("rip expiry yields its lock after one payload to a waiting recover", async 
   await using f = await fixture();
   const timerPayload = await f.payload("timer-first", 1024, 800_000);
   const recoverPayload = await f.payload("recover-second", 1024, 700_000);
-  const previousRoot = process.env.RIP_GRAVEYARD;
-  process.env.RIP_GRAVEYARD = f.root;
+  const previousRoot = process.env["RIP_GRAVEYARD"];
+  process.env["RIP_GRAVEYARD"] = f.root;
   using _restoreRoot = {
     [Symbol.dispose]: () => {
-      if (previousRoot === undefined) delete process.env.RIP_GRAVEYARD;
-      else process.env.RIP_GRAVEYARD = previousRoot;
+      if (previousRoot === undefined) delete process.env["RIP_GRAVEYARD"];
+      else process.env["RIP_GRAVEYARD"] = previousRoot;
     },
   };
   const entered = Promise.withResolvers<void>();

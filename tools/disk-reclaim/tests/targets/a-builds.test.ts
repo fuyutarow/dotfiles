@@ -157,14 +157,14 @@ describe("builds target", () => {
 
   test("keeps project virtualenv and dependencies in the blind tier", async () => {
     const home = tempRoot("reclaim-builds-repo-");
-    const oldHome = process.env.HOME;
+    const oldHome = process.env["HOME"];
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
-      if (oldHome === undefined) delete process.env.HOME;
-      else process.env.HOME = oldHome;
+      if (oldHome === undefined) delete process.env["HOME"];
+      else process.env["HOME"] = oldHome;
       rmSync(home, { recursive: true, force: true });
     });
-    process.env.HOME = home;
+    process.env["HOME"] = home;
     const project = join(home, "repo");
     const procDir = join(home, "proc");
     mkdirSync(procDir);
@@ -193,14 +193,14 @@ describe("builds target", () => {
 
   test("keeps a global Bun node_modules tree reached through the Bun bin symlink", async () => {
     const home = tempRoot("reclaim-builds-bun-");
-    const oldHome = process.env.HOME;
+    const oldHome = process.env["HOME"];
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
-      if (oldHome === undefined) delete process.env.HOME;
-      else process.env.HOME = oldHome;
+      if (oldHome === undefined) delete process.env["HOME"];
+      else process.env["HOME"] = oldHome;
       rmSync(home, { recursive: true, force: true });
     });
-    process.env.HOME = home;
+    process.env["HOME"] = home;
     const global = join(home, ".bun/install/global/node_modules");
     const procDir = join(home, "proc");
     mkdirSync(procDir);

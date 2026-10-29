@@ -48,7 +48,7 @@ const probe = (dir: string) => {
 };
 const target = createWorkspacesTarget({ openPaths: probe });
 const worlds: World[] = [];
-const originalPath = process.env.PATH;
+const originalPath = process.env["PATH"];
 const world = (files?: Record<string, string>) => {
   const w = new World(files);
   mkdirSync(join(w.root, "proc"));
@@ -62,11 +62,11 @@ const world = (files?: Record<string, string>) => {
     `#!${process.execPath}\nprocess.stdout.write(await Bun.file(${JSON.stringify(join(w.root, "runs.json"))}).text());\n`,
   );
   chmodSync(join(bin, "agx"), 0o755);
-  process.env.PATH = `${bin}:${originalPath}`;
+  process.env["PATH"] = `${bin}:${originalPath}`;
   return w;
 };
 afterEach(() => {
-  process.env.PATH = originalPath;
+  process.env["PATH"] = originalPath;
   for (const w of worlds.splice(0)) w.dispose();
 });
 afterAll(() => {

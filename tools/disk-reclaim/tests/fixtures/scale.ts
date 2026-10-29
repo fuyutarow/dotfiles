@@ -16,7 +16,7 @@ const errorOf = (error: unknown): Error =>
 async function prepareScaleRoot(
   prefix: string,
 ): Promise<Result<string, Error>> {
-  const cache = process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache");
+  const cache = process.env["XDG_CACHE_HOME"] ?? join(homedir(), ".cache");
   if (!isAbsolute(cache))
     return err(new Error("XDG_CACHE_HOME must be absolute"));
   const prepared = await fromAsyncThrowable(async () => {

@@ -247,12 +247,12 @@ test("rip expiry timer resolves its age from engine config and filesystem space"
   }
   await writeFile(join(root, ".record"), records.join("\n"));
 
-  const previousRoot = process.env.RIP_GRAVEYARD;
-  process.env.RIP_GRAVEYARD = root;
+  const previousRoot = process.env["RIP_GRAVEYARD"];
+  process.env["RIP_GRAVEYARD"] = root;
   using _restoreRoot = {
     [Symbol.dispose]: () => {
-      if (previousRoot === undefined) delete process.env.RIP_GRAVEYARD;
-      else process.env.RIP_GRAVEYARD = previousRoot;
+      if (previousRoot === undefined) delete process.env["RIP_GRAVEYARD"];
+      else process.env["RIP_GRAVEYARD"] = previousRoot;
     },
   };
   const target = createRipExpiryTarget({

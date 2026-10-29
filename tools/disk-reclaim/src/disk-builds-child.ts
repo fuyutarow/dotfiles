@@ -44,7 +44,7 @@ const measure = async (path: string) => {
     error: null,
   };
 };
-const action = process.env.DISK_BUILDS_ACTION;
+const action = process.env["DISK_BUILDS_ACTION"];
 if (action === undefined) {
   const candidates = await target.plan(ctx);
   const rows = await Promise.all(

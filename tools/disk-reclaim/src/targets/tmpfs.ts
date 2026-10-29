@@ -48,7 +48,7 @@ const MAX_TREE_SCAN_ENTRIES = 1_048_576;
 const MAX_TREE_SCAN_MS = 4000;
 
 function mountedTmpfs(): Mount[] {
-  const fixtureRoot = process.env.RECLAIM_TEST_TMPFS_ROOT;
+  const fixtureRoot = process.env["RECLAIM_TEST_TMPFS_ROOT"];
   if (fixtureRoot !== undefined) return [{ path: fixtureRoot, type: "tmpfs" }];
   if (process.platform !== "linux") return [];
   return awaitMountInfo() ?? [];
@@ -184,12 +184,12 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
     options.diskGraveyard ??
     (() =>
       join(
-        process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"),
+        process.env["XDG_DATA_HOME"] ?? join(homedir(), ".local/share"),
         "graveyard",
       ));
   const ripGraveyard =
     options.ripGraveyard ??
-    (() => process.env.RIP_GRAVEYARD ?? process.env.GRAVEYARD);
+    (() => process.env["RIP_GRAVEYARD"] ?? process.env["GRAVEYARD"]);
   const beforeUse = new Map<string, ReturnType<typeof usage>>();
   const stageOptions = new WeakMap<object, PlanOptions>();
   const stageTotals = { candidates: 0, entries: 0, bytes: 0 };
@@ -205,7 +205,8 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
   };
   const buildOptions = (ctx: Context): PlanOptions => {
     const procRoot =
-      process.env.RECLAIM_UNIT_PROC_ROOT ?? process.env.RECLAIM_TEST_PROC_ROOT;
+      process.env["RECLAIM_UNIT_PROC_ROOT"] ??
+      process.env["RECLAIM_TEST_PROC_ROOT"];
     const procOptions = procRoot === undefined ? {} : { procRoot };
     const opened =
       options.isOpen === undefined
@@ -424,7 +425,7 @@ function planEntry(
   const protectedPaths = options.context.config.protected ?? [];
   const configuredProtection = protectedPaths.some((entry) => {
     const root = resolve(
-      entry.replace(/^~(?=\/|$)/u, process.env.HOME ?? homedir()),
+      entry.replace(/^~(?=\/|$)/u, process.env["HOME"] ?? homedir()),
     );
     return (
       path === root ||

@@ -56,7 +56,7 @@ async function workspacesProbe(
   fetch = false,
 ): Promise<ProbeResult> {
   const env = { ...process.env };
-  delete env.DISK_WORKSPACES_ACTION;
+  delete env["DISK_WORKSPACES_ACTION"];
   // Put the planner and its jj/agx children in a separate process group so a
   // deadline cannot leave a forget process running after the lock is released.
   const child = Bun.spawn(

@@ -11,7 +11,7 @@ const bounded = {
   act: async (...args: Parameters<typeof target.act>) => {
     const result = await target.act(...args);
     elapsed += budgetMs;
-    if (process.env.RECLAIM_TEST_CANCEL_AFTER_ONE === "1")
+    if (process.env["RECLAIM_TEST_CANCEL_AFTER_ONE"] === "1")
       process.emit("SIGTERM");
     return result;
   },

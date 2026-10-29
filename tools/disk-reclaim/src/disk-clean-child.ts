@@ -23,7 +23,7 @@ const ctx: Context = {
 };
 const target = createCleanTarget(undefined, undefined, async (home) => {
   const timeout =
-    Number(process.env.DISK_CLEAN_DEADLINE) -
+    Number(process.env["DISK_CLEAN_DEADLINE"]) -
     Temporal.Now.instant().epochMilliseconds -
     500;
   if (timeout <= 0) return fail("deadline expired before Bun cache cleanup");
@@ -83,7 +83,7 @@ async function act(action: string) {
     fail,
   });
 }
-if (process.env.DISK_CLEAN_ACTION === undefined) {
+if (process.env["DISK_CLEAN_ACTION"] === undefined) {
   const candidates = await target.plan(ctx);
   const rows = await Promise.all(
     candidates.map(async (candidate) => ({
@@ -94,5 +94,5 @@ if (process.env.DISK_CLEAN_ACTION === undefined) {
   );
   console.log(JSON.stringify(rows));
 } else {
-  console.log(JSON.stringify(await act(process.env.DISK_CLEAN_ACTION)));
+  console.log(JSON.stringify(await act(process.env["DISK_CLEAN_ACTION"])));
 }

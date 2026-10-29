@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "documents": [
+    {
+      "filename": "evi-gpu_tdr_scheduler_semantics.md",
+      "frontmatter": {
+        "type": "source_evidence",
+        "title": "Windows WDDM TDR scheduler semantics and CUDA error-code boundary",
+        "description": "Bounded primary-source observations on WDDM scheduler preemption, documented defaults, TDR categories, and CUDA errors 700, 702, and 719",
+        "status": "draft",
+        "sok_id": "01a15d52-dda9-77a8-94c0-ddd3fcbdb014",
+        "sources": [
+          {
+            "resource": "https://learn.microsoft.com/en-us/windows-hardware/drivers/display/timeout-detection-and-recovery",
+            "id": "microsoft-wddm-tdr",
+            "title": "WDDM support for timeout detection and recovery"
+          },
+          {
+            "resource": "https://learn.microsoft.com/en-us/windows-hardware/drivers/display/tdr-registry-keys",
+            "id": "microsoft-tdr-registry-keys",
+            "title": "TDR registry keys"
+          },
+          {
+            "resource": "https://docs.nvidia.com/cuda/archive/12.8.0/pdf/CUDA_Runtime_API.pdf#page=533",
+            "id": "nvidia-cuda-runtime-api-12-8",
+            "title": "CUDA Runtime API version 12.8, error-code reference pages 533-535"
+          }
+        ],
+        "generated": {
+          "by": "process:gpu-tdr-semantics-source-distillation",
+          "at": "2026-10-21T00:00:00+09:00"
+        },
+        "sok_locator": "Microsoft WDDM TDR and TDR registry-key pages retrieved 2026-10-21; NVIDIA CUDA Runtime API 12.8 PDF pages 533-535",
+        "sok_capture": "locus_only",
+        "sok_read_depth": "partial",
+        "sok_read_scope": "The supplied packet's named Microsoft WDDM TDR and registry-key pages and NVIDIA CUDA Runtime API 12.8 error-code loci only; no host, Windows, GPU, or runtime observation was performed."
+      },
+      "body": "\n# Capture\n\n## Immutable evidence convention\n\nThis source-evidence document captures only the bounded primary-source loci named\nin its frontmatter. Its `sok_id`, source records, and body are the immutable\nevidence unit proposed for admission. The triad documents cite this capture by\nits `urn:uuid` and must not reinterpret an absent host observation as source\nevidence. Any correction requires a new evidence unit and a new proposal; it\ndoes not silently rewrite this capture.\n\n## EVI-TDR-001 — Scheduler-preemption semantics and default period\n\nMicrosoft describes timeout detection and recovery (TDR) as a graphics-scheduler\npreemption/completion mechanism. The scheduler tries to preempt execution; if it\ncannot complete or preempt the task within the documented default two-second\nperiod, Windows diagnoses a frozen GPU. This is not documentation that every\nCUDA kernel, process, guest syscall, or arbitrary wall-clock wait has a\ntwo-second timeout. Applicability to an individual workload depends on submitted\nwork and platform path.\n\n## EVI-TDR-002 — Documented settings defaults and recovery level\n\nMicrosoft documents `TdrDelay` with a default of two seconds as the delay for a\nscheduler preempt request. `TdrDdiDelay` is a separate driver-thread-exit delay\nwith a default of five seconds. `TdrLevelRecover (3)` is the documented default\ninitial recovery level. The same source limits these registry keys to driver\ndevelopment testing and debugging, not end-user or application manipulation.\nThese are source defaults, not an observation of any host's effective registry\nconfiguration and not evidence that a recovery occurred.\n\n## EVI-TDR-003 — Timeout categories and recovery record boundary\n\nMicrosoft distinguishes an engine timeout `0x141` from a GPU/adapter hang\n`0x117`: engine timeouts do not count toward the GPU-hang count and can be\npromoted if recovery fails. Microsoft also states that successful desktop\nrecovery logs its documented recovery message in Event Viewer and creates a\ndiagnostic report. The bounded packet contains no source that assigns that\nmessage a universal numeric Event Viewer ID such as `4101`; a captured local\nlabel would require its original provider, channel, timestamp, payload, and any\nreport/dump linkage before it can be classified.\n\n## EVI-TDR-004 — CUDA error-code meanings\n\nNVIDIA's CUDA Runtime API 12.8 defines error `700` as illegal address, `702` as\nlaunch timeout, and `719` as launch failure caused by an exception while a\nkernel executes. Thus `719` is not the launch-timeout code. A CUDA numeric error\nalone does not identify a faulty layer, establish a WDDM TDR, or distinguish\napplication memory misuse from system-specific causes.\n\n## Evidence absence boundary\n\nNo host registry value, display event, WER report, dump, scheduler trace,\nguest/host request correlation, GPU experiment, or runtime result is captured\nby this evidence unit. An empty retained result from a particular local query\ncan establish only that no matching record was retained in that queried surface\nand time window; it cannot establish that no TDR or other fault occurred.\n"
+    },
+    {
+      "filename": "led-gpu_tdr_scheduler_semantics.md",
+      "frontmatter": {
+        "type": "sok_claim_ledger",
+        "title": "WDDM TDR scheduler semantics and CUDA error-code boundary — claim ledger",
+        "description": "Claim-level evidence links, reversal conditions, and limits for the bounded WDDM TDR and CUDA error-code position",
+        "status": "draft",
+        "sok_id": "01a15d52-dda9-77a8-94c0-ddd63d538306",
+        "sources": [
+          {
+            "resource": "urn:uuid:01a15d52-dda9-77a8-94c0-ddd3fcbdb014",
+            "id": "gpu-tdr-semantics-evidence"
+          }
+        ],
+        "generated": {
+          "by": "process:gpu-tdr-semantics-source-distillation",
+          "at": "2026-10-21T00:00:00+09:00"
+        },
+        "sok_unit_id": "01a15d52-dda9-77a8-94c0-ddd7550fedf6",
+        "sok_authority_key": "ledger/gpu_tdr_scheduler_semantics"
+      },
+      "body": "\n# Claim ledger — WDDM TDR scheduler semantics and CUDA error-code boundary\n\n| ID | Claim | Disposition | Evidence | Reversal condition | Limit |\n| --- | --- | --- | --- | --- | --- |\n| TDRSEM-001 | WDDM TDR is a scheduler preemption/completion mechanism with a documented default two-second period. | supported | `urn:uuid:01a15d52-dda9-77a8-94c0-ddd3fcbdb014#EVI-TDR-001` | An applicable official WDDM source defines TDR differently or revises the default. | Does not make two seconds an arbitrary CUDA-kernel, process, or guest-syscall wall-clock timeout. |\n| TDRSEM-002 | `TdrDelay=2 s`, `TdrDdiDelay=5 s`, and `TdrLevelRecover=3` are documented defaults with distinct meanings. | supported | `urn:uuid:01a15d52-dda9-77a8-94c0-ddd3fcbdb014#EVI-TDR-002` | An applicable official registry-key source changes these definitions or defaults. | No effective host configuration or recovery is evidenced; the source does not recommend end-user/application adjustment. |\n| TDRSEM-003 | `0x141` is an engine timeout and `0x117` is a GPU/adapter-hang category; successful desktop recovery has a documented Event Viewer message and diagnostic report. | supported-with-limitations | `urn:uuid:01a15d52-dda9-77a8-94c0-ddd3fcbdb014#EVI-TDR-003` | An applicable official WDDM source revises these categories or recovery behavior. | No universal numeric Event Viewer ID is established here; a local label needs original record material. |\n| TDRSEM-004 | CUDA `700` is illegal address, `702` is launch timeout, and `719` is launch failure/device exception; `719` is not launch timeout. | supported | `urn:uuid:01a15d52-dda9-77a8-94c0-ddd3fcbdb014#EVI-TDR-004` | An applicable NVIDIA CUDA Runtime API source revises the error-code definitions. | A numeric CUDA error does not identify layer, root cause, or WDDM TDR occurrence. |\n| TDRSEM-005 | The bounded source corpus cannot establish an incident's effective host settings, TDR occurrence, reset, root cause, or WSL `dxg` causal direction. | supported-with-limitations | `urn:uuid:01a15d52-dda9-77a8-94c0-ddd3fcbdb014#Evidence absence boundary` | A separately retained, incident-correlated evidence unit supplies the missing original host/guest records and supports a narrower claim. | This is an evidence-boundary conclusion, not evidence that the hypothesized cause is false. |\n| TDRSEM-006 | An empty result from a particular retained event-log query cannot refute a TDR or other host fault without a mechanism-to-surface and retention guarantee. | supported-with-limitations | `urn:uuid:01a15d52-dda9-77a8-94c0-ddd3fcbdb014#Evidence absence boundary` | An applicable source plus retained configuration proves the mechanism must emit and remain retained in that exact queried surface. | It establishes only the narrow absence of a retained matching record in that query's surface and window. |\n"
+    },
+    {
+      "filename": "pro-gpu_tdr_scheduler_semantics.md",
+      "frontmatter": {
+        "type": "sok_protocol",
+        "title": "WDDM TDR scheduler semantics and CUDA error-code boundary — protocol",
+        "description": "Bounded primary-source distillation protocol for WDDM TDR semantics, defaults, categories, and CUDA errors 700, 702, and 719",
+        "status": "draft",
+        "sok_id": "01a15d52-dda9-77a8-94c0-ddd535c0796b",
+        "sources": [
+          {
+            "resource": "urn:uuid:01a15d52-dda9-77a8-94c0-ddd3fcbdb014",
+            "id": "gpu-tdr-semantics-evidence"
+          }
+        ],
+        "generated": {
+          "by": "process:gpu-tdr-semantics-source-distillation",
+          "at": "2026-10-21T00:00:00+09:00"
+        },
+        "sok_unit_id": "01a15d52-dda9-77a8-94c0-ddd7550fedf6",
+        "sok_authority_key": "protocol/gpu_tdr_scheduler_semantics"
+      },
+      "body": "\n# Protocol — WDDM TDR scheduler semantics and CUDA error-code boundary\n\n## Review mode and supplied corpus\n\nThis is a supplied, bounded primary-source distillation dated 2026-10-21. The\ncorpus is exactly the official Microsoft WDDM TDR page, Microsoft TDR registry\nkey page, and NVIDIA CUDA Runtime API 12.8 error-code loci identified in the\nsource packet. No additional source discovery, host query, Windows query, GPU\ntrial, or runtime test was performed.\n\n## Coverage contract\n\nThe unit may state only source-defined scheduler-preemption semantics,\ndocumented default values and recovery categories, CUDA error-code meanings,\nand the evidentiary limits that follow from their scope. It may not convert a\ndocumented default into an effective host setting, a category into a current\nevent, a CUDA code into a root cause, or a compatible guest-to-host narrative\ninto a proven causal mechanism.\n\n## Capture and synthesis convention\n\nThe evidence role uses `locus_only`: it retains named public resources, observed\ndate, and exact page/section scope rather than presenting a source summary as a\nverbatim quotation. The position is a synthesis of those observations; the\nledger gives each synthesis claim its evidence link, reversal condition, and\nlimit. The proposed four-role unit shares one unit ID, while the evidence\ncapture remains immutable after admission. A correction is a new capture and\nnew proposal, not an alteration of admitted evidence bytes.\n\n## Counterevidence and absence limits\n\nNo novelty claim is made. The supplied bounded corpus was not expanded with a\nmechanism-synonym or literature-completeness search. No source in this corpus\nestablishes that a specific Event Viewer numeric ID universally denotes the\ndocumented recovery message. Nor does this corpus establish that any queried\nevent-log surface is exhaustive. Therefore missing local records remain\n`not reported` for this knowledge unit, not evidence against a TDR or another\nhost fault.\n\n## Structural omissions\n\nThe protocol structurally omits host-effective registry state, event XML,\nreport/dump linkage, driver and firmware state, scheduler traces, guest/host\ncorrelation, WSL `dxg` transport details, application memory behavior, and\nruntime experiments. Those omissions prevent incident attribution and causal\ndirection claims without contradicting the bounded documented semantics.\n"
+    },
+    {
+      "filename": "sok-gpu_tdr_scheduler_semantics.md",
+      "frontmatter": {
+        "type": "sok_position",
+        "title": "WDDM TDR scheduler semantics and CUDA error-code uncertainty boundary",
+        "description": "Bounded position on scheduler-preemption TDR semantics, documented defaults, CUDA errors 700, 702, and 719, and the limits of incident attribution",
+        "status": "draft",
+        "sok_id": "01a15d52-dda9-77a8-94c0-ddd4fb36f074",
+        "sources": [
+          {
+            "resource": "urn:uuid:01a15d52-dda9-77a8-94c0-ddd535c0796b",
+            "id": "gpu-tdr-semantics-protocol"
+          },
+          {
+            "resource": "urn:uuid:01a15d52-dda9-77a8-94c0-ddd63d538306",
+            "id": "gpu-tdr-semantics-ledger"
+          },
+          {
+            "resource": "urn:uuid:01a15d52-dda9-77a8-94c0-ddd3fcbdb014",
+            "id": "gpu-tdr-semantics-evidence"
+          }
+        ],
+        "generated": {
+          "by": "process:gpu-tdr-semantics-source-distillation",
+          "at": "2026-10-21T00:00:00+09:00"
+        },
+        "sok_unit_id": "01a15d52-dda9-77a8-94c0-ddd7550fedf6",
+        "sok_authority_key": "sok/gpu_tdr_scheduler_semantics"
+      },
+      "body": "\n# WDDM TDR scheduler semantics and CUDA error-code uncertainty boundary\n\n## Research question\n\nWhat do the bounded official sources establish about Windows WDDM TDR as a\nscheduler-preemption mechanism, its documented defaults and categories, and the\nmeaning of CUDA errors `700`, `702`, and `719`; what remains unknown about an\nindividual incident's host state or causal path?\n\n## Position\n\n### Known\n\n- WDDM TDR is documented as a scheduler preemption/completion mechanism with a\n  default two-second timeout period. This does not make two seconds a universal\n  wall-clock deadline for arbitrary CUDA work or guest waiting.\n- `TdrDelay` defaults to two seconds for the scheduler preempt request;\n  `TdrDdiDelay` defaults to five seconds for driver threads to leave; and\n  `TdrLevelRecover (3)` is the documented default initial recovery level. These\n  values are development/debugging controls, not a recommendation to alter an\n  end-user or application system.\n- WDDM distinguishes engine timeout `0x141` from GPU/adapter hang `0x117`.\n  Successful desktop recovery is documented to log a recovery message and\n  diagnostic report, but this corpus does not source-verify a universal numeric\n  Event Viewer ID for that message.\n- CUDA `700` means illegal address, `702` means launch timeout, and `719` means\n  launch failure/device exception. In particular, CUDA `719` is not CUDA launch\n  timeout.\n\n### Uncertain\n\n- The effective TDR configuration, recovery state, and any event/dump material\n  on an individual host are not established by the source defaults.\n- Whether a host TDR, a host reset, another driver/hardware failure, an\n  application error, or a guest-only condition occurred in an incident is not\n  established here.\n- A proposed guest request → WSL `dxg` boundary → host WDDM TDR/recovery →\n  guest CUDA wait/failure sequence is a causal hypothesis only. This unit has no\n  correlated request identity or mechanism trace and asserts no causal direction.\n- A locally captured `Display/4101`, `0x141`, or `0x117` label requires original\n  record material before it can support its documented category; it would still\n  not identify the initiating guest request or root cause by itself.\n\n### Missing\n\n- Incident-correlated host event XML, WER live-kernel report or dump identifier,\n  driver version, and guest process/TID, CUDA error, and `dxg` wait observations\n  on a common time base are absent from this corpus.\n- Evidence that particular event-log channels, providers, IDs, fields, and\n  retention policies exhaustively expose the mechanism of interest is absent.\n- Independent semantic review and runtime or host evidence are absent.\n\n## Reversal conditions\n\nThis position changes if an applicable official source revises the stated WDDM\nor CUDA definitions, or if a separately retained incident-correlated evidence\nunit supplies original host/guest records that support or rule out a narrower\ncausal claim. Source defaults alone cannot satisfy that second condition.\n\n## Coverage boundary\n\nThis is a supplied, bounded primary-source distillation dated 2026-10-21. It\ncovers only the named Microsoft WDDM TDR and registry-key pages and NVIDIA CUDA\nRuntime API 12.8 error-code loci. It makes no literature-completeness claim;\ncontains no host query, Windows/GPU/runtime trial, registry read, or current\nincident assertion; and does not recommend a TDR setting change.\n"
+    }
+  ]
+}

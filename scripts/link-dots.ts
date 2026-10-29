@@ -37,7 +37,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, realpath, rename } from "node:fs/promises";
 import { hostname, homedir, release } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -976,7 +976,28 @@ export async function deployMacStatusline(
     );
   const domain = `gui/${process.getuid?.()}`;
   const label = `${domain}/${name}`;
+  const hash = createHash("sha256")
+    .update(new Uint8Array(await Bun.file(source).arrayBuffer()))
+    .digest("hex");
+  const state = join(
+    ctx.stateHome ?? join(ctx.home, ".local/state"),
+    "dotfiles/launchd",
+    `${name}.sha256`,
+  );
   const loaded = await probe(["print", label]);
+  const stateFile = Bun.file(state);
+  const recorded = (await stateFile.exists())
+    ? (await stateFile.text()).trim()
+    : undefined;
+  if (loaded.code === 0 && recorded === hash) return undefined;
+  await mkdir(dirname(state), { recursive: true });
+  const writeState = async (value: string) => {
+    const temporary = `${state}.${randomUUID()}.tmp`;
+    await Bun.write(temporary, value);
+    await rename(temporary, state);
+  };
+  // Invalidate before changing launchd so an interrupted reload cannot certify old state.
+  await writeState("");
   if (loaded.code === 0) {
     const stopped = await probe(["bootout", label]);
     if (stopped.code !== 0)
@@ -984,11 +1005,14 @@ export async function deployMacStatusline(
         `launchctl bootout failed: ${stopped.out}; repair: mise run link:dots`,
       );
   }
-  const result = await probe(["bootstrap", domain, plist]);
+  let result = await probe(["bootstrap", domain, plist]);
+  if (result.code !== 0 && /Bootstrap failed:\s*5\b/u.test(result.out))
+    result = await probe(["bootstrap", domain, plist]);
   if (result.code !== 0)
     return new Error(
       `launchctl bootstrap failed: ${result.out}; repair: mise run link:dots`,
     );
+  await writeState(`${hash}\n`);
   say(`loaded: ${name} launchd agent`);
   return undefined;
 }

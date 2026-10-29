@@ -97,6 +97,11 @@ test("mac sampler agent is linked, bootstrapped idempotently, and check is read-
   expect(calls[2]?.[2]).toBe(plist);
   calls.length = 0;
   expect(
+    await deployStatuslineOwners(ctx, undefined, undefined, launch),
+  ).toBeUndefined();
+  expect(calls.map(([verb]) => verb)).toEqual(["print"]);
+  calls.length = 0;
+  expect(
     await deployStatuslineOwners(
       { ...ctx, mode: "check" },
       undefined,
@@ -114,6 +119,47 @@ test("mac sampler agent is linked, bootstrapped idempotently, and check is read-
   expect(declaration).toContain("/opt/homebrew/bin");
   expect(declaration).toContain("tools/statusline/src/sampler.ts");
   expect(declaration).not.toContain("linuxbrew");
+});
+
+test("mac sampler reloads changed definitions and bootstraps unloaded agents", async () => {
+  const ctx = { ...fixture("safe"), os: "mac" as const };
+  const sourceDir = join(ctx.dotfiles, "launchd");
+  const dir = join(ctx.home, "Library/LaunchAgents");
+  mkdirSync(sourceDir, { recursive: true });
+  mkdirSync(dir, { recursive: true });
+  const source = join(sourceDir, "statusline-sampler.plist");
+  writeFileSync(source, "first");
+  symlinkSync(source, join(dir, "statusline-sampler.plist"));
+  const calls: string[][] = [];
+  let loaded = false;
+  const launch = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve({
+      code: args[0] === "print" && !loaded ? 1 : 0,
+      out: "",
+    });
+  };
+  expect(
+    await deployStatuslineOwners(ctx, undefined, undefined, launch),
+  ).toBeUndefined();
+  expect(calls.map(([verb]) => verb)).toEqual(["print", "bootstrap"]);
+  const state = join(
+    ctx.home,
+    ".local/state/dotfiles/launchd/statusline-sampler.sha256",
+  );
+  const firstHash = readFileSync(state, "utf8");
+  loaded = true;
+  writeFileSync(source, "changed");
+  calls.length = 0;
+  expect(
+    await deployStatuslineOwners(ctx, undefined, undefined, launch),
+  ).toBeUndefined();
+  expect(calls.map(([verb]) => verb)).toEqual([
+    "print",
+    "bootout",
+    "bootstrap",
+  ]);
+  expect(readFileSync(state, "utf8")).not.toBe(firstHash);
 });
 
 test("mac sampler reports bootstrap failure", async () => {
@@ -135,6 +181,39 @@ test("mac sampler reports bootstrap failure", async () => {
       }),
   );
   expect(error?.message).toContain("denied");
+});
+
+test("mac sampler retries bootstrap error 5 after booting out a loaded agent", async () => {
+  const ctx = { ...fixture("safe"), dotfiles: REPO, os: "mac" as const };
+  const dir = join(ctx.home, "Library/LaunchAgents");
+  mkdirSync(dir, { recursive: true });
+  symlinkSync(
+    join(REPO, "launchd/statusline-sampler.plist"),
+    join(dir, "statusline-sampler.plist"),
+  );
+  const calls: string[][] = [];
+  let bootstraps = 0;
+  const error = await deployStatuslineOwners(
+    ctx,
+    undefined,
+    undefined,
+    (args) => {
+      calls.push(args);
+      if (args[0] === "bootstrap" && bootstraps++ === 0)
+        return Promise.resolve({
+          code: 5,
+          out: "Bootstrap failed: 5: Input/output error",
+        });
+      return Promise.resolve({ code: 0, out: "" });
+    },
+  );
+  expect(error).toBeUndefined();
+  expect(calls.map(([verb]) => verb)).toEqual([
+    "print",
+    "bootout",
+    "bootstrap",
+    "bootstrap",
+  ]);
 });
 
 test("doctor refresh deployment enables its timer without starting a collector", async () => {

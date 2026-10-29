@@ -70,7 +70,12 @@ test.each(displayCases)(
     expect(calls[1]?.filter((token) => token.startsWith("rc="))).toEqual(
       marker === "" ? [] : [`rc=${marker}`],
     );
-    expect(calls[1]?.includes("--clear-token")).toBe(marker === "");
+    const args = calls[1] ?? [];
+    expect(
+      args.some(
+        (arg, index) => arg === "--clear-token" && args[index + 1] === "rc",
+      ),
+    ).toBe(marker === "");
     let reason = "";
     if (isAgent && state !== "rc:on" && state !== "rc:off")
       reason = state ?? "remote-control observation unavailable";

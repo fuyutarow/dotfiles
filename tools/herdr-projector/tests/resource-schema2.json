@@ -1,0 +1,40 @@
+{
+  "schema": 2,
+  "at": "2026-10-30T00:00:00Z",
+  "window_ms": 2000,
+  "host": {
+    "cpu_pct": 100,
+    "cores": 4,
+    "ram_bytes": 2048,
+    "ram_total_bytes": 4096,
+    "vram_bytes": null,
+    "vram_total_bytes": null
+  },
+  "agx": "ok",
+  "sessions": [
+    {
+      "session_id": "sid-1",
+      "vendor": "claude",
+      "pid": 1,
+      "cpu_pct": 32,
+      "ram_bytes": 1073741824,
+      "vram_bytes": 536870912,
+      "workers": {
+        "count": 2,
+        "cpu_pct": 53,
+        "ram_bytes": 214748365,
+        "vram_bytes": 134217728
+      }
+    }
+  ],
+  "unresolved_agents": [
+    {
+      "pid": 2,
+      "vendor": "codex",
+      "cpu_pct": 1,
+      "ram_bytes": 1024,
+      "vram_bytes": null
+    }
+  ],
+  "unowned": [{ "label": "orphan", "cpu_pct": 2, "ram_bytes": 1024 }]
+}

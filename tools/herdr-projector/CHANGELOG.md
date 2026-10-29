@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 — 2026-10-30
+
+- Project per-session RAM and VRAM resource tokens
+
 ## 0.2.0 — 2026-10-29
 
 - Project agent CPU and worker usage from the shared snapshot.

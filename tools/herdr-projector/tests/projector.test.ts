@@ -19,6 +19,8 @@ import {
 } from "../src/herdr-projector.ts";
 import { AgentSchema } from "../src/herdr-projector.ts";
 import ownerList from "./owner-list-oct21.json" with { type: "json" };
+import resourceV1 from "./resource-schema1.json" with { type: "json" };
+import resourceV2 from "./resource-schema2.json" with { type: "json" };
 
 const session = (overrides: Record<string, unknown> = {}) => ({
   schema: 1,
@@ -385,6 +387,86 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
     }),
   );
   expect(await readAgentCpu(env, now)).toBeDefined();
+});
+
+test("resource fixtures preserve CPU and project memory sums or clear absent tokens", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-resource-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
+  };
+  await mkdir(join(root, "dotfiles"));
+  const path = join(root, "dotfiles", "agent-cpu.json");
+  const now = Temporal.Instant.from(resourceV1.at).epochMilliseconds;
+  const parsedIdentity = FleetSessionSchema.safeParse(session());
+  if (!parsedIdentity.success) expect.unreachable("invalid fixture identity");
+  const identity = parsedIdentity.data;
+  const agent = {
+    agent: "claude",
+    pane_id: "pane",
+    tab_id: "tab",
+    agent_session: { value: "sid-1" },
+  };
+  const report = async (doc: unknown) => {
+    await Bun.write(path, JSON.stringify(doc));
+    const snapshot = await readAgentCpu({ XDG_STATE_HOME: root }, now);
+    const calls: string[][] = [];
+    await projectAgents(
+      [agent],
+      new Map([["sid-1", identity]]),
+      (args) => {
+        calls.push(args);
+        return Promise.resolve(true);
+      },
+      new Map(),
+      new Map(),
+      new Map(),
+      snapshot,
+    );
+    return { snapshot, args: calls[1] ?? [] };
+  };
+  const v1 = await report(resourceV1);
+  expect(v1.snapshot?.schema).toBe(1);
+  expect(v1.args).toContain("cpu=cpu:32%");
+  expect(v1.args).toContain("workers=w:2·53%");
+  expect(v1.args).toContain("--clear-token");
+  expect(v1.args).toContain("ram");
+  expect(v1.args).toContain("vram");
+  const v2 = await report(resourceV2);
+  expect(v2.snapshot?.schema).toBe(2);
+  expect(v2.args).toContain("cpu=cpu:32%");
+  expect(v2.args).toContain("workers=w:2·53%");
+  expect(v2.args).toContain("ram=ram 1.2G");
+  expect(v2.args).toContain("vram=vram 640M");
+  expect(agentCpuCacheInput(v2.snapshot)).not.toBe(
+    agentCpuCacheInput(v1.snapshot),
+  );
+  const row = resourceV2.sessions[0];
+  if (row === undefined) expect.unreachable("missing fixture session");
+  for (const [vram, workers] of [
+    [null, null],
+    [0, { ...row.workers, vram_bytes: 0 }],
+    [123, { ...row.workers, vram_bytes: null }],
+  ] as const) {
+    const result = await report({
+      ...resourceV2,
+      sessions: [{ ...row, vram_bytes: vram, workers }],
+    });
+    expect(result.args).toContain("vram");
+    expect(result.args).toContain("--clear-token");
+  }
+  const noWorkers = await report({
+    ...resourceV2,
+    sessions: [{ ...row, workers: null }],
+  });
+  expect(noWorkers.args).toContain("ram=ram 1G");
+  expect(noWorkers.args).toContain("vram=vram 512M");
+  const zero = await report({
+    ...resourceV2,
+    sessions: [{ ...row, ram_bytes: 0, vram_bytes: 0, workers: null }],
+  });
+  expect(zero.args).toContain("ram=ram 0B");
+  expect(zero.args).toContain("vram");
+  expect(zero.args).toContain("--clear-token");
 });
 
 const footerThread = "01a15424-5f6d-7ce0-9244-eb632a37f579";

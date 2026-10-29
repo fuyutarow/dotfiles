@@ -43,7 +43,7 @@ export const AgentSchema = z.object({
 const ListSchema = z.object({
   result: z.object({ agents: z.array(AgentSchema) }),
 });
-const AgentCpuSchema = z.object({
+const AgentCpuSchemaV1 = z.object({
   schema: z.literal(1),
   at: z.iso.datetime(),
   window_ms: z.number().int().positive(),
@@ -69,10 +69,58 @@ const AgentCpuSchema = z.object({
   ),
   unowned: z.array(z.object({ label: z.string(), cpu_pct: z.number() })),
 });
+const bytes = z.number().int().nonnegative();
+const AgentCpuSchemaV2 = AgentCpuSchemaV1.extend({
+  schema: z.literal(2),
+  host: AgentCpuSchemaV1.shape.host.extend({
+    ram_bytes: bytes,
+    ram_total_bytes: bytes,
+    vram_bytes: bytes.nullable(),
+    vram_total_bytes: bytes.nullable(),
+  }),
+  sessions: z.array(
+    AgentCpuSchemaV1.shape.sessions.element.extend({
+      ram_bytes: bytes,
+      vram_bytes: bytes.nullable(),
+      workers: z
+        .object({
+          count: z.number().int().nonnegative(),
+          cpu_pct: z.number(),
+          ram_bytes: bytes,
+          vram_bytes: bytes.nullable(),
+        })
+        .nullable(),
+    }),
+  ),
+  unresolved_agents: z.array(
+    AgentCpuSchemaV1.shape.unresolved_agents.element.extend({
+      ram_bytes: bytes,
+      vram_bytes: bytes.nullable(),
+    }),
+  ),
+  unowned: z.array(
+    AgentCpuSchemaV1.shape.unowned.element.extend({ ram_bytes: bytes }),
+  ),
+});
+const AgentCpuSchema = z.discriminatedUnion("schema", [
+  AgentCpuSchemaV1,
+  AgentCpuSchemaV2,
+]);
 const HERDR_TIMEOUT_MS = 2500;
 type AgentCpuSnapshot = z.output<typeof AgentCpuSchema>;
 type Agent = z.output<typeof AgentSchema>;
 type PaneTitleBinding = { sessionId: string; title: CodexNativeTitleRead };
+
+function formatMemory(byteCount: number): string {
+  let value = byteCount;
+  let unit = "B";
+  for (const next of ["K", "M", "G", "T", "P"]) {
+    if (value < 1024) break;
+    value /= 1024;
+    unit = next;
+  }
+  return `${Number(value.toFixed(1))}${unit}`;
+}
 
 /** Native session_index is an append log: a rename adds a newer exact-ID row. */
 export async function readProjectorTitle(
@@ -829,6 +877,34 @@ export async function projectAgents(
           ? ["--clear-token", "workers"]
           : ["--token", `workers=${workerToken}`]),
       );
+    if (isAgent) {
+      const memorySession =
+        cpuSnapshot?.schema === 2 && matchedSessionId !== undefined
+          ? cpuSnapshot.sessions.find(
+              (row) =>
+                row.session_id === matchedSessionId && row.vendor === vendor,
+            )
+          : undefined;
+      const ram =
+        memorySession === undefined
+          ? undefined
+          : memorySession.ram_bytes + (memorySession.workers?.ram_bytes ?? 0);
+      const vram =
+        memorySession === undefined ||
+        memorySession.vram_bytes === null ||
+        (memorySession.workers !== null &&
+          memorySession.workers.vram_bytes === null)
+          ? undefined
+          : memorySession.vram_bytes + (memorySession.workers?.vram_bytes ?? 0);
+      cpuArgs.push(
+        ...(ram === undefined
+          ? ["--clear-token", "ram"]
+          : ["--token", `ram=ram ${formatMemory(ram)}`]),
+        ...(vram === undefined || vram === 0
+          ? ["--clear-token", "vram"]
+          : ["--token", `vram=vram ${formatMemory(vram)}`]),
+      );
+    }
     if (vendor === "btm")
       cpuArgs.push(
         ...(unowned === ""

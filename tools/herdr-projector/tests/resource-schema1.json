@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "at": "2026-10-30T00:00:00Z",
+  "window_ms": 2000,
+  "host": { "cpu_pct": 100, "cores": 4 },
+  "agx": "ok",
+  "sessions": [
+    {
+      "session_id": "sid-1",
+      "vendor": "claude",
+      "pid": 1,
+      "cpu_pct": 32,
+      "workers": { "count": 2, "cpu_pct": 53 }
+    }
+  ],
+  "unresolved_agents": [],
+  "unowned": []
+}

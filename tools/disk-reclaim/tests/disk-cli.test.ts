@@ -1,14 +1,24 @@
 import { jsonOf, jsonText, z } from "@dotfiles/shared/src/zod.ts";
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  writeFile,
+  mkdir,
+  rename,
+  symlink,
+  utimes,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { runProbe } from "../src/disk-probe.ts";
 import { planPaths } from "../src/disk-path-plan.ts";
 import { movePaths } from "../src/disk-move.ts";
-import type { Candidate } from "../src/model.ts";
-import type { Context } from "../src/targets/index.ts";
+import type { Candidate, Config } from "../src/model.ts";
+import type { Context, Target } from "../src/targets/index.ts";
+import { createToolchainsTarget } from "../src/targets/toolchains.ts";
+import { toolchainsWorker } from "../src/disk-toolchains-worker.ts";
 
 const cli = join(import.meta.dir, "../src/disk.ts");
 const tmpfsProbe: typeof runProbe = () =>
@@ -1253,7 +1263,6 @@ test("rust entry preserves legacy refusals and reports measured per-item removal
   const { createRustTarget } = await import("../src/targets/rust.ts");
   const { freeClean } = await import("../src/disk-clean.ts");
   const { cleanAction } = await import("../src/disk-clean-action.ts");
-  const { symlink } = await import("node:fs/promises");
   for (const scenario of [
     "manifest",
     "busy",
@@ -1423,4 +1432,444 @@ test("rust plan-only requests cannot invoke an action", async () => {
     receipt: null,
   });
   expect(existsSync(join(home, "state"))).toBe(false);
+});
+const toolchainCandidate = (
+  path: string,
+  verdict: "KEEP" | "RECLAIM",
+  reason: string,
+): Candidate => ({
+  id: path,
+  path,
+  verdict,
+  reason,
+  checks: [],
+  bytes: 1024,
+  bytes_kind: "freed_now",
+  action: { kind: "delete", argv: verdict === "KEEP" ? [] : [path] },
+  result: null,
+});
+test("toolchains adapter preserves selected rows and requires measured results", async () => {
+  const { freeToolchains } = await import("../src/disk-toolchains.ts");
+  const candidates = [
+    {
+      candidate: toolchainCandidate(
+        "/fixture/current",
+        "KEEP",
+        "default rustup toolchain",
+      ),
+      fingerprint: null,
+    },
+    {
+      candidate: toolchainCandidate(
+        "/fixture/pinned",
+        "KEEP",
+        "pinned rustup toolchain",
+      ),
+      fingerprint: null,
+    },
+    {
+      candidate: toolchainCandidate(
+        "/fixture/old",
+        "RECLAIM",
+        "superseded release",
+      ),
+      fingerprint: "identity",
+    },
+  ];
+  const requests: string[] = [];
+  let unlocked = false;
+  let measures = 0;
+  const deps = {
+    guard: () => null,
+    lock: () =>
+      Promise.resolve({
+        release: () => {
+          unlocked = true;
+        },
+        exit: 0,
+        error: null,
+      }),
+    probe: (_argv: string[], _timeout: number, env?: NodeJS.ProcessEnv) => {
+      const isPlan = env?.DISK_TOOLCHAINS_REQUEST === "{}";
+      requests.push(isPlan ? "plan" : "/fixture/old");
+      const out = isPlan
+        ? candidates
+        : {
+            verdict: "completed",
+            reason: "removed",
+            effect: "unlink",
+            detail: { ok: true, bytes_freed: 1024, error: null },
+            same_filesystem: true,
+          };
+      return Promise.resolve({
+        out: JSON.stringify(out),
+        err: "",
+        exit: 0,
+        timedOut: false,
+      });
+    },
+    measure: () => {
+      measures++;
+      return Promise.resolve({
+        time: "now",
+        source: "statfs",
+        mount: null,
+        filesystem: null,
+        available_bytes: 100,
+        free_inodes: 10,
+        error: null,
+      });
+    },
+    receipt: () =>
+      Promise.resolve({
+        id: "receipt",
+        path: "/fixture/receipt",
+        delivery_error: null,
+      }),
+  };
+  const result = await freeToolchains(10000, performance.now(), false, deps);
+  expect(requests).toEqual(["plan", "/fixture/old"]);
+  expect(result.items.map((item) => item.verdict)).toEqual([
+    "keep",
+    "keep",
+    "completed",
+  ]);
+  expect(result.items[2]?.detail).toMatchObject({
+    before: { available_bytes: 100 },
+    after: { available_bytes: 100 },
+  });
+  expect(result.exit).toBe(1);
+  expect(result.receipt?.id).toBe("receipt");
+  expect(unlocked).toBe(true);
+
+  expect(measures).toBe(2);
+  let attempts = 0;
+  const missingAfter = await freeToolchains(10000, performance.now(), false, {
+    ...deps,
+    measure: () => {
+      attempts++;
+      if (attempts === 1) return deps.measure();
+      return new Promise((_resolve, reject) => {
+        reject(new Error("statfs unavailable"));
+      });
+    },
+  });
+  expect(missingAfter.exit).toBe(4);
+  expect(missingAfter.items[2]).toMatchObject({
+    verdict: "unknown",
+    effect: "unlink",
+  });
+  const missingReceipt = await freeToolchains(10000, performance.now(), false, {
+    ...deps,
+    receipt: () =>
+      new Promise((_resolve, reject) => {
+        reject(new Error("receipt unavailable"));
+      }),
+  });
+  expect(missingReceipt.exit).toBe(4);
+  expect(missingReceipt.items[2]).toMatchObject({
+    verdict: "unknown",
+    effect: "unlink",
+  });
+  const denied = await freeToolchains(10000, performance.now(), false, {
+    ...deps,
+    guard: () => "worker guard",
+  });
+  expect(denied.items[0]).toMatchObject({ verdict: "deny", effect: "none" });
+  const busy = await freeToolchains(10000, performance.now(), false, {
+    ...deps,
+    lock: () => Promise.resolve({ release: null, exit: 3, error: "busy" }),
+  });
+  expect(busy.exit).toBe(3);
+});
+
+test("toolchain worker rechecks refusals and identity before invoking action", async () => {
+  const config: Config = {
+    repo_roots: [],
+    repos: [],
+    scratch_roots: [],
+    delete_roots: [],
+    regenerable_ignored: [],
+    session_grace_hours: 24,
+    ignore_unreadable_procs: ["sshd"],
+  };
+  const path = "/fixture/version";
+  let rows: Candidate[] = [];
+  let actions = 0;
+  let protection: string | null = null;
+  const target: Target = {
+    name: "toolchains",
+    tier: "blind",
+    available: () => ({ available: true, skip_reason: null }),
+    plan: () => Promise.resolve(rows),
+    act: () => {
+      actions++;
+      return Promise.resolve({ ok: true, bytes_freed: 100, error: null });
+    },
+  };
+  const injected = {
+    config,
+    target,
+    fingerprint: () => Promise.resolve("identity"),
+    protection: () => protection,
+  };
+  for (const reason of [
+    "default rustup toolchain",
+    "pinned rustup toolchain",
+  ]) {
+    rows = [toolchainCandidate(path, "KEEP", reason)];
+    expect(
+      await toolchainsWorker({ path, fingerprint: "identity" }, injected),
+    ).toMatchObject({ verdict: "changed", effect: "none" });
+  }
+  rows = [];
+  expect(
+    await toolchainsWorker({ path, fingerprint: "identity" }, injected),
+  ).toMatchObject({ verdict: "changed", effect: "none" });
+  rows = [toolchainCandidate(path, "RECLAIM", "old")];
+  protection = "process paths are unknown";
+  expect(
+    await toolchainsWorker({ path, fingerprint: "identity" }, injected),
+  ).toMatchObject({ verdict: "unknown", effect: "none" });
+  protection = null;
+  expect(
+    await toolchainsWorker({ path, fingerprint: "changed" }, injected),
+  ).toMatchObject({ verdict: "changed", effect: "none" });
+  expect(actions).toBe(0);
+  expect(
+    await toolchainsWorker({ path, fingerprint: "identity" }, injected),
+  ).toMatchObject({ verdict: "completed", effect: "unlink" });
+  expect(actions).toBe(1);
+});
+
+test("real toolchains planner exposes retained versions through the disk adapter", async () => {
+  const home = await mkdtemp(join(tmpdir(), "disk-toolchain-parity-"));
+  const proc = join(home, "proc");
+  const rust = join(home, ".rustup/toolchains");
+  const releases = join(home, ".codex/packages/standalone/releases");
+  const servers = join(home, ".vscode-server/cli/servers");
+  const now = 2_000_000_000;
+  const old = now - 10 * 86400;
+  for (const path of [
+    join(proc, "123"),
+    join(home, "Workspace/project"),
+    ...["stable", "nightly"].map((name) => join(rust, name)),
+    ...["current", "recent", "live", "old"].map((name) => join(releases, name)),
+    ...["Stable-live", "Stable-new"].map((name) => join(servers, name)),
+  ])
+    await mkdir(path, { recursive: true });
+  await writeFile(
+    join(home, "Workspace/project/rust-toolchain.toml"),
+    '[toolchain]\nchannel = "nightly"\n',
+  );
+  await symlink(
+    join(releases, "current"),
+    join(home, ".codex/packages/standalone/current"),
+  );
+  await symlink(join(releases, "live/bin"), join(proc, "123/exe"));
+  for (const path of [
+    join(releases, "current"),
+    join(releases, "live"),
+    join(releases, "old"),
+    join(servers, "Stable-live"),
+  ])
+    await utimes(path, old, old);
+  for (const path of [join(releases, "recent"), join(servers, "Stable-new")])
+    await utimes(path, now - 3600, now - 3600);
+  const original = createToolchainsTarget(
+    () => home,
+    { available: () => true, defaultToolchain: () => "stable" },
+    (hash) => (hash === "live" ? 0 : 1),
+    {
+      includeRefusals: true,
+      nowSec: () => now,
+      projects: join(home, "Workspace"),
+      keepDays: 2,
+    },
+  );
+  const actions: string[] = [];
+  let procDir = proc;
+  const target: Target = {
+    ...original,
+    plan: (ctx) => original.plan({ ...ctx, procDir }),
+    act: (candidate) => {
+      actions.push(candidate.path ?? "");
+      return Promise.resolve({ ok: true, bytes_freed: 1, error: null });
+    },
+  };
+  const config: Config = {
+    repo_roots: [],
+    repos: [],
+    scratch_roots: [],
+    delete_roots: [],
+    regenerable_ignored: [],
+    session_grace_hours: 24,
+    ignore_unreadable_procs: ["sshd"],
+  };
+  const injected = {
+    config,
+    target,
+    fingerprint: () => Promise.resolve("fingerprint"),
+    protection: () => null,
+  };
+  const Request = z.object({
+    path: z.string().optional(),
+    fingerprint: z.string().optional(),
+  });
+  let crossFilesystem = false;
+  const deps = {
+    guard: () => null,
+    lock: () => Promise.resolve({ release: () => {}, exit: 0, error: null }),
+    probe: async (
+      _argv: string[],
+      _timeout: number,
+      env?: NodeJS.ProcessEnv,
+    ) => {
+      const request = jsonOf(Request).safeParse(
+        env?.DISK_TOOLCHAINS_REQUEST ?? "{}",
+      );
+      if (!request.success)
+        return { out: "", err: "bad request", exit: 1, timedOut: false };
+      const workerResult = await toolchainsWorker(
+        {
+          ...(request.data.path === undefined
+            ? {}
+            : { path: request.data.path }),
+          ...(request.data.fingerprint === undefined
+            ? {}
+            : { fingerprint: request.data.fingerprint }),
+        },
+        injected,
+      );
+      const out =
+        crossFilesystem &&
+        request.data.path !== undefined &&
+        !Array.isArray(workerResult)
+          ? { ...workerResult, same_filesystem: false }
+          : workerResult;
+      return { out: JSON.stringify(out), err: "", exit: 0, timedOut: false };
+    },
+    measure: () =>
+      Promise.resolve({
+        time: "fixture",
+        source: "statfs",
+        mount: null,
+        filesystem: null,
+        available_bytes: 10,
+        free_inodes: 10,
+        error: null,
+      }),
+    receipt: () =>
+      Promise.resolve({
+        id: "receipt",
+        path: "/fixture/receipt",
+        delivery_error: null,
+      }),
+  };
+  const { main } = await import("../src/disk.ts");
+  const Entry = z.object({
+    items: z.array(
+      z.object({
+        path: z.string().nullable(),
+        verdict: z.string(),
+        reason: z.string(),
+        effect: z.string(),
+        detail: z.unknown(),
+      }),
+    ),
+    outcome: z.string(),
+    counts: z.object({ completed: z.number(), refused: z.number() }),
+    receipt: z.unknown(),
+    observations: z.object({ before: z.unknown(), after: z.unknown() }),
+  });
+  const invoke = async () => {
+    let output = "";
+    const exitCode = process.exitCode;
+    await main(
+      ["free", "targets", "toolchains", "--no-progress"],
+      deps,
+      (text) => {
+        output += text;
+      },
+    );
+    const actualExit = process.exitCode;
+    process.exitCode = exitCode ?? 0;
+    const parsed = jsonOf(Entry).safeParse(output);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success)
+      return {
+        items: [],
+        outcome: "invalid",
+        exit: actualExit,
+        counts: { completed: 0, refused: 0 },
+        receipt: null,
+        observations: { before: null, after: null },
+      };
+    return { ...parsed.data, exit: actualExit };
+  };
+  const result = await invoke();
+  const row = (path: string) => result.items.find((item) => item.path === path);
+  expect(row(join(rust, "stable"))).toMatchObject({
+    verdict: "keep",
+    reason: "default rustup toolchain",
+    effect: "none",
+  });
+  expect(row(join(rust, "nightly"))).toMatchObject({
+    verdict: "keep",
+    reason: "pinned rustup toolchain",
+    effect: "none",
+  });
+  expect(row(join(releases, "current"))).toMatchObject({
+    verdict: "keep",
+    reason: "current codex release",
+    effect: "none",
+  });
+  expect(row(join(releases, "recent"))).toMatchObject({
+    verdict: "keep",
+    reason: "recent codex release",
+    effect: "none",
+  });
+  expect(row(join(releases, "live"))).toMatchObject({
+    verdict: "keep",
+    reason: "codex release in use",
+    effect: "none",
+  });
+  expect(row(join(servers, "Stable-live"))).toMatchObject({
+    verdict: "keep",
+    reason: "VS Code server in use",
+    effect: "none",
+  });
+  expect(row(join(releases, "old"))).toMatchObject({
+    verdict: "completed",
+    effect: "unlink",
+    detail: { before: { source: "statfs" }, after: { source: "statfs" } },
+  });
+  expect(result.exit).toBe(1);
+  expect(result.counts.completed).toBe(1);
+  expect(result.receipt).toMatchObject({ id: "receipt" });
+  expect(actions).toEqual([join(releases, "old")]);
+  procDir = join(home, "missing-proc");
+  actions.length = 0;
+  const unknown = await invoke();
+  expect(
+    unknown.items.find((item) => item.path === join(releases, "old")),
+  ).toMatchObject({
+    verdict: "keep",
+    reason: "codex release process use unknown",
+    effect: "none",
+  });
+  expect(actions).toEqual([]);
+  procDir = proc;
+  crossFilesystem = true;
+  const cross = await invoke();
+  expect(
+    cross.items.find((item) => item.path === join(releases, "old")),
+  ).toMatchObject({
+    verdict: "unknown",
+    reason: "candidate filesystem measurement unavailable",
+    effect: "unlink",
+  });
+  expect(cross.outcome).toBe("unknown");
+  expect(cross.exit).toBe(4);
+  expect(cross.observations).toEqual({ before: null, after: null });
 });

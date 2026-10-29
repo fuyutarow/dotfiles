@@ -11,6 +11,7 @@ import { unavailableRecords } from "./disk-records.ts";
 import { movePaths } from "./disk-move.ts";
 import { freeMiseConfigs } from "./disk-mise-configs.ts";
 import { freeClean } from "./disk-clean.ts";
+import { freeToolchains } from "./disk-toolchains.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const grammar: Record<string, string[]> = {
@@ -378,10 +379,15 @@ async function measureCapacity(
     return { measurement: null, error: "capacity measurement unavailable" };
   return { measurement: parsed.data, error: null };
 }
-async function main() {
+export async function main(
+  args = process.argv.slice(2),
+  toolchainsDeps?: Parameters<typeof freeToolchains>[3],
+  output: (text: string) => void = (text) => {
+    process.stdout.write(text);
+  },
+) {
   const start = performance.now();
   const started = Temporal.Now.instant().toString();
-  const args = process.argv.slice(2);
   if (
     args.length === 0 ||
     (args.length === 1 && (args[0] === "--help" || args[0] === "-h"))
@@ -644,6 +650,54 @@ async function main() {
   }
   if (
     key === "free targets" &&
+    targets.length === 1 &&
+    targets[0] === "toolchains"
+  ) {
+    const controller = new AbortController();
+    let cancelled = 0;
+    const interrupt = () => {
+      cancelled = 130;
+      controller.abort();
+    };
+    const terminate = () => {
+      cancelled = 143;
+      controller.abort();
+    };
+    process.once("SIGINT", interrupt);
+    process.once("SIGTERM", terminate);
+    const result = await freeToolchains(
+      deadline,
+      start,
+      !options.has("no-progress"),
+      toolchainsDeps,
+      controller.signal,
+      options.has("stop-on-error"),
+    );
+    process.removeListener("SIGINT", interrupt);
+    process.removeListener("SIGTERM", terminate);
+    const { items, before, after, receipt, exit } = result;
+    const counts = {
+      selected: items.length,
+      completed: items.filter((item) => item.verdict === "completed").length,
+      refused: items.filter((item) =>
+        ["deny", "changed", "ask", "keep"].includes(item.verdict),
+      ).length,
+      failed: items.filter((item) => item.verdict === "failed").length,
+      unknown: items.filter((item) => item.verdict === "unknown").length,
+    };
+    let outcome = "partial";
+    if (exit === 0) outcome = "completed";
+    if (exit === 3) outcome = "busy";
+    if (exit === 4) outcome = "unknown";
+    if (cancelled !== 0) outcome = "cancelled";
+    output(
+      `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before, after, delta_available_bytes: before === null || after === null ? null : after.available_bytes - before.available_bytes, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items, counts, errors: [], receipt })}\n`,
+    );
+    process.exitCode = cancelled === 0 ? exit : cancelled;
+    return;
+  }
+  if (
+    key === "free targets" &&
     targets.some((target) => target === "vhdx" || target === "audit")
   ) {
     const items = targets.map((target) => {
@@ -816,4 +870,4 @@ async function main() {
   process.exitCode = 4;
   if (key === "free records" && recordsInput === null) process.exit(4);
 }
-await main();
+if (import.meta.main) await main();

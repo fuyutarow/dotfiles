@@ -314,5 +314,11 @@ protected-path checks, revalidates identity under the reclaim lock, and records
 per-cache statfs observations. No measured increase is partial; an unavailable
 observation or child result remains unknown. `disk free targets rust` uses the same
 bounded per-item flow and the Rust planner: missing manifests, active Rust builds,
-live repository sessions and unknown process state remain refused. Other acting
-targets remain unavailable.
+live repository sessions and unknown process state remain refused.
+
+`disk free targets toolchains` rechecks each eligible version directory under the
+reclaim lock before deletion. Results include per-item statfs observations and
+preserve the target's current, pinned, recent, and in-use exclusions. When more
+than one item is acted on, measurements remain in their individual details;
+they are not combined across filesystems. Other acting targets remain unavailable
+through `disk`.

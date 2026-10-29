@@ -174,19 +174,35 @@ describe("toolchains target and version stores", () => {
     const old = join(servers, "Stable-oldfixture");
     const newest = join(servers, "Stable-newfixture");
     const recent = join(servers, "Stable-recentfixture");
-    for (const path of [old, newest, recent])
+    const busy = join(servers, "Stable-busyfixture");
+    const unknown = join(servers, "Stable-unknownfixture");
+    for (const path of [old, newest, recent, busy, unknown])
       mkdirSync(path, { recursive: true });
     const oldSec =
       Temporal.Now.instant().epochMilliseconds / 1000 - 100 * 86400;
     const recentSec = Temporal.Now.instant().epochMilliseconds / 1000 - 86400;
     utimesSync(old, oldSec, oldSec);
+    utimesSync(busy, oldSec, oldSec);
+    utimesSync(unknown, oldSec, oldSec);
     utimesSync(recent, recentSec, recentSec);
     const planned = (
-      await createToolchainsTarget(() => home).plan(contextFor(home))
+      await createToolchainsTarget(
+        () => home,
+        { available: () => false, defaultToolchain: () => {} },
+        (hash) =>
+          new Map([
+            ["busyfixture", 0],
+            ["oldfixture", 1],
+            ["recentfixture", 1],
+            ["newfixture", 1],
+          ]).get(hash),
+      ).plan(contextFor(home))
     ).map((candidate) => candidate.path);
     expect(planned).toContain(old);
     expect(planned).not.toContain(newest);
     expect(planned).not.toContain(recent);
+    expect(planned).not.toContain(busy);
+    expect(planned).not.toContain(unknown);
   });
 
   test("rustup pin files and the discovered default toolchain are explicit KEEP candidates", async () => {

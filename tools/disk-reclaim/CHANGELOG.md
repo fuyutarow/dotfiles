@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.7 — 2026-10-29
+
+- Enable bounded toolchains reclamation through disk free
+- Make toolchain process checks injectable for parity verification
+- Report retained toolchain versions with reasons
+
 ## 1.12.6 — 2026-10-29
 
 - Enable bounded disk free targets rust with legacy refusals

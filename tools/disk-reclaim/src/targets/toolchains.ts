@@ -6,6 +6,7 @@ import {
   readStore,
   releasesToRemove,
   STORES,
+  type Release,
 } from "../lib/version-stores.ts";
 import type { Context, Target } from "./index.ts";
 import { deleteTree, keepTreeCandidate, treeCandidate } from "./tree.ts";
@@ -29,12 +30,77 @@ const walkPins = (root: string, depth = 0): string[] => {
 const channel = (text: string) =>
   /channel\s*=\s*"?([^"\s]+)"?/u.exec(text)?.[1] ??
   text.trim().split("\n")[0]?.trim();
+const serverRefusal = (
+  busy: number | undefined,
+  newest: boolean,
+  recent: boolean,
+) => {
+  if (busy === undefined) return "VS Code server process use unknown";
+  if (busy === 0) return "VS Code server in use";
+  if (newest) return "current VS Code server";
+  if (recent) return "recent VS Code server";
+  return null;
+};
+const releaseRefusal = (
+  release: Release,
+  store: string,
+  current: string | undefined,
+  live: string[] | undefined,
+  cutoff: number,
+) => {
+  if (release.name === current) return `current ${store} release`;
+  if (current === undefined) return `${store} current release unknown`;
+  if (live === undefined) return `${store} release process use unknown`;
+  if (release.mtimeSec >= cutoff) return `recent ${store} release`;
+  if (
+    live.some(
+      (exe) => exe === release.path || exe.startsWith(`${release.path}/`),
+    )
+  )
+    return `${store} release in use`;
+  return `${store} release process use unknown`;
+};
+const retainedReleases = (
+  releases: Release[],
+  removable: Release[],
+  store: string,
+  current: string | undefined,
+  live: string[] | undefined,
+  cutoff: number,
+  ctx: Context,
+) =>
+  Promise.all(
+    releases
+      .filter((release) => !removable.some((row) => row.path === release.path))
+      .map((release) =>
+        keepTreeCandidate(
+          release.path,
+          releaseRefusal(release, store, current, live, cutoff),
+          ctx,
+        ),
+      ),
+  );
 export const createToolchainsTarget = (
   homePath: () => string = () => process.env.HOME ?? homedir(),
   rustupOptions?: {
     available: () => boolean;
     defaultToolchain: () => string | undefined;
   },
+  processProbe: (hash: string) => number | undefined = (hash) =>
+    fromThrowable(
+      () =>
+        Bun.spawnSync(["pgrep", "-f", hash], {
+          stdout: "ignore",
+          stderr: "ignore",
+          timeout: 5000,
+        }).exitCode,
+    )().unwrapOr(undefined),
+  options: {
+    includeRefusals?: boolean;
+    nowSec?: () => number;
+    projects?: string;
+    keepDays?: number;
+  } = {},
 ) => {
   const rustup = rustupOptions ?? {
     available: () => Bun.which("rustup") !== null && Bun.which("fd") !== null,
@@ -55,11 +121,14 @@ export const createToolchainsTarget = (
     available: () => ({ available: true, skip_reason: null }),
     plan: async (_ctx: Context) => {
       const home = homePath();
-      const projects = process.env.AUDIT_PROJECTS ?? join(home, "Workspace");
-      const keepDays = Number(process.env.KEEP_DAYS ?? "2");
-      const nowSec = Math.floor(
-        Temporal.Now.instant().epochMilliseconds / 1000,
-      );
+      const projects =
+        options.projects ??
+        process.env.AUDIT_PROJECTS ??
+        join(home, "Workspace");
+      const keepDays = options.keepDays ?? Number(process.env.KEEP_DAYS ?? "2");
+      const nowSec =
+        options.nowSec?.() ??
+        Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
       const live = liveExecutables(_ctx.procDir);
       const candidates = [];
       const rustupDir = join(home, ".rustup/toolchains");
@@ -133,19 +202,26 @@ export const createToolchainsTarget = (
       for (const name of serverNames) {
         const path = join(servers, name);
         const hash = name.replace(/^Stable-/u, "").replace(/\.staging$/u, "");
-        const busy = fromThrowable(() =>
-          Bun.spawnSync(["pgrep", "-f", hash], {
-            stdout: "ignore",
-            stderr: "ignore",
-            timeout: 5000,
-          }),
-        )();
+        const busy = processProbe(hash);
         const stat = fromThrowable(() => statSync(path))();
-        if (busy.isErr() || stat.isErr()) continue;
+        if (stat.isErr()) continue;
+        const reason =
+          options.includeRefusals === true
+            ? serverRefusal(
+                busy,
+                name === newest,
+                stat.value.mtimeMs / 1000 >= nowSec - keepDays * 86400,
+              )
+            : null;
+        if (reason !== null) {
+          candidates.push(await keepTreeCandidate(path, reason, _ctx));
+          continue;
+        }
+        if (busy === undefined) continue;
         if (
           name === newest ||
           stat.value.mtimeMs / 1000 >= nowSec - keepDays * 86400 ||
-          busy.value.exitCode === 0
+          busy === 0
         )
           continue;
         candidates.push(
@@ -154,12 +230,25 @@ export const createToolchainsTarget = (
       }
       for (const store of STORES) {
         const found = readStore(home, store);
-        for (const release of releasesToRemove(found.releases, {
+        const removable = releasesToRemove(found.releases, {
           current: found.current,
           live,
           nowSec,
           keepDays,
-        }))
+        });
+        if (options.includeRefusals === true)
+          candidates.push(
+            ...(await retainedReleases(
+              found.releases,
+              removable,
+              store.name,
+              found.current,
+              live,
+              nowSec - keepDays * 86400,
+              _ctx,
+            )),
+          );
+        for (const release of removable)
           candidates.push(
             await treeCandidate(
               release.path,

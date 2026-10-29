@@ -294,7 +294,10 @@ to `free`; fixtures use temporary roots and state.
 command grammar; run `disk --help` or `disk <command> --help` for modes and examples.
 `inspect receipts` and `inspect capacity` provide bounded read-only results; capacity planning
 reports its measurement and an unknown candidate plan. `free targets vhdx` and `audit` refuse
-these plan-only targets without taking action. Other action adapters return a `disk.result/1`
+these plan-only targets without taking action. `move paths` checks the configured graveyard,
+revalidates the existing delete protections under the reclaim lock, and invokes rip per item.
+It requires a verifiable burial record; uncertain or partial effects remain unknown. A move on
+the same filesystem does not free capacity. `move workspace-gc` remains unavailable. Other action adapters return a `disk.result/1`
 unknown result and exit 4 without mutation. Invalid requests exit 2. The existing
 `disk-reclaim` commands and their formats remain available unchanged. For `disk free records`,
 stdin must contain legacy `disk-reclaim plan` JSONL records.

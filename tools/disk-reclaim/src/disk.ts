@@ -8,6 +8,7 @@ import { ReclaimRecord } from "./records.ts";
 import { runProbe } from "./disk-probe.ts";
 import { planPaths } from "./disk-path-plan.ts";
 import { unavailableRecords } from "./disk-records.ts";
+import { movePaths } from "./disk-move.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const grammar: Record<string, string[]> = {
@@ -671,6 +672,38 @@ async function main() {
       `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items, counts: { selected: items.length, completed: 0, refused, failed: 0, unknown }, errors: [], receipt: null })}\n`,
     );
     process.exitCode = unknown > 0 ? 4 : 1;
+    return;
+  }
+  if (key === "move paths") {
+    const { items, graveyard, receipt, busy } = await movePaths(
+      positional,
+      deadline,
+      start,
+      !options.has("no-progress"),
+    );
+    const counts = {
+      selected: items.length,
+      completed: items.filter((i) => i.verdict === "completed").length,
+      refused: items.filter(
+        (i) => i.verdict === "deny" || i.verdict === "changed",
+      ).length,
+      failed: 0,
+      unknown: items.filter((i) => i.verdict === "unknown").length,
+    };
+    let outcome = "completed";
+    if (counts.refused > 0) outcome = "partial";
+    if (counts.unknown > 0) outcome = "unknown";
+    if (busy) outcome = "busy";
+    process.stderr.write(
+      "disk: burial does not free capacity on the same filesystem\n",
+    );
+    process.stdout.write(
+      `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope: { ...scope, destination: graveyard }, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items, counts, errors: [], receipt, detail: { capacity: "same-filesystem burial does not free capacity" } })}\n`,
+    );
+    process.exitCode = 0;
+    if (counts.refused > 0) process.exitCode = 1;
+    if (counts.unknown > 0) process.exitCode = 4;
+    if (busy) process.exitCode = 3;
     return;
   }
   const message =

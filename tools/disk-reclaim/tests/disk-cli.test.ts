@@ -1,13 +1,16 @@
 import { jsonText } from "../../shared/src/zod.ts";
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { runProbe } from "../src/disk-probe.ts";
 import { planPaths } from "../src/disk-path-plan.ts";
+import { movePaths } from "../src/disk-move.ts";
 
 const cli = join(import.meta.dir, "../src/disk.ts");
+const tmpfsProbe: typeof runProbe = () =>
+  Promise.resolve({ out: "tmpfs\n", err: "", exit: 0, timedOut: false });
 async function run(
   args: string[],
   input = "",
@@ -29,6 +32,89 @@ async function run(
   return { out, err, exit };
 }
 describe("disk parser and effect firewall", () => {
+  test("move records burial and refuses unsafe items using injected probes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "disk-move-fixture-"));
+    const graveyard = join(dir, "graveyard");
+    await mkdir(graveyard);
+    const good = join(dir, "good");
+    const live = join(dir, "live");
+    const unknown = join(dir, "unknown");
+    for (const path of [good, live, unknown]) await writeFile(path, "payload");
+    const previous = {
+      graveyard: process.env.GRAVEYARD,
+      state: process.env.RECLAIM_STATE_DIR,
+    };
+    process.env.GRAVEYARD = graveyard;
+    process.env.RECLAIM_STATE_DIR = join(dir, "state");
+    const probe: typeof runProbe = async (argv, _timeout, env) => {
+      if (argv[0] === "stat")
+        return { out: "apfs\n", err: "", exit: 0, timedOut: false };
+      if (argv[0] === "rip") {
+        const destination = join(graveyard, "buried");
+        await rename(good, destination);
+        await writeFile(
+          join(graveyard, ".record"),
+          `${Temporal.Now.instant().toString()}\t${good}\t${destination}\n`,
+        );
+        return { out: "", err: "", exit: 0, timedOut: false };
+      }
+      const path = env?.DISK_MOVE_PATH;
+      let verdict = "safe";
+      let reason = "safe";
+      if (path === live) {
+        verdict = "deny";
+        reason = "live process";
+      }
+      if (path === unknown) {
+        verdict = "unknown";
+        reason = "owner unknown";
+      }
+      return {
+        out: JSON.stringify({ verdict, reason }),
+        err: "",
+        exit: 0,
+        timedOut: false,
+      };
+    };
+    using _env = {
+      [Symbol.dispose]: () => {
+        if (previous.graveyard === undefined) delete process.env.GRAVEYARD;
+        else process.env.GRAVEYARD = previous.graveyard;
+        if (previous.state === undefined) delete process.env.RECLAIM_STATE_DIR;
+        else process.env.RECLAIM_STATE_DIR = previous.state;
+      },
+    };
+    const result = await movePaths(
+      [good, live, unknown],
+      10000,
+      performance.now(),
+      false,
+      probe,
+    );
+    expect(result.items.map((item) => item.verdict)).toEqual([
+      "completed",
+      "deny",
+      "unknown",
+    ]);
+    expect(result.items[0]?.effect).toBe("move");
+    expect(result.receipt).not.toBeNull();
+    expect(await readFile(live, "utf8")).toBe("payload");
+    expect(await readFile(unknown, "utf8")).toBe("payload");
+    expect(await readFile(join(graveyard, "buried"), "utf8")).toBe("payload");
+    const rejected = await movePaths(
+      [live],
+      10000,
+      performance.now(),
+      false,
+      tmpfsProbe,
+    );
+    expect(rejected.items[0]).toMatchObject({
+      verdict: "deny",
+      effect: "none",
+      reason: "graveyard is on tmpfs",
+    });
+    expect(await readFile(live, "utf8")).toBe("payload");
+  });
   test("root and verb help and version", async () => {
     for (const args of [
       [],
@@ -59,7 +145,6 @@ describe("disk parser and effect firewall", () => {
     const cases: [string[], string?][] = [
       [["plan", "targets"]],
       [["plan", "workspace-gc"]],
-      [["move", "paths", file]],
       [["move", "workspace-gc"]],
       [["free", "targets", "tmpfs"]],
       [["free", "records"], record],
@@ -131,6 +216,28 @@ describe("disk parser and effect firewall", () => {
         { verdict: "deny" },
       ],
     });
+  });
+  test("move paths reports each unverified burial without effects", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "disk-move-"));
+    const paths = [join(dir, "one"), join(dir, "two")];
+    for (const path of paths) await writeFile(path, "keep");
+    const result = await run(["move", "paths", ...paths, "--no-progress"], "", {
+      ...process.env,
+      HOME: dir,
+      GRAVEYARD: join(dir, "missing"),
+      RECLAIM_STATE_DIR: join(dir, "state"),
+    });
+    expect(result.exit).toBe(4);
+    expect(jsonText.safeParse(result.out).data).toMatchObject({
+      outcome: "unknown",
+      items: paths.map((path) => ({
+        path,
+        verdict: "unknown",
+        effect: "none",
+      })),
+      counts: { selected: 2, completed: 0, refused: 0, failed: 0, unknown: 2 },
+    });
+    for (const path of paths) expect(await readFile(path, "utf8")).toBe("keep");
   });
   test("receipt inspection reads only the selected state and preserves errors", async () => {
     const dir = await mkdtemp(join(tmpdir(), "disk-receipts-"));

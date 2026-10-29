@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.3 — 2026-10-29
+
+- Add guarded recoverable move paths
+- Report unavailable move paths per item
+
 ## 1.12.2 — 2026-10-29
 
 - Report records refusals while the acting adapter is unavailable

@@ -885,11 +885,17 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: [".oxfmtrc.json", ".rumdl.toml", "tsconfig.json", "mise.toml"],
+    sources: [
+      ".oxfmtrc.json",
+      ".rumdl.toml",
+      "tsconfig.json",
+      "mise.toml",
+      "knip.jsonc",
+    ],
     deployed: "the checkout",
-    consumer: "oxfmt, rumdl, bun check, mise",
+    consumer: "oxfmt, rumdl, bun check, mise, knip",
     writer: "human, in the repo",
-    verify: "mise run fmt:check · lint:md · typecheck · mise tasks",
+    verify: "mise run fmt:check · lint:md · typecheck · mise tasks · lint:knip",
   },
   {
     kind: "in-place",

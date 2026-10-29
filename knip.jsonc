@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@6.42.1/schema-jsonc.json",
+  "ignoreExportsUsedInFile": true,
+  "ignore": ["archives/**"],
+  "workspaces": {
+    ".": {
+      "entry": ["**/*.{test,spec}.{ts,tsx,js,jsx}", "scripts/**/*.ts", "agents/skills/*/scripts/**/*.{ts,js}", "agents/hooks/**/*.{ts,js}", "agents/codex/hooks/**/*.{ts,js}", "agents/claude/hooks/**/*.{ts,js}", "obsidian/{apply,trust}.ts", "macos/defaults.ts", "agents/models/check-releases.ts", "agents/research-control/cli.ts", "agents/goal-kernel/cli.ts", "agents/codex/{windows-hook,codex-update}.ts", "presets/typescript/lint-oxlint.ts", "**/tests/fixtures/**/*.{ts,js}", "**/tests/*preload.ts", "tools/statusline/bench/*.ts", "agents/skills/*/tests/fake-*.ts"],
+      "project": ["**/*.{ts,tsx,js,jsx}"],
+      "ignoreDependencies": ["knip", "oxlint", "oxlint-plugin-eslint", "oxlint-tsgolint", "oxfmt"],
+      "ignoreBinaries": ["mise"]
+    },
+    "tools/*": {
+      "entry": ["tests/fixtures/**/*.{ts,js}", "tests/*preload.ts", "tests/*fixture.ts", "bench/*.ts", "src/scope-{entry,controller}.ts", "src/disk-*-child.ts", "src/disk-{capacity,receipts,move-check}.ts", "src/receive.ts", "src/readonly-exec.ts", "**/*.{test,spec}.{ts,tsx,js,jsx}"],
+      "project": ["**/*.{ts,tsx,js,jsx}"]
+    }
+  }
+}

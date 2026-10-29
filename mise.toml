@@ -350,6 +350,12 @@ run = "bun scripts/lint-bun.ts"
 # agents/claude/hooks/repo-retrieve.ts in `ignorePatterns` (oxlint resolves its imports at the
 # link path and reports false errors; the real file is linted at its own path — same reason as
 # tsconfig.json's exclude).
+[tasks."lint:knip"]
+dir = "{{config_root}}"
+depends = ["bun:check"]
+description = "Report Knip findings across the repository"
+run = "bun scripts/lint-knip.ts"
+
 [tasks."lint:ts"]
 dir = "{{config_root}}"
 description = "oxlint --type-aware the repo's TS against .oxlintrc.json, with no disable comment"

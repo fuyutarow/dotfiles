@@ -1168,3 +1168,66 @@ kind = "types"
 name = "SkillEntry"
 reason = "newly visible after root derivation fix 1029"
 keeper = "dotfiles coordinator"
+
+[[exception]]
+file = "tools/disk-reclaim/src/disk-rip-expire-child.ts"
+kind = "files"
+name = "tools/disk-reclaim/src/disk-rip-expire-child.ts"
+reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
+keeper = "dotfiles maintainers"
+
+[[exception]]
+file = "tools/disk-reclaim/src/disk-workspaces-child.ts"
+kind = "files"
+name = "tools/disk-reclaim/src/disk-workspaces-child.ts"
+reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
+keeper = "dotfiles maintainers"
+
+[[exception]]
+file = "tools/disk-reclaim/src/disk-judgment-action.ts"
+kind = "files"
+name = "tools/disk-reclaim/src/disk-judgment-action.ts"
+reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
+keeper = "dotfiles maintainers"
+
+[[exception]]
+file = "tools/disk-reclaim/src/disk-workspaces-action.ts"
+kind = "files"
+name = "tools/disk-reclaim/src/disk-workspaces-action.ts"
+reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
+keeper = "dotfiles maintainers"
+
+[[exception]]
+file = "tools/disk-reclaim/src/disk-judgment-child.ts"
+kind = "files"
+name = "tools/disk-reclaim/src/disk-judgment-child.ts"
+reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
+keeper = "dotfiles maintainers"
+
+[[exception]]
+file = "tools/disk-reclaim/src/disk-purge-child.ts"
+kind = "files"
+name = "tools/disk-reclaim/src/disk-purge-child.ts"
+reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
+keeper = "dotfiles maintainers"
+
+[[exception]]
+file = "tools/disk-reclaim/src/disk-rip-expire-run.ts"
+kind = "files"
+name = "tools/disk-reclaim/src/disk-rip-expire-run.ts"
+reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
+keeper = "dotfiles maintainers"
+
+[[exception]]
+file = "tools/disk-reclaim/src/disk-purge-action.ts"
+kind = "files"
+name = "tools/disk-reclaim/src/disk-purge-action.ts"
+reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
+keeper = "dotfiles maintainers"
+
+[[exception]]
+file = "tools/statusline/src/sampler-lock.ts"
+kind = "files"
+name = "tools/statusline/src/sampler-lock.ts"
+reason = "Newly reported after alpha root derivation; retain while the sampler lock remains dynamically loaded."
+keeper = "dotfiles maintainers"

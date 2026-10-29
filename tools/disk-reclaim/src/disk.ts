@@ -3,6 +3,7 @@
 import { isAbsolute } from "node:path";
 import { join } from "node:path";
 import { cli } from "cleye";
+import { match as matchValue, P } from "ts-pattern";
 import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { ReclaimRecord } from "./records.ts";
 import { runProbe } from "./disk-probe.ts";
@@ -12,12 +13,18 @@ import { unavailableRecords } from "./disk-records.ts";
 import { movePaths } from "./disk-move.ts";
 import { freeMiseConfigs } from "./disk-mise-configs.ts";
 import { freeScratch } from "./disk-scratch.ts";
+import { freeRipExpiry } from "./disk-rip-expire.ts";
+import { freeWorkspaces } from "./disk-workspaces.ts";
 import { freeClean } from "./disk-clean.ts";
 import { freeToolchains } from "./disk-toolchains.ts";
 import { freeBuilds } from "./disk-builds.ts";
 import { freeCccIndexDb } from "./disk-ccc-index-db.ts";
+import { freeJudgment } from "./disk-judgment.ts";
 import { diskTargetNames } from "./disk-targets/index.ts";
 import pkg from "../package.json" with { type: "json" };
+
+type PurgeDependencies = NonNullable<Parameters<typeof freeClean>[3]>;
+type PlanOrPurgeDependencies = PlanDependencies | PurgeDependencies;
 
 const grammar: Record<string, string[]> = {
   plan: [
@@ -375,8 +382,20 @@ export async function main(
   buildsDependencies?: Parameters<typeof freeBuilds>[3],
   scratchDependencies?: Parameters<typeof freeScratch>[3],
   cccDependencies?: Parameters<typeof freeCccIndexDb>[3],
-  planDependencies?: PlanDependencies,
+  planOrPurgeDependencies?: PlanOrPurgeDependencies,
+  purgeDependencies?: Parameters<typeof freeClean>[3],
+  ripDependencies?: Parameters<typeof freeRipExpiry>[6],
+  workspacesDependencies?: Parameters<typeof freeWorkspaces>[3],
+  judgmentDependencies?: Parameters<typeof freeJudgment>[3],
 ) {
+  const planDependencies = matchValue(planOrPurgeDependencies)
+    .with({ guard: P._ }, () => ({}) satisfies PlanDependencies)
+    .otherwise((dependencies) => dependencies);
+  const selectedPurgeDependencies =
+    purgeDependencies ??
+    matchValue(planOrPurgeDependencies)
+      .with({ guard: P._ }, (dependencies) => dependencies)
+      .otherwise(() => null);
   const start = performance.now();
   const started = Temporal.Now.instant().toString();
   const args = [...argv];
@@ -704,6 +723,69 @@ export async function main(
   if (
     key === "free targets" &&
     targets.length === 1 &&
+    targets[0] === "rip-expire"
+  ) {
+    const controller = new AbortController();
+    let cancelled = 0;
+    const interrupt = () => {
+      cancelled = 130;
+      controller.abort();
+    };
+    const terminate = () => {
+      cancelled = 143;
+      controller.abort();
+    };
+    process.once("SIGINT", interrupt);
+    process.once("SIGTERM", terminate);
+    const injectedRipDependencies =
+      ripDependencies ??
+      (cccDependencies === undefined
+        ? undefined
+        : {
+            guard: cccDependencies.guard,
+            lock: cccDependencies.lock,
+            probe: (ms: number, signal?: AbortSignal) =>
+              cccDependencies.probe(undefined, ms, signal),
+            receipt: (result: unknown) => cccDependencies.receipt([result]),
+          });
+    const result = await freeRipExpiry(
+      deadline,
+      start,
+      !options.has("no-progress"),
+      get("only"),
+      options.has("stop-on-error"),
+      controller.signal,
+      injectedRipDependencies,
+    );
+    process.removeListener("SIGINT", interrupt);
+    process.removeListener("SIGTERM", terminate);
+    const items = result.data?.items ?? [];
+    const before = result.data?.before ?? null;
+    const after = result.data?.after ?? null;
+    const counts = {
+      selected: items.length,
+      completed: items.filter((i) => i.verdict === "completed").length,
+      refused: items.filter((i) =>
+        ["keep", "ask", "deny", "changed"].includes(i.verdict),
+      ).length,
+      failed: items.filter((i) => ["failed", "partial"].includes(i.verdict))
+        .length,
+      unknown: items.filter((i) => i.verdict === "unknown").length,
+    };
+    let outcome = "partial";
+    if (result.exit === 0) outcome = "completed";
+    else if (result.exit === 3) outcome = "busy";
+    else if (result.exit === 4) outcome = "unknown";
+    if (cancelled !== 0) outcome = "cancelled";
+    output(
+      `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before, after, delta_available_bytes: before === null || after === null ? null : after.available_bytes - before.available_bytes, unlinked_logical_bytes: items.reduce((sum, item) => sum + (item.logical_bytes ?? 0), 0), allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items, counts, errors: result.error === null ? [] : [{ code: "target_error", message: result.error, scope }], receipt: result.receipt })}\n`,
+    );
+    process.exitCode = cancelled === 0 ? result.exit : cancelled;
+    return;
+  }
+  if (
+    key === "free targets" &&
+    targets.length === 1 &&
     targets[0] === "toolchains"
   ) {
     const controller = new AbortController();
@@ -791,6 +873,9 @@ export async function main(
       targets[0] === "builds" ||
       targets[0] === "scratch" ||
       targets[0] === "ccc-index-db" ||
+      targets[0] === "purge" ||
+      targets[0] === "workspaces" ||
+      targets[0] === "judgment" ||
       targets[0] === "tmpfs")
   ) {
     const controller = new AbortController();
@@ -805,9 +890,10 @@ export async function main(
     };
     process.once("SIGINT", interrupt);
     process.once("SIGTERM", terminate);
-    let actingTarget: "clean" | "rust" | "tmpfs" = "clean";
+    let actingTarget: "clean" | "rust" | "tmpfs" | "purge" = "clean";
     if (targets[0] === "rust") actingTarget = "rust";
     if (targets[0] === "tmpfs") actingTarget = "tmpfs";
+    if (targets[0] === "purge") actingTarget = "purge";
     let result: Awaited<ReturnType<typeof freeScratch>>;
     if (targets[0] === "ccc-index-db")
       result = await freeCccIndexDb(
@@ -817,6 +903,26 @@ export async function main(
         cccDependencies,
         controller.signal,
         options.has("stop-on-error"),
+      );
+    else if (targets[0] === "judgment")
+      result = await freeJudgment(
+        deadline,
+        start,
+        !options.has("no-progress"),
+        judgmentDependencies ?? cccDependencies,
+        controller.signal,
+        options.has("stop-on-error"),
+        options.get("approve") ?? [],
+      );
+    else if (targets[0] === "workspaces")
+      result = await freeWorkspaces(
+        deadline,
+        start,
+        !options.has("no-progress"),
+        workspacesDependencies ?? cccDependencies,
+        controller.signal,
+        options.has("stop-on-error"),
+        options.has("fetch"),
       );
     else if (targets[0] === "scratch")
       result = await freeScratch(
@@ -841,11 +947,12 @@ export async function main(
         deadline,
         start,
         !options.has("no-progress"),
-        undefined,
+        targets[0] === "purge" ? selectedPurgeDependencies : undefined,
         controller.signal,
         options.has("stop-on-error"),
         actingTarget,
         get("only"),
+        options.has("under-pressure"),
       );
     process.removeListener("SIGINT", interrupt);
     process.removeListener("SIGTERM", terminate);

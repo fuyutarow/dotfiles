@@ -29,6 +29,7 @@ export function judgmentCandidates(
     protectedPaths?: string[];
     procDir?: string;
     ignoreUnreadableProcs?: readonly string[];
+    reason?: (path: string) => string | null;
   } = {},
 ): Candidate[] {
   const result: Candidate[] = [];
@@ -40,20 +41,23 @@ export function judgmentCandidates(
   for (const toolchain of toolchainNames) {
     const docs = join(toolchains, toolchain, "share/doc/rust/html");
     if (!existsSync(docs)) continue;
-    const reason = protectedReason(docs, {
-      ownerTarget: "judgment",
-      home,
-      ...(protection.repoRoots === undefined
-        ? {}
-        : { repoRoots: protection.repoRoots }),
-      ...(protection.protectedPaths === undefined
-        ? {}
-        : { protectedPaths: protection.protectedPaths }),
-      ...(protection.procDir === undefined
-        ? {}
-        : { procDir: protection.procDir }),
-      ignoreUnreadableProcs: protection.ignoreUnreadableProcs ?? [],
-    });
+    let reason: string | null;
+    if (protection.reason !== undefined) reason = protection.reason(docs);
+    else
+      reason = protectedReason(docs, {
+        ownerTarget: "judgment",
+        home,
+        ...(protection.repoRoots === undefined
+          ? {}
+          : { repoRoots: protection.repoRoots }),
+        ...(protection.protectedPaths === undefined
+          ? {}
+          : { protectedPaths: protection.protectedPaths }),
+        ...(protection.procDir === undefined
+          ? {}
+          : { procDir: protection.procDir }),
+        ignoreUnreadableProcs: protection.ignoreUnreadableProcs ?? [],
+      });
     const item = candidate(docs, docs, estimate(docs));
     if (reason === null) result.push(item);
     else {

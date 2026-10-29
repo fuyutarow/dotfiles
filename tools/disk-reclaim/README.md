@@ -26,6 +26,11 @@ containing nested Git or jj workspaces. It rechecks each candidate and its
 identity under the shared lock, and reports per-item statfs observations. An
 action without a measured increase in available space is partial.
 
+`disk free targets judgment --approve ITEM` requires approval for each eligible
+rust-docs path. Protected or uncertain paths remain refused even with approval.
+Each action rechecks the plan and fingerprint under the lock and reports statfs
+observations; no measured increase is partial.
+
 Part of the [tools/ architecture](../spec/architecture.md) (the mechanism the capacity recover part composes: invariants I-R1 to I-R5).
 
 Plan configured reclamation as one JSONL record per candidate. `apply` reads those records from

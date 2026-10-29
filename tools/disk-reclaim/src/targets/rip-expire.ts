@@ -67,7 +67,7 @@ const inside = (root: string, path: string): boolean => {
   );
 };
 
-async function safeScope(
+export async function safeScope(
   root: string,
   only: string | undefined,
 ): Promise<boolean> {

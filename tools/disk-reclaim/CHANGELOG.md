@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.12.13 — 2026-10-29
+
+- Add owner-approved judgment target to disk free
+- Enable bounded purge through disk free targets
+- Enable guarded rip-expire actions through disk free targets
+- Enable measured workspace reclamation through disk
+
 ## 1.12.12 — 2026-10-29
 
 - Preview target preflight verdicts without acting

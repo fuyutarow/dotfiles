@@ -267,74 +267,88 @@ async function recheckPurge(
   );
 }
 
-export const purge = {
-  name: "purge",
-  tier: "irreversible",
-  // Small subtrees first, so a huge one cannot delay every cheap recovery behind it.
-  fastFirst: true,
-  available: () => ({ available: true, skip_reason: null }),
-  plan: (ctx) => purgePlan(ctx, false),
-  recheck: (candidate, ctx) => recheckPurge(candidate, ctx, false),
-  act: async (candidate, ctx): Promise<ActionResult> => {
-    if (candidate.path === null)
-      return { ok: false, bytes_freed: null, error: "missing graveyard path" };
-    const plannedEntry = candidate.action.argv[1] === candidate.path;
-    const entryCount = countEntries(candidate.path) + (plannedEntry ? 1 : 0);
-    let freed = 0;
-    let removedEntries = 0;
-    let removedBytes = 0;
-    let failed = false;
-    // Planned rows own one top-level entry. Legacy/root rows still delete children independently.
-    const entries = plannedEntry
-      ? [candidate.path]
-      : graveyardEntries(candidate.path);
-    for (const entry of entries) {
-      const writable = fromThrowable(() => {
-        makeDirectoriesOwnerWritable(entry);
-      })();
-      if (writable.isErr()) {
-        failed = true;
+export function createPurgeTarget(
+  deps: {
+    remove?: typeof removeTree;
+    writable?: (path: string) => void;
+  } = {},
+) {
+  return {
+    name: "purge",
+    tier: "irreversible",
+    // Small subtrees first, so a huge one cannot delay every cheap recovery behind it.
+    fastFirst: true,
+    available: () => ({ available: true, skip_reason: null }),
+    plan: (ctx) => purgePlan(ctx, false),
+    recheck: (candidate, ctx) => recheckPurge(candidate, ctx, false),
+    act: async (candidate, ctx): Promise<ActionResult> => {
+      if (candidate.path === null)
+        return {
+          ok: false,
+          bytes_freed: null,
+          error: "missing graveyard path",
+        };
+      const plannedEntry = candidate.action.argv[1] === candidate.path;
+      const entryCount = countEntries(candidate.path) + (plannedEntry ? 1 : 0);
+      let freed = 0;
+      let removedEntries = 0;
+      let removedBytes = 0;
+      let failed = false;
+      // Planned rows own one top-level entry. Legacy/root rows still delete children independently.
+      const entries = plannedEntry
+        ? [candidate.path]
+        : graveyardEntries(candidate.path);
+      for (const entry of entries) {
+        const writable = fromThrowable(() => {
+          (deps.writable ?? makeDirectoriesOwnerWritable)(entry);
+        })();
+        if (writable.isErr()) {
+          failed = true;
+          ctx.log(
+            `ERROR ${entry}: cannot restore owner write permission: ${String(writable.error)}`,
+          );
+          continue;
+        }
+        const result = await (deps.remove ?? removeTree)(entry, {
+          uid: process.getuid?.() ?? 0,
+          // Graveyard entries are already-deleted data: the repo-store refusal does not apply.
+          graveyard: true,
+          protection: {
+            processes: ctx.liveness,
+            ownerTarget: "purge",
+            procDir: ctx.procDir,
+            repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
+            protectedPaths: ctx.config.protected ?? [],
+            ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
+          },
+          progress: removeTreeProgress(entry, null, ctx),
+        });
+        ctx.reportRemoval?.(result);
+        freed += result.statfs_bytes_freed;
+        removedEntries += result.entries_removed;
+        removedBytes += result.bytes_freed;
+        for (const refusal of result.refused) {
+          failed = true;
+          ctx.log(
+            `REFUSED ${refusal.path}: ${refusal.reason}; repair: ${refusal.repair}`,
+          );
+        }
+        for (const error of result.errors) {
+          failed = true;
+          ctx.log(`ERROR ${error.path}: ${error.error}`);
+        }
+      }
+      if (!failed)
         ctx.log(
-          `ERROR ${entry}: cannot restore owner write permission: ${String(writable.error)}`,
+          `${candidate.id}: ${entryCount} entries removed (${removedEntries} files and directories, ${removedBytes} bytes)`,
         );
-        continue;
-      }
-      const result = await removeTree(entry, {
-        uid: process.getuid?.() ?? 0,
-        // Graveyard entries are already-deleted data: the repo-store refusal does not apply.
-        graveyard: true,
-        protection: {
-          processes: ctx.liveness,
-          ownerTarget: "purge",
-          procDir: ctx.procDir,
-          repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
-          protectedPaths: ctx.config.protected ?? [],
-          ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
-        },
-        progress: removeTreeProgress(entry, null, ctx),
-      });
-      freed += result.statfs_bytes_freed;
-      removedEntries += result.entries_removed;
-      removedBytes += result.bytes_freed;
-      for (const refusal of result.refused) {
-        failed = true;
-        ctx.log(
-          `REFUSED ${refusal.path}: ${refusal.reason}; repair: ${refusal.repair}`,
-        );
-      }
-      for (const error of result.errors) {
-        failed = true;
-        ctx.log(`ERROR ${error.path}: ${error.error}`);
-      }
-    }
-    if (!failed)
-      ctx.log(
-        `${candidate.id}: ${entryCount} entries removed (${removedEntries} files and directories, ${removedBytes} bytes)`,
-      );
-    return {
-      ok: !failed,
-      bytes_freed: freed,
-      error: failed ? "some graveyard entries were refused or failed" : null,
-    };
-  },
-} satisfies Target;
+      return {
+        ok: !failed,
+        bytes_freed: freed,
+        error: failed ? "some graveyard entries were refused or failed" : null,
+      };
+    },
+  } satisfies Target;
+}
+
+export const purge = createPurgeTarget();

@@ -44,6 +44,8 @@ export type RemoveTreeResult = {
 };
 export type RemoveTreeOptions = {
   uid: number;
+  /** Test seams for filesystem and static protection facts. */
+  device?: (path: string, stat: Stats) => number;
   /** Additional request budget; false stops before another visit or unlink. */
   allowVisit?: () => boolean;
   /** Revalidate request authority after preflight and before the first unlink. */
@@ -70,6 +72,7 @@ export type RemoveTreeOptions = {
     repoRoots?: string[] | undefined;
     protectedPaths?: string[] | undefined;
     home?: string | undefined;
+    brewPrefix?: string | null | undefined;
     procDir?: string | undefined;
     ignoreUnreadableProcs?: readonly string[] | undefined;
   };
@@ -321,17 +324,14 @@ export async function removeTree(
       errors,
     };
   writeProgress();
-  const protectedPath = protectedReason(
-    path,
+  const protectionOptions =
     options.graveyard === true
       ? {
           ...options.protection,
-          // Deleted payloads can be unlinked even with open fds. Preserve static
-          // path protection while bypassing process probes and their unknowns.
           processes: { openPaths: () => ({ open: [], unknown: [] }) },
         }
-      : options.protection,
-  );
+      : options.protection;
+  const protectedPath = protectedReason(path, protectionOptions);
   if (protectedPath !== null)
     return {
       ok: false,
@@ -349,7 +349,10 @@ export async function removeTree(
       ],
       errors,
     };
-  const device = rootStat.dev;
+  const device = (options.device ?? ((_path, stat) => stat.dev))(
+    path,
+    rootStat,
+  );
   const parent = dirname(path);
   const measureFilesystem = options.measureFilesystem !== false;
   const before = measureFilesystem
@@ -471,7 +474,9 @@ export async function removeTree(
       return false;
     }
     const stat = statResult.value;
-    if (stat.dev !== device) {
+    if (
+      (options.device ?? ((_path, value) => value.dev))(entry, stat) !== device
+    ) {
       const owner = fromThrowable(() => getOwner(entry))().unwrapOr({
         uid: stat.uid,
         name: String(stat.uid),

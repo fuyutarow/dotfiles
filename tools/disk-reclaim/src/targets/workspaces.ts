@@ -37,6 +37,8 @@ import { scanCache, checkScanDeadline } from "../lib/scan-cache.ts";
 import { protectedReason } from "../lib/protected.ts";
 
 export type WorkspacesOptions = {
+  jj?: typeof jj;
+  runProtection?: typeof runProtection;
   /** opt-in: `jj git fetch` each store before judging (a fresher remote view) */
   fetch?: boolean;
   /** scratch liveness from the liveness module; absent = unknown, so scratch workspaces ASK */
@@ -71,8 +73,8 @@ const FORGET = (store: string, name: string) => [
   name,
 ];
 
-function ids(store: string, revset: string): string[] | null {
-  const run = jj([
+function ids(store: string, revset: string, runJj: typeof jj): string[] | null {
+  const run = runJj([
     "-R",
     store,
     "--ignore-working-copy",
@@ -85,8 +87,8 @@ function ids(store: string, revset: string): string[] | null {
   ]);
   return run.ok ? run.stdout.split("\n").filter((l) => l !== "") : null;
 }
-function lastFetch(store: string): string {
-  const run = jj([
+function lastFetch(store: string, runJj: typeof jj): string {
+  const run = runJj([
     "-R",
     store,
     "--ignore-working-copy",
@@ -116,7 +118,7 @@ async function storeCandidates(
 ): Promise<Candidate[]> {
   let fetchError: string | null = null;
   if ((options.fetch ?? context.fetch) === true) {
-    const fetched = jj(["-R", store, "git", "fetch"]);
+    const fetched = (options.jj ?? jj)(["-R", store, "git", "fetch"]);
     if (!fetched.ok) {
       fetchError = `fetch failed in ${store}: ${fetched.stderr.trim().split("\n")[0]}`;
       log(`workspaces: ${fetchError}`);
@@ -216,7 +218,7 @@ function gather(
     };
   } else if (ctx.mode === "run") {
     // Under the lock: snapshot the working copy; any warning means jj could not record everything.
-    const status = jj(["-R", root, "status"]);
+    const status = (options.jj ?? jj)(["-R", root, "status"]);
     if (!status.ok) {
       fresh = {
         ok: null,
@@ -242,7 +244,10 @@ function gather(
     }
   }
   // `file list` prints cwd-relative paths, so it runs from the workspace root.
-  const tracked = jj(["--ignore-working-copy", "file", "list"], root);
+  const tracked = (options.jj ?? jj)(
+    ["--ignore-working-copy", "file", "list"],
+    root,
+  );
   let foreign: string[] | null = null;
   if (tracked.ok) {
     const scan = scanWorkspace(
@@ -263,13 +268,17 @@ function gather(
   const unpushed = unpushedRevset(name);
   const facts = {
     fresh,
-    unpushed: ids(store, `${unpushed} ~ (empty() & description(exact:""))`),
-    conflicts: ids(store, `${unpushed} & conflicts()`),
-    bookmarks: ids(store, `${unpushed} & bookmarks()`),
+    unpushed: ids(
+      store,
+      `${unpushed} ~ (empty() & description(exact:""))`,
+      options.jj ?? jj,
+    ),
+    conflicts: ids(store, `${unpushed} & conflicts()`, options.jj ?? jj),
+    bookmarks: ids(store, `${unpushed} & bookmarks()`, options.jj ?? jj),
     foreign,
     open,
     session,
-    lastFetch: lastFetch(store),
+    lastFetch: lastFetch(store, options.jj ?? jj),
   };
   if (
     facts.fresh.ok !== null &&
@@ -350,7 +359,7 @@ async function evaluate(
       name,
       "workspace root",
     );
-  const run = await runProtection(store, root);
+  const run = await (options.runProtection ?? runProtection)(store, root);
   if (run !== null) return ask(id, root, run, name, "run judged and landed");
   if (!existsSync(root)) {
     return {
@@ -590,7 +599,7 @@ export function createWorkspacesTarget(
         }
       }
       // 1. recovery is durable before anything is destroyed
-      const run = await runProtection(store, path);
+      const run = await (options.runProtection ?? runProtection)(store, path);
       if (run !== null) return fail(run);
       ctx.recordRecovery(candidate, {
         repo: store,

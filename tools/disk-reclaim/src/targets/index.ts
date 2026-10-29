@@ -7,6 +7,7 @@ import type {
   Tier,
 } from "../model.ts";
 import type { LivenessSnapshot } from "../liveness/facts.ts";
+import type { RemoveTreeResult } from "../lib/remove-tree.ts";
 import { clean } from "./clean.ts";
 import { builds } from "./builds.ts";
 import { rust } from "./rust.ts";
@@ -64,6 +65,7 @@ export type Context = {
   /** One facts snapshot per plan, refreshed under the lock before actions. */
   liveness?: LivenessSnapshot;
   log: (message: string) => void;
+  reportRemoval?: (result: RemoveTreeResult) => void;
   /** Persist recovery before a multi-step action (e.g. workspace forget). */
   recordRecovery?:
     | ((candidate: Candidate, recovery: ReceiptAction["recovery"]) => void)

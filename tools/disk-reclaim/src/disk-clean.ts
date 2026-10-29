@@ -56,8 +56,9 @@ export async function cleanProbe(
   action: string | undefined,
   ms: number,
   signal?: AbortSignal,
-  target: "clean" | "rust" | "tmpfs" = "clean",
+  target: "clean" | "rust" | "tmpfs" | "purge" = "clean",
   only?: string,
+  underPressure = false,
 ): Promise<ProbeResult> {
   const spawned = fromThrowable(() =>
     Bun.spawn(
@@ -74,6 +75,8 @@ export async function cleanProbe(
           ),
           [`DISK_${target.toUpperCase()}_ACTION`]: action,
           DISK_TMPFS_ONLY: only,
+          DISK_PURGE_ONLY: only,
+          DISK_PURGE_UNDER_PRESSURE: underPressure ? "1" : "0",
         },
       },
     ),
@@ -103,11 +106,12 @@ export async function freeClean(
   deadline: number,
   start: number,
   progress: boolean,
-  injected?: Dependencies,
+  injected?: Dependencies | null,
   signal?: AbortSignal,
   stopOnError = false,
-  target: "clean" | "rust" | "tmpfs" = "clean",
+  target: "clean" | "rust" | "tmpfs" | "purge" = "clean",
   only?: string,
+  underPressure = false,
 ) {
   const remaining = () => Math.floor(deadline - (performance.now() - start));
   const report = (stage: string) => {
@@ -120,7 +124,8 @@ export async function freeClean(
     guard: workerMutationRefusal,
     lock: (ms) =>
       waitForLock(target, stateDir(), report, Math.min(10, ms / 1000)),
-    probe: (action, ms, abort) => cleanProbe(action, ms, abort, target, only),
+    probe: (action, ms, abort) =>
+      cleanProbe(action, ms, abort, target, only, underPressure),
     receipt: async (items) => {
       const id = crypto.randomUUID();
       const dir = join(stateDir(), "disk-receipts");

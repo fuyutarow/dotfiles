@@ -5,6 +5,8 @@ import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import { collectProcesses, resolveProcRoot, type OpenPaths } from "./procs.ts";
 
 export type ProtectionOptions = {
+  /** Override external Homebrew discovery for isolated fixtures. */
+  brewPrefix?: string | null | undefined;
   ownerTarget?: string | undefined;
   home?: string | undefined;
   repoRoots?: string[] | undefined;
@@ -171,7 +173,8 @@ export function protectedReason(
   )
     return "contains Rust target owned by rust target";
 
-  const prefix = brewPrefixOnce();
+  const prefix =
+    options.brewPrefix === undefined ? brewPrefixOnce() : options.brewPrefix;
   if (prefix !== null) protectedRoots.push(prefix);
   if (protectedRoots.some((root) => within(path, root) || within(root, path)))
     return "tool installation root";

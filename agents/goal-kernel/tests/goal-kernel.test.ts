@@ -417,7 +417,7 @@ describe("hook enforcement and privacy", () => {
       StoredEventSchema,
       jsonValue(await readFile(eventPath, "utf8")),
     );
-    event.event_type = "tampered";
+    event["event_type"] = "tampered";
     await writeFile(eventPath, `${JSON.stringify(event)}\n`);
     const tampered = await listRunEventsResult(root, requiredRunId(start));
     expect(tampered.isErr()).toBe(true);

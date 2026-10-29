@@ -110,9 +110,9 @@ function contentText(
     .flatMap((block) => {
       const record = asRecord(block);
       return record !== undefined &&
-        acceptedTypes.includes(String(record.type)) &&
-        typeof record.text === "string"
-        ? [record.text]
+        acceptedTypes.includes(String(record["type"])) &&
+        typeof record["text"] === "string"
+        ? [record["text"]]
         : [];
     })
     .join("\n");
@@ -180,12 +180,12 @@ function collectClaudeToolUseCalls(
     const block = asRecord(entry);
     if (
       block === undefined ||
-      block.type !== "tool_use" ||
-      typeof block.name !== "string"
+      block["type"] !== "tool_use" ||
+      typeof block["name"] !== "string"
     ) {
       continue;
     }
-    const input = block.input ?? null;
+    const input = block["input"] ?? null;
     const inputBytes = Buffer.byteLength(JSON.stringify(input));
     const outputBytes = 64;
     if (
@@ -195,8 +195,8 @@ function collectClaudeToolUseCalls(
       return { textBytes, truncated: true };
     }
     toolCalls.push({
-      ...(typeof block.id === "string" ? { tool_use_id: block.id } : {}),
-      tool_name: block.name,
+      ...(typeof block["id"] === "string" ? { tool_use_id: block["id"] } : {}),
+      tool_name: block["name"],
       input_sha256: sha256Value(input),
       input_bytes: inputBytes,
       source_line: sourceLine,
@@ -247,18 +247,18 @@ function parseTranscriptEntry(
   let truncated = false;
   let claudeMessages = 0;
   let codexMessages = 0;
-  const message = asRecord(entry.message);
-  const payload = asRecord(entry.payload);
+  const message = asRecord(entry["message"]);
+  const payload = asRecord(entry["payload"]);
   if (
-    (entry.type === "user" || entry.type === "assistant") &&
+    (entry["type"] === "user" || entry["type"] === "assistant") &&
     message !== undefined
   ) {
-    role = entry.type;
-    rawText = contentText(message.content, ["text"]);
+    role = entry["type"];
+    rawText = contentText(message["content"], ["text"]);
     claudeMessages = rawText === "" ? 0 : 1;
-    if (Array.isArray(message.content)) {
+    if (Array.isArray(message["content"])) {
       const result = collectClaudeToolUseCalls(
-        message.content,
+        message["content"],
         sourceLine,
         toolCalls,
         textBytes,
@@ -266,26 +266,26 @@ function parseTranscriptEntry(
       textBytes = result.textBytes;
       truncated = result.truncated;
     }
-  } else if (entry.type === "response_item" && payload !== undefined) {
+  } else if (entry["type"] === "response_item" && payload !== undefined) {
     if (
-      payload.type === "message" &&
-      (payload.role === "user" || payload.role === "assistant")
+      payload["type"] === "message" &&
+      (payload["role"] === "user" || payload["role"] === "assistant")
     ) {
-      role = payload.role;
-      rawText = contentText(payload.content, [
+      role = payload["role"];
+      rawText = contentText(payload["content"], [
         "input_text",
         "output_text",
         "text",
       ]);
       codexMessages = rawText === "" ? 0 : 1;
     } else if (
-      payload.type === "function_call" &&
-      typeof payload.name === "string"
+      payload["type"] === "function_call" &&
+      typeof payload["name"] === "string"
     ) {
       const result = collectCodexFunctionCall(
-        payload.name,
-        payload.arguments,
-        payload.call_id,
+        payload["name"],
+        payload["arguments"],
+        payload["call_id"],
         sourceLine,
         toolCalls,
         textBytes,
@@ -470,7 +470,7 @@ function toolTraces(events: readonly RunEvent[]): ToolTrace[] {
     trace.requested_at = event.occurred_at;
     // Unconditional overwrite (incl. undefined): matches pre-refactor semantics for a
     // duplicate/replayed tool.requested event of the same tool_use_id.
-    const kernelDecision = optionalString(event.kernel_decision);
+    const kernelDecision = optionalString(event["kernel_decision"]);
     trace.kernel_decision = kernelDecision;
     if (kernelDecision === "deny") trace.outcome = "denied";
   }
@@ -479,9 +479,9 @@ function toolTraces(events: readonly RunEvent[]): ToolTrace[] {
     trace.completed_at = event.occurred_at;
     // Unconditional overwrite (incl. undefined): matches pre-refactor semantics for a
     // duplicate/replayed tool.completed event of the same tool_use_id.
-    trace.response_sha256 = optionalString(event.tool_response_sha256);
-    if (typeof event.tool_exit_code === "number") {
-      trace.exit_code = event.tool_exit_code;
+    trace.response_sha256 = optionalString(event["tool_response_sha256"]);
+    if (typeof event["tool_exit_code"] === "number") {
+      trace.exit_code = event["tool_exit_code"];
     }
     trace.outcome =
       trace.exit_code === undefined || trace.exit_code === 0
@@ -493,14 +493,14 @@ function toolTraces(events: readonly RunEvent[]): ToolTrace[] {
     trace.completed_at = event.occurred_at;
     // Unconditional overwrite (incl. undefined): matches pre-refactor semantics for a
     // duplicate/replayed tool.failed event of the same tool_use_id.
-    trace.error_sha256 = optionalString(event.tool_error_sha256);
+    trace.error_sha256 = optionalString(event["tool_error_sha256"]);
     trace.outcome = "failed";
   }
 
   const traces = new Map<string, MutableTrace>();
   for (const event of events) {
     if (!event.event_type.startsWith("tool.")) continue;
-    const toolUseId = optionalString(event.tool_use_id);
+    const toolUseId = optionalString(event["tool_use_id"]);
     if (toolUseId === undefined) continue;
     const trace = traces.get(toolUseId) ?? {
       tool_use_id: toolUseId,
@@ -508,17 +508,17 @@ function toolTraces(events: readonly RunEvent[]): ToolTrace[] {
       workspace_paths: [],
     };
     // exactOptionalPropertyTypes: only write when defined, never assign an explicit undefined.
-    const toolName = optionalString(event.tool_name);
+    const toolName = optionalString(event["tool_name"]);
     if (toolName !== undefined) trace.tool_name = toolName;
-    const turnId = optionalString(event.turn_id);
+    const turnId = optionalString(event["turn_id"]);
     if (turnId !== undefined) trace.turn_id = turnId;
-    const inputSha256 = optionalString(event.tool_input_sha256);
+    const inputSha256 = optionalString(event["tool_input_sha256"]);
     if (inputSha256 !== undefined) trace.input_sha256 = inputSha256;
-    if (Array.isArray(event.workspace_paths)) {
+    if (Array.isArray(event["workspace_paths"])) {
       trace.workspace_paths = [
         ...new Set([
           ...trace.workspace_paths,
-          ...event.workspace_paths.flatMap((path) =>
+          ...event["workspace_paths"].flatMap((path) =>
             typeof path === "string" ? [path] : [],
           ),
         ]),
@@ -574,7 +574,7 @@ export async function buildPostmortem(
       events
         .filter((event) => event.event_type === "decision.recorded")
         .map(async (event) =>
-          (await parseRunDecision(event.decision)).map((decision) => ({
+          (await parseRunDecision(event["decision"])).map((decision) => ({
             event,
             decision,
           })),
@@ -610,8 +610,8 @@ export async function buildPostmortem(
     .map((event) => {
       // Resolve once so the narrowed `string` type (not `string | undefined`) flows into
       // the conditional spread below — exactOptionalPropertyTypes forbids the alternative.
-      const turnId = optionalString(event.turn_id);
-      const promptSha256 = optionalString(event.prompt_sha256);
+      const turnId = optionalString(event["turn_id"]);
+      const promptSha256 = optionalString(event["prompt_sha256"]);
       const prompt: {
         occurred_at: string;
         turn_id?: string;
@@ -620,8 +620,8 @@ export async function buildPostmortem(
       } = { occurred_at: event.occurred_at };
       if (turnId !== undefined) prompt.turn_id = turnId;
       if (promptSha256 !== undefined) prompt.prompt_sha256 = promptSha256;
-      if (typeof event.prompt_bytes === "number")
-        prompt.prompt_bytes = event.prompt_bytes;
+      if (typeof event["prompt_bytes"] === "number")
+        prompt.prompt_bytes = event["prompt_bytes"];
       return prompt;
     });
 

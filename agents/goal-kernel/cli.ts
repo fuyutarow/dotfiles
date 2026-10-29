@@ -274,7 +274,7 @@ async function main(): Promise<Result<void, Error>> {
                   jsonLine({ ok: true, command: "decide", event: eventValue });
                 } else {
                   const recorded = RecordedDecisionSchema.safeParse(
-                    eventValue.decision,
+                    eventValue["decision"],
                   );
                   const decisionId = recorded.success
                     ? recorded.data.decision_id

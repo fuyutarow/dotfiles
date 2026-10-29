@@ -270,7 +270,7 @@ async function parseAuthority(
   const keys = exactKeys(value, ["actor", "approved_at"], ["source"], locus);
   if (keys.isErr()) return err(keys.error);
   const approvedAtResult = boundedString(
-    value.approved_at,
+    value["approved_at"],
     `${locus}.approved_at`,
     64,
   );
@@ -285,13 +285,13 @@ async function parseAuthority(
     );
   }
   const sourceResult =
-    value.source === undefined
+    value["source"] === undefined
       ? undefined
-      : boundedString(value.source, `${locus}.source`, 500);
+      : boundedString(value["source"], `${locus}.source`, 500);
   if (sourceResult !== undefined && sourceResult.isErr()) {
     return err(sourceResult.error);
   }
-  const actorResult = boundedString(value.actor, `${locus}.actor`, 200);
+  const actorResult = boundedString(value["actor"], `${locus}.actor`, 200);
   if (actorResult.isErr()) return err(actorResult.error);
   return ok({
     actor: actorResult.value,
@@ -316,7 +316,7 @@ function parseDecision(
   );
   if (keys.isErr()) return err(keys.error);
   const decisionIdResult = boundedString(
-    value.decision_id,
+    value["decision_id"],
     `${locus}.decision_id`,
     96,
   );
@@ -330,7 +330,7 @@ function parseDecision(
       ),
     );
   }
-  const parent = value.parent_decision_id;
+  const parent = value["parent_decision_id"];
   if (parent !== null && typeof parent !== "string") {
     return err(
       new GoalKernelError(
@@ -353,12 +353,16 @@ function parseDecision(
       ),
     );
   }
-  const summary = boundedString(value.summary, `${locus}.summary`, 2_000);
+  const summary = boundedString(value["summary"], `${locus}.summary`, 2_000);
   if (summary.isErr()) return err(summary.error);
-  const evidence = stringArray(value.evidence_refs, `${locus}.evidence_refs`, {
-    max: 50,
-    itemMax: 1_000,
-  });
+  const evidence = stringArray(
+    value["evidence_refs"],
+    `${locus}.evidence_refs`,
+    {
+      max: 50,
+      itemMax: 1_000,
+    },
+  );
   if (evidence.isErr()) return err(evidence.error);
   return ok({
     decision_id: decisionId,
@@ -424,10 +428,10 @@ export async function parseGoalContract(
     "Goal contract",
   );
   if (keys.isErr()) return err(keys.error);
-  if (value.schema_version !== STATE_SCHEMA) {
+  if (value["schema_version"] !== STATE_SCHEMA) {
     return err(new GoalKernelError("GK_SCHEMA", "schema_version must be 1"));
   }
-  const goalIdResult = boundedString(value.goal_id, "goal_id", 64);
+  const goalIdResult = boundedString(value["goal_id"], "goal_id", 64);
   if (goalIdResult.isErr()) return err(goalIdResult.error);
   const goalId = goalIdResult.value;
   if (!GOAL_ID_RE.test(goalId)) {
@@ -439,9 +443,9 @@ export async function parseGoalContract(
     );
   }
   if (
-    typeof value.goal_version !== "number" ||
-    !Number.isSafeInteger(value.goal_version) ||
-    value.goal_version < 1
+    typeof value["goal_version"] !== "number" ||
+    !Number.isSafeInteger(value["goal_version"]) ||
+    value["goal_version"] < 1
   ) {
     return err(
       new GoalKernelError(
@@ -450,7 +454,7 @@ export async function parseGoalContract(
       ),
     );
   }
-  const supersedes = value.supersedes_goal_digest;
+  const supersedes = value["supersedes_goal_digest"];
   if (
     supersedes !== null &&
     (typeof supersedes !== "string" || !SHA256_RE.test(supersedes))
@@ -462,7 +466,7 @@ export async function parseGoalContract(
       ),
     );
   }
-  if (value.goal_version === 1 && supersedes !== null) {
+  if (value["goal_version"] === 1 && supersedes !== null) {
     return err(
       new GoalKernelError(
         "GK_GOAL_LINEAGE",
@@ -470,7 +474,7 @@ export async function parseGoalContract(
       ),
     );
   }
-  if (value.goal_version > 1 && supersedes === null) {
+  if (value["goal_version"] > 1 && supersedes === null) {
     return err(
       new GoalKernelError(
         "GK_GOAL_LINEAGE",
@@ -478,36 +482,36 @@ export async function parseGoalContract(
       ),
     );
   }
-  if (!Array.isArray(value.decisions)) {
+  if (!Array.isArray(value["decisions"])) {
     return err(new GoalKernelError("GK_SCHEMA", "decisions must be an array"));
   }
   const decisionsResult = Result.combine(
-    value.decisions.map((decision, index) =>
+    value["decisions"].map((decision, index) =>
       parseDecision(decision, `decisions[${index}]`),
     ),
   );
   if (decisionsResult.isErr()) return err(decisionsResult.error);
   const order = validateDecisionOrder(decisionsResult.value);
   if (order.isErr()) return err(order.error);
-  const northStar = boundedString(value.north_star, "north_star", 4_000);
+  const northStar = boundedString(value["north_star"], "north_star", 4_000);
   if (northStar.isErr()) return err(northStar.error);
-  const acceptance = stringArray(value.acceptance, "acceptance", {
+  const acceptance = stringArray(value["acceptance"], "acceptance", {
     min: 1,
     max: 50,
     itemMax: 1_000,
   });
   if (acceptance.isErr()) return err(acceptance.error);
-  const nonGoals = stringArray(value.non_goals, "non_goals", {
+  const nonGoals = stringArray(value["non_goals"], "non_goals", {
     max: 50,
     itemMax: 1_000,
   });
   if (nonGoals.isErr()) return err(nonGoals.error);
-  const authority = await parseAuthority(value.authority, "authority");
+  const authority = await parseAuthority(value["authority"], "authority");
   if (authority.isErr()) return err(authority.error);
   return ok({
     schema_version: STATE_SCHEMA,
     goal_id: goalId,
-    goal_version: value.goal_version,
+    goal_version: value["goal_version"],
     supersedes_goal_digest: supersedes,
     north_star: northStar.value,
     acceptance: acceptance.value,
@@ -540,21 +544,21 @@ export async function parseRunDecision(
     "Run decision",
   );
   if (keys.isErr()) return err(keys.error);
-  if (value.schema_version !== STATE_SCHEMA) {
+  if (value["schema_version"] !== STATE_SCHEMA) {
     return err(new GoalKernelError("GK_SCHEMA", "schema_version must be 1"));
   }
   const decision = parseDecision(
     {
-      decision_id: value.decision_id,
-      summary: value.summary,
-      parent_decision_id: value.parent_decision_id,
-      evidence_refs: value.evidence_refs,
+      decision_id: value["decision_id"],
+      summary: value["summary"],
+      parent_decision_id: value["parent_decision_id"],
+      evidence_refs: value["evidence_refs"],
     },
     "Run decision",
   );
   if (decision.isErr()) return err(decision.error);
   const authority = await parseAuthority(
-    value.authority,
+    value["authority"],
     "Run decision.authority",
   );
   if (authority.isErr()) return err(authority.error);
@@ -865,13 +869,13 @@ async function readActivePointer(
   );
   if (keys.isErr()) return err(keys.error);
   if (
-    value.schema_version !== STATE_SCHEMA ||
-    typeof value.goal_id !== "string" ||
-    typeof value.goal_version !== "number" ||
-    typeof value.goal_digest !== "string" ||
-    !SHA256_RE.test(value.goal_digest) ||
-    typeof value.snapshot_rel !== "string" ||
-    typeof value.activated_at !== "string"
+    value["schema_version"] !== STATE_SCHEMA ||
+    typeof value["goal_id"] !== "string" ||
+    typeof value["goal_version"] !== "number" ||
+    typeof value["goal_digest"] !== "string" ||
+    !SHA256_RE.test(value["goal_digest"]) ||
+    typeof value["snapshot_rel"] !== "string" ||
+    typeof value["activated_at"] !== "string"
   ) {
     return err(
       new GoalKernelError("GK_STATE", "ACTIVE.json has invalid fields"),
@@ -879,11 +883,11 @@ async function readActivePointer(
   }
   return ok({
     schema_version: STATE_SCHEMA,
-    goal_id: value.goal_id,
-    goal_version: value.goal_version,
-    goal_digest: value.goal_digest,
-    snapshot_rel: value.snapshot_rel,
-    activated_at: value.activated_at,
+    goal_id: value["goal_id"],
+    goal_version: value["goal_version"],
+    goal_digest: value["goal_digest"],
+    snapshot_rel: value["snapshot_rel"],
+    activated_at: value["activated_at"],
   });
 }
 
@@ -1115,23 +1119,23 @@ function parseBinding(input: unknown): KernelResult<RunBinding> {
   const keys = exactKeys(value, required, [], "run binding");
   if (keys.isErr()) return err(keys.error);
   if (
-    value.schema_version !== STATE_SCHEMA ||
-    typeof value.run_id !== "string" ||
-    !RUN_ID_RE.test(value.run_id) ||
-    (value.provider !== "claude" && value.provider !== "codex") ||
-    typeof value.session_id_sha256 !== "string" ||
-    !SHA256_RE.test(value.session_id_sha256) ||
-    typeof value.workspace_root !== "string" ||
-    typeof value.goal_id !== "string" ||
-    typeof value.goal_version !== "number" ||
-    typeof value.goal_digest !== "string" ||
-    !SHA256_RE.test(value.goal_digest) ||
-    typeof value.goal_snapshot_rel !== "string" ||
-    value.policy_version !== POLICY_VERSION ||
-    value.policy_digest !== POLICY_DIGEST ||
-    typeof value.bound_at !== "string" ||
-    typeof value.binding_sha256 !== "string" ||
-    !SHA256_RE.test(value.binding_sha256)
+    value["schema_version"] !== STATE_SCHEMA ||
+    typeof value["run_id"] !== "string" ||
+    !RUN_ID_RE.test(value["run_id"]) ||
+    (value["provider"] !== "claude" && value["provider"] !== "codex") ||
+    typeof value["session_id_sha256"] !== "string" ||
+    !SHA256_RE.test(value["session_id_sha256"]) ||
+    typeof value["workspace_root"] !== "string" ||
+    typeof value["goal_id"] !== "string" ||
+    typeof value["goal_version"] !== "number" ||
+    typeof value["goal_digest"] !== "string" ||
+    !SHA256_RE.test(value["goal_digest"]) ||
+    typeof value["goal_snapshot_rel"] !== "string" ||
+    value["policy_version"] !== POLICY_VERSION ||
+    value["policy_digest"] !== POLICY_DIGEST ||
+    typeof value["bound_at"] !== "string" ||
+    typeof value["binding_sha256"] !== "string" ||
+    !SHA256_RE.test(value["binding_sha256"])
   ) {
     return err(
       new GoalKernelError("GK_STATE", "run binding has invalid fields"),
@@ -1139,18 +1143,18 @@ function parseBinding(input: unknown): KernelResult<RunBinding> {
   }
   const binding: RunBinding = {
     schema_version: STATE_SCHEMA,
-    run_id: value.run_id,
-    provider: value.provider,
-    session_id_sha256: value.session_id_sha256,
-    workspace_root: value.workspace_root,
-    goal_id: value.goal_id,
-    goal_version: value.goal_version,
-    goal_digest: value.goal_digest,
-    goal_snapshot_rel: value.goal_snapshot_rel,
+    run_id: value["run_id"],
+    provider: value["provider"],
+    session_id_sha256: value["session_id_sha256"],
+    workspace_root: value["workspace_root"],
+    goal_id: value["goal_id"],
+    goal_version: value["goal_version"],
+    goal_digest: value["goal_digest"],
+    goal_snapshot_rel: value["goal_snapshot_rel"],
     policy_version: POLICY_VERSION,
     policy_digest: POLICY_DIGEST,
-    bound_at: value.bound_at,
-    binding_sha256: value.binding_sha256,
+    bound_at: value["bound_at"],
+    binding_sha256: value["binding_sha256"],
   };
   const { binding_sha256: expectedDigest, ...body } = binding;
   const actualDigest = sha256Value(body);
@@ -1295,12 +1299,12 @@ async function appendRunEvent(
     run_id: binding.run_id,
     provider: binding.provider,
     event_type:
-      typeof event.event_type === "string"
-        ? event.event_type
+      typeof event["event_type"] === "string"
+        ? event["event_type"]
         : "provider.event",
     provider_event:
-      typeof event.provider_event === "string"
-        ? event.provider_event
+      typeof event["provider_event"] === "string"
+        ? event["provider_event"]
         : "unknown",
     occurred_at: ids.at,
     goal_id: binding.goal_id,
@@ -1346,7 +1350,7 @@ export async function listRunEvents(
       );
     }
     const filenameDigest = name.match(/-([a-f0-9]{64})\.json$/u)?.[1];
-    const eventDigest = value.event_sha256;
+    const eventDigest = value["event_sha256"];
     if (
       filenameDigest === undefined ||
       typeof eventDigest !== "string" ||
@@ -1367,17 +1371,17 @@ export async function listRunEvents(
       );
     }
     if (
-      value.schema_version !== STATE_SCHEMA ||
-      typeof value.event_id !== "string" ||
-      typeof value.run_id !== "string" ||
-      (value.provider !== "claude" && value.provider !== "codex") ||
-      typeof value.event_type !== "string" ||
-      typeof value.provider_event !== "string" ||
-      typeof value.occurred_at !== "string" ||
-      typeof value.goal_id !== "string" ||
-      typeof value.goal_version !== "number" ||
-      typeof value.goal_digest !== "string" ||
-      typeof value.policy_digest !== "string"
+      value["schema_version"] !== STATE_SCHEMA ||
+      typeof value["event_id"] !== "string" ||
+      typeof value["run_id"] !== "string" ||
+      (value["provider"] !== "claude" && value["provider"] !== "codex") ||
+      typeof value["event_type"] !== "string" ||
+      typeof value["provider_event"] !== "string" ||
+      typeof value["occurred_at"] !== "string" ||
+      typeof value["goal_id"] !== "string" ||
+      typeof value["goal_version"] !== "number" ||
+      typeof value["goal_digest"] !== "string" ||
+      typeof value["policy_digest"] !== "string"
     ) {
       return err(
         new GoalKernelError(
@@ -1389,16 +1393,16 @@ export async function listRunEvents(
     events.push({
       ...value,
       schema_version: STATE_SCHEMA,
-      event_id: value.event_id,
-      run_id: value.run_id,
-      provider: value.provider,
-      event_type: value.event_type,
-      provider_event: value.provider_event,
-      occurred_at: value.occurred_at,
-      goal_id: value.goal_id,
-      goal_version: value.goal_version,
-      goal_digest: value.goal_digest,
-      policy_digest: value.policy_digest,
+      event_id: value["event_id"],
+      run_id: value["run_id"],
+      provider: value["provider"],
+      event_type: value["event_type"],
+      provider_event: value["provider_event"],
+      occurred_at: value["occurred_at"],
+      goal_id: value["goal_id"],
+      goal_version: value["goal_version"],
+      goal_digest: value["goal_digest"],
+      policy_digest: value["policy_digest"],
       event_sha256: eventDigest,
     });
   }
@@ -1443,7 +1447,7 @@ function toolWorkspacePaths(
       paths.push(safeWorkspacePath(value, workspaceRoot));
     }
   }
-  const command = input.command;
+  const command = input["command"];
   if (typeof command === "string" && command.includes("*** Begin Patch")) {
     paths.push(...patchFilePaths(command, workspaceRoot));
   }
@@ -1485,9 +1489,9 @@ function recordToolExitCode(
 ): void {
   const response = asRecord(toolResponse);
   if (response === undefined) return;
-  const exitCode = response.exit_code ?? response.exitCode;
+  const exitCode = response["exit_code"] ?? response["exitCode"];
   if (typeof exitCode === "number" && Number.isSafeInteger(exitCode)) {
-    event.tool_exit_code = exitCode;
+    event["tool_exit_code"] = exitCode;
   }
 }
 
@@ -1514,15 +1518,15 @@ function hookEvent(
     const value = optionalString(input[key]);
     if (value !== undefined) event[key] = value;
   }
-  const reason = optionalString(input.reason, 10_000);
+  const reason = optionalString(input["reason"], 10_000);
   if (reason !== undefined) {
-    event.reason_sha256 = sha256Text(reason);
-    event.reason_bytes = Buffer.byteLength(reason);
+    event["reason_sha256"] = sha256Text(reason);
+    event["reason_bytes"] = Buffer.byteLength(reason);
   }
-  const path = transcriptPath(input.transcript_path);
-  if (path !== undefined) event.transcript_path = path;
+  const path = transcriptPath(input["transcript_path"]);
+  if (path !== undefined) event["transcript_path"] = path;
   if (providerEvent === "UserPromptSubmit") {
-    if (typeof input.prompt !== "string") {
+    if (typeof input["prompt"] !== "string") {
       return err(
         new GoalKernelError(
           "GK_HOOK_PAYLOAD",
@@ -1530,27 +1534,35 @@ function hookEvent(
         ),
       );
     }
-    event.prompt_sha256 = sha256Text(input.prompt);
-    event.prompt_bytes = Buffer.byteLength(input.prompt);
+    event["prompt_sha256"] = sha256Text(input["prompt"]);
+    event["prompt_bytes"] = Buffer.byteLength(input["prompt"]);
   }
   if (providerEvent === "PreToolUse") {
-    event.kernel_decision = "defer";
-    event.tool_input_sha256 = sha256Value(input.tool_input ?? null);
-    const workspacePaths = toolWorkspacePaths(input.tool_input, workspaceRoot);
-    if (workspacePaths.length > 0) event.workspace_paths = workspacePaths;
+    event["kernel_decision"] = "defer";
+    event["tool_input_sha256"] = sha256Value(input["tool_input"] ?? null);
+    const workspacePaths = toolWorkspacePaths(
+      input["tool_input"],
+      workspaceRoot,
+    );
+    if (workspacePaths.length > 0) event["workspace_paths"] = workspacePaths;
   }
   if (
     providerEvent === "PostToolUse" ||
     providerEvent === "PostToolUseFailure"
   ) {
-    event.tool_input_sha256 = sha256Value(input.tool_input ?? null);
-    const workspacePaths = toolWorkspacePaths(input.tool_input, workspaceRoot);
-    if (workspacePaths.length > 0) event.workspace_paths = workspacePaths;
+    event["tool_input_sha256"] = sha256Value(input["tool_input"] ?? null);
+    const workspacePaths = toolWorkspacePaths(
+      input["tool_input"],
+      workspaceRoot,
+    );
+    if (workspacePaths.length > 0) event["workspace_paths"] = workspacePaths;
     if (providerEvent === "PostToolUse") {
-      event.tool_response_sha256 = sha256Value(input.tool_response ?? null);
-      recordToolExitCode(event, input.tool_response);
+      event["tool_response_sha256"] = sha256Value(
+        input["tool_response"] ?? null,
+      );
+      recordToolExitCode(event, input["tool_response"]);
     } else {
-      event.tool_error_sha256 = sha256Value(input.error ?? null);
+      event["tool_error_sha256"] = sha256Value(input["error"] ?? null);
     }
   }
   return ok(event);
@@ -1658,8 +1670,9 @@ export async function processHookEvent(
       stderr: "goal-kernel: GK_HOOK_PAYLOAD: input must be an object\n",
     };
   }
-  const providerEvent = optionalString(value.hook_event_name, 100) ?? "unknown";
-  const cwd = typeof value.cwd === "string" ? value.cwd : process.cwd();
+  const providerEvent =
+    optionalString(value["hook_event_name"], 100) ?? "unknown";
+  const cwd = typeof value["cwd"] === "string" ? value["cwd"] : process.cwd();
   const root = await resolveWorkspaceRoot(cwd);
   const paths = goalKernelPaths(root);
   if (!(await isTrustedConfig(paths))) {
@@ -1672,7 +1685,7 @@ export async function processHookEvent(
     if (providerEvent === "UserPromptSubmit") return blockPrompt(reason);
     return warning(reason);
   }
-  const sessionId = optionalString(value.session_id, 1_000);
+  const sessionId = optionalString(value["session_id"], 1_000);
   if (sessionId === undefined) {
     const reason =
       "GK_HOOK_PAYLOAD: configured workspace event lacks session_id";
@@ -1798,7 +1811,7 @@ export async function recordRunDecision(
       const recordedResults = await Promise.all(
         existingEvents.value
           .filter((event) => event.event_type === "decision.recorded")
-          .map((event) => parseRunDecision(event.decision)),
+          .map((event) => parseRunDecision(event["decision"])),
       );
       const recorded = Result.combine(recordedResults);
       if (recorded.isErr()) return err(recorded.error);
@@ -1912,7 +1925,7 @@ export function transcriptLocator(
   events: readonly RunEvent[],
 ): string | undefined {
   for (let index = events.length - 1; index >= 0; index -= 1) {
-    const candidate = events[index]?.transcript_path;
+    const candidate = events[index]?.["transcript_path"];
     if (typeof candidate === "string" && isAbsolute(candidate)) {
       return candidate;
     }

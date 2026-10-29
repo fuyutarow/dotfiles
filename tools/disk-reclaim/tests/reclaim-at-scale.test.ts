@@ -55,6 +55,15 @@ afterEach(() => {
   }
 });
 const old = Temporal.Now.instant().epochMilliseconds / 1000 - 48 * 3600;
+function writeExpiredBurialRecords(graveyard: string, paths: string[]): void {
+  const timestamp = Temporal.Instant.fromEpochMilliseconds(
+    Math.trunc(old * 1000),
+  ).toString();
+  writeFileSync(
+    join(graveyard, ".record"),
+    paths.map((path) => `${timestamp}\t/original\t${path}`).join("\n"),
+  );
+}
 const quietLiveness: LivenessSnapshot = {
   facts: () => {
     expect.unreachable("liveness facts are not read for tmpfs candidates");
@@ -81,6 +90,7 @@ test("delete of a graveyard subtree succeeds, repo stores included, with live an
   const subtree = join(graveyard, "home", "fuyu");
   mkdirSync(subtree, { recursive: true });
   repoStoreTree(subtree);
+  writeExpiredBurialRecords(graveyard, [subtree]);
   const procs = procFixture(base);
   const options = {
     config: { ...config(), delete_roots: [] },
@@ -162,6 +172,10 @@ for (const scenario of ["foreign", "failure", "mixed"] as const) {
       expect(lstatSync(failed).uid).toBe(uid);
       utimesSync(failed, old, old);
     }
+    writeExpiredBurialRecords(graveyard, [
+      ...(scenario !== "failure" ? [foreign] : []),
+      ...(scenario !== "foreign" ? [failed] : []),
+    ]);
     // Exercise the real walker without chown, sudo, or host permission assumptions.
     const target = createRipExpiryTarget({
       remove: async (path, options) => {
@@ -255,6 +269,10 @@ test("rip-expire handles equally old subtrees in path order and can be limited t
     if (name === "tmp") repoStoreTree(join(graveyard, name));
     utimesSync(join(graveyard, name), old, old);
   }
+  writeExpiredBurialRecords(graveyard, [
+    join(graveyard, "home"),
+    join(graveyard, "tmp"),
+  ]);
   const acted: string[] = [];
   const target = {
     ...purgeRip,
@@ -561,6 +579,7 @@ test("tmpfs --only preserves symlink and protected ancestors and purges a gravey
   const selected = join(graveyard, "home");
   mkdirSync(selected, { recursive: true });
   repoStoreTree(selected);
+  writeExpiredBurialRecords(graveyard, [selected]);
   const other = join(graveyard, "tmp");
   mkdirSync(other);
   const outside = join(base, "outside");

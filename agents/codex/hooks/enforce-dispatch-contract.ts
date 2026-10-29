@@ -35,7 +35,7 @@ const EFFORTS: Record<string, readonly string[] | "any"> = {
 };
 
 const CONFIG_PATH =
-  process.env.MODEL_FLOOR_CONFIG ??
+  process.env["MODEL_FLOOR_CONFIG"] ??
   join(import.meta.dir, "..", "..", "hooks", "model-floor.toml");
 
 function effortsFor(family: string): string {

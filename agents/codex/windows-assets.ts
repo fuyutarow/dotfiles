@@ -127,7 +127,7 @@ async function conptyBridge(
     "CODEX_CONPTY_SOURCE",
     "CODEX_CONPTY_OUTPUT",
   ];
-  const inheritedWslEnv = (process.env.WSLENV ?? "")
+  const inheritedWslEnv = (process.env["WSLENV"] ?? "")
     .split(":")
     .filter((entry) => entry !== "");
   const wslEnv = [
@@ -225,7 +225,7 @@ export function bridgeHooks(
     return value.map((item) => bridgeHooks(item, distro, bun, runner, user));
   const record = obj(value);
   if (record === undefined) return value;
-  if (record.type === "command" && typeof record.command === "string")
+  if (record["type"] === "command" && typeof record["command"] === "string")
     return {
       ...record,
       command: [
@@ -239,7 +239,7 @@ export function bridgeHooks(
         "--exec",
         quote(bun),
         quote(runner),
-        quote(record.command),
+        quote(record["command"]),
       ].join(" "),
     };
   return Object.fromEntries(

@@ -23,7 +23,7 @@ import {
   windowsPath,
 } from "./runtime.ts";
 
-const DEFAULT_DOTFILES = join(process.env.HOME ?? homedir(), "dotfiles");
+const DEFAULT_DOTFILES = join(process.env["HOME"] ?? homedir(), "dotfiles");
 const MANAGED_LAUNCHER =
   "# Managed by codex-runtime.ts; no shell alias is required.";
 const MissingPathError = z.looseObject({ code: z.literal("ENOENT") });
@@ -86,7 +86,7 @@ export async function desktopLauncherProblem(
 }
 
 export async function wslDistroName(
-  inherited = process.env.WSL_DISTRO_NAME,
+  inherited = process.env["WSL_DISTRO_NAME"],
   windowsRoot = async (): Promise<string | undefined> => {
     const signal = AbortSignal.timeout(5_000);
     const mapped = Bun.spawn(["wslpath", "-w", "/"], {
@@ -218,7 +218,7 @@ async function converge(
       code: 2,
       lines: ["FAIL WSL plain codex must use the declared standalone provider"],
     };
-  const home = process.env.HOME ?? homedir();
+  const home = process.env["HOME"] ?? homedir();
   const bun = process.execPath;
   const contents = launcherContents(bun, dotfiles);
   // Local drift must remain diagnosable even when Windows interop is unavailable.
@@ -327,7 +327,7 @@ async function main(): Promise<number> {
     return 2;
   }
   const result = await converge(
-    process.env.DOTFILES ?? DEFAULT_DOTFILES,
+    process.env["DOTFILES"] ?? DEFAULT_DOTFILES,
     parsed.flags.check,
   );
   for (const line of result.lines) process.stdout.write(`${line}\n`);

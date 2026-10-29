@@ -151,10 +151,11 @@ export function resolveDesktopRuntime(
 
 export async function configHome(
   dotfiles: string,
-  home = process.env.HOME ?? homedir(),
+  home = process.env["HOME"] ?? homedir(),
 ): Promise<string> {
   return (
-    process.env.CODEX_CONFIG_HOME ?? (await resolveRuntime(dotfiles, home)).home
+    process.env["CODEX_CONFIG_HOME"] ??
+    (await resolveRuntime(dotfiles, home)).home
   );
 }
 

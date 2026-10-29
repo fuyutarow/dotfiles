@@ -20,7 +20,7 @@ import { jsonOf, z } from "../../hooks/zod.ts";
 const MAX_TURNS = 1024;
 const CLIPBOARD_TURN_LIMIT = 50;
 const TURN_SEPARATOR = "\n\n---\n\n";
-const HOME = process.env.HOME ?? homedir();
+const HOME = process.env["HOME"] ?? homedir();
 const JsonRecordSchema = z.record(z.string(), z.unknown());
 const JsonRecordText = jsonOf(JsonRecordSchema);
 const twoDigits = (number: number) => String(number).padStart(2, "0");
@@ -135,7 +135,9 @@ async function completedFinals(
     if (!parsed.success) fail(`rollout contains an unreadable record: ${file}`);
     records.push(parsed.data);
   }
-  const metadataRow = records.find((record) => record.type === "session_meta");
+  const metadataRow = records.find(
+    (record) => record["type"] === "session_meta",
+  );
   const metadata = SessionMetadataSchema.safeParse(metadataRow);
   const recordedId = metadata.success
     ? (metadata.data.payload.session_id ?? metadata.data.payload.id)
@@ -181,9 +183,9 @@ function shellQuote(value: string): string {
 }
 
 function downloadCommand(file: string): string | null {
-  const configured = process.env.QUOTE_DOWNLOAD_SSH_TARGET?.trim();
+  const configured = process.env["QUOTE_DOWNLOAD_SSH_TARGET"]?.trim();
   const explicitTarget = configured !== undefined && configured !== "";
-  const connection = process.env.SSH_CONNECTION?.trim().split(/\s+/u);
+  const connection = process.env["SSH_CONNECTION"]?.trim().split(/\s+/u);
   const host = connection?.[2];
   const port = connection?.[3];
   let target = "";
@@ -264,7 +266,7 @@ async function copyText(
     );
     let herdrFailure: string | null = null;
     const helperExists = await attempt(() => access(herdrHelper));
-    if (process.env.HERDR_ENV === "1" && helperExists.ok) {
+    if (process.env["HERDR_ENV"] === "1" && helperExists.ok) {
       const herdr = await attempt(() =>
         runCommand("bun", [herdrHelper], {
           env: { COPY_PAYLOAD_FILE: payloadFile },
@@ -309,7 +311,7 @@ async function copyText(
 
 async function main(): Promise<void> {
   const { thread, count } = invocation();
-  const configuredCodexHome = process.env.CODEX_HOME?.trim();
+  const configuredCodexHome = process.env["CODEX_HOME"]?.trim();
   const codexHome =
     configuredCodexHome === undefined || configuredCodexHome === ""
       ? join(HOME, ".codex")
@@ -333,7 +335,7 @@ async function main(): Promise<void> {
   const where = `${userInfo().username}@${hostname()}`;
   const header = `from codex:${thread} | ${quoteTimestamp()} | turns: ${selected.length} | ${bodyBytes}B | ${where}`;
   const payload = `${header}\n${body}`;
-  const configuredDotfiles = process.env.DOTFILES?.trim();
+  const configuredDotfiles = process.env["DOTFILES"]?.trim();
   let dotfiles = configuredDotfiles;
   if (dotfiles === undefined || dotfiles === "")
     dotfiles = await dotfilesRoot();

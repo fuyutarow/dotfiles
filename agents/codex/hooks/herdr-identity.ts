@@ -36,14 +36,14 @@ const PaneReply = jsonOf(
 export async function readHerdrPaneName(): Promise<
   { name: string | undefined } | undefined
 > {
-  const path = process.env.HERDR_SOCKET_PATH;
-  const paneId = process.env.HERDR_PANE_ID;
+  const path = process.env["HERDR_SOCKET_PATH"];
+  const paneId = process.env["HERDR_PANE_ID"];
   if (
     path === undefined ||
     path === "" ||
     paneId === undefined ||
     paneId === "" ||
-    process.env.HERDR_ENV !== "1"
+    process.env["HERDR_ENV"] !== "1"
   )
     return undefined;
   return new Promise((resolve) => {

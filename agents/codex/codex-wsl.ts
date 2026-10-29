@@ -76,7 +76,9 @@ export function conptyConfigArgument(config: LaunchConfig): string | undefined {
 export function conptyEnvironment(
   env: Record<string, string | undefined> = process.env,
 ): Record<string, string | undefined> {
-  const entries = (env.WSLENV ?? "").split(":").filter((entry) => entry !== "");
+  const entries = (env["WSLENV"] ?? "")
+    .split(":")
+    .filter((entry) => entry !== "");
   if (!entries.some((entry) => entry.split("/", 1)[0] === "TERM"))
     entries.push("TERM");
   // The Windows client is attached to a VT ConPTY, not the inherited Linux

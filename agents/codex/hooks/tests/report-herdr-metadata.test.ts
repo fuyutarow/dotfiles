@@ -101,9 +101,9 @@ test("Codex hook writes and reports the exact rollout session id", async () => {
       const newline = input.indexOf("\n");
       if (newline < 0) return;
       const parsed = jsonOf(requestSchema).safeParse(input.slice(0, newline));
-      if (parsed.success && parsed.data.method === "pane.get") {
+      if (parsed.success && parsed.data["method"] === "pane.get") {
         const paneRequest = jsonOf(z.object({ pane_id: z.string() })).safeParse(
-          parsed.data.params,
+          parsed.data["params"],
         );
         if (!paneRequest.success) {
           socket.end("{}\n");
@@ -156,7 +156,7 @@ test("Codex hook writes and reports the exact rollout session id", async () => {
             ...process.env,
             HOME: home,
             TMPDIR: home,
-            PATH: `${bin}:${process.env.PATH ?? ""}`,
+            PATH: `${bin}:${process.env["PATH"] ?? ""}`,
             XDG_RUNTIME_DIR: runtime,
             HERDR_ENV: "1",
             HERDR_SOCKET_PATH: socketPath,

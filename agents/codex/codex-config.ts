@@ -8,7 +8,7 @@ import { attempt, errorMessage } from "../hooks/attempt.ts";
 import { configHome } from "./runtime.ts";
 
 const dotfiles =
-  process.env.DOTFILES ?? join(process.env.HOME ?? homedir(), "dotfiles");
+  process.env["DOTFILES"] ?? join(process.env["HOME"] ?? homedir(), "dotfiles");
 const checkOnly = process.argv.includes("--check");
 if (process.argv.slice(2).some((arg) => arg !== "--check")) {
   console.error("codex:config: usage: codex-config.ts [--check]");

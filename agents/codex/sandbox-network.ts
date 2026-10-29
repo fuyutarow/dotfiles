@@ -89,26 +89,26 @@ export type Live = {
 function values(parsed: unknown): Omit<Declared, "mcpServers"> | Error {
   const root = RecordSchema.safeParse(parsed);
   if (!root.success) return new Error("not TOML");
-  const table = RecordSchema.safeParse(root.data.sandbox_workspace_write);
+  const table = RecordSchema.safeParse(root.data["sandbox_workspace_write"]);
   const network = z
     .boolean()
-    .safeParse(table.success ? table.data.network_access : undefined);
-  const context = z.number().int().safeParse(root.data.model_context_window);
+    .safeParse(table.success ? table.data["network_access"] : undefined);
+  const context = z.number().int().safeParse(root.data["model_context_window"]);
   const compact = z
     .number()
     .int()
-    .safeParse(root.data.model_auto_compact_token_limit);
-  const approval = ApprovalPolicySchema.safeParse(root.data.approval_policy);
+    .safeParse(root.data["model_auto_compact_token_limit"]);
+  const approval = ApprovalPolicySchema.safeParse(root.data["approval_policy"]);
   const reviewer = ApprovalsReviewerSchema.safeParse(
-    root.data.approvals_reviewer,
+    root.data["approvals_reviewer"],
   );
-  const tui = RecordSchema.safeParse(root.data.tui);
+  const tui = RecordSchema.safeParse(root.data["tui"]);
   const statusLine = z
     .array(StatusLineItemSchema)
-    .safeParse(tui.success ? tui.data.status_line : undefined);
+    .safeParse(tui.success ? tui.data["status_line"] : undefined);
   const fullscreenTranscript = z
     .boolean()
-    .safeParse(tui.success ? tui.data.fullscreen_transcript : undefined);
+    .safeParse(tui.success ? tui.data["fullscreen_transcript"] : undefined);
   if (!statusLine.success || !fullscreenTranscript.success)
     return new Error(
       `Codex declaration requires tui.status_line to be an array of native Codex 0.162.1 items and tui.fullscreen_transcript to be boolean: ${StatusLineItemSchema.options.join(", ")}`,
@@ -184,12 +184,12 @@ export async function readDeclared(
 function liveMcpServer(value: unknown): McpServer | undefined {
   const entry = RecordSchema.safeParse(value);
   if (!entry.success) return undefined;
-  const url = z.string().safeParse(entry.data.url);
+  const url = z.string().safeParse(entry.data["url"]);
   if (url.success) return { type: "http", url: url.data };
-  const command = z.string().safeParse(entry.data.command);
+  const command = z.string().safeParse(entry.data["command"]);
   if (!command.success) return undefined;
-  const args = z.array(z.string()).safeParse(entry.data.args);
-  const env = z.record(z.string(), z.string()).safeParse(entry.data.env);
+  const args = z.array(z.string()).safeParse(entry.data["args"]);
+  const env = z.record(z.string(), z.string()).safeParse(entry.data["env"]);
   return {
     type: "stdio",
     command: command.data,
@@ -235,18 +235,18 @@ export async function readLive(home: string): Promise<Live | Error> {
   if (!parsed.ok) return new Error(`${path}: unreadable or not TOML`);
   const root = RecordSchema.safeParse(parsed.value);
   if (!root.success) return new Error(`${path}: unreadable or not TOML`);
-  const table = RecordSchema.safeParse(root.data.sandbox_workspace_write);
+  const table = RecordSchema.safeParse(root.data["sandbox_workspace_write"]);
   const network = z
     .boolean()
-    .safeParse(table.success ? table.data.network_access : undefined);
-  const context = z.number().int().safeParse(root.data.model_context_window);
+    .safeParse(table.success ? table.data["network_access"] : undefined);
+  const context = z.number().int().safeParse(root.data["model_context_window"]);
   const compact = z
     .number()
     .int()
-    .safeParse(root.data.model_auto_compact_token_limit);
-  const approval = z.string().safeParse(root.data.approval_policy);
-  const reviewer = z.string().safeParse(root.data.approvals_reviewer);
-  const mcpTable = RecordSchema.safeParse(root.data.mcp_servers);
+    .safeParse(root.data["model_auto_compact_token_limit"]);
+  const approval = z.string().safeParse(root.data["approval_policy"]);
+  const reviewer = z.string().safeParse(root.data["approvals_reviewer"]);
+  const mcpTable = RecordSchema.safeParse(root.data["mcp_servers"]);
   const mcpServers = Object.fromEntries(
     Object.entries(mcpTable.success ? mcpTable.data : {}).flatMap(
       ([name, value]) => {
@@ -255,13 +255,13 @@ export async function readLive(home: string): Promise<Live | Error> {
       },
     ),
   );
-  const tui = RecordSchema.safeParse(root.data.tui);
+  const tui = RecordSchema.safeParse(root.data["tui"]);
   const statusLine = z
     .array(z.string())
-    .safeParse(tui.success ? tui.data.status_line : undefined);
+    .safeParse(tui.success ? tui.data["status_line"] : undefined);
   const fullscreenTranscript = z
     .boolean()
-    .safeParse(tui.success ? tui.data.fullscreen_transcript : undefined);
+    .safeParse(tui.success ? tui.data["fullscreen_transcript"] : undefined);
   return {
     contents: read.value,
     networkAccess: network.success ? network.data : null,

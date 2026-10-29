@@ -11,8 +11,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { drift, readDeclared, readLive } from "./remote-control.ts";
 
-const home = process.env.HOME ?? homedir();
-const dotfiles = process.env.DOTFILES ?? join(home, "dotfiles");
+const home = process.env["HOME"] ?? homedir();
+const dotfiles = process.env["DOTFILES"] ?? join(home, "dotfiles");
 
 if (Bun.which("codex") === null) {
   console.log("codex-remote-control: codex absent — skipped");

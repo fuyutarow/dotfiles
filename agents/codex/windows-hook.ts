@@ -41,7 +41,7 @@ const input = received.value;
 const decoded = jsonText.safeParse(input);
 const payload = decoded.success ? { ...obj(decoded.data) } : undefined;
 if (payload !== undefined) await convertNativePaths(payload);
-const cwd = payload?.cwd;
+const cwd = payload?.["cwd"];
 const child = Bun.spawn(["zsh", "-lc", command], {
   ...(typeof cwd === "string" ? { cwd } : {}),
   stdin: "pipe",

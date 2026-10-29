@@ -47,7 +47,7 @@ const recoverInvalid = <T extends z.ZodType>(schema: T) =>
 
 const CODEX = "codex";
 const DOTFILES =
-  process.env.DOTFILES ?? join(process.env.HOME ?? homedir(), "dotfiles");
+  process.env["DOTFILES"] ?? join(process.env["HOME"] ?? homedir(), "dotfiles");
 
 // A field that is absent or not a string reads as undefined; a non-object payload is "no version".
 const DaemonVersionSchema = z.object({

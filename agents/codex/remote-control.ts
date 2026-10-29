@@ -33,7 +33,7 @@ export async function readDeclared(dotfiles: string): Promise<boolean | Error> {
   if (!r.ok) return new Error(`${path}: unreadable or not TOML`);
   const table = RecordSchema.safeParse(r.value);
   if (!table.success) return new Error(`${path}: unreadable or not TOML`);
-  const v = table.data.remote_control;
+  const v = table.data["remote_control"];
   return typeof v === "boolean"
     ? v
     : new Error(`${path}: remote_control must be true or false`);
@@ -51,8 +51,8 @@ async function readJson(path: string): Promise<Record<string, unknown> | null> {
 export async function readLive(home: string): Promise<Live> {
   const settings = await readJson(join(DAEMON_DIR(home), "settings.json"));
   const pidFile = await readJson(join(DAEMON_DIR(home), "app-server.pid"));
-  const persisted = settings?.remoteControlEnabled === true;
-  const pid = pidFile?.pid;
+  const persisted = settings?.["remoteControlEnabled"] === true;
+  const pid = pidFile?.["pid"];
   if (typeof pid !== "number") {
     const proc = Bun.spawn(
       ["ps", "-u", String(process.getuid?.() ?? 0), "-o", "args="],

@@ -51,8 +51,8 @@ async function reportRequestedSession(
   const key = new Bun.CryptoHasher("sha256")
     .update(
       JSON.stringify([
-        process.env.HERDR_SOCKET_PATH,
-        process.env.HERDR_PANE_ID,
+        process.env["HERDR_SOCKET_PATH"],
+        process.env["HERDR_PANE_ID"],
         requestedThread,
       ]),
     )
@@ -95,14 +95,14 @@ async function reportRequestedSession(
 }
 
 const hasHerdrPane =
-  process.env.HERDR_ENV === "1" &&
-  process.env.HERDR_SOCKET_PATH !== undefined &&
-  process.env.HERDR_SOCKET_PATH !== "" &&
-  process.env.HERDR_PANE_ID !== undefined &&
-  process.env.HERDR_PANE_ID !== "";
+  process.env["HERDR_ENV"] === "1" &&
+  process.env["HERDR_SOCKET_PATH"] !== undefined &&
+  process.env["HERDR_SOCKET_PATH"] !== "" &&
+  process.env["HERDR_PANE_ID"] !== undefined &&
+  process.env["HERDR_PANE_ID"] !== "";
 
 async function reportSessionId(sessionId: string) {
-  const paneId = process.env.HERDR_PANE_ID;
+  const paneId = process.env["HERDR_PANE_ID"];
   const executable = Bun.which("herdr");
   if (paneId === undefined || paneId === "" || executable === null) return;
   const child = Bun.spawn(

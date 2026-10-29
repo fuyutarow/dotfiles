@@ -31,6 +31,7 @@ const SessionCountsSchema = z.lazy(() =>
 const SummarySchema = z.lazy(() =>
   z.object({
     running: z.number().int().nonnegative(),
+    late: z.number().int().nonnegative().optional(),
     unattributed: z.number().int().nonnegative(),
     sessions: z.record(z.string(), SessionCountsSchema),
     noSession: SessionCountsSchema,
@@ -41,6 +42,7 @@ export type RunSnapshotSource =
   | { kind: "stale"; capturedAt: number }
   | { kind: "unknown"; why: string };
 export interface AgxSnapshotRead {
+  late?: number | undefined;
   judgments?: Record<string, number> | undefined;
   repositoryJudgments?: number | undefined;
   judgeWhy?: string | undefined;
@@ -97,6 +99,8 @@ export function adaptAgxStatus(
 ): AgxSnapshotRead {
   const { runs, workspaces, findings, judgments } = status;
   return {
+    // The core owns aggregation; older snapshots leave this count unavailable.
+    late: runs.summary?.late,
     judgments: judgments.by_session,
     repositoryJudgments: judgments.repository,
     judgeWhy: judgments.why ?? undefined,

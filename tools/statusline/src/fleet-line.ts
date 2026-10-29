@@ -36,6 +36,7 @@ export function fleetLine(
     parts.push(`judge ${scan?.actions?.judge} (agx worker judge)`);
   if ((scan?.actions?.land ?? 0) > 0)
     parts.push(`land ${scan?.actions?.land} (mise run land)`);
+  if ((scan?.late ?? 0) > 0) parts.push(`late ${scan?.late} (agx worker ls)`);
   const commands = new Map<string, number>();
   for (const [kind, count] of Object.entries(
     scan?.findings?.kinds ?? {},

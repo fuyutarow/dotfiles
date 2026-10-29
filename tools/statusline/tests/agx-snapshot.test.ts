@@ -42,6 +42,7 @@ const status = {
     ],
     summary: {
       running: 3,
+      late: 4,
       unattributed: 1,
       sessions: { session: { here: 1, other: 2 } },
       noSession: { here: 0, other: 3 },
@@ -157,6 +158,7 @@ test("collector invokes the dotfiles mise pin without agx on PATH and adapts all
   expect(adaptAgxStatus(wire)).toEqual({
     rows: status.runs.rows,
     summary: status.runs.summary,
+    late: 4,
     runSource: { kind: "stale", capturedAt: at },
     ageSeconds: 75,
     reason: undefined,
@@ -186,6 +188,7 @@ test("collector invokes the dotfiles mise pin without agx on PATH and adapts all
   expect((await readAgxSnapshotAsync(env, cwd)).summary).toEqual(
     status.runs.summary,
   );
+  expect((await readAgxSnapshotAsync(env, cwd)).late).toBe(4);
   expect(
     (await readFile(env.AGX_CALLS, "utf8")).trim().split("\n"),
   ).toHaveLength(1);

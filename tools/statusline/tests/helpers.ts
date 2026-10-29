@@ -129,7 +129,11 @@ export function cleanupTempDirs(): void {
 }
 
 /** Fixture core responses for old marker-based tests; production must never derive these. */
-export function coreSnapshot(output: string, capturedAt: number) {
+export function coreSnapshot(
+  output: string,
+  capturedAt: number,
+  late?: number,
+) {
   const decoded = jsonOf(z.array(z.unknown())).safeParse(output);
   const runs = decoded.success ? decoded.data : [];
   const schema = z.looseObject({
@@ -161,6 +165,7 @@ export function coreSnapshot(output: string, capturedAt: number) {
           : value;
       }),
       summary: {
+        late,
         running: live.length,
         unattributed: live.filter(
           (row) =>

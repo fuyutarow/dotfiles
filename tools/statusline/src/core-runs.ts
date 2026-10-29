@@ -109,6 +109,7 @@ export async function readCoreRuns(
   return {
     runs,
     unreadable,
+    late: snapshot.late,
     sessionScope: dispatcherSession,
     inventorySessions: displayedSessions,
     actions: {

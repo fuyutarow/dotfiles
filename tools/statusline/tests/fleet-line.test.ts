@@ -88,6 +88,14 @@ test("doctor findings retain every source kind, omit zero counts, and require a 
   expect(fleetLine(undefined, at)).toBe("");
 });
 
+test("late count renders only the owner-published summary and preserves zero or unknown", () => {
+  expect(fleetLine({ runs: [], unreadable: 0, late: 3 }, at)).toBe(
+    "late 3 (agx worker ls)",
+  );
+  expect(fleetLine({ runs: [], unreadable: 0, late: 0 }, at)).toBe("");
+  expect(fleetLine({ runs: [], unreadable: 0 }, at)).toBe("");
+});
+
 test("run snapshot lag is visible immediately when the source ledger is newer", () => {
   expect(
     fleetLine(

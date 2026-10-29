@@ -34,6 +34,7 @@ export interface RouteRun {
 }
 
 export interface RouteScan {
+  late?: number | undefined;
   /** Exact dispatcher session used to split own rows from the fleet's other count. */
   sessionScope?: string | undefined;
   /** Complete provider-session inventory shown by an unselected cwd view. */

@@ -28,6 +28,7 @@ import {
   seedAgxSnapshot,
 } from "./helpers.ts";
 import { jsonOf, z } from "../src/zod.ts";
+import { fleetLine } from "../src/fleet-line.ts";
 import {
   deadOwnMarker,
   malformedMarker,
@@ -304,6 +305,47 @@ describe("legacy enriched Run row", () => {
     const scan = await agxRouteRunsAsync(env);
     expect(scan.unreadable).toBe(0);
     expect(scan.runs.filter((run) => !run.alive)).toHaveLength(0);
+  });
+
+  test("late count comes from the published core summary, not row metadata", async () => {
+    const late = {
+      at: "2026-10-19T00:01:00Z",
+      first_return_s: 60,
+      elapsed: 61,
+    };
+    const row = {
+      id: "legacy",
+      ticket: "legacy",
+      state: "running",
+      row: "luna-high",
+      dispatcher_session: SESSION,
+      started_at: "2026-10-18T00:00:00Z",
+      late,
+    };
+    const dir = join(scratch, "published-late-summary");
+    const env = isolatedStatuslineEnv({ HOME: scratch, AGX_STATE_DIR: dir });
+    for (const [count, expected] of [
+      [7, "late 7 (agx worker ls)"],
+      [0, ""],
+      [undefined, ""],
+    ] as const) {
+      seedAgxSnapshot(env, {
+        output: JSON.stringify({
+          runs: [row],
+          summary: {
+            late: count,
+            running: 1,
+            unattributed: 0,
+            sessions: { [SESSION]: { here: 1, other: 0 } },
+            noSession: { here: 0, other: 1 },
+          },
+        }),
+        capturedAt: Temporal.Now.instant().epochMilliseconds,
+      });
+      const scan = await agxRouteRunsAsync(env, SESSION);
+      expect(scan.late).toBe(count);
+      expect(fleetLine(scan)).toBe(expected);
+    }
   });
 
   test("renders worker and workspace names from an agx worker run record", async () => {

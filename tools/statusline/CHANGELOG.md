@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.4 — 2026-10-29
+
+- Show late worker counts only from recorded metadata on currently running runs.
+
 ## 0.22.3 — 2026-10-29
 
 - Discover live sessions on macOS and record discovery failures.

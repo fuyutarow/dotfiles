@@ -180,7 +180,7 @@ describe("prompt archive", () => {
 
     expect(result).toEqual({ archived: 2, skipped: 0 });
     expect(rows).toHaveLength(2);
-    expect(rows.map((row) => row.vendor)).toEqual(["claude", "codex"]);
+    expect(rows.map((row) => row["vendor"])).toEqual(["claude", "codex"]);
     expect(rows[0]).toMatchObject({
       display: "synthetic Claude input",
       sessionId: "claude-session",

@@ -58,15 +58,15 @@ function parseInput(vendor: Vendor, value: unknown): InputRecord | undefined {
   if (!record.success) return undefined;
   const data = record.data;
   const isClaude = vendor === "claude";
-  const sessionValue = isClaude ? data.sessionId : data.session_id;
-  const timestampValue = isClaude ? data.timestamp : data.ts;
-  const textValue = isClaude ? data.display : data.text;
+  const sessionValue = isClaude ? data["sessionId"] : data["session_id"];
+  const timestampValue = isClaude ? data["timestamp"] : data["ts"];
+  const textValue = isClaude ? data["display"] : data["text"];
   if (typeof sessionValue !== "string" || typeof textValue !== "string")
     return undefined;
   const date = timestampParts(timestampValue);
   if (date === undefined) return undefined;
   const text = isClaude
-    ? JSON.stringify([textValue, data.pastedContents ?? null])
+    ? JSON.stringify([textValue, data["pastedContents"] ?? null])
     : textValue;
   return {
     vendor,
@@ -93,10 +93,10 @@ function parseArchived(value: unknown): InputRecord | undefined {
   const record = recordSchema.safeParse(value);
   if (
     !record.success ||
-    (record.data.vendor !== "claude" && record.data.vendor !== "codex")
+    (record.data["vendor"] !== "claude" && record.data["vendor"] !== "codex")
   )
     return undefined;
-  return parseInput(record.data.vendor, record.data);
+  return parseInput(record.data["vendor"], record.data);
 }
 
 async function readJsonLines(
@@ -127,9 +127,9 @@ async function readJsonLines(
 function getDataHome(options: ArchiveOptions): string {
   return (
     options.dataHome ??
-    (process.env.XDG_DATA_HOME === ""
+    (process.env["XDG_DATA_HOME"] === ""
       ? undefined
-      : process.env.XDG_DATA_HOME) ??
+      : process.env["XDG_DATA_HOME"]) ??
     join(homedir(), ".local", "share")
   );
 }

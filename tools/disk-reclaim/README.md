@@ -13,6 +13,11 @@ reports its own statfs measurements; no increase in available bytes is a partial
 result. The scan and worker are bounded by `--within`. Planning does not authorize
 or perform an action.
 
+`disk free targets scratch` keeps live or uncertain sessions and scratchpads
+containing nested Git or jj workspaces. It rechecks each candidate and its
+identity under the shared lock, and reports per-item statfs observations. An
+action without a measured increase in available space is partial.
+
 Part of the [tools/ architecture](../spec/architecture.md) (the mechanism the capacity recover part composes: invariants I-R1 to I-R5).
 
 Plan configured reclamation as one JSONL record per candidate. `apply` reads those records from

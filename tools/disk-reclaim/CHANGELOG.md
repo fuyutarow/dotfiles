@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.10 — 2026-10-29
+
+- Enable scratch target reclamation through disk free
+
 ## 1.12.9 — 2026-10-29
 
 - Add bounded tmpfs reclamation to disk free targets

@@ -414,7 +414,7 @@ describe("disk parser and effect firewall", () => {
       [["plan", "targets"]],
       [["plan", "workspace-gc"]],
       [["move", "workspace-gc"]],
-      [["free", "targets", "scratch"]],
+      [["free", "targets", "system"]],
       [["free", "records"], record],
       [["free", "paths", file]],
       [["free", "graveyard", "--amount", "1MB"]],
@@ -2313,7 +2313,7 @@ test("builds planning and unavailable targets never act", async () => {
   );
   expect(invalid.exit).toBe(2);
   const other = await run(
-    ["free", "targets", "scratch", "--no-progress"],
+    ["free", "targets", "system", "--no-progress"],
     "",
     env,
   );
@@ -2321,4 +2321,246 @@ test("builds planning and unavailable targets never act", async () => {
   expect(jsonText.safeParse(other.out).data).toMatchObject({
     outcome: "unknown",
   });
+});
+
+test.each(["live", "unknown", "nested-jj", "nested-git", "dead"] as const)(
+  "scratch entry preserves %s and measures removal",
+  async (state) => {
+    const { createScratchTarget } = await import("../src/targets/scratch.ts");
+    const { scratchAction } = await import("../src/disk-scratch-action.ts");
+    const { main } = await import("../src/disk.ts");
+    const root = await mkdtemp(join(tmpdir(), "disk-scratch-parity-"));
+    const path = join(
+      root,
+      "project",
+      "123e4567-e89b-42d3-a456-426614174000",
+      "scratchpad",
+    );
+    await mkdir(path, { recursive: true });
+    if (state === "nested-jj") {
+      await mkdir(join(path, "nested/.jj"), { recursive: true });
+      await writeFile(join(path, "nested/.jj/repo"), "fixture");
+    }
+    if (state === "nested-git")
+      await mkdir(join(path, "nested/.git"), { recursive: true });
+    let actions = 0;
+    let available = 100;
+    let delta = 10;
+    const target = createScratchTarget({
+      bytes: () => Promise.resolve(10),
+      getFacts: (ref) => ({
+        sessions: { ok: true, value: [] },
+        procStarttime: () => ({ ok: false, error: "absent" }),
+        environSessionIds: {
+          ok: true,
+          value: state === "live" ? [ref.uuid] : [],
+        },
+        openPaths: { ok: true, value: [] },
+        transcript: {
+          ok: true,
+          value:
+            state === "unknown"
+              ? { exists: false }
+              : { exists: true, mtimeMs: 1 },
+        },
+        now: 100_000_000,
+        graceHours: 24,
+      }),
+      remove: () => {
+        actions++;
+        available += delta;
+        return {
+          ok: true,
+          statfs_bytes_freed: 10,
+          bytes_freed: 10,
+          entries_removed: 1,
+          refused: [],
+          errors: [],
+        };
+      },
+    });
+    const ctx: Context = {
+      ...cleanContext,
+      targetName: "scratch",
+      config: { ...cleanContext.config, scratch_roots: [root] },
+    };
+    const deps = {
+      guard: (): string | null => null,
+      lock: () => Promise.resolve({ release: () => {}, exit: 0, error: null }),
+      receipt: () =>
+        Promise.resolve({ id: "r", path: "/fixture/r", delivery_error: null }),
+      probe: async (action: string | undefined) => {
+        if (action === undefined)
+          return {
+            out: JSON.stringify(
+              (await target.plan(ctx)).map((candidate) => ({
+                candidate,
+                fingerprint: "same",
+              })),
+            ),
+            err: "",
+            exit: 0,
+            timedOut: false,
+          };
+        const parsed = jsonOf(
+          z.object({
+            id: z.string(),
+            path: z.string(),
+            fingerprint: z.string(),
+          }),
+        ).safeParse(action);
+        if (!parsed.success) expect.unreachable("invalid fixture action");
+        const result = await scratchAction(parsed.data, {
+          target,
+          context: ctx,
+          identity: () => Promise.resolve("same"),
+          device: () => Promise.resolve(1),
+          measure: () => Promise.resolve(cleanObservation(available)),
+          fail: () => expect.unreachable("unexpected failure"),
+        });
+        return {
+          out: JSON.stringify(result),
+          err: "",
+          exit: 0,
+          timedOut: false,
+        };
+      },
+    };
+    let output = "";
+    const stdout = spyOn(process.stdout, "write").mockImplementation(
+      (chunk) => {
+        output += String(chunk);
+        return true;
+      },
+    );
+    const previous = process.exitCode;
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      stdout.mockRestore();
+      process.exitCode = previous ?? 0;
+    });
+    process.exitCode = 0;
+    await main(
+      ["free", "targets", "scratch", "--approve", path, "--no-progress"],
+      undefined,
+      undefined,
+      undefined,
+      deps,
+    );
+    const parsed = jsonOf(
+      z.looseObject({ items: z.array(z.looseObject({ reason: z.string() })) }),
+    ).safeParse(output);
+    if (!parsed.success) expect.unreachable("invalid disk result");
+    const result = parsed.data;
+    let expected = "keep";
+    if (state === "dead") expected = "completed";
+    else if (state === "unknown") expected = "ask";
+    expect(result).toMatchObject({
+      items: [
+        {
+          path,
+          verdict: expected,
+          effect: state === "dead" ? "unlink" : "none",
+        },
+      ],
+    });
+    if (state.startsWith("nested"))
+      expect(result.items[0]?.reason).toBe("delegated: jj workspace");
+    if (state === "live")
+      expect(result.items[0]?.reason).toContain(
+        "same-uid process carries CLAUDE_CODE_SESSION_ID",
+      );
+    if (state === "unknown")
+      expect(result.items[0]?.reason).toContain("transcript is missing");
+    if (state === "dead")
+      expect(result.items[0]).toMatchObject({
+        before: { available_bytes: 100 },
+        after: { available_bytes: 110 },
+      });
+    expect(process.exitCode).toBe(state === "dead" ? 0 : 1);
+    expect(actions).toBe(state === "dead" ? 1 : 0);
+    if (state === "dead") {
+      const { freeScratch } = await import("../src/disk-scratch.ts");
+      delta = 0;
+      const shortfall = await freeScratch(
+        10000,
+        performance.now(),
+        false,
+        deps,
+      );
+      expect(shortfall).toMatchObject({
+        exit: 1,
+        items: [
+          {
+            verdict: "partial",
+            reason: "no measured increase in available space",
+          },
+        ],
+      });
+      const request = { id: path, path, fingerprint: "same" };
+      const actionDeps = {
+        target,
+        context: ctx,
+        identity: () => Promise.resolve("changed"),
+        device: () => Promise.resolve(1),
+        measure: () => Promise.resolve(cleanObservation(available)),
+        fail: () => expect.unreachable("unexpected failure"),
+      };
+      expect(await scratchAction(request, actionDeps)).toMatchObject({
+        verdict: "changed",
+        effect: "none",
+      });
+      await mkdir(join(path, "new/.git"), { recursive: true });
+      expect(
+        await scratchAction(request, {
+          ...actionDeps,
+          identity: () => Promise.resolve("same"),
+        }),
+      ).toMatchObject({
+        verdict: "keep",
+        reason: "delegated: jj workspace",
+        effect: "none",
+      });
+      expect(
+        (
+          await freeScratch(10000, performance.now(), false, {
+            ...deps,
+            guard: () => "worker guard",
+          })
+        ).exit,
+      ).toBe(1);
+      expect(
+        (
+          await freeScratch(10000, performance.now(), false, {
+            ...deps,
+            lock: () =>
+              Promise.resolve({ release: null, exit: 3, error: "busy" }),
+          })
+        ).exit,
+      ).toBe(3);
+      expect(
+        (
+          await freeScratch(10000, performance.now(), false, {
+            ...deps,
+            probe: () =>
+              Promise.resolve({ out: "", err: "", exit: null, timedOut: true }),
+          })
+        ).exit,
+      ).toBe(4);
+      expect(actions).toBe(2);
+    }
+  },
+);
+
+test("scratch plan rejects action authority without touching the fixture", async () => {
+  const home = await mkdtemp(join(tmpdir(), "disk-scratch-plan-"));
+  const path = join(home, "payload");
+  await writeFile(path, "keep");
+  const result = await run(
+    ["plan", "targets", "--target", "scratch", "--yes"],
+    "",
+    { ...process.env, HOME: home, RECLAIM_STATE_DIR: join(home, "state") },
+  );
+  expect(result.exit).toBe(2);
+  expect(await readFile(path, "utf8")).toBe("keep");
 });

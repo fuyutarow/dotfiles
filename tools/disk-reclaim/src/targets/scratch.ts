@@ -102,6 +102,7 @@ export type ScratchTargetOptions = {
   uid?: () => number;
   probes?: Partial<LivenessProbes>;
   getFacts?: (ref: LivenessRef, graceHours: number) => LivenessFacts;
+  bytes?: (path: string, ctx: Context) => Promise<number | null>;
   remove?: (path: string, uid: number, ctx?: Context) => RemoveTreeResult;
 };
 
@@ -134,6 +135,7 @@ const candidateBytes = async (
 export function createScratchTarget(options: ScratchTargetOptions = {}) {
   const home = options.home ?? (() => process.env.HOME ?? homedir());
   const uid = options.uid ?? (() => process.getuid?.() ?? 0);
+  const bytes = options.bytes ?? candidateBytes;
   const remove =
     options.remove ??
     ((path, ownerUid, ctx) =>
@@ -177,7 +179,7 @@ export function createScratchTarget(options: ScratchTargetOptions = {}) {
                 "ASK",
                 `cannot inspect scratch workspace markers: ${delegated.error}`,
                 null,
-                await candidateBytes(ref.dir, ctx),
+                await bytes(ref.dir, ctx),
               );
             if (delegated.value)
               return candidate(
@@ -185,7 +187,7 @@ export function createScratchTarget(options: ScratchTargetOptions = {}) {
                 "KEEP",
                 "delegated: jj workspace",
                 false,
-                await candidateBytes(ref.dir, ctx),
+                await bytes(ref.dir, ctx),
               );
             const capturedFacts = inspect(() =>
               options.getFacts === undefined
@@ -198,7 +200,7 @@ export function createScratchTarget(options: ScratchTargetOptions = {}) {
                 "ASK",
                 `liveness facts unavailable: ${capturedFacts.error}`,
                 null,
-                await candidateBytes(ref.dir, ctx),
+                await bytes(ref.dir, ctx),
               );
             const result = judge(ref, capturedFacts.value);
             const verdict = verdicts[result.verdict];
@@ -208,7 +210,7 @@ export function createScratchTarget(options: ScratchTargetOptions = {}) {
               verdict,
               result.evidence.join("; "),
               check,
-              await candidateBytes(ref.dir, ctx),
+              await bytes(ref.dir, ctx),
             );
           }),
         ),

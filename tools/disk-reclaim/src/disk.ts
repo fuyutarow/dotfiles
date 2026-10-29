@@ -10,6 +10,7 @@ import { planPaths } from "./disk-path-plan.ts";
 import { unavailableRecords } from "./disk-records.ts";
 import { movePaths } from "./disk-move.ts";
 import { freeMiseConfigs } from "./disk-mise-configs.ts";
+import { freeScratch } from "./disk-scratch.ts";
 import { freeClean } from "./disk-clean.ts";
 import { freeToolchains } from "./disk-toolchains.ts";
 import { freeBuilds } from "./disk-builds.ts";
@@ -370,6 +371,7 @@ export async function main(
     process.stdout.write(text);
   },
   buildsDependencies?: Parameters<typeof freeBuilds>[3],
+  scratchDependencies?: Parameters<typeof freeScratch>[3],
 ) {
   const start = performance.now();
   const started = Temporal.Now.instant().toString();
@@ -722,6 +724,7 @@ export async function main(
     (targets[0] === "clean" ||
       targets[0] === "rust" ||
       targets[0] === "builds" ||
+      targets[0] === "scratch" ||
       targets[0] === "tmpfs")
   ) {
     const controller = new AbortController();
@@ -739,26 +742,36 @@ export async function main(
     let actingTarget: "clean" | "rust" | "tmpfs" = "clean";
     if (targets[0] === "rust") actingTarget = "rust";
     if (targets[0] === "tmpfs") actingTarget = "tmpfs";
-    const result =
-      targets[0] === "builds"
-        ? await freeBuilds(
-            deadline,
-            start,
-            !options.has("no-progress"),
-            buildsDependencies,
-            controller.signal,
-            options.has("stop-on-error"),
-          )
-        : await freeClean(
-            deadline,
-            start,
-            !options.has("no-progress"),
-            undefined,
-            controller.signal,
-            options.has("stop-on-error"),
-            actingTarget,
-            get("only"),
-          );
+    let result: Awaited<ReturnType<typeof freeScratch>>;
+    if (targets[0] === "scratch")
+      result = await freeScratch(
+        deadline,
+        start,
+        !options.has("no-progress"),
+        scratchDependencies,
+        controller.signal,
+        options.has("stop-on-error"),
+      );
+    else if (targets[0] === "builds")
+      result = await freeBuilds(
+        deadline,
+        start,
+        !options.has("no-progress"),
+        buildsDependencies,
+        controller.signal,
+        options.has("stop-on-error"),
+      );
+    else
+      result = await freeClean(
+        deadline,
+        start,
+        !options.has("no-progress"),
+        undefined,
+        controller.signal,
+        options.has("stop-on-error"),
+        actingTarget,
+        get("only"),
+      );
     process.removeListener("SIGINT", interrupt);
     process.removeListener("SIGTERM", terminate);
     const counts = {

@@ -8,7 +8,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ownerlessRefLocks, REF_LOCK_STALE_MS } from "../src/ref-locks.ts";
+import {
+  lsofHasHolder,
+  ownerlessRefLocks,
+  REF_LOCK_STALE_MS,
+} from "../src/ref-locks.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -30,6 +34,32 @@ function fixture(): { root: string; lock: string } {
 }
 
 describe("ownerlessRefLocks", () => {
+  test("recognizes both normal-exit signal representations and fails closed on errors", () => {
+    const result = {
+      exitCode: 1,
+      stdout: Buffer.from(""),
+      stderr: Buffer.from(""),
+    };
+    for (const signalCode of [null, undefined]) {
+      expect(lsofHasHolder({ ...result, signalCode })).toBe(false);
+      expect(
+        lsofHasHolder({
+          ...result,
+          signalCode,
+          exitCode: 0,
+          stdout: Buffer.from("42\n"),
+        }),
+      ).toBe(true);
+      expect(
+        lsofHasHolder({ ...result, signalCode, stderr: Buffer.from("error") }),
+      ).toBe(true);
+    }
+    expect(lsofHasHolder({ ...result, signalCode: "SIGTERM" })).toBe(true);
+    expect(lsofHasHolder({ ...result, signalCode: null, exitCode: null })).toBe(
+      true,
+    );
+  });
+
   test("resolves a worktree's shared ref directory", () => {
     const { root, lock } = fixture();
     const worktree = join(root, "sibling");

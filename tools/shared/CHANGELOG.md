@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.6 — 2026-10-30
+
+- Correct lsof normal exit signal handling for stale ref locks.
+
 ## 0.19.5 — 2026-10-30
 
 - Remove unused shared helpers and retire unreferenced fleet update and GPU visibility modules

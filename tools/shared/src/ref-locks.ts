@@ -89,7 +89,20 @@ function hasHolder(path: string, procRoot: string): boolean {
     timeout: 2_000,
     killSignal: "SIGTERM",
   });
-  if (result.signalCode !== null || result.exitCode === null) return true;
+  return lsofHasHolder(result);
+}
+
+export function lsofHasHolder(result: {
+  signalCode?: string | null | undefined;
+  exitCode: number | null;
+  stdout: Buffer;
+  stderr: Buffer;
+}): boolean {
+  if (
+    (result.signalCode !== null && result.signalCode !== undefined) ||
+    result.exitCode === null
+  )
+    return true;
   if (result.exitCode === 0) return result.stdout.toString().trim() !== "";
   return result.exitCode !== 1 || result.stderr.toString().trim() !== "";
 }

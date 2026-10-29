@@ -123,10 +123,12 @@ agent_panel_sort = "spaces"
 # `$workers` shows this tab's running agx worker count (`w:N`, `w:?` if agx is unreadable),
 # reported by tools/herdr-projector; zero counts disappear.
 # `$cpu` shows this agent's CPU use, `$workers` its workers' count and CPU use, and `$unowned` the largest unowned CPU users; tools/herdr-projector reports all three.
+# Row 3 is resource usage.
 [ui.sidebar.agents]
 rows = [
   ["state_icon", { token = "tab", fg = "#7f848e", bold = true, dim = false }],
-  [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc", { token = "$cpu", fg = "#7f848e", bold = false, dim = false }, { token = "$workers", fg = "#7f848e", bold = false, dim = false }],
+  [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc", { token = "$workers", fg = "#7f848e", bold = false, dim = false }],
+  [{ token = "$cpu", fg = "#7f848e", bold = false, dim = false }],
   # Custom reported agents use these default rows, not rows_by_agent overrides.
   # Unreported tokens disappear. See https://herdr.dev/docs/configuration/#sidebar-row-layouts.
   ["$btm_summary"],
@@ -144,11 +146,13 @@ rows = [
 # same dropped-workspace layout as the default rows above — see that block's comment for why.
 claude = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
-  [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc", { token = "$cpu", fg = "#7f848e", bold = false, dim = false }, { token = "$workers", fg = "#7f848e", bold = false, dim = false }],
+  [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc", { token = "$workers", fg = "#7f848e", bold = false, dim = false }],
+  [{ token = "$cpu", fg = "#7f848e", bold = false, dim = false }],
 ]
 codex = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
-  [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc", { token = "$cpu", fg = "#7f848e", bold = false, dim = false }, { token = "$workers", fg = "#7f848e", bold = false, dim = false }],
+  [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc", { token = "$workers", fg = "#7f848e", bold = false, dim = false }],
+  [{ token = "$cpu", fg = "#7f848e", bold = false, dim = false }],
 ]
 [session]
 # resume_agents_on_restore = true (default)

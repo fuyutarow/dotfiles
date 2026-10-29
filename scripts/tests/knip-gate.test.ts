@@ -44,6 +44,12 @@ test("production roots follow the repository's entry declarations", async () => 
     "scripts/guest-capacity-recover.ts", // systemd service
     "scripts/render-home.ts", // subprocess
     "scripts/tracked-files.ts", // subprocess
+    "tools/agent-resource-run/src/scope-entry.ts", // dynamically spawned
+    "tools/agent-resource-run/src/scope-controller.ts", // dynamically spawned
+    "tools/smart-open/src/receive.ts", // launchd
+    "tools/repo-retrieve/views/research-record-v1.ts", // documented operator command
+    "agents/claude/hooks/copy-via-herdr-pane.ts", // quote subprocess
+    "agents/claude/hooks/resolve-agent-name.ts", // quote subprocess
   ])
     expect(entries).toContain(entry);
   expect(entries).not.toContain("scripts/skills-links.ts");

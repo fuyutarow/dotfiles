@@ -1,7 +1,6 @@
-import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { fromThrowable, jsonOf, z } from "./zod.ts";
+import { z } from "./zod.ts";
 
 const UsageWindowSchema = z.object({
   used_percent: z.number().nullable(),
@@ -41,16 +40,4 @@ export function subscriptionUsagePath(
     "statusline",
     "subscription-usage.json",
   );
-}
-
-/** Read the single statusline-owned snapshot. Invalid or missing data stays unknown. */
-export function readSubscriptionUsageSnapshot(
-  env: NodeJS.ProcessEnv = process.env,
-): SubscriptionUsageSnapshot | undefined {
-  const text = fromThrowable(() =>
-    readFileSync(subscriptionUsagePath(env), "utf8"),
-  )().unwrapOr(undefined);
-  if (text === undefined) return undefined;
-  const parsed = jsonOf(SubscriptionUsageSnapshotSchema).safeParse(text);
-  return parsed.success ? parsed.data : undefined;
 }

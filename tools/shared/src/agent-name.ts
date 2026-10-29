@@ -22,9 +22,6 @@ import { basename } from "node:path";
 // Lowercase letters/digits, starting with a letter, capped at 12: generous enough for every
 // role token seen live so far (obs, dtr, pi, gpu, agt, ...) without an ugly session name.
 const ROLE_RE = /^[a-z][a-z0-9]{0,11}$/u;
-// Greedy project: the split lands on the LAST `-<role>_`. The project is deliberately not
-// restricted to the slug alphabet, so legacy snake-cased names (agentic_rnd-agt_bvxj) still parse.
-const NAME_RE = /^(.+)-([a-z][a-z0-9]{0,11})_([a-z0-9]+)$/u;
 
 export interface AgentName {
   project: string;
@@ -53,14 +50,4 @@ export function formatAgentName(name: AgentName): string {
 // `cwd` is a path; its basename is the project.
 export function agentNameFor(cwd: string, role: string, id: string): string {
   return formatAgentName({ project: basename(cwd), role, id });
-}
-
-// null when the string is not `<project>-<role>_<id>`.
-export function parseAgentName(name: string): AgentName | null {
-  const m = NAME_RE.exec(name);
-  if (m === null) return null;
-  const [, project, role, id] = m;
-  if (project === undefined || role === undefined || id === undefined)
-    return null;
-  return { project, role, id };
 }

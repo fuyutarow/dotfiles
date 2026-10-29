@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeEach, expect, test, spyOn } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { workspaceCounts } from "../src/agx-snapshot.ts";
+import { workspaceCounts } from "./support/workspace-counts.ts";
 import { agxRouteRunsAsync } from "../src/dispatch-runs.ts";
 import { routeLines } from "../src/dispatch-display.ts";
 import { ok } from "neverthrow";

@@ -1,8 +1,9 @@
+import { readCodexUsage } from "./support/codex-rate.ts";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readCodexRate, readCodexUsage } from "../src/codex-rate.ts";
+import { readCodexRate } from "../src/codex-rate.ts";
 import { codexRateSegment } from "../src/provider-display.ts";
 import {
   sampleCodexRate,

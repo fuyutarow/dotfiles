@@ -616,6 +616,7 @@ const OTHER: readonly Surface[] = [
     when: "all",
     sources: [
       "scripts/package.json",
+      "obsidian/package.json",
       "tools/shared/package.json",
       "tools/smart-open/package.json",
       "tools/repo-retrieve/package.json",
@@ -639,7 +640,7 @@ const OTHER: readonly Surface[] = [
     ],
     deployed: "the checkout",
     consumer:
-      "Bun package metadata of scripts and tools (shared modules; each CLI reads its own version)",
+      "Bun package metadata of scripts, Obsidian and tools (shared modules; each CLI reads its own version)",
     writer: "human, in the repo",
     verify: "mise run lint:ts · typecheck",
   },

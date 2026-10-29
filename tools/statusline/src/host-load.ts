@@ -15,8 +15,6 @@ import { cgroupMemory } from "./cgroup-memory.ts";
 import { z } from "./zod.ts";
 import { sampleCccIndexing } from "./ccc-indexing.ts";
 import {
-  gpuStatePath,
-  GpuStateSchema,
   gpuReadFromState,
   readGpuState,
   type GpuState,
@@ -73,21 +71,6 @@ function vramFromState(
         gpuSamples15: d.samples15,
       });
 }
-// A Mac with no nvidia-smi has no discrete VRAM to read: Apple silicon's GPU shares the RAM the
-// row already shows. That is "does not exist", which the EXPLICIT-ABSENCE law keeps silent. On
-// Linux a missing nvidia-smi stays n/a — there it is a broken GPU box, not a GPU-less one.
-export function vramGated(): Result<MemReading, string> | undefined {
-  const vram = vramFrac();
-  const absent =
-    process.platform === "darwin" &&
-    vram.isErr() &&
-    vram.error === "no nvidia-smi";
-  return absent ? undefined : vram;
-}
-export function vramFrac(): Result<MemReading, string> {
-  return vramFromState(readJson(gpuStatePath(), GpuStateSchema));
-}
-
 // Host RAM, Linux only (reads /proc/meminfo — instant, no subprocess). MemAvailable (not
 // MemFree) is what "used" is measured against: it already accounts for reclaimable page cache,
 // which MemFree does not, so MemFree would read as chronically "almost full" on a healthy box.
@@ -273,15 +256,6 @@ export async function readHostMetrics(): Promise<HostMetrics> {
   return { cpu, ram, tmp };
 }
 
-// Sync host-load API remains for the standalone `s` command; statusline uses readHostLoadAsync.
-export function readHostLoad(): HostLoad {
-  return {
-    cpuPct: cpuPct(),
-    ram: ramFrac(),
-    vram: vramGated(),
-    disks: diskReadings(),
-  };
-}
 /** Async render-path sample; host readings run independently and retain explicit unknowns. */
 export async function readHostLoadAsync(): Promise<Omit<HostLoad, "disks">> {
   const [cpu, ram, vram, tmp] = await Promise.all([

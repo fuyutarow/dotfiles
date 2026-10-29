@@ -1,15 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  arr,
-  at,
-  bool,
-  num,
-  obj,
-  parseJson,
-  str,
-  strAt,
-  strsAt,
-} from "../narrow.ts";
+import { arr, at, bool, num, obj, parseJson, str, strAt } from "../narrow.ts";
 
 const payload = parseJson(
   JSON.stringify({
@@ -62,12 +52,6 @@ describe("narrow: typed readers over untyped JSON", () => {
   test("null and absent are the same absent state for a reader", () => {
     expect(strAt(payload, "empty")).toBeUndefined();
     expect(strAt(payload, "missing")).toBeUndefined();
-  });
-
-  test("strsAt keeps only the strings, in order, and is [] when absent", () => {
-    expect(strsAt(payload, "tool_input", "flags")).toEqual(["-a", "-l"]);
-    expect(strsAt(payload, "tool_input", "command")).toEqual([]);
-    expect(strsAt(payload, "nope")).toEqual([]);
   });
 
   test("a hostile payload cannot reach the prototype", () => {

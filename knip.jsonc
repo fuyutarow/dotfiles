@@ -13,8 +13,6 @@
         "!**/tests/**!",
         "!**/*.{test,spec}.{ts,tsx,js,jsx}!",
         "!**/fixtures/**!",
-        "!scripts/test-isolation.ts!",
-        "!scripts/skills-links.ts!",
       ],
       "ignoreDependencies": [
         "knip",
@@ -24,6 +22,11 @@
         "oxfmt",
       ],
       "ignoreBinaries": ["mise"],
+    },
+    "obsidian": {
+      // Shell and remote launchers invoke these scripts; Obsidian loads the plugin.
+      "entry": ["open-vault.ts!", "open-remote.ts!", "forget-shadow.ts!", "local-plugins/doc-view/main.js!"],
+      "project": ["**/*.{ts,tsx,js,jsx}!", "!**/*.{test,spec}.{ts,tsx,js,jsx}!"],
     },
     "tools/disk-reclaim": {
       // Bun subprocesses and probe imports use paths constructed at runtime.
@@ -52,6 +55,16 @@
     },
     "tools/*": {
       "entry": [],
+      "project": [
+        "**/*.{ts,tsx,js,jsx}!",
+        "!**/tests/**!",
+        "!**/*.{test,spec}.{ts,tsx,js,jsx}!",
+        "!**/fixtures/**!",
+      ],
+    },
+    "tools/smart-open": {
+      // The receiver is launched by the macOS launchd agent.
+      "entry": ["src/receive.ts!"],
       "project": [
         "**/*.{ts,tsx,js,jsx}!",
         "!**/tests/**!",

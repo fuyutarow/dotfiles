@@ -1,0 +1,10 @@
+{
+  "name": "@dotfiles/obsidian",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "cleye": "2.6.0",
+    "neverthrow": "8.2.0",
+    "obsidian": "1.5.7"
+  }
+}

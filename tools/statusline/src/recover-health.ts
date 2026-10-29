@@ -21,7 +21,6 @@ export const RECOVER_HEALTH_CACHE = join(
   process.env["HOME"] ?? homedir(),
   ".cache/claude/statusline/recover-health.json",
 );
-export const RECOVER_HEALTH_STALE_MS = 90_000;
 
 const RecoverSnapshotSchema = z.object({
   capturedAt: z.number().int().nonnegative(),
@@ -181,18 +180,4 @@ export function recoverJournalFailure(
         "two consecutive reclaim runs made no progress under the warn line",
     };
   return undefined;
-}
-
-export function recoverHealthBadge(
-  health: RecoverHealth | undefined,
-  at = Temporal.Now.instant().epochMilliseconds,
-): string | undefined {
-  if (
-    health === undefined ||
-    at < health.at ||
-    at - health.at > RECOVER_HEALTH_STALE_MS
-  )
-    return undefined;
-  const shortUnit = health.unit.replace("-capacity-recover.service", "");
-  return `Recover: ${shortUnit} ${health.reason}`;
 }

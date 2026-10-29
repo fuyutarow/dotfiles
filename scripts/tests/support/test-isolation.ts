@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { brewPrefix } from "./core-tools.ts";
+import { brewPrefix } from "../../core-tools.ts";
 
 export const TEST_TMPDIR = realpathSync(tmpdir());
 export const TEST_HOST_PATH = [

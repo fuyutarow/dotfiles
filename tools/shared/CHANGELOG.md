@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.5 — 2026-10-30
+
+- Remove unused shared helpers and retire unreferenced fleet update and GPU visibility modules
+
 ## 0.19.4 — 2026-10-29
 
 - Add uncached storage measurement

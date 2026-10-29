@@ -450,20 +450,3 @@ export function writePlanJsonl(plan: IndexPlan): void {
     `${JSON.stringify({ type: "summary", estimator: "ceil(chars / 800)", ...summary })}\n`,
   );
 }
-
-// Only increasing persisted chunk counts are measured; file-list activity is not embeddings.
-export function measuredEta(
-  total: number,
-  initial: number,
-  current: number,
-  elapsedSeconds: number,
-) {
-  const delta = current - initial;
-  if (delta <= 0 || elapsedSeconds <= 0) return null;
-  const rate = delta / elapsedSeconds;
-  return {
-    rate,
-    remaining: Math.max(0, total - delta) / rate,
-    totalSeconds: elapsedSeconds + Math.max(0, total - delta) / rate,
-  };
-}

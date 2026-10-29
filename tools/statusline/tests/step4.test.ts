@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { ok } from "neverthrow";
 import { readCoreRuns } from "../src/core-runs.ts";
 import { render } from "../src/format.ts";
-import { readHostLoadAsync, vramFrac } from "../src/host-load.ts";
+import { readHostLoadAsync } from "../src/host-load.ts";
 import { sysRow } from "../src/host-display.ts";
 import { fleetLine } from "../src/fleet-line.ts";
 
@@ -317,7 +317,7 @@ test("GPU owner fixtures cover first failed probe, recovery, and paused failures
       JSON.stringify({ ...state, ...variant }),
     );
     const before = await Bun.file(join(root, "gpu-owner.json")).text();
-    const reading = vramFrac();
+    const reading = (await readHostLoadAsync()).vram;
     const text = Bun.stripANSI(
       sysRow({
         cpuPct: ok(1),

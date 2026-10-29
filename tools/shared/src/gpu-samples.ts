@@ -182,17 +182,3 @@ export function gpuReadFromState(
     ? { ok: false, why: "stale (no GPU sample)" }
     : { ok: true, value };
 }
-/** Compatibility name: this reads only; it never samples or starts a process. */
-export async function sampleGpu(
-  options: {
-    statePath?: string;
-    now?: number;
-    cwd?: string;
-    path?: string;
-    fallbacks?: string[];
-    timeoutMs?: number;
-    random?: () => number;
-  } = {},
-): Promise<GpuRead> {
-  return gpuReadFromState(await readGpuState(options.statePath), options.now);
-}

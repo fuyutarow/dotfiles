@@ -340,16 +340,3 @@ export async function readCodexNativeSession(
   if (!scanned.ok) return unavailable(errorMessage(scanned.error));
   return scanned.value;
 }
-
-/** Fallback-compatible refresh contract; all fleet records use the sole atomic writer. */
-export async function refreshCodexFleetSession(
-  session: FleetSession,
-  env: NodeJS.ProcessEnv = process.env,
-  nativePath?: string,
-): Promise<FleetSessionRead> {
-  if (session.vendor !== "codex") return session;
-  const next = await readCodexNativeSession(session, env, nativePath);
-  if (!FleetSessionSchema.safeParse(next).success) return next;
-  const written = await writeFleetSessionIfChanged(next, env);
-  return written.ok ? written.value : unavailable(errorMessage(written.error));
-}

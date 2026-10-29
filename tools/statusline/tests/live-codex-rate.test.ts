@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readLiveCodexRate } from "../src/codex-rate.ts";
+import { readLiveCodexRate } from "./support/codex-rate.ts";
 
 const roots: string[] = [];
 afterEach(async () => {

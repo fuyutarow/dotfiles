@@ -15,7 +15,7 @@ import {
   isolatedTestEnv,
   TEST_TMPDIR,
   testPathWithStub,
-} from "../../../../scripts/test-isolation.ts";
+} from "../../../../scripts/tests/support/test-isolation.ts";
 const dotfilesRoot = realpathSync(resolve(import.meta.dir, "../../../../"));
 const AGX_CONFIG = join(dotfilesRoot, "agents/agx/agx.toml");
 const NO_USE_FOR_FIXTURE = join(

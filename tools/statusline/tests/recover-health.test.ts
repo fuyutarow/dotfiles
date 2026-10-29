@@ -2,10 +2,7 @@ import { ok } from "neverthrow";
 import { describe, expect, test } from "bun:test";
 import type { Dataframe } from "../src/dataframe.ts";
 import { render } from "../src/format.ts";
-import {
-  recoverHealthBadge,
-  recoverJournalFailure,
-} from "../src/recover-health.ts";
+import { recoverJournalFailure } from "../src/recover-health.ts";
 
 const unit = "wsl-capacity-recover.service";
 const line = (time: string, message: string) =>
@@ -131,8 +128,5 @@ describe("recover health", () => {
     expect(render({ ...frame, recoverHealth: undefined })).not.toContain(
       "Recover:",
     );
-    const now = Temporal.Now.instant().epochMilliseconds;
-    expect(recoverHealthBadge(bad, now)).toContain("Recover: wsl FATAL");
-    expect(recoverHealthBadge(bad, now + 91_000)).toBeUndefined();
   });
 });

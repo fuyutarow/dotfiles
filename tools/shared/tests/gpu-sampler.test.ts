@@ -12,11 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordDxgEpisodes } from "../src/gpu-dxg-episodes.ts";
 import { jsonOf, z } from "../src/zod.ts";
-import {
-  gpuReadFromState,
-  readGpuState,
-  sampleGpu,
-} from "../src/gpu-samples.ts";
+import { gpuReadFromState, readGpuState } from "../src/gpu-samples.ts";
 import {
   checkGpuSampler,
   hostHasNvidiaSmi,
@@ -418,7 +414,9 @@ test("concurrent owner requests and many consumers never multiply a hanging driv
   while (!(await Bun.file(calls).exists()) && performance.now() < deadline)
     await Bun.sleep(10);
   const readers = await Promise.all(
-    Array.from({ length: 40 }, () => sampleGpu(options)),
+    Array.from({ length: 40 }, () =>
+      readGpuState(options.statePath).then((state) => gpuReadFromState(state)),
+    ),
   );
   expect(readers.every((r) => !r.ok)).toBe(true);
   expect(
@@ -482,11 +480,19 @@ test("readers serve only fresh state and preserve an explicit unresponsive verdi
   const { options } = await fixture();
   const now = 1_000_000;
   await Bun.write(options.statePath, JSON.stringify(ownerState(now)));
-  expect(await sampleGpu({ ...options, now })).toMatchObject({
+  expect(
+    await readGpuState(options.statePath).then((state) =>
+      gpuReadFromState(state, now),
+    ),
+  ).toMatchObject({
     ok: true,
     value: { memTotalGiB: 12 },
   });
-  expect(await sampleGpu({ ...options, now: now + 120_001 })).toMatchObject({
+  expect(
+    await readGpuState(options.statePath).then((state) =>
+      gpuReadFromState(state, now + 120_001),
+    ),
+  ).toMatchObject({
     ok: false,
     why: "stale (GPU sample expired)",
   });

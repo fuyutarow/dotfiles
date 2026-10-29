@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  effective,
-  parseShell,
-  redirectWritePaths,
-} from "../src/shell-syntax.ts";
+import { effective, parseShell } from "../src/shell-syntax.ts";
 
 const names = (command: string): string[] => {
   const parsed = parseShell(command, "/w");
@@ -104,8 +100,18 @@ describe("parseShell", () => {
       "/w",
     );
     expect(
-      parsed === undefined ? undefined : redirectWritePaths(parsed),
-    ).toEqual(["/x/rel.txt", "/abs"]);
+      parsed?.commands.flatMap((command) =>
+        command.redirects.map((redirect) => ({
+          cwd: command.cwd,
+          target: redirect.target,
+          op: redirect.op,
+        })),
+      ),
+    ).toEqual([
+      { cwd: "/x", target: "rel.txt", op: ">" },
+      { cwd: "/x", target: "1", op: "2>&" },
+      { cwd: "/x", target: "/abs", op: ">>" },
+    ]);
   });
 
   test("effective strips wrappers and reduces the name to a basename", () => {

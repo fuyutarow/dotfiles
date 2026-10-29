@@ -1,4 +1,4 @@
-declare module "obsidian" {
+declare namespace ObsidianHost {
   export class Plugin {
     app: App;
 
@@ -53,9 +53,16 @@ declare module "obsidian" {
   }
 }
 
+declare module "obsidian" {
+  export import Plugin = ObsidianHost.Plugin;
+  export import FileView = ObsidianHost.FileView;
+  export import TFile = ObsidianHost.TFile;
+  export import WorkspaceLeaf = ObsidianHost.WorkspaceLeaf;
+}
+
 declare namespace NodeJS {
   interface Require {
-    (id: "obsidian"): typeof import("obsidian");
+    (id: "obsidian"): typeof ObsidianHost;
     (id: "node:child_process"): typeof import("node:child_process");
   }
 }

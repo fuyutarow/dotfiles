@@ -1,7 +1,7 @@
 import { DoctorFindings } from "@dotfiles/shared/src/doctor-record.ts";
 import { resolve } from "node:path";
 import { readOwnerState } from "./owner-state.ts";
-import { jsonOf, z } from "./zod.ts";
+import { z } from "./zod.ts";
 const WorkspaceCountsSchema = () =>
   z.object({
     total: z.number().int().nonnegative(),
@@ -195,17 +195,4 @@ export async function readAgxSnapshotAsync(
     if (snapshot.findings !== undefined) snapshot.findings.stale = true;
   }
   return snapshot;
-}
-
-export function workspaceCounts(
-  output: string,
-  capturedAt: number,
-): WorkspaceCounts | undefined {
-  const parsed = jsonOf(
-    z.object({
-      counts: WorkspaceCountsSchema().omit({ capturedAt: true }),
-      complete: z.literal(true),
-    }),
-  ).safeParse(output);
-  return parsed.success ? { ...parsed.data.counts, capturedAt } : undefined;
 }

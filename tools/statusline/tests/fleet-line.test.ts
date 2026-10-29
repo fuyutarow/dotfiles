@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { workspaceCounts } from "../src/agx-snapshot.ts";
+import { workspaceCounts } from "./support/workspace-counts.ts";
 import { seedAgxSnapshot } from "./helpers.ts";
 import { fleetLine } from "../src/fleet-line.ts";
 

@@ -15,14 +15,6 @@ currently `SEARCH=0` and `LEARN=0`.
   Charter → Grounding authority lineage, explicit known-result disposition, bounded lease/time,
   immutable role grants, exact pre-action/receipt/learning joins, measurement-valid evidence,
   receipt-linked scale release, and the terminal exact-blocker branch.
-- `programme-flow.ts` validates programme-level streaming: independent section dispatch,
-  section WIP=1 across SEARCH through commit, current programme and per-section Goal/Grounding
-  authority, typed grounded-search or Section-admission authorization on every job, dependency
-  readiness, minimal-before-scale release, resource-slot backpressure, forbidden global/hot-path
-  waits, replay fences, and metrics derived only from valid section traces.
-- `learning-bus.ts` validates lateral committed learning: the exact source commit, immutable
-  subscriptions, deterministic delivery, recipient admission and local transfer commit,
-  replay/idempotency fences, visibility, and propagation-only metrics.
 
 These checkers validate structure and deterministic joins. They do not execute research, make
 scientific judgments, or supply a durable runtime.

@@ -27,7 +27,7 @@ import {
   isolatedTestEnv,
   TEST_TMPDIR,
   testPathWithStub,
-} from "../test-isolation.ts";
+} from "./support/test-isolation.ts";
 
 const ROOT = realpathSync(resolve(import.meta.dir, "../.."));
 const CLI_HOME = mkdtempSync(join(TEST_TMPDIR, "render-home-cli-"));

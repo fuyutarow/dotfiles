@@ -52,14 +52,6 @@ export function strAt(v: unknown, ...keys: string[]): string | undefined {
   return str(at(v, ...keys));
 }
 
-export function strsAt(v: unknown, ...keys: string[]): string[] {
-  const list = arr(at(v, ...keys)) ?? [];
-  return list.flatMap((item) => {
-    const value = str(item);
-    return value === undefined ? [] : [value];
-  });
-}
-
 /** JSON text -> decoded value, or undefined on invalid JSON. */
 export const parseJson = (text: string): unknown => {
   const parsed = jsonText.safeParse(text);

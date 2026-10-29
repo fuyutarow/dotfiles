@@ -4,8 +4,7 @@
 
 ## Decision and present status
 
-**Architecture selected.** The repository contains deterministic V0 trace and programme-flow
-checkers, plus deterministic lateral-learning schemas. It does **not** activate a live durable
+**Architecture selected.** The repository contains a deterministic V0 trace checker. It does **not** activate a live durable
 engine, provider, hook, broker runtime, or scientific run. As of 2026-08-04, scientific
 SEARCH=0 and LEARN=0. This is an architecture and local checking floor, not a complete system.
 

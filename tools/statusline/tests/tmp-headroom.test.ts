@@ -11,7 +11,6 @@ import {
 } from "../src/ansi.ts";
 import {
   tmpEntry,
-  tmpEntryAsync,
   tmpReadingsAsync,
   type StatFsCounts,
 } from "../src/storage.ts";
@@ -78,10 +77,11 @@ describe("tmp reading", () => {
   });
   test("a statfs failure is named, never a blank or a throw", async () => {
     expect(plain(tmpSegment(tmpEntry(err("ENOENT"))))).toBe("tmp n/a (ENOENT)");
-    const missing = await tmpEntryAsync(
-      statfs,
-      join(tmpdir(), "statusline-tmp-headroom-no-such-path"),
+    const [missing] = await tmpReadingsAsync("/missing-config", () =>
+      statfs(join(tmpdir(), "statusline-tmp-headroom-no-such-path")),
     );
+    expect(missing).toBeDefined();
+    if (missing === undefined) return;
     expect(plain(tmpSegment(missing))).toBe("tmp n/a (ENOENT)");
   });
   test("counts that cannot be a filesystem are a named miss", () => {
@@ -90,9 +90,11 @@ describe("tmp reading", () => {
     );
   });
   test("async read takes the injected statfs fixture", async () => {
-    const entry = await tmpEntryAsync(() =>
+    const [entry] = await tmpReadingsAsync("/missing-config", () =>
       Promise.resolve(fixture(26.5, 1038090)),
     );
+    expect(entry).toBeDefined();
+    if (entry === undefined) return;
     expect(plain(tmpSegment(entry))).toBe("tmp 26.5GiB free · inodes 99% free");
   });
 });
@@ -143,7 +145,12 @@ describe("tmp entry", () => {
     );
   });
   test("statfs is bounded even if its promise never settles", async () => {
-    const entry = await tmpEntryAsync(() => new Promise(() => {}));
+    const [entry] = await tmpReadingsAsync(
+      "/missing-config",
+      () => new Promise(() => {}),
+    );
+    expect(entry).toBeDefined();
+    if (entry === undefined) return;
     expect(plain(tmpSegment(entry))).toBe("tmp n/a (statfs timeout 150ms)");
   });
   test("configured tmpfs paths are included once and ordinary drives are excluded", async () => {

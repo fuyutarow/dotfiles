@@ -139,14 +139,6 @@ export function tmpEntry(
     inodeUsedPct: inodesKnown ? (100 * (files - ffree)) / files : undefined,
   };
 }
-/** Async render-path /tmp read; `read` is the statfs seam (tests pass a fixture or a missing path). */
-export async function tmpEntryAsync(
-  read: (path: string) => Promise<StatFsCounts> = statfs,
-  path = TMP_PATH,
-): Promise<TmpEntry> {
-  const counts = await boundedTmpStatfs(read, path);
-  return tmpEntry(counts);
-}
 // A stalled filesystem must not hold up a render. No subprocess and no sync statfs on this path.
 async function boundedTmpStatfs(
   read: (path: string) => Promise<StatFsCounts>,

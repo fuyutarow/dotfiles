@@ -3,9 +3,10 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  readSubscriptionUsageSnapshot,
   subscriptionUsagePath,
+  SubscriptionUsageSnapshotSchema,
 } from "@dotfiles/shared/src/subscription-usage.ts";
+import { jsonOf } from "@dotfiles/shared/src/zod.ts";
 import { rateRow } from "../src/rate-limits.ts";
 import { writeUsageSnapshotAsync } from "../src/usage-snapshot.ts";
 
@@ -44,10 +45,14 @@ test("the sampler atomically snapshots rates while the rate renderer only format
     },
   };
   rateRow(facts, now);
-  expect(readSubscriptionUsageSnapshot()).toBeUndefined();
+  expect(await Bun.file(subscriptionUsagePath()).exists()).toBe(false);
   await writeUsageSnapshotAsync(facts, now);
 
-  expect(readSubscriptionUsageSnapshot()).toEqual({
+  const snapshot = jsonOf(SubscriptionUsageSnapshotSchema).safeParse(
+    await Bun.file(subscriptionUsagePath()).text(),
+  );
+  expect(snapshot.success).toBe(true);
+  expect(snapshot.data).toEqual({
     version: 1,
     routes: {
       claude: {

@@ -804,17 +804,3 @@ export function effective(c: ShellCommand): Effective | undefined {
   }
   return undefined;
 }
-
-/** Every write target a redirect names, resolved against the cwd of ITS command (not the session's). */
-export function redirectWritePaths(parsed: ParsedShell): string[] {
-  return parsed.commands.flatMap((c) =>
-    c.redirects
-      .filter(
-        (r) => /[>]/u.test(r.op) && !r.op.endsWith("&") && r.target !== "",
-      )
-      .map((r) => {
-        const target = expandHome(r.target);
-        return isAbsolute(target) ? resolve(target) : resolve(c.cwd, target);
-      }),
-  );
-}

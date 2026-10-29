@@ -14,12 +14,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { cccPython } from "../src/ccc-scope.ts";
-import {
-  computeIndexPlan,
-  measuredEta,
-  planReport,
-  summarize,
-} from "../src/index-plan.ts";
+import { computeIndexPlan, planReport, summarize } from "../src/index-plan.ts";
 import { waitForIndexChild } from "../src/ccc-index.ts";
 import {
   indexRateFile,
@@ -829,14 +824,7 @@ test("aggregate byte limits follow the effective project budget", () => {
   );
 });
 
-test("measured ETA uses chunk deltas, ignores no advancement, and stops the client wait", async () => {
-  expect(measuredEta(1000, 100, 100, 10)).toBeNull();
-  const eta = measuredEta(1000, 100, 200, 10);
-  expect(eta).not.toBeNull();
-  if (eta === null) return;
-  expect(eta.rate).toBe(10);
-  expect(eta.remaining).toBe(90);
-  expect(eta.totalSeconds).toBe(100);
+test("index wait stops the client wait", async () => {
   let now = 0;
   let over = false;
   const result = await waitForIndexChild(

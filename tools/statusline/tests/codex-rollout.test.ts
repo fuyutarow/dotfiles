@@ -1,3 +1,4 @@
+import { readCodexSessionStatus } from "./support/codex-session.ts";
 import {
   afterEach,
   beforeEach,
@@ -25,7 +26,6 @@ import {
   readCodexSettingsEvents,
 } from "../src/adapters/codex-settings-stream.ts";
 import {
-  readCodexSessionStatus,
   readCodexThreadStatus,
   readCodexPinnedSessionStatus,
 } from "../src/adapters/codex-rollout.ts";

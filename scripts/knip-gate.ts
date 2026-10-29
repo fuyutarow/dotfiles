@@ -206,7 +206,7 @@ export async function roots(root: string): Promise<string[]> {
       await add(match[1] ?? "");
   }
   // These declarations invoke Bun subprocesses or systemd services, not imports.
-  for (const [source, path] of [
+  for (const [source, reference, path] of [
     ["scripts/link-dots.ts", "scripts/render-home.ts"],
     ["scripts/lint-skills-floor.ts", "scripts/tracked-files.ts"],
     [
@@ -218,13 +218,40 @@ export async function roots(root: string): Promise<string[]> {
     ["agents/codex/codex-runtime.ts", "agents/codex/codex-wsl.ts"],
     ["agents/codex/windows-assets.ts", "agents/codex/windows-hook.ts"],
     ["systemd/statusline-sampler.service", "tools/statusline/src/sampler.ts"],
-  ]) {
+    [
+      "tools/agent-resource-run/src/agent-resource-run.ts",
+      "scope-entry.ts",
+      "tools/agent-resource-run/src/scope-entry.ts",
+    ],
+    [
+      "tools/agent-resource-run/src/agent-resource-run.ts",
+      "scope-controller.ts",
+      "tools/agent-resource-run/src/scope-controller.ts",
+    ],
+    [
+      "tools/smart-open/smart-open-receiver.plist.mac",
+      "tools/smart-open/src/receive.ts",
+    ],
+    [
+      "tools/repo-retrieve/README.md",
+      "views/research-record-v1.ts",
+      "tools/repo-retrieve/views/research-record-v1.ts",
+    ],
+  ].map(([origin, second, third]) => [origin, second, third ?? second])) {
     if (
       source !== undefined &&
+      reference !== undefined &&
       path !== undefined &&
-      (await Bun.file(join(root, source)).text()).includes(path)
+      (await Bun.file(join(root, source)).text()).includes(reference)
     )
       await add(path);
+  }
+  // Claude invokes helpers as Bun subprocesses from its quote hook.
+  const quoteHook = await Bun.file(
+    join(root, "agents/claude/hooks/quote-command.ts"),
+  ).text();
+  for (const name of ["copy-via-herdr-pane.ts", "resolve-agent-name.ts"]) {
+    if (quoteHook.includes(name)) await add(`agents/claude/hooks/${name}`);
   }
   // Codex invokes these through a deployed prompt and a registered shell shim.
   for (const [source, reference, path] of [

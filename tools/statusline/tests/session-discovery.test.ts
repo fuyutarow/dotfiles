@@ -1,3 +1,4 @@
+import { readCodexSessionStatus } from "./support/codex-session.ts";
 import { afterEach, expect, test, spyOn } from "bun:test";
 import * as fs from "node:fs/promises";
 import {
@@ -87,7 +88,6 @@ import { version } from "../package.json";
 import {
   readCodexPinnedSessionStatus,
   readCodexThreadStatus,
-  readCodexSessionStatus,
 } from "../src/adapters/codex-rollout.ts";
 
 const roots: string[] = [];

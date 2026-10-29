@@ -206,9 +206,8 @@ outside this scaffolding step.
 | src/model-context.ts              |    60 | Model normalization and context labels                                    |
 | src/prompt-stamp.ts               |    95 | Temporal clock, offset, tilde path and prompt fields                      |
 | src/rate-limits.ts                |   158 | Scoped model caps, window percentages and reset countdowns                |
-| src/render-cache.ts               |   205 | Persistent source caches and per-session cross-process render guard       |
 | src/repo-state.ts                 |    36 | Bounded branch lookup and explicit git failures                           |
-| src/statusline.ts                 |   359 | Claude/Codex entry, live refresh, render guard and snapshot writes        |
+| src/statusline.ts                 |   359 | Claude/Codex entry, live refresh and snapshot writes        |
 | src/storage.ts                    |   130 | Storage TOML reads, disk measurements, shared threshold calculation       |
 | src/zod.ts                        |    44 | Local JSON codecs and nullable-field schema helper                        |
 
@@ -216,7 +215,7 @@ outside this scaffolding step.
 
 - `src/ansi.ts`:
 - `src/bounded.ts`: `node:child_process`, `node:fs`, `node:path`, `neverthrow`, `./zod.ts`
-- `src/build-dataframe.ts`: `node:fs/promises`, `node:path`, `neverthrow`, `./session-status.ts`, `./dataframe.ts`, `./identity.ts`, `./rate-limits.ts`, `./model-context.ts`, `./repo-state.ts`, `./jobs.ts`, `./host-load.ts`, `./dispatch-runs.ts`, `./dispatch-warning.ts`, `./render-cache.ts`, `./storage.ts`, `./zod.ts`, `./dispatch-state.ts`, `./bounded.ts`, `./codex-rate.ts`, `./jev-usage.ts`
+- `src/build-dataframe.ts`: `node:fs/promises`, `node:path`, `neverthrow`, `./session-status.ts`, `./dataframe.ts`, `./identity.ts`, `./rate-limits.ts`, `./model-context.ts`, `./repo-state.ts`, `./jobs.ts`, `./host-load.ts`, `./dispatch-runs.ts`, `./dispatch-warning.ts`, `./storage.ts`, `./zod.ts`, `./dispatch-state.ts`, `./bounded.ts`, `./codex-rate.ts`, `./jev-usage.ts`
 - `src/cgroup-memory.ts`:
 - `src/dataframe.ts`: `neverthrow`, `./host-load.ts`, `./storage.ts`, `./identity.ts`, `./rate-limits.ts`, `./jobs.ts`, `./dispatch-runs.ts`
 - `src/dispatch-runs.ts`: `./zod.ts`, `./core-runs.ts`, `./agx-snapshot.ts`, `./dispatch-display.ts`
@@ -228,14 +227,13 @@ outside this scaffolding step.
 - `src/live.ts`:
 - `src/session-status.ts`: (types only)
 - `src/adapters/claude-statusline.ts`: `../bounded.ts`, `../zod.ts`, `../session-status.ts`
-- `src/adapters/codex-rollout.ts`: `node:fs/promises`, `node:path`, `../session-status.ts`, `../../../shared/src/jsonl.ts`, `./codex-settings-stream.ts`, `../zod.ts`, `../render-cache.ts`
+- `src/adapters/codex-rollout.ts`: `node:fs/promises`, `node:path`, `../session-status.ts`, `../../../shared/src/jsonl.ts`, `./codex-settings-stream.ts`, `../zod.ts`
 - `src/jobs.ts`: `./bounded.ts`, `./ansi.ts`, `./prompt-stamp.ts`
 - `src/model-context.ts`: `./ansi.ts`, `./dataframe.ts`
 - `src/prompt-stamp.ts`: `node:os`
 - `src/rate-limits.ts`: `neverthrow`, `./zod.ts`, `./prompt-stamp.ts`, `./ansi.ts`, `./dataframe.ts`
-- `src/render-cache.ts`: `node:fs/promises`, `node:os`, `node:path`, `./zod.ts`
 - `src/repo-state.ts`: `./bounded.ts`, `./model-context.ts`
-- `src/statusline.ts`: `node:fs/promises`, `cleye`, `./ansi.ts`, `./bounded.ts`, `./zod.ts`, `./adapters/claude-statusline.ts`, `./adapters/codex-rollout.ts`, `./session-status.ts`, `./prompt-stamp.ts`, `./format.ts`, `./build-dataframe.ts`, `./codex-rate.ts`, `./host-load.ts`, `./model-context.ts`, `./rate-limits.ts`, `./live.ts`, `./dataframe.ts`, `./render-cache.ts`
+- `src/statusline.ts`: `node:fs/promises`, `cleye`, `./ansi.ts`, `./bounded.ts`, `./zod.ts`, `./adapters/claude-statusline.ts`, `./adapters/codex-rollout.ts`, `./session-status.ts`, `./prompt-stamp.ts`, `./format.ts`, `./build-dataframe.ts`, `./codex-rate.ts`, `./host-load.ts`, `./model-context.ts`, `./rate-limits.ts`, `./live.ts`, `./dataframe.ts`
 - `src/storage.ts`: `node:fs`, `node:path`, `neverthrow`, `../../shared/src/storage-headroom.ts`, `./zod.ts`, `./bounded.ts`, `./ansi.ts`
 - `src/zod.ts`: `neverthrow`, `../../shared/src/zod.ts`
 

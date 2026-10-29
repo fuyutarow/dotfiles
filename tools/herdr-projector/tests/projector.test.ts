@@ -480,10 +480,7 @@ import {
   nativeFooterObservation,
 } from "../src/herdr-projector.ts";
 import { mkdir } from "node:fs/promises";
-import {
-  refreshCodexFleetSession,
-  readCodexNativeSession,
-} from "@dotfiles/shared/src/fleet-session.ts";
+import { readCodexNativeSession } from "@dotfiles/shared/src/fleet-session.ts";
 
 type NativeTitleBindings = NonNullable<
   Parameters<typeof bindNativeCodexFooters>[4]
@@ -982,16 +979,16 @@ test("bounded exact rollout reads do not inherit stale fleet model when tail has
       }) +
       "\n",
   );
-  const result = await refreshCodexFleetSession(seed, fixture.env, path);
+  const result = await readCodexNativeSession(seed, fixture.env, path);
   expect(result).toMatchObject({
     session_id: footerThread,
     model: { na: true },
     effort: { na: true },
   });
   await Bun.write(path, "x".repeat(256 * 1024));
-  expect(await refreshCodexFleetSession(seed, fixture.env, path)).toMatchObject(
-    { na: true },
-  );
+  expect(await readCodexNativeSession(seed, fixture.env, path)).toMatchObject({
+    na: true,
+  });
 });
 
 test("native footer retains model and effort only from the same complete observation", () => {

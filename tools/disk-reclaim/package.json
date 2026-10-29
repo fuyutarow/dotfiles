@@ -10,7 +10,6 @@
     "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0",
     "neverthrow": "8.2.0",
-    "ts-pattern": "5.9.0",
-    "zod": "4.6.5"
+    "ts-pattern": "5.9.0"
   }
 }

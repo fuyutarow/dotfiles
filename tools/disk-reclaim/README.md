@@ -6,6 +6,13 @@ It returns `disk.result/1` rows and bounds the read-only probe with `--within` (
 plan does not authorize a later deletion. The `disk free paths`, `disk free graveyard`,
 and `disk free capacity` adapters remain unavailable.
 
+`disk free targets tmpfs [--only ABS]` takes the shared reclaim lock and rechecks
+each legacy tmpfs candidate before removal. Recent, open or unknown-use, foreign,
+protected, graveyard and incompletely scanned trees remain untouched. Each action
+reports its own statfs measurements; no increase in available bytes is a partial
+result. The scan and worker are bounded by `--within`. Planning does not authorize
+or perform an action.
+
 Part of the [tools/ architecture](../spec/architecture.md) (the mechanism the capacity recover part composes: invariants I-R1 to I-R5).
 
 Plan configured reclamation as one JSONL record per candidate. `apply` reads those records from

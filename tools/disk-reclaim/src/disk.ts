@@ -736,7 +736,10 @@ export async function main(
   if (
     key === "free targets" &&
     targets.length === 1 &&
-    (targets[0] === "clean" || targets[0] === "rust" || targets[0] === "builds")
+    (targets[0] === "clean" ||
+      targets[0] === "rust" ||
+      targets[0] === "builds" ||
+      targets[0] === "tmpfs")
   ) {
     const controller = new AbortController();
     let cancelled = 0;
@@ -750,7 +753,9 @@ export async function main(
     };
     process.once("SIGINT", interrupt);
     process.once("SIGTERM", terminate);
-    const cleanTarget = targets[0] === "rust" ? "rust" : "clean";
+    let actingTarget: "clean" | "rust" | "tmpfs" = "clean";
+    if (targets[0] === "rust") actingTarget = "rust";
+    if (targets[0] === "tmpfs") actingTarget = "tmpfs";
     const result =
       targets[0] === "builds"
         ? await freeBuilds(
@@ -768,7 +773,8 @@ export async function main(
             undefined,
             controller.signal,
             options.has("stop-on-error"),
-            cleanTarget,
+            actingTarget,
+            get("only"),
           );
     process.removeListener("SIGINT", interrupt);
     process.removeListener("SIGTERM", terminate);

@@ -21,6 +21,225 @@ import { createToolchainsTarget } from "../src/targets/toolchains.ts";
 import { toolchainsWorker } from "../src/disk-toolchains-worker.ts";
 
 const cli = join(import.meta.dir, "../src/disk.ts");
+
+test.each([
+  ["young", "younger than 60 minutes", "keep"],
+  ["open", "open by a process", "keep"],
+  ["unknown", "process-use status unavailable", "ask"],
+  ["foreign", "owned by another user", "keep"],
+  ["protected", "protected session or system directory", "keep"],
+  ["configured", "configured protected path", "keep"],
+  ["graveyard", "graveyard requires recorded burial", "keep"],
+  ["nested-graveyard", "contains a graveyard", "keep"],
+  ["limit", "tree safety scan limit exceeded", "ask"],
+  ["time", "tree safety scan limit exceeded", "ask"],
+  ["depth", "tree safety scan limit exceeded", "ask"],
+  ["idle", "tmpfs removal completed", "completed"],
+  ["zero", "no measured increase", "partial"],
+  ["changed", "fingerprint changed", "changed"],
+] as const)("tmpfs adapter preserves %s", async (scenario, reason, verdict) => {
+  const { createTmpfsTarget } = await import("../src/targets/tmpfs.ts");
+  const { freeClean } = await import("../src/disk-clean.ts");
+  const { cleanAction } = await import("../src/disk-clean-action.ts");
+  const root = await mkdtemp(join(tmpdir(), "disk-tmpfs-fixture-"));
+  let name = "candidate";
+  if (scenario === "protected") name = "claude-session";
+  if (scenario === "graveyard") name = "graveyard";
+  const path = join(root, name);
+  await mkdir(path);
+  if (scenario === "limit") await mkdir(join(path, "child"));
+  if (scenario === "nested-graveyard") await mkdir(join(path, "graveyard"));
+  if (scenario === "limit") await utimes(join(path, "child"), 1, 1);
+  if (scenario === "depth") {
+    let nested = path;
+    for (let i = 0; i < 66; i++) {
+      nested = join(nested, "d");
+      await mkdir(nested);
+    }
+  }
+  if (scenario !== "young") await utimes(path, 1, 1);
+  if (scenario === "depth") {
+    let nested = path;
+    for (let i = 0; i < 66; i++) {
+      nested = join(nested, "d");
+      await utimes(nested, 1, 1);
+    }
+  }
+  const fs = {
+    type: 0x01021994n,
+    files: 100n,
+    ffree: 50n,
+    blocks: 100n,
+    bfree: 50n,
+    bsize: 4096n,
+  };
+  const target = createTmpfsTarget({
+    mounts: () => [{ path: root, type: "tmpfs" }],
+    statfs: () => fs,
+    uid: () =>
+      scenario === "foreign"
+        ? (process.getuid?.() ?? 0) + 1
+        : (process.getuid?.() ?? 0),
+    now: () => Temporal.Now.instant().epochMilliseconds,
+    isOpen: () => {
+      if (scenario === "open") return true;
+      if (scenario === "unknown") return null;
+      return false;
+    },
+    ...(scenario === "limit" ? { scanMaxEntries: 1 } : {}),
+    ...(scenario === "time" ? { scanMaxMs: 0 } : {}),
+  });
+  const context = (): Context => ({
+    ...cleanContext,
+    targetName: "tmpfs",
+    config: {
+      ...cleanContext.config,
+      protected: scenario === "configured" ? [path] : [],
+    },
+  });
+  let actions = 0;
+  let measurements = 0;
+  const deps = {
+    guard: (): string | null => null,
+    lock: (_ms: number) =>
+      Promise.resolve({ release: () => {}, exit: 0, error: null }),
+    receipt: (_items: unknown[]) =>
+      Promise.resolve({ id: "r", path: "/fixture/r", delivery_error: null }),
+    probe: async (action: string | undefined) => {
+      if (action === undefined) {
+        const rows = (await target.plan(context())).filter(
+          (row) => !row.id.startsWith("tmpfs-usage:"),
+        );
+        return {
+          out: JSON.stringify(
+            rows.map((candidate) => ({ candidate, fingerprint: "same" })),
+          ),
+          err: "",
+          exit: 0,
+          timedOut: false,
+        };
+      }
+      const parsed = jsonOf(
+        z.object({ id: z.string(), path: z.string(), fingerprint: z.string() }),
+      ).safeParse(action);
+      if (!parsed.success)
+        return { out: "", err: "invalid request", exit: 1, timedOut: false };
+      const value = await cleanAction(parsed.data, {
+        target: {
+          ...target,
+          act: () => {
+            actions++;
+            return { ok: true, bytes_freed: 123, error: null };
+          },
+        },
+        context: context(),
+        identity: () =>
+          Promise.resolve(scenario === "changed" ? "changed" : "same"),
+        protection: () => null,
+        device: () => Promise.resolve(1),
+        measure: () =>
+          Promise.resolve(
+            cleanObservation(
+              measurements++ === 0 || scenario === "zero" ? 100 : 110,
+            ),
+          ),
+        fail: () => process.exit(99),
+        completedReason: "tmpfs removal completed",
+      });
+      return { out: JSON.stringify(value), err: "", exit: 0, timedOut: false };
+    },
+  };
+  const result = await freeClean(
+    10000,
+    performance.now(),
+    false,
+    deps,
+    undefined,
+    false,
+    "tmpfs",
+  );
+  const item = result.items.find((row) => row.path === path);
+  expect(item?.verdict).toBe(verdict);
+  expect(item?.reason).toContain(reason);
+  expect(item?.effect).toBe(
+    scenario === "idle" || scenario === "zero" ? "unlink" : "none",
+  );
+  expect(actions).toBe(scenario === "idle" || scenario === "zero" ? 1 : 0);
+  expect(result.exit).toBe(scenario === "idle" ? 0 : 1);
+});
+
+test("tmpfs plan-only and guard, lock, and lost worker refuse effects", async () => {
+  const { freeClean } = await import("../src/disk-clean.ts");
+  let calls = 0;
+  const deps = {
+    guard: (): string | null => null,
+    lock: (_ms: number) =>
+      Promise.resolve({ release: () => {}, exit: 0, error: null }),
+    receipt: (_items: unknown[]) =>
+      Promise.resolve({ id: "r", path: "/fixture/r", delivery_error: null }),
+    probe: () => {
+      calls++;
+      return Promise.resolve({
+        out: "",
+        err: "lost",
+        exit: null,
+        timedOut: true,
+      });
+    },
+  };
+  const denied = await freeClean(
+    10000,
+    performance.now(),
+    false,
+    { ...deps, guard: () => "worker guard" },
+    undefined,
+    false,
+    "tmpfs",
+  );
+  expect(denied.exit).toBe(1);
+  const busy = await freeClean(
+    10000,
+    performance.now(),
+    false,
+    {
+      ...deps,
+      lock: () => Promise.resolve({ release: null, exit: 3, error: "busy" }),
+    },
+    undefined,
+    false,
+    "tmpfs",
+  );
+  expect(busy.exit).toBe(3);
+  expect(calls).toBe(0);
+  const lost = await freeClean(
+    10000,
+    performance.now(),
+    false,
+    deps,
+    undefined,
+    false,
+    "tmpfs",
+  );
+  expect(lost.exit).toBe(4);
+  expect(calls).toBe(1);
+  const home = await mkdtemp(join(tmpdir(), "disk-tmpfs-plan-"));
+  const planned = await run(
+    ["plan", "targets", "--target", "tmpfs", "--no-progress"],
+    "",
+    { ...process.env, HOME: home },
+  );
+  expect(planned.exit).toBe(4);
+  expect(jsonText.safeParse(planned.out).data).toMatchObject({
+    outcome: "unknown",
+    items: [],
+  });
+  const invalid = await run(
+    ["plan", "targets", "--target", "tmpfs", "--yes"],
+    "",
+    { ...process.env, HOME: home },
+  );
+  expect(invalid.exit).toBe(2);
+});
 const tmpfsProbe: typeof runProbe = () =>
   Promise.resolve({ out: "tmpfs\n", err: "", exit: 0, timedOut: false });
 const cleanIdentity = () => Promise.resolve("same");
@@ -195,7 +414,7 @@ describe("disk parser and effect firewall", () => {
       [["plan", "targets"]],
       [["plan", "workspace-gc"]],
       [["move", "workspace-gc"]],
-      [["free", "targets", "tmpfs"]],
+      [["free", "targets", "scratch"]],
       [["free", "records"], record],
       [["free", "paths", file]],
       [["free", "graveyard", "--amount", "1MB"]],
@@ -2094,7 +2313,7 @@ test("builds planning and unavailable targets never act", async () => {
   );
   expect(invalid.exit).toBe(2);
   const other = await run(
-    ["free", "targets", "tmpfs", "--no-progress"],
+    ["free", "targets", "scratch", "--no-progress"],
     "",
     env,
   );

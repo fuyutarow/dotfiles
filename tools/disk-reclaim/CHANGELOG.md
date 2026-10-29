@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.9 — 2026-10-29
+
+- Add bounded tmpfs reclamation to disk free targets
+
 ## 1.12.8 — 2026-10-29
 
 - Enable guarded builds reclamation through disk free targets

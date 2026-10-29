@@ -56,7 +56,8 @@ async function cleanProbe(
   action: string | undefined,
   ms: number,
   signal?: AbortSignal,
-  target: "clean" | "rust" = "clean",
+  target: "clean" | "rust" | "tmpfs" = "clean",
+  only?: string,
 ): Promise<ProbeResult> {
   const spawned = fromThrowable(() =>
     Bun.spawn(
@@ -72,6 +73,7 @@ async function cleanProbe(
             Temporal.Now.instant().epochMilliseconds + ms,
           ),
           [`DISK_${target.toUpperCase()}_ACTION`]: action,
+          DISK_TMPFS_ONLY: only,
         },
       },
     ),
@@ -104,7 +106,8 @@ export async function freeClean(
   injected?: Dependencies,
   signal?: AbortSignal,
   stopOnError = false,
-  target: "clean" | "rust" = "clean",
+  target: "clean" | "rust" | "tmpfs" = "clean",
+  only?: string,
 ) {
   const remaining = () => Math.floor(deadline - (performance.now() - start));
   const report = (stage: string) => {
@@ -117,7 +120,7 @@ export async function freeClean(
     guard: workerMutationRefusal,
     lock: (ms) =>
       waitForLock(target, stateDir(), report, Math.min(10, ms / 1000)),
-    probe: (action, ms, abort) => cleanProbe(action, ms, abort, target),
+    probe: (action, ms, abort) => cleanProbe(action, ms, abort, target, only),
     receipt: async (items) => {
       const id = crypto.randomUUID();
       const dir = join(stateDir(), "disk-receipts");

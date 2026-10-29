@@ -12,6 +12,7 @@ import { movePaths } from "./disk-move.ts";
 import { freeMiseConfigs } from "./disk-mise-configs.ts";
 import { freeClean } from "./disk-clean.ts";
 import { freeToolchains } from "./disk-toolchains.ts";
+import { freeBuilds } from "./disk-builds.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const grammar: Record<string, string[]> = {
@@ -380,14 +381,16 @@ async function measureCapacity(
   return { measurement: parsed.data, error: null };
 }
 export async function main(
-  args = process.argv.slice(2),
+  argv = process.argv.slice(2),
   toolchainsDeps?: Parameters<typeof freeToolchains>[3],
   output: (text: string) => void = (text) => {
     process.stdout.write(text);
   },
+  buildsDependencies?: Parameters<typeof freeBuilds>[3],
 ) {
   const start = performance.now();
   const started = Temporal.Now.instant().toString();
+  const args = [...argv];
   if (
     args.length === 0 ||
     (args.length === 1 && (args[0] === "--help" || args[0] === "-h"))
@@ -733,7 +736,7 @@ export async function main(
   if (
     key === "free targets" &&
     targets.length === 1 &&
-    (targets[0] === "clean" || targets[0] === "rust")
+    (targets[0] === "clean" || targets[0] === "rust" || targets[0] === "builds")
   ) {
     const controller = new AbortController();
     let cancelled = 0;
@@ -747,15 +750,26 @@ export async function main(
     };
     process.once("SIGINT", interrupt);
     process.once("SIGTERM", terminate);
-    const result = await freeClean(
-      deadline,
-      start,
-      !options.has("no-progress"),
-      undefined,
-      controller.signal,
-      options.has("stop-on-error"),
-      targets[0] === "rust" ? "rust" : "clean",
-    );
+    const cleanTarget = targets[0] === "rust" ? "rust" : "clean";
+    const result =
+      targets[0] === "builds"
+        ? await freeBuilds(
+            deadline,
+            start,
+            !options.has("no-progress"),
+            buildsDependencies,
+            controller.signal,
+            options.has("stop-on-error"),
+          )
+        : await freeClean(
+            deadline,
+            start,
+            !options.has("no-progress"),
+            undefined,
+            controller.signal,
+            options.has("stop-on-error"),
+            cleanTarget,
+          );
     process.removeListener("SIGINT", interrupt);
     process.removeListener("SIGTERM", terminate);
     const counts = {

@@ -1,5 +1,5 @@
 import { jsonOf, jsonText, z } from "@dotfiles/shared/src/zod.ts";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
   mkdtemp,
   readFile,
@@ -1872,4 +1872,234 @@ test("real toolchains planner exposes retained versions through the disk adapter
   expect(cross.outcome).toBe("unknown");
   expect(cross.exit).toBe(4);
   expect(cross.observations).toEqual({ before: null, after: null });
+});
+
+async function runBuildsEntry(
+  deps: Parameters<typeof import("../src/disk-builds.ts").freeBuilds>[3],
+) {
+  const { main } = await import("../src/disk.ts");
+  let output = "";
+  const stdout = spyOn(process.stdout, "write").mockImplementation((chunk) => {
+    output += String(chunk);
+    return true;
+  });
+  const previousExit = process.exitCode;
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => {
+    stdout.mockRestore();
+    process.exitCode = previousExit ?? 0;
+  });
+  process.exitCode = 0;
+  await main(
+    [
+      "free",
+      "targets",
+      "builds",
+      "--approve",
+      "/fixture/project/dist",
+      "--no-progress",
+    ],
+    undefined,
+    undefined,
+    deps,
+  );
+  return { exit: process.exitCode, output: jsonText.safeParse(output).data };
+}
+
+for (const [label, reason] of [
+  ["protected", "tool installation root"],
+  ["in-use", "contains a running process cwd"],
+  ["foreign target", "owned by rust target"],
+  ["clean target", "owned by clean target"],
+  ["unknown process evidence", "process paths are unknown"],
+] as const) {
+  test(`builds entry retains legacy ${label} refusal`, async () => {
+    const { createBuildsTarget } = await import("../src/targets/builds.ts");
+    const path = "/fixture/project/dist";
+    const target = createBuildsTarget(
+      () => "/fixture",
+      () => [path],
+      {
+        includeOwned: true,
+        protection: () => reason,
+        tree: fakeTree,
+        stat: () => Promise.resolve({ dev: 1, isDirectory: () => true }),
+      },
+    );
+    const rows = await target.plan({ ...cleanContext, targetName: "builds" });
+    let actions = 0;
+    const result = await runBuildsEntry({
+      guard: () => null,
+      lock: () => Promise.resolve({ release: () => {}, exit: 0, error: null }),
+      receipt: () =>
+        Promise.resolve({ id: "r", path: "/fixture/r", delivery_error: null }),
+      probe: (action) => {
+        if (action !== undefined) actions++;
+        return Promise.resolve({
+          out: JSON.stringify(
+            rows.map((candidate) => ({ candidate, fingerprint: "same" })),
+          ),
+          err: "",
+          exit: 0,
+          timedOut: false,
+        });
+      },
+    });
+    expect(result.exit).toBe(1);
+    expect(result.output).toMatchObject({
+      items: [
+        {
+          path,
+          verdict: reason === "process paths are unknown" ? "ask" : "keep",
+          reason: `protected: ${reason}`,
+          effect: "none",
+        },
+      ],
+    });
+    expect(actions).toBe(0);
+  });
+}
+
+test("builds entry revalidates the real planner and reports a measured removal", async () => {
+  const { createBuildsTarget } = await import("../src/targets/builds.ts");
+  const { freeBuilds } = await import("../src/disk-builds.ts");
+  const { buildsAction } = await import("../src/disk-builds-action.ts");
+  const path = "/fixture/project/dist";
+  let reason: string | null = null;
+  let fingerprint = "same";
+  let actions = 0;
+  let available = 100;
+  let delta = 10;
+  let changeOnAction: string | null = null;
+  const ctx = { ...cleanContext, targetName: "builds" };
+  const target = {
+    ...createBuildsTarget(
+      () => "/fixture",
+      () => [path],
+      {
+        includeOwned: true,
+        protection: () => reason,
+        tree: fakeTree,
+        stat: () => Promise.resolve({ dev: 1, isDirectory: () => true }),
+      },
+    ),
+    act: () => {
+      actions++;
+      available += delta;
+      return Promise.resolve({ ok: true, bytes_freed: 10, error: null });
+    },
+  };
+  const deps = {
+    guard: (): string | null => null,
+    lock: () => Promise.resolve({ release: () => {}, exit: 0, error: null }),
+    receipt: () =>
+      Promise.resolve({ id: "r", path: "/fixture/r", delivery_error: null }),
+    probe: async (action: string | undefined) => {
+      if (action === undefined)
+        return {
+          out: JSON.stringify(
+            (await target.plan(ctx)).map((candidate) => ({
+              candidate,
+              fingerprint: "same",
+            })),
+          ),
+          err: "",
+          exit: 0,
+          timedOut: false,
+        };
+      reason = changeOnAction;
+      const parsed = jsonOf(
+        z.object({ id: z.string(), path: z.string(), fingerprint: z.string() }),
+      ).safeParse(action);
+      if (!parsed.success) expect.unreachable("invalid fixture action");
+      const result = await buildsAction(parsed.data, {
+        target,
+        context: ctx,
+        identity: () => Promise.resolve(fingerprint),
+        device: () => Promise.resolve(1),
+        measure: () => Promise.resolve(cleanObservation(available)),
+        fail: () => expect.unreachable("unexpected failure"),
+      });
+      return { out: JSON.stringify(result), err: "", exit: 0, timedOut: false };
+    },
+  };
+  const result = await runBuildsEntry(deps);
+  expect(result.exit).toBe(0);
+  expect(result.output).toMatchObject({
+    items: [
+      {
+        path,
+        verdict: "completed",
+        effect: "unlink",
+        before: { available_bytes: 100 },
+        after: { available_bytes: 110 },
+      },
+    ],
+  });
+  expect(actions).toBe(1);
+  delta = 0;
+  const shortfall = await freeBuilds(10000, performance.now(), false, deps);
+  expect(shortfall.exit).toBe(1);
+  expect(shortfall.items[0]).toMatchObject({
+    verdict: "partial",
+    reason: "no measured increase in available space",
+  });
+  expect(actions).toBe(2);
+  fingerprint = "changed";
+  expect(
+    (await freeBuilds(10000, performance.now(), false, deps)).items[0],
+  ).toMatchObject({ verdict: "changed", effect: "none" });
+  expect(actions).toBe(2);
+  fingerprint = "same";
+  changeOnAction = "contains a running process cwd";
+  expect(
+    (await freeBuilds(10000, performance.now(), false, deps)).items[0],
+  ).toMatchObject({ verdict: "keep", effect: "none" });
+  expect(actions).toBe(2);
+  const guarded = await freeBuilds(10000, performance.now(), false, {
+    ...deps,
+    guard: () => "worker guard",
+  });
+  expect(guarded).toMatchObject({ exit: 1, error: "worker guard", items: [] });
+  const locked = await freeBuilds(10000, performance.now(), false, {
+    ...deps,
+    lock: () => Promise.resolve({ release: null, exit: 3, error: "busy" }),
+  });
+  expect(locked).toMatchObject({ exit: 3, error: "busy", items: [] });
+  expect(actions).toBe(2);
+});
+
+test("builds planning and unavailable targets never act", async () => {
+  const home = "/fixture/unused-builds";
+  const env = {
+    ...process.env,
+    HOME: home,
+    RECLAIM_STATE_DIR: `${home}/state`,
+  };
+  const plan = await run(
+    ["plan", "targets", "--target", "builds", "--no-progress"],
+    "",
+    env,
+  );
+  expect(plan.exit).toBe(4);
+  expect(jsonText.safeParse(plan.out).data).toMatchObject({
+    outcome: "unknown",
+    items: [],
+    receipt: null,
+  });
+  const invalid = await run(
+    ["plan", "targets", "--target", "builds", "--yes"],
+    "",
+    env,
+  );
+  expect(invalid.exit).toBe(2);
+  const other = await run(
+    ["free", "targets", "tmpfs", "--no-progress"],
+    "",
+    env,
+  );
+  expect(other.exit).toBe(4);
+  expect(jsonText.safeParse(other.out).data).toMatchObject({
+    outcome: "unknown",
+  });
 });

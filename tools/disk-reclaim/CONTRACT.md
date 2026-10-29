@@ -62,8 +62,11 @@ grammar shown by their help. `inspect receipts` reads the existing receipt histo
 child process, reports malformed or unreadable history as unknown, and does not write state.
 `free targets vhdx` and `free targets audit` explicitly refuse these plan-only targets without
 starting an action; mixed selections report the remaining unavailable targets as unknown.
-Single-target `clean`, `rust`, and `mise-configs` actions are enabled; other
-action adapters remain unavailable: a valid request produces one
+Single-target `clean`, `rust`, `builds`, `toolchains`, and `mise-configs` actions are enabled.
+The builds adapter uses the legacy planner and rechecks each candidate and fingerprint under
+the common lock; protected, in-use, and other-target-owned paths are kept. Each action reports
+its own statfs measurements; a non-positive available-space change is partial. Unsupported
+action adapters produce one
 `disk.result/1` JSON object with outcome `unknown` and exit 4 before any operation. Invalid
 syntax or invalid legacy JSONL input exits 2 on stderr without a result. Help and version exit 0.
 `free records` alone reads stdin; it requires at least one valid legacy candidate record.

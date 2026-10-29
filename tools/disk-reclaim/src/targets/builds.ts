@@ -59,7 +59,18 @@ export const createBuildsTarget = (
     process.env.KONDO_DIR ?? process.env.HOME ?? homedir(),
   discover: (root: string, ctx: Context) => string[] = (path, ctx) =>
     scan(path, 0, undefined, ctx),
+  options: {
+    includeOwned?: boolean;
+    protection?: typeof protection;
+    tree?: typeof treeCandidate;
+    stat?: (
+      path: string,
+    ) => Promise<{ dev: number; isDirectory: () => boolean }>;
+  } = {},
 ) => {
+  const protect = options.protection ?? protection;
+  const tree = options.tree ?? treeCandidate;
+  const inspect = options.stat ?? stat;
   const completedPayloads = new WeakMap<Context, number>();
   return {
     name: "builds",
@@ -74,15 +85,16 @@ export const createBuildsTarget = (
         ctx,
         () => discover(root(), ctx),
       ).toSorted()) {
-        const reason = protection(path, ctx);
+        const reason = protect(path, ctx);
         if (
-          reason === "owned by rust target" ||
-          reason === "owned by clean target"
+          options.includeOwned !== true &&
+          (reason === "owned by rust target" ||
+            reason === "owned by clean target")
         )
           continue;
         if (reason !== null)
           rows.push({
-            ...(await treeCandidate(
+            ...(await tree(
               path,
               `regenerable build output (kondo --all parity)`,
               ctx,
@@ -97,7 +109,7 @@ export const createBuildsTarget = (
           });
         else
           rows.push(
-            await treeCandidate(
+            await tree(
               path,
               "regenerable build output (kondo --all parity)",
               ctx,
@@ -110,8 +122,8 @@ export const createBuildsTarget = (
     recheck: async (candidate, ctx) => {
       const path = candidate.path;
       if (path === null || !BUILD_NAMES.has(basename(path))) return null;
-      const rootStat = await fromAsyncThrowable(() => stat(root()))();
-      const pathStat = await fromAsyncThrowable(() => stat(path))();
+      const rootStat = await fromAsyncThrowable(() => inspect(root()))();
+      const pathStat = await fromAsyncThrowable(() => inspect(path))();
       if (
         rootStat.isErr() ||
         pathStat.isErr() ||
@@ -119,7 +131,7 @@ export const createBuildsTarget = (
         pathStat.value.dev !== rootStat.value.dev
       )
         return null;
-      const reason = protection(path, ctx);
+      const reason = protect(path, ctx);
       if (reason !== null)
         return {
           ...candidate,
@@ -127,7 +139,7 @@ export const createBuildsTarget = (
           reason: `protected: ${reason}`,
           action: { kind: "delete", argv: [] },
         };
-      return treeCandidate(
+      return tree(
         path,
         "regenerable build output (kondo --all parity)",
         ctx,

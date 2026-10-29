@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.8 — 2026-10-29
+
+- Enable guarded builds reclamation through disk free targets
+
 ## 1.12.7 — 2026-10-29
 
 - Enable bounded toolchains reclamation through disk free

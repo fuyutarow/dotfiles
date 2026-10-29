@@ -208,6 +208,7 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
     "launchd/statusline-sampler.plist",
     "Library/LaunchAgents/statusline-sampler.plist",
   ],
+  ["mac", "launchd/agent-cpu.plist", "Library/LaunchAgents/agent-cpu.plist"],
   ["not-mac", "systemd/ws-gc.service", ".config/systemd/user/ws-gc.service"],
   ["not-mac", "systemd/ws-gc.timer", ".config/systemd/user/ws-gc.timer"],
   [

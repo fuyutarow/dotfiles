@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { produce, run, type Options } from "../src/agent-cpu.ts";
+import { deployMacStatusline } from "../../../scripts/link-dots.ts";
 
 const id = "12345678-1234-4234-8234-123456789abc";
 async function fixture(mode = "ok") {
@@ -246,19 +247,118 @@ test("atomic output, failure and stdout parity", async () => {
   await f.reset();
   expect(await run(join(f.root, "missing", "out"), f.options)).toBe(1);
 });
-test("Darwin CLI reports unsupported platform", async () => {
-  if (process.platform !== "darwin") return;
-  const p = Bun.spawn({
-    cmd: ["bun", "tools/agent-cpu/src/agent-cpu.ts", "--out", "/unused"],
-    stdout: "pipe",
-    stderr: "pipe",
+test("macOS attributes ps trees and worker lease without proc or cgroups", async () => {
+  const f = await fixture();
+  const ps = join(f.root, "ps");
+  const sample = join(f.root, "sample");
+  const vm = join(f.root, "vm");
+  const sysctl = join(f.root, "sysctl");
+  const lsof = join(f.root, "lsof");
+  const codexId = "87654321-4321-4321-8321-cba987654321";
+  const rollout = join(f.root, "rollout-test.jsonl");
+  await writeFile(
+    rollout,
+    `${JSON.stringify({ type: "session_meta", payload: { id: codexId } })}\n`,
+  );
+  await writeFile(ps, `#!/bin/sh\ncat '${sample}'\n`);
+  await writeFile(
+    vm,
+    "#!/bin/sh\nprintf 'Mach Virtual Memory Statistics: (page size of 4096 bytes)\\nPages free: 10.\\nPages inactive: 20.\\nPages speculative: 5.\\n'\n",
+  );
+  await writeFile(sysctl, "#!/bin/sh\necho 1048576\n");
+  await writeFile(lsof, `#!/bin/sh\nprintf 'n%s\\n' '${rollout}'\n`);
+  for (const executable of [ps, vm, sysctl, lsof])
+    await chmod(executable, 0o755);
+  await writeFile(
+    f.options.agx,
+    `#!/bin/sh\necho '[{"dispatcher_session":"${id}","lease":{"pid":20,"unit":null}}]'\n`,
+  );
+  const set = (end: boolean) =>
+    writeFile(
+      sample,
+      [
+        `10 1 Fri Oct  9 01:13:58 2026 0:0${end ? "1" : "0"}.00 10 claude`,
+        `11 10 Fri Oct  9 01:13:58 2026 0:0${end ? "1" : "0"}.00 20 child`,
+        `20 10 Fri Oct  9 01:13:58 2026 0:0${end ? "1" : "0"}.00 30 worker`,
+        `21 20 Fri Oct  9 01:13:58 2026 0:0${end ? "1" : "0"}.00 40 codex`,
+        `30 1 Fri Oct  9 01:13:58 2026 0:0${end ? "1" : "0"}.00 50 codex`,
+      ].join("\n"),
+    );
+  await set(false);
+  const doc = await produce({
+    ...f.options,
+    platform: "darwin",
+    proc: "/missing",
+    cgroup: "/missing",
+    ps,
+    vmstat: vm,
+    sysctl,
+    lsof,
+    sleep: async () => set(true),
   });
-  const [out, err, code] = await Promise.all([
-    new Response(p.stdout).text(),
-    new Response(p.stderr).text(),
-    p.exited,
+  expect(doc?.sessions[0]).toEqual({
+    session_id: id,
+    pid: 10,
+    vendor: "claude",
+    cpu_pct: 100,
+    ram_bytes: 30 * 1024,
+    vram_bytes: null,
+    workers: { count: 1, cpu_pct: 100, ram_bytes: 70 * 1024, vram_bytes: null },
+  });
+  expect(doc?.unresolved_agents).toEqual([]);
+  expect(doc?.sessions[1]).toEqual({
+    session_id: codexId,
+    pid: 30,
+    vendor: "codex",
+    cpu_pct: 50,
+    ram_bytes: 50 * 1024,
+    vram_bytes: null,
+    workers: { count: 0, cpu_pct: 0, ram_bytes: 0, vram_bytes: null },
+  });
+  expect(doc?.host.ram_bytes).toBe(1048576 - 35 * 4096);
+  expect(doc?.host.vram_bytes).toBeNull();
+  await writeFile(f.options.agx, "#!/bin/sh\nexit 1\n");
+  await set(false);
+  const unavailable = await produce({
+    ...f.options,
+    platform: "darwin",
+    ps,
+    vmstat: vm,
+    sysctl,
+    lsof,
+    sleep: async () => set(true),
+  });
+  expect(unavailable?.agx).toBe("unavailable");
+  expect(unavailable?.sessions[0]?.workers).toBeNull();
+});
+
+test("macOS deploy bootstraps the declared agent-cpu plist", async () => {
+  const f = await fixture();
+  const dir = join(f.options.home, "Library/LaunchAgents");
+  await mkdir(dir, { recursive: true });
+  const root = join(import.meta.dir, "../../..");
+  const plist = join(dir, "agent-cpu.plist");
+  await symlink(join(root, "launchd/agent-cpu.plist"), plist);
+  const calls: string[][] = [];
+  const result = await deployMacStatusline(
+    {
+      home: f.options.home,
+      dotfiles: root,
+      os: "mac",
+      mode: "safe",
+      drift: [],
+    },
+    (args) => {
+      calls.push(args);
+      return Promise.resolve({ code: 0, out: "" });
+    },
+    "agent-cpu",
+  );
+  expect(result).toBeUndefined();
+  expect(calls.map((args) => args[0])).toEqual([
+    "print",
+    "bootout",
+    "bootstrap",
   ]);
-  expect(code).toBe(1);
-  expect(out).toBe("");
-  expect(err).toContain("unsupported platform");
+  expect(calls[2]?.[2]).toBe(plist);
 });

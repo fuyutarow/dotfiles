@@ -9,14 +9,21 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { z, jsonOf } from "@dotfiles/shared/src/zod.ts";
+import { produceMac } from "./macos.ts";
 
 const WINDOW = 2000;
 const uuid = z.uuid();
 const rowSchema = z.object({
   dispatcher_session: z.string().nullable(),
-  lease: z.object({ unit: z.string().nullable() }).nullable().optional(),
+  lease: z
+    .object({
+      unit: z.string().nullable().optional(),
+      pid: z.number().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
 });
-type Row = z.infer<typeof rowSchema>;
+export type Row = z.infer<typeof rowSchema>;
 type Vendor = "claude" | "codex";
 type Proc = {
   pid: number;
@@ -48,6 +55,11 @@ export type Options = {
   timeout: number;
   nvidia: string;
   nvidiaTimeout: number;
+  platform?: string;
+  ps?: string;
+  vmstat?: string;
+  sysctl?: string;
+  lsof?: string;
 };
 const defaults = (): Options => ({
   proc: "/proc",
@@ -63,7 +75,7 @@ const defaults = (): Options => ({
 });
 const read = (path: string) => readFile(path, "utf8");
 const optional = (path: string) => read(path).catch(() => "");
-function vendorOf(args: string[]): Vendor | undefined {
+export function vendorOf(args: string[]): Vendor | undefined {
   const first = basename(args[0] ?? "");
   const executable = /^(node|bun)$/u.test(first)
     ? basename(args[1] ?? "")
@@ -264,14 +276,14 @@ function hostMemory(raw: string) {
     ram_total_bytes: totalKb * 1024,
   };
 }
-const claudeFile = jsonOf(z.object({ sessionId: uuid }));
+export const claudeFile = jsonOf(z.object({ sessionId: uuid }));
 const rolloutMeta = jsonOf(
   z.object({
     type: z.literal("session_meta"),
     payload: z.object({ id: uuid.optional(), session_id: uuid.optional() }),
   }),
 );
-async function descriptorId(
+export async function descriptorId(
   target: string,
   vendor: Vendor | undefined,
 ): Promise<string | undefined> {
@@ -309,7 +321,7 @@ async function sessionId(
   }
   return ids.size === 1 ? [...ids][0] : undefined;
 }
-async function workers(options: Options): Promise<Row[] | null> {
+export async function workers(options: Options): Promise<Row[] | null> {
   return Promise.try(async () => {
     const child = Bun.spawn({
       cmd: [options.agx, "worker", "ls", "--json", "--running"],
@@ -331,6 +343,7 @@ async function workers(options: Options): Promise<Row[] | null> {
   }).catch(() => null);
 }
 export async function produce(options: Options) {
+  if (options.platform === "darwin") return produceMac(options);
   const rows = await workers(options);
   const first = await sample(options, rows ?? []);
   if (first === null) return null;
@@ -547,7 +560,11 @@ export async function run(
   return Promise.try(async () => {
     const document = await produce(options);
     if (document === null) {
-      process.stderr.write("agent-cpu: invalid /proc/stat\n");
+      process.stderr.write(
+        options.platform === "darwin"
+          ? "agent-cpu: invalid resource sample\n"
+          : "agent-cpu: invalid /proc/stat\n",
+      );
       return 1;
     }
     const data = `${JSON.stringify(document)}\n`;
@@ -564,7 +581,7 @@ export async function run(
   });
 }
 async function main() {
-  if (process.platform !== "linux") {
+  if (process.platform !== "linux" && process.platform !== "darwin") {
     process.stderr.write("agent-cpu: unsupported platform\n");
     return 1;
   }
@@ -574,6 +591,8 @@ async function main() {
     return 1;
   }
   const options = defaults();
+  options.platform = process.platform;
+  if (process.platform === "darwin") return run(args[1], options);
   const tick = Bun.spawn({
     cmd: ["getconf", "CLK_TCK"],
     stdout: "pipe",

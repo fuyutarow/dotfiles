@@ -960,21 +960,22 @@ export async function deployGpuSampler(
   return undefined;
 }
 
-async function deployMacStatusline(
+export async function deployMacStatusline(
   ctx: Ctx,
   probe: (args: string[]) => Promise<{ code: number; out: string }>,
+  name = "statusline-sampler",
 ): Promise<Error | undefined> {
-  const plist = join(ctx.home, "Library/LaunchAgents/statusline-sampler.plist");
+  const plist = join(ctx.home, `Library/LaunchAgents/${name}.plist`);
   const target = await realpath(plist).catch(() => null);
   const source = await realpath(
-    join(ctx.dotfiles, "launchd/statusline-sampler.plist"),
+    join(ctx.dotfiles, `launchd/${name}.plist`),
   ).catch(() => null);
   if (source === null || target !== source)
     return new Error(
-      "statusline-sampler.plist is not the declared link; repair: mise run link:dots",
+      `${name}.plist is not the declared link; repair: mise run link:dots`,
     );
   const domain = `gui/${process.getuid?.()}`;
-  const label = `${domain}/statusline-sampler`;
+  const label = `${domain}/${name}`;
   const loaded = await probe(["print", label]);
   if (loaded.code === 0) {
     const stopped = await probe(["bootout", label]);
@@ -988,7 +989,7 @@ async function deployMacStatusline(
     return new Error(
       `launchctl bootstrap failed: ${result.out}; repair: mise run link:dots`,
     );
-  say("loaded: statusline-sampler launchd agent (every 5s)");
+  say(`loaded: ${name} launchd agent`);
   return undefined;
 }
 
@@ -1182,6 +1183,26 @@ async function main(): Promise<Error | void> {
   if (gpuSamplerError !== undefined) return gpuSamplerError;
   const ownersError = await deployStatuslineOwners(ctx);
   if (ownersError !== undefined) return ownersError;
+  if (ctx.os === "mac") {
+    const agentCpuError = await deployMacStatusline(
+      ctx,
+      async (args) => {
+        const child = Bun.spawn(["launchctl", ...args], {
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 10_000,
+        });
+        const [out, err, code] = await Promise.all([
+          child.stdout.text(),
+          child.stderr.text(),
+          child.exited,
+        ]);
+        return { code, out: `${out}${err}`.trim() };
+      },
+      "agent-cpu",
+    );
+    if (agentCpuError !== undefined) return agentCpuError;
+  }
   const daemonError = deployCccDaemon(ctx);
   if (daemonError !== undefined) return daemonError;
   const triggersError = await deployDeclaredTriggers(ctx, triggers);

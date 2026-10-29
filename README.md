@@ -141,6 +141,9 @@ The A-class `agx` and `dx` suites are Homebrew core tools installed from the sha
 (`fuyutarow/tap/agx` and `fuyutarow/tap/dx`). Their release procedures install an explicit
 version and check `agx -V` and `dx --version` on PATH in every consumer. INV-6 allows no global
 mise tool rows.
+The minimum versions required by this checkout are declared in `tools/tool-tiers/src/core-floor.ts`.
+Post-merge checks them and upgrades only an outdated tap formula; doctor reports the same check.
+An unrelated `dx` on PATH requires the owner to resolve the collision before pulling can complete.
 The agx contracts live in that
 repository's [`contract/README.md`](https://github.com/fuyutarow/agx/blob/13b49ebd/contract/README.md).
 Dotfiles owns its statusline, hook, and landing integrations.

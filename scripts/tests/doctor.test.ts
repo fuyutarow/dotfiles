@@ -26,6 +26,7 @@ import { LINKS } from "../config-registry.ts";
 import { applies, sshSupportsAttachMatch } from "../link-dots.ts";
 import {
   checkAgx,
+  checkToolFloor,
   checkStatuslineOwners,
   CHECKS,
   checkCccDbMap,
@@ -39,6 +40,51 @@ import {
   checkWslGpuManagerPath,
   type Ctx,
 } from "../doctor.ts";
+import type { FloorIO } from "../../tools/tool-tiers/src/core-floor.ts";
+
+test("doctor uses the same floor without upgrading", async () => {
+  let upgrades = 0;
+  const io: FloorIO = {
+    read: (tool) =>
+      Promise.resolve(`${tool} ${tool === "agx" ? "1.22.7" : "0.1.6"}`),
+    installed: () => Promise.resolve(true),
+    upgrade: () => {
+      upgrades++;
+      return Promise.resolve();
+    },
+  };
+  const result = await checkToolFloor(
+    { home: "", dotfiles: "", isMac: true, isWsl: false, isCoreBox: false },
+    io,
+  );
+  expect(result.verdict).toBe("FAIL");
+  expect(result.detail).toContain("installed 1.22.7, required 1.22.8");
+  expect(upgrades).toBe(0);
+});
+
+test("doctor reports untrusted tap with its specific repair", async () => {
+  const io: FloorIO = {
+    read: (tool) =>
+      Promise.resolve(`${tool} ${tool === "agx" ? "1.22.8" : "0.1.6"}`),
+    installed: (tool) =>
+      Promise.resolve(
+        tool === "dx"
+          ? {
+              stderr:
+                "Refusing to load formula fuyutarow/tap/dx from untrusted tap fuyutarow/tap.",
+            }
+          : true,
+      ),
+    upgrade: () => Promise.resolve(),
+  };
+  const result = await checkToolFloor(
+    { home: "", dotfiles: "", isMac: true, isWsl: false, isCoreBox: false },
+    io,
+  );
+  expect(result.verdict).toBe("FAIL");
+  expect(result.detail).toContain("untrusted tap fuyutarow/tap");
+  expect(result.fix).toBe("brew trust fuyutarow/tap");
+});
 import {
   inspectRipGraveyard,
   RIP_GRAVEYARD_MAX_BYTES,

@@ -3,6 +3,107 @@ import { mkdtemp, writeFile, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runSteps, STEPS } from "../post-merge.ts";
+import {
+  checkCoreFloor,
+  type FloorIO,
+} from "../../tools/tool-tiers/src/core-floor.ts";
+
+const untrusted = {
+  stderr:
+    "Refusing to load formula fuyutarow/tap/dx from untrusted tap fuyutarow/tap. Run `brew trust fuyutarow/tap`.",
+};
+
+test.each(["read", "installed", "upgrade"])(
+  "untrusted tap during %s names the trust repair",
+  async (phase) => {
+    const io: FloorIO = {
+      read: (tool) => {
+        if (phase === "read" && tool === "dx")
+          return Promise.resolve(untrusted);
+        return Promise.resolve(tool === "agx" ? "agx 1.13.14" : "dx 0.1.6");
+      },
+      installed: (tool) =>
+        Promise.resolve(
+          phase === "installed" && tool === "dx" ? untrusted : true,
+        ),
+      upgrade: () =>
+        Promise.resolve(phase === "upgrade" ? untrusted : undefined),
+    };
+    const result = await checkCoreFloor(io, true);
+    expect(result.ok).toBe(false);
+    expect(result.detail).toContain(
+      "untrusted tap fuyutarow/tap; repair: brew trust fuyutarow/tap",
+    );
+    expect(result.fix).toBe("brew trust fuyutarow/tap");
+  },
+);
+
+test("floor upgrades only outdated tap tools and rechecks them", async () => {
+  const versions = { agx: "1.13.14", dx: "0.1.6" };
+  const upgraded: string[] = [];
+  const io: FloorIO = {
+    read: (tool) => Promise.resolve(`${tool} ${versions[tool]}`),
+    installed: () => Promise.resolve(true),
+    upgrade: (tool) => {
+      upgraded.push(tool);
+      versions[tool] = "1.22.8";
+      return Promise.resolve();
+    },
+  };
+  expect((await checkCoreFloor(io, true)).ok).toBe(true);
+  expect(upgraded).toEqual(["agx"]);
+  expect((await checkCoreFloor(io, true)).ok).toBe(true);
+  expect(upgraded).toEqual(["agx"]);
+});
+
+test("floor fails loudly when upgrade does not reach the floor", async () => {
+  const io: FloorIO = {
+    read: (tool) =>
+      Promise.resolve(`${tool} ${tool === "agx" ? "1.13.14" : "0.1.6"}`),
+    installed: () => Promise.resolve(true),
+    upgrade: () => Promise.resolve(),
+  };
+  expect(await checkCoreFloor(io, true)).toEqual({
+    ok: false,
+    detail: "agx: installed 1.13.14, required 1.22.8; repair: mise run up",
+  });
+});
+
+test("floor upgrades dx when needed and rejects a still-old result", async () => {
+  const upgraded: string[] = [];
+  const io: FloorIO = {
+    read: (tool) => Promise.resolve(tool === "dx" ? "dx 0.1.5" : "agx 1.22.8"),
+    installed: () => Promise.resolve(true),
+    upgrade: (tool) => {
+      upgraded.push(tool);
+      return Promise.resolve();
+    },
+  };
+  expect((await checkCoreFloor(io, true)).detail).toBe(
+    "dx: installed 0.1.5, required 0.1.6; repair: mise run up",
+  );
+  expect(upgraded).toEqual(["dx"]);
+});
+
+test.each([false, true])(
+  "dx collision blocks every upgrade (formula installed: %s)",
+  async (installed) => {
+    const upgraded: string[] = [];
+    const io: FloorIO = {
+      read: (tool) =>
+        Promise.resolve(tool === "dx" ? "deno 2.9.8" : "agx 1.13.14"),
+      installed: (tool) => Promise.resolve(tool === "dx" ? installed : true),
+      upgrade: (tool) => {
+        upgraded.push(tool);
+        return Promise.resolve();
+      },
+    };
+    expect((await checkCoreFloor(io, true)).detail).toContain(
+      "dx: fuyutarow/tap/dx not installed (PATH dx is another program)",
+    );
+    expect(upgraded).toEqual([]);
+  },
+);
 
 test("a recursive PATH Bun fixture is bypassed by every script step", async () => {
   const root = await mkdtemp(join(tmpdir(), "post-merge-"));
@@ -72,9 +173,9 @@ test("a failed step stays failed and prevents subsequent work", async () => {
   ).toBe(7);
   expect(lines[1]).toBe("[post-merge] bad failed (exit 7)");
   expect(lines.join("\n")).not.toContain("never");
-  expect(STEPS.reduce((sum, step) => sum + step.boundMs, 0)).toBeLessThan(
-    60_000,
-  );
+  expect(
+    STEPS.find((step) => step.name === "core-floor")?.boundMs,
+  ).toBeLessThanOrEqual(50_000);
 }, 15_000);
 
 test("link findings allow remaining deploy steps and remain a non-zero outcome", async () => {

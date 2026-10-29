@@ -6,6 +6,11 @@ export type Step = { name: string; args: string[]; boundMs: number };
 
 export const STEPS: Step[] = [
   {
+    name: "core-floor",
+    args: ["tools/tool-tiers/src/core-floor.ts"],
+    boundMs: 45_000,
+  },
+  {
     name: "deps:install",
     args: ["install", "--frozen-lockfile"],
     boundMs: 15_000,
@@ -30,9 +35,14 @@ export async function runSteps(
   report: (line: string) => void = (line) => process.stderr.write(`${line}\n`),
 ): Promise<number> {
   let findings = 0;
+  const deadline = performance.now() + 50_000;
   for (const step of steps) {
     const started = performance.now();
-    const signal = AbortSignal.timeout(step.boundMs);
+    const boundMs = Math.min(
+      step.boundMs,
+      Math.max(1, Math.floor(deadline - started)),
+    );
+    const signal = AbortSignal.timeout(boundMs);
     // Use the already running, mise-resolved binary, never the PATH wrapper. Its directory
     // also leads child PATHs so transitive Bun invocations cannot recurse through mise exec.
     const child = Bun.spawn([process.execPath, ...step.args], {
@@ -53,9 +63,7 @@ export async function runSteps(
       `[post-merge] ${step.name} ${((performance.now() - started) / 1000).toFixed(3)}s`,
     );
     if (signal.aborted) {
-      report(
-        `[post-merge] ${step.name} timed out (bound ${step.boundMs / 1000}s)`,
-      );
+      report(`[post-merge] ${step.name} timed out (bound ${boundMs / 1000}s)`);
       return 124;
     }
     if (code === 0) continue;

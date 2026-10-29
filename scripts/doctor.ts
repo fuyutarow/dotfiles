@@ -77,6 +77,11 @@ import { RENDERED } from "./config-registry.ts";
 import { googleDriveTargets } from "./link-dots.ts";
 import { brewPrefix, coreCommands, corePathProblems } from "./core-tools.ts";
 import {
+  checkCoreFloor,
+  coreFloorIO,
+  type FloorIO,
+} from "../tools/tool-tiers/src/core-floor.ts";
+import {
   declaredToolCommands,
   findToolCommandShadows,
 } from "../tools/tool-tiers/src/tool-tiers.ts";
@@ -2064,7 +2069,17 @@ type Check = {
   applies: (ctx: Ctx) => string | null;
 };
 const always = () => null;
+export async function checkToolFloor(
+  _ctx: Ctx,
+  io: FloorIO = coreFloorIO,
+): Promise<Finding> {
+  const result = await checkCoreFloor(io, false);
+  return result.ok
+    ? pass("core-floor", result.detail)
+    : fail("core-floor", result.detail, result.fix ?? "mise run up");
+}
 export const CHECKS: Check[] = [
+  { name: "core-floor", run: checkToolFloor, applies: always },
   { name: "rip-graveyard", run: checkRipGraveyard, applies: always },
   { name: "rip-graveyard-tmp", run: checkRipGraveyardTmp, applies: always },
   { name: "links", run: checkLinks, applies: always },

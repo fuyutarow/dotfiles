@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 — 2026-10-29
+
+- Check declared agx and dx version floors and diagnose untrusted taps.
+
 ## 0.1.4 — 2026-10-17
 
 - Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.

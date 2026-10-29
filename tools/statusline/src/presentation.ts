@@ -12,7 +12,7 @@ import { sessionProcessMatches } from "./session-discovery.ts";
 const PRESENTATION_PROTOCOL = "session-inventory-worker-scope-v4";
 
 export const presentationPath = () =>
-  `${process.env.STATUSLINE_OWNER_STATE ?? join(process.env.HOME ?? "", ".local/state/statusline/owner.json")}.view`;
+  `${process.env["STATUSLINE_OWNER_STATE"] ?? join(process.env["HOME"] ?? "", ".local/state/statusline/owner.json")}.view`;
 export interface PresentationSession {
   id: string;
   pid: number;

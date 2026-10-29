@@ -37,7 +37,7 @@ export async function prepareDisplayFields(
   codex = false,
 ): Promise<void> {
   const store =
-    root ?? join(process.env.HOME ?? "", ".cache/claude/statusline/fields");
+    root ?? join(process.env["HOME"] ?? "", ".cache/claude/statusline/fields");
   // Remember the disk inventory independently, so even a failed config read retains each disk.
   const inventory = await retainField(
     "disk-inventory",

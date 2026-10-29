@@ -12,8 +12,8 @@ import {
 } from "./session-discovery.ts";
 
 export const ownerStatePath = (env: NodeJS.ProcessEnv = process.env) =>
-  env.STATUSLINE_OWNER_STATE ??
-  join(join(env.HOME ?? "", ".local/state"), "statusline", "owner.json");
+  env["STATUSLINE_OWNER_STATE"] ??
+  join(join(env["HOME"] ?? "", ".local/state"), "statusline", "owner.json");
 export const OwnerFieldSchema = z.object({
   at: z.number(),
   value: z.unknown(),
@@ -29,13 +29,13 @@ const ResultWireSchema = z.record(z.string(), z.unknown());
 export const resultSchema = <T extends z.ZodType>(value: T) =>
   ResultWireSchema.transform((wire, context) => {
     if (Object.hasOwn(wire, "error")) {
-      const failure = ErrorTextSchema.safeParse(wire.error);
+      const failure = ErrorTextSchema.safeParse(wire["error"]);
       if (failure.success) return err(failure.data);
       context.addIssue({ code: "custom", message: "invalid owner error" });
       return z.NEVER;
     }
     const parsed = value.safeParse(
-      wire.value === null ? undefined : wire.value,
+      wire["value"] === null ? undefined : wire["value"],
     );
     if (!parsed.success) {
       context.addIssue({ code: "custom", message: "invalid owner value" });
@@ -158,7 +158,7 @@ const RateSchema = z
 /** Validate the previous sampler-owned wire record before reusing its baseline. */
 export function codexCreditMemoFromSnapshot(snapshot: OwnerState | undefined) {
   const parsed = resultSchema(RateSchema.optional()).safeParse(
-    snapshot?.fields.codexRate?.value,
+    snapshot?.fields["codexRate"]?.value,
   );
   return parsed.success
     ? parsed.data.unwrapOr(undefined)?.creditMemo
@@ -196,7 +196,7 @@ export async function readRenderSessions(
   const snapshot = await pending;
   const parsed = z
     .array(AgentSessionSchema)
-    .safeParse(snapshot?.fields.sessions?.value);
+    .safeParse(snapshot?.fields["sessions"]?.value);
   if (!parsed.success) return [];
   const canonical =
     cwd === process.cwd() ? cwd : await realpath(cwd).catch(() => cwd);
@@ -251,7 +251,7 @@ export function ownerSources(
       (await read(`name:${sid}`, resultSchema(z.string().optional()))) ??
       ok(undefined),
     rcState: async () =>
-      (process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ?? "") !== ""
+      (process.env["CLAUDE_CODE_BRIDGE_SESSION_ID"] ?? "") !== ""
         ? "on"
         : ((await read("rcState", z.enum(["on", "off", "unknown"]))) ??
           "unknown"),
@@ -284,7 +284,7 @@ export function ownerSources(
       )) ?? { jobs: [], orphans: 0, failed: "sampler unavailable" },
     hostLoad: async () => {
       const legacy =
-        (await pending)?.fields.cpuPct === undefined
+        (await pending)?.fields["cpuPct"] === undefined
           ? await read("hostLoad", HostSchema)
           : undefined;
       return {
@@ -330,7 +330,7 @@ export function ownerSources(
         resultSchema(RecoverHealthSchema.optional()),
       )) ?? err("sampler unavailable"),
     dispatchWarning: async () => {
-      const error = (await pending)?.fields.dispatchWarning?.error;
+      const error = (await pending)?.fields["dispatchWarning"]?.error;
       if (error !== undefined) return err(error);
       return (
         (await read("dispatchWarning", resultSchema(z.string().optional()))) ??

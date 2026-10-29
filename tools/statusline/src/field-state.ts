@@ -59,7 +59,7 @@ const SavedSchema = z.object({ at: z.number(), value: z.string() });
 export async function retainField(
   key: string,
   current: FieldState<string>,
-  root = join(process.env.HOME ?? "", ".cache/claude/statusline/fields"),
+  root = join(process.env["HOME"] ?? "", ".cache/claude/statusline/fields"),
   now = Temporal.Now.instant().epochMilliseconds,
 ): Promise<FieldState<string>> {
   const hash = new Bun.CryptoHasher("sha256").update(key).digest("hex");

@@ -9,11 +9,11 @@ import {
 import { rateRow } from "../src/rate-limits.ts";
 import { writeUsageSnapshotAsync } from "../src/usage-snapshot.ts";
 
-const priorHome = process.env.HOME;
+const priorHome = process.env["HOME"];
 const roots: string[] = [];
 afterEach(() => {
-  if (priorHome === undefined) delete process.env.HOME;
-  else process.env.HOME = priorHome;
+  if (priorHome === undefined) delete process.env["HOME"];
+  else process.env["HOME"] = priorHome;
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
 });
@@ -22,7 +22,7 @@ test("the sampler atomically snapshots rates while the rate renderer only format
   const root = mkdtempSync(join(tmpdir(), "statusline-usage-"));
   roots.push(root);
   const home = join(root, "home");
-  process.env.HOME = home;
+  process.env["HOME"] = home;
   const now =
     Temporal.Instant.from("2026-10-15T04:00:00Z").epochMilliseconds / 1000;
   const facts = {

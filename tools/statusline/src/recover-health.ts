@@ -18,7 +18,7 @@ export const RecoverHealthSchema = z.object({
 export type RecoverHealth = z.output<typeof RecoverHealthSchema>;
 
 export const RECOVER_HEALTH_CACHE = join(
-  process.env.HOME ?? homedir(),
+  process.env["HOME"] ?? homedir(),
   ".cache/claude/statusline/recover-health.json",
 );
 export const RECOVER_HEALTH_LOCK = RECOVER_HEALTH_CACHE + ".lock";

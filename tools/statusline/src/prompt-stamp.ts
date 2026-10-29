@@ -60,7 +60,7 @@ export const nowEpochSec = (): number =>
   Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
 
 /** zsh %~ : leading $HOME -> ~ */
-export function tildePath(p: string, home = process.env.HOME ?? ""): string {
+export function tildePath(p: string, home = process.env["HOME"] ?? ""): string {
   if (p === home) return "~";
   if (home !== "" && p.startsWith(`${home}/`))
     return `~${p.slice(home.length)}`;

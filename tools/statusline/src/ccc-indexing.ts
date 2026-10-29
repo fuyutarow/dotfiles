@@ -67,7 +67,7 @@ const PolicyStatusSchema = z.object({
 });
 
 function policyStatusPaths(): string[] {
-  const runtime = process.env.XDG_RUNTIME_DIR;
+  const runtime = process.env["XDG_RUNTIME_DIR"];
   const uid = process.getuid?.() ?? "unknown";
   const directories = [
     join(tmpdir(), `agent-resource-control-${uid}`),

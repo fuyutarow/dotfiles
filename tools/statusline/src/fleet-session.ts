@@ -42,7 +42,7 @@ async function sessionName(
   if (vendor === "codex")
     return unavailable("Codex rollout has no addressable agent name");
   if (resolvedName !== undefined && resolvedName !== "") return resolvedName;
-  if (process.env.HERDR_ENV !== "1")
+  if (process.env["HERDR_ENV"] !== "1")
     return unavailable(
       "Claude name lookup is not enabled outside Herdr sessions",
     );
@@ -135,7 +135,7 @@ export async function writeStatuslineFleetSession(
       session.sessionName,
       resolvedName,
     );
-    const paneId = process.env.TMUX_PANE;
+    const paneId = process.env["TMUX_PANE"];
     const record: FleetSession = {
       schema: 1,
       session_id: sessionId,
@@ -152,7 +152,7 @@ export async function writeStatuslineFleetSession(
       ),
       ctx,
       rate,
-      cwd: session.cwd ?? process.env.PWD ?? process.cwd(),
+      cwd: session.cwd ?? process.env["PWD"] ?? process.cwd(),
       pane_id: paneId ?? null,
       updated_at: Temporal.Now.instant().toString(),
     };

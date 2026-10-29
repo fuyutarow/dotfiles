@@ -106,13 +106,16 @@ export function isolatedStatuslineEnv(
   env: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
   const home =
-    env.HOME === undefined || env.HOME === ""
+    env["HOME"] === undefined || env["HOME"] === ""
       ? tempDir("statusline-env-home-")
-      : env.HOME;
+      : env["HOME"];
   let state = join(home, ".local", "state", "agx-test");
-  if (env.AGX_STATE_DIR !== undefined && env.AGX_STATE_DIR !== "") {
-    state = env.AGX_STATE_DIR;
-  } else if (env.XDG_STATE_HOME !== undefined && env.XDG_STATE_HOME !== "") {
+  if (env["AGX_STATE_DIR"] !== undefined && env["AGX_STATE_DIR"] !== "") {
+    state = env["AGX_STATE_DIR"];
+  } else if (
+    env["XDG_STATE_HOME"] !== undefined &&
+    env["XDG_STATE_HOME"] !== ""
+  ) {
     // Empty keeps migration tests on their temporary XDG root to exercise both reader paths.
     state = "";
   }
@@ -161,7 +164,9 @@ export function coreSnapshot(
       runs: runs.map((value) => {
         const row = schema.safeParse(value);
         return row.success && row.data.state === "running"
-          ? Object.assign({}, row.data, { phase: row.data.phase ?? "working" })
+          ? Object.assign({}, row.data, {
+              phase: row.data["phase"] ?? "working",
+            })
           : value;
       }),
       summary: {

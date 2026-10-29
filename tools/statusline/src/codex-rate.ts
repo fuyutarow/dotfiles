@@ -410,7 +410,7 @@ function rolloutActions(
 
 /** Account limits are shared across sessions, including a newly opened empty session. */
 export async function readCodexRate(
-  root = join(process.env.HOME ?? "", ".codex", "sessions"),
+  root = join(process.env["HOME"] ?? "", ".codex", "sessions"),
   _session?: string,
   nowMs = Temporal.Now.instant().epochMilliseconds,
   creditMemo?: CodexCreditMemo,

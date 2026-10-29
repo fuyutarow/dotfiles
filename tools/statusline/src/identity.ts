@@ -13,7 +13,7 @@ import {
   writeCacheAsync,
 } from "./bounded.ts";
 
-const HOME = process.env.HOME ?? "";
+const HOME = process.env["HOME"] ?? "";
 const fleetUnavailable = (why: string) => ({ na: true as const, why });
 // Which Claude account this CLI is authenticated as, AND the per-model weekly caps below —
 // one parse of ~/.claude.json serves both, the same file `claude` itself writes on login and
@@ -175,7 +175,7 @@ const RcProbeCacheSchema = z.record(z.string(), z.boolean());
  * re-scan ~230 MB on every render.
  */
 function rcProbeValid(): boolean | undefined {
-  const exe = process.env.CLAUDE_CODE_EXECPATH;
+  const exe = process.env["CLAUDE_CODE_EXECPATH"];
   if (exe === undefined || exe === "") return undefined;
   const st = fromThrowable(() => statSync(exe))();
   if (st.isErr()) return undefined;
@@ -193,7 +193,7 @@ function rcProbeValid(): boolean | undefined {
 
 // Sync compatibility probe retained for non-render callers; the renderer uses rcStateAsync.
 export function rcState(): RcState {
-  if ((process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ?? "") !== "") return "on";
+  if ((process.env["CLAUDE_CODE_BRIDGE_SESSION_ID"] ?? "") !== "") return "on";
   return rcProbeValid() === true ? "off" : "unknown";
 }
 async function binaryContainsAsync(
@@ -219,7 +219,7 @@ async function binaryContainsAsync(
   return file.size === 0 ? undefined : false;
 }
 async function rcProbeValidAsync(): Promise<boolean | undefined> {
-  const exe = process.env.CLAUDE_CODE_EXECPATH;
+  const exe = process.env["CLAUDE_CODE_EXECPATH"];
   if (exe === undefined || exe === "") return undefined;
   const st = await stat(exe).catch(() => null);
   if (st === null) return undefined;
@@ -233,7 +233,7 @@ async function rcProbeValidAsync(): Promise<boolean | undefined> {
   return valid;
 }
 export async function rcStateAsync(): Promise<RcState> {
-  if ((process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ?? "") !== "") return "on";
+  if ((process.env["CLAUDE_CODE_BRIDGE_SESSION_ID"] ?? "") !== "") return "on";
   return (await rcProbeValidAsync()) === true ? "off" : "unknown";
 }
 
@@ -244,9 +244,9 @@ const AGENT_LIST_TIMEOUT_MS = 3000; // `claude agents --json`, slower than the 2
 // statusLine commands can run with a narrower PATH than an interactive shell; prefer the env
 // var Claude Code exports for its own binary over a bare PATH lookup.
 const CLAUDE_BIN =
-  process.env.CLAUDE_CODE_EXECPATH !== undefined &&
-  process.env.CLAUDE_CODE_EXECPATH !== ""
-    ? process.env.CLAUDE_CODE_EXECPATH
+  process.env["CLAUDE_CODE_EXECPATH"] !== undefined &&
+  process.env["CLAUDE_CODE_EXECPATH"] !== ""
+    ? process.env["CLAUDE_CODE_EXECPATH"]
     : "claude";
 
 // `hint`: the stdin session_name seen when this entry was fetched — a different value now means
@@ -386,11 +386,11 @@ export async function reportToHerdr(
   codexSessionId?: string,
   codexCwd?: string,
 ): Promise<void> {
-  const paneId = process.env.HERDR_PANE_ID;
+  const paneId = process.env["HERDR_PANE_ID"];
   const id =
-    vendor === "codex" ? codexSessionId : process.env.CLAUDE_CODE_SESSION_ID;
+    vendor === "codex" ? codexSessionId : process.env["CLAUDE_CODE_SESSION_ID"];
   if (
-    process.env.HERDR_ENV !== "1" ||
+    process.env["HERDR_ENV"] !== "1" ||
     paneId === undefined ||
     paneId === "" ||
     id === undefined ||

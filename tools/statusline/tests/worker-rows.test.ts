@@ -13,7 +13,7 @@ const VENDOR = "01a1111b-7dab-7d61-8f9b-231c4cc9082b";
 test("worker snapshot uses doctor's classification and hides vendor sessions", async () => {
   const root = await mkdtemp(join(tmpdir(), "statusline-worker-rows-"));
   const env = {
-    PATH: process.env.PATH ?? "",
+    PATH: process.env["PATH"] ?? "",
     HOME: root,
     TMPDIR: root,
     XDG_STATE_HOME: root,

@@ -11,7 +11,7 @@ await mock.module("node:fs/promises", () => ({
       path === "/usr/bin/nvidia-smi"
     )
       return realAccess(
-        `${process.env.HOME}/missing-system-gpu-executable`,
+        `${process.env["HOME"]}/missing-system-gpu-executable`,
         mode,
       );
     return realAccess(path, mode);

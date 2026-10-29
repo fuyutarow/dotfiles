@@ -24,8 +24,8 @@ export const AgentSessionSchema = z.object({
   started_at: z.string(),
 });
 
-const home = () => process.env.HOME ?? "";
-const procRoot = () => process.env.STATUSLINE_PROC_ROOT ?? "/proc";
+const home = () => process.env["HOME"] ?? "";
+const procRoot = () => process.env["STATUSLINE_PROC_ROOT"] ?? "/proc";
 type DiscoveryFs = Pick<
   typeof fs,
   "open" | "readdir" | "readFile" | "readlink" | "realpath" | "stat"
@@ -72,7 +72,7 @@ export async function sessionProcessMatches(session: {
 }): Promise<boolean> {
   if (
     process.platform !== "linux" &&
-    process.env.STATUSLINE_PROC_ROOT === undefined
+    process.env["STATUSLINE_PROC_ROOT"] === undefined
   )
     return true;
   if (session.process_generation === undefined) return false;
@@ -266,10 +266,10 @@ async function claudeSession(
   if (raw === null) return null;
   const parsed = jsonText.safeParse(raw);
   const record = parsed.success ? asRecord(parsed.data) : undefined;
-  const sessionId = text(record?.sessionId);
-  const recordCwd = text(record?.cwd);
-  const socket = text(record?.messagingSocketPath);
-  const startedAt = timestamp(record?.startedAt);
+  const sessionId = text(record?.["sessionId"]);
+  const recordCwd = text(record?.["cwd"]);
+  const socket = text(record?.["messagingSocketPath"]);
+  const startedAt = timestamp(record?.["startedAt"]);
   if (
     sessionId === undefined ||
     recordCwd === undefined ||
@@ -343,11 +343,11 @@ async function codexSessions(
       const first = await readFirstLine(path, io);
       const parsed = jsonText.safeParse(first);
       const row = parsed.success ? asRecord(parsed.data) : undefined;
-      const payload = asRecord(row?.payload);
-      const sessionId = text(payload?.session_id) ?? text(payload?.id);
-      const sessionCwd = text(payload?.cwd);
+      const payload = asRecord(row?.["payload"]);
+      const sessionId = text(payload?.["session_id"]) ?? text(payload?.["id"]);
+      const sessionCwd = text(payload?.["cwd"]);
       if (
-        row?.type !== "session_meta" ||
+        row?.["type"] !== "session_meta" ||
         sessionId === undefined ||
         sessionCwd === undefined
       )
@@ -359,7 +359,7 @@ async function codexSessions(
       if (info?.isFile() !== true) return null;
       const started = z.iso
         .datetime({ offset: true })
-        .safeParse(payload?.timestamp);
+        .safeParse(payload?.["timestamp"]);
       const session: AgentSession = {
         vendor: "codex",
         pid,
@@ -405,7 +405,7 @@ export async function discoverSessions(
   allCwds = false,
   io: DiscoveryFs = fs,
   source: ProcessSource | undefined = process.platform === "darwin" &&
-  process.env.STATUSLINE_PROC_ROOT === undefined
+  process.env["STATUSLINE_PROC_ROOT"] === undefined
     ? darwinProcessSource()
     : undefined,
   onFailure: (reason: string) => void = () => {},
@@ -468,30 +468,33 @@ function codexPayload(raw: string, session: AgentSession) {
   for (const line of raw.split("\n")) {
     const parsed = jsonText.safeParse(line);
     const row = parsed.success ? asRecord(parsed.data) : undefined;
-    const payload = asRecord(row?.payload);
-    if (row?.type === "turn_context") {
-      model = text(payload?.model) ?? model;
+    const payload = asRecord(row?.["payload"]);
+    if (row?.["type"] === "turn_context") {
+      model = text(payload?.["model"]) ?? model;
       effort =
-        text(payload?.effort) ?? text(payload?.reasoning_effort) ?? effort;
+        text(payload?.["effort"]) ??
+        text(payload?.["reasoning_effort"]) ??
+        effort;
     }
     if (
-      row?.type === "event_msg" &&
-      payload?.type === "thread_settings_applied"
+      row?.["type"] === "event_msg" &&
+      payload?.["type"] === "thread_settings_applied"
     ) {
-      const settings = asRecord(payload.thread_settings);
-      model = text(settings?.model) ?? model;
-      effort = text(settings?.reasoning_effort) ?? effort;
+      const settings = asRecord(payload["thread_settings"]);
+      model = text(settings?.["model"]) ?? model;
+      effort = text(settings?.["reasoning_effort"]) ?? effort;
     }
-    if (row?.type !== "event_msg" || payload?.type !== "token_count") continue;
-    const info = asRecord(payload.info);
-    const usage = asRecord(info?.last_token_usage);
+    if (row?.["type"] !== "event_msg" || payload?.["type"] !== "token_count")
+      continue;
+    const info = asRecord(payload["info"]);
+    const usage = asRecord(info?.["last_token_usage"]);
     inputTokens =
-      typeof usage?.input_tokens === "number"
-        ? usage.input_tokens
+      typeof usage?.["input_tokens"] === "number"
+        ? usage["input_tokens"]
         : inputTokens;
     contextWindow =
-      typeof info?.model_context_window === "number"
-        ? info.model_context_window
+      typeof info?.["model_context_window"] === "number"
+        ? info["model_context_window"]
         : contextWindow;
   }
   let context:
@@ -562,18 +565,21 @@ export async function payloadForSession(
     if (!line.includes('"usage"') && !line.includes('"model"')) continue;
     const parsed = jsonText.safeParse(line);
     const row = parsed.success ? asRecord(parsed.data) : undefined;
-    const message = asRecord(row?.message);
-    const usage = asRecord(message?.usage);
-    if (modelName === undefined && typeof message?.model === "string")
-      modelName = message.model;
-    if (inputTokens === undefined && typeof usage?.input_tokens === "number")
+    const message = asRecord(row?.["message"]);
+    const usage = asRecord(message?.["usage"]);
+    if (modelName === undefined && typeof message?.["model"] === "string")
+      modelName = message["model"];
+    if (
+      inputTokens === undefined &&
+      typeof usage?.["input_tokens"] === "number"
+    )
       inputTokens =
-        usage.input_tokens +
-        (typeof usage.cache_read_input_tokens === "number"
-          ? usage.cache_read_input_tokens
+        usage["input_tokens"] +
+        (typeof usage["cache_read_input_tokens"] === "number"
+          ? usage["cache_read_input_tokens"]
           : 0) +
-        (typeof usage.cache_creation_input_tokens === "number"
-          ? usage.cache_creation_input_tokens
+        (typeof usage["cache_creation_input_tokens"] === "number"
+          ? usage["cache_creation_input_tokens"]
           : 0);
     if (modelName !== undefined && inputTokens !== undefined) break;
   }

@@ -25,16 +25,16 @@ import { modelName } from "../src/model-context.ts";
 import { version } from "../package.json";
 
 const roots: string[] = [];
-const oldOwner = process.env.STATUSLINE_OWNER_STATE;
-const oldProc = process.env.STATUSLINE_PROC_ROOT;
-const oldXdg = process.env.XDG_STATE_HOME;
+const oldOwner = process.env["STATUSLINE_OWNER_STATE"];
+const oldProc = process.env["STATUSLINE_PROC_ROOT"];
+const oldXdg = process.env["XDG_STATE_HOME"];
 afterEach(async () => {
-  if (oldOwner === undefined) delete process.env.STATUSLINE_OWNER_STATE;
-  else process.env.STATUSLINE_OWNER_STATE = oldOwner;
-  if (oldProc === undefined) delete process.env.STATUSLINE_PROC_ROOT;
-  else process.env.STATUSLINE_PROC_ROOT = oldProc;
-  if (oldXdg === undefined) delete process.env.XDG_STATE_HOME;
-  else process.env.XDG_STATE_HOME = oldXdg;
+  if (oldOwner === undefined) delete process.env["STATUSLINE_OWNER_STATE"];
+  else process.env["STATUSLINE_OWNER_STATE"] = oldOwner;
+  if (oldProc === undefined) delete process.env["STATUSLINE_PROC_ROOT"];
+  else process.env["STATUSLINE_PROC_ROOT"] = oldProc;
+  if (oldXdg === undefined) delete process.env["XDG_STATE_HOME"];
+  else process.env["XDG_STATE_HOME"] = oldXdg;
   await Promise.all(
     roots.splice(0).map((path) => rm(path, { recursive: true, force: true })),
   );
@@ -42,8 +42,8 @@ afterEach(async () => {
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "statusline-step3-"));
   roots.push(root);
-  process.env.STATUSLINE_OWNER_STATE = join(root, "owner.json");
-  process.env.STATUSLINE_PROC_ROOT = join(root, "proc");
+  process.env["STATUSLINE_OWNER_STATE"] = join(root, "owner.json");
+  process.env["STATUSLINE_PROC_ROOT"] = join(root, "proc");
   await Promise.all(
     [101, 102].map((pid) =>
       mkdir(join(root, "proc", String(pid)), { recursive: true }),
@@ -118,12 +118,12 @@ test("two live sessions render one location and one machine block; corrupt view 
 
 test("project XDG overrides cannot hide the host sampler; unreadable snapshot retains values across cold reads", async () => {
   const root = await fixture();
-  process.env.XDG_STATE_HOME = join(root, "project/.state");
-  delete process.env.STATUSLINE_OWNER_STATE;
+  process.env["XDG_STATE_HOME"] = join(root, "project/.state");
+  delete process.env["STATUSLINE_OWNER_STATE"];
   expect(ownerStatePath()).toBe(
-    join(process.env.HOME ?? "", ".local/state/statusline/owner.json"),
+    join(process.env["HOME"] ?? "", ".local/state/statusline/owner.json"),
   );
-  process.env.STATUSLINE_OWNER_STATE = join(root, "owner.json");
+  process.env["STATUSLINE_OWNER_STATE"] = join(root, "owner.json");
   const at = Temporal.Now.instant().epochMilliseconds - 65_000;
   await writeFile(
     `${ownerStatePath()}.last-good`,
@@ -142,8 +142,8 @@ test("project XDG overrides cannot hide the host sampler; unreadable snapshot re
   );
   expect(frame.cpuPct.unwrapOr(-1)).toBe(42);
   expect(frame.ram.unwrapOr(undefined)?.pct).toBe(50);
-  expect(frame.ownerAges?.cpu).toBeGreaterThanOrEqual(65_000);
-  expect((await readOwnerState())?.fields.cpuPct?.error).toBe(
+  expect(frame.ownerAges?.["cpu"]).toBeGreaterThanOrEqual(65_000);
+  expect((await readOwnerState())?.fields["cpuPct"]?.error).toBe(
     "owner snapshot unreadable",
   );
 });

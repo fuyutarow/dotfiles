@@ -42,7 +42,7 @@ export async function cachedSource<T extends z.ZodType>(options: {
 }): Promise<z.output<T>> {
   const root =
     options.root ??
-    join(process.env.HOME ?? "", ".cache/claude/statusline/sources");
+    join(process.env["HOME"] ?? "", ".cache/claude/statusline/sources");
   const path = join(root, `${safeKey(options.key)}.json`);
   const text = await readFile(path, "utf8").catch(() => null);
   const hit =
@@ -186,7 +186,7 @@ export async function withSessionRender(
 ): Promise<string> {
   const root =
     options.root ??
-    join(process.env.HOME ?? "", ".cache/claude/statusline/renders");
+    join(process.env["HOME"] ?? "", ".cache/claude/statusline/renders");
   const outputPath = renderPath(root, sid);
   const lockPath = `${outputPath}.lock`;
   const input = options.input ?? null;

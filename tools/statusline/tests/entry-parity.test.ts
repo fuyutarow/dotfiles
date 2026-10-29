@@ -25,7 +25,7 @@ import routing from "./fixtures/agx-c5-1.5.0.json";
 const GOLDEN = join(import.meta.dir, "golden");
 setDefaultTimeout(30000);
 // One-shot regeneration: GOLDEN_FROM=<entry.ts> bun test ... rewrites golden/ from that entry.
-const GOLDEN_FROM = process.env.GOLDEN_FROM;
+const GOLDEN_FROM = process.env["GOLDEN_FROM"];
 // JSON escapes ANSI; inspect decoded presentation strings at the cache boundary.
 function presentationStrings(value: unknown): string[] {
   if (typeof value === "string") return [value];

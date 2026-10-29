@@ -263,5 +263,5 @@ test("Codex and Claude sidebar rows use the same full name and vendor metadata t
   expect(config.success).toBe(true);
   if (!config.success) return;
   const rows = config.data.ui.sidebar.agents.rows_by_agent;
-  expect(rows.codex).toEqual(rows.claude);
+  expect(rows["codex"]).toEqual(rows["claude"]);
 });

@@ -409,9 +409,9 @@ export async function readCodexTranscriptStatus(
 
 export async function readCodexSessionStatus(
   cwd: string,
-  root = join(process.env.HOME ?? "", ".codex", "sessions"),
+  root = join(process.env["HOME"] ?? "", ".codex", "sessions"),
 ): Promise<SessionStatus | undefined> {
-  const sessionId = process.env.CODEX_SESSION_ID?.trim();
+  const sessionId = process.env["CODEX_SESSION_ID"]?.trim();
   if (sessionId === undefined || sessionId === "") return undefined;
   const selected = await readCodexThreadStatus(sessionId, root);
   return selected?.cwd === cwd ? selected : undefined;
@@ -420,7 +420,7 @@ export async function readCodexSessionStatus(
 /** Select an interactive TUI rollout by its thread ID from the rollout filename. */
 export async function readCodexThreadStatus(
   threadId: string,
-  root = join(process.env.HOME ?? "", ".codex", "sessions"),
+  root = join(process.env["HOME"] ?? "", ".codex", "sessions"),
 ): Promise<SessionStatus | undefined> {
   const selected = await cachedRolloutLookup(`thread:${root}:${threadId}`, () =>
     matchingRolloutByThread(root, threadId),
@@ -437,7 +437,7 @@ export async function readCodexThreadStatus(
 /** Reread one already-selected interactive session without selecting a newer cwd match. */
 export async function readCodexPinnedSessionStatus(
   sessionId: string,
-  root = join(process.env.HOME ?? "", ".codex", "sessions"),
+  root = join(process.env["HOME"] ?? "", ".codex", "sessions"),
 ): Promise<SessionStatus | undefined> {
   const selected = await matchingRolloutBySessionId(root, sessionId);
   return readSelectedSessionStatus(selected, selected?.meta.payload.cwd);

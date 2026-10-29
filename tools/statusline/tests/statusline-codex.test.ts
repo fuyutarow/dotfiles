@@ -21,7 +21,7 @@ test("statusline --codex defaults to PWD and reports a missing interactive sessi
     cwd: home,
     env: isolatedStatuslineEnv({
       HOME: home,
-      PATH: process.env.PATH ?? "",
+      PATH: process.env["PATH"] ?? "",
       PWD: "/fixture/codex",
     }),
   });
@@ -38,7 +38,7 @@ test("statusline --codex defaults to PWD and reports a missing interactive sessi
       cwd: home,
       env: isolatedStatuslineEnv({
         HOME: home,
-        PATH: process.env.PATH ?? "",
+        PATH: process.env["PATH"] ?? "",
         PWD: "/fixture/codex",
       }),
     },

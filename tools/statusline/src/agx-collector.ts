@@ -12,7 +12,7 @@ async function collectAgx<S extends z.ZodType>(
   schema: S,
   env: NodeJS.ProcessEnv,
 ) {
-  const executable = Bun.which("mise", { PATH: env.PATH ?? "" });
+  const executable = Bun.which("mise", { PATH: env["PATH"] ?? "" });
   if (executable === null) return err(`${tool} unavailable: no mise on PATH`);
   const result = await execAsyncWithin(
     tool,

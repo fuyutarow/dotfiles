@@ -146,8 +146,8 @@ export function currentDispatcherSession(
 ): string | undefined {
   return [
     payloadSession,
-    env.AGX_DISPATCHER_SESSION,
-    env.CLAUDE_CODE_SESSION_ID,
+    env["AGX_DISPATCHER_SESSION"],
+    env["CLAUDE_CODE_SESSION_ID"],
   ]
     .find((value) => value !== undefined && value.trim() !== "")
     ?.trim();

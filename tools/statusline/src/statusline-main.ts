@@ -188,14 +188,14 @@ async function codexSession(cwd?: string, pid?: string, threadId?: string) {
         }
       : { session, cwd: session.cwd, error: null };
   }
-  const envPwd = process.env.PWD;
+  const envPwd = process.env["PWD"];
   const currentCwd =
     envPwd === undefined || envPwd === "" ? process.cwd() : envPwd;
   const selectedCwd =
     cwd ?? (pid === undefined ? currentCwd : await cwdForPid(pid));
   if (selectedCwd === null || selectedCwd === "")
     return { session: null, error: "--codex requires --pid or --cwd" };
-  const runtimeId = process.env.CODEX_SESSION_ID?.trim();
+  const runtimeId = process.env["CODEX_SESSION_ID"]?.trim();
   if (runtimeId === undefined || runtimeId === "")
     return {
       session: null,
@@ -450,7 +450,7 @@ if (!codexMode) {
   const json = jsonText.safeParse(raw);
   if (!json.success) {
     process.stdout.write(
-      `${coloredHead(promptParts(process.env.PWD ?? ""))} ${DIM}v${version}${RST}\n`,
+      `${coloredHead(promptParts(process.env["PWD"] ?? ""))} ${DIM}v${version}${RST}\n`,
     );
     process.stdout.write(`${DIM}Model: ? | invalid statusline JSON${RST}`);
     process.exit(0);
@@ -463,7 +463,7 @@ if (!codexMode) {
     const path = (issue?.path ?? []).map(String).join(".");
     const where = path !== "" ? path : "(root)";
     process.stdout.write(
-      `${coloredHead(promptParts(process.env.PWD ?? ""))} ${DIM}v${version}${RST}\n`,
+      `${coloredHead(promptParts(process.env["PWD"] ?? ""))} ${DIM}v${version}${RST}\n`,
     );
     process.stdout.write(
       `${DIM}Model: ? | invalid statusline payload: ${where}: ${issue?.message ?? "?"}${RST}`,
@@ -509,7 +509,7 @@ if (liveMode) {
       }
       firstFrame = false;
       if (current === undefined)
-        return `${DIM}Codex: no interactive session for ${args.flags.cwd ?? process.env.PWD ?? process.cwd()}${RST}`;
+        return `${DIM}Codex: no interactive session for ${args.flags.cwd ?? process.env["PWD"] ?? process.cwd()}${RST}`;
       if (current.sessionId === undefined || current.sessionId === "") {
         process.stderr.write(
           "FATAL: live Codex status requires a session with a stable session ID\n",

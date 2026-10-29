@@ -49,8 +49,8 @@ export interface DiskReading {
 // "Disk C:" (a Windows drive under WSL, /mnt/<letter>), "Disk WSL" (the WSL guest root), or
 // "Disk <path>" elsewhere — a bare "C:" or "/" beside CPU/RAM/VRAM did not say what it was.
 export const IS_WSL =
-  process.env.WSL_DISTRO_NAME !== undefined ||
-  process.env.WSL_INTEROP !== undefined;
+  process.env["WSL_DISTRO_NAME"] !== undefined ||
+  process.env["WSL_INTEROP"] !== undefined;
 async function isWslAsync(): Promise<boolean> {
   if (IS_WSL) return true;
   const version = await readFile("/proc/version", "utf8").catch(() => "");

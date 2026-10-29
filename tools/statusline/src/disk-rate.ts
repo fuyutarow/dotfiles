@@ -27,8 +27,8 @@ export type DiskRateState = z.output<typeof DiskRateStateSchema>;
 type Sample = z.output<typeof SampleSchema>;
 
 export function diskRateStatePath(): string {
-  if (process.env.STATUSLINE_DISK_RATE_STATE !== undefined)
-    return process.env.STATUSLINE_DISK_RATE_STATE;
+  if (process.env["STATUSLINE_DISK_RATE_STATE"] !== undefined)
+    return process.env["STATUSLINE_DISK_RATE_STATE"];
   return join(
     join(homedir(), ".local", "state"),
     "statusline",

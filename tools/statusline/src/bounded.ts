@@ -18,8 +18,8 @@ export const recoverInvalid = <T extends z.ZodType>(schema: T) =>
   schema.optional().catch(undefined);
 // A sampler probe may redirect its own state without touching deployed host caches.
 function cachePath(path: string): string {
-  const root = process.env.STATUSLINE_CACHE_ROOT;
-  const prefix = `${process.env.HOME ?? ""}/.cache/claude/`;
+  const root = process.env["STATUSLINE_CACHE_ROOT"];
+  const prefix = `${process.env["HOME"] ?? ""}/.cache/claude/`;
   return root !== undefined && path.startsWith(prefix)
     ? join(root, path.slice(prefix.length))
     : path;

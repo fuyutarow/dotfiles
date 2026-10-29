@@ -81,8 +81,8 @@ export async function publishSnapshots(
   const sys = render(frame, { layout: "snapshot" }).split("\n")[2] ?? "";
   const at = Temporal.Now.instant().epochMilliseconds;
   const root =
-    process.env.STATUSLINE_CACHE_ROOT ??
-    join(process.env.HOME ?? "", ".cache/claude");
+    process.env["STATUSLINE_CACHE_ROOT"] ??
+    join(process.env["HOME"] ?? "", ".cache/claude");
   await writeCacheAsync(join(root, "statusline-sys.json"), {
     at,
     line: plain(sys),
@@ -107,8 +107,8 @@ export async function publishSnapshots(
 // Old presentation caches are retired. Cleanup is owned by this sampler, never a render.
 export async function cleanRetiredCaches(
   root = join(
-    process.env.STATUSLINE_CACHE_ROOT ??
-      join(process.env.HOME ?? "", ".cache/claude"),
+    process.env["STATUSLINE_CACHE_ROOT"] ??
+      join(process.env["HOME"] ?? "", ".cache/claude"),
     "statusline",
   ),
 ): Promise<void> {
@@ -135,7 +135,7 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
   const path = ownerStatePath();
   await mkdir(dirname(path), { recursive: true });
   // systemd removes its RuntimeDirectory even after a killed collector.
-  const lock = process.env.STATUSLINE_SAMPLER_LOCK_DIR ?? `${path}.lock`;
+  const lock = process.env["STATUSLINE_SAMPLER_LOCK_DIR"] ?? `${path}.lock`;
   await mkdir(dirname(lock), { recursive: true });
   let acquired = await mkdir(lock).then(
     () => true,
@@ -246,15 +246,15 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
     const error = discovery.error ?? sourceError;
     if (error === undefined) persist("sessions", sessions);
     else {
-      next.fields.sessions = {
+      next.fields["sessions"] = {
         at: Temporal.Now.instant().epochMilliseconds,
         value: null,
         error: `session discovery failed: ${error}`,
       };
     }
-    const home = process.env.HOME ?? "";
+    const home = process.env["HOME"] ?? "";
     const roots = new Set<string>();
-    const configuredRepository = process.env.STATUSLINE_REPOSITORY_ROOT;
+    const configuredRepository = process.env["STATUSLINE_REPOSITORY_ROOT"];
     const candidates = [
       process.cwd(),
       join(home, "dotfiles"),

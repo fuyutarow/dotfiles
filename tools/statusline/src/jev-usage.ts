@@ -21,7 +21,7 @@ export async function readJevUsage(
   nowMs?: number,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Result<JevUsage | undefined, string>> {
-  const executable = Bun.which("mise", { PATH: env.PATH ?? "" });
+  const executable = Bun.which("mise", { PATH: env["PATH"] ?? "" });
   if (executable === null) return err("Jev usage unavailable: no mise on PATH");
   const result = await execAsyncWithin(
     "Jev usage",

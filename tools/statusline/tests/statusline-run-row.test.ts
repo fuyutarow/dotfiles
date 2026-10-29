@@ -153,8 +153,8 @@ function listedProgress(path: string) {
   if (!parsed.success) return null;
   return {
     ...parsed.data,
-    cost_usd: parsed.data.cost_usd ?? null,
-    session: parsed.data.session ?? null,
+    cost_usd: parsed.data["cost_usd"] ?? null,
+    session: parsed.data["session"] ?? null,
   };
 }
 

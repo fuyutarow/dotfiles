@@ -39,7 +39,7 @@ import {
   writeCacheAsync,
 } from "./bounded.ts";
 
-const HOME = process.env.HOME ?? "";
+const HOME = process.env["HOME"] ?? "";
 
 // Shared shape for a "used/total" memory-style reading (RAM, VRAM): both the fraction string
 // AND the percentage, since render() needs the percentage to threshold-color the segment the
@@ -436,7 +436,7 @@ async function main(): Promise<void> {
 
 // JSON sampler mode is the process boundary for other tools: it exposes this file's existing
 // CPU/RAM readers and storage.ts's tmpfs statfs reading without a second measurement path.
-if (process.env.STATUSLINE_HOST_METRICS === "1") {
+if (process.env["STATUSLINE_HOST_METRICS"] === "1") {
   process.stdout.write(`${JSON.stringify(await readHostMetrics())}\n`);
   process.exit(0);
 }

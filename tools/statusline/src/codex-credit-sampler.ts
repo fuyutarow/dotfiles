@@ -14,7 +14,7 @@ export const CODEX_CREDIT_REFRESH_BUDGET_MS = 5000;
 /** Called once per sampler run, outside the 1,000 ms current-rate source. */
 export async function sampleCodexRate(
   previous: OwnerState | undefined,
-  root = join(process.env.HOME ?? "", ".codex", "sessions"),
+  root = join(process.env["HOME"] ?? "", ".codex", "sessions"),
   nowMs = Temporal.Now.instant().epochMilliseconds,
   refresh: (
     root: string,

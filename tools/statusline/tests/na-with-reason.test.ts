@@ -135,21 +135,22 @@ test("every unavailable leaf and every layout carries reasons, including retaine
 test.each([false, true])(
   "Stop uses the statusline formatter's exact fields (rich input: %s)",
   async (rich) => {
-    const priorRoot = process.env.STATUSLINE_CACHE_ROOT;
-    const priorHome = process.env.HOME;
-    const priorRuntime = process.env.XDG_RUNTIME_DIR;
+    const priorRoot = process.env["STATUSLINE_CACHE_ROOT"];
+    const priorHome = process.env["HOME"];
+    const priorRuntime = process.env["XDG_RUNTIME_DIR"];
     const home = join(root, "home");
-    process.env.HOME = home;
-    process.env.STATUSLINE_CACHE_ROOT = join(home, ".cache/claude");
-    process.env.XDG_RUNTIME_DIR = join(home, "runtime");
+    process.env["HOME"] = home;
+    process.env["STATUSLINE_CACHE_ROOT"] = join(home, ".cache/claude");
+    process.env["XDG_RUNTIME_DIR"] = join(home, "runtime");
     using _env = {
       [Symbol.dispose]: () => {
-        if (priorRoot === undefined) delete process.env.STATUSLINE_CACHE_ROOT;
-        else process.env.STATUSLINE_CACHE_ROOT = priorRoot;
-        if (priorHome === undefined) delete process.env.HOME;
-        else process.env.HOME = priorHome;
-        if (priorRuntime === undefined) delete process.env.XDG_RUNTIME_DIR;
-        else process.env.XDG_RUNTIME_DIR = priorRuntime;
+        if (priorRoot === undefined)
+          delete process.env["STATUSLINE_CACHE_ROOT"];
+        else process.env["STATUSLINE_CACHE_ROOT"] = priorRoot;
+        if (priorHome === undefined) delete process.env["HOME"];
+        else process.env["HOME"] = priorHome;
+        if (priorRuntime === undefined) delete process.env["XDG_RUNTIME_DIR"];
+        else process.env["XDG_RUNTIME_DIR"] = priorRuntime;
       },
     };
     {
@@ -237,20 +238,20 @@ test("snapshot publication composes same-session fleet Claude with cached Codex 
   const home = join(root, "mixed-provider-home");
   const runtime = join(home, "runtime");
   await mkdir(runtime, { recursive: true });
-  const priorRoot = process.env.STATUSLINE_CACHE_ROOT;
-  const priorHome = process.env.HOME;
-  const priorRuntime = process.env.XDG_RUNTIME_DIR;
-  process.env.HOME = home;
-  process.env.STATUSLINE_CACHE_ROOT = join(home, ".cache/claude");
-  process.env.XDG_RUNTIME_DIR = runtime;
+  const priorRoot = process.env["STATUSLINE_CACHE_ROOT"];
+  const priorHome = process.env["HOME"];
+  const priorRuntime = process.env["XDG_RUNTIME_DIR"];
+  process.env["HOME"] = home;
+  process.env["STATUSLINE_CACHE_ROOT"] = join(home, ".cache/claude");
+  process.env["XDG_RUNTIME_DIR"] = runtime;
   using _env = {
     [Symbol.dispose]: () => {
-      if (priorRoot === undefined) delete process.env.STATUSLINE_CACHE_ROOT;
-      else process.env.STATUSLINE_CACHE_ROOT = priorRoot;
-      if (priorHome === undefined) delete process.env.HOME;
-      else process.env.HOME = priorHome;
-      if (priorRuntime === undefined) delete process.env.XDG_RUNTIME_DIR;
-      else process.env.XDG_RUNTIME_DIR = priorRuntime;
+      if (priorRoot === undefined) delete process.env["STATUSLINE_CACHE_ROOT"];
+      else process.env["STATUSLINE_CACHE_ROOT"] = priorRoot;
+      if (priorHome === undefined) delete process.env["HOME"];
+      else process.env["HOME"] = priorHome;
+      if (priorRuntime === undefined) delete process.env["XDG_RUNTIME_DIR"];
+      else process.env["XDG_RUNTIME_DIR"] = priorRuntime;
     },
   };
 

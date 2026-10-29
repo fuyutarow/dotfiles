@@ -21,16 +21,16 @@ afterAll(() => rm(root, { recursive: true, force: true }));
 
 test("Claude status writes its normalized statusline facts atomically", async () => {
   const runtime = join(root, "claude-runtime");
-  const priorRuntime = process.env.XDG_RUNTIME_DIR;
-  const priorExe = process.env.CLAUDE_CODE_EXECPATH;
-  process.env.XDG_RUNTIME_DIR = runtime;
-  process.env.CLAUDE_CODE_EXECPATH = join(root, "missing-claude");
+  const priorRuntime = process.env["XDG_RUNTIME_DIR"];
+  const priorExe = process.env["CLAUDE_CODE_EXECPATH"];
+  process.env["XDG_RUNTIME_DIR"] = runtime;
+  process.env["CLAUDE_CODE_EXECPATH"] = join(root, "missing-claude");
   using _env = {
     [Symbol.dispose]: () => {
-      if (priorRuntime === undefined) delete process.env.XDG_RUNTIME_DIR;
-      else process.env.XDG_RUNTIME_DIR = priorRuntime;
-      if (priorExe === undefined) delete process.env.CLAUDE_CODE_EXECPATH;
-      else process.env.CLAUDE_CODE_EXECPATH = priorExe;
+      if (priorRuntime === undefined) delete process.env["XDG_RUNTIME_DIR"];
+      else process.env["XDG_RUNTIME_DIR"] = priorRuntime;
+      if (priorExe === undefined) delete process.env["CLAUDE_CODE_EXECPATH"];
+      else process.env["CLAUDE_CODE_EXECPATH"] = priorExe;
     },
   };
 
@@ -80,12 +80,12 @@ test("Claude status writes its normalized statusline facts atomically", async ()
 
 test("Codex rollout status is written with explicit unavailable provider fields", async () => {
   const runtime = join(root, "codex-runtime");
-  const priorRuntime = process.env.XDG_RUNTIME_DIR;
-  process.env.XDG_RUNTIME_DIR = runtime;
+  const priorRuntime = process.env["XDG_RUNTIME_DIR"];
+  process.env["XDG_RUNTIME_DIR"] = runtime;
   using _env = {
     [Symbol.dispose]: () => {
-      if (priorRuntime === undefined) delete process.env.XDG_RUNTIME_DIR;
-      else process.env.XDG_RUNTIME_DIR = priorRuntime;
+      if (priorRuntime === undefined) delete process.env["XDG_RUNTIME_DIR"];
+      else process.env["XDG_RUNTIME_DIR"] = priorRuntime;
     },
   };
   await writeStatuslineFleetSession(

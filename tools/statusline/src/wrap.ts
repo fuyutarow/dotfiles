@@ -119,6 +119,6 @@ export function wrapThroughSys(text: string, columns: number): string {
 export function statuslineColumns(
   env: NodeJS.ProcessEnv = process.env,
 ): number | undefined {
-  const columns = Number(env.COLUMNS);
+  const columns = Number(env["COLUMNS"]);
   return Number.isSafeInteger(columns) && columns > 0 ? columns : undefined;
 }

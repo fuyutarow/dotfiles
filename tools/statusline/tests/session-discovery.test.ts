@@ -91,15 +91,15 @@ import {
 } from "../src/adapters/codex-rollout.ts";
 
 const roots: string[] = [];
-const previousHome = process.env.HOME;
-const previousProcRoot = process.env.STATUSLINE_PROC_ROOT;
-const previousCodexSessionId = process.env.CODEX_SESSION_ID;
-const previousOwnerState = process.env.STATUSLINE_OWNER_STATE;
+const previousHome = process.env["HOME"];
+const previousProcRoot = process.env["STATUSLINE_PROC_ROOT"];
+const previousCodexSessionId = process.env["CODEX_SESSION_ID"];
+const previousOwnerState = process.env["STATUSLINE_OWNER_STATE"];
 afterEach(async () => {
-  process.env.HOME = previousHome;
-  process.env.STATUSLINE_PROC_ROOT = previousProcRoot;
-  process.env.CODEX_SESSION_ID = previousCodexSessionId;
-  process.env.STATUSLINE_OWNER_STATE = previousOwnerState;
+  process.env["HOME"] = previousHome;
+  process.env["STATUSLINE_PROC_ROOT"] = previousProcRoot;
+  process.env["CODEX_SESSION_ID"] = previousCodexSessionId;
+  process.env["STATUSLINE_OWNER_STATE"] = previousOwnerState;
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
@@ -117,8 +117,8 @@ async function fixture() {
       mkdir(path, { recursive: true }),
     ),
   );
-  process.env.HOME = home;
-  process.env.STATUSLINE_PROC_ROOT = proc;
+  process.env["HOME"] = home;
+  process.env["STATUSLINE_PROC_ROOT"] = proc;
   return { root, home, proc, cwd, elsewhere };
 }
 
@@ -653,9 +653,9 @@ test("exact Desktop identity survives a newer auxiliary rollout and same-cwd ses
     expect(selected?.context?.inputTokens).toBe(21000);
     expect(selected?.context?.usedPercent).toBe(10.5);
   }
-  process.env.CODEX_SESSION_ID = "";
+  process.env["CODEX_SESSION_ID"] = "";
   expect(await readCodexSessionStatus(cwd, root)).toBeUndefined();
-  process.env.CODEX_SESSION_ID = "desktop-owner";
+  process.env["CODEX_SESSION_ID"] = "desktop-owner";
   expect((await readCodexSessionStatus(cwd, root))?.sessionId).toBe(
     "desktop-owner",
   );
@@ -663,7 +663,7 @@ test("exact Desktop identity survives a newer auxiliary rollout and same-cwd ses
 
 test("prepared displays require source labels protocol and report sample age separately", async () => {
   const { home, proc, cwd } = await fixture();
-  process.env.STATUSLINE_OWNER_STATE = join(home, "owner.json");
+  process.env["STATUSLINE_OWNER_STATE"] = join(home, "owner.json");
   await fakeProcess(proc, 301, "/usr/bin/codex", cwd);
   const view = encodePresentation({
     schema: 1,
@@ -689,7 +689,7 @@ test("prepared displays require source labels protocol and report sample age sep
       },
     ],
   });
-  const path = `${process.env.STATUSLINE_OWNER_STATE}.view`;
+  const path = `${process.env["STATUSLINE_OWNER_STATE"]}.view`;
   await writeFile(
     path,
     view.replace(
@@ -708,14 +708,14 @@ test("prepared displays require source labels protocol and report sample age sep
 
 test("prepared membership rejects a reused PID instead of retaining its old shared scope", async () => {
   const { home, proc, cwd } = await fixture();
-  process.env.STATUSLINE_OWNER_STATE = join(home, "owner.json");
+  process.env["STATUSLINE_OWNER_STATE"] = join(home, "owner.json");
   await Promise.all([
     fakeProcess(proc, 401, "/usr/bin/codex", cwd, "401"),
     fakeProcess(proc, 402, "/usr/bin/codex", cwd, "402"),
   ]);
   const at = Temporal.Now.instant().epochMilliseconds;
   await writeFile(
-    `${process.env.STATUSLINE_OWNER_STATE}.view`,
+    `${process.env["STATUSLINE_OWNER_STATE"]}.view`,
     encodePresentation({
       schema: 1,
       version,

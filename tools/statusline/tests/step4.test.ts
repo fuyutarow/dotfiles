@@ -10,13 +10,13 @@ import { sysRow } from "../src/host-display.ts";
 import { fleetLine } from "../src/fleet-line.ts";
 
 const roots: string[] = [];
-const oldXdg = process.env.XDG_STATE_HOME;
-const oldProc = process.env.STATUSLINE_PROC_ROOT;
+const oldXdg = process.env["XDG_STATE_HOME"];
+const oldProc = process.env["STATUSLINE_PROC_ROOT"];
 afterEach(async () => {
-  if (oldXdg === undefined) delete process.env.XDG_STATE_HOME;
-  else process.env.XDG_STATE_HOME = oldXdg;
-  if (oldProc === undefined) delete process.env.STATUSLINE_PROC_ROOT;
-  else process.env.STATUSLINE_PROC_ROOT = oldProc;
+  if (oldXdg === undefined) delete process.env["XDG_STATE_HOME"];
+  else process.env["XDG_STATE_HOME"] = oldXdg;
+  if (oldProc === undefined) delete process.env["STATUSLINE_PROC_ROOT"];
+  else process.env["STATUSLINE_PROC_ROOT"] = oldProc;
   await Promise.all(
     roots.splice(0).map((path) => rm(path, { recursive: true, force: true })),
   );
@@ -197,8 +197,8 @@ test("source ages name their source only alongside an action; elapsed idle time 
 });
 test("gpu-owner stall replaces the utilization average with a JST recovery warning", async () => {
   const root = await fixture();
-  process.env.XDG_STATE_HOME = root;
-  process.env.STATUSLINE_PROC_ROOT = join(root, "proc");
+  process.env["XDG_STATE_HOME"] = root;
+  process.env["STATUSLINE_PROC_ROOT"] = join(root, "proc");
   await mkdir(join(root, "proc/2461429"), { recursive: true });
   await writeFile(join(root, "proc/2461429/comm"), "julia\n");
   await writeFile(
@@ -290,7 +290,7 @@ test("sampler publishes a GPU stall over a previously good utilization sample", 
 
 test("GPU owner fixtures cover first failed probe, recovery, and paused failures without driver calls", async () => {
   const root = await fixture();
-  process.env.XDG_STATE_HOME = root;
+  process.env["XDG_STATE_HOME"] = root;
   const now = at();
   const state = {
     schema: 1,

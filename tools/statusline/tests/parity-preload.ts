@@ -70,9 +70,9 @@ await mock.module("node:fs/promises", () => ({
       : realReadAsync(path, options);
   },
   statfs: (path: string) => {
-    const mode = process.env.STATUSLINE_FIXTURE_TMP;
+    const mode = process.env["STATUSLINE_FIXTURE_TMP"];
     if (path === "/tmp" && mode === "missing")
-      return realStatfs(`${process.env.HOME}/missing-tmp-mount`);
+      return realStatfs(`${process.env["HOME"]}/missing-tmp-mount`);
     if (path === "/tmp" && mode === "hung") return new Promise(() => {});
     const freeInodes = { warn: 150, deny: 50, exhausted: 0 };
     const selected = Object.entries(freeInodes).find(

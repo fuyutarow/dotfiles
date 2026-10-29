@@ -174,7 +174,7 @@ export async function buildDataframe(
   // `[ -n "$cwd" ] || cwd=$PWD` guard — "" is never a real working directory.
   const cwdCandidate = firstNonEmpty(
     data.cwd,
-    process.env.PWD ?? process.cwd(),
+    process.env["PWD"] ?? process.cwd(),
   );
   const cwd = cwdCandidate;
   const sid =

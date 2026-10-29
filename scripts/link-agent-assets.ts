@@ -138,9 +138,9 @@ function main(): void {
     return;
   }
 
-  const home = parsed.flags.home ?? process.env.HOME ?? homedir();
+  const home = parsed.flags.home ?? process.env["HOME"] ?? homedir();
   const dotfiles = resolve(
-    parsed.flags.dotfiles ?? process.env.DOTFILES ?? join(home, "dotfiles"),
+    parsed.flags.dotfiles ?? process.env["DOTFILES"] ?? join(home, "dotfiles"),
   );
   activatePostMergeHook(dotfiles, parsed.flags.dryRun);
   linkPath(

@@ -66,7 +66,7 @@ async function main(): Promise<void> {
         ? []
         : await findToolCommandShadows(
             declarations.map(({ command: name }) => name),
-            process.env.PATH ?? "",
+            process.env["PATH"] ?? "",
             dirname(brew),
           );
     for (const shadow of shadows)

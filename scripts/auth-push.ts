@@ -246,7 +246,7 @@ async function main(): Promise<void> {
     {
       home: homedir(),
       platform: process.platform,
-      user: process.env.USER ?? "",
+      user: process.env["USER"] ?? "",
       readFile: async (path) =>
         (await Bun.file(path).exists()) ? Bun.file(path).text() : null,
       run: spawn,

@@ -58,18 +58,18 @@ const owner = (what: string) => ({
 });
 
 const stateHome = () =>
-  (process.env.XDG_STATE_HOME === ""
+  (process.env["XDG_STATE_HOME"] === ""
     ? undefined
-    : process.env.XDG_STATE_HOME) ?? join(homedir(), ".local", "state");
+    : process.env["XDG_STATE_HOME"]) ?? join(homedir(), ".local", "state");
 const landRoot = () => join(stateHome(), "dotfiles", "land");
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
 // Inspect only the old directory's entries; never consume or migrate its journal.
 export async function landStateReady(): Promise<Error | undefined> {
   const old = join(
-    (process.env.AGX_STATE_DIR === ""
+    (process.env["AGX_STATE_DIR"] === ""
       ? undefined
-      : process.env.AGX_STATE_DIR) ?? join(stateHome(), "agx"),
+      : process.env["AGX_STATE_DIR"]) ?? join(stateHome(), "agx"),
     "land",
   );
   const entries = await attempt(() => readdir(old));

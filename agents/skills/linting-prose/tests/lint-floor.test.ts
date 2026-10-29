@@ -53,7 +53,7 @@ async function fakeBunx() {
   await chmod(binary, 0o755);
   return {
     dir,
-    env: { PATH: `${dir}:${process.env.PATH ?? ""}` },
+    env: { PATH: `${dir}:${process.env["PATH"] ?? ""}` },
     [Symbol.asyncDispose]: async () => {
       await rm(dir, { recursive: true, force: true });
     },

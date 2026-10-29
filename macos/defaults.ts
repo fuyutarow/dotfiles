@@ -25,7 +25,7 @@ type Value =
   | ["-string", string];
 type Setting = { domain: string; key: string; value: Value; why: string };
 
-const HOME = process.env.HOME ?? "";
+const HOME = process.env["HOME"] ?? "";
 const SCREENSHOTS = `${HOME}/Pictures/Screenshots`;
 
 const SETTINGS: Setting[] = [

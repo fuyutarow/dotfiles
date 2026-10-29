@@ -40,7 +40,7 @@ async function command(
 }
 
 export async function lintShell(root = process.cwd()): Promise<number> {
-  const vcs = process.env.PRECOMMIT_VCS;
+  const vcs = process.env["PRECOMMIT_VCS"];
   let files: string[];
   let before: (path: string) => Promise<string | null>;
   let after: (path: string) => Promise<string | null>;

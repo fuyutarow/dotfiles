@@ -7,7 +7,7 @@ import { registeredRepos } from "./workspace-repos.ts";
 // 横断実行)。dotfiles 自身の `lint` には入れない。他 repo の状態で dotfiles の gate が落ちる
 // のは結合の誤りである。強制は各 repo の check が持ち、ここは差分を見るための眺めに徹する。
 const check =
-  process.env.WIRING_CHECK ??
+  process.env["WIRING_CHECK"] ??
   join(
     import.meta.dir,
     "../agents/skills/wiring-repositories/scripts/wiring-check.ts",
@@ -17,8 +17,9 @@ if (!existsSync(check)) {
   process.exit(2);
 }
 
-const root = process.env.WORKSPACE_ROOT ?? `${process.env.HOME}/Workspace`;
-const dirs = registeredRepos(process.env.HOME ?? "", root);
+const root =
+  process.env["WORKSPACE_ROOT"] ?? `${process.env["HOME"]}/Workspace`;
+const dirs = registeredRepos(process.env["HOME"] ?? "", root);
 
 let rc = 0;
 for (const d of dirs) {

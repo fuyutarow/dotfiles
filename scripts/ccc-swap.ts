@@ -150,7 +150,7 @@ const DEFAULT_KEEP = 1;
 export async function resolveHome(
   homeFlag: string | undefined,
 ): Promise<string | null> {
-  const home = homeFlag ?? process.env.HOME ?? homedir();
+  const home = homeFlag ?? process.env["HOME"] ?? homedir();
   if (home === "") return null;
   // Canonical, symlinks resolved: ccc keys a project's DB by the path the OS reports (os.getcwd()
   // resolves symlinks — macOS's /var is /private/var), so a DB-path mapping built from the
@@ -653,7 +653,7 @@ export function daemonSocketPath(
   liveSettingsDir: string,
   env: Record<string, string | undefined> = process.env,
 ): string {
-  const runtimeDir = env.COCOINDEX_CODE_RUNTIME_DIR ?? liveSettingsDir;
+  const runtimeDir = env["COCOINDEX_CODE_RUNTIME_DIR"] ?? liveSettingsDir;
   return join(runtimeDir, "daemon.sock");
 }
 
@@ -734,7 +734,7 @@ export async function removeDir(
 ): Promise<void> {
   const spawn = opts.spawn ?? Bun.spawn;
   let ripOk = false;
-  const graveyard = process.env.RIP_GRAVEYARD;
+  const graveyard = process.env["RIP_GRAVEYARD"];
   if (Bun.which("rip") !== null && graveyard !== undefined) {
     // bounded: a single fast filesystem rename into rip's own graveyard, never hangs
     const result = await fromAsyncThrowable(
@@ -1014,7 +1014,7 @@ async function cmdBuild(
   // clients; inherited here it would forbid the client from spawning a shadow daemon, so every
   // shadow `ccc index` would wait out _wait_for_daemon's 30s for a socket nobody will create
   // and fail with "Daemon did not start in time". liveEnv deliberately KEEPS the flag.
-  delete shadowEnv.COCOINDEX_CODE_DAEMON_SUPERVISED;
+  delete shadowEnv["COCOINDEX_CODE_DAEMON_SUPERVISED"];
 
   // Always restart the shadow daemon fresh before indexing: COCOINDEX_CODE_DB_PATH_MAPPING is
   // read once and cached for the daemon PROCESS's whole lifetime (settings.py module global),
@@ -1749,7 +1749,7 @@ async function runVerb(
   const shadowDir = resolveShadowDir(home, flags.shadowDir);
   const liveSettingsDir = resolveLiveSettingsDir(
     home,
-    process.env.COCOINDEX_CODE_DIR,
+    process.env["COCOINDEX_CODE_DIR"],
   );
   // A basename can never contain a separator, so `/` is an unambiguous discriminator.
   const excludePaths = flags.exclude.filter((e) => e.includes("/"));

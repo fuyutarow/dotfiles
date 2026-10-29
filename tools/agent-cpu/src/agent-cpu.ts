@@ -48,7 +48,7 @@ export type Options = {
 const defaults = (): Options => ({
   proc: "/proc",
   cgroup: "/sys/fs/cgroup",
-  home: process.env.HOME ?? "",
+  home: process.env["HOME"] ?? "",
   hz: 100,
   now: () => Temporal.Now.instant().toString(),
   sleep: (ms) => Bun.sleep(ms),

@@ -120,9 +120,9 @@ export async function restoreRenderDependencies(
         env: {
           ...process.env,
           BUN_INSTALL_CACHE_DIR:
-            process.env.BUN_INSTALL_CACHE_DIR ??
+            process.env["BUN_INSTALL_CACHE_DIR"] ??
             join(
-              process.env.COMMAND_TARGET_HOME ?? homedir(),
+              process.env["COMMAND_TARGET_HOME"] ?? homedir(),
               ".bun/install/cache",
             ),
         },

@@ -483,7 +483,7 @@ function followMainCheckout(
       );
     yield* run(
       root,
-      [process.env.LAND_MISE ?? "mise", "run", "hook:post-merge"],
+      [process.env["LAND_MISE"] ?? "mise", "run", "hook:post-merge"],
       landEnvironment(root),
     );
     return ok({ conflictPaths: [], live: true });
@@ -535,7 +535,9 @@ async function resolveWorkspace(
 
 function packageBinMap(text: string): unknown {
   const parsed = jsonOf(z.record(z.string(), z.unknown())).safeParse(text);
-  return parsed.success ? parsed.data.bin : Symbol.for("invalid-package-json");
+  return parsed.success
+    ? parsed.data["bin"]
+    : Symbol.for("invalid-package-json");
 }
 
 function packageBinNames(text: string | undefined): string[] {
@@ -591,7 +593,7 @@ async function searchRemovalCallers(
 export async function removedCommandCallers(
   names: readonly string[],
   commitMessage: string,
-  home = process.env.HOME ?? "",
+  home = process.env["HOME"] ?? "",
   workspace = join(home, "Workspace"),
 ): Promise<Result<string[], Error>> {
   const pending = names.filter(
@@ -1223,7 +1225,7 @@ async function main(
         const committed = await run(
           landerRoot,
           [
-            process.env.LAND_MISE ?? "mise",
+            process.env["LAND_MISE"] ?? "mise",
             "run",
             "commit",
             "--",

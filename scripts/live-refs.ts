@@ -635,14 +635,17 @@ export async function candidateFindings(
         // The candidate's pins must reactivate tools after mise removes the
         // caller's PATH activation. Its disposable HOME owns outputs, not installs.
         MISE_DATA_DIR:
-          process.env.MISE_DATA_DIR ??
-          join(process.env.XDG_DATA_HOME ?? join(home, ".local/share"), "mise"),
+          process.env["MISE_DATA_DIR"] ??
+          join(
+            process.env["XDG_DATA_HOME"] ?? join(home, ".local/share"),
+            "mise",
+          ),
         MISE_TRUSTED_CONFIG_PATHS: repo,
         AGX_CONFIG: join(repo, "agents/agx/agx.toml"),
         DOTFILES: repo,
         COMMAND_TARGET_HOME: targetHome,
         CLAUDE_SETTINGS_PRIVATE:
-          process.env.CLAUDE_SETTINGS_PRIVATE ??
+          process.env["CLAUDE_SETTINGS_PRIVATE"] ??
           join(home, ".claude/settings.private.json"),
         DOTFILES_RENDER_REV: undefined,
         DOTFILES_RENDER_FROM_WORKING_COPY: "1",
@@ -693,8 +696,8 @@ async function main(): Promise<void> {
     process.exitCode = 2;
     return;
   }
-  const home = process.env.HOME ?? homedir();
-  const repo = process.env.DOTFILES ?? resolve(import.meta.dir, "..");
+  const home = process.env["HOME"] ?? homedir();
+  const repo = process.env["DOTFILES"] ?? resolve(import.meta.dir, "..");
   const os = await systemOs();
   if (os === undefined) {
     process.stderr.write(`FATAL: unsupported platform: ${process.platform}\n`);

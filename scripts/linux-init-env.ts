@@ -7,7 +7,7 @@ export function buildLinuxInitEnv(
   prefix = brewPrefix(home),
 ): NodeJS.ProcessEnv {
   const localBin = `${home}/.local/bin`;
-  const inheritedPath = inherited.PATH;
+  const inheritedPath = inherited["PATH"];
   const path = [
     ...prefixPaths(prefix),
     localBin,

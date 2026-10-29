@@ -49,7 +49,7 @@ if (argv._.length > 0)
   die(`unexpected argument: ${argv._[0]} (this command takes no positionals)`);
 
 const SRC = join(import.meta.dir, "..", "edge", "policy.plist.mac");
-const OVERRIDE = process.env.EDGE_POLICY_DST;
+const OVERRIDE = process.env["EDGE_POLICY_DST"];
 const MANAGED_DIR = "/Library/Managed Preferences";
 const DST = OVERRIDE ?? join(MANAGED_DIR, "com.microsoft.Edge.plist");
 const SUDO_MS = 120_000; // a person types a password

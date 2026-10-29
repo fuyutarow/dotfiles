@@ -164,7 +164,7 @@ export function lintHookSlugs(root: string): string[] {
 
 async function main(): Promise<void> {
   const result = await attempt(() =>
-    lintHookSlugs(process.env.DOTFILES ?? join(import.meta.dir, "..")),
+    lintHookSlugs(process.env["DOTFILES"] ?? join(import.meta.dir, "..")),
   );
   if (!result.ok) {
     process.stderr.write(`FATAL: hook-slug: ${errorMessage(result.error)}\n`);

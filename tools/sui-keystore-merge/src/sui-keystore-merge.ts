@@ -219,7 +219,7 @@ export function mergeSuiData(
 }
 
 function targetPath(configDir: string, file: string): string {
-  const home = process.env.HOME ?? "";
+  const home = process.env["HOME"] ?? "";
   const expanded = configDir.replace(/^~(?=\/)/u, home);
   return join(resolve(expanded), file);
 }

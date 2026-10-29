@@ -52,7 +52,7 @@ export async function runSkillsCli(
     },
   };
   const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-  const fake = process.env.VENDOR_SKILL_CLI;
+  const fake = process.env["VENDOR_SKILL_CLI"];
   const cliArgs = skillCliArgs(version, source, names);
   const command =
     fake === undefined
@@ -64,7 +64,7 @@ export async function runSkillsCli(
           ...process.env,
           HOME: home,
           BUN_INSTALL_CACHE_DIR:
-            process.env.BUN_INSTALL_CACHE_DIR ??
+            process.env["BUN_INSTALL_CACHE_DIR"] ??
             resolve(homedir(), ".bun/install/cache"),
         }
       : { ...process.env, HOME: home };
@@ -105,7 +105,7 @@ export async function runPinnedSkillsCommand(
         ...process.env,
         HOME: home,
         BUN_INSTALL_CACHE_DIR:
-          process.env.BUN_INSTALL_CACHE_DIR ??
+          process.env["BUN_INSTALL_CACHE_DIR"] ??
           resolve(homedir(), ".bun/install/cache"),
       },
       signal,

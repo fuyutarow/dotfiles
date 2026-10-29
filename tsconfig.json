@@ -1,6 +1,7 @@
 {
   "extends": "./presets/typescript/tsconfig.json",
   "compilerOptions": {
+    "noPropertyAccessFromIndexSignature": true,
     "paths": {
       "@dotfiles/shared/*": ["./tools/shared/*"]
     }

@@ -786,7 +786,7 @@ export async function probeHostMemory({
     return parseHostMemory(result.value.output.replaceAll("\r", ""));
   };
   const direct = await measure(env);
-  if (direct !== null || env.WSL_INTEROP !== undefined) return direct;
+  if (direct !== null || env["WSL_INTEROP"] !== undefined) return direct;
 
   // The user manager inherits no WSL_INTEROP: even an absolute Windows executable then
   // fails with "Invalid argument". Like wsl-audit's local PowerShell transport, borrow a
@@ -1014,7 +1014,7 @@ export type CapacityDecisionContext = {
 
 export function capacityDecisionPath(): string {
   return join(
-    process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"),
+    process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"),
     "dotfiles/capacity-decisions.jsonl",
   );
 }
@@ -1256,7 +1256,7 @@ async function main(): Promise<void> {
     process.stderr.write("FATAL: WSL host path required\n");
     process.exit(2);
   }
-  const thresholdResult = tmpfsThreshold(process.env.TMPFS_RECLAIM_PERCENT);
+  const thresholdResult = tmpfsThreshold(process.env["TMPFS_RECLAIM_PERCENT"]);
   if (thresholdResult.isErr()) {
     process.stderr.write(`FATAL: ${String(thresholdResult.error)}\n`);
     process.exit(2);

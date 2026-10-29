@@ -50,7 +50,7 @@ export async function runSteps(
       env: {
         ...process.env,
         DOTFILES: root,
-        PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
+        PATH: `${dirname(process.execPath)}:${process.env["PATH"] ?? ""}`,
       },
       stdin: "ignore",
       stdout: "inherit",

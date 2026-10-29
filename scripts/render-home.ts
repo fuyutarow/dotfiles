@@ -101,14 +101,14 @@ function fatal(line: string, ...more: string[]): never {
   return process.exit(1);
 }
 
-const home = process.env.HOME ?? homedir();
-const commandTargetHome = process.env.COMMAND_TARGET_HOME ?? home;
-const liveDotfiles = process.env.DOTFILES ?? join(import.meta.dir, "..");
+const home = process.env["HOME"] ?? homedir();
+const commandTargetHome = process.env["COMMAND_TARGET_HOME"] ?? home;
+const liveDotfiles = process.env["DOTFILES"] ?? join(import.meta.dir, "..");
 const prepared = await attempt(() =>
   prepareRenderSource(
     liveDotfiles,
-    process.env.DOTFILES_RENDER_FROM_WORKING_COPY === "1",
-    process.env.DOTFILES_RENDER_REV,
+    process.env["DOTFILES_RENDER_FROM_WORKING_COPY"] === "1",
+    process.env["DOTFILES_RENDER_REV"],
   ),
 );
 if (!prepared.ok)
@@ -142,7 +142,7 @@ if (dotfiles !== liveDotfiles && existsSync(committedRenderer)) {
 }
 const basePath = `${dotfiles}/agents/claude/settings.json`;
 const overlayPath =
-  process.env.CLAUDE_SETTINGS_PRIVATE ??
+  process.env["CLAUDE_SETTINGS_PRIVATE"] ??
   `${home}/.claude/settings.private.json`;
 
 function readJson(path: string): Record<string, unknown> | Error {
@@ -163,7 +163,7 @@ function withHooks(
   vendor: Vendor,
   from: string,
 ): Record<string, unknown> {
-  const hooks = HooksConfigSchema.safeParse(config.hooks ?? {});
+  const hooks = HooksConfigSchema.safeParse(config["hooks"] ?? {});
   if (!hooks.success) {
     fatal(
       `FATAL: ${from}: \`hooks\` is not a hook config — ${hooks.error.message}`,
@@ -176,8 +176,8 @@ function withHooks(
   for (const hook of Object.values(wired).flatMap((groups) =>
     groups.flatMap((group) => group.hooks),
   )) {
-    if (typeof hook.command !== "string") continue;
-    const command = hook.command;
+    if (typeof hook["command"] !== "string") continue;
+    const command = hook["command"];
     const identity = identities.identities.find(
       (h) =>
         h.commands.includes(
@@ -189,7 +189,8 @@ function withHooks(
         ),
     );
     if (identity !== undefined)
-      hook.command = `HOOK_SLUG=dotfiles:${identity.slug} ${command.replace(/^HOOK_SLUG=dotfiles:[\w:-]+ /u, "")}`;
+      hook["command"] =
+        `HOOK_SLUG=dotfiles:${identity.slug} ${command.replace(/^HOOK_SLUG=dotfiles:[\w:-]+ /u, "")}`;
   }
   return { ...config, hooks: wired };
 }
@@ -245,8 +246,8 @@ function commandTargets(value: unknown): string[] {
     }
     const record = obj(node);
     if (record === undefined) return;
-    if (record.type === "command" && typeof record.command === "string")
-      found.push(record.command);
+    if (record["type"] === "command" && typeof record["command"] === "string")
+      found.push(record["command"]);
     for (const child of Object.values(record)) visit(child);
   };
   visit(value);
@@ -257,13 +258,13 @@ function validateCommandTargets(
   settings: Record<string, unknown>,
   codex: Record<string, unknown>,
 ): void {
-  const statusLine = obj(settings.statusLine);
+  const statusLine = obj(settings["statusLine"]);
   const commands: string[] = [];
-  if (typeof statusLine?.command === "string")
-    commands.push(statusLine.command);
+  if (typeof statusLine?.["command"] === "string")
+    commands.push(statusLine["command"]);
   commands.push(
-    ...commandTargets(settings.hooks),
-    ...commandTargets(codex.hooks),
+    ...commandTargets(settings["hooks"]),
+    ...commandTargets(codex["hooks"]),
   );
 
   for (const command of commands) {
@@ -324,23 +325,23 @@ const { specs } = registry.value;
 
 // ── ~/.claude/settings.json ──────────────────────────────────────────────────────────────────
 const settings: Record<string, unknown> = { ...baseRead.value, ...overlay };
-const marketplaces = obj(settings.extraKnownMarketplaces);
+const marketplaces = obj(settings["extraKnownMarketplaces"]);
 if (marketplaces !== undefined && Object.hasOwn(marketplaces, "dotfiles")) {
   const remaining = { ...marketplaces };
-  delete remaining.dotfiles;
+  delete remaining["dotfiles"];
   if (Object.keys(remaining).length === 0)
-    delete settings.extraKnownMarketplaces;
-  else settings.extraKnownMarketplaces = remaining;
+    delete settings["extraKnownMarketplaces"];
+  else settings["extraKnownMarketplaces"] = remaining;
 }
-const enabledPlugins = obj(settings.enabledPlugins);
+const enabledPlugins = obj(settings["enabledPlugins"]);
 if (
   enabledPlugins !== undefined &&
   Object.hasOwn(enabledPlugins, "dotfiles@dotfiles")
 ) {
   const remaining = { ...enabledPlugins };
   delete remaining["dotfiles@dotfiles"];
-  if (Object.keys(remaining).length === 0) delete settings.enabledPlugins;
-  else settings.enabledPlugins = remaining;
+  if (Object.keys(remaining).length === 0) delete settings["enabledPlugins"];
+  else settings["enabledPlugins"] = remaining;
 }
 const tzPath = `${dotfiles}/zsh/timezone`;
 let tzNote = "";
@@ -352,11 +353,11 @@ if (existsSync(tzPath)) {
       `FATAL: ${tzPath} must hold one IANA zone name, got ${JSON.stringify(zone)}`,
     );
   }
-  const env = obj(settings.env) ?? {};
-  if (env.TZ !== undefined)
-    tzNote = ` (env.TZ kept: ${JSON.stringify(env.TZ)})`;
+  const env = obj(settings["env"]) ?? {};
+  if (env["TZ"] !== undefined)
+    tzNote = ` (env.TZ kept: ${JSON.stringify(env["TZ"])})`;
   else if (existsSync(`/usr/share/zoneinfo/${zone}`)) {
-    settings.env = { ...env, TZ: zone };
+    settings["env"] = { ...env, TZ: zone };
     tzNote = ` (env.TZ=${zone})`;
   } else tzNote = ` (no /usr/share/zoneinfo/${zone}: env.TZ not set)`;
 }

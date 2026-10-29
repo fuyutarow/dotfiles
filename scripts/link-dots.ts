@@ -1134,9 +1134,9 @@ async function main(): Promise<Error | void> {
     return new Error(`unexpected positional argument: ${parsed._[0]}`);
   if (parsed.flags.force && parsed.flags.check)
     return new Error("--force and --check are mutually exclusive");
-  const home = process.env.HOME ?? homedir();
+  const home = process.env["HOME"] ?? homedir();
   // Empty counts as unset. Resolve the declaring checkout from the script, including workspaces.
-  const envDotfiles = process.env.DOTFILES;
+  const envDotfiles = process.env["DOTFILES"];
   const mode: Mode = parsed.flags.check ? "check" : "safe";
   const detectedOs = detectOs();
   if (detectedOs instanceof Error) return detectedOs;
@@ -1150,10 +1150,10 @@ async function main(): Promise<Error | void> {
     mode: parsed.flags.force ? "force" : mode,
     drift: [],
     changedLinks: new Set(),
-    ...(process.env.XDG_STATE_HOME === undefined ||
-    process.env.XDG_STATE_HOME === ""
+    ...(process.env["XDG_STATE_HOME"] === undefined ||
+    process.env["XDG_STATE_HOME"] === ""
       ? {}
-      : { stateHome: process.env.XDG_STATE_HOME }),
+      : { stateHome: process.env["XDG_STATE_HOME"] }),
   };
   const rootsError = assertRoots(ctx.home, ctx.dotfiles);
   if (rootsError !== undefined) return rootsError;
@@ -1161,7 +1161,7 @@ async function main(): Promise<Error | void> {
     const refused = await renderRefusal(
       ctx.dotfiles,
       parsed.flags.fromWorkingCopy,
-      process.env.DOTFILES_RENDER_REV,
+      process.env["DOTFILES_RENDER_REV"],
     );
     if (refused !== undefined) return refused;
   }

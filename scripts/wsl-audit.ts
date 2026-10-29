@@ -223,7 +223,7 @@ export async function ps(leg: Leg, script: string, ms: number): Promise<Ran> {
   const direct = await run(argv, ms);
   // An inherited WSL_INTEROP that works needs no help, and one the caller set deliberately is not
   // ours to override — in both cases the direct result stands.
-  if (usable(direct) || process.env.WSL_INTEROP !== undefined) return direct;
+  if (usable(direct) || process.env["WSL_INTEROP"] !== undefined) return direct;
 
   for (const sock of await interopSockets()) {
     const retry = await run(argv, ms, { WSL_INTEROP: sock });

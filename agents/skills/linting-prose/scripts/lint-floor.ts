@@ -39,7 +39,8 @@ if (
 
 const here = dirname(resolve(import.meta.path));
 const config =
-  process.env.LINT_PROSE_CONFIG ?? resolve(here, "../assets/textlintrc.json");
+  process.env["LINT_PROSE_CONFIG"] ??
+  resolve(here, "../assets/textlintrc.json");
 // NOTE deliberately UNPINNED (floor W7 accepted, ledger-recorded 2026-07-23): the house
 // textlint RULES resolve from the bun global install; a pinned `textlint@x.y.z` switches
 // bunx to an isolated dir with no rule packages → "No rules found" (characterization test

@@ -145,10 +145,10 @@ async function main(): Promise<void> {
     return;
   }
 
-  const home = parsed.flags.home ?? process.env.HOME ?? homedir();
+  const home = parsed.flags.home ?? process.env["HOME"] ?? homedir();
   const dotfiles =
     parsed.flags.dotfiles ??
-    process.env.DOTFILES ??
+    process.env["DOTFILES"] ??
     resolve(import.meta.dir, "..");
   const declarationPath = resolve(dotfiles, "agents/skills.thirdparty.toml");
   const declarationText = fromThrowable((path: string) =>

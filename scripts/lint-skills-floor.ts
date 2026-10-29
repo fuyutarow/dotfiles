@@ -66,7 +66,7 @@ function copyWorktreeInputs(
 const tmp = mkdtempSync(join(tmpdir(), "skills-floor-"));
 const context = jjContext();
 const listed =
-  context === undefined && process.env.SKILLS_LINT_WORKTREE !== "1"
+  context === undefined && process.env["SKILLS_LINT_WORKTREE"] !== "1"
     ? run([
         "bun",
         "scripts/tracked-files.ts",
@@ -97,7 +97,7 @@ if (context !== undefined) {
       ),
     ),
   );
-} else if (process.env.SKILLS_LINT_WORKTREE === "1") {
+} else if (process.env["SKILLS_LINT_WORKTREE"] === "1") {
   const missing = copyWorktreeInputs(ROOT, tmp);
   if (missing !== undefined) {
     console.error(`lint-skills-floor: missing ${missing}`);

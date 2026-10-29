@@ -621,10 +621,10 @@ function main(): Promise<void> {
     process.exitCode = 2;
     return Promise.resolve();
   }
-  const home = parsed.flags.home ?? process.env.HOME ?? homedir();
+  const home = parsed.flags.home ?? process.env["HOME"] ?? homedir();
   const dotfiles =
     parsed.flags.dotfiles ??
-    process.env.DOTFILES ??
+    process.env["DOTFILES"] ??
     resolve(import.meta.dir, "..");
   const declarationPath = resolve(dotfiles, "agents/skills.thirdparty.toml");
   const text = fromThrowable((path: string) => readFileSync(path, "utf8"))(

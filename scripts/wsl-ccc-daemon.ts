@@ -4,7 +4,7 @@ import { $ } from "bun";
 // Two-step by design, like cc:install-mcp: link:dots places the unit, this activates it.
 // Stop the incumbent first — a fresh daemon unlinks and rebinds the socket at startup, so
 // skipping this leaves the old uncapped process alive and orphaned from its socket.
-const unit = `${process.env.HOME}/.config/systemd/user/ccc-daemon.service`;
+const unit = `${process.env["HOME"]}/.config/systemd/user/ccc-daemon.service`;
 const unitLinked = (await $`test -e ${unit}`.nothrow()).exitCode === 0;
 if (!unitLinked) {
   console.log("unit not linked — run: mise run link:dots");

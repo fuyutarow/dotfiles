@@ -75,7 +75,7 @@ if (
   process.exit(1);
 }
 
-const src = `${process.env.DOTFILES ?? `${process.env.HOME}/dotfiles`}/wsl/wslconfig.win`;
+const src = `${process.env["DOTFILES"] ?? `${process.env["HOME"]}/dotfiles`}/wsl/wslconfig.win`;
 if (!existsSync(src)) {
   console.log(`missing source: ${src}`);
   process.exit(1);

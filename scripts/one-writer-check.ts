@@ -26,8 +26,8 @@ import {
   thirdPartySkillFiles,
 } from "./skills-declaration.ts";
 
-const root = process.env.DOTFILES ?? join(import.meta.dir, "..");
-const home = process.env.HOME ?? homedir();
+const root = process.env["DOTFILES"] ?? join(import.meta.dir, "..");
+const home = process.env["HOME"] ?? homedir();
 const violations: string[] = [];
 
 const declaration = readDeclaration(root);
@@ -65,7 +65,7 @@ for (const rel of ["agents/claude/settings.json", "agents/codex/hooks.json"]) {
         .filter((h) => owned(h))
         .map(
           (h) =>
-            `${rel}: ${event} runs ${JSON.stringify(h.command)} — agents/hooks/hooks.toml owns it; delete it here`,
+            `${rel}: ${event} runs ${JSON.stringify(h["command"])} — agents/hooks/hooks.toml owns it; delete it here`,
         ),
     ),
   );

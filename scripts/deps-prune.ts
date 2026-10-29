@@ -130,7 +130,8 @@ if (import.meta.main) {
     pruneRepoBins(
       join(import.meta.dir, ".."),
       join(
-        process.env.BUN_INSTALL ?? join(process.env.HOME ?? homedir(), ".bun"),
+        process.env["BUN_INSTALL"] ??
+          join(process.env["HOME"] ?? homedir(), ".bun"),
         "bin",
       ),
     ),

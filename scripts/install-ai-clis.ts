@@ -96,7 +96,7 @@ async function main(): Promise<number | Error> {
 
   const dotfiles =
     parsed.flags.dotfiles ??
-    process.env.DOTFILES ??
+    process.env["DOTFILES"] ??
     join(homedir(), "dotfiles");
   const provider = await declaredProvider(dotfiles, hostKind());
   if (provider.isErr())

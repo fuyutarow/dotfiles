@@ -120,10 +120,10 @@ type SkippedServer = {
 // .mcp.json is parsed, not asserted: a server entry is read as a record and only the four fields
 // this script uses are kept (each stays `unknown` — jqOr() decides how it prints).
 const ServerEntrySchema = z.record(z.string(), z.unknown()).transform((r) => ({
-  type: r.type,
-  url: r.url,
-  command: r.command,
-  args: r.args,
+  type: r["type"],
+  url: r["url"],
+  command: r["command"],
+  args: r["args"],
 }));
 const McpJsonSchema = z.object({
   mcpServers: z.record(z.string(), ServerEntrySchema).nullish(),
@@ -484,18 +484,18 @@ async function main(): Promise<AbortError | UsageError | undefined> {
   // default (same idiom as scripts/link-dots.ts's DOTFILES default, mise.toml:203) — but HOME must NOT get that
   // same guard: an exported-but-empty `HOME=` has to flow through as "" (yielding "/dotfiles",
   // not `${homedir()}/dotfiles`), exactly like bash's own bare `$HOME` expansion.
-  const envHome = process.env.HOME;
+  const envHome = process.env["HOME"];
   const home = values.home ?? envHome ?? homedir();
   const envDotfiles =
-    process.env.DOTFILES !== undefined && process.env.DOTFILES !== ""
-      ? process.env.DOTFILES
+    process.env["DOTFILES"] !== undefined && process.env["DOTFILES"] !== ""
+      ? process.env["DOTFILES"]
       : undefined;
   const dotfiles = values.dotfiles ?? envDotfiles ?? `${home}/dotfiles`;
   const claudeBin = values.claudeBin ?? "claude";
   const codexBin = values.codexBin ?? "codex";
   const uvBin = values.uvBin ?? "uv";
   const cccBin = values.cccBin ?? "ccc";
-  const prune = process.env.MCP_PRUNE === "1";
+  const prune = process.env["MCP_PRUNE"] === "1";
   const mcpJsonPath = `${dotfiles}/.mcp.json`;
 
   // cocoindex-code is an optional uv tool used by the repository's retrieval skill.

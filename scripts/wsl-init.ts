@@ -4,8 +4,8 @@ import { $ } from "bun";
 await $`sudo apt install -y zsh`;
 await $`brew install sheldon topgrade`;
 await $`mise run deps`; // before link-dots.ts: it imports Cleye from node_modules
-await $`bun ${process.env.HOME}/dotfiles/scripts/link-dots.ts --force`;
-await $`brew bundle --file=${process.env.HOME}/dotfiles/Brewfile`;
+await $`bun ${process.env["HOME"]}/dotfiles/scripts/link-dots.ts --force`;
+await $`brew bundle --file=${process.env["HOME"]}/dotfiles/Brewfile`;
 await $`mise run tmux:plugins`;
 await $`topgrade`;
 // After the tool installs: zsh/zshenv arms the no-self-spawn guard as soon as link-dots

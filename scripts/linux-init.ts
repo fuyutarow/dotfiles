@@ -24,8 +24,8 @@ const DOTFILES = join(HOME, "dotfiles");
 const PREFIX = brewPrefix(HOME);
 const MISE = join(PREFIX, "bin/mise");
 const CHILD_ENV = buildLinuxInitEnv(HOME, process.env);
-process.env.HOME = HOME;
-process.env.PATH = CHILD_ENV.PATH ?? "";
+process.env["HOME"] = HOME;
+process.env["PATH"] = CHILD_ENV["PATH"] ?? "";
 $.env(CHILD_ENV);
 
 const say = (line: string): void => {

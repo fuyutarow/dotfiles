@@ -74,7 +74,7 @@ export function parseRegistry(
     const parsed = JsonObject.safeParse(entry);
     const h = parsed.success ? parsed.data : {};
     const { script, event, matcher, timeout, vendors } = h;
-    const failClosed = h.fail_closed;
+    const failClosed = h["fail_closed"];
     if (typeof script !== "string" || !/^[\w.-]+\.ts$/u.test(script))
       errors.push(`${at}.script must be a bare <name>.ts`);
     else if (!scriptExists(script))
@@ -130,7 +130,7 @@ export function commandFor(spec: HookSpec): string {
 }
 
 export const owned = (h: HookCommand): boolean =>
-  typeof h.command === "string" && h.command.includes(`${RUNNER} `);
+  typeof h["command"] === "string" && h["command"].includes(`${RUNNER} `);
 
 /** `hooks` with every owned entry removed (emptied groups dropped), then the registry's entries
  * for `vendor` appended per event. Idempotent; a deleted registry entry disappears. */

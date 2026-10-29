@@ -100,8 +100,8 @@ function pluginSettingsFindings(dotfiles: string, home: string): string[] {
       continue;
     }
     const value = settings.data;
-    const enabledPlugins = value.enabledPlugins;
-    const marketplaces = value.extraKnownMarketplaces;
+    const enabledPlugins = value["enabledPlugins"];
+    const marketplaces = value["extraKnownMarketplaces"];
     if (
       enabledPlugins !== null &&
       typeof enabledPlugins === "object" &&
@@ -144,10 +144,10 @@ function machineFindings(dotfiles: string, home: string): string[] {
 }
 
 function main(): void {
-  const dotfiles = process.env.DOTFILES ?? resolve(import.meta.dir, "..");
-  const machineMode = process.env.SKILLS_DOCTOR_MACHINE === "1";
+  const dotfiles = process.env["DOTFILES"] ?? resolve(import.meta.dir, "..");
+  const machineMode = process.env["SKILLS_DOCTOR_MACHINE"] === "1";
   const findings = machineMode
-    ? machineFindings(dotfiles, process.env.HOME ?? homedir())
+    ? machineFindings(dotfiles, process.env["HOME"] ?? homedir())
     : repoFindings(dotfiles).findings;
 
   for (const finding of findings)

@@ -24,8 +24,7 @@
     "noImplicitOverride": true,
     // `import "x"` with an unresolvable path is an error; a bad path otherwise fails only at runtime.
     "noUncheckedSideEffectImports": true,
-    // Kept OFF: ON was 1345 errors, almost all process.env.X -> process.env["X"], for little gain.
-    "noPropertyAccessFromIndexSignature": false,
+    "noPropertyAccessFromIndexSignature": true,
     "allowUnusedLabels": false,
     "allowUnreachableCode": false,
     "useUnknownInCatchVariables": true,

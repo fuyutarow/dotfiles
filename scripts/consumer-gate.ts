@@ -307,8 +307,8 @@ async function preserveTypescript(
   }
   if (savedConfig === undefined) return;
   const presetConfig = await objectFile(join(copy, "tsconfig.json"));
-  const localOptions = JsonObject.safeParse(savedConfig.compilerOptions);
-  const sharedOptions = JsonObject.safeParse(presetConfig?.compilerOptions);
+  const localOptions = JsonObject.safeParse(savedConfig["compilerOptions"]);
+  const sharedOptions = JsonObject.safeParse(presetConfig?.["compilerOptions"]);
   await writeFile(
     join(copy, "tsconfig.json"),
     JSON.stringify(
@@ -508,7 +508,7 @@ async function registerWorkspaceLinks(
 // New installs and metadata stay in scratch, avoiding a cold multi-GB SDK download per gate.
 async function seedMiseInstalls(home: string): Promise<void> {
   const source = join(
-    process.env.MISE_DATA_DIR ?? join(homedir(), ".local/share/mise"),
+    process.env["MISE_DATA_DIR"] ?? join(homedir(), ".local/share/mise"),
     "installs",
   );
   const tools = await attempt(() => readdir(source));
@@ -669,7 +669,7 @@ async function capturePathExecutable(
 async function capturePath(scratch: string, shadowed: readonly string[]) {
   const directories: string[] = [];
   const bindings = new Set<string>();
-  for (const path of new Set((process.env.PATH ?? "").split(":"))) {
+  for (const path of new Set((process.env["PATH"] ?? "").split(":"))) {
     const origin = await attempt(() => realpath(resolve(path)));
     if (!origin.ok) continue;
     const entries = await attempt(() => readdir(origin.value));

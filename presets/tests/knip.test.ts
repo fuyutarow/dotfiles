@@ -208,5 +208,5 @@ test("applying the TypeScript preset creates knip.jsonc and pins Knip", async ()
   ).safeParse(await readFile(join(target, "package.json"), "utf8"));
   expect(packageJson.success).toBe(true);
   if (packageJson.success)
-    expect(packageJson.data.devDependencies.knip).toBe("6.42.1");
+    expect(packageJson.data.devDependencies["knip"]).toBe("6.42.1");
 });

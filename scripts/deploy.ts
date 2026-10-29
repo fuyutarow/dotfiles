@@ -113,7 +113,7 @@ async function deployLocal(): Promise<string> {
     DOTFILES_RENDER_FROM_WORKING_COPY: "0",
     DOCTOR_ONLY: "",
   };
-  const mise = process.env.DEPLOY_MISE ?? "mise";
+  const mise = process.env["DEPLOY_MISE"] ?? "mise";
   for (const task of ["deps", "hook:post-merge"]) {
     const result = await execute(
       [mise, "run", task],
@@ -163,7 +163,7 @@ for (const host of LAND_HOSTS) {
   emit(`${host.alias}: waiting for host lock`);
   const result = await execute(
     [
-      process.env.DEPLOY_SSH ?? "ssh",
+      process.env["DEPLOY_SSH"] ?? "ssh",
       "-o",
       "BatchMode=yes",
       host.alias,

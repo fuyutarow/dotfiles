@@ -12,7 +12,8 @@ function fatal(error: unknown): number {
 
 // Operator-facing check; private vocabulary is never declared in this repository.
 async function main(): Promise<number> {
-  const configHome = process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
+  const configHome =
+    process.env["XDG_CONFIG_HOME"] ?? join(homedir(), ".config");
   const listPath = join(configHome, "dotfiles", "private-names.txt");
   const loaded = await fromAsyncThrowable(() => Bun.file(listPath).text())();
   if (loaded.isErr()) {

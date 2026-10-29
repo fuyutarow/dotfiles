@@ -33,7 +33,7 @@ const candidate = context === undefined ? undefined : jjCandidate(context);
 
 function readCandidateFile(path: string): { code: number; out: string } {
   if (context === undefined) {
-    if (process.env.SKILLS_LINT_WORKTREE === "1") {
+    if (process.env["SKILLS_LINT_WORKTREE"] === "1") {
       const file = fromThrowable((value: string) =>
         readFileSync(value, "utf8"),
       )(join(ROOT, path));
@@ -67,7 +67,7 @@ function listSkillPaths(): { code: number; out: string; error: string } {
         .join(""),
       error: "",
     };
-  if (process.env.SKILLS_LINT_WORKTREE === "1")
+  if (process.env["SKILLS_LINT_WORKTREE"] === "1")
     return {
       code: 0,
       out: [

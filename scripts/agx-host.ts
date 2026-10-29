@@ -178,7 +178,7 @@ async function main(): Promise<void> {
     process.exitCode = 2;
     return;
   }
-  const home = process.env.HOME;
+  const home = process.env["HOME"];
   if (home === undefined || home === "") {
     process.stderr.write("HOME is required\n");
     process.exitCode = 1;
@@ -194,7 +194,7 @@ async function main(): Promise<void> {
   const result = await declareRentedCodexHost({
     home,
     rented: parsed.flags.rented ?? false,
-    hostname: Bun.env.HOSTNAME ?? "unknown",
+    hostname: Bun.env["HOSTNAME"] ?? "unknown",
     date: Temporal.Now.plainDateISO().toString(),
     probes: hostDeclarationProbes(),
     say: (line) => {

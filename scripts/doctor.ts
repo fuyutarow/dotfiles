@@ -330,7 +330,7 @@ export async function checkRipGraveyard(
         'export GRAVEYARD="${XDG_DATA_HOME:-$HOME/.local/share}/graveyard"',
     ).length === 1;
   const hasDeclaration = hasRipDeclaration && hasGraveyardDeclaration;
-  const xdgDataEnv = process.env.XDG_DATA_HOME;
+  const xdgDataEnv = process.env["XDG_DATA_HOME"];
   const xdgData =
     xdgDataEnv === undefined || xdgDataEnv === ""
       ? join(ctx.home, ".local/share")
@@ -383,7 +383,7 @@ export async function checkRipGraveyard(
 }
 
 export async function checkRipGraveyardTmp(): Promise<Finding> {
-  const root = process.env.DOCTOR_TEST_TMP_ROOT ?? "/tmp";
+  const root = process.env["DOCTOR_TEST_TMP_ROOT"] ?? "/tmp";
   const entries = await attempt(() =>
     readdirSync(root)
       .filter((name) => name.startsWith("graveyard-"))
@@ -596,7 +596,7 @@ export async function checkDeps(ctx: Ctx): Promise<Finding> {
   if (pkg === null) return skip("deps", "no package.json in this checkout");
   const pkgObj = obj(pkg);
   const pins: Record<string, string> = Object.fromEntries(
-    [pkgObj?.dependencies, pkgObj?.devDependencies].flatMap((section) =>
+    [pkgObj?.["dependencies"], pkgObj?.["devDependencies"]].flatMap((section) =>
       Object.entries(obj(section) ?? {}).flatMap(
         ([n, v]): [string, string][] => (typeof v === "string" ? [[n, v]] : []),
       ),
@@ -608,8 +608,10 @@ export async function checkDeps(ctx: Ctx): Promise<Finding> {
       join(ctx.dotfiles, "node_modules", name, "package.json"),
     );
     if (installed === null) off.push(`${name}: not installed (pinned ${want})`);
-    else if (obj(installed)?.version !== want)
-      off.push(`${name}: ${String(obj(installed)?.version)} ≠ pinned ${want}`);
+    else if (obj(installed)?.["version"] !== want)
+      off.push(
+        `${name}: ${String(obj(installed)?.["version"])} ≠ pinned ${want}`,
+      );
   }
   return off.length === 0
     ? pass(
@@ -631,7 +633,7 @@ export async function checkBins(ctx: Ctx): Promise<Finding> {
   const problems: string[] = [];
   // existsSync already swallows every stat failure (missing path, dangling symlink target,
   // permission error) and reports false, so a prior real path is safe to resolve unconditionally.
-  const bins = obj(obj(pkg)?.bin) ?? {};
+  const bins = obj(obj(pkg)?.["bin"]) ?? {};
   const declaredBins = Object.entries(bins).flatMap(
     ([n, r]): [string, string][] => (typeof r === "string" ? [[n, r]] : []),
   );
@@ -711,7 +713,7 @@ export function missingSkillHelpers(
 export function checkSkillHelperPaths(ctx: Ctx): Promise<Finding> {
   const missing = registeredRepos(
     ctx.home,
-    process.env.WORKSPACE_ROOT ?? join(ctx.home, "Workspace"),
+    process.env["WORKSPACE_ROOT"] ?? join(ctx.home, "Workspace"),
   ).flatMap((repo) => {
     const misePath = join(repo, "mise.toml");
     if (!existsSync(misePath)) return [];
@@ -819,7 +821,8 @@ export async function checkMiseScope(ctx: Ctx): Promise<Finding> {
 
 export async function checkMcp(ctx: Ctx): Promise<Finding> {
   const declared = Object.keys(
-    obj(obj(await readJson(join(ctx.dotfiles, ".mcp.json")))?.mcpServers) ?? {},
+    obj(obj(await readJson(join(ctx.dotfiles, ".mcp.json")))?.["mcpServers"]) ??
+      {},
   );
   if (declared.length === 0)
     return skip("mcp", ".mcp.json declares no servers");
@@ -1588,7 +1591,7 @@ async function bunRequirement(ctx: Ctx): Promise<string | undefined> {
   if (!source.ok) return undefined;
   const parsed = jsonText.safeParse(source.value);
   const required = parsed.success
-    ? obj(obj(parsed.data)?.engines)?.bun
+    ? obj(obj(parsed.data)?.["engines"])?.["bun"]
     : undefined;
   return typeof required === "string" && /^>=\d+\.\d+\.\d+$/u.test(required)
     ? required
@@ -1623,7 +1626,7 @@ async function trackedOldPin(
     const file = await realpath(link);
     if (!file.endsWith(".toml")) return null;
     const config = Bun.TOML.parse(await Bun.file(file).text());
-    const pin = obj(obj(config)?.tools)?.bun;
+    const pin = obj(obj(config)?.["tools"])?.["bun"];
     if (typeof pin !== "string" || !/^\d+\.\d+(?:\.\d+)?$/u.test(pin))
       return null;
     // A minor-line pin resolves to its newest patch; only a line below the minimum is stale.
@@ -1638,7 +1641,7 @@ async function trackedOldPin(
 export async function checkBunFloor(
   ctx: Ctx,
   homebrew = brewPrefix(ctx.home),
-  path = process.env.PATH ?? "",
+  path = process.env["PATH"] ?? "",
 ): Promise<Finding> {
   const required = await bunRequirement(ctx);
   if (required === undefined)
@@ -2006,7 +2009,7 @@ export async function checkCoreTools(ctx: Ctx): Promise<Finding> {
 
 /** Flag earlier PATH copies and duplicates in user bin directories. */
 export async function checkBrewShadows(ctx: Ctx): Promise<Finding> {
-  const path = process.env.PATH ?? "";
+  const path = process.env["PATH"] ?? "";
   const brew = Bun.which("brew", { PATH: path });
   if (brew === null)
     return warn(
@@ -2242,15 +2245,15 @@ export function render(findings: Finding[]): string {
 }
 
 async function main(): Promise<void> {
-  const home = process.env.HOME ?? homedir();
+  const home = process.env["HOME"] ?? homedir();
   const ctx: Ctx = {
     home,
-    dotfiles: process.env.DOTFILES ?? join(import.meta.dir, ".."),
+    dotfiles: process.env["DOTFILES"] ?? join(import.meta.dir, ".."),
     isMac: process.platform === "darwin",
     isWsl: /microsoft/iu.test(release()), // same test as link-dots.ts: `uname -r`
     isCoreBox: process.platform === "linux" && !/microsoft/iu.test(release()),
   };
-  const only = (process.env.DOCTOR_ONLY ?? "")
+  const only = (process.env["DOCTOR_ONLY"] ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);

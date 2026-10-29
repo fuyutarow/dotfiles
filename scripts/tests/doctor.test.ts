@@ -309,7 +309,7 @@ function doctor(
     env: {
       ...process.env,
       ...env,
-      PATH: `${FAKE_CLAUDE_BIN}:${env["PATH"] ?? process.env.PATH ?? ""}`,
+      PATH: `${FAKE_CLAUDE_BIN}:${env["PATH"] ?? process.env["PATH"] ?? ""}`,
       CODEX_CONFIG_HOME: env.HOME,
       DOCTOR_ONLY: only,
       BUN_RUNTIME_TRANSPILER_CACHE_PATH: tmp("doctor-bun-cache-"),

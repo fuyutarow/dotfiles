@@ -57,7 +57,7 @@ function fail(message: string, code = 1): void {
 
 function currentHostKind(): HostKind {
   if (process.platform === "darwin") return "mac";
-  if (process.env.WSL_DISTRO_NAME !== undefined) return "wsl";
+  if (process.env["WSL_DISTRO_NAME"] !== undefined) return "wsl";
   return /microsoft/iu.test(release()) ? "wsl" : "linux";
 }
 
@@ -72,7 +72,7 @@ async function targetKind(target: string): Promise<HostKind | Error> {
 }
 
 function dotfilesRoot(): string {
-  return process.env.DOTFILES ?? join(import.meta.dir, "../../..");
+  return process.env["DOTFILES"] ?? join(import.meta.dir, "../../..");
 }
 
 function errorMessage(error: unknown): string {

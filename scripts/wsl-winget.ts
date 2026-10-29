@@ -133,7 +133,7 @@ async function wingetPath(): Promise<string> {
   return p;
 }
 
-const repoFile = `${process.env.DOTFILES ?? `${process.env.HOME}/dotfiles`}/wsl/winget.win.json`;
+const repoFile = `${process.env["DOTFILES"] ?? `${process.env["HOME"]}/dotfiles`}/wsl/winget.win.json`;
 
 // A Windows temp path winget can write to, and the same path as seen from WSL.
 async function scratch(): Promise<{ win: string; wsl: string }> {
@@ -206,9 +206,13 @@ async function dump(): Promise<void> {
   // Every record is spread, never rebuilt from a schema's output: the tracked file keeps winget's
   // own key order and every field this script does not read.
   const sources = (
-    must(JsonRecordList.nullish(), doc.Sources, "Sources") ?? []
+    must(JsonRecordList.nullish(), doc["Sources"], "Sources") ?? []
   ).map((src) => {
-    const packages = must(JsonRecordList, src.Packages, "a source's Packages")
+    const packages = must(
+      JsonRecordList,
+      src["Packages"],
+      "a source's Packages",
+    )
       .map((p) => ({
         id: must(PackageId, p, "a package").PackageIdentifier,
         p,
@@ -227,7 +231,7 @@ async function dump(): Promise<void> {
     a.name.localeCompare(b.name),
   );
   const json =
-    doc.Sources === undefined || doc.Sources === null
+    doc["Sources"] === undefined || doc["Sources"] === null
       ? doc
       : { ...doc, Sources: sortedSources.map((s) => s.src) };
   await Bun.write(repoFile, `${JSON.stringify(json, null, 2)}\n`);

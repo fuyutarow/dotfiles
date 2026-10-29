@@ -51,7 +51,7 @@ test.each([".", "tools"])(
         MISE_CEILING_PATHS: scratch,
         MISE_STATE_DIR: join(scratch, "mise-state"),
         JJ_CONFIG: config,
-        PATH: `${bin}:${process.env.PATH}`,
+        PATH: `${bin}:${process.env["PATH"]}`,
         MISE_TRUSTED_CONFIG_PATHS: repo,
         MISE_GLOBAL_CONFIG_FILE: join(scratch, "no-global.toml"),
         PRECOMMIT_VCS: undefined,

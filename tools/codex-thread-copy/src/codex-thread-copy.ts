@@ -73,7 +73,7 @@ if (import.meta.main) {
     },
   });
   const sessionsDirectory = resolve(
-    process.env.CODEX_HOME ?? `${process.env.HOME ?? ""}/.codex`,
+    process.env["CODEX_HOME"] ?? `${process.env["HOME"] ?? ""}/.codex`,
     "sessions",
   );
   const result = await copyThread(

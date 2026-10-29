@@ -56,10 +56,10 @@ function fakeHerdrSocket(path: string) {
           const request = parsed.data;
           requests.push(request);
           const result =
-            request.method === "ping"
+            request["method"] === "ping"
               ? { type: "pong", version: "0.9.3", protocol: 22 }
               : { type: "ok" };
-          socket.write(`${JSON.stringify({ id: request.id, result })}\n`);
+          socket.write(`${JSON.stringify({ id: request["id"], result })}\n`);
         }
       }
     });
@@ -153,7 +153,7 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
   const requests = await fakeHerdrSocket(socketPath);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    PATH: `${binDir}:${process.env.PATH ?? ""}`,
+    PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
     HOME: join(root, "home"),
     XDG_STATE_HOME: stateDir,
     TZ: "UTC",
@@ -163,17 +163,17 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
   };
 
   expect(await runEntry(root, env, ["--basic", "value with spaces"])).toBe(0);
-  expect(requests.map((request) => request.method)).toContain(
+  expect(requests.map((request) => request["method"])).toContain(
     "pane.report_agent",
   );
-  expect(requests.map((request) => request.method)).toContain(
+  expect(requests.map((request) => request["method"])).toContain(
     "pane.report_metadata",
   );
-  expect(requests.map((request) => request.method)).toContain(
+  expect(requests.map((request) => request["method"])).toContain(
     "pane.release_agent",
   );
   const agentRequest = requests.find(
-    (request) => request.method === "pane.report_agent",
+    (request) => request["method"] === "pane.report_agent",
   );
   const parsedAgentRequest = AgentRequestSchema.safeParse(agentRequest);
   expect(parsedAgentRequest.success).toBe(true);
@@ -186,7 +186,7 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
       resume_argv: ["btmp", "--basic", "value with spaces"],
     });
   const metadata = requests.find(
-    (request) => request.method === "pane.report_metadata",
+    (request) => request["method"] === "pane.report_metadata",
   );
   const parsedMetadata = MetadataRequestSchema.safeParse(metadata);
   expect(parsedMetadata.success, JSON.stringify(metadata)).toBe(true);
@@ -204,18 +204,18 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
     expect(parsedMetadata.data.params.title).toBe(`btm · ${btm_summary}`);
   }
   const metadataRequests = requests.filter(
-    (request) => request.method === "pane.report_metadata",
+    (request) => request["method"] === "pane.report_metadata",
   );
-  expect(metadataRequests.at(-1)?.params).toMatchObject({
+  expect(metadataRequests.at(-1)?.["params"]).toMatchObject({
     pane_id: "w1:p9",
     clear_title: true,
     tokens: { btm_summary: null },
   });
   expect(
-    requests.filter((request) => request.method === "pane.report_agent"),
+    requests.filter((request) => request["method"] === "pane.report_agent"),
   ).toHaveLength(1);
   expect(
-    requests.filter((request) => request.method === "pane.release_agent"),
+    requests.filter((request) => request["method"] === "pane.release_agent"),
   ).toHaveLength(1);
 }, 15000);
 
@@ -290,7 +290,7 @@ test.each([
     const requests = await fakeHerdrSocket(socketPath);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
       HOME: join(root, "home"),
       XDG_STATE_HOME: stateDir,
       TZ: "UTC",
@@ -301,7 +301,7 @@ test.each([
 
     expect(await runEntry(root, env)).toBe(0);
     const metadata = requests.find(
-      (request) => request.method === "pane.report_metadata",
+      (request) => request["method"] === "pane.report_metadata",
     );
     const parsed = MetadataRequestSchema.safeParse(metadata);
     expect(parsed.success, JSON.stringify(metadata)).toBe(true);
@@ -325,7 +325,7 @@ test("reports a missing GPU owner state as n/a", async () => {
   const requests = await fakeHerdrSocket(socketPath);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    PATH: `${binDir}:${process.env.PATH ?? ""}`,
+    PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
     HOME: join(root, "home"),
     XDG_STATE_HOME: stateDir,
     HERDR_ENV: "1",
@@ -335,7 +335,7 @@ test("reports a missing GPU owner state as n/a", async () => {
 
   expect(await runEntry(root, env)).toBe(0);
   const metadata = requests.find(
-    (request) => request.method === "pane.report_metadata",
+    (request) => request["method"] === "pane.report_metadata",
   );
   const parsed = MetadataRequestSchema.safeParse(metadata);
   expect(parsed.success, JSON.stringify(metadata)).toBe(true);
@@ -360,12 +360,12 @@ test("runs btm without any Herdr reports outside a Herdr pane", async () => {
   const requests = await fakeHerdrSocket(socketPath);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    PATH: `${binDir}:${process.env.PATH ?? ""}`,
+    PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
     HOME: join(root, "home"),
   };
-  delete env.HERDR_ENV;
-  delete env.HERDR_SOCKET_PATH;
-  delete env.HERDR_PANE_ID;
+  delete env["HERDR_ENV"];
+  delete env["HERDR_SOCKET_PATH"];
+  delete env["HERDR_PANE_ID"];
 
   expect(
     await runEntry(root, env, ["--basic", "value with spaces", "--", "-x"]),

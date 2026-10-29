@@ -165,7 +165,7 @@ async function ensureLocked(socket: string): Promise<Result<void, Error>> {
 // One lock per explicit socket serializes scheduler/manual ensures. A killed
 // ensure's lease expires after 30s; normal requests + registration finish in 15s.
 export async function ensureBtm(): Promise<Result<void, Error>> {
-  const socket = process.env.HERDR_SOCKET_PATH;
+  const socket = process.env["HERDR_SOCKET_PATH"];
   if (socket === undefined || socket === "")
     return err(new Error("ensure requires HERDR_SOCKET_PATH"));
   const lock = `${resolve(socket)}.btm-ensure.lock`;

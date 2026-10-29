@@ -43,10 +43,10 @@ const MetricsSchema = z.object({
 });
 
 function herdrPane(): string | undefined {
-  const socketPath = process.env.HERDR_SOCKET_PATH;
-  const paneId = process.env.HERDR_PANE_ID;
+  const socketPath = process.env["HERDR_SOCKET_PATH"];
+  const paneId = process.env["HERDR_PANE_ID"];
   if (
-    process.env.HERDR_ENV !== "1" ||
+    process.env["HERDR_ENV"] !== "1" ||
     socketPath === undefined ||
     socketPath === "" ||
     paneId === undefined ||

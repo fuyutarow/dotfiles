@@ -301,3 +301,10 @@ the same filesystem does not free capacity. `move workspace-gc` remains unavaila
 unknown result and exit 4 without mutation. Invalid requests exit 2. The existing
 `disk-reclaim` commands and their formats remain available unchanged. For `disk free records`,
 stdin must contain legacy `disk-reclaim plan` JSONL records.
+
+`disk free targets mise-configs` delegates the existing `mise prune --configs`
+operation as one target item. It rechecks the eligible metadata and its identity
+under the reclaim lock, records the operation, and reports before/after statfs
+measurements. Counts refer to target items; the backend's metadata counts remain
+in the item detail. Per-record selection is a follow-up; this command retains the
+bulk operation's scope. Other acting targets remain unavailable through `disk`.

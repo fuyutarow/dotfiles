@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.4 — 2026-10-29
+
+- Enable measured disk free for mise config metadata
+
 ## 1.12.3 — 2026-10-29
 
 - Add guarded recoverable move paths

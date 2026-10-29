@@ -9,6 +9,7 @@ import { runProbe } from "./disk-probe.ts";
 import { planPaths } from "./disk-path-plan.ts";
 import { unavailableRecords } from "./disk-records.ts";
 import { movePaths } from "./disk-move.ts";
+import { freeMiseConfigs } from "./disk-mise-configs.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const grammar: Record<string, string[]> = {
@@ -672,6 +673,53 @@ async function main() {
       `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items, counts: { selected: items.length, completed: 0, refused, failed: 0, unknown }, errors: [], receipt: null })}\n`,
     );
     process.exitCode = unknown > 0 ? 4 : 1;
+    return;
+  }
+  if (
+    key === "free targets" &&
+    targets.length === 1 &&
+    targets[0] === "mise-configs"
+  ) {
+    const controller = new AbortController();
+    let cancelled = 0;
+    const interrupt = () => {
+      cancelled = 130;
+      controller.abort();
+    };
+    const terminate = () => {
+      cancelled = 143;
+      controller.abort();
+    };
+    process.once("SIGINT", interrupt);
+    process.once("SIGTERM", terminate);
+    const result = await freeMiseConfigs(
+      deadline,
+      start,
+      !options.has("no-progress"),
+      undefined,
+      controller.signal,
+    );
+    process.removeListener("SIGINT", interrupt);
+    process.removeListener("SIGTERM", terminate);
+    const { item, before, after, receipt, exit } = result;
+    let outcome = "partial";
+    if (exit === 0) outcome = "completed";
+    else if (exit === 3) outcome = "busy";
+    else if (exit === 4) outcome = "unknown";
+    if (cancelled !== 0) outcome = "cancelled";
+    const counts = {
+      selected: 1,
+      completed: item.verdict === "completed" ? 1 : 0,
+      refused: ["deny", "changed", "ask", "keep"].includes(item.verdict)
+        ? 1
+        : 0,
+      failed: item.verdict === "failed" ? 1 : 0,
+      unknown: item.verdict === "unknown" ? 1 : 0,
+    };
+    process.stdout.write(
+      `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before, after, delta_available_bytes: before === null || after === null ? null : after.available_bytes - before.available_bytes, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items: [item], counts, errors: [], receipt })}\n`,
+    );
+    process.exitCode = cancelled === 0 ? exit : cancelled;
     return;
   }
   if (key === "move paths") {

@@ -538,3 +538,148 @@ describe("disk parser and effect firewall", () => {
     expect(jsonText.safeParse(out).data).toMatchObject({ outcome: "unknown" });
   });
 });
+
+test("mise-configs adapter keeps guards and reports measured bulk result", async () => {
+  const { freeMiseConfigs } = await import("../src/disk-mise-configs.ts");
+  const { createMiseConfigsTarget } =
+    await import("../src/targets/mise-configs.ts");
+  const candidate = {
+    id: "mise-configs:prune",
+    path: null,
+    verdict: "RECLAIM" as const,
+    reason: "one dead record",
+    checks: [],
+    bytes: null,
+    bytes_kind: "estimate" as const,
+    action: { kind: "command" as const, argv: ["mise", "prune", "--configs"] },
+    result: null,
+  };
+  let acts = 0;
+  let released = 0;
+  let fingerprints = ["identity", "identity"];
+  let free = [100, 105];
+  const target = {
+    ...createMiseConfigsTarget(),
+    available: () => ({ available: true, skip_reason: null }),
+    plan: () => [candidate],
+    act: () => {
+      acts++;
+      return { ok: true, bytes_freed: null, error: null };
+    },
+  };
+  const deps = {
+    target,
+    guard: (): string | null => null,
+    lock: (_ms: number) =>
+      Promise.resolve({
+        release: () => {
+          released++;
+        },
+        exit: 0,
+        error: null,
+      }),
+    fingerprint: () => Promise.resolve(fingerprints.shift() ?? "identity"),
+    measure: () =>
+      Promise.resolve({
+        time: "fixture",
+        source: "statfs",
+        mount: null,
+        filesystem: null,
+        available_bytes: free.shift() ?? 100,
+        free_inodes: 10,
+        error: null,
+      }),
+    receipt: () =>
+      Promise.resolve({
+        id: "fixture",
+        path: "/fixture/receipt",
+        delivery_error: null,
+      }),
+  };
+  const runAdapter = () =>
+    freeMiseConfigs(10000, performance.now(), false, deps);
+  const success = await runAdapter();
+  expect(success.exit).toBe(0);
+  expect(success.item).toMatchObject({
+    verdict: "completed",
+    effect: "unlink",
+    fingerprint: "identity",
+  });
+  expect(success.after?.available_bytes).toBe(105);
+  expect(success.before?.available_bytes).toBe(100);
+  expect(success.receipt?.id).toBe("fixture");
+  expect(acts).toBe(1);
+  expect(released).toBe(1);
+  fingerprints = ["first", "changed"];
+  const changed = await runAdapter();
+  expect(changed.item).toMatchObject({ verdict: "changed", effect: "none" });
+  expect(changed.exit).toBe(1);
+  expect(acts).toBe(1);
+  const busy = await freeMiseConfigs(10000, performance.now(), false, {
+    ...deps,
+    lock: () => Promise.resolve({ release: null, exit: 3, error: "busy" }),
+  });
+  expect(busy.exit).toBe(3);
+  expect(acts).toBe(1);
+  const unavailable = await freeMiseConfigs(10000, performance.now(), false, {
+    ...deps,
+    target: {
+      ...target,
+      available: () => ({
+        available: false,
+        skip_reason: "mise binary is unavailable",
+      }),
+    },
+  });
+  expect(unavailable.exit).toBe(4);
+  expect(unavailable.item.reason).toContain("unavailable");
+  const denied = await freeMiseConfigs(10000, performance.now(), false, {
+    ...deps,
+    guard: () => "worker guard",
+  });
+  expect(denied.item).toMatchObject({ verdict: "deny", effect: "none" });
+  expect(acts).toBe(1);
+  fingerprints = ["identity", "identity"];
+  let measurements = 0;
+  const missing = await freeMiseConfigs(10000, performance.now(), false, {
+    ...deps,
+    measure: () => {
+      measurements++;
+      if (measurements === 2)
+        return new Promise((_resolve, reject) => {
+          reject(new Error("statfs unavailable"));
+        });
+      return Promise.resolve({
+        time: "fixture",
+        source: "statfs",
+        mount: null,
+        filesystem: null,
+        available_bytes: 100,
+        free_inodes: 10,
+        error: null,
+      });
+    },
+  });
+  expect(missing.exit).toBe(4);
+  expect(missing.item.verdict).toBe("unknown");
+  fingerprints = ["identity", "identity"];
+  free = [100, 100];
+  const zero = await runAdapter();
+  expect(zero.exit).toBe(0);
+  expect(zero.after?.available_bytes).toBe(zero.before?.available_bytes);
+  fingerprints = ["identity", "identity"];
+  const receiptFailure = await freeMiseConfigs(
+    10000,
+    performance.now(),
+    false,
+    {
+      ...deps,
+      receipt: () =>
+        new Promise((_resolve, reject) => {
+          reject(new Error("disk full"));
+        }),
+    },
+  );
+  expect(receiptFailure.exit).toBe(4);
+  expect(receiptFailure.item.reason).toContain("receipt unavailable");
+});

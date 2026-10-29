@@ -65,7 +65,7 @@ const readRecordedPath = async (entry: string): Promise<string | undefined> => {
   return undefined;
 };
 
-async function deadEntries(stateDir: string): Promise<string[]> {
+export async function deadEntries(stateDir: string): Promise<string[]> {
   const dead: string[] = [];
   for (const [directory, requiresFile] of [
     ["tracked-configs", true],

@@ -213,3 +213,11 @@ reason = "Herdr installs and owns this session-state integration outside the rep
 command = "sh ~/.claude/hooks/herdr-agent-state.sh session"
 owner = "herdr"
 reason = "Vendored Herdr integration; upstream owns and overwrites its implementation."
+
+[[hook]]
+slug = "coord-idle-turn"
+script = "enforce-coord-idle-turn.ts"
+event = "Stop"
+fail_closed = false
+timeout = 20
+vendors = ["claude"]

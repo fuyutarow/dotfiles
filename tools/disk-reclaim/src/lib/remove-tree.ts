@@ -51,6 +51,7 @@ export type RemoveTreeOptions = {
   /** Defaults to allocated blocks; owner free requests count logical unlinked bytes. */
   bytesKind?: "allocated" | "logical";
   signal?: AbortSignal;
+  yieldForegroundLock?: (completed: number) => boolean | Promise<boolean>;
   owner?: (path: string) => { uid: number; name: string };
   immutable?: (path: string) => boolean | null;
   dryRun?: boolean;
@@ -277,6 +278,8 @@ export async function removeTree(
   let lastProgress = 0;
   const pending: { path: string; stat: Stats }[] = [];
   let inspected = 0;
+  let yielded = false;
+  const aborted = () => options.signal?.aborted === true;
   const writeProgress = (final = false): void => {
     const progress = options.progress;
     if (options.dryRun === true || progress === undefined || progress === false)
@@ -416,6 +419,14 @@ export async function removeTree(
   const inFlight = new Set<Promise<boolean>>();
   const drain = async (): Promise<boolean> =>
     (await Promise.all(inFlight)).every(Boolean);
+  const checkpoint = async (): Promise<boolean> => {
+    await Bun.sleep(0);
+    if (aborted()) return false;
+    if (options.yieldForegroundLock === undefined) return true;
+    if (!(await drain()) || aborted()) return false;
+    yielded = await options.yieldForegroundLock(0);
+    return !yielded && !aborted();
+  };
   const queueOrRemove = async (entry: {
     path: string;
     stat: Stats;
@@ -441,19 +452,19 @@ export async function removeTree(
   ): Promise<boolean> => {
     let complete = true;
     for (const child of children) {
-      if (options.signal?.aborted === true) return false;
+      if (options.signal?.aborted === true || yielded) return false;
       complete = (await visit(join(entry, child))) && complete;
     }
     return complete;
   };
   const visit = async (entry: string): Promise<boolean> => {
-    if (options.signal?.aborted === true) return false;
+    if (options.signal?.aborted === true || yielded) return false;
     if (options.allowVisit?.() === false) {
       errors.push({ path: entry, error: "request work budget exhausted" });
       return false;
     }
     inspected++;
-    if (inspected % 128 === 0) await Bun.sleep(0);
+    if (inspected % 128 === 0 && !(await checkpoint())) return false;
     const statResult = fromThrowable(() => lstatSync(entry))();
     if (statResult.isErr()) {
       errors.push({ path: entry, error: message(statResult.error) });
@@ -540,17 +551,27 @@ export async function removeTree(
     if (options.dryRun === true) return true;
     return queueOrRemove({ path: entry, stat });
   };
-  await visit(path);
+  const complete = await visit(path);
   await drain();
+  if (yielded)
+    errors.push({ path, error: "tree removal yielded to foreground work" });
   if (
     options.dryRun !== true &&
+    complete &&
+    !aborted() &&
     refused.length === 0 &&
     errors.length === 0 &&
     options.beforeUnlink !== undefined &&
     !(await options.beforeUnlink())
   )
     errors.push({ path, error: "request authority changed before unlink" });
-  if (options.dryRun !== true && refused.length === 0 && errors.length === 0) {
+  if (
+    options.dryRun !== true &&
+    complete &&
+    refused.length === 0 &&
+    errors.length === 0 &&
+    options.signal?.aborted !== true
+  ) {
     const files = pending.filter(({ stat }) => !stat.isDirectory());
     const directories = pending
       .filter(({ stat }) => stat.isDirectory())
@@ -574,7 +595,7 @@ export async function removeTree(
       (maximum, { path: item }) => Math.max(maximum, pathDepth(item)),
       0,
     );
-    for (let depth = maxDepth; depth >= 0; depth -= 1) {
+    for (let depth = maxDepth; depth >= 0 && !aborted(); depth -= 1) {
       await unlink(
         directories.filter(({ path: item }) => pathDepth(item) === depth),
       );
@@ -584,7 +605,7 @@ export async function removeTree(
   if (options.signal?.aborted === true)
     errors.push({
       path,
-      error: "graveyard expiry budget exhausted or cancelled",
+      error: "tree removal cancelled",
     });
   const after = measureFilesystem
     ? fromThrowable(() => statfsSync(parent))()

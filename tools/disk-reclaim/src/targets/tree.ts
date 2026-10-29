@@ -224,19 +224,23 @@ export async function keepTreeCandidate(
   };
 }
 
-export async function deleteTree(candidate: Candidate, _ctx: Context) {
+export async function deleteTree(candidate: Candidate, ctx: Context) {
   if (candidate.path === null)
     return { ok: false, bytes_freed: null, error: "missing path" };
   const result = await removeTree(candidate.path, {
     uid: process.getuid?.() ?? 0,
+    ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
+    ...(ctx.yieldForegroundLock === undefined
+      ? {}
+      : { yieldForegroundLock: ctx.yieldForegroundLock }),
     protection: {
-      ownerTarget: _ctx.targetName,
-      procDir: _ctx.procDir,
-      repoRoots: [..._ctx.config.repo_roots, ..._ctx.config.repos],
-      protectedPaths: _ctx.config.protected ?? [],
-      ignoreUnreadableProcs: _ctx.config.ignore_unreadable_procs ?? [],
+      ownerTarget: ctx.targetName,
+      procDir: ctx.procDir,
+      repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
+      protectedPaths: ctx.config.protected ?? [],
+      ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
     },
-    progress: removeTreeProgress(candidate.path, candidate.bytes, _ctx),
+    progress: removeTreeProgress(candidate.path, candidate.bytes, ctx),
   });
   return {
     ok: result.ok,

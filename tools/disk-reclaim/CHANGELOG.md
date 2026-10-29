@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.1 — 2026-10-29
+
+- Stop tree removal on cancellation or foreground lock yield
+
 ## 1.11.0 — 2026-10-29
 
 - Stop locked runs at a cooperative deadline and record the phase.

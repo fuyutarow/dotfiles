@@ -713,9 +713,9 @@ const normalizedVerified = (
       continue;
     }
     if (
-      typeof item.by !== "string" ||
-      !nonemptyText(item.by) ||
-      !validActor(item.by)
+      typeof item["by"] !== "string" ||
+      !nonemptyText(item["by"]) ||
+      !validActor(item["by"])
     ) {
       report(
         "RDS031",
@@ -723,9 +723,9 @@ const normalizedVerified = (
       );
     }
     if (
-      typeof item.at !== "string" ||
-      !nonemptyText(item.at) ||
-      !validDateTime(item.at)
+      typeof item["at"] !== "string" ||
+      !nonemptyText(item["at"]) ||
+      !validDateTime(item["at"])
     ) {
       report(
         "RDS032",
@@ -733,14 +733,14 @@ const normalizedVerified = (
       );
     }
     if (
-      typeof item.by === "string" &&
-      nonemptyText(item.by) &&
-      validActor(item.by) &&
-      typeof item.at === "string" &&
-      nonemptyText(item.at) &&
-      validDateTime(item.at)
+      typeof item["by"] === "string" &&
+      nonemptyText(item["by"]) &&
+      validActor(item["by"]) &&
+      typeof item["at"] === "string" &&
+      nonemptyText(item["at"]) &&
+      validDateTime(item["at"])
     ) {
-      events.push({ at: item.at, by: item.by });
+      events.push({ at: item["at"], by: item["by"] });
     }
   }
   return events;
@@ -764,29 +764,32 @@ const parseSources = (
       continue;
     }
     if (
-      typeof item.id !== "string" ||
-      !nonemptyText(item.id) ||
-      !/^[A-Za-z][A-Za-z0-9._-]*$/u.test(item.id)
+      typeof item["id"] !== "string" ||
+      !nonemptyText(item["id"]) ||
+      !/^[A-Za-z][A-Za-z0-9._-]*$/u.test(item["id"])
     ) {
       report(
         "RDS042",
         `sources[${index}].id must match ^[A-Za-z][A-Za-z0-9._-]*$`,
       );
-    } else if (ids.has(item.id)) {
-      report("RDS043", `duplicate sources[].id: ${item.id}`);
+    } else if (ids.has(item["id"])) {
+      report("RDS043", `duplicate sources[].id: ${item["id"]}`);
     } else {
-      ids.add(item.id);
+      ids.add(item["id"]);
     }
-    if (typeof item.resource !== "string" || !nonemptyText(item.resource)) {
+    if (
+      typeof item["resource"] !== "string" ||
+      !nonemptyText(item["resource"])
+    ) {
       report("RDS044", `sources[${index}].resource must be non-empty`);
     }
     if (
-      typeof item.id === "string" &&
-      nonemptyText(item.id) &&
-      typeof item.resource === "string" &&
-      nonemptyText(item.resource)
+      typeof item["id"] === "string" &&
+      nonemptyText(item["id"]) &&
+      typeof item["resource"] === "string" &&
+      nonemptyText(item["resource"])
     ) {
-      result.push({ id: item.id, resource: item.resource });
+      result.push({ id: item["id"], resource: item["resource"] });
     }
   }
   return result;
@@ -801,11 +804,11 @@ const parseReview = (
     report("RDS100", "rd_review must be a mapping");
     return undefined;
   }
-  const state = value.state;
-  const candidate = value.candidate;
-  const candidateSha256 = value.candidate_sha256;
-  const reviewer = value.reviewer;
-  const decision = value.decision;
+  const state = value["state"];
+  const candidate = value["candidate"];
+  const candidateSha256 = value["candidate_sha256"];
+  const reviewer = value["reviewer"];
+  const decision = value["decision"];
   const parsedState =
     typeof state === "string" && nonemptyText(state)
       ? reviewStateType(state)
@@ -843,8 +846,10 @@ const parseReview = (
 
   const questions: ReviewQuestion[] = [];
   const questionIds = new Set<string>();
-  const questionItems = Array.isArray(value.questions) ? value.questions : [];
-  if (!Array.isArray(value.questions) || questionItems.length === 0) {
+  const questionItems = Array.isArray(value["questions"])
+    ? value["questions"]
+    : [];
+  if (!Array.isArray(value["questions"]) || questionItems.length === 0) {
     report("RDS105", "rd_review.questions must be a non-empty array");
   }
   for (const [index, rawItem] of questionItems.entries()) {
@@ -853,11 +858,11 @@ const parseReview = (
       report("RDS106", `rd_review.questions[${index}] must be a mapping`);
       continue;
     }
-    const id = item.id;
-    const question = item.question;
-    const acceptIf = item.accept_if;
+    const id = item["id"];
+    const question = item["question"];
+    const acceptIf = item["accept_if"];
     const evidence = stringArray(
-      item.evidence,
+      item["evidence"],
       `rd_review.questions[${index}].evidence`,
       report,
     );
@@ -897,7 +902,7 @@ const parseReview = (
     }
   }
 
-  const decidedAt = value.decided_at;
+  const decidedAt = value["decided_at"];
   if (parsedState !== undefined && parsedState !== "open") {
     if (
       typeof decidedAt !== "string" ||
@@ -976,7 +981,7 @@ const parseRdTypeRegistryText = (source: string): RdTypeRegistryParse => {
     };
   }
   const parsed = asRecord(decoded.data);
-  const typeCodes = asRecord(parsed?.type_codes);
+  const typeCodes = asRecord(parsed?.["type_codes"]);
   const document = parseDocument(source, {
     prettyErrors: true,
     strict: true,
@@ -996,7 +1001,7 @@ const parseRdTypeRegistryText = (source: string): RdTypeRegistryParse => {
   }
   if (
     parsed === undefined ||
-    parsed.schema !== "rd-document-types/v1" ||
+    parsed["schema"] !== "rd-document-types/v1" ||
     typeCodes === undefined ||
     Object.keys(parsed).toSorted().join(",") !== "schema,type_codes"
   ) {
@@ -1263,7 +1268,7 @@ const readBaseDocumentIdentities = async (
   const identities: BaseDocumentIdentity[] = [];
   for (const [index, path] of paths.entries()) {
     const document = await parseMarkdown(sources[index] ?? "", () => {});
-    const value = document?.meta?.rd_document_id;
+    const value = document?.meta?.["rd_document_id"];
     if (typeof value !== "string" || !nonemptyText(value)) continue;
     const identity = parseRdDocumentId(value);
     if (identity !== undefined) identities.push({ identity, path });
@@ -1399,8 +1404,8 @@ const canonicalContentNeedsNewTimestamp = (
   ) {
     return false;
   }
-  const oldGenerated = asRecord(oldDocument.meta?.generated)?.at;
-  const currentGenerated = asRecord(currentDocument.meta.generated)?.at;
+  const oldGenerated = asRecord(oldDocument.meta?.["generated"])?.["at"];
+  const currentGenerated = asRecord(currentDocument.meta["generated"])?.["at"];
   return (
     typeof oldGenerated !== "string" ||
     !nonemptyText(oldGenerated) ||
@@ -1450,18 +1455,18 @@ const validateGitChange = async (
   const oldDocument = await baseDocument(repositoryRoot, base, oldPath);
   const oldMeta = oldDocument?.meta;
   const oldRole =
-    typeof oldMeta?.rd_role === "string" && nonemptyText(oldMeta.rd_role)
-      ? roleType(oldMeta.rd_role)
+    typeof oldMeta?.["rd_role"] === "string" && nonemptyText(oldMeta["rd_role"])
+      ? roleType(oldMeta["rd_role"])
       : undefined;
   const oldStatus =
-    typeof oldMeta?.status === "string" && nonemptyText(oldMeta.status)
-      ? statusType(oldMeta.status)
+    typeof oldMeta?.["status"] === "string" && nonemptyText(oldMeta["status"])
+      ? statusType(oldMeta["status"])
       : undefined;
-  const oldReview = asRecord(oldMeta?.rd_review)?.state;
+  const oldReview = asRecord(oldMeta?.["rd_review"])?.["state"];
   const oldDocumentId =
-    typeof oldMeta?.rd_document_id === "string" &&
-    nonemptyText(oldMeta.rd_document_id)
-      ? oldMeta.rd_document_id
+    typeof oldMeta?.["rd_document_id"] === "string" &&
+    nonemptyText(oldMeta["rd_document_id"])
+      ? oldMeta["rd_document_id"]
       : undefined;
   for (const currentPath of oldDocumentId === undefined
     ? []
@@ -1474,7 +1479,7 @@ const validateGitChange = async (
       `rd_document_id ${oldDocumentId} remains bound to its original path; ${currentPath} requires a new ID`,
     );
   }
-  const oldType = oldMeta?.type;
+  const oldType = oldMeta?.["type"];
   const hasOldType = typeof oldType === "string" && nonemptyText(oldType);
   const baseCode =
     hasOldType && baseTypeRegistry !== undefined
@@ -1508,9 +1513,9 @@ const validateGitChange = async (
   if (
     status === "M" &&
     currentDocument !== undefined &&
-    typeof oldMeta?.rd_document_id === "string" &&
-    nonemptyText(oldMeta.rd_document_id) &&
-    currentDocument.meta?.rd_document_id !== oldMeta.rd_document_id
+    typeof oldMeta?.["rd_document_id"] === "string" &&
+    nonemptyText(oldMeta["rd_document_id"]) &&
+    currentDocument.meta?.["rd_document_id"] !== oldMeta["rd_document_id"]
   ) {
     add(
       "RD_INTEGRITY",
@@ -1522,9 +1527,9 @@ const validateGitChange = async (
   if (
     status === "M" &&
     currentDocument !== undefined &&
-    typeof oldMeta?.type === "string" &&
-    nonemptyText(oldMeta.type) &&
-    currentDocument.meta?.type !== oldMeta.type
+    typeof oldMeta?.["type"] === "string" &&
+    nonemptyText(oldMeta["type"]) &&
+    currentDocument.meta?.["type"] !== oldMeta["type"]
   ) {
     add(
       "RD_INTEGRITY",
@@ -1537,7 +1542,7 @@ const validateGitChange = async (
     status === "M" &&
     currentDocument !== undefined &&
     oldRole !== undefined &&
-    currentDocument.meta?.rd_role !== oldRole
+    currentDocument.meta?.["rd_role"] !== oldRole
   ) {
     add(
       "RD_INTEGRITY",
@@ -1722,7 +1727,7 @@ const validateIndexDocument = (
       "root index frontmatter may contain only okf_version",
     );
   }
-  if (document.meta.okf_version !== "0.2") {
+  if (document.meta["okf_version"] !== "0.2") {
     add(
       "OKF",
       "OKF012",
@@ -1757,7 +1762,7 @@ const validateRegisteredType = (
   typeRegistry: ReadonlyMap<string, string> | undefined,
   add: AddFinding,
 ): void => {
-  const type = concept.meta.type;
+  const type = concept.meta["type"];
   if (
     typeRegistry === undefined ||
     typeof type !== "string" ||
@@ -1777,9 +1782,9 @@ const validateRegisteredType = (
   }
   const parsedFilename = parseRdDocumentFilename(basename(concept.path));
   const documentId =
-    typeof concept.meta.rd_document_id === "string" &&
-    nonemptyText(concept.meta.rd_document_id)
-      ? parseRdDocumentId(concept.meta.rd_document_id)
+    typeof concept.meta["rd_document_id"] === "string" &&
+    nonemptyText(concept.meta["rd_document_id"])
+      ? parseRdDocumentId(concept.meta["rd_document_id"])
       : undefined;
   const usedCode = parsedFilename?.code ?? documentId?.code;
   if (usedCode !== undefined && usedCode !== expectedCode) {
@@ -1817,20 +1822,20 @@ const validateGeneratedMetadata = (
   report: (code: string, message: string) => void,
 ): void => {
   if (
-    typeof generatedMeta.by !== "string" ||
-    !nonemptyText(generatedMeta.by) ||
-    !validActor(generatedMeta.by)
+    typeof generatedMeta["by"] !== "string" ||
+    !nonemptyText(generatedMeta["by"]) ||
+    !validActor(generatedMeta["by"])
   ) {
     report("RDS012", "generated.by must use the OKF actor convention");
   }
   if (
-    typeof generatedMeta.at !== "string" ||
-    !nonemptyText(generatedMeta.at) ||
-    !validDateTime(generatedMeta.at)
+    typeof generatedMeta["at"] !== "string" ||
+    !nonemptyText(generatedMeta["at"]) ||
+    !validDateTime(generatedMeta["at"])
   ) {
     report("RDS013", "generated.at must be an ISO-8601 datetime with timezone");
   } else {
-    concept.generatedAt = generatedMeta.at;
+    concept.generatedAt = generatedMeta["at"];
   }
 };
 
@@ -1848,9 +1853,9 @@ const validateCanonicalConcept = (
     add,
   );
   if (
-    typeof meta.rd_authority_key !== "string" ||
-    !nonemptyText(meta.rd_authority_key) ||
-    !validAuthorityKey(meta.rd_authority_key)
+    typeof meta["rd_authority_key"] !== "string" ||
+    !nonemptyText(meta["rd_authority_key"]) ||
+    !validAuthorityKey(meta["rd_authority_key"])
   ) {
     add(
       "RD_SCHEMA",
@@ -1860,9 +1865,9 @@ const validateCanonicalConcept = (
     );
   }
   if (
-    typeof meta.rd_owner !== "string" ||
-    !nonemptyText(meta.rd_owner) ||
-    !validOwner(meta.rd_owner)
+    typeof meta["rd_owner"] !== "string" ||
+    !nonemptyText(meta["rd_owner"]) ||
+    !validOwner(meta["rd_owner"])
   ) {
     add(
       "RD_SCHEMA",
@@ -1872,8 +1877,8 @@ const validateCanonicalConcept = (
     );
   }
   if (
-    typeof meta.rd_retire_when !== "string" ||
-    !nonemptyText(meta.rd_retire_when)
+    typeof meta["rd_retire_when"] !== "string" ||
+    !nonemptyText(meta["rd_retire_when"])
   ) {
     add(
       "RD_SCHEMA",
@@ -1892,9 +1897,9 @@ const validateCanonicalConcept = (
   }
   if (
     status !== "deprecated" &&
-    (typeof meta.stale_after !== "string" ||
-      !nonemptyText(meta.stale_after) ||
-      !validDate(meta.stale_after))
+    (typeof meta["stale_after"] !== "string" ||
+      !nonemptyText(meta["stale_after"]) ||
+      !validDate(meta["stale_after"]))
   ) {
     add(
       "RD_LIFECYCLE",
@@ -1905,16 +1910,16 @@ const validateCanonicalConcept = (
   }
   if (
     status !== "deprecated" &&
-    typeof meta.stale_after === "string" &&
-    nonemptyText(meta.stale_after) &&
-    validDate(meta.stale_after) &&
-    context.today >= meta.stale_after
+    typeof meta["stale_after"] === "string" &&
+    nonemptyText(meta["stale_after"]) &&
+    validDate(meta["stale_after"]) &&
+    context.today >= meta["stale_after"]
   ) {
     add(
       "RD_LIFECYCLE",
       "RDL002",
       path,
-      `canonical is stale on ${meta.stale_after}; evaluated ${context.today}`,
+      `canonical is stale on ${meta["stale_after"]}; evaluated ${context.today}`,
     );
   }
   const sourceMap =
@@ -2038,9 +2043,9 @@ const validateEvidenceMetadata = async (
     );
     return;
   }
-  const sourceId = evidenceMeta.source_id;
-  const digest = evidenceMeta.sha256;
-  const locator = evidenceMeta.locator;
+  const sourceId = evidenceMeta["source_id"];
+  const digest = evidenceMeta["sha256"];
+  const locator = evidenceMeta["locator"];
   const locatorSpec =
     typeof locator === "string" && nonemptyText(locator)
       ? parseEvidenceLocator(locator)
@@ -2125,7 +2130,7 @@ const validateEvidenceConcept = async (
   if (status !== "stable") {
     add("RD_SCHEMA", "RDS060", path, "evidence must have status: stable");
   }
-  if (meta.stale_after !== undefined) {
+  if (meta["stale_after"] !== undefined) {
     add(
       "RD_SCHEMA",
       "RDS061",
@@ -2141,7 +2146,11 @@ const validateEvidenceConcept = async (
       "an evidence record must bind exactly one raw artifact",
     );
   }
-  await validateEvidenceMetadata(concept, asRecord(meta.rd_evidence), context);
+  await validateEvidenceMetadata(
+    concept,
+    asRecord(meta["rd_evidence"]),
+    context,
+  );
 };
 
 const validateReviewRequestConcept = (
@@ -2165,9 +2174,9 @@ const validateReviewRequestConcept = (
     add,
   );
   if (
-    typeof meta.rd_owner !== "string" ||
-    !nonemptyText(meta.rd_owner) ||
-    !validOwner(meta.rd_owner)
+    typeof meta["rd_owner"] !== "string" ||
+    !nonemptyText(meta["rd_owner"]) ||
+    !validOwner(meta["rd_owner"])
   ) {
     add(
       "RD_SCHEMA",
@@ -2177,8 +2186,8 @@ const validateReviewRequestConcept = (
     );
   }
   if (
-    typeof meta.rd_retire_when !== "string" ||
-    !nonemptyText(meta.rd_retire_when)
+    typeof meta["rd_retire_when"] !== "string" ||
+    !nonemptyText(meta["rd_retire_when"])
   ) {
     add("RD_SCHEMA", "RDS071", path, "review request requires rd_retire_when");
   }
@@ -2190,7 +2199,7 @@ const validateReviewRequestConcept = (
       "review request requires candidate/evidence sources",
     );
   }
-  concept.review = parseReview(meta.rd_review, (code, message) => {
+  concept.review = parseReview(meta["rd_review"], (code, message) => {
     add("RD_SCHEMA", code, path, message);
   });
   const reviewState = concept.review?.state;
@@ -2204,9 +2213,9 @@ const validateReviewRequestConcept = (
   }
   if (
     reviewState === "open" &&
-    (typeof meta.stale_after !== "string" ||
-      !nonemptyText(meta.stale_after) ||
-      !validDate(meta.stale_after))
+    (typeof meta["stale_after"] !== "string" ||
+      !nonemptyText(meta["stale_after"]) ||
+      !validDate(meta["stale_after"]))
   ) {
     add(
       "RD_LIFECYCLE",
@@ -2217,16 +2226,16 @@ const validateReviewRequestConcept = (
   }
   if (
     reviewState === "open" &&
-    typeof meta.stale_after === "string" &&
-    nonemptyText(meta.stale_after) &&
-    validDate(meta.stale_after) &&
-    today >= meta.stale_after
+    typeof meta["stale_after"] === "string" &&
+    nonemptyText(meta["stale_after"]) &&
+    validDate(meta["stale_after"]) &&
+    today >= meta["stale_after"]
   ) {
     add(
       "RD_LIFECYCLE",
       "RDL012",
       path,
-      `open review request expired on ${meta.stale_after}`,
+      `open review request expired on ${meta["stale_after"]}`,
     );
   }
   if (reviewState === "withdrawn" && status !== "deprecated") {
@@ -2281,7 +2290,7 @@ const validateGeneratedViewConcept = async (
       "generated_view must always have status: draft",
     );
   }
-  if (meta.verified !== undefined) {
+  if (meta["verified"] !== undefined) {
     add(
       "RD_SCHEMA",
       "RDS081",
@@ -2290,7 +2299,7 @@ const validateGeneratedViewConcept = async (
     );
   }
   const generatedFrom = stringArray(
-    meta.rd_generated_from,
+    meta["rd_generated_from"],
     "rd_generated_from",
     (code, message) => {
       add("RD_SCHEMA", code, path, message);
@@ -2305,16 +2314,16 @@ const validateGeneratedViewConcept = async (
     );
   }
   if (
-    typeof meta.stale_after !== "string" ||
-    !nonemptyText(meta.stale_after) ||
-    !validDate(meta.stale_after)
+    typeof meta["stale_after"] !== "string" ||
+    !nonemptyText(meta["stale_after"]) ||
+    !validDate(meta["stale_after"])
   ) {
     add("RD_LIFECYCLE", "RDL020", path, "generated_view requires stale_after");
   }
   if (
-    typeof meta.rd_expires_at !== "string" ||
-    !nonemptyText(meta.rd_expires_at) ||
-    !validDate(meta.rd_expires_at)
+    typeof meta["rd_expires_at"] !== "string" ||
+    !nonemptyText(meta["rd_expires_at"]) ||
+    !validDate(meta["rd_expires_at"])
   ) {
     add(
       "RD_LIFECYCLE",
@@ -2322,7 +2331,7 @@ const validateGeneratedViewConcept = async (
       path,
       "generated_view requires rd_expires_at as YYYY-MM-DD",
     );
-  } else if (meta.stale_after !== meta.rd_expires_at) {
+  } else if (meta["stale_after"] !== meta["rd_expires_at"]) {
     add(
       "RD_LIFECYCLE",
       "RDL022",
@@ -2331,16 +2340,16 @@ const validateGeneratedViewConcept = async (
     );
   }
   if (
-    typeof meta.rd_expires_at === "string" &&
-    nonemptyText(meta.rd_expires_at) &&
-    validDate(meta.rd_expires_at) &&
+    typeof meta["rd_expires_at"] === "string" &&
+    nonemptyText(meta["rd_expires_at"]) &&
+    validDate(meta["rd_expires_at"]) &&
     concept.generatedAt !== undefined
   ) {
     const created = Temporal.Instant.from(
       concept.generatedAt,
     ).epochMilliseconds;
     const expires = Temporal.Instant.from(
-      `${meta.rd_expires_at}T00:00:00Z`,
+      `${meta["rd_expires_at"]}T00:00:00Z`,
     ).epochMilliseconds;
     const days = (expires - created) / 86_400_000;
     if (days < 0 || days > 30) {
@@ -2351,12 +2360,12 @@ const validateGeneratedViewConcept = async (
         "generated_view expiry must be within 30 days of generated.at",
       );
     }
-    if (today >= meta.rd_expires_at) {
+    if (today >= meta["rd_expires_at"]) {
       add(
         "RD_LIFECYCLE",
         "RDL024",
         path,
-        `generated_view expired on ${meta.rd_expires_at}`,
+        `generated_view expired on ${meta["rd_expires_at"]}`,
       );
     }
   }
@@ -2737,7 +2746,7 @@ const validateSuccessorsForConcept = async (
         `rd_supersedes target must be deprecated: ${target.path}`,
       );
     }
-    if (target.meta.rd_authority_key !== concept.meta.rd_authority_key) {
+    if (target.meta["rd_authority_key"] !== concept.meta["rd_authority_key"]) {
       add(
         "RD_LIFECYCLE",
         "RDL032",
@@ -2760,8 +2769,8 @@ const validateRetiredCanonical = (
 ): void => {
   const incoming = successorIncoming.get(concept.absolutePath) ?? [];
   const hasReason =
-    typeof concept.meta.rd_retired_reason === "string" &&
-    nonemptyText(concept.meta.rd_retired_reason);
+    typeof concept.meta["rd_retired_reason"] === "string" &&
+    nonemptyText(concept.meta["rd_retired_reason"]);
   if (incoming.length === 0 && !hasReason) {
     add(
       "RD_LIFECYCLE",
@@ -2976,8 +2985,8 @@ export async function inspectResearchDocs(
       continue;
     }
     if (
-      typeof parsed.meta.type !== "string" ||
-      !nonemptyText(parsed.meta.type)
+      typeof parsed.meta["type"] !== "string" ||
+      !nonemptyText(parsed.meta["type"])
     ) {
       add("OKF", "OKF006", path, "concept requires a non-empty type");
     }
@@ -3045,9 +3054,9 @@ export async function inspectResearchDocs(
       );
     }
     const parsedDocumentId =
-      typeof meta.rd_document_id === "string" &&
-      nonemptyText(meta.rd_document_id)
-        ? parseRdDocumentId(meta.rd_document_id)
+      typeof meta["rd_document_id"] === "string" &&
+      nonemptyText(meta["rd_document_id"])
+        ? parseRdDocumentId(meta["rd_document_id"])
         : undefined;
     if (parsedDocumentId === undefined) {
       add(
@@ -3073,40 +3082,40 @@ export async function inspectResearchDocs(
     }
     validateRegisteredType(concept, typeRegistry, add);
     validateProfileFieldNames(meta, report);
-    if (typeof meta.title !== "string" || !nonemptyText(meta.title)) {
+    if (typeof meta["title"] !== "string" || !nonemptyText(meta["title"])) {
       report("RDS007", "profile requires a non-empty title");
     }
     if (
-      typeof meta.description !== "string" ||
-      !nonemptyText(meta.description)
+      typeof meta["description"] !== "string" ||
+      !nonemptyText(meta["description"])
     ) {
       report("RDS008", "profile requires a non-empty description");
     }
     if (
-      typeof meta.status !== "string" ||
-      !nonemptyText(meta.status) ||
-      statusType(meta.status) === undefined
+      typeof meta["status"] !== "string" ||
+      !nonemptyText(meta["status"]) ||
+      statusType(meta["status"]) === undefined
     ) {
       report(
         "RDS009",
         "status must explicitly be draft, stable, or deprecated",
       );
     } else {
-      concept.status = statusType(meta.status);
+      concept.status = statusType(meta["status"]);
     }
     if (
-      typeof meta.rd_role !== "string" ||
-      !nonemptyText(meta.rd_role) ||
-      roleType(meta.rd_role) === undefined
+      typeof meta["rd_role"] !== "string" ||
+      !nonemptyText(meta["rd_role"]) ||
+      roleType(meta["rd_role"]) === undefined
     ) {
       report(
         "RDS010",
         `rd_role must be one of: ${RoleSchema.options.join(", ")}`,
       );
     } else {
-      concept.role = roleType(meta.rd_role);
+      concept.role = roleType(meta["rd_role"]);
     }
-    const generatedMeta = asRecord(meta.generated);
+    const generatedMeta = asRecord(meta["generated"]);
     if (generatedMeta === undefined) {
       report("RDS011", "generated must be a mapping with by and at");
     }
@@ -3114,21 +3123,21 @@ export async function inspectResearchDocs(
       validateGeneratedMetadata(concept, generatedMeta, report);
     }
     if (
-      meta.stale_after !== undefined &&
-      (typeof meta.stale_after !== "string" ||
-        !nonemptyText(meta.stale_after) ||
-        !validDate(meta.stale_after))
+      meta["stale_after"] !== undefined &&
+      (typeof meta["stale_after"] !== "string" ||
+        !nonemptyText(meta["stale_after"]) ||
+        !validDate(meta["stale_after"]))
     ) {
       report("RDS014", "stale_after must be YYYY-MM-DD");
     }
-    concept.sources = parseSources(meta.sources, report);
+    concept.sources = parseSources(meta["sources"], report);
     verifiedByPath.set(
       concept.absolutePath,
-      normalizedVerified(meta.verified, report),
+      normalizedVerified(meta["verified"], report),
     );
-    if (meta.rd_supersedes !== undefined) {
+    if (meta["rd_supersedes"] !== undefined) {
       concept.supersedes = stringArray(
-        meta.rd_supersedes,
+        meta["rd_supersedes"],
         "rd_supersedes",
         report,
       );
@@ -3191,14 +3200,15 @@ export async function inspectResearchDocs(
     if (
       concept.role !== "canonical" ||
       concept.status === "deprecated" ||
-      typeof concept.meta.rd_authority_key !== "string" ||
-      !nonemptyText(concept.meta.rd_authority_key)
+      typeof concept.meta["rd_authority_key"] !== "string" ||
+      !nonemptyText(concept.meta["rd_authority_key"])
     ) {
       continue;
     }
-    const entries = activeByAuthority.get(concept.meta.rd_authority_key) ?? [];
+    const entries =
+      activeByAuthority.get(concept.meta["rd_authority_key"]) ?? [];
     entries.push(concept);
-    activeByAuthority.set(concept.meta.rd_authority_key, entries);
+    activeByAuthority.set(concept.meta["rd_authority_key"], entries);
   }
   for (const [key, entries] of activeByAuthority) {
     for (const concept of entries.length > 1 ? entries : []) {

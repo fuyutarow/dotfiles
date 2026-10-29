@@ -77,10 +77,60 @@ describe("disk parser and effect firewall", () => {
         command: args[0],
         mode: args[1],
         outcome: "unknown",
-        items: [],
+        ...(args[1] === "records" ? {} : { items: [] }),
       });
       expect(await readFile(file, "utf8")).toBe("keep");
     }
+  });
+  test("records retain refusals and never act while the adapter is unavailable", async () => {
+    const fingerprint = { dev: 1, ino: 2, size: 3, mtime: 4 };
+    const base = {
+      target: "clean",
+      host: "local",
+      path: "/fixture",
+      bytes_allocated: 3,
+      regen: true,
+      holders: [],
+      verdict: "safe",
+      reason: "fixture",
+      fingerprint,
+    };
+    const input = [
+      base,
+      { ...base, path: "/keep", verdict: "keep" },
+      { ...base, path: "/deny", verdict: "deny" },
+      { ...base, path: "/ask", verdict: "ask", owner_item: "docs" },
+      { ...base, path: "C:\\fixture", fingerprint: null },
+    ]
+      .map((record) => JSON.stringify(record))
+      .join("\n");
+    const result = await run(["free", "records", "--no-progress"], input);
+    expect(result.exit).toBe(4);
+    expect(jsonText.safeParse(result.out).data).toMatchObject({
+      outcome: "unknown",
+      items: [
+        { verdict: "unknown", effect: "none" },
+        { verdict: "keep", effect: "none" },
+        { verdict: "deny", effect: "none" },
+        { verdict: "ask", effect: "none" },
+        { verdict: "deny", effect: "none" },
+      ],
+      counts: { selected: 5, refused: 4, unknown: 1, completed: 0 },
+    });
+    const approved = await run(
+      ["free", "records", "--approve", "docs", "--no-progress"],
+      input,
+    );
+    expect(approved.exit).toBe(4);
+    expect(jsonText.safeParse(approved.out).data).toMatchObject({
+      items: [
+        { verdict: "unknown" },
+        { verdict: "keep" },
+        { verdict: "deny" },
+        { verdict: "unknown" },
+        { verdict: "deny" },
+      ],
+    });
   });
   test("receipt inspection reads only the selected state and preserves errors", async () => {
     const dir = await mkdtemp(join(tmpdir(), "disk-receipts-"));

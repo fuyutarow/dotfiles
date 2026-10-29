@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.2 — 2026-10-29
+
+- Report records refusals while the acting adapter is unavailable
+
 ## 1.12.1 — 2026-10-29
 
 - Add bounded read-only path planning to disk

@@ -7,6 +7,7 @@ import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
 import { ReclaimRecord } from "./records.ts";
 import { runProbe } from "./disk-probe.ts";
 import { planPaths } from "./disk-path-plan.ts";
+import { unavailableRecords } from "./disk-records.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const grammar: Record<string, string[]> = {
@@ -241,7 +242,7 @@ async function validateRecords(
   if (timer !== undefined) clearInterval(timer);
   if (input === undefined) {
     process.stdin.destroy();
-    return false;
+    return null;
   }
   const lines = input.split(/\r?\n/u).filter((line) => line.trim() !== "");
   if (lines.length === 0) invalid("no input records");
@@ -249,7 +250,7 @@ async function validateRecords(
     if (!jsonOf(ReclaimRecord).safeParse(line).success)
       invalid("invalid input record");
   }
-  return true;
+  return input;
 }
 async function inspectReceipts(
   last: string,
@@ -509,9 +510,10 @@ async function main() {
       !Number.isSafeInteger(Number(get("last"))))
   )
     invalid("invalid --last");
-  const recordsRead =
-    key !== "free records" ||
-    (await validateRecords(deadline, !options.has("no-progress"), start));
+  const recordsInput =
+    key === "free records"
+      ? await validateRecords(deadline, !options.has("no-progress"), start)
+      : null;
   const scope = {
     path: get("path") ?? get("only") ?? null,
     paths: mode === "paths" ? positional : [],
@@ -620,6 +622,23 @@ async function main() {
     process.exitCode = issue === null ? 0 : 4;
     return;
   }
+  if (key === "free records" && recordsInput !== null) {
+    const items = unavailableRecords(
+      recordsInput,
+      options.get("approve") ?? [],
+    );
+    const unknown = items.filter((item) => item.verdict === "unknown").length;
+    const refused = items.length - unknown;
+    const outcome = "unknown";
+    const message =
+      "bounded records adapter unavailable; no operation was attempted";
+    process.stderr.write(`disk: ${message}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items, counts: { selected: items.length, completed: 0, refused, failed: 0, unknown }, errors: [{ code: "adapter_unavailable", message, scope }], receipt: null })}\n`,
+    );
+    process.exitCode = 4;
+    return;
+  }
   if (
     key === "free targets" &&
     targets.some((target) => target === "vhdx" || target === "audit")
@@ -663,6 +682,6 @@ async function main() {
     `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome: "unknown", started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items: [], counts: { selected: 0, completed: 0, refused: 0, failed: 0, unknown: 0 }, errors: [{ code: "adapter_unavailable", message, scope }], receipt: null })}\n`,
   );
   process.exitCode = 4;
-  if (!recordsRead) process.exit(4);
+  if (key === "free records" && recordsInput === null) process.exit(4);
 }
 await main();

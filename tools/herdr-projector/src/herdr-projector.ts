@@ -86,7 +86,7 @@ export async function readProjectorTitle(
   )
     return strict;
   const path = join(
-    env.CODEX_HOME ?? join(env.HOME ?? "", ".codex"),
+    env["CODEX_HOME"] ?? join(env["HOME"] ?? "", ".codex"),
     "session_index.jsonl",
   );
   const file = Bun.file(path);
@@ -192,9 +192,9 @@ export async function readAgentCpu(
   now = Temporal.Now.instant().epochMilliseconds,
 ): Promise<AgentCpuSnapshot | undefined> {
   const state =
-    env.XDG_STATE_HOME === undefined || env.XDG_STATE_HOME === ""
-      ? join(env.HOME ?? "", ".local", "state")
-      : env.XDG_STATE_HOME;
+    env["XDG_STATE_HOME"] === undefined || env["XDG_STATE_HOME"] === ""
+      ? join(env["HOME"] ?? "", ".local", "state")
+      : env["XDG_STATE_HOME"];
   const text = await Bun.file(join(state, "dotfiles", "agent-cpu.json"))
     .text()
     .catch(() => "");
@@ -254,7 +254,7 @@ function nativeFooterCwd(
   env: NodeJS.ProcessEnv,
 ): string | undefined {
   if (isAbsolute(cwd)) return cwd;
-  const home = env.HOME;
+  const home = env["HOME"];
   if (cwd.trim() === "~" && home !== undefined && isAbsolute(home)) return home;
   if (!cwd.startsWith("~/") || home === undefined || !isAbsolute(home))
     return undefined;
@@ -306,7 +306,7 @@ export async function bindNativeCodexFooters(
     if (path === undefined) {
       reasons.set(pane, "no exact rollout");
       process.stderr.write(
-        `herdr-projector: ${pane}: exact rollout lookup ${id} under ${env.CODEX_HOME ?? join(env.HOME ?? "", ".codex")}/sessions: missing, ambiguous or read limit\n`,
+        `herdr-projector: ${pane}: exact rollout lookup ${id} under ${env["CODEX_HOME"] ?? join(env["HOME"] ?? "", ".codex")}/sessions: missing, ambiguous or read limit\n`,
       );
       continue;
     }
@@ -559,7 +559,7 @@ export async function nativeClaudeRc(
     []) {
     if (proc.name !== "claude") continue;
     const path = join(
-      env.CLAUDE_CONFIG_DIR ?? join(env.HOME ?? "", ".claude"),
+      env["CLAUDE_CONFIG_DIR"] ?? join(env["HOME"] ?? "", ".claude"),
       "sessions",
       `${proc.pid}.json`,
     );
@@ -622,7 +622,7 @@ export async function bindClaudePanes(
     if (observed === undefined) continue;
     const id = observed.id;
     const path = join(
-      env.CLAUDE_CONFIG_DIR ?? join(env.HOME ?? "", ".claude"),
+      env["CLAUDE_CONFIG_DIR"] ?? join(env["HOME"] ?? "", ".claude"),
       "projects",
       agent.cwd.replaceAll(/[^a-zA-Z0-9]/gu, "-"),
       `${id}.jsonl`,
@@ -697,7 +697,7 @@ export async function nativeCodexRc(
   if (/microsoft/iu.test(osRelease))
     return "not applicable: Windows Desktop owns the native Codex app-server on WSL";
   const directory = join(
-    env.CODEX_HOME ?? join(env.HOME ?? "", ".codex"),
+    env["CODEX_HOME"] ?? join(env["HOME"] ?? "", ".codex"),
     "app-server-daemon",
   );
   const pid = jsonOf(z.object({ pid: z.number().int().positive() })).safeParse(
@@ -897,7 +897,7 @@ async function project(dryRun = false): Promise<number> {
     );
     return 1;
   }
-  const runtime = process.env.XDG_RUNTIME_DIR;
+  const runtime = process.env["XDG_RUNTIME_DIR"];
   let applied = true;
   const apply = async (args: string[]) => {
     if (dryRun) {
@@ -982,11 +982,11 @@ async function project(dryRun = false): Promise<number> {
   const panes = agents.map((agent) => ({
     ...agent,
     tokens: {
-      fullname: agent.tokens?.fullname,
-      model: agent.tokens?.model,
-      effort: agent.tokens?.effort,
-      rc: agent.tokens?.rc,
-      fleet_session_id: agent.tokens?.fleet_session_id,
+      fullname: agent.tokens?.["fullname"],
+      model: agent.tokens?.["model"],
+      effort: agent.tokens?.["effort"],
+      rc: agent.tokens?.["rc"],
+      fleet_session_id: agent.tokens?.["fleet_session_id"],
     },
   }));
   const fingerprint = () =>

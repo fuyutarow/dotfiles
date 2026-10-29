@@ -28,7 +28,7 @@ import {
 import {
   loadStorageHeadroom,
   storageLine,
-} from "../tools/shared/src/storage-headroom.ts";
+} from "@dotfiles/shared/src/storage-headroom.ts";
 
 // Consumer: a user-systemd timer and the Claude storage hook. One short run checks the Windows
 // drive and host RAM under WSL, reclaims only the repository's unattended-safe tiers, and stops

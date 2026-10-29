@@ -1,4 +1,4 @@
-import { DoctorStatus } from "../tools/shared/src/doctor-record.ts";
+import { DoctorStatus } from "@dotfiles/shared/src/doctor-record.ts";
 // `mise run doctor` — does THIS machine realize what the dotfiles declare? READ-ONLY: every check
 // compares a declared source of truth against the live machine and changes nothing. Consumer: a
 // human or agent reading verdict lines; each FAIL carries the command that repairs it.
@@ -64,7 +64,7 @@ import {
 } from "node:fs";
 import { readdir, realpath } from "node:fs/promises";
 import { fromThrowable } from "neverthrow";
-import { ownerlessRefLocks } from "../tools/shared/src/ref-locks.ts";
+import { ownerlessRefLocks } from "@dotfiles/shared/src/ref-locks.ts";
 import { homedir, hostname, release, tmpdir, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { registeredRepos } from "./workspace-repos.ts";
@@ -103,7 +103,7 @@ import {
   editorHost,
   receiverSocket,
   remoteSocket,
-} from "../tools/shared/src/sockets.ts";
+} from "@dotfiles/shared/src/sockets.ts";
 import {
   inspectRipGraveyard,
   RIP_GRAVEYARD_MAX_BYTES,

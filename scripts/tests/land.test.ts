@@ -34,7 +34,7 @@ import {
 import { landStateDir } from "../land-queue.ts";
 import { doctorReport } from "../land-doctor.ts";
 import { applyToolChangesets } from "../land-changesets.ts";
-import { tryAcquire } from "../../tools/shared/src/dir-lock.ts";
+import { tryAcquire } from "@dotfiles/shared/src/dir-lock.ts";
 
 const pathExists = (path: Parameters<typeof accessPath>[0]) =>
   accessPath(path).then(

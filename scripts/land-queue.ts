@@ -5,7 +5,11 @@ import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
-import { acquire, holderOf, tryAcquire } from "../tools/shared/src/dir-lock.ts";
+import {
+  acquire,
+  holderOf,
+  tryAcquire,
+} from "@dotfiles/shared/src/dir-lock.ts";
 import { LandReportSchema, landExit, type LandReport } from "./land-verdict.ts";
 
 const Enqueue = z.strictObject({

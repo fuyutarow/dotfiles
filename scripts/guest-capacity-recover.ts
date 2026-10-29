@@ -12,7 +12,7 @@ import {
   type GuestProbes,
   type PressureLevel,
   type StorageMeasurement,
-} from "../tools/shared/src/storage-headroom.ts";
+} from "@dotfiles/shared/src/storage-headroom.ts";
 
 // Consumer: guest-capacity-recover.service, queued by the storage-headroom hook below the recover
 // line (and again below deny) and run by its timer between tool calls. It frees guest / and /tmp

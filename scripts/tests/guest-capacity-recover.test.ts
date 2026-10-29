@@ -8,7 +8,7 @@ import {
   loadGuestDrive,
   requestGuestRecovery,
   type Drive,
-} from "../../tools/shared/src/storage-headroom.ts";
+} from "@dotfiles/shared/src/storage-headroom.ts";
 import {
   DISK_RECLAIM_STAGES,
   exitCode,

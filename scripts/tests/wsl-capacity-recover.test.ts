@@ -9,7 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fromAsyncThrowable, ok } from "neverthrow";
-import { fromThrowable, jsonOf, z } from "../../tools/shared/src/zod.ts";
+import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   hasLiveBuildProcess,
   claimEmergencyCacheDrop,

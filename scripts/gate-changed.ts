@@ -9,8 +9,8 @@ import {
   type Attempt,
 } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
-import { JJ_READ_ARGS } from "../tools/shared/src/jj-read.ts";
-import { readonlyCommand } from "../tools/shared/src/readonly-command.ts";
+import { JJ_READ_ARGS } from "@dotfiles/shared/src/jj-read.ts";
+import { readonlyCommand } from "@dotfiles/shared/src/readonly-command.ts";
 
 const ROOT = resolve(import.meta.dir, "..");
 const TYPESCRIPT = /\.(?:[cm]?ts|tsx)$/u;

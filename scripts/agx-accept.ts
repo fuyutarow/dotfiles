@@ -3,7 +3,7 @@ import { access as accessPath } from "node:fs/promises";
 
 import { cli } from "cleye";
 import { readFile } from "node:fs/promises";
-import { jsonOf, z } from "../tools/shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const pathExists = (path: Parameters<typeof accessPath>[0]) =>
   accessPath(path).then(

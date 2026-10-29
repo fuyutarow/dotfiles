@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { dirname } from "node:path";
 import { applyToolChangesets } from "./land-changesets.ts";
 import { join } from "node:path";
-import { jsonOf, z } from "../tools/shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { changesetDiagnostic, parseChangeset } from "./changeset.ts";
-import { attempt } from "../tools/shared/src/attempt.ts";
+import { attempt } from "@dotfiles/shared/src/attempt.ts";
 
 export type ToolDiffEntry = { path: string; status: "A" | "M" | "D" };
 

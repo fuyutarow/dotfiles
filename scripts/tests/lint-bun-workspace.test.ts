@@ -62,6 +62,70 @@ test("lint:bun admits only declared and present shared workspace imports", async
   }
 });
 
+test("shared imports require a listed workspace, matching lock, and no hook exemption", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lint-bun-shared-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
+  };
+  await mkdir(join(root, "scripts"), { recursive: true });
+  await mkdir(join(root, "tools/shared/src"), { recursive: true });
+  await mkdir(join(root, "agents/hooks"), { recursive: true });
+  const rootManifest = join(root, "package.json");
+  const lock = join(root, "bun.lock");
+  const declaration = { dependencies: { "@dotfiles/shared": "workspace:*" } };
+  const workspaces = ["scripts", "agents/hooks"];
+  const lockEntries = {
+    "tools/shared": { name: "@dotfiles/shared" },
+    scripts: declaration,
+    "agents/hooks": declaration,
+  };
+  await writeFile(rootManifest, JSON.stringify({ workspaces }));
+  await writeFile(lock, JSON.stringify({ workspaces: lockEntries }));
+  await writeFile(
+    join(root, "tools/shared/package.json"),
+    '{"name":"@dotfiles/shared"}',
+  );
+  await writeFile(
+    join(root, "tools/shared/src/example.ts"),
+    "export const value = 1;\n",
+  );
+  await writeFile(
+    join(root, "scripts/package.json"),
+    JSON.stringify(declaration),
+  );
+  const source = join(root, "scripts/example.ts");
+  const importText = 'import "@dotfiles/shared/src/example.ts";\n';
+  await writeFile(source, importText);
+  const run = () =>
+    Bun.spawnSync([process.execPath, script], {
+      cwd: root,
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 30_000,
+    });
+  expect(run().exitCode).toBe(0);
+  await writeFile(
+    rootManifest,
+    JSON.stringify({ workspaces: ["agents/hooks"] }),
+  );
+  expect(run().exitCode).toBe(1);
+  await writeFile(rootManifest, JSON.stringify({ workspaces }));
+  await writeFile(
+    lock,
+    JSON.stringify({ workspaces: { ...lockEntries, scripts: {} } }),
+  );
+  expect(run().exitCode).toBe(1);
+  await writeFile(lock, JSON.stringify({ workspaces: lockEntries }));
+  await writeFile(
+    join(root, "agents/hooks/package.json"),
+    JSON.stringify(declaration),
+  );
+  await writeFile(join(root, "agents/hooks/example.ts"), importText);
+  const hooks = run();
+  expect(hooks.exitCode).toBe(1);
+  expect(hooks.stdout.toString()).toContain("zero-dep tree");
+});
+
 test("workspace dependencies belong to the nearest manifest and hooks remain zero-dep", async () => {
   const root = await mkdtemp(join(tmpdir(), "lint-bun-workspace-deps-"));
   await using _cleanup = {

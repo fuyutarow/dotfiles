@@ -18,7 +18,7 @@ import {
   RIP_GRAVEYARD_MAX_BYTES,
 } from "../../tools/disk-reclaim/src/lib/graveyards.ts";
 import { Plan } from "../../tools/disk-reclaim/src/model.ts";
-import { jsonOf } from "../../tools/shared/src/zod.ts";
+import { jsonOf } from "@dotfiles/shared/src/zod.ts";
 
 test("timer expiry bounds a fresh graveyard oldest-first, then preserves its restore record", async () => {
   const root = await mkdtemp(join(tmpdir(), "timer-graveyard-cap-"));

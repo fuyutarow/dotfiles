@@ -46,7 +46,6 @@
   "dependencies": {
     "cleye": "2.6.0",
     "neverthrow": "8.2.0",
-    "ts-pattern": "5.9.0",
     "yaml": "2.9.0",
     "zod": "4.6.5"
   },
@@ -61,6 +60,7 @@
   "workspaces": [
     "tools/*",
     "agents/hooks",
-    "agents/skills/*"
+    "agents/skills/*",
+    "scripts"
   ]
 }

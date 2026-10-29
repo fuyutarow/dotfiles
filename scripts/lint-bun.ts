@@ -72,23 +72,24 @@ async function sanctioned(
   specifier: string,
 ): Promise<boolean> {
   const path = relative(root, resolve(file));
-  const parts = path.split(sep);
-  const tool = parts[1];
-  if (
-    parts[0] !== "tools" ||
-    parts.length < 3 ||
-    tool === undefined ||
-    tool === "shared"
-  )
+  if (path.startsWith(`..${sep}`) || path === "..") return false;
+  let directory = dirname(resolve(file));
+  while (directory !== root && directory.startsWith(`${root}${sep}`)) {
+    if (await Bun.file(join(directory, "package.json")).exists()) break;
+    directory = dirname(directory);
+  }
+  if (directory === root || !directory.startsWith(`${root}${sep}`))
     return false;
+  const workspace = relative(root, directory).split(sep).join("/");
+  if (workspace === "tools/shared") return false;
   const suffix = specifier.slice("@dotfiles/shared/".length);
   if (!/^src\/[\w.-]+\.ts$/u.test(suffix)) return false;
   return Promise.try(async () => {
     const rootPackage = Manifest.safeParse(
       await Bun.file(join(root, "package.json")).text(),
     );
-    const toolPackage = Manifest.safeParse(
-      await Bun.file(join(root, "tools", tool, "package.json")).text(),
+    const workspacePackage = Manifest.safeParse(
+      await Bun.file(join(directory, "package.json")).text(),
     );
     const sharedPackage = Manifest.safeParse(
       await Bun.file(join(root, "tools/shared/package.json")).text(),
@@ -98,16 +99,19 @@ async function sanctioned(
     );
     return (
       rootPackage.success &&
-      toolPackage.success &&
+      workspacePackage.success &&
       sharedPackage.success &&
       lock.success &&
-      (rootPackage.data.workspaces?.includes("tools/*") ?? false) &&
-      toolPackage.data.dependencies?.["@dotfiles/shared"] === "workspace:*" &&
+      (rootPackage.data.workspaces?.some((pattern) =>
+        new Bun.Glob(pattern).match(workspace),
+      ) ??
+        false) &&
+      workspacePackage.data.dependencies?.["@dotfiles/shared"] ===
+        "workspace:*" &&
       sharedPackage.data.name === "@dotfiles/shared" &&
       lock.data.workspaces["tools/shared"]?.name === "@dotfiles/shared" &&
-      lock.data.workspaces[`tools/${tool}`]?.dependencies?.[
-        "@dotfiles/shared"
-      ] === "workspace:*" &&
+      lock.data.workspaces[workspace]?.dependencies?.["@dotfiles/shared"] ===
+        "workspace:*" &&
       (await Bun.file(join(root, "tools/shared", suffix)).exists())
     );
   }).catch(() => false);

@@ -7,7 +7,6 @@
       "dependencies": {
         "cleye": "2.6.0",
         "neverthrow": "8.2.0",
-        "ts-pattern": "5.9.0",
         "yaml": "2.9.0",
         "zod": "4.6.5",
       },
@@ -194,6 +193,15 @@
       },
       "devDependencies": {
         "type-flag": "4.5.0",
+      },
+    },
+    "scripts": {
+      "name": "@dotfiles/scripts",
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+        "neverthrow": "8.2.0",
+        "ts-pattern": "5.9.0",
       },
     },
     "tools/agent-cpu": {
@@ -459,6 +467,8 @@
     "@dotfiles/prompt-archive": ["@dotfiles/prompt-archive@workspace:tools/prompt-archive"],
 
     "@dotfiles/repo-retrieve": ["@dotfiles/repo-retrieve@workspace:tools/repo-retrieve"],
+
+    "@dotfiles/scripts": ["@dotfiles/scripts@workspace:scripts"],
 
     "@dotfiles/secrets-push": ["@dotfiles/secrets-push@workspace:tools/secrets-push"],
 

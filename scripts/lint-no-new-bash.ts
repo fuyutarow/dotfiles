@@ -13,7 +13,7 @@ import {
   shellFile,
   shellGrowth,
   shellRemedy,
-} from "../tools/shared/src/no-new-bash.ts";
+} from "@dotfiles/shared/src/no-new-bash.ts";
 
 async function command(
   args: string[],

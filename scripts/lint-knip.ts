@@ -1,7 +1,7 @@
 /// <reference types="bun" />
 // The consumer's pinned local knip must emit a valid JSON report with findings data.
 // Exit 0 means checked (including findings); 2 means command/report failure.
-import { jsonOf, z } from "../tools/shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const Report = jsonOf(
   z.looseObject({

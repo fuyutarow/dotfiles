@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { RUN_DIR_ENV } from "../tools/shared/src/test-tmp.ts";
+import { RUN_DIR_ENV } from "@dotfiles/shared/src/test-tmp.ts";
 
 export const SYSTEM_TMP = "/tmp";
 const PROBE_TEST = "tools/shared/tests/test-tmp.test.ts";

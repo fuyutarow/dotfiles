@@ -1,5 +1,5 @@
-import { DoctorStatus } from "../../tools/shared/src/doctor-record.ts";
-import { jsonOf } from "../../tools/shared/src/zod.ts";
+import { DoctorStatus } from "@dotfiles/shared/src/doctor-record.ts";
+import { jsonOf } from "@dotfiles/shared/src/zod.ts";
 // bun test for scripts/doctor.ts — spawned end-to-end against throwaway HOME / DOTFILES trees
 // (DOCTOR_ONLY narrows to the checks a fixture can drive); the real $HOME is never touched.
 // Each FAIL case is paired with its PASS twin so a check that always passes, or always fails,
@@ -119,7 +119,7 @@ import {
   inspectRipGraveyard,
   RIP_GRAVEYARD_MAX_BYTES,
 } from "../../tools/disk-reclaim/src/lib/graveyards.ts";
-import { REF_LOCK_STALE_MS } from "../../tools/shared/src/ref-locks.ts";
+import { REF_LOCK_STALE_MS } from "@dotfiles/shared/src/ref-locks.ts";
 import { STEPS } from "../post-merge.ts";
 import {
   desktopLauncherProblem,

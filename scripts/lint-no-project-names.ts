@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
-import { z } from "../tools/shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 
 function fatal(error: unknown): number {
   process.stderr.write(

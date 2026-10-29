@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { attempt } from "../../tools/shared/src/attempt.ts";
-import { z } from "../../tools/shared/src/zod.ts";
+import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 

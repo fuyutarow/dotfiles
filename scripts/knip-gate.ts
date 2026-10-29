@@ -2,7 +2,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { z } from "../tools/shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 
 const repoRoot = resolve(import.meta.dir, "..");
 const finding = z.object({

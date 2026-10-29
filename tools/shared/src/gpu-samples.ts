@@ -13,29 +13,6 @@ const Memory = z
     memTotalGiB: z.number().positive(),
   })
   .refine((m) => m.memUsedGiB <= m.memTotalGiB);
-const PercentText = z
-  .string()
-  .trim()
-  .regex(/^\d+(?:\.\d+)?(?:\s*%)?$/u)
-  .transform((s) => Number(s.replace(/\s*%$/u, "")))
-  .pipe(Pct);
-const MiBText = z
-  .string()
-  .trim()
-  .regex(/^\d+(?:\.\d+)?(?:\s*MiB)?$/u)
-  .transform((s) => Number(s.replace(/\s*MiB$/u, "")) / 1024);
-export const GPU_QUERY =
-  "--query-gpu=utilization.gpu,utilization.memory,memory.used,memory.total";
-export const GpuOutputSchema = z
-  .string()
-  .transform((out) => (out.split("\n")[0] ?? "").split(","))
-  .pipe(z.tuple([PercentText, PercentText, MiBText, MiBText]))
-  .transform(([utilPct, , memUsedGiB, memTotalGiB]) => ({
-    utilPct,
-    memUsedGiB,
-    memTotalGiB,
-  }))
-  .pipe(Memory.extend({ utilPct: Pct }));
 export const GpuSampleSchema = Memory.extend({
   ts: z.number().int().nonnegative(),
   utilPct: Pct,
@@ -56,18 +33,6 @@ export function gpuStatePath(): string {
   return join(
     process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"),
     "gpu-owner.json",
-  );
-}
-export function gpuSampleInterval(_random = Math.random): number {
-  return GPU_INTERVAL_MS;
-}
-export async function readGpuSamples(
-  path: string,
-  now: number,
-): Promise<GpuSample[]> {
-  const state = await readGpuState(path);
-  return (
-    state?.samples.filter((s) => s.ts <= now && now - s.ts <= RETAIN_MS) ?? []
   );
 }
 function mean(rows: GpuSample[]): number | null {

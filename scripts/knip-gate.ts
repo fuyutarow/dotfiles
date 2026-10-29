@@ -22,6 +22,12 @@ const report = z.object({ issues: z.array(z.record(z.string(), z.unknown())) });
 const items = z.array(z.object({ name: z.string().min(1) }));
 type Finding = z.infer<typeof finding>;
 const key = (f: Finding) => JSON.stringify([f.file, f.kind, f.name]);
+function skillReference(skill: string, reference: string): string {
+  if (reference.startsWith("~/dotfiles/"))
+    return reference.slice("~/dotfiles/".length);
+  if (reference.startsWith("agents/")) return reference;
+  return `${dirname(skill)}/${reference}`;
+}
 function fatal(message: string): never {
   process.stderr.write(`FATAL knip gate: ${message}\n`);
   return process.exit(1);
@@ -78,11 +84,19 @@ export async function roots(root: string): Promise<string[]> {
     )
       paths.add(normalized);
   };
+  // These shared executables are launched by a systemd service and by a
+  // subprocess path assembled at runtime, respectively.
+  await add("tools/shared/src/gpu-stall-notify.ts");
+  await add("tools/shared/src/readonly-exec.ts");
   const pkg = readSchema(
     z.object({ bin: z.record(z.string(), z.string()) }),
     Bun.JSONC.parse(await Bun.file(join(root, "package.json")).text()),
   );
   for (const path of Object.values(pkg.bin)) await add(path);
+  // Goal Kernel is a documented operator CLI even though it is not published as a package bin.
+  await add("agents/goal-kernel/cli.ts");
+  // The research-control trace checker is invoked directly as documented in its README.
+  await add("agents/research-control/cli.ts");
   const mise = Bun.TOML.parse(await Bun.file(join(root, "mise.toml")).text());
   const tasks = readSchema(
     z.record(z.string(), z.object({ run: z.unknown().optional() }).loose()),
@@ -123,14 +137,9 @@ export async function roots(root: string): Promise<string[]> {
   })) {
     const text = await Bun.file(join(root, skill)).text();
     for (const match of text.matchAll(
-      /(?:[\w.-]+\/)*scripts\/[\w./-]+\.(?:ts|js)\b/gu,
+      /(?:~\/dotfiles\/)?(?:[\w.-]+\/)*scripts\/[\w./-]+\.(?:ts|js)\b/gu,
     )) {
-      const reference = match[0];
-      await add(
-        reference.startsWith("agents/")
-          ? reference
-          : `${dirname(skill)}/${reference}`,
-      );
+      await add(skillReference(skill, match[0]));
     }
     for (const match of text.matchAll(
       /~\/dotfiles\/(scripts\/[\w./-]+\.(?:ts|js))\b/gu,
@@ -155,6 +164,27 @@ export async function roots(root: string): Promise<string[]> {
       source !== undefined &&
       path !== undefined &&
       (await Bun.file(join(root, source)).text()).includes(path)
+    )
+      await add(path);
+  }
+  // Codex invokes these through a deployed prompt and a registered shell shim.
+  for (const [source, reference, path] of [
+    [
+      "agents/commands/quote.md",
+      ".codex/hooks/quote-command.ts",
+      "agents/codex/hooks/quote-command.ts",
+    ],
+    [
+      "agents/codex/hooks/run-reply-language.sh",
+      'exec "$p" "$dir/enforce-reply-language.ts"',
+      "agents/codex/hooks/enforce-reply-language.ts",
+    ],
+  ]) {
+    if (
+      source !== undefined &&
+      reference !== undefined &&
+      path !== undefined &&
+      (await Bun.file(join(root, source)).text()).includes(reference)
     )
       await add(path);
   }

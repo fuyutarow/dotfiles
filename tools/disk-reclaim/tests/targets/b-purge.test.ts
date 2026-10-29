@@ -23,7 +23,7 @@ import {
   existingGraveyards,
   graveyardCandidates,
 } from "../../src/lib/graveyards.ts";
-import { countEntries, newlines } from "../../src/lib/purge-progress.ts";
+import { countEntries } from "../../src/lib/purge-progress.ts";
 import type { Context } from "../../src/targets/index.ts";
 import type {
   LivenessFacts,
@@ -645,12 +645,6 @@ test("purge progress counts nested entries and symlinks without following links"
   symlinkSync("/", join(root, "loop"));
   expect(countEntries(root)).toBe(4);
   expect(countEntries(join(root, "missing"))).toBe(0);
-});
-
-test("purge progress counts one line per reported entry", () => {
-  expect(newlines(new TextEncoder().encode("removed 'a'\nremoved 'b'\n"))).toBe(
-    2,
-  );
 });
 
 test("interactive purge refuses without a terminal before touching fixture graveyards", async () => {

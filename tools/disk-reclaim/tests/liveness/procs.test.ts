@@ -16,7 +16,6 @@ import {
 import { judge } from "../../src/liveness/predicate.ts";
 import {
   collectProcesses,
-  openPathsUnder,
   procFs,
   processDecisionText,
 } from "../../src/lib/procs.ts";
@@ -104,10 +103,11 @@ for (const via of ["cwd", "fd", "fd/3", "environ"]) {
       const snapshot = createLivenessSnapshot(config, { home, procs: proc });
       const live = judge(ref, snapshot.facts(ref));
       expect(live.verdict).toBe(expected === "RECLAIM" ? "dead" : "unknown");
-      const open = openPathsUnder(ref.dir, ref.uid, {
+      const open = collectProcesses({
         ...proc,
+        uid: ref.uid,
         ignoreUnreadableProcs: config.ignore_unreadable_procs,
-      });
+      }).openPaths(ref.dir);
       expect(judgeWorkspace({ ...safeWorkspace, open }).verdict).toBe(
         via === "environ" ? "RECLAIM" : expected,
       );

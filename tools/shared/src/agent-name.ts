@@ -22,7 +22,6 @@ import { basename } from "node:path";
 // Lowercase letters/digits, starting with a letter, capped at 12: generous enough for every
 // role token seen live so far (obs, dtr, pi, gpu, agt, ...) without an ugly session name.
 const ROLE_RE = /^[a-z][a-z0-9]{0,11}$/u;
-const ID_RE = /^[a-z0-9]+$/u;
 // Greedy project: the split lands on the LAST `-<role>_`. The project is deliberately not
 // restricted to the slug alphabet, so legacy snake-cased names (agentic_rnd-agt_bvxj) still parse.
 const NAME_RE = /^(.+)-([a-z][a-z0-9]{0,11})_([a-z0-9]+)$/u;
@@ -35,10 +34,6 @@ export interface AgentName {
 
 export function isValidRole(role: string): boolean {
   return ROLE_RE.test(role);
-}
-
-export function isValidId(id: string): boolean {
-  return ID_RE.test(id);
 }
 
 // Directory basename -> project slug. Edge hyphens are trimmed; a basename with no [a-z0-9] at

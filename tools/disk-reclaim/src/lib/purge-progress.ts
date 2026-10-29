@@ -20,6 +20,3 @@ export function countEntries(dir: string): number {
   }
   return n;
 }
-
-export const newlines = (chunk: Uint8Array): number =>
-  chunk.reduce((n, b) => n + Number(b === 10), 0);

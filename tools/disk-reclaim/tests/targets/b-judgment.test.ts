@@ -2,10 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
-import {
-  docsComponents,
-  judgmentCandidates,
-} from "../../src/targets/judgment.ts";
+import { judgmentCandidates } from "../../src/targets/judgment.ts";
 
 const root = tempRoot("disk-reclaim-judgment-");
 afterAll(() => {
@@ -30,11 +27,4 @@ test("judgment owns rust-docs only; Rust target directories belong to rust", () 
     reason: "protected: tool installation root",
     action: { argv: [] },
   });
-  expect(
-    docsComponents([
-      "rust-docs-x86_64",
-      "rust-std-x86_64",
-      "rust-docs-preview",
-    ]),
-  ).toEqual(["rust-docs-x86_64", "rust-docs-preview"]);
 });

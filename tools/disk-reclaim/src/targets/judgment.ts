@@ -7,8 +7,6 @@ import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 
-export const docsComponents = (installed: readonly string[]): string[] =>
-  installed.filter((n) => /^rust-docs(?:-|$)/u.test(n));
 const candidate = (id: string, path: string, bytes: number): Candidate => ({
   id,
   path,

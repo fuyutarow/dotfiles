@@ -17,7 +17,6 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { Candidate, ReceiptAction } from "../../src/model.ts";
-import { openPathsUnder } from "../../src/jj/proc.ts";
 import { createWorkspacesTarget } from "../../src/targets/workspaces.ts";
 import { World } from "../jj/fixture.ts";
 import { collectProcesses } from "../../src/lib/procs.ts";
@@ -41,10 +40,11 @@ const test = (
 const probe = (dir: string) => {
   const w = worlds.find((world) => dir.startsWith(`${world.root}/`));
   assert.ok(w !== undefined, `no process fixture for ${dir}`);
-  return openPathsUnder(dir, process.getuid?.() ?? 0, {
+  return collectProcesses({
+    uid: process.getuid?.() ?? 0,
     procRoot: join(w.root, "proc"),
     ignoreUnreadableProcs: ["sshd"],
-  });
+  }).openPaths(dir);
 };
 const target = createWorkspacesTarget({ openPaths: probe });
 const worlds: World[] = [];

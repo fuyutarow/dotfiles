@@ -25,6 +25,31 @@
       ],
       "ignoreBinaries": ["mise"],
     },
+    "tools/disk-reclaim": {
+      // Bun subprocesses and probe imports use paths constructed at runtime.
+      "entry": [
+        "src/disk-clean-child.ts!",
+        "src/disk-rust-child.ts!",
+        "src/disk-tmpfs-child.ts!",
+        "src/disk-purge-child.ts!",
+        "src/disk-builds-child.ts!",
+        "src/disk-scratch-child.ts!",
+        "src/disk-ccc-index-db-child.ts!",
+        "src/disk-rip-expire-child.ts!",
+        "src/disk-workspaces-child.ts!",
+        "src/disk-judgment-child.ts!",
+        "src/disk-toolchains-worker.ts!",
+        "src/disk-capacity.ts!",
+        "src/disk-receipts.ts!",
+        "src/disk-move-check.ts!",
+      ],
+      "project": [
+        "**/*.{ts,tsx,js,jsx}!",
+        "!**/tests/**!",
+        "!**/*.{test,spec}.{ts,tsx,js,jsx}!",
+        "!**/fixtures/**!",
+      ],
+    },
     "tools/*": {
       "entry": [],
       "project": [
@@ -43,6 +68,16 @@
         "!**/fixtures/**!",
         // Fixture-only benchmark, not deployed production code.
         "!bench/render.ts!",
+      ],
+    },
+    "tools/shared": {
+      "entry": [],
+      "project": [
+        "**/*.{ts,tsx,js,jsx}!",
+        "!**/tests/**!",
+        "!**/*.{test,spec}.{ts,tsx,js,jsx}!",
+        "!**/fixtures/**!",
+        "!src/decode.ts!",
       ],
     },
   },

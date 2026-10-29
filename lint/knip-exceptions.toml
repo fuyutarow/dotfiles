@@ -43,20 +43,6 @@ reason = "Review files finding in root; retain until its use or removal is verif
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "agents/codex/hooks/quote-command.ts"
-kind = "files"
-name = "agents/codex/hooks/quote-command.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/codex/hooks/enforce-reply-language.ts"
-kind = "files"
-name = "agents/codex/hooks/enforce-reply-language.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "obsidian/local-plugins/doc-view/main.js"
 kind = "files"
 name = "obsidian/local-plugins/doc-view/main.js"
@@ -75,13 +61,6 @@ file = "agents/research-control/learning-bus.ts"
 kind = "files"
 name = "agents/research-control/learning-bus.ts"
 reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "package.json"
-kind = "dependencies"
-name = "@clack/prompts"
-reason = "Review dependencies finding in root; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
 
 [[exception]]
@@ -260,118 +239,6 @@ reason = "Review files finding in tools/repo-retrieve; retain until its use or r
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "tools/disk-reclaim/src/disk-clean-child.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-clean-child.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-toolchains-worker.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-toolchains-worker.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-builds-action.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-builds-action.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-ccc-index-db-action.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-ccc-index-db-action.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-tmpfs-child.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-tmpfs-child.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-ccc-index-db-child.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-ccc-index-db-child.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-scratch-child.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-scratch-child.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-capacity.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-capacity.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-clean-action.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-clean-action.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-scratch-action.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-scratch-action.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-receipts.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-receipts.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-builds-child.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-builds-child.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-clean-safety.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-clean-safety.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-clean-bun.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-clean-bun.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-rust-child.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-rust-child.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-move-check.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-move-check.ts"
-reason = "Review files finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "tools/smart-open/src/receive.ts"
 kind = "files"
 name = "tools/smart-open/src/receive.ts"
@@ -393,30 +260,9 @@ reason = "Review files finding in tools/shared; retain until its use or removal 
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "tools/shared/src/decode.ts"
-kind = "files"
-name = "tools/shared/src/decode.ts"
-reason = "Review files finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "tools/shared/src/fleet-update.ts"
 kind = "files"
 name = "tools/shared/src/fleet-update.ts"
-reason = "Review files finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/gpu-stall-notify.ts"
-kind = "files"
-name = "tools/shared/src/gpu-stall-notify.ts"
-reason = "Review files finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/readonly-exec.ts"
-kind = "files"
-name = "tools/shared/src/readonly-exec.ts"
 reason = "Review files finding in tools/shared; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
 
@@ -458,34 +304,6 @@ keeper = "dotfiles maintainers"
 [[exception]]
 file = "tools/shared/src/gpu-samples.ts"
 kind = "exports"
-name = "GPU_QUERY"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/gpu-samples.ts"
-kind = "exports"
-name = "GpuOutputSchema"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/gpu-samples.ts"
-kind = "exports"
-name = "gpuSampleInterval"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/gpu-samples.ts"
-kind = "exports"
-name = "readGpuSamples"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/gpu-samples.ts"
-kind = "exports"
 name = "sampleGpu"
 reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
@@ -505,24 +323,10 @@ reason = "Review exports finding in tools/smart-open; retain until its use or re
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "tools/disk-reclaim/src/lib/procs.ts"
-kind = "exports"
-name = "openPathsUnder"
-reason = "Review exports finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "tools/repo-retrieve/src/definitions.ts"
 kind = "exports"
 name = "candidatePool"
 reason = "Review exports finding in tools/repo-retrieve; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/readonly-command.ts"
-kind = "exports"
-name = "READONLY_JOB_ENV"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
 
 [[exception]]
@@ -547,27 +351,6 @@ reason = "The name workspaceCounts occurs in tools/statusline/tests/core-only.te
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "tools/disk-reclaim/src/targets/system.ts"
-kind = "exports"
-name = "systemExitCode"
-reason = "Review exports finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/targets/judgment.ts"
-kind = "exports"
-name = "docsComponents"
-reason = "Review exports finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/lib/purge-progress.ts"
-kind = "exports"
-name = "newlines"
-reason = "Review exports finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "tools/repo-retrieve/src/index-plan.ts"
 kind = "exports"
 name = "measuredEta"
@@ -589,69 +372,6 @@ reason = "Review exports finding in tools/shared; retain until its use or remova
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "tools/shared/src/shape.ts"
-kind = "exports"
-name = "arr"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/shape.ts"
-kind = "exports"
-name = "at"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/shape.ts"
-kind = "exports"
-name = "bool"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/shape.ts"
-kind = "exports"
-name = "num"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/shape.ts"
-kind = "exports"
-name = "obj"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/shape.ts"
-kind = "exports"
-name = "str"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/shape.ts"
-kind = "exports"
-name = "strsAt"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/shape.ts"
-kind = "types"
-name = "Obj"
-reason = "Review types finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/agent-name.ts"
-kind = "exports"
-name = "isValidId"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "tools/shared/src/agent-name.ts"
 kind = "exports"
 name = "parseAgentName"
@@ -661,21 +381,7 @@ keeper = "dotfiles maintainers"
 [[exception]]
 file = "tools/shared/src/jsonl.ts"
 kind = "exports"
-name = "DEFAULT_JSONL_TAIL_BYTES"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/jsonl.ts"
-kind = "exports"
 name = "readJsonlTailSync"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/jsonl.ts"
-kind = "exports"
-name = "readJsonlLines"
 reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
 
@@ -813,13 +519,6 @@ reason = "The name cccBadge occurs in tools/statusline/tests/ccc-indexing.test.t
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "tools/disk-reclaim/src/jj/proc.ts"
-kind = "exports"
-name = "openPathsUnder"
-reason = "Review exports finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "tools/shared/src/subscription-usage.ts"
 kind = "exports"
 name = "readSubscriptionUsageSnapshot"
@@ -896,65 +595,3 @@ name = "SkillEntry"
 reason = "newly visible after root derivation fix 1029"
 keeper = "dotfiles coordinator"
 
-[[exception]]
-file = "tools/disk-reclaim/src/disk-rip-expire-child.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-rip-expire-child.ts"
-reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-workspaces-child.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-workspaces-child.ts"
-reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-judgment-action.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-judgment-action.ts"
-reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-workspaces-action.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-workspaces-action.ts"
-reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-judgment-child.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-judgment-child.ts"
-reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-purge-child.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-purge-child.ts"
-reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-rip-expire-run.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-rip-expire-run.ts"
-reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/disk-reclaim/src/disk-purge-action.ts"
-kind = "files"
-name = "tools/disk-reclaim/src/disk-purge-action.ts"
-reason = "Dynamically loaded by the disk-reclaim adapter; retain while the adapter owns the child entry."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/sampler-lock.ts"
-kind = "files"
-name = "tools/statusline/src/sampler-lock.ts"
-reason = "Newly reported after alpha root derivation; retain while the sampler lock remains dynamically loaded."
-keeper = "dotfiles maintainers"

@@ -44,7 +44,6 @@
     "disk": "tools/disk-reclaim/src/disk.ts"
   },
   "dependencies": {
-    "@clack/prompts": "1.8.1",
     "cleye": "2.6.0",
     "neverthrow": "8.2.0",
     "ts-pattern": "5.9.0",

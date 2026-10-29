@@ -364,11 +364,3 @@ export function processDecisionText(text: string): string {
   // Plan reasons must retain pid/comm/exe so the owner can identify unknown processes.
   return text;
 }
-
-export function openPathsUnder(
-  dir: string,
-  uid = process.getuid?.() ?? 0,
-  options: Omit<ProcOptions, "uid"> = {},
-): OpenPaths {
-  return collectProcesses({ ...options, uid }).openPaths(dir);
-}

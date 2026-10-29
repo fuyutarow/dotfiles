@@ -25,10 +25,6 @@ const defaultRun: CommandRunner = (argv) => {
     err: result.stderr.toString(),
   };
 };
-export const systemExitCode = (
-  explicit: boolean,
-  available: boolean,
-): number => (!available && explicit ? 4 : 0);
 export function createSystemTarget(options: SystemOptions = {}) {
   const run = options.run ?? defaultRun;
   const detectedWsl = fromThrowable(() =>

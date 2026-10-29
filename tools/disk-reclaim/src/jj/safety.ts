@@ -1,5 +1,5 @@
 import type { Candidate } from "../model.ts";
-import type { OpenPaths } from "./proc.ts";
+import type { OpenPaths } from "../lib/procs.ts";
 
 type Check = Candidate["checks"][number];
 

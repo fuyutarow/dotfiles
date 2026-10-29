@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import assert from "node:assert/strict";
-import {
-  createSystemTarget,
-  systemExitCode,
-} from "../../src/targets/system.ts";
+import { createSystemTarget } from "../../src/targets/system.ts";
 import type { Context } from "../../src/targets/index.ts";
 
 const systemContext = {
@@ -65,8 +62,6 @@ describe("system target", () => {
         fstrimUnitInstalled: false,
       }).available(),
     ).toMatchObject({ available: false });
-    expect(systemExitCode(false, false)).toBe(0);
-    expect(systemExitCode(true, false)).toBe(4);
   });
 
   test("uses the installed fstrim unit without requiring broad passwordless sudo", () => {

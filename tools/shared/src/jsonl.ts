@@ -1,16 +1,8 @@
-import {
-  createReadStream,
-  closeSync,
-  openSync,
-  readSync,
-  statSync,
-} from "node:fs";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { open, stat, type FileHandle } from "node:fs/promises";
-import { createInterface } from "node:readline";
 import { StringDecoder } from "node:string_decoder";
 
 const READ_CHUNK_BYTES = 64 * 1024;
-export const DEFAULT_JSONL_TAIL_BYTES = 4 * 1024 * 1024;
 
 export type JsonlTail = Readonly<{ text: string; startOffset: number }>;
 export type JsonlInput = string | Iterable<string>;
@@ -146,15 +138,6 @@ async function tailStartOffsetAsync(
     offset += bytesRead;
   }
   return size;
-}
-
-/** Stream non-empty JSONL lines without retaining the file or an array of lines. */
-export async function* readJsonlLines(path: string): AsyncGenerator<string> {
-  const lines = createInterface({
-    input: createReadStream(path, { encoding: "utf8" }),
-    crlfDelay: Infinity,
-  });
-  for await (const line of lines) if (line !== "") yield line;
 }
 
 /** A synchronous streaming JSONL reader for commands with synchronous handlers. */

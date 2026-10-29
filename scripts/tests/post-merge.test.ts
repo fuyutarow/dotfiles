@@ -123,7 +123,7 @@ test("dx collision does not hide an agx floor failure", async () => {
 
 test("a recursive PATH Bun fixture is bypassed by every script step", async () => {
   const root = await mkdtemp(join(tmpdir(), "post-merge-"));
-  const previous = process.env.PATH;
+  const previous = process.env["PATH"];
   await writeFile(join(root, "bun"), '#!/bin/sh\nexec bun "$@"\n');
   await chmod(join(root, "bun"), 0o755);
   await writeFile(
@@ -133,11 +133,11 @@ test("a recursive PATH Bun fixture is bypassed by every script step", async () =
     process.exitCode = await p.exited;
   `,
   );
-  process.env.PATH = `${root}:${previous ?? ""}`;
+  process.env["PATH"] = `${root}:${previous ?? ""}`;
   const lines: string[] = [];
   await using _cleanup = {
     [Symbol.asyncDispose]: async () => {
-      process.env.PATH = previous;
+      process.env["PATH"] = previous;
       await rm(root, { recursive: true, force: true });
     },
   };

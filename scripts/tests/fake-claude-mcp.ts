@@ -15,7 +15,7 @@ function selected(variable: string, name: string): boolean {
 }
 
 if (args[0] === "mcp" && args[1] === "list") {
-  process.stdout.write(process.env.FAKE_CLAUDE_LIST ?? "");
+  process.stdout.write(process.env["FAKE_CLAUDE_LIST"] ?? "");
   process.exit(0);
 }
 
@@ -33,7 +33,7 @@ if (args[0] === "mcp" && name !== undefined && args[1] === "remove") {
 if (args[0] === "mcp" && name !== undefined && args[1] === "add") {
   if (selected("FAKE_CLAUDE_FAIL_ADD", name)) {
     process.stderr.write(`fake claude: add failed: ${name}\n`);
-    process.exit(Number(process.env.FAKE_CLAUDE_FAIL_ADD_EXITCODE ?? "1"));
+    process.exit(Number(process.env["FAKE_CLAUDE_FAIL_ADD_EXITCODE"] ?? "1"));
   }
   process.stdout.write(`added: ${name}\n`);
   process.exit(0);

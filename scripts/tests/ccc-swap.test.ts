@@ -75,7 +75,7 @@ async function pathExists(path: string): Promise<boolean> {
 // environment, so a restricted-env subprocess needs an absolute path to the REAL bun binary —
 // resolving "bun" via the shim would just re-invoke mise. Same trick as reclaim-clean.test.ts.
 async function resolveRealBun(): Promise<string> {
-  for (const dir of (process.env.PATH ?? "").split(":").filter(Boolean)) {
+  for (const dir of (process.env["PATH"] ?? "").split(":").filter(Boolean)) {
     const candidate = join(dir, "bun");
     if (
       await access(candidate).then(
@@ -110,16 +110,16 @@ renameSync(target, join(graveyard, "removed"));
 `,
       { mode: 0o755 },
     );
-    const prior = process.env.RIP_GRAVEYARD;
-    const priorPath = process.env.PATH;
-    process.env.RIP_GRAVEYARD = graveyard;
-    process.env.PATH = root;
+    const prior = process.env["RIP_GRAVEYARD"];
+    const priorPath = process.env["PATH"];
+    process.env["RIP_GRAVEYARD"] = graveyard;
+    process.env["PATH"] = root;
 
     await removeDir(target).finally(() => {
-      if (prior === undefined) delete process.env.RIP_GRAVEYARD;
-      else process.env.RIP_GRAVEYARD = prior;
-      if (priorPath === undefined) delete process.env.PATH;
-      else process.env.PATH = priorPath;
+      if (prior === undefined) delete process.env["RIP_GRAVEYARD"];
+      else process.env["RIP_GRAVEYARD"] = prior;
+      if (priorPath === undefined) delete process.env["PATH"];
+      else process.env["PATH"] = priorPath;
     });
 
     expect(await pathExists(target)).toBe(false);
@@ -139,7 +139,7 @@ async function runScript(
 ): Promise<{ out: string; err: string; code: number }> {
   // bounded: ccc-swap.ts bounds its own `ccc` child with AbortSignal.timeout and always exits.
   const proc = Bun.spawn([REAL_BUN, SCRIPT, ...args], {
-    env: { PATH: process.env.PATH ?? "", ...env },
+    env: { PATH: process.env["PATH"] ?? "", ...env },
     stdout: "pipe",
     stderr: "pipe",
   });

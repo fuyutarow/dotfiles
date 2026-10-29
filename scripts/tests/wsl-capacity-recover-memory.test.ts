@@ -46,7 +46,7 @@ process.stdout.write(process.env.MEMORY_OUTPUT ?? 'available_mb=3082\\r\\npage_r
     LIVE_INTEROP: socket,
     ATTEMPTS: attempts,
   };
-  delete env.WSL_INTEROP;
+  delete env["WSL_INTEROP"];
   return { powershell, interopDirectory: root, env, socket, attempts };
 }
 
@@ -59,7 +59,7 @@ test("measurement recovers the unit's missing WSL_INTEROP and skips a stale sock
     availableMb: 3082,
     pageReadsPerSecond: 0,
   });
-  expect(options.env.WSL_INTEROP).toBeUndefined();
+  expect(options.env["WSL_INTEROP"]).toBeUndefined();
   expect((await readFile(options.attempts, "utf8")).trim().split("\n")).toEqual(
     ["unset", stale, options.socket],
   );

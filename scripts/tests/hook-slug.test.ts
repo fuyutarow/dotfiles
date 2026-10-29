@@ -131,7 +131,7 @@ test("a fixture hook renders for both Claude and Codex with its nested slug", as
   expect(spec?.vendors).toEqual(["claude", "codex"]);
   if (spec === undefined) return;
   for (const vendor of ["claude", "codex"] as const) {
-    expect(wire({}, [spec], vendor).PreToolUse).toEqual([
+    expect(wire({}, [spec], vendor)["PreToolUse"]).toEqual([
       {
         matcher: "Bash",
         hooks: [

@@ -140,7 +140,7 @@ else process.exit(2);
         cwd: root,
         env: {
           ...process.env,
-          PATH: [bin, ...(process.env.PATH ?? "").split(":")]
+          PATH: [bin, ...(process.env["PATH"] ?? "").split(":")]
             .filter(
               (path) =>
                 !path.includes("/mise/installs/github-fuyutarow-agx/") &&

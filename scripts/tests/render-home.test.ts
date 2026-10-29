@@ -39,9 +39,9 @@ function run(
   env: Record<string, string>,
   preload?: string,
 ): { out: string; code: number } {
-  const dotfiles = env.DOTFILES ?? ROOT;
-  const home = env.HOME ?? CLI_HOME;
-  const path = env.PATH ?? testPathWithStub(join(dotfiles, "bin"));
+  const dotfiles = env["DOTFILES"] ?? ROOT;
+  const home = env["HOME"] ?? CLI_HOME;
+  const path = env["PATH"] ?? testPathWithStub(join(dotfiles, "bin"));
   const proc = Bun.spawnSync(
     [
       process.execPath,
@@ -301,7 +301,7 @@ describe("render-home: base only", () => {
     // The reference states no maximum (default 30 days, minimum 1).
     // Use 36500 days (100 years) to effectively disable transcript cleanup.
     // https://code.claude.com/docs/en/settings-reference#cleanupperioddays
-    expect(rendered.cleanupPeriodDays).toBe(36500);
+    expect(rendered["cleanupPeriodDays"]).toBe(36500);
   });
 
   test("real Claude settings render agx:snapshot on the same events as sys-snapshot", async () => {
@@ -314,7 +314,7 @@ describe("render-home: base only", () => {
     const home = makeHome();
     const result = run({ HOME: home, DOTFILES: dotfiles });
     expect(result.code, result.out).toBe(0);
-    const hooks = HooksConfigSchema.safeParse(readDest(home).hooks);
+    const hooks = HooksConfigSchema.safeParse(readDest(home)["hooks"]);
     expect(hooks.success).toBe(true);
     if (!hooks.success) return;
     for (const event of ["Stop", "PostToolUse"]) {
@@ -322,21 +322,21 @@ describe("render-home: base only", () => {
       const agx = groups.filter((group) =>
         group.hooks.some(
           (hook) =>
-            hook.command ===
+            hook["command"] ===
             "HOOK_SLUG=dotfiles:agx:snapshot sh ~/.claude/hooks/run.sh log-agx-snapshot.ts",
         ),
       );
       const sys = groups.filter((group) =>
         group.hooks.some(
           (hook) =>
-            hook.command ===
+            hook["command"] ===
             "HOOK_SLUG=dotfiles:sys-snapshot sh ~/.claude/hooks/run.sh log-sys-snapshot.ts",
         ),
       );
       expect(agx).toHaveLength(1);
       expect(sys).toHaveLength(1);
-      expect(agx[0]?.matcher).toBe(sys[0]?.matcher);
-      expect(agx[0]?.hooks[0]?.timeout).toBe(5);
+      expect(agx[0]?.["matcher"]).toBe(sys[0]?.["matcher"]);
+      expect(agx[0]?.["hooks"][0]?.["timeout"]).toBe(5);
     }
     cleanup(dotfiles, home);
   });
@@ -403,7 +403,7 @@ describe("render-home: base only", () => {
       COMMAND_TARGET_HOME: live,
     });
     expect(r.code).toBe(0);
-    expect(readDest(scratch).statusLine).toEqual({
+    expect(readDest(scratch)["statusLine"]).toEqual({
       type: "command",
       command: "~/.bun/bin/statusline",
     });
@@ -530,7 +530,7 @@ describe("render-home: failure modes", () => {
 
     const { code } = run({ HOME: home, DOTFILES: dotfiles });
     expect(code).toBe(0);
-    expect(readDest(home).statusLine).toEqual({
+    expect(readDest(home)["statusLine"]).toEqual({
       type: "command",
       command: "~/.bun/bin/statusline",
     });
@@ -710,7 +710,7 @@ describe("render-home: the rest of the rendered half", () => {
     const mine = { hooks: [{ type: "command", command: "sh -c mine" }] };
     writeFileSync(overlay, JSON.stringify({ hooks: { Stop: [mine] } }));
     run({ HOME: home, DOTFILES: dotfiles, CLAUDE_SETTINGS_PRIVATE: overlay });
-    expect(readDest(home).hooks).toEqual({
+    expect(readDest(home)["hooks"]).toEqual({
       Stop: [mine],
       PreToolUse: [GATE],
     });
@@ -822,13 +822,13 @@ describe("render-home: committed jj inputs", () => {
       originalPolicy,
     );
     expect(result.out).toContain(`render source: commit ${f.commit}`);
-    expect(readDest(f.home).model).toBe("committed-model");
+    expect(readDest(f.home)["model"]).toBe("committed-model");
     expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toBe(
       "# policy\n\n<!-- roster:begin -->\n<!-- roster:end -->\n",
     );
     const latest = run(f.env);
     expect(latest.code, latest.out).toBe(0);
-    expect(readDest(f.home).model).toBe("newer-model");
+    expect(readDest(f.home)["model"]).toBe("newer-model");
     expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toStartWith(
       "# newer policy\n",
     );
@@ -907,7 +907,7 @@ describe("render-home: committed jj inputs", () => {
     expect(run({ ...f.env, DOTFILES_RENDER_FROM_WORKING_COPY: "1" }).code).toBe(
       0,
     );
-    expect(readObject(join(f.home, ".codex/hooks.json")).fixture).toBe(
+    expect(readObject(join(f.home, ".codex/hooks.json"))["fixture"]).toBe(
       "dirty-hook-input",
     );
     const deployed = run({

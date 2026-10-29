@@ -7,7 +7,7 @@ const SCRIPT = join(import.meta.dir, "..", "lint-no-new-bash.ts");
 const lines = (n: number) => "echo ok\n".repeat(n);
 function run(cwd: string, cmd: string[]) {
   const env = { ...process.env };
-  delete env.PRECOMMIT_VCS;
+  delete env["PRECOMMIT_VCS"];
   const result = Bun.spawnSync(cmd, {
     cwd,
     env,

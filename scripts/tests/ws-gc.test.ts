@@ -63,7 +63,7 @@ if (verb === "enable") {
     ...process.env,
     HOME: home,
     DOTFILES: REPO,
-    PATH: `${bin}:${process.env.PATH}`,
+    PATH: `${bin}:${process.env["PATH"]}`,
     DOCTOR_ONLY: "ws-gc",
   };
   const run = async (cmd: string[]) => {

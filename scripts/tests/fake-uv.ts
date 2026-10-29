@@ -5,7 +5,7 @@
 
 process.stdout.write(`CALL uv ${Bun.argv.slice(2).join(" ")}\n`);
 
-if (process.env.FAKE_UV_FAIL === "1") {
+if (process.env["FAKE_UV_FAIL"] === "1") {
   process.stderr.write("fake uv: install failed\n");
   process.exit(1);
 }

@@ -105,7 +105,7 @@ test("the repo Markdown formatter output parses as one changeset entry", async (
       cwd: repo,
       env: {
         ...process.env,
-        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
         MISE_STATE_DIR: join(root, "mise-state"),
         MISE_CACHE_DIR: join(root, "mise-cache"),
         MISE_CONFIG_DIR: join(root, "mise-config"),

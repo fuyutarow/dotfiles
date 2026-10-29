@@ -99,7 +99,7 @@ async function writeAgxLsFixture(
   return bin;
 }
 function pathWithFixture(bin: string): string {
-  return `${bin}${delimiter}${process.env.PATH ?? ""}`;
+  return `${bin}${delimiter}${process.env["PATH"] ?? ""}`;
 }
 async function withProcessEnv<T>(
   values: Record<string, string>,
@@ -676,7 +676,7 @@ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['format', '${formatter}'
       cwd,
       env: {
         ...env,
-        PATH: `${temp}:${process.env.PATH ?? ""}`,
+        PATH: `${temp}:${process.env["PATH"] ?? ""}`,
         LAND_MISE: mise,
         LAND_AGX: agx,
         LAND_SSH: ssh,
@@ -711,7 +711,7 @@ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['format', '${formatter}'
       cwd: main,
       env: {
         ...env,
-        PATH: `${temp}:${process.env.PATH ?? ""}`,
+        PATH: `${temp}:${process.env["PATH"] ?? ""}`,
         LAND_MISE: mise,
         LAND_AGX: agx,
         LAND_SSH: ssh,

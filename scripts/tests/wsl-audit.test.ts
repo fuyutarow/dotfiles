@@ -144,7 +144,7 @@ process.stdout.write(host ? ${JSON.stringify(host)} : ${JSON.stringify(guest)});
           ...flags,
         ],
         {
-          env: { ...process.env, PATH: `${dir}:${process.env.PATH ?? ""}` },
+          env: { ...process.env, PATH: `${dir}:${process.env["PATH"] ?? ""}` },
           stdout: "pipe",
           stderr: "pipe",
           signal: AbortSignal.timeout(10_000),

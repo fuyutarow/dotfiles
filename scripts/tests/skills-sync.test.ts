@@ -89,7 +89,7 @@ process.on("exit", () => console.error("BUILD_CALLS=" + count));
     maxBuffer: 4 * 1024 * 1024,
     env: {
       ...process.env,
-      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      PATH: `${bin}:${process.env["PATH"] ?? ""}`,
       VENDOR_SKILL_CLI: FAKE,
       FAKE_SKILLS_MARKER: marker,
       FAKE_SKILLS_ARGS_MARKER: `${marker}.args`,

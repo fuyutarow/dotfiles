@@ -4,8 +4,8 @@ import { resolve } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 
 const args = Bun.argv.slice(2);
-const home = process.env.HOME ?? "";
-const marker = process.env.FAKE_CLAUDE_MARKER;
+const home = process.env["HOME"] ?? "";
+const marker = process.env["FAKE_CLAUDE_MARKER"];
 
 const InstalledPluginsSchema = z.looseObject({
   plugins: z.record(z.string(), z.array(z.looseObject({ scope: z.string() }))),

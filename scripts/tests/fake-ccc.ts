@@ -40,7 +40,7 @@ function parseDbPathMapping(
 
 function resolveDbDir(cwd: string): string {
   for (const m of parseDbPathMapping(
-    process.env.COCOINDEX_CODE_DB_PATH_MAPPING,
+    process.env["COCOINDEX_CODE_DB_PATH_MAPPING"],
   )) {
     if (cwd === m.source || cwd.startsWith(`${m.source}/`)) {
       const rel = cwd.slice(m.source.length).replace(/^\//u, "");
@@ -66,22 +66,22 @@ if (command === "index") {
   // socket nobody will ever create, and raises DaemonStartError. Reproduce that here, or the
   // suite silently passes on an env leak that breaks every real build (regression 2026-08-08).
   if (
-    process.env.COCOINDEX_CODE_DAEMON_SUPERVISED !== undefined &&
-    process.env.COCOINDEX_CODE_DAEMON_SUPERVISED !== ""
+    process.env["COCOINDEX_CODE_DAEMON_SUPERVISED"] !== undefined &&
+    process.env["COCOINDEX_CODE_DAEMON_SUPERVISED"] !== ""
   ) {
     process.stderr.write("Daemon did not start in time.\n");
     process.exit(1);
   }
 
   if (
-    process.env.FAKE_CCC_FAIL !== undefined &&
-    process.env.FAKE_CCC_FAIL !== "" &&
-    cwd.includes(process.env.FAKE_CCC_FAIL)
+    process.env["FAKE_CCC_FAIL"] !== undefined &&
+    process.env["FAKE_CCC_FAIL"] !== "" &&
+    cwd.includes(process.env["FAKE_CCC_FAIL"])
   ) {
     process.stderr.write("fake ccc: simulated indexing failure\n");
     process.exit(1);
   }
-  if (process.env.FAKE_CCC_HANG === "1") {
+  if (process.env["FAKE_CCC_HANG"] === "1") {
     // Never resolves — proves the caller's AbortSignal.timeout is what ends this, not a
     // hand-rolled setTimeout in the fixture.
     await new Promise(() => {});
@@ -89,8 +89,8 @@ if (command === "index") {
 
   const dbDir = resolveDbDir(cwd);
   mkdirSync(dbDir, { recursive: true });
-  const dim = process.env.FAKE_CCC_DIM ?? "768";
-  const chunkCount = Number(process.env.FAKE_CCC_CHUNKS ?? "3");
+  const dim = process.env["FAKE_CCC_DIM"] ?? "768";
+  const chunkCount = Number(process.env["FAKE_CCC_CHUNKS"] ?? "3");
 
   const db = new Database(join(dbDir, "target_sqlite.db"), { create: true });
   db.run(

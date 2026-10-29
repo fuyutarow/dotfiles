@@ -98,7 +98,7 @@ process.exit(await child.exited);
     {
       env: {
         ...process.env,
-        PATH: `${bin}:${process.env.PATH}`,
+        PATH: `${bin}:${process.env["PATH"]}`,
         HOME: root,
         XDG_RUNTIME_DIR: runtime,
         XDG_STATE_HOME: root,

@@ -720,7 +720,7 @@ test("land-style outer sandbox preserves setup executable reached through a shad
       env: {
         ...process.env,
         TMPDIR: f.temp,
-        PATH: `${join(f.consumer, "bin")}:${process.env.PATH ?? ""}`,
+        PATH: `${join(f.consumer, "bin")}:${process.env["PATH"] ?? ""}`,
       },
       stdout: "pipe",
       stderr: "pipe",
@@ -827,7 +827,7 @@ test("tasks can spawn sh by name through a symlinked bin in nested sandboxes", a
       env: {
         ...process.env,
         TMPDIR: f.temp,
-        PATH: `${join(f.consumer, "bin")}:${process.env.PATH ?? ""}`,
+        PATH: `${join(f.consumer, "bin")}:${process.env["PATH"] ?? ""}`,
       },
       stdout: "pipe",
       stderr: "pipe",

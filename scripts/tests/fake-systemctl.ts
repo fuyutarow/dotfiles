@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { z, jsonOf } from "../../agents/hooks/zod.ts";
-const home = process.env.HOME ?? "";
+const home = process.env["HOME"] ?? "";
 const stateFile = join(home, "state.json");
 const parsed = jsonOf(
   z.object({ enabled: z.string(), active: z.string() }),
@@ -20,7 +20,7 @@ const state = parsed.data;
 const args = process.argv.slice(2);
 appendFileSync(join(home, "calls"), `${args.join(" ")}\n`);
 const verb = args[1];
-if (verb === process.env.FAIL_SYSTEMCTL) process.exit(9);
+if (verb === process.env["FAIL_SYSTEMCTL"]) process.exit(9);
 if (verb === "is-enabled") {
   process.stdout.write(`${state.enabled}\n`);
   process.exit(

@@ -79,7 +79,7 @@ process.stdout.write(JSON.stringify(process.env.AGX_FAKE_LEGACY === "1" ? rows :
       env: {
         ...process.env,
         AGX_STATE_DIR: state,
-        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
       },
     },
   );
@@ -106,7 +106,7 @@ process.stdout.write(JSON.stringify(process.env.AGX_FAKE_LEGACY === "1" ? rows :
       env: {
         ...process.env,
         AGX_STATE_DIR: state,
-        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
       },
     },
   );
@@ -122,7 +122,7 @@ process.stdout.write(JSON.stringify(process.env.AGX_FAKE_LEGACY === "1" ? rows :
       env: {
         ...process.env,
         AGX_STATE_DIR: state,
-        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
       },
     },
   );
@@ -140,7 +140,7 @@ process.stdout.write(JSON.stringify(process.env.AGX_FAKE_LEGACY === "1" ? rows :
         ...process.env,
         AGX_STATE_DIR: state,
         AGX_FAKE_LEGACY: "1",
-        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
       },
     },
   );

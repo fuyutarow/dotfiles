@@ -13,7 +13,7 @@ import { resolve } from "node:path";
 import { parseSkillLock } from "../skills-declaration.ts";
 
 const args = Bun.argv.slice(2);
-const home = process.env.HOME ?? "";
+const home = process.env["HOME"] ?? "";
 const command = args[0] ?? "";
 const sourceIndex = args.indexOf("add") + 1;
 const source = args[sourceIndex] ?? "vendor/repo";
@@ -24,17 +24,19 @@ const names = args.flatMap((arg, index) =>
 );
 const isLocal = existsSync(source);
 const stowaway =
-  !isLocal && process.env.FAKE_SKILLS_STOWAWAY !== "0" ? ["find-skills"] : [];
+  !isLocal && process.env["FAKE_SKILLS_STOWAWAY"] !== "0"
+    ? ["find-skills"]
+    : [];
 const all = [...names, ...stowaway];
-const content = process.env.FAKE_SKILLS_CONTENT;
+const content = process.env["FAKE_SKILLS_CONTENT"];
 
-const marker = process.env.FAKE_SKILLS_MARKER;
+const marker = process.env["FAKE_SKILLS_MARKER"];
 if (marker !== undefined)
   appendFileSync(
     marker,
     `${home}\t${process.cwd()}\t${command}\t${source}\t${all.join(",")}\n`,
   );
-const argsMarker = process.env.FAKE_SKILLS_ARGS_MARKER;
+const argsMarker = process.env["FAKE_SKILLS_ARGS_MARKER"];
 if (argsMarker !== undefined)
   appendFileSync(argsMarker, `${args.join("\t")}\n`);
 
@@ -98,8 +100,8 @@ for (const [index, name] of all.entries()) {
   for (const base of bases) install(name, base);
   if (
     isLocal &&
-    (process.env.FAKE_SKILLS_FAIL_AFTER_ONE === "1" ||
-      (process.env.FAKE_SKILLS_FAIL_CODEX === "1" &&
+    (process.env["FAKE_SKILLS_FAIL_AFTER_ONE"] === "1" ||
+      (process.env["FAKE_SKILLS_FAIL_CODEX"] === "1" &&
         agentIndex >= 0 &&
         agents.length === 1 &&
         agents[0] === "codex")) &&
@@ -112,7 +114,7 @@ for (const [index, name] of all.entries()) {
 
 const oldSkills = previous.skills;
 const newSkills =
-  process.env.FAKE_SKILLS_NO_LEDGER === "1"
+  process.env["FAKE_SKILLS_NO_LEDGER"] === "1"
     ? oldSkills
     : {
         ...oldSkills,

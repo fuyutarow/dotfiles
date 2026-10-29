@@ -1,6 +1,6 @@
 // argv-forwarding: fixture for the released agx host command (no declaration schema/parser).
 const args = process.argv.slice(2);
-const home = process.env.HOME;
+const home = process.env["HOME"];
 if (home === undefined) {
   process.stderr.write("fixture HOME missing\n");
   process.exit(2);

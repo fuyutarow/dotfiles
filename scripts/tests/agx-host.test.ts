@@ -157,7 +157,7 @@ describe("mise release routing and CLI exit mapping", () => {
           env: {
             ...process.env,
             HOME: home,
-            PATH: `${home}:${process.env.PATH ?? ""}`,
+            PATH: `${home}:${process.env["PATH"] ?? ""}`,
           },
           stdout: "pipe",
           stderr: "pipe",

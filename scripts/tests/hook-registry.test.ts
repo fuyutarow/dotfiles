@@ -42,19 +42,24 @@ test("Codex metadata bridge is canonical, Codex-only and wired once without repl
   const twice = wire(once, specs, "codex");
   expect(twice).toEqual(once);
   expect(
-    once.PostToolUse?.flatMap((group) => group.hooks).filter(
-      (hook) =>
-        hook.command ===
-        "sh ~/.agents/hooks/run.sh report-codex-herdr-metadata.ts",
-    ),
+    once["PostToolUse"]
+      ?.flatMap((group) => group.hooks)
+      .filter(
+        (hook) =>
+          hook["command"] ===
+          "sh ~/.agents/hooks/run.sh report-codex-herdr-metadata.ts",
+      ),
   ).toHaveLength(1);
   expect(JSON.stringify(wire({}, specs, "claude"))).not.toContain(
     "report-codex-herdr-metadata.ts",
   );
   expect(
-    once.SessionStart?.flatMap((group) => group.hooks).filter(
-      (hook) => hook.command === "sh ~/.codex/herdr-agent-state.sh session",
-    ),
+    once["SessionStart"]
+      ?.flatMap((group) => group.hooks)
+      .filter(
+        (hook) =>
+          hook["command"] === "sh ~/.codex/herdr-agent-state.sh session",
+      ),
   ).toHaveLength(1);
   const identities = z
     .object({
@@ -123,7 +128,7 @@ describe("wire", () => {
   test("the storage gate is wired into BOTH Claude and Codex", () => {
     for (const vendor of ["claude", "codex"] as const) {
       const out = wire({}, [storage], vendor);
-      expect(out.PreToolUse?.[0]).toEqual({
+      expect(out["PreToolUse"]?.[0]).toEqual({
         matcher: "Bash",
         hooks: [
           {
@@ -138,8 +143,8 @@ describe("wire", () => {
 
   test("owned entries are replaced, vendor-specific ones kept, emptied groups dropped", () => {
     const out = wire(vendorOnly, [storage], "codex");
-    expect(out.Stop).toBeUndefined();
-    expect(out.PreToolUse).toEqual([
+    expect(out["Stop"]).toBeUndefined();
+    expect(out["PreToolUse"]).toEqual([
       {
         matcher: "Bash",
         hooks: [
@@ -168,7 +173,7 @@ describe("wire", () => {
 
   test("fail_closed=false omits the flag; timeout is carried", () => {
     const soft = { ...storage, fail_closed: false, timeout: 15 };
-    expect(wire({}, [soft], "claude").PreToolUse?.[0]?.hooks[0]).toEqual({
+    expect(wire({}, [soft], "claude")["PreToolUse"]?.[0]?.hooks[0]).toEqual({
       type: "command",
       command: "sh ~/.agents/hooks/run.sh enforce-storage-headroom.ts",
       timeout: 15,

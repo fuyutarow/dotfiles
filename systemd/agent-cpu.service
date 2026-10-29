@@ -1,0 +1,6 @@
+[Unit]
+Description=Sample CPU usage for agent sessions
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'exec "%h/.bun/bin/agent-cpu" --out "$${XDG_STATE_HOME:-$$HOME/.local/state}/dotfiles/agent-cpu.json"'

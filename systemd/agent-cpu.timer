@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh agent CPU usage every sixty seconds after completion
+
+[Timer]
+OnBootSec=60s
+OnUnitInactiveSec=60s
+AccuracySec=1s
+Unit=agent-cpu.service
+
+[Install]
+WantedBy=timers.target

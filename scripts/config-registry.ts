@@ -285,6 +285,21 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
     "systemd/herdr-projector.timer",
     ".config/systemd/user/timers.target.wants/herdr-projector.timer",
   ],
+  [
+    "not-mac",
+    "systemd/agent-cpu.service",
+    ".config/systemd/user/agent-cpu.service",
+  ],
+  [
+    "not-mac",
+    "systemd/agent-cpu.timer",
+    ".config/systemd/user/agent-cpu.timer",
+  ],
+  [
+    "not-mac",
+    "systemd/agent-cpu.timer",
+    ".config/systemd/user/timers.target.wants/agent-cpu.timer",
+  ],
 
   // --- cocoindex-code (declarative global settings = no interactive `ccc init`) ---
   [
@@ -603,6 +618,7 @@ const OTHER: readonly Surface[] = [
       "tools/coredev/package.json",
       "tools/herdr-btm/package.json",
       "tools/herdr-projector/package.json",
+      "tools/agent-cpu/package.json",
       "tools/secrets-push/package.json",
       "tools/sui-keystore-merge/package.json",
       "tools/baseline/package.json",

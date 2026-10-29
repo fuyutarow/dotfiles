@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/agent-cpu",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agent-cpu": "src/agent-cpu.ts"
+  }
+}

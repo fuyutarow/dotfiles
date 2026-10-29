@@ -109,6 +109,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │   ├── rr/          # rr (= repo-retrieve): declared query-shape router over ccc / rg / Serena; src/ (CLI, ccc adapters, python helpers), retrieval.toml, tests/
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
 │   ├── storage-headroom/ # storage decisions (decide) and read-only headroom CLI; hooks adapt the verdict
+│   ├── agent-cpu/   # agent and worker CPU samples for the Herdr display
 │   └── shared/      # code several tools import (Bash syntax parsing, hook path resolution, zod, attempt, narrow, typesafe-key, jev-client, sockets, model-orders, worker-env)
 ├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
 ├── tmux/        # tmux.conf, clipboard.conf, scripts/ (status bar, layouts)
@@ -178,6 +179,7 @@ bin name has a classification.
 | `statusline` | A | Agent runtime invokes the machine status renderer. |
 | `btmp` | A | Operators inspect the herdr backtrace map. |
 | `herdr-projector` | A | Operators project herdr session state machine-wide. |
+| `agent-cpu` | A | The user service samples agent and worker CPU usage machine-wide. |
 | `tool` | A | Operators look up the machine's declared tool tiers. |
 | `coredev` | A | Operators manage approved remote core development hosts. |
 | `sui-keystore-merge` | A | Operators merge local Sui keystore data. |

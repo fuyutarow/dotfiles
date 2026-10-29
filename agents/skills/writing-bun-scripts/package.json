@@ -1,0 +1,12 @@
+{
+  "name": "@dotfiles/skill-writing-bun-scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "cleye": "2.6.0"
+  },
+  "devDependencies": {
+    "type-flag": "4.5.0"
+  }
+}

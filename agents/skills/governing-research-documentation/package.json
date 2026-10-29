@@ -1,0 +1,10 @@
+{
+  "name": "@dotfiles/skill-governing-research-documentation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "cleye": "2.6.0",
+    "yaml": "2.9.0"
+  }
+}

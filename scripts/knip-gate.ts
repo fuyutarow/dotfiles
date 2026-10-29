@@ -229,18 +229,34 @@ async function main() {
   const toolsConfig = config.workspaces["tools/*"];
   if (rootConfig === undefined || toolsConfig === undefined)
     return fatal("missing workspace configuration");
+  const manifest = readSchema(
+    z.object({ workspaces: z.array(z.string()) }),
+    Bun.JSONC.parse(await Bun.file(join(repoRoot, "package.json")).text()),
+  );
+  const workspaces = new Set<string>();
+  for (const pattern of manifest.workspaces) {
+    for await (const path of new Bun.Glob(`${pattern}/package.json`).scan({
+      cwd: repoRoot,
+    }))
+      workspaces.add(dirname(path));
+  }
   const entries = await roots(repoRoot);
   rootConfig.entry = entries
-    .filter((p) => !p.startsWith("tools/"))
+    .filter(
+      (p) =>
+        ![...workspaces].some((workspace) => p.startsWith(`${workspace}/`)),
+    )
     .map((p) => `${p}!`);
-  for (const path of entries.filter((p) => p.startsWith("tools/"))) {
-    const parts = path.split("/");
-    const workspace = parts.slice(0, 2).join("/");
+  for (const workspace of workspaces) {
     config.workspaces[workspace] ??= {
       ...toolsConfig,
       entry: [],
     };
-    config.workspaces[workspace].entry.push(`${parts.slice(2).join("/")}!`);
+    config.workspaces[workspace].entry.push(
+      ...entries
+        .filter((path) => path.startsWith(`${workspace}/`))
+        .map((path) => `${path.slice(workspace.length + 1)}!`),
+    );
   }
   const dir = await mkdtemp(join(tmpdir(), "dotfiles-knip-"));
   await using _cleanup = {
@@ -263,8 +279,9 @@ async function main() {
       "json",
       "--workspace",
       ".",
-      "--workspace",
-      "./tools/*",
+      ...[...workspaces]
+        .toSorted()
+        .flatMap((workspace) => ["--workspace", `./${workspace}`]),
       "--config",
       configPath,
     ],

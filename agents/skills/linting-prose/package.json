@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/skill-linting-prose",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "type-flag": "4.5.0"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@dotfiles/skill-continuing-long-running-tasks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "cleye": "2.6.0",
+    "neverthrow": "8.2.0"
+  }
+}

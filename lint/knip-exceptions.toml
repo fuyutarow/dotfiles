@@ -595,3 +595,10 @@ name = "SkillEntry"
 reason = "newly visible after root derivation fix 1029"
 keeper = "dotfiles coordinator"
 
+[[exception]]
+file = "package.json"
+kind = "dependencies"
+name = "yaml"
+reason = "The root test agents/codex/tests/quote-command.test.ts imports yaml; production-only Knip excludes tests."
+keeper = "dotfiles maintainers"
+

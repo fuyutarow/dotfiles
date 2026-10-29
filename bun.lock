@@ -8,7 +8,6 @@
         "cleye": "2.6.0",
         "neverthrow": "8.2.0",
         "ts-pattern": "5.9.0",
-        "type-flag": "4.5.0",
         "yaml": "2.9.0",
         "zod": "4.6.5",
       },
@@ -23,6 +22,179 @@
     },
     "agents/hooks": {
       "name": "@dotfiles/hooks",
+    },
+    "agents/skills/codifying-doctrine": {
+      "name": "@dotfiles/skill-codifying-doctrine",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/commanding-research-fleets": {
+      "name": "@dotfiles/skill-commanding-research-fleets",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/compiling-latex": {
+      "name": "@dotfiles/skill-compiling-latex",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/continuing-long-running-tasks": {
+      "name": "@dotfiles/skill-continuing-long-running-tasks",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+        "neverthrow": "8.2.0",
+      },
+    },
+    "agents/skills/designing-command-line-interfaces": {
+      "name": "@dotfiles/skill-designing-command-line-interfaces",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/designing-developer-diagnostics": {
+      "name": "@dotfiles/skill-designing-developer-diagnostics",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/designing-interactions": {
+      "name": "@dotfiles/skill-designing-interactions",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/designing-version-schemes": {
+      "name": "@dotfiles/skill-designing-version-schemes",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/directing-research": {
+      "name": "@dotfiles/skill-directing-research",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/driving-antigravity": {
+      "name": "@dotfiles/skill-driving-antigravity",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/driving-git": {
+      "name": "@dotfiles/skill-driving-git",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/driving-grok": {
+      "name": "@dotfiles/skill-driving-grok",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/forging-novel-theses": {
+      "name": "@dotfiles/skill-forging-novel-theses",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/forging-skills": {
+      "name": "@dotfiles/skill-forging-skills",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/forming-hypotheses-from-anomalies": {
+      "name": "@dotfiles/skill-forming-hypotheses-from-anomalies",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/governing-configuration-systems": {
+      "name": "@dotfiles/skill-governing-configuration-systems",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/governing-research-documentation": {
+      "name": "@dotfiles/skill-governing-research-documentation",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+        "yaml": "2.9.0",
+      },
+    },
+    "agents/skills/issuing-technical-memoranda": {
+      "name": "@dotfiles/skill-issuing-technical-memoranda",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/linting-prose": {
+      "name": "@dotfiles/skill-linting-prose",
+      "version": "0.0.0",
+      "dependencies": {
+        "type-flag": "4.5.0",
+      },
+    },
+    "agents/skills/surfacing-blind-spots": {
+      "name": "@dotfiles/skill-surfacing-blind-spots",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/systematizing-knowledge": {
+      "name": "@dotfiles/skill-systematizing-knowledge",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/wiring-mise-tasks": {
+      "name": "@dotfiles/skill-wiring-mise-tasks",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/wiring-repositories": {
+      "name": "@dotfiles/skill-wiring-repositories",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "agents/skills/writing-bun-scripts": {
+      "name": "@dotfiles/skill-writing-bun-scripts",
+      "version": "0.0.0",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+      "devDependencies": {
+        "type-flag": "4.5.0",
+      },
     },
     "tools/agent-cpu": {
       "name": "@dotfiles/agent-cpu",
@@ -293,6 +465,54 @@
     "@dotfiles/serena-foreground": ["@dotfiles/serena-foreground@workspace:tools/serena-foreground"],
 
     "@dotfiles/shared": ["@dotfiles/shared@workspace:tools/shared"],
+
+    "@dotfiles/skill-codifying-doctrine": ["@dotfiles/skill-codifying-doctrine@workspace:agents/skills/codifying-doctrine"],
+
+    "@dotfiles/skill-commanding-research-fleets": ["@dotfiles/skill-commanding-research-fleets@workspace:agents/skills/commanding-research-fleets"],
+
+    "@dotfiles/skill-compiling-latex": ["@dotfiles/skill-compiling-latex@workspace:agents/skills/compiling-latex"],
+
+    "@dotfiles/skill-continuing-long-running-tasks": ["@dotfiles/skill-continuing-long-running-tasks@workspace:agents/skills/continuing-long-running-tasks"],
+
+    "@dotfiles/skill-designing-command-line-interfaces": ["@dotfiles/skill-designing-command-line-interfaces@workspace:agents/skills/designing-command-line-interfaces"],
+
+    "@dotfiles/skill-designing-developer-diagnostics": ["@dotfiles/skill-designing-developer-diagnostics@workspace:agents/skills/designing-developer-diagnostics"],
+
+    "@dotfiles/skill-designing-interactions": ["@dotfiles/skill-designing-interactions@workspace:agents/skills/designing-interactions"],
+
+    "@dotfiles/skill-designing-version-schemes": ["@dotfiles/skill-designing-version-schemes@workspace:agents/skills/designing-version-schemes"],
+
+    "@dotfiles/skill-directing-research": ["@dotfiles/skill-directing-research@workspace:agents/skills/directing-research"],
+
+    "@dotfiles/skill-driving-antigravity": ["@dotfiles/skill-driving-antigravity@workspace:agents/skills/driving-antigravity"],
+
+    "@dotfiles/skill-driving-git": ["@dotfiles/skill-driving-git@workspace:agents/skills/driving-git"],
+
+    "@dotfiles/skill-driving-grok": ["@dotfiles/skill-driving-grok@workspace:agents/skills/driving-grok"],
+
+    "@dotfiles/skill-forging-novel-theses": ["@dotfiles/skill-forging-novel-theses@workspace:agents/skills/forging-novel-theses"],
+
+    "@dotfiles/skill-forging-skills": ["@dotfiles/skill-forging-skills@workspace:agents/skills/forging-skills"],
+
+    "@dotfiles/skill-forming-hypotheses-from-anomalies": ["@dotfiles/skill-forming-hypotheses-from-anomalies@workspace:agents/skills/forming-hypotheses-from-anomalies"],
+
+    "@dotfiles/skill-governing-configuration-systems": ["@dotfiles/skill-governing-configuration-systems@workspace:agents/skills/governing-configuration-systems"],
+
+    "@dotfiles/skill-governing-research-documentation": ["@dotfiles/skill-governing-research-documentation@workspace:agents/skills/governing-research-documentation"],
+
+    "@dotfiles/skill-issuing-technical-memoranda": ["@dotfiles/skill-issuing-technical-memoranda@workspace:agents/skills/issuing-technical-memoranda"],
+
+    "@dotfiles/skill-linting-prose": ["@dotfiles/skill-linting-prose@workspace:agents/skills/linting-prose"],
+
+    "@dotfiles/skill-surfacing-blind-spots": ["@dotfiles/skill-surfacing-blind-spots@workspace:agents/skills/surfacing-blind-spots"],
+
+    "@dotfiles/skill-systematizing-knowledge": ["@dotfiles/skill-systematizing-knowledge@workspace:agents/skills/systematizing-knowledge"],
+
+    "@dotfiles/skill-wiring-mise-tasks": ["@dotfiles/skill-wiring-mise-tasks@workspace:agents/skills/wiring-mise-tasks"],
+
+    "@dotfiles/skill-wiring-repositories": ["@dotfiles/skill-wiring-repositories@workspace:agents/skills/wiring-repositories"],
+
+    "@dotfiles/skill-writing-bun-scripts": ["@dotfiles/skill-writing-bun-scripts@workspace:agents/skills/writing-bun-scripts"],
 
     "@dotfiles/smart-open": ["@dotfiles/smart-open@workspace:tools/smart-open"],
 

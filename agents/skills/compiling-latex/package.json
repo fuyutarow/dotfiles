@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/skill-compiling-latex",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "cleye": "2.6.0"
+  }
+}

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.6 — 2026-10-29
+
+- Recover interrupted sampler locks using a kernel lock; during the one-time rollout an old sampler can overlap until it exits.
+
 ## 0.22.5 — 2026-10-29
 
 - Recover stale sampler locks after interrupted runs on macOS.

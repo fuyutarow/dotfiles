@@ -1,5 +1,6 @@
 // Timer-owned collectors. No render imports or invokes this entry point.
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
+import { acquireSamplerLock } from "./sampler-lock.ts";
 import { dirname, join } from "node:path";
 import { cli } from "cleye";
 import { buildDataframe } from "./build-dataframe.ts";
@@ -136,32 +137,8 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   // systemd removes its RuntimeDirectory even after a killed collector.
   const lock = process.env["STATUSLINE_SAMPLER_LOCK_DIR"] ?? `${path}.lock`;
-  await mkdir(dirname(lock), { recursive: true });
-  let acquired = await mkdir(lock).then(
-    () => true,
-    () => false,
-  );
-  if (!acquired) {
-    const info = await stat(lock).catch(() => null);
-    if (
-      info !== null &&
-      Temporal.Now.instant().epochMilliseconds - info.mtimeMs > 60_000
-    ) {
-      // launchd runs only one instance of this job. A manual run during a stale
-      // lock can overlap a takeover; owner-state writes use atomic renames.
-      await rm(lock, { recursive: true, force: true });
-      acquired = await mkdir(lock).then(
-        () => true,
-        () => false,
-      );
-    }
-  }
-  if (!acquired) return;
-  await using _lockCleanup = {
-    [Symbol.asyncDispose]: async () => {
-      await rm(lock, { recursive: true, force: true });
-    },
-  };
+  await using lockOwner = await acquireSamplerLock(lock);
+  if (lockOwner === undefined) return;
   {
     const previous = await readOwnerState();
     const next: OwnerState = { schema: 1, fields: {} };

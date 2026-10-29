@@ -125,7 +125,7 @@ export async function hostHasNvidiaSmi(procRoot = "/proc"): Promise<boolean> {
   return rows.some(Boolean);
 }
 async function executable(
-  path = process.env.PATH ?? "",
+  path = process.env["PATH"] ?? "",
   fallbacks = ["/usr/lib/wsl/lib/nvidia-smi", "/usr/bin/nvidia-smi"],
 ): Promise<string | undefined> {
   for (const candidate of [
@@ -303,7 +303,7 @@ export async function gpuSlotHeld(
 > {
   if (process.platform !== "linux")
     return { error: "slot inventory requires Linux" };
-  const runtimeRoot = process.env.XDG_RUNTIME_DIR;
+  const runtimeRoot = process.env["XDG_RUNTIME_DIR"];
   const directory =
     options.slotDirectory ??
     (runtimeRoot !== undefined && runtimeRoot.startsWith("/")

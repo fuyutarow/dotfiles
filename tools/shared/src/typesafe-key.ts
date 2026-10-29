@@ -46,7 +46,7 @@ function fromLegacyFile(): string | undefined {
 
 /** The key and where it came from, or why none was found (every place tried is named). */
 export function typesafeKey(): KeyLookup {
-  const env = process.env.TYPESAFE_API_KEY;
+  const env = process.env["TYPESAFE_API_KEY"];
   if (env !== undefined && env !== "")
     return { ok: true, key: env, source: "env" };
   const fnox =

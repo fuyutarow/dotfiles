@@ -59,7 +59,7 @@ function sessionPath(
   sessionId: string,
   env: NodeJS.ProcessEnv,
 ): Attempt<string> {
-  const runtimeDir = env.XDG_RUNTIME_DIR;
+  const runtimeDir = env["XDG_RUNTIME_DIR"];
   if (runtimeDir === undefined || runtimeDir === "")
     return { ok: false, error: new Error("XDG_RUNTIME_DIR is not set") };
   if (!SessionIdSchema.safeParse(sessionId).success)
@@ -242,7 +242,7 @@ export async function codexRolloutPath(
   if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u.test(id))
     return undefined;
   const root = join(
-    env.CODEX_HOME ?? join(env.HOME ?? "", ".codex"),
+    env["CODEX_HOME"] ?? join(env["HOME"] ?? "", ".codex"),
     "sessions",
   );
   const pending = [root];

@@ -52,8 +52,8 @@ export function coordinatorPath(path: string): boolean {
     join(homedir(), ".local/state"),
     join(homedir(), ".claude"),
     join(homedir(), ".codex/sessions"),
-    process.env.CLAUDE_SESSION_SCRATCHPAD,
-    process.env.SESSION_SCRATCHPAD,
+    process.env["CLAUDE_SESSION_SCRATCHPAD"],
+    process.env["SESSION_SCRATCHPAD"],
   ].some(
     (root) =>
       root !== undefined && root !== "" && insidePath(path, physicalPath(root)),

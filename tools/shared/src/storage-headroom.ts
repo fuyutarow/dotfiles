@@ -110,7 +110,7 @@ function parseDrive(name: string, value: unknown, errors: string[]): Drive {
   for (const key of Object.keys(table))
     if (!allowed.has(key)) errors.push(`${where}: unknown key '${key}'`);
 
-  const label = nonEmptyString(table.label, `${where}.label`, errors);
+  const label = nonEmptyString(table["label"], `${where}.label`, errors);
   // Accepted for the statusline; enforcement still depends only on free-space thresholds.
   const durations: { rate_red_minutes?: number; rate_yellow_minutes?: number } =
     {};
@@ -121,56 +121,56 @@ function parseDrive(name: string, value: unknown, errors: string[]): Drive {
     else
       errors.push(`${where}.${key}: expected a positive duration in minutes`);
   }
-  const path = nonEmptyString(table.path, `${where}.path`, errors);
-  const rawDeny = table.deny_gib;
+  const path = nonEmptyString(table["path"], `${where}.path`, errors);
+  const rawDeny = table["deny_gib"];
   const denyGib = nonNegative(rawDeny, `${where}.deny_gib`, errors);
-  const denyPct = percent(table.deny_pct, `${where}.deny_pct`, errors);
+  const denyPct = percent(table["deny_pct"], `${where}.deny_pct`, errors);
   const warnGib =
-    table.warn_gib === undefined
+    table["warn_gib"] === undefined
       ? undefined
-      : nonNegative(table.warn_gib, `${where}.warn_gib`, errors);
+      : nonNegative(table["warn_gib"], `${where}.warn_gib`, errors);
   const warnPct =
-    table.warn_pct === undefined
+    table["warn_pct"] === undefined
       ? undefined
-      : percent(table.warn_pct, `${where}.warn_pct`, errors);
+      : percent(table["warn_pct"], `${where}.warn_pct`, errors);
   if ((warnGib === undefined) !== (warnPct === undefined))
     errors.push(
       `${where}: warn_gib and warn_pct go together (both or neither)`,
     );
   const recoverGib =
-    table.recover_gib === undefined
+    table["recover_gib"] === undefined
       ? undefined
-      : nonNegative(table.recover_gib, `${where}.recover_gib`, errors);
+      : nonNegative(table["recover_gib"], `${where}.recover_gib`, errors);
   const recoverPct =
-    table.recover_pct === undefined
+    table["recover_pct"] === undefined
       ? undefined
-      : percent(table.recover_pct, `${where}.recover_pct`, errors);
+      : percent(table["recover_pct"], `${where}.recover_pct`, errors);
   if ((recoverGib === undefined) !== (recoverPct === undefined))
     errors.push(
       `${where}: recover_gib and recover_pct go together (both or neither)`,
     );
   const tmpRecoverPct =
-    table.tmp_recover_pct === undefined
+    table["tmp_recover_pct"] === undefined
       ? undefined
-      : percent(table.tmp_recover_pct, `${where}.tmp_recover_pct`, errors);
+      : percent(table["tmp_recover_pct"], `${where}.tmp_recover_pct`, errors);
   const cargoTargets = z
     .array(z.string().min(1))
     .optional()
-    .safeParse(table.reclaim_cargo_targets);
+    .safeParse(table["reclaim_cargo_targets"]);
   if (!cargoTargets.success)
     errors.push(
       `${where}.reclaim_cargo_targets: expected an array of non-empty path strings`,
     );
   const stopGib =
-    table.stop_gib === undefined
+    table["stop_gib"] === undefined
       ? undefined
-      : nonNegative(table.stop_gib, `${where}.stop_gib`, errors);
+      : nonNegative(table["stop_gib"], `${where}.stop_gib`, errors);
   if (
     name === "host" &&
-    typeof table.stop_gib === "number" &&
+    typeof table["stop_gib"] === "number" &&
     typeof rawDeny === "number" &&
     rawDeny > 0 &&
-    table.stop_gib >= rawDeny
+    table["stop_gib"] >= rawDeny
   ) {
     errors.push(`${where}.stop_gib: must be below deny_gib`);
   }
@@ -213,9 +213,9 @@ export function loadStorageHeadroom(path: string): {
   if (!rootResult.success)
     return { drives: [], errors: ["top level: expected a table"] };
   const root = rootResult.data;
-  if (root.schema !== 1)
-    errors.push(`schema: expected 1, got ${JSON.stringify(root.schema)}`);
-  const rawDrivesResult = ObjectSchema.safeParse(root.drive);
+  if (root["schema"] !== 1)
+    errors.push(`schema: expected 1, got ${JSON.stringify(root["schema"])}`);
+  const rawDrivesResult = ObjectSchema.safeParse(root["drive"]);
   if (
     !rawDrivesResult.success ||
     Object.keys(rawDrivesResult.data).length === 0
@@ -224,7 +224,7 @@ export function loadStorageHeadroom(path: string): {
     return { drives: [], errors };
   }
   const rawDrives = rawDrivesResult.data;
-  if (!ObjectSchema.safeParse(rawDrives.host).success)
+  if (!ObjectSchema.safeParse(rawDrives["host"]).success)
     errors.push("drive.host: required Windows host drive table");
   const drives = Object.entries(rawDrives).map(([name, drive]) =>
     parseDrive(name, drive, errors),
@@ -375,7 +375,7 @@ export function episodeStep(
 
 export function guestRecoveryStateDir(): string {
   return (
-    process.env.GUEST_RECOVERY_STATE_DIR ??
+    process.env["GUEST_RECOVERY_STATE_DIR"] ??
     join(homedir(), ".local", "state", "guest-capacity-recover")
   );
 }

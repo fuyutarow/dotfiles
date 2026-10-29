@@ -30,9 +30,9 @@ async function run(
     ...extraEnv,
     TERM: "xterm-256color",
   };
-  delete env.NO_COLOR;
-  delete env.FORCE_COLOR;
-  if (color) env.FORCE_COLOR = "1";
+  delete env["NO_COLOR"];
+  delete env["FORCE_COLOR"];
+  if (color) env["FORCE_COLOR"] = "1";
   let output = "";
   const command = [process.execPath, entry, ...args];
   const child = tty
@@ -132,8 +132,8 @@ for await (const packagePath of new Bun.Glob("tools/*/package.json").scan({
             "#!/usr/bin/env bun\nprocess.stderr.write(`Error: Unknown flag: ${process.argv[2]}.\\n`);\nprocess.exit(1);\n",
             { mode: 0o755 },
           );
-          extraEnv.PATH = `${root}:${process.env.PATH ?? ""}`;
-          extraEnv.HERDR_ENV = "";
+          extraEnv["PATH"] = `${root}:${process.env["PATH"] ?? ""}`;
+          extraEnv["HERDR_ENV"] = "";
         }
         const error = await run(entry, ["-Z"], false, false, extraEnv);
         expect(error.exit).toBeGreaterThan(0);

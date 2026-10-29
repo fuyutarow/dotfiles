@@ -54,7 +54,7 @@ export const GPU_INTERVAL_MS = 60_000;
 export const GPU_FRESH_MS = 120_000;
 export function gpuStatePath(): string {
   return join(
-    process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"),
+    process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"),
     "gpu-owner.json",
   );
 }

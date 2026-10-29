@@ -127,7 +127,7 @@ export function createTestTmp(
     : mkdtempSync(join(root, `${RUN_PREFIX}${process.pid}-`));
   const dir = mkdtempSync(join(parent, `p${process.pid}-`));
   env[RUN_DIR_ENV] = parent;
-  env.TMPDIR = dir;
+  env["TMPDIR"] = dir;
   let done = false;
   return {
     parent,
@@ -165,8 +165,8 @@ export function installTestTmp(
 const processTmp = installTestTmp();
 // Installed tool binaries are test inputs. Preserve their declared location before
 // isolating HOME/XDG_DATA_HOME; mise must not reinstall the toolchain in each fixture.
-process.env.MISE_DATA_DIR ??= join(
-  process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"),
+process.env["MISE_DATA_DIR"] ??= join(
+  process.env["XDG_DATA_HOME"] ?? join(homedir(), ".local/share"),
   "mise",
 );
 // Subprocess integration tests have 30 s child guards. Bun's 5 s default otherwise kills an

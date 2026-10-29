@@ -89,7 +89,8 @@ export async function readCodexNativeTitle(
   if (!UUID_PATTERN.test(sessionId))
     return unavailable(sessionId, "invalid session ID");
 
-  const codexHome = env.CODEX_HOME ?? join(env.HOME ?? homedir(), ".codex");
+  const codexHome =
+    env["CODEX_HOME"] ?? join(env["HOME"] ?? homedir(), ".codex");
   const path = join(codexHome, "session_index.jsonl");
   const readResult = await attempt(async (): Promise<CodexNativeTitleRead> => {
     const pathBefore = await stat(path, { bigint: true });

@@ -23,7 +23,7 @@ import {
 
 const MODULE = join(import.meta.dir, "../src/test-tmp.ts");
 const BUN = process.execPath;
-const importHome = process.env.HOME;
+const importHome = process.env["HOME"];
 let previousHome: string | undefined;
 
 function scratch(): string {
@@ -51,10 +51,10 @@ test("this test process runs with its own TMPDIR under a run parent", () => {
   const parent = process.env[RUN_DIR_ENV] ?? "";
   expect(parent).toContain(RUN_PREFIX);
   expect(tmpdir().startsWith(`${parent}/`)).toBe(true);
-  expect(process.env.HOME).toContain("dotfiles-test-");
+  expect(process.env["HOME"]).toContain("dotfiles-test-");
   expect(importHome?.startsWith(`${parent}/`)).toBe(true);
-  expect(importHome).not.toBe(process.env.HOME);
-  expect(process.env.CLAUDE_BASH_DURATIONS_DIR).toContain("dotfiles-test-");
+  expect(importHome).not.toBe(process.env["HOME"]);
+  expect(process.env["CLAUDE_BASH_DURATIONS_DIR"]).toContain("dotfiles-test-");
   for (const key of [
     "XDG_CACHE_HOME",
     "XDG_CONFIG_HOME",
@@ -66,14 +66,14 @@ test("this test process runs with its own TMPDIR under a run parent", () => {
 });
 
 test("a test may persist state only in its own home", async () => {
-  previousHome = process.env.HOME;
+  previousHome = process.env["HOME"];
   await writeFile(join(previousHome ?? "", "hidden-state"), "fixture");
 });
 
 test("the next test has a fresh home and child processes inherit its paths", async () => {
-  expect(process.env.HOME).not.toBe(previousHome);
+  expect(process.env["HOME"]).not.toBe(previousHome);
   expect(
-    await access(join(process.env.HOME ?? "", "hidden-state")).then(
+    await access(join(process.env["HOME"] ?? "", "hidden-state")).then(
       () => true,
       () => false,
     ),
@@ -90,9 +90,9 @@ test("the next test has a fresh home and child processes inherit its paths", asy
   expect(await child.exited).toBe(0);
   expect(output.trim()).toBe(
     JSON.stringify([
-      process.env.HOME,
-      process.env.XDG_STATE_HOME,
-      process.env.TMPDIR,
+      process.env["HOME"],
+      process.env["XDG_STATE_HOME"],
+      process.env["TMPDIR"],
     ]),
   );
 });
@@ -293,7 +293,7 @@ test("createTestTmp exports TMPDIR and the run parent into the given env", () =>
   const root = scratch();
   const env: Record<string, string | undefined> = {};
   const tmp = createTestTmp(env, root);
-  expect(env.TMPDIR).toBe(tmp.dir);
+  expect(env["TMPDIR"]).toBe(tmp.dir);
   expect(env[RUN_DIR_ENV]).toBe(tmp.parent);
   expect(tmp.ownsParent).toBe(true);
   tmp.cleanup();

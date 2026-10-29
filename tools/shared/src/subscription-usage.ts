@@ -38,7 +38,8 @@ export type SubscriptionUsageWindow = z.output<typeof UsageWindowSchema>;
 export function subscriptionUsagePath(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  const home = env.HOME !== undefined && env.HOME !== "" ? env.HOME : homedir();
+  const home =
+    env["HOME"] !== undefined && env["HOME"] !== "" ? env["HOME"] : homedir();
   return join(
     home,
     ".cache",

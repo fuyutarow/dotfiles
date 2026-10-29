@@ -22,7 +22,7 @@ export function findExe(
   name: string,
   fallbackDirs: string[] = [],
 ): string | null {
-  const dirs = (process.env.PATH ?? "")
+  const dirs = (process.env["PATH"] ?? "")
     .split(":")
     .filter(Boolean)
     .concat(fallbackDirs);

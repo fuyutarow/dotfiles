@@ -73,7 +73,7 @@ function unobservedCell() {
 }
 
 function runtimeRoot(env: NodeJS.ProcessEnv): string | undefined {
-  const runtimeDir = env.XDG_RUNTIME_DIR;
+  const runtimeDir = env["XDG_RUNTIME_DIR"];
   return runtimeDir !== undefined && runtimeDir !== "" && isAbsolute(runtimeDir)
     ? runtimeDir
     : undefined;
@@ -100,7 +100,7 @@ function lockPath(
 }
 
 function unavailablePathWhy(sessionId: string, env: NodeJS.ProcessEnv): string {
-  if (env.XDG_RUNTIME_DIR === undefined || env.XDG_RUNTIME_DIR === "")
+  if (env["XDG_RUNTIME_DIR"] === undefined || env["XDG_RUNTIME_DIR"] === "")
     return "XDG_RUNTIME_DIR is not set";
   if (runtimeRoot(env) === undefined)
     return "XDG_RUNTIME_DIR must be an absolute path";

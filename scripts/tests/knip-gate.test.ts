@@ -1,0 +1,27 @@
+import { expect, test } from "bun:test";
+import { resolve } from "node:path";
+import { roots } from "../knip-gate.ts";
+
+test("production roots follow the repository's entry declarations", async () => {
+  const entries = await roots(resolve(import.meta.dir, "../.."));
+  for (const entry of [
+    "tools/baseline/src/baseline.ts", // package bin
+    "scripts/linux-init.ts", // mise task
+    "scripts/post-merge.ts", // mise task using mise which bun
+    "agents/hooks/enforce-storage-headroom.ts", // shared hook
+    "agents/codex/hooks/enforce-math-delimiters.ts", // vendor hook
+    "agents/skills/compiling-latex/scripts/tex-oracle.ts", // skill
+    "scripts/ccc-swap.ts", // skill references checkout CLI
+    "agents/goal-kernel/cli.ts", // documented CLI
+    "agents/research-control/cli.ts", // documented CLI
+    "agents/codex/codex-update.ts", // topgrade
+    "agents/codex/codex-wsl.ts", // generated launcher
+    "agents/codex/windows-hook.ts", // Windows hook bridge
+    "presets/typescript/lint-knip.ts", // copied preset
+    "scripts/guest-capacity-recover.ts", // systemd service
+    "scripts/render-home.ts", // subprocess
+    "scripts/tracked-files.ts", // subprocess
+  ])
+    expect(entries).toContain(entry);
+  expect(entries).not.toContain("scripts/skills-links.ts");
+});

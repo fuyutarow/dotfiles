@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { z } from "../tools/shared/src/zod.ts";
 
-const root = resolve(import.meta.dir, "..");
+const repoRoot = resolve(import.meta.dir, "..");
 const finding = z.object({
   file: z.string().min(1),
   kind: z.string().min(1),
@@ -68,7 +68,7 @@ export function evaluateKnipOutput(reportText: string, exceptionText: string) {
   return { findings, messages };
 }
 
-async function roots(): Promise<string[]> {
+export async function roots(root: string): Promise<string[]> {
   const paths = new Set<string>();
   const add = async (path: string) => {
     const normalized = path.replace(/^\.\//u, "");
@@ -95,7 +95,7 @@ async function roots(): Promise<string[]> {
     const matches = commands.flatMap((command) =>
       Array.from(
         command.matchAll(
-          /\bbun\s+(?:["']?)(?:(?:~\/dotfiles\/|\$\{MISE_PROJECT_ROOT\}\/|\.\/))?([\w./-]+\.(?:ts|js))\b/gu,
+          /(?:\bbun|"\$\(mise which bun\)")\s+(?:["']?)(?:(?:~\/dotfiles\/|\$\{MISE_PROJECT_ROOT\}\/|\.\/))?([\w./-]+\.(?:ts|js))\b/gu,
         ),
       ),
     );
@@ -132,6 +132,40 @@ async function roots(): Promise<string[]> {
           : `${dirname(skill)}/${reference}`,
       );
     }
+    for (const match of text.matchAll(
+      /~\/dotfiles\/(scripts\/[\w./-]+\.(?:ts|js))\b/gu,
+    ))
+      await add(match[1] ?? "");
+  }
+  // These declarations invoke Bun subprocesses or systemd services, not imports.
+  for (const [source, path] of [
+    ["scripts/link-dots.ts", "scripts/render-home.ts"],
+    ["scripts/lint-skills-floor.ts", "scripts/tracked-files.ts"],
+    [
+      "wsl/guest-capacity-recover.service.wsl",
+      "scripts/guest-capacity-recover.ts",
+    ],
+    ["wsl/wsl-capacity-recover.service.wsl", "scripts/wsl-capacity-recover.ts"],
+    ["topgrade/topgrade.toml", "agents/codex/codex-update.ts"],
+    ["agents/codex/codex-runtime.ts", "agents/codex/codex-wsl.ts"],
+    ["agents/codex/windows-assets.ts", "agents/codex/windows-hook.ts"],
+  ]) {
+    if (
+      source !== undefined &&
+      path !== undefined &&
+      (await Bun.file(join(root, source)).text()).includes(path)
+    )
+      await add(path);
+  }
+  for (const doc of [
+    "agents/goal-kernel/README.md",
+    "agents/research-control/README.md",
+  ]) {
+    const text = await Bun.file(join(root, doc)).text();
+    for (const match of text.matchAll(
+      /agents\/(?:goal-kernel|research-control)\/[\w./-]+\.ts\b/gu,
+    ))
+      await add(match[0]);
   }
   for await (const manifest of new Bun.Glob("presets/*/preset.toml").scan({
     cwd: root,
@@ -158,13 +192,13 @@ async function main() {
   const workspaceSchema = z.object({ entry: z.array(z.string()) }).loose();
   const config = readSchema(
     z.object({ workspaces: z.record(z.string(), workspaceSchema) }).loose(),
-    Bun.JSONC.parse(await Bun.file(join(root, "knip.jsonc")).text()),
+    Bun.JSONC.parse(await Bun.file(join(repoRoot, "knip.jsonc")).text()),
   );
   const rootConfig = config.workspaces["."];
   const toolsConfig = config.workspaces["tools/*"];
   if (rootConfig === undefined || toolsConfig === undefined)
     return fatal("missing workspace configuration");
-  const entries = await roots();
+  const entries = await roots(repoRoot);
   rootConfig.entry = entries
     .filter((p) => !p.startsWith("tools/"))
     .map((p) => `${p}!`);
@@ -203,7 +237,7 @@ async function main() {
       "--config",
       configPath,
     ],
-    { cwd: root, stdout: "pipe", stderr: "pipe", timeout: 120_000 },
+    { cwd: repoRoot, stdout: "pipe", stderr: "pipe", timeout: 120_000 },
   );
   const [stdout, stderr, exit] = await Promise.all([
     new Response(child.stdout).text(),
@@ -214,7 +248,7 @@ async function main() {
     return fatal(`knip exited ${exit}: ${stderr}`);
   const result = evaluateKnipOutput(
     stdout,
-    await Bun.file(join(root, "lint/knip-exceptions.toml")).text(),
+    await Bun.file(join(repoRoot, "lint/knip-exceptions.toml")).text(),
   );
   for (const line of result.messages) process.stdout.write(`${line}\n`);
   if (result.messages.length === 0)

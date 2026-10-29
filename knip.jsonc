@@ -4,12 +4,17 @@
   "ignore": ["archives/**"],
   "workspaces": {
     ".": {
+      // The mise plugin labels task scripts as development entries, which otherwise
+      // filters even explicitly declared production roots out of the graph.
+      "mise": false,
       "entry": [],
       "project": [
         "**/*.{ts,tsx,js,jsx}!",
         "!**/tests/**!",
         "!**/*.{test,spec}.{ts,tsx,js,jsx}!",
         "!**/fixtures/**!",
+        "!scripts/test-isolation.ts!",
+        "!scripts/skills-links.ts!",
       ],
       "ignoreDependencies": [
         "knip",

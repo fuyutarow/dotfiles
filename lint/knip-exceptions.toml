@@ -1,192 +1,10 @@
 # Each row is a current production finding awaiting the owning workspace review.
 
 [[exception]]
-file = "scripts/skills-links.ts"
-kind = "files"
-name = "scripts/skills-links.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/post-merge.ts"
-kind = "files"
-name = "scripts/post-merge.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/render-home.ts"
-kind = "files"
-name = "scripts/render-home.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/render-source.ts"
-kind = "files"
-name = "scripts/render-source.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/agx-host.ts"
-kind = "files"
-name = "scripts/agx-host.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/land-doctor.ts"
-kind = "files"
-name = "scripts/land-doctor.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/skills-install.ts"
-kind = "files"
-name = "scripts/skills-install.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/lint-tmp-leaks.ts"
-kind = "files"
-name = "scripts/lint-tmp-leaks.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/hook-registry.ts"
-kind = "files"
-name = "scripts/hook-registry.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/skills-declaration.ts"
-kind = "files"
-name = "scripts/skills-declaration.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/linux-init-env.ts"
-kind = "files"
-name = "scripts/linux-init-env.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/guest-capacity-recover.ts"
-kind = "files"
-name = "scripts/guest-capacity-recover.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/config-registry.ts"
-kind = "files"
-name = "scripts/config-registry.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/wsl-capacity-recover.ts"
-kind = "files"
-name = "scripts/wsl-capacity-recover.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/tracked-files.ts"
-kind = "files"
-name = "scripts/tracked-files.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "scripts/lint-knip.ts"
 kind = "files"
 name = "scripts/lint-knip.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/land-verdict.ts"
-kind = "files"
-name = "scripts/land-verdict.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/test-isolation.ts"
-kind = "files"
-name = "scripts/test-isolation.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/land-queue.ts"
-kind = "files"
-name = "scripts/land-queue.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/skills-copy.ts"
-kind = "files"
-name = "scripts/skills-copy.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/land-changesets.ts"
-kind = "files"
-name = "scripts/land-changesets.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/core-tools.ts"
-kind = "files"
-name = "scripts/core-tools.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/linux-migrate-brew.ts"
-kind = "files"
-name = "scripts/linux-migrate-brew.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/linux-brew.ts"
-kind = "files"
-name = "scripts/linux-brew.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/consumer-gate.ts"
-kind = "files"
-name = "scripts/consumer-gate.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "scripts/ccc-swap.ts"
-kind = "files"
-name = "scripts/ccc-swap.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "cocoindex/deploy-daemon.ts"
-kind = "files"
-name = "cocoindex/deploy-daemon.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
+reason = "No production caller found; review removal of this duplicate of presets/typescript/lint-knip.ts."
 keeper = "dotfiles maintainers"
 
 [[exception]]
@@ -207,69 +25,6 @@ keeper = "dotfiles maintainers"
 file = "obsidian/forget-shadow.ts"
 kind = "files"
 name = "obsidian/forget-shadow.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/codex/sandbox-network.ts"
-kind = "files"
-name = "agents/codex/sandbox-network.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/codex/windows-hook.ts"
-kind = "files"
-name = "agents/codex/windows-hook.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/codex/remote-control.ts"
-kind = "files"
-name = "agents/codex/remote-control.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/codex/runtime.ts"
-kind = "files"
-name = "agents/codex/runtime.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/codex/windows-assets.ts"
-kind = "files"
-name = "agents/codex/windows-assets.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/codex/codex-wsl.ts"
-kind = "files"
-name = "agents/codex/codex-wsl.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/codex/codex-update.ts"
-kind = "files"
-name = "agents/codex/codex-update.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/goal-kernel/cli.ts"
-kind = "files"
-name = "agents/goal-kernel/cli.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/goal-kernel/postmortem.ts"
-kind = "files"
-name = "agents/goal-kernel/postmortem.ts"
 reason = "Review files finding in root; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
 
@@ -309,13 +64,6 @@ reason = "Review files finding in root; retain until its use or removal is verif
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "agents/research-control/cli.ts"
-kind = "files"
-name = "agents/research-control/cli.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "agents/research-control/programme-flow.ts"
 kind = "files"
 name = "agents/research-control/programme-flow.ts"
@@ -330,30 +78,9 @@ reason = "Review files finding in root; retain until its use or removal is verif
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "agents/research-control/trace.ts"
-kind = "files"
-name = "agents/research-control/trace.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "presets/src/manifests.ts"
-kind = "files"
-name = "presets/src/manifests.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "package.json"
 kind = "dependencies"
 name = "@clack/prompts"
-reason = "Review dependencies finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "package.json"
-kind = "dependencies"
-name = "ts-pattern"
 reason = "Review dependencies finding in root; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
 
@@ -486,42 +213,7 @@ keeper = "dotfiles maintainers"
 [[exception]]
 file = "agents/goal-kernel/kernel.ts"
 kind = "exports"
-name = "activateGoal"
-reason = "Review exports finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/goal-kernel/kernel.ts"
-kind = "exports"
 name = "runGoalKernelHook"
-reason = "Review exports finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/goal-kernel/kernel.ts"
-kind = "exports"
-name = "recordRunDecision"
-reason = "Review exports finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/goal-kernel/kernel.ts"
-kind = "exports"
-name = "readGoalStatus"
-reason = "Review exports finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/goal-kernel/kernel.ts"
-kind = "exports"
-name = "transcriptLocator"
-reason = "Review exports finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/goal-kernel/kernel.ts"
-kind = "exports"
-name = "assertReadableRegularFile"
 reason = "Review exports finding in root; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
 
@@ -757,13 +449,6 @@ reason = "Review files finding in tools/statusline; retain until its use or remo
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "tools/tool-tiers/src/core-floor.ts"
-kind = "files"
-name = "tools/tool-tiers/src/core-floor.ts"
-reason = "Review files finding in tools/tool-tiers; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "tools/shared/src/gpu-visibility.ts"
 kind = "files"
 name = "tools/shared/src/gpu-visibility.ts"
@@ -795,27 +480,6 @@ keeper = "dotfiles maintainers"
 file = "tools/shared/src/readonly-exec.ts"
 kind = "files"
 name = "tools/shared/src/readonly-exec.ts"
-reason = "Review files finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/test-tmp.ts"
-kind = "files"
-name = "tools/shared/src/test-tmp.ts"
-reason = "Review files finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/jj-read.ts"
-kind = "files"
-name = "tools/shared/src/jj-read.ts"
-reason = "Review files finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/ref-locks.ts"
-kind = "files"
-name = "tools/shared/src/ref-locks.ts"
 reason = "Review files finding in tools/shared; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
 
@@ -894,13 +558,6 @@ file = "tools/statusline/src/presentation.ts"
 kind = "exports"
 name = "writePresentation"
 reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/sockets.ts"
-kind = "exports"
-name = "receiverSocket"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
 
 [[exception]]
@@ -1051,13 +708,6 @@ reason = "Review exports finding in tools/statusline; retain until its use or re
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "tools/disk-reclaim/src/lib/graveyards.ts"
-kind = "exports"
-name = "inspectRipGraveyard"
-reason = "Review exports finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "tools/disk-reclaim/src/targets/system.ts"
 kind = "exports"
 name = "systemExitCode"
@@ -1076,13 +726,6 @@ file = "tools/disk-reclaim/src/lib/purge-progress.ts"
 kind = "exports"
 name = "newlines"
 reason = "Review exports finding in tools/disk-reclaim; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/repo-retrieve/src/ccc-db-dir.ts"
-kind = "exports"
-name = "DB_ARTIFACTS"
-reason = "Review exports finding in tools/repo-retrieve; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
 
 [[exception]]
@@ -1201,13 +844,6 @@ keeper = "dotfiles maintainers"
 file = "tools/shared/src/jsonl.ts"
 kind = "exports"
 name = "JsonlLineReader"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/doctor-record.ts"
-kind = "exports"
-name = "DoctorStatus"
 reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
 
@@ -1476,3 +1112,59 @@ kind = "types"
 name = "RecoveryVerdict"
 reason = "Review types finding in tools/agent-resource-run; retain until its use or removal is verified."
 keeper = "dotfiles maintainers"
+
+[[exception]]
+file = "agents/skills/wiring-mise-tasks/scripts/jj-commit.ts"
+kind = "binaries"
+name = "jj"
+reason = "newly visible after root derivation fix 1029"
+keeper = "dotfiles coordinator"
+
+[[exception]]
+file = "agents/skills/wiring-mise-tasks/scripts/jj-commit.ts"
+kind = "unresolved"
+name = ".githooks/post-commit"
+reason = "newly visible after root derivation fix 1029"
+keeper = "dotfiles coordinator"
+
+[[exception]]
+file = "scripts/fmt-sh.ts"
+kind = "binaries"
+name = "shfmt"
+reason = "newly visible after root derivation fix 1029"
+keeper = "dotfiles coordinator"
+
+[[exception]]
+file = "scripts/lint-sh.ts"
+kind = "binaries"
+name = "shfmt"
+reason = "newly visible after root derivation fix 1029"
+keeper = "dotfiles coordinator"
+
+[[exception]]
+file = "scripts/fmt-sh-check.ts"
+kind = "binaries"
+name = "shfmt"
+reason = "newly visible after root derivation fix 1029"
+keeper = "dotfiles coordinator"
+
+[[exception]]
+file = "scripts/linux-init.ts"
+kind = "binaries"
+name = "pgrep"
+reason = "newly visible after root derivation fix 1029"
+keeper = "dotfiles coordinator"
+
+[[exception]]
+file = "scripts/skills-declaration.ts"
+kind = "exports"
+name = "homeRepoLinkedSkillTargets"
+reason = "newly visible after root derivation fix 1029"
+keeper = "dotfiles coordinator"
+
+[[exception]]
+file = "scripts/skills-declaration.ts"
+kind = "types"
+name = "SkillEntry"
+reason = "newly visible after root derivation fix 1029"
+keeper = "dotfiles coordinator"

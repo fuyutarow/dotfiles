@@ -108,7 +108,7 @@ if(name === "kill" || name === "killall") process.exit(99);
     ...process.env,
     HOME: home,
     DOTFILES: join(import.meta.dir, ".."),
-    PATH: `${bin}:${process.env.PATH}`,
+    PATH: `${bin}:${process.env["PATH"]}`,
     OBSIDIAN_APP_SOURCE: join(home, "app.json"),
     OBSIDIAN_PLUGINS_SOURCE: join(home, "plugins.json"),
     SSH_CONNECTION: "",
@@ -154,7 +154,10 @@ if(name === "kill" || name === "killall") process.exit(99);
 test("remote shadow is applied and prepared before trust and opening, including registered retries", async () => {
   const f = await fixture();
   const initial = await object(f.registry);
-  initial.vaults = { ...record(initial.vaults), parent: { path: f.home } };
+  initial["vaults"] = {
+    ...record(initial["vaults"]),
+    parent: { path: f.home },
+  };
   await writeFile(f.registry, JSON.stringify(initial));
   await writeFile(
     join(f.home, "plugins.json"),
@@ -199,14 +202,14 @@ process.exitCode=result.isOk()?0:2;
   expect(await exists(join(f.home, "trusted"))).toBe(true);
   expect(await exists(join(f.home, "opened"))).toBe(true);
   expect(
-    Object.values(record((await object(f.registry)).vaults)).some(
-      (value) => record(value).path === f.target,
+    Object.values(record((await object(f.registry))["vaults"])).some(
+      (value) => record(value)["path"] === f.target,
     ),
   ).toBe(true);
   const state = await object(
     join(f.target, ".obsidian/plugins/remote-ssh/data.json"),
   );
-  expect(state.autoConnectProfileId).toMatch(/^so-/u);
+  expect(state["autoConnectProfileId"]).toMatch(/^so-/u);
   // A partially installed registered shadow must be repaired on the next invocation.
   await rm(join(f.target, ".obsidian/plugins/remote-ssh/main.js"));
   expect(await run()).toMatchObject({ exit: 0, error: "" });
@@ -268,7 +271,7 @@ test("wrapper registers, gracefully saves, retains flushed entries in order, app
   expect(result).toMatchObject({ exit: 0, stderr: "" });
   const reg = await object(f.registry);
   expect(reg).toMatchObject(f.original);
-  const vaults = record(reg.vaults);
+  const vaults = record(reg["vaults"]);
   const ids = Object.keys(vaults);
   expect(ids.slice(0, 3)).toEqual([
     "aaaaaaaaaaaaaaaa",
@@ -302,18 +305,18 @@ test("wrapper registers, gracefully saves, retains flushed entries in order, app
     await readdir(join(f.home, "Library/Application Support/obsidian")),
   ).toEqual(["obsidian.json"]);
   expect((await f.run([f.target], {}, true)).exit).toBe(0);
-  expect(Object.keys(record((await object(f.registry)).vaults))).toHaveLength(
-    4,
-  );
+  expect(
+    Object.keys(record((await object(f.registry))["vaults"])),
+  ).toHaveLength(4);
 });
 
 test("not running: creates missing registry without quitting", async () => {
   const f = await fixture();
   await rm(f.registry);
   expect((await f.run()).exit).toBe(0);
-  expect(Object.keys(record((await object(f.registry)).vaults))).toHaveLength(
-    1,
-  );
+  expect(
+    Object.keys(record((await object(f.registry))["vaults"])),
+  ).toHaveLength(1);
   expect(await f.events()).not.toContain("osascript");
 });
 
@@ -418,7 +421,7 @@ test("concurrent registrations serialize and preserve both new entries", async (
   expect(results.map((result) => result.exit)).toEqual([0, 0]);
   const reg = await object(f.registry);
   expect(reg).toMatchObject(f.original);
-  const paths = Object.values(record(reg.vaults)).map((value) => {
+  const paths = Object.values(record(reg["vaults"])).map((value) => {
     const parsed = z.object({ path: z.string() }).safeParse(value);
     return parsed.success ? parsed.data.path : undefined;
   });
@@ -529,8 +532,8 @@ test("forget removes exactly one shadow after graceful flush and preserves recov
   const result = await f.runForget();
   expect(result).toMatchObject({ exit: 0, stderr: "" });
   const expected = record(f.original.vaults);
-  delete expected.shadow;
-  expected.cccccccccccccccc = {
+  delete expected["shadow"];
+  expected["cccccccccccccccc"] = {
     path: join(f.home, "other"),
     ts: 3,
     open: true,

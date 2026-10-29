@@ -45,11 +45,12 @@ import { jsonOf, z } from "../agents/hooks/zod.ts";
 // Exit: 0 all vaults already matched or were updated / 1 --check found drift / 2 FATAL.
 
 const APP_SOURCE =
-  process.env.OBSIDIAN_APP_SOURCE ?? join(import.meta.dir, "app.json");
+  process.env["OBSIDIAN_APP_SOURCE"] ?? join(import.meta.dir, "app.json");
 const PLUGINS_SOURCE =
-  process.env.OBSIDIAN_PLUGINS_SOURCE ?? join(import.meta.dir, "plugins.json");
+  process.env["OBSIDIAN_PLUGINS_SOURCE"] ??
+  join(import.meta.dir, "plugins.json");
 const REGISTRY = join(
-  process.env.HOME ?? "",
+  process.env["HOME"] ?? "",
   "Library/Application Support/obsidian/obsidian.json",
 );
 const FETCH_MS = 30_000;
@@ -162,7 +163,7 @@ async function vaultPaths(): Promise<Result<string[], string>> {
   if (!(await exists(REGISTRY))) return ok([]);
   const reg = await readJsonObject(REGISTRY);
   if (reg.isErr()) return err(reg.error);
-  const vaultsRecord = RecordSchema.safeParse(reg.value.vaults);
+  const vaultsRecord = RecordSchema.safeParse(reg.value["vaults"]);
   const vaults: Record<string, unknown> = vaultsRecord.success
     ? vaultsRecord.data
     : {};
@@ -559,7 +560,7 @@ async function main(): Promise<Result<void, string>> {
       continue;
     }
     const shadowBase = resolve(
-      process.env.HOME ?? "",
+      process.env["HOME"] ?? "",
       ".obsidian-remote/vaults",
     );
     const canonicalBase = await realpath(shadowBase).catch(() => shadowBase);

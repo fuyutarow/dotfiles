@@ -18,7 +18,7 @@ export async function forgetShadow(
     | { kind: "profile"; value: string }
     | { kind: "path"; value: string },
 ): Promise<Result<void, string>> {
-  const home = process.env.HOME ?? "";
+  const home = process.env["HOME"] ?? "";
   const registry = join(
     home,
     "Library/Application Support/obsidian/obsidian.json",
@@ -95,10 +95,10 @@ export async function forgetShadow(
   if (Bun.which("rip") === null)
     return err("rip is required for recoverable shadow removal");
   const graveyard = resolve(
-    process.env.GRAVEYARD ??
-      process.env.RIP_GRAVEYARD ??
+    process.env["GRAVEYARD"] ??
+      process.env["RIP_GRAVEYARD"] ??
       join(
-        process.env.XDG_DATA_HOME ?? join(home, ".local/share"),
+        process.env["XDG_DATA_HOME"] ?? join(home, ".local/share"),
         "graveyard",
       ),
   );

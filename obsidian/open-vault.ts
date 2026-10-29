@@ -19,7 +19,7 @@ import { jsonOf, z } from "../agents/hooks/zod.ts";
 // Never enable the CLI or touch Chromium storage just to open a folder.
 // Exit: 0 opened / 2 FATAL. No signals are ever sent to Obsidian.
 const REGISTRY = join(
-  process.env.HOME ?? "",
+  process.env["HOME"] ?? "",
   "Library/Application Support/obsidian/obsidian.json",
 );
 const Registry = z.record(z.string(), z.unknown());
@@ -46,7 +46,7 @@ export async function readRegistry(): Promise<
   const parsed = jsonOf(Registry).safeParse(text);
   if (!parsed.success)
     return err(`${REGISTRY}: invalid JSON object; refusing to replace it`);
-  const vaults = Vaults.safeParse(parsed.data.vaults ?? {});
+  const vaults = Vaults.safeParse(parsed.data["vaults"] ?? {});
   if (!vaults.success)
     return err(`${REGISTRY}: invalid vaults; refusing to replace it`);
   return ok({ data: parsed.data, vaults: vaults.data });
@@ -194,7 +194,7 @@ async function register(
         value: { path: target, ts: Temporal.Now.instant().epochMilliseconds },
         enumerable: true,
       });
-      latest.value.data.vaults = latest.value.vaults;
+      latest.value.data["vaults"] = latest.value.vaults;
       await atomicWrite(latest.value.data);
       process.stdout.write(`SET   registered ${target} as ${id}\n`);
       match = { id, root: target };
@@ -281,8 +281,8 @@ async function main(): Promise<Result<void, string>> {
   if (prototypeFlag) return err("Unknown option '--__proto__'");
   if (parsed._.length > 1) return err("usage: open-vault.ts [dir]");
   if (
-    (process.env.SSH_CONNECTION ?? "") !== "" ||
-    (process.env.SSH_TTY ?? "") !== ""
+    (process.env["SSH_CONNECTION"] ?? "") !== "" ||
+    (process.env["SSH_TTY"] ?? "") !== ""
   )
     return err("run obs in a local macOS shell");
   const target = await realpath(parsed._.dir ?? process.cwd());
@@ -291,7 +291,7 @@ async function main(): Promise<Result<void, string>> {
   const registry = await readRegistry();
   if (registry.isErr()) return err(registry.error);
   const match = await containing(registry.value.vaults, target);
-  if (process.env.OBS_DRY_RUN === "1") {
+  if (process.env["OBS_DRY_RUN"] === "1") {
     if (match === undefined)
       process.stdout.write(
         `DRY   register ${target}; apply house settings; relaunch Obsidian; open obsidian://open?vault=<new-id>\n`,

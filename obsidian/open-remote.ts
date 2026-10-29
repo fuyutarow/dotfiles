@@ -20,7 +20,7 @@ export const RemoteRequest = z.object({
 });
 type Request = z.infer<typeof RemoteRequest>;
 const ObjectJson = jsonOf(z.record(z.string(), z.unknown()));
-const home = () => process.env.HOME ?? "";
+const home = () => process.env["HOME"] ?? "";
 const exists = (path: string): Promise<boolean> =>
   access(path).then(
     () => true,
@@ -52,7 +52,7 @@ export async function shadowPath(request: Request): Promise<string> {
   for (const entry of (await readdir(base)).toSorted()) {
     const data = join(base, entry, ".obsidian/plugins/remote-ssh/data.json");
     const state = await object(data);
-    if (state.isOk() && state.value.autoConnectProfileId === id)
+    if (state.isOk() && state.value["autoConnectProfileId"] === id)
       return join(base, entry);
   }
   // Obsidian lists a vault by its directory name, so it reads `<alias>--<folder>` like the
@@ -109,7 +109,7 @@ export async function prepareShadow(
       plugins["remote-ssh"].settings.profiles.find((p) => p.id === "r99-u26")
         ?.walkIgnoreDirs ?? [],
   };
-  const existing = z.array(z.unknown()).safeParse(data.profiles ?? []);
+  const existing = z.array(z.unknown()).safeParse(data["profiles"] ?? []);
   const profiles = existing.success ? existing.data : [];
   const kept = profiles.filter((p) => {
     const parsed = z.object({ id: z.string() }).safeParse(p);

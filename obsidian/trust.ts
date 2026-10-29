@@ -22,7 +22,7 @@ import { jsonOf, jsonText, z } from "../agents/hooks/zod.ts";
 // Exit: 0 keys set and read back / 2 FATAL (Obsidian did not quit, start, or confirm the write).
 
 const SUPPORT = join(
-  process.env.HOME ?? "",
+  process.env["HOME"] ?? "",
   "Library/Application Support/obsidian",
 );
 const REGISTRY = join(SUPPORT, "obsidian.json");

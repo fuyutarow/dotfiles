@@ -105,6 +105,7 @@ export function createCccIndexDbTarget(
     isRegisteredRoot?: (project: string) => boolean | Promise<boolean>;
     loadPolicy?: typeof loadCollectionPolicy;
     now?: () => number;
+    discoverArtifacts?: typeof discoverArtifacts;
   } = {},
 ): Target {
   const home = options.home ?? (() => process.env.HOME ?? homedir());
@@ -149,7 +150,9 @@ export function createCccIndexDbTarget(
       const ttlDays = loaded.value.classRules.deregisteredIndexDb.ttlDays;
       const ttlMs = ttlDays * 24 * 60 * 60 * 1_000;
       const cutoff = now() - ttlMs;
-      const artifactResult = await discoverArtifacts(cacheRoot);
+      const artifactResult = await (
+        options.discoverArtifacts ?? discoverArtifacts
+      )(cacheRoot);
       if (artifactResult.isErr()) {
         ctx.reportPlanError?.(
           `ccc index DB scan failed: ${artifactResult.error instanceof Error ? artifactResult.error.message : String(artifactResult.error)}`,

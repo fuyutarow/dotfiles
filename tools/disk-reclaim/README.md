@@ -133,6 +133,9 @@ artifact-level walk leaves nested workspace DBs independent of their registered 
 registered roots, recently touched artifacts, and artifacts with live readers; other artifacts
 are eligible after `collection_policy.class_rules.deregistered_index_db.ttl_days`, loaded through
 the shared policy loader.
+`disk free targets ccc-index-db` reports each artifact separately, rechecks the plan and
+fingerprint under its target lock, and measures available space before and after removal.
+Unknown reader status and scan errors refuse removal; approval does not override a retained item.
 
 The `tmpfs` target reports inode and byte use for each detected tmpfs mount, then considers every
 top-level directory owned by the current user. The mkdtemp-style name remains a recognition signal,

@@ -14,6 +14,7 @@ import { freeScratch } from "./disk-scratch.ts";
 import { freeClean } from "./disk-clean.ts";
 import { freeToolchains } from "./disk-toolchains.ts";
 import { freeBuilds } from "./disk-builds.ts";
+import { freeCccIndexDb } from "./disk-ccc-index-db.ts";
 import { diskTargetNames } from "./disk-targets/index.ts";
 import pkg from "../package.json" with { type: "json" };
 
@@ -372,6 +373,7 @@ export async function main(
   },
   buildsDependencies?: Parameters<typeof freeBuilds>[3],
   scratchDependencies?: Parameters<typeof freeScratch>[3],
+  cccDependencies?: Parameters<typeof freeCccIndexDb>[3],
 ) {
   const start = performance.now();
   const started = Temporal.Now.instant().toString();
@@ -725,6 +727,7 @@ export async function main(
       targets[0] === "rust" ||
       targets[0] === "builds" ||
       targets[0] === "scratch" ||
+      targets[0] === "ccc-index-db" ||
       targets[0] === "tmpfs")
   ) {
     const controller = new AbortController();
@@ -743,7 +746,16 @@ export async function main(
     if (targets[0] === "rust") actingTarget = "rust";
     if (targets[0] === "tmpfs") actingTarget = "tmpfs";
     let result: Awaited<ReturnType<typeof freeScratch>>;
-    if (targets[0] === "scratch")
+    if (targets[0] === "ccc-index-db")
+      result = await freeCccIndexDb(
+        deadline,
+        start,
+        !options.has("no-progress"),
+        cccDependencies,
+        controller.signal,
+        options.has("stop-on-error"),
+      );
+    else if (targets[0] === "scratch")
       result = await freeScratch(
         deadline,
         start,

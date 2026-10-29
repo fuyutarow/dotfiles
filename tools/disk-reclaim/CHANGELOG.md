@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.11 — 2026-10-29
+
+- Enable safe ccc index DB reclamation through disk free
+
 ## 1.12.10 — 2026-10-29
 
 - Enable scratch target reclamation through disk free

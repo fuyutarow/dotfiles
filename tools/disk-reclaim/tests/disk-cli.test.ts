@@ -2564,3 +2564,204 @@ test("scratch plan rejects action authority without touching the fixture", async
   expect(result.exit).toBe(2);
   expect(await readFile(path, "utf8")).toBe("keep");
 });
+
+for (const scenario of [
+  "registered",
+  "fresh",
+  "open",
+  "unknown",
+  "remove",
+  "scan",
+  "changed",
+  "revalidation",
+  "zero",
+  "guard",
+  "lock",
+  "lost",
+] as const) {
+  test(`ccc-index-db entry preserves ${scenario}`, async () => {
+    const { createCccIndexDbTarget } =
+      await import("../src/targets/ccc-index-db.ts");
+    const { cccIndexDbAction } =
+      await import("../src/disk-ccc-index-db-action.ts");
+    const { loadCollectionPolicy } = await import("../src/policy.ts");
+    const { err } = await import("neverthrow");
+    const { main } = await import("../src/disk.ts");
+    const root = await mkdtemp(join(tmpdir(), "disk-ccc-fixture-"));
+    const home = join(root, "home");
+    const db = join(root, "db");
+    const path = join(db, "project", "cocoindex.db");
+    await mkdir(join(db, "project"), { recursive: true });
+    await writeFile(path, "fixture");
+    await utimes(path, 1, 1);
+    const policy = join(root, "policy.toml");
+    await writeFile(
+      policy,
+      'graveyard_min_age_hours = 24\ngraveyard_pressure_undo_minutes = 10\n[collection_policy.class_rules.ownerless_cache]\ndefault_owner = "dotfiles"\nttl_days = 14\n[collection_policy.class_rules.deregistered_index_db]\nttl_days = 3\n',
+    );
+    const now = scenario === "fresh" ? 2_000 : 10 * 86400_000;
+    const liveness: NonNullable<Context["liveness"]> = {
+      facts: () => expect.unreachable("no session probe"),
+      openPaths: () => ({
+        open: scenario === "open" ? [{ path, pid: 1, via: "fd" }] : [],
+        unknown: scenario === "unknown" ? ["unreadable reader"] : [],
+      }),
+      refresh: () => liveness,
+    };
+    const context: Context = {
+      ...cleanContext,
+      targetName: "ccc-index-db",
+      liveness,
+    };
+    let actions = 0;
+    let available = 100;
+    let revalidating = false;
+    const target: Target = {
+      ...createCccIndexDbTarget({
+        home: () => home,
+        dbRoot: () => db,
+        ...(scenario === "scan"
+          ? {
+              discoverArtifacts: () =>
+                Promise.resolve(err(new Error("fixture scan failed"))),
+            }
+          : {}),
+        isRegisteredRoot: () =>
+          scenario === "registered" ||
+          (scenario === "revalidation" && revalidating),
+        loadPolicy: () => loadCollectionPolicy(policy),
+        now: () => now,
+      }),
+      act: () => {
+        actions++;
+        if (scenario !== "zero") available += 10;
+        return Promise.resolve({ ok: true, bytes_freed: 1000, error: null });
+      },
+    };
+    const deps = {
+      guard: () => (scenario === "guard" ? "worker guard" : null),
+      lock: () =>
+        Promise.resolve(
+          scenario === "lock"
+            ? { release: null, exit: 3, error: "busy" }
+            : { release: () => {}, exit: 0, error: null },
+        ),
+      receipt: () =>
+        Promise.resolve({ id: "r", path: "/fixture/r", delivery_error: null }),
+      probe: async (action: string | undefined) => {
+        let error: string | undefined;
+        if (action === undefined) {
+          const rows = await target.plan({
+            ...context,
+            reportPlanError: (message) => {
+              error = message;
+            },
+          });
+          return {
+            out: JSON.stringify(
+              rows.map((candidate) => ({ candidate, fingerprint: "same" })),
+            ),
+            err: error ?? "",
+            exit: error === undefined ? 0 : 4,
+            timedOut: false,
+          };
+        }
+        revalidating = true;
+        if (scenario === "lost")
+          return { out: "", err: "lost child", exit: 1, timedOut: false };
+        const request = jsonOf(
+          z.object({
+            id: z.string(),
+            path: z.string(),
+            fingerprint: z.string(),
+          }),
+        ).safeParse(action);
+        if (!request.success) expect.unreachable("invalid fixture action");
+        const result = await cccIndexDbAction(request.data, {
+          target,
+          context,
+          identity: () =>
+            Promise.resolve(scenario === "changed" ? "changed" : "same"),
+          device: () => Promise.resolve(1),
+          measure: () => Promise.resolve(cleanObservation(available)),
+          fail: () => expect.unreachable("unexpected failure"),
+        });
+        return {
+          out: JSON.stringify(result),
+          err: "",
+          exit: 0,
+          timedOut: false,
+        };
+      },
+    };
+    let output = "";
+    const previous = process.exitCode;
+    const stdout = spyOn(process.stdout, "write").mockImplementation(
+      (chunk) => {
+        output += String(chunk);
+        return true;
+      },
+    );
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      stdout.mockRestore();
+      process.exitCode = previous ?? 0;
+    });
+    process.exitCode = 0;
+    await main(
+      ["free", "targets", "ccc-index-db", "--approve", path, "--no-progress"],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      deps,
+    );
+    const result = jsonText.safeParse(output).data;
+    if (scenario === "scan" || scenario === "guard" || scenario === "lock") {
+      const exits = { scan: 4, guard: 1, lock: 3 };
+      expect(process.exitCode).toBe(exits[scenario]);
+      expect(result).toMatchObject({ items: [] });
+      if (scenario === "scan")
+        expect(JSON.stringify(result)).toContain("ccc index DB scan failed");
+    } else {
+      const expected = {
+        registered: ["keep", "registered retrieval root"],
+        fresh: ["keep", "touched within"],
+        open: ["keep", "live reader"],
+        unknown: ["ask", "could not establish reader"],
+        remove: ["completed", "index artifact removal completed"],
+        changed: ["changed", "fingerprint changed"],
+        revalidation: ["keep", "registered retrieval root"],
+        zero: ["partial", "no measured increase"],
+        lost: ["unknown", "child failed"],
+      } as const;
+      const [verdict, reason] = expected[scenario];
+      expect(result).toMatchObject({
+        items: [
+          {
+            path,
+            verdict,
+            effect: ["remove", "zero", "lost"].includes(scenario)
+              ? "unlink"
+              : "none",
+          },
+        ],
+      });
+      expect(JSON.stringify(result)).toContain(reason);
+      if (scenario === "remove")
+        expect(result).toMatchObject({
+          items: [
+            {
+              before: { source: "statfs", available_bytes: 100 },
+              after: { source: "statfs", available_bytes: 110 },
+            },
+          ],
+        });
+      let expectedExit = 1;
+      if (scenario === "remove") expectedExit = 0;
+      if (scenario === "lost") expectedExit = 4;
+      expect(process.exitCode).toBe(expectedExit);
+    }
+    expect(actions).toBe(scenario === "remove" || scenario === "zero" ? 1 : 0);
+  });
+}

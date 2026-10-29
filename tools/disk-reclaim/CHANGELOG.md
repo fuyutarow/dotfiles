@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.15 — 2026-10-30
+
+- Preserve completed timer actions in receipts on cancellation.
+
 ## 1.12.14 — 2026-10-30
 
 - Report completed deletions when a run is cancelled.

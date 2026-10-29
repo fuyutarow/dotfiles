@@ -119,6 +119,7 @@ export type EngineOptions = {
   /** Timer injection for deterministic run-deadline tests. */
   scheduleDeadline?: (callback: () => void, ms: number) => () => void;
   deadlineCheck?: (phase: string) => void;
+  cancellationSignal?: AbortSignal;
   measureFree?: () => number;
   onCompletedDeletion?: (path: string) => void;
 };
@@ -591,7 +592,7 @@ async function recheckAndAct(
   Object.assign(action, result);
   if (result.ok && found.path !== null && found.action.kind === "delete")
     onCompletedDeletion?.(found.path);
-  check("action");
+  check("action complete");
   return result.ok ? 0 : 1;
 }
 
@@ -688,6 +689,7 @@ async function executeCandidates(
         })
       : indexes;
   for (const index of order) {
+    if (options.cancellationSignal?.aborted === true) break;
     if (ctx.foregroundLockYielded?.() === true) break;
     options.deadlineCheck?.("candidate recheck");
     const exit = await recheckAndAct(
@@ -714,6 +716,9 @@ async function executeTarget(
   targetsRemaining: number,
 ): Promise<string> {
   const check = options.deadlineCheck ?? (() => {});
+  const checkUnlessCancelled = (phase: string): void => {
+    if (options.cancellationSignal?.aborted !== true) check(phase);
+  };
   check("target plan");
   const headroom = options.headroom ?? readHeadroom();
   const started = now();
@@ -859,9 +864,9 @@ async function executeTarget(
     } else {
       row.candidates = parsed.data;
       await executeCandidates(target, row, stageCtx, actions, options);
-      check("finish");
+      checkUnlessCancelled("finish");
       await target.finish?.(stageCtx);
-      check("finish");
+      checkUnlessCancelled("finish");
     }
   }
   if (plannedFailure !== null && row.exit === 0) row.exit = 1;
@@ -914,6 +919,7 @@ async function executeLocked(
     };
   let receipt: string | null = null;
   for (const [index, target] of targets.entries()) {
+    if (options.cancellationSignal?.aborted === true) break;
     check("target plan");
     if (options.context.foregroundLockYielded?.() === true) break;
     const row = lockedPlan.targets[index];
@@ -1030,7 +1036,7 @@ export async function run(
   const check = (phase: string): void => {
     if (controller.signal.aborted)
       AbortSignal.abort(new RunDeadline(phase)).throwIfAborted();
-    if (signal.aborted)
+    if (signal.aborted && phase !== "action complete")
       AbortSignal.abort(new Error(`cancelled: ${phase}`)).throwIfAborted();
   };
   let yielded = false;
@@ -1038,6 +1044,9 @@ export async function run(
   const lockedOptions: EngineOptions = {
     ...runOptions,
     deadlineCheck: check,
+    ...(options.context.signal === undefined
+      ? {}
+      : { cancellationSignal: options.context.signal }),
     context: {
       ...runOptions.context,
       signal,

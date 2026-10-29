@@ -47,6 +47,9 @@ fingerprint-changed records do not run.
 When a deletion run is cancelled, stderr reports `cancelled during deletion` and each
 successfully deleted path as `deleted before cancellation: <path>`.
 
+A timer run stopped by SIGTERM exits 143; SIGINT exits 130. It writes a receipt
+containing the items completed before the signal before exiting.
+
 On WSL, apply runs `fstrim` with a 120-second bound and samples `/mnt/c` for up to 10 seconds.
 The report keeps guest free-space delta separate from measured Windows C: free-space delta.
 

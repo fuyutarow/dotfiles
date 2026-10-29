@@ -128,6 +128,21 @@ describe("config-map findings", () => {
     );
   });
 
+  test("retained SOKS request evidence is excluded without excluding adjacent JSON", () => {
+    expect(
+      findings(
+        [row(["mise.toml"])],
+        [
+          "tools/shared/evidence/claude-agents-soks-request.json",
+          "tools/shared/evidence/codex-stop-soks-request.json",
+          "tools/shared/evidence/runtime-settings.json",
+        ],
+      ),
+    ).toEqual([
+      "unregistered: tools/shared/evidence/runtime-settings.json — add a row to scripts/config-registry.ts (or an EXCLUDED reason in scripts/config-map.ts)",
+    ]);
+  });
+
   test("a row naming a missing source is reported, with the unregistered file, in one run", () => {
     const f = findings([row(["no/such/file.toml"])], ["other.json"]);
     expect(

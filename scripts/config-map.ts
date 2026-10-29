@@ -114,6 +114,12 @@ const EXCLUDED: readonly {
     why: "retained read-only owner evidence, not deployed configuration",
   },
   {
+    test: (p) =>
+      p.startsWith("tools/shared/evidence/") &&
+      p.endsWith("-soks-request.json"),
+    why: "retained SOKS evidence import requests, not deployed configuration",
+  },
+  {
     test: (p) => p.includes(".example."),
     why: "an example, not a configuration",
   },

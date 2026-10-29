@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "documents": [
+    {
+      "filename": "evi-codex_stop.md",
+      "frontmatter": {
+        "type": "source_evidence",
+        "title": "Codex Stop continuation and hook trust — evi",
+        "description": "Published continuation semantics and definition-specific trust",
+        "status": "draft",
+        "sok_id": "01a15ee4-c885-718a-a604-c7723aa491a8",
+        "sources": [
+          {
+            "resource": "https://learn.chatgpt.com/docs/hooks",
+            "title": "Codex hooks"
+          },
+          {
+            "resource": "https://developers.openai.com/codex/hooks",
+            "title": "Codex hooks redirect"
+          }
+        ],
+        "generated": {
+          "by": "process:documentation-synthesis",
+          "at": "2026-10-21T14:37:29Z"
+        },
+        "sok_locator": "#stop, lines 1671–1694; #review-and-trust-hooks, lines 980–986; inspected 2026-10-21",
+        "sok_capture": "locus_only",
+        "sok_read_depth": "partial",
+        "sok_read_scope": "Supplied summary of Stop and review-and-trust-hooks sections"
+      },
+      "body": "\n# Published protocol\n\nStop input includes turn_id:string, stop_hook_active:boolean and\nlast_assistant_message:string|null; matcher is unused.\nNonempty exit-0 stdout must be JSON. {\"decision\":\"block\",\"reason\":\"...\"} requests\ncontinuation using that reason as a new user prompt; it does not hide or reject\nthe displayed turn. Exit 2 with stderr reason is an alternative.\n"
+    },
+    {
+      "filename": "led-codex_stop.md",
+      "frontmatter": {
+        "type": "sok_claim_ledger",
+        "title": "Codex Stop continuation and hook trust — led",
+        "description": "Published continuation semantics and definition-specific trust",
+        "status": "draft",
+        "sok_id": "01a15ee4-c886-71cf-b041-abdf243cb243",
+        "sources": [
+          {
+            "resource": "urn:uuid:01a15ee4-c885-718a-a604-c7723aa491a8"
+          }
+        ],
+        "generated": {
+          "by": "process:documentation-synthesis",
+          "at": "2026-10-21T14:37:29Z"
+        },
+        "sok_unit_id": "01a15ee4-c886-71cf-b041-abe02786acf6",
+        "sok_authority_key": "led/codex_stop_continuation_trust"
+      },
+      "body": "\n# Claims and limits\n\nStop requests another turn; nonmanaged trust binds an exact definition.\nCorrection of either upstream rule reverses its corresponding claim.\nNo minimum version or active-client trust is established.\nActive-flag loop guards, one-pass limits and formatting policies are consumer\nchoices, not vendor requirements.\n"
+    },
+    {
+      "filename": "pro-codex_stop.md",
+      "frontmatter": {
+        "type": "sok_protocol",
+        "title": "Codex Stop continuation and hook trust — pro",
+        "description": "Published continuation semantics and definition-specific trust",
+        "status": "draft",
+        "sok_id": "01a15ee4-c886-71cf-b041-abde77d4e37d",
+        "sources": [
+          {
+            "resource": "urn:uuid:01a15ee4-c885-718a-a604-c7723aa491a8"
+          }
+        ],
+        "generated": {
+          "by": "process:documentation-synthesis",
+          "at": "2026-10-21T14:37:29Z"
+        },
+        "sok_unit_id": "01a15ee4-c886-71cf-b041-abe02786acf6",
+        "sok_authority_key": "pro/codex_stop_continuation_trust"
+      },
+      "body": "\n# Coverage\n\nOne vendor, two partial official sections, locus-only supplied summary;\nno verbatim capture, runtime replication, complete review or novelty assessment.\nSeparate protocol semantics from client execution and trust observations.\n"
+    },
+    {
+      "filename": "sok-codex_stop.md",
+      "frontmatter": {
+        "type": "sok_position",
+        "title": "Codex Stop continuation and hook trust — sok",
+        "description": "Published continuation semantics and definition-specific trust",
+        "status": "draft",
+        "sok_id": "01a15ee4-c886-71cf-b041-abdd60ad7fad",
+        "sources": [
+          {
+            "resource": "urn:uuid:01a15ee4-c885-718a-a604-c7723aa491a8"
+          },
+          {
+            "resource": "urn:uuid:01a15ee4-c886-71cf-b041-abde77d4e37d"
+          },
+          {
+            "resource": "urn:uuid:01a15ee4-c886-71cf-b041-abdf243cb243"
+          }
+        ],
+        "generated": {
+          "by": "process:documentation-synthesis",
+          "at": "2026-10-21T14:37:29Z"
+        },
+        "sok_unit_id": "01a15ee4-c886-71cf-b041-abe02786acf6",
+        "sok_authority_key": "sok/codex_stop_continuation_trust"
+      },
+      "body": "\n# Question\n\nHow do Stop continuation and hook trust interact?\n\nContinuation preserves displayed output. Nonmanaged user, project and plugin\nhooks require review and trust of the exact definition hash; new or changed\ndefinitions are skipped until trusted through hook review. Managed policy is\nseparate. Configuration presence does not establish execution.\n"
+    }
+  ]
+}

@@ -14,6 +14,7 @@ async function fixture() {
   for (const directory of [brew, system, local]) {
     await mkdir(directory, { recursive: true });
     await Bun.write(join(directory, "mise"), "fixture mise");
+    await chmod(join(directory, "mise"), 0o755);
   }
   await Bun.write(join(brew, "brew"), "#!/bin/sh\nexit 0\n");
   await chmod(join(brew, "brew"), 0o755);
@@ -98,7 +99,7 @@ test("doctor fails naming both paths and rip; without the shadow it passes", asy
       child.exited,
     ]);
     expect(err).toBe("");
-    if (path.includes(local)) {
+    if (path.startsWith(local)) {
       expect(code).toBe(1);
       expect(out).toContain("FAIL  brew-shadows");
       expect(out).toContain(join(local, "mise"));

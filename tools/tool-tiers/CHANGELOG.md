@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3 — 2026-10-30
+
+- Fix brew shadow doctor test fixtures and PATH expectations
+
 ## 0.2.2 — 2026-10-30
 
 - Replace dx with semlint as a core Homebrew tool.

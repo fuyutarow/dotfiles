@@ -40,6 +40,7 @@ want()    { [[ $3 == *"$2"* ]] && ok "$1" || bad "$1 (expected sequence absent)"
 wantnot() { [[ $3 != *"$2"* ]] && ok "$1" || bad "$1 (forbidden sequence present)" }
 
 source "$ROOT/zsh/tests/clipboard-routing.test.zsh"
+source "$ROOT/zsh/tests/role-readers.test.zsh"
 
 # Run shell lines inside a REAL pty with aliases.zsh loaded; return everything the terminal saw.
 pty_run() {

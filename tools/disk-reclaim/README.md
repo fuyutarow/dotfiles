@@ -309,31 +309,7 @@ unknown result and exit 4 without mutation. Invalid requests exit 2. The existin
 `disk-reclaim` commands and their formats remain available unchanged. For `disk free records`,
 stdin must contain legacy `disk-reclaim plan` JSONL records.
 
-`disk free targets mise-configs` delegates the existing `mise prune --configs`
-operation as one target item. It rechecks the eligible metadata and its identity
-under the reclaim lock, records the operation, and reports before/after statfs
-measurements. Counts refer to target items; the backend's metadata counts remain
-in the item detail. Per-record selection is a follow-up; this command retains the
-bulk operation's scope.
-
-`disk free targets clean` reports each cache separately. It retains busy and
-protected-path checks, revalidates identity under the reclaim lock, and records
-per-cache statfs observations. No measured increase is partial; an unavailable
-observation or child result remains unknown.
-
-`disk free targets rust` uses the same bounded per-item flow and the Rust planner:
-missing manifests, active Rust builds, live repository sessions and unknown process
-state remain refused.
-
-`disk free targets toolchains` rechecks each eligible version directory under the
-reclaim lock before deletion. Results include per-item statfs observations and
-preserve the target's current, pinned, recent, and in-use exclusions. When more
-than one item is acted on, measurements remain in their individual details;
-they are not combined across filesystems.
-
-`disk free targets builds` reports each discovered build directory separately, including
-paths kept for protection, active use, or ownership by another target. It rechecks the
-legacy builds rules and identity under the reclaim lock before each removal and reports
-per-item statfs observations. A zero or negative available-space change is partial;
-an unavailable measurement or child result is unknown. Counts refer to item rows.
+Per-target details: [mise-configs](docs/disk-free-mise-configs.md),
+[clean](docs/disk-free-clean.md), [rust](docs/disk-free-rust.md),
+[toolchains](docs/disk-free-toolchains.md), and [builds](docs/disk-free-builds.md).
 Other unimplemented acting targets remain unavailable.

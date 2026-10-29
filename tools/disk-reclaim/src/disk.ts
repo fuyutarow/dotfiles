@@ -13,6 +13,7 @@ import { freeMiseConfigs } from "./disk-mise-configs.ts";
 import { freeClean } from "./disk-clean.ts";
 import { freeToolchains } from "./disk-toolchains.ts";
 import { freeBuilds } from "./disk-builds.ts";
+import { diskTargetNames } from "./disk-targets/index.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const grammar: Record<string, string[]> = {
@@ -84,24 +85,6 @@ const flags = new Set([
   "no-progress",
 ]);
 const repeated = new Set(["target", "approve"]);
-const targetNames = new Set([
-  "tmpfs",
-  "clean",
-  "ccc-index-db",
-  "builds",
-  "rust",
-  "toolchains",
-  "mise-configs",
-  "workspaces",
-  "scratch",
-  "system",
-  "judgment",
-  "rip-expire",
-  "purge",
-  "host",
-  "vhdx",
-  "audit",
-]);
 const tiers = new Set([
   "blind",
   "sudo",
@@ -465,7 +448,7 @@ export async function main(
   const targets =
     key === "free targets" ? positional : (options.get("target") ?? []);
   if (
-    targets.some((target) => !targetNames.has(target)) ||
+    targets.some((target) => !diskTargetNames.has(target)) ||
     new Set(targets).size !== targets.length
   )
     invalid("invalid or duplicate target");

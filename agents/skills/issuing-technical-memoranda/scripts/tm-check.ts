@@ -177,9 +177,9 @@ for (const path of files) {
     continue;
   }
   reportMissingCoverKeys(front, path);
-  if (typeof front.date === "string" && !ISO_DATE.test(front.date))
-    say("FAIL", path, `date '${front.date}' is not YYYY-MM-DD (T1)`);
-  if (typeof front.tm === "string" && /\s/u.test(front.tm))
+  if (typeof front["date"] === "string" && !ISO_DATE.test(front["date"]))
+    say("FAIL", path, `date '${front["date"]}' is not YYYY-MM-DD (T1)`);
+  if (typeof front["tm"] === "string" && /\s/u.test(front["tm"]))
     say(
       "FAIL",
       path,
@@ -188,8 +188,8 @@ for (const path of files) {
 
   // author must carry a reachable contact, not just a name
   if (
-    typeof front.author === "string" &&
-    !/[@/]|ext\.?\s*\d|#[\w-]/iu.test(front.author)
+    typeof front["author"] === "string" &&
+    !/[@/]|ext\.?\s*\d|#[\w-]/iu.test(front["author"])
   )
     say(
       "WARN",
@@ -197,7 +197,7 @@ for (const path of files) {
       "'author' carries no reachable contact (mail, handle, channel, extension) (T1)",
     );
 
-  if (!nonEmpty(front.size))
+  if (!nonEmpty(front["size"]))
     say(
       "WARN",
       path,
@@ -206,9 +206,9 @@ for (const path of files) {
 
   // ------------------------------------------------------------ T2 AUTHORITY
   const authority =
-    typeof front.authority === "string"
-      ? front.authority
-      : (JSON.stringify(front.authority) ?? "");
+    typeof front["authority"] === "string"
+      ? front["authority"]
+      : (JSON.stringify(front["authority"]) ?? "");
   if (
     authority !== "" &&
     !/^personal$/u.test(authority) &&
@@ -222,9 +222,9 @@ for (const path of files) {
 
   // ------------------------------------------------ T3 ADDRESSEE and RELEASE
   const release =
-    typeof front.release === "string"
-      ? front.release
-      : (JSON.stringify(front.release) ?? "");
+    typeof front["release"] === "string"
+      ? front["release"]
+      : (JSON.stringify(front["release"]) ?? "");
   if (
     release !== "" &&
     !/^internal$/u.test(release) &&
@@ -238,7 +238,7 @@ for (const path of files) {
 
   // cover-only recipients need a stated pull path, or they are a dead end
   if (
-    nonEmpty(front.cc) &&
+    nonEmpty(front["cc"]) &&
     !/\bcc\b[^\n]*full text|full text[^\n]*\b(request|ask|reply|link)/iu.test(
       body,
     )

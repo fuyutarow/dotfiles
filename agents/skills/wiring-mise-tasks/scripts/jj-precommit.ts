@@ -50,7 +50,7 @@ export function jjRead(args: string[], root = process.cwd()): Buffer {
 }
 
 export function jjContext(): JjPrecommit | undefined {
-  const vcs = process.env.PRECOMMIT_VCS;
+  const vcs = process.env["PRECOMMIT_VCS"];
   if (vcs === undefined) return undefined;
   if (vcs !== "jj") fatal(`unsupported PRECOMMIT_VCS=${vcs}`);
   const {

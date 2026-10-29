@@ -36,7 +36,7 @@ const die = (m: string, code = 2): never => {
   process.exit(code);
 };
 
-const envBookmark = process.env.BOOKMARK;
+const envBookmark = process.env["BOOKMARK"];
 
 // strictFlags alone lets --__proto__ reach type-flag before the unknown-flag check (BG1).
 const rejectPrototypeFlag = (type: string, flag: string): void => {

@@ -183,7 +183,7 @@ function taskBodies(
   const config = recordSchema.safeParse(Bun.TOML.parse(source));
   if (!config.success) return [];
   const entries = recordSchema.safeParse(
-    split ? config.data : (config.data.tasks ?? {}),
+    split ? config.data : (config.data["tasks"] ?? {}),
   );
   if (!entries.success) return [];
   return Object.entries(entries.data).flatMap(([name, value]) => {
@@ -1011,7 +1011,7 @@ export async function checkTools(
     return ["invalid mise tool configuration"];
   const problems: string[] = [];
   if (policy.taskDirectory !== undefined) {
-    if (Object.keys(config.tasks).length > 0)
+    if (Object.keys(config["tasks"]).length > 0)
       problems.push(`task bodies must live in ${policy.taskDirectory}`);
     if (
       JSON.stringify(config.task_config.includes) !==
@@ -1127,7 +1127,7 @@ async function check(
       );
     return { failures: 0, environmentFailure: true };
   }
-  const local = listed.tasks.filter(
+  const local = listed["tasks"].filter(
     (task) =>
       task.source.startsWith(`${realRoot}/`) ||
       task.source.startsWith(`${root}/`),

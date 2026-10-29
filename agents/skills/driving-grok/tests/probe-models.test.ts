@@ -226,7 +226,7 @@ describe("probe-models.ts — GROK-not-found FATAL path", () => {
     // `grok` on this host (verified above via a PATH scan), keep every other
     // entry so the mise-shimmed `bun` we spawn with can still bootstrap itself.
     const grokDir = dirname(Bun.which("grok") ?? "");
-    const filteredPath = (process.env.PATH ?? "")
+    const filteredPath = (process.env["PATH"] ?? "")
       .split(":")
       .filter((dir) => dir !== grokDir && dir.length > 0)
       .join(":");

@@ -49,7 +49,7 @@ if (process.env.FAIL_FORMATTER) process.exit(3);
   const env = {
     ...process.env,
     JJ_CONFIG: config,
-    PATH: `${bin}:${process.env.PATH ?? ""}`,
+    PATH: `${bin}:${process.env["PATH"] ?? ""}`,
     PRECOMMIT_VCS: undefined,
     PRECOMMIT_PATHS_FILE: undefined,
     PRECOMMIT_REV: undefined,

@@ -14,7 +14,7 @@ if (args[0] === "--version") {
 }
 
 if (args[0] === "models") {
-  if (process.env.FAKE_GROK_MODELS_FAIL === "1") {
+  if (process.env["FAKE_GROK_MODELS_FAIL"] === "1") {
     process.stderr.write("fake roster fetch failed\n");
     process.exit(3);
   }

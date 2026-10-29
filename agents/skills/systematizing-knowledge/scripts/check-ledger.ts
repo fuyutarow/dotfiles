@@ -133,17 +133,17 @@ const validateSources = (
     }
 
     let valid = true;
-    if (nonemptyString(sourceRecord.source_id) === undefined) {
+    if (nonemptyString(sourceRecord["source_id"]) === undefined) {
       report(`sources[${index}].source_id must be a non-empty string`);
       valid = false;
     }
-    if (nonemptyString(sourceRecord.locator) === undefined) {
+    if (nonemptyString(sourceRecord["locator"]) === undefined) {
       report(`sources[${index}].locator must be a non-empty string`);
       valid = false;
     }
     if (
-      sourceRecord.role !== undefined &&
-      nonemptyString(sourceRecord.role) === undefined
+      sourceRecord["role"] !== undefined &&
+      nonemptyString(sourceRecord["role"]) === undefined
     ) {
       report(`sources[${index}].role must be a non-empty string when present`);
     }
@@ -171,21 +171,23 @@ const validateAssessment = (
     return;
   }
 
-  const status = nonemptyString(assessment.status);
+  const status = nonemptyString(assessment["status"]);
   if (status === undefined || !assessmentStatuses.has(status)) {
     report(
       `assessment.status must be one of: ${[...assessmentStatuses].join(", ")}`,
     );
   }
-  if (nonemptyString(assessment.basis) === undefined) {
+  if (nonemptyString(assessment["basis"]) === undefined) {
     report("assessment.basis must be a non-empty string");
   }
-  if (!Array.isArray(assessment.limitations)) {
+  if (!Array.isArray(assessment["limitations"])) {
     report("assessment.limitations must be an array of strings");
     return;
   }
   if (
-    !assessment.limitations.every((item) => nonemptyString(item) !== undefined)
+    !assessment["limitations"].every(
+      (item) => nonemptyString(item) !== undefined,
+    )
   ) {
     report("assessment.limitations must contain only non-empty strings");
   }
@@ -207,19 +209,19 @@ const validateRelations = (
       report(`relations[${index}] must be an object`);
       continue;
     }
-    const target = nonemptyString(relationRecord.target);
+    const target = nonemptyString(relationRecord["target"]);
     if (target === undefined) {
       report(`relations[${index}].target must be a non-empty string`);
     } else {
       targets.push(target);
     }
-    const relationType = nonemptyString(relationRecord.type);
+    const relationType = nonemptyString(relationRecord["type"]);
     if (relationType === undefined || !relationTypes.has(relationType)) {
       report(
         `relations[${index}].type must be one of: ${[...relationTypes].join(", ")}`,
       );
     }
-    if (nonemptyString(relationRecord.basis) === undefined) {
+    if (nonemptyString(relationRecord["basis"]) === undefined) {
       report(`relations[${index}].basis must be a non-empty string`);
     }
   }
@@ -325,7 +327,7 @@ const checkFile = async (path: string): Promise<FileResult> => {
     const rowReport = (message: string): void => {
       report(line, message);
     };
-    const claimId = nonemptyString(row.claim_id);
+    const claimId = nonemptyString(row["claim_id"]);
     if (claimId === undefined) {
       rowReport("claim_id must be a non-empty string");
       continue;
@@ -335,32 +337,32 @@ const checkFile = async (path: string): Promise<FileResult> => {
       continue;
     }
 
-    if (nonemptyString(row.claim) === undefined) {
+    if (nonemptyString(row["claim"]) === undefined) {
       rowReport("claim must be a non-empty string");
     }
-    if (nonemptyString(row.scope) === undefined) {
+    if (nonemptyString(row["scope"]) === undefined) {
       rowReport("scope must be a non-empty string");
     }
-    if (typeof row.load_bearing !== "boolean") {
+    if (typeof row["load_bearing"] !== "boolean") {
       rowReport("load_bearing must be a boolean");
     }
-    const claimType = nonemptyString(row.claim_type);
+    const claimType = nonemptyString(row["claim_type"]);
     if (claimType === undefined || !claimTypes.has(claimType)) {
       rowReport(`claim_type must be one of: ${[...claimTypes].join(", ")}`);
     }
 
-    const validSourceCount = validateSources(row.sources, rowReport);
+    const validSourceCount = validateSources(row["sources"], rowReport);
     const derivedFrom = stringArray(
-      row.derived_from,
+      row["derived_from"],
       "derived_from",
       rowReport,
     );
-    const relationTargets = validateRelations(row.relations, rowReport);
-    const isLoadBearing = row.load_bearing === true;
+    const relationTargets = validateRelations(row["relations"], rowReport);
+    const isLoadBearing = row["load_bearing"] === true;
     if (isLoadBearing) {
       loadBearing += 1;
     }
-    validateAssessment(row.assessment, isLoadBearing, rowReport);
+    validateAssessment(row["assessment"], isLoadBearing, rowReport);
 
     if (
       claimType !== undefined &&

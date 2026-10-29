@@ -38,8 +38,8 @@ async function run(
     killSignal: "SIGTERM",
   });
   const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
+    new Response(child.stdout)["text"](),
+    new Response(child.stderr)["text"](),
     child.exited,
   ]);
   const timedOut = signal.aborted;
@@ -85,11 +85,11 @@ async function probeAll(
     );
     const envelope =
       result.exitCode === 0 ? jsonRecord(result.output) : undefined;
-    const text = envelope?.text;
-    const usage = RecordSchema.safeParse(envelope?.usage);
+    const text = envelope?.["text"];
+    const usage = RecordSchema.safeParse(envelope?.["usage"]);
     const tokens =
       usage.success && Object.hasOwn(usage.data, "total_tokens")
-        ? String(usage.data.total_tokens)
+        ? String(usage.data["total_tokens"])
         : "?";
     if (result.exitCode === 0 && text === "OK") {
       process.stdout.write(
@@ -99,7 +99,7 @@ async function probeAll(
     }
     if (result.output.includes("unknown model id")) {
       process.stdout.write(
-        `RESULT: INVALID_NAME ${model} (exit ${result.exitCode}) — not an exact model id (\`${process.env.GROK ?? "grok"} models\` or references/model-catalog.md); copy it verbatim\n`,
+        `RESULT: INVALID_NAME ${model} (exit ${result.exitCode}) — not an exact model id (\`${process.env["GROK"] ?? "grok"} models\` or references/model-catalog.md); copy it verbatim\n`,
       );
       failures += 1;
       continue;
@@ -143,10 +143,10 @@ async function main(): Promise<void> {
   }
   const models = parsed._;
 
-  const grok = Bun.which(process.env.GROK ?? "grok");
+  const grok = Bun.which(process.env["GROK"] ?? "grok");
   if (grok === null) {
     process.stderr.write(
-      `FATAL: ${process.env.GROK ?? "grok"} not on PATH — environment problem, not a model result\n`,
+      `FATAL: ${process.env["GROK"] ?? "grok"} not on PATH — environment problem, not a model result\n`,
     );
     process.exitCode = 2;
     return;

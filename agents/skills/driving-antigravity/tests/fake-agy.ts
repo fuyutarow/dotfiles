@@ -9,16 +9,16 @@ export {};
 const argv = Bun.argv.slice(2);
 
 if (argv[0] === "--version") {
-  process.stdout.write(`${process.env.FAKE_AGY_VERSION ?? "1.1.5"}\n`);
+  process.stdout.write(`${process.env["FAKE_AGY_VERSION"] ?? "1.1.5"}\n`);
   process.exit(0);
 }
 
 if (argv[0] === "models") {
   process.stdout.write(
-    process.env.FAKE_AGY_MODELS_OUTPUT ??
+    process.env["FAKE_AGY_MODELS_OUTPUT"] ??
       "Gemini 3.5 Flash (Medium)\nClaude 4.6 Sonnet\nGPT-OSS 20B\n",
   );
-  process.exit(Number(process.env.FAKE_AGY_MODELS_EXIT ?? "0"));
+  process.exit(Number(process.env["FAKE_AGY_MODELS_EXIT"] ?? "0"));
 }
 
 const modelIndex = argv.indexOf("--model");

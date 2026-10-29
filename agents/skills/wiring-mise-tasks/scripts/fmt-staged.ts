@@ -144,7 +144,7 @@ async function checkSnapshot(
         env: {
           ...process.env,
           MISE_TRUSTED_CONFIG_PATHS: [
-            process.env.MISE_TRUSTED_CONFIG_PATHS,
+            process.env["MISE_TRUSTED_CONFIG_PATHS"],
             tmp,
           ]
             .filter((path) => path !== undefined && path !== "")

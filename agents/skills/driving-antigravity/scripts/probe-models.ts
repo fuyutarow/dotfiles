@@ -80,7 +80,7 @@ async function main(): Promise<Outcome<number>> {
   );
   const models = parsed._;
 
-  const agy = Bun.which(process.env.AGY_BIN ?? "agy");
+  const agy = Bun.which(process.env["AGY_BIN"] ?? "agy");
   if (agy === null)
     return {
       ok: false,

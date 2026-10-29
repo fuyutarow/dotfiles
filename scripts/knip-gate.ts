@@ -149,6 +149,7 @@ export async function roots(root: string): Promise<string[]> {
     ["topgrade/topgrade.toml", "agents/codex/codex-update.ts"],
     ["agents/codex/codex-runtime.ts", "agents/codex/codex-wsl.ts"],
     ["agents/codex/windows-assets.ts", "agents/codex/windows-hook.ts"],
+    ["systemd/statusline-sampler.service", "tools/statusline/src/sampler.ts"],
   ]) {
     if (
       source !== undefined &&

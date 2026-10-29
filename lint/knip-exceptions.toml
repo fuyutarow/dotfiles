@@ -379,73 +379,10 @@ reason = "Review files finding in tools/smart-open; retain until its use or remo
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "tools/statusline/bench/render.ts"
-kind = "files"
-name = "tools/statusline/bench/render.ts"
-reason = "Review files finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/snapshot-rate.ts"
-kind = "files"
-name = "tools/statusline/src/snapshot-rate.ts"
-reason = "Review files finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/agx-collector.ts"
-kind = "files"
-name = "tools/statusline/src/agx-collector.ts"
-reason = "Review files finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "tools/statusline/src/render-cache.ts"
 kind = "files"
 name = "tools/statusline/src/render-cache.ts"
-reason = "Review files finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/sampler.ts"
-kind = "files"
-name = "tools/statusline/src/sampler.ts"
-reason = "Review files finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/dispatch-warning.ts"
-kind = "files"
-name = "tools/statusline/src/dispatch-warning.ts"
-reason = "Review files finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/usage-snapshot.ts"
-kind = "files"
-name = "tools/statusline/src/usage-snapshot.ts"
-reason = "Review files finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/repo-state.ts"
-kind = "files"
-name = "tools/statusline/src/repo-state.ts"
-reason = "Review files finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/collector-sources.ts"
-kind = "files"
-name = "tools/statusline/src/collector-sources.ts"
-reason = "Review files finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/codex-credit-sampler.ts"
-kind = "files"
-name = "tools/statusline/src/codex-credit-sampler.ts"
-reason = "Review files finding in tools/statusline; retain until its use or removal is verified."
+reason = "Only statusline tests reference this legacy cache module; assess removal together with its tests."
 keeper = "dotfiles maintainers"
 
 [[exception]]
@@ -501,7 +438,7 @@ keeper = "dotfiles maintainers"
 file = "tools/statusline/package.json"
 kind = "dependencies"
 name = "zod"
-reason = "Review dependencies finding in tools/statusline; retain until its use or removal is verified."
+reason = "Statusline imports zod through the shared codec; direct package dependency requires lockfile coordination."
 keeper = "dotfiles maintainers"
 
 [[exception]]
@@ -554,13 +491,6 @@ reason = "Review exports finding in tools/shared; retain until its use or remova
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "tools/statusline/src/presentation.ts"
-kind = "exports"
-name = "writePresentation"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "tools/shared/src/sockets.ts"
 kind = "exports"
 name = "SETTLE_MS"
@@ -589,13 +519,6 @@ reason = "Review exports finding in tools/repo-retrieve; retain until its use or
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "tools/statusline/src/ansi.ts"
-kind = "exports"
-name = "NA_COLOR"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "tools/shared/src/readonly-command.ts"
 kind = "exports"
 name = "READONLY_JOB_ENV"
@@ -606,105 +529,21 @@ keeper = "dotfiles maintainers"
 file = "tools/statusline/src/adapters/codex-rollout.ts"
 kind = "exports"
 name = "readCodexSessionStatus"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/identity.ts"
-kind = "exports"
-name = "readClaudeJson"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/identity.ts"
-kind = "exports"
-name = "readClaudeJsonAsync"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/identity.ts"
-kind = "exports"
-name = "account"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/identity.ts"
-kind = "exports"
-name = "ultracodeConfigured"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/identity.ts"
-kind = "exports"
-name = "ultracodeConfiguredAsync"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/identity.ts"
-kind = "exports"
-name = "rcStateAsync"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/identity.ts"
-kind = "exports"
-name = "readAgentNamesAsync"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name readCodexSessionStatus occurs in tools/statusline/tests/codex-rollout.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/identity.ts"
 kind = "exports"
 name = "agentName"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/prompt-stamp.ts"
-kind = "exports"
-name = "clockHMZ"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/prompt-stamp.ts"
-kind = "exports"
-name = "promptHead"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/agx-snapshot.ts"
-kind = "exports"
-name = "agxStatusKey"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name agentName occurs in tools/statusline/tests/build-dataframe-budget.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/agx-snapshot.ts"
 kind = "exports"
 name = "workspaceCounts"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/owner-state.ts"
-kind = "exports"
-name = "codexCreditMemoFromSnapshot"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/owner-state.ts"
-kind = "exports"
-name = "repositoryRoot"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name workspaceCounts occurs in tools/statusline/tests/core-only.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
@@ -850,239 +689,127 @@ keeper = "dotfiles maintainers"
 [[exception]]
 file = "tools/statusline/src/dispatch-runs.ts"
 kind = "exports"
-name = "agxRouteRunsAsync"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/dispatch-runs.ts"
-kind = "exports"
 name = "agxJobRunsAsync"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name agxJobRunsAsync occurs in tools/statusline/tests/c2-progress.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/dispatch-runs.ts"
 kind = "exports"
 name = "readCoreRuns"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name readCoreRuns occurs in tools/statusline/tests/step4.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/dispatch-runs.ts"
 kind = "exports"
 name = "routeLines"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name routeLines occurs in tools/statusline/tests/na-with-reason.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/dispatch-runs.ts"
 kind = "exports"
 name = "currentDispatcherSession"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/rate-limits.ts"
-kind = "exports"
-name = "modelWeeklyLimits"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/jobs.ts"
-kind = "exports"
-name = "scanOutOfHarnessAsync"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/host-load.ts"
-kind = "exports"
-name = "MemReadingSchema"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/host-load.ts"
-kind = "exports"
-name = "memReading"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/host-load.ts"
-kind = "exports"
-name = "sysRow"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name currentDispatcherSession occurs in tools/statusline/tests/render-golden.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/host-load.ts"
 kind = "exports"
 name = "sysSegment"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name sysSegment occurs in tools/statusline/tests/tmp-headroom.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/host-load.ts"
 kind = "exports"
 name = "memSegment"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/host-load.ts"
-kind = "exports"
-name = "STALE_SHOW_S"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name memSegment occurs in tools/statusline/tests/ccc-indexing.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/host-load.ts"
 kind = "exports"
 name = "readHostLoad"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name readHostLoad occurs in tools/statusline/tests/step4.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/storage.ts"
 kind = "exports"
 name = "tmpEntryAsync"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/storage.ts"
-kind = "exports"
-name = "diskReadingsAsync"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name tmpEntryAsync occurs in tools/statusline/tests/tmp-headroom.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/storage.ts"
 kind = "exports"
 name = "diskSegment"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name diskSegment occurs in tools/statusline/tests/na-with-reason.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/storage.ts"
 kind = "exports"
 name = "tmpSegment"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name tmpSegment occurs in tools/statusline/tests/na-with-reason.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/codex-rate.ts"
 kind = "exports"
 name = "readLiveCodexRate"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name readLiveCodexRate occurs in tools/statusline/tests/live-codex-rate.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/codex-rate.ts"
 kind = "exports"
 name = "readCodexUsage"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name readCodexUsage occurs in tools/statusline/tests/codex-rate.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/codex-rate.ts"
 kind = "exports"
 name = "resolveCodexSession"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "No statusline test references to resolveCodexSession were found by literal search; inspect declaration and consumers before removal."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/codex-rate.ts"
 kind = "exports"
 name = "readCodexActivity"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "No statusline test references to readCodexActivity were found by literal search; inspect declaration and consumers before removal."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/codex-rate.ts"
 kind = "exports"
 name = "codexRateSegment"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name codexRateSegment occurs in tools/statusline/tests/na-with-reason.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/jev-usage.ts"
 kind = "exports"
 name = "jevUsageSegment"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/recover-health.ts"
-kind = "exports"
-name = "RECOVER_HEALTH_LOCK"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/recover-health.ts"
-kind = "exports"
-name = "RECOVER_HEALTH_REFRESH_MS"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/recover-health.ts"
-kind = "exports"
-name = "readRecoverHealthAsync"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/recover-health.ts"
-kind = "exports"
-name = "refreshRecoverHealth"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name jevUsageSegment occurs in tools/statusline/tests/na-with-reason.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/recover-health.ts"
 kind = "exports"
 name = "recoverHealthBadge"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/ccc-indexing.ts"
-kind = "exports"
-name = "CCC_PROBE_TTL_MS"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/ccc-indexing.ts"
-kind = "exports"
-name = "CCC_INDEX_THRESHOLD_MS"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/statusline/src/ccc-indexing.ts"
-kind = "exports"
-name = "CccIndexSchema"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
+reason = "The name recoverHealthBadge occurs in tools/statusline/tests/recover-health.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]
 file = "tools/statusline/src/ccc-indexing.ts"
 kind = "exports"
 name = "cccBadge"
-reason = "Review exports finding in tools/statusline; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "tools/shared/src/codex-subscription-usage.ts"
-kind = "exports"
-name = "readCodexCreditBaseline"
-reason = "Review exports finding in tools/shared; retain until its use or removal is verified."
+reason = "The name cccBadge occurs in tools/statusline/tests/ccc-indexing.test.ts; trace its import before deleting this production-unused export."
 keeper = "dotfiles maintainers"
 
 [[exception]]

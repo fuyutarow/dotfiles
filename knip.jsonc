@@ -34,5 +34,16 @@
         "!**/fixtures/**!",
       ],
     },
+    "tools/statusline": {
+      "entry": [],
+      "project": [
+        "**/*.{ts,tsx,js,jsx}!",
+        "!**/tests/**!",
+        "!**/*.{test,spec}.{ts,tsx,js,jsx}!",
+        "!**/fixtures/**!",
+        // Fixture-only benchmark, not deployed production code.
+        "!bench/render.ts!",
+      ],
+    },
   },
 }

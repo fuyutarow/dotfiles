@@ -1,4 +1,4 @@
-import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, maybe, z } from "./zod.ts";
@@ -25,17 +25,6 @@ const fleetUnavailable = (why: string) => ({ na: true as const, why });
 // err = the file could not be read or parsed (claude rewrites it constantly, so a read can land
 // mid-write), or a part has an unexpected shape: that part is then UNKNOWN, which render() says,
 // instead of reading as "no account" / "no cap". A part that is validly absent is the real absence.
-// Sync compatibility reader; buildDataframe uses readClaudeJsonAsync.
-export function readClaudeJson(): Result<unknown, string> {
-  const unreadable = "~/.claude.json unreadable";
-  const text = fromThrowable(
-    () => readFileSync(`${HOME}/.claude.json`, "utf8"),
-    () => unreadable,
-  )();
-  if (text.isErr()) return err(text.error);
-  const parsed = jsonText.safeParse(text.value);
-  return parsed.success ? ok(parsed.data) : err(unreadable);
-}
 export async function readClaudeJsonAsync(): Promise<Result<unknown, string>> {
   const text = await Bun.file(`${HOME}/.claude.json`)
     .text()
@@ -66,13 +55,6 @@ export function account(cj: unknown): Result<string | undefined, string> {
 // key), so this file — not the repo source — is the only place that reflects what is ACTUALLY
 // configured right now. Cheap like account() just above: same file class, smaller payload.
 const SettingsSchema = z.object({ ultracode: z.boolean().optional() });
-export function ultracodeConfigured(): boolean {
-  // unreadable / not JSON / wrong shape -> treated as not configured, the segment reads "off"
-  return (
-    readJson(`${HOME}/.claude/settings.json`, SettingsSchema)?.ultracode ===
-    true
-  );
-}
 export async function ultracodeConfiguredAsync(): Promise<boolean | undefined> {
   const settings = await readJsonAsync(
     `${HOME}/.claude/settings.json`,

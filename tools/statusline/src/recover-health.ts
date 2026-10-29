@@ -21,8 +21,6 @@ export const RECOVER_HEALTH_CACHE = join(
   process.env["HOME"] ?? homedir(),
   ".cache/claude/statusline/recover-health.json",
 );
-export const RECOVER_HEALTH_LOCK = RECOVER_HEALTH_CACHE + ".lock";
-export const RECOVER_HEALTH_REFRESH_MS = 5_000;
 export const RECOVER_HEALTH_STALE_MS = 90_000;
 
 const RecoverSnapshotSchema = z.object({

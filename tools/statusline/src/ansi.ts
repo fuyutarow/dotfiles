@@ -18,7 +18,6 @@ export const MID = "·"; //   meter middot
 // "no GPU", and VRAM vanished while the card was fine). Absence stays silent ONLY where it means
 // the thing does not exist (not a repo -> no branch; no model-scoped weekly cap -> no segment).
 // rc:? above is the older instance of the same rule.
-export const NA_COLOR = `${ESC}[38;5;178m`; // amber, same as rc:? — "unverified", not "bad"
 export type Unavailable = { kind: "unknown"; reason: string };
 export function unavailable(reason: string): Unavailable {
   // Upstream diagnostic text can itself contain the reserved absence token.

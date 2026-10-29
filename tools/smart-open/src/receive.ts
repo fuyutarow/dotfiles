@@ -172,7 +172,7 @@ if (settleMs >= ACK_MS) {
   process.exit(2);
 }
 
-const OPENER = (process.env.SMART_OPEN_OPENER ?? "open").split(" ");
+const OPENER = (process.env["SMART_OPEN_OPENER"] ?? "open").split(" ");
 const SSH_CONFIG = argv.flags.sshConfig;
 const MAX_LINE = 4096;
 const REPORT_MS = 10_000;
@@ -408,7 +408,7 @@ async function openObsidian(
   const outcome = await attempt(async () => {
     // The helper receives only Mac-resolved SSH fields, never remote-supplied connection data.
     const helper =
-      process.env.SMART_OPEN_OBSIDIAN_OPENER ??
+      process.env["SMART_OPEN_OBSIDIAN_OPENER"] ??
       join(import.meta.dir, "../../../obsidian/open-remote.ts");
     const proc = Bun.spawn([process.execPath, helper], {
       stdin: new Blob([

@@ -127,12 +127,12 @@ const settled = <T>(value: T | PromiseLike<T>): Promise<T> =>
 // SMART_OPEN_SOCKET_DIR (default /tmp). With none bound, SOCKET names the pattern, for messages.
 async function pickForward(): Promise<{ socket: string; alias: string }> {
   const user = userInfo().username;
-  const pinned = process.env.SMART_OPEN_SOCKET;
+  const pinned = process.env["SMART_OPEN_SOCKET"];
   if (pinned !== undefined) {
     const named = /--([^/]+)\.sock$/u.exec(pinned);
     return { socket: pinned, alias: named?.[1] ?? "" };
   }
-  const dir = process.env.SMART_OPEN_SOCKET_DIR ?? "/tmp";
+  const dir = process.env["SMART_OPEN_SOCKET_DIR"] ?? "/tmp";
   const newest = (await pathExists(dir))
     ? (await settled(remoteForwards(user, dir)))[0]
     : undefined;
@@ -143,9 +143,9 @@ const SOCKET = FORWARD.socket;
 // What was searched, for the no-forward message: the pinned path, or the pattern a forward is bound
 // at (the alias part unknown on this side — the client chose it).
 const LOOKED_FOR =
-  process.env.SMART_OPEN_SOCKET ??
+  process.env["SMART_OPEN_SOCKET"] ??
   join(
-    process.env.SMART_OPEN_SOCKET_DIR ?? "/tmp",
+    process.env["SMART_OPEN_SOCKET_DIR"] ?? "/tmp",
     `smart-open-${userInfo().username}--*.sock`,
   );
 // An empty override is no override: an `export SMART_OPEN_SSH_HOST=` must not hide the name's alias.
@@ -160,19 +160,21 @@ const OPEN_MS = 15_000;
 // slow uplink) must never read as a hang. Shorter waits print nothing extra.
 // SMART_OPEN_SAY_AFTER_MS overrides it — a test seam, like SMART_OPEN_LOCAL_OPENER: a loaded test
 // host makes even a trivial spawn exceed 400 ms, and the quiet-path tests must stay quiet.
-const configuredSayAfterMs = Number(process.env.SMART_OPEN_SAY_AFTER_MS ?? "");
+const configuredSayAfterMs = Number(
+  process.env["SMART_OPEN_SAY_AFTER_MS"] ?? "",
+);
 const SAY_AFTER_MS =
   Number.isNaN(configuredSayAfterMs) || configuredSayAfterMs === 0
     ? 400
     : configuredSayAfterMs;
 const LOCAL_WAIT_MS = 3_000;
 // This shell came in over ssh, so this machine's own screen is not the one being looked at.
-const OVER_SSH = (process.env.SSH_CONNECTION ?? "") !== "";
+const OVER_SSH = (process.env["SSH_CONNECTION"] ?? "") !== "";
 const isUrl = (t: string) =>
   /^[a-z][a-z0-9+.-]*:\/\//iu.test(t) || /^mailto:/iu.test(t);
 const isWsl = async (): Promise<boolean> => {
   if (process.platform !== "linux") return false;
-  if (process.env.WSL_DISTRO_NAME !== undefined) return true;
+  if (process.env["WSL_DISTRO_NAME"] !== undefined) return true;
   if (!(await Bun.file("/proc/version").exists())) return false;
   return /microsoft/iu.test(await readFile("/proc/version", "utf8"));
 };
@@ -203,7 +205,7 @@ const ErrorCodeSchema = z.object({ code: z.unknown() });
 
 // One line out, one line back. Resolves to the outcome; never throws.
 async function toClient(request: Record<string, string>): Promise<Probe> {
-  const ackMs = request.app === "obsidian" ? OBSIDIAN_ACK_MS : ACK_MS;
+  const ackMs = request["app"] === "obsidian" ? OBSIDIAN_ACK_MS : ACK_MS;
   const seen = await settled(fileKey(SOCKET));
   if (seen === undefined || !seen.socket)
     return { outcome: "no-socket", reply: "", why: "", seen };
@@ -253,7 +255,7 @@ async function toClient(request: Record<string, string>): Promise<Probe> {
 // SMART_OPEN_LOCAL_OPENER replaces the this-machine opener (same seam as the receiver's
 // SMART_OPEN_OPENER) so tests can drive every fall-through without opening a real browser.
 async function localCommand(target: string): Promise<string[]> {
-  const override = process.env.SMART_OPEN_LOCAL_OPENER;
+  const override = process.env["SMART_OPEN_LOCAL_OPENER"];
   if (override !== undefined && override !== "")
     return [...override.split(" "), target];
   if (process.platform === "darwin") return ["open", target];

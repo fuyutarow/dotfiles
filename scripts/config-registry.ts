@@ -891,6 +891,7 @@ const OTHER: readonly Surface[] = [
       "tsconfig.json",
       "mise.toml",
       "knip.jsonc",
+      "lint/knip-exceptions.toml",
     ],
     deployed: "the checkout",
     consumer: "oxfmt, rumdl, bun check, mise, knip",

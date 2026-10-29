@@ -353,8 +353,8 @@ run = "bun scripts/lint-bun.ts"
 [tasks."lint:knip"]
 dir = "{{config_root}}"
 depends = ["bun:check"]
-description = "Report Knip findings across the repository"
-run = "bun scripts/lint-knip.ts"
+description = "Gate production Knip findings against the exception ledger"
+run = "bun scripts/knip-gate.ts"
 
 [tasks."lint:ts"]
 dir = "{{config_root}}"

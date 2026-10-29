@@ -68,16 +68,16 @@ the measured anchors: `references/measurement.md`.
 
 There is no single "clean up WSL". Each location has its own lever.
 
-| Bytes live in… | Lever (mise task) | Reclaims | Frees C: how |
+| Bytes live in… | Lever | Reclaims | Frees C: how |
 |---|---|---|---|
-| guest package/build caches | `reclaim:clean`, `reclaim:builds`, `reclaim:system` | GB–tens | sparse discard may return space live; measure C: after delete + fstrim; otherwise compact |
-| the vhdx's sparse gap (logical ≫ used) | `reclaim:vhdx` (planner → offline compact) | **the biggest**, ~100GB-class | directly, after `wsl --shutdown` |
-| orphaned `swap.vhdx` (dead distro instances) | `reclaim:host` | tens of GB, recurring | directly, live-safe (OS locks the live one) |
-| winget cache, temp files older than 1 day, Delivery Optimization, WER/dumps | `reclaim:host` → `reclaim:host:yes` | per-tier plan bytes | SSH from macOS/WSL; measure C: delta per lever; near-zero = inert here |
-| Windows Update component store | `reclaim:host:yes` (DISM) | unknown until measured | slow; plan-only without `--yes`; needs elevation |
+| guest package/build caches | `disk-reclaim plan clean builds system`; `disk-reclaim run clean builds system --yes` deletes eligible caches and runs system maintenance | GB–tens | frees guest space now; sparse discard may return space to C: live; measure C: after cleanup and fstrim; otherwise compact |
+| the vhdx's sparse gap (logical ≫ used) | `disk-reclaim plan vhdx` (plan only, from WSL) | **the biggest**, ~100GB-class | operator compacts offline after `wsl --shutdown` |
+| orphaned `swap.vhdx` (dead distro instances) | `disk-reclaim plan host`; `disk-reclaim run host --yes` deletes eligible host items | tens of GB, recurring | directly, live-safe (OS locks the live one) |
+| winget cache, temp files older than 1 day, Delivery Optimization, WER/dumps | `disk-reclaim plan host` then `disk-reclaim run host --yes` | per-tier plan bytes | SSH from macOS/WSL; measure C: delta per lever; near-zero = inert here |
+| Windows Update component store | `disk-reclaim run host --yes` (DISM) | unknown until measured | slow; `disk-reclaim plan host` only reports; needs elevation |
 | Windows restore point / VSS shadow storage | `vssadmin list shadowstorage` and `vssadmin list shadows /for=C:` | allocated storage, not ordinary file-scan totals | ASK only; deletion is irreversible and needs the owner; cap with `vssadmin resize shadowstorage` (may remove snapshots); observed 14.8 GB on 2026-10-12, details in `references/reclaim.md` |
-| Recycle Bin / `hiberfil.sys` | `run host --yes --approve recycle-bin` / `--approve hibernate-off` | plan includes size | explicit approval only; hibernation changes a system setting |
-| WSL distro VHDX files | `plan host --host r99` | allocated bytes, distro, state | report only; use `plan vhdx` for compaction; never delete |
+| Recycle Bin / `hiberfil.sys` | `disk-reclaim run host --yes --approve recycle-bin` / `disk-reclaim run host --yes --approve hibernate-off` | plan includes size | explicit approval only; hibernation changes a system setting |
+| WSL distro VHDX files | `disk-reclaim plan host --host r99` | allocated bytes, distro, state | report only; use `disk-reclaim plan vhdx` for compaction; never delete |
 | Windows-side app bloat | winget uninstall + `wsl:winget:dump` | tens of GB | directly |
 | an unused distro | `wsl.exe --unregister <name>` | its whole vhdx | directly |
 | C: is simply too small | relocate: `wsl --manage <distro> --move <D:\path>` | **the whole vhdx**, durable | moves it off C: entirely |
@@ -85,8 +85,8 @@ There is no single "clean up WSL". Each location has its own lever.
 Memory (vmmemWSL) is a different axis. Its levers — `memory=`, `autoMemoryReclaim`, `swap=0`,
 `wsl --shutdown` — are in `references/reclaim.md`.
 
-Attack largest-reachable-first. `reclaim:host` is free and live; `reclaim:vhdx` is the prize but
-needs an idle box. The full order, the Home-vs-Pro method split, and the winget/prune commands:
+Attack largest-reachable-first. Host cleanup can run live; the vhdx planner only reports, and
+compaction needs an idle box. The full order, the Home-vs-Pro method split, and the winget/prune commands:
 `references/reclaim.md`.
 
 ## Recover — the box is unreachable, decide which layer is down
@@ -122,7 +122,7 @@ and does not wake another distro.
 |---|---|
 | setting up ssh/Tailscale INTO a WSL box, DefaultShell, remote editors | `securing-remote-access` |
 | a Linux-only disk/memory question with no Windows host under it | ordinary debugging; no skill |
-| "reclaim my Mac/Linux disk" (no WSL2/Windows) | `reclaim:*` tasks directly, or plain cleanup |
+| "reclaim my Mac/Linux disk" (no WSL2/Windows) | `mise run reclaim` plans cleanup, or use plain cleanup |
 | securing/hardening/exposing the SSH server | `securing-remote-access` |
 | the box is healthy and I'm configuring the standing keepalive/.wslconfig | `securing-remote-access` (Setup 4) |
 

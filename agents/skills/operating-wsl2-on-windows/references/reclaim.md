@@ -24,12 +24,12 @@ establish host reclaim. If discard returns little, consider offline compaction.
 Offline **compaction** is another way to reclaim unused allocation. Confirm sparse with
 `fsutil sparse queryflag <vhdx>` before assuming set-sparse would help.
 
-## reclaim:host — separate Windows cleanup tiers over SSH
+## Host cleanup — separate Windows cleanup tiers over SSH
 
-`disk-reclaim plan host` (or `mise run reclaim:host`). A fresh distro launch writes a new
+`disk-reclaim plan host` reports candidates without deleting. A fresh distro launch writes a new
 `%TEMP%\<guid>\swap.vhdx` and leaves the previous one behind. They accumulate across restarts (three
 present, 17 GB orphaned, on one box). READ-ONLY plan from macOS or WSL; `--host` defaults to `r99`.
-`run host --yes` / `reclaim:host:yes` runs swap, winget, temp files older than 1 day, Delivery Optimization, WER/dumps and slow DISM cleanup. Recycle Bin and hibernation require `--approve recycle-bin` / `--approve hibernate-off`. Each lever reports C: free delta; near-zero is "inert here". VHDX allocation/distro/state are report-only; guest `system` cleanup remains optional and separate.
+`disk-reclaim run host --yes` runs eligible swap, winget, temp files older than 1 day, Delivery Optimization, WER/dumps and slow DISM cleanup. Recycle Bin and hibernation require `--approve recycle-bin` / `--approve hibernate-off`. Each lever reports C: free delta; near-zero is "inert here". VHDX allocation/distro/state are report-only; guest `system` cleanup remains optional and separate.
 
 Safe on a live box **by construction**. The running instance holds its swap.vhdx open, so Windows
 refuses to delete it (a sharing violation). Even if the newest-is-live heuristic were wrong, the OS
@@ -46,9 +46,9 @@ Deleting a shadow is irreversible and requires the owner. The owner can cap grow
 `vssadmin resize shadowstorage /for=C: /on=C: /maxsize=<owner-chosen-cap>`; shrinking the cap
 can remove snapshots too ([Microsoft command reference](https://learn.microsoft.com/windows-server/administration/windows-commands/vssadmin-resize-shadowstorage)).
 
-## reclaim:vhdx — the offline compaction (the ~100GB-class prize)
+## VHDX — the offline compaction (the ~100GB-class prize)
 
-`disk-reclaim plan vhdx` (or `mise run reclaim:vhdx`) is a READ-ONLY PLANNER. It resolves the
+`disk-reclaim plan vhdx`, run from WSL, is a READ-ONLY PLANNER. It resolves the
 vhdx path, measures logical-vs-guest-used, detects the method, and prints the elevated procedure. It
 does not run the compaction. That needs admin — an ssh session is not elevated. It also needs a
 stopped distro, since `wsl --shutdown` kills every job first. So it is operator-driven, run when the
@@ -67,7 +67,7 @@ Method by Windows edition (each runs after the shutdown + set-sparse-false above
 | Pro / Enterprise (Hyper-V present) | `Optimize-VHD -Path <vhdx> -Mode Full` | one command; admin |
 | Home (no Hyper-V) | `diskpart` → `select vdisk` / `attach vdisk readonly` / `compact vdisk` / `detach vdisk` | a diskpart script; admin |
 
-`mise run reclaim:vhdx` prints the full sequence for the detected edition.
+`disk-reclaim plan vhdx` prints the sequence for the detected edition; it does not compact.
 
 ## Reading a damaged or sparse VHDX read-only
 
@@ -133,7 +133,7 @@ box). Irreversible: it deletes the Linux disk.
 
 ## Order of attack when C: is tight
 
-1. `reclaim:host` — free, live, recurring; no disruption.
-2. your own large guest run-data — you know what is disposable; delete it inside the guest.
-3. `reclaim:vhdx` — the biggest single lever, but needs an idle box (shutdown).
+1. `disk-reclaim plan host`, then `disk-reclaim run host --yes` for eligible live cleanup.
+2. Your own large guest run-data — identify disposable data; `rip` moves it to the graveyard and does not immediately free disk space. `mise run disk:free -- SIZE` frees eligible graveyard payloads now, preserving the undo window.
+3. `disk-reclaim plan vhdx` — plan only; offline compaction needs an idle box (shutdown).
 4. winget bloat + unused distros — Windows-side, direct.

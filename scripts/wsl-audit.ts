@@ -378,7 +378,7 @@ export function judge(
       f.push({
         level: "WARN",
         key: "c-free",
-        text: `C: ${pct.toFixed(1)}% free (${gb(cFree)}) — below ${C_FREE_WARN_PCT}%; reclaim:system / reclaim:builds are the levers`,
+        text: `C: ${pct.toFixed(1)}% free (${gb(cFree)}) — below ${C_FREE_WARN_PCT}%; disk-reclaim plan system builds reports cleanup candidates`,
       });
     }
   }

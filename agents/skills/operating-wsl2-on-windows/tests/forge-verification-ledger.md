@@ -20,7 +20,7 @@ gets top prominence: it is the skill's reason to exist.
 
 - The deny-list table → the runnable form is `mise run wsl:audit` (`scripts/wsl-audit.ts`), which
   applies every fix and has unit tests (`scripts/tests/wsl-audit.test.ts`, mutation-checked).
-- The reclaim ladder → `reclaim:host` / `reclaim:vhdx` / `reclaim:clean|builds|system` mise tasks.
+- The reclaim ladder → `disk-reclaim plan host` / `disk-reclaim plan vhdx` / `disk-reclaim plan clean builds system`; `disk-reclaim run <target> --yes` applies eligible actions except plan-only vhdx.
 - The recovery ladder → `mise run wsl:wake` (`scripts/wsl-wake.ts`), unit-tested host-selection.
 Every rule changes a tool call or names a task; no line is narration-only.
 
@@ -70,7 +70,7 @@ Description kept tight to minimize the charge.
 | completeness | major | machine name "r99 measurements" leaked into SKILL.md | changed to "measured anchors" |
 | completeness | major | claims vmmemWSL coverage but had no MEMORY reclaim lever | added a memory reclaim table (memory=/autoMemoryReclaim/swap=0/shutdown) |
 | completeness | major | no RELOCATE lever (`wsl --manage --move`) — the durable fix for an undersized C: | added a relocate row to the ladder (SKILL.md + reclaim.md) |
-| completeness | minor | no swap=0/swapfile prevention counterpart to reclaim:host | added to the memory table |
+| completeness | minor | no swap=0/swapfile prevention counterpart to host cleanup | added to the memory table |
 | completeness | major | no VM-death/crash-loop unreachability class (distinct from idle-stop) | added a 4th lifecycle row + a wake-vs-revive note |
 | operationality | minor | measurement.md "measured anchors" bullets duplicated/drifted from wsl-audit.ts comments | replaced with a one-source-of-truth pointer to the code |
 | operationality | minor | routing cell packed 3 decisions as prose | split into labeled Cut/Order/Keys clauses |

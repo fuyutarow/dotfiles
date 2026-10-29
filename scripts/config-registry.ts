@@ -31,24 +31,43 @@ export type When = "all" | "mac" | "wsl" | "linux" | "not-mac";
 export const LAND_HOSTS: readonly {
   alias: string;
   deploy: boolean;
+  role: "workstation" | "shared-light";
   brewPrefix: "/home/linuxbrew/.linuxbrew" | "~/.linuxbrew";
   hostnames?: readonly string[];
   reason?: string;
 }[] = [
-  { alias: "sol", deploy: true, brewPrefix: "~/.linuxbrew" },
+  {
+    alias: "sol",
+    deploy: true,
+    role: "shared-light",
+    brewPrefix: "~/.linuxbrew",
+    hostnames: ["sol.cc.uec.ac.jp"],
+  },
   {
     alias: "r99-u26",
     deploy: true,
+    role: "workstation",
     brewPrefix: "/home/linuxbrew/.linuxbrew",
     hostnames: ["R99"],
   },
   {
     alias: "r99-u24",
     deploy: false,
+    role: "workstation",
     brewPrefix: "/home/linuxbrew/.linuxbrew",
     reason: "damaged",
   },
 ];
+
+export function resolveRole(host: string): {
+  role: "workstation" | "shared-light";
+  bound: boolean;
+} {
+  const row = LAND_HOSTS.find(
+    (entry) => entry.alias === host || entry.hostnames?.includes(host) === true,
+  );
+  return { role: row?.role ?? "workstation", bound: row !== undefined };
+}
 
 // Coredev is deliberately a selector, not a second deployment system. This is its complete
 // authority: task names already owned by mise.toml, grouped by the capability they realize.
@@ -407,11 +426,26 @@ export type Surface = {
 /** The rendered half of $HOME: render-home.ts writes exactly these (home-relative), nothing else. */
 export const RENDERED = [
   {
+    dest: ".config/dotfiles/role.env",
+    inputs: ["roles/roles.toml", "scripts/config-registry.ts"],
+    machine: "hostname selects a declared role",
+    consumer: "shell profiles",
+    when: "all",
+  },
+  {
+    dest: ".config/environment.d/60-dotfiles-role.conf",
+    inputs: ["roles/roles.toml", "scripts/config-registry.ts"],
+    machine: "hostname selects a declared role",
+    consumer: "systemd user manager",
+    when: "not-mac",
+  },
+  {
     dest: ".config/dotfiles/brew-prefix",
     inputs: ["scripts/config-registry.ts"],
     machine:
       "OS and hostname; home-relative prefixes expand against the target HOME",
     consumer: "zshenv, zprofile, bashrc (quiet Homebrew PATH delivery)",
+    when: "all",
   },
   {
     dest: ".claude/settings.json",
@@ -423,20 +457,31 @@ export const RENDERED = [
     machine: "~/.claude/settings.private.json",
     consumer:
       "Claude Code (user settings: hooks, permissions, autoMode, env.TZ)",
+    when: "all",
   },
   {
     dest: ".codex/hooks.json",
     inputs: ["agents/codex/hooks.json", "agents/hooks/hooks.toml"],
     machine: "",
     consumer: "Codex (user hooks)",
+    when: "all",
   },
   {
     dest: ".claude/CLAUDE.md",
     inputs: ["agents/claude/CLAUDE.md", "agents/agx/agx.toml"],
     machine: "",
     consumer: "Claude Code (user memory, read at session start)",
+    when: "all",
   },
 ] as const;
+
+export function renderedForPlatform(isLinux: boolean) {
+  return RENDERED.filter((r) => r.when === "all" || isLinux);
+}
+
+export function roleSystemdEnvironment(cap: number | ""): string {
+  return cap === "" ? "" : `TOKIO_WORKER_THREADS=${cap}\n`;
+}
 
 const DOCTOR = "mise run doctor";
 
@@ -923,7 +968,7 @@ export function surfaces(): Surface[] {
   }));
   const rendered = RENDERED.map((r): Surface => ({
     kind: "rendered",
-    when: "all",
+    when: r.when,
     sources: r.inputs,
     deployed: `~/${r.dest}${r.machine === "" ? "" : ` (+ ${r.machine})`}`,
     consumer: r.consumer,

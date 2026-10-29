@@ -1,0 +1,7 @@
+[workstation]
+tokio_worker_threads = ""
+rustc_wrapper = "sccache"
+
+[shared-light]
+tokio_worker_threads = 4
+rustc_wrapper = "none"

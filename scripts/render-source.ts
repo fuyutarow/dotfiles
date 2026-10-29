@@ -20,6 +20,7 @@ export const RENDER_INPUTS = [
   "tools/tool-tiers/src/tool-commands.tsv",
   "Brewfile.core",
   "zsh/timezone",
+  "roles/roles.toml",
   "scripts/render-home.ts",
   "scripts/render-source.ts",
   "scripts/hook-registry.ts",

@@ -21,6 +21,7 @@ import {
 import { resolve, join } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { brewPrefix } from "../core-tools.ts";
+import { resolveRole } from "../config-registry.ts";
 import { HooksConfigSchema } from "../hook-registry.ts";
 import {
   isolatedTestEnv,
@@ -34,19 +35,29 @@ afterAll(() => {
   rmSync(CLI_HOME, { recursive: true, force: true });
 });
 const SCRIPT = join(ROOT, "scripts/render-home.ts");
-function run(env: Record<string, string>): { out: string; code: number } {
+function run(
+  env: Record<string, string>,
+  preload?: string,
+): { out: string; code: number } {
   const dotfiles = env.DOTFILES ?? ROOT;
   const home = env.HOME ?? CLI_HOME;
   const path = env.PATH ?? testPathWithStub(join(dotfiles, "bin"));
-  const proc = Bun.spawnSync([process.execPath, SCRIPT], {
-    cwd: ROOT,
-    env: isolatedTestEnv(home, path, {
-      DOTFILES: dotfiles,
-      ...env,
-    }),
-    maxBuffer: 4 * 1024 * 1024,
-    timeout: 25_000,
-  });
+  const proc = Bun.spawnSync(
+    [
+      process.execPath,
+      ...(preload === undefined ? [] : ["--preload", preload]),
+      SCRIPT,
+    ],
+    {
+      cwd: ROOT,
+      env: isolatedTestEnv(home, path, {
+        DOTFILES: dotfiles,
+        ...env,
+      }),
+      maxBuffer: 4 * 1024 * 1024,
+      timeout: 25_000,
+    },
+  );
   return {
     out: proc.stdout.toString() + proc.stderr.toString(),
     code: proc.exitCode ?? -1,
@@ -56,6 +67,11 @@ function run(env: Record<string, string>): { out: string; code: number } {
 /** The other inputs render-home.ts reads, as minimal fixtures: an empty-hooks codex file, a
  * CLAUDE.md with empty legacy markers and a one-hook registry. */
 function writeOtherInputs(dir: string, productionCli = false): void {
+  mkdirSync(join(dir, "roles"), { recursive: true });
+  writeFileSync(
+    join(dir, "roles/roles.toml"),
+    readFileSync(join(ROOT, "roles/roles.toml")),
+  );
   mkdirSync(join(dir, "agents", "agx"), { recursive: true });
   writeFileSync(
     join(dir, "agents", "agx", "agx.toml"),
@@ -96,6 +112,84 @@ function writeOtherInputs(dir: string, productionCli = false): void {
     '[[hook]]\nslug = "gate"\nscript = "gate.ts"\nevent = "PreToolUse"\nmatcher = "Bash"\nfail_closed = true\nvendors = ["claude", "codex"]\n',
   );
 }
+
+test("role bindings resolve exact hosts and unknown hosts safely", () => {
+  expect(resolveRole("sol.cc.uec.ac.jp")).toEqual({
+    role: "shared-light",
+    bound: true,
+  });
+  expect(resolveRole("sol")).toEqual({ role: "shared-light", bound: true });
+  expect(resolveRole("R99")).toEqual({ role: "workstation", bound: true });
+  expect(resolveRole("unknown.example")).toEqual({
+    role: "workstation",
+    bound: false,
+  });
+  expect(resolveRole("sol.other.example")).toEqual({
+    role: "workstation",
+    bound: false,
+  });
+});
+
+test("Linux role environment renders safely without touching a linked directory", () => {
+  const dotfiles = makeDotfiles({});
+  const home = makeHome();
+  const preload = join(home, "linux.ts");
+  const setHost = (host: string) => {
+    writeFileSync(
+      preload,
+      `import * as os from "node:os"; import { mock } from "bun:test"; Object.defineProperty(process, "platform", { value: "linux" }); mock.module("node:os", () => ({ ...os, hostname: () => ${JSON.stringify(host)} }));\n`,
+    );
+  };
+  const path = join(home, ".config/environment.d/60-dotfiles-role.conf");
+  setHost("sol.cc.uec.ac.jp");
+  let result = run({ DOTFILES: dotfiles, HOME: home }, preload);
+  expect(result.code, result.out).toBe(0);
+  expect(readFileSync(path, "utf8")).toBe("TOKIO_WORKER_THREADS=4\n");
+  expect(lstatSync(path).isFile()).toBe(true);
+  setHost("unknown.example");
+  result = run({ DOTFILES: dotfiles, HOME: home }, preload);
+  expect(result.code, result.out).toBe(0);
+  expect(readFileSync(path, "utf8")).toBe("");
+  const linkedHome = makeHome();
+  mkdirSync(join(linkedHome, ".config"), { recursive: true });
+  symlinkSync(
+    join(dotfiles, "roles"),
+    join(linkedHome, ".config/environment.d"),
+  );
+  result = run({ DOTFILES: dotfiles, HOME: linkedHome }, preload);
+  expect(result.code).toBe(1);
+  expect(result.out).toContain("is a symlink; refusing");
+  expect(existsSync(join(dotfiles, "roles/60-dotfiles-role.conf"))).toBe(false);
+  expect(existsSync(join(linkedHome, ".config/dotfiles/role.env"))).toBe(false);
+  writeFileSync(
+    preload,
+    'Object.defineProperty(process, "platform", { value: "darwin" });\n',
+  );
+  writeFileSync(path, "mac sentinel\n");
+  result = run({ DOTFILES: dotfiles, HOME: home }, preload);
+  expect(result.code, result.out).toBe(0);
+  expect(readFileSync(path, "utf8")).toBe("mac sentinel\n");
+  cleanup(dotfiles, home, linkedHome);
+});
+
+test("role render is data only and invalid defaults leave outputs untouched", () => {
+  const dotfiles = makeDotfiles({});
+  const home = makeHome();
+  const result = run({ DOTFILES: dotfiles, HOME: home });
+  expect(result.code, result.out).toBe(0);
+  const path = join(home, ".config/dotfiles/role.env");
+  const before = readFileSync(path, "utf8");
+  expect(before).toMatch(
+    /^DOTFILES_ROLE=(workstation|shared-light)\nDOTFILES_ROLE_TOKIO_WORKER_THREADS=(|[1-9][0-9]*)\nDOTFILES_ROLE_RUSTC_WRAPPER=(sccache|none)\n$/u,
+  );
+  writeFileSync(
+    join(dotfiles, "roles/roles.toml"),
+    '[workstation]\ntokio_worker_threads = -1\nrustc_wrapper = "none"\n',
+  );
+  expect(run({ DOTFILES: dotfiles, HOME: home }).code).toBe(1);
+  expect(readFileSync(path, "utf8")).toBe(before);
+  cleanup(dotfiles, home);
+});
 
 function writeRosterCli(dir: string, code: string): void {
   const path = join(dir, "bin/agx");

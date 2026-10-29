@@ -65,7 +65,7 @@ import {
 import { readdir, realpath } from "node:fs/promises";
 import { fromThrowable } from "neverthrow";
 import { ownerlessRefLocks } from "../tools/shared/src/ref-locks.ts";
-import { homedir, release, tmpdir, userInfo } from "node:os";
+import { homedir, hostname, release, tmpdir, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { registeredRepos } from "./workspace-repos.ts";
 import {
@@ -73,7 +73,7 @@ import {
   parseMapping,
 } from "../tools/repo-retrieve/src/ccc-db-dir.ts";
 import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
-import { RENDERED } from "./config-registry.ts";
+import { renderedForPlatform, resolveRole } from "./config-registry.ts";
 import { googleDriveTargets } from "./link-dots.ts";
 import { brewPrefix, coreCommands, corePathProblems } from "./core-tools.ts";
 import {
@@ -406,10 +406,6 @@ export async function checkRipGraveyardTmp(): Promise<Finding> {
 
 // Every file scripts/render-home.ts writes (scripts/config-registry.ts RENDERED), as a path under
 // HOME. JSON ones compare as values (and name the differing top-level keys); text byte-for-byte.
-const RENDERED_FILES = RENDERED.map((r) => ({
-  rel: r.dest,
-  json: r.dest.endsWith(".json"),
-}));
 
 /** Why the deployed `live` is not the fresh render `want` (empty when it is). */
 async function renderedDiff(
@@ -435,6 +431,10 @@ async function renderedDiff(
 }
 
 export async function checkRendered(ctx: Ctx): Promise<Finding> {
+  const renderedFiles = renderedForPlatform(!ctx.isMac).map((r) => ({
+    rel: r.dest,
+    json: r.dest.endsWith(".json"),
+  }));
   if (!existsSync(join(ctx.dotfiles, "scripts/render-home.ts"))) {
     return skip("rendered", "no scripts/render-home.ts in this checkout");
   }
@@ -473,7 +473,7 @@ export async function checkRendered(ctx: Ctx): Promise<Finding> {
   }
   const details = (
     await Promise.all(
-      RENDERED_FILES.map(async ({ rel, json }) =>
+      renderedFiles.map(async ({ rel, json }) =>
         renderedDiff(rel, json, join(ctx.home, rel), join(scratch, rel)),
       ),
     )
@@ -488,7 +488,7 @@ export async function checkRendered(ctx: Ctx): Promise<Finding> {
   }
   return pass(
     "rendered",
-    `${RENDERED_FILES.map((f) => `~/${f.rel}`).join(", ")} match a fresh render`,
+    `${renderedFiles.map((f) => `~/${f.rel}`).join(", ")} match a fresh render`,
   );
 }
 
@@ -2109,8 +2109,18 @@ export async function checkToolFloor(
     ? pass("core-floor", result.detail)
     : fail("core-floor", result.detail, result.fix ?? "mise run up");
 }
+export function checkRole(_ctx?: Ctx, host = hostname()): Promise<Finding> {
+  const { role, bound } = resolveRole(host);
+  return Promise.resolve(
+    info(
+      "role",
+      `${role} (${bound ? `host ${host}` : `unbound host ${host}; default`})`,
+    ),
+  );
+}
 export const CHECKS: Check[] = [
   { name: "core-floor", run: checkToolFloor, applies: always },
+  { name: "role", run: checkRole, applies: always },
   { name: "rip-graveyard", run: checkRipGraveyard, applies: always },
   { name: "rip-graveyard-tmp", run: checkRipGraveyardTmp, applies: always },
   { name: "links", run: checkLinks, applies: always },

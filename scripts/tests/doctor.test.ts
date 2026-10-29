@@ -27,6 +27,7 @@ import { applies, sshSupportsAttachMatch } from "../link-dots.ts";
 import {
   checkAgx,
   checkToolFloor,
+  checkRole,
   checkStatuslineOwners,
   CHECKS,
   checkCccDbMap,
@@ -102,6 +103,17 @@ test("doctor warns on a dx collision with the same repair", async () => {
     "dx: fuyutarow/tap/dx not installed (PATH dx is another program); repair: mise run up",
   );
   expect(result.fix).toBe("mise run up");
+});
+
+test("role doctor reports bound and unbound host resolution", async () => {
+  expect(await checkRole(undefined, "sol.cc.uec.ac.jp")).toMatchObject({
+    verdict: "INFO",
+    detail: "shared-light (host sol.cc.uec.ac.jp)",
+  });
+  expect(await checkRole(undefined, "unknown.example")).toMatchObject({
+    verdict: "INFO",
+    detail: "workstation (unbound host unknown.example; default)",
+  });
 });
 import {
   inspectRipGraveyard,

@@ -66,13 +66,18 @@ import {
   rmSync,
   unlinkSync,
 } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { obj } from "../agents/hooks/narrow.ts";
-import { jsonText } from "../agents/hooks/zod.ts";
+import { jsonText, z } from "../agents/hooks/zod.ts";
 import { loadSlugs } from "../agents/hooks/slugs.ts";
-import { RENDERED } from "./config-registry.ts";
+import {
+  LAND_HOSTS,
+  renderedForPlatform,
+  resolveRole,
+  roleSystemdEnvironment,
+} from "./config-registry.ts";
 import { brewPrefix } from "./core-tools.ts";
 import { prepareRenderSource } from "./render-source.ts";
 import {
@@ -356,7 +361,37 @@ if (existsSync(tzPath)) {
   } else tzNote = ` (no /usr/share/zoneinfo/${zone}: env.TZ not set)`;
 }
 
+const rolePath = join(dotfiles, "roles/roles.toml");
+const roleInput = await attempt(async () =>
+  Bun.TOML.parse(await Bun.file(rolePath).text()),
+);
+const roleSchema = z.strictObject({
+  workstation: z.strictObject({
+    tokio_worker_threads: z.union([z.literal(""), z.number().int().positive()]),
+    rustc_wrapper: z.enum(["sccache", "none"]),
+  }),
+  "shared-light": z.strictObject({
+    tokio_worker_threads: z.union([z.literal(""), z.number().int().positive()]),
+    rustc_wrapper: z.enum(["sccache", "none"]),
+  }),
+});
+if (!roleInput.ok)
+  fatal(`FATAL: cannot read ${rolePath} — ${errorMessage(roleInput.error)}`);
+const roles = roleSchema.safeParse(roleInput.value);
+if (!roles.success)
+  fatal(`FATAL: invalid ${rolePath} — ${roles.error.message}`);
+for (const host of LAND_HOSTS) {
+  if (!Object.hasOwn(roles.data, host.role))
+    fatal(`FATAL: unknown role for ${host.alias}: ${host.role}`);
+}
+const role = resolveRole(hostname()).role;
+const defaults = roles.data[role];
 const outputs: Output[] = [
+  {
+    dest: `${home}/.config/dotfiles/role.env`,
+    text: `DOTFILES_ROLE=${role}\nDOTFILES_ROLE_TOKIO_WORKER_THREADS=${defaults.tokio_worker_threads}\nDOTFILES_ROLE_RUSTC_WRAPPER=${defaults.rustc_wrapper}\n`,
+    from: `${rolePath} + LAND_HOSTS`,
+  },
   {
     dest: `${home}/.config/dotfiles/brew-prefix`,
     text: `${brewPrefix(commandTargetHome)}\n`,
@@ -368,6 +403,18 @@ const outputs: Output[] = [
     from: `${basePath}${overlayKeys.length > 0 ? ` + ${overlayPath} [${overlayKeys.join(", ")}]` : " (no private overlay)"}${tzNote}`,
   },
 ];
+if (process.platform === "linux") {
+  const directory = `${home}/.config/environment.d`;
+  if (
+    lstatSync(directory, { throwIfNoEntry: false })?.isSymbolicLink() === true
+  )
+    fatal(`FATAL: ${directory} is a symlink; refusing to render through it`);
+  outputs.push({
+    dest: `${directory}/60-dotfiles-role.conf`,
+    text: roleSystemdEnvironment(defaults.tokio_worker_threads),
+    from: `${rolePath} + LAND_HOSTS`,
+  });
+}
 
 // ── ~/.codex/hooks.json ──────────────────────────────────────────────────────────────────────
 const codexPath = `${dotfiles}/agents/codex/hooks.json`;
@@ -397,7 +444,9 @@ outputs.push({
 // ── write ────────────────────────────────────────────────────────────────────────────────────
 // The registry (scripts/config-registry.ts RENDERED) is what doctor and lint:one-writer check; a
 // render that writes a path it does not list, or skips one it lists, is a bug caught here.
-const declared = RENDERED.map((r) => `${home}/${r.dest}`).toSorted();
+const declared = renderedForPlatform(process.platform === "linux")
+  .map((r) => `${home}/${r.dest}`)
+  .toSorted();
 const produced = outputs.map((o) => o.dest).toSorted();
 if (!Bun.deepEquals(declared, produced)) {
   fatal(

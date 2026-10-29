@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.3 — 2026-10-29
+
+- Preserve deadline outcome and phase when reading receipts
+
 ## 1.11.2 — 2026-10-29
 
 - Avoid repeating build discovery during candidate rechecks

@@ -181,6 +181,8 @@ export const ReceiptV2 = ReceiptV1.extend({
   actions: z.array(ReceiptAction),
   headroom: Headroom.optional(),
   under_pressure: z.boolean().optional(),
+  outcome: z.enum(["deadline"]).optional(),
+  phase: z.string().optional(),
   lock_yield: z
     .object({
       payloads_completed: z.number().int().nonnegative(),

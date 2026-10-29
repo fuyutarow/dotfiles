@@ -110,6 +110,9 @@ They are historical/compatibility material, not active guidance for this shim. D
 schema identifier or mutate a frozen v1 record. Never present a v1 structural PASS as a v2 or semantic
 verdict.
 
+The legacy structural checkers are `scripts/research-check.ts` and
+`scripts/research-run-check.ts`; use them only for the existing v1 compatibility boundary.
+
 ### Legacy quarantine manifest — readability only
 
 The retained references below are discoverable for compatibility audits. Never load them as current

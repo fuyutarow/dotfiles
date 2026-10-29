@@ -344,62 +344,6 @@ reason = "Review files finding in root; retain until its use or removal is verif
 keeper = "dotfiles maintainers"
 
 [[exception]]
-file = "agents/skills/directing-research/scripts/research-check.ts"
-kind = "files"
-name = "agents/skills/directing-research/scripts/research-check.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/skills/directing-research/scripts/research-run-check.ts"
-kind = "files"
-name = "agents/skills/directing-research/scripts/research-run-check.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/skills/wiring-mise-tasks/scripts/jj-summary.ts"
-kind = "files"
-name = "agents/skills/wiring-mise-tasks/scripts/jj-summary.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/skills/directing-research/scripts/research-run/parse.ts"
-kind = "files"
-name = "agents/skills/directing-research/scripts/research-run/parse.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/skills/directing-research/scripts/research-run/packet-validation.ts"
-kind = "files"
-name = "agents/skills/directing-research/scripts/research-run/packet-validation.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/skills/directing-research/scripts/research-run/model.ts"
-kind = "files"
-name = "agents/skills/directing-research/scripts/research-run/model.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/skills/directing-research/scripts/research-run/joins.ts"
-kind = "files"
-name = "agents/skills/directing-research/scripts/research-run/joins.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
-file = "agents/skills/directing-research/scripts/research-run/primitives.ts"
-kind = "files"
-name = "agents/skills/directing-research/scripts/research-run/primitives.ts"
-reason = "Review files finding in root; retain until its use or removal is verified."
-keeper = "dotfiles maintainers"
-
-[[exception]]
 file = "package.json"
 kind = "dependencies"
 name = "@clack/prompts"

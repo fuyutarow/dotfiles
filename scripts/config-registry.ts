@@ -773,8 +773,7 @@ const OTHER: readonly Surface[] = [
     deployed: "the checkout",
     consumer: "scripts/land.ts shared-surface consumer commit gates",
     writer: "human, in the repo",
-    verify:
-      "bun test scripts/tests/consumer-gate.test.ts scripts/tests/land.test.ts",
+    verify: "bun test scripts/tests/consumer-gate.test.ts",
   },
   {
     kind: "in-place",

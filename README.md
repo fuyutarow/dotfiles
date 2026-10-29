@@ -44,6 +44,10 @@ Most dotfiles configure a shell. Two things here are less usual:
 
 Retrospectives live in [`~/Workspace/retrospectives/register.toml`](~/Workspace/retrospectives/register.toml). Write new retrospectives there and search the register before acting on new owner feedback.
 
+Landing consumer roots are declared in `presets/consumers.toml` relative to the host home,
+for example `~/Workspace/firedancer`. The landing gate expands these paths at runtime and
+fails with the resolved path and a clone command when a consumer is missing.
+
 ## Toolbox
 
 A curated modern-CLI stack, aliased for a terse daily grammar. Run `hhh` for the full annotated

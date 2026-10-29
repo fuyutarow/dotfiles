@@ -217,8 +217,8 @@ async function exportTrunk(
     : `extract ${commit}: ${extracted.reason} ${extracted.output}`;
 }
 
-function expandRoot(path: string): string {
-  return path.startsWith("~/") ? join(homedir(), path.slice(2)) : resolve(path);
+export function expandRoot(path: string, home = homedir()): string {
+  return path.startsWith("~/") ? join(home, path.slice(2)) : resolve(path);
 }
 
 /** No subprocess may write outside scratch, even through an absolute path or a surviving symlink. */
@@ -570,6 +570,11 @@ async function captureExecutables(scratch: string, consumer: Consumer) {
     const found = Bun.which(name);
     if (found === null) continue;
     const executable = await realpath(found);
+    // macOS kills copies of its signed system shell; the original is read-only.
+    if (process.platform === "darwin" && executable === "/bin/sh") {
+      paths.set(name, executable);
+      continue;
+    }
     const known = captured.get(executable);
     const target = known ?? join(directory, basename(name));
     const error =
@@ -713,7 +718,17 @@ async function checkConsumer(
   changed: readonly string[],
 ): Promise<string[]> {
   const source = expandRoot(consumer.root);
-  const scratch = await mkdtemp(join(tmpdir(), "consumer-gate-"));
+  const consumerRoot = await attempt(() => stat(source));
+  if (!consumerRoot.ok || !consumerRoot.value.isDirectory())
+    return [
+      `FAIL ${consumer.name}: consumer root missing: ${source}; clone with: jj git clone <repository-url> ${source}`,
+    ];
+  const createdScratch = await mkdtemp(join(tmpdir(), "consumer-gate-"));
+  // Seatbelt evaluates canonical paths, including when TMPDIR traverses /var.
+  const scratch =
+    process.platform === "darwin"
+      ? await realpath(createdScratch)
+      : createdScratch;
   await using _cleanup = {
     [Symbol.asyncDispose]: () => rm(scratch, { recursive: true, force: true }),
   };

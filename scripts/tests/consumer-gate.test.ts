@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ConsumerRegistry,
+  expandRoot,
   runConsumerGates,
   sharedSurfaces,
 } from "../consumer-gate.ts";
@@ -134,6 +135,47 @@ test("the same preset passes when consumer code is compliant", async () => {
   expect(result.lines[0]).toContain("PASS fixture-consumer");
 });
 
+test("shell setup and command execute inside the export", async () => {
+  const f = await fixture({ compliant: true });
+  const registry = join(f.root, "presets/consumers.toml");
+  await writeFile(
+    registry,
+    (await readFile(registry, "utf8"))
+      .replace(
+        'setup = ["true"]',
+        'setup = ["sh", "-c", "mkdir -p node_modules"]',
+      )
+      .replace(
+        `command = [${JSON.stringify(process.execPath)}, "gate.ts"]`,
+        'command = ["sh", "-c", "test -d node_modules && test -d .git"]',
+      ),
+  );
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result.ok, result.lines.join("\n")).toBe(true);
+});
+
+test("a symlinked TMPDIR permits writes inside the isolated export", async () => {
+  const f = await fixture({ compliant: true });
+  const realTmp = join(f.temp, "real-tmp");
+  const linkedTmp = join(f.temp, "linked-tmp");
+  await mkdir(realTmp);
+  await symlink(realTmp, linkedTmp);
+  const source = `import {runConsumerGates} from ${JSON.stringify(join(import.meta.dir, "../consumer-gate.ts"))}; const r = await runConsumerGates(${JSON.stringify(f.root)}, ['presets/demo/rule']); console.log(JSON.stringify(r)); process.exitCode = r.ok ? 0 : 1;`;
+  const child = Bun.spawn([process.execPath, "--eval", source], {
+    env: { ...process.env, TMPDIR: linkedTmp },
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 60_000,
+  });
+  const [out, err, exit] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  expect(exit, out + err).toBe(0);
+  expect(out).toContain("PASS fixture-consumer");
+});
+
 test("omitted setup still runs the consumer check and rejects noncompliant code", async () => {
   for (const compliant of [true, false]) {
     const f = await fixture({ compliant });
@@ -171,6 +213,34 @@ test("unrelated consumers skip; missing registered consumer fails closed", async
   const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
   expect(result.ok).toBe(false);
   expect(result.lines[0]).toContain("fixture-consumer");
+});
+
+test("host-relative roots resolve against each host home", () => {
+  expect(expandRoot("~/Workspace/firedancer", "/Users/alice")).toBe(
+    "/Users/alice/Workspace/firedancer",
+  );
+  expect(expandRoot("~/Workspace/firedancer", "/home/bob")).toBe(
+    "/home/bob/Workspace/firedancer",
+  );
+});
+
+test("missing consumer root reports its resolved path and clone command", async () => {
+  const f = await fixture();
+  const registry = join(f.root, "presets/consumers.toml");
+  const missing = join(f.temp, "missing-consumer");
+  await writeFile(
+    registry,
+    (await readFile(registry, "utf8")).replace(
+      `root = ${JSON.stringify(f.consumer)}`,
+      `root = ${JSON.stringify(missing)}`,
+    ),
+  );
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result.ok).toBe(false);
+  expect(result.checked).toBe(1);
+  expect(result.lines).toEqual([
+    `FAIL fixture-consumer: consumer root missing: ${missing}; clone with: jj git clone <repository-url> ${missing}`,
+  ]);
 });
 
 test("hung gates are red and report the timeout", async () => {
@@ -334,14 +404,14 @@ test("owner declarations select only the declared shared surfaces", async () => 
     ...parsed.data.pending,
   ].toSorted(
     (a, b) =>
-      ["retrospectives", "firedancer", "polysearch-v1"].indexOf(a.name) -
-      ["retrospectives", "firedancer", "polysearch-v1"].indexOf(b.name),
+      ["retrospectives", "firedancer", "agx"].indexOf(a.name) -
+      ["retrospectives", "firedancer", "agx"].indexOf(b.name),
   );
   expect(declarations).toHaveLength(3);
   expect(declarations.map((row: { name: string }) => row.name)).toEqual([
     "retrospectives",
     "firedancer",
-    "polysearch-v1",
+    "agx",
   ]);
   expect(declarations[0]).toMatchObject({
     trunk: "alpha",
@@ -352,24 +422,12 @@ test("owner declarations select only the declared shared surfaces", async () => 
   expect(declarations[0]?.setup).toBeUndefined();
   expect(declarations[0]?.preset_dirs).toBeUndefined();
   expect(declarations[1]?.command).toEqual(["mise", "run", "lint:ts"]);
-  expect(
-    declarations.slice(2).map((row: { surfaces: string[] }) => row.surfaces),
-  ).toEqual([["package-bins"]]);
-  expect(declarations[2]?.full_gate_rule).toContain("CLI or manifest schema");
-  expect(declarations[2]?.trunk).toBeUndefined();
-  expect(parsed.data.pending).toHaveLength(0);
   expect(declarations[2]?.command).toEqual([
     "sh",
     "-c",
-    "jj-commit --help >/dev/null && jj-push --help >/dev/null && fmt-staged --help >/dev/null && mise-contract && bun scripts/spec-lint.ts",
+    "mise run lint:ts && mise run lint:all && mise run lint:knip",
   ]);
-  expect(declarations[2]?.notify).toEqual([
-    {
-      paths: ["tools/agent-resource-run/**"],
-      contact: "polysearch-v1-agt_f24v",
-      check: "RUSTC_WRAPPER= mise run hook:pre-commit",
-    },
-  ]);
+  expect(parsed.data.pending).toHaveLength(0);
 });
 
 async function typescriptFixture(directory?: string, missing = false) {
@@ -465,12 +523,12 @@ test("preset directory paths cannot escape the consumer", () => {
   }
 });
 
-test("matching candidate paths emit one NOTICE with the owner contact and unavailable check", async () => {
+test("matching candidate paths emit one NOTICE with the declared contact and unavailable check", async () => {
   const f = await fixture({ surface: "package-bins", gate: "" });
   const registry = join(f.root, "presets/consumers.toml");
   await writeFile(
     registry,
-    `${await Bun.file(registry).text()}\nnotify = [{ paths = ["tools/agent-resource-run/**"], contact = "polysearch-v1-agt_f24v", check = "RUSTC_WRAPPER= mise run hook:pre-commit" }]\n`,
+    `${await Bun.file(registry).text()}\nnotify = [{ paths = ["tools/agent-resource-run/**"], contact = "fixture-owner", check = "RUSTC_WRAPPER= mise run hook:pre-commit" }]\n`,
   );
   const result = await runConsumerGates(f.root, [
     "tools/agent-resource-run/src/main.ts",
@@ -479,7 +537,7 @@ test("matching candidate paths emit one NOTICE with the owner contact and unavai
   expect(result.ok, result.lines.join("\n")).toBe(true);
   expect(result.checked).toBe(1);
   expect(result.lines.filter((line) => line.startsWith("NOTICE"))).toEqual([
-    "NOTICE fixture-consumer: contact polysearch-v1-agt_f24v; gate cannot run check: RUSTC_WRAPPER= mise run hook:pre-commit",
+    "NOTICE fixture-consumer: contact fixture-owner; gate cannot run check: RUSTC_WRAPPER= mise run hook:pre-commit",
   ]);
   const unrelated = await runConsumerGates(f.root, ["tools/other/main.ts"]);
   expect(unrelated.lines.some((line) => line.startsWith("NOTICE"))).toBe(false);

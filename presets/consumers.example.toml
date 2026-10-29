@@ -1,0 +1,7 @@
+# Example consumer declaration. The gate expands ~/ against the running user's $HOME.
+[[consumers]]
+name = "example"
+root = "~/Workspace/example"
+surfaces = ["presets/typescript"]
+command = ["mise", "run", "lint:ts"]
+timeout_ms = 120000

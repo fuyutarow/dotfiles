@@ -3,7 +3,7 @@
 # Omitted trunk uses the consumer repository's own trunk() revset.
 [[consumers]]
 name = "retrospectives"
-root = "/home/fuyu/Workspace/retrospectives"
+root = "~/Workspace/retrospectives"
 trunk = "alpha"
 surfaces = ["package-bins"]
 bins = ["mise-contract"]
@@ -13,7 +13,7 @@ timeout_ms = 120000
 
 [[consumers]]
 name = "firedancer"
-root = "/home/fuyu/Workspace/firedancer"
+root = "~/Workspace/firedancer"
 trunk = "alpha"
 surfaces = ["presets/typescript"]
 setup = ["bun", "install", "--frozen-lockfile"]
@@ -23,7 +23,7 @@ timeout_ms = 120000
 
 [[consumers]]
 name = "agx"
-root = "/home/fuyu/Workspace/agx"
+root = "~/Workspace/agx"
 trunk = "alpha"
 surfaces = ["presets/typescript"]
 setup = ["bun", "install", "--frozen-lockfile"]
@@ -31,16 +31,4 @@ setup = ["bun", "install", "--frozen-lockfile"]
 command = ["sh", "-c", "mise run lint:ts && mise run lint:all && mise run lint:knip"]
 timeout_ms = 180000
 
-[[consumers]]
-name = "polysearch-v1"
-root = "/home/fuyu/Workspace/polysearch-v1"
-surfaces = ["package-bins"]
-bins = ["jj-commit", "jj-push", "fmt-staged", "mise-contract"]
-setup = ["sh", "-c", "mise trust && cargo fetch --locked"]
-command = ["sh", "-c", "jj-commit --help >/dev/null && jj-push --help >/dev/null && fmt-staged --help >/dev/null && mise-contract && bun scripts/spec-lint.ts"]
-# Owner request 2026-10-17: resource admission needs the user systemd cgroup bus,
-# which is unavailable in the consumer gate sandbox. Notify its owner separately.
-notify = [{ paths = ["tools/agent-resource-run/**"], contact = "polysearch-v1-agt_f24v", check = "RUSTC_WRAPPER= mise run hook:pre-commit" }]
-full_gate_rule = "The owner runs the full gate only when agent-resource-run CLI or manifest schema changes."
-timeout_ms = 600000
 

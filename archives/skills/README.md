@@ -1,5 +1,16 @@
 # Archived skills
 
+## 2026-10-29 owner-requested consolidation
+
+| Skill | Archived | Why | Successor |
+|---|---|---|---|
+| [`base-architecture`](base-architecture/SKILL.md) | 2026-10-29 | Owner-requested retirement of `base:architecture_2610.1`; its universal file/export/builder counts, component-publication ban and exclusive use-case ownership conflict with the current practice system | `base:usecase-first_2610.8`, deployed separately; preserves contract traceability, responsibility boundaries, scoped static checks and checked removal within its existing practice structure |
+
+The archived package is the complete deployed manual, preserved byte for byte.
+It is historical evidence, not an active alias or executable policy. Its source document
+is removed from the publisher; deployment removes both managed registrations.
+The successor does not inherit the archived universal prescriptions.
+
 ## 2026-10-26 TigerStyle reorganization
 
 The [former Tiger risk/conformance workflow](practicing-tiger-style-ledger/SKILL.md)

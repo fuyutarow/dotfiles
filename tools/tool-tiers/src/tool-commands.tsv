@@ -10,7 +10,7 @@ bottom	btm
 rustup	rustup cargo
 bun	bun bunx
 uv	uv uvx
-poppler	pdftoppm pdfinfo
+poppler	pdftoppm pdfinfo pdftotext
 wl-clipboard	wl-copy wl-paste
 bubblewrap	bwrap
 texlive	bibtex chktex kpsewhich latexmk lualatex tlmgr

@@ -13,6 +13,8 @@
         "!**/tests/**!",
         "!**/*.{test,spec}.{ts,tsx,js,jsx}!",
         "!**/fixtures/**!",
+        "!herdr-pane.ts!",
+        "!**/herdr-pane.ts!",
       ],
       "ignoreDependencies": [
         "knip",

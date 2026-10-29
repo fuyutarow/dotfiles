@@ -388,5 +388,8 @@ async function pushWithRetry(): Promise<void> {
 if (push) await pushWithRetry();
 
 // post-commit: warm the search index (fail-open, same as .githooks/post-commit)
-if (existsSync(".githooks/post-commit"))
-  await $`.githooks/post-commit`.nothrow();
+const postCommitHook = join(
+  import.meta.dir,
+  "../../../../.githooks/post-commit",
+);
+if (existsSync(postCommitHook)) await $`${postCommitHook}`.nothrow();

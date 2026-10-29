@@ -17,7 +17,8 @@ import {
 } from "../../../../tools/shared/src/fleet-session.ts";
 import { projectAgents } from "../../../../tools/herdr-projector/src/herdr-projector.ts";
 import { jsonOf, z } from "../../../../tools/shared/src/zod.ts";
-import { codexAgentName, readHerdrPaneName } from "../herdr-identity.ts";
+import { codexAgentName } from "../herdr-identity.ts";
+import { readHerdrPaneName } from "../herdr-pane.ts";
 
 const requestSchema = z.record(z.string(), z.unknown());
 const restoreEnvironment = (previous: Map<string, string | undefined>) => {

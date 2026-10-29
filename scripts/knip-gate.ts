@@ -74,9 +74,10 @@ export function evaluateKnipOutput(reportText: string, exceptionText: string) {
   return { findings, messages };
 }
 
-// Only operating-system supplied commands are listed here; package commands come
-// from the repository's installer declarations below.
+// Only operating-system supplied commands and bootstrap installers are listed here;
+// package commands come from the repository's installer declarations below.
 const osBinaries = [
+  "brew", // Homebrew bootstraps the declared packages.
   "osascript",
   "pbcopy",
   "defaults",

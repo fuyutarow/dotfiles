@@ -4,10 +4,8 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp, rm } from "node:fs/promises";
-import {
-  codexAgentName,
-  readHerdrPaneName,
-} from "../../../agents/codex/hooks/herdr-identity.ts";
+import { codexAgentName } from "../../../agents/codex/hooks/herdr-identity.ts";
+import { readHerdrPaneName } from "../../../agents/codex/hooks/herdr-pane.ts";
 import { readFleetSession } from "@dotfiles/shared/src/fleet-session.ts";
 import { writeStatuslineFleetSession } from "../src/fleet-session.ts";
 

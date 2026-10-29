@@ -200,7 +200,7 @@ ${tmpPct === undefined ? "" : `tmp_recover_pct = ${tmpPct}`}
   );
   return {
     ...env,
-    PATH: `${bin}:${process.env.PATH ?? ""}`,
+    PATH: `${bin}:${process.env["PATH"] ?? ""}`,
     GUEST_RECOVERY_STATE_DIR: join(home, "state"),
     calls,
   };

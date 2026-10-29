@@ -14,7 +14,7 @@ function project(): { cwd: string; env: Record<string, string> } {
   const bin = tempDir("search-route-syntax-bin-");
   writeFileSync(join(bin, "ccc"), "#!/bin/sh\nexit 0\n");
   chmodSync(join(bin, "ccc"), 0o755);
-  return { cwd, env: { PATH: `${bin}:${process.env.PATH ?? ""}` } };
+  return { cwd, env: { PATH: `${bin}:${process.env["PATH"] ?? ""}` } };
 }
 
 const verdict = (command: string): string | undefined => {

@@ -20,7 +20,7 @@ export { findExe } from "../../tools/shared/src/find-executable.ts";
 
 /** Registry identity, also passed by the renderer for launcher diagnostics. */
 export function hookSlug(): string {
-  return process.env.HOOK_SLUG ?? slugForScript(Bun.main);
+  return process.env["HOOK_SLUG"] ?? slugForScript(Bun.main);
 }
 
 export const HOOK_NAMESPACE = "dotfiles";
@@ -64,7 +64,7 @@ export function hookJson(value: unknown, slug = hookSlug()): string {
           : entry,
       ]),
     );
-  const specific = obj(root.hookSpecificOutput);
+  const specific = obj(root["hookSpecificOutput"]);
   return JSON.stringify({
     ...prefixFields(root),
     ...(specific === undefined

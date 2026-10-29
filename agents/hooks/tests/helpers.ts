@@ -19,7 +19,7 @@ export function runHook(
   const input = typeof payload === "string" ? payload : JSON.stringify(payload);
   const baseline =
     name === "enforce-search-route.ts"
-      ? process.env.SEARCH_ROUTE_BASELINE_HOOK
+      ? process.env["SEARCH_ROUTE_BASELINE_HOOK"]
       : undefined;
   const hookEnv = {
     ...process.env,

@@ -6,7 +6,7 @@ import { requestGuestRecovery } from "../../tools/shared/src/storage-headroom.ts
 import { decidePre, hookJson, hookStderr, readStdinJson } from "./lib.ts";
 
 const CONFIG_PATH =
-  process.env.STORAGE_HEADROOM_CONFIG ??
+  process.env["STORAGE_HEADROOM_CONFIG"] ??
   join(import.meta.dir, "storage-headroom.toml");
 
 async function main(): Promise<void> {

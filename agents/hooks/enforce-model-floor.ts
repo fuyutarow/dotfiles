@@ -31,7 +31,8 @@ import {
 } from "../../tools/shared/src/model-orders.ts";
 
 const CONFIG_PATH =
-  process.env.MODEL_FLOOR_CONFIG ?? join(import.meta.dir, "model-floor.toml");
+  process.env["MODEL_FLOOR_CONFIG"] ??
+  join(import.meta.dir, "model-floor.toml");
 
 // The cheapest possible test of "might this run a model CLI": the word must appear at all.
 const MAYBE_A_MODEL_CLI = /\b(?:codex|grok|claude|agy)\b/u;

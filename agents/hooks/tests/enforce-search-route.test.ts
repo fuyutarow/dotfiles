@@ -36,7 +36,7 @@ const bashPayload = (cwd: string, command: string) => ({
 });
 
 const withCcc = () => ({
-  PATH: `${cccPath()}:${process.env.PATH ?? ""}`,
+  PATH: `${cccPath()}:${process.env["PATH"] ?? ""}`,
 });
 
 test("recorded coordinator search commands retain their allow/deny envelopes", () => {

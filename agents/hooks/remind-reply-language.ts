@@ -35,7 +35,7 @@ const result = await attempt(async () => {
     parsed.data.hook_event_name !== "UserPromptSubmit"
   )
     return new Error("wrong hook event; fail open");
-  const home = process.env.HOME ?? homedir();
+  const home = process.env["HOME"] ?? homedir();
   const settings = parseJson(
     readFileSync(join(home, ".claude", "settings.json"), "utf8"),
   );

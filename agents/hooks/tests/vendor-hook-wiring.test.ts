@@ -31,8 +31,8 @@ async function unwiredVendorHooks(registryPath: string, vendorPaths: string[]) {
       .flatMap((config) => Object.values(config.hooks).flat())
       .flatMap((group) => group.hooks)
       .flatMap((hook) =>
-        hook.type === "command" && typeof hook.command === "string"
-          ? [hook.command]
+        hook.type === "command" && typeof hook["command"] === "string"
+          ? [hook["command"]]
           : [],
       ),
   );

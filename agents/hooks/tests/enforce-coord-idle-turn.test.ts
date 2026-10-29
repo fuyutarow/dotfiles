@@ -148,7 +148,7 @@ const commands = (
   Object.values(config)
     .flat()
     .flatMap((group) => group.hooks)
-    .map((item) => item.command);
+    .map((item) => item["command"]);
 
 test("registry wires the hook only to Claude Stop", async () => {
   const { loadRegistry, wire } =
@@ -157,7 +157,7 @@ test("registry wires the hook only to Claude Stop", async () => {
   expect(registry.errors).toEqual([]);
   const claude = wire({}, registry.specs, "claude");
   const codex = wire({}, registry.specs, "codex");
-  expect(commands({ Stop: claude.Stop ?? [] })).toContain(
+  expect(commands({ Stop: claude["Stop"] ?? [] })).toContain(
     "sh ~/.agents/hooks/run.sh enforce-coord-idle-turn.ts",
   );
   expect(commands(codex)).not.toContain(

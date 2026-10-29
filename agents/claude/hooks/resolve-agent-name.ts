@@ -18,14 +18,14 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { attempt, attemptOr } from "../../hooks/attempt.ts";
 import { arr, at, parseJson, strAt } from "../../hooks/narrow.ts";
 
-const HOME = process.env.HOME ?? "";
+const HOME = process.env["HOME"] ?? "";
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
 // 30s for both a hit and a miss — was 5min on a hit until 2026-09-02, when a stale hit right
 // after `/rename` (the exact moment someone is watching) turned out to matter more than the
 // rare extra `claude agents --json` call it now costs. See tools/statusline/src/identity.ts's agentName()
 // for the fuller writeup — same cache file, same fix, kept in sync deliberately.
 const AGENT_NAME_TTL_MS = 30_000;
-const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH ?? "claude";
+const CLAUDE_BIN = process.env["CLAUDE_CODE_EXECPATH"] ?? "claude";
 
 type Entry = { name?: string; at: number };
 
@@ -104,7 +104,7 @@ async function agentName(sid: string): Promise<string | undefined> {
   return next[sid]?.name;
 }
 
-const sid = process.env.AGENT_NAME_SESSION_ID;
+const sid = process.env["AGENT_NAME_SESSION_ID"];
 if (sid !== undefined && sid !== "") {
   const name = await agentName(sid);
   if (name !== undefined && name !== "") process.stdout.write(name);

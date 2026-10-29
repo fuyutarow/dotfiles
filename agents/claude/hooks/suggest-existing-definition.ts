@@ -50,9 +50,9 @@ const HEADERS: Record<string, RegExp[]> = {
     /^ {0,4}(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_]\w*)\s*[(<]/gmu,
   ],
 };
-HEADERS.tsx = HEADERS.ts ?? [];
-HEADERS.js = HEADERS.ts ?? [];
-HEADERS.mjs = HEADERS.ts ?? [];
+HEADERS["tsx"] = HEADERS["ts"] ?? [];
+HEADERS["js"] = HEADERS["ts"] ?? [];
+HEADERS["mjs"] = HEADERS["ts"] ?? [];
 
 type NewDef = { name: string; text: string };
 

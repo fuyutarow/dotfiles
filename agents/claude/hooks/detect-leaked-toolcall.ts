@@ -35,14 +35,14 @@ async function main(): Promise<void> {
 
   await attempt(() => {
     appendFileSync(
-      `${process.env.HOME ?? ""}/.claude/leaked-toolcall.log`,
+      `${process.env["HOME"] ?? ""}/.claude/leaked-toolcall.log`,
       `${Temporal.Now.instant().toString({ fractionalSecondDigits: 3 })}  leaked-toolcall  ${transcript}\n`,
     );
   }); // best-effort
 
   if (
-    process.env.CLAUDE_HOOK_QUIET !== undefined &&
-    process.env.CLAUDE_HOOK_QUIET !== ""
+    process.env["CLAUDE_HOOK_QUIET"] !== undefined &&
+    process.env["CLAUDE_HOOK_QUIET"] !== ""
   )
     return; // tests: skip bell + desktop notification
   await attempt(() => {

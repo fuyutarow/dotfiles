@@ -38,7 +38,7 @@ import { arr, at, str, strAt } from "../../hooks/narrow.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 // Overridable for the test suite only; a malformed value falls back rather than disarming.
-const envMax = Number(process.env.NO_NEW_BASH_MAX_LINES);
+const envMax = Number(process.env["NO_NEW_BASH_MAX_LINES"]);
 const MAX_LINES = Number.isInteger(envMax) && envMax > 0 ? envMax : 12;
 const SHELLS = new Set(["sh", "bash", "dash", "ksh", "zsh"]);
 const VENDORED = /^#\s*(?:installed|managed) by herdr\b/mu;

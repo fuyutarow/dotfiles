@@ -25,7 +25,7 @@ const KEEP = 10;
 
 /** $CLAUDE_BASH_DURATIONS_DIR (test seam), else ~/.local/state/claude-bash-durations. */
 export const stateDir = (env: NodeJS.ProcessEnv = process.env): string =>
-  env.CLAUDE_BASH_DURATIONS_DIR ??
+  env["CLAUDE_BASH_DURATIONS_DIR"] ??
   join(homedir(), ".local/state/claude-bash-durations");
 
 // The key is the command's leading words, then the FLAGS it was given (values dropped): a flag

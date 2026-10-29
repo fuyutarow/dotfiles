@@ -178,7 +178,7 @@ describe("quote-command: output mode follows the requested count", () => {
         HERDR_ENV: "",
         SSH_CONNECTION: "",
         SSH_TTY: "",
-        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
         QUOTE_TEST_PBCOPY_CAPTURE: captured,
       },
     );

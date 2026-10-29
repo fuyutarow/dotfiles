@@ -55,7 +55,7 @@ function allow(sessionTitle: string, additionalContext: string | null): never {
     sessionTitle,
   };
   if (additionalContext !== null && additionalContext !== "")
-    hookSpecificOutput.additionalContext = additionalContext;
+    hookSpecificOutput["additionalContext"] = additionalContext;
   console.log(hookJson({ hookSpecificOutput }));
   process.exit(0);
 }

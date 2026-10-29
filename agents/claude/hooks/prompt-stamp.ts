@@ -46,7 +46,7 @@ export const stampMDHMZ = (z: Temporal.ZonedDateTime): string =>
   `${stampMDHM(z)}${offsetShort(z)}`;
 
 /** zsh %~ : leading $HOME -> ~ */
-export function tildePath(p: string, home = process.env.HOME ?? ""): string {
+export function tildePath(p: string, home = process.env["HOME"] ?? ""): string {
   if (p === home) return "~";
   if (home !== "" && p.startsWith(`${home}/`))
     return `~${p.slice(home.length)}`;

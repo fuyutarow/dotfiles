@@ -17,7 +17,7 @@ import { attempt, attemptOr } from "../../hooks/attempt.ts";
 import { at, parseJson, strAt } from "../../hooks/narrow.ts";
 import { MAX_QUOTE_TURNS } from "./quote.config.ts";
 
-const HOME = process.env.HOME ?? "";
+const HOME = process.env["HOME"] ?? "";
 const KEEP = MAX_QUOTE_TURNS; // deepest `/quote N` worth supporting; bounds the file for a long session
 
 async function recordResponse(

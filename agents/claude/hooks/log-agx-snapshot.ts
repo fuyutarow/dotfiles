@@ -120,13 +120,13 @@ async function main(): Promise<void> {
   const sid =
     nonEmpty(strAt(payload, "session_id")) ??
     nonEmpty(strAt(payload, "thread_id")) ??
-    nonEmpty(process.env.CLAUDE_CODE_SESSION_ID) ??
-    nonEmpty(process.env.CODEX_THREAD_ID) ??
-    nonEmpty(process.env.CODEX_SESSION_ID);
+    nonEmpty(process.env["CLAUDE_CODE_SESSION_ID"]) ??
+    nonEmpty(process.env["CODEX_THREAD_ID"]) ??
+    nonEmpty(process.env["CODEX_SESSION_ID"]);
   const now = Temporal.Now.instant().epochMilliseconds;
   const key = (sid ?? "unknown").replaceAll(/[^A-Za-z0-9_-]/gu, "_");
   const cadenceDir = join(
-    process.env.HOME ?? homedir(),
+    process.env["HOME"] ?? homedir(),
     ".cache/claude/agx-log",
   );
   const cadence = join(cadenceDir, `${key}.last`);

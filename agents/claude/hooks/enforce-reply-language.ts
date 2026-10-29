@@ -232,7 +232,7 @@ async function main(audit: DecisionAudit): Promise<number> {
 }
 
 if (import.meta.main) {
-  const home = process.env.HOME ?? homedir();
+  const home = process.env["HOME"] ?? homedir();
   const audit: DecisionAudit = {
     home,
     settings_path: join(home, ".claude", "settings.json"),

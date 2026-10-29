@@ -33,7 +33,7 @@ import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import { readStdinJson } from "./lib.ts";
 import { promptParts } from "./prompt-stamp.ts";
 
-const HOME = process.env.HOME ?? "";
+const HOME = process.env["HOME"] ?? "";
 const CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
 const STATE_DIR = `${HOME}/.cache/claude/sys-log`;
 // Per session: the statusline writes THIS session's rows (Ctx, Rate) here. Each payload carries

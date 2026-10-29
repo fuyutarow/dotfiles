@@ -44,15 +44,15 @@ import { parseJson, strAt } from "../../hooks/narrow.ts";
 // upgrade keeps a dead path (2026-10-01: 0.9.1 path gone after 0.9.3, /quote stopped copying).
 // Use it only while it still exists; otherwise the `herdr` on PATH (the stable brew symlink).
 const HERDR_BIN =
-  process.env.HERDR_BIN_PATH !== undefined &&
-  process.env.HERDR_BIN_PATH !== "" &&
-  existsSync(process.env.HERDR_BIN_PATH)
-    ? process.env.HERDR_BIN_PATH
+  process.env["HERDR_BIN_PATH"] !== undefined &&
+  process.env["HERDR_BIN_PATH"] !== "" &&
+  existsSync(process.env["HERDR_BIN_PATH"])
+    ? process.env["HERDR_BIN_PATH"]
     : "herdr";
 const DOTFILES =
-  process.env.DOTFILES !== undefined && process.env.DOTFILES !== ""
-    ? process.env.DOTFILES
-    : `${process.env.HOME}/dotfiles`;
+  process.env["DOTFILES"] !== undefined && process.env["DOTFILES"] !== ""
+    ? process.env["DOTFILES"]
+    : `${process.env["HOME"]}/dotfiles`;
 const CLIP_SCRIPT = `${DOTFILES}/zsh/copy-to-clipboard.sh`;
 const POLL_ATTEMPTS = 10;
 const POLL_DELAY_MS = 200;
@@ -92,7 +92,7 @@ async function isBarePrompt(paneId: string): Promise<boolean> {
   return /^[$%#>]$/u.test(last);
 }
 
-const payloadFile = process.env.COPY_PAYLOAD_FILE;
+const payloadFile = process.env["COPY_PAYLOAD_FILE"];
 if (
   payloadFile === undefined ||
   payloadFile === "" ||
@@ -103,7 +103,7 @@ if (
   );
   process.exit(2);
 }
-if (process.env.HERDR_ENV !== "1") {
+if (process.env["HERDR_ENV"] !== "1") {
   console.error("HERDR_ENV is not 1; this hook is not running in a Herdr pane");
   process.exit(3);
 }
@@ -112,7 +112,7 @@ if (!existsSync(CLIP_SCRIPT)) {
   process.exit(3);
 }
 
-const selfPane = process.env.HERDR_PANE_ID;
+const selfPane = process.env["HERDR_PANE_ID"];
 if (selfPane === undefined || selfPane === "") {
   console.error("HERDR_PANE_ID is missing; there is no current pane to split");
   process.exit(3);

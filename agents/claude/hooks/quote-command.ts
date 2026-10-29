@@ -44,7 +44,7 @@ import {
   MAX_QUOTE_TURNS as MAX_TURNS,
 } from "./quote.config.ts";
 
-const HOME = process.env.HOME ?? "";
+const HOME = process.env["HOME"] ?? "";
 const HOOKS = `${HOME}/.claude/hooks`;
 const TURN_SEPARATOR = "\n\n---\n\n";
 // MAX_TURNS comes from quote.config.ts, shared with capture-last-response.ts's KEEP — that
@@ -78,7 +78,7 @@ type CopyResult =
   | { readonly ok: false; readonly reason: string };
 
 async function copyViaSshOsc52(text: string): Promise<CopyResult> {
-  const tty = process.env.SSH_TTY?.trim();
+  const tty = process.env["SSH_TTY"]?.trim();
   if (tty === undefined || tty === "") {
     return {
       ok: false,
@@ -122,8 +122,8 @@ function shellQuote(value: string): string {
 }
 
 function downloadCommand(file: string): string | undefined {
-  const configuredTarget = process.env.QUOTE_DOWNLOAD_SSH_TARGET?.trim();
-  const connection = process.env.SSH_CONNECTION?.trim().split(/\s+/u);
+  const configuredTarget = process.env["QUOTE_DOWNLOAD_SSH_TARGET"]?.trim();
+  const connection = process.env["SSH_CONNECTION"]?.trim().split(/\s+/u);
   const serverIp = connection?.[2];
   const serverPort = connection?.[3];
   let inferredTarget: string | undefined;
@@ -136,7 +136,7 @@ function downloadCommand(file: string): string | undefined {
       ? configuredTarget
       : inferredTarget;
   if (target === undefined || target === "") return undefined;
-  const configuredPort = process.env.QUOTE_DOWNLOAD_SSH_PORT?.trim();
+  const configuredPort = process.env["QUOTE_DOWNLOAD_SSH_PORT"]?.trim();
   let port = serverPort;
   if (configuredPort !== undefined && configuredPort !== "") {
     port = configuredPort;
@@ -306,8 +306,8 @@ if (paneCopy.ok) {
 
 const failures = [`Herdr pane: ${failureReason(paneCopy.error)}`];
 const remote =
-  (process.env.SSH_CONNECTION?.trim() ?? "") !== "" ||
-  (process.env.SSH_TTY?.trim() ?? "") !== "";
+  (process.env["SSH_CONNECTION"]?.trim() ?? "") !== "" ||
+  (process.env["SSH_TTY"]?.trim() ?? "") !== "";
 if (remote) {
   const osc52 = await copyViaSshOsc52(payloadText);
   if (osc52.ok) {

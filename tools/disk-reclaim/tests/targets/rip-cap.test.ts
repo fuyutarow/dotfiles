@@ -89,7 +89,7 @@ test("budget cancellation inside a payload keeps and measures partial deletion",
   expect(result.ok).toBe(false);
   expect(result.entries_removed).toBe(1);
   expect(result.bytes_freed).toBeGreaterThan(0);
-  expect(result.errors[0]?.error).toContain("budget exhausted or cancelled");
+  expect(result.errors[0]?.error).toContain("tree removal cancelled");
   expect((await readdir(root)).length).toBe(1);
   // A fresh invocation finishes the same payload without any saved cursor.
   const remaining = await removeTree(root, {

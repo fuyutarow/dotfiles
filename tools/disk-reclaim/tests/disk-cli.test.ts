@@ -1,4 +1,4 @@
-import { jsonText } from "@dotfiles/shared/src/zod.ts";
+import { jsonOf, jsonText, z } from "@dotfiles/shared/src/zod.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,10 +7,49 @@ import { existsSync } from "node:fs";
 import { runProbe } from "../src/disk-probe.ts";
 import { planPaths } from "../src/disk-path-plan.ts";
 import { movePaths } from "../src/disk-move.ts";
+import type { Candidate } from "../src/model.ts";
+import type { Context } from "../src/targets/index.ts";
 
 const cli = join(import.meta.dir, "../src/disk.ts");
 const tmpfsProbe: typeof runProbe = () =>
   Promise.resolve({ out: "tmpfs\n", err: "", exit: 0, timedOut: false });
+const cleanIdentity = () => Promise.resolve("same");
+const fakeTree = (path: string, reason: string): Promise<Candidate> =>
+  Promise.resolve({
+    id: path,
+    path,
+    verdict: "RECLAIM",
+    reason,
+    checks: [],
+    bytes: 123,
+    bytes_kind: "freed_now",
+    action: { kind: "delete", argv: [path] },
+    result: null,
+  });
+const fakeKeep = async (path: string, reason: string): Promise<Candidate> => ({
+  ...(await fakeTree(path, reason)),
+  verdict: "KEEP",
+  action: { kind: "delete", argv: [] },
+});
+const cleanContext: Context = {
+  mode: "run",
+  explicit: true,
+  targetName: "clean",
+  log: () => {},
+  config: {
+    repo_roots: [],
+    repos: [],
+    scratch_roots: [],
+    delete_roots: [],
+    regenerable_ignored: [],
+    session_grace_hours: 24,
+    ignore_unreadable_procs: [],
+    regenerable_caches: [
+      { path: "~/.cache/sccache", class: "REGENERABLE", process: "sccache" },
+      { path: "~/.cache/Homebrew", class: "REGENERABLE", process: "brew" },
+    ],
+  },
+};
 async function run(
   args: string[],
   input = "",
@@ -682,4 +721,530 @@ test("mise-configs adapter keeps guards and reports measured bulk result", async
   );
   expect(receiptFailure.exit).toBe(4);
   expect(receiptFailure.item.reason).toContain("receipt unavailable");
+});
+
+const cleanCandidate = (
+  path: string,
+  verdict: "RECLAIM" | "KEEP",
+  reason: string,
+) => ({
+  id: path,
+  path,
+  verdict,
+  reason,
+  checks: [],
+  bytes: 1024,
+  bytes_kind: "freed_now",
+  action: { kind: "delete", argv: [path] },
+  result: null,
+});
+const cleanObservation = (n: number) => ({
+  time: "fixture",
+  source: "statfs",
+  mount: null,
+  filesystem: null,
+  available_bytes: n,
+  free_inodes: 10,
+  error: null,
+});
+test("clean adapter preserves refusals, identity, lock, and measured results", async () => {
+  const { freeClean } = await import("../src/disk-clean.ts");
+  const rows = [
+    {
+      candidate: cleanCandidate("/fixture/uv", "KEEP", "busy: uv"),
+      fingerprint: "1",
+    },
+    {
+      candidate: cleanCandidate("/fixture/julia", "KEEP", "busy: julia"),
+      fingerprint: "2",
+    },
+    {
+      candidate: cleanCandidate("/fixture/cargo", "KEEP", "busy: cargo"),
+      fingerprint: "3",
+    },
+    {
+      candidate: cleanCandidate("/fixture/bun", "KEEP", "busy: bun"),
+      fingerprint: "4",
+    },
+    {
+      candidate: cleanCandidate("/fixture/protected", "RECLAIM", "cache"),
+      fingerprint: "5",
+    },
+    {
+      candidate: cleanCandidate("/fixture/changed", "RECLAIM", "cache"),
+      fingerprint: "6",
+    },
+    {
+      candidate: cleanCandidate("/fixture/safe", "RECLAIM", "cache"),
+      fingerprint: "7",
+    },
+  ];
+  let actions = 0;
+  let released = 0;
+  let delta = 10;
+  const deps = {
+    guard: (): string | null => null,
+    lock: (_ms: number) =>
+      Promise.resolve({
+        release: () => {
+          released++;
+        },
+        exit: 0,
+        error: null,
+      }),
+    receipt: (_items: unknown[]) =>
+      Promise.resolve({
+        id: "receipt",
+        path: "/fixture/receipt",
+        delivery_error: null,
+      }),
+    probe: (action: string | undefined) => {
+      if (action === undefined)
+        return Promise.resolve({
+          out: JSON.stringify(rows),
+          err: "",
+          exit: 0,
+          timedOut: false,
+        });
+      actions++;
+      let result = {
+        verdict: "completed",
+        reason: "done",
+        effect: "unlink",
+        before: cleanObservation(100),
+        after: cleanObservation(100 + delta),
+      };
+      if (action.includes("/fixture/protected"))
+        result = {
+          verdict: "keep",
+          reason: "protected: tool installation root",
+          effect: "none",
+          before: cleanObservation(100),
+          after: cleanObservation(100),
+        };
+      else if (action.includes("/fixture/changed"))
+        result = {
+          verdict: "changed",
+          reason: "fingerprint changed",
+          effect: "none",
+          before: cleanObservation(100),
+          after: cleanObservation(100),
+        };
+      return Promise.resolve({
+        out: JSON.stringify(result),
+        err: "",
+        exit: 0,
+        timedOut: false,
+      });
+    },
+  };
+  const runClean = () => freeClean(10000, performance.now(), false, deps);
+  const result = await runClean();
+  expect(result.exit).toBe(1);
+  expect(result.items.map((item) => item.verdict)).toEqual([
+    "keep",
+    "keep",
+    "keep",
+    "keep",
+    "keep",
+    "changed",
+    "completed",
+  ]);
+  expect(result.items[4]?.reason).toContain("protected");
+  expect(result.items[6]?.after?.available_bytes).toBe(110);
+  expect(actions).toBe(3);
+  expect(released).toBe(1);
+  delta = 0;
+  expect((await runClean()).items[6]?.verdict).toBe("partial");
+  const denied = await freeClean(10000, performance.now(), false, {
+    ...deps,
+    guard: () => "worker guard",
+  });
+  expect(denied.exit).toBe(1);
+  const locked = await freeClean(10000, performance.now(), false, {
+    ...deps,
+    lock: () => Promise.resolve({ release: null, exit: 3, error: "busy" }),
+  });
+  expect(locked.exit).toBe(3);
+  const lost = await freeClean(10000, performance.now(), false, {
+    ...deps,
+    probe: (action) =>
+      action === undefined
+        ? deps.probe(action)
+        : Promise.resolve({ out: "", err: "", exit: null, timedOut: true }),
+  });
+  expect(lost.exit).toBe(4);
+  expect(lost.items[4]?.verdict).toBe("unknown");
+});
+
+test("clean revalidation retains busy, protected and changed refusals", async () => {
+  const { revalidateClean } = await import("../src/disk-clean-safety.ts");
+  const { Candidate } = await import("../src/model.ts");
+  const request = {
+    id: "/fixture/cache",
+    path: "/fixture/cache",
+    fingerprint: "same",
+  };
+  const safe = Candidate.safeParse(
+    cleanCandidate(request.path, "RECLAIM", "cache"),
+  );
+  expect(safe.success).toBe(true);
+  if (!safe.success) return;
+  for (const reason of [
+    "busy: uv",
+    "busy: bun",
+    "busy: julia",
+    "busy: cargo",
+    "busy: brew",
+    "busy: sccache",
+  ]) {
+    const busy = { ...safe.data, verdict: "KEEP" as const, reason };
+    expect(
+      await revalidateClean([busy], request, cleanIdentity, () => null),
+    ).toMatchObject({ verdict: "keep", reason });
+  }
+  expect(
+    await revalidateClean(
+      [safe.data],
+      request,
+      cleanIdentity,
+      () => "tool installation root",
+    ),
+  ).toMatchObject({
+    verdict: "keep",
+    reason: "protected: tool installation root",
+  });
+  expect(
+    await revalidateClean(
+      [safe.data],
+      request,
+      cleanIdentity,
+      () => "process paths are unknown",
+    ),
+  ).toMatchObject({ verdict: "unknown" });
+  expect(
+    await revalidateClean(
+      [safe.data],
+      request,
+      () => Promise.resolve("changed"),
+      () => null,
+    ),
+  ).toMatchObject({ verdict: "changed" });
+  expect(
+    await revalidateClean([safe.data], request, cleanIdentity, () => null),
+  ).toMatchObject({ verdict: "safe" });
+});
+
+test("clean entry connects legacy cache refusals and safety revalidation", async () => {
+  const { createCleanTarget } = await import("../src/targets/clean.ts");
+  const { freeClean } = await import("../src/disk-clean.ts");
+  const { cleanAction } = await import("../src/disk-clean-action.ts");
+  const home = "/fixture";
+  const relative = [
+    ".cache/uv",
+    ".bun/install/cache",
+    ".julia/compiled",
+    ".julia/scratchspaces",
+    ".cargo/registry/src",
+    ".cargo/registry/cache",
+    ".cargo/git/checkouts",
+    ".cache/sccache",
+    ".cache/Homebrew",
+    ".cache/pip",
+    ".npm/_cacache",
+  ];
+  const paths = new Set(relative.map((p) => `${home}/${p}`));
+  const target = createCleanTarget(
+    () => home,
+    () => true,
+    () => false,
+    { exists: (p) => paths.has(String(p)), tree: fakeTree, keep: fakeKeep },
+  );
+  const initial = await target.plan(cleanContext);
+  let actionCalls = 0;
+  let receiptCalls = 0;
+  const deps = {
+    guard: (): string | null => null,
+    lock: (_ms: number) =>
+      Promise.resolve({ release: () => {}, exit: 0, error: null }),
+    receipt: (_items: unknown[]) => {
+      receiptCalls++;
+      return Promise.resolve({
+        id: "r",
+        path: "/fixture/receipt",
+        delivery_error: null,
+      });
+    },
+    probe: async (action: string | undefined) => {
+      if (action === undefined)
+        return {
+          out: JSON.stringify(
+            initial.map((candidate) => ({
+              candidate,
+              fingerprint: "original",
+            })),
+          ),
+          err: "",
+          exit: 0,
+          timedOut: false,
+        };
+      actionCalls++;
+      const parsed = jsonOf(
+        z.object({ id: z.string(), path: z.string(), fingerprint: z.string() }),
+      ).safeParse(action);
+      expect(parsed.success).toBe(true);
+      if (!parsed.success)
+        return { out: "", err: "invalid", exit: 1, timedOut: false };
+      const request = parsed.data;
+      const checked = await cleanAction(request, {
+        target: {
+          ...target,
+          act: () => {
+            expect.unreachable("refused item must never act");
+          },
+        },
+        context: cleanContext,
+        identity: () =>
+          Promise.resolve(
+            request.path.endsWith("_cacache") ? "changed" : "original",
+          ),
+        protection: (path) =>
+          path.endsWith("/pip") ? "tool installation root" : null,
+        device: () => Promise.resolve(1),
+        measure: () => Promise.resolve(cleanObservation(100)),
+        fail: () => process.exit(99),
+      });
+      return {
+        out: JSON.stringify(checked),
+        err: "",
+        exit: 0,
+        timedOut: false,
+      };
+    },
+  };
+  const result = await freeClean(10000, performance.now(), false, deps);
+  expect(result.exit).toBe(1);
+  for (const candidate of initial.filter((c) => c.verdict === "KEEP"))
+    expect(result.items.find((i) => i.path === candidate.path)).toMatchObject({
+      verdict: "keep",
+      reason: candidate.reason,
+      effect: "none",
+    });
+  expect(
+    result.items.find((i) => i.path === `${home}/.cache/pip`),
+  ).toMatchObject({
+    verdict: "keep",
+    reason: "protected: tool installation root",
+    effect: "none",
+  });
+  expect(
+    result.items.find((i) => i.path === `${home}/.npm/_cacache`),
+  ).toMatchObject({
+    verdict: "changed",
+    reason: "fingerprint changed",
+    effect: "none",
+  });
+  expect(actionCalls).toBe(2);
+  expect(receiptCalls).toBe(1);
+  for (const name of ["cargo", "rustc", "rust-analyzer"]) {
+    const rustTarget = createCleanTarget(
+      () => home,
+      (comm) => comm === name,
+      () => false,
+      { exists: (p) => paths.has(String(p)), tree: fakeTree, keep: fakeKeep },
+    );
+    const cargo = (await rustTarget.plan(cleanContext)).filter(
+      (c) => c.path?.includes("/.cargo/") === true,
+    );
+    expect(cargo).toHaveLength(3);
+    expect(
+      cargo.every((c) => c.verdict === "KEEP" && c.reason === "busy: cargo"),
+    ).toBe(true);
+  }
+});
+
+test("clean cache becoming busy after plan is kept before action", async () => {
+  const { createCleanTarget } = await import("../src/targets/clean.ts");
+  const { cleanAction } = await import("../src/disk-clean-action.ts");
+  const path = "/fixture/.cache/uv";
+  let busy = false;
+  let acts = 0;
+  const target = createCleanTarget(
+    () => "/fixture",
+    () => busy,
+    () => false,
+    { exists: (p) => String(p) === path, tree: fakeTree, keep: fakeKeep },
+  );
+  const before = (await target.plan(cleanContext))[0];
+  expect(before?.verdict).toBe("RECLAIM");
+  busy = true;
+  const result = await cleanAction(
+    { id: path, path, fingerprint: "same" },
+    {
+      target: {
+        ...target,
+        act: () => {
+          acts++;
+          return { ok: true, bytes_freed: 1, error: null };
+        },
+      },
+      context: cleanContext,
+      identity: cleanIdentity,
+      protection: () => null,
+      device: () => Promise.resolve(1),
+      measure: () => Promise.resolve(cleanObservation(1)),
+      fail: () => process.exit(99),
+    },
+  );
+  expect(result).toMatchObject({
+    verdict: "keep",
+    reason: "busy: uv",
+    effect: "none",
+  });
+  expect(acts).toBe(0);
+});
+
+test("Bun cache child is killed on deadline and its termination is awaited", async () => {
+  const { cleanBunProbe } = await import("../src/disk-clean-bun.ts");
+  const deadline = new AbortController();
+  let killed = false;
+  const childExit = Promise.withResolvers<number>();
+  const spawn = new Proxy(Bun.spawn, {
+    apply: (_target, _thisArg, args: unknown[]) => {
+      const argv = z.array(z.string()).safeParse(args[0]);
+      expect(argv.data).toEqual(["bun", "pm", "cache", "rm"]);
+      const options = z
+        .object({
+          signal: z.instanceof(AbortSignal),
+          killSignal: z.literal("SIGKILL"),
+          env: z.object({ HOME: z.literal("/fixture") }),
+        })
+        .safeParse(args[1]);
+      expect(options.success).toBe(true);
+      if (options.success)
+        options.data.signal.addEventListener("abort", () => {
+          killed = true;
+        });
+      return {
+        stdout: new Response("").body,
+        stderr: new Response("").body,
+        exited: childExit.promise,
+      };
+    },
+  });
+  let settled = false;
+  const resultPromise = cleanBunProbe(
+    "/fixture",
+    1000,
+    (argv, timeout, env, signal) =>
+      runProbe(argv, timeout, env, signal, {
+        spawn,
+        deadline: () => deadline.signal,
+      }),
+  ).then((result) => {
+    settled = true;
+    return result;
+  });
+  deadline.abort();
+  expect(killed).toBe(true);
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  childExit.resolve(137);
+  expect(await resultPromise).toMatchObject({ exit: 137, timedOut: true });
+});
+
+test("clean approval, lock and worker refusals cannot call an action", async () => {
+  const { freeClean } = await import("../src/disk-clean.ts");
+  const row = {
+    candidate: {
+      ...cleanCandidate("/fixture/needs-approval", "KEEP", "approval required"),
+      verdict: "ASK",
+    },
+    fingerprint: "same",
+  };
+  let probes = 0;
+  let actions = 0;
+  let locks = 0;
+  const deps = {
+    guard: (): string | null => null,
+    lock: (_ms: number) => {
+      locks++;
+      return Promise.resolve({ release: () => {}, exit: 0, error: null });
+    },
+    receipt: (_items: unknown[]) =>
+      Promise.resolve({ id: "r", path: "/fixture/r", delivery_error: null }),
+    probe: (action: string | undefined) => {
+      probes++;
+      if (action !== undefined) actions++;
+      return Promise.resolve({
+        out: JSON.stringify([row]),
+        err: "",
+        exit: 0,
+        timedOut: false,
+      });
+    },
+  };
+  const ask = await freeClean(10000, performance.now(), false, deps);
+  expect(ask.exit).toBe(1);
+  expect(ask.items).toMatchObject([
+    {
+      path: "/fixture/needs-approval",
+      verdict: "ask",
+      reason: "approval required",
+      effect: "none",
+    },
+  ]);
+  expect(actions).toBe(0);
+  const before = probes;
+  const busy = await freeClean(10000, performance.now(), false, {
+    ...deps,
+    lock: () =>
+      Promise.resolve({
+        release: null,
+        exit: 3,
+        error: "lock holder: fixture",
+      }),
+  });
+  expect(busy).toMatchObject({
+    exit: 3,
+    error: "lock holder: fixture",
+    items: [],
+  });
+  expect(probes).toBe(before);
+  const denied = await freeClean(10000, performance.now(), false, {
+    ...deps,
+    guard: () => "worker guard",
+  });
+  expect(denied).toMatchObject({ exit: 1, error: "worker guard", items: [] });
+  expect(locks).toBe(1);
+  expect(probes).toBe(before);
+});
+
+test("clean plan-only request cannot act even with approval", async () => {
+  const home = "/fixture/unused";
+  const result = await run(
+    [
+      "plan",
+      "targets",
+      "--target",
+      "clean",
+      "--approve",
+      "/fixture/cache",
+      "--no-progress",
+    ],
+    "",
+    { ...process.env, HOME: home, RECLAIM_STATE_DIR: `${home}/state` },
+  );
+  expect(result.exit).toBe(4);
+  expect(jsonText.safeParse(result.out).data).toMatchObject({
+    outcome: "unknown",
+    items: [],
+    receipt: null,
+  });
+  const invalid = await run(
+    ["plan", "targets", "--target", "clean", "--yes"],
+    "",
+    { ...process.env, HOME: home },
+  );
+  expect(invalid.exit).toBe(2);
 });

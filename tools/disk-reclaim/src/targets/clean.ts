@@ -5,6 +5,11 @@ import { deleteTree, keepTreeCandidate, treeCandidate } from "./tree.ts";
 import { processBusy } from "../lib/busy.ts";
 
 export type ProcessProbe = (comm: string) => boolean;
+const defaultFs = {
+  exists: existsSync,
+  tree: treeCandidate,
+  keep: keepTreeCandidate,
+};
 
 const paths = (home: string) => [
   `${home}/.bun/install/cache`,
@@ -21,7 +26,7 @@ const paths = (home: string) => [
 export const createCleanTarget = (
   home: () => string = () => process.env.HOME ?? homedir(),
   isBusy: ProcessProbe = processBusy,
-  bunGc: (homePath: string) => boolean = (homePath) => {
+  bunGc: (homePath: string) => boolean | Promise<boolean> = (homePath) => {
     const result = Bun.spawnSync(["bun", "pm", "cache", "rm"], {
       stdout: "pipe",
       stderr: "pipe",
@@ -30,6 +35,7 @@ export const createCleanTarget = (
     });
     return result.exitCode === 0;
   },
+  fs = defaultFs,
 ) =>
   ({
     name: "clean",
@@ -46,7 +52,7 @@ export const createCleanTarget = (
             ),
           ]),
         ]
-          .filter((p) => existsSync(p))
+          .filter((p) => fs.exists(p))
           .map((p) => {
             let comm = _ctx.config.regenerable_caches?.find(
               (rule) => rule.path.replace(/^~/u, root) === p,
@@ -63,18 +69,18 @@ export const createCleanTarget = (
                 p.startsWith(`${root}/.cargo/git/`)) &&
               ["cargo", "rustc", "rust-analyzer"].some((name) => isBusy(name))
             )
-              return keepTreeCandidate(p, "busy: cargo", _ctx);
+              return fs.keep(p, "busy: cargo", _ctx);
             if (comm !== undefined && isBusy(comm))
-              return keepTreeCandidate(p, `busy: ${comm}`, _ctx);
-            return treeCandidate(p, "regenerable package cache", _ctx);
+              return fs.keep(p, `busy: ${comm}`, _ctx);
+            return fs.tree(p, "regenerable package cache", _ctx);
           }),
       );
     },
-    act: (candidate, ctx) => {
+    act: async (candidate, ctx) => {
       if (candidate.path?.endsWith("/.bun/install/cache") === true) {
         if (isBusy("bun"))
           return { ok: false, bytes_freed: null, error: "busy: bun" };
-        if (bunGc(home()))
+        if (await bunGc(home()))
           return { ok: true, bytes_freed: candidate.bytes ?? 0, error: null };
       }
       return deleteTree(candidate, ctx);

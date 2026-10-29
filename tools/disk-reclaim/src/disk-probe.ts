@@ -6,14 +6,17 @@ export async function runProbe(
   timeout: number,
   env: NodeJS.ProcessEnv = process.env,
   parentSignal?: AbortSignal,
+  injected?: { spawn: typeof Bun.spawn; deadline: (ms: number) => AbortSignal },
 ) {
-  const deadline = AbortSignal.timeout(Math.min(timeout, 2147483647));
+  const deadline = (
+    injected?.deadline ?? ((ms: number) => AbortSignal.timeout(ms))
+  )(Math.min(timeout, 2147483647));
   const signal =
     parentSignal === undefined
       ? deadline
       : AbortSignal.any([deadline, parentSignal]);
   const spawned = fromThrowable(() =>
-    Bun.spawn(argv, {
+    (injected?.spawn ?? Bun.spawn)(argv, {
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",

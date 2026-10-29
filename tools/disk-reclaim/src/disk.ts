@@ -10,6 +10,7 @@ import { planPaths } from "./disk-path-plan.ts";
 import { unavailableRecords } from "./disk-records.ts";
 import { movePaths } from "./disk-move.ts";
 import { freeMiseConfigs } from "./disk-mise-configs.ts";
+import { freeClean } from "./disk-clean.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const grammar: Record<string, string[]> = {
@@ -673,6 +674,55 @@ async function main() {
       `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items, counts: { selected: items.length, completed: 0, refused, failed: 0, unknown }, errors: [], receipt: null })}\n`,
     );
     process.exitCode = unknown > 0 ? 4 : 1;
+    return;
+  }
+  if (
+    key === "free targets" &&
+    targets.length === 1 &&
+    targets[0] === "clean"
+  ) {
+    const controller = new AbortController();
+    let cancelled = 0;
+    const interrupt = () => {
+      cancelled = 130;
+      controller.abort();
+    };
+    const terminate = () => {
+      cancelled = 143;
+      controller.abort();
+    };
+    process.once("SIGINT", interrupt);
+    process.once("SIGTERM", terminate);
+    const result = await freeClean(
+      deadline,
+      start,
+      !options.has("no-progress"),
+      undefined,
+      controller.signal,
+      options.has("stop-on-error"),
+    );
+    process.removeListener("SIGINT", interrupt);
+    process.removeListener("SIGTERM", terminate);
+    const counts = {
+      selected: result.items.length,
+      completed: result.items.filter((i) => i.verdict === "completed").length,
+      refused: result.items.filter((i) =>
+        ["keep", "ask", "deny", "changed"].includes(i.verdict),
+      ).length,
+      failed: result.items.filter((i) =>
+        ["failed", "partial"].includes(i.verdict),
+      ).length,
+      unknown: result.items.filter((i) => i.verdict === "unknown").length,
+    };
+    let outcome = "partial";
+    if (result.exit === 0) outcome = "completed";
+    else if (result.exit === 3) outcome = "busy";
+    else if (result.exit === 4) outcome = "unknown";
+    if (cancelled !== 0) outcome = "cancelled";
+    process.stdout.write(
+      `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items: result.items, counts, errors: result.error === null ? [] : [{ code: "clean_error", message: result.error, scope }], receipt: result.receipt })}\n`,
+    );
+    process.exitCode = cancelled === 0 ? result.exit : cancelled;
     return;
   }
   if (

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.5 — 2026-10-29
+
+- Enable measured clean target through disk free
+
 ## 1.12.4 — 2026-10-29
 
 - Enable measured disk free for mise config metadata

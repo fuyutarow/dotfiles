@@ -44,6 +44,8 @@ stderr. Probe, SSH, lock, fstrim, and host sampling waits have explicit bounds.
 Exit 0 means the plan or all selected actions completed. Exit 1 means at least one selected action
 failed. Exit 2 means invalid invocation or plan/apply setup failure. Skipped ASK, KEEP, DENY, or
 fingerprint-changed records do not run.
+When a deletion run is cancelled, stderr reports `cancelled during deletion` and each
+successfully deleted path as `deleted before cancellation: <path>`.
 
 On WSL, apply runs `fstrim` with a 120-second bound and samples `/mnt/c` for up to 10 seconds.
 The report keeps guest free-space delta separate from measured Windows C: free-space delta.

@@ -120,6 +120,7 @@ export type EngineOptions = {
   scheduleDeadline?: (callback: () => void, ms: number) => () => void;
   deadlineCheck?: (phase: string) => void;
   measureFree?: () => number;
+  onCompletedDeletion?: (path: string) => void;
 };
 // Cooperative deadline: bounds work between checks, not one blocking syscall.
 const RUN_BUDGET_S = 1800;
@@ -496,6 +497,7 @@ async function recheckAndAct(
   ctx: Context,
   actions: ReceiptAction[],
   check: (phase: string) => void,
+  onCompletedDeletion?: (path: string) => void,
 ): Promise<number> {
   check("candidate recheck");
   if (isAborted(ctx.signal)) return 0;
@@ -577,7 +579,6 @@ async function recheckAndAct(
   const acted = await fromAsyncThrowable(async () =>
     target.act(found, freshContext),
   )();
-  check("action");
   const validated = acted.isOk() ? ActionResult.safeParse(acted.value) : null;
   let result: ActionResult = {
     ok: false,
@@ -588,6 +589,9 @@ async function recheckAndAct(
   if (acted.isErr()) result.error = errorMessage(acted.error);
   found.result = result;
   Object.assign(action, result);
+  if (result.ok && found.path !== null && found.action.kind === "delete")
+    onCompletedDeletion?.(found.path);
+  check("action");
   return result.ok ? 0 : 1;
 }
 
@@ -693,6 +697,7 @@ async function executeCandidates(
       ctx,
       actions,
       options.deadlineCheck ?? (() => {}),
+      options.onCompletedDeletion,
     );
     if (exit === 0) continue;
     row.exit = exit;

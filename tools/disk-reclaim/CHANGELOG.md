@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.14 — 2026-10-30
+
+- Report completed deletions when a run is cancelled.
+
 ## 1.12.13 — 2026-10-29
 
 - Add owner-approved judgment target to disk free

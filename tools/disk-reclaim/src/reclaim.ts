@@ -345,16 +345,6 @@ function planTable(value: Plan): string {
   return lines.join("\n");
 }
 
-function completedDeletionPaths(value: Plan): string[] {
-  return value.targets.flatMap((target) =>
-    target.candidates.flatMap((candidate) =>
-      candidate.path !== null && candidate.result?.ok === true
-        ? [candidate.path]
-        : [],
-    ),
-  );
-}
-
 function reportProcessDiagnostics(
   value: Plan,
   details: Set<string>,
@@ -747,6 +737,7 @@ export async function main(
   const progressReporter = new ProgressReporter({ tty: progressTty });
   const cancellation = new AbortController();
   let cancelledWith: 130 | 143 | undefined;
+  const completedPaths: string[] = [];
   let interruptCount = 0;
   let activePhase = "scan";
   const processDetails = new Set<string>();
@@ -956,6 +947,7 @@ export async function main(
     yes: authorized,
     underPressure: f.underPressure,
     stopOnError: f.stopOnError,
+    onCompletedDeletion: (path: string) => completedPaths.push(path),
   };
   const restore = () => {
     progressReporter.finish();
@@ -1005,6 +997,11 @@ export async function main(
   });
   if (result.error !== null && cancelledWith === undefined)
     process.stderr.write(`reclaim: ${safeStderr(result.error)}\n`);
+  if (cancelledWith !== undefined && selectedCommand === "run")
+    for (const path of completedPaths)
+      process.stderr.write(
+        `disk-reclaim: deleted before cancellation: ${safeStderr(path)}\n`,
+      );
   if (result.plan !== null) {
     const validated = Plan.safeParse(result.plan);
     if (!validated.success) return fail(validated.error.message);
@@ -1014,13 +1011,6 @@ export async function main(
       selectedCommand === "plan" && !f.yes && f.json
         ? []
         : await recordsFromPlan(validated.data);
-    if (cancelledWith !== undefined && selectedCommand === "run") {
-      const completedPaths = completedDeletionPaths(validated.data);
-      const summary = completedPaths.map((path) => safeStderr(path)).join(", ");
-      process.stderr.write(
-        `disk-reclaim: deleted before cancellation: ${summary.length === 0 ? "none" : summary}\n`,
-      );
-    }
     if (cancelledWith !== undefined && selectedCommand === "plan") {
       // An incomplete plan is not a usable plan document.
     } else if (selectedCommand === "plan" && !f.yes)

@@ -494,6 +494,9 @@ async function fixture() {
     LAND_EVENTS: events,
     AGX_STATE_DIR: join(temp, "agx-state"),
     XDG_STATE_HOME: join(temp, "state"),
+    XDG_DATA_HOME: join(temp, "data"),
+    GRAVEYARD: join(temp, "data", "graveyard"),
+    RIP_GRAVEYARD: join(temp, "data", "graveyard"),
     LAND_EXPECT_WORKSPACE: worker,
   };
   await writeFile(
@@ -2017,7 +2020,10 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     await writeFile(join(f.main, "keep.txt"), "uncommitted main version\n");
     const result = await f.land();
 
-    expect(result.exitCode).toBe(0);
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
     expect(result.stdout.toString()).toContain(
       '[land] main checkout: NOT LIVE rebase conflicted on ["keep.txt"]',
     );
@@ -2038,6 +2044,49 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     expect(
       (await f.log()).filter((event) => event[1] === "hook:post-merge"),
     ).toHaveLength(0);
+  });
+
+  test("LAND-OWN-TREE recreates a forgotten lander and lands the worker change", async () => {
+    const f = await fixture();
+    const state = join(
+      f.env.XDG_STATE_HOME,
+      "dotfiles",
+      "land",
+      basename(landStateDir(await realpath(f.main))),
+    );
+    const lander = join(state, "workspace");
+    const name = `land-owned-${basename(state)}`;
+    await mkdir(state, { recursive: true });
+    await f.jj(f.main, [
+      "workspace",
+      "add",
+      "--name",
+      name,
+      "-r",
+      "alpha",
+      lander,
+    ]);
+    await f.jj(f.main, ["workspace", "forget", name]);
+    expect(await pathExists(lander)).toBe(true);
+    await mkdir(f.env.GRAVEYARD, { recursive: true });
+    await writeFile(join(f.worker, "keep.txt"), "worker version\n");
+
+    const result = await f.land();
+
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    expect(result.stdout.toString()).toContain("[land] summary: LIVE");
+    expect(
+      await f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"]),
+    ).toBe("worker version");
+    expect(
+      (await f.jj(f.main, ["workspace", "list"]))
+        .split("\n")
+        .some((line) => line.trimStart().startsWith(`${name}:`)),
+    ).toBe(true);
+    expect((await readdir(f.env.GRAVEYARD)).length).toBeGreaterThan(0);
   });
 
   test("LAND-OWN-TREE refuses its dirty tree with exact paths before rebase", async () => {

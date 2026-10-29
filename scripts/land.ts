@@ -778,6 +778,13 @@ function prepareLander(
   name: string,
 ): ResultAsync<string, Error> {
   return safeTry(async function* () {
+    if (await pathExists(root)) {
+      const workspaces = yield* jj(source, ["workspace", "list"]);
+      const registered = workspaces
+        .split("\n")
+        .some((line) => line.trimStart().startsWith(`${name}:`));
+      if (!registered) yield* run(source, ["rip", root]);
+    }
     if (!(await pathExists(root))) {
       yield* jj(source, [
         "workspace",

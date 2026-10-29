@@ -172,6 +172,10 @@ test("timer expires nested eligible rip payloads by ctime record order until bou
     [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
   };
   const env = cliEnv(root);
+  await writeFile(
+    env.RECLAIM_CONFIG,
+    `${await readFile(env.RECLAIM_CONFIG, "utf8")}\ngraveyard_min_age_hours = 24\ngraveyard_pressure_undo_minutes = 10\n\n[collection_policy.class_rules.ownerless_cache]\ndefault_owner = "dotfiles"\nttl_days = 14\n\n[collection_policy.class_rules.deregistered_index_db]\nttl_days = 7\n`,
+  );
   const parent = join(env.RIP_GRAVEYARD, "home/user/workspaces");
   await mkdir(parent, { recursive: true });
   // Names and mtimes deliberately disagree with record order. All entries are

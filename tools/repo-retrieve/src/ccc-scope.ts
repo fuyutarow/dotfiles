@@ -13,12 +13,15 @@ import { join } from "node:path";
 import { readonlyCommand } from "../../shared/src/readonly-command.ts";
 import { attempt } from "../../shared/src/attempt.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
+import { cccBackend } from "./ccc-entry.ts";
 
-// The `ccc` entry point is a uv-tool script whose shebang names the interpreter that can import
-// cocoindex_code.
+// The owned public entry may be a Bun wrapper; its preserved backend is the uv-tool script whose
+// shebang names the interpreter that can import cocoindex_code.
 export async function cccPython(ccc: string): Promise<string | null> {
   const read = await attempt(
-    () => readFileSync(realpathSync(ccc), "utf8").split("\n", 1)[0] ?? "",
+    () =>
+      readFileSync(realpathSync(cccBackend(ccc)), "utf8").split("\n", 1)[0] ??
+      "",
   );
   if (!read.ok) return null;
   const interpreter = read.value.startsWith("#!/")

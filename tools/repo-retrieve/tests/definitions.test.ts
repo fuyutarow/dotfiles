@@ -2,13 +2,21 @@
 // bench-definitions.ts against a real catalog (README "Measurements"); these pin the rules that
 // decide what a card says and what counts as internal.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   firstLine,
   isPrivate,
   isTest,
+  cccPython,
   loadRetrievalConfig,
   strengthOf,
 } from "../src/definitions.ts";
@@ -68,6 +76,37 @@ describe("definition cards", () => {
       "none",
     ]);
   });
+});
+
+test("definitions resolve Python through the installed Bun entry's uv backend", () => {
+  const home = mkdtempSync(join(tmpdir(), "definitions-ccc-"));
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => {
+    rmSync(home, { recursive: true, force: true });
+  });
+  const bin = join(home, ".local/bin");
+  const uvBin = join(home, ".local/share/uv/bin");
+  mkdirSync(bin, { recursive: true });
+  mkdirSync(uvBin, { recursive: true });
+  const python = join(uvBin, "python3.12");
+  writeFileSync(python, "#!/usr/bin/env bun\nprocess.exit(0);\n");
+  chmodSync(python, 0o755);
+  const backend = join(bin, "ccc-backend");
+  writeFileSync(backend, `#!${python}\n# preserved uv backend\n`);
+  chmodSync(backend, 0o755);
+  const entry = join(bin, "ccc");
+  writeFileSync(entry, "#!/usr/bin/env bun\n// dotfiles:ccc-index-entry\n");
+  chmodSync(entry, 0o755);
+
+  expect(
+    cccPython(entry).match(
+      (value) => value,
+      () => null,
+    ),
+  ).toBe(python);
+  const unrelated = join(bin, "other-wrapper");
+  writeFileSync(unrelated, "#!/usr/bin/env bun\n");
+  expect(cccPython(unrelated).isErr()).toBe(true);
 });
 
 describe("retrieval.toml", () => {

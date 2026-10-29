@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.5 — 2026-10-29
+
+- Resolve ccc Python through the preserved uv backend
+
 ## 1.5.4 — 2026-10-28
 
 - Ignore user ripgrep config for deterministic lexical routes while preserving rr-controlled hidden traversal

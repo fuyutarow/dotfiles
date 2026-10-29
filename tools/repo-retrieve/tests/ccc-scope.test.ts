@@ -153,3 +153,32 @@ test("a ccc that is not ccc's Python script cannot answer: null", async () => {
   chmodSync(fake, 0o755);
   expect(await inScopeChanges(dir, fake, a, b)).toBeNull();
 });
+
+test("the installed Bun entry resolves scope checks through its uv backend", async () => {
+  const dir = project();
+  const a = commit(dir, { "README.md": "a" });
+  const b = commit(dir, { "notes.md": "n", "archive/x.md": "x" });
+  const home = mkdtempSync(join(tmpdir(), "ccc-scope-managed-"));
+  dirs.push(home);
+  const bin = join(home, ".local/bin");
+  const uvBin = join(home, ".local/share/uv/bin");
+  mkdirSync(bin, { recursive: true });
+  mkdirSync(uvBin, { recursive: true });
+  const python = join(uvBin, "python3.12");
+  writeFileSync(
+    python,
+    `#!/usr/bin/env bun\nconsole.log(JSON.stringify(["notes.md"]));\n`,
+  );
+  chmodSync(python, 0o755);
+  const backend = join(bin, "ccc-backend");
+  writeFileSync(backend, `#!${python}\n# preserved uv backend\n`);
+  chmodSync(backend, 0o755);
+  const entry = join(bin, "ccc");
+  writeFileSync(entry, "#!/usr/bin/env bun\n// dotfiles:ccc-index-entry\n");
+  chmodSync(entry, 0o755);
+
+  expect(await inScopeChanges(dir, entry, a, b)).toEqual({
+    changed: 2,
+    inScope: ["notes.md"],
+  });
+});

@@ -48,6 +48,7 @@ import {
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { typesafeKey } from "../../shared/src/typesafe-key.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
+import { cccBackend } from "./ccc-entry.ts";
 
 // One definition as ccc_defs.py writes it (see its `Record:` line); every file this module reads
 // back — the extractor's cache and the catalog's records.json — is parsed with this schema.
@@ -286,12 +287,11 @@ const MetaSchema = z.object({
 type Meta = z.output<typeof MetaSchema>;
 const SCAN_EVERY_MS = 60_000;
 
-// The interpreter that can import cocoindex: the `ccc` script's own shebang (same as ccc-scope.ts).
-function cccPython(): Result<string, Error> {
-  const executable = requireExecutable("ccc");
-  if (executable.isErr()) return err(executable.error);
+// The interpreter that can import cocoindex: the uv-owned backend's shebang, even when the
+// installed public entry is a Bun wrapper.
+export function cccPython(entry: string): Result<string, Error> {
   const resolved = fromThrowable(
-    () => realpathSync(executable.value),
+    () => realpathSync(cccBackend(entry)),
     asError,
   )();
   if (resolved.isErr()) return err(resolved.error);
@@ -527,7 +527,9 @@ async function rebuild(
   if (setup.isErr()) return err(setup.error);
   const onlyArgs =
     only !== null && existsSync(cachePath) ? ["--only", onlyPath] : [];
-  const python = cccPython();
+  const executable = requireExecutable("ccc");
+  if (executable.isErr()) return err(executable.error);
+  const python = cccPython(executable.value);
   if (python.isErr()) return err(python.error);
   const extract = await fromAsyncThrowable(
     () =>

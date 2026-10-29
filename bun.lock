@@ -21,6 +21,9 @@
         "oxlint-tsgolint": "7.0.2003",
       },
     },
+    "agents/hooks": {
+      "name": "@dotfiles/hooks",
+    },
     "tools/agent-cpu": {
       "name": "@dotfiles/agent-cpu",
       "version": "0.1.0",
@@ -91,7 +94,7 @@
     },
     "tools/disk-reclaim": {
       "name": "@dotfiles/disk-reclaim",
-      "version": "1.12.1",
+      "version": "1.12.13",
       "bin": {
         "disk-reclaim": "src/reclaim.ts",
       },
@@ -208,7 +211,7 @@
     },
     "tools/statusline": {
       "name": "@dotfiles/statusline",
-      "version": "0.22.5",
+      "version": "0.22.6",
       "bin": {
         "statusline": "src/statusline.ts",
       },
@@ -276,6 +279,8 @@
     "@dotfiles/herdr-btm": ["@dotfiles/herdr-btm@workspace:tools/herdr-btm"],
 
     "@dotfiles/herdr-projector": ["@dotfiles/herdr-projector@workspace:tools/herdr-projector"],
+
+    "@dotfiles/hooks": ["@dotfiles/hooks@workspace:agents/hooks"],
 
     "@dotfiles/preset": ["@dotfiles/preset@workspace:tools/preset"],
 

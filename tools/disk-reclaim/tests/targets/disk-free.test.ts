@@ -220,12 +220,13 @@ test("rip expiry yields after one complete payload to a foreground free request"
     payloads.push(
       await f.payload(`payload-${index}`, 1024 ** 3, 700_000 + index),
     );
+  const currentTime = Temporal.Now.instant().epochMilliseconds;
   await writeFile(
     join(f.root, ".record"),
     payloads
       .map(
         (path, index) =>
-          `${Temporal.Instant.fromEpochMilliseconds(Temporal.Now.instant().epochMilliseconds - 700_000 - index).toString()}\t/original\t${path}`,
+          `${Temporal.Instant.fromEpochMilliseconds(currentTime - 700_000 - index).toString()}\t/original\t${path}`,
       )
       .join("\n"),
   );
@@ -276,6 +277,7 @@ test("rip expiry yields after one complete payload to a foreground free request"
   const foregroundPayload = payloads[10] ?? f.root;
   const foreground = freeGraveyard("1KiB", {
     ...f.options,
+    now: currentTime,
     processes: () => {
       expect(backgroundDeleted).toEqual([backgroundPayload]);
       expect(existsSync(foregroundPayload)).toBe(true);

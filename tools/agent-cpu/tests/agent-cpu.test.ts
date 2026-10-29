@@ -21,6 +21,15 @@ async function fixture(mode = "ok") {
     home = join(root, "home");
   await mkdir(join(home, ".claude", "sessions"), { recursive: true });
   await mkdir(join(cgroup, "app", "agt_one.service"), { recursive: true });
+  await mkdir(proc, { recursive: true });
+  await writeFile(
+    join(cgroup, "app", "agt_one.service", "memory.current"),
+    "4096\n",
+  );
+  await writeFile(
+    join(proc, "meminfo"),
+    "MemTotal: 1024 kB\nMemAvailable: 256 kB\n",
+  );
   await writeFile(
     join(home, ".claude", "sessions", "10.json"),
     JSON.stringify({ sessionId: id }),
@@ -31,6 +40,12 @@ async function fixture(mode = "ok") {
   if (mode === "fail") command = "exit 1";
   await writeFile(agx, `#!/bin/sh\necho x >> '${root}/calls'\n${command}\n`);
   await chmod(agx, 0o755);
+  const nvidia = join(root, "fake-nvidia");
+  await writeFile(
+    nvidia,
+    `#!/bin/sh\ncase "$1" in\n  --query-compute-apps=*) printf '11, 2\\n12, 3\\n13, 4\\n20, 5\\n' ;;\n  --query-gpu=*) printf '100, 1000\\n200, 2000\\n' ;;\nesac\n`,
+  );
+  await chmod(nvidia, 0o755);
   async function setSample(end: boolean) {
     await mkdir(proc, { recursive: true });
     await writeFile(
@@ -68,6 +83,10 @@ async function fixture(mode = "ok") {
       );
       await writeFile(join(dir, "cmdline"), `${name}\0`);
       await writeFile(join(dir, "cgroup"), `0::${group}\n`);
+      await writeFile(
+        join(dir, "status"),
+        `Name:\t${name}\nVmRSS:\t${ticks} kB\n`,
+      );
     }
     await writeFile(
       join(cgroup, "app", "agt_one.service", "cpu.stat"),
@@ -84,6 +103,8 @@ async function fixture(mode = "ok") {
     sleep: async () => setSample(true),
     agx,
     timeout: mode === "timeout" ? 1000 : 2000,
+    nvidia,
+    nvidiaTimeout: 5000,
   };
   return { root, options, reset: () => setSample(false) };
 }
@@ -92,23 +113,39 @@ test("attributes nearest agents, worker cgroups and top unowned", async () => {
   const doc = await produce(f.options);
   expect(doc).not.toBeNull();
   if (doc === null) return;
-  expect(doc.host).toEqual({ cpu_pct: 100, cores: 2 });
+  expect(doc.schema).toBe(2);
+  expect(doc.host).toEqual({
+    cpu_pct: 100,
+    cores: 2,
+    ram_bytes: 786432,
+    ram_total_bytes: 1048576,
+    vram_bytes: 314572800,
+    vram_total_bytes: 3145728000,
+  });
   expect(doc.sessions).toEqual([
     {
       session_id: id,
       pid: 10,
       vendor: "claude",
       cpu_pct: 30,
-      workers: { count: 1, cpu_pct: 50 },
+      ram_bytes: 60 * 1024,
+      vram_bytes: 2097152,
+      workers: { count: 1, cpu_pct: 50, ram_bytes: 4096, vram_bytes: 5242880 },
     },
   ]);
   expect(doc.unresolved_agents).toEqual([
-    { pid: 12, vendor: "codex", cpu_pct: 20 },
+    {
+      pid: 12,
+      vendor: "codex",
+      cpu_pct: 20,
+      ram_bytes: 40 * 1024,
+      vram_bytes: 7340032,
+    },
   ]);
   expect(doc.unowned).toEqual([
-    { label: "orphan:alpha", cpu_pct: 50 },
-    { label: "orphan:beta", cpu_pct: 40 },
-    { label: "orphan:gamma", cpu_pct: 30 },
+    { label: "orphan:alpha", cpu_pct: 50, ram_bytes: 100 * 1024 },
+    { label: "orphan:beta", cpu_pct: 40, ram_bytes: 80 * 1024 },
+    { label: "orphan:gamma", cpu_pct: 30, ram_bytes: 60 * 1024 },
   ]);
   expect((await readFile(join(f.root, "calls"), "utf8")).trim()).toBe("x");
 });
@@ -136,9 +173,32 @@ test("unowned excludes values below five percent", async () => {
   expect(doc).not.toBeNull();
   if (doc === null) return;
   expect(doc.unowned).toEqual([
-    { label: "demo.service", cpu_pct: 10 },
-    { label: "orphan:edge", cpu_pct: 5 },
+    { label: "demo.service", cpu_pct: 10, ram_bytes: 20 * 1024 },
+    { label: "orphan:edge", cpu_pct: 5, ram_bytes: 10 * 1024 },
   ]);
+});
+test("nvidia-smi absent makes every VRAM field null", async () => {
+  const f = await fixture();
+  const doc = await produce({
+    ...f.options,
+    nvidia: join(f.root, "absent-nvidia"),
+  });
+  expect(doc?.host.vram_bytes).toBeNull();
+  expect(doc?.host.vram_total_bytes).toBeNull();
+  expect(doc?.sessions[0]?.vram_bytes).toBeNull();
+  expect(doc?.sessions[0]?.workers?.vram_bytes).toBeNull();
+  expect(doc?.unresolved_agents[0]?.vram_bytes).toBeNull();
+});
+test("pid absent from successful GPU query has zero VRAM", async () => {
+  const f = await fixture();
+  const nvidia = join(f.root, "empty-gpu");
+  await writeFile(
+    nvidia,
+    "#!/bin/sh\ncase \"$1\" in\n  --query-compute-apps=*) : ;;\n  --query-gpu=*) printf '100, 1000\\n' ;;\nesac\n",
+  );
+  await chmod(nvidia, 0o755);
+  const doc = await produce({ ...f.options, nvidia });
+  expect(doc?.sessions[0]?.vram_bytes).toBe(0);
 });
 for (const mode of ["fail", "timeout"])
   test(`agx ${mode} produces null workers`, async () => {

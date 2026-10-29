@@ -27,6 +27,7 @@ type Proc = {
   vendor?: Vendor;
   unit?: string;
   group: string;
+  rss?: number;
 };
 type Sample = {
   processes: Map<number, Proc>;
@@ -34,6 +35,7 @@ type Sample = {
   idle: number;
   cores: number;
   units: Map<string, number>;
+  unitPaths: Map<string, string>;
 };
 export type Options = {
   proc: string;
@@ -44,6 +46,8 @@ export type Options = {
   sleep: (ms: number) => Promise<void>;
   agx: string;
   timeout: number;
+  nvidia: string;
+  nvidiaTimeout: number;
 };
 const defaults = (): Options => ({
   proc: "/proc",
@@ -54,6 +58,8 @@ const defaults = (): Options => ({
   sleep: (ms) => Bun.sleep(ms),
   agx: "agx",
   timeout: 15000,
+  nvidia: "nvidia-smi",
+  nvidiaTimeout: 5000,
 });
 const read = (path: string) => readFile(path, "utf8");
 const optional = (path: string) => read(path).catch(() => "");
@@ -168,6 +174,94 @@ async function sample(options: Options, rows: Row[]): Promise<Sample | null> {
     idle,
     cores: cpuLines.filter((line) => /^cpu\d+\s/u.test(line)).length,
     units,
+    unitPaths: groups,
+  };
+}
+async function nvidia(options: Options, query: "compute" | "host") {
+  return Promise.try(async () => {
+    const args =
+      query === "compute"
+        ? [
+            "--query-compute-apps=pid,used_memory",
+            "--format=csv,noheader,nounits",
+          ]
+        : [
+            "--query-gpu=memory.used,memory.total",
+            "--format=csv,noheader,nounits",
+          ];
+    const child = Bun.spawn({
+      cmd: [options.nvidia, ...args],
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: options.nvidiaTimeout,
+    });
+    const [out, , code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    return code === 0 ? out : null;
+  }).catch(() => null);
+}
+function parseGpu(raw: string | null) {
+  if (raw === null) return null;
+  const values = new Map<number, number>();
+  if (raw.trim() === "") return values;
+  for (const line of raw.trim().split("\n")) {
+    const fields = line.split(",").map((value) => Number(value.trim()));
+    const pid = fields[0];
+    const memory = fields[1];
+    if (
+      pid === undefined ||
+      memory === undefined ||
+      !Number.isInteger(pid) ||
+      !Number.isFinite(memory) ||
+      memory < 0
+    )
+      return null;
+    values.set(pid, memory * 1048576);
+  }
+  return values;
+}
+function parseHostGpu(raw: string | null) {
+  if (raw === null) return null;
+  const rows = raw
+    .trim()
+    .split("\n")
+    .map((line) => line.split(",").map((value) => Number(value.trim())));
+  if (
+    rows.length === 0 ||
+    rows.some(
+      (row) =>
+        row.length !== 2 || row.some((n) => !Number.isFinite(n) || n < 0),
+    )
+  )
+    return null;
+  return {
+    used: rows.reduce((sum, row) => sum + (row[0] ?? 0), 0) * 1048576,
+    total: rows.reduce((sum, row) => sum + (row[1] ?? 0), 0) * 1048576,
+  };
+}
+async function rss(options: Options, proc: Proc) {
+  const raw = await optional(join(options.proc, String(proc.pid), "status"));
+  const match = /^VmRSS:\s+(\d+)\s+kB$/mu.exec(raw);
+  return match?.[1] === undefined ? 0 : Number(match[1]) * 1024;
+}
+function hostMemory(raw: string) {
+  const total = /^MemTotal:\s+(\d+)\s+kB$/mu.exec(raw)?.[1];
+  const available = /^MemAvailable:\s+(\d+)\s+kB$/mu.exec(raw)?.[1];
+  if (total === undefined || available === undefined) return null;
+  const totalKb = Number(total);
+  const availableKb = Number(available);
+  if (
+    !Number.isSafeInteger(totalKb) ||
+    !Number.isSafeInteger(availableKb) ||
+    availableKb > totalKb
+  )
+    return null;
+  return {
+    ram_bytes: (totalKb - availableKb) * 1024,
+    ram_total_bytes: totalKb * 1024,
   };
 }
 const claudeFile = jsonOf(z.object({ sessionId: uuid }));
@@ -244,6 +338,71 @@ export async function produce(options: Options) {
   const second = await sample(options, rows ?? []);
   if (second === null) return null;
   const at = options.now();
+  const [computeRaw, hostGpuRaw, meminfo] = await Promise.all([
+    nvidia(options, "compute"),
+    nvidia(options, "host"),
+    read(join(options.proc, "meminfo")),
+  ]);
+  const gpuByPid = parseGpu(computeRaw);
+  const hostGpu = parseHostGpu(hostGpuRaw);
+  const hostRam = hostMemory(meminfo);
+  if (hostRam === null) return null;
+  const gpuAvailable = gpuByPid !== null && hostGpu !== null;
+  const ramByAgent = new Map<number, number>();
+  const vramByAgent = new Map<number, number>();
+  const ramByLabel = new Map<string, number>();
+  const vramByUnit = new Map<string, number>();
+  const unitRam = new Map<string, number>();
+  const processOwner = (proc: Proc) => {
+    let ancestor: Proc | undefined = proc;
+    const seen = new Set<number>();
+    while (
+      ancestor !== undefined &&
+      ancestor.vendor === undefined &&
+      !seen.has(ancestor.pid)
+    ) {
+      seen.add(ancestor.pid);
+      ancestor = second.processes.get(ancestor.parent);
+    }
+    return ancestor?.vendor === undefined ? undefined : ancestor;
+  };
+  await Promise.all(
+    [...second.processes.values()].map(async (proc) => {
+      proc.rss = await rss(options, proc);
+    }),
+  );
+  for (const proc of second.processes.values()) {
+    const workerUnit = proc.group
+      .split("/")
+      .find((part) => /^agt_.*\.service$/u.test(part));
+    const owner = processOwner(proc);
+    if (workerUnit !== undefined) {
+      vramByUnit.set(
+        workerUnit,
+        (vramByUnit.get(workerUnit) ?? 0) + (gpuByPid?.get(proc.pid) ?? 0),
+      );
+      continue;
+    }
+    if (owner !== undefined) {
+      ramByAgent.set(
+        owner.pid,
+        (ramByAgent.get(owner.pid) ?? 0) + (proc.rss ?? 0),
+      );
+      vramByAgent.set(
+        owner.pid,
+        (vramByAgent.get(owner.pid) ?? 0) + (gpuByPid?.get(proc.pid) ?? 0),
+      );
+    } else {
+      const label =
+        proc.unit ?? `${proc.parent === 1 ? "orphan:" : ""}${proc.name}`;
+      ramByLabel.set(label, (ramByLabel.get(label) ?? 0) + (proc.rss ?? 0));
+    }
+  }
+  for (const [unit, group] of second.unitPaths) {
+    const raw = await optional(join(options.cgroup, group, "memory.current"));
+    const value = Number(raw.trim());
+    if (Number.isSafeInteger(value) && value >= 0) unitRam.set(unit, value);
+  }
   const agents = [...second.processes.values()].filter(
     (p) =>
       p.vendor !== undefined &&
@@ -279,10 +438,22 @@ export async function produce(options: Options) {
     vendor: Vendor;
     pid: number;
     cpu_pct: number;
-    workers: { count: number; cpu_pct: number } | null;
+    ram_bytes: number;
+    vram_bytes: number | null;
+    workers: {
+      count: number;
+      cpu_pct: number;
+      ram_bytes: number;
+      vram_bytes: number | null;
+    } | null;
   }[] = [];
-  const unresolved_agents: { pid: number; vendor: Vendor; cpu_pct: number }[] =
-    [];
+  const unresolved_agents: {
+    pid: number;
+    vendor: Vendor;
+    cpu_pct: number;
+    ram_bytes: number;
+    vram_bytes: number | null;
+  }[] = [];
   for (const agent of agents) {
     if (agent.vendor === undefined) continue;
     const id = await sessionId(agent, options);
@@ -290,6 +461,8 @@ export async function produce(options: Options) {
       pid: agent.pid,
       vendor: agent.vendor,
       cpu_pct: Math.round(usage.get(agent.pid) ?? 0),
+      ram_bytes: ramByAgent.get(agent.pid) ?? 0,
+      vram_bytes: gpuAvailable ? (vramByAgent.get(agent.pid) ?? 0) : null,
     };
     if (id === undefined) {
       unresolved_agents.push(base);
@@ -302,25 +475,39 @@ export async function produce(options: Options) {
         .flatMap((unit) => (unit === null || unit === undefined ? [] : [unit])),
     );
     let micros = 0;
-    for (const unit of unitNames)
+    let workersRam = 0;
+    let workersVram = 0;
+    for (const unit of unitNames) {
       micros += Math.max(
         0,
         (second.units.get(unit) ?? 0) - (first.units.get(unit) ?? 0),
       );
+      workersRam += unitRam.get(unit) ?? 0;
+      workersVram += vramByUnit.get(unit) ?? 0;
+    }
+    let workerStats: {
+      count: number;
+      cpu_pct: number;
+      ram_bytes: number;
+      vram_bytes: number | null;
+    } | null = null;
+    if (owned !== undefined) {
+      const workersVramBytes = gpuAvailable ? workersVram : null;
+      workerStats = {
+        count: owned.length,
+        cpu_pct: Math.round((micros / (WINDOW * 1000)) * 100),
+        ram_bytes: workersRam,
+        vram_bytes: workersVramBytes,
+      };
+    }
     sessions.push({
       session_id: id,
       ...base,
-      workers:
-        owned === undefined
-          ? null
-          : {
-              count: owned.length,
-              cpu_pct: Math.round((micros / (WINDOW * 1000)) * 100),
-            },
+      workers: workerStats,
     });
   }
   return {
-    schema: 1,
+    schema: 2,
     at,
     window_ms: WINDOW,
     host: {
@@ -332,12 +519,19 @@ export async function produce(options: Options) {
           100,
       ),
       cores: second.cores,
+      ...hostRam,
+      vram_bytes: gpuAvailable ? hostGpu.used : null,
+      vram_total_bytes: gpuAvailable ? hostGpu.total : null,
     },
     agx: rows === null ? "unavailable" : "ok",
     sessions,
     unresolved_agents,
     unowned: [...unowned]
-      .map(([label, value]) => ({ label, cpu_pct: Math.round(value) }))
+      .map(([label, value]) => ({
+        label,
+        cpu_pct: Math.round(value),
+        ram_bytes: ramByLabel.get(label) ?? 0,
+      }))
       .filter((row) => row.cpu_pct >= 5)
       .toSorted((a, b) => b.cpu_pct - a.cpu_pct)
       .slice(0, 3),

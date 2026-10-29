@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { jsonOf, z } from "../src/zod.ts";
 import {
   assess,
   loadStorageHeadroom,
@@ -16,6 +18,47 @@ const REAL_CONFIG = join(
 );
 
 describe("storage headroom", () => {
+  test("uncached measurement leaves hook cache untouched while existing caller writes and reuses it", async () => {
+    const home = mkdtempSync(join(tmpdir(), "headroom-cache-"));
+    const module = join(import.meta.dir, "../src/storage-headroom.ts");
+    const env = { ...process.env, HOME: home };
+    const invoke = async (name: string) => {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "-e",
+          `import { ${name} } from ${JSON.stringify(module)}; console.log(JSON.stringify(${name}(${JSON.stringify(home)})))`,
+        ],
+        { env, stdout: "pipe", stderr: "pipe" },
+      );
+      const [out, err, exit] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      expect(exit).toBe(0);
+      expect(err).toBe("");
+      const parsed = jsonOf(
+        z.object({ free: z.number(), total: z.number() }),
+      ).safeParse(out);
+      expect(parsed.success).toBe(true);
+      return parsed.success ? parsed.data : null;
+    };
+    const dir = join(home, ".cache", "claude-hooks", "storage-headroom");
+    const uncached = await invoke("measureStorageUncached");
+    expect(uncached?.free).toBeGreaterThanOrEqual(0);
+    expect(uncached?.total).toBeGreaterThan(0);
+    expect(existsSync(dir)).toBe(false);
+    const first = await invoke("measureStorage");
+    const files = await readdir(dir);
+    expect(files).toHaveLength(1);
+    const file = join(dir, files[0] ?? "");
+    const contents = await readFile(file, "utf8");
+    expect(await invoke("measureStorage")).toEqual(first);
+    expect(await readFile(file, "utf8")).toBe(contents);
+    await invoke("measureStorageUncached");
+    expect(await readFile(file, "utf8")).toBe(contents);
+  });
   test("line math uses the smaller threshold and the absolute line without a total", () => {
     expect(storageLine(40, 10, 1_000 * GiB)).toBe(40 * GiB);
     expect(storageLine(40, 10, 200 * GiB)).toBe(20 * GiB);

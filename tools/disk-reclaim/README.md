@@ -281,3 +281,14 @@ deleted), with a stderr diagnostic. System calls must
 return before a cooperative budget can stop work. Budget exhaustion and per-payload skips are
 reported, and no background continuation is launched. The worker mutation guard also applies
 to `free`; fixtures use temporary roots and state.
+
+## Disk command family
+
+`disk plan`, `disk move`, `disk free`, and `disk inspect` expose the new effect-oriented
+command grammar; run `disk --help` or `disk <command> --help` for modes and examples.
+`inspect receipts` and `inspect capacity` provide bounded read-only results; capacity planning
+reports its measurement and an unknown candidate plan. `free targets vhdx` and `audit` refuse
+these plan-only targets without taking action. Other action adapters return a `disk.result/1`
+unknown result and exit 4 without mutation. Invalid requests exit 2. The existing
+`disk-reclaim` commands and their formats remain available unchanged. For `disk free records`,
+stdin must contain legacy `disk-reclaim plan` JSONL records.

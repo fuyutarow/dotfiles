@@ -54,3 +54,19 @@ The flat JSONL fields and verdict vocabulary are the pipeline interface. Human p
 presentation layer and cannot change those records. `tools/disk-reclaim/tests/records.test.ts`,
 `records-cli.test.ts`, host-return tests, and the shared terminal-progress tests provide positive
 and negative receipts for stdin scope, fingerprint changes, owner approval, and channel behavior.
+
+## `disk` family parser
+
+The additive `disk` entry accepts the effect-oriented `plan`, `move`, `free`, and `inspect`
+grammar shown by their help. `inspect receipts` reads the existing receipt history in a bounded
+child process, reports malformed or unreadable history as unknown, and does not write state.
+`free targets vhdx` and `free targets audit` explicitly refuse these plan-only targets without
+starting an action; mixed selections report the remaining unavailable targets as unknown. Other
+action adapters are not yet enabled: a valid request produces one
+`disk.result/1` JSON object with outcome `unknown` and exit 4 before any operation. Invalid
+syntax or invalid legacy JSONL input exits 2 on stderr without a result. Help and version exit 0.
+`free records` alone reads stdin; it requires at least one valid legacy candidate record.
+Selectors are exclusive, repeatable target and approval values must be distinct, and `--` ends
+options. Unspecified scope and observations remain null; counts are zero because no item was
+selected by an adapter. Sizes are rounded up to bytes and durations are bounded safe integers.
+The legacy `disk-reclaim` interface retains its existing contract.

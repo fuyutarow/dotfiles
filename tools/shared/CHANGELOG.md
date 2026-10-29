@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.4 — 2026-10-29
+
+- Add uncached storage measurement
+
 ## 0.19.3 — 2026-10-24
 
 - Remove unused telemetry location and GPU denial helpers

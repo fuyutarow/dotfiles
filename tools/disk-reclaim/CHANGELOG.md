@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.0 — 2026-10-29
+
+- Add disk command family
+
 ## 1.11.3 — 2026-10-29
 
 - Preserve deadline outcome and phase when reading receipts

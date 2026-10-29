@@ -254,6 +254,18 @@ export function assess(
   };
 }
 
+/** Measure without reading or writing the hook cache. */
+export function measureStorageUncached(
+  path: string,
+): StorageMeasurement | null {
+  const result = fromThrowable(() => statfsSync(path))();
+  if (result.isErr()) return null;
+  return {
+    free: result.value.bavail * result.value.bsize,
+    total: result.value.blocks * result.value.bsize,
+  };
+}
+
 /** Free bytes available to an unprivileged caller and filesystem capacity; null on statfs failure. */
 export function measureStorage(path: string): StorageMeasurement | null {
   const cacheDir = join(
@@ -282,12 +294,8 @@ export function measureStorage(path: string): StorageMeasurement | null {
       : null;
   })();
   if (cached.isOk() && cached.value !== null) return cached.value;
-  const result = fromThrowable(() => statfsSync(path))();
-  if (result.isErr()) return null;
-  const measured = {
-    free: result.value.bavail * result.value.bsize,
-    total: result.value.blocks * result.value.bsize,
-  };
+  const measured = measureStorageUncached(path);
+  if (measured === null) return null;
   fromThrowable(() => {
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(cacheFile, JSON.stringify({ ...measured, at: now }));

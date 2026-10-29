@@ -40,7 +40,8 @@
     "lint-ts-candidate": "agents/skills/wiring-mise-tasks/scripts/lint-ts-candidate.ts",
     "preset": "tools/preset/src/preset.ts",
     "codex-thread-copy": "tools/codex-thread-copy/src/codex-thread-copy.ts",
-    "agent-cpu": "tools/agent-cpu/src/agent-cpu.ts"
+    "agent-cpu": "tools/agent-cpu/src/agent-cpu.ts",
+    "disk": "tools/disk-reclaim/src/disk.ts"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",

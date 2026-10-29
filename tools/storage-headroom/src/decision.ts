@@ -76,7 +76,7 @@ export const TMP_INODE_WARN_PCT = 85;
 export const TMP_INODE_DENY_PCT = 95;
 const MAX_SCRATCHPAD_WRITE_BYTES = 64 * 1024;
 const CONFIG_PATH =
-  process.env.STORAGE_HEADROOM_CONFIG ??
+  process.env["STORAGE_HEADROOM_CONFIG"] ??
   resolve(import.meta.dir, "../../../agents/hooks/storage-headroom.toml");
 
 // --- Config: shape and validation -------------------------------------------------------------
@@ -480,7 +480,7 @@ function launcherByText(
     if (m !== null)
       return {
         command: l.command,
-        label: [l.command, m.groups?.sub, m.groups?.task]
+        label: [l.command, m.groups?.["sub"], m.groups?.["task"]]
           .filter((part) => part !== undefined)
           .join(" "),
       };
@@ -591,7 +591,7 @@ async function freeBytes(path: string): Promise<number | null> {
 }
 
 function nowMs(): number {
-  const injected = Number(process.env.STORAGE_HEADROOM_NOW_MS);
+  const injected = Number(process.env["STORAGE_HEADROOM_NOW_MS"]);
   return Number.isFinite(injected)
     ? injected
     : Temporal.Now.instant().epochMilliseconds;
@@ -678,7 +678,7 @@ async function space(path: string): Promise<Space | null> {
 // multi-minute cache cleanup, and this service also runs from a timer while an agent is idle.
 async function requestRecovery(): Promise<string> {
   // A fixture config must not start the real host service during hook tests.
-  if (process.env.STORAGE_HEADROOM_CONFIG !== undefined) return "";
+  if (process.env["STORAGE_HEADROOM_CONFIG"] !== undefined) return "";
   const stamp = join(
     homedir(),
     ".local/state/wsl-capacity-recover/last-request",
@@ -801,7 +801,7 @@ const expand = (p: string) =>
 function cargoTargetDir(command: string, cwd: string): string | null {
   const envDir =
     /\bCARGO_TARGET_DIR=(\S+)/u.exec(command)?.[1] ??
-    process.env.CARGO_TARGET_DIR;
+    process.env["CARGO_TARGET_DIR"];
   let start = cwd;
   const cd = /(?:^|[;&|(]\s*)cd\s+(\S+)/u.exec(command)?.[1];
   if (cd !== undefined) start = resolve(cwd, expand(cd));
@@ -967,13 +967,13 @@ export async function decide(payload: unknown): Promise<Verdict> {
   // /tmp is guarded even when the byte-only declaration predates inode protection.
   if (
     !Object.values(config.drive).some((d) => d.path === "/tmp") &&
-    (process.env.STORAGE_HEADROOM_CONFIG === undefined ||
-      process.env.TMPDIR !== undefined)
+    (process.env["STORAGE_HEADROOM_CONFIG"] === undefined ||
+      process.env["TMPDIR"] !== undefined)
   ) {
     const sp = await space(
-      process.env.STORAGE_HEADROOM_CONFIG === undefined
+      process.env["STORAGE_HEADROOM_CONFIG"] === undefined
         ? "/tmp"
-        : (process.env.TMPDIR ?? dirname(CONFIG_PATH)),
+        : (process.env["TMPDIR"] ?? dirname(CONFIG_PATH)),
     );
     if (inodeUse(sp) !== null)
       drives.push({
@@ -1008,8 +1008,8 @@ export async function decide(payload: unknown): Promise<Verdict> {
       .includes("microsoft");
   const hostUnreadable =
     wsl &&
-    config.drive.host !== undefined &&
-    (await freeBytes(config.drive.host.path)) === null;
+    config.drive["host"] !== undefined &&
+    (await freeBytes(config.drive["host"].path)) === null;
   if (low.length > 0 && smallScratchpadWrite && !inodeDeny) {
     return {
       decision: "allow",
@@ -1050,7 +1050,7 @@ export async function decide(payload: unknown): Promise<Verdict> {
     };
   }
   if (hit !== null && (warningLine.length > 0 || hostUnreadable || inodeDeny)) {
-    const hostDrive = config.drive.host;
+    const hostDrive = config.drive["host"];
     const hostLow =
       hostDrive !== undefined &&
       drives.some(
@@ -1086,7 +1086,9 @@ async function denyLowSpace(
   additionalContext = "",
 ): Promise<Verdict> {
   const first = "free space: disk-reclaim run --tier blind --yes";
-  const candidates = await readReclaimPlanCache(process.env.HOME ?? homedir());
+  const candidates = await readReclaimPlanCache(
+    process.env["HOME"] ?? homedir(),
+  );
   const reclaimAdvice =
     candidates.length > 0
       ? `Cached safe reclaim candidates: ${candidates

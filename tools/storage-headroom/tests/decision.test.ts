@@ -83,12 +83,12 @@ test.each([
     const fixture = cachedConfig(
       (c) => {
         for (const row of Object.values(c.drive)) {
-          row.deny_gib = 0;
-          row.deny_pct = 0;
-          row.warn_gib = 0;
-          row.warn_pct = 0;
+          row["deny_gib"] = 0;
+          row["deny_pct"] = 0;
+          row["warn_gib"] = 0;
+          row["warn_pct"] = 0;
         }
-        c.drive.tmp = {
+        c.drive["tmp"] = {
           label: "fixture tmp",
           path: root,
           deny_gib: 0,
@@ -112,10 +112,10 @@ test.each([
         type,
         files: 1000,
         ffree: free,
-        at: Number(fixture.env.STORAGE_HEADROOM_NOW_MS),
+        at: Number(fixture.env["STORAGE_HEADROOM_NOW_MS"]),
       }),
     );
-    fixture.env.TMPDIR = root;
+    fixture.env["TMPDIR"] = root;
     const result = runHook(HOOK, bash("touch output"), fixture.env);
     expect(decisionOf(result.stdout)?.permissionDecision).toBe(expected);
     if (message === undefined) expect(result.stdout).toBe("");
@@ -133,13 +133,13 @@ function runHook(
   env: Record<string, string> = {},
   cwd?: string,
 ) {
-  const home = env.HOME;
+  const home = env["HOME"];
   const space = home === undefined ? undefined : fixtureSpace.get(home);
   if (home !== undefined && space !== undefined) {
     const now =
-      env.STORAGE_HEADROOM_NOW_MS === undefined
+      env["STORAGE_HEADROOM_NOW_MS"] === undefined
         ? Temporal.Now.instant().epochMilliseconds
-        : Number(env.STORAGE_HEADROOM_NOW_MS);
+        : Number(env["STORAGE_HEADROOM_NOW_MS"]);
     cachedSpace(home, "/mnt/c", space.free, space.total, now);
     cachedSpace(home, "/", space.free, space.total, now);
   }
@@ -277,13 +277,13 @@ function config(edit: (c: Doc) => void): Record<string, string> {
 // so a non-zero size gets 100% and a zero size 0%.
 const pct = (gibLine: number): number => (gibLine > 0 ? 100 : 0);
 const drives = (host: number, guest: number, hostWarn: number) => (c: Doc) => {
-  driveRow(c, "host").deny_gib = host;
-  driveRow(c, "host").deny_pct = pct(host);
-  driveRow(c, "host").stop_gib = host > 0 ? host / 2 : 0;
-  driveRow(c, "guest").deny_gib = guest;
-  driveRow(c, "guest").deny_pct = pct(guest);
-  driveRow(c, "host").warn_gib = hostWarn;
-  driveRow(c, "host").warn_pct = pct(hostWarn);
+  driveRow(c, "host")["deny_gib"] = host;
+  driveRow(c, "host")["deny_pct"] = pct(host);
+  driveRow(c, "host")["stop_gib"] = host > 0 ? host / 2 : 0;
+  driveRow(c, "guest")["deny_gib"] = guest;
+  driveRow(c, "guest")["deny_pct"] = pct(guest);
+  driveRow(c, "host")["warn_gib"] = hostWarn;
+  driveRow(c, "host")["warn_pct"] = pct(hostWarn);
 };
 const FULL = config(drives(1_000_000, 1_000_000, 60));
 const EMPTY = config(drives(0, 0, 0));
@@ -291,10 +291,10 @@ const WARN_ONLY = config(drives(0, 0, 1_000_000));
 
 // The 2026-10-05 rented box: an absolute size meant for a 1 TB disk, a small share of this one.
 const SMALL_SHARE = config((c) => {
-  driveRow(c, "host").deny_gib = 1_000_000;
-  driveRow(c, "host").deny_pct = 0;
-  driveRow(c, "guest").deny_gib = 1_000_000;
-  driveRow(c, "guest").deny_pct = 0;
+  driveRow(c, "host")["deny_gib"] = 1_000_000;
+  driveRow(c, "host")["deny_pct"] = 0;
+  driveRow(c, "guest")["deny_gib"] = 1_000_000;
+  driveRow(c, "guest")["deny_pct"] = 0;
 });
 
 describe("enforce-storage-headroom", () => {
@@ -306,11 +306,11 @@ describe("enforce-storage-headroom", () => {
           (c) => {
             drives(10, 10, 20)(c);
             for (const row of Object.values(c.drive)) {
-              delete row.rate_red_minutes;
-              delete row.rate_yellow_minutes;
+              delete row["rate_red_minutes"];
+              delete row["rate_yellow_minutes"];
               if (durations) {
-                row.rate_red_minutes = 0.001;
-                row.rate_yellow_minutes = 100_000;
+                row["rate_red_minutes"] = 0.001;
+                row["rate_yellow_minutes"] = 100_000;
               }
             }
           },
@@ -346,8 +346,8 @@ describe("enforce-storage-headroom", () => {
         HOOK,
         bash("cp x y"),
         config((c) => {
-          driveRow(c, "host").rate_red_minutes = value;
-          driveRow(c, "guest").rate_yellow_minutes = value;
+          driveRow(c, "host")["rate_red_minutes"] = value;
+          driveRow(c, "guest")["rate_yellow_minutes"] = value;
         }),
       );
       const reason = decisionOf(r.stdout)?.permissionDecisionReason ?? "";
@@ -378,8 +378,8 @@ describe("enforce-storage-headroom", () => {
       HOOK,
       bash("cp x y"),
       config((c) => {
-        delete driveRow(c, "host").warn_gib;
-        driveRow(c, "guest").deny_pct = 150;
+        delete driveRow(c, "host")["warn_gib"];
+        driveRow(c, "guest")["deny_pct"] = 150;
       }),
     );
     const reason = decisionOf(r.stdout)?.permissionDecisionReason ?? "";
@@ -432,7 +432,7 @@ describe("enforce-storage-headroom", () => {
     () => {
       const cfg = config((c) => {
         drives(0, 0, 0)(c);
-        driveRow(c, "host").path = "/missing-wsl-host-drive";
+        driveRow(c, "host")["path"] = "/missing-wsl-host-drive";
       });
       const d = decisionOf(runHook(HOOK, bash("cargo build"), cfg).stdout);
       expect(d?.permissionDecision).toBe("deny");
@@ -744,8 +744,8 @@ describe("enforce-storage-headroom", () => {
     const budget = (warn: number, hostWarn = 0) =>
       config((c) => {
         drives(0, 0, hostWarn)(c);
-        firstBudget(c).warn_gib = warn;
-        firstBudget(c).deny_gib = Math.max(warn + 1, 80);
+        firstBudget(c)["warn_gib"] = warn;
+        firstBudget(c)["deny_gib"] = Math.max(warn + 1, 80);
       });
     const TINY = budget(0.001);
     const HUGE = budget(1000);
@@ -770,8 +770,8 @@ describe("enforce-storage-headroom", () => {
       const { root, home } = workspace();
       const full = config((c) => {
         drives(0, 0, 0)(c);
-        firstBudget(c).warn_gib = 0.0005;
-        firstBudget(c).deny_gib = 0.001;
+        firstBudget(c)["warn_gib"] = 0.0005;
+        firstBudget(c)["deny_gib"] = 0.001;
       });
       for (const command of ["cargo test", "mise run test", "m t"]) {
         const r = runHook(
@@ -868,8 +868,8 @@ describe("enforce-storage-headroom", () => {
 
     test("an invalid config denies non-allowlisted calls with EVERY error in one decision", () => {
       const bad = config((c) => {
-        driveRow(c, "host").deny_gib = "thirty"; // wrong type
-        (c.launcher[0] ?? (expect(c.launcher[0]).toBeDefined(), {})).comand =
+        driveRow(c, "host")["deny_gib"] = "thirty"; // wrong type
+        (c.launcher[0] ?? (expect(c.launcher[0]).toBeDefined(), {}))["comand"] =
           "typo"; // unknown key
       });
       const d = decisionOf(runHook(HOOK, bash("cp x y"), bad).stdout);
@@ -896,7 +896,7 @@ describe("enforce-storage-headroom", () => {
 
     test("omitting deny.advice cannot silently disarm the gate", () => {
       const bad = config((c) => {
-        delete c.deny.advice;
+        delete c.deny["advice"];
       });
       const d = decisionOf(runHook(HOOK, bash("cp x y"), bad).stdout);
       expect(d?.permissionDecision).toBe("deny");
@@ -905,8 +905,8 @@ describe("enforce-storage-headroom", () => {
 
     test("the emergency floor must remain below the launch-denial line", () => {
       const bad = config((c) => {
-        driveRow(c, "host").deny_gib = 20;
-        driveRow(c, "host").stop_gib = 30;
+        driveRow(c, "host")["deny_gib"] = 20;
+        driveRow(c, "host")["stop_gib"] = 30;
       });
       const d = decisionOf(runHook(HOOK, bash("cp x y"), bad).stdout);
       expect(d?.permissionDecision).toBe("deny");

@@ -3,7 +3,7 @@
 //   ~/.claude/settings.json  <- agents/claude/settings.json + ~/.claude/settings.private.json
 //                               + zsh/timezone (env.TZ) + agents/hooks/hooks.toml (claude)
 //   ~/.codex/hooks.json      <- agents/codex/hooks.json + agents/hooks/hooks.toml (codex)
-//   ~/.claude/CLAUDE.md      <- agents/claude/CLAUDE.md (legacy empty markers omitted)
+//   ~/.claude/CLAUDE.md      <- agents/claude/CLAUDE.md
 // Consumer: scripts/link-dots.ts (and therefore `mise run link:dots` + the post-merge hook), and
 // `mise run doctor`, which renders into a scratch HOME and compares. Output is verdict lines.
 //
@@ -390,11 +390,7 @@ const md = await attempt(() => readFileSync(mdPath, "utf8"));
 if (!md.ok) fatal(`FATAL: cannot read ${mdPath} — ${errorMessage(md.error)}`);
 outputs.push({
   dest: `${home}/.claude/CLAUDE.md`,
-  // Keep the legacy declaration markers out of deployed guidance.
-  text: md.value.replace(
-    /<!-- roster:begin -->[\s\S]*?<!-- roster:end -->\n?/u,
-    "",
-  ),
+  text: md.value,
   from: mdPath,
 });
 

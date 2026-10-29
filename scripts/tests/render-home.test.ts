@@ -110,6 +110,16 @@ function writeRosterCli(dir: string, code: string): void {
   chmodSync(path, 0o755);
 }
 
+function writeAgxFailureSentinel(dir: string, marker: string): void {
+  const path = join(dir, "bin/agx");
+  mkdirSync(join(dir, "bin"), { recursive: true });
+  writeFileSync(
+    path,
+    `#!/bin/sh\nprintf called > ${JSON.stringify(marker)}\nexit 97\n`,
+  );
+  chmodSync(path, 0o755);
+}
+
 function writeMiseCli(dir: string): void {
   const path = join(dir, "bin/mise");
   mkdirSync(join(path, ".."), { recursive: true });
@@ -327,7 +337,9 @@ describe("render-home: base only", () => {
     // A real file, never a symlink — the whole point of the change.
     expect(lstatSync(dest(home)).isSymbolicLink()).toBe(false);
     const policy = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
-    expect(policy).toBe("# policy\n\n");
+    expect(policy).toBe(
+      "# policy\n\n<!-- roster:begin -->\n<!-- roster:end -->\n",
+    );
     cleanup(dotfiles, home);
   });
 
@@ -718,13 +730,13 @@ describe("render-home: committed jj inputs", () => {
     expect(result.out).toContain(`render source: commit ${f.commit}`);
     expect(readDest(f.home).model).toBe("committed-model");
     expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toBe(
-      "# policy\n\n",
+      "# policy\n\n<!-- roster:begin -->\n<!-- roster:end -->\n",
     );
     const latest = run(f.env);
     expect(latest.code, latest.out).toBe(0);
     expect(readDest(f.home).model).toBe("newer-model");
     expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toStartWith(
-      "Newer renderer:# newer policy",
+      "# newer policy\n",
     );
     cleanup(f.dotfiles, f.home);
   }, 30_000);
@@ -816,7 +828,7 @@ describe("render-home: committed jj inputs", () => {
 });
 
 describe("render-home: agx guidance", () => {
-  test("production guidance has two policy lines and preserves every other alpha byte", () => {
+  test("production CLAUDE.md preserves the source's current rendered policy", () => {
     const home = makeHome();
     using _cleanup = {
       [Symbol.dispose]: () => {
@@ -833,26 +845,8 @@ describe("render-home: agx guidance", () => {
     });
     expect(result.code, result.out).toBe(0);
     const md = readFileSync(join(home, ".claude/CLAUDE.md"), "utf8");
-    const alpha = readFileSync(
-      join(import.meta.dir, "fixtures/render-home-claude-alpha.md"),
-      "utf8",
-    );
-    const start = alpha.indexOf("<!-- roster:begin -->");
-    const end = alpha.indexOf("- **Execution stays observable;");
-    const lines = [
-      "- **Dispatch workers through agx.** The installed `agx --help` is the only manual.",
-      "- **Install or upgrade agx:** `brew install fuyutarow/tap/agx` / `brew upgrade fuyutarow/tap/agx`.",
-    ];
-    expect(start).toBeGreaterThan(0);
-    expect(end).toBeGreaterThan(start);
-    expect(Buffer.from(md)).toEqual(
-      Buffer.from(
-        alpha.slice(0, start) + lines.join("\n") + "\n" + alpha.slice(end),
-      ),
-    );
-    expect(md).not.toContain("roster:");
-    expect(md).not.toContain("| default |");
-    expect(md).not.toContain("sourced snapshot");
+    const source = readFileSync(join(ROOT, "agents/claude/CLAUDE.md"), "utf8");
+    expect(Buffer.from(md)).toEqual(Buffer.from(source));
   });
 
   test("rendering never calls agx even when it would fail", () => {
@@ -864,15 +858,12 @@ describe("render-home: agx guidance", () => {
       },
     };
     const called = join(home, "agx-called");
-    writeRosterCli(
-      dotfiles,
-      `Bun.write(${JSON.stringify(called)}, "called"); process.exit(7);`,
-    );
+    writeAgxFailureSentinel(dotfiles, called);
     const result = run({ HOME: home, DOTFILES: dotfiles });
     expect(result.code, result.out).toBe(0);
     expect(existsSync(called)).toBe(false);
     expect(readFileSync(join(home, ".claude/CLAUDE.md"), "utf8")).toBe(
-      "# policy\n\n",
+      readFileSync(join(dotfiles, "agents/claude/CLAUDE.md"), "utf8"),
     );
   });
 
@@ -889,7 +880,7 @@ describe("render-home: agx guidance", () => {
     const result = run({ HOME: home, DOTFILES: dotfiles, PATH: emptyPath });
     expect(result.code, result.out).toBe(0);
     expect(readFileSync(join(home, ".claude/CLAUDE.md"), "utf8")).toBe(
-      "# policy\n\n",
+      readFileSync(join(dotfiles, "agents/claude/CLAUDE.md"), "utf8"),
     );
   });
 });

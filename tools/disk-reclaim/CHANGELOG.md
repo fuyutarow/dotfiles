@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.2 — 2026-10-29
+
+- Avoid repeating build discovery during candidate rechecks
+
 ## 1.11.1 — 2026-10-29
 
 - Stop tree removal on cancellation or foreground lock yield

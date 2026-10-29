@@ -36,47 +36,101 @@ const context = (repoRoots: string[], procDir: string) => ({
 });
 
 describe("builds target", () => {
-  test("completes every payload when no foreground waiter is registered", async () => {
-    const temp = tempRoot("reclaim-builds-run-");
+  test("discovery count stays fixed as the engine acts on more build directories", async () => {
+    const runWithCandidates = async (candidateCount: number) => {
+      const temp = tempRoot("reclaim-builds-run-");
+      using cleanup = new DisposableStack();
+      cleanup.defer(() => {
+        rmSync(temp, { recursive: true, force: true });
+      });
+      const home = join(temp, "home");
+      const state = join(temp, "state");
+      const procDir = join(temp, "proc");
+      mkdirSync(home);
+      mkdirSync(procDir);
+      const payloads = Array.from({ length: candidateCount }, (_, index) =>
+        join(home, `project-${index}`, "dist"),
+      );
+      for (const [index, path] of payloads.entries()) {
+        mkdirSync(path, { recursive: true });
+        writeFileSync(join(path, "artifact"), "x".repeat(index + 1));
+      }
+      const logs: string[] = [];
+      let scans = 0;
+      const baseContext = {
+        ...context([], procDir),
+        scanCacheDir: join(temp, "cache"),
+      };
+      const target = createBuildsTarget(
+        () => home,
+        () => {
+          scans += 1;
+          return payloads;
+        },
+      );
+      const result = await run([target], {
+        context: {
+          ...baseContext,
+          log: (line) => {
+            logs.push(line);
+          },
+        },
+        headroom: { drives: [] },
+        state,
+        yes: true,
+        captureLiveness: (config) =>
+          createLivenessSnapshot(config, {
+            home,
+            procs: { procRoot: procDir },
+          }),
+      });
+      expect(result.exit).toBe(0);
+      expect(payloads.every((path) => !existsSync(path))).toBe(true);
+      expect(logs.some((line) => line.includes("builds yielded"))).toBe(false);
+      return scans;
+    };
+
+    const oneCandidateScans = await runWithCandidates(1);
+    const threeCandidateScans = await runWithCandidates(3);
+    expect(oneCandidateScans).toBe(threeCandidateScans);
+    expect(threeCandidateScans).toBeLessThan(1 + 3);
+  });
+
+  test("recheck skips removed and newly protected candidates", async () => {
+    const home = tempRoot("reclaim-builds-recheck-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
-      rmSync(temp, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
     });
-    const home = join(temp, "home");
-    const state = join(temp, "state");
-    const procDir = join(temp, "proc");
-    mkdirSync(home);
+    const procDir = join(home, "proc");
+    const removed = join(home, "a", "dist");
+    const protectedPath = join(home, "b", "node_modules");
     mkdirSync(procDir);
-    const payloads = [
-      join(home, "a", "node_modules"),
-      join(home, "b", "dist"),
-      join(home, "c", "build"),
-    ];
-    for (const [index, path] of payloads.entries()) {
-      mkdirSync(path, { recursive: true });
-      writeFileSync(join(path, "artifact"), "x".repeat(index + 1));
-    }
-    const logs: string[] = [];
-    const baseContext = context([], procDir);
-    const result = await run([createBuildsTarget(() => home)], {
-      context: {
-        ...baseContext,
-        log: (line) => {
-          logs.push(line);
-        },
-      },
-      headroom: { drives: [] },
-      state,
-      yes: true,
-      captureLiveness: (config) =>
-        createLivenessSnapshot(config, {
-          home,
-          procs: { procRoot: procDir },
-        }),
+    mkdirSync(removed, { recursive: true });
+    mkdirSync(protectedPath, { recursive: true });
+    const target = createBuildsTarget(
+      () => home,
+      () => [removed, protectedPath],
+    );
+    const ctx = context([], procDir);
+    const candidates = await target.plan(ctx);
+    const missing = candidates.find((candidate) => candidate.path === removed);
+    const protectedCandidate = candidates.find(
+      (candidate) => candidate.path === protectedPath,
+    );
+    expect(missing).toBeDefined();
+    expect(protectedCandidate).toBeDefined();
+    if (missing === undefined || protectedCandidate === undefined) return;
+    rmSync(removed, { recursive: true });
+    expect(await target.recheck(missing, ctx)).toBeNull();
+    const fresh = await target.recheck(protectedCandidate, {
+      ...ctx,
+      config: { ...ctx.config, repo_roots: [join(home, "b")] },
     });
-    expect(result.exit).toBe(0);
-    expect(payloads.every((path) => !existsSync(path))).toBe(true);
-    expect(logs.some((line) => line.includes("builds yielded"))).toBe(false);
+    expect(fresh).toMatchObject({
+      verdict: "KEEP",
+      reason: "protected: project environment or dependencies belong to repo",
+    });
   });
 
   test("preserves old kondo roots and age semantics while excluding Rust targets", async () => {

@@ -1,6 +1,8 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { fromAsyncThrowable } from "neverthrow";
 import { fromThrowable } from "../../../shared/src/zod.ts";
 import { protectedReason } from "../lib/protected.ts";
 import type { Candidate } from "../model.ts";
@@ -44,9 +46,19 @@ function scan(
     return scan(path, depth + 1, rootDevice, ctx);
   });
 }
+const protection = (path: string, ctx: Context) =>
+  protectedReason(path, {
+    home: process.env.HOME ?? homedir(),
+    procDir: ctx.procDir,
+    repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
+    protectedPaths: ctx.config.protected ?? [],
+    ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
+  });
 export const createBuildsTarget = (
   root: () => string = () =>
     process.env.KONDO_DIR ?? process.env.HOME ?? homedir(),
+  discover: (root: string, ctx: Context) => string[] = (path, ctx) =>
+    scan(path, 0, undefined, ctx),
 ) => {
   const completedPayloads = new WeakMap<Context, number>();
   return {
@@ -60,15 +72,9 @@ export const createBuildsTarget = (
         root(),
         "build-discovery-v1",
         ctx,
-        () => scan(root(), 0, undefined, ctx),
+        () => discover(root(), ctx),
       ).toSorted()) {
-        const reason = protectedReason(path, {
-          home: process.env.HOME ?? homedir(),
-          procDir: ctx.procDir,
-          repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
-          protectedPaths: ctx.config.protected ?? [],
-          ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
-        });
+        const reason = protection(path, ctx);
         if (
           reason === "owned by rust target" ||
           reason === "owned by clean target"
@@ -100,6 +106,33 @@ export const createBuildsTarget = (
           );
       }
       return rows;
+    },
+    recheck: async (candidate, ctx) => {
+      const path = candidate.path;
+      if (path === null || !BUILD_NAMES.has(basename(path))) return null;
+      const rootStat = await fromAsyncThrowable(() => stat(root()))();
+      const pathStat = await fromAsyncThrowable(() => stat(path))();
+      if (
+        rootStat.isErr() ||
+        pathStat.isErr() ||
+        !pathStat.value.isDirectory() ||
+        pathStat.value.dev !== rootStat.value.dev
+      )
+        return null;
+      const reason = protection(path, ctx);
+      if (reason !== null)
+        return {
+          ...candidate,
+          verdict: reason === "process paths are unknown" ? "ASK" : "KEEP",
+          reason: `protected: ${reason}`,
+          action: { kind: "delete", argv: [] },
+        };
+      return treeCandidate(
+        path,
+        "regenerable build output (kondo --all parity)",
+        ctx,
+        BUILD_SCAN_MAX_ENTRIES,
+      );
     },
     act: async (candidate, ctx) => {
       const result = await deleteTree(candidate, ctx);

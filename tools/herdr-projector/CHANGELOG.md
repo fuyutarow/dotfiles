@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 — 2026-10-29
+
+- Project agent CPU and worker usage from the shared snapshot.
+
 ## 0.1.20 — 2026-10-28
 
 - Project running agx workers per matched fleet session

@@ -43,23 +43,34 @@ export const AgentSchema = z.object({
 const ListSchema = z.object({
   result: z.object({ agents: z.array(AgentSchema) }),
 });
-const AgxWorkerRowsSchema = z.array(
-  z.object({
-    state: z.string(),
-    dispatcher_session: z.string().nullish(),
-  }),
-);
-// Real agx took 3.42 s at load 9 (2026-10-28); 15 s fits the 60 s projector period.
-export const AGX_WORKER_TIMEOUT_MS = 15_000;
+const AgentCpuSchema = z.object({
+  schema: z.literal(1),
+  at: z.iso.datetime(),
+  window_ms: z.number().int().positive(),
+  host: z.object({ cpu_pct: z.number(), cores: z.number().int().positive() }),
+  agx: z.enum(["ok", "unavailable"]),
+  sessions: z.array(
+    z.object({
+      session_id: z.string(),
+      vendor: z.enum(["claude", "codex"]),
+      pid: z.number().int(),
+      cpu_pct: z.number(),
+      workers: z
+        .object({ count: z.number().int().nonnegative(), cpu_pct: z.number() })
+        .nullable(),
+    }),
+  ),
+  unresolved_agents: z.array(
+    z.object({
+      pid: z.number().int(),
+      vendor: z.enum(["claude", "codex"]),
+      cpu_pct: z.number(),
+    }),
+  ),
+  unowned: z.array(z.object({ label: z.string(), cpu_pct: z.number() })),
+});
 const HERDR_TIMEOUT_MS = 2500;
-const AGX_WORKER_ARGS = ["worker", "ls", "--json", "--running"];
-type AgxWorkerRow = z.output<typeof AgxWorkerRowsSchema>[number];
-export type AgxWorkerSnapshot =
-  | { available: true; rows: AgxWorkerRow[] }
-  | { available: false };
-const UNAVAILABLE_AGX_WORKERS = {
-  available: false,
-} satisfies AgxWorkerSnapshot;
+type AgentCpuSnapshot = z.output<typeof AgentCpuSchema>;
 type Agent = z.output<typeof AgentSchema>;
 type PaneTitleBinding = { sessionId: string; title: CodexNativeTitleRead };
 
@@ -176,26 +187,24 @@ async function boundedOutput(
   return result.ok ? result.value : undefined;
 }
 
-export async function readAgxWorkers(
-  command: typeof run = run,
-): Promise<AgxWorkerSnapshot> {
-  const output = await command("agx", AGX_WORKER_ARGS, AGX_WORKER_TIMEOUT_MS);
-  if (output === undefined) return { available: false };
-  const parsed = jsonOf(AgxWorkerRowsSchema).safeParse(output);
-  return parsed.success
-    ? { available: true, rows: parsed.data }
-    : { available: false };
-}
-
-function countRunningWorkers(
-  workers: AgxWorkerSnapshot,
-  sessionId: string,
-): number | undefined {
-  if (!workers.available) return undefined;
-  return workers.rows.filter(
-    (worker) =>
-      worker.state === "running" && worker.dispatcher_session === sessionId,
-  ).length;
+export async function readAgentCpu(
+  env: NodeJS.ProcessEnv = process.env,
+  now = Temporal.Now.instant().epochMilliseconds,
+): Promise<AgentCpuSnapshot | undefined> {
+  const state =
+    env.XDG_STATE_HOME === undefined || env.XDG_STATE_HOME === ""
+      ? join(env.HOME ?? "", ".local", "state")
+      : env.XDG_STATE_HOME;
+  const text = await Bun.file(join(state, "dotfiles", "agent-cpu.json"))
+    .text()
+    .catch(() => "");
+  const parsed = jsonOf(AgentCpuSchema).safeParse(text);
+  if (
+    !parsed.success ||
+    now - Temporal.Instant.from(parsed.data.at).epochMilliseconds > 180_000
+  )
+    return undefined;
+  return parsed.data;
 }
 
 /** Only the complete penultimate native status row, followed by native shortcuts.
@@ -723,9 +732,8 @@ export async function projectAgents(
   titles: ReadonlyMap<string, PaneTitleBinding> = new Map(),
   remoteControl: ReadonlyMap<string, string> = new Map(),
   reasons: ReadonlyMap<string, string> = new Map(),
-  workers?: AgxWorkerSnapshot,
+  cpuSnapshot?: AgentCpuSnapshot,
 ): Promise<number> {
-  const workerSnapshot = workers ?? UNAVAILABLE_AGX_WORKERS;
   let updated = 0;
   for (const agent of agents) {
     if (agent.pane_id === undefined || agent.tab_id === undefined) continue;
@@ -792,12 +800,41 @@ export async function projectAgents(
       isAgent && !notApplicable && rc !== "rc:on" && rc !== "rc:off";
     const displayRc =
       unknownRc && (model !== "" || effort !== "") ? "rc?" : marker;
-    const workerCount =
+    const cpuSession =
       matchedSessionId === undefined
         ? undefined
-        : countRunningWorkers(workerSnapshot, matchedSessionId);
-    const workerToken = workerCount === undefined ? "w:?" : `w:${workerCount}`;
-
+        : cpuSnapshot?.sessions.find(
+            (row) =>
+              row.session_id === matchedSessionId && row.vendor === vendor,
+          );
+    const cpuToken =
+      cpuSession === undefined ? "cpu:?" : `cpu:${cpuSession.cpu_pct}%`;
+    let workerToken = "w:?";
+    if (cpuSession?.workers !== undefined && cpuSession.workers !== null) {
+      workerToken =
+        cpuSession.workers.count === 0
+          ? ""
+          : `w:${cpuSession.workers.count}·${cpuSession.workers.cpu_pct}%`;
+    }
+    const unowned =
+      cpuSnapshot?.unowned
+        .map((row) => `${row.label} ${row.cpu_pct}%`)
+        .join(" · ") ?? "";
+    const cpuArgs: string[] = [];
+    if (isAgent)
+      cpuArgs.push(
+        "--token",
+        `cpu=${cpuToken}`,
+        ...(workerToken === ""
+          ? ["--clear-token", "workers"]
+          : ["--token", `workers=${workerToken}`]),
+      );
+    if (vendor === "btm")
+      cpuArgs.push(
+        ...(unowned === ""
+          ? ["--clear-token", "unowned"]
+          : ["--token", `unowned=${unowned}`]),
+      );
     const renamed = await apply(["tab", "rename", agent.tab_id, name]);
     const reported = await apply([
       "pane",
@@ -818,14 +855,18 @@ export async function projectAgents(
       `rc_reason=${unknownRc || notApplicable ? (rc ?? "remote-control observation unavailable") : ""}`,
       "--token",
       `fleet_session_id=${matchedSessionId ?? ""}`,
-      ...(matchedSessionId === undefined || workerToken === "w:0"
-        ? ["--clear-token", "workers"]
-        : ["--token", `workers=${workerToken}`]),
+      ...cpuArgs,
     ]);
     if (renamed && reported) updated++;
   }
   process.stdout.write(`herdr-projector: projected ${updated} pane(s)\n`);
   return 0;
+}
+
+export function agentCpuCacheInput(
+  snapshot: AgentCpuSnapshot | undefined,
+): string {
+  return JSON.stringify(snapshot ?? null);
 }
 
 export function nativeTitleCacheInputs(
@@ -848,7 +889,7 @@ export function nativeTitleCacheInputs(
 }
 
 async function project(dryRun = false): Promise<number> {
-  const workers = await readAgxWorkers();
+  const cpuSnapshot = await readAgentCpu();
   const agents = await agentList();
   if (agents === undefined) {
     process.stderr.write(
@@ -958,14 +999,7 @@ async function project(dryRun = false): Promise<number> {
           titles: nativeTitleCacheInputs(titleBindings),
           remoteControl: [...remoteControl],
           reasons: [...reasons],
-          workers: {
-            available: workers.available,
-            counts: workers.available
-              ? sessionIds
-                  .toSorted()
-                  .map((id) => [id, countRunningWorkers(workers, id)])
-              : [],
-          },
+          cpuSnapshot: agentCpuCacheInput(cpuSnapshot),
         }),
       )
       .digest("hex");
@@ -985,7 +1019,7 @@ async function project(dryRun = false): Promise<number> {
     titleBindings,
     remoteControl,
     reasons,
-    workers,
+    cpuSnapshot,
   );
   // A failed mutation must be retried, and cache trouble must not block projection.
   if (!dryRun && applied && cacheDir !== undefined && cachePath !== undefined) {

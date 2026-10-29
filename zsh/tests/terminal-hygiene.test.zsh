@@ -309,6 +309,32 @@ want "ssh exit 0 propagates"                          "EC=0"     "$out"
 out=$(pty_run 'ssh' 'print -r -- AFTER_255')
 want "no read on the ssh path: shell survives exit 255" "AFTER_255" "$out"
 
+# A Herdr client owns the local terminal directly; repair before the next command on the same
+# line, not merely at the next prompt. The stub records argv and simulates success and failure.
+herdr_tmp=$(mktemp -d) || exit 1
+cat >| "$herdr_tmp/herdr" <<'EOF'
+#!/bin/sh
+printf 'HERDR_ARGS=<%s><%s>\n' "$1" "$2"
+exit "${HERDR_EXIT:-0}"
+EOF
+chmod +x "$herdr_tmp/herdr"
+for herdr_exit in 0 1; do
+  out=$(PATH="$herdr_tmp:$PATH" HERDR_EXIT=$herdr_exit pty_run \
+    'herdr --remote sol; print -r -- "HERDR_STATUS=$?"' 'print -r -- AFTER_HERDR')
+  after_client=${out#*HERDR_ARGS=\<--remote\>\<sol\>}
+  before_status=${after_client%%HERDR_STATUS=*}
+  want "herdr exit $herdr_exit forwards arguments" 'HERDR_ARGS=<--remote><sol>' "$out"
+  want "herdr exit $herdr_exit disables mouse reporting before returning" "$MODES_OFF" "$before_status"
+  want "herdr exit $herdr_exit disables Kitty reporting before returning" "$KEYS_OFF" "$before_status"
+  want "herdr exit $herdr_exit leaves alternate screen before returning" "$ALT_OFF" "$before_status"
+  want "herdr exit $herdr_exit propagates status" "HERDR_STATUS=$herdr_exit" "$out"
+  want "herdr exit $herdr_exit does not read queued input" 'AFTER_HERDR' "$out"
+done
+rip "$herdr_tmp" >/dev/null 2>&1
+zsh -f -c "source ${(q)ROOT}/zsh/aliases.zsh >/dev/null 2>&1; [[ \$(whence -w herdr) != 'herdr: function' ]]" \
+  && ok "non-interactive sourcing leaves herdr as a command" \
+  || bad "non-interactive sourcing must not install the herdr wrapper"
+
 # --- 5. the precmd hook is registered exactly once, however often the file is sourced -------
 # `${#${(M)arr:#pat}}` is a zsh trap, and NOT atuin- or this-box-specific (root-caused 2026-09-12,
 # verified directly against zsh 5.9 across 0/1/2/3-element arrays): without `@`, a nested

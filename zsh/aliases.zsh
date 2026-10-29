@@ -676,7 +676,7 @@ typeset -g _TERM_LEAVE_ALTSCREEN=$'\e[?1047l'
 
 # Everything safe to assert at any moment: writes only, moves the cursor nowhere, leaves the
 # alternate screen only if stranded on it, and is a no-op on a healthy terminal.
-# Runs before every prompt and after ssh.
+# Runs before every prompt and after ssh or herdr.
 _term_restore() {
   [[ -t 1 ]] || return 0                       # piped/redirected: no terminal to fix
   print -rn -- "$_TERM_MODES_OFF$_TERM_KEYS_OFF$_TERM_RENDER_RESET$_TERM_LEAVE_ALTSCREEN"
@@ -709,6 +709,12 @@ if [[ -o interactive ]]; then
     # leaves the tty raw. Running `stty sane` after every ssh would fork each time and silently undo
     # a user's own `stty -ixon` / custom erase / intr, so pay for it only where it is the cure.
     (( ec >= 128 && ec != 255 )) && [[ -t 0 ]] && stty sane 2>/dev/null
+    return $ec
+  }
+  herdr() {
+    command herdr "$@"
+    local ec=$?
+    _term_restore
     return $ec
   }
 fi

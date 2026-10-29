@@ -85,6 +85,24 @@ test("doctor reports untrusted tap with its specific repair", async () => {
   expect(result.detail).toContain("untrusted tap fuyutarow/tap");
   expect(result.fix).toBe("brew trust fuyutarow/tap");
 });
+
+test("doctor warns on a dx collision with the same repair", async () => {
+  const io: FloorIO = {
+    read: (tool) =>
+      Promise.resolve(tool === "dx" ? "deno 2.9.8" : "agx 1.22.8"),
+    installed: (tool) => Promise.resolve(tool === "agx"),
+    upgrade: () => Promise.resolve(),
+  };
+  const result = await checkToolFloor(
+    { home: "", dotfiles: "", isMac: true, isWsl: false, isCoreBox: false },
+    io,
+  );
+  expect(result.verdict).toBe("WARN");
+  expect(result.detail).toBe(
+    "dx: fuyutarow/tap/dx not installed (PATH dx is another program); repair: mise run up",
+  );
+  expect(result.fix).toBe("mise run up");
+});
 import {
   inspectRipGraveyard,
   RIP_GRAVEYARD_MAX_BYTES,

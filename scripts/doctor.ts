@@ -2074,6 +2074,11 @@ export async function checkToolFloor(
   io: FloorIO = coreFloorIO,
 ): Promise<Finding> {
   const result = await checkCoreFloor(io, false);
+  if (result.warning === true)
+    return {
+      ...warn("core-floor", result.detail),
+      fix: result.fix ?? "mise run up",
+    };
   return result.ok
     ? pass("core-floor", result.detail)
     : fail("core-floor", result.detail, result.fix ?? "mise run up");

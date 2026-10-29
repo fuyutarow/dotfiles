@@ -86,24 +86,40 @@ test("floor upgrades dx when needed and rejects a still-old result", async () =>
 });
 
 test.each([false, true])(
-  "dx collision blocks every upgrade (formula installed: %s)",
+  "dx collision warns after checking the agx floor (formula installed: %s)",
   async (installed) => {
     const upgraded: string[] = [];
     const io: FloorIO = {
       read: (tool) =>
-        Promise.resolve(tool === "dx" ? "deno 2.9.8" : "agx 1.13.14"),
+        Promise.resolve(tool === "dx" ? "deno 2.9.8" : "agx 1.22.8"),
       installed: (tool) => Promise.resolve(tool === "dx" ? installed : true),
       upgrade: (tool) => {
         upgraded.push(tool);
         return Promise.resolve();
       },
     };
-    expect((await checkCoreFloor(io, true)).detail).toContain(
-      "dx: fuyutarow/tap/dx not installed (PATH dx is another program)",
-    );
+    expect(await checkCoreFloor(io, true)).toEqual({
+      ok: true,
+      warning: true,
+      detail:
+        "dx: fuyutarow/tap/dx not installed (PATH dx is another program); repair: mise run up",
+      fix: "mise run up",
+    });
     expect(upgraded).toEqual([]);
   },
 );
+
+test("dx collision does not hide an agx floor failure", async () => {
+  const io: FloorIO = {
+    read: (tool) =>
+      Promise.resolve(tool === "dx" ? "deno 2.9.8" : "agx 1.22.7"),
+    installed: (tool) => Promise.resolve(tool === "agx"),
+    upgrade: () => Promise.resolve(),
+  };
+  const result = await checkCoreFloor(io, true);
+  expect(result.ok).toBe(false);
+  expect(result.detail).toContain("agx: installed 1.22.7, required 1.22.8");
+});
 
 test("a recursive PATH Bun fixture is bypassed by every script step", async () => {
   const root = await mkdtemp(join(tmpdir(), "post-merge-"));

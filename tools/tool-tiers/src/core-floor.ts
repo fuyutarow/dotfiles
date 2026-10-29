@@ -75,7 +75,7 @@ async function upgradeAndRead(
 export async function checkCoreFloor(
   io: FloorIO,
   upgrade: boolean,
-): Promise<{ ok: boolean; detail: string; fix?: string }> {
+): Promise<{ ok: boolean; detail: string; fix?: string; warning?: boolean }> {
   const tools: Tool[] = ["agx", "dx"];
   const observations = await Promise.all(
     tools.map(async (tool) => {
@@ -92,6 +92,7 @@ export async function checkCoreFloor(
       return {
         tool,
         version: match?.[1],
+        otherProgram: typeof output === "string" && match === null,
         installed: installed === true,
         error,
       };
@@ -108,17 +109,22 @@ export async function checkCoreFloor(
       detail: `${trustFailure.tool}: untrusted tap fuyutarow/tap; repair: brew trust fuyutarow/tap`,
       fix: "brew trust fuyutarow/tap",
     };
-  const invalid = observations
-    .toReversed()
-    .find((item) => !item.installed || item.version === undefined);
+  const collision = observations.find(
+    (item) => item.tool === "dx" && item.otherProgram,
+  );
+  const invalid = observations.find(
+    (item) =>
+      item !== collision && (!item.installed || item.version === undefined),
+  );
   if (invalid !== undefined) {
     const detail =
-      invalid.tool === "dx"
-        ? "dx: fuyutarow/tap/dx not installed (PATH dx is another program)"
-        : "agx: fuyutarow/tap/agx not installed or PATH agx is another program";
+      invalid.tool === "agx"
+        ? "agx: fuyutarow/tap/agx not installed or PATH agx is another program"
+        : "dx: fuyutarow/tap/dx not installed or PATH dx is unavailable";
     return { ok: false, detail: `${detail}; repair: mise run up` };
   }
   for (const item of observations) {
+    if (item === collision) continue;
     const required = CORE_FLOORS[item.tool];
     let version = item.version;
     let output: string | undefined | ProbeError;
@@ -153,13 +159,21 @@ export async function checkCoreFloor(
         detail: `${item.tool}: installed ${version ?? "unknown"}, required ${required}; repair: mise run up`,
       };
   }
+  if (collision !== undefined)
+    return {
+      ok: true,
+      warning: true,
+      detail:
+        "dx: fuyutarow/tap/dx not installed (PATH dx is another program); repair: mise run up",
+      fix: "mise run up",
+    };
   return { ok: true, detail: `agx and dx meet declared floors` };
 }
 
 if (import.meta.main) {
   const result = await checkCoreFloor(coreFloorIO, true);
-  process.stderr.write(
-    `${result.ok ? "PASS" : "FAIL"} core-floor: ${result.detail}\n`,
-  );
+  let verdict = result.ok ? "PASS" : "FAIL";
+  if (result.warning === true) verdict = "WARN";
+  process.stderr.write(`${verdict} core-floor: ${result.detail}\n`);
   process.exitCode = result.ok ? 0 : 1;
 }

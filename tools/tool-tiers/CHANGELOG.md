@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 — 2026-10-29
+
+- Warn on dx name collisions while retaining core floor failures.
+
 ## 0.2.0 — 2026-10-29
 
 - Check declared agx and dx version floors and diagnose untrusted taps.

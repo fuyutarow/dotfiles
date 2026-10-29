@@ -21,14 +21,20 @@ it checks that agent's tab label and repairs it to `btm` with the documented
 `herdr tab rename <TAB_ID> <LABEL>...` command (installed `herdr tab rename --help`).
 Tabs already labelled `btm` need no rename; existing panes and processes remain.
 The sidebar's configured `tab` token displays this label.
-Otherwise it creates a tab in the first workspace, or a
-workspace if the server is empty. It replaces only its new placeholder tab using
-the documented [layout.apply argv launch](https://herdr.dev/docs/socket-api/).
+It creates one tab in each workspace that has not yet had a btm, or a
+workspace if the server is empty. Herdr workspace metadata records that btm was
+created; a closed btm tab stays closed until the Herdr server restarts. Killing
+btm likewise does not recreate it during that server session. A new workspace
+gets its own tab. Herdr discards the record when the workspace closes or the
+server restarts, so a restored workspace can get a new btm after restart.
+It launches using the documented
+[layout.apply argv launch](https://herdr.dev/docs/socket-api/), which returns
+the actual tab ID to wait for.
 That avoids typing into a shell during startup. Existing workspace focus stays
 unchanged. It never closes an existing user pane or removes duplicate user apps.
 
-With installed herdr, bun, btm and the linked btmp bin, normal startup and pane
-closure converge within **20 seconds**. A crashed ensure's lock expires after
+With installed herdr, bun, btm and the linked btmp bin, normal startup converges
+within **20 seconds**. A crashed ensure's lock expires after
 30 seconds; allow 60 seconds for that recovery. Repeated and concurrent ensures
 are serialized. Manually starting additional btmp instances is not deduplicated.
 
@@ -39,8 +45,8 @@ No separate OS timer or service is needed. New interactive shells load the alias
 ## Verification
 
 `bun test tools/herdr-btm` starts an isolated real herdr server with its socket,
-config and home under `/tmp`. It checks startup, automatic recovery after pane
-closure, repeated/concurrent ensure, zsh alias resolution, argument forwarding,
+config and home under `/tmp`. It checks startup, respecting pane closure, new
+workspaces, repeated/concurrent ensure, zsh alias resolution, argument forwarding,
 registration and exit status. It does not address the owner's live server.
-The pending patch changeset targets version 0.2.1; release tooling writes the
+The patch changeset leaves version selection to release tooling, which writes the
 package version and changelog.

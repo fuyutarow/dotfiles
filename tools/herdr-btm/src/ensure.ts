@@ -11,22 +11,29 @@ const Agents = z.object({
 });
 const Workspaces = z.object({
   result: z.object({
-    workspaces: z.array(z.object({ workspace_id: z.string() })),
+    workspaces: z.array(
+      z.object({
+        workspace_id: z.string(),
+        tokens: z.record(z.string(), z.string()).optional(),
+      }),
+    ),
   }),
 });
 const Created = z.object({
-  result: z.object({ tab: z.object({ tab_id: z.string() }) }),
+  result: z.object({
+    tab: z.object({ tab_id: z.string(), workspace_id: z.string() }),
+  }),
 });
 const errorOf = (error: unknown) => new Error(String(error));
 
 // https://herdr.dev/docs/socket-api/ documents layout.apply argv launches.
-// Only the just-created placeholder tab is replaced; no user's shell is targeted.
+// Herdr returns the actual tab it creates; no user's shell is targeted.
 async function launch(
   socketPath: string,
   tabId: string,
-): Promise<Result<void, Error>> {
+): Promise<Result<string, Error>> {
   return ResultAsync.fromPromise(
-    new Promise<void>((resolveLaunch, reject) => {
+    new Promise<string>((resolveLaunch, reject) => {
       const socket = createConnection(socketPath);
       let pending = "";
       socket.setTimeout(1500, () => {
@@ -58,12 +65,15 @@ async function launch(
         pending += data.toString();
         if (!pending.includes("\n")) return;
         const response = jsonOf(
-          z.object({ result: z.unknown(), error: z.unknown().optional() }),
+          z.object({
+            result: z.object({ layout: z.object({ tab_id: z.string() }) }),
+            error: z.unknown().optional(),
+          }),
         ).safeParse(pending.split("\n")[0]);
         socket.destroy();
         if (!response.success || response.data.error !== undefined)
           reject(new Error(`layout.apply: ${pending.slice(0, 1000)}`));
-        else resolveLaunch();
+        else resolveLaunch(response.data.result.layout.tab_id);
       });
       socket.on("end", () => {
         reject(new Error("layout.apply disconnected"));
@@ -102,10 +112,84 @@ async function request<S extends z.ZodType>(
     : err(new Error(`invalid herdr ${args.join(" ")} response`));
 }
 
-async function hasBtm(): Promise<Result<boolean, Error>> {
+async function hasBtm(tabId: string): Promise<Result<boolean, Error>> {
   return (await request(["agent", "list"], Agents)).map(({ result }) =>
-    result.agents.some((agent) => agent.agent === "btm"),
+    result.agents.some(
+      (agent) => agent.agent === "btm" && agent.tab_id === tabId,
+    ),
   );
+}
+
+async function createBtm(
+  socket: string,
+  workspaceId: string | undefined,
+): Promise<Result<string, Error>> {
+  const args =
+    workspaceId === undefined
+      ? ["workspace", "create", "--label", "btm", "--no-focus"]
+      : [
+          "tab",
+          "create",
+          "--workspace",
+          workspaceId,
+          "--label",
+          "btm",
+          "--no-focus",
+        ];
+  const created = await request(args, Created);
+  if (created.isErr()) return err(created.error);
+  const launched = await launch(socket, created.value.result.tab.tab_id);
+  if (launched.isErr()) return err(launched.error);
+  const marked = await markWorkspace(created.value.result.tab.workspace_id);
+  if (marked.isErr()) return err(marked.error);
+  const deadline = performance.now() + 8000;
+  while (performance.now() < deadline) {
+    const found = await hasBtm(launched.value);
+    if (found.isErr()) return err(found.error);
+    if (found.value) return ok(created.value.result.tab.workspace_id);
+    await Bun.sleep(100);
+  }
+  return err(new Error("btm did not register within 8s"));
+}
+
+async function markWorkspace(
+  workspaceId: string,
+): Promise<Result<void, Error>> {
+  const bin = Bun.which("herdr");
+  if (bin === null) return err(new Error("herdr is not on PATH"));
+  const child = Bun.spawn(
+    [
+      bin,
+      "workspace",
+      "report-metadata",
+      workspaceId,
+      "--source",
+      "btmp",
+      "--token",
+      "btmp_ensured=1",
+    ],
+    { stdin: "ignore", stdout: "ignore", stderr: "pipe", timeout: 1500 },
+  );
+  const [code, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stderr).text(),
+  ]);
+  if (code !== 0)
+    return err(new Error(`herdr workspace report-metadata: ${stderr.trim()}`));
+  return ok(undefined);
+}
+
+async function ensureWorkspace(
+  socket: string,
+  workspaceId: string | undefined,
+  occupied: Set<string>,
+): Promise<Result<void, Error>> {
+  if (workspaceId === undefined || !occupied.has(workspaceId)) {
+    const created = await createBtm(socket, workspaceId);
+    if (created.isErr()) return err(created.error);
+    return ok(undefined);
+  }
+  return markWorkspace(workspaceId);
 }
 
 async function ensureLocked(socket: string): Promise<Result<void, Error>> {
@@ -116,14 +200,18 @@ async function ensureLocked(socket: string): Promise<Result<void, Error>> {
       .filter((agent) => agent.agent === "btm")
       .map((agent) => agent.tab_id),
   );
+  const occupied = new Set<string>();
   for (const tabId of existingTabs) {
     const current = await request(
       ["tab", "get", tabId],
       z.object({
-        result: z.object({ tab: z.object({ label: z.string() }) }),
+        result: z.object({
+          tab: z.object({ label: z.string(), workspace_id: z.string() }),
+        }),
       }),
     );
     if (current.isErr()) return err(current.error);
+    occupied.add(current.value.result.tab.workspace_id);
     if (current.value.result.tab.label === "btm") continue;
     // Installed help: herdr tab rename <TAB_ID> <LABEL>...
     const renamed = await request(
@@ -132,34 +220,22 @@ async function ensureLocked(socket: string): Promise<Result<void, Error>> {
     );
     if (renamed.isErr()) return err(renamed.error);
   }
-  if (existingTabs.size > 0) return ok(undefined);
   const workspaces = await request(["workspace", "list"], Workspaces);
   if (workspaces.isErr()) return err(workspaces.error);
-  const workspace = workspaces.value.result.workspaces[0];
-  const args =
-    workspace === undefined
-      ? ["workspace", "create", "--label", "btm", "--no-focus"]
-      : [
-          "tab",
-          "create",
-          "--workspace",
-          workspace.workspace_id,
-          "--label",
-          "btm",
-          "--no-focus",
-        ];
-  const created = await request(args, Created);
-  if (created.isErr()) return err(created.error);
-  const launched = await launch(socket, created.value.result.tab.tab_id);
-  if (launched.isErr()) return launched;
-  const deadline = performance.now() + 8000;
-  while (performance.now() < deadline) {
-    const registered = await hasBtm();
-    if (registered.isErr()) return err(registered.error);
-    if (registered.value) return ok(undefined);
-    await Bun.sleep(100);
+  const targets =
+    workspaces.value.result.workspaces.length === 0
+      ? [undefined]
+      : workspaces.value.result.workspaces;
+  for (const workspace of targets) {
+    if (workspace?.tokens?.["btmp_ensured"] === "1") continue;
+    const marked = await ensureWorkspace(
+      socket,
+      workspace?.workspace_id,
+      occupied,
+    );
+    if (marked.isErr()) return err(marked.error);
   }
-  return err(new Error("btm did not register within 8s"));
+  return ok(undefined);
 }
 
 // One lock per explicit socket serializes scheduler/manual ensures. A killed

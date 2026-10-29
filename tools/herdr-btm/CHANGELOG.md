@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5 — 2026-10-30
+
+- Respect closing the automatically created btm tab in each Herdr workspace.
+
 ## 0.2.4 — 2026-10-24
 
 - Narrow the single BTM row before returning it in integration coverage

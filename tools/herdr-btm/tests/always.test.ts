@@ -20,7 +20,7 @@ const Agents = jsonOf(
   }),
 );
 
-test("isolated headless startup, repeated/concurrent ensure, and pane loss converge to one btm within 20s", async () => {
+test("ensure respects a closed btm and creates one in a new workspace", async () => {
   const root = await mkdtemp(join(tmpdir(), "btm-always-"));
   await using _temp = {
     [Symbol.asyncDispose]: async () => {
@@ -137,18 +137,27 @@ test("isolated headless startup, repeated/concurrent ensure, and pane loss conve
     run([process.execPath, entry, "ensure"]),
   ]);
   expect(await agents()).toEqual([first]);
+  await run([
+    "herdr",
+    "tab",
+    "create",
+    "--workspace",
+    first.tab_id.split(":")[0] ?? "",
+    "--no-focus",
+  ]);
   await run(["herdr", "pane", "close", first.pane_id]);
-  const restored = await waitForOne();
-  expect(restored.pane_id).not.toBe(first.pane_id);
-  // Observe another complete scheduler interval, so a delayed duplicate cannot hide.
-  await Bun.sleep(5500);
-  expect(await agents()).toEqual([restored]);
-  await run(["herdr", "pane", "close", restored.pane_id]);
   await Promise.all([
     run([process.execPath, entry, "ensure"]),
     run([process.execPath, entry, "ensure"]),
   ]);
-  expect(await agents()).toHaveLength(1);
+  // Observe another complete scheduler interval.
+  await Bun.sleep(5500);
+  expect(await agents()).toHaveLength(0);
+  await run(["herdr", "workspace", "create", "--label", "new", "--no-focus"]);
+  await run([process.execPath, entry, "ensure"]);
+  const second = await waitForOne();
+  expect(second.tab_id).not.toBe(first.tab_id);
+  expect(second.tab_id.split(":")[0]).not.toBe(first.tab_id.split(":")[0]);
 }, 60000);
 
 test("interactive zsh maps btm to btmp without recursion", async () => {

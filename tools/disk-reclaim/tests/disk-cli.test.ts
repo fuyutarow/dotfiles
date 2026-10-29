@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { runProbe } from "../src/disk-probe.ts";
+import { planPaths } from "../src/disk-path-plan.ts";
 
 const cli = join(import.meta.dir, "../src/disk.ts");
 async function run(
@@ -57,7 +58,6 @@ describe("disk parser and effect firewall", () => {
     });
     const cases: [string[], string?][] = [
       [["plan", "targets"]],
-      [["plan", "paths", file]],
       [["plan", "workspace-gc"]],
       [["move", "paths", file]],
       [["move", "workspace-gc"]],
@@ -223,11 +223,94 @@ describe("disk parser and effect firewall", () => {
       scope: { path: home },
       outcome: "completed",
     });
-    const planned = await run(["plan", "paths", "--", home], "", env);
-    expect(planned.exit).toBe(4);
-    expect(jsonText.safeParse(planned.out).data).toMatchObject({
-      scope: { paths: [home] },
-    });
+  });
+  test("path plan preserves checks and refuses unknown or mismatched results without effects", async () => {
+    const signal = new AbortController().signal;
+    const rows = [
+      {
+        path: "/safe",
+        bytes: 20,
+        allowed: true,
+        checks: [{ name: "root", ok: true, detail: "allowed" }],
+      },
+      {
+        path: "/held",
+        bytes: null,
+        allowed: false,
+        checks: [
+          { name: "undo", ok: false, detail: "undo window" },
+          { name: "process", ok: false, detail: "unknown process" },
+        ],
+      },
+      {
+        path: "/unknown",
+        bytes: null,
+        allowed: false,
+        checks: [{ name: "process", ok: false, detail: "unknown process" }],
+      },
+    ];
+    let calls = 0;
+    const result = await planPaths(
+      ["/safe", "/held", "/unknown"],
+      100,
+      signal,
+      (paths, timeout) => {
+        calls++;
+        expect(paths).toEqual(["/safe", "/held", "/unknown"]);
+        expect(timeout).toBe(100);
+        return Promise.resolve({ out: JSON.stringify(rows), error: null });
+      },
+    );
+    expect(calls).toBe(1);
+    expect(result.items.map((item) => item.verdict)).toEqual([
+      "safe",
+      "keep",
+      "unknown",
+    ]);
+    expect(result.items.every((item) => item.effect === "none")).toBe(true);
+    expect(result.items[1]?.detail.checks).toEqual(rows[1]?.checks);
+    const mismatch = await planPaths(["/other"], 100, signal, () =>
+      Promise.resolve({ out: JSON.stringify(rows), error: null }),
+    );
+    expect(mismatch.error).not.toBeNull();
+    const timed = await planPaths(["/safe"], 1, signal, () =>
+      Promise.resolve({ out: "", error: "deadline exceeded" }),
+    );
+    expect(timed.items).toEqual([]);
+    expect(timed.error).toBe("deadline exceeded");
+  });
+  test("path plan retains each legacy refusal and never upgrades an incomplete size", async () => {
+    const checks: [string, string][] = [
+      ["configured-root", "outside configured roots"],
+      ["protected-root", "filesystem root and HOME are protected"],
+      ["no-symlink-escape", "symlink path refused"],
+      ["repo-store", "repo root protection: repo store holder"],
+      ["jj-workspace", "listed workspace"],
+      ["no-live-process", "pid 3 has cwd under target"],
+      ["graveyard-undo-window", "undo window: recorded burial is too recent"],
+      ["graveyard-undo-window", "unknown burial"],
+    ];
+    const rows = checks.map(([name, detail], index) => ({
+      path: `/item${index}`,
+      bytes: null,
+      allowed: false,
+      checks: [{ name, ok: false, detail }],
+    }));
+    rows.push({ path: "/incomplete", bytes: null, allowed: true, checks: [] });
+    const result = await planPaths(
+      rows.map((row) => row.path),
+      100,
+      new AbortController().signal,
+      () => Promise.resolve({ out: JSON.stringify(rows), error: null }),
+    );
+    expect(
+      result.items.slice(0, 7).every((item) => item.verdict === "keep"),
+    ).toBe(true);
+    expect(result.items[7]?.verdict).toBe("unknown");
+    expect(result.items[8]?.verdict).toBe("unknown");
+    expect(result.items.map((item) => item.detail.checks)).toEqual(
+      rows.map((row) => row.checks),
+    );
   });
   test("plan-only targets are refused without effects, including in mixed selections", async () => {
     const home = await mkdtemp(join(tmpdir(), "disk-plan-only-"));

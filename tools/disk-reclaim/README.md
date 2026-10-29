@@ -1,5 +1,11 @@
 # disk-reclaim
 
+The `disk plan paths ABS...` entry previews the legacy delete checks without deleting.
+It returns `disk.result/1` rows and bounds the read-only probe with `--within` (default
+120 seconds). A timeout or incomplete safety information returns unknown; a completed
+plan does not authorize a later deletion. The `disk free paths`, `disk free graveyard`,
+and `disk free capacity` adapters remain unavailable.
+
 Part of the [tools/ architecture](../spec/architecture.md) (the mechanism the capacity recover part composes: invariants I-R1 to I-R5).
 
 Plan configured reclamation as one JSONL record per candidate. `apply` reads those records from

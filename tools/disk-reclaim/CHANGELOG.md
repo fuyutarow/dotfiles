@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.1 — 2026-10-29
+
+- Add bounded read-only path planning to disk
+
 ## 1.12.0 — 2026-10-29
 
 - Add disk command family

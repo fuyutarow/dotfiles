@@ -6,6 +6,7 @@ import { cli } from "cleye";
 import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
 import { ReclaimRecord } from "./records.ts";
 import { runProbe } from "./disk-probe.ts";
+import { planPaths } from "./disk-path-plan.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const grammar: Record<string, string[]> = {
@@ -523,6 +524,49 @@ async function main() {
     goal = { kind: "min_available_bytes", value: minimum };
   else if (amount !== undefined)
     goal = { kind: "available_delta_bytes", value: amount };
+  if (key === "plan paths") {
+    const controller = new AbortController();
+    let cancelled = 0;
+    const interrupt = () => {
+      cancelled = 130;
+      controller.abort();
+    };
+    const terminate = () => {
+      cancelled = 143;
+      controller.abort();
+    };
+    process.once("SIGINT", interrupt);
+    process.once("SIGTERM", terminate);
+    const report = () => {
+      if (!options.has("no-progress"))
+        process.stderr.write(
+          `disk: plan paths checking ${positional.join(", ")}; elapsed ${Math.floor(performance.now() - start)}ms / deadline ${deadline}ms; last stage: checking\n`,
+        );
+    };
+    report();
+    const timer = setInterval(report, 5000);
+    const remaining = Math.max(
+      1,
+      deadline - Math.floor(performance.now() - start),
+    );
+    const result = await planPaths(positional, remaining, controller.signal);
+    clearInterval(timer);
+    process.removeListener("SIGINT", interrupt);
+    process.removeListener("SIGTERM", terminate);
+    const unknown = result.items.filter(
+      (item) => item.verdict === "unknown",
+    ).length;
+    let outcome = "completed";
+    if (result.error !== null || unknown > 0) outcome = "unknown";
+    if (cancelled !== 0) outcome = "cancelled";
+    if (result.error !== null) process.stderr.write(`disk: ${result.error}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items: result.items, counts: { selected: result.items.length, completed: 0, refused: result.items.filter((item) => item.verdict === "keep").length, failed: 0, unknown }, errors: result.error === null ? [] : [{ code: "path_plan_unknown", message: result.error, scope }], receipt: null })}\n`,
+    );
+    process.exitCode = outcome === "unknown" ? 4 : 0;
+    if (cancelled !== 0) process.exitCode = cancelled;
+    return;
+  }
   if (key === "inspect receipts") {
     const { detail, error } = await inspectReceipts(
       get("last") ?? "10",

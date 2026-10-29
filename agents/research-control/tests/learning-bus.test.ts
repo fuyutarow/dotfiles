@@ -411,16 +411,16 @@ function delivery(
     "SECTION_TRANSFER_DELIVERY",
     {
       deliveryId: id,
-      transferLocus: p.locator,
-      transferSha256: p.sha256,
+      transferLocus: p["locator"],
+      transferSha256: p["sha256"],
       recipientSectionId: recipient,
-      subscriptionLocus: sub.locator,
-      subscriptionSha256: sub.sha256,
+      subscriptionLocus: sub["locator"],
+      subscriptionSha256: sub["sha256"],
       matchedTopicIds: ["topic"],
       matchedPremiseIds: ["premise"],
       matchedInterfaceIds: ["interface"],
       matchedDeltaClass: "supports",
-      idempotencyKey: `${p.sha256}:${recipient}`,
+      idempotencyKey: `${p["sha256"]}:${recipient}`,
       enqueuedAt: at(10),
       deliveredAt: at(11),
       brokerKind: "DETERMINISTIC_EXACT_MATCH",
@@ -432,12 +432,12 @@ function delivery(
       {
         kind: "SECTION_TRANSFER_PACKET",
         id: "packet",
-        sha256: p.sha256,
+        sha256: p["sha256"],
       },
       {
         kind: "SECTION_SUBSCRIPTION",
-        id: sub.id,
-        sha256: sub.sha256,
+        id: sub["id"],
+        sha256: sub["sha256"],
       },
     ],
   );
@@ -463,13 +463,13 @@ function admission(
       mandateFence: `fence-${recipient}`,
       sectionCharterLocus: `charters/${recipient}.json`,
       sectionCharterSha256: digest("e"),
-      deliveryLocus: deliveryEnvelope.locator,
-      deliverySha256: deliveryEnvelope.sha256,
-      transferLocus: p.locator,
-      transferSha256: p.sha256,
-      subscriptionLocus: sub.locator,
-      subscriptionSha256: sub.sha256,
-      idempotencyKey: `${p.sha256}:${recipient}`,
+      deliveryLocus: deliveryEnvelope["locator"],
+      deliverySha256: deliveryEnvelope["sha256"],
+      transferLocus: p["locator"],
+      transferSha256: p["sha256"],
+      subscriptionLocus: sub["locator"],
+      subscriptionSha256: sub["sha256"],
+      idempotencyKey: `${p["sha256"]}:${recipient}`,
       decision,
       reasonClass: "applicable",
       decidedAt: at(12),
@@ -480,18 +480,18 @@ function admission(
     [
       {
         kind: "SECTION_TRANSFER_DELIVERY",
-        id: deliveryEnvelope.id,
-        sha256: deliveryEnvelope.sha256,
+        id: deliveryEnvelope["id"],
+        sha256: deliveryEnvelope["sha256"],
       },
       {
         kind: "SECTION_TRANSFER_PACKET",
         id: "packet",
-        sha256: p.sha256,
+        sha256: p["sha256"],
       },
       {
         kind: "SECTION_SUBSCRIPTION",
-        id: sub.id,
-        sha256: sub.sha256,
+        id: sub["id"],
+        sha256: sub["sha256"],
       },
     ],
   );
@@ -512,11 +512,11 @@ function commit(recipient: string, admissionEnvelope: Envelope): Envelope {
       mandateFence: `fence-${recipient}`,
       sectionCharterLocus: `charters/${recipient}.json`,
       sectionCharterSha256: digest("e"),
-      admissionLocus: admissionEnvelope.locator,
-      admissionSha256: admissionEnvelope.sha256,
-      transferLocus: p.locator,
-      transferSha256: p.sha256,
-      idempotencyKey: `${p.sha256}:${recipient}`,
+      admissionLocus: admissionEnvelope["locator"],
+      admissionSha256: admissionEnvelope["sha256"],
+      transferLocus: p["locator"],
+      transferSha256: p["sha256"],
+      idempotencyKey: `${p["sha256"]}:${recipient}`,
       localEffect: "PRIOR_UPDATE",
       stateLocus: `state/${recipient}.json`,
       stateBeforeSha256: digest("b"),
@@ -530,13 +530,13 @@ function commit(recipient: string, admissionEnvelope: Envelope): Envelope {
     [
       {
         kind: "SECTION_TRANSFER_ADMISSION",
-        id: admissionEnvelope.id,
-        sha256: admissionEnvelope.sha256,
+        id: admissionEnvelope["id"],
+        sha256: admissionEnvelope["sha256"],
       },
       {
         kind: "SECTION_TRANSFER_PACKET",
         id: "packet",
-        sha256: p.sha256,
+        sha256: p["sha256"],
       },
     ],
   );
@@ -584,10 +584,10 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("unsubscribed Director receives no delivery", () => {
     const value = input();
-    value.artifacts.subscriptions = [subscription("other")];
-    value.artifacts.deliveries = [];
-    value.artifacts.admissions = [];
-    value.artifacts.commits = [];
+    value["artifacts"].subscriptions = [subscription("other")];
+    value["artifacts"].deliveries = [];
+    value["artifacts"].admissions = [];
+    value["artifacts"].commits = [];
     expect(checkLearningBus(value)).toMatchObject({
       ok: true,
       metrics: {
@@ -600,12 +600,12 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("replay is dropped without multiplying propagation or scientific metrics", () => {
     const value = input();
-    const seededDelivery = value.artifacts.deliveries[0];
+    const seededDelivery = value["artifacts"].deliveries[0];
     expect(seededDelivery).toBeDefined();
     if (seededDelivery === undefined) return;
     const replay = structuredClone(seededDelivery);
-    replay.id = "delivery-replay";
-    value.artifacts.deliveries.push(replay);
+    replay["id"] = "delivery-replay";
+    value["artifacts"].deliveries.push(replay);
     const result = checkLearningBus(value);
     expect(codes(value)).toContain("TRANSFER_REPLAY");
     expect(result.metrics).toMatchObject({
@@ -616,12 +616,12 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("a replay cannot create a second local transfer commit", () => {
     const value = input();
-    const seededCommit = value.artifacts.commits[0];
+    const seededCommit = value["artifacts"].commits[0];
     expect(seededCommit).toBeDefined();
     if (seededCommit === undefined) return;
     const replay = structuredClone(seededCommit);
-    replay.id = "commit-replay";
-    value.artifacts.commits.push(replay);
+    replay["id"] = "commit-replay";
+    value["artifacts"].commits.push(replay);
     expect(checkLearningBus(value)).toMatchObject({
       metrics: { transferCommits: 1, transferReplayDrops: 1 },
     });
@@ -629,12 +629,12 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("a source commit publishes only one packet", () => {
     const value = input();
-    const seededPacket = value.artifacts.packets[0];
+    const seededPacket = value["artifacts"].packets[0];
     expect(seededPacket).toBeDefined();
     if (seededPacket === undefined) return;
     const replay = structuredClone(seededPacket);
-    replay.id = "packet-replay";
-    value.artifacts.packets.push(replay);
+    replay["id"] = "packet-replay";
+    value["artifacts"].packets.push(replay);
     expect(checkLearningBus(value)).toMatchObject({
       metrics: { transferPacketsPublished: 1, transferReplayDrops: 1 },
     });
@@ -644,26 +644,26 @@ describe("cross-section-learning-bus/v1", () => {
     const value = input({ sourceCommitEventId: "missing" });
     expect(codes(value)).toContain("TRANSFER_WITHOUT_COMMIT");
     const mismatched = input();
-    const mismatchedPacket = mismatched.artifacts.packets[0];
+    const mismatchedPacket = mismatched["artifacts"].packets[0];
     expect(mismatchedPacket).toBeDefined();
     if (mismatchedPacket === undefined) return;
     const packetBody = mismatchedPacket.body;
-    packetBody.sourceCommitSha256 = digest("f");
-    mismatchedPacket.sha256 = decoded(z.string(), bodySha256(packetBody));
+    packetBody["sourceCommitSha256"] = digest("f");
+    mismatchedPacket["sha256"] = decoded(z.string(), bodySha256(packetBody));
     expect(codes(mismatched)).toContain("TRANSFER_WITHOUT_COMMIT");
   });
   test("packet receipt lineage rejects an unrelated extra digest", () => {
     const value = input();
-    const artifacts = value.artifacts;
+    const artifacts = value["artifacts"];
     const packetEnvelope = artifacts.packets[0];
     expect(packetEnvelope).toBeDefined();
     if (packetEnvelope === undefined) return;
     const packetBody = packetEnvelope.body;
-    packetBody.sourceReceiptDigests = [
-      ...decoded(z.array(z.string()), packetBody.sourceReceiptDigests),
+    packetBody["sourceReceiptDigests"] = [
+      ...decoded(z.array(z.string()), packetBody["sourceReceiptDigests"]),
       digest("f"),
     ];
-    packetEnvelope.sha256 = decoded(z.string(), bodySha256(packetBody));
+    packetEnvelope["sha256"] = decoded(z.string(), bodySha256(packetBody));
     artifacts.deliveries = [];
     artifacts.admissions = [];
     artifacts.commits = [];
@@ -675,10 +675,10 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("committed learning misses its declared publish deadline", () => {
     const value = input();
-    value.artifacts.packets = [];
-    value.artifacts.deliveries = [];
-    value.artifacts.admissions = [];
-    value.artifacts.commits = [];
+    value["artifacts"].packets = [];
+    value["artifacts"].deliveries = [];
+    value["artifacts"].admissions = [];
+    value["artifacts"].commits = [];
     expect(codes(value)).toContain("COMMITTED_LEARNING_NOT_PUBLISHED");
   });
   test.each([
@@ -687,7 +687,7 @@ describe("cross-section-learning-bus/v1", () => {
     ["TRANSFER_GLOBAL_BARRIER", "DELIVERY_QUORUM"],
   ])("forbidden dependency %s is classified", (code, kind) => {
     const value = input();
-    const p = value.artifacts.packets[0];
+    const p = value["artifacts"].packets[0];
     expect(p).toBeDefined();
     if (p === undefined) return;
     p.dependencies = [{ kind, id: "wait", sha256: digest("d") }];
@@ -695,20 +695,20 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("programme visibility and auto-enactment fail closed", () => {
     const visible = input();
-    const visiblePacket = visible.artifacts.packets[0];
+    const visiblePacket = visible["artifacts"].packets[0];
     expect(visiblePacket).toBeDefined();
     if (visiblePacket === undefined) return;
     const packetBody = visiblePacket.body;
-    packetBody.programmeVisible = true;
-    visiblePacket.sha256 = decoded(z.string(), bodySha256(packetBody));
+    packetBody["programmeVisible"] = true;
+    visiblePacket["sha256"] = decoded(z.string(), bodySha256(packetBody));
     expect(codes(visible)).toContain("RAW_METHOD_LEAK_TO_PROGRAMME");
     const mutation = input();
-    const mutationAdmission = mutation.artifacts.admissions[0];
+    const mutationAdmission = mutation["artifacts"].admissions[0];
     expect(mutationAdmission).toBeDefined();
     if (mutationAdmission === undefined) return;
     const body = mutationAdmission.body;
-    body.localStateMutation = true;
-    mutationAdmission.sha256 = decoded(z.string(), bodySha256(body));
+    body["localStateMutation"] = true;
+    mutationAdmission["sha256"] = decoded(z.string(), bodySha256(body));
     expect(codes(mutation)).toContain("TRANSFER_AUTO_ENACTED");
   });
   test("caller supplied scientific counters fail closed", () => {
@@ -731,7 +731,7 @@ describe("cross-section-learning-bus/v1", () => {
       expect(text).toBeDefined();
       if (text === undefined) continue;
       const result = checkLearningBus(decodedJson(z.json(), text));
-      expect(result.schema).toBe("cross-section-learning-bus/v1");
+      expect(result["schema"]).toBe("cross-section-learning-bus/v1");
       expect(result.findings.map((finding) => finding.code)).toContain(
         "TRANSFER_WITHOUT_COMMIT",
       );

@@ -268,7 +268,7 @@ function trace(): TraceFixture {
   };
 }
 function events(value: TraceFixture): Rec[] {
-  return value.events;
+  return value["events"];
 }
 function codes(value: unknown): string[] {
   return checkTrace(value).findings.map((finding) => finding.code);
@@ -277,13 +277,13 @@ function expectCode(value: unknown, code: string): void {
   expect(codes(value)).toContain(code);
 }
 function section(value: TraceFixture, name: string): Rec {
-  const found = value.authority[name];
+  const found = value["authority"][name];
   expect(found).toBeDefined();
   if (found === undefined) return {};
   return found;
 }
 function patchEvidence(event: Rec, patch: Rec): void {
-  event.evidence = { ...rec(event.evidence), ...patch };
+  event["evidence"] = { ...rec(event["evidence"]), ...patch };
 }
 // Fixtures below always index within the fixed event list they just built;
 // this only guards noUncheckedIndexedAccess, the index is never actually out of range.
@@ -296,7 +296,7 @@ function nth(list: Rec[], index: number): Rec {
 function eventAt(value: TraceFixture, index: number): Rec {
   return nth(events(value), index);
 }
-if (process.env.WRITE_WIRE_FIXTURES === "1") {
+if (process.env["WRITE_WIRE_FIXTURES"] === "1") {
   const directory = resolve(import.meta.dir, "../fixtures");
   const make = (mutate: (value: TraceFixture) => void) => {
     const value = trace();
@@ -304,7 +304,7 @@ if (process.env.WRITE_WIRE_FIXTURES === "1") {
     return `${JSON.stringify(value)}\n`;
   };
   const blocker = (value: TraceFixture) => {
-    value.lease = { ...value.lease, terminalTarget: "EXACT_BLOCKER" };
+    value["lease"] = { ...value["lease"], terminalTarget: "EXACT_BLOCKER" };
     const list = events(value);
     list.splice(5);
     list.push({
@@ -330,7 +330,7 @@ if (process.env.WRITE_WIRE_FIXTURES === "1") {
     "valid-intent-receipt-learning.json": make(() => {}),
     "valid-exact-blocker.json": make(blocker),
     "role-switch.json": make((v) => {
-      v.roleGrants.push({
+      v["roleGrants"].push({
         grantId: "d2",
         actorInstanceId: "director",
         role: "section-director",
@@ -340,10 +340,10 @@ if (process.env.WRITE_WIRE_FIXTURES === "1") {
       patchEvidence(eventAt(v, 5), { locator: "/x/.agent-state/y" });
     }),
     "receipt-without-intent.json": make((v) => {
-      eventAt(v, 5).intentId = "missing";
+      eventAt(v, 5)["intentId"] = "missing";
     }),
     "learn-without-new-receipt.json": make((v) => {
-      delete eventAt(v, 6).delta;
+      delete eventAt(v, 6)["delta"];
     }),
     "next-search-before-learning.json": make((v) => {
       events(v).splice(6);
@@ -354,11 +354,11 @@ if (process.env.WRITE_WIRE_FIXTURES === "1") {
       events(v).push({ ...eventAt(v, 4), id: "i2", at: at(8) });
     }),
     "role-authority-violation.json": make((v) => {
-      eventAt(v, 1).grantId = "d";
-      eventAt(v, 1).actorInstanceId = "director";
+      eventAt(v, 1)["grantId"] = "d";
+      eventAt(v, 1)["actorInstanceId"] = "director";
     }),
     "invalid-intent-does-not-release-wip.json": make((v) => {
-      eventAt(v, 4).executableSpecificationSha256 = digest("0");
+      eventAt(v, 4)["executableSpecificationSha256"] = digest("0");
     }),
     "proposal-only-100m.json": make((v) => {
       events(v).splice(2);
@@ -480,50 +480,50 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("missing authority lineage is rejected before event indexing", () => {
     const value = trace();
-    delete value.authority.openIssue;
+    delete value["authority"]["openIssue"];
     expectCode(value, "AUTHORITY_LINEAGE_INVALID");
   });
   test("known result cannot be admitted as a novel gap", () => {
     const value = trace();
-    eventAt(value, 1).knownResult = true;
+    eventAt(value, 1)["knownResult"] = true;
     expectCode(value, "KNOWN_RESULT_REDISCOVERY");
   });
   test("candidate must explicitly carry the current grounding known-result disposition", () => {
     const value = trace();
-    delete eventAt(value, 1).knownResult;
+    delete eventAt(value, 1)["knownResult"];
     expectCode(value, "KNOWN_RESULT_DISPOSITION_MISSING");
   });
   test("registered replication cannot claim knownResult=false", () => {
     const value = trace();
     const grounding = section(value, "grounding");
-    grounding.knownResultDisposition = "REGISTERED_REPLICATION";
-    grounding.knownResult = true;
-    eventAt(value, 1).noveltyDisposition = "REGISTERED_REPLICATION";
+    grounding["knownResultDisposition"] = "REGISTERED_REPLICATION";
+    grounding["knownResult"] = true;
+    eventAt(value, 1)["noveltyDisposition"] = "REGISTERED_REPLICATION";
     expectCode(value, "KNOWN_RESULT_DISPOSITION_MISMATCH");
   });
   test("candidate disposition must exact-match current grounding", () => {
     const value = trace();
-    eventAt(value, 1).noveltyDisposition = "REGISTERED_REPLICATION";
-    eventAt(value, 1).knownResult = true;
+    eventAt(value, 1)["noveltyDisposition"] = "REGISTERED_REPLICATION";
+    eventAt(value, 1)["knownResult"] = true;
     expectCode(value, "KNOWN_RESULT_DISPOSITION_MISMATCH");
   });
   test("stale grounding and wrong goal axis are rejected", () => {
     const stale = trace();
-    eventAt(stale, 1).groundingFence = "old-fence";
+    eventAt(stale, 1)["groundingFence"] = "old-fence";
     expectCode(stale, "STALE_KNOWLEDGE_SNAPSHOT");
     const wrongGoal = trace();
-    eventAt(wrongGoal, 1).goalConstitutionId = "other";
+    eventAt(wrongGoal, 1)["goalConstitutionId"] = "other";
     expectCode(wrongGoal, "GOAL_LINEAGE_MISMATCH");
   });
   test("an intermediate semantic authority link cannot drift from Goal Constitution", () => {
     const value = trace();
-    section(value, "openIssue").objectiveId = "other-objective";
+    section(value, "openIssue")["objectiveId"] = "other-objective";
     expectCode(value, "GOAL_LINEAGE_MISMATCH");
   });
   test("measurement-invalid receipt closes the intent but earns no scientific credit", () => {
     const value = trace();
-    eventAt(value, 5).measurementValidity = "FAIL";
-    eventAt(value, 6).learningClass = "INSTRUMENTATION_REPAIR";
+    eventAt(value, 5)["measurementValidity"] = "FAIL";
+    eventAt(value, 6)["learningClass"] = "INSTRUMENTATION_REPAIR";
     const result = checkTrace(value);
     expect(result.summary).toMatchObject({
       scientificReceipts: 0,
@@ -536,7 +536,7 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("REJECT consumes scientific learning but earns no scientific LEARN credit", () => {
     const value = trace();
-    eventAt(value, 7).decision = "REJECT";
+    eventAt(value, 7)["decision"] = "REJECT";
     const result = checkTrace(value);
     expect(result.summary.scientificReceipts).toBe(1);
     expect(result.summary.scientificCommits).toBe(0);
@@ -544,13 +544,13 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("scientific learning cannot claim a measurement-invalid receipt", () => {
     const value = trace();
-    eventAt(value, 5).measurementValidity = "UNKNOWN";
+    eventAt(value, 5)["measurementValidity"] = "UNKNOWN";
     expectCode(value, "MEASUREMENT_INVALID_FOR_SCIENCE");
   });
   test("escalated confirmation requires a released PASS digest", () => {
     const value = trace();
-    eventAt(value, 3).runScale = "ESCALATED_CONFIRMATION";
-    eventAt(value, 3).escalationClass = "SCALE";
+    eventAt(value, 3)["runScale"] = "ESCALATED_CONFIRMATION";
+    eventAt(value, 3)["escalationClass"] = "SCALE";
     expectCode(value, "SWEEP_WITHOUT_RELEASE");
     expect(checkTrace(value).summary).toMatchObject({
       scientificReceipts: 0,
@@ -563,7 +563,7 @@ describe("research-section-trace/v2 exact wire", () => {
     const value = trace();
     const list = events(value);
     const release = nth(list, 7);
-    release.scaleRelease = "ESCALATED_CONFIRMATION";
+    release["scaleRelease"] = "ESCALATED_CONFIRMATION";
     list.push({
       ...nth(list, 3),
       id: "e2",
@@ -581,7 +581,7 @@ describe("research-section-trace/v2 exact wire", () => {
   test("escalated confirmation rejects a wrong release commit digest", () => {
     const value = trace();
     const list = events(value);
-    nth(list, 7).scaleRelease = "ESCALATED_CONFIRMATION";
+    nth(list, 7)["scaleRelease"] = "ESCALATED_CONFIRMATION";
     list.push({
       ...nth(list, 3),
       id: "e2",
@@ -598,8 +598,8 @@ describe("research-section-trace/v2 exact wire", () => {
   test("REJECT cannot release escalated confirmation", () => {
     const value = trace();
     const list = events(value);
-    nth(list, 7).scaleRelease = "ESCALATED_CONFIRMATION";
-    nth(list, 7).decision = "REJECT";
+    nth(list, 7)["scaleRelease"] = "ESCALATED_CONFIRMATION";
+    nth(list, 7)["decision"] = "REJECT";
     list.push({
       ...nth(list, 3),
       id: "e2",
@@ -627,7 +627,7 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("duplicate same-role actor grant is ROLE_SWITCH", () => {
     const value = trace();
-    value.roleGrants.push({
+    value["roleGrants"].push({
       grantId: "d2",
       actorInstanceId: "director",
       role: "section-director",
@@ -636,42 +636,42 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("unknown kind is invalid", () => {
     const value = trace();
-    eventAt(value, 1).kind = "HIDDEN";
+    eventAt(value, 1)["kind"] = "HIDDEN";
     expectCode(value, "TRACE_INVALID");
   });
   test("wrong mandate and candidate authority are rejected", () => {
     const value = trace();
-    eventAt(value, 0).grantId = "d";
-    eventAt(value, 0).actorInstanceId = "director";
-    eventAt(value, 1).grantId = "d";
-    eventAt(value, 1).actorInstanceId = "director";
+    eventAt(value, 0)["grantId"] = "d";
+    eventAt(value, 0)["actorInstanceId"] = "director";
+    eventAt(value, 1)["grantId"] = "d";
+    eventAt(value, 1)["actorInstanceId"] = "director";
     expectCode(value, "ROLE_AUTHORITY_VIOLATION");
   });
   test("missing pre-action chain blocks intent", () => {
     const value = trace();
-    eventAt(value, 4).admissionId = "missing";
+    eventAt(value, 4)["admissionId"] = "missing";
     expectCode(value, "INTENT_NOT_EXECUTABLE");
   });
   test("intent must exact-join the executable measurement and scale contract", () => {
     const value = trace();
-    eventAt(value, 4).measurementContractSha256 = digest("0");
+    eventAt(value, 4)["measurementContractSha256"] = digest("0");
     expectCode(value, "INTENT_NOT_EXECUTABLE");
     const drift = trace();
-    drift.events = events(drift);
-    eventAt(drift, 4).runScale = "ESCALATED_CONFIRMATION";
+    drift["events"] = events(drift);
+    eventAt(drift, 4)["runScale"] = "ESCALATED_CONFIRMATION";
     expectCode(drift, "INTENT_NOT_EXECUTABLE");
     const missing = trace();
-    delete eventAt(missing, 4).measurementContractSha256;
+    delete eventAt(missing, 4)["measurementContractSha256"];
     expectCode(missing, "INTENT_NOT_EXECUTABLE");
   });
   test("executable spec requires a consistent escalation class", () => {
     const value = trace();
-    eventAt(value, 3).escalationClass = "SCALE";
+    eventAt(value, 3)["escalationClass"] = "SCALE";
     expectCode(value, "INTENT_NOT_EXECUTABLE");
   });
   test("digest mutation is explicit", () => {
     const value = trace();
-    eventAt(value, 3).admissionSha256 = digest("f");
+    eventAt(value, 3)["admissionSha256"] = digest("f");
     expectCode(value, "DIGEST_JOIN_MISMATCH");
   });
   test("evidence requires lowercase SHA-256", () => {
@@ -682,14 +682,14 @@ describe("research-section-trace/v2 exact wire", () => {
   test("second receipt is duplicate terminal", () => {
     const value = trace();
     const second = structuredClone(eventAt(value, 5));
-    second.id = "r2";
-    second.at = at(9);
+    second["id"] = "r2";
+    second["at"] = at(9);
     events(value).push(second);
     expectCode(value, "DUPLICATE_TERMINAL");
   });
   test("terminal target mismatch is explicit", () => {
     const value = trace();
-    eventAt(value, 5).terminalClass = "KILL_RECEIPT";
+    eventAt(value, 5)["terminalClass"] = "KILL_RECEIPT";
     expectCode(value, "TERMINAL_TARGET_MISMATCH");
   });
   test("blocker needs exact intent and blocks later search", () => {
@@ -709,19 +709,19 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("equal, out-of-order, and future times are invalid", () => {
     const value = trace();
-    eventAt(value, 2).at = at(2);
-    eventAt(value, 3).at = "2026-08-03T00:21:00Z";
+    eventAt(value, 2)["at"] = at(2);
+    eventAt(value, 3)["at"] = "2026-08-03T00:21:00Z";
     expectCode(value, "TRACE_INVALID");
   });
   test("invalid intent does not release deadline", () => {
     const value = trace();
-    eventAt(value, 4).executableSpecificationSha256 = digest("0");
+    eventAt(value, 4)["executableSpecificationSha256"] = digest("0");
     expectCode(value, "FIRST_INTENT_OVERDUE");
   });
   test("wrong-role candidate cannot release the chain", () => {
     const value = trace();
-    eventAt(value, 1).grantId = "d";
-    eventAt(value, 1).actorInstanceId = "director";
+    eventAt(value, 1)["grantId"] = "d";
+    eventAt(value, 1)["actorInstanceId"] = "director";
     expectCode(value, "ROLE_AUTHORITY_VIOLATION");
     expectCode(value, "FIRST_INTENT_OVERDUE");
   });
@@ -733,13 +733,13 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("missing learning fields do not invent a digest finding", () => {
     const value = trace();
-    delete eventAt(value, 6).delta;
+    delete eventAt(value, 6)["delta"];
     expectCode(value, "LEARN_WITHOUT_NEW_RECEIPT");
     expect(codes(value)).not.toContain("DIGEST_JOIN_MISMATCH");
   });
   test("exact blocker alternate terminal passes without learning", () => {
     const value = trace();
-    value.lease = { ...value.lease, terminalTarget: "EXACT_BLOCKER" };
+    value["lease"] = { ...value["lease"], terminalTarget: "EXACT_BLOCKER" };
     const list = events(value);
     list.splice(5);
     list.push({
@@ -768,7 +768,7 @@ describe("research-section-trace/v2 exact wire", () => {
       bad = join(directory, "bad.json");
     await writeFile(good, `${JSON.stringify(trace())}\n`);
     const invalid = trace();
-    eventAt(invalid, 1).kind = "HIDDEN";
+    eventAt(invalid, 1)["kind"] = "HIDDEN";
     await writeFile(bad, `${JSON.stringify(invalid)}\n`);
     const cli = resolve(import.meta.dir, "../cli.ts");
     const run = async (args: string[]) => {

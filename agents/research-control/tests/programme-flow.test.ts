@@ -45,7 +45,7 @@ function eventAt(
   trace: z.output<typeof TraceFixtureSchema>,
   index: number,
 ): Record<string, unknown> {
-  const event = trace.events[index];
+  const event = trace["events"][index];
   expect(event).toBeDefined();
   if (event === undefined) return {};
   return event;
@@ -122,8 +122,8 @@ describe("programme-flow/v2", () => {
   test("a validated scientific PASS receipt and Director release authorize confirmation", () => {
     const base = flowBase("flow-streaming-pass.json");
     const trace = traceFixture();
-    const digest = eventAt(trace, 5).artifactSha256;
-    eventAt(trace, 7).scaleRelease = "ESCALATED_CONFIRMATION";
+    const digest = eventAt(trace, 5)["artifactSha256"];
+    eventAt(trace, 7)["scaleRelease"] = "ESCALATED_CONFIRMATION";
     const result = checkProgrammeFlow({
       ...base,
       traces: [trace],
@@ -142,9 +142,9 @@ describe("programme-flow/v2", () => {
   test("a Director rejection cannot release confirmation", () => {
     const base = flowBase("flow-streaming-pass.json");
     const trace = traceFixture();
-    const digest = eventAt(trace, 5).artifactSha256;
-    eventAt(trace, 7).decision = "REJECT";
-    eventAt(trace, 7).scaleRelease = "ESCALATED_CONFIRMATION";
+    const digest = eventAt(trace, 5)["artifactSha256"];
+    eventAt(trace, 7)["decision"] = "REJECT";
+    eventAt(trace, 7)["scaleRelease"] = "ESCALATED_CONFIRMATION";
     const result = checkProgrammeFlow({
       ...base,
       traces: [trace],
@@ -270,8 +270,8 @@ describe("programme-flow/v2", () => {
       learningCommits: 1,
     });
     const distinctLease = structuredClone(trace);
-    distinctLease.lease.leaseId = "other-lease";
-    distinctLease.lease.sectionId = "other-section";
+    distinctLease["lease"]["leaseId"] = "other-lease";
+    distinctLease["lease"]["sectionId"] = "other-section";
     const sharedReceipt = checkProgrammeFlow({
       ...base,
       traces: [trace, distinctLease],
@@ -321,6 +321,6 @@ describe("programme-flow/v2", () => {
     );
     expect(names).toHaveLength(18);
     for (const name of names)
-      expect(flow(name).schema).toBe("programme-flow/v2");
+      expect(flow(name)["schema"]).toBe("programme-flow/v2");
   });
 });

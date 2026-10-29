@@ -46,16 +46,16 @@ const Sha = z.string().regex(/^[a-f0-9]{64}$/u);
 // A plain object as a Record, or undefined; the parsed copy is what callers use.
 function record(value: unknown): R | undefined {
   const parsed = RecordSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  return parsed["success"] ? parsed.data : undefined;
 }
 function list(value: unknown): unknown[] | undefined {
   const parsed = z.array(z.unknown()).safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  return parsed["success"] ? parsed.data : undefined;
 }
 // A finite number, or undefined (z.number() rejects NaN and +-Infinity).
 function finite(value: unknown): number | undefined {
   const parsed = z.number().safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  return parsed["success"] ? parsed.data : undefined;
 }
 const JobSchema = z
   .looseObject({
@@ -110,7 +110,7 @@ function add(
 }
 function releasedScientificPassDigests(trace: unknown): Set<string> {
   const traceRecord = record(trace);
-  const rawEvents = list(traceRecord?.events);
+  const rawEvents = list(traceRecord?.["events"]);
   if (rawEvents === undefined) return new Set();
   const events = rawEvents.flatMap((event) => {
     const parsed = record(event);
@@ -120,31 +120,31 @@ function releasedScientificPassDigests(trace: unknown): Set<string> {
   const learningById = new Map<string, R>();
   for (const event of events) {
     if (
-      event.kind === "RECEIPT" &&
-      event.measurementValidity === "PASS" &&
-      typeof event.artifactSha256 === "string" &&
-      event.artifactSha256 !== ""
+      event["kind"] === "RECEIPT" &&
+      event["measurementValidity"] === "PASS" &&
+      typeof event["artifactSha256"] === "string" &&
+      event["artifactSha256"] !== ""
     )
-      receipts.add(event.artifactSha256);
-    if (event.kind === "LEARNING" && typeof event.id === "string")
-      learningById.set(event.id, event);
+      receipts.add(event["artifactSha256"]);
+    if (event["kind"] === "LEARNING" && typeof event["id"] === "string")
+      learningById.set(event["id"], event);
   }
   const released = new Set<string>();
   for (const commit of events) {
     const learning =
-      typeof commit.learningId === "string"
-        ? learningById.get(commit.learningId)
+      typeof commit["learningId"] === "string"
+        ? learningById.get(commit["learningId"])
         : undefined;
-    const digest = commit.receiptSha256;
+    const digest = commit["receiptSha256"];
     if (
-      commit.kind === "DIRECTOR_COMMIT" &&
-      commit.decision === "COMMIT" &&
-      commit.scaleRelease === "ESCALATED_CONFIRMATION" &&
+      commit["kind"] === "DIRECTOR_COMMIT" &&
+      commit["decision"] === "COMMIT" &&
+      commit["scaleRelease"] === "ESCALATED_CONFIRMATION" &&
       typeof digest === "string" &&
       receipts.has(digest) &&
-      learning?.learningClass === "SCIENTIFIC" &&
-      learning.receiptSha256 === digest &&
-      learning.artifactSha256 === commit.learningSha256
+      learning?.["learningClass"] === "SCIENTIFIC" &&
+      learning["receiptSha256"] === digest &&
+      learning["artifactSha256"] === commit["learningSha256"]
     )
       released.add(digest);
   }
@@ -174,17 +174,17 @@ function recordDependencyNotReady(
   item: Job,
   locator: string,
 ): void {
-  const itemWait = record(item.wait);
+  const itemWait = record(item["wait"]);
   if (
     itemWait === undefined ||
-    itemWait.reason !== "DEPENDENCY_NOT_READY" ||
-    itemWait.locator !== locator
+    itemWait["reason"] !== "DEPENDENCY_NOT_READY" ||
+    itemWait["locator"] !== locator
   )
     add(
       findings,
       "DEPENDENCY_NOT_READY",
       "dependency is not complete",
-      item.id,
+      item["id"],
       locator,
     );
 }
@@ -200,44 +200,44 @@ function evaluateWaitedJob(
   const wait = record(rawWait);
   if (
     wait === undefined ||
-    typeof wait.reason !== "string" ||
-    typeof wait.locator !== "string" ||
-    wait.locator.trim() === ""
+    typeof wait["reason"] !== "string" ||
+    typeof wait["locator"] !== "string" ||
+    wait["locator"].trim() === ""
   ) {
     add(
       findings,
       "FLOW_INVALID",
       "wait requires reason and nonempty blocker locator",
-      item.id,
+      item["id"],
     );
     return;
   }
-  const reason = wait.reason;
+  const reason = wait["reason"];
   const forbiddenCode = forbidden.get(reason);
   if (forbiddenCode !== undefined) {
-    add(findings, forbiddenCode, `forbidden wait ${reason}`, item.id);
+    add(findings, forbiddenCode, `forbidden wait ${reason}`, item["id"]);
     if (item.readyAt <= now && capacity > 0)
       add(
         findings,
         "READY_WORK_NOT_DISPATCHED",
         "ready compatible work was blocked",
-        item.id,
+        item["id"],
       );
     return;
   }
   if (!waits.has(reason)) {
-    add(findings, "FLOW_INVALID", "unknown wait reason", item.id);
+    add(findings, "FLOW_INVALID", "unknown wait reason", item["id"]);
     return;
   }
   if (
     reason === "NO_COMPATIBLE_CAPACITY" &&
-    (wait.locator !== item.resource || capacity > 0)
+    (wait["locator"] !== item["resource"] || capacity > 0)
   ) {
     add(
       findings,
       "READY_WORK_NOT_DISPATCHED",
       "claimed no capacity despite matching free slot",
-      item.id,
+      item["id"],
     );
     ready.push(item);
   }
@@ -265,7 +265,7 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
     metrics,
   });
   const parsedInput = FlowInputSchema.safeParse(rawInput);
-  if (!parsedInput.success) {
+  if (!parsedInput["success"]) {
     add(
       findings,
       "FLOW_INVALID",
@@ -274,7 +274,7 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
     return finish();
   }
   const input = parsedInput.data;
-  const schedulerTickMs = finite(input.config.schedulerTickMs);
+  const schedulerTickMs = finite(input.config["schedulerTickMs"]);
   if (
     schedulerTickMs === undefined ||
     schedulerTickMs < 100 ||
@@ -283,15 +283,15 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
     add(findings, "FLOW_INVALID", "schedulerTickMs must be 100..5000");
   const jobs = input.jobs.flatMap((raw) => {
     const parsed = JobSchema.safeParse(raw);
-    return parsed.success ? [parsed.data] : [];
+    return parsed["success"] ? [parsed.data] : [];
   });
   if (jobs.length !== input.jobs.length)
     add(findings, "FLOW_INVALID", "job fields must be finite and valid");
   const jobIds = new Set<string>();
   for (const item of jobs) {
-    if (jobIds.has(item.id))
-      add(findings, "FLOW_INVALID", "duplicate job id", item.id);
-    jobIds.add(item.id);
+    if (jobIds.has(item["id"]))
+      add(findings, "FLOW_INVALID", "duplicate job id", item["id"]);
+    jobIds.add(item["id"]);
   }
   if (new Set(input.completedJobIds).size !== input.completedJobIds.length)
     add(findings, "FLOW_INVALID", "completed job ids must be unique");
@@ -304,23 +304,23 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
   const releasedReceiptDigests = new Set(input.releasedReceiptDigests);
   const sectionAuthorities = input.sectionAuthorities.flatMap((raw) => {
     const parsed = SectionAuthoritySchema.safeParse(raw);
-    return parsed.success ? [parsed.data] : [];
+    return parsed["success"] ? [parsed.data] : [];
   });
   if (sectionAuthorities.length !== input.sectionAuthorities.length)
     add(findings, "FLOW_INVALID", "section authorities must be valid");
   const sectionAuthorityById = new Map<string, SectionAuthority>();
   const ambiguousSections = new Set<string>();
   for (const authority of sectionAuthorities) {
-    if (sectionAuthorityById.has(authority.sectionId)) {
-      ambiguousSections.add(authority.sectionId);
+    if (sectionAuthorityById.has(authority["sectionId"])) {
+      ambiguousSections.add(authority["sectionId"]);
       add(
         findings,
         "FLOW_INVALID",
         "section authority must be unique",
-        authority.sectionId,
+        authority["sectionId"],
       );
     }
-    sectionAuthorityById.set(authority.sectionId, authority);
+    sectionAuthorityById.set(authority["sectionId"], authority);
   }
   const free = new Map<string, number>();
   const slotIds = new Set<string>();
@@ -328,12 +328,12 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
     const slot = record(rawSlot);
     if (
       slot === undefined ||
-      typeof slot.id !== "string" ||
-      slot.id === "" ||
-      typeof slot.resource !== "string" ||
-      slot.resource === "" ||
-      typeof slot.free !== "boolean" ||
-      slotIds.has(slot.id)
+      typeof slot["id"] !== "string" ||
+      slot["id"] === "" ||
+      typeof slot["resource"] !== "string" ||
+      slot["resource"] === "" ||
+      typeof slot["free"] !== "boolean" ||
+      slotIds.has(slot["id"])
     ) {
       add(
         findings,
@@ -342,8 +342,9 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
       );
       continue;
     }
-    slotIds.add(slot.id);
-    if (slot.free) free.set(slot.resource, (free.get(slot.resource) ?? 0) + 1);
+    slotIds.add(slot["id"]);
+    if (slot["free"])
+      free.set(slot["resource"], (free.get(slot["resource"]) ?? 0) + 1);
   }
   const traceMetrics = {
     candidateInventory: 0,
@@ -360,10 +361,10 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
       add(findings, "FLOW_INVALID", "embedded section trace is invalid");
       continue;
     }
-    const identity = `${checked.summary.sectionId ?? ""}:${checked.summary.leaseId ?? ""}`;
+    const identity = `${checked.summary["sectionId"] ?? ""}:${checked.summary["leaseId"] ?? ""}`;
     if (
-      checked.summary.sectionId === null ||
-      checked.summary.leaseId === null ||
+      checked.summary["sectionId"] === null ||
+      checked.summary["leaseId"] === null ||
       traceIdentities.has(identity) ||
       checked.summary.receiptDigests.some((digest) =>
         receiptDigests.has(digest),
@@ -399,25 +400,25 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
     );
   if (traceMetrics.learningCommits > traceMetrics.searchReceipts)
     add(findings, "FLOW_INVALID", "derived commits exceed receipts");
-  const rawInfrastructureChecks = finite(counts.infrastructureChecks);
+  const rawInfrastructureChecks = finite(counts["infrastructureChecks"]);
   const infrastructureChecks =
     rawInfrastructureChecks !== undefined && rawInfrastructureChecks >= 0
       ? rawInfrastructureChecks
       : 0;
-  const rawIdle = finite(counts.readySlotIdleMs);
+  const rawIdle = finite(counts["readySlotIdleMs"]);
   const idle = rawIdle !== undefined && rawIdle >= 0 ? rawIdle : 0;
-  const rawUtilization = finite(counts.candidateComputeUtilization);
+  const rawUtilization = finite(counts["candidateComputeUtilization"]);
   const utilization =
     rawUtilization !== undefined && rawUtilization >= 0 && rawUtilization <= 1
       ? rawUtilization
       : 0;
   if (
     (Object.hasOwn(counts, "infrastructureChecks") &&
-      infrastructureChecks !== counts.infrastructureChecks) ||
+      infrastructureChecks !== counts["infrastructureChecks"]) ||
     (Object.hasOwn(counts, "readySlotIdleMs") &&
-      idle !== counts.readySlotIdleMs) ||
+      idle !== counts["readySlotIdleMs"]) ||
     (Object.hasOwn(counts, "candidateComputeUtilization") &&
-      utilization !== counts.candidateComputeUtilization)
+      utilization !== counts["candidateComputeUtilization"])
   )
     add(
       findings,
@@ -426,7 +427,7 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
     );
   const active = new Map<string, number>();
   for (const item of jobs)
-    active.set(item.sectionId, (active.get(item.sectionId) ?? 0) + 1);
+    active.set(item["sectionId"], (active.get(item["sectionId"]) ?? 0) + 1);
   const wipExceeded = new Set<string>();
   for (const [section, count] of active)
     if (count > 1) {
@@ -440,21 +441,22 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
     }
   const ready: Job[] = [];
   for (const item of jobs) {
-    if (wipExceeded.has(item.sectionId)) continue;
-    const sectionAuthority = sectionAuthorityById.get(item.sectionId);
-    const authorization = record(item.semanticAuthorization);
+    if (wipExceeded.has(item["sectionId"])) continue;
+    const sectionAuthority = sectionAuthorityById.get(item["sectionId"]);
+    const authorization = record(item["semanticAuthorization"]);
     const requiredKind =
       item.stage === "SEARCH" ? "GROUNDED_SEARCH" : "SECTION_ADMISSION";
     const validValueClass =
       item.stage === "SEARCH"
-        ? authorization !== undefined && authorization.valueClass === "SEARCH"
+        ? authorization !== undefined &&
+          authorization["valueClass"] === "SEARCH"
         : authorization !== undefined &&
           [
             "UPSTREAM_KILL",
             "MINIMAL_DISCRIMINATOR",
             "REPLICATION",
             "CONFIRMATION",
-          ].includes(String(authorization.valueClass));
+          ].includes(String(authorization["valueClass"]));
     if (
       item.authorityRevision !== input.currentAuthorityRevision ||
       item.authorityFence !== input.currentAuthorityFence
@@ -463,13 +465,13 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
         findings,
         "STALE_WORK_FENCE",
         "job authority revision or fence is stale",
-        item.id,
+        item["id"],
       );
       continue;
     }
     const unresolvedDependency = item.dependsOn.find(
       (dependency) =>
-        dependency === item.id ||
+        dependency === item["id"] ||
         jobIds.has(dependency) ||
         !completedJobIds.has(dependency),
     );
@@ -480,79 +482,81 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
     }
     if (
       item.stage === "EXECUTION" &&
-      item.runScale !== "MINIMAL_DISCRIMINATOR" &&
-      item.runScale !== "ESCALATED_CONFIRMATION"
+      item["runScale"] !== "MINIMAL_DISCRIMINATOR" &&
+      item["runScale"] !== "ESCALATED_CONFIRMATION"
     ) {
       add(
         findings,
         "FLOW_INVALID",
         "execution requires a declared run scale",
-        item.id,
+        item["id"],
       );
       continue;
     }
     if (
       item.stage === "EXECUTION" &&
-      ((item.runScale === "MINIMAL_DISCRIMINATOR" &&
-        item.escalationClass !== "NONE") ||
-        (item.runScale === "ESCALATED_CONFIRMATION" &&
+      ((item["runScale"] === "MINIMAL_DISCRIMINATOR" &&
+        item["escalationClass"] !== "NONE") ||
+        (item["runScale"] === "ESCALATED_CONFIRMATION" &&
           !["SCALE", "FULL_SWEEP", "GPU_PORT"].includes(
-            String(item.escalationClass),
+            String(item["escalationClass"]),
           )))
     ) {
       add(
         findings,
         "FLOW_INVALID",
         "execution run scale and escalation class are inconsistent",
-        item.id,
+        item["id"],
       );
       continue;
     }
     if (
       item.stage === "EXECUTION" &&
-      item.runScale === "ESCALATED_CONFIRMATION" &&
-      (typeof item.releaseReceiptDigest !== "string" ||
-        item.releaseReceiptDigest === "" ||
-        !releasedReceiptDigests.has(item.releaseReceiptDigest) ||
-        !releasedScientificReceipts.has(item.releaseReceiptDigest))
+      item["runScale"] === "ESCALATED_CONFIRMATION" &&
+      (typeof item["releaseReceiptDigest"] !== "string" ||
+        item["releaseReceiptDigest"] === "" ||
+        !releasedReceiptDigests.has(item["releaseReceiptDigest"]) ||
+        !releasedScientificReceipts.has(item["releaseReceiptDigest"]))
     ) {
       add(
         findings,
         "SWEEP_WITHOUT_RELEASE",
         "escalated confirmation requires a released prior receipt digest",
-        item.id,
+        item["id"],
       );
       continue;
     }
     if (
-      ambiguousSections.has(item.sectionId) ||
+      ambiguousSections.has(item["sectionId"]) ||
       sectionAuthority === undefined ||
       authorization === undefined ||
-      authorization.kind !== requiredKind ||
-      typeof authorization.locator !== "string" ||
-      authorization.locator === "" ||
-      !Sha.safeParse(authorization.sha256).success ||
-      authorization.goalConstitutionSha256 !==
-        sectionAuthority.goalConstitutionSha256 ||
-      authorization.groundingSha256 !== sectionAuthority.groundingSha256 ||
-      authorization.groundingRevision !== sectionAuthority.groundingRevision ||
-      authorization.groundingFence !== sectionAuthority.groundingFence ||
+      authorization["kind"] !== requiredKind ||
+      typeof authorization["locator"] !== "string" ||
+      authorization["locator"] === "" ||
+      !Sha.safeParse(authorization["sha256"])["success"] ||
+      authorization["goalConstitutionSha256"] !==
+        sectionAuthority["goalConstitutionSha256"] ||
+      authorization["groundingSha256"] !==
+        sectionAuthority["groundingSha256"] ||
+      authorization["groundingRevision"] !==
+        sectionAuthority["groundingRevision"] ||
+      authorization["groundingFence"] !== sectionAuthority["groundingFence"] ||
       !validValueClass
     ) {
       add(
         findings,
         "SCIENTIFIC_ADMISSION_INVALID",
         "job semantic authorization does not exact-join its current section authority",
-        item.id,
+        item["id"],
       );
       continue;
     }
     if (Object.hasOwn(item, "waitReason")) {
-      add(findings, "FLOW_INVALID", "bare waitReason is forbidden", item.id);
+      add(findings, "FLOW_INVALID", "bare waitReason is forbidden", item["id"]);
       continue;
     }
-    const wait = item.wait;
-    const capacity = free.get(item.resource) ?? 0;
+    const wait = item["wait"];
+    const capacity = free.get(item["resource"]) ?? 0;
     if (wait !== undefined) {
       evaluateWaitedJob(findings, item, wait, capacity, input.now, ready);
       continue;
@@ -568,10 +572,10 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
   });
   const dispatched: string[] = [];
   for (const item of ready) {
-    const capacity = free.get(item.resource) ?? 0;
+    const capacity = free.get(item["resource"]) ?? 0;
     if (capacity > 0) {
-      dispatched.push(item.id);
-      free.set(item.resource, capacity - 1);
+      dispatched.push(item["id"]);
+      free.set(item["resource"], capacity - 1);
     }
   }
   const hours = input.elapsedMs / 3_600_000;

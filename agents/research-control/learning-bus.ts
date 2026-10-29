@@ -40,11 +40,11 @@ const SUPERVISOR = /(?:SUPERVISOR|VERIFIER|PROGRAMME)/iu;
 const RecordSchema = z.looseObject({});
 function record(value: unknown): RecordValue | undefined {
   const parsed = RecordSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  return parsed["success"] ? parsed.data : undefined;
 }
 function list(value: unknown): unknown[] | undefined {
   const parsed = z.array(z.unknown()).safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  return parsed["success"] ? parsed.data : undefined;
 }
 // The string itself when it is nonempty after trim, else undefined.
 function str(value: unknown): string | undefined {
@@ -160,10 +160,10 @@ const EnvelopeSchema = z.strictObject({
 function dependencySet(deps: Dependency[], expected: Dependency[]): boolean {
   if (deps.length !== expected.length) return false;
   const actual = deps
-    .map((d) => `${d.kind}\u0000${d.id}\u0000${d.sha256}`)
+    .map((d) => `${d["kind"]}\u0000${d["id"]}\u0000${d["sha256"]}`)
     .toSorted();
   const wanted = expected
-    .map((d) => `${d.kind}\u0000${d.id}\u0000${d.sha256}`)
+    .map((d) => `${d["kind"]}\u0000${d["id"]}\u0000${d["sha256"]}`)
     .toSorted();
   return actual.every((value, index) => value === wanted[index]);
 }
@@ -173,21 +173,24 @@ function hasForbiddenDependency(
 ): boolean {
   let bad = false;
   for (const dependency of envelope.dependencies) {
-    if (SUPERVISOR.test(dependency.kind) || SUPERVISOR.test(dependency.id)) {
+    if (
+      SUPERVISOR.test(dependency["kind"]) ||
+      SUPERVISOR.test(dependency["id"])
+    ) {
       add(
         findings,
         "SUPERVISOR_IN_TRANSFER_PATH",
         "Supervisor or verifier dependency is on the transfer path",
-        envelope.id,
+        envelope["id"],
       );
       bad = true;
     }
-    if (BARRIERS.test(dependency.kind) || BARRIERS.test(dependency.id)) {
+    if (BARRIERS.test(dependency["kind"]) || BARRIERS.test(dependency["id"])) {
       add(
         findings,
         "TRANSFER_GLOBAL_BARRIER",
         "global acknowledgement, quorum, or wave dependency is forbidden",
-        envelope.id,
+        envelope["id"],
       );
       bad = true;
     }
@@ -235,22 +238,22 @@ function packetBody(body: RecordValue): boolean {
       "uncertainty",
       "evidenceLocator",
     ]) &&
-    digest(body.sourceCommitSha256) &&
-    digest(body.evidenceSha256) &&
-    strings(body.sourceReceiptDigests) &&
-    strings(body.topicIds) &&
-    strings(body.affectedPremiseIds, true) &&
-    strings(body.interfaceIds, true) &&
-    DELTAS.has(String(body.deltaClass)) &&
-    body.visibility === "SECTION_FEDERATION_ONLY" &&
-    body.programmeVisible === false &&
-    body.rawHumanMethodIncluded === false &&
-    body.authority === "PROPOSAL_ONLY"
+    digest(body["sourceCommitSha256"]) &&
+    digest(body["evidenceSha256"]) &&
+    strings(body["sourceReceiptDigests"]) &&
+    strings(body["topicIds"]) &&
+    strings(body["affectedPremiseIds"], true) &&
+    strings(body["interfaceIds"], true) &&
+    DELTAS.has(String(body["deltaClass"])) &&
+    body["visibility"] === "SECTION_FEDERATION_ONLY" &&
+    body["programmeVisible"] === false &&
+    body["rawHumanMethodIncluded"] === false &&
+    body["authority"] === "PROPOSAL_ONLY"
   );
 }
 function subscriptionBody(body: RecordValue): boolean {
-  const effectiveAt = timestamp(body.effectiveAt);
-  const expiresAt = timestamp(body.expiresAt);
+  const effectiveAt = timestamp(body["effectiveAt"]);
+  const expiresAt = timestamp(body["expiresAt"]);
   const keys = [
     "subscriptionId",
     "recipientSectionId",
@@ -286,28 +289,28 @@ function subscriptionBody(body: RecordValue): boolean {
       "recipientDirectorRoleGrant",
       "eventLogCursor",
     ]) &&
-    digest(body.sectionMandateSha256) &&
-    digest(body.sectionCharterSha256) &&
-    nonNegativeInteger(body.mandateRevision) &&
-    strings(body.topicIds) &&
-    strings(body.affectedPremiseIds, true) &&
-    strings(body.interfaceIds, true) &&
-    (stringList(body.acceptedDeltaClasses)?.every((delta) =>
+    digest(body["sectionMandateSha256"]) &&
+    digest(body["sectionCharterSha256"]) &&
+    nonNegativeInteger(body["mandateRevision"]) &&
+    strings(body["topicIds"]) &&
+    strings(body["affectedPremiseIds"], true) &&
+    strings(body["interfaceIds"], true) &&
+    (stringList(body["acceptedDeltaClasses"])?.every((delta) =>
       DELTAS.has(delta),
     ) ??
       false) &&
     effectiveAt !== undefined &&
     expiresAt !== undefined &&
     expiresAt > effectiveAt &&
-    body.immutable === true &&
-    body.visibility === "SECTION_FEDERATION_CONTROL" &&
-    body.programmeVisible === false &&
-    body.authority === "ROUTING_FILTER_ONLY"
+    body["immutable"] === true &&
+    body["visibility"] === "SECTION_FEDERATION_CONTROL" &&
+    body["programmeVisible"] === false &&
+    body["authority"] === "ROUTING_FILTER_ONLY"
   );
 }
 function deliveryBody(body: RecordValue): boolean {
-  const enqueuedAt = timestamp(body.enqueuedAt);
-  const deliveredAt = timestamp(body.deliveredAt);
+  const enqueuedAt = timestamp(body["enqueuedAt"]);
+  const deliveredAt = timestamp(body["deliveredAt"]);
   const keys = [
     "deliveryId",
     "transferLocus",
@@ -336,19 +339,19 @@ function deliveryBody(body: RecordValue): boolean {
       "subscriptionLocus",
       "idempotencyKey",
     ]) &&
-    digest(body.transferSha256) &&
-    digest(body.subscriptionSha256) &&
-    strings(body.matchedTopicIds) &&
-    strings(body.matchedPremiseIds, true) &&
-    strings(body.matchedInterfaceIds, true) &&
-    DELTAS.has(String(body.matchedDeltaClass)) &&
+    digest(body["transferSha256"]) &&
+    digest(body["subscriptionSha256"]) &&
+    strings(body["matchedTopicIds"]) &&
+    strings(body["matchedPremiseIds"], true) &&
+    strings(body["matchedInterfaceIds"], true) &&
+    DELTAS.has(String(body["matchedDeltaClass"])) &&
     enqueuedAt !== undefined &&
     deliveredAt !== undefined &&
     deliveredAt >= enqueuedAt &&
-    body.brokerKind === "DETERMINISTIC_EXACT_MATCH" &&
-    body.ackRequired === false &&
-    body.semanticAuthority === "NONE" &&
-    body.programmeVisible === false
+    body["brokerKind"] === "DETERMINISTIC_EXACT_MATCH" &&
+    body["ackRequired"] === false &&
+    body["semanticAuthority"] === "NONE" &&
+    body["programmeVisible"] === false
   );
 }
 function admissionBody(body: RecordValue): boolean {
@@ -393,17 +396,17 @@ function admissionBody(body: RecordValue): boolean {
       "idempotencyKey",
       "reasonClass",
     ]) &&
-    digest(body.sectionMandateSha256) &&
-    digest(body.sectionCharterSha256) &&
-    nonNegativeInteger(body.mandateRevision) &&
-    digest(body.deliverySha256) &&
-    digest(body.transferSha256) &&
-    digest(body.subscriptionSha256) &&
-    ADMISSIONS.has(String(body.decision)) &&
-    timestamp(body.decidedAt) !== undefined &&
-    typeof body.localStateMutation === "boolean" &&
-    body.programmeVisible === false &&
-    body.authority === "ADMISSION_ONLY"
+    digest(body["sectionMandateSha256"]) &&
+    digest(body["sectionCharterSha256"]) &&
+    nonNegativeInteger(body["mandateRevision"]) &&
+    digest(body["deliverySha256"]) &&
+    digest(body["transferSha256"]) &&
+    digest(body["subscriptionSha256"]) &&
+    ADMISSIONS.has(String(body["decision"])) &&
+    timestamp(body["decidedAt"]) !== undefined &&
+    typeof body["localStateMutation"] === "boolean" &&
+    body["programmeVisible"] === false &&
+    body["authority"] === "ADMISSION_ONLY"
   );
 }
 function commitBody(body: RecordValue): boolean {
@@ -448,21 +451,21 @@ function commitBody(body: RecordValue): boolean {
       "idempotencyKey",
       "stateLocus",
     ]) &&
-    digest(body.sectionMandateSha256) &&
-    digest(body.sectionCharterSha256) &&
-    nonNegativeInteger(body.mandateRevision) &&
-    digest(body.admissionSha256) &&
-    digest(body.transferSha256) &&
-    digest(body.stateBeforeSha256) &&
-    digest(body.stateAfterSha256) &&
+    digest(body["sectionMandateSha256"]) &&
+    digest(body["sectionCharterSha256"]) &&
+    nonNegativeInteger(body["mandateRevision"]) &&
+    digest(body["admissionSha256"]) &&
+    digest(body["transferSha256"]) &&
+    digest(body["stateBeforeSha256"]) &&
+    digest(body["stateAfterSha256"]) &&
     ["PRIOR_UPDATE", "CANDIDATE_TEST_INPUT"].includes(
-      String(body.localEffect),
+      String(body["localEffect"]),
     ) &&
-    timestamp(body.committedAt) !== undefined &&
-    body.searchCredit === "NONE" &&
-    body.learnCredit === "NONE" &&
-    body.programmeVisible === false &&
-    body.authority === "LOCAL_SECTION_STATE_ONLY"
+    timestamp(body["committedAt"]) !== undefined &&
+    body["searchCredit"] === "NONE" &&
+    body["learnCredit"] === "NONE" &&
+    body["programmeVisible"] === false &&
+    body["authority"] === "LOCAL_SECTION_STATE_ONLY"
   );
 }
 function matches(packet: RecordValue, subscription: RecordValue): boolean {
@@ -475,14 +478,17 @@ function matches(packet: RecordValue, subscription: RecordValue): boolean {
       need.every((value) => have.includes(value))
     );
   };
-  const accepted = stringList(subscription.acceptedDeltaClasses, true);
+  const accepted = stringList(subscription["acceptedDeltaClasses"], true);
   return (
-    includes(subscription.topicIds, packet.topicIds) &&
-    includes(subscription.affectedPremiseIds, packet.affectedPremiseIds) &&
-    includes(subscription.interfaceIds, packet.interfaceIds) &&
+    includes(subscription["topicIds"], packet["topicIds"]) &&
+    includes(
+      subscription["affectedPremiseIds"],
+      packet["affectedPremiseIds"],
+    ) &&
+    includes(subscription["interfaceIds"], packet["interfaceIds"]) &&
     accepted !== undefined &&
-    typeof packet.deltaClass === "string" &&
-    accepted.includes(packet.deltaClass)
+    typeof packet["deltaClass"] === "string" &&
+    accepted.includes(packet["deltaClass"])
   );
 }
 function bodyValid(kind: ArtifactKind, body: RecordValue): boolean {
@@ -553,8 +559,8 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
     metrics,
   });
   const input = record(rawInput);
-  const artifacts = record(input?.artifacts);
-  const evaluatedAt = timestamp(input?.evaluatedAt);
+  const artifacts = record(input?.["artifacts"]);
+  const evaluatedAt = timestamp(input?.["evaluatedAt"]);
   if (
     input === undefined ||
     !exactKeys(input, [
@@ -564,9 +570,9 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
       "sourceCommitEventId",
       "artifacts",
     ]) ||
-    input.schema !== LEARNING_BUS_SCHEMA ||
+    input["schema"] !== LEARNING_BUS_SCHEMA ||
     evaluatedAt === undefined ||
-    !text(input.sourceCommitEventId) ||
+    !text(input["sourceCommitEventId"]) ||
     artifacts === undefined
   ) {
     add(
@@ -588,29 +594,29 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
       "BUS_INVALID",
       "scientific counters are derived from the validated source trace",
     );
-  const source = checkTrace(input.sourceTrace);
+  const source = checkTrace(input["sourceTrace"]);
   if (!source.ok) {
     add(findings, "TRANSFER_WITHOUT_COMMIT", "source trace is not valid");
     return finish(source.summary);
   }
-  const events = (list(record(input.sourceTrace)?.events) ?? []).flatMap(
+  const events = (list(record(input["sourceTrace"])?.["events"]) ?? []).flatMap(
     (event) => {
       const parsed = record(event);
       return parsed === undefined ? [] : [parsed];
     },
   );
   const selected = events.find(
-    (event) => event.id === input.sourceCommitEventId,
+    (event) => event["id"] === input["sourceCommitEventId"],
   );
-  const selectedId = str(selected?.id);
-  const selectedSha = digestOf(selected?.artifactSha256);
-  const selectedReceipt = digestOf(selected?.receiptSha256);
-  const commitAt = timestamp(selected?.at);
+  const selectedId = str(selected?.["id"]);
+  const selectedSha = digestOf(selected?.["artifactSha256"]);
+  const selectedReceipt = digestOf(selected?.["receiptSha256"]);
+  const commitAt = timestamp(selected?.["at"]);
   if (
     selected === undefined ||
     selectedId === undefined ||
-    selected.kind !== "DIRECTOR_COMMIT" ||
-    selected.decision !== "COMMIT" ||
+    selected["kind"] !== "DIRECTOR_COMMIT" ||
+    selected["decision"] !== "COMMIT" ||
     selectedSha === undefined ||
     selectedReceipt === undefined ||
     commitAt === undefined ||
@@ -646,7 +652,7 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
   const ids = new Set<string>();
   for (const candidate of all) {
     const parsedEnvelope = EnvelopeSchema.safeParse(candidate);
-    if (!parsedEnvelope.success || ids.has(parsedEnvelope.data.id)) {
+    if (!parsedEnvelope["success"] || ids.has(parsedEnvelope.data["id"])) {
       add(
         findings,
         "BUS_INVALID",
@@ -655,26 +661,26 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
       continue;
     }
     const raw = parsedEnvelope.data;
-    ids.add(raw.id);
+    ids.add(raw["id"]);
     const actual = bodySha256(raw.body);
-    if (actual !== raw.sha256) {
+    if (actual !== raw["sha256"]) {
       add(
         findings,
         "BUS_INVALID",
         "artifact SHA-256 does not recompute from canonical body",
-        raw.id,
+        raw["id"],
       );
       continue;
     }
-    if (!bodyValid(raw.kind, raw.body)) {
+    if (!bodyValid(raw["kind"], raw.body)) {
       add(
         findings,
-        raw.kind === "SECTION_TRANSFER_PACKET" ||
-          raw.body.programmeVisible === true
+        raw["kind"] === "SECTION_TRANSFER_PACKET" ||
+          raw.body["programmeVisible"] === true
           ? "RAW_METHOD_LEAK_TO_PROGRAMME"
           : "BUS_INVALID",
         "artifact body violates its closed V0 constants",
-        raw.id,
+        raw["id"],
       );
       continue;
     }
@@ -682,7 +688,7 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
     envelopes.push(raw);
   }
   const byKind = (kind: ArtifactKind) =>
-    envelopes.filter((item) => item.kind === kind);
+    envelopes.filter((item) => item["kind"] === kind);
   const packets = byKind("SECTION_TRANSFER_PACKET");
   const subscriptions = byKind("SECTION_SUBSCRIPTION");
   const deliveries = byKind("SECTION_TRANSFER_DELIVERY");
@@ -697,18 +703,18 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
   let replayDrops = 0;
   for (const packet of packets) {
     const body = packet.body;
-    const packetReceipts = stringList(body.sourceReceiptDigests, true) ?? [];
+    const packetReceipts = stringList(body["sourceReceiptDigests"], true) ?? [];
     if (
       !dependencySet(packet.dependencies, [selectedDependency]) ||
-      body.sourceCommitSha256 !== selected.artifactSha256 ||
+      body["sourceCommitSha256"] !== selected["artifactSha256"] ||
       packetReceipts.length !== 1 ||
-      packetReceipts[0] !== selected.receiptSha256
+      packetReceipts[0] !== selected["receiptSha256"]
     ) {
       add(
         findings,
         "TRANSFER_WITHOUT_COMMIT",
         "packet does not exact-join selected source commit and receipt",
-        packet.id,
+        packet["id"],
       );
       continue;
     }
@@ -717,14 +723,14 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
         findings,
         "TRANSFER_REPLAY",
         "source commit may publish only one packet",
-        packet.id,
+        packet["id"],
       );
       replayDrops += 1;
       continue;
     }
     validPackets.push(packet);
   }
-  const deadline = timestamp(selected.transferPublishDueAt);
+  const deadline = timestamp(selected["transferPublishDueAt"]);
   if (
     deadline !== undefined &&
     evaluatedAt > deadline &&
@@ -737,40 +743,42 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
       selectedId,
     );
   const packetByDigest = new Map(
-    validPackets.map((item) => [item.sha256, item]),
+    validPackets.map((item) => [item["sha256"], item]),
   );
   const subscriptionByDigest = new Map(
-    subscriptions.map((item) => [item.sha256, item]),
+    subscriptions.map((item) => [item["sha256"], item]),
   );
   const validDeliveries: Envelope[] = [];
   const commitToDelivery: number[] = [];
   const seenDeliveryKeys = new Set<string>();
   for (const delivery of deliveries) {
     const body = delivery.body,
-      packet = packetByDigest.get(String(body.transferSha256)),
-      subscription = subscriptionByDigest.get(String(body.subscriptionSha256));
-    const key = `${String(body.transferSha256)}:${String(body.recipientSectionId)}`;
+      packet = packetByDigest.get(String(body["transferSha256"])),
+      subscription = subscriptionByDigest.get(
+        String(body["subscriptionSha256"]),
+      );
+    const key = `${String(body["transferSha256"])}:${String(body["recipientSectionId"])}`;
     if (seenDeliveryKeys.has(key)) {
       add(
         findings,
         "TRANSFER_REPLAY",
         "packet-recipient delivery idempotency key replayed",
-        delivery.id,
+        delivery["id"],
       );
       replayDrops += 1;
       continue;
     }
     seenDeliveryKeys.add(key);
-    const deliveredAt = timestamp(body.deliveredAt);
-    const effectiveAt = timestamp(subscription?.body.effectiveAt);
-    const expiresAt = timestamp(subscription?.body.expiresAt);
+    const deliveredAt = timestamp(body["deliveredAt"]);
+    const effectiveAt = timestamp(subscription?.body["effectiveAt"]);
+    const expiresAt = timestamp(subscription?.body["expiresAt"]);
     if (
       packet === undefined ||
       subscription === undefined ||
-      body.transferLocus !== packet.locator ||
-      body.subscriptionLocus !== subscription.locator ||
-      body.recipientSectionId !== subscription.body.recipientSectionId ||
-      body.idempotencyKey !== key ||
+      body["transferLocus"] !== packet["locator"] ||
+      body["subscriptionLocus"] !== subscription["locator"] ||
+      body["recipientSectionId"] !== subscription.body["recipientSectionId"] ||
+      body["idempotencyKey"] !== key ||
       !matches(packet.body, subscription.body) ||
       deliveredAt === undefined ||
       effectiveAt === undefined ||
@@ -781,13 +789,13 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
       !dependencySet(delivery.dependencies, [
         {
           kind: "SECTION_TRANSFER_PACKET",
-          id: packet.id,
-          sha256: packet.sha256,
+          id: packet["id"],
+          sha256: packet["sha256"],
         },
         {
           kind: "SECTION_SUBSCRIPTION",
-          id: subscription.id,
-          sha256: subscription.sha256,
+          id: subscription["id"],
+          sha256: subscription["sha256"],
         },
       ])
     ) {
@@ -795,7 +803,7 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
         findings,
         "BUS_INVALID",
         "delivery must exact-join one matching immutable subscription and packet",
-        delivery.id,
+        delivery["id"],
       );
       continue;
     }
@@ -803,17 +811,19 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
     commitToDelivery.push(deliveredAt - commitAt);
   }
   const deliveryByDigest = new Map(
-    validDeliveries.map((item) => [item.sha256, item]),
+    validDeliveries.map((item) => [item["sha256"], item]),
   );
   const validAdmissions: Envelope[] = [];
   const deliveryToAdmission: number[] = [];
   const seenAdmissionKeys = new Set<string>();
   for (const admission of admissions) {
     const body = admission.body,
-      delivery = deliveryByDigest.get(String(body.deliverySha256)),
-      packet = packetByDigest.get(String(body.transferSha256)),
-      subscription = subscriptionByDigest.get(String(body.subscriptionSha256));
-    const key = `${String(body.transferSha256)}:${String(body.recipientSectionId)}`;
+      delivery = deliveryByDigest.get(String(body["deliverySha256"])),
+      packet = packetByDigest.get(String(body["transferSha256"])),
+      subscription = subscriptionByDigest.get(
+        String(body["subscriptionSha256"]),
+      );
+    const key = `${String(body["transferSha256"])}:${String(body["recipientSectionId"])}`;
     if (
       seenAdmissionKeys.has(key) ||
       seenDeliveryKeys.has(`admission:${key}`)
@@ -822,23 +832,23 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
         findings,
         "TRANSFER_REPLAY",
         "packet-recipient admission idempotency key replayed",
-        admission.id,
+        admission["id"],
       );
       replayDrops += 1;
       continue;
     }
     seenDeliveryKeys.add(`admission:${key}`);
-    if (body.localStateMutation !== false) {
+    if (body["localStateMutation"] !== false) {
       add(
         findings,
         "TRANSFER_AUTO_ENACTED",
         "admission cannot mutate recipient state",
-        admission.id,
+        admission["id"],
       );
       continue;
     }
-    const decidedAt = timestamp(body.decidedAt);
-    const deliveredAt = timestamp(delivery?.body.deliveredAt);
+    const decidedAt = timestamp(body["decidedAt"]);
+    const deliveredAt = timestamp(delivery?.body["deliveredAt"]);
     if (
       delivery === undefined ||
       packet === undefined ||
@@ -846,36 +856,40 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
       decidedAt === undefined ||
       deliveredAt === undefined ||
       decidedAt < deliveredAt ||
-      body.recipientSectionId !== delivery.body.recipientSectionId ||
-      body.recipientDirectorInstanceId !==
-        subscription.body.recipientDirectorInstanceId ||
-      body.recipientDirectorRoleGrant !==
-        subscription.body.recipientDirectorRoleGrant ||
-      body.sectionMandateLocus !== subscription.body.sectionMandateLocus ||
-      body.sectionMandateSha256 !== subscription.body.sectionMandateSha256 ||
-      body.mandateRevision !== subscription.body.mandateRevision ||
-      body.mandateFence !== subscription.body.mandateFence ||
-      body.sectionCharterLocus !== subscription.body.sectionCharterLocus ||
-      body.sectionCharterSha256 !== subscription.body.sectionCharterSha256 ||
-      body.idempotencyKey !== key ||
-      body.deliveryLocus !== delivery.locator ||
-      body.transferLocus !== packet.locator ||
-      body.subscriptionLocus !== subscription.locator ||
+      body["recipientSectionId"] !== delivery.body["recipientSectionId"] ||
+      body["recipientDirectorInstanceId"] !==
+        subscription.body["recipientDirectorInstanceId"] ||
+      body["recipientDirectorRoleGrant"] !==
+        subscription.body["recipientDirectorRoleGrant"] ||
+      body["sectionMandateLocus"] !==
+        subscription.body["sectionMandateLocus"] ||
+      body["sectionMandateSha256"] !==
+        subscription.body["sectionMandateSha256"] ||
+      body["mandateRevision"] !== subscription.body["mandateRevision"] ||
+      body["mandateFence"] !== subscription.body["mandateFence"] ||
+      body["sectionCharterLocus"] !==
+        subscription.body["sectionCharterLocus"] ||
+      body["sectionCharterSha256"] !==
+        subscription.body["sectionCharterSha256"] ||
+      body["idempotencyKey"] !== key ||
+      body["deliveryLocus"] !== delivery["locator"] ||
+      body["transferLocus"] !== packet["locator"] ||
+      body["subscriptionLocus"] !== subscription["locator"] ||
       !dependencySet(admission.dependencies, [
         {
           kind: "SECTION_TRANSFER_DELIVERY",
-          id: delivery.id,
-          sha256: delivery.sha256,
+          id: delivery["id"],
+          sha256: delivery["sha256"],
         },
         {
           kind: "SECTION_TRANSFER_PACKET",
-          id: packet.id,
-          sha256: packet.sha256,
+          id: packet["id"],
+          sha256: packet["sha256"],
         },
         {
           kind: "SECTION_SUBSCRIPTION",
-          id: subscription.id,
-          sha256: subscription.sha256,
+          id: subscription["id"],
+          sha256: subscription["sha256"],
         },
       ])
     ) {
@@ -883,7 +897,7 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
         findings,
         "BUS_INVALID",
         "admission must exact-join delivery, packet, and subscription",
-        admission.id,
+        admission["id"],
       );
       continue;
     }
@@ -892,21 +906,21 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
     deliveryToAdmission.push(decidedAt - deliveredAt);
   }
   const admissionByDigest = new Map(
-    validAdmissions.map((item) => [item.sha256, item]),
+    validAdmissions.map((item) => [item["sha256"], item]),
   );
   const validCommits: Envelope[] = [];
   const seenCommitKeys = new Set<string>();
   for (const commit of commits) {
     const body = commit.body,
-      admission = admissionByDigest.get(String(body.admissionSha256)),
-      packet = packetByDigest.get(String(body.transferSha256));
-    const key = `${String(body.transferSha256)}:${String(body.recipientSectionId)}`;
+      admission = admissionByDigest.get(String(body["admissionSha256"])),
+      packet = packetByDigest.get(String(body["transferSha256"]));
+    const key = `${String(body["transferSha256"])}:${String(body["recipientSectionId"])}`;
     if (seenCommitKeys.has(key)) {
       add(
         findings,
         "TRANSFER_REPLAY",
         "packet-recipient transfer commit idempotency key replayed",
-        commit.id,
+        commit["id"],
       );
       replayDrops += 1;
       continue;
@@ -915,31 +929,31 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
     if (
       admission === undefined ||
       packet === undefined ||
-      admission.body.decision !== "ADOPT" ||
-      body.recipientSectionId !== admission.body.recipientSectionId ||
-      body.recipientDirectorInstanceId !==
-        admission.body.recipientDirectorInstanceId ||
-      body.recipientDirectorRoleGrant !==
-        admission.body.recipientDirectorRoleGrant ||
-      body.sectionMandateLocus !== admission.body.sectionMandateLocus ||
-      body.sectionMandateSha256 !== admission.body.sectionMandateSha256 ||
-      body.mandateRevision !== admission.body.mandateRevision ||
-      body.mandateFence !== admission.body.mandateFence ||
-      body.sectionCharterLocus !== admission.body.sectionCharterLocus ||
-      body.sectionCharterSha256 !== admission.body.sectionCharterSha256 ||
-      body.idempotencyKey !== key ||
-      body.admissionLocus !== admission.locator ||
-      body.transferLocus !== packet.locator ||
+      admission.body["decision"] !== "ADOPT" ||
+      body["recipientSectionId"] !== admission.body["recipientSectionId"] ||
+      body["recipientDirectorInstanceId"] !==
+        admission.body["recipientDirectorInstanceId"] ||
+      body["recipientDirectorRoleGrant"] !==
+        admission.body["recipientDirectorRoleGrant"] ||
+      body["sectionMandateLocus"] !== admission.body["sectionMandateLocus"] ||
+      body["sectionMandateSha256"] !== admission.body["sectionMandateSha256"] ||
+      body["mandateRevision"] !== admission.body["mandateRevision"] ||
+      body["mandateFence"] !== admission.body["mandateFence"] ||
+      body["sectionCharterLocus"] !== admission.body["sectionCharterLocus"] ||
+      body["sectionCharterSha256"] !== admission.body["sectionCharterSha256"] ||
+      body["idempotencyKey"] !== key ||
+      body["admissionLocus"] !== admission["locator"] ||
+      body["transferLocus"] !== packet["locator"] ||
       !dependencySet(commit.dependencies, [
         {
           kind: "SECTION_TRANSFER_ADMISSION",
-          id: admission.id,
-          sha256: admission.sha256,
+          id: admission["id"],
+          sha256: admission["sha256"],
         },
         {
           kind: "SECTION_TRANSFER_PACKET",
-          id: packet.id,
-          sha256: packet.sha256,
+          id: packet["id"],
+          sha256: packet["sha256"],
         },
       ])
     ) {
@@ -947,14 +961,14 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
         findings,
         "TRANSFER_AUTO_ENACTED",
         "local transfer commit needs a distinct ADOPT admission and packet",
-        commit.id,
+        commit["id"],
       );
       continue;
     }
     validCommits.push(commit);
   }
   const routed = new Set(
-    validDeliveries.map((delivery) => delivery.body.transferSha256),
+    validDeliveries.map((delivery) => delivery.body["transferSha256"]),
   );
   const visibility = findings.filter(
     (finding) => finding.code === "RAW_METHOD_LEAK_TO_PROGRAMME",
@@ -963,17 +977,18 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
     transferPacketsPublished: validPackets.length,
     transferDeliveries: validDeliveries.length,
     transferAdmissionsByClass: {
-      ADOPT: validAdmissions.filter((item) => item.body.decision === "ADOPT")
+      ADOPT: validAdmissions.filter((item) => item.body["decision"] === "ADOPT")
         .length,
-      REJECT: validAdmissions.filter((item) => item.body.decision === "REJECT")
-        .length,
-      DEFER: validAdmissions.filter((item) => item.body.decision === "DEFER")
+      REJECT: validAdmissions.filter(
+        (item) => item.body["decision"] === "REJECT",
+      ).length,
+      DEFER: validAdmissions.filter((item) => item.body["decision"] === "DEFER")
         .length,
     },
     transferCommits: validCommits.length,
     transferReplayDrops: replayDrops,
     unroutedTransferPackets: validPackets.filter(
-      (packet) => !routed.has(packet.sha256),
+      (packet) => !routed.has(packet["sha256"]),
     ).length,
     programmeVisibilityViolations: visibility,
     commitToDeliveryMs: {

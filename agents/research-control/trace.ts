@@ -92,11 +92,11 @@ const authority = new Map<string, readonly string[]>([
 const RecordSchema = z.looseObject({});
 function record(value: unknown): R | undefined {
   const parsed = RecordSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  return parsed["success"] ? parsed.data : undefined;
 }
 function list(value: unknown): unknown[] | undefined {
   const parsed = z.array(z.unknown()).safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  return parsed["success"] ? parsed.data : undefined;
 }
 // The string itself when it is nonempty after trim, else undefined.
 function str(value: unknown): string | undefined {
@@ -144,12 +144,12 @@ function fields(event: R, names: string[]): boolean {
 function evidence(value: unknown): boolean {
   const item = record(value);
   if (item === undefined) return false;
-  const locator = str(item.locator);
+  const locator = str(item["locator"]);
   return (
     locator !== undefined &&
-    sha(item.sha256) &&
-    item.tracked === true &&
-    item.ignored === false &&
+    sha(item["sha256"]) &&
+    item["tracked"] === true &&
+    item["ignored"] === false &&
     locator !== ".agent-state" &&
     !/(?:^|\/)\.agent-state(?:\/|$)/u.test(locator)
   );
@@ -226,13 +226,13 @@ export function checkTrace(rawInput: unknown): TraceResult {
     },
   });
   const input = record(rawInput);
-  const lease = record(input?.lease);
-  const authorityRoot = record(input?.authority);
-  const roleGrants = list(input?.roleGrants);
-  const rawEvents = list(input?.events);
+  const lease = record(input?.["lease"]);
+  const authorityRoot = record(input?.["authority"]);
+  const roleGrants = list(input?.["roleGrants"]);
+  const rawEvents = list(input?.["events"]);
   if (
     input === undefined ||
-    input.schema !== SCHEMA ||
+    input["schema"] !== SCHEMA ||
     lease === undefined ||
     authorityRoot === undefined ||
     roleGrants === undefined ||
@@ -255,12 +255,12 @@ export function checkTrace(rawInput: unknown): TraceResult {
   ] as const;
   type LineageName = (typeof lineageNames)[number];
   const lineage: Record<LineageName, R | undefined> = {
-    goalConstitution: record(authorityRoot.goalConstitution),
-    programmeSnapshot: record(authorityRoot.programmeSnapshot),
-    openIssue: record(authorityRoot.openIssue),
-    sectionMandate: record(authorityRoot.sectionMandate),
-    sectionCharter: record(authorityRoot.sectionCharter),
-    grounding: record(authorityRoot.grounding),
+    goalConstitution: record(authorityRoot["goalConstitution"]),
+    programmeSnapshot: record(authorityRoot["programmeSnapshot"]),
+    openIssue: record(authorityRoot["openIssue"]),
+    sectionMandate: record(authorityRoot["sectionMandate"]),
+    sectionCharter: record(authorityRoot["sectionCharter"]),
+    grounding: record(authorityRoot["grounding"]),
   };
   const authorityRecord = lineageNames.every(
     (name) => lineage[name] !== undefined,
@@ -270,29 +270,30 @@ export function checkTrace(rawInput: unknown): TraceResult {
     const p = lineage[parent];
     if (c === undefined || p === undefined) return false;
     return (
-      nonempty(c.id) &&
-      sha(c.sha256) &&
-      c[`${parent}Id`] === p.id &&
-      c[`${parent}Sha256`] === p.sha256
+      nonempty(c["id"]) &&
+      sha(c["sha256"]) &&
+      c[`${parent}Id`] === p["id"] &&
+      c[`${parent}Sha256`] === p["sha256"]
     );
   };
-  const grounding = authorityRecord ? lineage.grounding : undefined;
-  const goal = authorityRecord ? lineage.goalConstitution : undefined;
+  const grounding = authorityRecord ? lineage["grounding"] : undefined;
+  const goal = authorityRecord ? lineage["goalConstitution"] : undefined;
   const semanticGoalValid =
     goal !== undefined &&
-    nonNegativeInteger(goal.revision) &&
-    nonempty(goal.signer) &&
-    nonempty(goal.objectiveId) &&
-    nonempty(goal.successObservableId) &&
-    Array.isArray(goal.invariantIds) &&
-    goal.invariantIds.length > 0 &&
-    goal.invariantIds.every(nonempty) &&
-    new Set(goal.invariantIds).size === goal.invariantIds.length;
+    nonNegativeInteger(goal["revision"]) &&
+    nonempty(goal["signer"]) &&
+    nonempty(goal["objectiveId"]) &&
+    nonempty(goal["successObservableId"]) &&
+    Array.isArray(goal["invariantIds"]) &&
+    goal["invariantIds"].length > 0 &&
+    goal["invariantIds"].every(nonempty) &&
+    new Set(goal["invariantIds"]).size === goal["invariantIds"].length;
   const semanticJoin = (value: R): boolean =>
     semanticGoalValid &&
-    value.objectiveId === goal?.objectiveId &&
-    value.successObservableId === goal?.successObservableId &&
-    JSON.stringify(value.invariantIds) === JSON.stringify(goal?.invariantIds);
+    value?.["objectiveId"] === goal?.["objectiveId"] &&
+    value?.["successObservableId"] === goal?.["successObservableId"] &&
+    JSON.stringify(value?.["invariantIds"]) ===
+      JSON.stringify(goal?.["invariantIds"]);
   const authorityValid =
     authorityRecord &&
     link("programmeSnapshot", "goalConstitution") &&
@@ -305,17 +306,17 @@ export function checkTrace(rawInput: unknown): TraceResult {
     }) &&
     grounding !== undefined &&
     link("grounding", "sectionCharter") &&
-    nonNegativeInteger(grounding.revision) &&
-    nonempty(grounding.fence) &&
-    sha(grounding.sha256) &&
+    nonNegativeInteger(grounding["revision"]) &&
+    nonempty(grounding["fence"]) &&
+    sha(grounding["sha256"]) &&
     fields(grounding, ["objective", "success"]) &&
     dispositionMatchesKnownResult(
-      grounding.knownResultDisposition,
-      grounding.knownResult,
+      grounding["knownResultDisposition"],
+      grounding["knownResult"],
     ) &&
-    Array.isArray(grounding.invariants) &&
-    grounding.invariants.length > 0 &&
-    grounding.invariants.every(nonempty);
+    Array.isArray(grounding["invariants"]) &&
+    grounding["invariants"].length > 0 &&
+    grounding["invariants"].every(nonempty);
   if (!authorityValid)
     add(
       findings,
@@ -328,11 +329,11 @@ export function checkTrace(rawInput: unknown): TraceResult {
       "GOAL_LINEAGE_MISMATCH",
       "authority lineage does not preserve the Goal Constitution semantic IDs",
     );
-  const start = time(lease.startedAt),
-    expires = time(lease.expiresAt),
-    due = time(lease.firstIntentDueAt),
-    evaluated = time(input.evaluatedAt);
-  const classes = lease.allowedActionClasses;
+  const start = time(lease["startedAt"]),
+    expires = time(lease["expiresAt"]),
+    due = time(lease["firstIntentDueAt"]),
+    evaluated = time(input["evaluatedAt"]);
+  const classes = lease["allowedActionClasses"];
   const validLease =
     ["leaseId", "sectionId", "mandateId"].every((key) =>
       nonempty(lease[key]),
@@ -341,19 +342,19 @@ export function checkTrace(rawInput: unknown): TraceResult {
     expires !== undefined &&
     due !== undefined &&
     evaluated !== undefined &&
-    ["ACTIVE", "TERMINATED"].includes(String(input.status)) &&
+    ["ACTIVE", "TERMINATED"].includes(String(input["status"])) &&
     evaluated >= start &&
     expires > start &&
     due >= start &&
     due <= Math.min(start + 1_800_000, start + (expires - start) * 0.2) &&
-    Number.isInteger(lease.maxControlEventsBeforeIntent) &&
-    typeof lease.maxControlEventsBeforeIntent === "number" &&
-    lease.maxControlEventsBeforeIntent >= 0 &&
-    lease.maxControlEventsBeforeIntent <= 2 &&
-    Number.isInteger(lease.maxProposalEventsBeforeIntent) &&
-    typeof lease.maxProposalEventsBeforeIntent === "number" &&
-    lease.maxProposalEventsBeforeIntent >= 0 &&
-    lease.maxProposalEventsBeforeIntent <= 1 &&
+    Number.isInteger(lease["maxControlEventsBeforeIntent"]) &&
+    typeof lease["maxControlEventsBeforeIntent"] === "number" &&
+    lease["maxControlEventsBeforeIntent"] >= 0 &&
+    lease["maxControlEventsBeforeIntent"] <= 2 &&
+    Number.isInteger(lease["maxProposalEventsBeforeIntent"]) &&
+    typeof lease["maxProposalEventsBeforeIntent"] === "number" &&
+    lease["maxProposalEventsBeforeIntent"] >= 0 &&
+    lease["maxProposalEventsBeforeIntent"] <= 1 &&
     Array.isArray(classes) &&
     classes.length > 0 &&
     new Set(classes).size === classes.length &&
@@ -361,7 +362,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
       ["PROOF", "BUILD", "EXPERIMENT", "MEASUREMENT"].includes(String(value)),
     ) &&
     ["PROOF_RECEIPT", "RUN_RECEIPT", "KILL_RECEIPT", "EXACT_BLOCKER"].includes(
-      String(lease.terminalTarget),
+      String(lease["terminalTarget"]),
     );
   if (!validLease)
     add(
@@ -380,9 +381,9 @@ export function checkTrace(rawInput: unknown): TraceResult {
   const actors = new Set<string>();
   for (const rawGrant of roleGrants) {
     const raw = record(rawGrant);
-    const grantId = str(raw?.grantId);
-    const grantActor = str(raw?.actorInstanceId);
-    const grantRole = str(raw?.role);
+    const grantId = str(raw?.["grantId"]);
+    const grantActor = str(raw?.["actorInstanceId"]);
+    const grantRole = str(raw?.["role"]);
     if (
       grantId === undefined ||
       grantActor === undefined ||
@@ -412,11 +413,11 @@ export function checkTrace(rawInput: unknown): TraceResult {
     });
   }
   const grounder = authorityValid ? grounding : undefined;
-  const grounderGrant = lookup(grants, grounder?.grounderGrantId);
+  const grounderGrant = lookup(grants, grounder?.["grounderGrantId"]);
   if (
     grounder === undefined ||
-    grounderGrant?.role !== "section-grounder" ||
-    grounderGrant.actorInstanceId !== grounder.grounderActorInstanceId
+    grounderGrant?.["role"] !== "section-grounder" ||
+    grounderGrant["actorInstanceId"] !== grounder["grounderActorInstanceId"]
   )
     add(
       findings,
@@ -427,11 +428,11 @@ export function checkTrace(rawInput: unknown): TraceResult {
   const ids = new Set<string>();
   for (const rawEvent of rawEvents) {
     const raw = record(rawEvent);
-    const eventId = str(raw?.id);
-    const eventKind = str(raw?.kind);
-    const eventActor = str(raw?.actorInstanceId);
-    const eventGrant = str(raw?.grantId);
-    const eventAt = str(raw?.at);
+    const eventId = str(raw?.["id"]);
+    const eventKind = str(raw?.["kind"]);
+    const eventActor = str(raw?.["actorInstanceId"]);
+    const eventGrant = str(raw?.["grantId"]);
+    const eventAt = str(raw?.["at"]);
     const eventAtMs = time(eventAt);
     if (
       raw === undefined ||
@@ -461,25 +462,33 @@ export function checkTrace(rawInput: unknown): TraceResult {
       grantId: eventGrant,
     };
     events.push(event);
-    if (!kinds.has(event.kind))
-      add(findings, "TRACE_INVALID", "unknown event kind", event.id);
-    const grant = grants.get(event.grantId);
-    if (grant === undefined || grant.actorInstanceId !== event.actorInstanceId)
-      add(findings, "TRACE_INVALID", "event grant identity mismatch", event.id);
-    const allowed = authority.get(event.kind);
-    if (allowed !== undefined && !allowed.includes(grant?.role ?? ""))
+    if (!kinds.has(event["kind"]))
+      add(findings, "TRACE_INVALID", "unknown event kind", event["id"]);
+    const grant = grants.get(event["grantId"]);
+    if (
+      grant === undefined ||
+      grant["actorInstanceId"] !== event["actorInstanceId"]
+    )
+      add(
+        findings,
+        "TRACE_INVALID",
+        "event grant identity mismatch",
+        event["id"],
+      );
+    const allowed = authority.get(event["kind"]);
+    if (allowed !== undefined && !allowed.includes(grant?.["role"] ?? ""))
       add(
         findings,
         "ROLE_AUTHORITY_VIOLATION",
-        `${event.kind} has wrong role`,
-        event.id,
+        `${event["kind"]} has wrong role`,
+        event["id"],
       );
     if (evaluated !== undefined && event.atMs > evaluated)
       add(
         findings,
         "TRACE_INVALID",
         "event is later than evaluatedAt",
-        event.id,
+        event["id"],
       );
   }
   for (let i = 1; i < events.length; i += 1) {
@@ -494,16 +503,16 @@ export function checkTrace(rawInput: unknown): TraceResult {
         findings,
         "TRACE_INVALID",
         "event times must strictly increase",
-        current.id,
+        current["id"],
       );
   }
-  const byId = new Map(events.map((event) => [event.id, event]));
-  const mandates = events.filter((event) => event.kind === "MANDATE");
+  const byId = new Map(events.map((event) => [event["id"], event]));
+  const mandates = events.filter((event) => event["kind"] === "MANDATE");
   const firstMandate = mandates.length === 1 ? mandates[0] : undefined;
   const mandate =
     firstMandate !== undefined &&
-    firstMandate.mandateId === lease.mandateId &&
-    grants.get(firstMandate.grantId)?.role === "programme-supervisor" &&
+    firstMandate["mandateId"] === lease["mandateId"] &&
+    grants.get(firstMandate["grantId"])?.["role"] === "programme-supervisor" &&
     start !== undefined &&
     due !== undefined &&
     firstMandate.atMs >= start &&
@@ -518,16 +527,16 @@ export function checkTrace(rawInput: unknown): TraceResult {
     );
 
   const candidates = events.filter(
-    (event) => event.kind === "CANDIDATE_PACKET",
+    (event) => event["kind"] === "CANDIDATE_PACKET",
   );
-  const admissions = events.filter((event) => event.kind === "ADMISSION");
-  const specs = events.filter((event) => event.kind === "EXECUTABLE_SPEC");
-  const intents = events.filter((event) => event.kind === "INTENT");
+  const admissions = events.filter((event) => event["kind"] === "ADMISSION");
+  const specs = events.filter((event) => event["kind"] === "EXECUTABLE_SPEC");
+  const intents = events.filter((event) => event["kind"] === "INTENT");
   const invalidIntent = (event: E, message: string): void => {
-    add(findings, "INTENT_NOT_EXECUTABLE", message, event.id);
+    add(findings, "INTENT_NOT_EXECUTABLE", message, event["id"]);
   };
   const digestMismatch = (event: E, message: string): void => {
-    add(findings, "DIGEST_JOIN_MISMATCH", message, event.id);
+    add(findings, "DIGEST_JOIN_MISMATCH", message, event["id"]);
   };
   const candidateAuthorityJoin = (event: E): boolean =>
     authorityValid &&
@@ -535,88 +544,89 @@ export function checkTrace(rawInput: unknown): TraceResult {
       const value = lineage[name];
       return (
         value !== undefined &&
-        event[`${name}Id`] === value.id &&
-        event[`${name}Sha256`] === value.sha256
+        event[`${name}Id`] === value["id"] &&
+        event[`${name}Sha256`] === value["sha256"]
       );
     }) &&
-    event.groundingRevision === grounding?.revision &&
-    event.groundingFence === grounding?.fence &&
-    event.groundingSha256 === grounding?.sha256 &&
-    event.objective === grounding?.objective &&
-    event.success === grounding?.success &&
-    JSON.stringify(event.invariants) ===
-      JSON.stringify(grounding?.invariants) &&
-    event.noveltyDisposition === grounding?.knownResultDisposition &&
-    event.knownResult === grounding?.knownResult &&
+    event["groundingRevision"] === grounding?.["revision"] &&
+    event["groundingFence"] === grounding?.["fence"] &&
+    event["groundingSha256"] === grounding?.["sha256"] &&
+    event?.["objective"] === grounding?.["objective"] &&
+    event?.["success"] === grounding?.["success"] &&
+    JSON.stringify(event["invariants"]) ===
+      JSON.stringify(grounding?.["invariants"]) &&
+    event["noveltyDisposition"] === grounding?.["knownResultDisposition"] &&
+    event?.["knownResult"] === grounding?.["knownResult"] &&
     dispositionMatchesKnownResult(
-      event.noveltyDisposition,
-      event.knownResult,
+      event["noveltyDisposition"],
+      event["knownResult"],
     ) &&
     semanticJoin(event);
   const candidateValid = (event: E): boolean =>
-    grants.get(event.grantId)?.role === "searcher" &&
+    grants.get(event["grantId"])?.["role"] === "searcher" &&
     mandate !== undefined &&
     event.atMs > mandate.atMs &&
-    nonempty(event.candidateId) &&
-    sha(event.artifactSha256) &&
+    nonempty(event["candidateId"]) &&
+    sha(event["artifactSha256"]) &&
     candidateAuthorityJoin(event) &&
     ["NOVEL_GAP", "REGISTERED_REPLICATION"].includes(
-      String(event.noveltyDisposition),
+      String(event["noveltyDisposition"]),
     );
   for (const candidate of candidates) {
-    if (typeof candidate.knownResult !== "boolean")
+    if (typeof candidate["knownResult"] !== "boolean")
       add(
         findings,
         "KNOWN_RESULT_DISPOSITION_MISSING",
         "candidate must declare the current grounding known-result disposition",
-        candidate.id,
+        candidate["id"],
       );
     if (
-      candidate.noveltyDisposition !== grounding?.knownResultDisposition ||
-      candidate.knownResult !== grounding?.knownResult ||
+      candidate["noveltyDisposition"] !==
+        grounding?.["knownResultDisposition"] ||
+      candidate?.["knownResult"] !== grounding?.["knownResult"] ||
       !dispositionMatchesKnownResult(
-        candidate.noveltyDisposition,
-        candidate.knownResult,
+        candidate["noveltyDisposition"],
+        candidate["knownResult"],
       )
     )
       add(
         findings,
         "KNOWN_RESULT_DISPOSITION_MISMATCH",
         "candidate novelty disposition and known-result boolean must exact-join current grounding",
-        candidate.id,
+        candidate["id"],
       );
     if (
-      candidate.knownResult === true &&
-      candidate.noveltyDisposition === "NOVEL_GAP"
+      candidate["knownResult"] === true &&
+      candidate["noveltyDisposition"] === "NOVEL_GAP"
     )
       add(
         findings,
         "KNOWN_RESULT_REDISCOVERY",
         "known result cannot be admitted as a novel gap",
-        candidate.id,
+        candidate["id"],
       );
     if (
-      candidate.groundingRevision !== grounding?.revision ||
-      candidate.groundingFence !== grounding?.fence ||
-      candidate.groundingSha256 !== grounding?.sha256
+      candidate["groundingRevision"] !== grounding?.["revision"] ||
+      candidate["groundingFence"] !== grounding?.["fence"] ||
+      candidate["groundingSha256"] !== grounding?.["sha256"]
     )
       add(
         findings,
         "STALE_KNOWLEDGE_SNAPSHOT",
         "candidate does not use the current grounding revision and fence",
-        candidate.id,
+        candidate["id"],
       );
     if (
-      candidate.groundingRevision === grounding?.revision &&
-      candidate.groundingFence === grounding?.fence &&
-      candidate.groundingSha256 === grounding?.sha256 &&
+      candidate["groundingRevision"] === grounding?.["revision"] &&
+      candidate["groundingFence"] === grounding?.["fence"] &&
+      candidate["groundingSha256"] === grounding?.["sha256"] &&
       !candidateAuthorityJoin(candidate)
     )
       add(
         findings,
         "GOAL_LINEAGE_MISMATCH",
         "candidate does not exact-join the goal, objective, success, and invariants",
-        candidate.id,
+        candidate["id"],
       );
     if (!candidateValid(candidate))
       invalidIntent(
@@ -626,27 +636,30 @@ export function checkTrace(rawInput: unknown): TraceResult {
   }
   const validCandidates = candidates.filter((event) => candidateValid(event));
   const validAdmission = (event: E): boolean => {
-    const candidate = lookup(byId, event.candidateEventId);
+    const candidate = lookup(byId, event["candidateEventId"]);
     const good =
-      grants.get(event.grantId)?.role === "section-director" &&
-      candidate?.kind === "CANDIDATE_PACKET" &&
+      grants.get(event["grantId"])?.["role"] === "section-director" &&
+      candidate?.["kind"] === "CANDIDATE_PACKET" &&
       candidateValid(candidate) &&
       candidate.atMs < event.atMs &&
-      candidate.candidateId === event.candidateId &&
-      candidate.artifactSha256 === event.candidateSha256 &&
-      sha(event.artifactSha256) &&
-      event.decision === "ADMIT" &&
+      candidate["candidateId"] === event["candidateId"] &&
+      candidate["artifactSha256"] === event["candidateSha256"] &&
+      sha(event["artifactSha256"]) &&
+      event["decision"] === "ADMIT" &&
       [
         "UPSTREAM_KILL",
         "MINIMAL_DISCRIMINATOR",
         "REPLICATION",
         "CONFIRMATION",
-      ].includes(String(event.valueClass)) &&
-      !(candidate.knownResult === true && event.valueClass !== "REPLICATION");
+      ].includes(String(event["valueClass"])) &&
+      !(
+        candidate["knownResult"] === true &&
+        event["valueClass"] !== "REPLICATION"
+      );
     if (
       candidate !== undefined &&
-      nonempty(event.candidateSha256) &&
-      event.candidateSha256 !== candidate.artifactSha256
+      nonempty(event["candidateSha256"]) &&
+      event["candidateSha256"] !== candidate["artifactSha256"]
     )
       digestMismatch(event, "admission candidate digest mismatch");
     if (!good)
@@ -656,19 +669,19 @@ export function checkTrace(rawInput: unknown): TraceResult {
   const admissionOk = new Set(
     admissions
       .filter((event) => validAdmission(event))
-      .map((event) => event.id),
+      .map((event) => event["id"]),
   );
   const validSpec = (event: E): boolean => {
-    const admission = lookup(byId, event.admissionId);
+    const admission = lookup(byId, event["admissionId"]);
     const good =
-      grants.get(event.grantId)?.role === "builder" &&
-      admission?.kind === "ADMISSION" &&
-      admissionOk.has(admission.id) &&
+      grants.get(event["grantId"])?.["role"] === "builder" &&
+      admission?.["kind"] === "ADMISSION" &&
+      admissionOk.has(admission["id"]) &&
       admission.atMs < event.atMs &&
-      admission.artifactSha256 === event.admissionSha256 &&
-      admission.candidateId === event.candidateId &&
-      sha(event.artifactSha256) &&
-      sha(event.implementationSha256) &&
+      admission["artifactSha256"] === event["admissionSha256"] &&
+      admission["candidateId"] === event["candidateId"] &&
+      sha(event["artifactSha256"]) &&
+      sha(event["implementationSha256"]) &&
       fields(event, [
         "implementationLocus",
         "entrypointAndParameters",
@@ -680,20 +693,20 @@ export function checkTrace(rawInput: unknown): TraceResult {
         "positiveControl",
         "negativeControl",
       ]) &&
-      Array.isArray(event.validityChecks) &&
-      event.validityChecks.length > 0 &&
-      event.validityChecks.every(nonempty) &&
-      sha(event.measurementContractSha256) &&
-      ((event.runScale === "MINIMAL_DISCRIMINATOR" &&
-        event.escalationClass === "NONE") ||
-        (event.runScale === "ESCALATED_CONFIRMATION" &&
+      Array.isArray(event["validityChecks"]) &&
+      event["validityChecks"].length > 0 &&
+      event["validityChecks"].every(nonempty) &&
+      sha(event["measurementContractSha256"]) &&
+      ((event["runScale"] === "MINIMAL_DISCRIMINATOR" &&
+        event["escalationClass"] === "NONE") ||
+        (event["runScale"] === "ESCALATED_CONFIRMATION" &&
           ["SCALE", "FULL_SWEEP", "GPU_PORT"].includes(
-            String(event.escalationClass),
+            String(event["escalationClass"]),
           )));
     if (
       admission !== undefined &&
-      nonempty(event.admissionSha256) &&
-      event.admissionSha256 !== admission.artifactSha256
+      nonempty(event["admissionSha256"]) &&
+      event["admissionSha256"] !== admission["artifactSha256"]
     )
       digestMismatch(event, "spec admission digest mismatch");
     if (!good)
@@ -701,31 +714,32 @@ export function checkTrace(rawInput: unknown): TraceResult {
     return good;
   };
   const specOk = new Set(
-    specs.filter((event) => validSpec(event)).map((event) => event.id),
+    specs.filter((event) => validSpec(event)).map((event) => event["id"]),
   );
   const validIntent = (event: E): boolean => {
-    const admission = lookup(byId, event.admissionId);
-    const spec = lookup(byId, event.executableSpecificationId);
-    const deadline = time(event.terminalDueAt);
+    const admission = lookup(byId, event["admissionId"]);
+    const spec = lookup(byId, event["executableSpecificationId"]);
+    const deadline = time(event["terminalDueAt"]);
     const good =
-      grants.get(event.grantId)?.role === "section-director" &&
+      grants.get(event["grantId"])?.["role"] === "section-director" &&
       mandate !== undefined &&
       event.atMs > mandate.atMs &&
-      admission?.kind === "ADMISSION" &&
-      admissionOk.has(admission.id) &&
-      spec?.kind === "EXECUTABLE_SPEC" &&
-      specOk.has(spec.id) &&
+      admission?.["kind"] === "ADMISSION" &&
+      admissionOk.has(admission["id"]) &&
+      spec?.["kind"] === "EXECUTABLE_SPEC" &&
+      specOk.has(spec["id"]) &&
       spec.atMs < event.atMs &&
-      admission.artifactSha256 === event.admissionSha256 &&
-      spec.artifactSha256 === event.executableSpecificationSha256 &&
-      admission.candidateId === event.candidateId &&
-      spec.candidateId === event.candidateId &&
-      spec.measurementContractSha256 === event.measurementContractSha256 &&
-      spec.runScale === event.runScale &&
-      spec.escalationClass === event.escalationClass &&
-      sha(event.artifactSha256) &&
+      admission["artifactSha256"] === event["admissionSha256"] &&
+      spec["artifactSha256"] === event["executableSpecificationSha256"] &&
+      admission["candidateId"] === event["candidateId"] &&
+      spec["candidateId"] === event["candidateId"] &&
+      spec["measurementContractSha256"] ===
+        event["measurementContractSha256"] &&
+      spec["runScale"] === event["runScale"] &&
+      spec["escalationClass"] === event["escalationClass"] &&
+      sha(event["artifactSha256"]) &&
       Array.isArray(classes) &&
-      classes.includes(event.actionClass) &&
+      classes.includes(event["actionClass"]) &&
       fields(event, ["falsifierOutcomeMap", "executorSink"]) &&
       deadline !== undefined &&
       expires !== undefined &&
@@ -733,14 +747,14 @@ export function checkTrace(rawInput: unknown): TraceResult {
       deadline <= expires;
     if (
       admission !== undefined &&
-      nonempty(event.admissionSha256) &&
-      event.admissionSha256 !== admission.artifactSha256
+      nonempty(event["admissionSha256"]) &&
+      event["admissionSha256"] !== admission["artifactSha256"]
     )
       digestMismatch(event, "intent admission digest mismatch");
     if (
       spec !== undefined &&
-      nonempty(event.executableSpecificationSha256) &&
-      event.executableSpecificationSha256 !== spec.artifactSha256
+      nonempty(event["executableSpecificationSha256"]) &&
+      event["executableSpecificationSha256"] !== spec["artifactSha256"]
     )
       digestMismatch(event, "intent specification digest mismatch");
     if (!good)
@@ -751,7 +765,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
     return good;
   };
   const validIntents = intents.filter((event) => validIntent(event));
-  const validIntentIds = new Set(validIntents.map((event) => event.id));
+  const validIntentIds = new Set(validIntents.map((event) => event["id"]));
   const firstIntent = validIntents[0];
   if (
     firstIntent === undefined &&
@@ -773,16 +787,16 @@ export function checkTrace(rawInput: unknown): TraceResult {
             (firstIntent === undefined || event.atMs < firstIntent.atMs),
         );
   if (
-    typeof lease.maxControlEventsBeforeIntent === "number" &&
+    typeof lease["maxControlEventsBeforeIntent"] === "number" &&
     window.filter(
-      (event) => control.has(event.kind) && event.kind !== "MANDATE",
-    ).length > lease.maxControlEventsBeforeIntent
+      (event) => control.has(event["kind"]) && event["kind"] !== "MANDATE",
+    ).length > lease["maxControlEventsBeforeIntent"]
   )
     add(findings, "CONTROL_WIP_EXCEEDED", "control WIP exceeded");
   if (
-    typeof lease.maxProposalEventsBeforeIntent === "number" &&
-    window.filter((event) => event.kind === "CANDIDATE_PACKET").length >
-      lease.maxProposalEventsBeforeIntent
+    typeof lease["maxProposalEventsBeforeIntent"] === "number" &&
+    window.filter((event) => event["kind"] === "CANDIDATE_PACKET").length >
+      lease["maxProposalEventsBeforeIntent"]
   )
     add(findings, "PROPOSAL_WIP_EXCEEDED", "proposal WIP exceeded");
 
@@ -792,119 +806,122 @@ export function checkTrace(rawInput: unknown): TraceResult {
   const scientificReceipts = new Map<string, E>();
   const blockers: E[] = [];
   const handleReceipt = (event: E, intent: E): void => {
-    const spec = lookup(byId, intent.executableSpecificationId);
+    const spec = lookup(byId, intent["executableSpecificationId"]);
     const measurementJoined =
-      spec?.kind === "EXECUTABLE_SPEC" &&
-      event.measurementContractSha256 === spec.measurementContractSha256 &&
-      ["PASS", "FAIL", "UNKNOWN"].includes(String(event.measurementValidity));
+      spec?.["kind"] === "EXECUTABLE_SPEC" &&
+      event["measurementContractSha256"] ===
+        spec["measurementContractSha256"] &&
+      ["PASS", "FAIL", "UNKNOWN"].includes(
+        String(event["measurementValidity"]),
+      );
     if (!measurementJoined)
       add(
         findings,
         "MEASUREMENT_CONTRACT_MISMATCH",
         "receipt must exact-join its executable measurement contract",
-        event.id,
+        event["id"],
       );
-    if (!evidence(event.measurementValidityEvidence))
+    if (!evidence(event["measurementValidityEvidence"]))
       add(
         findings,
         "MEASUREMENT_VALIDITY_EVIDENCE_INVALID",
         "receipt needs durable measurement validity evidence separate from observation evidence",
-        event.id,
+        event["id"],
       );
     if (
-      event.terminalClass !== lease.terminalTarget ||
-      lease.terminalTarget === "EXACT_BLOCKER"
+      event["terminalClass"] !== lease["terminalTarget"] ||
+      lease["terminalTarget"] === "EXACT_BLOCKER"
     ) {
       add(
         findings,
         "TERMINAL_TARGET_MISMATCH",
         "receipt terminal class differs from lease target",
-        event.id,
+        event["id"],
       );
       return;
     }
-    if (!(sha(event.artifactSha256) && measurementJoined)) return;
-    validReceipts.set(event.id, event);
-    terminalsByIntent.set(intent.id, [event]);
+    if (!(sha(event["artifactSha256"]) && measurementJoined)) return;
+    validReceipts.set(event["id"], event);
+    terminalsByIntent.set(intent["id"], [event]);
     if (
-      event.measurementValidity === "PASS" &&
-      evidence(event.evidence) &&
-      evidence(event.measurementValidityEvidence)
+      event["measurementValidity"] === "PASS" &&
+      evidence(event["evidence"]) &&
+      evidence(event["measurementValidityEvidence"])
     )
-      scientificReceipts.set(event.id, event);
+      scientificReceipts.set(event["id"], event);
   };
   const handleBlocker = (event: E, intent: E): void => {
     blockers.push(event);
     if (
-      input.status !== "TERMINATED" ||
-      lease.terminalTarget !== "EXACT_BLOCKER" ||
+      input["status"] !== "TERMINATED" ||
+      lease["terminalTarget"] !== "EXACT_BLOCKER" ||
       !fields(event, [
         "failedPrerequisite",
         "externalAuthorityOrEvent",
         "releaseCondition",
       ]) ||
-      !evidence(event.evidence)
+      !evidence(event["evidence"])
     )
       add(
         findings,
         "EXACT_BLOCKER_INVALID",
         "blocker terminal is invalid",
-        event.id,
+        event["id"],
       );
-    else terminalsByIntent.set(intent.id, [event]);
+    else terminalsByIntent.set(intent["id"], [event]);
   };
   const handleTerminalEvent = (event: E): void => {
-    const intent = lookup(byId, event.intentId);
+    const intent = lookup(byId, event["intentId"]);
     const joined =
-      grants.get(event.grantId)?.role === "executor" &&
+      grants.get(event["grantId"])?.["role"] === "executor" &&
       intent !== undefined &&
-      validIntentIds.has(intent.id) &&
+      validIntentIds.has(intent["id"]) &&
       event.atMs > intent.atMs &&
-      event.intentSha256 === intent.artifactSha256;
+      event["intentSha256"] === intent["artifactSha256"];
     if (!joined) {
       add(
         findings,
-        event.kind === "EXACT_BLOCKER"
+        event["kind"] === "EXACT_BLOCKER"
           ? "EXACT_BLOCKER_INVALID"
           : "RECEIPT_WITHOUT_INTENT",
         "terminal lacks exact valid intent join",
-        event.id,
+        event["id"],
       );
       if (
         intent !== undefined &&
-        nonempty(event.intentSha256) &&
-        event.intentSha256 !== intent.artifactSha256
+        nonempty(event["intentSha256"]) &&
+        event["intentSha256"] !== intent["artifactSha256"]
       )
         digestMismatch(event, "terminal intent digest mismatch");
       return;
     }
-    const count = (terminalCounts.get(intent.id) ?? 0) + 1;
-    terminalCounts.set(intent.id, count);
+    const count = (terminalCounts.get(intent["id"]) ?? 0) + 1;
+    terminalCounts.set(intent["id"], count);
     if (count > 1)
       add(
         findings,
         "DUPLICATE_TERMINAL",
         "intent has more than one terminal",
-        event.id,
+        event["id"],
       );
-    if (!evidence(event.evidence))
+    if (!evidence(event["evidence"]))
       add(
         findings,
         "TRANSIENT_SCIENTIFIC_EVIDENCE",
         "scientific evidence is invalid",
-        event.id,
+        event["id"],
       );
-    if (event.kind === "RECEIPT") handleReceipt(event, intent);
+    if (event["kind"] === "RECEIPT") handleReceipt(event, intent);
     else handleBlocker(event, intent);
   };
   for (const event of events)
-    if (event.kind === "RECEIPT" || event.kind === "EXACT_BLOCKER")
+    if (event["kind"] === "RECEIPT" || event["kind"] === "EXACT_BLOCKER")
       handleTerminalEvent(event);
   const validBlocker = blockers.some(
     (event) =>
       !findings.some(
         (finding) =>
-          finding.eventId === event.id &&
+          finding.eventId === event["id"] &&
           finding.code === "EXACT_BLOCKER_INVALID",
       ),
   );
@@ -913,42 +930,42 @@ export function checkTrace(rawInput: unknown): TraceResult {
       (event) =>
         event.atMs > blocker.atMs &&
         ["CANDIDATE_PACKET", "ADMISSION", "EXECUTABLE_SPEC", "INTENT"].includes(
-          event.kind,
+          event["kind"],
         ),
     ))
       add(
         findings,
         "SEARCH_AFTER_EXACT_BLOCKER",
         "search follows exact blocker",
-        later.id,
+        later["id"],
       );
 
-  const learning = events.filter((event) => event.kind === "LEARNING");
+  const learning = events.filter((event) => event["kind"] === "LEARNING");
   const validLearning = new Map<string, E>();
   const usedReceipts = new Set<string>();
   const processLearningItem = (item: E): void => {
-    const receiptId = str(item.receiptId);
+    const receiptId = str(item["receiptId"]);
     const receipt = lookup(validReceipts, receiptId);
     const scientific =
-      receipt !== undefined && scientificReceipts.has(receipt.id);
-    if (item.learningClass === "SCIENTIFIC" && !scientific)
+      receipt !== undefined && scientificReceipts.has(receipt["id"]);
+    if (item["learningClass"] === "SCIENTIFIC" && !scientific)
       add(
         findings,
         "MEASUREMENT_INVALID_FOR_SCIENCE",
         "scientific learning requires a PASS receipt with durable measurement validity evidence",
-        item.id,
+        item["id"],
       );
     const good =
       receipt !== undefined &&
       receiptId !== undefined &&
       item.atMs > receipt.atMs &&
-      item.receiptSha256 === receipt.artifactSha256 &&
+      item["receiptSha256"] === receipt["artifactSha256"] &&
       !usedReceipts.has(receiptId) &&
-      sha(item.artifactSha256) &&
+      sha(item["artifactSha256"]) &&
       ["SCIENTIFIC", "INSTRUMENTATION_REPAIR"].includes(
-        String(item.learningClass),
+        String(item["learningClass"]),
       ) &&
-      (item.learningClass !== "SCIENTIFIC" || scientific) &&
+      (item["learningClass"] !== "SCIENTIFIC" || scientific) &&
       fields(item, [
         "prior",
         "observation",
@@ -961,132 +978,140 @@ export function checkTrace(rawInput: unknown): TraceResult {
         findings,
         "LEARN_WITHOUT_NEW_RECEIPT",
         "learning lacks exact new receipt join",
-        item.id,
+        item["id"],
       );
       if (
         receipt !== undefined &&
-        nonempty(item.receiptSha256) &&
-        item.receiptSha256 !== receipt.artifactSha256
+        nonempty(item["receiptSha256"]) &&
+        item["receiptSha256"] !== receipt["artifactSha256"]
       )
         digestMismatch(item, "learning receipt digest mismatch");
     } else if (receiptId !== undefined) {
       usedReceipts.add(receiptId);
-      validLearning.set(item.id, item);
+      validLearning.set(item["id"], item);
     }
   };
   for (const item of learning) processLearningItem(item);
   const committed = new Map<string, E>();
   const scientificCommits = new Map<string, E>();
   const processDirectorCommit = (commit: E): void => {
-    const item = lookup(validLearning, commit.learningId);
+    const item = lookup(validLearning, commit["learningId"]);
     const receipt =
-      item !== undefined ? lookup(validReceipts, item.receiptId) : undefined;
+      item !== undefined ? lookup(validReceipts, item["receiptId"]) : undefined;
     const good =
       item !== undefined &&
       receipt !== undefined &&
       commit.atMs > item.atMs &&
-      commit.actorInstanceId !== item.actorInstanceId &&
-      commit.learningSha256 === item.artifactSha256 &&
-      commit.receiptSha256 === receipt.artifactSha256 &&
-      ["COMMIT", "REJECT", "DEFER"].includes(String(commit.decision)) &&
-      nonempty(commit.stateTransition) &&
-      !committed.has(item.id);
+      commit["actorInstanceId"] !== item["actorInstanceId"] &&
+      commit["learningSha256"] === item["artifactSha256"] &&
+      commit["receiptSha256"] === receipt["artifactSha256"] &&
+      ["COMMIT", "REJECT", "DEFER"].includes(String(commit["decision"])) &&
+      nonempty(commit["stateTransition"]) &&
+      !committed.has(item["id"]);
     if (!good) {
       add(
         findings,
         "LEARN_WITHOUT_NEW_RECEIPT",
         "commit lacks exact later learning join",
-        commit.id,
+        commit["id"],
       );
       if (
         item !== undefined &&
-        nonempty(commit.learningSha256) &&
-        commit.learningSha256 !== item.artifactSha256
+        nonempty(commit["learningSha256"]) &&
+        commit["learningSha256"] !== item["artifactSha256"]
       )
         digestMismatch(commit, "commit learning digest mismatch");
       if (
         receipt !== undefined &&
-        nonempty(commit.receiptSha256) &&
-        commit.receiptSha256 !== receipt.artifactSha256
+        nonempty(commit["receiptSha256"]) &&
+        commit["receiptSha256"] !== receipt["artifactSha256"]
       )
         digestMismatch(commit, "commit receipt digest mismatch");
     } else {
-      committed.set(item.id, commit);
-      if (item.learningClass === "SCIENTIFIC" && commit.decision === "COMMIT")
-        scientificCommits.set(item.id, commit);
+      committed.set(item["id"], commit);
+      if (
+        item["learningClass"] === "SCIENTIFIC" &&
+        commit["decision"] === "COMMIT"
+      )
+        scientificCommits.set(item["id"], commit);
     }
   };
   for (const commit of events.filter(
-    (event) => event.kind === "DIRECTOR_COMMIT",
+    (event) => event["kind"] === "DIRECTOR_COMMIT",
   ))
     processDirectorCommit(commit);
   for (const item of validLearning.values())
-    if (!committed.has(item.id))
+    if (!committed.has(item["id"]))
       add(
         findings,
         "LEARN_WITHOUT_NEW_RECEIPT",
         "learning needs one later commit",
-        item.id,
+        item["id"],
       );
   const unreleasedEscalatedSpecs = new Set<string>();
   for (const spec of specs) {
-    if (spec.runScale !== "ESCALATED_CONFIRMATION") continue;
+    if (spec["runScale"] !== "ESCALATED_CONFIRMATION") continue;
     const receipt = [...scientificReceipts.values()].find(
       (item) =>
-        item.artifactSha256 === spec.priorPassReceiptSha256 &&
+        item["artifactSha256"] === spec["priorPassReceiptSha256"] &&
         item.atMs < spec.atMs,
     );
-    const release = nonempty(spec.scaleReleaseCommitId)
-      ? events.find((event) => event.id === spec.scaleReleaseCommitId)
+    const release = nonempty(spec["scaleReleaseCommitId"])
+      ? events.find((event) => event["id"] === spec["scaleReleaseCommitId"])
       : undefined;
     const learned =
       receipt !== undefined &&
       [...validLearning.values()].some(
         (item) =>
-          item.learningClass === "SCIENTIFIC" && item.receiptId === receipt.id,
+          item["learningClass"] === "SCIENTIFIC" &&
+          item["receiptId"] === receipt["id"],
       );
     const committedReceipt =
-      release?.kind === "DIRECTOR_COMMIT" &&
-      sha(release.artifactSha256) &&
-      release.decision === "COMMIT" &&
-      release.scaleRelease === "ESCALATED_CONFIRMATION" &&
-      release.artifactSha256 === spec.scaleReleaseCommitSha256 &&
+      release?.["kind"] === "DIRECTOR_COMMIT" &&
+      sha(release["artifactSha256"]) &&
+      release["decision"] === "COMMIT" &&
+      release["scaleRelease"] === "ESCALATED_CONFIRMATION" &&
+      release["artifactSha256"] === spec["scaleReleaseCommitSha256"] &&
       receipt !== undefined &&
-      release.receiptSha256 === receipt.artifactSha256 &&
+      release["receiptSha256"] === receipt["artifactSha256"] &&
       release.atMs < spec.atMs &&
-      [...scientificCommits.values()].some((item) => item.id === release.id);
+      [...scientificCommits.values()].some(
+        (item) => item["id"] === release["id"],
+      );
     if (!learned || !committedReceipt) {
-      unreleasedEscalatedSpecs.add(spec.id);
+      unreleasedEscalatedSpecs.add(spec["id"]);
       add(
         findings,
         "SWEEP_WITHOUT_RELEASE",
         "escalated confirmation needs an exact scientifically learned PASS receipt and released Director commit",
-        spec.id,
+        spec["id"],
       );
     }
   }
   const unreleasedEscalatedIntents = new Set(
     validIntents
       .filter((intent) =>
-        unreleasedEscalatedSpecs.has(String(intent.executableSpecificationId)),
+        unreleasedEscalatedSpecs.has(
+          String(intent["executableSpecificationId"]),
+        ),
       )
-      .map((intent) => intent.id),
+      .map((intent) => intent["id"]),
   );
   const creditableScientificReceipts = new Map(
     [...scientificReceipts].filter(([receiptId]) => {
       const receipt = validReceipts.get(receiptId);
       return (
         receipt !== undefined &&
-        !unreleasedEscalatedIntents.has(String(receipt.intentId))
+        !unreleasedEscalatedIntents.has(String(receipt["intentId"]))
       );
     }),
   );
   const creditableScientificCommits = new Map(
     [...scientificCommits].filter(([, commit]) => {
-      const learningEvent = lookup(validLearning, commit.learningId);
+      const learningEvent = lookup(validLearning, commit["learningId"]);
       return (
         learningEvent !== undefined &&
-        creditableScientificReceipts.has(String(learningEvent.receiptId))
+        creditableScientificReceipts.has(String(learningEvent["receiptId"]))
       );
     }),
   );
@@ -1094,36 +1119,38 @@ export function checkTrace(rawInput: unknown): TraceResult {
     [...committed].filter(([learningId, commit]) => {
       const item = validLearning.get(learningId);
       const receipt =
-        item !== undefined ? lookup(validReceipts, item.receiptId) : undefined;
+        item !== undefined
+          ? lookup(validReceipts, item["receiptId"])
+          : undefined;
       return (
-        item?.learningClass === "INSTRUMENTATION_REPAIR" &&
+        item?.["learningClass"] === "INSTRUMENTATION_REPAIR" &&
         receipt !== undefined &&
-        ["FAIL", "UNKNOWN"].includes(String(receipt.measurementValidity)) &&
-        commit.decision === "COMMIT"
+        ["FAIL", "UNKNOWN"].includes(String(receipt["measurementValidity"])) &&
+        commit["decision"] === "COMMIT"
       );
     }),
   );
   const instrumentationReceipts = new Map(
     [...instrumentationCommits.values()].flatMap((commit) => {
-      const item = lookup(validLearning, commit.learningId);
+      const item = lookup(validLearning, commit["learningId"]);
       const receipt =
         item !== undefined
-          ? validReceipts.get(String(item.receiptId))
+          ? validReceipts.get(String(item["receiptId"]))
           : undefined;
-      return receipt === undefined ? [] : [[receipt.id, receipt] as const];
+      return receipt === undefined ? [] : [[receipt["id"], receipt] as const];
     }),
   );
   for (const receipt of validReceipts.values()) {
     const next = events.find(
       (event) =>
         event.atMs > receipt.atMs &&
-        (event.kind === "CANDIDATE_PACKET" ||
-          (event.kind === "INTENT" && validIntentIds.has(event.id))),
+        (event["kind"] === "CANDIDATE_PACKET" ||
+          (event["kind"] === "INTENT" && validIntentIds.has(event["id"]))),
     );
     const complete = [...validLearning.values()].some((item) => {
-      const commit = committed.get(item.id);
+      const commit = committed.get(item["id"]);
       return (
-        item.receiptId === receipt.id &&
+        item["receiptId"] === receipt["id"] &&
         commit !== undefined &&
         commit.atMs < (next?.atMs ?? item.atMs)
       );
@@ -1133,13 +1160,13 @@ export function checkTrace(rawInput: unknown): TraceResult {
         findings,
         "NEXT_SEARCH_BEFORE_LEARNING",
         "next search precedes committed learning",
-        next.id,
+        next["id"],
       );
   }
   for (const intent of validIntents) {
-    const deadline = time(intent.terminalDueAt);
+    const deadline = time(intent["terminalDueAt"]);
     if (
-      !terminalsByIntent.has(intent.id) &&
+      !terminalsByIntent.has(intent["id"]) &&
       evaluated !== undefined &&
       ((deadline !== undefined && evaluated >= deadline) ||
         evaluated >= (expires ?? Infinity))
@@ -1148,31 +1175,31 @@ export function checkTrace(rawInput: unknown): TraceResult {
         findings,
         "MISSING_TERMINAL_RECEIPT",
         "expired intent lacks terminal",
-        intent.id,
+        intent["id"],
       );
   }
-  const promotions = events.filter((event) => event.kind === "PROMOTION");
+  const promotions = events.filter((event) => event["kind"] === "PROMOTION");
   for (const verification of events.filter(
     (event) =>
-      event.kind === "MODEL_VERIFICATION" ||
-      event.kind === "VERIFICATION_ATTEMPT",
+      event["kind"] === "MODEL_VERIFICATION" ||
+      event["kind"] === "VERIFICATION_ATTEMPT",
   ))
     if (!promotions.some((promotion) => promotion.atMs < verification.atMs))
       add(
         findings,
         "PREMATURE_MODEL_VERIFICATION",
         "model verification may occur only after promotion",
-        verification.id,
+        verification["id"],
       );
   const ended =
-    input.status === "TERMINATED" ||
+    input["status"] === "TERMINATED" ||
     (evaluated !== undefined && evaluated >= (expires ?? Infinity));
   if (ended && !validBlocker && creditableScientificReceipts.size === 0)
     add(findings, "SEARCH_NOT_STARTED", "ended trace lacks receipt");
   if (ended && !validBlocker && creditableScientificCommits.size === 0)
     add(findings, "LEARN_NOT_STARTED", "ended trace lacks committed learning");
   if (
-    (input.status === "ACTIVE" || ended) &&
+    (input["status"] === "ACTIVE" || ended) &&
     findings.some((finding) =>
       [
         "FIRST_INTENT_OVERDUE",
@@ -1195,10 +1222,10 @@ export function checkTrace(rawInput: unknown): TraceResult {
     instrumentationCommits.size,
     validCandidates.length,
     specOk.size,
-    str(lease.sectionId) ?? null,
-    str(lease.leaseId) ?? null,
+    str(lease["sectionId"]) ?? null,
+    str(lease["leaseId"]) ?? null,
     [...validReceipts.values()].map((receipt) =>
-      String(receipt.artifactSha256),
+      String(receipt["artifactSha256"]),
     ),
   );
 }

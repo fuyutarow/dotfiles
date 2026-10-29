@@ -41,6 +41,7 @@ import {
   type Result,
 } from "neverthrow";
 import { resolveDbDir } from "./ccc-db-dir.ts";
+import { cccBackend } from "./ccc-entry.ts";
 import { hostLoad, processedWork, recordIndexRate } from "./index-rate.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
@@ -1037,26 +1038,6 @@ async function runChildToStderr(
   cwd: string,
   plan?: IndexPlan,
 ): Promise<{ exitCode: number; cause: string }> {
-  const runtimeDir = process.env.XDG_RUNTIME_DIR;
-  if (runtimeDir !== undefined) {
-    const deferralPath = join(
-      runtimeDir,
-      "agent-resource-control",
-      "ccc-gpu-status.json",
-    );
-    const deferral = jsonOf(
-      z.object({ deferring: z.boolean(), reason: z.string().optional() }),
-    ).safeParse(
-      await Bun.file(deferralPath)
-        .text()
-        .catch(() => ""),
-    );
-    if (deferral.success && deferral.data.deferring) {
-      process.stderr.write(
-        `NOTE: ccc GPU work deferred: ${deferral.data.reason ?? "GPU reservation live"}; waiting for CPU indexing progress\n`,
-      );
-    }
-  }
   const startedAt = Temporal.Now.instant().epochMilliseconds;
   let overBudget = false;
   // bounded: waitForIndexChild enforces progress and elapsed limits before terminating this client.
@@ -1132,8 +1113,8 @@ async function runChildToStderr(
 }
 
 // Companion to the freshness gate, not a search route: writes INDEXED_AT (ccc's DB dir). This is
-// now the ONLY thing that writes that file. A plain `ccc index` run by hand (bypassing this
-// wrapper entirely) still leaves the watermark stale or missing -- there is deliberately no
+// now the ONLY thing that writes that file. The deployed ccc entry refuses raw index; an
+// explicitly invoked vendor backend still leaves the watermark stale or missing. There is no
 // separate, faster, no-reindex path to recover it (that path used to be `stamp`; it asserted
 // freshness without ever observing an indexer run, and was deleted because that assertion could
 // not be verified -- see the file header). The only way to make the watermark fresh again is to
@@ -1167,7 +1148,8 @@ export async function runIndexWrapper(
   const ccc = requireExecutable("ccc");
   if (ccc.isErr()) return err(ccc.error);
 
-  const planned = await computeIndexPlan(project, ccc.value);
+  const backend = cccBackend(ccc.value);
+  const planned = await computeIndexPlan(project, backend);
   if (planned.isErr()) return err(planned.error);
   const plan = planned.value;
   process.stderr.write(planReport(plan));
@@ -1175,8 +1157,7 @@ export async function runIndexWrapper(
     writePlanJsonl(plan);
     return ok({ kind: "plan", exitCode: plan.violations.length === 0 ? 0 : 4 });
   }
-  if (plan.violations.length > 0 && options.acceptPlan !== true)
-    return ok({ kind: "refused", exitCode: 4 });
+  if (plan.violations.length > 0) return ok({ kind: "refused", exitCode: 4 });
   if (options.acceptPlan === true) {
     const accepted = await fromAsyncThrowable(
       () =>
@@ -1188,7 +1169,7 @@ export async function runIndexWrapper(
     )();
     if (accepted.isErr()) return err(accepted.error);
     process.stderr.write(
-      "PLAN: --accept-plan override recorded in .cocoindex_code/RR_ACCEPTED_PLAN.json; measured time budget still applies\n",
+      "PLAN: --accept-plan recorded in .cocoindex_code/RR_ACCEPTED_PLAN.json; no violations permitted; measured time budget still applies\n",
     );
   }
 
@@ -1291,7 +1272,7 @@ export async function runIndexWrapper(
       : observedRequest;
   const certifiedResult = await reindexCertified(
     project,
-    ccc.value,
+    backend,
     timeoutMs,
     expectedHead,
     plan,

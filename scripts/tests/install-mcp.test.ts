@@ -3,7 +3,7 @@
 // port was built from). Every fixture is a throwaway tmp .mcp.json plus fake claude/codex/uv
 // binaries — the real claude/codex CLIs are NEVER invoked by these tests (Safety rule).
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -57,10 +57,34 @@ async function run(
   args: string[],
   env: Record<string, string | undefined> = {},
 ): Promise<{ out: string; code: number }> {
-  const proc = await spawn(["bun", SCRIPT, ...args], {
+  // Deployment now installs the owned ccc entry. Every fixture must have its own home.
+  const home = await mkdtemp(join(tmpdir(), "install-mcp-run-home-"));
+  const fixtureArgs = [...args];
+  if (!fixtureArgs.includes("--home")) fixtureArgs.push("--home", home);
+  const uvIndex = fixtureArgs.indexOf("--uv-bin") + 1;
+  if (fixtureArgs[uvIndex] === FAKE_UV) {
+    const uv = join(home, "uv");
+    await writeFile(
+      uv,
+      `#!${process.execPath}
+import { mkdirSync, symlinkSync } from 'node:fs';
+const child = Bun.spawn([${JSON.stringify(FAKE_UV)}, ...Bun.argv.slice(2)], { stdout: 'inherit', stderr: 'inherit' });
+const code = await child.exited;
+if (code === 0) {
+  mkdirSync(${JSON.stringify(join(home, ".local/bin"))}, { recursive: true });
+  symlinkSync(${JSON.stringify(FAKE_UV)}, ${JSON.stringify(join(home, ".local/bin/ccc"))});
+}
+process.exit(code);
+`,
+    );
+    await chmod(uv, 0o755);
+    fixtureArgs[uvIndex] = uv;
+  }
+  const proc = await spawn(["bun", SCRIPT, ...fixtureArgs], {
     env: { ...process.env, ...env },
     maxBuffer: 4 * 1024 * 1024,
   });
+  await cleanup(home);
   return {
     out: proc.stdout.toString() + proc.stderr.toString(),
     code: proc.exitCode ?? -1,
@@ -232,9 +256,7 @@ describe("install-mcp: happy path registration", () => {
     expect(out).toContain(
       `applied ${dotfiles}/.mcp.json -> Claude(user); codex:config owns Codex MCP entries`,
     );
-    expect(out).toContain(
-      "tip: run 'ccc index <repo>' once to warm cocoindex-code's embedding model.",
-    );
+    expect(out).toContain("tip: run 'rr index'");
     await cleanup(dotfiles);
   });
 
@@ -543,6 +565,8 @@ describe("install-mcp: root argumentization / defaults", () => {
       [
         "bun",
         SCRIPT,
+        "--home",
+        dotfiles,
         "--claude-bin",
         FAKE_CLAUDE,
         "--codex-bin",
@@ -611,7 +635,7 @@ describe("install-mcp: root argumentization / defaults", () => {
     expect(out).toContain(
       `applied ${dotfiles}/.mcp.json -> Claude(user); codex:config owns Codex MCP entries`,
     );
-    expect(out).toContain("tip: run 'ccc index <repo>'");
+    expect(out).toContain("tip: run 'rr index'");
     await cleanup(dotfiles);
   });
 });

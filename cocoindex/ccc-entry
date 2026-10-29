@@ -1,0 +1,17 @@
+#!/usr/bin/env bun
+// dotfiles:ccc-index-entry
+// Policy entry, not a security sandbox. rr invokes the preserved uv backend after admission.
+import { dirname, join } from "node:path";
+
+// argv-forwarding: cocoindex-code ccc (preserve downstream flags and operands)
+const args = Bun.argv.slice(2);
+const command = args.find((arg) => !arg.startsWith("-"));
+if (command === "index") {
+  process.stderr.write("ccc index refused: run 'rr index' in the registered repository. Use 'rr index --plan' to inspect content admission; exclude dumps, huge files and blobs in .cocoindex_code/settings.yml before indexing.\n");
+  process.exit(4);
+}
+const backend = join(dirname(Bun.argv[1]), "ccc-backend");
+const child = Bun.spawn([backend, ...args], {
+  stdin: "inherit", stdout: "inherit", stderr: "inherit",
+});
+process.exitCode = await child.exited;

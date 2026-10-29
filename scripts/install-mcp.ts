@@ -46,11 +46,46 @@
 //        1 for Cleye's native ordinary-unknown-flag refusal, or for a genuinely unexpected
 //        internal error with no shell analogue (FATAL on stderr only for the latter).
 
-import { access, readFile } from "node:fs/promises";
+import {
+  access,
+  readFile,
+  mkdir,
+  realpath,
+  symlink,
+  rename,
+  chmod,
+  unlink,
+} from "node:fs/promises";
+import { join } from "node:path";
 import { homedir } from "node:os";
 import { cli } from "cleye";
 import { attempt } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { cccBackend } from "../tools/repo-retrieve/src/ccc-entry.ts";
+
+export async function installCccEntry(
+  home: string,
+  entry: string,
+): Promise<void> {
+  const bin = join(home, ".local", "bin");
+  const backend = await realpath(cccBackend(entry));
+  const source = await readFile(
+    new URL("../cocoindex/ccc-entry", import.meta.url),
+  );
+  await mkdir(bin, { recursive: true });
+  const backendTemp = join(bin, `ccc-backend.tmp-${process.pid}`);
+  const entryTemp = join(bin, `ccc.tmp-${process.pid}`);
+  await symlink(backend, backendTemp);
+  await rename(backendTemp, join(bin, "ccc-backend"));
+  await Bun.write(entryTemp, source);
+  await chmod(entryTemp, 0o755);
+  // Replace the uv symlink itself, never write through it into the vendor package.
+  await rename(entryTemp, join(bin, "ccc"));
+  await Promise.all([
+    unlink(backendTemp).catch(() => {}),
+    unlink(entryTemp).catch(() => {}),
+  ]);
+}
 
 class UsageError extends Error {}
 
@@ -485,6 +520,15 @@ async function main(): Promise<AbortError | UsageError | undefined> {
   }
   if (installFailure !== undefined) return installFailure;
 
+  if (dryRun) {
+    print(
+      `[dry-run] would install ccc admission entry at ${home}/.local/bin/ccc`,
+    );
+  } else if (!isUnavailable(cccAvailable) || !isUnavailable(uvAvailable)) {
+    const entry = Bun.which(cccBin) ?? join(home, ".local", "bin", "ccc");
+    await installCccEntry(home, entry);
+  }
+
   const servers = await loadMcpServers(mcpJsonPath);
   const names = Object.keys(servers).toSorted();
   const partition = await partitionAvailableServers(servers, (tool) =>
@@ -571,7 +615,7 @@ async function main(): Promise<AbortError | UsageError | undefined> {
   );
 
   print(
-    "tip: run 'ccc index <repo>' once to warm cocoindex-code's embedding model.",
+    "tip: run 'rr index' in a registered repository after content admission passes.",
   );
   return undefined;
 }

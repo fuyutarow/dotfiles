@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.6 — 2026-10-29
+
+- Require rr index admission before invoking the preserved ccc backend
+
 ## 1.5.5 — 2026-10-29
 
 - Resolve ccc Python through the preserved uv backend

@@ -509,14 +509,18 @@ describe.skipIf(ccc === null)(
       expect(dry.stdout).toContain('"path":"bulk/payload.json"');
       expect(dry.stdout).toContain('"type":"summary"');
       const accepted = await cli(root, ["--accept-plan"], env);
-      expect(accepted.code).toBe(1); // the fixture ccc fails; it never embeds
-      expect(accepted.stderr).toContain("override recorded");
+      expect(accepted.code).toBe(4); // violations remain mandatory with the override flag
+      expect(accepted.stderr).toContain("PLAN REFUSED");
+      expect(accepted.stderr).toContain(suggestion);
+      expect(await Bun.file(called).exists()).toBe(false);
+      expect(
+        await Bun.file(join(root, ".cocoindex_code", "INDEXED_AT")).exists(),
+      ).toBe(false);
       expect(
         await Bun.file(
           join(root, ".cocoindex_code", "RR_ACCEPTED_PLAN.json"),
         ).exists(),
-      ).toBe(true);
-      rmSync(called);
+      ).toBe(false);
       settings(root, `${top.exclude}\n- '!bulk/**/*.txt'\n`);
       const fixed = await computeIndexPlan(root, ccc);
       expect(fixed.isOk()).toBe(true);
@@ -593,6 +597,8 @@ describe.skipIf(ccc === null)(
     test("elapsed time budget stops only the fixture client and repeats the contributor report", async () => {
       if (ccc === null) return;
       const root = fixture(true);
+      // Reach the runtime limit only after satisfying mandatory content admission.
+      settings(root, "- 'bulk/payload.json'\n");
       writeFileSync(
         join(root, ".cocoindex_code", "rr.toml"),
         "[index]\nmax_seconds = 1\nest_chunks_per_second = 1000000\n",
@@ -631,7 +637,9 @@ else:
       );
       expect(result.stderr).toContain("left the daemon running");
       expect(result.stderr.match(/Top contributors/gu)?.length).toBe(2);
-      expect(result.stderr).toContain("bulk/payload.json");
+      expect(result.stderr).toContain("bulk (.txt, text)");
+      expect(result.stderr).not.toContain("bulk/payload.json");
+      expect(await Bun.file(join(root, "started")).exists()).toBe(true);
       expect(
         await Bun.file(join(root, ".cocoindex_code", "INDEXED_AT")).exists(),
       ).toBe(false);

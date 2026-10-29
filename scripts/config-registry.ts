@@ -504,6 +504,17 @@ const DOCTOR = "mise run doctor";
 const OTHER: readonly Surface[] = [
   {
     kind: "applied",
+    when: "all",
+    sources: ["cocoindex/ccc-entry"],
+    deployed:
+      "~/.local/bin/ccc (owned entry), ~/.local/bin/ccc-backend (uv backend link)",
+    consumer: "ccc clients and rr index",
+    writer:
+      "mise run cc:install-mcp installs the entry after uv tool installation",
+    verify: "bun test tools/repo-retrieve/tests/ccc-entry.test.ts",
+  },
+  {
+    kind: "applied",
     when: "not-mac",
     sources: ["cocoindex/ccc-daemon.service.wsl"],
     deployed:

@@ -361,7 +361,7 @@ dir = "{{config_root}}"
 description = "oxlint --type-aware the repo's TS against .oxlintrc.json, with no disable comment"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
 depends = ["bun:check", "lint:ts-no-disable", "lint:no-sync"]
-run = "bunx --bun oxlint --type-aware"
+run = "bun scripts/lint-oxlint.ts --type-aware"
 
 # node/no-sync for non-test TS, run through oxlint's own rule (scripts/lint-no-sync.ts). A genuinely
 # required sync call carries `// sync-ok: <reason>` on its line or the comment block above it, so

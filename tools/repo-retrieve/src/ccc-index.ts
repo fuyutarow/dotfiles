@@ -820,10 +820,11 @@ export async function checkIndexFreshness(
     );
   } else if (watermark.value.head !== currentHead) {
     const maxCommits = Number(
-      process.env.REPO_RETRIEVE_MAX_STALE_COMMITS ?? DEFAULT_MAX_STALE_COMMITS,
+      process.env["REPO_RETRIEVE_MAX_STALE_COMMITS"] ??
+        DEFAULT_MAX_STALE_COMMITS,
     );
     const maxAgeMs = Number(
-      process.env.REPO_RETRIEVE_MAX_STALE_AGE_MS ?? DEFAULT_MAX_STALE_AGE_MS,
+      process.env["REPO_RETRIEVE_MAX_STALE_AGE_MS"] ?? DEFAULT_MAX_STALE_AGE_MS,
     );
     const ageMs =
       Temporal.Now.instant().epochMilliseconds -
@@ -997,7 +998,7 @@ async function reindexCertified(
       `FATAL: 'ccc index' succeeded but no index artifacts exist under ${dbDir.value}; ` +
         "the daemon and this process resolve different DB dirs. Compare the 'DB path mappings' " +
         `line of 'ccc doctor' with this process's COCOINDEX_CODE_DB_PATH_MAPPING ` +
-        `(${process.env.COCOINDEX_CODE_DB_PATH_MAPPING ?? "unset"}). Watermark left unwritten\n`,
+        `(${process.env["COCOINDEX_CODE_DB_PATH_MAPPING"] ?? "unset"}). Watermark left unwritten\n`,
     );
     return ok({ code: 2, head: null });
   }
@@ -1173,10 +1174,10 @@ export async function runIndexWrapper(
     );
   }
 
-  const worker = process.env.REPO_RETRIEVE_INDEX_WORKER === "1";
+  const worker = process.env["REPO_RETRIEVE_INDEX_WORKER"] === "1";
   let expectedHead: string | null | undefined;
   if (worker) {
-    expectedHead = process.env.REPO_RETRIEVE_INDEX_REQUEST_HEAD;
+    expectedHead = process.env["REPO_RETRIEVE_INDEX_REQUEST_HEAD"];
     if (expectedHead === "none") expectedHead = null;
   }
   if (mode === "detach") {
@@ -1267,7 +1268,8 @@ export async function runIndexWrapper(
   // A detached worker owns only the request passed by its parent. A foreground
   // scan may fulfill the prior request it captured, including an unresolvable old HEAD.
   const capturedRequest =
-    worker && observedRequest?.id !== process.env.REPO_RETRIEVE_INDEX_REQUEST_ID
+    worker &&
+    observedRequest?.id !== process.env["REPO_RETRIEVE_INDEX_REQUEST_ID"]
       ? null
       : observedRequest;
   const certifiedResult = await reindexCertified(

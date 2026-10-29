@@ -238,7 +238,7 @@ async function processObjects(
     if (loaded.isErr()) return err(loaded.error);
     if (loaded.value.type === "payload") {
       batch.objects++;
-      batch.counts.payload = (batch.counts.payload ?? 0) + 1;
+      batch.counts["payload"] = (batch.counts["payload"] ?? 0) + 1;
       batch.sourceBytes += loaded.value.bytes;
       continue;
     }

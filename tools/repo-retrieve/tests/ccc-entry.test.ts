@@ -62,7 +62,7 @@ async function fixture() {
   const env = {
     ...process.env,
     HOME: home,
-    PATH: `${bin}:${process.env.PATH}`,
+    PATH: `${bin}:${process.env["PATH"]}`,
     XDG_STATE_HOME: join(home, "state"),
     XDG_RUNTIME_DIR: join(home, "runtime"),
     COCOINDEX_CODE_DB_PATH_MAPPING: "",

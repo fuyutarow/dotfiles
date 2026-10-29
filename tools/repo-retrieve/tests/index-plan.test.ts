@@ -135,7 +135,7 @@ if (script === 'ccc_plan.py') {
     root,
     home,
     env: {
-      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      PATH: `${bin}:${process.env["PATH"] ?? ""}`,
       HOME: home,
       XDG_STATE_HOME: join(home, "state"),
       COCOINDEX_CODE_DB_PATH_MAPPING: "",
@@ -277,7 +277,7 @@ describe.skipIf(ccc === null)(
       );
       chmodSync(join(bin, "ccc"), 0o755);
       const env = {
-        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
         COCOINDEX_CODE_DB_PATH_MAPPING: "",
       };
       const plan = await cli(root, ["--plan"], env);
@@ -396,7 +396,7 @@ describe.skipIf(ccc === null)(
       );
       chmodSync(fake, 0o755);
       const refused = await cli(root, [], {
-        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
       });
       expect(refused.code).toBe(4);
       expect(await Bun.file(called).exists()).toBe(false);
@@ -496,7 +496,7 @@ describe.skipIf(ccc === null)(
         `#!${interpreter}\nfrom pathlib import Path\nPath(${JSON.stringify(called)}).write_text('called')\nraise SystemExit(1)\n`,
       );
       chmodSync(fake, 0o755);
-      const env = { PATH: `${bin}:${process.env.PATH ?? ""}` };
+      const env = { PATH: `${bin}:${process.env["PATH"] ?? ""}` };
       const refused = await cli(root, [], env);
       expect(refused.code).toBe(4);
       expect(refused.stderr).toContain(suggestion);
@@ -627,7 +627,7 @@ else:
       );
       chmodSync(fake, 0o755);
       const result = await cli(root, ["--accept-plan"], {
-        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
       });
       expect(result.code).toBe(125);
       expect(result.stderr).toContain("repo-retrieve elapsed");

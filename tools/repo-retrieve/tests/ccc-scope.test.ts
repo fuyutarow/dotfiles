@@ -15,7 +15,7 @@ import { inScopeChanges } from "../src/ccc-scope.ts";
 // answers. Skipped where ccc is absent.
 const ccc = Bun.which("ccc");
 const dirs: string[] = [];
-const originalRustLog = process.env.RUST_LOG;
+const originalRustLog = process.env["RUST_LOG"];
 const bunSpawn = Bun.spawn;
 
 function spawnWithQuietTelemetry<
@@ -62,8 +62,8 @@ beforeAll(() => {
 afterAll(() => {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
   Bun.spawn = bunSpawn;
-  if (originalRustLog === undefined) delete process.env.RUST_LOG;
-  else process.env.RUST_LOG = originalRustLog;
+  if (originalRustLog === undefined) delete process.env["RUST_LOG"];
+  else process.env["RUST_LOG"] = originalRustLog;
 });
 
 function git(dir: string, ...args: string[]): string {

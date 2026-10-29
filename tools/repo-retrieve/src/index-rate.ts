@@ -36,7 +36,7 @@ export function indexRateFile(
   env: Record<string, string | undefined> = process.env,
   host = hostname(),
 ): string {
-  const stateHome = env.XDG_STATE_HOME ?? join(homedir(), ".local/state");
+  const stateHome = env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state");
   const hostKey = host.replaceAll(/[^a-zA-Z0-9._-]/gu, "_");
   return join(stateHome, "repo-retrieve", hostKey, "index-rates.jsonl");
 }

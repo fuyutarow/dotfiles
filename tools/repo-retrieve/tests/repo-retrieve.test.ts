@@ -331,7 +331,7 @@ function run(
     timeout,
     env: {
       ...process.env,
-      PATH: `${tools.bin}:${process.env.PATH ?? ""}`,
+      PATH: `${tools.bin}:${process.env["PATH"] ?? ""}`,
       FAKE_SEARCH_LOG: tools.log,
       // Fixtures own their index data instead of inheriting the host cache map.
       COCOINDEX_CODE_DB_PATH_MAPPING: "",
@@ -778,7 +778,7 @@ describe("repo-retrieve route contract", () => {
         timeout: 5_000,
         env: {
           ...process.env,
-          PATH: `${tools.bin}:${process.env.PATH ?? ""}`,
+          PATH: `${tools.bin}:${process.env["PATH"] ?? ""}`,
           FAKE_SEARCH_LOG: tools.log,
           FAKE_RG_THREE_LINES: "1",
         },

@@ -133,7 +133,7 @@ export function loadRetrievalConfig(
   if (parsed.isErr()) return err(parsed.error);
   const parsedToml = parsed.value;
   const raw = asTable(parsedToml) ?? {};
-  const d = asTable(raw.definition) ?? {};
+  const d = asTable(raw["definition"]) ?? {};
   const fail = (key: string, want: string): Error =>
     new Error(`${path}: definition.${key} must be ${want}`);
   const num = (t: Table, key: string, at: string): Result<number, Error> => {
@@ -160,7 +160,7 @@ export function loadRetrievalConfig(
   if (pool.value > recallCount.value)
     return err(fail("pool", `at most recall (${recallCount.value})`));
 
-  const p = table(d.priors, "priors");
+  const p = table(d["priors"], "priors");
   if (p.isErr()) return err(p.error);
   const publicPrior = num(p.value, "public", "priors.");
   if (publicPrior.isErr()) return err(publicPrior.error);
@@ -177,13 +177,13 @@ export function loadRetrievalConfig(
     test: testPrior.value,
   };
 
-  const judgeValue = d.judge;
+  const judgeValue = d["judge"];
   if (judgeValue !== "jev" && judgeValue !== "local")
     return err(fail("judge", '"jev" or "local"'));
   const judge: Judge = judgeValue === "jev" ? "jev" : "local";
-  const endpoints = table(d.jev_endpoints, "jev_endpoints");
+  const endpoints = table(d["jev_endpoints"], "jev_endpoints");
   if (endpoints.isErr()) return err(endpoints.error);
-  const providerValue = d.jev_provider;
+  const providerValue = d["jev_provider"];
   const provider =
     typeof providerValue === "string" ? providerValue : undefined;
   if (provider === undefined)
@@ -196,16 +196,16 @@ export function loadRetrievalConfig(
         `one of [definition.jev_endpoints.*] (${Object.keys(endpoints.value).join(", ")})`,
       ),
     );
-  const urlValue = e.url;
+  const urlValue = e["url"];
   const url = typeof urlValue === "string" ? urlValue : undefined;
   if (url === undefined)
     return err(fail(`jev_endpoints.${provider}.url`, "an https:// URL"));
   if (!url.startsWith("https://"))
     return err(fail(`jev_endpoints.${provider}.url`, "an https:// URL"));
-  const model = configuredString(e.model, `jev_endpoints.${provider}.model`);
+  const model = configuredString(e["model"], `jev_endpoints.${provider}.model`);
   if (model.isErr()) return err(model.error);
   const whenExhausted = configuredString(
-    e.when_exhausted,
+    e["when_exhausted"],
     `jev_endpoints.${provider}.when_exhausted`,
   );
   if (whenExhausted.isErr()) return err(whenExhausted.error);
@@ -214,12 +214,12 @@ export function loadRetrievalConfig(
   if (whenExhausted.value !== undefined)
     jevEndpoint.whenExhausted = whenExhausted.value;
 
-  const noEgress = NoEgressSchema.safeParse(d.no_egress);
+  const noEgress = NoEgressSchema.safeParse(d["no_egress"]);
   const noEgressPaths = noEgress.success ? noEgress.data : undefined;
   if (noEgressPaths === undefined)
     return err(fail("no_egress", "a list of paths"));
 
-  const ths = table(d.thresholds, "thresholds");
+  const ths = table(d["thresholds"], "thresholds");
   if (ths.isErr()) return err(ths.error);
   const thresholdsOf = (j: Judge): Result<Thresholds, Error> => {
     const t = table(ths.value[j], `thresholds.${j}`);

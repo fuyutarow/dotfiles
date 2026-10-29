@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.12 — 2026-10-29
+
+- Preview target preflight verdicts without acting
+
 ## 1.12.11 — 2026-10-29
 
 - Enable safe ccc index DB reclamation through disk free

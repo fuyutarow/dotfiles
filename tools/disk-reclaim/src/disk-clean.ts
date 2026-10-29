@@ -52,7 +52,7 @@ type Dependencies = {
 
 // The Bun cache command is a descendant of the adapter child. Kill the whole
 // process group on cancellation and wait for the pipes and child to close.
-async function cleanProbe(
+export async function cleanProbe(
   action: string | undefined,
   ms: number,
   signal?: AbortSignal,

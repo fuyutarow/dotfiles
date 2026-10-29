@@ -1,10 +1,11 @@
-import { mkdir, statfs, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { fromAsyncThrowable } from "neverthrow";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { Candidate } from "./model.ts";
 import { runProbe } from "./disk-probe.ts";
+import { measureToolchain } from "./disk-toolchains-measure.ts";
 import { stateDir, waitForLock } from "./receipt.ts";
 import { workerMutationRefusal } from "./lib/worker-guard.ts";
 
@@ -74,18 +75,7 @@ export async function freeToolchains(
     lock: (ms) =>
       waitForLock("toolchains", stateDir(), report, Math.min(10, ms / 1000)),
     probe: runProbe,
-    measure: async (path) => {
-      const s = await statfs(path);
-      return {
-        time: Temporal.Now.instant().toString(),
-        source: "statfs",
-        mount: null,
-        filesystem: null,
-        available_bytes: s.bavail * s.bsize,
-        free_inodes: s.ffree,
-        error: null,
-      };
-    },
+    measure: measureToolchain,
     receipt: async (items) => {
       const id = crypto.randomUUID();
       const dir = join(stateDir(), "disk-receipts");

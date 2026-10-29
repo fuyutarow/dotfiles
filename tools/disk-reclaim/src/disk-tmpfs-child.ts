@@ -4,7 +4,7 @@ import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { loadConfig } from "./engine.ts";
 import { protectedReason } from "./lib/protected.ts";
 import { createTmpfsTarget } from "./targets/tmpfs.ts";
-import { cleanAction } from "./disk-clean-action.ts";
+import { cleanAction, cleanPreflight } from "./disk-clean-action.ts";
 import type { Context } from "./targets/index.ts";
 
 const fail = (message: string): never => {
@@ -80,12 +80,17 @@ if (action === undefined) {
   console.log(JSON.stringify(rows));
 } else {
   const parsed = jsonOf(
-    z.object({ id: z.string(), path: z.string(), fingerprint: z.string() }),
+    z.object({
+      id: z.string(),
+      path: z.string(),
+      fingerprint: z.string(),
+      preview: z.boolean().optional(),
+    }),
   ).safeParse(action);
   const request = parsed.success ? parsed.data : fail("invalid tmpfs action");
   console.log(
     JSON.stringify(
-      await cleanAction(request, {
+      await (request.preview === true ? cleanPreflight : cleanAction)(request, {
         target,
         context: ctx,
         identity,

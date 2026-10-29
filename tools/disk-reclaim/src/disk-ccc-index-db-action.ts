@@ -1,7 +1,7 @@
 import { dirname } from "node:path";
 import type { Context, Target } from "./targets/index.ts";
 
-export async function cccIndexDbAction<T>(
+export async function cccIndexDbPreflight<T>(
   request: { id: string; path: string; fingerprint: string },
   deps: {
     target: Target;
@@ -48,7 +48,25 @@ export async function cccIndexDbAction<T>(
       reason: "fingerprint changed",
       effect: "none",
     };
-  const result = await deps.target.act(current, context);
+  return {
+    verdict: "safe" as const,
+    reason: current.reason,
+    effect: "none" as const,
+    candidate: current,
+    before,
+    context: context,
+  };
+}
+
+export async function cccIndexDbAction<T>(
+  request: Parameters<typeof cccIndexDbPreflight<T>>[0],
+  deps: Parameters<typeof cccIndexDbPreflight<T>>[1],
+) {
+  const checked = await cccIndexDbPreflight(request, deps);
+  if (checked.candidate === undefined || checked.context === undefined)
+    return checked;
+  const { candidate, before, context } = checked;
+  const result = await deps.target.act(candidate, context);
   const after = await deps.measure(request.path);
   return {
     verdict: result.ok ? "completed" : "failed",

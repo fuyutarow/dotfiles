@@ -37,12 +37,60 @@ type Dependencies = {
   ) => Promise<{ id: string; path: string; delivery_error: null }>;
 };
 
+export async function misePreflight(
+  deps: Pick<Dependencies, "target" | "fingerprint" | "measure">,
+  ctx: Context,
+) {
+  const available = await deps.target.available(ctx);
+  if (!available.available)
+    return {
+      kind: "unknown" as const,
+      reason: available.skip_reason ?? "target unavailable",
+    };
+  const first = await deps.target.plan(ctx);
+  if (first.length === 0) return { kind: "empty" as const };
+  const candidate = first[0];
+  if (
+    first.length !== 1 ||
+    candidate === undefined ||
+    candidate.verdict !== "RECLAIM"
+  )
+    return {
+      kind: "unknown" as const,
+      reason: "target plan unavailable or refused",
+    };
+  const fingerprint = await deps.fingerprint();
+  const before = await deps.measure();
+  const reavailable = await deps.target.available(ctx);
+  const fresh = await deps.target.plan(ctx);
+  const current = fresh[0];
+  if (!reavailable.available)
+    return {
+      kind: "unknown" as const,
+      reason: reavailable.skip_reason ?? "target unavailable",
+    };
+  if (
+    current === undefined ||
+    fresh.length !== 1 ||
+    current.verdict !== "RECLAIM" ||
+    current.id !== candidate.id ||
+    current.reason !== candidate.reason ||
+    (await deps.fingerprint()) !== fingerprint
+  )
+    return {
+      kind: "changed" as const,
+      reason: "target plan changed during revalidation",
+    };
+  return { kind: "safe" as const, candidate: current, fingerprint, before };
+}
+
 export async function freeMiseConfigs(
   deadline: number,
   start: number,
   progress: boolean,
   injected?: Dependencies,
   signal?: AbortSignal,
+  preview = false,
 ) {
   const remaining = () => Math.floor(deadline - (performance.now() - start));
   const report = (stage: string) => {
@@ -185,7 +233,7 @@ export async function freeMiseConfigs(
   let receipt: Awaited<ReturnType<Dependencies["receipt"]>> | null = null;
   let exit = 4;
   const result = () => ({ item, before, after, receipt, exit });
-  const guard = deps.guard();
+  const guard = preview ? null : deps.guard();
   if (guard !== null) {
     item.verdict = "deny";
     item.reason = guard;
@@ -197,7 +245,11 @@ export async function freeMiseConfigs(
     return result();
   }
   report("waiting for lock");
-  const locked = await fromAsyncThrowable(() => deps.lock(remaining()))();
+  const locked = await fromAsyncThrowable(() =>
+    preview
+      ? Promise.resolve({ release: () => {}, exit: 0, error: null })
+      : deps.lock(remaining()),
+  )();
   if (locked.isErr()) {
     item.reason = `lock unavailable: ${String(locked.error)}`;
     return result();
@@ -213,47 +265,28 @@ export async function freeMiseConfigs(
       item.reason = "deadline expired";
       return;
     }
-    const available = await deps.target.available(ctx);
-    if (!available.available) {
-      item.reason = available.skip_reason ?? "target unavailable";
-      return;
-    }
-    const first = await deps.target.plan(ctx);
-    if (first.length === 0) {
+    const checked = await misePreflight(deps, ctx);
+    if (checked.kind === "empty") {
       item.verdict = "completed";
       item.reason = "no dead config records";
       exit = 0;
       return;
     }
-    const candidate = first[0];
-    if (
-      first.length !== 1 ||
-      candidate === undefined ||
-      candidate.verdict !== "RECLAIM"
-    ) {
-      item.reason = "target plan unavailable or refused";
+    if (checked.kind !== "safe") {
+      item.reason = checked.reason;
+      if (checked.kind === "changed") {
+        item.verdict = "changed";
+        exit = 1;
+      }
       return;
     }
-    item.fingerprint = await deps.fingerprint();
-    before = await deps.measure();
-    const reavailable = await deps.target.available(ctx);
-    const fresh = await deps.target.plan(ctx);
-    const current = fresh[0];
-    if (!reavailable.available) {
-      item.reason = reavailable.skip_reason ?? "target unavailable";
-      return;
-    }
-    if (
-      current === undefined ||
-      fresh.length !== 1 ||
-      current.verdict !== "RECLAIM" ||
-      current.id !== candidate.id ||
-      current.reason !== candidate.reason ||
-      (await deps.fingerprint()) !== item.fingerprint
-    ) {
-      item.verdict = "changed";
-      item.reason = "target plan changed during revalidation";
-      exit = 1;
+    item.fingerprint = checked.fingerprint;
+    before = checked.before;
+    const current = checked.candidate;
+    if (preview) {
+      item.verdict = "safe";
+      item.reason = current.reason;
+      exit = 0;
       return;
     }
     if (remaining() <= 0 || signal?.aborted === true) {

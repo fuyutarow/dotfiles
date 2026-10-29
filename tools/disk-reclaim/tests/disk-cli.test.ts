@@ -1464,9 +1464,9 @@ test("clean plan-only request cannot act even with approval", async () => {
     "",
     { ...process.env, HOME: home, RECLAIM_STATE_DIR: `${home}/state` },
   );
-  expect(result.exit).toBe(4);
+  expect(result.exit).toBe(0);
   expect(jsonText.safeParse(result.out).data).toMatchObject({
-    outcome: "unknown",
+    outcome: "completed",
     items: [],
     receipt: null,
   });
@@ -1644,9 +1644,9 @@ test("rust plan-only requests cannot invoke an action", async () => {
     "",
     { ...process.env, HOME: home, RECLAIM_STATE_DIR: join(home, "state") },
   );
-  expect(result.exit).toBe(4);
+  expect(result.exit).toBe(0);
   expect(jsonText.safeParse(result.out).data).toMatchObject({
-    outcome: "unknown",
+    outcome: "completed",
     items: [],
     receipt: null,
   });
@@ -2300,9 +2300,9 @@ test("builds planning and unavailable targets never act", async () => {
     "",
     env,
   );
-  expect(plan.exit).toBe(4);
+  expect(plan.exit).toBe(0);
   expect(jsonText.safeParse(plan.out).data).toMatchObject({
-    outcome: "unknown",
+    outcome: "completed",
     items: [],
     receipt: null,
   });
@@ -2765,3 +2765,281 @@ for (const scenario of [
     expect(actions).toBe(scenario === "remove" || scenario === "zero" ? 1 : 0);
   });
 }
+
+test.each([
+  "mise-configs",
+  "clean",
+  "rust",
+  "toolchains",
+  "builds",
+  "tmpfs",
+  "scratch",
+  "ccc-index-db",
+] as const)(
+  "plan entry uses %s planning without action",
+  async (targetName) => {
+    const { main } = await import("../src/disk.ts");
+    const candidates: Candidate[] = [
+      await fakeTree("/fixture/reclaim", "eligible fixture"),
+      await fakeKeep("/fixture/keep", "retained fixture"),
+    ];
+    let plans = 0;
+    let actions = 0;
+    const fixtureTarget: Target = {
+      name: "mise-configs",
+      tier: "blind",
+      available: () => ({ available: true, skip_reason: null }),
+      plan: () => {
+        plans++;
+        return Promise.resolve(candidates);
+      },
+      act: () => {
+        actions++;
+        expect.unreachable("action called");
+      },
+    };
+    const probe = (action: string | undefined) => {
+      if (action !== undefined) {
+        const request = jsonOf(z.object({ preview: z.boolean() })).safeParse(
+          action,
+        );
+        if (!request.success || !request.data.preview) {
+          actions++;
+          expect.unreachable("action called");
+        }
+        return Promise.resolve({
+          out: JSON.stringify({
+            verdict: "safe",
+            reason: "eligible fixture",
+            effect: "none",
+            same_filesystem: true,
+          }),
+          err: "",
+          exit: 0,
+          timedOut: false,
+        });
+      }
+      plans++;
+      return Promise.resolve({
+        out: JSON.stringify(
+          candidates.map((candidate) => ({
+            candidate,
+            fingerprint: "identity",
+          })),
+        ),
+        err: "",
+        exit: 0,
+        timedOut: false,
+      });
+    };
+    let output = "";
+    const previous = process.exitCode;
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      process.exitCode = previous ?? 0;
+    });
+    process.exitCode = 0;
+    await main(
+      ["plan", "targets", targetName, "--no-progress"],
+      undefined,
+      (text) => {
+        output += text;
+      },
+      undefined,
+      undefined,
+      undefined,
+      { probe, miseTarget: fixtureTarget },
+    );
+    expect(process.exitCode).toBe(0);
+    expect(jsonText.safeParse(output).data).toMatchObject({
+      outcome: "completed",
+      receipt: null,
+      counts: { selected: 2, completed: 0, refused: 1, unknown: 0 },
+      items: [
+        {
+          target: targetName,
+          path: "/fixture/reclaim",
+          verdict: "safe",
+          reason: "eligible fixture",
+          effect: "none",
+        },
+        {
+          target: targetName,
+          path: "/fixture/keep",
+          verdict: "keep",
+          reason: "retained fixture",
+          effect: "none",
+        },
+      ],
+    });
+    expect(plans).toBe(1);
+    expect(actions).toBe(0);
+  },
+);
+
+test.each([
+  "clean",
+  "rust",
+  "tmpfs",
+  "toolchains",
+  "builds",
+  "scratch",
+  "ccc-index-db",
+] as const)("%s plan entry shares the action refusal", async (targetName) => {
+  const { main } = await import("../src/disk.ts");
+  const { cleanAction, cleanPreflight } =
+    await import("../src/disk-clean-action.ts");
+  const { buildsAction, buildsPreflight } =
+    await import("../src/disk-builds-action.ts");
+  const { scratchAction, scratchPreflight } =
+    await import("../src/disk-scratch-action.ts");
+  const { cccIndexDbAction, cccIndexDbPreflight } =
+    await import("../src/disk-ccc-index-db-action.ts");
+  const path = "/fixture/protected";
+  const eligible = await fakeTree(path, "eligible fixture");
+  const kept = await fakeKeep(path, "protected fixture");
+  let actions = 0;
+  const target = {
+    name: targetName,
+    tier: "blind" as const,
+    fastFirst: true as const,
+    available: () => ({ available: true as const, skip_reason: null }),
+    plan: () =>
+      Promise.resolve([
+        targetName === "scratch" || targetName === "ccc-index-db"
+          ? kept
+          : eligible,
+      ]),
+    recheck: () => Promise.resolve(kept),
+    act: () => {
+      actions++;
+      expect.unreachable("action must not run");
+    },
+  };
+  const deps = {
+    target,
+    context: cleanContext,
+    identity: () => Promise.resolve("same"),
+    protection: () => "fixture protection",
+    device: () => Promise.resolve(1),
+    measure: () => Promise.resolve(cleanObservation(100)),
+    fail: (message: string): never => {
+      expect.unreachable(message);
+    },
+  };
+  const request = { id: path, path, fingerprint: "same" };
+  const toolDeps = {
+    config: cleanContext.config,
+    target,
+    fingerprint: deps.identity,
+    protection: deps.protection,
+  };
+  const check = async (preview: boolean) => {
+    if (targetName === "toolchains")
+      return toolchainsWorker({ ...request, preview }, toolDeps);
+    if (targetName === "builds")
+      return preview
+        ? buildsPreflight(request, deps)
+        : buildsAction(request, deps);
+    if (targetName === "scratch")
+      return preview
+        ? scratchPreflight(request, deps)
+        : scratchAction(request, deps);
+    if (targetName === "ccc-index-db")
+      return preview
+        ? cccIndexDbPreflight(request, deps)
+        : cccIndexDbAction(request, deps);
+    return preview ? cleanPreflight(request, deps) : cleanAction(request, deps);
+  };
+  const probe = async (action: string | undefined) => ({
+    out: JSON.stringify(
+      action === undefined
+        ? [{ candidate: eligible, fingerprint: "same" }]
+        : await check(true),
+    ),
+    err: "",
+    exit: 0,
+    timedOut: false,
+  });
+  let output = "";
+  const previous = process.exitCode;
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => {
+    process.exitCode = previous ?? 0;
+  });
+  process.exitCode = 0;
+  await main(
+    ["plan", "targets", targetName, "--no-progress"],
+    undefined,
+    (text) => {
+      output += text;
+    },
+    undefined,
+    undefined,
+    undefined,
+    { probe },
+  );
+  const acted = await check(false);
+  let reason = "protected fixture";
+  if (targetName === "toolchains") reason = "fixture protection";
+  else if (["clean", "rust", "tmpfs"].includes(targetName))
+    reason = "protected: fixture protection";
+  expect(acted).toMatchObject({ verdict: "keep", reason, effect: "none" });
+  expect(jsonText.safeParse(output).data).toMatchObject({
+    items: [{ verdict: "keep", reason, effect: "none" }],
+  });
+  expect(process.exitCode).toBe(0);
+  expect(actions).toBe(0);
+});
+
+test("real clean plan preflight leaves a reclaimable cache untouched", async () => {
+  const home = await mkdtemp(join(tmpdir(), "disk-clean-real-plan-"));
+  const path = join(home, ".npm/_cacache");
+  await mkdir(path, { recursive: true });
+  await writeFile(join(path, "payload"), "keep");
+  const result = await run(["plan", "targets", "clean", "--no-progress"], "", {
+    ...process.env,
+    HOME: home,
+    RECLAIM_STATE_DIR: join(home, "state"),
+  });
+  expect([0, 4]).toContain(result.exit);
+  expect(jsonText.safeParse(result.out).data).toMatchObject({
+    items: [{ path, effect: "none" }],
+    receipt: null,
+  });
+  expect(await readFile(join(path, "payload"), "utf8")).toBe("keep");
+  expect(existsSync(join(home, "state"))).toBe(false);
+});
+
+test("real mise-configs plan revalidates dead records without pruning", async () => {
+  const home = await mkdtemp(join(tmpdir(), "disk-mise-real-plan-"));
+  const state = join(home, "mise");
+  await mkdir(join(state, "tracked-configs"), { recursive: true });
+  const record = join(state, "tracked-configs", "dead");
+  await symlink(join(home, "missing.toml"), record);
+  const result = await run(
+    ["plan", "targets", "mise-configs", "--no-progress"],
+    "",
+    {
+      ...process.env,
+      HOME: home,
+      MISE_STATE_DIR: state,
+      RECLAIM_STATE_DIR: join(home, "reclaim"),
+    },
+  );
+  expect(result.exit).toBe(0);
+  expect(jsonText.safeParse(result.out).data).toMatchObject({
+    items: [
+      {
+        verdict: "safe",
+        reason: "1 dead tracked, trusted, or ignored config records",
+        effect: "none",
+      },
+    ],
+    receipt: null,
+  });
+  expect(existsSync(join(home, "reclaim"))).toBe(false);
+  expect(await (await import("node:fs/promises")).readlink(record)).toBe(
+    join(home, "missing.toml"),
+  );
+});

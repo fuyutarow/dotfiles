@@ -2,7 +2,7 @@ import { dirname } from "node:path";
 import type { Context } from "./targets/index.ts";
 import type { createScratchTarget } from "./targets/scratch.ts";
 
-export async function scratchAction<T>(
+export async function scratchPreflight<T>(
   request: { id: string; path: string; fingerprint: string },
   deps: {
     target: ReturnType<typeof createScratchTarget>;
@@ -42,7 +42,25 @@ export async function scratchAction<T>(
       reason: "fingerprint changed",
       effect: "none",
     };
-  const result = await deps.target.act(current, deps.context);
+  return {
+    verdict: "safe" as const,
+    reason: current.reason,
+    effect: "none" as const,
+    candidate: current,
+    before,
+    context: deps.context,
+  };
+}
+
+export async function scratchAction<T>(
+  request: Parameters<typeof scratchPreflight<T>>[0],
+  deps: Parameters<typeof scratchPreflight<T>>[1],
+) {
+  const checked = await scratchPreflight(request, deps);
+  if (checked.candidate === undefined || checked.context === undefined)
+    return checked;
+  const { candidate, before, context } = checked;
+  const result = await deps.target.act(candidate, context);
   const after = await deps.measure(request.path);
   return {
     verdict: result.ok ? "completed" : "failed",

@@ -4,7 +4,7 @@ import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { loadConfig } from "./engine.ts";
 import { createBuildsTarget } from "./targets/builds.ts";
 import type { Context } from "./targets/index.ts";
-import { buildsAction } from "./disk-builds-action.ts";
+import { buildsAction, buildsPreflight } from "./disk-builds-action.ts";
 
 const fail = (message: string): never => {
   process.stderr.write(`${message}\n`);
@@ -57,19 +57,27 @@ if (action === undefined) {
   console.log(JSON.stringify(rows));
 } else {
   const parsed = jsonOf(
-    z.object({ id: z.string(), path: z.string(), fingerprint: z.string() }),
+    z.object({
+      id: z.string(),
+      path: z.string(),
+      fingerprint: z.string(),
+      preview: z.boolean().optional(),
+    }),
   ).safeParse(action);
   const request = parsed.success ? parsed.data : fail("invalid builds action");
   console.log(
     JSON.stringify(
-      await buildsAction(request, {
-        target,
-        context: ctx,
-        identity,
-        device: async (path) => (await lstat(path)).dev,
-        measure,
-        fail,
-      }),
+      await (request.preview === true ? buildsPreflight : buildsAction)(
+        request,
+        {
+          target,
+          context: ctx,
+          identity,
+          device: async (path) => (await lstat(path)).dev,
+          measure,
+          fail,
+        },
+      ),
     ),
   );
 }

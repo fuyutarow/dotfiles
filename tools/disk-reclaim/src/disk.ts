@@ -7,6 +7,7 @@ import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { ReclaimRecord } from "./records.ts";
 import { runProbe } from "./disk-probe.ts";
 import { planPaths } from "./disk-path-plan.ts";
+import { planTarget, type PlanDependencies } from "./disk-target-plan.ts";
 import { unavailableRecords } from "./disk-records.ts";
 import { movePaths } from "./disk-move.ts";
 import { freeMiseConfigs } from "./disk-mise-configs.ts";
@@ -20,7 +21,7 @@ import pkg from "../package.json" with { type: "json" };
 
 const grammar: Record<string, string[]> = {
   plan: [
-    "targets [--target TARGET]... [--tier TIER | --all] [--on windows] [--host ALIAS] [--only ABS] [--fetch] [--approve ITEM]... [--within DURATION]",
+    "targets [TARGET... | --target TARGET]... [--tier TIER | --all] [--on windows] [--host ALIAS] [--only ABS] [--fetch] [--approve ITEM]... [--within DURATION]",
     "paths ABS... [--within DURATION]",
     "capacity --path ABS --min-available SIZE [--within DURATION]",
     "workspace-gc [--all] [--legacy] [--within DURATION]",
@@ -374,6 +375,7 @@ export async function main(
   buildsDependencies?: Parameters<typeof freeBuilds>[3],
   scratchDependencies?: Parameters<typeof freeScratch>[3],
   cccDependencies?: Parameters<typeof freeCccIndexDb>[3],
+  planDependencies?: PlanDependencies,
 ) {
   const start = performance.now();
   const started = Temporal.Now.instant().toString();
@@ -448,9 +450,14 @@ export async function main(
       (positional.length > 0 && options.has("tier"))
     )
       invalid("select targets or --tier blind");
-  } else if (positional.length > 0) invalid("unexpected positional argument");
+  } else if (key !== "plan targets" && positional.length > 0)
+    invalid("unexpected positional argument");
+  if (key === "plan targets" && positional.length > 0 && options.has("target"))
+    invalid("conflicting selectors");
   const targets =
-    key === "free targets" ? positional : (options.get("target") ?? []);
+    key === "free targets" || (key === "plan targets" && positional.length > 0)
+      ? positional
+      : (options.get("target") ?? []);
   if (
     targets.some((target) => !diskTargetNames.has(target)) ||
     new Set(targets).size !== targets.length
@@ -464,7 +471,7 @@ export async function main(
     invalid("invalid tier");
   if (
     key === "plan targets" &&
-    [options.has("target"), options.has("tier"), options.has("all")].filter(
+    [targets.length > 0, options.has("tier"), options.has("all")].filter(
       Boolean,
     ).length > 1
   )
@@ -525,6 +532,62 @@ export async function main(
     goal = { kind: "min_available_bytes", value: minimum };
   else if (amount !== undefined)
     goal = { kind: "available_delta_bytes", value: amount };
+  if (
+    key === "plan targets" &&
+    targets.length === 1 &&
+    [
+      "mise-configs",
+      "clean",
+      "rust",
+      "toolchains",
+      "builds",
+      "tmpfs",
+      "scratch",
+      "ccc-index-db",
+    ].includes(targets[0] ?? "") &&
+    scope.host === "local"
+  ) {
+    const controller = new AbortController();
+    let cancelled = 0;
+    const interrupt = () => {
+      cancelled = 130;
+      controller.abort();
+    };
+    const terminate = () => {
+      cancelled = 143;
+      controller.abort();
+    };
+    process.once("SIGINT", interrupt);
+    process.once("SIGTERM", terminate);
+    const remaining = Math.floor(deadline - (performance.now() - start));
+    const result = await planTarget(
+      targets[0] ?? "",
+      remaining,
+      controller.signal,
+      get("only"),
+      planDependencies,
+    );
+    process.removeListener("SIGINT", interrupt);
+    process.removeListener("SIGTERM", terminate);
+    const counts = {
+      selected: result.items.length,
+      completed: 0,
+      refused: result.items.filter((item) =>
+        ["keep", "ask", "deny", "changed"].includes(item.verdict),
+      ).length,
+      failed: 0,
+      unknown: result.items.filter((item) => item.verdict === "unknown").length,
+    };
+    let outcome = "completed";
+    if (result.error !== null || counts.unknown > 0) outcome = "unknown";
+    if (cancelled !== 0) outcome = "cancelled";
+    output(
+      `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items: result.items, counts, errors: result.error === null ? [] : [{ code: "target_error", message: result.error, scope }], receipt: null })}\n`,
+    );
+    process.exitCode = outcome === "unknown" ? 4 : 0;
+    if (cancelled !== 0) process.exitCode = cancelled;
+    return;
+  }
   if (key === "plan paths") {
     const controller = new AbortController();
     let cancelled = 0;

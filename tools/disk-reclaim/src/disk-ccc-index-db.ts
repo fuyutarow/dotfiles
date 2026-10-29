@@ -50,7 +50,7 @@ type Dependencies = {
   ) => Promise<{ id: string; path: string; delivery_error: null }>;
 };
 
-async function cccIndexDbProbe(
+export async function cccIndexDbProbe(
   action: string | undefined,
   ms: number,
   signal?: AbortSignal,

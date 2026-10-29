@@ -50,7 +50,7 @@ type Dependencies = {
   ) => Promise<{ id: string; path: string; delivery_error: null }>;
 };
 
-async function scratchProbe(
+export async function scratchProbe(
   action: string | undefined,
   ms: number,
   signal?: AbortSignal,

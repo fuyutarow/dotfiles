@@ -50,7 +50,7 @@ type Dependencies = {
   ) => Promise<{ id: string; path: string; delivery_error: null }>;
 };
 
-async function buildsProbe(
+export async function buildsProbe(
   action: string | undefined,
   ms: number,
   signal?: AbortSignal,

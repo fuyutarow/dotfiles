@@ -4,7 +4,10 @@ import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { loadConfig } from "./engine.ts";
 import { createCccIndexDbTarget } from "./targets/ccc-index-db.ts";
 import type { Context } from "./targets/index.ts";
-import { cccIndexDbAction } from "./disk-ccc-index-db-action.ts";
+import {
+  cccIndexDbAction,
+  cccIndexDbPreflight,
+} from "./disk-ccc-index-db-action.ts";
 
 const fail = (message: string): never => {
   process.stderr.write(`${message}\n`);
@@ -68,21 +71,29 @@ if (action === undefined) {
   console.log(JSON.stringify(rows));
 } else {
   const parsed = jsonOf(
-    z.object({ id: z.string(), path: z.string(), fingerprint: z.string() }),
+    z.object({
+      id: z.string(),
+      path: z.string(),
+      fingerprint: z.string(),
+      preview: z.boolean().optional(),
+    }),
   ).safeParse(action);
   const request = parsed.success
     ? parsed.data
     : fail("invalid ccc-index-db action");
   console.log(
     JSON.stringify(
-      await cccIndexDbAction(request, {
-        target,
-        context: ctx,
-        identity,
-        device: async (path) => (await lstat(path)).dev,
-        measure,
-        fail,
-      }),
+      await (request.preview === true ? cccIndexDbPreflight : cccIndexDbAction)(
+        request,
+        {
+          target,
+          context: ctx,
+          identity,
+          device: async (path) => (await lstat(path)).dev,
+          measure,
+          fail,
+        },
+      ),
     ),
   );
 }

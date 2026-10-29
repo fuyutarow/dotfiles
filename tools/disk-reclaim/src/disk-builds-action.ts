@@ -2,7 +2,7 @@ import { dirname } from "node:path";
 import type { Context } from "./targets/index.ts";
 import type { createBuildsTarget } from "./targets/builds.ts";
 
-export async function buildsAction<T>(
+export async function buildsPreflight<T>(
   request: { id: string; path: string; fingerprint: string },
   deps: {
     target: ReturnType<typeof createBuildsTarget>;
@@ -48,7 +48,25 @@ export async function buildsAction<T>(
       reason: "fingerprint changed",
       effect: "none",
     };
-  const result = await deps.target.act(current, deps.context);
+  return {
+    verdict: "safe" as const,
+    reason: current.reason,
+    effect: "none" as const,
+    candidate: current,
+    before,
+    context: deps.context,
+  };
+}
+
+export async function buildsAction<T>(
+  request: Parameters<typeof buildsPreflight<T>>[0],
+  deps: Parameters<typeof buildsPreflight<T>>[1],
+) {
+  const checked = await buildsPreflight(request, deps);
+  if (checked.candidate === undefined || checked.context === undefined)
+    return checked;
+  const { candidate, before, context } = checked;
+  const result = await deps.target.act(candidate, context);
   const after = await deps.measure(request.path);
   return {
     verdict: result.ok ? "completed" : "failed",

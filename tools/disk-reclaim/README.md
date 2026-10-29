@@ -1,5 +1,13 @@
 # disk-reclaim
 
+`disk plan targets TARGET` previews a single landed target (mise-configs, clean, rust,
+toolchains, builds, tmpfs, scratch, or ccc-index-db). It reports per-item verdicts and
+reasons after the same read-only preflight used by `disk free targets`. It does not run
+the action or write a receipt. A safe verdict is a point-in-time observation: free
+rechecks before acting. The `selected` count is the number of returned items.
+`mise-configs` has no per-item act-time KEEP check; its bulk config-prune preflight
+checks availability, fingerprint and the plan again.
+
 The `disk plan paths ABS...` entry previews the legacy delete checks without deleting.
 It returns `disk.result/1` rows and bounds the read-only probe with `--within` (default
 120 seconds). A timeout or incomplete safety information returns unknown; a completed

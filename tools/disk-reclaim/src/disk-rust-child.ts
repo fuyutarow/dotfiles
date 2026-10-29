@@ -5,7 +5,7 @@ import { protectedReason } from "./lib/protected.ts";
 import { createRustTarget } from "./targets/rust.ts";
 import type { Context } from "./targets/index.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { cleanAction } from "./disk-clean-action.ts";
+import { cleanAction, cleanPreflight } from "./disk-clean-action.ts";
 
 const fail = (message: string): never => {
   process.stderr.write(`${message}\n`);
@@ -47,10 +47,15 @@ const measure = async (path: string) => {
 };
 async function act(action: string) {
   const parsed = jsonOf(
-    z.object({ id: z.string(), path: z.string(), fingerprint: z.string() }),
+    z.object({
+      id: z.string(),
+      path: z.string(),
+      fingerprint: z.string(),
+      preview: z.boolean().optional(),
+    }),
   ).safeParse(action);
   const request = parsed.success ? parsed.data : fail("invalid rust action");
-  return cleanAction(request, {
+  return (request.preview === true ? cleanPreflight : cleanAction)(request, {
     target,
     context: ctx,
     identity,

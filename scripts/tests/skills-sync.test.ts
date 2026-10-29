@@ -53,6 +53,7 @@ function run(
   inHouseOnly = false,
   dryRun = false,
   failAfterOne = false,
+  failCodex = false,
 ) {
   const bin = fakeBin();
   using _bin = {
@@ -94,6 +95,7 @@ process.on("exit", () => console.error("BUILD_CALLS=" + count));
       FAKE_SKILLS_ARGS_MARKER: `${marker}.args`,
       FAKE_CLAUDE_MARKER: `${marker}.claude`,
       FAKE_SKILLS_FAIL_AFTER_ONE: failAfterOne ? "1" : "0",
+      FAKE_SKILLS_FAIL_CODEX: failCodex ? "1" : "0",
     },
   });
   return {
@@ -154,6 +156,73 @@ function cleanup(...paths: string[]): void {
 }
 
 describe("skills:sync", () => {
+  test("takes over matching in-house links in both homes", () => {
+    const dotfiles = makeDotfiles([]);
+    const home = makeHome();
+    const source = join(dotfiles, "agents/skills/house-skill");
+    const original = readFileSync(join(source, "SKILL.md"), "utf8");
+    for (const base of [".agents/skills", ".claude/skills"])
+      symlinkSync(source, join(home, base, "house-skill"));
+    const result = run(dotfiles, home, join(home, "calls"), true);
+    expect(result.code, result.out).toBe(0);
+    for (const base of [".agents/skills", ".claude/skills"]) {
+      const target = join(home, base, "house-skill");
+      expect(lstatSync(target).isDirectory()).toBe(true);
+      expect(readFileSync(join(target, "SKILL.md"), "utf8")).toBe(original);
+    }
+    expect(readFileSync(join(source, "SKILL.md"), "utf8")).toBe(original);
+    cleanup(dotfiles, home);
+  });
+
+  test("refuses foreign and wrong-name repository links before any install", () => {
+    for (const [foreign, base] of [
+      [false, ".agents/skills"],
+      [true, ".agents/skills"],
+      [true, ".claude/skills"],
+    ] as const) {
+      const dotfiles = makeDotfiles([], ["house-skill", "other-skill"]);
+      const other = makeDotfiles([]);
+      mkdirSync(join(other, ".git"));
+      const home = makeHome();
+      const target = join(home, base, "house-skill");
+      const source = foreign
+        ? join(other, "agents/skills/house-skill")
+        : join(dotfiles, "agents/skills/other-skill");
+      symlinkSync(source, target);
+      const marker = join(home, "calls");
+      const result = run(dotfiles, home, marker, true);
+      expect(result.code, result.out).toBe(3);
+      expect(result.out).toContain("resolves into a repository");
+      expect(lstatSync(target).isSymbolicLink()).toBe(true);
+      expect(existsSync(marker)).toBe(false);
+      cleanup(dotfiles, other, home);
+    }
+  });
+
+  test("restores an in-house Codex link if the installer fails", () => {
+    const dotfiles = makeDotfiles([]);
+    const home = makeHome();
+    const source = join(dotfiles, "agents/skills/house-skill");
+    const target = join(home, ".agents/skills/house-skill");
+    symlinkSync(source, target);
+    const result = run(
+      dotfiles,
+      home,
+      join(home, "calls"),
+      true,
+      false,
+      false,
+      true,
+    );
+    expect(result.code, result.out).toBe(1);
+    expect(result.out).toContain("skills add for Codex exited 17");
+    expect(lstatSync(target).isSymbolicLink()).toBe(true);
+    expect(readFileSync(join(source, "SKILL.md"), "utf8")).toContain(
+      "name: house-skill",
+    );
+    cleanup(dotfiles, home);
+  });
+
   test("rejects a nested agents scaffold before any installation or plugin mutation", () => {
     const dotfiles = makeDotfiles([]);
     const home = makeHome();

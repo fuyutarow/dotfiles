@@ -190,6 +190,20 @@ export function resolvesIntoRepository(path: string, root: string): boolean {
   return isSymlink(path) && repositoryAncestor(resolved) !== undefined;
 }
 
+/** Only an individual link to its namesake source in this checkout can be taken over. */
+export function isOwnInHouseLink(
+  path: string,
+  root: string,
+  name: string,
+): boolean {
+  if (!isSymlink(path)) return false;
+  const checkout = canonicalPath(root);
+  // sync-ok: Admission must resolve the existing link before permitting any installation.
+  const target = fromThrowable((value: string) => realpathSync(value))(path);
+  if (checkout === undefined || target.isErr()) return false;
+  return target.value === resolve(checkout, "agents/skills", name);
+}
+
 export function skillCliArgs(
   version: string,
   source: string,
@@ -216,6 +230,7 @@ export function homePathRefusals(
   home: string,
   root: string,
   names: readonly string[],
+  inHouseNames: readonly string[] = [],
 ): string[] {
   const paths = [
     `${home}/.agents/skills`,
@@ -226,8 +241,15 @@ export function homePathRefusals(
       `${home}/.claude/skills/${name}`,
     ]),
   ];
-  const unsafe = [...new Set(paths)].filter((path) =>
-    resolvesIntoRepository(path, root),
+  const allowed = new Set(
+    inHouseNames.flatMap((name) =>
+      [".agents/skills", ".claude/skills"]
+        .map((base) => resolve(home, base, name))
+        .filter((path) => isOwnInHouseLink(path, root, name)),
+    ),
+  );
+  const unsafe = [...new Set(paths)].filter(
+    (path) => !allowed.has(resolve(path)) && resolvesIntoRepository(path, root),
   );
   if (unsafe.length === 0) return [];
   const more =

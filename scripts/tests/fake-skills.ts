@@ -98,7 +98,11 @@ for (const [index, name] of all.entries()) {
   for (const base of bases) install(name, base);
   if (
     isLocal &&
-    process.env.FAKE_SKILLS_FAIL_AFTER_ONE === "1" &&
+    (process.env.FAKE_SKILLS_FAIL_AFTER_ONE === "1" ||
+      (process.env.FAKE_SKILLS_FAIL_CODEX === "1" &&
+        agentIndex >= 0 &&
+        agents.length === 1 &&
+        agents[0] === "codex")) &&
     index === 0
   ) {
     process.stderr.write("fake skills: forced partial install failure\n");

@@ -14,7 +14,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -24,6 +24,7 @@ import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
   homePathRefusals,
   inHouseLayoutRefusals,
+  isOwnInHouseLink,
   parseDeclaration,
   skillCliArgs,
 } from "./skills-declaration.ts";
@@ -415,6 +416,32 @@ async function syncInHouseCodex(
   }
 
   if (install.length > 0) {
+    const skillsRoot = resolve(home, ".agents/skills");
+    await mkdir(skillsRoot, { recursive: true });
+    const transaction = await mkdtemp(
+      join(skillsRoot, ".dotfiles-skills-sync-"),
+    );
+    const links: { target: string; backup: string }[] = [];
+    let succeeded = false;
+    await using _transaction = {
+      [Symbol.asyncDispose]: async () => {
+        if (!succeeded) {
+          for (const { target, backup } of links.toReversed()) {
+            await rm(target, { recursive: true, force: true });
+            await rename(backup, target);
+          }
+        }
+        await rm(transaction, { recursive: true, force: true });
+      },
+    };
+    for (const name of install.filter((candidate) =>
+      isOwnInHouseLink(resolve(skillsRoot, candidate), root, candidate),
+    )) {
+      const target = resolve(skillsRoot, name);
+      const backup = resolve(transaction, name);
+      await rename(target, backup);
+      links.push({ target, backup });
+    }
     const installed = await runPinnedSkillsCommand(
       cliVersion,
       [
@@ -454,6 +481,7 @@ async function syncInHouseCodex(
           recursive: true,
         },
       );
+    succeeded = true;
   }
 
   if (stale.length > 0 && !deferRemoval) {
@@ -639,7 +667,12 @@ function main(): Promise<void> {
 
   const refusals = parsed.flags.dryRun
     ? []
-    : homePathRefusals(home, dotfiles, [...names, ...inHouseNames]);
+    : homePathRefusals(
+        home,
+        dotfiles,
+        [...names, ...inHouseNames],
+        inHouseNames,
+      );
   for (const refusal of refusals) fail(refusal);
   if (refusals.length > 0) {
     process.exitCode = 3;

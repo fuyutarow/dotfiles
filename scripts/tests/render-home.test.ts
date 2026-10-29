@@ -141,15 +141,30 @@ test("Linux role environment renders safely without touching a linked directory"
     );
   };
   const path = join(home, ".config/environment.d/60-dotfiles-role.conf");
+  const cpuProbe = Bun.spawnSync(["/usr/bin/getconf", "_NPROCESSORS_ONLN"]);
+  expect(cpuProbe.exitCode).toBe(0);
+  const cpus = Number(cpuProbe.stdout.toString().trim());
+  expect(cpus).toBeGreaterThan(0);
+  writeFileSync(
+    join(dotfiles, "roles/roles.toml"),
+    `[workstation]\ntokio_worker_threads = ""\nrustc_wrapper = "sccache"\n[shared-light]\ntokio_worker_threads = ${cpus + 1}\nrustc_wrapper = "none"\n`,
+  );
   setHost("sol.cc.uec.ac.jp");
   let result = run({ DOTFILES: dotfiles, HOME: home }, preload);
   expect(result.code, result.out).toBe(0);
-  expect(readFileSync(path, "utf8")).toBe("TOKIO_WORKER_THREADS=4\n");
+  expect(readFileSync(path, "utf8")).toBe(`TOKIO_WORKER_THREADS=${cpus}\n`);
   expect(lstatSync(path).isFile()).toBe(true);
+  writeFileSync(
+    join(dotfiles, "roles/roles.toml"),
+    '[workstation]\ntokio_worker_threads = ""\nrustc_wrapper = "sccache"\n[shared-light]\ntokio_worker_threads = 1\nrustc_wrapper = "none"\n',
+  );
+  result = run({ DOTFILES: dotfiles, HOME: home }, preload);
+  expect(result.code, result.out).toBe(0);
+  expect(readFileSync(path, "utf8")).toBe("TOKIO_WORKER_THREADS=1\n");
   setHost("unknown.example");
   result = run({ DOTFILES: dotfiles, HOME: home }, preload);
   expect(result.code, result.out).toBe(0);
-  expect(readFileSync(path, "utf8")).toBe("");
+  expect(readFileSync(path, "utf8")).toBe("RUSTC_WRAPPER=sccache\n");
   const linkedHome = makeHome();
   mkdirSync(join(linkedHome, ".config"), { recursive: true });
   symlinkSync(

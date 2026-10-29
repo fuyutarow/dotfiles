@@ -410,9 +410,28 @@ if (process.platform === "linux") {
     lstatSync(directory, { throwIfNoEntry: false })?.isSymbolicLink() === true
   )
     fatal(`FATAL: ${directory} is a symlink; refusing to render through it`);
+  const cpuProbe = await attempt(async () => {
+    const proc = Bun.spawn(["/usr/bin/getconf", "_NPROCESSORS_ONLN"], {
+      timeout: 5_000,
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    const [output, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      proc.exited,
+    ]);
+    return code === 0 ? output.trim() : "";
+  });
+  // Like the shell reader, retain the role value if the CPU count is unavailable.
+  const cpuText = cpuProbe.ok ? cpuProbe.value : "";
+  const cpus = /^[0-9]+$/u.test(cpuText) ? Number(cpuText) : 0;
+  const threads = defaults.tokio_worker_threads;
+  const capped = threads !== "" && cpus > 0 ? Math.min(threads, cpus) : threads;
   outputs.push({
     dest: `${directory}/60-dotfiles-role.conf`,
-    text: roleSystemdEnvironment(defaults.tokio_worker_threads),
+    text:
+      roleSystemdEnvironment(capped) +
+      (defaults.rustc_wrapper === "sccache" ? "RUSTC_WRAPPER=sccache\n" : ""),
     from: `${rolePath} + LAND_HOSTS`,
   });
 }

@@ -1756,38 +1756,6 @@ export async function processHookEvent(
   };
 }
 
-export async function runGoalKernelHook(provider: Provider): Promise<void> {
-  const stdin = await caughtAsync(async () => {
-    const chunks: Buffer[] = [];
-    const source: AsyncIterable<Buffer | string> = process.stdin;
-    for await (const chunk of source) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    }
-    return Buffer.concat(chunks).toString("utf8");
-  });
-  const failure = stdin.isErr() ? errorMessage(stdin.error) : undefined;
-  const parsed = stdin.isOk() ? jsonText.safeParse(stdin.value) : undefined;
-  if (failure !== undefined || parsed?.success !== true) {
-    const reason =
-      failure ?? parsed?.error?.issues.map((i) => i.message).join("; ") ?? "";
-    process.stderr.write(`goal-kernel: malformed hook JSON: ${reason}\n`);
-    process.exitCode = 1;
-    return;
-  }
-  const processed = await caughtAsync(() =>
-    processHookEvent(provider, parsed.data),
-  );
-  if (processed.isErr()) {
-    process.stderr.write(`goal-kernel: ${errorMessage(processed.error)}\n`);
-    process.exitCode = 1;
-    return;
-  }
-  const result = processed.value;
-  if (result.stdout !== "") process.stdout.write(result.stdout);
-  if (result.stderr !== "") process.stderr.write(result.stderr);
-  process.exitCode = result.exit_code;
-}
-
 export async function recordRunDecision(
   workspaceRoot: string,
   id: string,

@@ -25,7 +25,6 @@ const SkillLockSchema = z.looseObject({
 });
 
 export type ThirdPartySkill = z.infer<typeof DeclarationSchema>;
-export type SkillEntry = ThirdPartySkill["skills"][number];
 export type SkillLock = z.infer<typeof SkillLockSchema>;
 export type SkillFile = { path: string; content: string };
 
@@ -257,23 +256,6 @@ export function homePathRefusals(
   return [
     `Refusing: ${unsafe[0]}${more} resolves into a repository; run mise run skills:migrate`,
   ];
-}
-
-/** Global repo links that migration and skills-wiring own: the Codex root link and vendor names. */
-export function homeRepoLinkedSkillTargets(
-  home: string,
-  root: string,
-  names: readonly string[],
-): string[] {
-  const paths = [
-    resolve(home, ".agents/skills"),
-    ...[".agents/skills", ".claude/skills"].flatMap((target) =>
-      names.map((name) => resolve(home, target, name)),
-    ),
-  ];
-  return [...new Set(paths)].filter(
-    (path) => isSymlink(path) && resolvesIntoRepository(path, root),
-  );
 }
 
 export function toolLockPath(home: string): string {

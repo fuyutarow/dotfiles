@@ -59,6 +59,17 @@
         "!**/fixtures/**!",
       ],
     },
+    "tools/agent-resource-run": {
+      "entry": [],
+      "project": [
+        "**/*.{ts,tsx,js,jsx}!",
+        "!**/tests/**!",
+        "!**/*.{test,spec}.{ts,tsx,js,jsx}!",
+        "!**/fixtures/**!",
+        // Retained only by cgroup-memory.test.ts; the runner uses other readers.
+        "!src/lib/cgroup-memory.ts!",
+      ],
+    },
     "tools/statusline": {
       "entry": [],
       "project": [

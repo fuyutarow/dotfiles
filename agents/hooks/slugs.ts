@@ -26,7 +26,6 @@ const Registry = z.object({
     )
     .default([]),
 });
-export type HookIdentity = z.output<typeof Identity>;
 
 export function loadSlugs(path = join(import.meta.dir, "hooks.toml")) {
   const result = Registry.safeParse(Bun.TOML.parse(readFileSync(path, "utf8")));

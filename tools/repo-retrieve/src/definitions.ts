@@ -924,28 +924,6 @@ export async function judgeJev(
   return { reason: "still rate-limited after retries" };
 }
 
-// The candidates the second stage would score, with the exact text it would read — for comparing
-// second-stage backends on the same input (bench, experiments).
-export async function candidatePool(
-  project: string,
-  query: string,
-): Promise<Result<{ name: string; text: string; def: Definition }[], Error>> {
-  const cfg = loadRetrievalConfig();
-  if (cfg.isErr()) return err(cfg.error);
-  const catalog = await refreshCatalog(project, []);
-  if (catalog.isErr()) return err(catalog.error);
-  const { dir, defs, byFile } = catalog.value;
-  const hits = await recall(dir, query, cfg.value.recall);
-  if (hits.isErr()) return err(hits.error);
-  const order = candidates(hits.value, byFile, ownersOf(defs)).slice(
-    0,
-    cfg.value.pool,
-  );
-  return ok(
-    order.map((def) => ({ name: def.name, text: rerankText(def), def })),
-  );
-}
-
 // private helper key -> the public definitions in its file whose body calls it.
 function ownersOf(defs: Definition[]): Map<string, Definition[]> {
   const publicByFile = new Map<string, Definition[]>();

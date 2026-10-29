@@ -19,8 +19,6 @@ const RecoveryVerdictSchema = z.object({
   recorded_at: z.string(),
 });
 
-export type RecoveryVerdict = z.infer<typeof RecoveryVerdictSchema>;
-
 export type RecoveryVerdictAssessment = {
   kind: "allow" | "refuse";
   message: string;

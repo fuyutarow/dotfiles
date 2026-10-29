@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.1 — 2026-10-30
+
+- Remove unused recovery verdict type export.
+
 ## 1.14.0 — 2026-10-27
 
 - Add bounded GPU VRAM admission waits

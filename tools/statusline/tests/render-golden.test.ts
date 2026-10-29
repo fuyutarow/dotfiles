@@ -3,7 +3,7 @@ import { err, ok } from "neverthrow";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
 import { buildDataframe } from "../src/build-dataframe.ts";
 import { render } from "../src/format.ts";
-import { currentDispatcherSession } from "../src/dispatch-runs.ts";
+import { currentDispatcherSession } from "../src/dispatch-display.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

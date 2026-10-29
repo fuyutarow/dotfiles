@@ -2,12 +2,9 @@ import { expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  cccBadge,
-  cccObservation,
-  sampleCccIndexing,
-} from "../src/ccc-indexing.ts";
-import { memSegment } from "../src/host-load.ts";
+import { cccObservation, sampleCccIndexing } from "../src/ccc-indexing.ts";
+import { cccBadge } from "../src/ccc-model.ts";
+import { memSegment } from "../src/host-display.ts";
 
 test("GPU segment fixture shows long indexing only; idle, young and stale are silent", () => {
   const now = Temporal.Now.instant().epochMilliseconds;

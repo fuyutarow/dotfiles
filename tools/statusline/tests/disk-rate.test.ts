@@ -4,14 +4,14 @@ import { join } from "node:path";
 import {
   diskReadings,
   diskReadingsAsync,
-  diskSegment,
   type DiskReading,
 } from "../src/storage.ts";
+import { diskSegment } from "../src/storage-display.ts";
 import { DiskRateStateSchema, updateDiskRates } from "../src/disk-rate.ts";
 import { readJson } from "../src/bounded.ts";
 import { ESC, RST } from "../src/ansi.ts";
 import { ok } from "neverthrow";
-import { sysSegment } from "../src/host-load.ts";
+import { sysSegment } from "../src/host-display.ts";
 import { cleanupTempDirs, tempDir } from "./helpers.ts";
 
 const GiB = 1024 ** 3;

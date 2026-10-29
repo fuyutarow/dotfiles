@@ -74,6 +74,65 @@ export function evaluateKnipOutput(reportText: string, exceptionText: string) {
   return { findings, messages };
 }
 
+// Only operating-system supplied commands are listed here; package commands come
+// from the repository's installer declarations below.
+const osBinaries = [
+  "osascript",
+  "pbcopy",
+  "defaults",
+  "softwareupdate",
+  "killall", // macOS
+  "notify-send",
+  "chsh",
+  "pgrep",
+  "lsattr", // Linux (lsattr: e2fsprogs)
+];
+
+export function declaredBinaries(
+  brewfiles: string[],
+  commandMap: string,
+  miseText: string,
+  installer: string,
+): string[] {
+  const packages = new Set<string>();
+  const declarations = brewfiles.flatMap((source) =>
+    Array.from(source.matchAll(/^\s*(?:brew|cask)\s+["']([^"']+)["']/gmu)),
+  );
+  for (const match of declarations) {
+    const name = match[1]?.split("/").at(-1);
+    if (name !== undefined) packages.add(name);
+  }
+  const binaries = new Set(osBinaries);
+  const mapped = new Set<string>();
+  for (const line of commandMap.split("\n")) {
+    const [name, commands] = line.split("\t");
+    if (name === undefined || commands === undefined || !packages.has(name))
+      continue;
+    mapped.add(name);
+    if (commands === "-") continue;
+    for (const command of commands.trim().split(/\s+/u)) binaries.add(command);
+  }
+  for (const name of packages) if (!mapped.has(name)) binaries.add(name);
+  const mise = readSchema(
+    z.object({ tools: z.record(z.string(), z.unknown()) }).loose(),
+    Bun.TOML.parse(miseText),
+  );
+  for (const name of Object.keys(mise.tools))
+    binaries.add(name.split("/").at(-1) ?? name);
+  // install-mcp.ts declares both the uv package and its configurable command.
+  if (
+    /"tool",\s*"install",\s*"--upgrade",\s*"cocoindex-code\[full\]"/u.test(
+      installer,
+    )
+  ) {
+    const command = installer.match(
+      /const cccBin = values\.cccBin \?\? "([^"]+)"/u,
+    )?.[1];
+    if (command !== undefined) binaries.add(command);
+  }
+  return [...binaries].toSorted();
+}
+
 export async function roots(root: string): Promise<string[]> {
   const paths = new Set<string>();
   const add = async (path: string) => {
@@ -222,13 +281,30 @@ export async function roots(root: string): Promise<string[]> {
 async function main() {
   const workspaceSchema = z.object({ entry: z.array(z.string()) }).loose();
   const config = readSchema(
-    z.object({ workspaces: z.record(z.string(), workspaceSchema) }).loose(),
+    z
+      .object({
+        workspaces: z.record(z.string(), workspaceSchema),
+        ignoreBinaries: z.array(z.string()).optional(),
+      })
+      .loose(),
     Bun.JSONC.parse(await Bun.file(join(repoRoot, "knip.jsonc")).text()),
   );
   const rootConfig = config.workspaces["."];
   const toolsConfig = config.workspaces["tools/*"];
   if (rootConfig === undefined || toolsConfig === undefined)
     return fatal("missing workspace configuration");
+  config.ignoreBinaries = declaredBinaries(
+    await Promise.all(
+      ["Brewfile.core", "Brewfile.ondemand"].map((path) =>
+        Bun.file(join(repoRoot, path)).text(),
+      ),
+    ),
+    await Bun.file(
+      join(repoRoot, "tools/tool-tiers/src/tool-commands.tsv"),
+    ).text(),
+    await Bun.file(join(repoRoot, "mise.toml")).text(),
+    await Bun.file(join(repoRoot, "scripts/install-mcp.ts")).text(),
+  );
   const manifest = readSchema(
     z.object({ workspaces: z.array(z.string()) }),
     Bun.JSONC.parse(await Bun.file(join(repoRoot, "package.json")).text()),

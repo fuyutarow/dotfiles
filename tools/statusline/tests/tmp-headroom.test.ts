@@ -12,11 +12,11 @@ import {
 import {
   tmpEntry,
   tmpEntryAsync,
-  tmpSegment,
   tmpReadingsAsync,
   type StatFsCounts,
 } from "../src/storage.ts";
-import { sysSegment } from "../src/host-load.ts";
+import { tmpSegment } from "../src/storage-display.ts";
+import { sysSegment } from "../src/host-display.ts";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import {
   TMP_INODE_WARN_PCT as hookWarn,

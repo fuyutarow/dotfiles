@@ -357,5 +357,3 @@ export async function diskReadingsAsync(
   await writeCacheAsync(statePath, rated.state);
   return ok(rated.entries);
 }
-
-export { diskSegment, tmpSegment } from "./storage-display.ts";

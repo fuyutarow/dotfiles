@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { err, ok } from "neverthrow";
 import { rateRow } from "../src/rate-limits.ts";
-import { memSegment, sysSegment } from "../src/host-load.ts";
-import { diskSegment, type DiskReading } from "../src/storage.ts";
+import { memSegment, sysSegment } from "../src/host-display.ts";
+import { type DiskReading } from "../src/storage.ts";
+import { diskSegment } from "../src/storage-display.ts";
 import { diskFreeColor, paceColor } from "../src/ansi.ts";
 
 const reset = "\u001B[0m";

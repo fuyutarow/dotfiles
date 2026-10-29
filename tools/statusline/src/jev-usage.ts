@@ -63,5 +63,3 @@ export async function readJevUsage(
     return err("Jev usage observation stale or in the future");
   return ok({ costUsd: usage.estimated_cost_usd ?? undefined });
 }
-
-export { jevUsageSegment } from "./provider-display.ts";

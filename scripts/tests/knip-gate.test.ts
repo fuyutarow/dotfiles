@@ -1,6 +1,29 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { roots } from "../knip-gate.ts";
+import { declaredBinaries, roots } from "../knip-gate.ts";
+
+test("binary allowances follow declared packages and installer commands", () => {
+  const brew = ['brew "vendor/tap/example"\ncask "widget"\n# brew "commented"'];
+  const mapping = "example\texample-cli\nother\tother-cli\n";
+  const installer =
+    'const cccBin = values.cccBin ?? "ccc";\n["tool", "install", "--upgrade", "cocoindex-code[full]"]';
+  const derive = (sources: string[], install = installer) =>
+    declaredBinaries(sources, mapping, '[tools]\nrunner = "1"', install);
+  const result = derive(brew);
+  for (const name of [
+    "example-cli",
+    "widget",
+    "runner",
+    "ccc",
+    "lsattr",
+    "osascript",
+  ])
+    expect(result).toContain(name);
+  for (const name of ["example", "other-cli", "commented", "undeclared"])
+    expect(result).not.toContain(name);
+  expect(derive([], "")).not.toContain("ccc");
+  expect(derive([])).not.toContain("example-cli");
+});
 
 test("production roots follow the repository's entry declarations", async () => {
   const entries = await roots(resolve(import.meta.dir, "../.."));

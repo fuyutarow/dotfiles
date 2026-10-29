@@ -4,8 +4,7 @@
  * Fail direction: open. A broken continuity helper must not turn auto-compaction into a failed turn.
  */
 
-import { fromAsyncThrowable } from "neverthrow";
-import { jsonText, z } from "../../../hooks/zod.ts";
+import { z } from "../../../hooks/zod.ts";
 import {
   continuationProjectRoot,
   inspectContinuationRecord,
@@ -16,22 +15,6 @@ import {
 // A hook payload is a plain JSON object; null, arrays, and scalars fail the schema.
 const HookInputSchema = z.record(z.string(), z.unknown());
 type HookInput = Readonly<z.output<typeof HookInputSchema>>;
-
-const MAX_HOOK_INPUT_BYTES = 1_048_576;
-
-async function readBoundedStdin(): Promise<string | undefined> {
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for await (const chunk of process.stdin) {
-    const bytes: Buffer = Buffer.isBuffer(chunk)
-      ? chunk
-      : Buffer.from(String(chunk));
-    total += bytes.byteLength;
-    if (total > MAX_HOOK_INPUT_BYTES) return undefined;
-    chunks.push(bytes);
-  }
-  return Buffer.concat(chunks, total).toString("utf8");
-}
 
 function stringField(input: HookInput, key: string): string | undefined {
   const value = input[key];
@@ -147,16 +130,4 @@ export async function handleCompactHook(
   return platform === "codex"
     ? JSON.stringify({ continue: false, stopReason: reason })
     : JSON.stringify({ decision: "block", reason });
-}
-
-export async function runCompactHook(platform: Platform): Promise<void> {
-  // Explicit fail-open: auto-compaction must remain able to recover a full context window.
-  await fromAsyncThrowable(async (): Promise<void> => {
-    const raw = await readBoundedStdin();
-    if (raw === undefined) return;
-    const decoded = jsonText.safeParse(raw);
-    if (!decoded.success) return;
-    const output = await handleCompactHook(platform, decoded.data);
-    if (output !== undefined) process.stdout.write(`${output}\n`);
-  })();
 }

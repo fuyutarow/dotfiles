@@ -22,7 +22,6 @@ export {
   hookJson,
   hookMessage,
   hookStderr,
-  hookSlug,
 } from "../../hooks/lib.ts";
 
 export type TranscriptEntry = {

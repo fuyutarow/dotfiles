@@ -77,7 +77,8 @@ test("worker snapshot uses doctor's classification and hides vendor sessions", a
   await Bun.write(
     renderer,
     `
-    import { agxRouteRunsAsync, routeLines } from ${JSON.stringify(join(import.meta.dir, "../src/dispatch-runs.ts"))};
+    import { agxRouteRunsAsync } from ${JSON.stringify(join(import.meta.dir, "../src/dispatch-runs.ts"))};
+    import { routeLines } from ${JSON.stringify(join(import.meta.dir, "../src/dispatch-display.ts"))};
     const scan = await agxRouteRunsAsync(process.env, ${JSON.stringify(SESSION)}, false);
     const lines = routeLines(scan.runs.map(run => ({ ...run, secs: 90 })), ${JSON.stringify(SESSION)}, scan.unreadable, scan.fleet);
     process.stdout.write(JSON.stringify({

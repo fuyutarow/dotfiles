@@ -2,11 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  readCodexRate,
-  readCodexUsage,
-  codexRateSegment,
-} from "../src/codex-rate.ts";
+import { readCodexRate, readCodexUsage } from "../src/codex-rate.ts";
+import { codexRateSegment } from "../src/provider-display.ts";
 import {
   sampleCodexRate,
   CODEX_CREDIT_REFRESH_INTERVAL_MS,

@@ -17,7 +17,8 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { codexRateSegment, readCodexRate } from "../src/codex-rate.ts";
+import { readCodexRate } from "../src/codex-rate.ts";
+import { codexRateSegment } from "../src/provider-display.ts";
 import { jsonText } from "../src/zod.ts";
 import {
   hashSettingsPrefix,

@@ -1,12 +1,6 @@
-import {
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fromThrowable, jsonOf, z } from "./zod.ts";
 
 const UsageWindowSchema = z.object({
@@ -59,27 +53,4 @@ export function readSubscriptionUsageSnapshot(
   if (text === undefined) return undefined;
   const parsed = jsonOf(SubscriptionUsageSnapshotSchema).safeParse(text);
   return parsed.success ? parsed.data : undefined;
-}
-
-/** Publish a complete snapshot with one rename so readers never observe partial JSON. */
-export function writeSubscriptionUsageSnapshot(
-  snapshot: SubscriptionUsageSnapshot,
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
-  const parsed = SubscriptionUsageSnapshotSchema.safeParse(snapshot);
-  if (!parsed.success) return false;
-  const path = subscriptionUsagePath(env);
-  const temp = `${path}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  const written = fromThrowable(() => {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(temp, `${JSON.stringify(parsed.data)}\n`, { mode: 0o600 });
-    renameSync(temp, path);
-  })();
-  if (written.isErr()) {
-    fromThrowable(() => {
-      unlinkSync(temp);
-    })();
-    return false;
-  }
-  return true;
 }

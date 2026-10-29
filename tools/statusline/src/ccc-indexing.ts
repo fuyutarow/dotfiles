@@ -3,7 +3,6 @@ import {
   CccIndexSchema,
   type CccIndex,
 } from "./ccc-model.ts";
-export { cccBadge } from "./ccc-model.ts";
 export type { CccIndex } from "./ccc-model.ts";
 // Replaces detect-ccc-gpu-hold's prompt/Bash advisory. In September 2026, catch-up indexing
 // held the GPU for over an hour: generated records, archives and frozen copies dominated

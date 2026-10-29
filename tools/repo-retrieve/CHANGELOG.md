@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.7 — 2026-10-30
+
+- Remove unused candidate pool helper.
+
 ## 1.5.6 — 2026-10-29
 
 - Require rr index admission before invoking the preserved ccc backend

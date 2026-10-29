@@ -2,7 +2,6 @@ import { renderUnavailable, unavailable } from "./ansi.ts";
 import { memReading, type MemReading } from "./host-model.ts";
 import { sysRow, formatBytes, type HostLoad } from "./host-display.ts";
 export type { MemReading } from "./host-model.ts";
-export { sysSegment, memSegment } from "./host-display.ts";
 export type { HostLoad } from "./host-display.ts";
 // Host load — CPU · RAM · VRAM · Disk — read and rendered as the statusline's Sys row. Consumers:
 // tools/statusline/src/statusline.ts (row 5) and `s` in zsh/aliases.zsh (one row, now).

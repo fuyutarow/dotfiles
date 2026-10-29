@@ -6,7 +6,6 @@ import { writeFleetSession } from "@dotfiles/shared/src/fleet-session.ts";
 import {
   execAsyncRenderBounded,
   execAsyncWithin,
-  execBounded,
   readJson,
   readJsonAsync,
   writeCache,
@@ -275,51 +274,6 @@ function agentNameEntries(
     };
   }
   return next;
-}
-// ok(undefined) = the session is simply not listed (yet): nothing to show. err = the lookup
-// failed, so the name is unknown, which render() says instead of dropping the segment.
-export function agentName(
-  sid: string,
-  hint?: string,
-): Result<string | undefined, string> {
-  // missing / corrupt / wrong-shape cache file -> treat as empty and refetch below
-  const cache = readJson(AGENT_NAME_CACHE, AgentNameCacheSchema) ?? {};
-  const hit = cache[sid];
-  // A /rename shows up here first: the stdin session_name moves at once, while the cached name
-  // would lag up to the TTL (and the herdr tab with it). Only a KNOWN previous value can differ —
-  // an entry with no stored hint is not treated as renamed.
-  const renamed =
-    hit?.hint !== undefined && hint !== undefined && hit.hint !== hint;
-  if (
-    hit !== null &&
-    hit !== undefined &&
-    !renamed &&
-    Temporal.Now.instant().epochMilliseconds - hit.at < AGENT_NAME_TTL_MS
-  )
-    return ok(hit.name);
-
-  // Cache miss or stale: pay the ~0.5-0.75s (measured 2026-08-28) `claude agents --json` cost.
-  const outResult = execBounded(
-    "claude agents",
-    CLAUDE_BIN,
-    ["agents", "--json"],
-    850,
-  );
-  if (outResult.isErr()) return err(outResult.error.why); // `claude` missing/slow/errored/over budget
-  const listResult = jsonOf(AgentListSchema).safeParse(outResult.value);
-  if (!listResult.success) return err("claude agents output unparsable");
-  const now = Temporal.Now.instant().epochMilliseconds;
-  const next = agentNameEntries(listResult.data, now);
-  if (!Object.hasOwn(next, sid)) next[sid] = { at: now }; // not listed yet -> cache the miss too
-  // Keep every session's last-seen hint across this whole-file rewrite; record ours.
-  for (const [id, entry] of Object.entries(next)) {
-    const seen = id === sid ? hint : cache[id]?.hint;
-    if (seen !== undefined) entry.hint = seen;
-  }
-  // best-effort write, result discarded on purpose: cache write failed (e.g. read-only fs) ->
-  // value below still returned, just not persisted.
-  writeCache(AGENT_NAME_CACHE, next);
-  return ok(next[sid]?.name);
 }
 export async function agentNameAsync(
   sid: string,

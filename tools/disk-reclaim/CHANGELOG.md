@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.0 — 2026-10-29
+
+- Stop locked runs at a cooperative deadline and record the phase.
+
 ## 1.10.4 — 2026-10-28
 
 - Yield builds runs to foreground reclaim waiters

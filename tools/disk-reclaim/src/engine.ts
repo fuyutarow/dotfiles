@@ -115,7 +115,19 @@ export type EngineOptions = {
   state?: string;
   /** Fixture seam; production snapshots always read the real process table. */
   captureLiveness?: (config: Config) => LivenessSnapshot;
+  env?: NodeJS.ProcessEnv;
+  /** Timer injection for deterministic run-deadline tests. */
+  scheduleDeadline?: (callback: () => void, ms: number) => () => void;
+  deadlineCheck?: (phase: string) => void;
+  measureFree?: () => number;
 };
+// Cooperative deadline: bounds work between checks, not one blocking syscall.
+const RUN_BUDGET_S = 1800;
+class RunDeadline extends Error {
+  constructor(readonly phase: string) {
+    super(`deadline: ${phase}`);
+  }
+}
 export type EngineResult = {
   exit: number;
   plan: Plan | null;
@@ -483,7 +495,9 @@ async function recheckAndAct(
   index: number,
   ctx: Context,
   actions: ReceiptAction[],
+  check: (phase: string) => void,
 ): Promise<number> {
+  check("candidate recheck");
   if (isAborted(ctx.signal)) return 0;
   const original = row.candidates[index];
   if (original === undefined || original.verdict !== "RECLAIM") return 0;
@@ -496,6 +510,7 @@ async function recheckAndAct(
     const one = await target.recheck(original, freshContext);
     return one === null ? [] : [one];
   })();
+  check("candidate recheck");
   if (isAborted(ctx.signal)) return 0;
   const parsed = fresh.isOk() ? Candidate.array().safeParse(fresh.value) : null;
   if (parsed !== null && !parsed.success) {
@@ -558,9 +573,11 @@ async function recheckAndAct(
   };
   actions.push(action);
   ctx.log(`${target.name}: ${found.id} ${found.action.kind}`);
+  check("action");
   const acted = await fromAsyncThrowable(async () =>
     target.act(found, freshContext),
   )();
+  check("action");
   const validated = acted.isOk() ? ActionResult.safeParse(acted.value) : null;
   let result: ActionResult = {
     ok: false,
@@ -668,8 +685,15 @@ async function executeCandidates(
       : indexes;
   for (const index of order) {
     if (ctx.foregroundLockYielded?.() === true) break;
-    if (ctx.signal?.aborted === true) break;
-    const exit = await recheckAndAct(target, row, index, ctx, actions);
+    options.deadlineCheck?.("candidate recheck");
+    const exit = await recheckAndAct(
+      target,
+      row,
+      index,
+      ctx,
+      actions,
+      options.deadlineCheck ?? (() => {}),
+    );
     if (exit === 0) continue;
     row.exit = exit;
     if (exit === 2 || options.stopOnError === true || target.tier !== "blind")
@@ -684,9 +708,12 @@ async function executeTarget(
   dir: string,
   targetsRemaining: number,
 ): Promise<string> {
+  const check = options.deadlineCheck ?? (() => {});
+  check("target plan");
   const headroom = options.headroom ?? readHeadroom();
   const started = now();
-  const before = freeBytes();
+  const measureFree = options.measureFree ?? freeBytes;
+  const before = measureFree();
   const output = outputPath(target.name, dir);
   writeFileSync(output, "", { mode: 0o600 });
   const actions: ReceiptAction[] = [];
@@ -710,7 +737,7 @@ async function executeTarget(
       ended: now(),
       exit: row.exit ?? 0,
       free_before: before,
-      free_after: freeBytes(),
+      free_after: measureFree(),
       output,
       actions,
       headroom,
@@ -781,6 +808,7 @@ async function executeTarget(
   const availability = await fromAsyncThrowable(async () =>
     target.available(ctx),
   )();
+  check("target plan");
   if (availability.isErr() || !availability.value.available) {
     row.available = false;
     row.skip_reason = availability.isErr()
@@ -801,6 +829,7 @@ async function executeTarget(
       )(ctx.config),
     };
     const fresh = await fromAsyncThrowable(async () => target.plan(stageCtx))();
+    check("target plan");
     const parsed = fresh.isOk()
       ? Candidate.array().safeParse(fresh.value)
       : null;
@@ -825,7 +854,9 @@ async function executeTarget(
     } else {
       row.candidates = parsed.data;
       await executeCandidates(target, row, stageCtx, actions, options);
+      check("finish");
       await target.finish?.(stageCtx);
+      check("finish");
     }
   }
   if (plannedFailure !== null && row.exit === 0) row.exit = 1;
@@ -853,7 +884,10 @@ async function executeLocked(
   options: EngineOptions,
   dir: string,
 ): Promise<EngineResult> {
+  const check = options.deadlineCheck ?? (() => {});
+  check("locked plan");
   const recheckedPreview = await plan(targets, options);
+  check("locked plan");
   if (recheckedPreview.plan === null) return recheckedPreview;
   const lockedPlan = recheckedPreview.plan;
   if (
@@ -875,8 +909,8 @@ async function executeLocked(
     };
   let receipt: string | null = null;
   for (const [index, target] of targets.entries()) {
+    check("target plan");
     if (options.context.foregroundLockYielded?.() === true) break;
-    if (options.context.signal?.aborted === true) break;
     const row = lockedPlan.targets[index];
     receipt = await executeTargetIfPresent(
       target,
@@ -921,6 +955,15 @@ export async function run(
   targets: Target[],
   options: EngineOptions,
 ): Promise<EngineResult> {
+  const rawBudget =
+    (options.env ?? process.env).RECLAIM_RUN_BUDGET_S ?? String(RUN_BUDGET_S);
+  const budget = Number(rawBudget);
+  if (!/^\d+$/u.test(rawBudget) || !Number.isSafeInteger(budget) || budget <= 0)
+    return {
+      exit: 2,
+      plan: null,
+      error: "RECLAIM_RUN_BUDGET_S must be a positive integer",
+    };
   if (
     options.yes !== true ||
     targets.some(
@@ -955,12 +998,43 @@ export async function run(
   if (lock.release === null)
     return { exit: lock.exit, plan: preview.plan, error: lock.error };
   const releaseLock = lock.release;
+  const controller = new AbortController();
+  const schedule =
+    options.scheduleDeadline ??
+    ((callback, ms) => {
+      let remaining = ms;
+      let timer: ReturnType<typeof setTimeout>;
+      const next = (): void => {
+        const delay = Math.min(remaining, 2147483647);
+        remaining -= delay;
+        timer = setTimeout(remaining > 0 ? next : callback, delay);
+      };
+      next();
+      return () => {
+        clearTimeout(timer);
+      };
+    });
+  const cancelDeadline = schedule(() => {
+    controller.abort();
+  }, budget * 1000);
+  const signal =
+    options.context.signal === undefined
+      ? controller.signal
+      : AbortSignal.any([controller.signal, options.context.signal]);
+  const check = (phase: string): void => {
+    if (controller.signal.aborted)
+      AbortSignal.abort(new RunDeadline(phase)).throwIfAborted();
+    if (signal.aborted)
+      AbortSignal.abort(new Error(`cancelled: ${phase}`)).throwIfAborted();
+  };
   let yielded = false;
   let lockYield: { payloads_completed: number; reason: string } | undefined;
   const lockedOptions: EngineOptions = {
     ...runOptions,
+    deadlineCheck: check,
     context: {
       ...runOptions.context,
+      signal,
       yieldForegroundLock: async (payloadsCompleted) => {
         if (yielded || !(await hasForegroundWaiter(dir))) return false;
         yielded = true;
@@ -976,10 +1050,38 @@ export async function run(
     },
   };
   using _lock = { [Symbol.dispose]: lock.release };
+  using _deadline = { [Symbol.dispose]: cancelDeadline };
   const execute = await fromAsyncThrowable(async () =>
     executeLocked(targets, lockedOptions, dir),
   )();
-  return execute.isOk()
-    ? execute.value
-    : { exit: 2, plan: null, error: errorMessage(execute.error) };
+  if (execute.isOk()) return execute.value;
+  if (execute.error instanceof RunDeadline) {
+    const time = now();
+    const free = (options.measureFree ?? freeBytes)();
+    const receipt = {
+      schema: 2 as const,
+      name: "run",
+      target: "run",
+      tier: "blind" as const,
+      command: ["disk-reclaim", "run"],
+      host: hostname(),
+      pid: process.pid,
+      started: time,
+      ended: time,
+      exit: 1,
+      free_before: free,
+      free_after: free,
+      output: null,
+      actions: [],
+      outcome: "deadline",
+      phase: execute.error.phase,
+    };
+    const receiptPath = writeReceipt(receipt, dir);
+    return {
+      exit: 1,
+      plan: { ...preview.plan, mode: "run", receipt: receiptPath },
+      error: execute.error.message,
+    };
+  }
+  return { exit: 2, plan: null, error: errorMessage(execute.error) };
 }

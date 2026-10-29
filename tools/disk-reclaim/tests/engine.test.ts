@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { hostname } from "node:os";
 import { tryAcquire } from "../../shared/src/dir-lock.ts";
+import { jsonOf, z } from "../../shared/src/zod.ts";
 import {
   loadConfig,
   plan,
@@ -20,6 +21,7 @@ import { candidate, fakeTarget } from "./fixtures/fake-target.ts";
 import { tempRoot } from "./fixtures/temp.ts";
 
 const dirs: string[] = [];
+const noop = (): void => {};
 function fixtureConfig() {
   const { config } = loadConfig();
   assert.ok(config !== null);
@@ -75,6 +77,154 @@ function options(
 afterEach(() => {
   for (const dir of dirs.splice(0))
     rmSync(dir, { recursive: true, force: true });
+});
+
+test.each([
+  "locked plan",
+  "target plan",
+  "candidate recheck",
+  "action",
+  "finish",
+])(
+  "run records and releases its lock when the deadline expires during %s",
+  async (phase) => {
+    let expire = noop;
+    let cancelled = false;
+    let calls = 0;
+    let clockMs = 0;
+    const opts = options({
+      env: { RECLAIM_RUN_BUDGET_S: "1" },
+      measureFree: () => 1000,
+      scheduleDeadline: (callback, ms) => {
+        expect(ms).toBe(1000);
+        expire = () => {
+          clockMs += ms;
+          callback();
+        };
+        return () => {
+          cancelled = true;
+        };
+      },
+    });
+    const { target } = fakeTarget({
+      candidates: [{ ...candidate("item"), path: null }],
+    });
+    const expireDuring = async (
+      signal: AbortSignal | undefined,
+    ): Promise<void> => {
+      assert.ok(signal !== undefined);
+      const aborted = new Promise<void>((resolve) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            resolve();
+          },
+          { once: true },
+        );
+      });
+      queueMicrotask(expire);
+      await aborted;
+      expect(signal.aborted).toBe(true);
+    };
+    target.plan = async (ctx) => {
+      calls += 1;
+      if (
+        (phase === "locked plan" && calls === 2) ||
+        (phase === "target plan" && calls === 3)
+      ) {
+        await expireDuring(ctx.signal);
+      }
+      return [{ ...candidate("item"), path: null }];
+    };
+    target.recheck = async (item, ctx) => {
+      if (phase === "candidate recheck") {
+        await expireDuring(ctx.signal);
+      }
+      return item;
+    };
+    target.act = async (_item, ctx) => {
+      if (phase === "action") {
+        await expireDuring(ctx.signal);
+      }
+      return { ok: true, bytes_freed: 100, error: null };
+    };
+    target.finish = async (ctx) => {
+      if (phase === "finish") {
+        await expireDuring(ctx.signal);
+      }
+    };
+    const result = await run([target], opts);
+    expect(result.exit).toBe(1);
+    expect(result.error).toBe(`deadline: ${phase}`);
+    expect(cancelled).toBe(true);
+    expect(clockMs).toBe(1000);
+    const lines = readFileSync(join(opts.state, "log.jsonl"), "utf8")
+      .trim()
+      .split("\n");
+    const deadlineReceipt = jsonOf(
+      z.object({ outcome: z.string(), phase: z.string() }),
+    ).safeParse(lines.at(-1) ?? "");
+    expect(deadlineReceipt.success && deadlineReceipt.data).toMatchObject({
+      outcome: "deadline",
+      phase,
+    });
+    const second = await run(
+      [
+        fakeTarget({ candidates: [{ ...candidate("second"), path: null }] })
+          .target,
+      ],
+      { ...opts, scheduleDeadline: () => noop },
+    );
+    expect(second.exit).toBe(0);
+  },
+);
+
+test("run rejects an invalid budget before taking the lock", async () => {
+  for (const value of ["0", "-1", "1.5", "", "abc"]) {
+    const opts = options({ env: { RECLAIM_RUN_BUDGET_S: value } });
+    const result = await run([fakeTarget().target], opts);
+    expect(result.exit).toBe(2);
+    expect(result.error).toContain("RECLAIM_RUN_BUDGET_S");
+    expect(existsSync(join(opts.state, "lock"))).toBe(false);
+  }
+});
+
+test("run uses the default budget and combines the caller signal", async () => {
+  const caller = new AbortController();
+  let scheduledMs = 0;
+  const opts = options({
+    env: {},
+    measureFree: () => 1000,
+    scheduleDeadline: (_callback, ms) => {
+      scheduledMs = ms;
+      return noop;
+    },
+  });
+  opts.context.signal = caller.signal;
+  const { target } = fakeTarget();
+  let plans = 0;
+  target.plan = (ctx) => {
+    plans += 1;
+    if (plans === 2) {
+      caller.abort();
+      expect(ctx.signal?.aborted).toBe(true);
+    }
+    return [];
+  };
+  const result = await run([target], opts);
+  expect(scheduledMs).toBe(1_800_000);
+  expect(result.error).toContain("cancelled");
+  const second = await run(
+    [
+      fakeTarget({ candidates: [{ ...candidate("second"), path: null }] })
+        .target,
+    ],
+    {
+      ...opts,
+      context: { ...opts.context, signal: new AbortController().signal },
+    },
+  );
+  expect(second.exit).toBe(0);
 });
 
 test("plan is read-only, validates reclaim.plan/1, and ASK/KEEP do not fail", async () => {

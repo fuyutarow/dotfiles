@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Candidate } from "../model.ts";
 import { collectProcesses, resolveProcRoot } from "../lib/procs.ts";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import type { Context, Target } from "./index.ts";
 import { deleteTree, treeCandidate } from "./tree.ts";
 import { cachedDiscovery, checkScanDeadline } from "../lib/scan-cache.ts";

@@ -1,4 +1,4 @@
-import { DoctorFindings } from "../../shared/src/doctor-record.ts";
+import { DoctorFindings } from "@dotfiles/shared/src/doctor-record.ts";
 import { resolve } from "node:path";
 import { readOwnerState } from "./owner-state.ts";
 import { jsonOf, z } from "./zod.ts";

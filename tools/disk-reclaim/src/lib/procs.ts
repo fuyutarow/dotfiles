@@ -6,7 +6,7 @@ import {
   statSync,
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { fromThrowable, z } from "../../../shared/src/zod.ts";
+import { fromThrowable, z } from "@dotfiles/shared/src/zod.ts";
 
 export type Probe<T> = { ok: true; value: T } | { ok: false; error: string };
 type ProcResult<T> = { ok: true; value: T } | { ok: false; error: unknown };

@@ -1,4 +1,4 @@
-import { DoctorRecord } from "../../shared/src/doctor-record.ts";
+import { DoctorRecord } from "@dotfiles/shared/src/doctor-record.ts";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";

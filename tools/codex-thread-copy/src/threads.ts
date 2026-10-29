@@ -2,8 +2,8 @@ import { createReadStream } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
-import { attempt } from "../../shared/src/attempt.ts";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const sessionMetaSchema = z.object({
   type: z.literal("session_meta"),

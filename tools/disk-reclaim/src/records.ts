@@ -1,7 +1,7 @@
 import { lstat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import type { Plan } from "./model.ts";
 
 export const Fingerprint = z.object({

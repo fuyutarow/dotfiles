@@ -37,7 +37,7 @@ import { agxStatusKey } from "./agx-snapshot.ts";
 import { collectAgxStatus } from "./agx-collector.ts";
 import { renderField } from "./field-state.ts";
 import { version } from "../package.json";
-import { readFleetSession } from "../../shared/src/fleet-session.ts";
+import { readFleetSession } from "@dotfiles/shared/src/fleet-session.ts";
 import { snapshotWithFleetFacts } from "./snapshot-rate.ts";
 
 const plain = (value: string) =>

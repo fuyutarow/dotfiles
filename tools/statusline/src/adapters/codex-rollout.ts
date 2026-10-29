@@ -1,7 +1,7 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { SessionStatus } from "../session-status.ts";
-import { jsonlLines, readJsonlTail } from "../../../shared/src/jsonl.ts";
+import { jsonlLines, readJsonlTail } from "@dotfiles/shared/src/jsonl.ts";
 import {
   hashSettingsPrefix,
   readCodexSettingsEvents,

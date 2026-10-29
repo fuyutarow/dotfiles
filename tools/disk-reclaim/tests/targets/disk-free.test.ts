@@ -15,10 +15,10 @@ import {
 import { tmpdir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { freeGraveyard, freeExit, requestedBytes } from "../../src/free.ts";
-import { tryAcquire } from "../../../shared/src/dir-lock.ts";
+import { tryAcquire } from "@dotfiles/shared/src/dir-lock.ts";
 import { hasForegroundWaiter } from "../../src/receipt.ts";
 import { loadConfig, run } from "../../src/engine.ts";
-import { jsonOf, jsonText } from "../../../shared/src/zod.ts";
+import { jsonOf, jsonText } from "@dotfiles/shared/src/zod.ts";
 import { collectProcesses } from "../../src/lib/procs.ts";
 import { removeTree } from "../../src/lib/remove-tree.ts";
 import { RIP_GRAVEYARD_MAX_BYTES } from "../../src/lib/graveyards.ts";

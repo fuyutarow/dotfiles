@@ -2,8 +2,8 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { err, ok, type Result } from "neverthrow";
-import { attempt } from "../../shared/src/attempt.ts";
-import { z } from "../../shared/src/zod.ts";
+import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import type { HostKind } from "./profiles.ts";
 
 export type ApprovedHost = {

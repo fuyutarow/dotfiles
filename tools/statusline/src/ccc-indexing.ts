@@ -20,7 +20,10 @@ export type { CccIndex } from "./ccc-model.ts";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gpuStateFailure, readGpuState } from "../../shared/src/gpu-samples.ts";
+import {
+  gpuStateFailure,
+  readGpuState,
+} from "@dotfiles/shared/src/gpu-samples.ts";
 import {
   execAsyncWithin,
   readJsonAsync,

@@ -1,7 +1,7 @@
 // Local JSON codecs ported from agents/hooks/zod.ts (now tools/shared/src/zod.ts).
 // Use the permitted shared Zod primitive so hooks and the package validate with the same pin.
 import { fromThrowable } from "neverthrow";
-import { z } from "../../shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 
 export { z };
 

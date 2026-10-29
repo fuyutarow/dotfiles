@@ -3,8 +3,8 @@ import { cli as cleyeCli } from "cleye";
 import { mkdir, rename } from "node:fs/promises";
 import { release } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { attempt } from "../../shared/src/attempt.ts";
-import { standardCli } from "../../shared/src/cli.ts";
+import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
 import {
   FleetSessionSchema,
@@ -15,12 +15,12 @@ import {
   writeFleetSessionIfChanged,
   type FleetSession,
   type FleetSessionRead,
-} from "../../shared/src/fleet-session.ts";
+} from "@dotfiles/shared/src/fleet-session.ts";
 import {
   readCodexNativeTitle,
   type CodexNativeTitleRead,
-} from "../../shared/src/codex-native-title.ts";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+} from "@dotfiles/shared/src/codex-native-title.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const argv = process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, () => argv);

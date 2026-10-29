@@ -3,9 +3,12 @@ import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gpuAdmissionRefusal } from "../src/agent-resource-run.ts";
-import { type GpuState, readGpuState } from "../../shared/src/gpu-samples.ts";
+import {
+  type GpuState,
+  readGpuState,
+} from "@dotfiles/shared/src/gpu-samples.ts";
 import { DecisionRecord, withDecision } from "../src/lib/decision-record.ts";
-import { runGpuSampler } from "../../shared/src/gpu-sampler.ts";
+import { runGpuSampler } from "@dotfiles/shared/src/gpu-sampler.ts";
 
 // Holder identity only contributes an advisory diagnostic, never a refusal.
 async function advisoryAdmission(

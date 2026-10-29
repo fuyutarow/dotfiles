@@ -32,7 +32,7 @@ import {
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 import { measuredTreeBytes } from "./tree.ts";
-import { fromThrowable, z } from "../../../shared/src/zod.ts";
+import { fromThrowable, z } from "@dotfiles/shared/src/zod.ts";
 import { scanCache, checkScanDeadline } from "../lib/scan-cache.ts";
 import { protectedReason } from "../lib/protected.ts";
 

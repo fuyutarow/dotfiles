@@ -56,8 +56,8 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { cli as cleyeCli, command } from "cleye";
-import { standardCli } from "../../shared/src/cli.ts";
-import { z } from "../../shared/src/zod.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import {
   err,
   fromAsyncThrowable,

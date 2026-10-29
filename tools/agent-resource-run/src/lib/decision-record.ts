@@ -6,7 +6,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
-import { jsonOf, z } from "../../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const context = new AsyncLocalStorage<DecisionRecord>();
 const utc = () =>

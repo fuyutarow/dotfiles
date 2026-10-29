@@ -1,5 +1,10 @@
 {
   "extends": "./presets/typescript/tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@dotfiles/shared/*": ["./tools/shared/*"]
+    }
+  },
   "include": ["**/*.ts"],
   "exclude": [
     "node_modules",

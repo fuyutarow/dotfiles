@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 
 export type CommandResult = { code: number; out: string; err: string };
 export type CommandRunner = (argv: string[]) => CommandResult;

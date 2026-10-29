@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "../../shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import {
   buildLockHolderLaunch,
   buildSystemdLaunch,

@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { readReceipts, stateDir } from "./receipt.ts";
-import { fromThrowable, z } from "../../shared/src/zod.ts";
+import { fromThrowable, z } from "@dotfiles/shared/src/zod.ts";
 import { fromAsyncThrowable } from "neverthrow";
 
 // Isolated process: no probes, child processes, or writes are reachable here.

@@ -5,5 +5,9 @@
   "type": "module",
   "bin": {
     "codex-thread-copy": "src/codex-thread-copy.ts"
+  },
+  "dependencies": {
+    "@dotfiles/shared": "workspace:*",
+    "cleye": "2.6.0"
   }
 }

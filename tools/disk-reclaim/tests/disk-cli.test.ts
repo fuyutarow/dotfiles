@@ -1,4 +1,4 @@
-import { jsonText } from "../../shared/src/zod.ts";
+import { jsonText } from "@dotfiles/shared/src/zod.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";

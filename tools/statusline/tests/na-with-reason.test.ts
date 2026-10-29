@@ -10,7 +10,7 @@ import { snapshotWithFleetFacts } from "../src/snapshot-rate.ts";
 import {
   writeFleetSession,
   type FleetSession,
-} from "../../shared/src/fleet-session.ts";
+} from "@dotfiles/shared/src/fleet-session.ts";
 import {
   hasBareUnavailable,
   renderUnavailable,

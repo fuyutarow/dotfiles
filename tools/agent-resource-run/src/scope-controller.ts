@@ -2,7 +2,7 @@
 // has stopped every descendant, including processes that outlive the direct command.
 import { err, fromAsyncThrowable, ok } from "neverthrow";
 import { readFile } from "node:fs/promises";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 async function main() {
   const payload = jsonOf(

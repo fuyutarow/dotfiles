@@ -5,7 +5,7 @@ import { realTmpdir } from "./fixtures/temp.ts";
 import {
   AGX_WORKER_ENV,
   AGX_WORKER_VALUE,
-} from "../../shared/src/worker-env.ts";
+} from "@dotfiles/shared/src/worker-env.ts";
 import { workerMutationRefusal } from "../src/lib/worker-guard.ts";
 
 test("worker guard rejects when HOME and reclaim state are both outside tmp", () => {

@@ -8,9 +8,9 @@ import {
   readFleetSession,
   writeFleetSession,
   type FleetSessionRead,
-} from "../../shared/src/fleet-session.ts";
-import { jsonOf } from "../../shared/src/zod.ts";
-import { readCodexNativeTitle } from "../../shared/src/codex-native-title.ts";
+} from "@dotfiles/shared/src/fleet-session.ts";
+import { jsonOf } from "@dotfiles/shared/src/zod.ts";
+import { readCodexNativeTitle } from "@dotfiles/shared/src/codex-native-title.ts";
 import {
   nativeTitleCacheInputs,
   agentCpuCacheInput,
@@ -401,7 +401,7 @@ import { mkdir } from "node:fs/promises";
 import {
   refreshCodexFleetSession,
   readCodexNativeSession,
-} from "../../shared/src/fleet-session.ts";
+} from "@dotfiles/shared/src/fleet-session.ts";
 
 type NativeTitleBindings = NonNullable<
   Parameters<typeof bindNativeCodexFooters>[4]

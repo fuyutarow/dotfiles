@@ -5,5 +5,10 @@
   "type": "module",
   "bin": {
     "baseline": "src/baseline.ts"
+  },
+  "dependencies": {
+    "@dotfiles/shared": "workspace:*",
+    "cleye": "2.6.0",
+    "neverthrow": "8.2.0"
   }
 }

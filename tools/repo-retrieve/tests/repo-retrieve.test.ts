@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { z } from "../../shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
 import { decodedJson } from "../../../agents/hooks/tests/decode.ts";
 import { waitForIndexChild } from "../src/ccc-index.ts";

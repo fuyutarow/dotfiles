@@ -3,7 +3,7 @@
 import { isAbsolute } from "node:path";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
+import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { ReclaimRecord } from "./records.ts";
 import { runProbe } from "./disk-probe.ts";
 import { planPaths } from "./disk-path-plan.ts";

@@ -1,9 +1,9 @@
-import { attempt } from "../../shared/src/attempt.ts";
+import { attempt } from "@dotfiles/shared/src/attempt.ts";
 import {
   writeFleetSession,
   type FleetSession,
   type FleetSessionUnavailable,
-} from "../../shared/src/fleet-session.ts";
+} from "@dotfiles/shared/src/fleet-session.ts";
 import type { SessionStatus } from "./session-status.ts";
 import { agentNameAsync } from "./identity.ts";
 

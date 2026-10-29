@@ -2,7 +2,7 @@ import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, maybe, z } from "./zod.ts";
-import { writeFleetSession } from "../../shared/src/fleet-session.ts";
+import { writeFleetSession } from "@dotfiles/shared/src/fleet-session.ts";
 import {
   execAsyncRenderBounded,
   execAsyncWithin,

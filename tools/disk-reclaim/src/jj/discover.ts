@@ -1,6 +1,6 @@
 import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import { jj } from "./jj.ts";
 import { checkScanDeadline } from "../lib/scan-cache.ts";
 

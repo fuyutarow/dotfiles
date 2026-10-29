@@ -2,7 +2,7 @@ import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
 import type { Candidate } from "../model.ts";
 import type { Context } from "./index.ts";
 import { defaultScanCacheDir, scanCache } from "../lib/scan-cache.ts";
-import { z } from "../../../shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 
 export async function treeBytes(
   path: string,

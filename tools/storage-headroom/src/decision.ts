@@ -36,8 +36,8 @@ import {
   nonEmptyString,
   storageLine as effective,
   type Drive,
-} from "../../shared/src/storage-headroom.ts";
-import { readReclaimPlanCache } from "../../shared/src/reclaim-plan-cache.ts";
+} from "@dotfiles/shared/src/storage-headroom.ts";
+import { readReclaimPlanCache } from "@dotfiles/shared/src/reclaim-plan-cache.ts";
 import {
   existsSync,
   mkdirSync,
@@ -48,12 +48,16 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { attempt, attemptOr, errorMessage } from "../../shared/src/attempt.ts";
+import {
+  attempt,
+  attemptOr,
+  errorMessage,
+} from "@dotfiles/shared/src/attempt.ts";
 import {
   type ShellCommand,
   effective as effectiveCommand,
   parseShell,
-} from "../../shared/src/shell-syntax.ts";
+} from "@dotfiles/shared/src/shell-syntax.ts";
 import {
   type Obj,
   arr,
@@ -64,7 +68,7 @@ import {
   parseJson,
   str,
   strAt,
-} from "../../shared/src/narrow.ts";
+} from "@dotfiles/shared/src/narrow.ts";
 
 const GiB = 1024 ** 3;
 // Shared with statusline; configuration migration belongs to capacity-unify.

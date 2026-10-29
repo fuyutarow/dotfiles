@@ -10,11 +10,11 @@ import {
 } from "node:fs";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
-import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
+import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   AGX_WORKER_ENV,
   AGX_WORKER_VALUE,
-} from "../../shared/src/worker-env.ts";
+} from "@dotfiles/shared/src/worker-env.ts";
 import { Plan, ReceiptV1 } from "../src/model.ts";
 import { readReceipts, stateDir, writeReceipt } from "../src/receipt.ts";
 import { loadConfig } from "../src/engine.ts";

@@ -5,7 +5,7 @@ import { tempRoot } from "../fixtures/temp.ts";
 import { createCleanTarget } from "../../src/targets/clean.ts";
 import { run } from "../../src/engine.ts";
 import { processBusy } from "../../src/lib/busy.ts";
-import { z } from "../../../shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import { loadConfig } from "../../src/engine.ts";
 
 const cacheRoot = tempRoot("reclaim-clean-cache-");

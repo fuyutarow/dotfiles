@@ -20,7 +20,7 @@ import { expireGraveyard } from "../../../../scripts/wsl-capacity-recover.ts";
 import { cliEnv } from "../fixtures/cli-env.ts";
 import { inspectRipGraveyard, ripRecords } from "../../src/lib/graveyards.ts";
 import { Plan } from "../../src/model.ts";
-import { jsonOf } from "../../../shared/src/zod.ts";
+import { jsonOf } from "@dotfiles/shared/src/zod.ts";
 import { removeTree } from "../../src/lib/remove-tree.ts";
 import { createRipExpiryTarget } from "../../src/targets/rip-expire.ts";
 import type { Context } from "../../src/targets/index.ts";

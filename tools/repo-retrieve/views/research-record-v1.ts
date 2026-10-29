@@ -11,9 +11,9 @@ import {
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
-import { attempt, errorMessage } from "../../shared/src/attempt.ts";
-import { z } from "../../shared/src/zod.ts";
-import { plainHelp } from "../../shared/src/cli.ts";
+import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
+import { plainHelp } from "@dotfiles/shared/src/cli.ts";
 
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const formatSchema = z.object({

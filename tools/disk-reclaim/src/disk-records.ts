@@ -1,4 +1,4 @@
-import { jsonOf } from "../../shared/src/zod.ts";
+import { jsonOf } from "@dotfiles/shared/src/zod.ts";
 import { ReclaimRecord } from "./records.ts";
 
 /** Classify records without touching their paths or invoking a target. */

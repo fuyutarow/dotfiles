@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative, resolve, isAbsolute, sep } from "node:path";
 import { homedir } from "node:os";
-import { fromThrowable, jsonOf, z } from "../../../shared/src/zod.ts";
+import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   collectProcesses,
   resolveProcRoot,

@@ -3,8 +3,8 @@ import { lstat, realpath, statfs } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
 import { match } from "ts-pattern";
-import { z } from "../../shared/src/zod.ts";
-import type { Holder } from "../../shared/src/dir-lock.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
+import type { Holder } from "@dotfiles/shared/src/dir-lock.ts";
 import type { Config } from "./model.ts";
 import {
   errorMessage,

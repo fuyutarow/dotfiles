@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { tryAcquire } from "../../shared/src/dir-lock.ts";
+import { tryAcquire } from "@dotfiles/shared/src/dir-lock.ts";
 import { run } from "../src/engine.ts";
 import { hasForegroundWaiter } from "../src/receipt.ts";
 import { recoverExit, recoverGraveyard } from "../src/recover.ts";

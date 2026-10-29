@@ -5,5 +5,9 @@
   "bin": {
     "herdr-projector": "src/herdr-projector.ts"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@dotfiles/shared": "workspace:*",
+    "cleye": "2.6.0"
+  }
 }

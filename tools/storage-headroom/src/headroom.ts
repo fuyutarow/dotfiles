@@ -6,7 +6,7 @@ import {
   measureStorage,
   type Drive,
   type StorageMeasurement,
-} from "../../shared/src/storage-headroom.ts";
+} from "@dotfiles/shared/src/storage-headroom.ts";
 type Headroom = {
   drives: {
     label: string;

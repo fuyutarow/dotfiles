@@ -5,5 +5,11 @@
   "type": "module",
   "bin": {
     "btmp": "src/btmp.ts"
+  },
+  "dependencies": {
+    "@dotfiles/shared": "workspace:*",
+    "cleye": "2.6.0",
+    "neverthrow": "8.2.0",
+    "type-flag": "4.5.0"
   }
 }

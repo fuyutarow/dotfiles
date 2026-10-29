@@ -3,7 +3,7 @@ import { cli as cleyeCli } from "cleye";
 import { mkdir, lstat, readFile, realpath, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { jsonOf, z } from "../../../agents/hooks/zod.ts";
-import { standardCli } from "../../shared/src/cli.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const cliArgv = () => process.argv.slice(2);

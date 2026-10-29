@@ -2,7 +2,7 @@ import { existsSync, lstatSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import {
   createLivenessSnapshot,
   type LivenessFacts,

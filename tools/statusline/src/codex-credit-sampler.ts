@@ -6,7 +6,7 @@ import {
   CREDIT_DELTA_WINDOW_MS,
   readCodexCreditBaseline,
   type CodexCreditMemo,
-} from "../../shared/src/codex-subscription-usage.ts";
+} from "@dotfiles/shared/src/codex-subscription-usage.ts";
 
 export const CODEX_CREDIT_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 export const CODEX_CREDIT_REFRESH_BUDGET_MS = 5000;

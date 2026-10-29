@@ -16,8 +16,8 @@ import {
 import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
-import { acquire, pidAlive } from "../../shared/src/dir-lock.ts";
-import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
+import { acquire, pidAlive } from "@dotfiles/shared/src/dir-lock.ts";
+import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   Receipt,
   ReclaimItemOutcome,

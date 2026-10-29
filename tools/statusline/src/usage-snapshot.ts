@@ -3,7 +3,7 @@ import {
   subscriptionUsagePath,
   SubscriptionUsageSnapshotSchema,
   type SubscriptionUsageSnapshot,
-} from "../../shared/src/subscription-usage.ts";
+} from "@dotfiles/shared/src/subscription-usage.ts";
 import { readJsonAsync, writeCacheAsync } from "./bounded.ts";
 
 type RateFacts = Pick<

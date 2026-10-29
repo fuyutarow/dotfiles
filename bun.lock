@@ -22,11 +22,283 @@
         "oxlint-tsgolint": "7.0.2003",
       },
     },
+    "tools/agent-cpu": {
+      "name": "@dotfiles/agent-cpu",
+      "version": "0.1.0",
+      "bin": {
+        "agent-cpu": "src/agent-cpu.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+      },
+    },
+    "tools/agent-resource-run": {
+      "name": "@dotfiles/agent-resource-run",
+      "version": "1.14.0",
+      "bin": {
+        "agent-resource-run": "src/agent-resource-run.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+        "neverthrow": "8.2.0",
+      },
+    },
+    "tools/baseline": {
+      "name": "@dotfiles/baseline",
+      "version": "0.1.1",
+      "bin": {
+        "baseline": "src/baseline.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+        "neverthrow": "8.2.0",
+      },
+    },
+    "tools/codex-thread-copy": {
+      "name": "@dotfiles/codex-thread-copy",
+      "version": "0.1.1",
+      "bin": {
+        "codex-thread-copy": "src/codex-thread-copy.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+      },
+    },
+    "tools/coredev": {
+      "name": "@dotfiles/coredev",
+      "version": "0.5.1",
+      "bin": {
+        "coredev": "src/coredev.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+        "neverthrow": "8.2.0",
+      },
+    },
+    "tools/detect-japanese": {
+      "name": "@dotfiles/detect-japanese",
+      "version": "0.2.2",
+      "bin": {
+        "detect-japanese": "src/cli.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+      },
+    },
+    "tools/disk-reclaim": {
+      "name": "@dotfiles/disk-reclaim",
+      "version": "1.12.1",
+      "bin": {
+        "disk-reclaim": "src/reclaim.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+        "neverthrow": "8.2.0",
+        "ts-pattern": "5.9.0",
+        "zod": "4.6.5",
+      },
+    },
+    "tools/herdr-btm": {
+      "name": "@dotfiles/herdr-btm",
+      "version": "0.2.4",
+      "bin": {
+        "btmp": "src/btmp.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+        "neverthrow": "8.2.0",
+        "type-flag": "4.5.0",
+      },
+    },
+    "tools/herdr-projector": {
+      "name": "@dotfiles/herdr-projector",
+      "version": "0.2.0",
+      "bin": {
+        "herdr-projector": "src/herdr-projector.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+      },
+    },
+    "tools/preset": {
+      "name": "@dotfiles/preset",
+      "version": "0.2.0",
+      "bin": {
+        "preset": "src/preset.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+      },
+    },
+    "tools/prompt-archive": {
+      "name": "@dotfiles/prompt-archive",
+      "version": "0.1.1",
+      "bin": {
+        "prompt-archive": "src/prompt-archive.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+      },
+    },
+    "tools/repo-retrieve": {
+      "name": "@dotfiles/repo-retrieve",
+      "version": "1.5.6",
+      "bin": {
+        "rr": "src/repo-retrieve.ts",
+        "repo-retrieve": "src/repo-retrieve.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+        "neverthrow": "8.2.0",
+      },
+    },
+    "tools/secrets-push": {
+      "name": "@dotfiles/secrets-push",
+      "version": "0.2.3",
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+      },
+    },
+    "tools/serena-foreground": {
+      "name": "@dotfiles/serena-foreground",
+      "version": "1.0.2",
+      "bin": {
+        "serena-foreground": "src/serena-foreground.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+        "neverthrow": "8.2.0",
+      },
+    },
+    "tools/shared": {
+      "name": "@dotfiles/shared",
+      "version": "0.19.4",
+      "bin": {
+        "gpu-sampler": "src/gpu-sampler.ts",
+      },
+      "dependencies": {
+        "@clack/prompts": "1.8.1",
+        "cleye": "2.6.0",
+        "neverthrow": "8.2.0",
+        "type-flag": "4.5.0",
+      },
+    },
+    "tools/smart-open": {
+      "name": "@dotfiles/smart-open",
+      "version": "1.2.0",
+      "bin": {
+        "smart-open": "src/smart-open.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+      },
+    },
+    "tools/statusline": {
+      "name": "@dotfiles/statusline",
+      "version": "0.22.5",
+      "bin": {
+        "statusline": "src/statusline.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+        "neverthrow": "8.2.0",
+        "zod": "4.6.5",
+      },
+    },
+    "tools/storage-headroom": {
+      "name": "@dotfiles/storage-headroom",
+      "version": "0.2.5",
+      "bin": {
+        "storage-headroom": "src/storage-headroom.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+        "neverthrow": "8.2.0",
+      },
+    },
+    "tools/sui-keystore-merge": {
+      "name": "@dotfiles/sui-keystore-merge",
+      "version": "0.2.2",
+      "bin": {
+        "sui-keystore-merge": "src/sui-keystore-merge.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+      },
+    },
+    "tools/tool-tiers": {
+      "name": "@dotfiles/tool-tiers",
+      "version": "0.2.1",
+      "bin": {
+        "tool": "src/tool.ts",
+      },
+      "dependencies": {
+        "@dotfiles/shared": "workspace:*",
+        "cleye": "2.6.0",
+      },
+    },
   },
   "packages": {
     "@clack/core": ["@clack/core@1.5.1", "", { "dependencies": { "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-iHTrHA8MtVuLl2TfZySmcKv1qO2PoyC9Z7pfSDozEuV5vtY3/wcOPKJXlqJ5Oq2Cx5DDGQGAMVx6HZfRRoVEbQ=="],
 
     "@clack/prompts": ["@clack/prompts@1.8.1", "", { "dependencies": { "@clack/core": "1.5.1", "fast-string-width": "^3.0.2", "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-dlT1m5e/0yUL0kRNcQn7yGLVThkgbB0Ga/1AmfDDC/8ik6AIiSf2QLQO2zPYvefsHP0aFgxO93cVLCCfDp7kzQ=="],
+
+    "@dotfiles/agent-cpu": ["@dotfiles/agent-cpu@workspace:tools/agent-cpu"],
+
+    "@dotfiles/agent-resource-run": ["@dotfiles/agent-resource-run@workspace:tools/agent-resource-run"],
+
+    "@dotfiles/baseline": ["@dotfiles/baseline@workspace:tools/baseline"],
+
+    "@dotfiles/codex-thread-copy": ["@dotfiles/codex-thread-copy@workspace:tools/codex-thread-copy"],
+
+    "@dotfiles/coredev": ["@dotfiles/coredev@workspace:tools/coredev"],
+
+    "@dotfiles/detect-japanese": ["@dotfiles/detect-japanese@workspace:tools/detect-japanese"],
+
+    "@dotfiles/disk-reclaim": ["@dotfiles/disk-reclaim@workspace:tools/disk-reclaim"],
+
+    "@dotfiles/herdr-btm": ["@dotfiles/herdr-btm@workspace:tools/herdr-btm"],
+
+    "@dotfiles/herdr-projector": ["@dotfiles/herdr-projector@workspace:tools/herdr-projector"],
+
+    "@dotfiles/preset": ["@dotfiles/preset@workspace:tools/preset"],
+
+    "@dotfiles/prompt-archive": ["@dotfiles/prompt-archive@workspace:tools/prompt-archive"],
+
+    "@dotfiles/repo-retrieve": ["@dotfiles/repo-retrieve@workspace:tools/repo-retrieve"],
+
+    "@dotfiles/secrets-push": ["@dotfiles/secrets-push@workspace:tools/secrets-push"],
+
+    "@dotfiles/serena-foreground": ["@dotfiles/serena-foreground@workspace:tools/serena-foreground"],
+
+    "@dotfiles/shared": ["@dotfiles/shared@workspace:tools/shared"],
+
+    "@dotfiles/smart-open": ["@dotfiles/smart-open@workspace:tools/smart-open"],
+
+    "@dotfiles/statusline": ["@dotfiles/statusline@workspace:tools/statusline"],
+
+    "@dotfiles/storage-headroom": ["@dotfiles/storage-headroom@workspace:tools/storage-headroom"],
+
+    "@dotfiles/sui-keystore-merge": ["@dotfiles/sui-keystore-merge@workspace:tools/sui-keystore-merge"],
+
+    "@dotfiles/tool-tiers": ["@dotfiles/tool-tiers@workspace:tools/tool-tiers"],
 
     "@emnapi/core": ["@emnapi/core@1.11.2", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA=="],
 

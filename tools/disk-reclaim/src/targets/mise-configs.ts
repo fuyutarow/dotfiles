@@ -11,7 +11,7 @@ import { dirname, join, resolve } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
 import type { ActionResult } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { z } from "../../../shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 
 type CommandResult = { code: number; out: string; err: string };
 type CommandRunner = (argv: string[]) => Promise<CommandResult>;

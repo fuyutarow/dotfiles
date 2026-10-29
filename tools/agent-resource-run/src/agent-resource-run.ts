@@ -11,14 +11,14 @@ import {
   ok,
   type Result,
 } from "neverthrow";
-import { standardCli } from "../../shared/src/cli.ts";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   GpuProcessIdentitySchema,
   gpuStatePath,
   readGpuState,
   type GpuState,
-} from "../../shared/src/gpu-samples.ts";
+} from "@dotfiles/shared/src/gpu-samples.ts";
 import {
   assessRecoveryVerdict,
   readRecoveryVerdict,

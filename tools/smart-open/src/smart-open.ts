@@ -42,8 +42,8 @@ import { readFile, stat } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
-import { standardCli } from "../../shared/src/cli.ts";
-import { attempt, errorMessage } from "../../shared/src/attempt.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
+import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
 import {
   ACK_MS,
   editorHost,
@@ -53,8 +53,8 @@ import {
   SSH_HOST_ENV,
   unlinkIfSame,
   type FileKey,
-} from "../../shared/src/sockets.ts";
-import { z } from "../../shared/src/zod.ts";
+} from "@dotfiles/shared/src/sockets.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
 import { OBSIDIAN_ACK_MS } from "./protocol.ts";
 

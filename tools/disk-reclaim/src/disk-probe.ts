@@ -1,4 +1,4 @@
-import { fromThrowable } from "../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 
 /** Observe the direct child's termination before reporting a timeout. */
 export async function runProbe(

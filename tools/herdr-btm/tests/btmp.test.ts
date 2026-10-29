@@ -3,7 +3,7 @@ import { chmod, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const tempDirs: string[] = [];
 const servers: ReturnType<typeof createServer>[] = [];

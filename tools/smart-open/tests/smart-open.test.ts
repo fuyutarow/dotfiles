@@ -19,13 +19,13 @@ import {
 } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
-import { attempt } from "../../shared/src/attempt.ts";
+import { attempt } from "@dotfiles/shared/src/attempt.ts";
 import {
   ACK_MS,
   fileKey,
   SETTLE_MS,
   unlinkIfSame,
-} from "../../shared/src/sockets.ts";
+} from "@dotfiles/shared/src/sockets.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const TOOL = join(import.meta.dir, "..");
@@ -544,7 +544,7 @@ await Bun.write(join(process.env.HOME, 'shadow'), target);
     true,
   );
   const dataPath = join(shadow, ".obsidian/plugins/remote-ssh/data.json");
-  const { jsonOf, z } = await import("../../shared/src/zod.ts");
+  const { jsonOf, z } = await import("@dotfiles/shared/src/zod.ts");
   const dataSchema = jsonOf(
     z.object({
       activeProfileId: z.string(),

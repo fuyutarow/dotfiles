@@ -2,7 +2,7 @@ import {
   assess,
   loadStorageHeadroom,
   measureStorageUncached,
-} from "../../shared/src/storage-headroom.ts";
+} from "@dotfiles/shared/src/storage-headroom.ts";
 import { statfs } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";

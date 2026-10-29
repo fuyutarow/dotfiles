@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   readSubscriptionUsageSnapshot,
   subscriptionUsagePath,
-} from "../../shared/src/subscription-usage.ts";
+} from "@dotfiles/shared/src/subscription-usage.ts";
 import { rateRow } from "../src/rate-limits.ts";
 import { writeUsageSnapshotAsync } from "../src/usage-snapshot.ts";
 

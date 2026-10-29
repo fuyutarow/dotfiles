@@ -7,7 +7,7 @@ import {
 } from "../../src/lib/procs.ts";
 import { procFixture } from "../fixtures/procs.ts";
 import { tempRoot } from "../fixtures/temp.ts";
-import { TerminalProgress } from "../../../shared/src/terminal-progress.ts";
+import { TerminalProgress } from "@dotfiles/shared/src/terminal-progress.ts";
 
 test("40 EACCES fds yield one expected summary on TTY and pipes; verbose keeps detail", () => {
   const root = tempRoot("reclaim-diagnostics-");

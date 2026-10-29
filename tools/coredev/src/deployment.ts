@@ -1,5 +1,5 @@
-import { jsonOf, z } from "../../shared/src/zod.ts";
-import { shellQuote } from "../../shared/src/read-path.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
+import { shellQuote } from "@dotfiles/shared/src/read-path.ts";
 import { err, ok, type Result } from "neverthrow";
 
 export type HostKind = "linux" | "wsl" | "mac";

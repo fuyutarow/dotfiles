@@ -10,9 +10,9 @@
 
 import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-import { readonlyCommand } from "../../shared/src/readonly-command.ts";
-import { attempt } from "../../shared/src/attempt.ts";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { readonlyCommand } from "@dotfiles/shared/src/readonly-command.ts";
+import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { cccBackend } from "./ccc-entry.ts";
 
 // The owned public entry may be a Bun wrapper; its preserved backend is the uv-tool script whose

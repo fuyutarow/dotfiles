@@ -3,8 +3,8 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { hostname } from "node:os";
-import { tryAcquire } from "../../shared/src/dir-lock.ts";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { tryAcquire } from "@dotfiles/shared/src/dir-lock.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   loadConfig,
   plan,

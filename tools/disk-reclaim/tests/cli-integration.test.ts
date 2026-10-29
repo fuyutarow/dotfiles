@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import { jsonOf } from "../../shared/src/zod.ts";
+import { jsonOf } from "@dotfiles/shared/src/zod.ts";
 import { plan } from "../src/engine.ts";
 import { createLivenessSnapshot, readSessions } from "../src/liveness/facts.ts";
 import { Plan, ReceiptV2 } from "../src/model.ts";

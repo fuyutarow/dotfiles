@@ -15,7 +15,7 @@ import { countEntries } from "../lib/purge-progress.ts";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ActionResult, Candidate, Config, Headroom } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { fromThrowable, z } from "../../../shared/src/zod.ts";
+import { fromThrowable, z } from "@dotfiles/shared/src/zod.ts";
 import { scanCache, checkScanDeadline } from "../lib/scan-cache.ts";
 import { ripExpiryCandidates } from "./rip-expire.ts";
 import { loadGraveyardAgePolicy } from "../graveyard-age.ts";

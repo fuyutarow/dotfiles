@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, symlink, stat } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const entry = resolve(import.meta.dir, "../src/btmp.ts");
 const configPath = resolve(import.meta.dir, "../../../herdr/config.toml");

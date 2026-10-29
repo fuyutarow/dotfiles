@@ -12,7 +12,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { removeTree } from "../lib/remove-tree.ts";
 import { collectProcesses } from "../lib/procs.ts";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import { checkScanDeadline } from "../lib/scan-cache.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";

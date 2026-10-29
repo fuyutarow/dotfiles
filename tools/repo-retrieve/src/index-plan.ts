@@ -1,8 +1,8 @@
 // A read-only admission gate. The Python bridge owns enumeration; all policy is here.
 import { join, posix } from "node:path";
 import { err, ok, type Result } from "neverthrow";
-import { z, jsonOf } from "../../shared/src/zod.ts";
-import { attempt, errorMessage } from "../../shared/src/attempt.ts";
+import { z, jsonOf } from "@dotfiles/shared/src/zod.ts";
+import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
 import { cccPython } from "./ccc-scope.ts";
 import { readIndexRate } from "./index-rate.ts";
 

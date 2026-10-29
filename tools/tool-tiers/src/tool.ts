@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
-import { standardCli } from "../../shared/src/cli.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
 import { dirname, join } from "node:path";
 import {

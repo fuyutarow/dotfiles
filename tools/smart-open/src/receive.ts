@@ -62,16 +62,16 @@ import { chmod, lstat, mkdir, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { cli as cleyeCli } from "cleye";
-import { standardCli } from "../../shared/src/cli.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
-import { attempt } from "../../shared/src/attempt.ts";
+import { attempt } from "@dotfiles/shared/src/attempt.ts";
 import {
   ACK_MS,
   editorHost,
   receiverSocket,
   SETTLE_MS,
-} from "../../shared/src/sockets.ts";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+} from "@dotfiles/shared/src/sockets.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { OBSIDIAN_OPEN_MS } from "./protocol.ts";
 
 const cliArgv = () => process.argv.slice(2);

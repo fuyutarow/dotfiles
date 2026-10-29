@@ -3,7 +3,7 @@ import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gpuAdmissionRefusal } from "../src/agent-resource-run.ts";
-import type { GpuState } from "../../shared/src/gpu-samples.ts";
+import type { GpuState } from "@dotfiles/shared/src/gpu-samples.ts";
 
 // Holder identity only contributes an advisory diagnostic, never a refusal.
 async function advisoryAdmission(

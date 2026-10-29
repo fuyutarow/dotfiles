@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { fromThrowable, jsonOf, z } from "../../../shared/src/zod.ts";
+import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import type { Context } from "../targets/index.ts";
 
 const Entry = z.object({ key: z.string(), value: z.unknown() });

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
 import { resolve } from "node:path";
-import { standardCli } from "../../shared/src/cli.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { newestThread } from "./threads.ts";
 import pkg from "../package.json" with { type: "json" };
 

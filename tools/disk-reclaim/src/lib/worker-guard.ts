@@ -4,9 +4,9 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
   AGX_WORKER_ENV,
   AGX_WORKER_VALUE,
-} from "../../../shared/src/worker-env.ts";
+} from "@dotfiles/shared/src/worker-env.ts";
 import { stateDir } from "../receipt.ts";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 
 const isWithin = (path: string, parent: string): boolean => {
   const rel = relative(resolve(parent), resolve(path));

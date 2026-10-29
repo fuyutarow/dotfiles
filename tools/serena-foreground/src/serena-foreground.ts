@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
-import { standardCli } from "../../shared/src/cli.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { fromPromise } from "neverthrow";
 import {
   executeJob,

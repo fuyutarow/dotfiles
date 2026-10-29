@@ -59,5 +59,8 @@
     "oxlint": "1.82.0",
     "oxlint-plugin-eslint": "1.82.0",
     "oxlint-tsgolint": "7.0.2003"
-  }
+  },
+  "workspaces": [
+    "tools/*"
+  ]
 }

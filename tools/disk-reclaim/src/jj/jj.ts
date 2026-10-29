@@ -1,4 +1,4 @@
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 
 export type JjResult = { ok: boolean; stdout: string; stderr: string };
 

@@ -1,7 +1,7 @@
 import {
   TerminalProgress,
   type TerminalProgressOptions,
-} from "../../../shared/src/terminal-progress.ts";
+} from "@dotfiles/shared/src/terminal-progress.ts";
 
 export type ProgressOptions = TerminalProgressOptions;
 export class ProgressReporter extends TerminalProgress {

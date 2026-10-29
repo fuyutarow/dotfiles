@@ -1,6 +1,6 @@
 import { clockHM, nowEpochSec, pad2, stampMDHM } from "./prompt-stamp.ts";
 import { pctColor, roles, paceColor, pctFmt, unavailable } from "./ansi.ts";
-import { formatCostUsd } from "../../shared/src/dispatch-pricing.ts";
+import { formatCostUsd } from "@dotfiles/shared/src/dispatch-pricing.ts";
 import type { CodexRate } from "./codex-rate.ts";
 import type { JevUsage } from "./jev-usage.ts";
 

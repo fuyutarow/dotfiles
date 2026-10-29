@@ -6,5 +6,10 @@
   "bin": {
     "rr": "src/repo-retrieve.ts",
     "repo-retrieve": "src/repo-retrieve.ts"
+  },
+  "dependencies": {
+    "@dotfiles/shared": "workspace:*",
+    "cleye": "2.6.0",
+    "neverthrow": "8.2.0"
   }
 }

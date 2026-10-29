@@ -5,5 +5,8 @@
   "type": "module",
   "bin": {
     "agent-cpu": "src/agent-cpu.ts"
+  },
+  "dependencies": {
+    "@dotfiles/shared": "workspace:*"
   }
 }

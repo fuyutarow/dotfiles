@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeFleetSession } from "../../shared/src/fleet-session.ts";
+import { writeFleetSession } from "@dotfiles/shared/src/fleet-session.ts";
 
 test("CLI caches unchanged cycles, invalidates inputs, and retries failed writes", async () => {
   const root = await mkdtemp(join(tmpdir(), "projector-cycle-"));

@@ -5,5 +5,10 @@
   "type": "module",
   "bin": {
     "agent-resource-run": "src/agent-resource-run.ts"
+  },
+  "dependencies": {
+    "@dotfiles/shared": "workspace:*",
+    "cleye": "2.6.0",
+    "neverthrow": "8.2.0"
   }
 }

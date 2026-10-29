@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { expect } from "bun:test";
-import { at, obj, parseJson, strAt } from "../../shared/src/narrow.ts";
+import { at, obj, parseJson, strAt } from "@dotfiles/shared/src/narrow.ts";
 
 const message = (text: string) =>
   `[dotfiles:storage-headroom] ${text.replace(/^storage-headroom:\s*/u, "")}`;

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { chmodSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { jsonOf } from "../../../shared/src/zod.ts";
+import { jsonOf } from "@dotfiles/shared/src/zod.ts";
 import { Plan } from "../../src/model.ts";
 import { ReclaimRecord } from "../../src/records.ts";
 import { cliEnv } from "../fixtures/cli-env.ts";

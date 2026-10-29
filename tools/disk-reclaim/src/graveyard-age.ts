@@ -1,7 +1,7 @@
 import { statfs } from "node:fs/promises";
 import { dirname } from "node:path";
 import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
-import { z } from "../../shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import { loadCollectionPolicy } from "./policy.ts";
 
 const GIB = 1024 ** 3;

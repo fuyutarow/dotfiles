@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { attempt, type Attempt } from "../../shared/src/attempt.ts";
-import { jsonText, z } from "../../shared/src/zod.ts";
+import { attempt, type Attempt } from "@dotfiles/shared/src/attempt.ts";
+import { jsonText, z } from "@dotfiles/shared/src/zod.ts";
 
 type JsonRecord = Record<string, unknown>;
 type Vendor = "claude" | "codex";

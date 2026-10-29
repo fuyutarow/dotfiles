@@ -2,7 +2,7 @@
 import { expect, mock } from "bun:test";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 const read = fs.readFile;
 const directory = fs.readdir;
 const open = fs.opendir;

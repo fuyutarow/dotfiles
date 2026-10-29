@@ -1,7 +1,7 @@
 import {
   FleetSessionSchema,
   type FleetSession,
-} from "../../shared/src/fleet-session.ts";
+} from "@dotfiles/shared/src/fleet-session.ts";
 import { fromThrowable } from "neverthrow";
 import type { Dataframe } from "./dataframe.ts";
 import { contextLabel } from "./model-context.ts";

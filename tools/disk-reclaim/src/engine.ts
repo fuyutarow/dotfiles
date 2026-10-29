@@ -2,7 +2,7 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { cpus, homedir, hostname } from "node:os";
 import { resolve } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
-import { fromThrowable, z } from "../../shared/src/zod.ts";
+import { fromThrowable, z } from "@dotfiles/shared/src/zod.ts";
 import { readHeadroom } from "./storage.ts";
 import { protectedReason } from "./lib/protected.ts";
 import {

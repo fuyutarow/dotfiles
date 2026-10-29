@@ -1,5 +1,5 @@
 import { isAbsolute } from "node:path";
-import { z } from "../../shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import { CollectionPolicyConfig } from "./policy.ts";
 
 const absolute = z.string().refine(isAbsolute, "expected an absolute path");

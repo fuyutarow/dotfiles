@@ -14,22 +14,22 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { bashCwd } from "../../shared/src/bash-cwd.ts";
-import { findExe } from "../../shared/src/find-executable.ts";
-import { strAt } from "../../shared/src/shape.ts";
+import { bashCwd } from "@dotfiles/shared/src/bash-cwd.ts";
+import { findExe } from "@dotfiles/shared/src/find-executable.ts";
+import { strAt } from "@dotfiles/shared/src/shape.ts";
 import {
   coordinatorPath,
   insidePath,
   physicalPath,
   readPath,
   shellQuote,
-} from "../../shared/src/read-path.ts";
+} from "@dotfiles/shared/src/read-path.ts";
 import {
   type ParsedShell,
   type ShellCommand,
   effective,
   parseShell,
-} from "../../shared/src/shell-syntax.ts";
+} from "@dotfiles/shared/src/shell-syntax.ts";
 
 const GREP_SEARCH =
   /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:(?:sudo|command|time|nice)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|timeout(?:\s+--\S+)*\s+\S+\s+)*(?:\S*\/)?(grep|egrep|fgrep|rg|ripgrep|ag|ack|ugrep)\b/u;

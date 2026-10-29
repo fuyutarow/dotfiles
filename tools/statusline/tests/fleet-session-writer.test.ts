@@ -13,7 +13,7 @@ import { join } from "node:path";
 import {
   FleetSessionSchema,
   readFleetSession,
-} from "../../shared/src/fleet-session.ts";
+} from "@dotfiles/shared/src/fleet-session.ts";
 import { writeStatuslineFleetSession } from "../src/fleet-session.ts";
 
 const root = await mkdtemp(join(tmpdir(), "fleet-session-writer-"));

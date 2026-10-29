@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { fromAsyncThrowable } from "neverthrow";
 import { resolve, sep } from "node:path";
-import { fromThrowable, jsonOf, z } from "../../../shared/src/zod.ts";
+import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const Runs = z.array(
   z.looseObject({

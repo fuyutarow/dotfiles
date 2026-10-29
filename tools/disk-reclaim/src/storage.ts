@@ -5,7 +5,7 @@ import {
   loadStorageHeadroom,
   measureStorage,
   type StorageMeasurement,
-} from "../../shared/src/storage-headroom.ts";
+} from "@dotfiles/shared/src/storage-headroom.ts";
 import type { Headroom } from "./model.ts";
 
 export function readHeadroom(

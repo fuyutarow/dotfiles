@@ -20,7 +20,7 @@ import {
   waitForLock,
   writeReceipt,
 } from "./receipt.ts";
-import { fromThrowable } from "../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import {
   directoryProtection,
   removeTree,

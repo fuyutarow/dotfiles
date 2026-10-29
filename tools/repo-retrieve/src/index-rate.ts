@@ -1,7 +1,7 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { availableParallelism, hostname, homedir, loadavg } from "node:os";
 import { dirname, join } from "node:path";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const HISTORY_LIMIT = 9;
 // Small/short runs mostly measure startup and incremental reuse, not bulk throughput.

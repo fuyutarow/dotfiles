@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fromAsyncThrowable, fromThrowable } from "neverthrow";
-import { jsonOf, z } from "../../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 export const RECOVERY_VERDICT_MAX_AGE_MS = 5 * 60 * 1000;
 

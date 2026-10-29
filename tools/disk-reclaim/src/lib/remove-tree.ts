@@ -17,7 +17,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { dlopen, FFIType, ptr, read } from "bun:ffi";
 import { listWorkspaces, storeOf } from "../jj/discover.ts";
 import { runProtection } from "../jj/run-guard.ts";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import { protectedReason, type ProtectionOptions } from "./protected.ts";
 type ProtectionProcesses = NonNullable<ProtectionOptions["processes"]>;
 import { countEntries } from "./purge-progress.ts";

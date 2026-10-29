@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { err, ok, type Result } from "neverthrow";
-import { attempt, errorMessage } from "../../shared/src/attempt.ts";
-import { loadStorageHeadroom } from "../../shared/src/storage-headroom.ts";
-import { z } from "../../shared/src/zod.ts";
+import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { loadStorageHeadroom } from "@dotfiles/shared/src/storage-headroom.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 
 const CacheRule = z
   .object({

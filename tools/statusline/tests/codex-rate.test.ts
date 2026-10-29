@@ -11,7 +11,7 @@ import {
   sampleCodexRate,
   CODEX_CREDIT_REFRESH_INTERVAL_MS,
 } from "../src/codex-credit-sampler.ts";
-import { readCodexCreditBaseline } from "../../shared/src/codex-subscription-usage.ts";
+import { readCodexCreditBaseline } from "@dotfiles/shared/src/codex-subscription-usage.ts";
 import {
   codexCreditMemoFromSnapshot,
   ownerSources,

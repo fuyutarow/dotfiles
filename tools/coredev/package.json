@@ -7,6 +7,8 @@
     "coredev": "src/coredev.ts"
   },
   "dependencies": {
-    "cleye": "2.6.0"
+    "@dotfiles/shared": "workspace:*",
+    "cleye": "2.6.0",
+    "neverthrow": "8.2.0"
   }
 }

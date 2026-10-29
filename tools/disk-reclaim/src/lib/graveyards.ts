@@ -8,7 +8,7 @@ import {
 import { homedir } from "node:os";
 import { lstat, readdir } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 
 export type Graveyard = { readonly label: string; readonly path: string };
 export type RipRecord = {

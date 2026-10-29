@@ -8,7 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { z, jsonOf } from "../../shared/src/zod.ts";
+import { z, jsonOf } from "@dotfiles/shared/src/zod.ts";
 
 const WINDOW = 2000;
 const uuid = z.uuid();

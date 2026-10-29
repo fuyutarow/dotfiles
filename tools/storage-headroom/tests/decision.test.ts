@@ -9,14 +9,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { attempt } from "../../shared/src/attempt.ts";
+import { attempt } from "@dotfiles/shared/src/attempt.ts";
 import {
   assess,
   loadStorageHeadroom,
-} from "../../shared/src/storage-headroom.ts";
-import { z } from "../../shared/src/zod.ts";
+} from "@dotfiles/shared/src/storage-headroom.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import { decisionOf, runHook as runHookProcess } from "./helpers.ts";
-import { decoded } from "../../shared/src/decode.ts";
+import { decoded } from "@dotfiles/shared/src/decode.ts";
 
 // The host-drive cases measure the WSL host drive itself (/mnt/c): declared, so elsewhere SKIPs.
 const NO_WSL_HOST_DRIVE = !existsSync("/mnt/c");

@@ -9,10 +9,10 @@
 // NO_DEFINITION (strength "none"); it is counted under "absent".
 import { homedir } from "node:os";
 import { cli as cleyeCli } from "cleye";
-import { standardCli } from "../../shared/src/cli.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
 import { err, ok, type Result } from "neverthrow";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { findDefinitions } from "./definitions.ts";
 
 const cliArgv = () => process.argv.slice(2);

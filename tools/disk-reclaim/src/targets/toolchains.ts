@@ -9,7 +9,7 @@ import {
 } from "../lib/version-stores.ts";
 import type { Context, Target } from "./index.ts";
 import { deleteTree, keepTreeCandidate, treeCandidate } from "./tree.ts";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import { cachedDiscovery, checkScanDeadline } from "../lib/scan-cache.ts";
 
 const walkPins = (root: string, depth = 0): string[] => {

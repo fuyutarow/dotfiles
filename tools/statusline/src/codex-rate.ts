@@ -1,15 +1,15 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { readJsonlTail } from "../../shared/src/jsonl.ts";
+import { readJsonlTail } from "@dotfiles/shared/src/jsonl.ts";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
 import { pad2 } from "./prompt-stamp.ts";
-import type { TokenUsage } from "../../shared/src/dispatch-pricing.ts";
+import type { TokenUsage } from "@dotfiles/shared/src/dispatch-pricing.ts";
 import type {
   CodexAccountRate,
   CodexCreditMemo,
-} from "../../shared/src/codex-subscription-usage.ts";
-import { CREDIT_DELTA_WINDOW_MS } from "../../shared/src/codex-subscription-usage.ts";
+} from "@dotfiles/shared/src/codex-subscription-usage.ts";
+import { CREDIT_DELTA_WINDOW_MS } from "@dotfiles/shared/src/codex-subscription-usage.ts";
 
 export type CodexRate = CodexAccountRate;
 const LiveRateEvent = z.object({
@@ -416,7 +416,7 @@ export async function readCodexRate(
   creditMemo?: CodexCreditMemo,
 ): Promise<Result<CodexRate | undefined, string>> {
   const { readCodexSubscriptionUsage } =
-    await import("../../shared/src/codex-subscription-usage.ts");
+    await import("@dotfiles/shared/src/codex-subscription-usage.ts");
   const result = await readCodexSubscriptionUsage(
     root,
     nowMs,

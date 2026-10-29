@@ -1,7 +1,7 @@
 import { DIM, RST, renderUnavailable, unavailable } from "./ansi.ts";
 import { dur } from "./jobs.ts";
 import { relative } from "node:path";
-import { formatCostUsd } from "../../shared/src/dispatch-pricing.ts";
+import { formatCostUsd } from "@dotfiles/shared/src/dispatch-pricing.ts";
 import type { RouteRun, RouteScan } from "./dispatch-runs.ts";
 
 export function actionLine(value: string, cwd?: string): string | undefined {

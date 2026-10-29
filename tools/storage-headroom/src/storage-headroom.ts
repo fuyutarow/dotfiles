@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
-import { standardCli } from "../../shared/src/cli.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
 import { fromThrowable } from "neverthrow";
 import { headroom } from "./headroom.ts";
-import type { StorageMeasurement } from "../../shared/src/storage-headroom.ts";
+import type { StorageMeasurement } from "@dotfiles/shared/src/storage-headroom.ts";
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, cliArgv);

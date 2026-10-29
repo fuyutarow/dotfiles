@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mergeSuiData } from "../src/sui-keystore-merge.ts";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const keystoreJson = jsonOf(z.array(z.string()));
 const aliasesJson = jsonOf(

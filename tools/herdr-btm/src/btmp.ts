@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
-import { standardCli } from "../../shared/src/cli.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   gpuEstimate,
   gpuStateFailure,
   readGpuState,
-} from "../../shared/src/gpu-samples.ts";
+} from "@dotfiles/shared/src/gpu-samples.ts";
 import { ensureBtm } from "./ensure.ts";
 import { btmpArgs } from "./args.ts";
 

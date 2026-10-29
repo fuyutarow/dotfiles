@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import { protectedReason } from "../lib/protected.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";

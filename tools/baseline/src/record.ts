@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { err, ok, type Result } from "neverthrow";
-import { attempt, errorMessage } from "../../shared/src/attempt.ts";
+import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
 import { parseFailures } from "./data.ts";
 
 const JJ_TIMEOUT = 60_000;

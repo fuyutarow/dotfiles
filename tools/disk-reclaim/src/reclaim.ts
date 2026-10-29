@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 // Consumer: humans (tables) and machine callers (one JSON document).
 import { cli as cleyeCli, command } from "cleye";
-import { standardCli } from "../../shared/src/cli.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { resolve } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
-import { z } from "../../shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import {
   actPlannedPath,
   loadConfig,

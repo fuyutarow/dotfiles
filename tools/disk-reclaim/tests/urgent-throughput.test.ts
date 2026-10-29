@@ -13,7 +13,7 @@ import type { Context } from "../src/targets/index.ts";
 import { cliEnv } from "./fixtures/cli-env.ts";
 import { tempRoot } from "./fixtures/temp.ts";
 import { Plan } from "../src/model.ts";
-import { jsonOf } from "../../shared/src/zod.ts";
+import { jsonOf } from "@dotfiles/shared/src/zod.ts";
 
 const config = {
   repo_roots: [],

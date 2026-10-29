@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import { basename, join } from "node:path";
-import { readJsonlTail } from "../../shared/src/jsonl.ts";
+import { readJsonlTail } from "@dotfiles/shared/src/jsonl.ts";
 import { jsonText, z } from "./zod.ts";
 import type { SessionStatus } from "./session-status.ts";
 

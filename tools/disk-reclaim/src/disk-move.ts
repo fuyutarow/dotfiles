@@ -1,7 +1,7 @@
 import { lstat, mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { runProbe } from "./disk-probe.ts";
 import { ripRecords } from "./lib/graveyards.ts";
 import { stateDir, waitForLock } from "./receipt.ts";

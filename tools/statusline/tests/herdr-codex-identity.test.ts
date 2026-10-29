@@ -8,7 +8,7 @@ import {
   codexAgentName,
   readHerdrPaneName,
 } from "../../../agents/codex/hooks/herdr-identity.ts";
-import { readFleetSession } from "../../shared/src/fleet-session.ts";
+import { readFleetSession } from "@dotfiles/shared/src/fleet-session.ts";
 import { writeStatuslineFleetSession } from "../src/fleet-session.ts";
 
 test("Codex names derive their suffixes from the exact thread, not pane display text", () => {

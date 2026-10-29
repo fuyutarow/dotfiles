@@ -7,6 +7,7 @@
     "storage-headroom": "src/storage-headroom.ts"
   },
   "dependencies": {
+    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0",
     "neverthrow": "8.2.0"
   }

@@ -45,8 +45,8 @@ import {
   ok,
   type Result,
 } from "neverthrow";
-import { jsonOf, z } from "../../shared/src/zod.ts";
-import { typesafeKey } from "../../shared/src/typesafe-key.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
+import { typesafeKey } from "@dotfiles/shared/src/typesafe-key.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
 import { cccBackend } from "./ccc-entry.ts";
 

@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import { collectProcesses, resolveProcRoot, type OpenPaths } from "./procs.ts";
 
 export type ProtectionOptions = {

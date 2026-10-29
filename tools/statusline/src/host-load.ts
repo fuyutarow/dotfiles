@@ -27,7 +27,7 @@ import {
   gpuReadFromState,
   readGpuState,
   type GpuState,
-} from "../../shared/src/gpu-samples.ts";
+} from "@dotfiles/shared/src/gpu-samples.ts";
 import {
   ENRICHMENT_TIMEOUT_MS,
   execAsyncBounded,

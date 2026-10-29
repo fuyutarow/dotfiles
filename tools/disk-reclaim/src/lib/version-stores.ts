@@ -1,6 +1,6 @@
 import { readdirSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import { resolveProcRoot } from "./procs.ts";
 
 export type VersionStore = {

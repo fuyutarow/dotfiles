@@ -8,7 +8,7 @@ const { version } = cliPackage;
 import { realpath } from "node:fs/promises";
 import { ok } from "neverthrow";
 import { resetRenderBudget } from "./bounded.ts";
-import { standardCli } from "../../shared/src/cli.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { cli as cleyeCli } from "cleye";
 import { jsonText, z } from "./zod.ts";
 import { SessionStatusSchema, type SessionStatus } from "./session-status.ts";

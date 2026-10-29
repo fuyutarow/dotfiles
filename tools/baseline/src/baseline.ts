@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli, command } from "cleye";
-import { standardCli } from "../../shared/src/cli.ts";
-import { attempt, errorMessage } from "../../shared/src/attempt.ts";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
+import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
 import packageJson from "../package.json" with { type: "json" };
 import { newFailures, render } from "./data.ts";
 import { record } from "./record.ts";

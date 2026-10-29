@@ -5,7 +5,7 @@ import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
 import { protectedReason } from "../lib/protected.ts";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 
 export const docsComponents = (installed: readonly string[]): string[] =>
   installed.filter((n) => /^rust-docs(?:-|$)/u.test(n));

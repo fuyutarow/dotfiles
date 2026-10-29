@@ -1,6 +1,6 @@
 import { readdirSync, type Dirent } from "node:fs";
 import { join } from "node:path";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 
 export function countEntries(dir: string): number {
   let n = 0;

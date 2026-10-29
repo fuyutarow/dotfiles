@@ -1,4 +1,4 @@
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 
 /** Exact process-name probe; missing pgrep mirrors the shell's false condition. */
 export function processBusy(

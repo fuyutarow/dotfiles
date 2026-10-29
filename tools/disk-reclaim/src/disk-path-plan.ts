@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
+import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const Rows = z.array(
   z.object({

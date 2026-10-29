@@ -1,7 +1,7 @@
 // Consumer: the resource runner's scope child. Verify the effective RAM ceiling and per-run
 // task accounting before executing anything; unavailable cgroup enforcement fails closed.
 import { readFile } from "node:fs/promises";
-import { jsonOf, z } from "../../shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { err, fromAsyncThrowable, ok } from "neverthrow";
 import { gpuAdmissionRefusal } from "./agent-resource-run.ts";
 import {

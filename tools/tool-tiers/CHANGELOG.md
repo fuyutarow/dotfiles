@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 — 2026-10-30
+
+- Replace dx with semlint as a core Homebrew tool.
+
 ## 0.2.1 — 2026-10-29
 
 - Warn on dx name collisions while retaining core floor failures.

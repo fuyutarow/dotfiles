@@ -24,10 +24,10 @@ brew "sccache"      # workstation compiler cache; shared-light hosts omit it via
 brew "fnox"         # secrets: Keychain (mac), age files elsewhere — tools/secrets-push fills a box
 # fnox uses age-encrypted files on WSL; keep its provider available on every host.
 brew "age"
-# Owner decision (2026-10-25): every host gets agx and dx from the shared public tap.
+# Owner decision (2026-10-25): every host gets agx and semlint from the shared public tap.
 tap "fuyutarow/tap"
 brew "fuyutarow/tap/agx"
-brew "fuyutarow/tap/dx"
+brew "fuyutarow/tap/semlint"
 # WSL alone uses the Homebrew Codex cask for unqualified `codex`; macOS and ordinary Linux
 # retain their standalone installer. Probe procfs so SSH/herdr WSL sessions work too.
 if OS.linux? && File.read("/proc/sys/kernel/osrelease").match?(/microsoft/iu)

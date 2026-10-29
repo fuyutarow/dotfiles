@@ -84,18 +84,18 @@ test("tool declarations resolve tier and formula while honoring OS guards", asyn
   ]);
 });
 
-test("agx and dx are unconditional core formulas on every host", async () => {
+test("agx and semlint are unconditional core formulas on every host", async () => {
   const root = fixture();
   writeFileSync(
     join(root, "Brewfile.core"),
-    'tap "fuyutarow/tap"\nbrew "fuyutarow/tap/agx"\nbrew "fuyutarow/tap/dx"\n',
+    'tap "fuyutarow/tap"\nbrew "fuyutarow/tap/agx"\nbrew "fuyutarow/tap/semlint"\n',
   );
   for (const host of [linux, mac, wsl]) {
     expect(
       (await brewEntries(root, host))
         .map(({ name }) => name)
         .filter((name) => name.startsWith("fuyutarow/tap/")),
-    ).toEqual(["fuyutarow/tap/agx", "fuyutarow/tap/dx"]);
+    ).toEqual(["fuyutarow/tap/agx", "fuyutarow/tap/semlint"]);
   }
   for (const host of [linux, mac, wsl])
     expect(await toolDeclaration(root, "agx", host)).toEqual({
@@ -103,6 +103,13 @@ test("agx and dx are unconditional core formulas on every host", async () => {
       tier: "core",
       kind: "formula",
       package: "fuyutarow/tap/agx",
+    });
+  for (const host of [linux, mac, wsl])
+    expect(await toolDeclaration(root, "semlint", host)).toEqual({
+      command: "semlint",
+      tier: "core",
+      kind: "formula",
+      package: "fuyutarow/tap/semlint",
     });
 });
 

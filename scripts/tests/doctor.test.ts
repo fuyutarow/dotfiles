@@ -47,7 +47,7 @@ test("doctor uses the same floor without upgrading", async () => {
   let upgrades = 0;
   const io: FloorIO = {
     read: (tool) =>
-      Promise.resolve(`${tool} ${tool === "agx" ? "1.22.7" : "0.1.6"}`),
+      Promise.resolve(`${tool} ${tool === "agx" ? "1.22.7" : "0.2.0"}`),
     installed: () => Promise.resolve(true),
     upgrade: () => {
       upgrades++;
@@ -66,13 +66,13 @@ test("doctor uses the same floor without upgrading", async () => {
 test("doctor reports untrusted tap with its specific repair", async () => {
   const io: FloorIO = {
     read: (tool) =>
-      Promise.resolve(`${tool} ${tool === "agx" ? "1.22.8" : "0.1.6"}`),
+      Promise.resolve(`${tool} ${tool === "agx" ? "1.22.8" : "0.2.0"}`),
     installed: (tool) =>
       Promise.resolve(
-        tool === "dx"
+        tool === "semlint"
           ? {
               stderr:
-                "Refusing to load formula fuyutarow/tap/dx from untrusted tap fuyutarow/tap.",
+                "Refusing to load formula fuyutarow/tap/semlint from untrusted tap fuyutarow/tap.",
             }
           : true,
       ),
@@ -87,10 +87,10 @@ test("doctor reports untrusted tap with its specific repair", async () => {
   expect(result.fix).toBe("brew trust fuyutarow/tap");
 });
 
-test("doctor warns on a dx collision with the same repair", async () => {
+test("doctor fails on unexpected semlint output", async () => {
   const io: FloorIO = {
     read: (tool) =>
-      Promise.resolve(tool === "dx" ? "deno 2.9.8" : "agx 1.22.8"),
+      Promise.resolve(tool === "semlint" ? "other 2.9.8" : "agx 1.22.8"),
     installed: (tool) => Promise.resolve(tool === "agx"),
     upgrade: () => Promise.resolve(),
   };
@@ -98,11 +98,10 @@ test("doctor warns on a dx collision with the same repair", async () => {
     { home: "", dotfiles: "", isMac: true, isWsl: false, isCoreBox: false },
     io,
   );
-  expect(result.verdict).toBe("WARN");
+  expect(result.verdict).toBe("FAIL");
   expect(result.detail).toBe(
-    "dx: fuyutarow/tap/dx not installed (PATH dx is another program); repair: mise run up",
+    "semlint: fuyutarow/tap/semlint not installed or PATH semlint is unavailable; repair: mise run up",
   );
-  expect(result.fix).toBe("mise run up");
 });
 
 test("role doctor reports bound and unbound host resolution", async () => {

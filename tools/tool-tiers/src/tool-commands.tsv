@@ -16,4 +16,4 @@ bubblewrap	bwrap
 texlive	bibtex chktex kpsewhich latexmk lualatex tlmgr
 codex	codex
 agx	agx
-dx	dx
+semlint	semlint

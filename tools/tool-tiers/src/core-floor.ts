@@ -1,5 +1,5 @@
 // Minimum versions required by this checkout; shared by post-merge and doctor.
-export const CORE_FLOORS = { agx: "1.22.8", dx: "0.1.6" } as const;
+export const CORE_FLOORS = { agx: "1.22.8", semlint: "0.2.0" } as const;
 type Tool = keyof typeof CORE_FLOORS;
 type ProbeError = { stderr: string };
 export type FloorIO = {
@@ -76,7 +76,7 @@ export async function checkCoreFloor(
   io: FloorIO,
   upgrade: boolean,
 ): Promise<{ ok: boolean; detail: string; fix?: string; warning?: boolean }> {
-  const tools: Tool[] = ["agx", "dx"];
+  const tools: Tool[] = ["agx", "semlint"];
   const observations = await Promise.all(
     tools.map(async (tool) => {
       const [output, installed] = await Promise.all([
@@ -92,7 +92,6 @@ export async function checkCoreFloor(
       return {
         tool,
         version: match?.[1],
-        otherProgram: typeof output === "string" && match === null,
         installed: installed === true,
         error,
       };
@@ -109,22 +108,17 @@ export async function checkCoreFloor(
       detail: `${trustFailure.tool}: untrusted tap fuyutarow/tap; repair: brew trust fuyutarow/tap`,
       fix: "brew trust fuyutarow/tap",
     };
-  const collision = observations.find(
-    (item) => item.tool === "dx" && item.otherProgram,
-  );
   const invalid = observations.find(
-    (item) =>
-      item !== collision && (!item.installed || item.version === undefined),
+    (item) => !item.installed || item.version === undefined,
   );
   if (invalid !== undefined) {
     const detail =
       invalid.tool === "agx"
         ? "agx: fuyutarow/tap/agx not installed or PATH agx is another program"
-        : "dx: fuyutarow/tap/dx not installed or PATH dx is unavailable";
+        : "semlint: fuyutarow/tap/semlint not installed or PATH semlint is unavailable";
     return { ok: false, detail: `${detail}; repair: mise run up` };
   }
   for (const item of observations) {
-    if (item === collision) continue;
     const required = CORE_FLOORS[item.tool];
     let version = item.version;
     let output: string | undefined | ProbeError;
@@ -159,15 +153,7 @@ export async function checkCoreFloor(
         detail: `${item.tool}: installed ${version ?? "unknown"}, required ${required}; repair: mise run up`,
       };
   }
-  if (collision !== undefined)
-    return {
-      ok: true,
-      warning: true,
-      detail:
-        "dx: fuyutarow/tap/dx not installed (PATH dx is another program); repair: mise run up",
-      fix: "mise run up",
-    };
-  return { ok: true, detail: `agx and dx meet declared floors` };
+  return { ok: true, detail: `agx and semlint meet declared floors` };
 }
 
 if (import.meta.main) {

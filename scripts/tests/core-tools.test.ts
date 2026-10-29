@@ -50,24 +50,29 @@ test("host declarations select shared-user or standard Linux prefix", () => {
     "/home/linuxbrew/.linuxbrew",
   );
 });
-test("core Brewfile commands include agx and dx on every host", async () => {
+test("core Brewfile commands include agx and semlint on every host", async () => {
   const root = fixture();
   writeFileSync(
     join(root, "Brewfile.core"),
-    'tap "fuyutarow/tap"\nbrew "fuyutarow/tap/agx"\nbrew "fuyutarow/tap/dx"\n',
+    'tap "fuyutarow/tap"\nbrew "fuyutarow/tap/agx"\nbrew "fuyutarow/tap/semlint"\n',
   );
-  expect(await coreCommands(root, { isWsl: false })).toEqual(["agx", "dx"]);
-  expect(await coreCommands(root, { isWsl: true })).toEqual(["agx", "dx"]);
+  expect(await coreCommands(root, { isWsl: false })).toEqual([
+    "agx",
+    "semlint",
+  ]);
+  expect(await coreCommands(root, { isWsl: true })).toEqual(["agx", "semlint"]);
 });
 
-test("doctor command paths require agx and dx under the Homebrew prefix", () => {
+test("doctor command paths require agx and semlint under the Homebrew prefix", () => {
   const home = fixture();
   const prefix = join(home, "brew");
   const bin = join(prefix, "bin");
   mkdirSync(bin, { recursive: true });
-  for (const command of ["brew", "agx", "dx"]) exe(join(bin, command));
-  expect(corePathProblems(["agx", "dx"], prefix, bin)).toEqual([]);
-  expect(corePathProblems(["agx", "dx"], prefix, "/usr/bin")).toHaveLength(2);
+  for (const command of ["brew", "agx", "semlint"]) exe(join(bin, command));
+  expect(corePathProblems(["agx", "semlint"], prefix, bin)).toEqual([]);
+  expect(corePathProblems(["agx", "semlint"], prefix, "/usr/bin")).toHaveLength(
+    2,
+  );
 });
 test("core provenance rejects legacy shadowing and an outside-target symlink", () => {
   const root = fixture();
@@ -184,6 +189,6 @@ test("conditional Bun providers retain one pair of Homebrew runtime commands", a
   const commands = await coreCommands(join(import.meta.dir, "../.."), {
     isWsl: false,
   });
-  expect(commands).toHaveLength(42);
+  expect(commands).toHaveLength(43);
   expect(commands.filter((name) => name.includes("/"))).toEqual([]);
 });

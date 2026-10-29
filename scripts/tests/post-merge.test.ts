@@ -10,7 +10,7 @@ import {
 
 const untrusted = {
   stderr:
-    "Refusing to load formula fuyutarow/tap/dx from untrusted tap fuyutarow/tap. Run `brew trust fuyutarow/tap`.",
+    "Refusing to load formula fuyutarow/tap/semlint from untrusted tap fuyutarow/tap. Run `brew trust fuyutarow/tap`.",
 };
 
 test.each(["read", "installed", "upgrade"])(
@@ -18,13 +18,15 @@ test.each(["read", "installed", "upgrade"])(
   async (phase) => {
     const io: FloorIO = {
       read: (tool) => {
-        if (phase === "read" && tool === "dx")
+        if (phase === "read" && tool === "semlint")
           return Promise.resolve(untrusted);
-        return Promise.resolve(tool === "agx" ? "agx 1.13.14" : "dx 0.1.6");
+        return Promise.resolve(
+          tool === "agx" ? "agx 1.13.14" : "semlint 0.2.0",
+        );
       },
       installed: (tool) =>
         Promise.resolve(
-          phase === "installed" && tool === "dx" ? untrusted : true,
+          phase === "installed" && tool === "semlint" ? untrusted : true,
         ),
       upgrade: () =>
         Promise.resolve(phase === "upgrade" ? untrusted : undefined),
@@ -39,7 +41,7 @@ test.each(["read", "installed", "upgrade"])(
 );
 
 test("floor upgrades only outdated tap tools and rechecks them", async () => {
-  const versions = { agx: "1.13.14", dx: "0.1.6" };
+  const versions = { agx: "1.13.14", semlint: "0.2.0" };
   const upgraded: string[] = [];
   const io: FloorIO = {
     read: (tool) => Promise.resolve(`${tool} ${versions[tool]}`),
@@ -59,7 +61,7 @@ test("floor upgrades only outdated tap tools and rechecks them", async () => {
 test("floor fails loudly when upgrade does not reach the floor", async () => {
   const io: FloorIO = {
     read: (tool) =>
-      Promise.resolve(`${tool} ${tool === "agx" ? "1.13.14" : "0.1.6"}`),
+      Promise.resolve(`${tool} ${tool === "agx" ? "1.13.14" : "0.2.0"}`),
     installed: () => Promise.resolve(true),
     upgrade: () => Promise.resolve(),
   };
@@ -69,10 +71,11 @@ test("floor fails loudly when upgrade does not reach the floor", async () => {
   });
 });
 
-test("floor upgrades dx when needed and rejects a still-old result", async () => {
+test("floor upgrades semlint when needed and rejects a still-old result", async () => {
   const upgraded: string[] = [];
   const io: FloorIO = {
-    read: (tool) => Promise.resolve(tool === "dx" ? "dx 0.1.5" : "agx 1.22.8"),
+    read: (tool) =>
+      Promise.resolve(tool === "semlint" ? "semlint 0.1.9" : "agx 1.22.8"),
     installed: () => Promise.resolve(true),
     upgrade: (tool) => {
       upgraded.push(tool);
@@ -80,46 +83,33 @@ test("floor upgrades dx when needed and rejects a still-old result", async () =>
     },
   };
   expect((await checkCoreFloor(io, true)).detail).toBe(
-    "dx: installed 0.1.5, required 0.1.6; repair: mise run up",
+    "semlint: installed 0.1.9, required 0.2.0; repair: mise run up",
   );
-  expect(upgraded).toEqual(["dx"]);
+  expect(upgraded).toEqual(["semlint"]);
 });
 
 test.each([false, true])(
-  "dx collision warns after checking the agx floor (formula installed: %s)",
+  "unexpected semlint output fails the floor (formula installed: %s)",
   async (installed) => {
     const upgraded: string[] = [];
     const io: FloorIO = {
       read: (tool) =>
-        Promise.resolve(tool === "dx" ? "deno 2.9.8" : "agx 1.22.8"),
-      installed: (tool) => Promise.resolve(tool === "dx" ? installed : true),
+        Promise.resolve(tool === "semlint" ? "other 2.9.8" : "agx 1.22.8"),
+      installed: (tool) =>
+        Promise.resolve(tool === "semlint" ? installed : true),
       upgrade: (tool) => {
         upgraded.push(tool);
         return Promise.resolve();
       },
     };
     expect(await checkCoreFloor(io, true)).toEqual({
-      ok: true,
-      warning: true,
+      ok: false,
       detail:
-        "dx: fuyutarow/tap/dx not installed (PATH dx is another program); repair: mise run up",
-      fix: "mise run up",
+        "semlint: fuyutarow/tap/semlint not installed or PATH semlint is unavailable; repair: mise run up",
     });
     expect(upgraded).toEqual([]);
   },
 );
-
-test("dx collision does not hide an agx floor failure", async () => {
-  const io: FloorIO = {
-    read: (tool) =>
-      Promise.resolve(tool === "dx" ? "deno 2.9.8" : "agx 1.22.7"),
-    installed: (tool) => Promise.resolve(tool === "agx"),
-    upgrade: () => Promise.resolve(),
-  };
-  const result = await checkCoreFloor(io, true);
-  expect(result.ok).toBe(false);
-  expect(result.detail).toContain("agx: installed 1.22.7, required 1.22.8");
-});
 
 test("a recursive PATH Bun fixture is bypassed by every script step", async () => {
   const root = await mkdtemp(join(tmpdir(), "post-merge-"));

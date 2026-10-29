@@ -169,7 +169,9 @@ async function readSource(
       return `${source ?? "this machine"}: fnox has no ${spec.name}`;
     bytes = fnoxValue(result.bytes);
   } else if (source === undefined) {
-    const file = Bun.file(spec.path.replace(/^~(?=\/)/u, Bun.env.HOME ?? "~"));
+    const file = Bun.file(
+      spec.path.replace(/^~(?=\/)/u, Bun.env["HOME"] ?? "~"),
+    );
     if (!(await file.exists()))
       return `source file for ${spec.name} does not exist`;
     bytes = new Uint8Array(await file.arrayBuffer());

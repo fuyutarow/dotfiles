@@ -86,7 +86,7 @@ async function fixture(mismatch = false): Promise<{
     root,
     env: {
       ...process.env,
-      PATH: bin + ":" + (process.env.PATH ?? ""),
+      PATH: bin + ":" + (process.env["PATH"] ?? ""),
       HOME: sourceHome,
       SOURCE_HOME: sourceHome,
       TARGET_HOME: target,
@@ -154,15 +154,18 @@ describe("secrets:push CLI and config ownership", () => {
       "TYPESAFE_API_KEY → target-box: SHA-256 matched",
     );
     expect(
-      await readFile(join(f.env.TARGET_HOME ?? "", "TYPESAFE_API_KEY"), "utf8"),
+      await readFile(
+        join(f.env["TARGET_HOME"] ?? "", "TYPESAFE_API_KEY"),
+        "utf8",
+      ),
     ).toBe("local-secret");
     expect(
-      await readFile(join(f.env.TARGET_HOME ?? "", "EXISTING_KEY"), "utf8"),
+      await readFile(join(f.env["TARGET_HOME"] ?? "", "EXISTING_KEY"), "utf8"),
     ).toBe("preserve-me");
     expect(await readFile(join(f.root, "argv.log"), "utf8")).not.toContain(
       "local-secret",
     );
-    expect(await readFile(f.env.SSH_LOG ?? "", "utf8")).not.toContain(
+    expect(await readFile(f.env["SSH_LOG"] ?? "", "utf8")).not.toContain(
       "local-secret",
     );
   });
@@ -178,16 +181,16 @@ describe("secrets:push CLI and config ownership", () => {
     ]);
     expect(result.code).toBe(0);
     expect(
-      await readFile(join(f.env.TARGET_HOME ?? "", "RELAY_KEY"), "utf8"),
+      await readFile(join(f.env["TARGET_HOME"] ?? "", "RELAY_KEY"), "utf8"),
     ).toBe("remote-secret");
-    expect(await readFile(f.env.SSH_LOG ?? "", "utf8")).not.toContain(
+    expect(await readFile(f.env["SSH_LOG"] ?? "", "utf8")).not.toContain(
       "remote-secret",
     );
   });
 
   test("reads NAME=@path verbatim on the source", async () => {
     const f = await fixture();
-    const sourcePath = join(f.env.SOURCE_HOME ?? "", "secret.bin");
+    const sourcePath = join(f.env["SOURCE_HOME"] ?? "", "secret.bin");
     const result = await run(f.root, f.env, [
       "--secret",
       "FROM_FILE=@" + sourcePath,
@@ -195,7 +198,7 @@ describe("secrets:push CLI and config ownership", () => {
     ]);
     expect(result.code).toBe(0);
     expect(
-      await readFile(join(f.env.TARGET_HOME ?? "", "FROM_FILE"), "utf8"),
+      await readFile(join(f.env["TARGET_HOME"] ?? "", "FROM_FILE"), "utf8"),
     ).toBe("file-secret");
   });
 
@@ -210,7 +213,7 @@ describe("secrets:push CLI and config ownership", () => {
     ]);
     expect(result.code).toBe(0);
     expect(
-      await readFile(join(f.env.TARGET_HOME ?? "", "FROM_FILE"), "utf8"),
+      await readFile(join(f.env["TARGET_HOME"] ?? "", "FROM_FILE"), "utf8"),
     ).toBe("file-secret");
   });
 
@@ -218,7 +221,7 @@ describe("secrets:push CLI and config ownership", () => {
     "verifies a file ending in %j and discloses fnox trimming",
     async (ending) => {
       const f = await fixture();
-      const path = join(f.env.SOURCE_HOME ?? "", "secret.bin");
+      const path = join(f.env["SOURCE_HOME"] ?? "", "secret.bin");
       await writeFile(path, "file-secret" + ending);
       const result = await run(f.root, f.env, [
         "--secret",
@@ -228,7 +231,7 @@ describe("secrets:push CLI and config ownership", () => {
       expect(result.code).toBe(0);
       expect(result.out).toContain("fnox set trimmed surrounding whitespace");
       expect(
-        await readFile(join(f.env.TARGET_HOME ?? "", "FROM_FILE"), "utf8"),
+        await readFile(join(f.env["TARGET_HOME"] ?? "", "FROM_FILE"), "utf8"),
       ).toBe("file-secret");
     },
   );
@@ -237,7 +240,7 @@ describe("secrets:push CLI and config ownership", () => {
     "rejects a one-byte file mutation with ending %j",
     async (ending) => {
       const f = await fixture(true);
-      const path = join(f.env.SOURCE_HOME ?? "", "secret.bin");
+      const path = join(f.env["SOURCE_HOME"] ?? "", "secret.bin");
       await writeFile(path, "file-secret" + ending);
       const result = await run(f.root, f.env, [
         "--secret",
@@ -251,7 +254,9 @@ describe("secrets:push CLI and config ownership", () => {
 
   test("creates a fresh age config when the target has none", async () => {
     const f = await fixture();
-    await rm(join(f.env.TARGET_HOME ?? "", ".config", "fnox", "config.toml"));
+    await rm(
+      join(f.env["TARGET_HOME"] ?? "", ".config", "fnox", "config.toml"),
+    );
     const result = await run(f.root, f.env, [
       "--secret",
       "RELAY_KEY",
@@ -260,13 +265,13 @@ describe("secrets:push CLI and config ownership", () => {
     expect(result.code).toBe(0);
     expect(
       await readFile(
-        join(f.env.TARGET_HOME ?? "", ".config", "fnox", "config.toml"),
+        join(f.env["TARGET_HOME"] ?? "", ".config", "fnox", "config.toml"),
         "utf8",
       ),
     ).toContain('recipients = ["age1fixture"]');
     expect(
       await readFile(
-        join(f.env.TARGET_HOME ?? "", ".config", "fnox", "age.txt"),
+        join(f.env["TARGET_HOME"] ?? "", ".config", "fnox", "age.txt"),
         "utf8",
       ),
     ).toContain("AGE-SECRET-KEY-1fixture");
@@ -275,7 +280,7 @@ describe("secrets:push CLI and config ownership", () => {
   test("refuses a foreign config without running set", async () => {
     const f = await fixture();
     const config = join(
-      f.env.TARGET_HOME ?? "",
+      f.env["TARGET_HOME"] ?? "",
       ".config",
       "fnox",
       "config.toml",

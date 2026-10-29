@@ -356,6 +356,10 @@ test("timer work budgets retain progress and converge over two fresh runs", asyn
     [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
   };
   const env = cliEnv(root);
+  await writeFile(
+    env.RECLAIM_CONFIG,
+    `${await readFile(env.RECLAIM_CONFIG, "utf8")}\ngraveyard_min_age_hours = 24\ngraveyard_pressure_undo_minutes = 10\n\n[collection_policy.class_rules.ownerless_cache]\ndefault_owner = "dotfiles"\nttl_days = 14\n\n[collection_policy.class_rules.deregistered_index_db]\nttl_days = 7\n`,
+  );
   await mkdir(env.RIP_GRAVEYARD);
   // Both name order and mtime disagree with rip's record time; all are <24h old.
   const names = ["z-oldest", "a-middle", "b-newest"];

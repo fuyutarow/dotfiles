@@ -372,7 +372,6 @@ const TOPIC_COMMANDS = [
   "btm",
   "bun", // interactive only: Claude Code hooks run `bun …` (zsh/zshrc runtime dir)
   "cargo",
-  "sccache", // RUSTC_WRAPPER=sccache is unconditional: without it every cargo call fails
 
   "herdr",
   "jj",
@@ -392,6 +391,7 @@ async function checkCommands(host: string): Promise<Finding> {
     `for n v in \${(kv)aliases}; do w=(\${(z)v}); c=\${(Q)w[1]}; [[ $c == (${PREFIXES}) ]] && continue; ` +
     `whence -- $c > /dev/null || print -r -- "${MARK("UNRESOLVED")}=$n→$c"; done; ` +
     `for c in ${TOPIC_COMMANDS.join(" ")}; do whence -- $c > /dev/null || print -r -- "${MARK("UNRESOLVED")}=topic→$c"; done; ` +
+    `if [[ \${RUSTC_WRAPPER:-} == sccache ]]; then whence -- sccache > /dev/null || print -r -- "${MARK("UNRESOLVED")}=topic→sccache"; fi; ` +
     `print -r -- "${MARK("DONE")}=1"`;
   const r = await run(
     [...SSH, "-o", "ClearAllForwardings=yes", "-tt", host],

@@ -42,6 +42,35 @@ wantnot() { [[ $3 != *"$2"* ]] && ok "$1" || bad "$1 (forbidden sequence present
 source "$ROOT/zsh/tests/clipboard-routing.test.zsh"
 source "$ROOT/zsh/tests/role-readers.test.zsh"
 
+# --- role.env gates sccache without executing the role declaration -----------------------------
+role_home=$(mktemp -d) || exit 1
+role_missing_home=$(mktemp -d) || exit 1
+mkdir -p "$role_home/.config/dotfiles"
+role_profile() {
+  local profile=$1 role_value=$2 expected=$3 out config_home=$role_home/.config
+  if [[ $role_value == absent ]]; then
+    config_home=$role_missing_home/.config
+  else
+    print -r -- "$role_value" >| "$role_home/.config/dotfiles/role.env"
+  fi
+  out=$(env -i HOME="$role_home" XDG_CONFIG_HOME="$config_home" PATH="/usr/bin:/bin" \
+    RUSTC_WRAPPER=sentinel PROFILE="$ROOT/zsh/zprofile.$profile" \
+    zsh -f -c 'source "$PROFILE" >/dev/null 2>&1; print -r -- "WRAPPER=${RUSTC_WRAPPER-unset}"' 2>/dev/null)
+  [[ $out == "WRAPPER=$expected" ]] && ok "$profile role sccache=$role_value -> $expected" \
+    || bad "$profile role sccache=$role_value -> $out (expected $expected)"
+}
+for profile in mac wsl; do
+  role_profile "$profile" 'DOTFILES_ROLE_RUSTC_WRAPPER=sccache' sccache
+  role_profile "$profile" 'DOTFILES_ROLE_RUSTC_WRAPPER=none' unset
+  role_profile "$profile" absent sccache
+done
+for profile in mac wsl; do
+  role_profile "$profile" $'DOTFILES_ROLE_RUSTC_WRAPPER=sccache\nprint -r -- ROLE_ENV_EXECUTED > "$HOME/role-env-executed"' sccache
+done
+[[ ! -e $role_home/role-env-executed ]] && ok "role.env is read as data, not sourced" \
+  || bad "role.env was executed by profile"
+rip "$role_home" "$role_missing_home" >/dev/null 2>&1
+
 # Run shell lines inside a REAL pty with aliases.zsh loaded; return everything the terminal saw.
 pty_run() {
   local out chunk line

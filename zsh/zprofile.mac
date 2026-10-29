@@ -70,8 +70,27 @@ fi
 _dbg "Setting up bun completions"
 [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
-# for Rust — unconditional, as in zprofile.wsl: sccache is core, and its absence must fail loudly.
-export RUSTC_WRAPPER="sccache"
+# Profiles preserve the workstation default when role.env has not been deployed. Parse its plain
+# KEY=value data with zsh builtins; never source the generated file as shell code.
+_role_env=${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/role.env
+if [[ -r $_role_env ]]; then
+  _role_wrapper=''
+  while IFS='=' read -r _role_key _role_value; do
+    if [[ $_role_key == DOTFILES_ROLE_RUSTC_WRAPPER ]]; then
+      _role_wrapper=$_role_value
+      break
+    fi
+  done < $_role_env
+  if [[ $_role_wrapper == sccache ]]; then
+    export RUSTC_WRAPPER=sccache
+  elif [[ $_role_wrapper == none ]]; then
+    unset RUSTC_WRAPPER
+  fi
+  unset _role_wrapper _role_key _role_value
+else
+  export RUSTC_WRAPPER=sccache
+fi
+unset _role_env
 
 # Antigravity IDE (macOS-only; guarded so absence is harmless)
 if [[ -d "$HOME/.antigravity-ide/antigravity-ide/bin" ]]; then

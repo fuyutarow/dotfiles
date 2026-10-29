@@ -618,6 +618,14 @@ test("tmpfs --only preserves symlink and protected ancestors and purges a gravey
     expect(payloads).toHaveLength(1);
     expect(payloads[0]?.verdict).toBe("KEEP");
   }
+  const selectedPayloads = (
+    await target.plan({ ...context, only: selected })
+  ).filter((row) => !row.id.startsWith("tmpfs-usage:"));
+  expect(selectedPayloads).toHaveLength(1);
+  expect(selectedPayloads[0]?.verdict).toBe("KEEP");
+  expect(selectedPayloads[0]?.reason).toBe(
+    "graveyard requires recorded burial and undo-window checks; use rip-expire",
+  );
   const result = await run([target], {
     context: { ...context, only: selected },
     headroom: { drives: [] },
@@ -626,7 +634,7 @@ test("tmpfs --only preserves symlink and protected ancestors and purges a gravey
     captureLiveness: () => quietLiveness,
   });
   expect(result.exit).toBe(0);
-  expect(existsSync(selected)).toBe(false);
+  expect(existsSync(selected)).toBe(true);
   expect(existsSync(other)).toBe(true);
   expect(existsSync(join(outside, "child"))).toBe(true);
 });

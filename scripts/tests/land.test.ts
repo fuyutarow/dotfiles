@@ -584,6 +584,12 @@ if (argv[1] === 'commit' && process.env.LAND_CHECK_IGNORE === '1') {
  appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['commit-cwd', process.cwd()]) + '\\n');
  if (fs.existsSync(path.join(process.cwd(), 'git/ignore')) && fs.readFileSync(path.join(process.cwd(), 'git/ignore'), 'utf8').includes('INVALID-LINT')) { process.stderr.write('lint:ignore refused\\n'); process.exit(9); }
 }
+if (argv[1] === 'commit' && process.env.LAND_CHECK_TOOL_CHANGESETS === '1') {
+ const { lintToolChangesets } = await import(${JSON.stringify(pathToFileURL(join(REPO, "scripts/lint-tool-changesets.ts")).href)});
+ const problems = await lintToolChangesets(process.cwd());
+ if (problems === undefined || problems.length > 0) { process.stderr.write('tool changesets: FAIL ' + JSON.stringify(problems)); process.exit(9); }
+ await (await import('node:fs/promises')).appendFile(process.env.LAND_EVENTS, JSON.stringify(['tool-changesets', 'PASS']) + '\\n');
+}
 if (argv[1] === 'deps' || argv[1] === 'hook:post-merge') process.exit(0);
 if (argv[1] === 'doctor') { process.stdout.write('PASS fixture healthy\\nRESULT: PASS · FAIL 0 · WARN 0 · PASS 1 · SKIP 0\\n'); process.exit(0); }
 if (argv[0] === 'show') { process.stdout.write(JSON.stringify({ judgment: process.env.LAND_NO_ACCEPT === '1' ? null : { kind: 'acceptance', accept: true } })); process.exit(0); }
@@ -903,7 +909,8 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       join(f.worker, "tools/fixture-worker/src/next/cli.ts"),
       "#!/usr/bin/env bun\nprocess.stderr.write('fixture bookkeeping failure'); process.exit(9);\n",
     );
-    const result = await f.land();
+    const result = await f.land([], { LAND_CHECK_TOOL_CHANGESETS: "1" });
+    expect(await f.log()).toContainEqual(["tool-changesets", "PASS"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout.toString()).not.toContain("[land] landed:");
     expect(result.stdout.toString()).toContain("landed and pushed");

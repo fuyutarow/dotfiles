@@ -139,6 +139,7 @@ alias = "l"
 description = "Lint the repo: Markdown + shell/zsh + Bun script contract + TS (oxlint + bun check) + skills index"
 depends = [
   "lint:md",
+  "lint:tool-changesets",
   "lint:sh",
   "lint:bash",
   "lint:zsh",
@@ -165,6 +166,11 @@ depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Reject private deny-listed words in tracked file contents and paths; absent private list is unconfigured"
 run = "bun scripts/lint-no-project-names.ts"
+
+[tasks."lint:tool-changesets"]
+dir = "{{config_root}}"
+description = "Reject worker-edited tool versions/changelogs and invalid workspace changesets"
+run = "bun scripts/lint-tool-changesets.ts"
 
 [tasks."lint:hook-slug"]
 depends = ["bun:check"]

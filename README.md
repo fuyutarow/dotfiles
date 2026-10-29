@@ -200,7 +200,8 @@ bin name has a classification.
 | `lint-ts-candidate` | B | A consumer repository's TypeScript lint gate uses its pinned checker. |
 
 Each tool change records its release intent in a generated `tools/<name>/.changes/<slug>.md`
-file. Run `mise run changeset -- <tool> <patch|minor|major> "<entry>"`; do not hand-write the file. Tickets do not edit
+file with a descriptive slug, never a version number. `lint:tool-changesets` rejects worker edits
+to tool versions and changelogs against the workspace fork point with alpha. Run `mise run changeset -- <tool> <patch|minor|major> "<entry>"`; do not hand-write the file. Tickets do not edit
 `package.json` versions or `CHANGELOG.md`. At land, `scripts/land.ts` applies the highest pending
 bump per tool, prepends all entries under one new SemVer heading, and removes the changeset files
 in the same landed commit. `gate:land` and land validate the file through the same zod schema.

@@ -45,6 +45,7 @@ import {
   runQueue,
 } from "./land-queue.ts";
 import { applyToolChangesets } from "./land-changesets.ts";
+import { recordLandReleaseCandidate } from "./lint-tool-changesets.ts";
 import type { ConsumerGateReport } from "./consumer-gate.ts";
 import {
   landExit,
@@ -1172,7 +1173,12 @@ async function main(
       );
       if (!parsed.flags.dryRun) {
         stage = "changesets";
-        const appliedChangesets = await applyToolChangesets(landerRoot);
+        const releaseDate = Temporal.Now.plainDateISO().toString();
+        await recordLandReleaseCandidate(landerRoot, alpha, rev, releaseDate);
+        const appliedChangesets = await applyToolChangesets(
+          landerRoot,
+          releaseDate,
+        );
         if (appliedChangesets.isErr())
           return reject(errorMessage(appliedChangesets.error));
         const landedChangesets = appliedChangesets.value;
@@ -1291,6 +1297,8 @@ async function main(
       return ok(undefined);
     }),
   );
+  if (landedRoot !== undefined)
+    await rm(join(landedRoot, ".jj", "land-release.json"), { force: true });
   const result = captured.ok
     ? captured.value
     : reject(errorMessage(captured.error));

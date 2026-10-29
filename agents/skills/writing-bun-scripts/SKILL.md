@@ -82,6 +82,7 @@ downstream argument contract and own their wrapper help/version before delegatio
 |---|---|
 | New local script | one `.ts`, run `bun path/script.ts` — BG1 anatomy |
 | A few shell commands | `Bun.$` — `` await $`cmd`.text() ``; `{ raw: … }` for globs; sequence with separate awaits |
+| Change a repo tool under `tools/<name>/` | Run `mise run changeset -- <tool> <patch|minor|major> "<entry>"` to generate a descriptive slug. Never edit the tool's package version or `CHANGELOG.md`; `land` writes those release outputs. |
 | Call a CLI that can hang (LLM CLIs, network) | `Bun.spawn({ cmd: […], timeout, killSignal })` + bounded relay |
 | Read / write a file | `Bun.file(p).text()/.json()` / `Bun.write` (node:fs stays for `existsSync`/`readdir`/`rm`) |
 | Parse flags / positionals in an ordinary command | `cli({ name, flags, parameters, strictFlags: true, ignoreArgv: rejectPrototypeFlag })`; Cleye owns help and positional mapping |

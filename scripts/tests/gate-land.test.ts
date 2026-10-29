@@ -28,6 +28,7 @@ test("pre-commit runs exactly the gate:land checks plus staged formatting", asyn
   if (!parsed.success) return;
   const mise = parsed.data;
   const land = mise.tasks["gate:land"];
+  const lint = mise.tasks.lint;
   const hook = mise.tasks["hook:pre-commit"];
 
   expect(land).toBeDefined();
@@ -38,6 +39,10 @@ test("pre-commit runs exactly the gate:land checks plus staged formatting", asyn
     "lint:changesets",
     "lint:no-project-names",
   ]);
+  expect(lint?.depends).toContain("lint:tool-changesets");
+  expect(mise.tasks["lint:tool-changesets"]?.run).toBe(
+    "bun scripts/lint-tool-changesets.ts",
+  );
   expect(hook?.run).toBeUndefined();
   expect(hook?.depends).toEqual(["fmt:staged", "gate:land"]);
   expect(mise.tasks.check?.depends).toEqual(["fmt:check", "lint", "test"]);

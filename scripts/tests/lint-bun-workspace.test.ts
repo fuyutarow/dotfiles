@@ -61,3 +61,60 @@ test("lint:bun admits only declared and present shared workspace imports", async
     expect(bad.stdout.toString()).toContain("unlisted-external");
   }
 });
+
+test("workspace dependencies belong to the nearest manifest and hooks remain zero-dep", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lint-bun-workspace-deps-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
+  };
+  await mkdir(join(root, "scripts"), { recursive: true });
+  await mkdir(join(root, "agents/hooks"), { recursive: true });
+  await writeFile(
+    join(root, "package.json"),
+    JSON.stringify({
+      workspaces: ["scripts", "agents/hooks"],
+      dependencies: { example: "1.2.3" },
+    }),
+  );
+  await writeFile(
+    join(root, "bun.lock"),
+    JSON.stringify({
+      workspaces: {
+        scripts: { dependencies: { example: "1.2.3" } },
+        "agents/hooks": { dependencies: { example: "1.2.3" } },
+      },
+    }),
+  );
+  const manifest = join(root, "scripts/package.json");
+  await writeFile(
+    manifest,
+    JSON.stringify({ dependencies: { example: "1.2.3" } }),
+  );
+  await writeFile(join(root, "scripts/example.ts"), 'import "example";\n');
+  const run = () =>
+    Bun.spawnSync([process.execPath, script], {
+      cwd: root,
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 30_000,
+    });
+  expect(run().exitCode).toBe(0);
+  await writeFile(manifest, JSON.stringify({ dependencies: {} }));
+  const undeclared = run();
+  expect(undeclared.exitCode).toBe(1);
+  expect(undeclared.stdout.toString()).toContain(
+    "unpinned external dependency 'example'",
+  );
+  await writeFile(
+    manifest,
+    JSON.stringify({ dependencies: { example: "1.2.3" } }),
+  );
+  await writeFile(
+    join(root, "agents/hooks/package.json"),
+    JSON.stringify({ dependencies: { example: "1.2.3" } }),
+  );
+  await writeFile(join(root, "agents/hooks/example.ts"), 'import "example";\n');
+  const hooks = run();
+  expect(hooks.exitCode).toBe(1);
+  expect(hooks.stdout.toString()).toContain("zero-dep tree");
+});

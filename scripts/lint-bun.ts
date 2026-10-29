@@ -1,7 +1,8 @@
 // Production Bun script floor: selected jj snapshot bytes, or local production-surface scan.
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
   jjCandidate,
@@ -38,7 +39,9 @@ const Manifest = jsonOf(
   z.object({
     name: z.string().optional(),
     workspaces: z.array(z.string()).optional(),
+    bin: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
     dependencies: z.record(z.string(), z.string()).optional(),
+    devDependencies: z.record(z.string(), z.string()).optional(),
   }),
 );
 const Lock = z.object({
@@ -47,9 +50,21 @@ const Lock = z.object({
     z.object({
       name: z.string().optional(),
       dependencies: z.record(z.string(), z.string()).optional(),
+      devDependencies: z.record(z.string(), z.string()).optional(),
     }),
   ),
 });
+
+function pinned(
+  deps: Record<string, string> | undefined,
+  lockedDeps: Record<string, string> | undefined,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(deps ?? {}).filter(
+      ([name, version]) => lockedDeps?.[name] === version,
+    ),
+  );
+}
 
 async function sanctioned(
   root: string,
@@ -103,12 +118,104 @@ async function check(paths: string[], root: string): Promise<number> {
     process.stdout.write("lint:bun: no selected production script\n");
     return 0;
   }
-  const result = Bun.spawnSync(["bun", checker, ...paths], {
+  const stage = await mkdtemp(join(tmpdir(), "lint-bun-workspaces-"));
+  const replacements = new Map<string, string>();
+  const stagedPaths = await Promise.all(
+    paths.map(async (file) => {
+      const absolute = resolve(file);
+      let directory = dirname(absolute);
+      while (directory !== root && directory.startsWith(`${root}${sep}`)) {
+        if (await Bun.file(join(directory, "package.json")).exists()) break;
+        directory = dirname(directory);
+      }
+      if (directory === root || !directory.startsWith(`${root}${sep}`))
+        return file;
+      return Promise.try(async () => {
+        const rootManifest = Manifest.safeParse(
+          await Bun.file(join(root, "package.json")).text(),
+        );
+        const manifestText = await Bun.file(
+          join(directory, "package.json"),
+        ).text();
+        const manifest = Manifest.safeParse(manifestText);
+        const lock = await Promise.try(async () =>
+          Lock.safeParse(
+            Bun.JSONC.parse(await Bun.file(join(root, "bun.lock")).text()),
+          ),
+        ).catch(() => null);
+        const workspace = relative(root, directory).split(sep).join("/");
+        if (
+          !rootManifest.success ||
+          !manifest.success ||
+          !(
+            rootManifest.data.workspaces?.some((pattern) =>
+              new Bun.Glob(pattern).match(workspace),
+            ) ?? false
+          ) ||
+          (await Bun.file(join(directory, "bun.lock")).exists())
+        )
+          return file;
+        const locked =
+          lock?.success === true ? lock.data.workspaces[workspace] : undefined;
+        const stagedDirectory = join(stage, workspace);
+        const stagedFile = join(stage, relative(root, absolute));
+        await mkdir(dirname(stagedFile), { recursive: true });
+        await copyFile(absolute, stagedFile);
+        const bin = manifest.data.bin;
+        let targets: string[] = [];
+        if (typeof bin === "string") targets = [bin];
+        else if (bin !== undefined) targets = Object.values(bin);
+        for (const target of targets) {
+          if (typeof target !== "string") continue;
+          const original = resolve(directory, target);
+          if (
+            !original.startsWith(`${directory}${sep}`) ||
+            !(await Bun.file(original).exists())
+          )
+            continue;
+          const staged = join(stage, relative(root, original));
+          await mkdir(dirname(staged), { recursive: true });
+          await copyFile(original, staged);
+        }
+        await Bun.write(
+          join(stagedDirectory, "package.json"),
+          JSON.stringify({
+            ...manifest.data,
+            dependencies: pinned(
+              manifest.data.dependencies,
+              locked?.dependencies,
+            ),
+            devDependencies: pinned(
+              manifest.data.devDependencies,
+              locked?.devDependencies,
+            ),
+          }),
+        );
+        await Bun.write(join(stagedDirectory, "bun.lock"), "{}");
+        let ancestor = dirname(absolute);
+        while (ancestor.startsWith(root)) {
+          if (await Bun.file(join(ancestor, ".zero-dep")).exists()) {
+            const marker = join(stage, relative(root, ancestor), ".zero-dep");
+            await mkdir(dirname(marker), { recursive: true });
+            await copyFile(join(ancestor, ".zero-dep"), marker);
+          }
+          if (ancestor === root) break;
+          ancestor = dirname(ancestor);
+        }
+        replacements.set(stagedFile, file);
+        return stagedFile;
+      }).catch(() => file);
+    }),
+  );
+  const result = Bun.spawnSync(["bun", checker, ...stagedPaths], {
     stdout: "pipe",
     stderr: "pipe",
     timeout: 300_000,
   });
-  const output = result.stdout.toString();
+  let output = result.stdout.toString();
+  for (const [staged, original] of replacements)
+    output = output.replaceAll(staged, original);
+  await rm(stage, { recursive: true, force: true });
   const lines = output.split("\n");
   let removed = 0;
   for (let i = 0; i < lines.length; i++) {

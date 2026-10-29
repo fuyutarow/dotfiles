@@ -9,12 +9,16 @@ export async function revalidateClean(
   const candidate = candidates.find(
     (c) => c.id === request.id && c.path === request.path,
   );
-  if (candidate === undefined || candidate.verdict !== "RECLAIM")
+  if (candidate === undefined || candidate.verdict !== "RECLAIM") {
+    let verdict = "changed";
+    if (candidate?.verdict === "KEEP") verdict = "keep";
+    if (candidate?.verdict === "ASK") verdict = "ask";
     return {
       candidate: null,
-      verdict: candidate?.verdict === "KEEP" ? "keep" : "changed",
+      verdict,
       reason: candidate?.reason ?? "candidate disappeared",
     };
+  }
   if ((await identity(request.path)) !== request.fingerprint)
     return {
       candidate: null,

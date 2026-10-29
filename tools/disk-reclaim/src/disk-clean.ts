@@ -20,7 +20,7 @@ const planSchema = z.array(
   z.object({ candidate: Candidate, fingerprint: z.string().nullable() }),
 );
 const actionSchema = z.object({
-  verdict: z.enum(["completed", "failed", "keep", "changed", "unknown"]),
+  verdict: z.enum(["completed", "failed", "keep", "ask", "changed", "unknown"]),
   reason: z.string().nullable(),
   effect: z.enum(["none", "unlink"]),
   before: observation.optional(),
@@ -56,10 +56,11 @@ async function cleanProbe(
   action: string | undefined,
   ms: number,
   signal?: AbortSignal,
+  target: "clean" | "rust" = "clean",
 ): Promise<ProbeResult> {
   const spawned = fromThrowable(() =>
     Bun.spawn(
-      [process.execPath, join(import.meta.dir, "disk-clean-child.ts")],
+      [process.execPath, join(import.meta.dir, `disk-${target}-child.ts`)],
       {
         stdin: "ignore",
         stdout: "pipe",
@@ -67,10 +68,10 @@ async function cleanProbe(
         detached: true,
         env: {
           ...process.env,
-          DISK_CLEAN_DEADLINE: String(
+          [`DISK_${target.toUpperCase()}_DEADLINE`]: String(
             Temporal.Now.instant().epochMilliseconds + ms,
           ),
-          ...(action === undefined ? {} : { DISK_CLEAN_ACTION: action }),
+          [`DISK_${target.toUpperCase()}_ACTION`]: action,
         },
       },
     ),
@@ -103,19 +104,20 @@ export async function freeClean(
   injected?: Dependencies,
   signal?: AbortSignal,
   stopOnError = false,
+  target: "clean" | "rust" = "clean",
 ) {
   const remaining = () => Math.floor(deadline - (performance.now() - start));
   const report = (stage: string) => {
     if (progress)
       process.stderr.write(
-        `disk: free clean ${stage}; elapsed ${Math.floor(performance.now() - start)}ms / deadline ${deadline}ms\n`,
+        `disk: free ${target} ${stage}; elapsed ${Math.floor(performance.now() - start)}ms / deadline ${deadline}ms\n`,
       );
   };
   const deps: Dependencies = injected ?? {
     guard: workerMutationRefusal,
     lock: (ms) =>
-      waitForLock("clean", stateDir(), report, Math.min(10, ms / 1000)),
-    probe: cleanProbe,
+      waitForLock(target, stateDir(), report, Math.min(10, ms / 1000)),
+    probe: (action, ms, abort) => cleanProbe(action, ms, abort, target),
     receipt: async (items) => {
       const id = crypto.randomUUID();
       const dir = join(stateDir(), "disk-receipts");
@@ -176,7 +178,7 @@ export async function freeClean(
       return { out: "", error: "deadline expired or cancelled" };
     const timer = progress
       ? setInterval(() => {
-          report("waiting for clean");
+          report(`waiting for ${target}`);
         }, 5000)
       : undefined;
     const response = await fromAsyncThrowable(() =>
@@ -206,7 +208,7 @@ export async function freeClean(
     else if (candidate.verdict === "ASK") verdict = "ask";
     const item = {
       id: candidate.id,
-      target: "clean",
+      target,
       path: candidate.path,
       verdict,
       reason: candidate.reason,

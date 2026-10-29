@@ -312,4 +312,7 @@ bulk operation's scope.
 `disk free targets clean` reports each cache separately. It retains busy and
 protected-path checks, revalidates identity under the reclaim lock, and records
 per-cache statfs observations. No measured increase is partial; an unavailable
-observation or child result remains unknown. Other acting targets remain unavailable.
+observation or child result remains unknown. `disk free targets rust` uses the same
+bounded per-item flow and the Rust planner: missing manifests, active Rust builds,
+live repository sessions and unknown process state remain refused. Other acting
+targets remain unavailable.

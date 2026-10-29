@@ -1248,3 +1248,179 @@ test("clean plan-only request cannot act even with approval", async () => {
   );
   expect(invalid.exit).toBe(2);
 });
+
+test("rust entry preserves legacy refusals and reports measured per-item removal", async () => {
+  const { createRustTarget } = await import("../src/targets/rust.ts");
+  const { freeClean } = await import("../src/disk-clean.ts");
+  const { cleanAction } = await import("../src/disk-clean-action.ts");
+  const { symlink } = await import("node:fs/promises");
+  for (const scenario of [
+    "manifest",
+    "busy",
+    "unknown",
+    "session",
+    "idle",
+    "zero",
+    "changed",
+  ] as const) {
+    const root = await mkdtemp(join(tmpdir(), "disk-rust-fixture-"));
+    const project = join(root, "project");
+    const path = join(project, "target");
+    const proc = join(root, "proc");
+    await mkdir(path, { recursive: true });
+    if (scenario !== "manifest")
+      await writeFile(join(project, "Cargo.toml"), "[package]");
+    if (scenario !== "unknown") await mkdir(proc);
+    if (scenario === "busy" || scenario === "session") {
+      const base = join(proc, "10");
+      await mkdir(join(base, "fd"), { recursive: true });
+      const name = scenario === "busy" ? "cargo" : "editor";
+      await writeFile(join(base, "comm"), name);
+      await writeFile(
+        join(base, "stat"),
+        `10 (${name}) S ${Array.from({ length: 18 }, () => "0").join(" ")} 123\n`,
+      );
+      await writeFile(join(base, "environ"), "");
+      await writeFile(join(base, "maps"), "");
+      await symlink(`/usr/bin/${name}`, join(base, "exe"));
+      await symlink(project, join(base, "cwd"));
+    }
+    const context: Context = {
+      ...cleanContext,
+      targetName: "rust",
+      procDir: proc,
+    };
+    const target = createRustTarget(() => root);
+    let actions = 0;
+    let measures = 0;
+    const deps = {
+      guard: (): string | null => null,
+      lock: (_ms: number) =>
+        Promise.resolve({ release: () => {}, exit: 0, error: null }),
+      receipt: (_items: unknown[]) =>
+        Promise.resolve({ id: "r", path: "/fixture/r", delivery_error: null }),
+      probe: async (action: string | undefined) => {
+        if (action === undefined) {
+          const rows = await target.plan(context);
+          return {
+            out: JSON.stringify(
+              rows.map((candidate) => ({ candidate, fingerprint: "same" })),
+            ),
+            err: "",
+            exit: 0,
+            timedOut: false,
+          };
+        }
+        const parsed = jsonOf(
+          z.object({
+            id: z.string(),
+            path: z.string(),
+            fingerprint: z.string(),
+          }),
+        ).safeParse(action);
+        if (!parsed.success)
+          return { out: "", err: "invalid request", exit: 1, timedOut: false };
+        const request = parsed.data;
+        const value = await cleanAction(request, {
+          target: {
+            ...target,
+            act: () => {
+              actions++;
+              return { ok: true, bytes_freed: 123, error: null };
+            },
+          },
+          context,
+          identity: () =>
+            Promise.resolve(scenario === "changed" ? "changed" : "same"),
+          protection: () => null,
+          device: () => Promise.resolve(1),
+          measure: () =>
+            Promise.resolve(
+              cleanObservation(
+                measures++ === 0 || scenario === "zero" ? 100 : 110,
+              ),
+            ),
+          fail: () => process.exit(99),
+        });
+        return {
+          out: JSON.stringify(value),
+          err: "",
+          exit: 0,
+          timedOut: false,
+        };
+      },
+    };
+    const result = await freeClean(
+      10000,
+      performance.now(),
+      false,
+      deps,
+      undefined,
+      false,
+      "rust",
+    );
+    const item = result.items.find((row) => row.path === path);
+    if (scenario === "idle") {
+      expect(result.exit).toBe(0);
+      expect(item).toMatchObject({
+        target: "rust",
+        verdict: "completed",
+        effect: "unlink",
+        after: { available_bytes: 110 },
+      });
+      expect(actions).toBe(1);
+    } else if (scenario === "zero") {
+      expect(result.exit).toBe(1);
+      expect(item).toMatchObject({
+        verdict: "partial",
+        reason: "no measured increase in available space",
+        effect: "unlink",
+      });
+      expect(actions).toBe(1);
+    } else {
+      expect(result.exit).toBe(1);
+      const reason = {
+        manifest: "Cargo.toml is missing",
+        busy: "live Rust build process",
+        unknown: "process state is unreadable",
+        session: "live process cwd",
+        changed: "fingerprint changed",
+      }[scenario];
+      expect(item?.reason).toContain(reason);
+      const expected = {
+        manifest: "ask",
+        busy: "keep",
+        unknown: "ask",
+        session: "ask",
+        changed: "changed",
+      }[scenario];
+      expect(item?.verdict).toBe(expected);
+      expect(item?.effect).toBe("none");
+      expect(actions).toBe(0);
+    }
+  }
+});
+
+test("rust plan-only requests cannot invoke an action", async () => {
+  const home = await mkdtemp(join(tmpdir(), "disk-rust-plan-"));
+  const result = await run(
+    [
+      "plan",
+      "targets",
+      "--target",
+      "rust",
+      "--approve",
+      "/fixture/target",
+      "--no-progress",
+    ],
+    "",
+    { ...process.env, HOME: home, RECLAIM_STATE_DIR: join(home, "state") },
+  );
+  expect(result.exit).toBe(4);
+  expect(jsonText.safeParse(result.out).data).toMatchObject({
+    outcome: "unknown",
+    items: [],
+    receipt: null,
+  });
+  expect(existsSync(join(home, "state"))).toBe(false);
+});

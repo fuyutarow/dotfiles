@@ -679,7 +679,7 @@ async function main() {
   if (
     key === "free targets" &&
     targets.length === 1 &&
-    targets[0] === "clean"
+    (targets[0] === "clean" || targets[0] === "rust")
   ) {
     const controller = new AbortController();
     let cancelled = 0;
@@ -700,6 +700,7 @@ async function main() {
       undefined,
       controller.signal,
       options.has("stop-on-error"),
+      targets[0] === "rust" ? "rust" : "clean",
     );
     process.removeListener("SIGINT", interrupt);
     process.removeListener("SIGTERM", terminate);
@@ -720,7 +721,7 @@ async function main() {
     else if (result.exit === 4) outcome = "unknown";
     if (cancelled !== 0) outcome = "cancelled";
     process.stdout.write(
-      `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items: result.items, counts, errors: result.error === null ? [] : [{ code: "clean_error", message: result.error, scope }], receipt: result.receipt })}\n`,
+      `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items: result.items, counts, errors: result.error === null ? [] : [{ code: "target_error", message: result.error, scope }], receipt: result.receipt })}\n`,
     );
     process.exitCode = cancelled === 0 ? result.exit : cancelled;
     return;

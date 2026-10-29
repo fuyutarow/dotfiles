@@ -12,6 +12,7 @@ export async function cleanAction<T>(
     device: (path: string) => Promise<number>;
     measure: (path: string) => Promise<T>;
     fail: (message: string) => never;
+    completedReason?: string;
   },
 ) {
   const candidates = await deps.target.plan(deps.context);
@@ -33,7 +34,9 @@ export async function cleanAction<T>(
   const after = await deps.measure(request.path);
   return {
     verdict: result.ok ? "completed" : "failed",
-    reason: result.ok ? "cache cleanup completed" : result.error,
+    reason: result.ok
+      ? (deps.completedReason ?? "cache cleanup completed")
+      : result.error,
     effect: "unlink",
     before,
     after,

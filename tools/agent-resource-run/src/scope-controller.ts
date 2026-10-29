@@ -7,7 +7,7 @@ import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 async function main() {
   const payload = jsonOf(
     z.object({ argv: z.array(z.string()).min(1), scope: z.string() }),
-  ).safeParse(process.env.AGENT_RESOURCE_SCOPE_LAUNCH);
+  ).safeParse(process.env["AGENT_RESOURCE_SCOPE_LAUNCH"]);
   if (!payload.success) return err(new Error("invalid scope launch payload"));
   const { scope, argv } = payload.data;
   let cgroup: string | undefined;

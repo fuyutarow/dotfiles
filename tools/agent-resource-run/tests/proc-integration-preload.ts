@@ -9,8 +9,8 @@ import { fromAsyncThrowable } from "neverthrow";
 const readDirectory = fs.readdir;
 const readFile = fs.readFile;
 const openDirectory = fs.opendir;
-const fakeProcRoot = process.env.AGENT_RESOURCE_TEST_PROC_ROOT;
-const fakeProcReads = process.env.AGENT_RESOURCE_TEST_PROC_READS;
+const fakeProcRoot = process.env["AGENT_RESOURCE_TEST_PROC_ROOT"];
+const fakeProcReads = process.env["AGENT_RESOURCE_TEST_PROC_READS"];
 let fakeProcReadCount = 0;
 await mock.module("node:fs/promises", () => ({
   ...fs,
@@ -28,7 +28,7 @@ await mock.module("node:fs/promises", () => ({
       return entries;
     }
     if (path !== "/proc") return entries;
-    const runtime = process.env.XDG_RUNTIME_DIR;
+    const runtime = process.env["XDG_RUNTIME_DIR"];
     const selected = await Promise.all(
       entries.map(async (entry) => {
         if (!/^\d+$/u.test(entry)) return null;

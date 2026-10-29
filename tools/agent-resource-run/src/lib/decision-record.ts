@@ -47,7 +47,7 @@ export const withDecision = <T>(record: DecisionRecord, action: () => T): T =>
   context.run(record, action);
 export const decisionDirectory = () =>
   join(
-    process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"),
+    process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"),
     "agent-resource",
     "decisions",
   );

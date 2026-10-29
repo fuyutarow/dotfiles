@@ -176,7 +176,7 @@ process.stdout.write(await gpuAdmissionRefusal(${JSON.stringify(request)}, 512, 
 `,
       ],
       {
-        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` },
+        env: { ...process.env, PATH: `${bin}:${process.env["PATH"] ?? ""}` },
         stdout: "pipe",
         stderr: "pipe",
         timeout: 5000,

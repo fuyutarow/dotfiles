@@ -585,7 +585,7 @@ async function stillStalled(
 }
 async function policy() {
   const path =
-    process.env.AGENT_RESOURCE_POLICY ??
+    process.env["AGENT_RESOURCE_POLICY"] ??
     join(import.meta.dir, "../resource-policy.toml");
   if (!isAbsolute(path))
     return err(new UsageError("AGENT_RESOURCE_POLICY must be absolute"));
@@ -624,7 +624,7 @@ async function policy() {
   return ok(parsed.data);
 }
 function runtimeDirectory() {
-  const root = process.env.XDG_RUNTIME_DIR;
+  const root = process.env["XDG_RUNTIME_DIR"];
   if (root === undefined || !isAbsolute(root))
     return err(
       new Error("XDG_RUNTIME_DIR must name the user runtime directory"),
@@ -1187,7 +1187,7 @@ async function runDecision(
     ["flock", "systemd-run", "systemctl"].some((bin) => Bun.which(bin) === null)
   )
     return ok(failure(69, "Linux flock and user systemd are required", report));
-  if (process.env.AGENT_RESOURCE_ADMISSION_RECEIPT !== undefined)
+  if (process.env["AGENT_RESOURCE_ADMISSION_RECEIPT"] !== undefined)
     return ok(
       failure(
         69,

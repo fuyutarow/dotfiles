@@ -15,7 +15,7 @@ import {
   saveDecision,
 } from "./lib/decision-record.ts";
 class HealthRefusal extends Error {}
-const inheritedId = process.env.AGENT_RESOURCE_DECISION_ID;
+const inheritedId = process.env["AGENT_RESOURCE_DECISION_ID"];
 const decisionId =
   inheritedId !== undefined && /^[a-f0-9-]{36}$/u.test(inheritedId)
     ? inheritedId
@@ -26,12 +26,12 @@ record.reason = "scope-entry";
 
 async function main() {
   const command = jsonOf(z.array(z.string()).min(1)).safeParse(
-    process.env.AGENT_RESOURCE_SCOPE_COMMAND,
+    process.env["AGENT_RESOURCE_SCOPE_COMMAND"],
   );
   const invocationId = z
     .string()
     .regex(/^[a-f0-9]{32}$/u)
-    .safeParse(process.env.INVOCATION_ID);
+    .safeParse(process.env["INVOCATION_ID"]);
   const receipt = jsonOf(
     z.object({
       scope_unit: z.string(),
@@ -51,7 +51,7 @@ async function main() {
         vram_peak_bytes: z.number().optional(),
       }),
     }),
-  ).safeParse(process.env.AGENT_RESOURCE_ADMISSION_RECEIPT);
+  ).safeParse(process.env["AGENT_RESOURCE_ADMISSION_RECEIPT"]);
   record.invocation_id = invocationId.success ? invocationId.data : null;
   if (receipt.success) record.systemd_unit = receipt.data.scope_unit;
   await saveDecision(record.snapshot());
@@ -123,7 +123,7 @@ async function main() {
       new Error("scope RAM/swap ceiling or pids accounting unavailable"),
     );
   process.stdout.write(
-    `ADMIT job=${process.env.AGENT_RESOURCE_JOB_ID} scope=${receipt.data.scope_unit} ram=${memoryMax.trim()}\n`,
+    `ADMIT job=${process.env["AGENT_RESOURCE_JOB_ID"]} scope=${receipt.data.scope_unit} ram=${memoryMax.trim()}\n`,
   );
   // bounded: the enclosing systemd scope owns RuntimeMaxSec, MemoryMax and TasksMax.
   const child = Bun.spawn(command.data, {

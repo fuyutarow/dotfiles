@@ -42,7 +42,7 @@ async function advisoryAdmission(
   return lines.join("\n");
 }
 
-const runtimeBase = process.env.AGX_TEST_RUNTIME_DIR ?? "/tmp";
+const runtimeBase = process.env["AGX_TEST_RUNTIME_DIR"] ?? "/tmp";
 const runtime = await mkdtemp(join(runtimeBase, "arr-test-"));
 afterAll(() => rm(runtime, { recursive: true, force: true }));
 const privateSocketPath = join(runtime, "systemd", "private");
@@ -228,7 +228,7 @@ test.skipIf(!live)(
       {
         env: {
           ...process.env,
-          PATH: `${bin}:${process.env.PATH}`,
+          PATH: `${bin}:${process.env["PATH"]}`,
           AGENT_RESOURCE_SCOPE_LAUNCH: JSON.stringify({
             argv: ["true"],
             scope: "fixture.scope",
@@ -474,8 +474,8 @@ test("GPU VRAM admission admits a 4 GiB request after a 3 GiB holder releases", 
       samples: [],
     }),
   );
-  f.env.AGENT_RESOURCE_TEST_PROC_ROOT = procRoot;
-  f.env.AGENT_RESOURCE_TEST_PROC_READS = reads;
+  f.env["AGENT_RESOURCE_TEST_PROC_ROOT"] = procRoot;
+  f.env["AGENT_RESOURCE_TEST_PROC_READS"] = reads;
   const bin = join(f.dir, "bin");
   await mkdir(bin);
   await Bun.write(
@@ -483,7 +483,7 @@ test("GPU VRAM admission admits a 4 GiB request after a 3 GiB holder releases", 
     `#!${process.execPath}\nprocess.exit(0);\n`,
   );
   await chmod(join(bin, "systemctl"), 0o755);
-  f.env.PATH = `${bin}:${process.env.PATH}`;
+  f.env["PATH"] = `${bin}:${process.env["PATH"]}`;
   const pending = invoke(["--manifest", f.path, "--check-only"], f.env);
   let waitingObserved = false;
   for (let n = 0; n < 200; n++) {
@@ -532,7 +532,7 @@ test("GPU VRAM admission wait expires with DENY 69 and elapsed seconds", async (
       samples: [],
     }),
   );
-  f.env.AGENT_RESOURCE_TEST_PROC_ROOT = procRoot;
+  f.env["AGENT_RESOURCE_TEST_PROC_ROOT"] = procRoot;
   const result = await invoke(["--manifest", f.path, "--check-only"], f.env);
   expect(result.exit, result.stdout + result.stderr).toBe(69);
   expect(result.stdout).toContain("GPU VRAM budget exceeded");
@@ -570,8 +570,8 @@ test("GPU VRAM refusal stays immediate when admission_wait_s is omitted", async 
       samples: [],
     }),
   );
-  f.env.AGENT_RESOURCE_TEST_PROC_ROOT = procRoot;
-  f.env.AGENT_RESOURCE_TEST_PROC_READS = reads;
+  f.env["AGENT_RESOURCE_TEST_PROC_ROOT"] = procRoot;
+  f.env["AGENT_RESOURCE_TEST_PROC_READS"] = reads;
   const result = await invoke(["--manifest", f.path, "--check-only"], f.env);
   expect(result.exit, result.stdout + result.stderr).toBe(69);
   expect(result.stdout).toContain("GPU VRAM budget exceeded");
@@ -597,9 +597,9 @@ test("GPU request larger than the ceiling refuses immediately despite admission_
     }),
   );
   const procRoot = join(f.dir, "fake-proc");
-  f.env.AGENT_RESOURCE_TEST_PROC_ROOT = procRoot;
+  f.env["AGENT_RESOURCE_TEST_PROC_ROOT"] = procRoot;
   await mkdir(procRoot, { recursive: true });
-  f.env.AGENT_RESOURCE_TEST_PROC_READS = reads;
+  f.env["AGENT_RESOURCE_TEST_PROC_READS"] = reads;
   const result = await invoke(["--manifest", f.path, "--check-only"], f.env);
   expect(result.exit, result.stdout + result.stderr).toBe(69);
   expect(result.stdout).toContain("GPU VRAM budget exceeded");
@@ -847,7 +847,7 @@ for (const stopMode of ["real-stop", "false-success"])
       `,
         );
         await chmod(join(bin, "systemctl"), 0o755);
-        firstEnv.PATH = `${bin}:${process.env.PATH}`;
+        firstEnv["PATH"] = `${bin}:${process.env["PATH"]}`;
       }
       const first = invoke(
         [
@@ -959,7 +959,7 @@ test.skipIf(!live)(
       policy,
       "schema=1\ngpu_max_concurrent_jobs=2\ngpu_safety_mib=512\ngpu_partition_device=0\ngpu_partition_ccc_mib=2048\nmemory_high_fraction=0.9\n",
     );
-    f.env.AGENT_RESOURCE_POLICY = policy;
+    f.env["AGENT_RESOURCE_POLICY"] = policy;
     const marker = join(f.dir, "first-job-started");
     const first = invoke(
       [
@@ -1159,7 +1159,7 @@ test.skipIf(!live)(
     const secondManifest = await fixture(
       manifest({ output_lock: "shared-output" }),
     );
-    secondManifest.env.XDG_STATE_HOME = a.env.XDG_STATE_HOME;
+    secondManifest.env["XDG_STATE_HOME"] = a.env["XDG_STATE_HOME"];
     const denied = await invoke(
       ["--manifest", secondManifest.path, "--", "true"],
       secondManifest.env,
@@ -1179,7 +1179,7 @@ test.skipIf(!live)(
       oomPolicy,
       "schema=1\ngpu_max_concurrent_jobs=1\ngpu_safety_mib=512\ngpu_partition_device=0\ngpu_partition_ccc_mib=2048\nmemory_high_fraction=0.99\n",
     );
-    f.env.AGENT_RESOURCE_POLICY = oomPolicy;
+    f.env["AGENT_RESOURCE_POLICY"] = oomPolicy;
     const result = await invoke(
       [
         "--manifest",
@@ -1340,7 +1340,7 @@ test.skipIf(!live)(
     for (const caller of callers) {
       const result = await invoke(
         ["--manifest", f.path, ...caller.flags, "--", ...caller.argv],
-        { ...f.env, PATH: `${bin}:${process.env.PATH}` },
+        { ...f.env, PATH: `${bin}:${process.env["PATH"]}` },
       );
       expect(result.exit, caller.name + result.stdout + result.stderr).toBe(0);
       expect(result.stdout).toContain(

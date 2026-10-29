@@ -84,7 +84,7 @@ process.exit(await child.exited);
     root,
     env: {
       ...process.env,
-      PATH: `${bin}:${process.env.PATH}`,
+      PATH: `${bin}:${process.env["PATH"]}`,
       XDG_STATE_HOME: root,
       XDG_RUNTIME_DIR: root,
       AGENT_RESOURCE_POLICY: join(root, "policy.toml"),

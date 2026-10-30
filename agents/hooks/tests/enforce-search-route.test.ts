@@ -751,3 +751,31 @@ describe("display filter over the router's stream (widened 2026-10-01)", () => {
     });
   }
 });
+
+test("recorded complex filters allow external output and deny both project roots", () => {
+  const project = registerProject();
+  const other = registerProject();
+  const commands = [
+    "cd /home/fuyu/Workspace/firedancer && export PATH=/home/linuxbrew/.linuxbrew/bin:$PATH && mise run leaderboard:view -- --all 2>&1 | grep -F -e '25fc5cf3' | head -14 | cut -c1-300",
+    "cat /tmp/claude-1000/-home-fuyu-Workspace-firedancer/kps9-local_fold-1-memory_read-test.log | grep -e TIMING; sed -n '30,50p' /home/fuyu/Workspace/firedancer.ws/ws_kps3-integrate-1029/packages-2611/FireOps.jl/modules/local_fold/1/test/memory_read.jl",
+    "f=/home/fuyu/.local/state/agx/runs/69161943-e0ca-43c0-8508-32c77cf5b2d4/design.md; wc -c $f; cat $f | grep -E -e '^#{1,3} '",
+    "ls /tmp/claude-1000/-home-fuyu-Workspace-firedancer/ | grep -F -e trial | head",
+  ];
+  for (const command of commands) {
+    expect({
+      command,
+      decision: decisionOf(
+        runHook(HOOK, bashPayload(project, command), withCcc()).stdout,
+      )?.permissionDecision,
+    }).toEqual({ command, decision: undefined });
+  }
+  for (const path of [join(project, "source.ts"), join(other, "source.ts")]) {
+    const command = `cat ${path} | grep needle`;
+    expect({
+      command,
+      decision: decisionOf(
+        runHook(HOOK, bashPayload(project, command), withCcc()).stdout,
+      )?.permissionDecision,
+    }).toEqual({ command, decision: "deny" });
+  }
+});

@@ -172,8 +172,6 @@ function isRouterProducer(c: ShellCommand): boolean {
 }
 
 function readsRegisteredProjectFile(c: ShellCommand, name: string): boolean {
-  const project = registeredProject(c.cwd);
-  if (project === null) return false;
   const eff = effective(c);
   if (eff === undefined) return true;
   const args = eff.args;
@@ -188,8 +186,89 @@ function readsRegisteredProjectFile(c: ShellCommand, name: string): boolean {
   return operands.some((operand) => {
     if (operand === "-") return false;
     const target = readPath(operand, c);
-    return target.resolved && insidePath(target.path, physicalPath(project));
+    return (
+      !target.resolved || registeredProject(physicalPath(target.path)) !== null
+    );
   });
+}
+
+// Resolve only a literal absolute path assigned in this shell, with no intervening command
+// capable of changing it. Everything else remains dynamic and is denied conservatively.
+function resolveLocalProducer(
+  c: ShellCommand,
+  preceding: ShellCommand[],
+): ShellCommand {
+  if (!c.dynamic || c.words[0] !== "cat" || c.words.length !== 2) return c;
+  const ref = /^\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})$/u.exec(
+    c.rawWords[1] ?? "",
+  );
+  if (ref === null) return c;
+  const name = ref[1] ?? ref[2];
+  for (const step of preceding.toReversed()) {
+    if (
+      step.nested ||
+      step.leading.length > 0 ||
+      ![";", "", "&&"].includes(step.sep)
+    )
+      return c;
+    if (
+      step.words.length === 0 &&
+      step.assignments.length === 1 &&
+      !step.dynamic
+    )
+      return resolveAssignmentProducer(c, step, name ?? "");
+    if (step.words[0] !== "wc" || step.assignments.length > 0) return c;
+  }
+  return c;
+}
+
+function resolveAssignmentProducer(
+  c: ShellCommand,
+  step: ShellCommand,
+  name: string,
+): ShellCommand {
+  const assignment = new RegExp(
+    `^${name}=(/[^\\s$\u0060*?\\[\\]"']+)$`,
+    "u",
+  ).exec(step.assignments[0] ?? "");
+  if (assignment === null) return c;
+  const path = assignment[1] ?? "";
+  return {
+    ...c,
+    words: ["cat", path],
+    rawWords: ["cat", path],
+    dynamic: false,
+  };
+}
+
+function allowedFilterStages(
+  parsed: ParsedShell,
+  command: string,
+): Set<ShellCommand> {
+  const top = parsed.commands.filter((c) => !c.nested);
+  const allowed = new Set<ShellCommand>();
+  for (let start = 0; start < top.length;) {
+    let end = start + 1;
+    while (top[end]?.sep === "|") end++;
+    const pipeline = top.slice(start, end);
+    const producer = pipeline[0];
+    if (
+      producer !== undefined &&
+      pipeline.length > 1 &&
+      isAllowedStreamFilterPipeline(
+        [
+          resolveLocalProducer(producer, top.slice(0, start)),
+          ...pipeline.slice(1),
+        ],
+        command,
+      )
+    )
+      pipeline.forEach((stage) => {
+        allowed.add(stage);
+      });
+    start = end;
+  }
+  return allowed;
 }
 
 function isAllowedPipeProducer(c: ShellCommand, command: string): boolean {
@@ -490,15 +569,10 @@ function isAllowedStreamFilterPipeline(
 }
 
 function rawSearchBySyntax(parsed: ParsedShell, command: string): boolean {
-  if (
-    isAllowedStreamFilterPipeline(
-      parsed.commands.filter((c) => !c.nested),
-      command,
-    )
-  )
-    return false;
+  const allowed = allowedFilterStages(parsed, command);
   return parsed.commands.some(
     (c) =>
+      !allowed.has(c) &&
       commandSearches(c, command) &&
       ((c.dynamic &&
         parsed.commands.some((step) => step.assignments.length > 0)) ||
@@ -763,14 +837,9 @@ function searchTargets(payload: unknown): string[] {
   if (cwd === "") cwd = process.cwd();
   const parsed = parseShell(command, cwd);
   if (parsed === undefined) return [startPath(payload)];
-  if (
-    isAllowedStreamFilterPipeline(
-      parsed.commands.filter((c) => !c.nested),
-      command,
-    )
-  )
-    return [];
+  const allowed = allowedFilterStages(parsed, command);
   const targets = parsed.commands.flatMap((c) => {
+    if (allowed.has(c)) return [];
     if (!commandSearches(c, command)) return [];
     // Shell-local assignments are not the hook environment. Do not reuse its values after one.
     if (
@@ -809,7 +878,10 @@ function searchTargets(payload: unknown): string[] {
     );
   });
   const unroutedFilter = parsed.commands.some(
-    (c) => commandSearches(c, command) && searchOperands(c).length === 0,
+    (c) =>
+      !allowed.has(c) &&
+      commandSearches(c, command) &&
+      searchOperands(c).length === 0,
   );
   return targets.length === 0 && hasRouter && unroutedFilter
     ? [resolve(cwd)]

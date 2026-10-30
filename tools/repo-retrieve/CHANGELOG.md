@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.8 — 2026-10-30
+
+- Correct classification of multi-command stream filters and cross-project file reads.
+
 ## 1.5.7 — 2026-10-30
 
 - Remove unused candidate pool helper.

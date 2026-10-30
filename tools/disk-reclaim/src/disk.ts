@@ -21,6 +21,7 @@ import { freeBuilds } from "./disk-builds.ts";
 import { freeCccIndexDb } from "./disk-ccc-index-db.ts";
 import { freeJudgment } from "./disk-judgment.ts";
 import { diskTargetNames } from "./disk-targets/index.ts";
+import { registry } from "./targets/index.ts";
 import pkg from "../package.json" with { type: "json" };
 
 type PurgeDependencies = NonNullable<Parameters<typeof freeClean>[3]>;
@@ -553,8 +554,17 @@ export async function main(
     goal = { kind: "available_delta_bytes", value: amount };
   if (
     key === "plan targets" &&
-    targets.length === 1 &&
-    [
+    (targets.length > 0 || options.has("all") || options.has("tier"))
+  ) {
+    const selected =
+      targets.length > 0
+        ? targets
+        : registry
+            .filter(
+              (target) => options.has("all") || target.tier === get("tier"),
+            )
+            .map((target) => target.name);
+    const supported = new Set([
       "mise-configs",
       "clean",
       "rust",
@@ -563,9 +573,7 @@ export async function main(
       "tmpfs",
       "scratch",
       "ccc-index-db",
-    ].includes(targets[0] ?? "") &&
-    scope.host === "local"
-  ) {
+    ]);
     const controller = new AbortController();
     let cancelled = 0;
     const interrupt = () => {
@@ -578,30 +586,101 @@ export async function main(
     };
     process.once("SIGINT", interrupt);
     process.once("SIGTERM", terminate);
-    const remaining = Math.floor(deadline - (performance.now() - start));
-    const result = await planTarget(
-      targets[0] ?? "",
-      remaining,
-      controller.signal,
-      get("only"),
-      planDependencies,
+    const items: Array<
+      Awaited<ReturnType<typeof planTarget>>["items"][number]
+    > = [];
+    const errors: { code: string; message: string; scope: object }[] = [];
+    let stage = "starting targets";
+    const progress = () => {
+      if (!options.has("no-progress"))
+        process.stderr.write(
+          `disk: plan targets ${stage}; ${Math.floor(performance.now() - start)}/${deadline}ms\n`,
+        );
+    };
+    progress();
+    const timer = options.has("no-progress")
+      ? undefined
+      : setInterval(progress, 5000);
+    const results = await Promise.all(
+      selected.map(async (target) => {
+        const remaining = Math.floor(deadline - (performance.now() - start));
+        const reason = matchValue({
+          expired: remaining <= 0,
+          aborted: controller.signal.aborted,
+        })
+          .with({ expired: true }, () => "request deadline expired")
+          .with({ aborted: true }, () => "request cancelled")
+          .otherwise(() => "plan adapter unavailable");
+        const result =
+          supported.has(target) &&
+          scope.host === "local" &&
+          remaining > 0 &&
+          !controller.signal.aborted
+            ? await planTarget(
+                target,
+                remaining,
+                controller.signal,
+                get("only"),
+                planDependencies,
+              )
+            : { items: [], error: reason };
+        stage = `finished ${target}`;
+        progress();
+        return result;
+      }),
     );
+    if (timer !== undefined) clearInterval(timer);
+    for (const [index, result] of results.entries()) {
+      const target = selected[index] ?? "unknown";
+      items.push(
+        ...result.items,
+        ...(result.error === null
+          ? []
+          : [
+              {
+                id: target,
+                target,
+                path: null,
+                verdict: "unknown",
+                reason: result.error,
+                fingerprint: null,
+                effect: "none",
+                logical_bytes: null,
+                allocated_bytes: null,
+                eligible_at: null,
+                error: result.error,
+                detail: null,
+              },
+            ]),
+      );
+      errors.push(
+        ...(result.error === null
+          ? []
+          : [
+              {
+                code: "target_error",
+                message: result.error,
+                scope: { target, host: scope.host },
+              },
+            ]),
+      );
+    }
     process.removeListener("SIGINT", interrupt);
     process.removeListener("SIGTERM", terminate);
     const counts = {
-      selected: result.items.length,
+      selected: items.length,
       completed: 0,
-      refused: result.items.filter((item) =>
+      refused: items.filter((item) =>
         ["keep", "ask", "deny", "changed"].includes(item.verdict),
       ).length,
       failed: 0,
-      unknown: result.items.filter((item) => item.verdict === "unknown").length,
+      unknown: items.filter((item) => item.verdict === "unknown").length,
     };
     let outcome = "completed";
-    if (result.error !== null || counts.unknown > 0) outcome = "unknown";
+    if (errors.length > 0 || counts.unknown > 0) outcome = "unknown";
     if (cancelled !== 0) outcome = "cancelled";
     output(
-      `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items: result.items, counts, errors: result.error === null ? [] : [{ code: "target_error", message: result.error, scope }], receipt: null })}\n`,
+      `${JSON.stringify({ schema: "disk.result/1", command, mode, outcome, started_at: started, finished_at: Temporal.Now.instant().toString(), deadline_ms: deadline, scope: { ...scope, targets: selected }, goal, observations: { before: null, after: null, delta_available_bytes: null, unlinked_logical_bytes: 0, allocated_estimate_bytes: null, moved_logical_bytes: 0 }, items, counts, errors, receipt: null })}\n`,
     );
     process.exitCode = outcome === "unknown" ? 4 : 0;
     if (cancelled !== 0) process.exitCode = cancelled;

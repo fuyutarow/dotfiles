@@ -9,6 +9,7 @@ import { cccIndexDbProbe } from "./disk-ccc-index-db.ts";
 import { runProbe } from "./disk-probe.ts";
 import { createMiseConfigsTarget } from "./targets/mise-configs.ts";
 import type { Context, Target } from "./targets/index.ts";
+import { diskTargetNames } from "./disk-targets/index.ts";
 
 const Rows = z.array(
   z.object({ candidate: Candidate, fingerprint: z.string().nullable() }),
@@ -78,12 +79,13 @@ async function misePlan(target: Target) {
   };
 }
 
-function chooseProbe(target: string, only?: string): Probe {
+function chooseProbe(target: string, only?: string): Probe | undefined {
   if (target === "clean" || target === "rust" || target === "tmpfs")
     return (action, ms, abort) => cleanProbe(action, ms, abort, target, only);
   if (target === "builds") return buildsProbe;
   if (target === "scratch") return scratchProbe;
   if (target === "ccc-index-db") return cccIndexDbProbe;
+  if (target !== "toolchains") return undefined;
   return (action, ms, abort) =>
     runProbe(
       [
@@ -146,6 +148,8 @@ export async function planTarget(
   only?: string,
   injected?: PlanDependencies,
 ) {
+  if (!diskTargetNames.has(target))
+    return { items: [], error: `plan adapter unavailable: ${target}` };
   const start = performance.now();
   const remaining = () => Math.floor(timeout - (performance.now() - start));
   const call = async (probe: Probe, request?: string): Promise<Reply> => {
@@ -177,6 +181,8 @@ export async function planTarget(
     };
   }
   const probe = injected?.probe ?? chooseProbe(target, only);
+  if (probe === undefined && target !== "mise-configs")
+    return { items: [], error: `plan adapter unavailable: ${target}` };
   let rows: Row[];
   if (target === "mise-configs" && injected?.miseTarget !== undefined) {
     const result = await fromAsyncThrowable(() =>
@@ -187,6 +193,8 @@ export async function planTarget(
       return { items: [], error: result.value.error };
     rows = result.value.rows;
   } else {
+    if (probe === undefined)
+      return { items: [], error: "plan adapter unavailable" };
     const response = await call(probe);
     if (response.error !== null) return { items: [], error: response.error };
     const parsed = jsonOf(Rows).safeParse(response.out);
@@ -198,7 +206,9 @@ export async function planTarget(
   for (const row of rows) {
     const { candidate: c, fingerprint } = row;
     const verdict = await candidateVerdict(target, row, (action) =>
-      call(probe, action),
+      probe === undefined
+        ? Promise.resolve({ out: null, error: "plan adapter unavailable" })
+        : call(probe, action),
     );
     items.push({
       id: c.id,

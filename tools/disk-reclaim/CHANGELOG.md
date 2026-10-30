@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.16 — 2026-10-30
+
+- Plan selected targets and report unavailable adapters per target
+
 ## 1.12.15 — 2026-10-30
 
 - Preserve completed timer actions in receipts on cancellation.

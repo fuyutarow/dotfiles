@@ -689,7 +689,7 @@ test("tmpfs plan-only and guard, lock, and lost worker refuse effects", async ()
   expect(planned.exit).toBe(4);
   expect(jsonText.safeParse(planned.out).data).toMatchObject({
     outcome: "unknown",
-    items: [],
+    items: [{ target: "tmpfs", verdict: "unknown" }],
   });
   const invalid = await run(
     ["plan", "targets", "--target", "tmpfs", "--yes"],

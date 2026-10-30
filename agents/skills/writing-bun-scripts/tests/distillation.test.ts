@@ -2,10 +2,12 @@ import { expect, test } from "bun:test";
 
 const skill = await Bun.file(new URL("../SKILL.md", import.meta.url)).text();
 
-test("opening carries the three implementation principles and route", () => {
+test("description and opening carry the current implementation decisions and route", () => {
   const opening = skill.split("## Runtime and distribution")[0];
-  expect(opening).toContain("Preserve the consumer's contract");
-  expect(opening).toContain("independent of cwd and reproducible dependencies");
+  expect(opening).toContain("package bin and bun link");
+  expect(opening).toContain("import.meta.dir");
+  expect(opening).toContain("bunx package@version");
+  expect(opening).toContain("Freeze CLI, output and exit contracts");
   expect(opening).toContain("bounded Bun primitives and evidence");
   expect(opening).toContain("designing-command-line-interfaces");
 });

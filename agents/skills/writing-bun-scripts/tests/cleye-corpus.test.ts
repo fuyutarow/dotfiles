@@ -80,9 +80,6 @@ const CORPUS: CorpusEntry[] = [
     path: "agents/skills/continuing-long-running-tasks/scripts/continuation-checkpoint.ts",
   },
   {
-    path: "agents/skills/designing-command-line-interfaces/scripts/cli-contract-check.ts",
-  },
-  {
     path: "agents/skills/designing-command-line-interfaces/scripts/diagnostic-card-check.ts",
   },
   {

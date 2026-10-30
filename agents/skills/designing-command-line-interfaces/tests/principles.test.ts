@@ -7,13 +7,18 @@ const triggers = await readFile(
   "utf8",
 );
 
-test("the description and opening convey the three principles", () => {
+test("the description and opening convey the current CLI decisions", () => {
   const [frontmatter, body] = skill.split("\n---\n").slice(0, 2);
-  for (const text of [frontmatter, body?.split("## Contract")[0]]) {
-    expect(text).toContain("protocol");
-    expect(text).toContain("truthful");
-    expect(text).toContain("conditional defaults");
-  }
+  expect(frontmatter).toContain("Use XDG config, cache and state");
+  expect(frontmatter).toContain(
+    "flags > environment > project > user > system",
+  );
+  expect(frontmatter).toContain("Never claim unobserved effects succeeded");
+  const opening = body?.split("## Contract")[0] ?? "";
+  expect(opening).toContain("A CLI is a protocol");
+  expect(opening).toContain(
+    "Select conventions for consumers and compatibility",
+  );
 });
 
 test("the CLI modes and configuration boundary remain discoverable", () => {

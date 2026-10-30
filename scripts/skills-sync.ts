@@ -14,7 +14,15 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { cp, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import {
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+} from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -519,12 +527,74 @@ function recordInHouseState(
     : `could not record in-house skill state: ${writeError}`;
 }
 
-function previousInHouseNames(home: string, dotfiles: string): Set<string> {
+async function pathPresent(path: string): Promise<boolean> {
+  return Promise.try(() => lstat(path)).then(
+    () => true,
+    (error: unknown) => {
+      const parsed = z.object({ code: z.string() }).safeParse(error);
+      if (parsed.success && parsed.data.code === "ENOENT") return false;
+      fail(`FATAL: cannot inspect ${path}: ${errorText(error)}`);
+      return process.exit(1);
+    },
+  );
+}
+
+async function previousInHouseNames(
+  home: string,
+  dotfiles: string,
+): Promise<Set<string>> {
   const state = loadInHouseState(home).unwrapOr({ version: 1, skills: {} });
+  const archive = resolve(dotfiles, "archives/skills/README.md");
+  const text = (await pathPresent(archive))
+    ? await readFile(archive, "utf8")
+    : "";
+  // Only table entries identify retired skills; prose may mention active successors.
+  const archived = [
+    ...text.matchAll(
+      /^\|\s*(?:\[`([a-z0-9][a-z0-9-]{0,63})`\]\([^)]*\)|`([a-z0-9][a-z0-9-]{0,63})`)\s*\|/gmu,
+    ),
+  ].map((match) => match[1] ?? match[2] ?? "");
+  const present = await Promise.all(
+    archived.map(async (name) => ({
+      name,
+      paths: await Promise.all(
+        [".agents/skills", ".claude/skills"].map((base) =>
+          pathPresent(resolve(home, base, name)),
+        ),
+      ),
+    })),
+  );
   return new Set([
     ...Object.keys(state.skills),
     ...codexInHouseNamesFromLock(home, dotfiles),
+    ...present
+      .filter((entry) => entry.paths.some(Boolean))
+      .map((entry) => entry.name),
   ]);
+}
+
+async function retireCopies(
+  home: string,
+  base: string,
+  names: readonly string[],
+): Promise<string | undefined> {
+  for (const name of names) {
+    const target = resolve(home, base, name);
+    if (!(await pathPresent(target))) continue;
+    const result = Bun.spawn(["rip", target], {
+      stdout: "ignore",
+      stderr: "pipe",
+      timeout: 30_000,
+    });
+    const [exitCode, stderr] = await Promise.all([
+      result.exited,
+      new Response(result.stderr).text(),
+    ]);
+    if (exitCode !== 0 || (await pathPresent(target)))
+      return `could not retire ${target}: ${stderr.trim()}`;
+    print(`removed stale ${base} skill ${name}`);
+  }
+  return undefined;
 }
 
 async function removeStaleCodex(
@@ -534,23 +604,48 @@ async function removeStaleCodex(
   cliVersion: string,
 ): Promise<string | undefined> {
   if (stale.length === 0) return undefined;
+  const present = (
+    await Promise.all(
+      stale.map(async (name) => ({
+        name,
+        present: await pathPresent(resolve(home, ".agents/skills", name)),
+      })),
+    )
+  )
+    .filter((entry) => entry.present)
+    .map((entry) => entry.name);
   const removed = await runPinnedSkillsCommand(
     cliVersion,
     ["remove", ...stale.toSorted(), "-g", "--agent", "codex", "-y"],
     home,
     root,
   );
+  const remaining = (
+    await Promise.all(
+      stale.map(async (name) => ({
+        name,
+        present: await pathPresent(resolve(home, ".agents/skills", name)),
+      })),
+    )
+  )
+    .filter((entry) => entry.present)
+    .map((entry) => entry.name);
+  for (const name of present.filter(
+    (candidate) => !remaining.includes(candidate),
+  ))
+    print(`removed stale .agents/skills skill ${name}`);
+  if (remaining.length > 0)
+    return retireCopies(home, ".agents/skills", remaining);
   if (!removed.timedOut && removed.exitCode === 0) return undefined;
   const reason = removed.timedOut ? "timed out" : `exited ${removed.exitCode}`;
   return `skills remove for stale Codex skills ${reason}`;
 }
 
-function removeStaleClaude(home: string, stale: readonly string[]): void {
-  for (const name of stale)
-    rmSync(resolve(home, ".claude/skills", name), {
-      recursive: true,
-      force: true,
-    });
+async function removeStaleClaude(
+  home: string,
+  stale: readonly string[],
+): Promise<string | undefined> {
+  return retireCopies(home, ".claude/skills", stale);
 }
 
 function rejectPrototypeFlag(
@@ -803,7 +898,7 @@ function main(): Promise<void> {
       }
     }
     print(`bundled entries: ${bundled}`);
-    const stale = [...previousInHouseNames(home, dotfiles)].filter(
+    const stale = [...(await previousInHouseNames(home, dotfiles))].filter(
       (name) => !inHouseSet.has(name) && !names.includes(name),
     );
     const claudeError = await syncInHouseClaude(
@@ -853,7 +948,12 @@ function main(): Promise<void> {
         process.exitCode = 1;
         return;
       }
-      removeStaleClaude(home, stale);
+      const claudeCleanupError = await removeStaleClaude(home, stale);
+      if (claudeCleanupError !== undefined) {
+        fail(`FATAL: ${claudeCleanupError}`);
+        process.exitCode = 1;
+        return;
+      }
       const stateError = recordInHouseState(
         home,
         dotfiles,
@@ -1002,7 +1102,12 @@ function main(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    removeStaleClaude(home, stale);
+    const claudeCleanupError = await removeStaleClaude(home, stale);
+    if (claudeCleanupError !== undefined) {
+      fail(`FATAL: ${claudeCleanupError}`);
+      process.exitCode = 1;
+      return;
+    }
     const stateError = recordInHouseState(
       home,
       dotfiles,

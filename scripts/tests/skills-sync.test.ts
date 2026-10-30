@@ -501,6 +501,28 @@ describe("skills:sync", () => {
     cleanup(dotfiles, home);
   });
 
+  test("prunes unrecorded archived copies in both homes and preserves foreign skills", () => {
+    const dotfiles = makeDotfiles([]);
+    const home = makeHome();
+    mkdirSync(join(dotfiles, "archives/skills"), { recursive: true });
+    writeFileSync(
+      join(dotfiles, "archives/skills/README.md"),
+      "| Skill | Archived | Why | Successor |\n|---|---|---|---|\n| [`retired-house`](retired-house/SKILL.md) | today | retired | `foreign-skill` |\n",
+    );
+    writeInstalled(home, "retired-house", "retired\n");
+    writeInstalled(home, "foreign-skill", "foreign\n");
+    const result = run(dotfiles, home, join(home, "calls"));
+    expect(result.code, result.out).toBe(0);
+    for (const base of [".agents/skills", ".claude/skills"]) {
+      expect(existsSync(join(home, base, "retired-house"))).toBe(false);
+      expect(
+        readFileSync(join(home, base, "foreign-skill/SKILL.md"), "utf8"),
+      ).toBe("foreign\n");
+      expect(result.out).toContain(`removed stale ${base} skill retired-house`);
+    }
+    cleanup(dotfiles, home);
+  });
+
   test("partial Claude install failure preserves every existing in-house copy", () => {
     const dotfiles = makeDotfiles([], ["alpha", "beta"]);
     const home = makeHome({

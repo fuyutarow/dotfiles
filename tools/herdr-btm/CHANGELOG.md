@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.6 — 2026-10-30
+
+- Keep automatic btm presence to one per Herdr server while respecting close.
+
 ## 0.2.5 — 2026-10-30
 
 - Respect closing the automatically created btm tab in each Herdr workspace.

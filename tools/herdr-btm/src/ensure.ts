@@ -179,17 +179,15 @@ async function markWorkspace(
   return ok(undefined);
 }
 
-async function ensureWorkspace(
-  socket: string,
-  workspaceId: string | undefined,
-  occupied: Set<string>,
+async function markUnrecorded(
+  workspaces: z.output<typeof Workspaces>["result"]["workspaces"],
 ): Promise<Result<void, Error>> {
-  if (workspaceId === undefined || !occupied.has(workspaceId)) {
-    const created = await createBtm(socket, workspaceId);
-    if (created.isErr()) return err(created.error);
-    return ok(undefined);
+  for (const workspace of workspaces) {
+    if (workspace.tokens?.["btmp_ensured"] === "1") continue;
+    const marked = await markWorkspace(workspace.workspace_id);
+    if (marked.isErr()) return err(marked.error);
   }
-  return markWorkspace(workspaceId);
+  return ok(undefined);
 }
 
 async function ensureLocked(socket: string): Promise<Result<void, Error>> {
@@ -200,7 +198,6 @@ async function ensureLocked(socket: string): Promise<Result<void, Error>> {
       .filter((agent) => agent.agent === "btm")
       .map((agent) => agent.tab_id),
   );
-  const occupied = new Set<string>();
   for (const tabId of existingTabs) {
     const current = await request(
       ["tab", "get", tabId],
@@ -211,7 +208,6 @@ async function ensureLocked(socket: string): Promise<Result<void, Error>> {
       }),
     );
     if (current.isErr()) return err(current.error);
-    occupied.add(current.value.result.tab.workspace_id);
     if (current.value.result.tab.label === "btm") continue;
     // Installed help: herdr tab rename <TAB_ID> <LABEL>...
     const renamed = await request(
@@ -222,20 +218,15 @@ async function ensureLocked(socket: string): Promise<Result<void, Error>> {
   }
   const workspaces = await request(["workspace", "list"], Workspaces);
   if (workspaces.isErr()) return err(workspaces.error);
-  const targets =
-    workspaces.value.result.workspaces.length === 0
-      ? [undefined]
-      : workspaces.value.result.workspaces;
-  for (const workspace of targets) {
-    if (workspace?.tokens?.["btmp_ensured"] === "1") continue;
-    const marked = await ensureWorkspace(
-      socket,
-      workspace?.workspace_id,
-      occupied,
-    );
-    if (marked.isErr()) return err(marked.error);
-  }
-  return ok(undefined);
+  const all = workspaces.value.result.workspaces;
+  const recorded = all.some(
+    (workspace) => workspace.tokens?.["btmp_ensured"] === "1",
+  );
+  if (recorded) return markUnrecorded(all);
+  if (existingTabs.size > 0) return ok(undefined);
+  const created = await createBtm(socket, all[0]?.workspace_id);
+  if (created.isErr()) return err(created.error);
+  return markUnrecorded(all.slice(1));
 }
 
 // One lock per explicit socket serializes scheduler/manual ensures. A killed

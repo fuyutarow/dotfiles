@@ -20,7 +20,7 @@ const Agents = jsonOf(
   }),
 );
 
-test("ensure respects a closed btm and creates one in a new workspace", async () => {
+test("ensure creates at most one btm across workspaces and respects close", async () => {
   const root = await mkdtemp(join(tmpdir(), "btm-always-"));
   await using _temp = {
     [Symbol.asyncDispose]: async () => {
@@ -110,6 +110,7 @@ test("ensure respects a closed btm and creates one in a new workspace", async ()
     return expect.unreachable("BTM-ALWAYS: no btm row within 20s");
   };
   const first = await waitForOne();
+  await run(["herdr", "workspace", "create", "--label", "new", "--no-focus"]);
   await run(["herdr", "tab", "rename", first.tab_id, "2"]);
   await run([process.execPath, entry, "ensure"]);
   const Tab = jsonOf(
@@ -153,11 +154,8 @@ test("ensure respects a closed btm and creates one in a new workspace", async ()
   // Observe another complete scheduler interval.
   await Bun.sleep(5500);
   expect(await agents()).toHaveLength(0);
-  await run(["herdr", "workspace", "create", "--label", "new", "--no-focus"]);
   await run([process.execPath, entry, "ensure"]);
-  const second = await waitForOne();
-  expect(second.tab_id).not.toBe(first.tab_id);
-  expect(second.tab_id.split(":")[0]).not.toBe(first.tab_id.split(":")[0]);
+  expect(await agents()).toHaveLength(0);
 }, 60000);
 
 test("interactive zsh maps btm to btmp without recursion", async () => {

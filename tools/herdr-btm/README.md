@@ -21,12 +21,12 @@ it checks that agent's tab label and repairs it to `btm` with the documented
 `herdr tab rename <TAB_ID> <LABEL>...` command (installed `herdr tab rename --help`).
 Tabs already labelled `btm` need no rename; existing panes and processes remain.
 The sidebar's configured `tab` token displays this label.
-It creates one tab in each workspace that has not yet had a btm, or a
-workspace if the server is empty. Herdr workspace metadata records that btm was
-created; a closed btm tab stays closed until the Herdr server restarts. Killing
-btm likewise does not recreate it during that server session. A new workspace
-gets its own tab. Herdr discards the record when the workspace closes or the
-server restarts, so a restored workspace can get a new btm after restart.
+If no btm exists, it creates one tab in the first workspace, or a workspace if
+the server is empty. Workspace tokens record creation for the whole server;
+ensure copies the token to existing and newly observed workspaces. A closed btm
+tab or killed btm stays closed while a workspace carrying the token remains.
+Herdr discards the record when all token-bearing workspaces close or the server
+restarts; ensure can then create one btm again.
 It launches using the documented
 [layout.apply argv launch](https://herdr.dev/docs/socket-api/), which returns
 the actual tab ID to wait for.
@@ -45,7 +45,7 @@ No separate OS timer or service is needed. New interactive shells load the alias
 ## Verification
 
 `bun test tools/herdr-btm` starts an isolated real herdr server with its socket,
-config and home under `/tmp`. It checks startup, respecting pane closure, new
+config and home under `/tmp`. It checks startup, respecting pane closure, multiple
 workspaces, repeated/concurrent ensure, zsh alias resolution, argument forwarding,
 registration and exit status. It does not address the owner's live server.
 The patch changeset leaves version selection to release tooling, which writes the

@@ -47,7 +47,7 @@ test("doctor uses the same floor without upgrading", async () => {
   let upgrades = 0;
   const io: FloorIO = {
     read: (tool) =>
-      Promise.resolve(`${tool} ${tool === "agx" ? "1.22.7" : "0.2.0"}`),
+      Promise.resolve(`${tool} ${tool === "agx" ? "1.22.7" : "0.2.1"}`),
     installed: () => Promise.resolve(true),
     upgrade: () => {
       upgrades++;
@@ -66,7 +66,7 @@ test("doctor uses the same floor without upgrading", async () => {
 test("doctor reports untrusted tap with its specific repair", async () => {
   const io: FloorIO = {
     read: (tool) =>
-      Promise.resolve(`${tool} ${tool === "agx" ? "1.22.8" : "0.2.0"}`),
+      Promise.resolve(`${tool} ${tool === "agx" ? "1.22.8" : "0.2.1"}`),
     installed: (tool) =>
       Promise.resolve(
         tool === "semlint"

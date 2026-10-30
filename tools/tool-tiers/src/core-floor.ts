@@ -1,5 +1,5 @@
 // Minimum versions required by this checkout; shared by post-merge and doctor.
-export const CORE_FLOORS = { agx: "1.22.8", semlint: "0.2.0" } as const;
+export const CORE_FLOORS = { agx: "1.22.8", semlint: "0.2.1" } as const;
 type Tool = keyof typeof CORE_FLOORS;
 type ProbeError = { stderr: string };
 export type FloorIO = {

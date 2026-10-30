@@ -49,6 +49,9 @@ their executable details.
   second login-shell version manager, or expose mise shims on interactive PATH.
   INV-6 allows no global tool rows. A-class agx and semlint are Homebrew core tools from the
   shared public tap; release procedures check `agx -V` and `semlint --version` on PATH.
+  The semlint floor is 0.2.1 and requires jj 0.46.0 or later. Its commands are `check`, `review`,
+  `admit`, `ls`, and `view` (`admit` replaced `land`). Use `semlint.toml` with `edition = 1` and
+  `.semlint/`; `dx.toml` and `.dx/` are refused.
   See [README's Tool installation kinds](README.md#tool-installation-kinds).
   `mise activate` serves interactive per-directory shells; the shim directory serves only
   non-interactive shells. Homebrew-managed core Bun/uv remain available in every cwd.

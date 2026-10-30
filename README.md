@@ -143,6 +143,9 @@ The A-class `agx` and `semlint` suites are Homebrew core tools installed from th
 version and check `agx -V` and `semlint --version` on PATH in every consumer. INV-6 allows no global
 mise tool rows.
 The minimum versions required by this checkout are declared in `tools/tool-tiers/src/core-floor.ts`.
+The semlint floor is 0.2.1; it requires jj 0.46.0 or later. Its commands are `check`, `review`,
+`admit`, `ls`, and `view` (`admit` replaced `land`). Configuration uses `semlint.toml` with
+`edition = 1` and `.semlint/`; `dx.toml` and `.dx/` are refused.
 Post-merge checks them and upgrades only an outdated tap formula; doctor reports the same check.
 The agx contracts live in that
 repository's [`contract/README.md`](https://github.com/fuyutarow/agx/blob/13b49ebd/contract/README.md).

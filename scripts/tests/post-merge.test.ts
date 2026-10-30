@@ -21,7 +21,7 @@ test.each(["read", "installed", "upgrade"])(
         if (phase === "read" && tool === "semlint")
           return Promise.resolve(untrusted);
         return Promise.resolve(
-          tool === "agx" ? "agx 1.13.14" : "semlint 0.2.0",
+          tool === "agx" ? "agx 1.13.14" : "semlint 0.2.1",
         );
       },
       installed: (tool) =>
@@ -41,7 +41,7 @@ test.each(["read", "installed", "upgrade"])(
 );
 
 test("floor upgrades only outdated tap tools and rechecks them", async () => {
-  const versions = { agx: "1.13.14", semlint: "0.2.0" };
+  const versions = { agx: "1.13.14", semlint: "0.2.1" };
   const upgraded: string[] = [];
   const io: FloorIO = {
     read: (tool) => Promise.resolve(`${tool} ${versions[tool]}`),
@@ -61,7 +61,7 @@ test("floor upgrades only outdated tap tools and rechecks them", async () => {
 test("floor fails loudly when upgrade does not reach the floor", async () => {
   const io: FloorIO = {
     read: (tool) =>
-      Promise.resolve(`${tool} ${tool === "agx" ? "1.13.14" : "0.2.0"}`),
+      Promise.resolve(`${tool} ${tool === "agx" ? "1.13.14" : "0.2.1"}`),
     installed: () => Promise.resolve(true),
     upgrade: () => Promise.resolve(),
   };
@@ -75,7 +75,7 @@ test("floor upgrades semlint when needed and rejects a still-old result", async 
   const upgraded: string[] = [];
   const io: FloorIO = {
     read: (tool) =>
-      Promise.resolve(tool === "semlint" ? "semlint 0.1.9" : "agx 1.22.8"),
+      Promise.resolve(tool === "semlint" ? "semlint 0.2.0" : "agx 1.22.8"),
     installed: () => Promise.resolve(true),
     upgrade: (tool) => {
       upgraded.push(tool);
@@ -83,7 +83,7 @@ test("floor upgrades semlint when needed and rejects a still-old result", async 
     },
   };
   expect((await checkCoreFloor(io, true)).detail).toBe(
-    "semlint: installed 0.1.9, required 0.2.0; repair: mise run up",
+    "semlint: installed 0.2.0, required 0.2.1; repair: mise run up",
   );
   expect(upgraded).toEqual(["semlint"]);
 });

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4 — 2026-10-30
+
+- Raise the semlint core floor to 0.2.1.
+
 ## 0.2.3 — 2026-10-30
 
 - Fix brew shadow doctor test fixtures and PATH expectations

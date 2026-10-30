@@ -10,7 +10,7 @@ Desk review does not establish live invocation accuracy or downstream code quali
 | Review this ordinary helper using Tiger Style, including variable names | Tiger; not restricted to costly or durable systems. |
 | Apply TigerStyle to a queue implementation | Tiger across all applicable source sections; DbC for detailed enforcement choices. |
 | Review only TigerStyle naming in this file | Tiger Naming Things, with a scoped result. |
-| Choose types versus runtime guards for stale permissions | designing-by-contract; Tiger only for an additional requested style review. |
+| Choose types versus runtime guards for stale permissions | base-usecase-first; Tiger only for an additional requested style review. |
 | Add a routine TypeScript annotation | writing-typescript/direct edit. |
 | Explain TigerStyle history | Explanation with source attribution; no invented compliance ceremony. |
 | Reorganize the Tiger skill | forging-skills. |
@@ -39,5 +39,5 @@ Desk review does not establish live invocation accuracy or downstream code quali
 ## Boundary with DbC
 
 Tiger retains its original contract/assertion teaching.
-Detailed enforcement design has one home in designing-by-contract.
+Detailed enforcement design has one home in base-usecase-first.
 A combined task can cite the same contract; it must not create a second invariant/enforcer authority.

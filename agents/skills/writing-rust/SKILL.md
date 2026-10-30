@@ -8,7 +8,7 @@ description: >-
   Cargo layout → here; repo layers/polyglot placement → wiring-repositories;
   mise task graph → wiring-mise-tasks.
   Change/debug → repository instructions and this language owner; structure-only → refactoring-code;
-  invariant placement/type-as-spec → designing-by-contract; consequential risk → practicing-tiger-style.
+  invariant placement/type-as-spec → base-usecase-first; consequential risk → practicing-tiger-style.
   PyO3/maturin binding design stays here; Python tooling → running-python-tools.
   Excludes Rust-written CLI installation, syntax explanations, and prose editing with settled design.
   English skill; respond in the user's language.
@@ -87,7 +87,7 @@ Full artifact spec + trigger: RG0 row above; lookup: `references/selection.md`.
 |---|---|
 | `wiring-repositories` | **PURPOSE:** Cargo package/workspace/target semantics stay here; repository layer admission and cross-language manifest placement stay there. Agree in substance; do not diff for byte identity. |
 | `wiring-mise-tasks` | **PURPOSE:** Rust package, feature and test-mode coverage stays here; task names, dependencies and runtime declarations stay there. Pass the RG5 scope to the task writer. |
-| `designing-by-contract` | **PURPOSE:** choose predicates, representations, construction paths and residual obligations there. Rust visibility, ownership, conversions, Serde APIs and crate choices remain here. |
+| `base-usecase-first` | **PURPOSE:** choose predicates, representations, construction paths and residual obligations there. Rust visibility, ownership, conversions, Serde APIs and crate choices remain here. |
 | governing-configuration-systems | **DECISIVE:** Cargo.toml or a Rust parser's crate-specific manifest, API, and implementation → HERE. A format-independent configuration contract → governing-configuration-systems. |
 | Repository instructions and this language owner | Implement Rust changes under repository instructions and apply the relevant Rust guidance here (RG0–RG4). |
 | `refactoring-code` | **Co-fire on any behavior-preserving Rust restructuring, with ORDER**: its two-hats / oracle / deny-gate govern the change discipline; this skill supplies the Rust **oracle** (`cargo check` + `clippy` + `cargo nextest` green as the bracket) and the Rust-safe transforms (module/visibility moves, ownership refactors, `impl Trait` extraction). A Rust refactor that improves no named property is still 場当たり churn — its deny-gate applies unchanged. **The "oracle" role does NOT suspend RG0** — a rename/refactor here is still first-crate-entry; the fire/no-fire boundary is the ★ callout. |

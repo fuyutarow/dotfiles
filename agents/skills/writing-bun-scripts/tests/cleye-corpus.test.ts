@@ -83,9 +83,8 @@ const CORPUS: CorpusEntry[] = [
     path: "agents/skills/designing-command-line-interfaces/scripts/cli-contract-check.ts",
   },
   {
-    path: "agents/skills/designing-developer-diagnostics/scripts/diagnostic-card-check.ts",
+    path: "agents/skills/designing-command-line-interfaces/scripts/diagnostic-card-check.ts",
   },
-  { path: "agents/skills/designing-interactions/scripts/captive-probe.ts" },
   {
     path: "agents/skills/designing-version-schemes/scripts/versioning-contract-check.ts",
   },
@@ -98,9 +97,6 @@ const CORPUS: CorpusEntry[] = [
   { path: "agents/skills/forging-skills/scripts/skill-check.ts" },
   {
     path: "agents/skills/forming-hypotheses-from-anomalies/scripts/hypothesis-check.ts",
-  },
-  {
-    path: "agents/skills/governing-configuration-systems/scripts/configuration-contract-check.ts",
   },
   {
     path: "agents/skills/issuing-technical-memoranda/scripts/tm-check.ts",

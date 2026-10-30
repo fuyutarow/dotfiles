@@ -37,7 +37,7 @@ Its VOPR discussion does not make passing fuzzing a proof of no bugs.
 
 [It Takes Two to Contract](https://tigerbeetle.com/blog/2023-12-27-it-takes-two-to-contract/)
 explains contract programming and paired assertions from TigerBeetle practice.
-This guide's detailed cross-language contract workflow belongs to `designing-by-contract`.
+This guide's detailed cross-language contract workflow belongs to `base-usecase-first`.
 That delegation does not remove the original assertion rules from TigerStyle.
 
 Corpus authority: `urn:uuid:01a0c8de-83f8-72d8-bf42-89b56c011da7`.

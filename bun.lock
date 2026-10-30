@@ -58,20 +58,6 @@
         "cleye": "2.6.0",
       },
     },
-    "agents/skills/designing-developer-diagnostics": {
-      "name": "@dotfiles/skill-designing-developer-diagnostics",
-      "version": "0.0.0",
-      "dependencies": {
-        "cleye": "2.6.0",
-      },
-    },
-    "agents/skills/designing-interactions": {
-      "name": "@dotfiles/skill-designing-interactions",
-      "version": "0.0.0",
-      "dependencies": {
-        "cleye": "2.6.0",
-      },
-    },
     "agents/skills/designing-version-schemes": {
       "name": "@dotfiles/skill-designing-version-schemes",
       "version": "0.0.0",
@@ -214,7 +200,7 @@
     },
     "tools/agent-cpu": {
       "name": "@dotfiles/agent-cpu",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "bin": {
         "agent-cpu": "src/agent-cpu.ts",
       },
@@ -282,7 +268,7 @@
     },
     "tools/disk-reclaim": {
       "name": "@dotfiles/disk-reclaim",
-      "version": "1.12.13",
+      "version": "1.12.18",
       "bin": {
         "disk-reclaim": "src/reclaim.ts",
       },
@@ -295,7 +281,7 @@
     },
     "tools/herdr-btm": {
       "name": "@dotfiles/herdr-btm",
-      "version": "0.2.4",
+      "version": "0.2.6",
       "bin": {
         "btmp": "src/btmp.ts",
       },
@@ -341,7 +327,7 @@
     },
     "tools/repo-retrieve": {
       "name": "@dotfiles/repo-retrieve",
-      "version": "1.5.7",
+      "version": "1.5.8",
       "bin": {
         "rr": "src/repo-retrieve.ts",
         "repo-retrieve": "src/repo-retrieve.ts",
@@ -374,7 +360,7 @@
     },
     "tools/shared": {
       "name": "@dotfiles/shared",
-      "version": "0.19.4",
+      "version": "0.19.6",
       "bin": {
         "gpu-sampler": "src/gpu-sampler.ts",
       },
@@ -433,7 +419,7 @@
     },
     "tools/tool-tiers": {
       "name": "@dotfiles/tool-tiers",
-      "version": "0.2.1",
+      "version": "0.2.4",
       "bin": {
         "tool": "src/tool.ts",
       },
@@ -497,10 +483,6 @@
     "@dotfiles/skill-continuing-long-running-tasks": ["@dotfiles/skill-continuing-long-running-tasks@workspace:agents/skills/continuing-long-running-tasks"],
 
     "@dotfiles/skill-designing-command-line-interfaces": ["@dotfiles/skill-designing-command-line-interfaces@workspace:agents/skills/designing-command-line-interfaces"],
-
-    "@dotfiles/skill-designing-developer-diagnostics": ["@dotfiles/skill-designing-developer-diagnostics@workspace:agents/skills/designing-developer-diagnostics"],
-
-    "@dotfiles/skill-designing-interactions": ["@dotfiles/skill-designing-interactions@workspace:agents/skills/designing-interactions"],
 
     "@dotfiles/skill-designing-version-schemes": ["@dotfiles/skill-designing-version-schemes@workspace:agents/skills/designing-version-schemes"],
 

@@ -6,7 +6,7 @@ description: >-
   cache invalidation, off-by-one errors, formatting, dependencies, and tooling.
   Use for Tiger Style implementation, design, or review, including ordinary code and naming.
   Preserve the pinned source rules and distinguish explicit adaptations from literal conformance.
-  Contract enforcement design uses designing-by-contract; language mechanics use writing-*.
+  Contract enforcement design uses base-usecase-first; language mechanics use writing-*.
   Skill revision uses forging-skills. Respond in the user's language.
 ---
 
@@ -83,13 +83,13 @@ without considering compatibility and the authorized change scope.
 
 TigerStyle's assertions, paired checks, positive/negative space, and check/use locality stay visible here
 because they are source rules.
-Use `designing-by-contract` when the task needs a detailed choice among types, parsers, assertions,
+Use `base-usecase-first` when the task needs a detailed choice among types, parsers, assertions,
 and runtime enforcement. Refer to its contract instead of maintaining a second enforcement procedure here.
 
 | Question | Owner |
 |---|---|
 | Full TigerStyle or source-faithful coding review, including naming | This skill |
-| Preconditions, postconditions, invariants, construction paths, and enforcement boundaries | designing-by-contract |
+| Preconditions, postconditions, invariants, construction paths, and enforcement boundaries | base-usecase-first |
 | Language APIs, formatter commands, ownership syntax, and implementation | Repository instructions and writing-* |
 | Behavior-preserving restructuring | refactoring-code |
 | Benchmark footing, leakage, or score validity | validating-experimental-evidence |

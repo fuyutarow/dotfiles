@@ -1,9 +1,9 @@
 {
-  "maxListingChars": 48326,
-  "measuredOn": "2026-10-24",
-  "skillsAtMeasurement": 54,
+  "maxListingChars": 45642,
+  "measuredOn": "2026-10-30",
+  "skillsAtMeasurement": 50,
   "why": "A local ratchet over the static sum of active in-house skill names and descriptions under agents/skills/. This is a conservative character-footprint proxy, not measured per-turn tokens: host selection, truncation, invocation policy and tokenization affect observed listing cost. F4 in forging-skills owns membership and the retire/merge/shorten/raise decision. The shared floor compares the proxy against maxListingChars. A ceiling raise needs an explicit reason in the same reviewable change; recovered footprint may lower the ceiling.",
-  "evidenceAtMeasurement": "The worktree floor after retiring the in-house session-messaging skill measures 54 active in-house skill directories and 48,326 name+description characters. The upstream driving-agx declaration is a third-party source/name pair and is not copied into this source-side floor; skills:sync remains with the coordinator. The cap matches the measured proxy with no slack.",
+  "evidenceAtMeasurement": "The worktree floor after the owner-requested consolidation measures 50 active in-house skill directories and 45,642 name+description characters. The cap matches that measured proxy with no slack; sibling changes are measured separately.",
   "raises": [
     {
       "date": "2026-10-14",
@@ -25,13 +25,6 @@
       "to": 51683,
       "spentBy": "record CLI admission",
       "reason": "The owner-approved r99-u26 WIP admits a 460-character name+description entry for the example-research record CLI. The floor measured 51,223 chars at 58 skills before admission and 51,683 at 59 after; the cap matches the new total exactly, with no added slack."
-    },
-    {
-      "date": "2026-10-10",
-      "from": 50782,
-      "to": 51223,
-      "spentBy": "practicing-unix-philosophy",
-      "reason": "User-requested Unix-philosophy distillation, corrected after the user rejected a boundary-only scope and requested unix in the name. The entry joins the nine major principles, prototyping and three-system learning into a design approach; existing CLI, interaction and structural-edit owners retain their detailed contracts. Its name+description adds 487 characters to the measured 50,736 baseline, consuming the prior 46-character slack and pinning the ceiling at 51,223. The semantic index repair now succeeds; the three-query JA/EN battery found the previous draft and adjacent interaction guidance, which were inspected rather than reported absent. No unrelated skill is retired. Source reading, coverage review and executed composition checks are recorded in practicing-unix-philosophy/tests/forge-verification-ledger.md."
     },
     {
       "date": "2026-10-03",
@@ -75,13 +68,6 @@
       "to": 63355,
       "spentBy": "Jev CLI skill (retired 2026-10-06)",
       "reason": "A new 897-character name+description entry; the 69-skill collection measured 63,355 characters after admission, with the prior collection at 62,458 (59 below its 62,517 ratchet). Admission closed an ownership void around Jev's non-generative state-plus-typed-questions to probabilities boundary, primitive choice, caller-side abstention policy, and exact JSON relay. Retiring or merging a sibling was rejected because doing so would collapse JUDGMENT-NOT-AGENT into a tool-using/generative worker contract. The vendor typesafe-ai skill remained the application-integration owner; the Jev guide owned immediate agent/shell operation through the bundled official-API runner. Its worker and Jev implementation moved into agents/routing-control, and the single entrypoint is agx."
-    },
-    {
-      "date": "2026-09-17",
-      "from": 61723,
-      "to": 62517,
-      "spentBy": "designing-developer-diagnostics",
-      "reason": "A new 794-character name+description entry, measured by `mise run lint:skills-floor` across 67 installed skill directories. Admission closes a demonstrated ownership void: no existing skill owns the DIAGNOSTIC CARD from observed developer-tool failure through recovery confidence, locus/grouping, and human-plus-machine receipt. Retiring a sibling was considered and rejected: linting-prose owns wording, implementing-and-debugging owns cause/fix work, governing-configuration-systems owns authority and integrity, and designing-interactions owns end-user interaction flows. The descriptor carries typed cuts for those races."
     },
     {
       "date": "2026-09-17",

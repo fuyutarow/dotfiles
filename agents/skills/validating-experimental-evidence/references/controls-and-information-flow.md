@@ -29,7 +29,7 @@ Judge access against prediction-time information permissions and perturb the act
 
 The exact invariant is conditional on the registered protocol. A protocol that permits
 other examples' labels before a given prediction must name that reveal order explicitly.
-If the invariant has no clear state/API boundary, ask `designing-by-contract`
+If the invariant has no clear state/API boundary, ask `base-usecase-first`
 to place it. The target code owner
 implements the test and fixes a violation.
 

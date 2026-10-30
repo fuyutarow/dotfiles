@@ -1,5 +1,16 @@
 # Archived skills
 
+## 2026-10-30 owner-requested consolidation
+
+| Skill | Archived | Why | Successor |
+|---|---|---|---|
+| [`designing-by-contract`](designing-by-contract/SKILL.md) | 2026-10-30 | Owner-requested consolidation of live decisions | `base-usecase-first` |
+| [`designing-interactions`](designing-interactions/SKILL.md) | 2026-10-30 | Owner-requested consolidation of live decisions | `designing-command-line-interfaces` |
+| [`designing-developer-diagnostics`](designing-developer-diagnostics/SKILL.md) | 2026-10-30 | Owner-requested consolidation of live decisions | `designing-command-line-interfaces` |
+| [`practicing-unix-philosophy`](practicing-unix-philosophy/SKILL.md) | 2026-10-30 | Owner-requested consolidation of live decisions | `base-usecase-first` |
+
+The complete packages are preserved byte for byte outside discovery.
+
 ## 2026-10-29 owner-requested consolidation
 
 | Skill | Archived | Why | Successor |
@@ -17,7 +28,7 @@ The [former Tiger risk/conformance workflow](practicing-tiger-style-ledger/SKILL
 is preserved as history. Its T0–T4 ledger and risk tiers are not upstream TigerStyle.
 The active `practicing-tiger-style` follows the complete pinned upstream guide.
 `designing-type-contracts` was renamed and expanded into
-[`designing-by-contract`](../../agents/skills/designing-by-contract/SKILL.md), the single
+[`designing-by-contract`](designing-by-contract/SKILL.md), the single
 owner of static and runtime invariant enforcement. The old name is not an active alias.
 
 Skills retired from `agents/skills/`. Nothing here is linked into any agent (`mise run link:skills`

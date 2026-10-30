@@ -9,7 +9,7 @@ The user required the complete TigerStyle and a distinct, useful Design by Contr
 ### Responsibility and treatment
 
 - TigerStyle: the full pinned source, all Safety/Performance/DX sections, exact prescriptions and explicit adaptation rules.
-- designing-by-contract: detailed precondition/postcondition/invariant enforcement across static and runtime boundaries.
+- base-usecase-first: detailed precondition/postcondition/invariant enforcement across static and runtime boundaries.
 - Language/domain owners retain implementation, project policy, and required behavior.
 - The former Tiger risk/conformance package is preserved at
   `archives/skills/practicing-tiger-style-ledger/`, indexed by the archive catalog.

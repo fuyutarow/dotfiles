@@ -69,7 +69,7 @@ tree. Dotfiles keeps its JSON codec in `agents/hooks/zod.ts`.
 
 ## Cut
 
-Invariant placement, schema/type authority, and construction-path design → `designing-by-contract`.
+Invariant placement, schema/type authority, and construction-path design → `base-usecase-first`.
 This skill keeps TypeScript syntax and library idioms; the contract does not mandate a new dependency.
 
 Follow repository instructions for implementation and debugging. Prose/wording → `linting-prose`.

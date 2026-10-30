@@ -1,7 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@6.42.1/schema-jsonc.json",
   "ignoreExportsUsedInFile": true,
-  "ignore": ["archives/**"],
+  "ignore": ["archives/**", ".obsidian/**"],
   "workspaces": {
     ".": {
       // The mise plugin labels task scripts as development entries, which otherwise

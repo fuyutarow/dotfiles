@@ -42,6 +42,9 @@ test("production roots follow the repository's entry declarations", async () => 
     "agents/codex/windows-hook.ts", // Windows hook bridge
     "presets/typescript/lint-knip.ts", // copied preset
     "scripts/guest-capacity-recover.ts", // systemd service
+    "scripts/ws-gc-log.ts", // systemd service
+    "tools/shared/src/gpu-stall-notify.ts", // systemd service
+    "tools/statusline/src/sampler.ts", // systemd service
     "scripts/render-home.ts", // subprocess
     "scripts/tracked-files.ts", // subprocess
     "tools/agent-resource-run/src/scope-entry.ts", // dynamically spawned

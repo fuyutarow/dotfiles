@@ -144,9 +144,7 @@ export async function roots(root: string): Promise<string[]> {
     )
       paths.add(normalized);
   };
-  // These shared executables are launched by a systemd service and by a
-  // subprocess path assembled at runtime, respectively.
-  await add("tools/shared/src/gpu-stall-notify.ts");
+  // This subprocess path is assembled at runtime.
   await add("tools/shared/src/readonly-exec.ts");
   const pkg = readSchema(
     z.object({ bin: z.record(z.string(), z.string()) }),
@@ -174,6 +172,15 @@ export async function roots(root: string): Promise<string[]> {
       ),
     );
     for (const match of matches) await add(match[1] ?? "");
+  }
+  for await (const unit of new Bun.Glob("systemd/*.service").scan({
+    cwd: root,
+  })) {
+    const text = await Bun.file(join(root, unit)).text();
+    for (const match of text.matchAll(
+      /^ExecStart=\/usr\/bin\/env\s+bun\s+%h\/dotfiles\/([\w./-]+\.(?:ts|js))\b/gmu,
+    ))
+      await add(match[1] ?? "");
   }
   const hooks = Bun.TOML.parse(
     await Bun.file(join(root, "agents/hooks/hooks.toml")).text(),
@@ -218,7 +225,6 @@ export async function roots(root: string): Promise<string[]> {
     ["topgrade/topgrade.toml", "agents/codex/codex-update.ts"],
     ["agents/codex/codex-runtime.ts", "agents/codex/codex-wsl.ts"],
     ["agents/codex/windows-assets.ts", "agents/codex/windows-hook.ts"],
-    ["systemd/statusline-sampler.service", "tools/statusline/src/sampler.ts"],
     [
       "tools/agent-resource-run/src/agent-resource-run.ts",
       "scope-entry.ts",

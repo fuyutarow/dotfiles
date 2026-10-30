@@ -145,6 +145,7 @@ depends = [
   "lint:zsh",
   "lint:bun",
   "lint:ts",
+  "lint:knip",
   "vendor:deps:check",
   "lint:one-writer",
   "lint:hook-slug",

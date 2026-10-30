@@ -1,21 +1,18 @@
 ---
 name: writing-bun-scripts
 description: >-
-  Writes local Bun TypeScript scripts, hooks and CLIs, including Bash migration. Preserve the
-  consumer's contract; make execution independent of cwd and reproducible dependencies; use
-  Bun's bounded primitives and evidence for the behavior claimed. Use for local automation,
-  bunx, hook bodies, or skill scripts. CLI protocol → designing-command-line-interfaces;
-  TypeScript idiom → writing-typescript; task graph → wiring-mise-tasks.
+  Writes Bun TypeScript scripts, hooks and CLIs; migrates Bash. PATH commands use package bin and bun link; hooks have no npm deps; resolve files via import.meta.dir. Pin one-shots with bunx package@version, permanent deps in the lockfile; freeze CLI, output and exits before migration. Use for skill scripts. CLI protocol → designing-command-line-interfaces; TypeScript idiom → writing-typescript; task graph → wiring-mise-tasks.
 ---
 
 # Writing Bun scripts
 
 > **Version**: v2610.2.0 (2026-10-30) — principle-first distillation.
 
-Preserve the consumer's contract. Make execution independent of cwd and reproducible dependencies.
-Use bounded Bun primitives and evidence suited to the behavior claimed. These translate
-`base-usecase-first` into local automation: a migration preserves accepted behavior, and a
-successful run alone does not prove type safety.
+PATH commands use package bin and `bun link`; hooks have no npm dependencies. Resolve script-owned
+files via `import.meta.dir`. Pin one-shot tools with `bunx package@version` and permanent
+dependencies in the lockfile. Freeze CLI, output and exit contracts before shell migration.
+Use bounded Bun primitives and evidence suited to the behavior claimed; a successful run alone
+does not prove type safety.
 
 ## Runtime and distribution
 

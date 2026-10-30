@@ -1,33 +1,18 @@
-# F3 trigger desk-check — designing-command-line-interfaces
+# Trigger desk-check — designing-command-line-interfaces
 
-Run these against the name and description after each description or cut edit.
-
-## FIRES
-
-| Ask | Why |
-|---|---|
-| “Design a CLI for humans and CI.” | Multi-consumer CLI CONTRACT. |
-| 「CLI設計で subcommand と flags を決めたい」 | Invocation grammar. |
-| “Should `--json` write progress to stdout?” | Channels and machine mode. |
-| 「終了コードと partial failure の扱いを設計して」 | Outcome/recovery contract. |
-| “Our destructive command has dry-run and force; audit its contract.” | Ordered interaction then C2. |
-| “Make this command script-safe across future output changes.” | Stable machine route and evolution. |
-| “This new CLI's interface is unsettled; implement it.” | This contract first, then implementation. |
-| 「`oo` を打つとしばらく沈黙する、固まったように見える」 | C3 liveness: an unannounced wait. |
-| “It says success but nothing opened.” | C4: a handed-off effect reported as success. |
-| 「つながっていないと黙って別のマシンで開く」 | C4 fallback row. |
-| “Our CLI hangs when CI runs it” (blocked on a prompt). | C0/C1 noninteractive path; `designing-interactions` U3 co-fires for the captive-surface judgment. |
-
-## MUST NOT FIRE
+These are review cases, not measured live selection accuracy.
 
 | Ask | Route |
 |---|---|
-| “Which `codex exec` sandbox flag?” | `dispatch` (`tools/dispatch`). |
-| “Make this error message friendlier.” | `linting-prose` or diagnostic card. |
-| “Should releases use SemVer?” | `designing-version-schemes`. |
-| “Canonicalize config before signing.” | `governing-configuration-systems`. |
-| “Launch our open-source CLI.” | `growing-oss-adoption`. |
-| `git status | jq .` once. | Direct shell use. |
-| “Implement the already-specified subcommand.” | Follow repository instructions and the language owner. |
-| “My web page's spinner feels slow.” | `designing-interactions`; a GUI latency budget, not a CLI contract. |
-| “Why is this command slow? Make it faster.” | Follow repository instructions and the relevant performance/domain owner; performance, not what the caller is told. |
+| Design a CLI for people and CI | Here: consumer protocol |
+| CLI の subcommand と flags を決めたい | Here: invocation |
+| Our command hangs at a CI prompt | Here: noninteractive input |
+| The command silently falls back to another machine | Here: outcome and target |
+| It says success but nothing opened | Here: evidence of effect |
+| Design the error and recovery for a failed CLI invocation | Here: diagnostic mode |
+| Design undo or confirmation for a destructive CLI | Here: interaction and effects |
+| Choose CLI config paths and override order | Here: conditional storage defaults |
+| Canonicalize or sign this config | `governing-configuration-systems` |
+| Implement the already specified command | Repository instructions and language owner |
+| My web page spinner feels slow | GUI interaction design |
+| Choose SemVer or CalVer | Version scheme design |

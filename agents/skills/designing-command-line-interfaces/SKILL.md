@@ -1,20 +1,17 @@
 ---
 name: designing-command-line-interfaces
 description: >-
-  Design and audit CLI interfaces. A CLI is a protocol for its actual human and machine consumers;
-  effects, recovery and outcomes must be truthful and observable; conventions are conditional defaults,
-  selected for those consumers and compatibility. Use for CLI grammar, help, diagnostics, interaction,
-  noninteractive operation, storage, streams, exit status, waits, partial failure and evolution.
-  Configuration integrity and authority belong to governing-configuration-systems; implementation
-  follows repository instructions and the relevant language skill.
+  Design and audit CLIs: grammar, help, interaction, storage, exits, waits and failures. Default to XDG config, cache and state for config, cache and history; flags > environment > project > user > system. Refuse or expose consequential defaults for missing input. Prompt only on TTY stdin; otherwise accept input or fail. Bound waits, say what is awaited, time out or cancel. Errors state observations and uncertainty, not guessed causes. Config integrity and authority: governing-configuration-systems; implementation: repository and language rules.
 ---
 
 # Designing command-line interfaces
 
-A CLI is a protocol for its actual human and machine consumers. Its effects, recovery and outcomes
-must be truthful and observable. Conventions are conditional defaults: select them for those
-consumers and compatibility. Apply `base-usecase-first` to the payoff, costs, prohibitions and
-acceptance evidence; translate it into the CLI decisions below.
+A CLI is a protocol for its human and machine consumers. When suitable, use XDG config, cache
+and state for configuration, cache and history; prefer flags > environment > project > user > system.
+Refuse or expose consequential defaults for missing input. Prompt only on TTY stdin; otherwise accept
+input or fail. Bound waits, say what is awaited, and time out or allow cancellation. Errors state
+observations and uncertainty, not guessed causes. Select conventions for consumers and compatibility;
+apply `base-usecase-first` to payoff, costs, prohibitions and acceptance evidence.
 
 > **Version**: v2610.2.0 (2026-10-30) — principle-first CLI ownership.
 

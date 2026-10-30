@@ -5,8 +5,8 @@
 //
 // PreToolUse (enforce-background-waits) records the start of every foreground Bash call by its
 // tool_use_id; PostToolUse (record-bash-duration) turns that into a duration and keeps the last
-// KEEP durations per command key. A key is the leading words of the command (`mise run commit`,
-// `bun test`, `agx worker run`), so every call of the same tool shares one history.
+// KEEP durations per key. Full command hashes identify exact calls; eligible single commands also
+// record a coarse task shape (`mise run commit`, `bun test`, `agx worker run`).
 // Zero-dep (hooks run before node_modules exist): node fs and the vendored zod bundle.
 
 import {
@@ -17,6 +17,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { jsonOf, z } from "../../hooks/zod.ts";
 import { parseShell } from "../../hooks/shell-syntax.ts";
@@ -39,6 +40,8 @@ const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u;
 /** One step's key: `<up to 3 leading words> <up to 3 flags>`, env assignments dropped. */
 function stepKey(step: string): string | undefined {
   let all = step.split(/\s+/u).filter((w) => w !== "" && !ASSIGNMENT.test(w));
+  // Julia scripts are workloads, not subcommands: retain the shared runtime history.
+  if (all[0] === "julia") return "julia";
   // Directory selection is not a mise task. Previously every `mise -C … run TASK`
   // collapsed to `mise -C`, making a slow land poison a later deps or inspection.
   if (all[0] === "mise") {
@@ -96,10 +99,36 @@ export function commandKey(command: string): string | undefined {
   return keys.length === 0 ? undefined : keys.join(" && ");
 }
 
+/** Hash the complete command without changing quoting or whitespace inside arguments. */
+export function exactKey(command: string): string {
+  return `exact:${createHash("sha256").update(command.trim()).digest("hex")}`;
+}
+
+/** Coarse keys are unsafe for cheap local commands and arbitrary remote or inline scripts. */
+export function historyShapeKeys(command: string): string[] {
+  const parsed = parseShell(command);
+  if (parsed === undefined) return [];
+  const eligible = parsed.commands.filter((c) => {
+    const name = c.words[0];
+    return (
+      name !== undefined &&
+      !/^(?:ls|cat|head|tail|wc|stat|test|date|echo|ssh)$/u.test(name) &&
+      !(name === "bun" && c.words[1] === "-e") &&
+      name !== "cd" &&
+      !c.header
+    );
+  });
+  return eligible.flatMap((c) => {
+    const key = stepKey(c.rawWords.join(" "));
+    return key === undefined ? [] : [key];
+  });
+}
+
 const Summary = z.record(z.string(), z.array(z.number()));
 type Summary = z.output<typeof Summary>;
 const Pending = z.object({
   key: z.string(),
+  exact: z.string().optional(),
   started: z.number(),
   version: z.literal(2),
 });
@@ -124,11 +153,12 @@ export function recordStart(
   toolUseId: string,
   key: string,
   nowMs: number,
+  exact?: string,
 ): void {
   mkdirSync(join(dir, "pending"), { recursive: true });
   writeFileSync(
     pendingPath(dir, toolUseId),
-    JSON.stringify({ key, started: nowMs, version: 2 }),
+    JSON.stringify({ key, exact, started: nowMs, version: 2 }),
   );
 }
 
@@ -151,6 +181,10 @@ export function recordEnd(
   // stored as just `echo`, `cut …` or `sed -i`. Never mix those into new samples.
   const key = `v2:${pending.key}`;
   summary[key] = [...(summary[key] ?? []), ms].slice(-KEEP);
+  if (pending.exact !== undefined && pending.exact !== pending.key) {
+    const exact = `v2:${pending.exact}`;
+    summary[exact] = [...(summary[exact] ?? []), ms].slice(-KEEP);
+  }
   writeFileSync(summaryPath(dir), `${JSON.stringify(summary)}\n`);
   return ms;
 }

@@ -10,6 +10,7 @@ import {
 } from "../enforce-background-waits.ts";
 import {
   commandKey,
+  exactKey,
   recordEnd,
   recordStart,
   stepKeys,
@@ -75,6 +76,51 @@ describe("backgroundReason", () => {
     expect(
       backgroundReason({ command: "echo untilsleep; cat sleepy.txt" }),
     ).toBeUndefined();
+  });
+});
+
+describe("operand-sensitive history", () => {
+  test("unrelated local reads and SSH scripts do not inherit a slow compound", () => {
+    const dir = mkdtempSync(join(tmpdir(), "background-shapes-"));
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      CLAUDE_BASH_DURATIONS_DIR: dir,
+    };
+    delete env[AGX_WORKER_ENV];
+    for (const command of ["ls A; ls B", "ssh host 'slow command'"]) {
+      const key = exactKey(command);
+      expect(key).toBeDefined();
+      if (key === undefined) continue;
+      recordStart(dir, command, key, 0);
+      recordEnd(dir, command, 12_000);
+    }
+    expect(decideWithEnv("ls /tmp; cat /etc/hostname", env)).toBe("");
+    expect(decideWithEnv("ssh host 'other command'", env)).toBe("");
+    expect(decideWithEnv("ls A; ls B", env)).toContain(
+      '"permissionDecision":"deny"',
+    );
+  });
+
+  test("a recorded long Julia run remains background-only, including in a compound", () => {
+    const dir = mkdtempSync(join(tmpdir(), "background-julia-"));
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      CLAUDE_BASH_DURATIONS_DIR: dir,
+    };
+    delete env[AGX_WORKER_ENV];
+    const key = commandKey("julia experiment.jl");
+    expect(key).toBeDefined();
+    if (key === undefined) return;
+    recordStart(dir, "julia", key, 0);
+    recordEnd(dir, "julia", 12_000);
+    recordStart(dir, "fast-exact", exactKey("julia other.jl"), 0);
+    recordEnd(dir, "fast-exact", 100);
+    expect(decideWithEnv("julia other.jl", env)).toContain(
+      '"permissionDecision":"deny"',
+    );
+    expect(decideWithEnv("echo ready; julia experiment.jl", env)).toContain(
+      '"permissionDecision":"deny"',
+    );
   });
 });
 
@@ -196,6 +242,10 @@ describe("small-file viewer history exemption", () => {
       recordStart(dir, key, key, 0);
       recordEnd(dir, key, 7000);
     }
+    for (const [i, command] of denied.entries()) {
+      recordStart(dir, `exact-${i}`, exactKey(command), 0);
+      recordEnd(dir, `exact-${i}`, 7000);
+    }
     for (const command of allowed)
       expect({ command, output: decideWithEnv(command, env) }).toEqual({
         command,
@@ -273,13 +323,13 @@ describe("small-file viewer history exemption", () => {
     writeFileSync(large, "x".repeat(5 * 1024 * 1024));
     writeFileSync(small, "small\n");
     mkdirSync(dir, { recursive: true });
-    for (const [key, ms] of [
-      ["cat", 7000],
-      ["tail -f", 7000],
-      ["cat -c", 7000],
-    ] as const) {
-      recordStart(dir, key, key, 0);
-      recordEnd(dir, key, ms);
+    for (const [i, command] of [
+      `cat ${large}`,
+      `tail -f ${small}`,
+      `cat ${small} | wc -c`,
+    ].entries()) {
+      recordStart(dir, `slow-${i}`, exactKey(command), 0);
+      recordEnd(dir, `slow-${i}`, 7000);
     }
     const env: NodeJS.ProcessEnv = {
       ...process.env,

@@ -50,10 +50,11 @@ import {
 } from "../../../tools/shared/src/worker-env.ts";
 import {
   commandKey,
+  exactKey,
+  historyShapeKeys,
   judgedMs,
   recordStart,
   stateDir,
-  stepKeys,
 } from "./bash-durations.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
@@ -518,12 +519,23 @@ const isBash = strAt(payload, "tool_name") === "Bash";
 const isWorker = process.env[AGX_WORKER_ENV] === AGX_WORKER_VALUE;
 const command = isBash ? (strAt(input, "command") ?? "") : "";
 const key = isBash ? commandKey(command) : undefined;
+const exact = exactKey(command);
 const dir = stateDir();
-// Judged by the slowest known of the whole command and each of its steps: a compound call first
-// seen as a whole still goes to the background when one of its steps (`bun test`) is known slow.
-const measured = [
-  ...new Set([...(key === undefined ? [] : [key]), ...stepKeys(command)]),
-]
+// Judge the exact call and its steps alongside eligible coarse shapes: a known slow `bun test`
+// still protects a compound call, while unrelated cheap commands do not share shape history.
+const parsedForHistory = parseShell(command);
+const exactKeys = [
+  exact,
+  ...(parsedForHistory?.commands.map((c) => exactKey(c.rawWords.join(" "))) ??
+    []),
+];
+const exactMeasured = [...new Set(exactKeys)]
+  .flatMap((k) => {
+    const ms = judgedMs(dir, k);
+    return ms === undefined ? [] : [{ key: k, ms }];
+  })
+  .toSorted((a, b) => b.ms - a.ms)[0];
+const measured = [...new Set(historyShapeKeys(command))]
   .flatMap((k) => {
     const ms = judgedMs(dir, k);
     return ms === undefined ? [] : [{ key: k, ms }];
@@ -539,12 +551,15 @@ if (inner !== undefined)
     "deny",
     `background-waits: ${inner} Rewrite command: ${JSON.stringify(observedBackgroundCommand(command))} with run_in_background: true.`,
   );
-const historyForCall = isSmallFileViewer(
+const shapeForCall = isSmallFileViewer(
   command,
   strAt(payload, "cwd") ?? process.cwd(),
 )
   ? undefined
   : measured;
+const historyForCall = [exactMeasured, shapeForCall]
+  .filter((entry) => entry !== undefined)
+  .toSorted((a, b) => b.ms - a.ms)[0];
 const why = isBash
   ? backgroundReason(input, historyForCall, isWorker)
   : undefined;
@@ -564,4 +579,13 @@ if (
   toolUseId !== undefined &&
   at(input, "run_in_background") !== true
 )
-  recordStart(dir, toolUseId, key, Temporal.Now.instant().epochMilliseconds);
+  recordStart(
+    dir,
+    toolUseId,
+    historyShapeKeys(command).length === 1 &&
+      parsedForHistory?.commands.length === 1
+      ? key
+      : exact,
+    Temporal.Now.instant().epochMilliseconds,
+    exact,
+  );

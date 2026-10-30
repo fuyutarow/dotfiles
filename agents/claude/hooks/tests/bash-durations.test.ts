@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   commandKey,
+  exactKey,
   judgedMs,
   medianMs,
   recordEnd,
@@ -45,7 +46,7 @@ describe("duration attribution", () => {
     const key = commandKey(compound);
     expect(key).toBeDefined();
     if (key === undefined) return;
-    recordStart(dir, "compound", key, 0);
+    recordStart(dir, "compound", key, 0, exactKey(compound));
     recordEnd(dir, "compound", 15_000);
     const cheapKey = commandKey(cheap);
     expect(cheapKey).toBeDefined();

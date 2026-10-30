@@ -1,187 +1,102 @@
 ---
 name: writing-bun-scripts
 description: >-
-  Writes and refactors local Bun TypeScript automation: scripts, hooks, Bun CLIs, bunx, and bash→TS
-  migration. Uses Cleye `cli`, strict/prototype-safe argv, verdict lines/JSON, Bun.$, native-timeout
-  Bun.spawn, and BUN-NATIVE-FIRST. Owns dependency ladder, bunx-over-npx, NO-NEW-BASH, CWD-HOSTILE,
-  ZERO-DEP, and PINNED-OR-ABSENT. Use for ローカルスクリプト, スクリプト書いて, 自動化して, bash を bun/TS
-  に書き換え, シェルスクリプト移行, bun スクリプト, bunx, npx, hooks 実装, or skill scripts/. CLI contract
-  → designing-command-line-interfaces; TS → writing-typescript; Python → running-python-tools; task
-  graph → wiring-mise-tasks; new repo → wiring-repositories first;
-  hook events → local configuration source and executable checks; vendor CLI semantics → driving-*.
-  English skill; respond in the user's
-  language.
+  Writes local Bun TypeScript scripts, hooks and CLIs, including Bash migration. Preserve the
+  consumer's contract; make execution independent of cwd and reproducible dependencies; use
+  Bun's bounded primitives and evidence for the behavior claimed. Use for local automation,
+  bunx, hook bodies, or skill scripts. CLI protocol → designing-command-line-interfaces;
+  TypeScript idiom → writing-typescript; task graph → wiring-mise-tasks.
 ---
 
-# Writing Bun scripts — local automation in Bun TypeScript
+# Writing Bun scripts
 
-> **Version**: v2610.1.2 (2026-10-28) — Bun workspace package boundaries and graph gates.
-> Bun runtime facts remain pinned in `references/bun-facts.md`.
-> **Scope**: local automation scripts on this host — dotfiles scripts, skill `scripts/`, Claude
-> hooks, repo helpers. NORMATIVE, not descriptive: the 2026-07 bash→TS migration corpus (18
-> skill scripts + 4 hooks) is the refactor PATIENT, graded KEEP / REFACTOR in the Refactor map
-> below — where corpus and this skill disagree, this skill wins.
-> **Durability**: dated facts (Bun version/API status, issue links, third-party benchmarks)
-> live ONLY in `references/bun-facts.md` — a Bun version number or API-status claim in this
-> body is a bug. Staleness: re-verify that file when `bun --version` moves.
-> **Build order (atomic).** Verify:
-> `test -f references/bun-facts.md || echo MISSING facts; test -f scripts/script-check.ts || echo MISSING floor; test -f tests/forge-verification-ledger.md || echo MISSING ledger`
+> **Version**: v2610.2.0 (2026-10-30) — principle-first distillation.
 
-## Language & stable tokens
+Preserve the consumer's contract. Make execution independent of cwd and reproducible dependencies.
+Use bounded Bun primitives and evidence suited to the behavior claimed. These translate
+`base-usecase-first` into local automation: a migration preserves accepted behavior, and a
+successful run alone does not prove type safety.
 
-English skill; respond in the user's language (default Japanese). Stable tokens, fixed even
-inside Japanese prose: **LAW**, **gate** (BG0–BG4), **shim**, **envelope**, **verdict lines**,
-**graduation**, **CWD-HOSTILE**, **CLEYE-FIRST**, **BUN-NATIVE-FIRST**, **KEEP / REFACTOR**,
-**floor**.
+## Runtime and distribution
 
-## THE LAW
+New local scripts are Bun TypeScript, invoked as `bun <path>`; resolve script-owned paths from
+`import.meta.dir`, not cwd. Keep Bash only for bootstrap before Bun exists, hook entry, an exec
+wrapper of at most ten lines, or externally regenerated vendor shell. A conditional, loop or
+JSON access signals migration to TypeScript. Check bootstrap callers for actual ordering;
+identify vendor shell by its own vendor header, which survives regeneration. Mark other shims
+`# shim: <bootstrap|hook-entry|exec-wrapper>`.
 
-> Local automation on this host is Bun TypeScript. Bash survives only as a declared THIN SHIM —
-> bootstrap-before-toolchain, hook-entry, a ≤10-line exec wrapper — and the first conditional,
-> loop, or JSON access appearing in a `.sh` is the signal it should have been `.ts`
-> (**NO-NEW-BASH**). Scripts are zero-config single files run `bun <path>` from ANY cwd: an
-> ancestor `node_modules` silently flips Bun's module resolution, so third-party imports are
-> absent by default and paths resolve from `import.meta.dir`, never from cwd unless cwd IS the
-> input (**CWD-HOSTILE**). Ordinary argv boundaries use Cleye `cli`: framework help and
-> `parameters` are the contract, not behavior to reproduce manually. Direct `typeFlag` is only a
-> marked raw argv forwarding/embedding exception whose downstream relay preserves token order and
-> `--` (**CLEYE-FIRST**). Where Bun ships the primitive — `$`, `spawn` with native timeout,
-> `file`, `which`, `Glob`, `sleep`, `bun:sqlite`, `password` — hand-rolling it is the smell
-> (**BUN-NATIVE-FIRST**). Third-party code enters only pinned: `bunx pkg@x.y.z`, or graduation
-> to package.json + bun.lock (**PINNED-OR-ABSENT**). And bun **TRANSPILES, never type-checks**:
-> a green run proves nothing about types.
+Scripts have no shebang. A PATH binary is a package `bin` entry linked by `bun link`, with
+shebang and executable mode; test fixture binaries may also have shebangs. Do not create manual
+`.ts` PATH symlinks. Freeze a shell script's CLI, output and exit contract before migration.
+Repo tool release intent belongs to the changeset task in the repository instructions.
+Guard a dual-use script's entry with `import.meta.main`. Keep skill packages self-contained:
+do not import helpers across skill directories; reduce duplication with native options.
 
-## The gates — BG0–BG4, each with a checkable artifact
+## Dependencies and argv
 
-| Gate | Rule | Artifact |
-|---|---|---|
-| **BG0 RUNTIME** (deny-gate, fires on entry) | A new local script is `.ts` on bun. DENY: new bash beyond the four shim classes (any new `.sh` carries a `# shim: <bootstrap\|hook-entry\|exec-wrapper\|vendored>` comment); node/ts-node/npx as a runtime; deno. `vendored` = shell an external tool overwrites (e.g. `herdr-agent-state.sh`) — marker-EXEMPT, detected from its own vendor header, not a marker the overwrite would erase. `bootstrap` means code that runs BEFORE bun exists (`scripts/bootstrap-linux.sh`, which installs it) — nothing after that qualifies. `scripts/link-dots.sh` claimed the exemption until 2026-10-05 while already calling `bun render-claude-settings.ts`, and every caller ran after bun; it is now `scripts/link-dots.ts`. Verify the before-bun claim against the callers, never against the file's own comment. | file extension + shim comment in any surviving `.sh` (vendored: header content, not a written marker) |
-| **BG1 CONTRACT** | Invoked `bun <path>`; **no shebang** — except where the file IS the binary: a `package.json` `bin` entry (`bun link`, run by `mise run deps`, symlinks it onto PATH in `~/.bun/bin`; shebang + `100755` REQUIRED there, floor F14) or a test fixture substituted for a driven binary. A PATH command is a `bin` entry, never a hand-made symlink of a `.ts` into `~/.local/bin`. Every ordinary argv entry uses bare-imported Cleye `cli` (exact `cleye@2.6.0` in repo-root package.json + bun.lock); `node:util` `parseArgs` and hand parsing of `Bun.argv` / `process.argv` are forbidden. Every `cli` **and** `command` declares `strictFlags: true`, `ignoreArgv: rejectPrototypeFlag`, and `parameters:` (spell `parameters: []` for flag-only). Cleye commands inherit `strictFlags` but not `ignoreArgv`. `rejectPrototypeFlag` rejects unknown `__proto__` before type-flag mutates its unknown-object; `constructor` and `prototype` are ordinary own keys, so strictFlags rejects them in the normal unknown path. Cleye camelCase flag keys intentionally render/accept kebab-case flags. Use `<rest...>` / `[rest...]` only when excess positionals are accepted deliberately; otherwise reject `parsed._.length` or call `rejectUnexpectedArguments(parsed.unknownFlags, parsed._)`. Cleye-owned help exits 0; ordinary unknown flags and missing required parameters exit 1 on stderr; the local prototype guard and caught usage/environment failures exit 2. Direct `typeFlag` is permitted only for `// argv-forwarding: <consumer>` on its own line: use a real parser call, retain its `unknownFlags` invariant, parse a copy, and relay the original raw argv byte/order/`--` unchanged; reviewers verify that last semantic property. Its wrapper-owned keys stay explicit kebab spelling. A zero-dep tree that needs argv parsing must graduate first; zero-dep is never permission to select another parser. Entry = `main().catch(…)` → `FATAL: …` on stderr, exit 2; `import.meta.main` guard only when also imported. ONE declared consumer per script — machine → single-line JSON envelope; agent/human → verdict lines. After parsing, domain verdicts use exit 0 clean / 1 findings / 2 FATAL; Cleye's framework exit 1 is distinguished by its stderr diagnostic, not by code alone. Use `process.stdout.write`, not `console.log`. | floor PASS + a boundary fixture proving strict/prototype/help/positional behavior |
-| **BG2 SUBPROCESS** | Simple shell-out → `Bun.$` (escaped interpolation, cross-platform; sharp edges in facts §2 — spread `process.env` in `.env()`, branch on `exitCode` after `.nothrow()`, no `$` in polling loops). Can hang, needs streaming or kill → `Bun.spawn` with NATIVE `timeout:` / `killSignal:` / `signal:` — a hand-rolled `setTimeout`+`kill()` is REFACTOR (facts §3). **Drain `stdout` and `stderr` in ONE `Promise.all`** with `proc.exited` — sequential drain deadlocks on the pipe you are not reading, and the only symptom is your own timeout, which misreads as a slow child. **Bound a hangable child with `signal: AbortSignal.timeout(ms)` and read the timeout off the SIGNAL** (`sig.aborted`) — `proc.killed` is true after a clean exit, and `proc.signalCode` cannot separate your timeout from an external kill. All three measured, facts §3. Always bound relayed output (slice caps); gate on `Bun.which` before real work. Hooks context: sync `main`, `spawnSync`, zero npm imports ever. | `timeout:` present, or a `// bounded:` comment naming why not; floor W9/W10 clean (no `.killed` branch, no sequential drain) |
-| **BG3 DEPENDENCIES** | The ladder: node:/bun: builtins → Bun global → **the repo-root graduation project** (package.json + bun.lock, restored by `mise run deps`; bare import, EXACT version, resolved on the file's realpath so symlinked skills work from any cwd) → `bunx pkg@x.y.z` (PINNED — unpinned bunx in any hook/CI path is drift; staleness is real, facts §5) → GRADUATION to a package.json + bun.lock project (trigger: ≥2 files sharing deps, a dep you must pin, or type/editor pressure). Inline `pkg@ver` imports are legal ONLY in throwaway one-offs run from a known-clean cwd — an ancestor `node_modules` makes them THROW (facts §4). Hooks: no imports beyond node:/bun:, ever — auto-install at hook time is the hazard. | floor unpinned-import FAIL; graduation = the package.json itself |
-| **BG4 VERIFICATION** | Behavior worth keeping → `bun test` in a sibling `tests/`, fixture-binary pattern (a real spawned executable exercising timeout/error paths — not a mock); prove any new gate/floor check FIRES (inject bad input, watch FAIL, revert); types: editor LSP + `bunx typescript@<pin> tsc --noEmit` at graduation — never claim "typed" from a green run (TRANSPILE-ONLY). | test run output / red→green record in the change |
+Prefer builtins and Bun globals, then a lockfile-backed project with exact dependencies; use
+`bunx package@version` for a pinned one-shot JS tool. In dotfiles the graduation project is
+root `package.json` and `bun.lock`. Inline version imports are only for throwaway invocations
+from a known clean cwd: ancestor `node_modules` changes resolution. Pin a tool and its plugins
+together in a project when isolated bunx cannot find those plugins. Distributed zero-dep trees
+and hooks stay independent of npm; in zero-dep scripts use local narrowing instead of adding
+zod or ts-pattern, until graduation. See `writing-typescript` for TS idiom.
 
-## CLI version and help surface
+For ordinary argv boundaries use Cleye `cli` and `command`, with the exact Cleye version in the
+root manifest and lockfile. Use framework help and `parameters`; do not hand-parse argv or use
+`parseArgs`. Each `cli` and `command` declares `strictFlags: true`, `parameters`, and
+`ignoreArgv: rejectPrototypeFlag`; the latter is not inherited by commands. A direct `typeFlag`
+call is only for `// argv-forwarding: <consumer>`: parse a copy, preserve its `unknownFlags`
+invariant, and relay the original tokens in order including `--`.
 
-For package CLIs, start from [the CLI template](assets/cli.ts.txt). In dotfiles use
-`tools/shared/src/cli.ts` `standardCli(cleyeCli, pkg, cliArgv)` with a single static package.json
-import. Outside dotfiles, copy that helper into the owning package and adjust its import. Define `cliArgv = () => process.argv.slice(2)` at the CLI boundary and reuse it
-for any explicit argv passed to Cleye; the shared adapter never reads global argv.
-`-V` and `--version` must print one stdout line `<name> <version>` and exit 0.
-Aliases share the first declared package bin name.
-The helper preserves Cleye inference and parameter mapping, renders help without ESC bytes
-or terminal-dependent headings/widths (including FORCE_COLOR), and preserves the typed
-unknown flag in diagnostics. Apply it to command help as well as root help. Test all
-four TTY/FORCE_COLOR combinations against the same help bytes; version aliases must
-match, and an unknown `-Z` must be diagnosed as `-Z`. Forwarding wrappers retain their
-downstream argument contract and own their wrapper help/version before delegation.
+The existing house consumer contract distinguishes Cleye usage exit 1 from local fatal exit 2
+by stderr; declare whether the script emits a single-line machine JSON envelope or human/agent
+verdict lines. For reusable CLI protocol, defaults, compatibility, and interaction decisions use
+`designing-command-line-interfaces`. Parser use is the conditional default for ordinary CLI
+arguments ([CLIG basics](https://clig.dev/#the-basics)).
+Preserve the existing domain exits 0/1/2; report caught fatal errors on stderr with exit 2,
+and set process exit state at the entry boundary. An error envelope must exit nonzero.
 
-## Decision table
+## Processes and hooks
 
-| You want to… | Do this |
-|---|---|
-| New local script | one `.ts`, run `bun path/script.ts` — BG1 anatomy |
-| A few shell commands | `Bun.$` — `` await $`cmd`.text() ``; `{ raw: … }` for globs; sequence with separate awaits |
-| Change a repo tool under `tools/<name>/` | Run `mise run changeset -- <tool> <patch|minor|major> "<entry>"` to generate a descriptive slug. Never edit the tool's package version or `CHANGELOG.md`; `land` writes those release outputs. |
-| Call a CLI that can hang (LLM CLIs, network) | `Bun.spawn({ cmd: […], timeout, killSignal })` + bounded relay |
-| Read / write a file | `Bun.file(p).text()/.json()` / `Bun.write` (node:fs stays for `existsSync`/`readdir`/`rm`) |
-| Parse flags / positionals in an ordinary command | `cli({ name, flags, parameters, strictFlags: true, ignoreArgv: rejectPrototypeFlag })`; Cleye owns help and positional mapping |
-| Own named commands + generated command help | `cli({ commands: [command({ name, parameters, strictFlags: true, ignoreArgv: rejectPrototypeFlag })], … })`; every command repeats the prototype guard |
-| Accept excess positionals | declare a deliberate `<rest...>` / `[rest...]` schema; otherwise reject `parsed._.length` or use `rejectUnexpectedArguments(parsed.unknownFlags, parsed._)` |
-| Forward arbitrary downstream argv | exact `// argv-forwarding: <downstream>` marker; parse a copy with `typeFlag`, then relay the original argv unchanged including `--` |
-| Show a human progress, a spinner, or a confirmation prompt | `@clack/prompts` (exact pin; never in hooks): `progress` + `advance`, `spinner`, `text`/`confirm` + `isCancel`. No hand-drawn `\r` bar — it wraps on a narrow pane (2026-10-06). Off a TTY: plain lines; a human-only confirm refuses a non-TTY stdin. Example: `disk-reclaim run purge --interactive` |
-| Run a JS/TS CLI tool once | `bunx pkg@x.y.z` — never npx, never `npm i -g` |
-| Python payload (lib or tool) | STOP → `running-python-tools` (uvx / `uv run --with`) |
-| Import a library | BG3 graduation check FIRST |
-| Write a hook | sync `main`, node:/Bun globals only, zero deps, fail-open/-closed declared in the header |
-| Test a script | `bun test <dir>/tests` + a fixture binary |
-| Migrate a `.sh` | freeze its CLI/exit/output contract → write the `.ts` → delete the `.sh` in the same change |
+For Bun Shell interpolation use escaped values; use `{ raw: ... }` only when raw shell syntax
+is intended. Await side-effecting operations separately. Use `Bun.$` only when the child cannot
+hang; otherwise use `Bun.spawn` with native timeout/killSignal and an
+`AbortSignal.timeout(ms)`. Determine timeout from the signal's `aborted` state, not `proc.killed`
+or `signalCode`. Drain stdout, stderr and `exited` concurrently in one `Promise.all`; bound
+relayed output. See [Bun facts](references/bun-facts.md) for the measured failure modes.
+Prefer Bun's native primitives to a hand-rolled equivalent when they meet the need.
 
-## Refactor map — corpus baseline → target (the standing work order)
+Hook bodies use synchronous main and `spawnSync`, with only `node:`/`bun:` imports and Bun
+globals; declare fail-open or fail-closed in the header. Hook event and matcher configuration
+belongs to its declared owner. Avoid hand-drawn carriage-return progress bars: they wrapped in
+narrow panes. When interactive behavior is needed, follow the CLI owner's conditional defaults
+([CLIG interactivity](https://clig.dev/#interactivity)).
 
-The 2026-07 migration corpus is graded here; receipts and the full drift evidence live in
-`tests/forge-verification-ledger.md`. Contracts KEEP; implementations largely REFACTOR.
+## Workspace boundaries and verification
 
-| Corpus pattern | Verdict | Target |
-|---|---|---|
-| exit 0/1/2 + `main().catch` → FATAL stderr, exit 2 | KEEP | — |
-| `parseArgs`, raw `Bun.argv`, or unmarked direct `typeFlag` | REFACTOR | ordinary boundary → Cleye `cli`; direct type-flag only with the exact forwarding marker |
-| manual help / positional routing | REFACTOR | Cleye help and `parameters`; excess is a spread schema, `parsed._.length`, or the established `rejectUnexpectedArguments` refusal |
-| Cleye `strictFlags` without local ignoreArgv | REFACTOR (security) | `ignoreArgv: rejectPrototypeFlag` on every cli/command prevents `--__proto__` mutation before strictFlags runs |
-| exact-kebab schema rule | REFACTOR | Cleye camelCase keys render as kebab-case flags; exact spelling remains only on forwarding-wrapper type-flag keys |
-| envelope vs verdict-lines split by consumer | KEEP | declare the consumer per script (BG1) |
-| zero npm imports across the corpus | **SUPERSEDED 2026-07-28** — the physics is real but it is solved by graduation, not by abstinence: measured, an inline pinned import throws under an ancestor node_modules while a lockfile-backed bare import resolves through symlinks from any cwd | repo-root package.json + bun.lock; DISTRIBUTED code (hooks/, templates/, `.zero-dep` trees) stays zero-dep |
-| fixture-binary tests (agx worker family) | KEEP | extend to the other script families |
-| hooks: sync + zero-dep + explicit fail-open/-closed headers | KEEP (sync + zero-dep is load-bearing; Bun globals are equally legal there) | — |
-| hand-rolled `setTimeout`+`kill`+`clearTimeout` (probe family ×3 + run-claude) | REFACTOR | native `Bun.spawn` `timeout:`/`killSignal:` |
-| `Bun.spawn` ceremony for short bounded commands (version checks, wrangler calls) | REFACTOR | `Bun.$` + `.quiet()`/`.nothrow()` + `exitCode` branch |
-| `node:fs` readFile boilerplate for whole-file reads | REFACTOR | `Bun.file().text()/.json()` |
-| error envelopes that exit 0 (turnstile auth-probe) | REFACTOR (bug) | error envelope ⇒ non-zero exit (BG1) |
-| `process.exitCode =` vs `process.exit()` split | RULE | set exit at the entry boundary only; either form; never mid-library |
-| the same `run()` helper duplicated across skills | RULE | never import across skill dirs — self-containment beats DRY (links break cross-dir paths); SHRINK the pattern via native options until duplication is trivial |
-| unpinned `bunx textlint` / `bunx wrangler` calls | REFACTOR | pin `bunx pkg@x.y.z` (facts §5) |
+For Bun workspaces enforce package boundaries and cycles, including devDependencies, on the
+dependency graph. Ancestor `node_modules` can invalidate a boundary test based on resolution
+alone. In coralbase, package `imports` targets outside their owning package and workspace cycles
+were observed as hazards; these observations are not confirmed Bun documentation.
 
-CI gap (repo `fmt:ts` excludes `agents/skills/**`; skill tests unreachable from `mise run
-test`) → `wiring-mise-tasks` territory; recorded in the ledger, not fixed here.
+Run `script-check <file.ts ...>` on changed
+scripts. This floor is structural, not proof of behavior. Test relevant behavior with `bun test`;
+for child-process failures use a real fixture executable. Check that a new gate rejects bad input.
+For structure-only refactors also use `refactoring-code`; task graph changes belong to
+`wiring-mise-tasks`. Preserve contracts and use evidence specific to the claim.
+For a verification verdict, record the command and its output.
 
-## Execution model
-
-The modal invocation — writing or refactoring ONE script — is SOLO, zero agents. Corpus-wide
-migrations/audits fan out ONE read-only worker per script (extract contract → rewrite → floor +
-test), and evidence is CITATION-RELAY: a verdict carries the command + verbatim output; an
-agent's bare PASS is zero evidence. No harness → same map, serial. Durable operating guidance
-from a frontier model (Fable 5, 2026-07); if a constraint here feels unnecessary, that feeling
-is the failure mode — follow the map.
-
-## MUST-NOT-FIRE — and the fire/no-fire set
-
-FIRES:
-
-| Ask | Why |
-|---|---|
-| 「この bash スクリプト、bun ts に書き換えて」 | the migration core |
-| 「移行した skill scripts、拙いから全面リファクタして」 | the standing work order — co-fire `refactoring-code` (governs: two hats, oracle); this supplies the Refactor map + the bun oracle |
-| "write a script that tallies brew leaves vs the Brewfile" | no bun keyword — BG0 routes local automation to bun ts |
-| 「probe-models.ts に --json フラグ足して」 | editing a house bun script under repository instructions |
-| 「この script、yaml パーサ import していい？」(a bun script is in context) | BG3 dependency ladder |
-| 「hooks に新しい detector 足して」 | inspect the local event/matcher declaration FIRST; this owns the hook body |
-| 「この bootstrap の .sh も ts 化しよう」 | fires: check the callers — runs after bun → port it (link-dots.ts, 2026-10-05); truly before bun (installs bun) → stays a `bootstrap` shim (BG0) |
-
-MUST NOT fire (route):
+## Selection cases
 
 | Ask | Route |
 |---|---|
-| 「React コンポーネントの props 型直して」 | `writing-typescript` alone — idiom, not a local script |
-| 「PDF からテキスト抽出して」 | `running-python-tools` — Python payload (uv run --with pypdf) |
-| 「mise に lint:ts タスク足して」 | `wiring-mise-tasks` — the graph; here only if also authoring the script body |
-| a one-shot interactive pipeline (`ls \| grep …`) | no skill — a command, not a kept script |
-| 「codex exec の sandbox フラグどれ？」 | `dispatch` (`tools/dispatch`) |
-| 「Worker をデプロイして」 | wrangler / workers-best-practices family (but a deploy SCRIPT to author → co-fire: their wrangler semantics, this skill's script anatomy) |
-| 「bun で CLI ツール作って npm に publish したい」 | product/package engineering, not local automation — `writing-typescript` idiom floor; this skill's scope ends at the local graduation project |
-| “Design or audit a reusable CLI's consumers, grammar, effects, stdout/stderr or machine route, outcomes, or compatibility.” | `designing-command-line-interfaces`; return here once the contract is settled to implement the Bun script. |
-| 「Express サーバーをリファクタして」 | `refactoring-code` + `writing-typescript` — an app/server, not a local automation script |
-| 「zsh の alias 追加して」 | no skill — shell config is the zsh/ topic, not a script |
+| Convert a local Bash script to Bun TS | Here; check bootstrap callers |
+| Refactor existing skill scripts | Here and `refactoring-code` |
+| Add a hook detector | Here for the body; inspect the event/matcher owner |
+| Add a mise task | `wiring-mise-tasks`; here if writing its script |
+| Design a reusable CLI protocol | `designing-command-line-interfaces` |
 
-## Routing — sibling cuts (typed)
-
-| Sibling | Cut |
-|---|---|
-| governing-configuration-systems | **DECISIVE:** Bun/TS config reader or generator implementation and argv/runtime contract → HERE. Its effective declaration, signature/digest boundary, and target acceptance → governing-configuration-systems. |
-| `writing-typescript` | PURPOSE — how TS READS (idiom floor: `satisfies`, `??`, absence modeling) → theirs; how a SCRIPT is built/run/tested/shipped → here. It auto-co-fires via its `paths` glob on any `.ts`. SEAM RULING (canonical home HERE, mirrored there): in zero-config standalone scripts the zero-dep floor beats its zod/ts-pattern rows — hand-rolled narrowing (`isRecord`) is the accepted form; those rows re-enter at graduation. |
-| `designing-command-line-interfaces` | PURPOSE — reusable CLI consumers, grammar, effects, channels, outcomes, and compatibility → there; settled Bun implementation → here. |
-| `running-python-tools` | DECISIVE by payload language — Python tool/snippet NOW → there (uvx / `uv run`); JS/TS tool/script → here (`bunx` pinned). This skill is the home of the bunx-over-npx rule that its body names as "the Python analogue … used for JS" (reciprocal landed there 2026-07-23). |
-| `writing-python` | the same DECISIVE cut for KEPT code — kept Python → there; kept TS scripts → here. |
-| `wiring-mise-tasks` | PURPOSE — task NAME/verb/graph → theirs; the script BODY a task runs → here. |
-| `forging-skills` | PURPOSE — WHETHER a skill ships a script + floor-vs-semantic doctrine → theirs; HOW that script is written → here. |
-| local configuration source and executable checks | PURPOSE — hook EVENTS/matchers/settings.json follow their declared source and checks; the hook's `.ts` body → here (hooks rows in BG2/BG3). House hook bodies follow this skill. |
-| `agx` / `driving-grok` / `driving-antigravity` | PURPOSE — their CLI laws and models → their owner; generic spawn/envelope/timeout craft → here (their scripts are corpus exemplars). |
-| `refactoring-code` | governs behavior-preserving restructure; this supplies the Bun oracle (floor + `bun test` green bracket) and target idioms. Follow repository instructions for implementation and debugging. |
-| `raising-resolution` | silent sub-step: probe the actual runtime (`bun --version`, run the command) before asserting a Bun fact — never recall one from training. |
-
-## Reference index — load the file you need
-
-| File | Covers | Read when |
-|---|---|---|
-| `references/bun-facts.md` | DATED Bun facts and marked coralbase observations: auto-install & the cwd trap, Bun.$ semantics + sharp edges, native spawn timeout API, bunx staleness, node-compat gaps, WSL quirks, --compile, perf reality, typecheck wiring, version pinning, workspace boundaries | before relying on any Bun feature not already encoded in the gates; any "does Bun support X?" |
-| `scripts/script-check.ts` | the mechanical floor — run `script-check <file.ts …>`, never read into context | after every new/edited script; per-file in corpus audits |
-| `tests/forge-verification-ledger.md` | F3 artifact: harvest provenance, the corpus KEEP/REFACTOR baseline with receipts, fleet findings, proof-of-fire records | reforging; auditing this skill; starting the corpus refactor |
+These are desk-review cases, not measured selection accuracy. Historical evidence and triage
+mapping are in `tests/forge-verification-ledger.md`.

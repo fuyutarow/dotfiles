@@ -7,6 +7,8 @@ type CorpusEntry = Readonly<{
   path: string;
   executable?: string;
   command?: string;
+  prefix?: readonly string[];
+  helpText?: string;
   prototypeFlag?: Readonly<{ exit: number; message: string }>;
   // A CLI whose OWN contract differs from Cleye's default for an unknown flag (exit 1, "Unknown
   // flag") declares it here, and the test then holds it to THAT. tex-oracle reserves exit 1 for
@@ -23,6 +25,7 @@ const CORPUS: CorpusEntry[] = [
   { path: "scripts/consumer-gate.ts" },
   { path: "scripts/guest-capacity-recover.ts" },
   { path: "scripts/lint-no-sync.ts" },
+  { path: "scripts/lint-oxlint.ts" },
   {
     path: "scripts/lint-no-new-bash.ts",
     prototypeFlag: { exit: 2, message: "" },
@@ -51,6 +54,13 @@ const CORPUS: CorpusEntry[] = [
     path: "tools/disk-reclaim/src/reclaim.ts",
     unknownFlag: { exit: 2, message: "Unknown flag" },
   },
+  {
+    path: "tools/disk-reclaim/src/disk.ts",
+    prefix: ["plan", "targets"],
+    helpText: "--help",
+    unknownFlag: { exit: 2, message: "unknown option" },
+  },
+  { path: "tools/repo-retrieve/views/research-record-v1.ts" },
   { path: "tools/repo-retrieve/src/bench-definitions.ts" },
   {
     path: "tools/shared/src/gpu-sampler.ts",
@@ -176,6 +186,7 @@ async function run(
       ...(entry.command !== undefined && entry.command !== ""
         ? [entry.command]
         : []),
+      ...(entry.prefix ?? []),
       ...argv,
     ],
     {
@@ -244,7 +255,7 @@ describe("production Cleye corpus boundary", () => {
     test(entry.path, async () => {
       const help = await run(entry, ["--help"]);
       expect(help.exitCode).toBe(0);
-      expect(help.stdout).toContain("Show help");
+      expect(help.stdout).toContain(entry.helpText ?? "Show help");
 
       const unknown = await run(entry, ["--definitely-unknown-cleye-contract"]);
       const expected = entry.unknownFlag ?? {

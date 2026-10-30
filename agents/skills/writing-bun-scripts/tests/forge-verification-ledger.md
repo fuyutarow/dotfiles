@@ -478,3 +478,187 @@ Observed: asked 「juliaの新規プロジェクトを立ち上げたい」, a s
 never wiring-repositories, so the repo's layer set (jj, mise contract, .claude/) was skipped. The
 description now names the cut: new repo/project (新規プロジェクト, 立ち上げ) → wiring-repositories FIRST;
 this skill then owns the language manifest. skill-check clean; listing within budget.
+
+## 2026-10-30 DISTILL-BUN-1030 triage map
+
+Frozen source: `ufp-triage-writing-bun-scripts-1030.md` and `usecase-triage-writing-bun-scripts-1030.md` in the dispatcher scratchpad. Rows count original decision statements, including duplicates; R IDs are frozen usecase IDs. Historical ledger entries above describe earlier versions, not current instructions.
+
+| Frozen class and locator | Decision | Disposition |
+|---|---|---|
+| RESIDUE-KEEP; SKILL.md:24-26 | dated Bun facts は `references/bun-facts.md` に集約し、version 変更時に再検証する | R001: removed (unproven) |
+| RESIDUE-CUT; SKILL.md:27-28 | facts・floor・ledger の存在確認を atomic build order とする | Removed (residue) |
+| RESIDUE-CUT; SKILL.md:32 | 英語で書き、日本語で応答する | Removed (residue) |
+| RESIDUE-CUT; SKILL.md:33-35 | stable tokens を固定する | Removed (residue) |
+| UFP-DERIVED; SKILL.md:39-42 | Bash は bootstrap・hook-entry・短い exec wrapper に限る | Kept: SKILL.md (see mapping by locator below) |
+| UFP-DERIVED; SKILL.md:40-42 | `.sh` の最初の conditional、loop、JSON access は TypeScript 移行の合図 | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; SKILL.md:42-45 | scripts は任意 cwd から `bun <path>` で動き、path は `import.meta.dir` 基準 | R002: kept SKILL.md#runtime-and-distribution |
+| CLIG-SUPPORTED; SKILL.md:45-46 | 通常 argv 境界は parser framework を使う | Kept: SKILL.md#dependencies-and-argv; conditional CLIG basics citation |
+| RESIDUE-KEEP; SKILL.md:45-46,59 | 通常 argv parser は Cleye `cli`、framework help と `parameters` を契約にする | R003: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:46-47 | `typeFlag` 例外は marker 付き forwarding に限り raw argv の順序と `--` を保つ | R004: kept SKILL.md#dependencies-and-argv |
+| UFP-DERIVED; SKILL.md:48-50 | Bun native primitive がある場合は手製実装を避ける | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; SKILL.md:50-51 | third-party code は exact pin または package.json + bun.lock で導入 | R005: kept SKILL.md#dependencies-and-argv |
+| UFP-DERIVED; SKILL.md:51-52 | Bun の green run を型検査の証拠とみなさない | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; SKILL.md:58 | BG0 は新規 local script を Bun TypeScript にし、shim 以外の Bash、Node runtime、Deno を拒否 | R006: kept SKILL.md#runtime-and-distribution |
+| RESIDUE-KEEP; SKILL.md:58 | vendored shell は自己記述 vendor header で例外判定する | R007: kept SKILL.md#runtime-and-distribution |
+| RESIDUE-KEEP; SKILL.md:58 | bootstrap 例外は Bun 導入前の呼出しに限り、実呼出元を調べる | R008: kept SKILL.md#runtime-and-distribution |
+| RESIDUE-KEEP; SKILL.md:59 | script は shebang なし、PATH binary は package `bin` と shebang/100755 を使う | R009: kept SKILL.md#runtime-and-distribution |
+| RESIDUE-KEEP; SKILL.md:59 | PATH command に手製 `.ts` symlink を使わない | R010: kept SKILL.md#runtime-and-distribution |
+| RESIDUE-KEEP; SKILL.md:59 | Cleye exact version を root manifest/lock に置く | R011: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:59 | `parseArgs` と手書き `Bun.argv` parsing を禁止 | R012: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:59 | 各 Cleye boundary は strict flags、prototype guard、parameters を宣言 | R013: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:59 | Cleye camelCase keys を kebab flags として使う | R014: removed (unproven) |
+| CLIG-SUPPORTED; SKILL.md:59 | excess positionals は意図して宣言し、他は拒否する | Referenced: designing-command-line-interfaces |
+| RESIDUE-KEEP; SKILL.md:59 | Cleye usage exit 1 と local fatal exit 2 を stderr で区別する | R015: kept SKILL.md#dependencies-and-argv |
+| CLIG-SUPPORTED; SKILL.md:59 | parse 後の domain result は成功0、失敗非0 | Referenced: designing-command-line-interfaces |
+| UFP-DERIVED; SKILL.md:59 | fatal error を entry catch で stderr に伝え exit 2 にする | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; SKILL.md:59 | machine consumer は一行 JSON、agent/human は verdict lines と宣言 | R016: kept SKILL.md#dependencies-and-argv |
+| CLIG-SUPPORTED; SKILL.md:59; references/bun-facts.md:147-151 | piped output には `process.stdout.write` を用いる | Removed: implementation override has no proven live usecase |
+| RESIDUE-KEEP; SKILL.md:60 | hangable process は native timeout/killSignal を使う | R017: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; SKILL.md:60 | stdout/stderr と exited を同じ Promise.all で drain する | R018: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; SKILL.md:60 | timeout は AbortSignal.timeout と `sig.aborted` で判定する | R019: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; SKILL.md:60 | relay output を slice cap で制限する | R020: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; SKILL.md:60; references/bun-facts.md:191-192 | real work 前に `Bun.which` で executable を確認する | R021: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:60-61,96 | hooks は sync main、spawnSync、zero npm imports とする | R022: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; SKILL.md:61 | dependency ladder は builtin/Bun global/root graduation/bunx の順 | R023: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:61 | hooks/CI/scripts の bunx は pinned | R024: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:61 | ≥2 files share dependencies, a pin need, or type/editor pressure triggers graduation | R025: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:61 | inline version imports は既知の clean cwd の throwaway に限定 | R026: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:61 | hooks は node:/bun: 以外を import しない | R027: kept SKILL.md#dependencies-and-argv |
+| CLIG-SUPPORTED; SKILL.md:62 | behavior worth keeping は sibling tests と fixture-binary で検査する | Kept: SKILL.md#workspace-boundaries-and-verification |
+| UFP-DERIVED; SKILL.md:62 | 新 gate は bad input で fail することを確認する | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; SKILL.md:62 | graduation 時に pinned TypeScript compiler の独立 gate を置く | R028: removed (unproven) |
+| UFP-DERIVED; SKILL.md:62 | green Bun run だけで typed と主張しない | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; SKILL.md:66-69 | CLI helper/template を使い、dotfiles adapter は static manifest import | R029: removed (unproven) |
+| RESIDUE-CUT; SKILL.md:68-69 | `cliArgv` helper を境界で宣言して再利用する | Removed (residue) |
+| CLIG-SUPPORTED; SKILL.md:70 | `-V`/`--version` は version を stdout 一行で出して成功終了 | Referenced: designing-command-line-interfaces |
+| RESIDUE-KEEP; SKILL.md:71 | aliases は最初の package bin 名を共有 | R030: removed (unproven) |
+| CLIG-SUPPORTED; SKILL.md:72-75 | help output を terminal decoration と環境変数に依存させない | Removed: implementation override has no proven live usecase |
+| RESIDUE-KEEP; SKILL.md:72-76 | root/command help を4 TTY/FORCE_COLOR 組合せで同一 bytes とし、unknown flag spelling を保つ | R031: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:76-77 | forwarding wrapper は downstream contract を保ち、自身の help/version を先に扱う | R032: removed (unproven) |
+| UFP-DERIVED; SKILL.md:83 | 新規 local script は一つの `.ts` として `bun path` で実行 | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; SKILL.md:84; references/bun-facts.md:32-33 | shell commands は Bun.$ とし、side effects を別 await にする | R033: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:85 | repo tool release は changeset task を使い、version/changelog を手編集しない | R034: owned by AGENTS.md |
+| RESIDUE-KEEP; SKILL.md:86 | potentially hanging CLI を native Bun.spawn timeout で実行 | R035: kept SKILL.md#processes-and-hooks |
+| RESIDUE-CUT; SKILL.md:87 | file IO では Bun.file/Bun.write を優先する | Removed (residue) |
+| CLIG-SUPPORTED; SKILL.md:88 | 普通の command の argv parsing は named flags/parameters を持つ parser で行う | Kept: SKILL.md#dependencies-and-argv; conditional CLIG basics citation |
+| RESIDUE-KEEP; SKILL.md:89 | named commands は各 command で prototype guard を再宣言 | R036: kept SKILL.md#dependencies-and-argv |
+| CLIG-SUPPORTED; SKILL.md:90 | excess positionals は意図して許可し、他は拒否 | Referenced: designing-command-line-interfaces |
+| RESIDUE-KEEP; SKILL.md:91 | arbitrary downstream argv は marker 付きで原順・`--` を維持 | R037: kept SKILL.md#dependencies-and-argv |
+| CLIG-SUPPORTED; SKILL.md:92 | progress, spinner, prompt は human-facing interactive surface に用いる | Referenced: designing-command-line-interfaces |
+| RESIDUE-KEEP; SKILL.md:92 | prompts は exact-pinned @clack、hooks では使わず、non-TTY confirm を拒否 | R038: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:92 | hand-drawn carriage-return progress bar を避ける | R039: kept SKILL.md#processes-and-hooks |
+| RESIDUE-CUT; SKILL.md:92 | interactive example `disk-reclaim run purge --interactive` | Removed (residue) |
+| CLIG-SUPPORTED; SKILL.md:93 | JS/TS one-off tool は versioned/pinned invocation を使う | Kept: SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:94 | Python payload は running-python-tools に移す | R040: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:95 | library import 前に BG3 graduation check を通す | R041: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:96 | hook は sync/zero-dep、fail-open/-closed を header に宣言 | R042: kept SKILL.md#processes-and-hooks |
+| CLIG-SUPPORTED; SKILL.md:97 | script tests は actual fixture executable で child behavior を exercise | Kept: SKILL.md#workspace-boundaries-and-verification |
+| UFP-DERIVED; SKILL.md:98 | Bash migration で既存 CLI/exit/output contract を先に固定する | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; SKILL.md:98 | 新 TS ができた同じ change で旧 `.sh` を削除 | R043: removed (unproven) |
+| UFP-DERIVED; SKILL.md:102-103 | corpus contracts を KEEP、実装を必要に応じ REFACTOR | Kept: SKILL.md (see mapping by locator below) |
+| UFP-DERIVED; SKILL.md:107 | exit 0/1/2 と main catch contract を保持 | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; SKILL.md:108 | raw/manual parser を ordinary boundary の Cleye に置換 | R044: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:109 | manual help/position routing を Cleye help/parameters に置換 | R045: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:110 | every cli/command に rejectPrototypeFlag を置く | R046: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:111 | Cleye camelCase schema を使い kebab rendering に任せる | R047: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:112 | machine envelope と human/agent verdict-lines を consumer ごとに宣言 | R048: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:113 | zero npm imports rule は graduation により supersede、distributed trees は zero-dep | R049: kept SKILL.md#dependencies-and-argv |
+| CLIG-SUPPORTED; SKILL.md:114 | fixture-binary tests を他 script family に適用 | Kept: SKILL.md#workspace-boundaries-and-verification |
+| RESIDUE-KEEP; SKILL.md:115 | hooks は sync + zero-dep、Bun globals は許可 | R050: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; SKILL.md:116 | manual setTimeout/kill を native Bun.spawn timeout に置換 | R051: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; SKILL.md:117 | short bounded process は Bun.$ に置換 | R052: removed (unproven) |
+| RESIDUE-CUT; SKILL.md:118 | whole-file node:fs read boilerplate を Bun.file に置換 | Removed (residue) |
+| UFP-DERIVED; SKILL.md:119 | error envelope は nonzero exit にする | Kept: SKILL.md (see mapping by locator below) |
+| UFP-DERIVED; SKILL.md:120 | process exit state は entry boundary にだけ設定 | Kept: SKILL.md (see mapping by locator below) |
+| UFP-DERIVED; SKILL.md:121 | cross-skill imports を避け、native options で重複を縮める | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; SKILL.md:122 | unpinned bunx calls は exact pin に変更 | R053: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:124-125 | CI gap の owner は wiring-mise-tasks | R054: owned by wiring-mise-tasks |
+| RESIDUE-CUT; SKILL.md:129 | one script is SOLO, zero agents | Removed (residue) |
+| RESIDUE-KEEP; SKILL.md:129-131 | corpus migration/audit dispatches one read-only worker per script | R055: removed (unproven) |
+| UFP-DERIVED; SKILL.md:131-132 | verdict evidence includes command and verbatim output | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-CUT; SKILL.md:132 | without harness, run serially | Removed (residue) |
+| RESIDUE-CUT; SKILL.md:132-134 | Fable 5 frontier guidance is authoritative even if a constraint feels unnecessary | Removed (residue) |
+| UFP-DERIVED; SKILL.md:142 | Bash-to-TS migration is in scope | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; SKILL.md:143 | full refactor co-fires refactoring-code and this Bun oracle | R056: kept SKILL.md#workspace-boundaries-and-verification |
+| UFP-DERIVED; SKILL.md:144 | local script request without Bun keyword still routes to Bun TS | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; SKILL.md:145 | editing a house Bun script invokes this guidance | R057: kept SKILL.md |
+| RESIDUE-KEEP; SKILL.md:146 | dependency question on a Bun script invokes BG3 | R058: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:147 | new hook detector requires inspecting local event/matcher declaration first | R059: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; SKILL.md:148 | bootstrap conversion depends on actual callers and whether Bun exists yet | R060: kept SKILL.md#runtime-and-distribution |
+| RESIDUE-KEEP; SKILL.md:154 | React props typing routes to writing-typescript | R061: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:155 | PDF text extraction routes to running-python-tools | R062: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:156 | mise task graph routes to wiring-mise-tasks | R063: owned by wiring-mise-tasks |
+| CLIG-SUPPORTED; SKILL.md:157 | one-shot interactive pipeline is a command, not a kept script | Removed: scope example; CLI composition is owned by designing-command-line-interfaces |
+| RESIDUE-KEEP; SKILL.md:158 | Codex sandbox flag question routes to dispatch tool | R064: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:159 | Worker deployment routes to wrangler semantics; deployment script may co-fire here | R065: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:160 | published product CLI routes outside local automation scope | R066: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:161,171 | reusable CLI design routes to designing-command-line-interfaces, implementation returns here | R067: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:162 | Express server refactor routes to refactoring-code and writing-typescript | R068: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:163 | zsh alias routes to shell configuration topic | R069: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:169 | config reader/generator implementation here; authority/acceptance to governing-configuration-systems | R070: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:170 | TS idiom belongs to writing-typescript; script lifecycle belongs here | R071: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:170 | zero-config no-dep floor beats zod/ts-pattern until graduation | R072: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; SKILL.md:171 | reusable CLI contract goes to CLI skill; settled Bun implementation returns here | R073: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:172-173 | Python NOW and kept Python route to respective Python skills | R074: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:174 | task graph belongs to wiring-mise-tasks, script body here | R075: owned by wiring-mise-tasks |
+| RESIDUE-KEEP; SKILL.md:175 | skill publication/floor doctrine belongs to forging-skills | R076: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:176 | hook event/matcher source and checks belong to configuration owner; body here | R077: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; SKILL.md:177 | vendor CLI laws stay with vendor skills; generic subprocess mechanics here | R078: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:178 | structural refactor belongs to refactoring-code; implementation follows repo instructions | R079: kept SKILL.md#workspace-boundaries-and-verification |
+| RESIDUE-KEEP; SKILL.md:179 | verify actual Bun runtime rather than recall from training | R080: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:185 | load Bun facts before relying on an unencoded feature | R081: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:186 | run script floor after each new/edited script | R082: kept SKILL.md#workspace-boundaries-and-verification |
+| RESIDUE-KEEP; SKILL.md:187 | read forge ledger for refactors, audits, corpus work | R083: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:3-8 | Bun version/API fact 全体を version change または reforge 時に再確認 | R084: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:17-19 | frozen lockfile を使う CI では Bun binary version を pin | R085: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:25-26 | Bun.$ interpolation は escaped、dynamic content のみ raw escape hatch | R086: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; bun-facts.md:32-33 | side-effecting Bun.$ commands は別々に await | R087: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; bun-facts.md:37-38 | `.env()` は既存 process.env を spread | R088: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:39-40 | `.nothrow()` の直後に exitCode を分岐 | R089: removed (unproven) |
+| RESIDUE-CUT; bun-facts.md:41 | Bun Shell command substitution は `$()` を使う | Removed (residue) |
+| RESIDUE-KEEP; bun-facts.md:42 | hangable child に Bun.$ を使わない | R090: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; bun-facts.md:43-44 | polling loop で Bun.$ を使わない | R091: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:45-46 | dotfile glob behavior を test | R092: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:47-48 | cross-platform destructive rm は node:fs rm | R093: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:49 | cross-OS newline output は echo でなく printf | R094: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:53-57 | timeout-capable child は native Bun.spawn timeout API を使う | R095: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; bun-facts.md:59-70 | `proc.killed` を timeout detector にしない | R096: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; bun-facts.md:71-82 | `signalCode` だけで timeout を判定しない | R097: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; bun-facts.md:79-82 | timeout 判定は AbortSignal.timeout と aborted state | R098: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; bun-facts.md:83-86 | Bun.$ を使うのは hang risk がない時 | R099: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; bun-facts.md:88-95 | stdout/stderr concurrently drain し relay size を bound | R100: kept SKILL.md#processes-and-hooks |
+| RESIDUE-KEEP; bun-facts.md:101-110 | inline version import の auto-install 条件を限定 | R101: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-CUT; bun-facts.md:111 | Bun auto install is unavailable offline | Removed (residue) |
+| RESIDUE-CUT; bun-facts.md:112 | list bunfig auto-install modes | Removed (residue) |
+| RESIDUE-KEEP; bun-facts.md:113-115 | dependency updates を受け入れる前に resolved tree を検証 | R102: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:119-124 | hooks/CI/scripts の bunx は exact-pin | R103: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-KEEP; bun-facts.md:125-126 | stale global bunx copy が残る場合 cache と global bin を確認 | R104: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:127-132 | plugins を要する bunx tool は tool+plugins を graduation project で pin | R105: kept SKILL.md#dependencies-and-argv |
+| RESIDUE-CUT; bun-facts.md:133-134 | bunx can be slower than npx; benchmark before claiming speed win | Removed (residue) |
+| RESIDUE-KEEP; bun-facts.md:135-138 | WSL bunx install は noninteractive flags を渡し managed dirs を native filesystem に置く | R106: removed (unproven) |
+| RESIDUE-CUT; bun-facts.md:142-143 | list Bun.file method and Bun.write accepted types | Removed (residue) |
+| RESIDUE-KEEP; bun-facts.md:144-145 | node:fs は sync exists, readdir, rm, mkdtemp に残す | R107: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:149-151 | piped scripts は process.stdout.write を使う | R108: removed (unproven) |
+| RESIDUE-CUT; bun-facts.md:155-157 | list bun test discovery patterns and preload syntax | Removed (residue) |
+| RESIDUE-KEEP; bun-facts.md:158-159 | house tests use sibling tests/ and fixture binary | R109: kept SKILL.md#workspace-boundaries-and-verification |
+| RESIDUE-KEEP; bun-facts.md:163-165 | native addon を避け Bun.password/sqlite/JS-WASM alternatives | R110: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:166-167 | fragile Node APIs を使うなら Bun 上で smoke-test | R111: removed (unproven) |
+| RESIDUE-CUT; bun-facts.md:168-169 | record node:util parseArgs implementation version history | Removed (residue) |
+| RESIDUE-KEEP; bun-facts.md:170-173 | scripts は cwd-relative `.env` discovery に依存しない | R112: removed (unproven) |
+| RESIDUE-CUT; bun-facts.md:177-179 | list `bun build --compile` target matrix | Removed (residue) |
+| RESIDUE-KEEP; bun-facts.md:180-182 | compiled binary を clean machine で検査してから distribution を信頼 | R113: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:186-187 | process.env を portability idiom として使う | R114: removed (unproven) |
+| UFP-DERIVED; bun-facts.md:188-190 | dual-use script に import.meta.main guard、path anchor に import.meta.dir/path | Kept: SKILL.md (see mapping by locator below) |
+| RESIDUE-KEEP; bun-facts.md:191-192 | binary override は env fallback、実行前 PATH gate は Bun.which | R115: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:193-195 | graduation 時の `bun run` vs `bun <path>` collision を考慮 | R116: removed (unproven) |
+| RESIDUE-CUT; bun-facts.md:199-201 | Bun cold-start is ~8–15 ms vs Node ~60–120 ms | Removed (residue) |
+| RESIDUE-KEEP; bun-facts.md:202-204 | long-running daemon/watcher に Bun を使わず別 runtime または restart | R117: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:208-209 | Bun run is not type-check evidence | R118: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:210-213 | graduation project has pinned tsc gate; zero-config files rely on floor/tests/editor | R119: removed (unproven) |
+| RESIDUE-KEEP; bun-facts.md:217-218 | workspace boundary is dependency graph enforced by a gate | R120: kept SKILL.md#workspace-boundaries-and-verification |
+| RESIDUE-CUT; bun-facts.md:220-222 | conditional exports cannot be relied on as default package boundary | Removed (residue) |
+| RESIDUE-KEEP; bun-facts.md:223-226 | workspace boundary tests must account for ancestor node_modules resolution | R121: kept SKILL.md#workspace-boundaries-and-verification |
+| RESIDUE-KEEP; bun-facts.md:227-229 | `imports` targets stay in owning package | R122: kept SKILL.md#workspace-boundaries-and-verification |
+| RESIDUE-KEEP; bun-facts.md:230-232 | workspace dependency cycles are gated, including devDependencies | R123: kept SKILL.md#workspace-boundaries-and-verification |
+
+UFP locator mapping: SKILL.md:39–42, 83, 98, 102–103, 121, 142, 144 and bun-facts.md:188–190 → SKILL.md#runtime-and-distribution; SKILL.md:48–50 → SKILL.md#processes-and-hooks; SKILL.md:51–52, 62, 131–132 → SKILL.md#workspace-boundaries-and-verification; SKILL.md:59, 107, 119–120 → SKILL.md#dependencies-and-argv. General guarantees remain in base-usecase-first.

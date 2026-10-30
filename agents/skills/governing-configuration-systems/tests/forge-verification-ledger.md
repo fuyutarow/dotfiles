@@ -1,5 +1,48 @@
 # Distillation verification ledger
 
+## 2026-10-30 — held edition decisions
+
+The 26 numbered rows below refer to the frozen `triage-u26-wip-1030.md` hunks, not
+individual rules. LIVE means a named current consumer makes the stated decision relevant;
+it does not establish that the proposed rule has been exercised or improved outcomes. A hunk
+with both labels has live and unproven parts. Paths are relative to the repository root.
+
+| Row | Held decision | Usecase and disposition |
+|---:|---|---|
+| 1 | Route interpretation evolution | LIVE: semlint configuration selects `edition = 1` and refuses the old files, `README.md:145-148`; trigger added. |
+| 2 | Selector, admission, migration and activation | LIVE: model-floor consumes `schema = 1` (`agents/hooks/model-floor.toml:27`) and denies schema 2 (`agents/hooks/tests/enforce-model-floor.test.ts:145-155`); semlint transition at `README.md:147-148`. Added bounded admission and change guidance. Mandatory first-edition selector and fixed legacy semantics are USECASE-UNPROVEN. |
+| 3 | Interpretation admission and acceptance | LIVE: model-floor rejection above; target acceptance guidance added. Signed layers and rollback are USECASE-UNPROVEN. |
+| 4 | Load a special reference for persisted changes | USECASE-UNPROVEN: no consumer establishes that a separate reference is needed; guidance stays in Decisions. |
+| 5 | Separate interpretation from release comparator | LIVE: semlint edition and binary floor coexist at `README.md:145-148`; routing case added. |
+| 6 | Reference index | USECASE-UNPROVEN: no demonstrated need for the separate reference. |
+| 7 | Contract record edition distinct from target edition | USECASE-UNPROVEN: no live caller of this skill's contract record was found. |
+| 8 | Template migration fields | USECASE-UNPROVEN: no live template consumer was found. |
+| 9 | Full edition and migration reference | LIVE in part: model-floor admission and semlint selector above; distilled in Decisions. Layer normalization, signed selector, lossy conversion and rollback have no demonstrated consumer and are USECASE-UNPROVEN. |
+| 10 | Checker record and target edition fields | USECASE-UNPROVEN: no live checker caller was found. |
+| 11 | Checker record admission | USECASE-UNPROVEN: no live checker caller was found. |
+| 12 | Reader matrix and receipts | LIVE in part: model-floor rejection test at `agents/hooks/tests/enforce-model-floor.test.ts:145-155`; actual consumer accepted/rejected paths retained. Tamper and rollback receipts are USECASE-UNPROVEN. |
+| 13 | Checker evolution fields | USECASE-UNPROVEN: no live checker caller was found. |
+| 14 | Checker edition-dependent fields | USECASE-UNPROVEN: no live checker caller was found. |
+| 15 | Checker field set | USECASE-UNPROVEN: no live checker caller was found. |
+| 16 | Checker record selector before payload | USECASE-UNPROVEN: no live checker caller was found. |
+| 17 | Checker legacy and unsupported admission | USECASE-UNPROVEN: no live checker caller was found; model-floor evidence supports target admission, not this checker. |
+| 18 | Checker edition 1 fields | USECASE-UNPROVEN: no live checker caller was found. |
+| 19 | Checker disposition and none validation | USECASE-UNPROVEN: no live checker caller was found. |
+| 20 | Checker positive test | USECASE-UNPROVEN: no live checker caller was found. |
+| 21 | Checker boundary tests | USECASE-UNPROVEN: no live checker caller was found. |
+| 22 | Checker record edition fixture | USECASE-UNPROVEN: no live checker caller was found. |
+| 23 | Checker migration fixture | USECASE-UNPROVEN: no live checker caller was found. |
+| 24 | Held evidence ledger | LIVE: this table records the semlint and model-floor consumers and bounded dispositions. |
+| 25 | Failure corpus | USECASE-UNPROVEN: held examples are hypothetical; no matching recorded incident was established. |
+| 26 | Edition trigger and release boundary | LIVE: `README.md:145-148` distinguishes semlint binary floor and configuration edition; desk cases added. |
+
+Searches used `rr text` for `edition = 1`, `schema = 2`, `schema = `,
+`semlint.toml`, `migration`, `configuration-contract-check`, and `contract-check.ts`.
+No checker caller was shown; this is a bounded search result, not proof of absence, so the
+deleted checker remains unrestored. The Bun pin transition at `mise.toml:13-15` and
+`README.md:90-94` is a separate live migration, not evidence of an edition migration.
+No independent reader evaluation or semantic migration execution was performed.
+
 Frozen inputs: `ufp-triage-governing-configuration-systems-1030.md` and `usecase-triage-governing-configuration-systems-1030.md` in the 2026-10-30 clig-1030 scratchpad. Locators identify the frozen revision, not current line numbers. Each table row is counted separately; the frozen aggregate understates RESIDUE-KEEP. LIVE is caller evidence, not observed benefit.
 
 | Frozen row | Statement | Class / usecase | Disposition |

@@ -4,8 +4,8 @@ description: >-
   Governs configuration integrity and authority. Choose representation only after naming its
   consumer and trust regime; bind integrity to exact bytes or a named canonical value profile;
   identify the effective declaration and its authority, then verify what the target actually
-  consumes. Use for signed configuration, policy bundles, canonicalization, and authority
-  contracts. CLI configuration sourcing belongs to designing-command-line-interfaces;
+  consumes. Use for configuration interpretation editions, signed configuration, policy bundles,
+  canonicalization, and authority contracts. CLI configuration sourcing belongs to designing-command-line-interfaces;
   repository wiring and language-specific parser implementation belong to their owners.
 ---
 
@@ -15,7 +15,7 @@ Choose representation after identifying the consumer and trust regime. Bind inte
 bytes or to a named canonical value profile. Identify the effective declaration and its authority,
 then verify what the target actually consumes.
 
-> **Version**: v2610.2.0 (2026-10-30) — principle-first distillation.
+> **Version**: v2610.3.0 (2026-10-30) — edition admission and compatibility decisions.
 
 ## Decisions
 
@@ -32,6 +32,11 @@ then verify what the target actually consumes.
 - Verify using the actual target path and named effective input, including accepted and rejected
   cases. For layered input, observe the resolved result; retain evidence sufficient to identify the
   input, target and outcome.
+- When configuration outlives a reader upgrade, identify the interpretation selector and supported
+  editions; reuse an existing selector and follow vendor-owned formats. Define how missing and
+  unsupported selectors are handled before interpreting or activating values. For a change, compare
+  the old and new readers' effective values and make migration and activation explicit; test the
+  supported and rejected paths with the actual consumer.
 
 These are domain applications of `base-usecase-first`: use it for contract design, type and
 parser and state invariants, parser enforcement, and acceptance evidence.

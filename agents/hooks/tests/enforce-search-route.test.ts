@@ -39,6 +39,32 @@ const withCcc = () => ({
   PATH: `${cccPath()}:${process.env["PATH"] ?? ""}`,
 });
 
+test("stdin filters accept command output and external logs while protecting project files", () => {
+  const project = registerProject();
+  const outside = tempDir("search-route-external-log-");
+  const log = join(outside, "x.log");
+  writeFileSync(log, "TIMING\n");
+  const cases: ReadonlyArray<readonly [string, string | undefined]> = [
+    ["mise run leaderboard:view -- --all | grep -F -e X | head", undefined],
+    ["ssh host 'cmd' | grep -e A -e B", undefined],
+    [`cat ${log} | grep -F -e TIMING`, undefined],
+    ["jj workspace list | grep -ivcnE -e A -e B", undefined],
+    ["grep -r X packages-2611", "deny"],
+    ["rg X", "deny"],
+    ["cat src/file.ts | grep X", "deny"],
+    ["printf x | grep -e X src/file.ts", "deny"],
+    ["cat src/file.ts | grep -F -e X", "deny"],
+  ];
+  for (const [command, expected] of cases) {
+    expect({
+      command,
+      decision: decisionOf(
+        runHook(HOOK, bashPayload(project, command), withCcc()).stdout,
+      )?.permissionDecision,
+    }).toEqual({ command, decision: expected });
+  }
+});
+
 test("recorded coordinator search commands retain their allow/deny envelopes", () => {
   const project = registerProject();
   const scratch = tempDir("search-route-coordinator-");

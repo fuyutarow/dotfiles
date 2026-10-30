@@ -1,15 +1,16 @@
 ---
 name: designing-command-line-interfaces
 description: >-
-  Design and audit CLIs: grammar, help, interaction, storage, exits, waits and failures. Default to XDG config, cache and state for config, cache and history; flags > environment > project > user > system. Refuse or expose consequential defaults for missing input. Prompt only on TTY stdin; otherwise accept input or fail. Bound waits, say what is awaited, time out or cancel. Errors state observations and uncertainty, not guessed causes. Config integrity and authority: governing-configuration-systems; implementation: repository and language rules.
+  Design and audit CLIs. Use XDG config, cache and state for config, cache and history; flags > environment > project > user > system. Refuse or expose consequential defaults and fallbacks. Prompt only on TTY stdin; otherwise accept input or fail. Bound waits; say what is awaited, time out or cancel. Never claim unobserved effects succeeded; report handoff or unknown. Errors state observations and uncertainty, not guessed causes. Config integrity and authority: governing-configuration-systems; implementation: repository and language rules.
 ---
 
 # Designing command-line interfaces
 
 A CLI is a protocol for its human and machine consumers. When suitable, use XDG config, cache
 and state for configuration, cache and history; prefer flags > environment > project > user > system.
-Refuse or expose consequential defaults for missing input. Prompt only on TTY stdin; otherwise accept
-input or fail. Bound waits, say what is awaited, and time out or allow cancellation. Errors state
+Refuse or expose consequential defaults and fallbacks. Prompt only on TTY stdin; otherwise accept
+input or fail. Bound waits, say what is awaited, and time out or allow cancellation. Never claim an
+unobserved effect succeeded; report a handoff or unknown result. Errors state
 observations and uncertainty, not guessed causes. Select conventions for consumers and compatibility;
 apply `base-usecase-first` to payoff, costs, prohibitions and acceptance evidence.
 

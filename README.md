@@ -221,6 +221,7 @@ enables the local systemd consumers, and `mise run doctor` checks their activity
 
 On Linux, `mise run link:dots` links and enables `ws-gc.timer`, a dotfiles-owned consumer of the
 released agx workspace collection interface. `mise run doctor` checks the timer and latest result.
+The service uses a Bun wrapper to copy both output streams to the journal and to one file per run in `/ws-gc` (default `~/.local/state/ws-gc`). It retains the newest 48 run files, approximately 48 hours at the hourly cadence; extra manual runs shorten that window. On r99-u26, an observed run was about 0.4 MB (1,401 JSON rows), or roughly 20 MB for 48 runs. The bound is by run count, not bytes. Older files go to the rip graveyard when `rip` is available; otherwise the wrapper removes only its own log files.
 The CLI and workspace contract are documented by the agx owner above.
 
 **Single sources of truth** — each fact has one home, so nothing drifts:

@@ -6,7 +6,7 @@ Type=oneshot
 WorkingDirectory=%h/dotfiles
 Environment=PATH=%h/.bun/bin:%h/.local/bin:%h/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
 # Abandonment remains an explicit owner command, never an unattended action.
-ExecStart=/usr/bin/env mise -C %h/dotfiles exec -- agx ws gc --all --legacy --json
+ExecStart=/usr/bin/env bun %h/dotfiles/scripts/ws-gc-log.ts
 StandardOutput=journal
 StandardError=journal
 TimeoutStartSec=30min

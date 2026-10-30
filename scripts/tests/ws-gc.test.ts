@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdtemp, mkdir, readlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { checkWsGc } from "../doctor.ts";
 import { LINKS } from "../config-registry.ts";
 import { deployWsGc, link, type Ctx } from "../link-dots.ts";
 
@@ -83,7 +84,21 @@ if (verb === "enable") {
   };
   const probe = (args: string[]) =>
     run([join(bin, "systemctl"), "--user", ...args]);
-  const doctor = () => run([process.execPath, join(REPO, "scripts/doctor.ts")]);
+  const doctor = async () => {
+    if (process.platform !== "darwin")
+      return run([process.execPath, join(REPO, "scripts/doctor.ts")]);
+    const finding = await checkWsGc(
+      { home, dotfiles: REPO, isMac: false, isWsl: false, isCoreBox: true },
+      async (cmd) => {
+        const result = await run([join(bin, "systemctl"), ...cmd.slice(1)]);
+        return { ...result, err: "", timedOut: false, missing: false };
+      },
+    );
+    return {
+      code: finding.verdict === "FAIL" ? 1 : 0,
+      out: finding.verdict + " " + finding.detail,
+    };
+  };
   return { home, ctx, calls, writeState, probe, doctor };
 }
 
@@ -102,11 +117,10 @@ test("WS-GC-TIMER: registry links both units and the only service command uses s
   }
   const service = await Bun.file(join(REPO, "systemd/ws-gc.service")).text();
   expect(service.split("\n").filter((line) => line.startsWith("Exec"))).toEqual(
-    [
-      "ExecStart=/usr/bin/env mise -C %h/dotfiles exec -- agx ws gc --all --legacy --json",
-    ],
+    ["ExecStart=/usr/bin/env bun %h/dotfiles/scripts/ws-gc-log.ts"],
   );
   expect(service).toContain("StandardOutput=journal");
+  expect(service).toContain("StandardError=journal");
   expect(service).not.toContain("--abandoned");
   const timer = await Bun.file(join(REPO, "systemd/ws-gc.timer")).text();
   expect(timer).toContain("OnBootSec=5min");
@@ -163,4 +177,61 @@ test("WS-GC-TIMER: deployment refuses undeclared units and reports enable failur
   expect((await deployWsGc(f.ctx, f.probe, true))?.message).toContain(
     "enable ws-gc.timer failed",
   );
+});
+
+test("WS-GC-TIMER: wrapper journals both streams and keeps the newest 48 run files", async () => {
+  const f = await fixture();
+  const state = join(f.home, "state");
+  const logs = join(state, "ws-gc");
+  await mkdir(logs, { recursive: true });
+  for (let i = 0; i < 49; i++) {
+    await Bun.write(
+      join(
+        logs,
+        `ws-gc-2020-01-01T00-00-${String(i).padStart(2, "0")}.000Z-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.log`,
+      ),
+      "old\n",
+    );
+  }
+  await Bun.write(join(logs, "unrelated.log"), "untouched\n");
+  const mise = join(f.home, "bin/mise");
+  await Bun.write(
+    mise,
+    `#!${process.execPath}\nprocess.stdout.write('{"rows":1}\\n');\nprocess.stderr.write('gc removed /example reason=test\\n');\nprocess.exitCode = 7;\n`,
+  );
+  await chmod(mise, 0o755);
+  const child = Bun.spawn(
+    [process.execPath, join(REPO, "scripts/ws-gc-log.ts")],
+    {
+      env: {
+        ...process.env,
+        HOME: f.home,
+        XDG_STATE_HOME: state,
+        PATH: join(f.home, "bin"),
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 10_000,
+    },
+  );
+  const [out, err, code] = await Promise.all([
+    child.stdout.text(),
+    child.stderr.text(),
+    child.exited,
+  ]);
+  expect(code).toBe(7);
+  expect(out).toBe('{"rows":1}\n');
+  expect(err).toBe("gc removed /example reason=test\n");
+  const { readdir } = await import("node:fs/promises");
+  const names = await readdir(logs);
+  expect(names.filter((name) => name.startsWith("ws-gc-")).length).toBe(48);
+  expect(names).toContain("unrelated.log");
+  const current = names.find(
+    (name) => name.startsWith("ws-gc-20") && !name.startsWith("ws-gc-2020"),
+  );
+  expect(current).toBeDefined();
+  if (current === undefined) return;
+  const contents = await Bun.file(join(logs, current)).text();
+  expect(contents).toContain(out);
+  expect(contents).toContain(err);
 });

@@ -12,7 +12,16 @@ import type { Context, Target } from "./targets/index.ts";
 import { diskTargetNames } from "./disk-targets/index.ts";
 
 const Rows = z.array(
-  z.object({ candidate: Candidate, fingerprint: z.string().nullable() }),
+  z.object({
+    candidate: Candidate,
+    fingerprint: z.string().nullable(),
+    preview: z
+      .object({
+        verdict: z.enum(["safe", "keep", "ask", "unknown", "changed"]),
+        reason: z.string(),
+      })
+      .optional(),
+  }),
 );
 const Preflight = z.object({
   verdict: z.enum(["safe", "keep", "ask", "unknown", "changed"]),
@@ -117,6 +126,7 @@ async function candidateVerdict(
   call: (action?: string) => Promise<Reply>,
 ) {
   const { candidate: c, fingerprint } = row;
+  if (target === "tmpfs" && row.preview !== undefined) return row.preview;
   if (c.verdict !== "RECLAIM")
     return { verdict: c.verdict.toLowerCase(), reason: c.reason };
   if (target === "mise-configs") return { verdict: "safe", reason: c.reason };

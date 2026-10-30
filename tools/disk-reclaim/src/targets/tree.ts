@@ -114,7 +114,7 @@ type TreeScanMessage =
 export async function measuredTreeBytes(
   path: string,
   ctx?: Context,
-  bound?: { maxEntries: number; onTruncated: () => void },
+  bound?: { maxEntries?: number; onTruncated: () => void },
 ): Promise<number> {
   let lastMetadataReport = 0;
   const onMetadataProgress = (probes: number) => {
@@ -161,15 +161,13 @@ export async function measuredTreeBytes(
     ctx?.signal,
     {
       onMetadataProgress,
-      ...(bound === undefined
+      onTruncated: () => {
+        truncated = true;
+        bound?.onTruncated();
+      },
+      ...(bound?.maxEntries === undefined
         ? {}
-        : {
-            maxEntries: bound.maxEntries,
-            onTruncated: () => {
-              truncated = true;
-              bound.onTruncated();
-            },
-          }),
+        : { maxEntries: bound.maxEntries }),
       ...(ctx?.mode === "plan"
         ? { cacheDir: ctx.scanCacheDir ?? defaultScanCacheDir() }
         : {}),
@@ -188,15 +186,12 @@ export function treeCandidate(
   maxEntries?: number,
 ): Promise<Candidate> {
   let truncated = false;
-  const bound =
-    maxEntries === undefined
-      ? undefined
-      : {
-          maxEntries,
-          onTruncated: () => {
-            truncated = true;
-          },
-        };
+  const bound = {
+    ...(maxEntries === undefined ? {} : { maxEntries }),
+    onTruncated: () => {
+      truncated = true;
+    },
+  };
   return measuredTreeBytes(path, ctx, bound).then((bytes) => ({
     id: path,
     path,

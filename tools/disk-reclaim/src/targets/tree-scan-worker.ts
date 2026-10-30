@@ -1,4 +1,5 @@
 import { lstat, readdir } from "node:fs/promises";
+import { fromAsyncThrowable } from "neverthrow";
 import { join } from "node:path";
 import { scanCache } from "../lib/scan-cache.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
@@ -33,7 +34,7 @@ self.addEventListener(
     }>,
   ) => {
     let entries = 0;
-    let truncated = false;
+    const state = { truncated: false };
     let bytes = 0;
     let probes = 0;
     const onProbe = () => {
@@ -50,7 +51,7 @@ self.addEventListener(
             log: quiet,
             onProbe,
           };
-    const visit = async (root: string): Promise<void> => {
+    const visit = async (root: string): Promise<string | null> => {
       const pending: ScanNode[] = [{ path: root, bytes: 0, children: 0 }];
       const count = (
         node: ScanNode,
@@ -74,20 +75,45 @@ self.addEventListener(
         if (entries % 128 === 0)
           self.postMessage({ kind: "progress", entries, bytes }, []);
       };
+      const missing = (node: ScanNode, error: unknown) => {
+        const parsed = z.object({ code: z.string() }).safeParse(error);
+        if (
+          !parsed.success ||
+          parsed.data.code !== "ENOENT" ||
+          node.parent === undefined
+        )
+          return {
+            node,
+            allocated: 0,
+            names: [],
+            cache: undefined,
+            error: String(error),
+          };
+        state.truncated = true;
+        for (
+          let ancestor: ScanNode | undefined = node.parent;
+          ancestor !== undefined;
+          ancestor = ancestor.parent
+        )
+          ancestor.cache = undefined;
+        return { node, allocated: 0, names: [], cache: undefined, error: null };
+      };
       while (pending.length > 0) {
         // A bounded walk stops with a partial (lower-bound) size instead of walking a huge tree.
         if (
           event.data.maxEntries !== undefined &&
           entries >= event.data.maxEntries
         ) {
-          truncated = true;
-          return;
+          state.truncated = true;
+          return null;
         }
         // Bound outstanding filesystem requests; serial awaits made large changed roots slow.
         const batch = pending.splice(Math.max(0, pending.length - 64));
         const measured = await Promise.all(
           batch.map(async (node) => {
-            const stat = await lstat(node.path);
+            const result = await fromAsyncThrowable(() => lstat(node.path))();
+            if (result.isErr()) return missing(node, result.error);
+            const stat = result.value;
             onProbe();
             const directory = stat.isDirectory() && !stat.isSymbolicLink();
             const cache =
@@ -101,18 +127,39 @@ self.addEventListener(
                 allocated: cached.data,
                 names: [],
                 cache: undefined,
+                error: null,
               };
-            const names = directory ? await readdir(node.path) : [];
-            return { node, allocated: stat.blocks * 512, names, cache };
+            const names = await fromAsyncThrowable(() =>
+              directory ? readdir(node.path) : Promise.resolve([]),
+            )();
+            if (names.isErr()) return missing(node, names.error);
+            return {
+              node,
+              allocated: stat.blocks * 512,
+              names: names.value,
+              cache,
+              error: null,
+            };
           }),
         );
-        for (const { node, allocated, names, cache } of measured)
+        const failure = measured.find((item) => item.error !== null);
+        if (failure !== undefined) return failure.error;
+        for (const { node, allocated, names, cache } of measured) {
           count(node, allocated, names, cache);
+        }
       }
+      return null;
     };
     visit(event.data.path).then(
-      () => {
-        self.postMessage({ kind: "done", entries, bytes, truncated }, []);
+      (error) => {
+        if (error !== null) {
+          self.postMessage({ kind: "error", message: error }, []);
+          return;
+        }
+        self.postMessage(
+          { kind: "done", entries, bytes, truncated: state.truncated },
+          [],
+        );
       },
       (error: unknown) => {
         self.postMessage({ kind: "error", message: String(error) }, []);

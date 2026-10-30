@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.17 — 2026-10-30
+
+- Handle disappearing scan entries and batch tmpfs plan checks
+
 ## 1.12.16 — 2026-10-30
 
 - Plan selected targets and report unavailable adapters per target

@@ -1,8 +1,10 @@
 import { lstat, readdir, statfs } from "node:fs/promises";
+import { fromAsyncThrowable } from "neverthrow";
 import { dirname } from "node:path";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { loadConfig } from "./engine.ts";
 import { protectedReason } from "./lib/protected.ts";
+import { collectProcesses } from "./lib/procs.ts";
 import { createTmpfsTarget } from "./targets/tmpfs.ts";
 import { cleanAction, cleanPreflight } from "./disk-clean-action.ts";
 import type { Context } from "./targets/index.ts";
@@ -68,14 +70,61 @@ if (action === undefined) {
   )
     fail("requested scope is outside verified tmpfs mounts");
   const candidates = plan.filter((c) => !c.id.startsWith("tmpfs-usage:"));
+  const processes = collectProcesses({
+    ignoreUnreadableProcs: config.ignore_unreadable_procs ?? [],
+  });
   const rows = await Promise.all(
-    candidates.map(async (candidate) => ({
-      candidate,
-      fingerprint:
-        candidate.verdict === "RECLAIM" && candidate.path !== null
-          ? await identity(candidate.path)
-          : null,
-    })),
+    candidates.map(async (candidate) => {
+      if (candidate.verdict !== "RECLAIM" || candidate.path === null)
+        return { candidate, fingerprint: null };
+      const path = candidate.path;
+      const checked = await fromAsyncThrowable(async () => {
+        const fingerprint = await identity(path);
+        const reason = protectedReason(path, {
+          ownerTarget: "tmpfs",
+          repoRoots: [...config.repo_roots, ...config.repos],
+          protectedPaths: config.protected ?? [],
+          ignoreUnreadableProcs: config.ignore_unreadable_procs ?? [],
+          processes,
+        });
+        const sameDevice =
+          (await lstat(path)).dev === (await lstat(dirname(path))).dev;
+        const unchanged = (await identity(path)) === fingerprint;
+        let verdict = "safe";
+        let explanation = candidate.reason;
+        if (reason !== null) {
+          verdict = "keep";
+          explanation = `protected: ${reason}`;
+        }
+        if (!sameDevice) {
+          verdict = "unknown";
+          explanation = "candidate filesystem measurement unavailable";
+        }
+        if (reason === "process paths are unknown") {
+          verdict = "unknown";
+          explanation = `protected: ${reason}`;
+        }
+        if (!unchanged) {
+          verdict = "changed";
+          explanation = "fingerprint changed";
+        }
+        return {
+          candidate,
+          fingerprint,
+          preview: {
+            verdict,
+            reason: explanation,
+          },
+        };
+      })();
+      if (checked.isErr())
+        return {
+          candidate,
+          fingerprint: null,
+          preview: { verdict: "unknown", reason: String(checked.error) },
+        };
+      return checked.value;
+    }),
   );
   console.log(JSON.stringify(rows));
 } else {

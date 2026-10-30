@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { lstatSync, rmSync, writeFileSync } from "node:fs";
+import { lstatSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { treeBytes } from "../../src/targets/tree.ts";
 import { tempRoot } from "../fixtures/temp.ts";
@@ -25,6 +25,34 @@ test("worker sizing delivers intermediate counters and preserves allocated bytes
   expect(updates.map((update) => update.entries)).toEqual([128, 256, 301]);
   expect(updates[0]?.bytes).toBeLessThan(result);
   expect(updates.at(-1)?.bytes).toBe(result);
+});
+
+test("a file disappearing during a walk does not fail the scan", async () => {
+  const root = tempRoot("reclaim-tree-vanish-");
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+  const paths = Array.from({ length: 3000 }, (_, i) => join(root, String(i)));
+  for (const path of paths) writeFileSync(path, "data");
+  let removed = false;
+  let truncated = false;
+  const result = await treeBytes(
+    root,
+    () => {
+      if (removed) return;
+      removed = true;
+      for (const path of paths) unlinkSync(path);
+    },
+    undefined,
+    {
+      onTruncated: () => {
+        truncated = true;
+      },
+    },
+  );
+  expect(result).toBeGreaterThanOrEqual(0);
+  expect(truncated).toBe(true);
 });
 
 test("aborting a tree scan terminates its worker", async () => {

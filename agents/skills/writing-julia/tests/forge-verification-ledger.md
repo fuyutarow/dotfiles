@@ -1,5 +1,38 @@
 # Forge verification ledger — writing-julia (F3 artifact)
 
+## 2026-10-26 — Julia 1.13 safety and total-cost review, v2610.4.1
+
+Consumer request: pursue safe and efficient Julia without substituting officialness for useful guarantees.
+The review focused on Julia 1.13 execution/testing changes, TTFX, compilation cost, and unsafe performance assumptions.
+It is not a fresh audit of every numerical package, GPU backend, or dependency in the catalog.
+
+Preserved: the method-first, ZERO-EXPORTS, explicit-import, and admitted-resource house policies.
+Clarified that these are deliberate local policies, not universal language requirements.
+The acceptance rule now rejects a performance claim that changes the numerical contract or merely shifts cost.
+
+Corrections:
+
+- Julia 1.13 Pkg.test no longer forces bounds checks; require an explicit bounds-enabled safety lane.
+- Ordinary Arrays are 1-based; generic axes must be established before unchecked indexing.
+- Type-stable return and inferable intermediate computation are different properties.
+  Specialization costs compilation time/code size; it is not free by construction.
+- Package-image reuse is conditional, not established by a persistent depot.
+  Measure cold/fresh/warm states and retain a small representative precompile workload only with a benefit.
+- Sysimages lock versions and need covered calls; JuliaC supports full bundling and optional trimming.
+- Narrowed the canonical bind-path recipe to a demonstrated Linux path-key/cache problem.
+- AD differentiates the implemented program and retains floating-point/backend obligations.
+- Added trace-eval, CPU-target, GC, release-status, and version-scope notes for 1.13.
+
+Primary material inspected: official downloads, v1.13.2 NEWS/package images/performance tips,
+1.13 highlights, PrecompileTools workload guidance, PackageCompiler sysimages, and JuliaC README.
+Source observations are distilled into the existing corpus unit
+`urn:uuid:01a0cdef-e16f-75f7-8732-42a510dd980c` with evidence
+`urn:uuid:01a176f4-26ef-77ef-befc-d6d0e4601b2e`.
+
+The eight new trigger cases are design-review oracles, not actual Julia execution results.
+The source audit and verification below are from the held 2026-10-26 change, not this port.
+No runtime compatibility or performance result is inferred from this port.
+
 ## 2026-10-03 — cold start of per-commit snapshot runs (setup.md §3.5.0)
 
 **Trigger:** research project's launcher ran every registered run from a fresh `arena-snapshots/<key>` directory; each run spent 8–10 min

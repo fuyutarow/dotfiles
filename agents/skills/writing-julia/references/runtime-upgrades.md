@@ -39,17 +39,26 @@ Use isolated environments for new dependency resolution rather than silently rep
 | 1.13: Apple Silicon CPU counts and thread-pool defaults | Recheck worker, GC, precompile, and BLAS thread counts; keep explicit resource limits. | CPU-count detection establishes optimal P/E-core placement or pinning. |
 | 1.13: changed string hashing and selected API behaviors | Check hash-dependent caches and affected API tests against the versioned NEWS. | Minor-version compatibility freezes all hash outputs and internal behavior. |
 | 1.13: Windows bracketed paste | Check the REPL/terminal behavior when paste is the actual task. | A REPL improvement changes numerical execution semantics. |
+| 1.13: `Pkg.test` inherits bounds mode | Keep the ordinary cache-reusing test lane and an explicit `--check-bounds=yes` safety lane. | Passing default tests establishes safety inside `@inbounds`. |
+| 1.13: `--trace-eval` and typed introspection arguments | Use top-level evaluation tracing for stalled scripts/tests, and `@which f(::T)` for method provenance without constructing the input. | Top-level tracing is a compilation profiler or a substitute for resource/cancellation bounds. |
+| 1.13: `JULIA_CPU_TARGET=sysimage` | For portable images, consider the base sysimage's targets and test the real deployment CPUs. | The local native CPU or an `-O3` benchmark proves portability. |
+| 1.13: image objects skipped during full GC marking | Measure GC and allocation separately on representative retained heaps. | Published GC examples guarantee a workload-wide speedup. |
 | Juliaup GUI | Check the installed Juliaup distribution if a GUI is requested. | GUI availability is a Julia 1.13 language capability. |
 
 For latency claims, use `compilation.md` to separate loading, first execution, and warmed execution.
 Keep a version upgrade only on the evidence relevant to its stated purpose; “newer” is not a performance result.
 
-## Evidence snapshot [dated:2026-09-23]
+## Evidence snapshot [dated:2026-10-26]
 
-The captured official support table lists stable **1.13.0** and LTS **1.10.12**.
+The official download page lists stable **1.13.2** (2026-10-14) and LTS **1.10.12**.
 Refresh the channel check when selecting a runtime; these values are not evergreen defaults.
-The captured JET README distinguishes installability from functional support and documents `JET_AVAILABLE`.
-Its then-current v0.12 series targets Julia 1.12/1.13; confirm the actual installed pair before treating JET as a gate.
+The earlier 2026-09-23 JET observation distinguished installability from functional support and documented `JET_AVAILABLE`.
+That earlier v0.12 series targeted Julia 1.12/1.13; no fresh JET compatibility result is claimed here.
+Confirm the actual installed pair before treating JET as a gate.
+
+Current primary loci: [downloads](https://julialang.org/downloads/),
+[1.13.2 NEWS](https://github.com/JuliaLang/julia/blob/v1.13.2/NEWS.md), and
+[1.13 highlights](https://julialang.org/blog/2026/09/julia-1.13-highlights/).
 
 Source positions in soks:
 - `urn:uuid:01a0cdef-e16f-75f7-8732-42a510dd980c`, `sok-julia_release_feature_boundaries.md`.

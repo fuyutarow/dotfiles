@@ -32,6 +32,8 @@ Do not invent one. In particular, do not equate `-O3` with guaranteed SIMD.
 2. **TTFX:** start a fresh Julia process for every trial.
    Include loading, compilation, and the first useful result in the boundary.
    Label whether package images already existed.
+   Attribute package loading with `InteractiveUtils.@time_imports`, then remaining compilation with `--trace-compile`.
+   On Julia 1.13, use `--trace-eval` to locate top-level evaluation stalls; it does not measure compilation time.
 3. **Debuggability/correctness:** use the flag that exposes the suspected fault.
    `--check-bounds=yes` overrides `@inbounds`.
    An optimization level does not replace that check.
@@ -72,6 +74,11 @@ decision: <retain default | retain flag | revert flag>
 tuning knobs. Change one only when its documented dimension is the stated question.
 Retain the same receipt. For cache diagnosis, include `-O`, `-g`, `--check-bounds`, `--inline`,
 and `--pkgimages` in the package-image state.
+
+Julia 1.13 ordinary `Pkg.test()` inherits bounds mode, avoiding the former forced-cache variant.
+Keep a separate explicit `--check-bounds=yes` safety lane; compare latency only under matched flag/cache states.
+For image portability, Julia 1.13's `JULIA_CPU_TARGET=sysimage` can reuse the base image's targets.
+It does not replace testing the produced image on the supported CPUs.
 
 ## Primary sources audited [dated:2026-09]
 

@@ -1,24 +1,20 @@
 ---
 name: writing-julia
 description: >-
-  Write Julia for research packages. Use for Julia code/runs, experiments, AD,
-  hot paths, BlueStyle names and Runic formatting, layout, Pkg metadata, deps/compat/sources/workspaces,
-  API/release, TTFX, AOT, or `-O`/`--optimize`. Trigger on Julia パッケージ, パッケージ化, 依存関係, 登録,
-  type stability/型安定, DI, JET/Aqua, DrWatson, JSON/TOML, include order, submodules,
-  export禁止, no exports, public API, 名前空間, device ownership/デバイスの型, and `.jl` suffix. ZERO-EXPORTS is mandatory:
-  every authored module forbids `export`/`@reexport`; stable API uses `public`; package source
-  forbids implicit imports. MANDATORY before Julia code or a recordable run. §2.0 forbids FD
-  derivatives, grid optimization, and lerp-as-evaluation.
-  Feature/bugfix → follow repository instructions and this language owner. Refactor → refactoring-code governs.
-  GPU kernel work → optimizing-julia-gpu-kernels after host type discipline. Formal proofs →
-  proving-theorems. Does an identity hold (記号検算) → verifying-symbolic-identities. Python tooling → running-python-tools. Config authority →
-  governing-configuration-systems. New repo → wiring-repositories first. Descriptive,
-  VCS-only, and legal asks stay out.
+  Write and review Julia research packages and runs: safe generic kernels, type stability, AD,
+  package/API/dependency design, environments, Julia 1.13 upgrades, TTFX, precompilation, AOT,
+  and compiler flags. Use for Julia code, .jl files, packaging, JET/Aqua, DrWatson,
+  JSON/TOML, namespaces, or device-array ownership. ZERO-EXPORTS is mandatory for authored
+  modules: public-only API, no export/@reexport, and explicit dependency imports.
+  Read before Julia code or a recordable run; retain the numerical-method and resource rules.
+  Performance changes must preserve numerical semantics and measure startup separately from warm execution.
+  Refactoring is governed by refactoring-code; GPU kernels use optimizing-julia-gpu-kernels.
+  Formal proofs and exact identities use their own skills. Prose, VCS-only, and legal asks stay out.
 ---
 
 # Model Julia — Coding Discipline & Package Engineering
 
-> **Version**: v2610.4.0 (2026-10-03) — setup.md §3.5.0: cold start of per-commit snapshot runs (one canonical bind path).
+> **Version**: v2610.4.1 (2026-10-26) — Julia 1.13 safety, cache-aware TTFX, and compiler-cost checks.
 > **Scope**: modern Julia for research, from numerical method to a distributable package contract.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
@@ -41,6 +37,15 @@ Run through `agent-resource-run`. P7 alone owns resource limits.
 > the references. JG6 fires at package birth; JG7 fires on every module/API/import change; JG8 on any device-array state.
 
 ## The gates — JG0–JG8, each with a checkable artifact
+
+Safety and efficiency are acceptance conditions, not a preference for newer syntax.
+Reject an apparent speedup that changes the required numerical result, exceeds admitted resources,
+or merely transfers cost from execution to compilation, loading, memory, or another process.
+Measure startup/TTFX and warmed execution separately on the same relevant inputs.
+Use `base-usecase-first` to decide where invariants and contracts belong.
+
+ZERO-EXPORTS, the numerical-method defaults, and resource admission are house policies.
+They remain binding here; do not misattribute them to universal Julia language requirements.
 
 | Gate | Rule | Artifact |
 |---|---|---|
@@ -113,7 +118,7 @@ reference file that matches the task.
 | Python | Julia | Notes |
 |---|---|---|
 | `A @ B` | `A * B` | Matrix multiply. `@` is macro prefix in Julia |
-| `A[0]` | `A[1]` | **1-indexed everywhere** |
+| `A[0]` | `A[1]` | Ordinary Arrays are 1-based; generic AbstractArray code uses axes/eachindex, not an assumed origin. |
 | `A[0, 0]` | `A[1, 1]` | Same for matrices |
 | `A[-1]` | `A[end]` | Last element |
 | `A[1:3]` | `A[1:3]` | Same syntax BUT Julia includes both ends (closed interval) |
@@ -238,13 +243,14 @@ backend = AutoForwardDiff()
 df_dx = derivative(f, backend, x)               # scalar derivative
 ∇f    = gradient(f, backend, x)                # gradient
 H     = hessian(f, backend, x)                 # Hessian
-# For input_dim ≫ 100, switch backend to AutoEnzyme() — see references/autodiff.md §2.7.3
+# Compare suitable backends on this function; dimension alone does not establish compatibility or speed.
 ```
 
 **Why**: FD balances truncation against round-off and requires a tuned step size.
 Forward difference bottoms out near √eps; central difference near eps^(2/3).
 Both remain above machine precision, and higher derivatives compound error.
-AD has no truncation error, needs no step size, and composes for higher derivatives.
+AD avoids finite-difference truncation and step-size choice; it still has floating-point error
+and differentiates the implemented program. Verify the required derivative semantics and backend support.
 
 **Permitted exceptions** (write the exception in a comment):
 - Cross-checking an AD-computed gradient at one point during initial development (DI provides
@@ -337,7 +343,7 @@ Match batch size to observability. Prefer the smallest increment that answers th
 ## 9. Checklist Before Submitting Julia Code
 
 Correctness (§1):
-- [ ] All indices start at 1; matrix multiply uses `*` (not `@`); element-wise ops use dot (`.+`, `.*`, `sin.()`)
+- [ ] Ordinary arrays start at 1; generic arrays use `axes`/`eachindex` or an explicit one-based restriction; matrix multiply uses `*` (not `@`); element-wise ops use dot (`.+`, `.*`, `sin.()`)
 - [ ] Index coefficients use `*`; repairs preserve grouping (`numeric-syntax.md`).
 - [ ] No untyped containers (`Float64[]` not `[]`); no globals captured in hot loops
 - [ ] Functions return consistent types; `end` closes every block; `$` interpolation; `time_ns()`

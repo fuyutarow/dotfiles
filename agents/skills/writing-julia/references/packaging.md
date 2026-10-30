@@ -227,6 +227,8 @@ Before any package release:
 
 - install from a fresh environment using the candidate URL/revision;
 - load the package by name and run `Pkg.test()`;
+- on Julia 1.13+, separately run `Pkg.test(; julia_args=["--check-bounds=yes"])` for the safety gate;
+  ordinary `Pkg.test()` now inherits bounds mode and no longer forces checks inside `@inbounds`;
 - run Aqua, ExplicitImports, and JET as scoped in `architecture.md` §10.6.1;
 - pass the recursive ZERO-EXPORTS test for root, child, and extension modules;
 - confirm the version matches the public API change under PK7.

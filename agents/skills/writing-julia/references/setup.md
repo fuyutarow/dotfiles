@@ -161,29 +161,31 @@ Marwick 2018, *research compendium* (10.1080/00031305.2017.1375986); DrWatson �
 
 ## 3.5 TTFX (Time To First eXecution) — the layered countermeasure map
 
-**TTFX** (historically "time to first plot") is the latency before the *first* real result —
-the compile-then-run cost paid the first time a code path is hit. It was Julia's signature
-weakness; the modern fix is a layered stack. On a **persistent host the depot already persists**,
-so Layers 0–1 carry across sessions automatically — the cross-session caching that an ephemeral
-filesystem needs is unnecessary here.
+**TTFX** means time to first execution; time to first plot is one workload-specific example.
+Define the measured boundary: process startup, package loading, first useful call, or the complete command.
+A persistent depot permits cache reuse but does not guarantee it: source, dependency, runtime,
+CPU target, compiler flags, and invalidations can change which images are usable.
+Use fresh processes with both reusable-cache and deliberately cold states; measure warmed execution separately.
+Use an isolated depot for deliberately cold measurements; do not erase a shared depot to create a benchmark condition.
 
 | Layer | Mechanism | Caches | When to apply |
 |-------|-----------|--------|---------------|
-| **0** | Julia ≥1.9 package images (`Pkg.precompile`, §3.3) | **native** code of deps, not just lowered IR | always — the floor everything builds on (free, automatic) |
+| **0** | Julia ≥1.9 package images (`Pkg.precompile`, §3.3) | native code captured by package precompilation | ordinary baseline; compilation consumes time, disk, memory, and admitted CPU |
 | **1** | `PrecompileTools.@compile_workload` | native code of **your** hot path | a package you author + call repeatedly |
-| **2** | custom sysimage (PackageCompiler) / `juliac` | a frozen image / AOT binary | persistent local dev or a deployment target |
+| **2** | custom sysimage (PackageCompiler) / JuliaC | selected frozen package versions/methods or a bundled binary | measured load/first-call bottleneck or a deployment contract |
 
 **Layer 0 — package images (automatic, the floor).** Since Julia 1.9, `Pkg.precompile()` writes
 *native* code into package images, not just lowered IR. This is why the precompile step in §3.2
-is a TTFX lever, not merely a dependency-resolution step. Nothing to do beyond running it; on a
-persistent host the result is reused across sessions.
+is a TTFX lever, not merely a dependency-resolution step. It does not precompile every future
+argument specialization. Check actual reuse and remaining first-call compilation on the intended workload.
 
 **Layer 1 — `PrecompileTools.jl` (package-author side).** Lets a package run a representative
 workload **at precompile time**, so the relevant native code lands in the package image. Apply
 when you author a package whose hot path is called across many `julia -e` invocations.
 
 ```julia
-using PrecompileTools, DifferentiationInterface
+using PrecompileTools: @setup_workload, @compile_workload
+using DifferentiationInterface: AutoForwardDiff, prepare_gradient, gradient
 import ForwardDiff
 
 @setup_workload begin
@@ -197,25 +199,36 @@ import ForwardDiff
 end
 ```
 
-When it **doesn't** help: a single long computation in one process — JIT cost is amortized anyway.
+Keep `@compile_workload` at module top level; put unneeded input-generation compilation in `@setup_workload`.
+Exercise representative small input types and paths, with no training run, external side effect, or unbounded input.
+Measure its precompile time, image size, loading, and first useful call before retaining it.
+For a single long computation, startup work may be amortized; demonstrate a material benefit before adding a workload.
 
 **Layer 2 — custom sysimage / AOT binary.** Two distinct tools for a *persistent* host or a
 deployment target:
-- **PackageCompiler** builds a full (untrimmed) sysimage that freezes everything for sub-second
-  startup — the mechanism the VS Code Julia extension auto-generates from `JuliaSysimage.toml`
-  (§8). The right tool for local interactive dev when startup latency dominates your loop.
-- **`juliac` / `JuliaC.jl`** (Julia ≥1.12, §3.6) is the modern gcc-like driver that wraps the
-  experimental `--trim` AOT path to emit small executables/libraries (a trimmed "hello" is
-  ~1 MB). A *companion* to PackageCompiler, not a replacement. **Not for whole research
-  codebases** (trimming requires every reachable call statically resolvable, which exploratory
-  code routinely violates) — but an extracted type-stable kernel is exactly what it CAN compile;
-  route per §3.5.1.
+- **PackageCompiler** can reduce package-loading and covered first-call work through a custom sysimage.
+  Embedded packages and dependencies are locked to the image's versions and take precedence over the active project.
+  Include representative precompile calls; merely embedding a package does not compile every method specialization.
+  Measure the gain and rebuild when the version or CPU contract changes; no sub-second guarantee follows.
+- **JuliaC.jl** (Julia ≥1.12) is a companion built on PackageCompiler, with compile/link/bundle steps
+  for executables, shared libraries, sysimages, and object/bitcode outputs. Trimming is optional.
+  Choose full-runtime bundling versus trimming from the deployment contract; a dynamic research workload
+  does not have to become trim-compatible merely to use JuliaC. Validate a trimmed kernel's reachable code
+  and produced artifact separately (§3.5.1).
+
+Primary sources checked 2026-10-26:
+[PrecompileTools](https://julialang.github.io/PrecompileTools.jl/stable/),
+[sysimage version/workload limits](https://julialang.github.io/PackageCompiler.jl/stable/sysimages.html),
+[JuliaC](https://github.com/JuliaLang/JuliaC.jl), and
+[package-image cache keys](https://github.com/JuliaLang/julia/blob/v1.13.2/doc/src/devdocs/pkgimg.md).
 
 ### 3.5.0 Cold start of runs launched from per-commit snapshots `[dated:2026-10]`
 
-A launcher that runs every job from an immutable snapshot of one commit (path-dev'd local packages in a workspace) pays a full
-local-stack recompile whenever the snapshot PATH changes. Diagnose first: in a fresh process with a warm cache, time each `import`
-(`InteractiveUtils.@time_imports`). A warm local package loads in well under a second; minutes mean the cache was rejected.
+A launcher using a new immutable snapshot path can repeatedly invalidate local-package caches.
+First time imports in fresh processes with `InteractiveUtils.@time_imports` and inspect actual cache reuse.
+There is no universal one-second import threshold: dependency loading and initialization can also dominate.
+The canonical-bind recipe below is a Linux-specific remedy for a demonstrated path-key problem,
+not a prerequisite for every Julia launcher. Validate isolation, permissions, and cache behavior on the target host.
 
 | Observation / constraint | Mechanism (Julia 1.11–1.13) | Action |
 |---|---|---|
@@ -238,7 +251,7 @@ registry, SKILL.md header.)
 
 | | Route A — PackageCompiler `create_library` | Route B — `juliac --trim` |
 |---|---|---|
-| Status | production route; docs carry no "experimental" label | **experimental** in BOTH 1.12 and 1.13 (the `julia` binary rejects `--trim` without `--experimental`; JuliaC forwards the flag when needed) |
+| Status | established full-runtime bundling route | validate the exact Julia/JuliaC release and trim mode; `--experimental` requirements depend on the build |
 | Artifact | full bundle: your lib + `libjulia` + stdlibs + `artifacts/` — order 100 MB+ | small executables/libraries (trimmed "hello" ~1 MB) |
 | Hard requirement | `@ccallable` C-ABI entry functions; PackageCompiler's app-relocatability rules apply | ALL code reachable from the `entrypoint` statically resolvable — one leftover dynamic dispatch = compile-time **"Verifier error: unresolved call / invoke / ccallable"** (safe mode) |
 | Use when | server-side / internal deploy / embedding into a Python wheel — size irrelevant; usable TODAY | size-constrained / edge deploy, and ONLY when kernel + deps are type-stable end-to-end |
@@ -247,9 +260,10 @@ registry, SKILL.md header.)
 emits `include/julia_init.h` + `lib/` (+ `share/julia`); the caller **must** call
 `init_julia(argc, argv)` before any entry point (thread count etc. pass as CLI-style args) and
 should call `shutdown_julia(retcode)` at exit. Plan **one Julia runtime per process**:
-`jl_init` may only be called once per process lifetime (embedding manual), so never design two
-Julia-built libraries into one host process — and two libraries cannot even share a `dest_dir`
-(each owns `share/julia`).
+the ordinary runtime's `jl_init` may only be called once per process lifetime (embedding manual).
+Do not independently initialize conflicting runtime bundles. JuliaC also exposes `--privatize` for
+runtime-symbol isolation on supported Unix targets; that option alone does not verify multi-runtime
+initialization, thread, memory, or artifact compatibility. Test the concrete host/bundle arrangement.
 
 **Route B discipline**: the `@ccallable` surface uses concrete C-ABI types (`Ptr{Float64}`,
 `Csize_t`, …) and must be dispatch-free; every reachable path obeys type stability

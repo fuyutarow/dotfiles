@@ -17,13 +17,12 @@ Contents:
 
 ## 2.1 Type Stability — the load-bearing discipline
 
-**Type stability** = the return type (and every local's type) is predictable from the argument
-TYPES alone, never from their values. It is the single property Julia's speed rests on:
-inferable types → dispatch resolved at compile time → devirtualized, inlined, SIMD-able native
-code. When inference loses a concrete type, values get boxed and every subsequent call becomes a
-runtime method lookup on the boxed value — the 10–100× slowdowns, the GC pressure, and (at a
-compile boundary) `juliac --trim` verifier errors (setup.md §3.5.1) all trace back to this one
-property.
+**Type stability** concerns whether the return type can be inferred from argument types.
+Inferable concrete intermediate values are a stronger hot-path requirement; a stable return alone
+does not establish it. Inspect the actual call path rather than equating every highlighted union
+with a costly box or dispatch. Type inference helps optimization but does not establish numerical
+correctness, allocation bounds, SIMD, or a fixed speedup. Measure those properties separately.
+For trimmed artifacts, check the entire reachable compilation boundary (setup.md §3.5.1).
 
 ### 2.1.1 Multiple dispatch ≠ dynamic dispatch — never "ban dispatch"
 
@@ -55,9 +54,11 @@ good(x) = x > 0 ? x : zero(x)
 
 **(b) Non-concrete struct fields** — after untyped containers, the most common LLM-authored
 instability. An abstract or missing field annotation makes every access *of that field* return
-an unknown type, and the instability spreads into each function that touches it. Unlike
-§2.1.1's scoping, this rule is UNCONDITIONAL: a struct definition doesn't know its future call
-sites, and the parametric form costs nothing — so parametrize even "cold" structs:
+an unknown type, and the instability can spread into functions that touch it.
+Following §2.1.1's shell/kernel split, state needed by hot kernels must retain concrete field types.
+Use parametric fields to preserve genericity, but do not claim that specialization costs nothing:
+excessive type variants can increase compilation latency and code size. Deliberately dynamic cold
+data stays behind a function barrier; verify the hot boundary rather than adding parameters mechanically.
 
 ```julia
 # BAD: every field access is type-unstable

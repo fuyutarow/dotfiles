@@ -72,6 +72,21 @@ asks — Rust/TS/C++ — which test nothing). Expanded v2609.1.0 with JG6 packag
 | 「実験結果をファイルに残したい」 vs 「別言語のツールに渡したい」 | tests the axis split: persistence (JLD2→HDF5/Arrow) vs interchange (JSON.jl) |
 | 「サンプル JSON から Julia の struct 定義を生成したい」 | the ONE surviving JSON3 use (`@generatetypes`) — emit then commit, never a runtime dep |
 
+## Julia 1.13 safety and latency cases (2026-10-26)
+
+These are scoped design-review oracles, not performance measurements.
+
+| Request or observation | Required decision | Reject |
+|---|---|---|
+| Julia 1.13 default Pkg.test passed code using @inbounds | Require the explicit --check-bounds=yes safety lane and an index/axes argument | Default tests prove checked bounds |
+| Generic AbstractArray kernel assumes indices start at one | Use axes/eachindex or establish the one-based restriction before unchecked access | 1-indexed everywhere |
+| Warm microbenchmark is fast but each CLI invocation is slow | Measure fresh-process loading/TTFX and warmed execution separately | A hot benchmark proves acceptable startup |
+| Persistent depot but recompilation continues | Inspect cache key/flags/source/dependency/runtime and invalidation facts | Persistent storage guarantees cache reuse |
+| JuliaC requested for a dynamic application | Consider full bundling; trimming is optional and separately verified | All JuliaC usage requires trim-compatible dependencies |
+| Custom sysimage selected | Record locked versions, covered calls, CPU targets, rebuild conditions, and observed latency | Project manifest overrides embedded package versions |
+| All cold data is parameterized to reduce dispatch | Assess specialization/compiler/image cost and keep deliberate dynamic data behind a barrier | More specializations are free |
+| Faster implementation changes derivative or floating-point result | Preserve the declared numerical contract; reject or explicitly reauthorize the semantic change | Newer syntax or AD guarantees the desired mathematics |
+
 ## NN stack decision cases (v2609.5.0)
 
 These exercise selection after invocation; they do not claim measured runtime compatibility.

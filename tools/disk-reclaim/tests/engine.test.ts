@@ -84,6 +84,7 @@ test.each([
   "target plan",
   "candidate recheck",
   "action",
+  "action complete",
   "finish",
 ])(
   "run records and releases its lock when the deadline expires during %s",
@@ -106,6 +107,9 @@ test.each([
         };
       },
     });
+    opts.context.log = (line) => {
+      if (phase === "action" && line.startsWith("fake: item ")) expire();
+    };
     const { target } = fakeTarget({
       candidates: [{ ...candidate("item"), path: null }],
     });
@@ -143,7 +147,7 @@ test.each([
       return item;
     };
     target.act = async (_item, ctx) => {
-      if (phase === "action") {
+      if (phase === "action complete") {
         await expireDuring(ctx.signal);
       }
       return { ok: true, bytes_freed: 100, error: null };

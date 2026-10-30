@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.18 — 2026-10-30
+
+- Correct action deadline test expectations
+
 ## 1.12.17 — 2026-10-30
 
 - Handle disappearing scan entries and batch tmpfs plan checks

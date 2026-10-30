@@ -34,7 +34,7 @@ const ROSTER_CLI = [
   "roster",
   "--json",
 ];
-const ROSTER_TIMEOUT_MS = 2000;
+const ROSTER_TIMEOUT_MS = 4000;
 const ENTRY = "`agx worker run <ticket>` or `agx-worker run <ticket>`";
 
 // Validate presentation fields only; strict roster policy belongs to the CLI.
@@ -65,13 +65,14 @@ async function main(): Promise<void> {
 
   // The dotfiles pin owns the CLI version regardless of the caller's working directory.
   const command = ROSTER_CLI;
+  const timeout = AbortSignal.timeout(ROSTER_TIMEOUT_MS);
   const loaded = await (async (): Promise<Attempt<string>> => {
     const spawned = await attempt(async () => {
       const child = Bun.spawn(command, {
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
-        timeout: ROSTER_TIMEOUT_MS,
+        signal: timeout,
         killSignal: "SIGKILL",
       });
       const [stdout, stderr, code] = await Promise.all([
@@ -83,8 +84,10 @@ async function main(): Promise<void> {
     });
     if (!spawned.ok) return { ok: false, error: spawned.error };
     const child = spawned.value;
-    if (child.signal !== null)
+    if (timeout.aborted)
       return { ok: false, error: `ETIMEDOUT after ${ROSTER_TIMEOUT_MS} ms` };
+    if (child.signal !== null)
+      return { ok: false, error: `terminated by ${child.signal}` };
     if (child.code !== 0)
       return {
         ok: false,
@@ -117,7 +120,7 @@ async function main(): Promise<void> {
       ].join("\n"),
     };
   })();
-  if (!loaded.ok) {
+  if (!loaded.ok && !timeout.aborted) {
     // FATAL: the roster could not be read, so dispatch guidance cannot be verified; fail closed.
     decidePre(
       "deny",
@@ -132,7 +135,9 @@ async function main(): Promise<void> {
       "Dispatch with `agx worker dispatch <ticket>` or `agx-worker dispatch <ticket>`. " +
       "For durable runs use `systemd-run --user --unit=agt_<slug> --collect -- agx worker dispatch …`; " +
       "continue with `agx worker run <ticket> --continue <run>` or `agx-worker run <ticket> --continue <run>`.\n" +
-      `Roster (agx worker roster --json):\n${loaded.value}`,
+      (loaded.ok
+        ? `Roster (agx worker roster --json):\n${loaded.value}`
+        : "Roster unavailable (agx worker roster --json timed out)."),
   );
 }
 

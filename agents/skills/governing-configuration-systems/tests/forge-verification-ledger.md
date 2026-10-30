@@ -1,59 +1,113 @@
-# Forge verification ledger — governing-configuration-systems
+# Distillation verification ledger
 
-## 0. Function and placement
+Frozen inputs: `ufp-triage-governing-configuration-systems-1030.md` and `usecase-triage-governing-configuration-systems-1030.md` in the 2026-10-30 clig-1030 scratchpad. Locators identify the frozen revision, not current line numbers. Each table row is counted separately; the frozen aggregate understates RESIDUE-KEEP. LIVE is caller evidence, not observed benefit.
 
-    configuration request + consumer/trust regime
-      -- classify | specify | audit -->
-    CONFIGURATION CONTRACT
-      --> target-accepted effective declaration + acceptance receipt
+| Frozen row | Statement | Class / usecase | Disposition |
+|---|---|---|---|
+| `SKILL.md:2-8` | 設定面・形式・署名・digest・gate等の網羅語で発火させる | RESIDUE-CUT | Removed |
+| `SKILL.md:8-12` | consumer/trust、effective declaration、integrity contract は本スキルへ振り分ける | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `SKILL.md:12` | 英語スキルで利用者の言語に応答する | RESIDUE-CUT | Removed |
+| `SKILL.md:29-30` | format選択前にconsumerとtrust regimeを名指す | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `SKILL.md:31` | 有効宣言・権威・表現・検証境界・verifierを示す | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `SKILL.md:33-34` | byte digestはbyte、semantic digestは名前付きprofileと制約データモデルに結び付ける | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `SKILL.md:36` | このスキルを configuration contract の唯一の所有者とする | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `SKILL.md:38-40` | authored source、generated artifact、signature、gate input、decision recordを区別する | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `SKILL.md:42` | repo layers と target parser はここで選ばない | RESIDUE-KEEP / live | Moved to wiring-repositories; routing in SKILL.md |
+| `SKILL.md:44` | commentをapprovalにしない | RESIDUE-KEEP / unproven | Removed |
+| `SKILL.md:46` | strict JSONはcanonical bytesを意味しない | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `SKILL.md:48` | JSON grammar単体はcanonical profileではない | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `SKILL.md:50` | JCSは名前付きJSON profileで、普遍的義務ではない | RESIDUE-KEEP / unproven | Removed |
+| `SKILL.md:52` | TOMLの複数表記はparsed valueを曖昧にしない | RESIDUE-KEEP / unproven | Removed |
+| `SKILL.md:54` | 根拠とskill独自規則はledgerに置く | RESIDUE-KEEP / unproven | Removed |
+| `SKILL.md:57-65` | 各gateにdecisionとartifact/stop条件を対応させる | RESIDUE-KEEP / unproven | Removed |
+| `SKILL.md:67` | contract templateから始める | UFP-DERIVED | Removed template; general contract design in base-usecase-first |
+| `SKILL.md:69` | 解釈前にcontract checkerを実行する | RESIDUE-KEEP / unproven | Removed |
+| `SKILL.md:71` | checkerはfield presenceとconditional obligationsを確認する | RESIDUE-KEEP / unproven | Removed |
+| `SKILL.md:73` | semantic acceptanceはtarget validatorで確認する | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `SKILL.md:77-78` | workflowで各regimeを選び、同じsurfaceの複数regimeを考慮する | RESIDUE-KEEP / unproven | Removed |
+| `SKILL.md:79` | format選択前にboundaryを決める | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `SKILL.md:80-82` | workflow中に参照文書を順番に読む | RESIDUE-CUT | Removed |
+| `SKILL.md:83` | executable stateとattributable reasonを読者別に分ける | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `SKILL.md:84-86` | mechanical floor後、effective declarationを消費するtarget pathを走らせる | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `SKILL.md:92-98` | contract上の判断を一人で保持し、合意を検証結果とみなさない | UFP-DERIVED | Removed execution model; acceptance evidence in base-usecase-first |
+| `SKILL.md:100` | 自動化がなければ同じ地図を逐次使う | RESIDUE-CUT | Removed |
+| `SKILL.md:105` | type/parser/state invariantの問いは旧契約スキルと連携する | RESIDUE-KEEP / live | Moved to base-usecase-first; routing in SKILL.md |
+| `SKILL.md:106` | CLI parserのflag追加は言語ownerへ渡す | RESIDUE-KEEP / unproven | Removed |
+| `SKILL.md:107` | Claude hooks/permissions/MCPは宣言済み設定と実行checkを調べる | RESIDUE-KEEP / live | Moved to local configuration declarations; routing in SKILL.md |
+| `SKILL.md:108` | repository layers/tasksは wiring-repositories へ渡す | RESIDUE-KEEP / live | Moved to wiring-repositories; routing in SKILL.md |
+| `SKILL.md:109` | 言語manifest/parser APIは該当 writing skillへ渡す | RESIDUE-KEEP / live | Moved to writing-*; routing in SKILL.md |
+| `SKILL.md:110` | SKILL作成は forging-skills へ渡す | RESIDUE-KEEP / unproven | Removed |
+| `SKILL.md:111` | high-risk release boundsは practicing-tiger-style へ渡す | RESIDUE-KEEP / unproven | Removed |
+| `SKILL.md:112` | 構文説明のみなら直接回答する | RESIDUE-CUT | Removed |
+| `SKILL.md:116-124` | reference indexの読取り案内 | RESIDUE-CUT | Removed |
+| `consumer-and-trust-regimes.md:3` | consumer classificationとregime selectionは本書の所有範囲 | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `consumer-and-trust-regimes.md:5` | format syntaxはtarget language/toolの所有 | RESIDUE-KEEP / live | Moved to writing-*; routing in SKILL.md |
+| `consumer-and-trust-regimes.md:7-20` | surfaceに複数regimeがあり得る | RESIDUE-KEEP / unproven | Removed |
+| `consumer-and-trust-regimes.md:10` | 人が編集するならformat/schema/comment policy/writerを名指す | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `consumer-and-trust-regimes.md:11` | generated outputならgenerator/input/regeneration/hand-edit ruleを名指す | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `consumer-and-trust-regimes.md:12` | signed raw bytesならencoding等を明示する | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `consumer-and-trust-regimes.md:13` | signed canonical valuesならprofile/admission/serializerを明示する | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `consumer-and-trust-regimes.md:14` | gated decisionならschema/authority/exceptions/verifierを名指す | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `consumer-and-trust-regimes.md:22` | regimesは成熟度順ではない | RESIDUE-CUT | Removed |
+| `consumer-and-trust-regimes.md:24` | signed rendered artifactは複数regimeを合成し得る | RESIDUE-KEEP / unproven | Removed |
+| `consumer-and-trust-regimes.md:30` | 実際のprecedence/parser behaviorはtarget docsまたはmeasured receiptで確認する | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `consumer-and-trust-regimes.md:32-37` | classifierで人編集・生成・integrity・exception・複数sourceを判定する | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `consumer-and-trust-regimes.md:34,36,38` | 「No」側で不要物を作らないという一般助言 | RESIDUE-CUT | Removed |
+| `canonicalization-and-representation.md:3` | raw/canonical boundaryは本書の所有範囲 | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `canonicalization-and-representation.md:5` | schemaとverifierはtargetが所有する | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:10` | raw-byte integrityならencoding/line endings/BOM/scope/signer/verifierを指定する | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `canonicalization-and-representation.md:11` | canonical value integrityならgrammar/schema/duplicate/numeric/Unicode/profile/inputを指定する | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `canonicalization-and-representation.md:14` | serializerを名指さずparsed dataをcanonicalと呼ばない | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `canonicalization-and-representation.md:16` | 未検証dataをcanonicalizeしてaccepted policyと呼ばない | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:18` | digestだけでauthorizationやgate acceptanceを主張しない | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:20-22` | JSON whitespace/escape formsは異なり、member orderも観測可能な場合がある | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:24` | strict JSONはsemantic integrity profileとして不足 | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `canonicalization-and-representation.md:26` | JCS選択時にversionとinput constraintsを名指す | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:29-34` | JCS境界でduplicate reject、number/Unicode policy、object sort、array orderを定める | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:36` | JCSはsignature protocolやapplication schemaではない | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:38` | JWSは定義されたencoded inputに署名する | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:40` | signature acceptanceはapplication decision | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:44` | TOML v1.0.0 value mappingは一意 | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:46` | TOML source表記の違いはparsed valuesを曖昧にしない | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:48` | semantic TOML digestにはparse mappingとserializerが必要 | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:50` | TOML v1.0.0は本書のsemantic profileを提供しない | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:52` | TOMLをediting model/ecosystemがconsumerに合う場合に選ぶ | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:54` | JSON plus named profileはcanonical JSON bytesが必要な場合に限る | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:56-66` | profile selectionで各scenarioのrepresentation detailsを名指す | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:70-72` | X.509/DER analogyはspecified bytesの必要性に限る | RESIDUE-KEEP / unproven | Removed |
+| `canonicalization-and-representation.md:74` | analogyからJCS/JSON configをX.509 certificateとしない | RESIDUE-CUT | Removed |
+| `authority-events-and-lifecycle.md:3` | effective declarationとdecision recordの区別は本書の所有 | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `authority-events-and-lifecycle.md:5` | この参照はskill-supplied guidance | RESIDUE-KEEP / unproven | Removed |
+| `authority-events-and-lifecycle.md:7` | JSON/TOML/JWS/JCSはevent sourcingを要求しない | RESIDUE-KEEP / unproven | Removed |
+| `authority-events-and-lifecycle.md:9-21` | 実行状態、理由、例外の読者が違えばartifactを分ける | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `authority-events-and-lifecycle.md:23` | small human-authored configは説明commentを保てる | RESIDUE-KEEP / unproven | Removed |
+| `authority-events-and-lifecycle.md:25` | commentがgateをoverride/authorizationを証明すれば境界を越える | RESIDUE-KEEP / unproven | Removed |
+| `authority-events-and-lifecycle.md:27` | gated inputにはrecord locatorまたはnoneを指定する | RESIDUE-KEEP / unproven | Removed |
+| `authority-events-and-lifecycle.md:29` | exception非対応targetではencoded locatorまたはnoneを指定する | RESIDUE-KEEP / unproven | Removed |
+| `authority-events-and-lifecycle.md:31-44` | decision recordにauthority/change/rationale/scope/expiry/integrityを記録する | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `authority-events-and-lifecycle.md:46` | reviewed commit/signed record/append-only storeは契約を満たし得る | RESIDUE-KEEP / unproven | Removed |
+| `authority-events-and-lifecycle.md:48` | target verifierは宣言したeffective inputを使用する | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `authority-events-and-lifecycle.md:52` | raw rollbackは保護byteを復元する | RESIDUE-KEEP / unproven | Removed |
+| `authority-events-and-lifecycle.md:54` | canonical rollbackはaccepted artifact/profile/verifierを復元する | RESIDUE-KEEP / unproven | Removed |
+| `authority-events-and-lifecycle.md:56` | rationale replay前にeffective stateを戻す | RESIDUE-KEEP / unproven | Removed |
+| `verification-and-profiles.md:3` | contract fieldsとacceptance receiptsは本書の所有 | RESIDUE-KEEP / unproven | Removed |
+| `verification-and-profiles.md:5` | target parser/schema/crypto verifierを本書は創作しない | RESIDUE-KEEP / unproven | Removed |
+| `verification-and-profiles.md:9-10` | consumer/authority/writer/effective configuration/representationを記録する | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `verification-and-profiles.md:11` | trust regime/signature inputを区別する | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `verification-and-profiles.md:12` | canonical profileにalgorithm/versionを記録する | RESIDUE-KEEP / unproven | Removed |
+| `verification-and-profiles.md:13` | schema/duplicate/number-Unicode policyを記録する | RESIDUE-KEEP / unproven | Removed |
+| `verification-and-profiles.md:14-15` | precedence/mergeとdecision/exception recordを記録する | UFP-DERIVED | Moved to designing-command-line-interfaces (sourcing) and base-usecase-first (records); effective input in SKILL.md, Decisions |
+| `verification-and-profiles.md:16` | verifier commandとpositive/negative casesを記録する | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `verification-and-profiles.md:20` | checkerを contract pathに対して実行する | RESIDUE-KEEP / unproven | Removed |
+| `verification-and-profiles.md:22` | checkerはabsent fieldsとunknown regimesをrejectする | RESIDUE-KEEP / unproven | Removed |
+| `verification-and-profiles.md:24` | checkerはraw/canonical/gated conditional fieldsを検査する | RESIDUE-KEEP / unproven | Removed |
+| `verification-and-profiles.md:26-28` | gated inputsはrecord/noneとencoded/noneを使う | RESIDUE-KEEP / unproven | Removed |
+| `verification-and-profiles.md:30` | checkerはsignature/schema/merge behaviorを検証できない | RESIDUE-KEEP / unproven | Removed |
+| `verification-and-profiles.md:32` | representation choicesはcanonicalization referenceに属する | RESIDUE-KEEP / unproven | Removed |
+| `verification-and-profiles.md:34-45` | acceptance receiptにcontract digest、validator、profile/schema、positive/negative evidence、residualを含める | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `verification-and-profiles.md:47` | signature boundaryではprotected bytesとsigner/key trust evidenceを含める | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
+| `verification-and-profiles.md:49` | layered configではresolved output等のprecedence observableを出す | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `verification-and-profiles.md:51` | validatorはauthored sourceでなくnamed effective declarationを消費する | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
+| `verification-and-profiles.md:53` | green contract floorだけではacceptance receiptにならない | RESIDUE-KEEP / unproven | Removed |
 
-STOP: parser/schema/API implementation → language owner.
-STOP: layer admission/order → wiring-repositories.
-
-This is a new ownership void: wiring-repositories chooses repository layers and wiring order;
-operating-the-harness owns .claude mechanics; language skills own manifest/parser detail;
-practicing-tiger-style owns risk posture; governing-research-documentation owns R&D documents.
-This skill owns cross-domain executable configuration representation, authority, and verification.
-
-## 1. Source-grade table
-
-| Rule | Source / locus | Grade | Source-local status | Skill disposition |
-|---|---|---|---|---|
-| JSON syntax is not canonical bytes; JCS is an explicit profile with input restrictions. | RFC 8259 §§2,4,7 https://www.rfc-editor.org/rfc/rfc8259.html; RFC 8785 §§3.1–3.2.3 https://www.rfc-editor.org/rfc/rfc8785.html; SoK evi 01a089d8-d3ce-7045-af0b-e4d825b4d85c / 01a089d8-d3f4-7711-ac4f-af813850dbda; ledger CFG-001/002 | author-confirmed | supported | Require a named raw-byte or canonical boundary. |
-| JWS signs a defined encoded input but leaves payload schema and signature acceptance partly to the application. | RFC 7515 §§3.3,5.1,5.2 https://www.rfc-editor.org/rfc/rfc7515.html; SoK evi 01a089d8-d414-74c6-abe0-344ff710998f; ledger CFG-003 | author-confirmed | supported | Require target schema/key/acceptance evidence separately. |
-| TOML maps unambiguously to a hash table while retaining multiple source forms. | TOML v1.0.0 Objectives, Keys, Table, Inline Table, Array of Tables https://toml.io/en/v1.0.0; SoK evi 01a089d8-d437-7470-8026-f1df2d01a680; ledger CFG-004 | author-confirmed | supported | Do not reject TOML as semantically ambiguous; name a serializer only for semantic integrity. |
-| Cargo, PyPA, and mise distinguish role, writer, namespace, or scope in configuration. | Cargo opening https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html; PyPA opening https://packaging.python.org/en/latest/specifications/pyproject-toml/; mise hierarchy https://mise.jdx.dev/configuration.html; SoK evi IDs 01a089d8-d475-7458-ba7f-9d1501e2cd82, 01a089d8-d491-72b4-a372-e11d52415043, 01a089d8-d4ae-7060-baf5-69116e8d0b2e; ledger CFG-006/007 | author-confirmed | supported with limitations | Classify role before format; never claim universal ecosystem consensus. |
-| Effective declaration versus decision-record split. | No primary source in the bounded corpus; ledger CFG-008 | skill-supplied | not a source mandate | Apply only when machine state, rationale, exception, and lifecycle have distinct readers. |
-| X.509/DER comparison. | RFC 5280 §4.1.1.3 https://www.rfc-editor.org/rfc/rfc5280.html; RFC 8785 §§1,3 https://www.rfc-editor.org/rfc/rfc8785.html; SoK evi 01a089d8-d459-722d-a589-44c8840299ca / 01a089d8-d3f4-7711-ac4f-af813850dbda; ledger CFG-005 | constructed | limited synthesis | Compare specified bytes only; never claim protocol equivalence. |
-
-## 2. Calibration inversion
-
-| | Source audience | Agent consumer |
-|---|---|---|
-| Dominant error | Under-specifying an interoperable data/signature representation. | Over-applying strict JSON, JCS, or event records as ceremony. |
-| Corrective bias | Name precise serialization and verification behavior. | Start with consumer/trust regime; keep MUST-NOT-FIRE first-class. |
-| Prominent guard | Canonical profile details. | Typed routing and conditional gates before format preference. |
-
-## 3. Verification record
-
-Initial forge, 2026-09-10:
-
-| Check | Receipt |
-|---|---|
-| Contract behavior | bun test tests/configuration-contract-check.test.ts: 21 pass, 0 fail, 47 assertions. |
-| Valid input | configuration-contract-check against valid-contract.md: exit 0; C1/C2/C3 PASS; FAIL=0. |
-| Proof of fire | The same test run receives exit 1 for missing profile, strict JSON, negated boundaries, n/a payloads, placeholders, malformed regime, duplicate field, missing required fields, and comment-only dispositions. |
-| Script floor | writing-bun-scripts script-check: exit 0; FAIL=0 WARN=0. |
-| Skill floor | forging-skills skill-check on this skill: exit 0; no output, including zero prose-debt warnings. |
-| Trigger desk-check | Six fire, six no-fire, and three ordered co-fire rows were reviewed independently. One .claude co-fire ambiguity was repaired. |
-| Architecture audit | Independent review found C3 ceremony, C5 effective-input, one-home, source-locus, and reciprocal-cut defects. Each was repaired before this record. |
-| Behavior audit | Independent adversarial tests found boundary, placeholder, Markdown, and disposition false passes/rejects. The parser and suite were expanded to 21 green tests. |
-
-A green mechanical floor does not verify source truth, target semantics, or deployment acceptance.
-
-## 4. Maintenance triggers
-
-- A source position changes its status or a named canonicalization/signature profile moves.
-- A real configuration incident reveals an unnamed merge, authority, encoding, or acceptance boundary.
-- A sibling changes its typed cut.
-- The contract checker fails to reject a missing conditional field or rejects a valid documented regime.
+The package no longer prescribes the unproven contract checker, template or profile-specific examples. CLI sourcing defaults are owned by designing-command-line-interfaces. The prior source position was bounded; this rewrite has not been tested with independent readers under an attention budget.

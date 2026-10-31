@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.6 — 2026-10-31
+
+- Allow slower Homebrew core-floor probes and report timeouts accurately
+
 ## 0.2.5 — 2026-10-31
 
 - Read tool command mappings asynchronously.

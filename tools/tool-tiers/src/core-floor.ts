@@ -1,7 +1,7 @@
 // Minimum versions required by this checkout; shared by post-merge and doctor.
 export const CORE_FLOORS = { agx: "1.22.8", semlint: "0.2.1" } as const;
 type Tool = keyof typeof CORE_FLOORS;
-type ProbeError = { stderr: string };
+type ProbeError = { stderr: string; timeout?: boolean };
 export type FloorIO = {
   read: (tool: Tool) => Promise<string | undefined | ProbeError>;
   installed: (tool: Tool) => Promise<boolean | ProbeError>;
@@ -11,13 +11,14 @@ export type FloorIO = {
 async function command(
   args: string[],
   ms: number,
-): Promise<{ code: number; out: string; err: string }> {
+): Promise<{ code: number; out: string; err: string; timeout: boolean }> {
   return Promise.try(async () => {
+    const signal = AbortSignal.timeout(ms);
     const proc = Bun.spawn(args, {
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
-      signal: AbortSignal.timeout(ms),
+      signal,
       killSignal: "SIGKILL",
     });
     const [out, err, code] = await Promise.all([
@@ -25,8 +26,13 @@ async function command(
       new Response(proc.stderr).text(),
       proc.exited,
     ]);
-    return { code, out: out.trim(), err: err.slice(0, 8192) };
-  }).catch(() => ({ code: 127, out: "", err: "" }));
+    return {
+      code,
+      out: out.trim(),
+      err: err.slice(0, 8192),
+      timeout: signal.aborted,
+    };
+  }).catch(() => ({ code: 127, out: "", err: "", timeout: false }));
 }
 
 function trustError(result: {
@@ -45,14 +51,20 @@ export const coreFloorIO: FloorIO = {
       [tool, tool === "agx" ? "-V" : "--version"],
       3000,
     );
+    if (result.timeout) return { stderr: result.err, timeout: true };
     return trustError(result) ?? (result.code === 0 ? result.out : undefined);
   },
   installed: async (tool) => {
     const result = await command(
       ["brew", "list", `fuyutarow/tap/${tool}`],
-      3000,
+      15000,
     );
-    return trustError(result) ?? result.code === 0;
+    return (
+      trustError(result) ??
+      (result.timeout
+        ? { stderr: result.err, timeout: true }
+        : result.code === 0)
+    );
   },
   upgrade: async (tool) => {
     const result = await command(
@@ -107,6 +119,12 @@ export async function checkCoreFloor(
       ok: false,
       detail: `${trustFailure.tool}: untrusted tap fuyutarow/tap; repair: brew trust fuyutarow/tap`,
       fix: "brew trust fuyutarow/tap",
+    };
+  const timeout = observations.find((item) => item.error?.timeout === true);
+  if (timeout !== undefined)
+    return {
+      ok: false,
+      detail: `${timeout.tool}: probe timed out; retry the check`,
     };
   const invalid = observations.find(
     (item) => !item.installed || item.version === undefined,

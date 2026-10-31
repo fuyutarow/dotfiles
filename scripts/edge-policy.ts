@@ -11,10 +11,11 @@
 import { access, copyFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cli } from "cleye";
+import { consola } from "consola";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 
 const die = (msg: string, code = 2): never => {
-  console.error(`edge-policy: ${msg}`);
+  consola.error(`edge-policy: ${msg}`);
   process.exit(code);
 };
 const rejectPrototypeFlag = (type: string, flag: string): void => {

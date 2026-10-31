@@ -1,11 +1,12 @@
 import { $ } from "bun";
+import { consola } from "consola";
 
 // The machine enforcement of INV-6 (no implicit global toolchain — see zsh/zshenv). The
 // timeout is an assertion here too — the last case boots the user's whole login chain.
 const to = Bun.which("timeout") ?? Bun.which("gtimeout");
 
 if (to === null) {
-  console.log(
+  consola.warn(
     "⚠️  no timeout(1) on PATH — running unbounded; a wedged login shell will block instead of failing",
   );
   const res = await $`zsh zsh/tests/mise-scope.test.zsh`.nothrow();

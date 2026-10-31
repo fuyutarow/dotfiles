@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, opendir, readFile, readdir, readlink } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
+import { createConsola } from "consola";
 import {
   err,
   fromAsyncThrowable,
@@ -37,6 +38,8 @@ import {
   saveDecision,
   readDecision,
 } from "./lib/decision-record.ts";
+
+const consola = createConsola({ level: 4 });
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);
@@ -877,7 +880,7 @@ export async function gpuAdmissionRefusal(
     if (record !== undefined) {
       record.reason = "dxg-suspected";
     }
-    console.error(
+    consola.warn(
       `WARN dxg-suspected: ${suspicion}; admitting subject to owner/capacity checks`,
     );
   }
@@ -979,7 +982,7 @@ export async function gpuAdmissionRefusal(
   for (const { pid } of sampled.processes) {
     const problem = await holderIdentityProblem(sampled, pid);
     if (problem !== undefined)
-      console.error(
+      consola.warn(
         `WARN GPU holder check is advisory, not refusing: ${problem}`,
       );
   }
@@ -1539,7 +1542,7 @@ if (import.meta.main) {
   result.match(
     (code) => process.exit(code),
     (error) => {
-      process.stderr.write(
+      consola.error(
         `${error instanceof UsageError ? "USAGE" : "ERROR"}: ${error.message}\n`,
       );
       process.exit(error instanceof UsageError ? 2 : 70);

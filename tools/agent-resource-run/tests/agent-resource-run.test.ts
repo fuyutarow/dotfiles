@@ -27,19 +27,20 @@ import {
 async function advisoryAdmission(
   ...args: Parameters<typeof gpuAdmissionRefusal>
 ) {
-  const warning = spyOn(console, "error").mockImplementation(() => {});
+  const chunks: string[] = [];
+  const warning = spyOn(process.stderr, "write").mockImplementation((chunk) => {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk));
+    return true;
+  });
   using _restoreWarning = {
     [Symbol.dispose]: () => {
       warning.mockRestore();
     },
   };
   expect(await gpuAdmissionRefusal(...args)).toBeUndefined();
-  const lines = warning.mock.calls.map(([line]) => String(line));
-  for (const line of lines)
-    expect(line).toStartWith(
-      "WARN GPU holder check is advisory, not refusing: ",
-    );
-  return lines.join("\n");
+  const lines = chunks.join("");
+  expect(lines).toContain("WARN GPU holder check is advisory, not refusing: ");
+  return lines;
 }
 
 const runtimeBase = process.env["AGX_TEST_RUNTIME_DIR"] ?? "/tmp";

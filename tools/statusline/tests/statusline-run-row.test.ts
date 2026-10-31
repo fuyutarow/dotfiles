@@ -1,3 +1,5 @@
+import { createConsola } from "consola";
+
 import { agxJobRunsAsync } from "./support/job-runs.ts";
 import { afterAll, describe, expect, test } from "bun:test";
 import {
@@ -1525,7 +1527,9 @@ describe("legacy enriched Run row", () => {
     expect(first.map(({ ticket }) => ticket)).toEqual(["a"]);
     expect(second).toEqual(first);
     expect(existsSync(log)).toBe(false);
-    console.info(`agx snapshot read warm cache: ${warmMs.toFixed(2)}ms`);
+    createConsola({ level: 4 }).info(
+      `agx snapshot read warm cache: ${warmMs.toFixed(2)}ms`,
+    );
   });
 
   // These fixtures carry doctor's orphaned classification, regardless of age or judgment.

@@ -178,6 +178,7 @@
       "name": "@dotfiles/obsidian",
       "dependencies": {
         "cleye": "2.6.0",
+        "consola": "3.4.2",
         "neverthrow": "8.2.0",
         "obsidian": "1.5.7",
       },
@@ -211,6 +212,7 @@
       "dependencies": {
         "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
+        "consola": "3.4.2",
         "neverthrow": "8.2.0",
       },
     },
@@ -388,6 +390,9 @@
         "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
         "neverthrow": "8.2.0",
+      },
+      "devDependencies": {
+        "consola": "3.4.2",
       },
     },
     "tools/storage-headroom": {

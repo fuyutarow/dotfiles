@@ -422,7 +422,7 @@ async function landHere(
         `  or:   ${isUrl(target) ? "o" : "oo"} --here ${isUrl(target) ? "<url>" : "<path>"}  opens it on this machine instead`,
       ].join("\n"),
     );
-    if (isUrl(target)) process.stdout.write(`${target}\n`);
+    if (isUrl(target)) process.stdout.write(target + "\n");
     return false;
   }
   if (why !== undefined) consola.error(`smart-open: ${why} — opening here`);

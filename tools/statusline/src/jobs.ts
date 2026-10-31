@@ -1,3 +1,7 @@
+import { constants } from "node:fs";
+import { open } from "node:fs/promises";
+import { basename, dirname } from "node:path";
+import { jsonOf, z } from "./zod.ts";
 import { execAsyncBounded } from "./bounded.ts";
 import { DIM, RST } from "./ansi.ts";
 import { pad2 } from "./prompt-stamp.ts";
@@ -15,7 +19,7 @@ export interface Admitted {
 // mentions agent-resource-run would report itself as a running job.
 const RUNTIME = new Set(["bun", "node", "deno", "taskset", "systemd-run"]);
 // -> the manifest's job name, or undefined when this line is not an admission.
-function admittedName(tok: string[]): string | undefined {
+function admittedManifest(tok: string[]): string | undefined {
   const i = tok.findIndex(
     (t) => t === "agent-resource-run" || t.endsWith("/agent-resource-run"),
   );
@@ -28,11 +32,51 @@ function admittedName(tok: string[]): string | undefined {
       return undefined;
   }
   if (tok[i + 1] !== "--manifest") return undefined;
-  const name = (tok[i + 2] ?? "")
-    .split("/")
-    .pop()
-    ?.replace(/\.resource\.json$/u, "");
-  return name === "" ? undefined : name;
+  const path = tok[i + 2];
+  return path === "" ? undefined : path;
+}
+// Keep the scan responsive even for a slow filesystem; never read more than 64 KiB.
+const MANIFEST_LIMIT = 64 * 1024;
+const MANIFEST_TIMEOUT_MS = 100;
+const ManifestLabel = jsonOf(
+  z.object({ job_id: z.string().trim().min(1).max(80) }),
+);
+async function manifestLabel(path: string): Promise<string> {
+  const fallback = basename(dirname(path));
+  const read = async (): Promise<string> => {
+    await using file = await open(
+      path,
+      constants.O_RDONLY | constants.O_NONBLOCK,
+    );
+    const buffer = Buffer.alloc(MANIFEST_LIMIT + 1);
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+    if (bytesRead > MANIFEST_LIMIT) return fallback;
+    const parsed = ManifestLabel.safeParse(
+      buffer.subarray(0, bytesRead).toString("utf8"),
+    );
+    return parsed.success ? parsed.data.job_id : fallback;
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    read().catch(() => fallback),
+    new Promise<string>((resolve) => {
+      timer = setTimeout(() => {
+        resolve(fallback);
+      }, MANIFEST_TIMEOUT_MS);
+    }),
+  ]).finally(() => {
+    clearTimeout(timer);
+  });
+}
+function cachedLabel(
+  path: string,
+  labels: Map<string, Promise<string>>,
+): Promise<string> {
+  const existing = labels.get(path);
+  if (existing !== undefined) return existing;
+  const label = manifestLabel(path);
+  labels.set(path, label);
+  return label;
 }
 // ps's `etime`, "[[dd-]hh:]mm:ss" on both procps and BSD ps, in seconds. A bare number is taken as
 // seconds (etimes' shape), so a recorded etimes line still reads. undefined: not that shape.
@@ -61,17 +105,26 @@ export async function scanOutOfHarnessAsync(): Promise<{
     return { jobs: [], orphans: 0, failed: rawResult.error.why };
   const jobs: Admitted[] = [];
   let orphans = 0;
+  const labels = new Map<string, Promise<string>>();
+  const pending: Promise<void>[] = [];
   for (const line of rawResult.value.split("\n")) {
     const m = line.match(/^\s*(\d+)\s+([\d:-]+)\s+(\S.*)$/u);
     if (m === null) continue;
     const [, ppid, etime, args] = m;
     if (ppid === undefined || etime === undefined || args === undefined)
       continue;
-    const name = admittedName(args.split(/\s+/u));
+    const path = admittedManifest(args.split(/\s+/u));
     const secs = etimeSecs(etime);
-    if (name !== undefined && secs !== undefined) jobs.push({ name, secs });
-    else if (ppid === "1" && args.includes("/scratchpad/")) orphans++;
+    if (path !== undefined && secs !== undefined) {
+      const label = cachedLabel(path, labels);
+      pending.push(
+        label.then((name) => {
+          jobs.push({ name, secs });
+        }),
+      );
+    } else if (ppid === "1" && args.includes("/scratchpad/")) orphans++;
   }
+  await Promise.all(pending);
   return { jobs, orphans };
 }
 // elapsed: <h>h<mm>m past an hour, else <m>m<ss>s — same shape as the rate-limit countdowns.

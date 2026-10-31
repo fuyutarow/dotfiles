@@ -1370,6 +1370,37 @@ describe("legacy enriched Run row", () => {
     expect(out).not.toContain("Job: 2 (a, b)");
   });
 
+  test("Job uses manifest job_id and falls back to the parent directory", async () => {
+    const root = join(scratch, "manifest-labels");
+    for (const dir of ["named", "missing-field", "unreadable"]) {
+      mkdirSync(join(root, dir), { recursive: true });
+    }
+    writeFileSync(
+      join(root, "named", "resource.json"),
+      JSON.stringify({ job_id: "training-run" }),
+    );
+    writeFileSync(
+      join(root, "missing-field", "resource.json"),
+      JSON.stringify({ name: "ignored" }),
+    );
+    const ps = [
+      `9 00:30 agent-resource-run --manifest ${join(root, "named", "resource.json")}`,
+      `9 00:20 agent-resource-run --manifest ${join(root, "missing-field", "resource.json")}`,
+      `9 00:10 agent-resource-run --manifest ${join(root, "unreadable", "resource.json")}`,
+    ].join("\n");
+    const out = await render(
+      join(scratch, "manifest-label-render"),
+      undefined,
+      undefined,
+      "[]",
+      ps,
+      join(scratch, "manifest-label-home"),
+    );
+    expect(out).toContain(
+      "Job: training-run 0m30s missing-field 0m20s unreadable 0m10s",
+    );
+  });
+
   test("Job displays admitted compute jobs and orphans only", async () => {
     const out = await render(
       join(scratch, "job-compute-only"),
@@ -1379,7 +1410,7 @@ describe("legacy enriched Run row", () => {
       "1 00:10:00 agent-resource-run --manifest /tmp/compute.resource.json\n1 00:02:00 /tmp/scratchpad/orphan",
       join(scratch, "job-home"),
     );
-    expect(out).toContain("Job: compute 10m00s orphan×1");
+    expect(out).toContain("Job: tmp 10m00s orphan×1");
     expect(
       out.split("\n").find((line) => line.startsWith("Job:")),
     ).not.toContain("agx");
@@ -1407,7 +1438,7 @@ describe("legacy enriched Run row", () => {
       ps.toReversed().join("\n"),
       join(scratch, "job-fmt-home-b"),
     );
-    const line = "Job: job2610-modtest-gpu-3g 0m32s cpu 0m22s";
+    const line = "Job: tmp 0m32s tmp 0m22s";
     expect(first).toContain(line);
     expect(reversed).toContain(line);
     expect(first).not.toMatch(/cpu\+1/u);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.18 — 2026-10-31
+
+- Show admitted job IDs from resource manifests in the Job row.
+
 ## 0.22.17 — 2026-10-31
 
 - Show Linux user block quotas in the disk status.

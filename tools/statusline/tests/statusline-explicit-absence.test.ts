@@ -330,7 +330,7 @@ describe("statusline other rows", () => {
       const bin = binWith({
         ps: `echo '    9  ${etime} /x/agent-resource-run --manifest /m/jobx.resource.json'`,
       });
-      expect(render({ bin }).text).toContain(`Job: jobx ${shown}`);
+      expect(render({ bin }).text).toContain(`Job: m ${shown}`);
     },
     SLOW,
   );
@@ -349,7 +349,7 @@ describe("statusline other rows", () => {
         "echo '    1  300 /x/scratchpad/leak.sh'",
     });
     const text = render({ bin }).text;
-    expect(text).toContain("Job: jobx 2m00s orphan×1");
+    expect(text).toContain("Job: m 2m00s orphan×1");
     expect(text).not.toContain("det×");
   });
 

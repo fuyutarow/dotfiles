@@ -364,7 +364,7 @@ exec "${process.execPath}" -e '${AGX_FIXTURE_RUNNER}'`,
     );
     fake(
       "ps",
-      "echo '9 02:00 /x/agent-resource-run --manifest /m/job.resource.json'\necho '1 00:30 /x/scratchpad/leak'",
+      "echo '9 02:00 /x/agent-resource-run --manifest /m/job/resource.json'\necho '1 00:30 /x/scratchpad/leak'",
     );
     fake(
       "vm_stat",

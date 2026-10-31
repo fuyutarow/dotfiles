@@ -19,18 +19,23 @@ import {
 const roots: string[] = [];
 const ESC = String.fromCodePoint(27);
 const NOW = 1791496800;
-async function fixture(): Promise<{ root: string; file: string }> {
-  const root = await mkdtemp(join(tmpdir(), "statusline-codex-"));
-  roots.push(root);
-  const day = Temporal.Instant.fromEpochMilliseconds(NOW * 1000)
-    .toZonedDateTimeISO("Asia/Tokyo")
+function sessionDayDirectory(root: string, nowMs: number): string {
+  const day = Temporal.Instant.fromEpochMilliseconds(nowMs)
+    .toZonedDateTimeISO("UTC")
     .toPlainDate();
-  const dir = join(
+  return join(
     root,
     String(day.year),
     String(day.month).padStart(2, "0"),
     String(day.day).padStart(2, "0"),
   );
+}
+async function fixture(
+  nowMs = NOW * 1000,
+): Promise<{ root: string; file: string }> {
+  const root = await mkdtemp(join(tmpdir(), "statusline-codex-"));
+  roots.push(root);
+  const dir = sessionDayDirectory(root, nowMs);
   await mkdir(dir, { recursive: true });
   return { root, file: join(dir, "rollout-1.jsonl") };
 }
@@ -225,8 +230,8 @@ test("live usage tail skips a partial first line", async () => {
 });
 
 test("account usage survives newer empty sessions, pinned sessions, and null rate events", async () => {
-  const { root, file } = await fixture();
-  const now = Temporal.Now.instant().epochMilliseconds;
+  const now = NOW * 1000;
+  const { root, file } = await fixture(now);
   const timestamp = Temporal.Instant.fromEpochMilliseconds(
     now - 1000,
   ).toString();
@@ -245,13 +250,7 @@ test("account usage survives newer empty sessions, pinned sessions, and null rat
     }) +
       '\n{"type":"event_msg","payload":{"type":"token_count","rate_limits":null}}\n',
   );
-  const day = Temporal.Now.plainDateISO();
-  const dir = join(
-    root,
-    String(day.year),
-    String(day.month).padStart(2, "0"),
-    String(day.day).padStart(2, "0"),
-  );
+  const dir = sessionDayDirectory(root, now);
   await mkdir(dir, { recursive: true });
   await writeFile(
     join(dir, "rollout-new-empty-session.jsonl"),
@@ -259,7 +258,7 @@ test("account usage survives newer empty sessions, pinned sessions, and null rat
   );
   for (const session of [undefined, "empty-session"]) {
     for (let i = 0; i < 3; i++) {
-      const result = await readCodexRate(root, session);
+      const result = await readCodexRate(root, session, now);
       expect(
         result.isOk()
           ? result.value?.windows.find((value) => value.minutes === 10080)

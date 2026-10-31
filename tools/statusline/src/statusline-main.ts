@@ -457,7 +457,7 @@ if (!codexMode) {
   }
   const { ClaudeStatuslineInputSchema } =
     await import("./adapters/claude-statusline.ts");
-  const payload = ClaudeStatuslineInputSchema.safeParse(json.data);
+  const payload = await ClaudeStatuslineInputSchema.safeParseAsync(json.data);
   if (!payload.success) {
     const issue = payload.error.issues[0];
     const path = (issue?.path ?? []).map(String).join(".");

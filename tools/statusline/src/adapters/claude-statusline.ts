@@ -83,7 +83,7 @@ export const ClaudeStatuslineInputSchema = z
     ),
     worktree: maybe(z.object({ name: maybe(z.string()) })),
   })
-  .transform((input): SessionStatus => ({
+  .transform(async (input): Promise<SessionStatus> => ({
     cwd:
       input.cwd !== undefined && input.cwd !== ""
         ? input.cwd
@@ -100,7 +100,7 @@ export const ClaudeStatuslineInputSchema = z
         : {
             inputTokens: contextTokens(input.context_window),
             usedPercent: input.context_window.used_percentage,
-            compactWindow: claudeTranscriptWindow(
+            compactWindow: await claudeTranscriptWindow(
               input.transcript_path,
               input.session_id,
             ),

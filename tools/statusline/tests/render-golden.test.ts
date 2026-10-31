@@ -13,7 +13,7 @@ const ANSI = new RegExp(`${String.fromCodePoint(27)}\\[[0-9;]*m`, "gu");
 describe("statusline render golden", () => {
   test("fixed collector results keep the rendered rows unchanged", async () => {
     const sessionId = "fixture-session";
-    const parsed = ClaudeStatuslineInputSchema.safeParse({
+    const parsed = await ClaudeStatuslineInputSchema.safeParseAsync({
       cwd: "/fixture/project",
       session_id: sessionId,
       model: { display_name: "Opus" },

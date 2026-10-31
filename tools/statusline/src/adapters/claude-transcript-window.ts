@@ -1,18 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import {
-  closeSync,
-  fstatSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  readSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { closeSync, fstatSync, mkdirSync, openSync, readSync } from "node:fs";
+import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { fromThrowable, jsonOf, z } from "../zod.ts";
+import { jsonOf, z } from "../zod.ts";
 
 const SCAN_BYTES = 8 * 1024 * 1024;
 const LINE_BYTES = 64 * 1024;
@@ -69,12 +60,10 @@ function scanBytes(state: State, bytes: Buffer): void {
   } else state.partial = remainder.toString("base64");
 }
 
-function readState(path: string): State | undefined {
-  return fromThrowable(() => {
-    // sync-ok: The small state file is read at the statusline stdin boundary.
-    if (statSync(path).size > LINE_BYTES * 2 + 4096) return void 0;
-    // sync-ok: State reads are bounded by the size check above.
-    const parsed = jsonOf(stateSchema).safeParse(readFileSync(path, "utf8"));
+async function readState(path: string): Promise<State | undefined> {
+  return Promise.try(async () => {
+    if ((await stat(path)).size > LINE_BYTES * 2 + 4096) return void 0;
+    const parsed = jsonOf(stateSchema).safeParse(await readFile(path, "utf8"));
     if (!parsed.success) return void 0;
     const state = parsed.data;
     if (
@@ -83,18 +72,19 @@ function readState(path: string): State | undefined {
     )
       return void 0;
     return state;
-  })().unwrapOr(undefined);
+  }).catch(() => void 0);
 }
 
-function saveState(path: string, state: State): void {
+async function saveState(path: string, state: State): Promise<void> {
   const temp = `${path}.${randomUUID()}.tmp`;
-  // sync-ok: Small per-session state is atomically written at the stdin boundary.
-  writeFileSync(temp, JSON.stringify(state), { mode: 0o600 });
-  // sync-ok: Rename publishes the complete state atomically.
-  renameSync(temp, path);
+  await writeFile(temp, JSON.stringify(state), { mode: 0o600 });
+  await rename(temp, path);
 }
 
-function scan(path: string, statePath: string): number | undefined {
+async function scan(
+  path: string,
+  statePath: string,
+): Promise<number | undefined> {
   // sync-ok: Open the transcript at the synchronous stdin boundary.
   const fd = openSync(path, "r");
   using _file = {
@@ -105,7 +95,7 @@ function scan(path: string, statePath: string): number | undefined {
   };
   // sync-ok: Identity and size determine whether scanning can resume.
   const info = fstatSync(fd);
-  const previous = readState(statePath);
+  const previous = await readState(statePath);
   const state: State =
     previous !== undefined &&
     previous.path === path &&
@@ -129,14 +119,14 @@ function scan(path: string, statePath: string): number | undefined {
   scanBytes(state, bytes.subarray(0, count));
   state.offset += count;
   state.size = info.size;
-  saveState(statePath, state);
+  await saveState(statePath, state);
   return state.offset === info.size ? state.window : undefined;
 }
 
-export function claudeTranscriptWindow(
+export async function claudeTranscriptWindow(
   path: string | undefined,
   sessionId: string | undefined,
-): number | undefined {
+): Promise<number | undefined> {
   if (
     path === undefined ||
     path === "" ||
@@ -144,7 +134,7 @@ export function claudeTranscriptWindow(
     sessionId === ""
   )
     return void 0;
-  return fromThrowable(() => {
+  return Promise.try(async () => {
     const root = join(
       process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"),
       "statusline",
@@ -153,5 +143,5 @@ export function claudeTranscriptWindow(
     mkdirSync(root, { recursive: true, mode: 0o700 });
     const key = createHash("sha256").update(sessionId).digest("hex");
     return scan(path, join(root, `claude-compact-${key}.json`));
-  })().unwrapOr(undefined);
+  }).catch(() => void 0);
 }

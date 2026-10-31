@@ -13,7 +13,7 @@ const directory = mkdtempSync(
   join(process.env["AGX_RUN_DIR"] ?? tmpdir(), "compact-test-"),
 );
 
-function parse(
+async function parse(
   settings: string,
   model = "claude-opus-5-5",
   modelWindow?: number,
@@ -26,7 +26,7 @@ function parse(
   process.env["XDG_STATE_HOME"] = directory;
   const previous = process.env["CLAUDE_CONFIG_DIR"];
   process.env["CLAUDE_CONFIG_DIR"] = directory;
-  const parsed = ClaudeStatuslineInputSchema.safeParse({
+  const parsed = await ClaudeStatuslineInputSchema.safeParseAsync({
     session_id: sessionId,
     model: { id: model },
     transcript_path: transcript,
@@ -50,12 +50,14 @@ describe("Claude auto-compact window", () => {
   const settings = JSON.stringify({
     modelSettings: { "claude-opus-5-5": { autoCompactWindow: 400000 } },
   });
-  test("matches model and displays usage against its window", () => {
-    const context = parse(
-      settings,
-      "claude-opus-5-5[1m]",
-      1000000,
-      join(import.meta.dir, "fixtures/claude-autocompact.jsonl"),
+  test("matches model and displays usage against its window", async () => {
+    const context = (
+      await parse(
+        settings,
+        "claude-opus-5-5[1m]",
+        1000000,
+        join(import.meta.dir, "fixtures/claude-autocompact.jsonl"),
+      )
     )?.context;
     expect(context?.compactWindow).toBe(400000);
     expect(
@@ -100,14 +102,14 @@ describe("Claude auto-compact window", () => {
       ),
     ).toBe("Ctx: 120k 12%");
   });
-  test("ignores host settings regardless of their contents", () => {
+  test("ignores host settings regardless of their contents", async () => {
     for (const input of ["{}", settings, "{"]) {
-      const context = parse(input, "claude-sonnet-5-5")?.context;
+      const context = (await parse(input, "claude-sonnet-5-5"))?.context;
       expect(context?.compactWindow).toBeUndefined();
       expect(context?.usedPercent).toBe(12);
     }
   });
-  test("scans older records incrementally and resumes across renders", () => {
+  test("scans older records incrementally and resumes across renders", async () => {
     const path = join(directory, "large.jsonl");
     const command = record("<command-name>/autocompact</command-name>");
     const output = record(
@@ -120,15 +122,15 @@ describe("Claude auto-compact window", () => {
       prefix + command + "\n" + output + "\n" + "x".repeat(300000) + "\n",
     );
     expect(
-      parse(settings, "claude-opus-5-5", 1000000, path, 120000, "large")
+      (await parse(settings, "claude-opus-5-5", 1000000, path, 120000, "large"))
         ?.context?.compactWindow,
     ).toBeUndefined();
     expect(
-      parse(settings, "claude-opus-5-5", 1000000, path, 120000, "large")
+      (await parse(settings, "claude-opus-5-5", 1000000, path, 120000, "large"))
         ?.context?.compactWindow,
     ).toBe(400000);
   });
-  test("rescans replaced transcripts and corrupt state", () => {
+  test("rescans replaced transcripts and corrupt state", async () => {
     const path = join(directory, "replace.jsonl");
     const command = record("<command-name>/autocompact</command-name>");
     const output = (n: number) =>
@@ -137,8 +139,16 @@ describe("Claude auto-compact window", () => {
       );
     writeFileSync(path, [command, output(400), ""].join("\n"));
     expect(
-      parse(settings, "claude-opus-5-5", 1000000, path, 120000, "replace")
-        ?.context?.compactWindow,
+      (
+        await parse(
+          settings,
+          "claude-opus-5-5",
+          1000000,
+          path,
+          120000,
+          "replace",
+        )
+      )?.context?.compactWindow,
     ).toBe(400000);
     const replacement = path + ".new";
     writeFileSync(
@@ -147,13 +157,29 @@ describe("Claude auto-compact window", () => {
     );
     renameSync(replacement, path);
     expect(
-      parse(settings, "claude-opus-5-5", 1000000, path, 120000, "replace")
-        ?.context?.compactWindow,
+      (
+        await parse(
+          settings,
+          "claude-opus-5-5",
+          1000000,
+          path,
+          120000,
+          "replace",
+        )
+      )?.context?.compactWindow,
     ).toBe(600000);
     writeFileSync(path, [command, output(300), ""].join("\n"));
     expect(
-      parse(settings, "claude-opus-5-5", 1000000, path, 120000, "replace")
-        ?.context?.compactWindow,
+      (
+        await parse(
+          settings,
+          "claude-opus-5-5",
+          1000000,
+          path,
+          120000,
+          "replace",
+        )
+      )?.context?.compactWindow,
     ).toBe(300000);
     const key = createHash("sha256").update("replace").digest("hex");
     writeFileSync(
@@ -161,16 +187,24 @@ describe("Claude auto-compact window", () => {
       "{corrupt",
     );
     expect(
-      parse(settings, "claude-opus-5-5", 1000000, path, 120000, "replace")
-        ?.context?.compactWindow,
+      (
+        await parse(
+          settings,
+          "claude-opus-5-5",
+          1000000,
+          path,
+          120000,
+          "replace",
+        )
+      )?.context?.compactWindow,
     ).toBe(300000);
     expect(
-      parse(settings, "claude-opus-5-5", 1000000, path + "-missing")?.context
-        ?.compactWindow,
+      (await parse(settings, "claude-opus-5-5", 1000000, path + "-missing"))
+        ?.context?.compactWindow,
     ).toBeUndefined();
   });
   test("dataframe computes the displayed percentage from the parsed window", async () => {
-    const session = parse(
+    const session = await parse(
       settings,
       "claude-opus-5-5",
       1000000,
@@ -210,7 +244,7 @@ describe("Claude auto-compact window", () => {
       },
     });
     expect(ctxSegment(frame).replaceAll(ansi, "")).toBe("Ctx: 30% (120k/400k)");
-    const modelOnly = parse(
+    const modelOnly = await parse(
       settings,
       "claude-opus-5-5",
       1000000,
@@ -253,7 +287,7 @@ describe("Claude auto-compact window", () => {
       "Ctx: 95% (953k/1M)",
     );
     expect(
-      parse("{}", "claude-opus-5-5", 0)?.context?.modelWindow,
+      (await parse("{}", "claude-opus-5-5", 0))?.context?.modelWindow,
     ).toBeUndefined();
   });
 });

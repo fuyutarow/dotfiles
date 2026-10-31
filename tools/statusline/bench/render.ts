@@ -44,7 +44,9 @@ if (!json.success) {
   process.stderr.write(`invalid benchmark fixture JSON: ${fixturePath}\n`);
   process.exit(1);
 }
-const parsedFixture = ClaudeStatuslineInputSchema.safeParse(json.data);
+const parsedFixture = await ClaudeStatuslineInputSchema.safeParseAsync(
+  json.data,
+);
 if (!parsedFixture.success) {
   process.stderr.write(`invalid benchmark fixture shape: ${fixturePath}\n`);
   process.exit(1);

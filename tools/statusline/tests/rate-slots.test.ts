@@ -67,7 +67,7 @@ const quietSources = {
 async function row(payload: unknown = {}, options: BuildDataframeOptions = {}) {
   const fieldStoreRoot = await mkdtemp(join(tmpdir(), "rate-slot-fields-"));
   roots.push(fieldStoreRoot);
-  const parsed = ClaudeStatuslineInputSchema.safeParse(payload);
+  const parsed = await ClaudeStatuslineInputSchema.safeParseAsync(payload);
   expect(parsed.success).toBe(true);
   if (!parsed.success) return "";
   return plain(

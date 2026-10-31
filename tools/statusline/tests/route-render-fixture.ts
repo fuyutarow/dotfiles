@@ -6,7 +6,7 @@ import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.t
 import { agxRouteRunsAsync } from "../src/dispatch-runs.ts";
 import { render } from "../src/format.ts";
 import { jsonOf } from "../src/zod.ts";
-const data = jsonOf(ClaudeStatuslineInputSchema).safeParse(
+const data = await jsonOf(ClaudeStatuslineInputSchema).safeParseAsync(
   await Bun.stdin.text(),
 );
 if (!data.success) process.exit(2);

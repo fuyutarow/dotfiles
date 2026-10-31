@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.14 — 2026-10-31
+
+- Read Claude transcript state asynchronously.
+
 ## 0.22.13 — 2026-10-31
 
 - Run the bounded host memory subprocess asynchronously.

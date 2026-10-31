@@ -753,7 +753,7 @@ export async function missingSkillHelpers(
 }
 
 export async function checkSkillHelperPaths(ctx: Ctx): Promise<Finding> {
-  const repos = registeredRepos(
+  const repos = await registeredRepos(
     ctx.home,
     process.env["WORKSPACE_ROOT"] ?? join(ctx.home, "Workspace"),
   );

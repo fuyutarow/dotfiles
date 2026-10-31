@@ -21,7 +21,7 @@ if (!(await attempt(() => access(check))).ok) {
 
 const root =
   process.env["WORKSPACE_ROOT"] ?? `${process.env["HOME"]}/Workspace`;
-const dirs = registeredRepos(process.env["HOME"] ?? "", root);
+const dirs = await registeredRepos(process.env["HOME"] ?? "", root);
 
 let rc = 0;
 for (const d of dirs) {

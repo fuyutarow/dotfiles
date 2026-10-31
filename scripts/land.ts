@@ -607,7 +607,7 @@ export async function removedCommandCallers(
       new Error("repo-retrieve is required for removal caller checks"),
     );
   const callers = new Set<string>();
-  const searches = registeredRepos(home, workspace).flatMap((repo) =>
+  const searches = (await registeredRepos(home, workspace)).flatMap((repo) =>
     pending.map((name) => ({ repo, name })),
   );
   for (const { repo, name } of searches) {

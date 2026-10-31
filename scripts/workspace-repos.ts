@@ -1,18 +1,28 @@
-import { existsSync, readdirSync } from "node:fs";
+import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 /** The shared repo set used by repos:audit and the helper-path doctor check. */
-export function registeredRepos(
+async function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
+export async function registeredRepos(
   home: string,
   workspace = join(home, "Workspace"),
-): string[] {
+): Promise<string[]> {
   const candidates = [join(home, "dotfiles")];
-  if (existsSync(workspace)) {
+  if (await exists(workspace)) {
     candidates.push(
-      ...readdirSync(workspace, { withFileTypes: true })
+      ...(await readdir(workspace, { withFileTypes: true }))
         .filter((entry) => entry.isDirectory())
         .map((entry) => join(workspace, entry.name)),
     );
   }
-  return candidates.filter((path) => existsSync(join(path, ".git")));
+  const present = await Promise.all(
+    candidates.map((path) => exists(join(path, ".git"))),
+  );
+  return candidates.filter((_, index) => present[index] === true);
 }

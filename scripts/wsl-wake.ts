@@ -1,4 +1,5 @@
 import { cli } from "cleye";
+import { consola } from "consola";
 import { managedDistrosFromConfig, type ManagedDistro } from "./wsl-keepalive";
 
 // Start the WSL distro on a Windows host, and leave the GUEST actually reachable, from the Mac.
@@ -249,7 +250,7 @@ if (import.meta.main) {
       new Error(error instanceof Error ? error.message : String(error)),
   );
   if (result instanceof Error) {
-    console.error(`FATAL: ${result.message}`);
+    consola.error(`FATAL: ${result.message}`);
     process.exit(result instanceof UsageError ? 2 : 1);
   }
   process.exit(result);

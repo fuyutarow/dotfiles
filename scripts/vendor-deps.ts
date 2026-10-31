@@ -10,10 +10,10 @@
 // re-exported, so nothing is asserted by hand.
 //
 // Exit: 0 written / up to date · 1 --check found drift (run `mise run vendor:deps`) · 2 FATAL.
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
+import { fromAsyncThrowable } from "neverthrow";
 import { consola } from "consola";
 
 const ROOT = join(import.meta.dir, "..");
@@ -60,11 +60,11 @@ if (argv._.length > 0) {
   process.exit(2);
 }
 
-function version(
+async function version(
   pkg: string,
-): { ok: true; value: string } | { ok: false; error: string } {
-  const result = fromThrowable(() =>
-    readFileSync(join(ROOT, "node_modules", pkg, "package.json"), "utf8"),
+): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
+  const result = await fromAsyncThrowable(() =>
+    readFile(join(ROOT, "node_modules", pkg, "package.json"), "utf8"),
   )();
   if (result.isErr())
     return {
@@ -109,12 +109,12 @@ if (!built.success || built.outputs[0] === undefined) {
   consola.error(`FATAL: bundle failed: ${built.logs.map(String).join("; ")}`);
   process.exit(2);
 }
-const zodVersion = version("zod");
+const zodVersion = await version("zod");
 if (!zodVersion.ok) {
   consola.error(`FATAL: ${zodVersion.error}`);
   process.exit(2);
 }
-const neverthrowVersion = version("neverthrow");
+const neverthrowVersion = await version("neverthrow");
 if (!neverthrowVersion.ok) {
   consola.error(`FATAL: ${neverthrowVersion.error}`);
   process.exit(2);
@@ -126,17 +126,20 @@ const committedJs = Bun.file(JS_PATH);
 const committedBanner =
   committedJs.size === 0
     ? undefined
-    : readFileSync(JS_PATH, "utf8").split("\n", 1)[0];
+    : (await readFile(JS_PATH, "utf8")).split("\n", 1)[0];
 const committedBunVersion = committedBanner?.match(/\bBun@([^\s;]+)/u)?.[1];
 
 const files = [
   { path: JS_PATH, text: js },
   { path: join(OUT_DIR, "deps.d.ts"), text: DTS },
 ];
-const drift = files.filter((f) => {
-  const have = Bun.file(f.path);
-  return have.size === 0 || readFileSync(f.path, "utf8") !== f.text;
-});
+const driftChecks = await Promise.all(
+  files.map(async (f) => {
+    const have = Bun.file(f.path);
+    return have.size === 0 || (await readFile(f.path, "utf8")) !== f.text;
+  }),
+);
+const drift = files.filter((_, index) => driftChecks[index] === true);
 
 if (argv.flags.check) {
   if (drift.length === 0) {

@@ -1,0 +1,66 @@
+{
+  "processes": {
+    "w9:p1N": {
+      "result": {
+        "process_info": {
+          "foreground_processes": [{ "pid": 1105305, "name": "claude" }]
+        }
+      }
+    },
+    "w9:pOther": {
+      "result": {
+        "process_info": {
+          "foreground_processes": [{ "pid": 2200001, "name": "claude" }]
+        }
+      }
+    }
+  },
+  "parents": "1105305 100\n1098612 1105305\n2200001 200",
+  "snapshot": {
+    "schema": 2,
+    "at": "2026-10-31T05:40:01.498782683Z",
+    "window_ms": 1000,
+    "host": {
+      "cpu_pct": 100,
+      "cores": 1,
+      "ram_bytes": 0,
+      "ram_total_bytes": 0,
+      "vram_bytes": null,
+      "vram_total_bytes": null
+    },
+    "agx": "ok",
+    "sessions": [
+      {
+        "session_id": "c602d8dc-0a46-438f-aca5-88a88ff0f0dd",
+        "pid": 1105305,
+        "vendor": "claude",
+        "cpu_pct": 73,
+        "ram_bytes": 1916280832,
+        "vram_bytes": null,
+        "workers": {
+          "count": 0,
+          "cpu_pct": 0,
+          "ram_bytes": 0,
+          "vram_bytes": null
+        }
+      }
+    ],
+    "unresolved_agents": [
+      {
+        "pid": 1098612,
+        "vendor": "claude",
+        "cpu_pct": 19,
+        "ram_bytes": 2147483648,
+        "vram_bytes": null
+      },
+      {
+        "pid": 2200001,
+        "vendor": "claude",
+        "cpu_pct": 88,
+        "ram_bytes": 3221225472,
+        "vram_bytes": null
+      }
+    ],
+    "unowned": []
+  }
+}

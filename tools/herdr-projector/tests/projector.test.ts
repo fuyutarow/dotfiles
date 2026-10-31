@@ -19,6 +19,7 @@ import {
   paneResourcePids,
 } from "../src/herdr-projector.ts";
 import u26Witness from "./resource-u26.json" with { type: "json" };
+import ambiguousPaneWitness from "./resource-ambiguous-pane-1031.json" with { type: "json" };
 import { AgentSchema } from "../src/herdr-projector.ts";
 import ownerList from "./owner-list-oct21.json" with { type: "json" };
 import resourceV1 from "./resource-schema1.json" with { type: "json" };
@@ -92,6 +93,53 @@ test("u26 foreground PIDs attribute unresolved Codex and mismatched Claude sessi
   expect(calls[3]).toContain("cpu=cpu:0%");
   expect(calls[3]).toContain("ram=ram 124.7M");
   expect(calls[3]).toContain("workers=w:?");
+});
+
+test("foreground Claude ancestor wins over nested and other-pane Claude rows", async () => {
+  const agents = [
+    { agent: "claude", pane_id: "w9:p1N", tab_id: "same-tree" },
+    { agent: "claude", pane_id: "w9:pOther", tab_id: "other-pane" },
+  ];
+  const processes = new Map(Object.entries(ambiguousPaneWitness.processes));
+  const paneIds = await paneResourcePids(
+    agents,
+    (pane) => Promise.resolve(JSON.stringify(processes.get(pane))),
+    ambiguousPaneWitness.parents,
+  );
+  const root = await mkdtemp(join(tmpdir(), "ambiguous-pane-resource-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
+  };
+  await mkdir(join(root, "dotfiles"), { recursive: true });
+  await Bun.write(
+    join(root, "dotfiles", "agent-cpu.json"),
+    JSON.stringify(ambiguousPaneWitness.snapshot),
+  );
+  const snapshot = await readAgentCpu(
+    { XDG_STATE_HOME: root },
+    Temporal.Instant.from(ambiguousPaneWitness.snapshot.at).epochMilliseconds,
+  );
+  if (snapshot === undefined) expect.unreachable("invalid resource fixture");
+  const calls: string[][] = [];
+  await projectAgents(
+    agents,
+    new Map(),
+    (args) => {
+      calls.push(args);
+      return Promise.resolve(true);
+    },
+    new Map(),
+    new Map(),
+    new Map(),
+    snapshot,
+    paneIds,
+  );
+  const reports = calls.filter((args) => args[1] === "report-metadata");
+  expect(reports[0]).toContain("cpu=cpu:73%");
+  expect(reports[0]).toContain("ram=ram 1.8G");
+  expect(reports[0]).not.toContain("cpu=cpu:? (ambiguous process)");
+  expect(reports[1]).toContain("cpu=cpu:88%");
+  expect(reports[1]).toContain("ram=ram 3G");
 });
 
 test("fleet burst activations coalesce before reading without exhausting protective limits", async () => {

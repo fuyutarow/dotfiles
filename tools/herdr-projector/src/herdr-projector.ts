@@ -109,6 +109,7 @@ const AgentCpuSchema = z.discriminatedUnion("schema", [
 const HERDR_TIMEOUT_MS = 2500;
 type AgentCpuSnapshot = z.output<typeof AgentCpuSchema>;
 type Agent = z.output<typeof AgentSchema>;
+type PaneProcessIds = { pids: number[]; ancestorPids: number[][] };
 type PaneTitleBinding = { sessionId: string; title: CodexNativeTitleRead };
 const PaneProcessInfo = jsonOf(
   z.object({
@@ -143,13 +144,15 @@ export async function paneResourcePids(
   agents: Agent[],
   read: (pane: string) => Promise<string | undefined>,
   parents: string,
-): Promise<Map<string, number[]>> {
+): Promise<Map<string, PaneProcessIds>> {
   const children = new Map<number, number[]>();
+  const parentByPid = new Map<number, number>();
   for (const line of parents.split("\n")) {
     const match = /^\s*(\d+)\s+(\d+)\s*$/u.exec(line);
     if (match === null) continue;
     const pid = Number(match[1]);
     const parent = Number(match[2]);
+    parentByPid.set(pid, parent);
     children.set(parent, [...(children.get(parent) ?? []), pid]);
   }
   const entries = await Promise.all(
@@ -167,7 +170,23 @@ export async function paneResourcePids(
             info.data?.result.process_info.foreground_processes.map(
               (p) => p.pid,
             ) ?? [];
-          return [pane, descendants(roots, children)] as const;
+          const ancestorPids = roots.map((root) => {
+            const ancestors = [root];
+            const seen = new Set(ancestors);
+            let current = root;
+            while (parentByPid.has(current)) {
+              const parent = parentByPid.get(current);
+              if (parent === undefined || seen.has(parent)) break;
+              ancestors.push(parent);
+              seen.add(parent);
+              current = parent;
+            }
+            return ancestors;
+          });
+          return [
+            pane,
+            { pids: descendants(roots, children), ancestorPids },
+          ] as const;
         })(),
       ];
     }),
@@ -845,7 +864,7 @@ export async function projectAgents(
   remoteControl: ReadonlyMap<string, string> = new Map(),
   reasons: ReadonlyMap<string, string> = new Map(),
   cpuSnapshot?: AgentCpuSnapshot,
-  panePids: ReadonlyMap<string, number[]> = new Map(),
+  panePids: ReadonlyMap<string, PaneProcessIds> = new Map(),
 ): Promise<number> {
   let updated = 0;
   for (const agent of agents) {
@@ -913,24 +932,49 @@ export async function projectAgents(
       isAgent && !notApplicable && rc !== "rc:on" && rc !== "rc:off";
     const displayRc =
       unknownRc && (model !== "" || effort !== "") ? "rc?" : marker;
-    const pids = panePids.get(agent.pane_id) ?? [];
+    const processIds = panePids.get(agent.pane_id) ?? {
+      pids: [],
+      ancestorPids: [],
+    };
     const candidates = [
       ...(cpuSnapshot?.sessions ?? []),
       ...(cpuSnapshot?.unresolved_agents ?? []),
-    ].filter((row) => row.vendor === vendor && pids.includes(row.pid));
+    ].filter(
+      (row) => row.vendor === vendor && processIds.pids.includes(row.pid),
+    );
     const fallback =
       cpuSnapshot?.sessions.filter(
         (row) => row.session_id === matchedSessionId && row.vendor === vendor,
       ) ?? [];
     const matches = candidates.length > 0 ? candidates : fallback;
-    const resource = matches.length === 1 ? matches[0] : undefined;
+    const nearestAncestor = matches
+      .map((row) => ({
+        row,
+        distance: Math.min(
+          ...processIds.ancestorPids.flatMap((ancestors) => {
+            const distance = ancestors.indexOf(row.pid);
+            return distance === -1 ? [] : [distance];
+          }),
+          Number.POSITIVE_INFINITY,
+        ),
+      }))
+      .filter((scored) => Number.isFinite(scored.distance))
+      .toSorted((a, b) => a.distance - b.distance);
+    let resource = matches.length === 1 ? matches[0] : undefined;
+    const closest = nearestAncestor[0];
+    if (
+      resource === undefined &&
+      closest !== undefined &&
+      closest.distance !== nearestAncestor[1]?.distance
+    )
+      resource = closest.row;
     const parsedCpu =
       AgentCpuSchemaV1.shape.sessions.element.safeParse(resource);
     const cpuSession = parsedCpu.success ? parsedCpu.data : undefined;
     let resourceReason = "no resource row";
     if (cpuSnapshot === undefined) resourceReason = "snapshot unavailable";
     else if (matches.length > 1) resourceReason = "ambiguous process";
-    else if (pids.length === 0) resourceReason = "no process";
+    else if (processIds.pids.length === 0) resourceReason = "no process";
     const cpuToken =
       resource === undefined
         ? `cpu:? (${resourceReason})`

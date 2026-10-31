@@ -137,7 +137,15 @@ if (rule === 'strict' && code === 'legacy') { process.stderr.write('lint:fixture
   return { root, consumer, temp };
 }
 
-async function syncPathFixture(mode: "pass" | "drift" | "candidate" | "check") {
+async function syncPathFixture(
+  mode:
+    | "pass"
+    | "drift"
+    | "candidate"
+    | "check"
+    | "package-alpha"
+    | "package-candidate",
+) {
   const f = await fixture({ surface: "standard-presets/typescript", gate: "" });
   const repo = join(import.meta.dir, "../..");
   await cp(join(repo, "standard-presets"), join(f.root, "standard-presets"), {
@@ -165,6 +173,13 @@ async function syncPathFixture(mode: "pass" | "drift" | "candidate" | "check") {
     join(f.root, "standard-presets/typescript/package.json"),
     join(f.consumer, "package.json"),
   );
+  if (mode === "package-alpha") {
+    const path = join(f.consumer, "package.json");
+    await writeFile(
+      path,
+      (await readFile(path, "utf8")).replace('    "consola": "3.4.2",\n', ""),
+    );
+  }
   await cp(
     join(f.root, "standard-presets/typescript/tsconfig.json"),
     join(f.consumer, "tsconfig.json"),
@@ -192,30 +207,62 @@ async function syncPathFixture(mode: "pass" | "drift" | "candidate" | "check") {
       join(f.root, "standard-presets/typescript/house.oxlintrc.json"),
       `${house}\n`,
     );
+  if (mode === "package-candidate") {
+    const path = join(f.root, "standard-presets/typescript/package.json");
+    await writeFile(
+      path,
+      (await readFile(path, "utf8")).replace(
+        '    "consola": "3.4.2",',
+        '    "consola": "3.4.2",\n    "new-required-package": "1.0.0",',
+      ),
+    );
+    const manifest = join(f.root, "standard-presets/typescript/preset.toml");
+    await writeFile(
+      manifest,
+      (await readFile(manifest, "utf8")).replace(
+        '"dependencies.consola"',
+        '"dependencies.consola", "dependencies.new-required-package"',
+      ),
+    );
+  }
   return f;
 }
 
-for (const mode of ["pass", "drift", "candidate", "check"] as const) {
+for (const mode of [
+  "pass",
+  "drift",
+  "candidate",
+  "check",
+  "package-alpha",
+  "package-candidate",
+] as const) {
   test(`typescript sync ${mode}`, async () => {
     const f = await syncPathFixture(mode);
     const result = await runConsumerGates(f.root, [
       "standard-presets/typescript/house.oxlintrc.json",
     ]);
     expect(result.ok, result.lines.join("\n")).toBe(
-      mode === "pass" || mode === "drift",
+      mode === "pass" || mode === "drift" || mode === "package-alpha",
     );
     const expected = {
-      drift:
-        "skipped: drifted from presets (house.oxlintrc.json), reconcile in the consumer",
+      drift: "skipped: sync already refuses with current presets",
       pass: "PASS fixture-consumer",
       candidate: "FAIL fixture-consumer",
       check: "FAIL fixture-consumer",
+      "package-alpha": "skipped: sync already refuses with current presets",
+      "package-candidate": "FAIL fixture-consumer",
     };
     expect(result.lines.join("\n")).toContain(expected[mode]);
     if (mode === "candidate")
       expect(result.lines.join("\n")).toContain("sync exit 1");
     if (mode === "check")
       expect(result.lines.join("\n")).toContain("gate.ts exit 7");
+    if (mode === "package-alpha")
+      expect(result.lines.join("\n")).toContain("dependencies.consola");
+    if (mode === "package-candidate")
+      expect(result.lines.join("\n")).toContain(
+        "dependencies.new-required-package",
+      );
   });
 }
 

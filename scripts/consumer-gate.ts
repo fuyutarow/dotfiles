@@ -770,28 +770,24 @@ async function syncTypescript(
     if (!(await Bun.file(join(copy, config)).exists()))
       return `FAIL ${consumer.name}: apply standard-presets/typescript: declared preset directory ${directory} has no config file ${config}`;
   }
-  const registry = `[[consumers]]\nroot = ${JSON.stringify(target)}\nplacement = ${JSON.stringify(consumer.placement ?? DEFAULT_PLACEMENT).replaceAll(":", " =")}\n`;
-  await writeFile(join(candidate, REGISTRY), registry);
-  const sync = (presetRoot: string, dryRun = false) =>
+  const registry = (path: string) =>
+    `[[consumers]]\nroot = ${JSON.stringify(path)}\nplacement = ${JSON.stringify(consumer.placement ?? DEFAULT_PLACEMENT).replaceAll(":", " =")}\n`;
+  await writeFile(join(candidate, REGISTRY), registry(target));
+  const baselineCopy = join(scratch, "baseline-consumer");
+  await copyTree(copy, baselineCopy);
+  const sync = (presetRoot: string, syncTarget: string) =>
     run([
       process.execPath,
       join(presetRoot, "standard-presets/src/cli.ts"),
       "sync",
       "typescript",
       "--to",
-      target,
-      ...(dryRun ? ["--dry-run"] : []),
+      syncTarget,
     ]);
-  const applied = await sync(candidate);
+  const applied = await sync(candidate, target);
   if (applied.ok) return undefined;
   const failure = `FAIL ${consumer.name}: sync ${applied.reason}\n${diagnosticOutput(applied.output)}`;
-  const conflicts = Array.from(
-    applied.output.matchAll(
-      /preset: conflict ([^\n:]+): local changes cannot be reconciled/gu,
-    ),
-    (match) => match[1] ?? "",
-  );
-  if (conflicts.length === 0) return failure;
+  if (!applied.reason.startsWith("exit ")) return failure;
   const revision = await resolveTrunk(root, "alpha");
   const commit = revision.stdout.trim();
   if (!revision.ok || !/^[a-f0-9]{40,64}$/u.test(commit)) return failure;
@@ -802,24 +798,11 @@ async function syncTypescript(
     join(candidate, "node_modules"),
     join(baseline, "node_modules"),
   );
-  await writeFile(join(baseline, REGISTRY), registry);
-  const current = await sync(baseline, true);
-  const drift = conflicts.filter((path) =>
-    current.output.includes(
-      `preset: conflict ${path}: local changes cannot be reconciled`,
-    ),
-  );
-  const candidateCount = [...applied.output.matchAll(/preset: conflict /gu)]
-    .length;
-  const currentCount = [...current.output.matchAll(/preset: conflict /gu)]
-    .length;
-  if (
-    !current.ok &&
-    drift.length === conflicts.length &&
-    candidateCount === drift.length &&
-    currentCount === drift.length
-  )
-    return `SKIP ${consumer.name}: skipped: drifted from presets (${drift.join(", ")}), reconcile in the consumer`;
+  const baselineTarget = join(baselineCopy, directory ?? ".");
+  await writeFile(join(baseline, REGISTRY), registry(baselineTarget));
+  const current = await sync(baseline, baselineTarget);
+  if (!current.ok && current.reason.startsWith("exit "))
+    return `SKIP ${consumer.name}: skipped: sync already refuses with current presets, reconcile in the consumer\n${diagnosticOutput(current.output)}`;
   return failure;
 }
 

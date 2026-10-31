@@ -12,9 +12,9 @@ const toolUseId = strAt(payload, "tool_use_id");
 if (strAt(payload, "tool_name") === "Bash" && toolUseId !== undefined) {
   const dir = stateDir();
   const durationMs = num(at(payload, "duration_ms"));
-  if (durationMs === undefined) discardStart(dir, toolUseId);
+  if (durationMs === undefined) await discardStart(dir, toolUseId);
   else
-    recordEnd(
+    await recordEnd(
       dir,
       toolUseId,
       Temporal.Now.instant().epochMilliseconds,

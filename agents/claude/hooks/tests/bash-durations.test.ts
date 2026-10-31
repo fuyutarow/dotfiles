@@ -41,13 +41,13 @@ describe("duration attribution", () => {
     ["slowcmd; echo done", "echo done"],
     ["slowcmd; head /tmp/input", "head /tmp/input"],
     ["slowcmd; cat /tmp/input | cut -c1-300", "cat /tmp/input | cut -c1-300"],
-  ])("%s does not lend its total to %s", (compound, cheap) => {
+  ])("%s does not lend its total to %s", async (compound, cheap) => {
     const dir = scratch();
     const key = commandKey(compound);
     expect(key).toBeDefined();
     if (key === undefined) return;
     recordStart(dir, "compound", key, 0, exactKey(compound));
-    recordEnd(dir, "compound", 15_000);
+    await recordEnd(dir, "compound", 15_000);
     const cheapKey = commandKey(cheap);
     expect(cheapKey).toBeDefined();
     if (cheapKey === undefined) return;
@@ -60,9 +60,9 @@ describe("duration attribution", () => {
     });
     expect(result.exitCode, result.stderr.toString()).toBe(0);
     expect(result.stdout.toString()).toBe("");
-    expect(judgedMs(dir, cheapKey)).toBeUndefined();
+    expect(await judgedMs(dir, cheapKey)).toBeUndefined();
     // The measured whole compound remains slow, even though its parts are unmeasured.
-    expect(judgedMs(dir, key)).toBe(15_000);
+    expect(await judgedMs(dir, key)).toBe(15_000);
     const repeated = Bun.spawnSync(["bun", HOOK], {
       stdin: new Blob([
         JSON.stringify({
@@ -77,7 +77,7 @@ describe("duration attribution", () => {
     expect(repeated.stdout.toString()).toContain('"permissionDecision":"deny"');
   });
 
-  test("ambiguous legacy samples cannot deny cheap calls; new single-command samples still count", () => {
+  test("ambiguous legacy samples cannot deny cheap calls; new single-command samples still count", async () => {
     const dir = scratch();
     writeFileSync(
       join(dir, "summary.json"),
@@ -91,12 +91,12 @@ describe("duration attribution", () => {
       }),
     );
     for (const key of ["echo", "cut -c1-300", "sed -i", "mise -C"])
-      expect(judgedMs(dir, key), key).toBeUndefined();
-    expect(judgedMs(dir, "bun test")).toBeGreaterThan(5000);
-    expect(judgedMs(dir, "mise run land")).toBe(45_000);
+      expect(await judgedMs(dir, key), key).toBeUndefined();
+    expect(await judgedMs(dir, "bun test")).toBeGreaterThan(5000);
+    expect(await judgedMs(dir, "mise run land")).toBe(45_000);
     recordStart(dir, "new-slow-sed", "sed -i", 0);
-    recordEnd(dir, "new-slow-sed", 12_000);
-    expect(judgedMs(dir, "sed -i")).toBe(12_000);
+    await recordEnd(dir, "new-slow-sed", 12_000);
+    expect(await judgedMs(dir, "sed -i")).toBe(12_000);
   });
 
   test("mise directory flags retain the task identity", () => {
@@ -122,15 +122,15 @@ describe("duration attribution", () => {
     expect(commandKey(command)).toBe(`unparsed:${command}`);
   });
 
-  test("an old pending record cannot be promoted to trusted telemetry", () => {
+  test("an old pending record cannot be promoted to trusted telemetry", async () => {
     const dir = scratch();
     recordStart(dir, "old", "echo", 0);
     writeFileSync(
       join(dir, "pending", "old.json"),
       JSON.stringify({ key: "echo", started: 0 }),
     );
-    expect(recordEnd(dir, "old", 15_000)).toBeUndefined();
-    expect(judgedMs(dir, "echo")).toBeUndefined();
+    expect(await recordEnd(dir, "old", 15_000)).toBeUndefined();
+    expect(await judgedMs(dir, "echo")).toBeUndefined();
   });
 });
 
@@ -164,30 +164,30 @@ describe("commandKey", () => {
 });
 
 describe("recordStart / recordEnd / medianMs", () => {
-  test("a closed record becomes a duration; the median is over the last ten", () => {
+  test("a closed record becomes a duration; the median is over the last ten", async () => {
     const dir = scratch();
     for (const [i, ms] of [1000, 30_000, 20_000].entries()) {
       recordStart(dir, `id${i}`, "mise run commit", 0);
-      expect(recordEnd(dir, `id${i}`, ms)).toBe(ms);
+      expect(await recordEnd(dir, `id${i}`, ms)).toBe(ms);
     }
-    expect(medianMs(dir, "mise run commit")).toBe(20_000);
-    expect(medianMs(dir, "never ran")).toBeUndefined();
+    expect(await medianMs(dir, "mise run commit")).toBe(20_000);
+    expect(await medianMs(dir, "never ran")).toBeUndefined();
   });
 
-  test("an end with no start (a background call) records nothing", () => {
+  test("an end with no start (a background call) records nothing", async () => {
     const dir = scratch();
-    expect(recordEnd(dir, "unknown", 5000)).toBeUndefined();
-    expect(medianMs(dir, "ls")).toBeUndefined();
+    expect(await recordEnd(dir, "unknown", 5000)).toBeUndefined();
+    expect(await medianMs(dir, "ls")).toBeUndefined();
   });
 
-  test("the hook supplied tool duration excludes time spent in the hook harness", () => {
+  test("the hook supplied tool duration excludes time spent in the hook harness", async () => {
     const dir = scratch();
     recordStart(dir, "short", "cat", 0);
-    expect(recordEnd(dir, "short", 8000, 120)).toBe(120);
-    expect(medianMs(dir, "cat")).toBe(120);
+    expect(await recordEnd(dir, "short", 8000, 120)).toBe(120);
+    expect(await medianMs(dir, "cat")).toBe(120);
   });
 
-  test("a PostToolUse event without duration telemetry does not record harness time", () => {
+  test("a PostToolUse event without duration telemetry does not record harness time", async () => {
     const dir = scratch();
     const env = ordinarySessionEnv({ CLAUDE_BASH_DURATIONS_DIR: dir });
     recordStart(dir, "no-duration", "cat", 0);
@@ -198,7 +198,7 @@ describe("recordStart / recordEnd / medianMs", () => {
       env,
       timeout: 30_000,
     });
-    expect(medianMs(dir, "cat")).toBeUndefined();
+    expect(await medianMs(dir, "cat")).toBeUndefined();
   });
 });
 
@@ -221,7 +221,7 @@ describe("the measured rule", () => {
     ).toBeUndefined();
   });
 
-  test("end to end: a measured slow command is denied, a fast one is allowed and measured", () => {
+  test("end to end: a measured slow command is denied, a fast one is allowed and measured", async () => {
     const dir = scratch();
     const env = ordinarySessionEnv({ CLAUDE_BASH_DURATIONS_DIR: dir });
     const hook = (path: string, payload: unknown): string =>
@@ -239,7 +239,7 @@ describe("the measured rule", () => {
     expect(hook(HOOK, first)).toBe("");
     // Claude's duration_ms is tool execution time, excluding hook/harness setup.
     hook(POST, { ...first, duration_ms: 40_000 });
-    expect(medianMs(dir, "mise run commit")).toBeGreaterThan(39_000);
+    expect(await medianMs(dir, "mise run commit")).toBeGreaterThan(39_000);
     // the next commit in front is denied with the measured reason
     const second = {
       tool_name: "Bash",
@@ -252,23 +252,25 @@ describe("the measured rule", () => {
   });
 });
 
-test("one slow latest run is enough: judged by the larger of median and latest", () => {
+test("one slow latest run is enough: judged by the larger of median and latest", async () => {
   const dir = scratch();
   for (const [i, ms] of [500, 600, 700, 120_000].entries()) {
     recordStart(dir, `j${i}`, "example-records leaderboard --all", 0);
-    recordEnd(dir, `j${i}`, ms);
+    await recordEnd(dir, `j${i}`, ms);
   }
-  expect(medianMs(dir, "example-records leaderboard --all")).toBe(650);
-  expect(judgedMs(dir, "example-records leaderboard --all")).toBe(120_000);
+  expect(await medianMs(dir, "example-records leaderboard --all")).toBe(650);
+  expect(await judgedMs(dir, "example-records leaderboard --all")).toBe(
+    120_000,
+  );
 });
 
-test("a compound call first seen as a whole is still sent back when one of its steps is known slow", () => {
+test("a compound call first seen as a whole is still sent back when one of its steps is known slow", async () => {
   expect(
     stepKeys("cd x && f=a.ts && sed -i '' s/a/b/ $f && bun test $f"),
   ).toEqual(["sed -i", "bun test"]);
   const dir = scratch();
   recordStart(dir, "s1", "bun test", 0);
-  recordEnd(dir, "s1", 23_000);
+  await recordEnd(dir, "s1", 23_000);
   const out = Bun.spawnSync(["bun", HOOK], {
     stdin: new Blob([
       JSON.stringify({
@@ -293,10 +295,10 @@ test("the foreground bound is the owner's 5 s", () => {
   ).toBeUndefined();
 });
 
-test("a dispatched worker may keep measured-slow and long-timeout Bash calls in front", () => {
+test("a dispatched worker may keep measured-slow and long-timeout Bash calls in front", async () => {
   const dir = scratch();
   recordStart(dir, "worker-slow", "bun test", 0);
-  recordEnd(dir, "worker-slow", 23_000);
+  await recordEnd(dir, "worker-slow", 23_000);
   const payload = {
     tool_name: "Bash",
     tool_use_id: "worker-next",

@@ -80,7 +80,7 @@ describe("backgroundReason", () => {
 });
 
 describe("operand-sensitive history", () => {
-  test("unrelated local reads and SSH scripts do not inherit a slow compound", () => {
+  test("unrelated local reads and SSH scripts do not inherit a slow compound", async () => {
     const dir = mkdtempSync(join(tmpdir(), "background-shapes-"));
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -92,7 +92,7 @@ describe("operand-sensitive history", () => {
       expect(key).toBeDefined();
       if (key === undefined) continue;
       recordStart(dir, command, key, 0);
-      recordEnd(dir, command, 12_000);
+      await recordEnd(dir, command, 12_000);
     }
     expect(decideWithEnv("ls /tmp; cat /etc/hostname", env)).toBe("");
     expect(decideWithEnv("ssh host 'other command'", env)).toBe("");
@@ -101,7 +101,7 @@ describe("operand-sensitive history", () => {
     );
   });
 
-  test("a recorded long Julia run remains background-only, including in a compound", () => {
+  test("a recorded long Julia run remains background-only, including in a compound", async () => {
     const dir = mkdtempSync(join(tmpdir(), "background-julia-"));
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -112,9 +112,9 @@ describe("operand-sensitive history", () => {
     expect(key).toBeDefined();
     if (key === undefined) return;
     recordStart(dir, "julia", key, 0);
-    recordEnd(dir, "julia", 12_000);
+    await recordEnd(dir, "julia", 12_000);
     recordStart(dir, "fast-exact", exactKey("julia other.jl"), 0);
-    recordEnd(dir, "fast-exact", 100);
+    await recordEnd(dir, "fast-exact", 100);
     expect(decideWithEnv("julia other.jl", env)).toContain(
       '"permissionDecision":"deny"',
     );
@@ -127,7 +127,7 @@ describe("operand-sensitive history", () => {
 describe("slow command attribution", () => {
   test.each(["mise run land -- x", "bun test /tmp/test.ts", "mise install"])(
     "keeps %s slow alone and inside a new compound",
-    (command) => {
+    async (command) => {
       const dir = mkdtempSync(join(tmpdir(), "background-slow-step-"));
       const env: NodeJS.ProcessEnv = {
         ...process.env,
@@ -138,7 +138,7 @@ describe("slow command attribution", () => {
       expect(key).toBeDefined();
       if (key === undefined) return;
       recordStart(dir, "slow", key, 0);
-      recordEnd(dir, "slow", 23_000);
+      await recordEnd(dir, "slow", 23_000);
       for (const next of [
         command,
         `echo ready; ${command}; echo done`,
@@ -180,7 +180,7 @@ describe("small-file viewer history exemption", () => {
     expect(isSmallFileViewer(`cat ${file}`, sub)).toBe(true); // Preserve the original single-file exemption.
   });
 
-  test("coordinator variables, home paths and compound reads ignore slow history; other commands retain it", () => {
+  test("coordinator variables, home paths and compound reads ignore slow history; other commands retain it", async () => {
     const root = realpathSync(
       mkdtempSync(join(tmpdir(), "coordinator-reads-")),
     );
@@ -240,11 +240,11 @@ describe("small-file viewer history exemption", () => {
     for (const key of keys) {
       if (key === undefined) continue;
       recordStart(dir, key, key, 0);
-      recordEnd(dir, key, 7000);
+      await recordEnd(dir, key, 7000);
     }
     for (const [i, command] of denied.entries()) {
       recordStart(dir, `exact-${i}`, exactKey(command), 0);
-      recordEnd(dir, `exact-${i}`, 7000);
+      await recordEnd(dir, `exact-${i}`, 7000);
     }
     for (const command of allowed)
       expect({ command, output: decideWithEnv(command, env) }).toEqual({
@@ -259,7 +259,7 @@ describe("small-file viewer history exemption", () => {
     }
   }, 30_000);
 
-  test("allows small read-only viewers regardless of a slow command history", () => {
+  test("allows small read-only viewers regardless of a slow command history", async () => {
     const root = mkdtempSync(join(tmpdir(), "background-viewers-"));
     const dir = join(root, "history");
     const file = join(root, "small.json");
@@ -267,7 +267,7 @@ describe("small-file viewer history exemption", () => {
     mkdirSync(dir, { recursive: true });
     for (const [i, ms] of [7000, 7000].entries()) {
       recordStart(dir, `cat-${i}`, "cat", 0);
-      recordEnd(dir, `cat-${i}`, ms);
+      await recordEnd(dir, `cat-${i}`, ms);
     }
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -276,7 +276,7 @@ describe("small-file viewer history exemption", () => {
     delete env[AGX_WORKER_ENV];
     for (const key of ["cat", "tail -n", "wc", "jq", "sed -n"]) {
       recordStart(dir, `${key}-slow`, key, 0);
-      recordEnd(dir, `${key}-slow`, 7000);
+      await recordEnd(dir, `${key}-slow`, 7000);
     }
     for (const command of [
       `cat ${file}`,
@@ -290,7 +290,7 @@ describe("small-file viewer history exemption", () => {
     }
   }, 30_000);
 
-  test("exempts the owner's trivial local read and append examples from slow history", () => {
+  test("exempts the owner's trivial local read and append examples from slow history", async () => {
     const root = mkdtempSync(join(tmpdir(), "background-trivial-"));
     const dir = join(root, "history");
     const file = join(root, "small.txt");
@@ -298,7 +298,7 @@ describe("small-file viewer history exemption", () => {
     mkdirSync(dir, { recursive: true });
     for (const key of ["cat", "head", "printf"]) {
       recordStart(dir, key, key, 0);
-      recordEnd(dir, key, 7000);
+      await recordEnd(dir, key, 7000);
     }
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -315,7 +315,7 @@ describe("small-file viewer history exemption", () => {
     }
   }, 30_000);
 
-  test("does not exempt a 5 MiB file, tail -f, or a pipeline from slow history", () => {
+  test("does not exempt a 5 MiB file, tail -f, or a pipeline from slow history", async () => {
     const root = mkdtempSync(join(tmpdir(), "background-viewers-slow-"));
     const dir = join(root, "history");
     const large = join(root, "large.txt");
@@ -329,7 +329,7 @@ describe("small-file viewer history exemption", () => {
       `cat ${small} | wc -c`,
     ].entries()) {
       recordStart(dir, `slow-${i}`, exactKey(command), 0);
-      recordEnd(dir, `slow-${i}`, 7000);
+      await recordEnd(dir, `slow-${i}`, 7000);
     }
     const env: NodeJS.ProcessEnv = {
       ...process.env,

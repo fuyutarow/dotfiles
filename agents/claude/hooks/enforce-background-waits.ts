@@ -529,18 +529,19 @@ const exactKeys = [
   ...(parsedForHistory?.commands.map((c) => exactKey(c.rawWords.join(" "))) ??
     []),
 ];
-const exactMeasured = [...new Set(exactKeys)]
-  .flatMap((k) => {
-    const ms = judgedMs(dir, k);
-    return ms === undefined ? [] : [{ key: k, ms }];
-  })
-  .toSorted((a, b) => b.ms - a.ms)[0];
-const measured = [...new Set(historyShapeKeys(command))]
-  .flatMap((k) => {
-    const ms = judgedMs(dir, k);
-    return ms === undefined ? [] : [{ key: k, ms }];
-  })
-  .toSorted((a, b) => b.ms - a.ms)[0];
+const measuredFor = async (keys: string[]) =>
+  (
+    await Promise.all(
+      [...new Set(keys)].map(async (historyKey) => {
+        const ms = await judgedMs(dir, historyKey);
+        return ms === undefined ? undefined : { key: historyKey, ms };
+      }),
+    )
+  )
+    .filter((entry) => entry !== undefined)
+    .toSorted((a, b) => b.ms - a.ms)[0];
+const exactMeasured = await measuredFor(exactKeys);
+const measured = await measuredFor(historyShapeKeys(command));
 const inner =
   isBash && at(input, "run_in_background") === true
     ? unwaitedJobs(command)

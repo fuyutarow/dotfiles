@@ -9,13 +9,8 @@
 // record a coarse task shape (`mise run commit`, `bun test`, `agx worker run`).
 // Zero-dep (hooks run before node_modules exist): node fs and the vendored zod bundle.
 
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { access, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -133,9 +128,16 @@ const Pending = z.object({
   version: z.literal(2),
 });
 
-const readParsed = <T>(path: string, schema: z.ZodType<T>): T | undefined => {
-  if (!existsSync(path)) return undefined;
-  const parsed = jsonOf(schema).safeParse(readFileSync(path, "utf8"));
+const readParsed = async <T>(
+  path: string,
+  schema: z.ZodType<T>,
+): Promise<T | undefined> => {
+  const exists = await access(path).then(
+    () => true,
+    () => false,
+  );
+  if (!exists) return undefined;
+  const parsed = jsonOf(schema).safeParse(await readFile(path, "utf8"));
   return parsed.success ? parsed.data : undefined;
 };
 const summaryPath = (dir: string): string => join(dir, "summary.json");
@@ -143,8 +145,11 @@ const pendingPath = (dir: string, id: string): string =>
   join(dir, "pending", `${id.replaceAll(/[^A-Za-z0-9_-]/gu, "_")}.json`);
 
 /** PostToolUse did not supply a tool-runtime measurement; discard the start instead of timing hooks. */
-export function discardStart(dir: string, toolUseId: string): void {
-  rmSync(pendingPath(dir, toolUseId), { force: true });
+export async function discardStart(
+  dir: string,
+  toolUseId: string,
+): Promise<void> {
+  await rm(pendingPath(dir, toolUseId), { force: true });
 }
 
 /** PreToolUse: a foreground call of `key` starts now. */
@@ -163,20 +168,20 @@ export function recordStart(
 }
 
 /** PostToolUse: the call ended now; keep its duration. Returns it, or undefined if no start was seen. */
-export function recordEnd(
+export async function recordEnd(
   dir: string,
   toolUseId: string,
   nowMs: number,
   measuredMs?: number,
-): number | undefined {
+): Promise<number | undefined> {
   const path = pendingPath(dir, toolUseId);
-  const pending = readParsed(path, Pending);
+  const pending = await readParsed(path, Pending);
   rmSync(path, { force: true });
   if (pending === undefined) return undefined;
   // Claude's PostToolUse duration_ms measures the tool itself, excluding permission prompts
   // and PreToolUse hooks. Keep the wall-clock interval only as a compatibility fallback.
   const ms = Math.max(0, measuredMs ?? nowMs - pending.started);
-  const summary: Summary = readParsed(summaryPath(dir), Summary) ?? {};
+  const summary: Summary = (await readParsed(summaryPath(dir), Summary)) ?? {};
   // Old samples lack provenance: pipelines and substitutions could have been
   // stored as just `echo`, `cut …` or `sed -i`. Never mix those into new samples.
   const key = `v2:${pending.key}`;
@@ -190,8 +195,11 @@ export function recordEnd(
 }
 
 /** The median measured duration of `key` here, or undefined before its first measurement. */
-export function medianMs(dir: string, key: string): number | undefined {
-  const summary = readParsed(summaryPath(dir), Summary) ?? {};
+export async function medianMs(
+  dir: string,
+  key: string,
+): Promise<number | undefined> {
+  const summary = (await readParsed(summaryPath(dir), Summary)) ?? {};
   const runs = summary[`v2:${key}`] ?? summary[key];
   if (runs === undefined || runs.length === 0) return undefined;
   const sorted = runs.toSorted((a, b) => a - b);
@@ -204,8 +212,11 @@ export function medianMs(dir: string, key: string): number | undefined {
 /** The duration this kind of command is judged by: the larger of its median and its latest run, so
  *  one slow run (`--all`, a cold cache) is enough to send the next call to the background — the
  *  error that costs the human a wait is the one to avoid. undefined before its first measurement. */
-export function judgedMs(dir: string, key: string): number | undefined {
-  const summary = readParsed(summaryPath(dir), Summary) ?? {};
+export async function judgedMs(
+  dir: string,
+  key: string,
+): Promise<number | undefined> {
+  const summary = (await readParsed(summaryPath(dir), Summary)) ?? {};
   // Keep legacy slow task histories (land, tests, installs), but retire ambiguous
   // viewer/builtin keys. Newly measured slow single commands still count, even
   // for these tools: this is a provenance boundary, not a permanent exemption.
@@ -218,7 +229,7 @@ export function judgedMs(dir: string, key: string): number | undefined {
   )
     return undefined;
   const runs = summary[`v2:${key}`] ?? summary[key];
-  const median = medianMs(dir, key);
+  const median = await medianMs(dir, key);
   const latest = runs?.at(-1);
   if (median === undefined || latest === undefined) return undefined;
   return Math.max(median, latest);

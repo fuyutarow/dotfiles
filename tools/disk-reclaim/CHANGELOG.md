@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.19 — 2026-10-31
+
+- Make toolchain target filesystem and process probes asynchronous
+
 ## 1.12.18 — 2026-10-30
 
 - Correct action deadline test expectations

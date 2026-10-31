@@ -64,7 +64,7 @@ function versionHome(store: VersionStore): string {
 }
 
 describe("toolchains target and version stores", () => {
-  test("selects superseded old releases while preserving current, recent, and live releases", () => {
+  test("selects superseded old releases while preserving current, recent, and live releases", async () => {
     const store = STORES[0];
     expect(store).toBeDefined();
     if (store === undefined) return;
@@ -77,7 +77,7 @@ describe("toolchains target and version stores", () => {
     utimesSync(join(dir, "1.0"), NOW - 3600, NOW - 3600);
     mkdirSync(join(dir, "0.9"));
     utimesSync(join(dir, "0.9"), OLD, OLD);
-    const found = readStore(home, store);
+    const found = await readStore(home, store);
     expect(found.current).toBe("2.0");
     expect(
       names(
@@ -101,7 +101,7 @@ describe("toolchains target and version stores", () => {
     ).toEqual(["0.9"]);
   });
 
-  test("matches a current pointer resolving inside a release directory", () => {
+  test("matches a current pointer resolving inside a release directory", async () => {
     const home = tempRoot("reclaim-version-pointer-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -114,10 +114,10 @@ describe("toolchains target and version stores", () => {
     };
     mkdirSync(join(home, "releases/2.0/bin"), { recursive: true });
     symlinkSync(join(home, "releases/2.0/bin"), join(home, "current"));
-    expect(readStore(home, store).current).toBe("2.0");
+    expect((await readStore(home, store)).current).toBe("2.0");
   });
 
-  test("missing pointer or process evidence keeps all releases", () => {
+  test("missing pointer or process evidence keeps all releases", async () => {
     const store = STORES[0];
     expect(store).toBeDefined();
     if (store === undefined) return;
@@ -127,7 +127,7 @@ describe("toolchains target and version stores", () => {
       rmSync(home, { recursive: true, force: true });
     });
     rmSync(join(home, store.pointer));
-    const found = readStore(home, store);
+    const found = await readStore(home, store);
     expect(found.current).toBeUndefined();
     expect(
       releasesToRemove(found.releases, {
@@ -147,7 +147,7 @@ describe("toolchains target and version stores", () => {
     ).toEqual([]);
   });
 
-  test("reads executable paths from fixture proc and strips the deleted suffix; missing proc is unknown", () => {
+  test("reads executable paths from fixture proc and strips the deleted suffix; missing proc is unknown", async () => {
     const proc = tempRoot("reclaim-version-proc-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -156,8 +156,8 @@ describe("toolchains target and version stores", () => {
     mkdirSync(join(proc, "42"));
     symlinkSync("/opt/tool/1.0 (deleted)", join(proc, "42/exe"));
     mkdirSync(join(proc, "self"));
-    expect(liveExecutables(proc)).toEqual(["/opt/tool/1.0"]);
-    expect(liveExecutables(join(proc, "missing"))).toBeUndefined();
+    expect(await liveExecutables(proc)).toEqual(["/opt/tool/1.0"]);
+    expect(await liveExecutables(join(proc, "missing"))).toBeUndefined();
   });
 
   test("toolchains plans old VS Code versions except the newest and recent versions", async () => {
@@ -188,14 +188,19 @@ describe("toolchains target and version stores", () => {
     const planned = (
       await createToolchainsTarget(
         () => home,
-        { available: () => false, defaultToolchain: () => {} },
+        {
+          available: () => false,
+          defaultToolchain: () => Promise.resolve(undefined),
+        },
         (hash) =>
-          new Map([
-            ["busyfixture", 0],
-            ["oldfixture", 1],
-            ["recentfixture", 1],
-            ["newfixture", 1],
-          ]).get(hash),
+          Promise.resolve(
+            new Map([
+              ["busyfixture", 0],
+              ["oldfixture", 1],
+              ["recentfixture", 1],
+              ["newfixture", 1],
+            ]).get(hash),
+          ),
       ).plan(contextFor(home))
     ).map((candidate) => candidate.path);
     expect(planned).toContain(old);
@@ -226,7 +231,8 @@ describe("toolchains target and version stores", () => {
     );
     const target = createToolchainsTarget(() => home, {
       available: () => true,
-      defaultToolchain: () => "stable-x86_64-unknown-linux-gnu",
+      defaultToolchain: () =>
+        Promise.resolve("stable-x86_64-unknown-linux-gnu"),
     });
     const rustup = (await target.plan(contextFor(home))).filter(
       (candidate) => candidate.path?.startsWith(rustupDir) === true,

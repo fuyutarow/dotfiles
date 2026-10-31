@@ -203,10 +203,10 @@ export async function auditCandidates(
       await size(path),
     );
   }
-  const live = liveExecutables();
+  const live = await liveExecutables();
   const nowSec = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
   for (const store of STORES) {
-    const { releases, current } = readStore(home, store);
+    const { releases, current } = await readStore(home, store);
     const removable = new Set(
       releasesToRemove(releases, { current, live, nowSec, keepDays: 2 }).map(
         (release) => release.name,

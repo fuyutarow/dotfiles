@@ -1,6 +1,7 @@
-import { existsSync, readdirSync, statSync, readFileSync } from "node:fs";
+import { access, readFile, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { fromAsyncThrowable } from "neverthrow";
 import {
   liveExecutables,
   readStore,
@@ -10,22 +11,25 @@ import {
 } from "../lib/version-stores.ts";
 import type { Context, Target } from "./index.ts";
 import { deleteTree, keepTreeCandidate, treeCandidate } from "./tree.ts";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
-import { cachedDiscovery, checkScanDeadline } from "../lib/scan-cache.ts";
+import { checkScanDeadline } from "../lib/scan-cache.ts";
 
-const walkPins = (root: string, depth = 0): string[] => {
+const walkPins = async (root: string, depth = 0): Promise<string[]> => {
   checkScanDeadline();
   if (depth > 5) return [];
-  const names = fromThrowable(() => readdirSync(root))().unwrapOr([]);
-  return names.flatMap((name) => {
-    const path = join(root, name);
-    const stat = fromThrowable(() => statSync(path))();
-    if (stat.isErr()) return [];
-    if (stat.value.isDirectory()) return walkPins(path, depth + 1);
-    if (name === "rust-toolchain" || name === "rust-toolchain.toml")
-      return [path];
-    return [];
-  });
+  const names = (await fromAsyncThrowable(() => readdir(root))()).unwrapOr([]);
+  return (
+    await Promise.all(
+      names.map(async (name) => {
+        const path = join(root, name);
+        const info = await fromAsyncThrowable(() => stat(path))();
+        if (info.isErr()) return [];
+        if (info.value.isDirectory()) return walkPins(path, depth + 1);
+        if (name === "rust-toolchain" || name === "rust-toolchain.toml")
+          return [path];
+        return [];
+      }),
+    )
+  ).flat();
 };
 const channel = (text: string) =>
   /channel\s*=\s*"?([^"\s]+)"?/u.exec(text)?.[1] ??
@@ -84,17 +88,17 @@ export const createToolchainsTarget = (
   homePath: () => string = () => process.env["HOME"] ?? homedir(),
   rustupOptions?: {
     available: () => boolean;
-    defaultToolchain: () => string | undefined;
+    defaultToolchain: () => Promise<string | undefined>;
   },
-  processProbe: (hash: string) => number | undefined = (hash) =>
-    fromThrowable(
-      () =>
-        Bun.spawnSync(["pgrep", "-f", hash], {
-          stdout: "ignore",
-          stderr: "ignore",
-          timeout: 5000,
-        }).exitCode,
-    )().unwrapOr(undefined),
+  processProbe: (hash: string) => Promise<number | undefined> = async (hash) =>
+    fromAsyncThrowable(async () => {
+      const child = Bun.spawn(["pgrep", "-f", hash], {
+        stdout: "ignore",
+        stderr: "ignore",
+        signal: AbortSignal.timeout(5000),
+      });
+      return child.exited;
+    })().then((result) => result.unwrapOr(undefined)),
   options: {
     includeRefusals?: boolean;
     nowSec?: () => number;
@@ -104,16 +108,22 @@ export const createToolchainsTarget = (
 ) => {
   const rustup = rustupOptions ?? {
     available: () => Bun.which("rustup") !== null && Bun.which("fd") !== null,
-    defaultToolchain: () =>
-      fromThrowable(() =>
-        Bun.spawnSync(["rustup", "show", "active-toolchain"], {
-          stdout: "pipe",
-          stderr: "ignore",
-          timeout: 5000,
-        }),
-      )()
-        .map((result) => result.stdout.toString().trim().split(/\s+/u)[0])
-        .unwrapOr(undefined),
+    defaultToolchain: async () =>
+      (
+        await fromAsyncThrowable(async () => {
+          const child = Bun.spawn(["rustup", "show", "active-toolchain"], {
+            stdout: "pipe",
+            stderr: "ignore",
+            signal: AbortSignal.timeout(5000),
+          });
+          const [exitCode, stdout] = await Promise.all([
+            child.exited,
+            new Response(child.stdout).text(),
+          ]);
+          void exitCode;
+          return stdout.trim().split(/\s+/u)[0];
+        })()
+      ).unwrapOr(undefined),
   };
   return {
     name: "toolchains",
@@ -130,28 +140,30 @@ export const createToolchainsTarget = (
       const nowSec =
         options.nowSec?.() ??
         Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
-      const live = liveExecutables(_ctx.procDir);
+      const live = await liveExecutables(_ctx.procDir);
       const candidates = [];
       const rustupDir = join(home, ".rustup/toolchains");
-      const pins = cachedDiscovery(
-        projects,
-        "toolchain-pin-discovery-v1",
-        _ctx,
-        () => walkPins(projects),
-      )
-        .flatMap((path) =>
-          fromThrowable(() => readFileSync(path, "utf8"))()
-            .map((text) => [channel(text) ?? ""])
-            .unwrapOr([]),
+      const pinPaths = await walkPins(projects);
+      const pinReads = await Promise.all(
+        pinPaths.map((path) =>
+          fromAsyncThrowable(() => readFile(path, "utf8"))(),
+        ),
+      );
+      const pins = pinReads
+        .flatMap((result) =>
+          result.map((text) => [channel(text) ?? ""]).unwrapOr([]),
         )
         .filter(Boolean);
       let rustupNames: string[] = [];
       let defaultName: string | undefined;
-      if (rustup.available() && existsSync(rustupDir)) {
-        rustupNames = fromThrowable(() => readdirSync(rustupDir))()
+      if (
+        rustup.available() &&
+        (await fromAsyncThrowable(() => access(rustupDir))()).isOk()
+      ) {
+        rustupNames = (await fromAsyncThrowable(() => readdir(rustupDir))())
           .map((names) => names.toSorted())
           .unwrapOr([]);
-        defaultName = rustup.defaultToolchain();
+        defaultName = await rustup.defaultToolchain();
       }
       for (const name of rustupNames) {
         const path = join(rustupDir, name);
@@ -176,42 +188,48 @@ export const createToolchainsTarget = (
         );
       }
       const servers = join(home, ".vscode-server/cli/servers");
-      const serverNames = fromThrowable(() => readdirSync(servers))()
+      const serverEntries = (await fromAsyncThrowable(() => readdir(servers))())
         .unwrapOr([])
-        .filter(
-          (name) =>
-            name.startsWith("Stable-") &&
-            fromThrowable(() =>
-              statSync(join(servers, name)).isDirectory(),
-            )().unwrapOr(false),
-        );
+        .filter((name) => name.startsWith("Stable-"));
+      const serverNames = (
+        await Promise.all(
+          serverEntries.map(async (name) => {
+            const info = await fromAsyncThrowable(() =>
+              stat(join(servers, name)),
+            )();
+            return info.isOk() && info.value.isDirectory() ? [name] : [];
+          }),
+        )
+      ).flat();
       let newest: string | undefined;
       for (const name of serverNames) {
-        const stat = fromThrowable(() => statSync(join(servers, name)))();
-        if (stat.isErr()) continue;
+        const serverStat = await fromAsyncThrowable(() =>
+          stat(join(servers, name)),
+        )();
+        if (serverStat.isErr()) continue;
         if (newest === undefined) {
           newest = name;
           continue;
         }
         const latestName = newest;
-        const latest = fromThrowable(() =>
-          statSync(join(servers, latestName)),
+        const latest = await fromAsyncThrowable(() =>
+          stat(join(servers, latestName)),
         )();
-        if (latest.isOk() && stat.value.mtimeMs > latest.value.mtimeMs)
+        if (latest.isOk() && serverStat.value.mtimeMs > latest.value.mtimeMs)
           newest = name;
       }
       for (const name of serverNames) {
         const path = join(servers, name);
         const hash = name.replace(/^Stable-/u, "").replace(/\.staging$/u, "");
-        const busy = processProbe(hash);
-        const stat = fromThrowable(() => statSync(path))();
-        if (stat.isErr()) continue;
+        const busy = await processProbe(hash);
+        const serverStat = await fromAsyncThrowable(() => stat(path))();
+        if (serverStat.isErr()) continue;
         const reason =
           options.includeRefusals === true
             ? serverRefusal(
                 busy,
                 name === newest,
-                stat.value.mtimeMs / 1000 >= nowSec - keepDays * 86400,
+                serverStat.value.mtimeMs / 1000 >= nowSec - keepDays * 86400,
               )
             : null;
         if (reason !== null) {
@@ -221,7 +239,7 @@ export const createToolchainsTarget = (
         if (busy === undefined) continue;
         if (
           name === newest ||
-          stat.value.mtimeMs / 1000 >= nowSec - keepDays * 86400 ||
+          serverStat.value.mtimeMs / 1000 >= nowSec - keepDays * 86400 ||
           busy === 0
         )
           continue;
@@ -230,7 +248,7 @@ export const createToolchainsTarget = (
         );
       }
       for (const store of STORES) {
-        const found = readStore(home, store);
+        const found = await readStore(home, store);
         const removable = releasesToRemove(found.releases, {
           current: found.current,
           live,

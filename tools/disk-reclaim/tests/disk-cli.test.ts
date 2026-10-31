@@ -2356,8 +2356,11 @@ test("real toolchains planner exposes retained versions through the disk adapter
     await utimes(path, now - 3600, now - 3600);
   const original = createToolchainsTarget(
     () => home,
-    { available: () => true, defaultToolchain: () => "stable" },
-    (hash) => (hash === "live" ? 0 : 1),
+    {
+      available: () => true,
+      defaultToolchain: () => Promise.resolve("stable"),
+    },
+    (hash) => Promise.resolve(hash === "live" ? 0 : 1),
     {
       includeRefusals: true,
       nowSec: () => now,

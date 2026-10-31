@@ -1,6 +1,6 @@
-import { readdirSync, readlinkSync, realpathSync, statSync } from "node:fs";
+import { readlink, readdir, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
+import { fromAsyncThrowable } from "neverthrow";
 import { resolveProcRoot } from "./procs.ts";
 
 export type VersionStore = {
@@ -25,26 +25,32 @@ export type Release = {
   readonly path: string;
   readonly mtimeSec: number;
 };
-const real = (path: string): string | undefined => {
-  return fromThrowable(() => realpathSync(path))().unwrapOr(undefined);
+const real = async (path: string): Promise<string | undefined> => {
+  return (await fromAsyncThrowable(() => realpath(path))()).unwrapOr(undefined);
 };
-export function readStore(
+export async function readStore(
   home: string,
   store: VersionStore,
-): { releases: Release[]; current: string | undefined } {
+): Promise<{ releases: Release[]; current: string | undefined }> {
   const dir = join(home, store.dir);
-  const names = fromThrowable(() => readdirSync(dir))()
+  const names = (await fromAsyncThrowable(() => readdir(dir))())
     .map((entries) => entries.toSorted((a, b) => a.localeCompare(b)))
     .unwrapOr([]);
-  const releases = names.flatMap((name): Release[] => {
-    const path = join(dir, name);
-    const stat = fromThrowable(() => statSync(path))();
-    return stat.isOk()
-      ? [{ name, path, mtimeSec: Math.floor(stat.value.mtimeMs / 1000) }]
-      : [];
-  });
-  const target = real(join(home, store.pointer));
-  const realDir = real(dir);
+  const releases = (
+    await Promise.all(
+      names.map(async (name): Promise<Release[]> => {
+        const path = join(dir, name);
+        const info = await fromAsyncThrowable(() => stat(path))();
+        return info.isOk()
+          ? [{ name, path, mtimeSec: Math.floor(info.value.mtimeMs / 1000) }]
+          : [];
+      }),
+    )
+  ).flat();
+  const [target, realDir] = await Promise.all([
+    real(join(home, store.pointer)),
+    real(dir),
+  ]);
   const current =
     target === undefined || realDir === undefined
       ? undefined
@@ -54,22 +60,25 @@ export function readStore(
         })?.name;
   return { releases, current };
 }
-export function liveExecutables(
+export async function liveExecutables(
   procDir = resolveProcRoot(),
-): string[] | undefined {
-  const pids = fromThrowable(() => readdirSync(procDir))();
+): Promise<string[] | undefined> {
+  const pids = await fromAsyncThrowable(() => readdir(procDir))();
   if (pids.isErr()) return undefined;
-  return pids.value
-    .filter((p) => /^\d+$/u.test(p))
-    .flatMap((pid) => {
-      const executable = fromThrowable(() =>
-        readlinkSync(join(procDir, pid, "exe")).replace(/ \(deleted\)$/u, ""),
-      )();
-      return executable.match(
-        (path) => [path],
-        () => [],
-      );
-    });
+  return (
+    await Promise.all(
+      pids.value
+        .filter((p) => /^\d+$/u.test(p))
+        .map(async (pid) => {
+          const executable = await fromAsyncThrowable(() =>
+            readlink(join(procDir, pid, "exe")),
+          )();
+          return executable
+            .map((path) => [path.replace(/ \(deleted\)$/u, "")])
+            .unwrapOr([]);
+        }),
+    )
+  ).flat();
 }
 export function releasesToRemove(
   releases: readonly Release[],

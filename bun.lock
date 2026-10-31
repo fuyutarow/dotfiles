@@ -225,6 +225,7 @@
       "dependencies": {
         "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
+        "consola": "3.4.2",
         "neverthrow": "8.2.0",
       },
     },

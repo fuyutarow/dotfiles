@@ -1,18 +1,21 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { err, ok, type Result } from "neverthrow";
+import { createConsola } from "consola";
 import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
 import { parseFailures } from "./data.ts";
 
 const JJ_TIMEOUT = 60_000;
 const TEST_TIMEOUT = 30 * 60_000;
+const logger = createConsola({ stdout: process.stderr });
 
 async function run(
   cmd: string[],
   cwd: string,
   signal?: AbortSignal,
   env = process.env,
+  timeout = TEST_TIMEOUT,
 ) {
   const child = Bun.spawn(cmd, {
     cwd,
@@ -20,7 +23,7 @@ async function run(
     stdout: "pipe",
     stderr: "pipe",
     stdin: "ignore",
-    timeout: TEST_TIMEOUT,
+    timeout,
     ...(signal === undefined ? {} : { signal }),
   });
   const [stdout, stderr, exit] = await Promise.all([
@@ -32,7 +35,7 @@ async function run(
 }
 
 function jj(args: string[], cwd: string, snapshot = false) {
-  return Bun.spawnSync(
+  return run(
     [
       "jj",
       ...(snapshot ? [] : ["--ignore-working-copy"]),
@@ -40,12 +43,10 @@ function jj(args: string[], cwd: string, snapshot = false) {
       "--color=never",
       ...args,
     ],
-    {
-      cwd,
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: JJ_TIMEOUT,
-    },
+    cwd,
+    undefined,
+    process.env,
+    JJ_TIMEOUT,
   );
 }
 
@@ -61,16 +62,14 @@ async function cleanup(
   const removed = await attempt(() => rmOwned(root));
   if (!removed.ok) return err(errorMessage(removed.error));
   if (!forgotten.ok) return err(errorMessage(forgotten.error));
-  if (forgotten.value.exitCode !== 0)
-    return err(
-      `could not forget ${name}: ${forgotten.value.stderr.toString().trim()}`,
-    );
+  if (forgotten.value.exit !== 0)
+    return err(`could not forget ${name}: ${forgotten.value.stderr.trim()}`);
   return removed.value;
 }
 
-function rmOwned(root: string): Result<void, string> {
+async function rmOwned(root: string): Promise<Result<void, string>> {
   // The caller wraps filesystem exceptions with attempt; no deletion outside this mkdtemp tree.
-  rmSync(root, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true });
   return ok(undefined);
 }
 
@@ -84,9 +83,7 @@ export async function record(
   if (executable === undefined) return err("record requires -- <test command>");
   if (!executable.includes("/") && Bun.which(executable) === null)
     return err(`test command not found: ${executable}`);
-  const made = await attempt(() =>
-    mkdtempSync(join(tmpdir(), "baseline-record-")),
-  );
+  const made = await attempt(() => mkdtemp(join(tmpdir(), "baseline-record-")));
   if (!made.ok) return err(errorMessage(made.error));
   const root = made.value;
   const workspace = join(root, "checkout");
@@ -100,9 +97,9 @@ export async function record(
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
     process.on(signal, interrupt);
   const result = await attempt(async (): Promise<Result<string[], string>> => {
-    process.stderr.write(`baseline: checking out ${rev}\n`);
+    logger.info(`baseline: checking out ${rev}`);
     // --ignore-working-copy also suppresses materializing the NEW checkout in jj.
-    const added = jj(
+    const added = await jj(
       [
         "workspace",
         "add",
@@ -117,11 +114,11 @@ export async function record(
       repo,
       true,
     );
-    if (added.exitCode !== 0) return err(added.stderr.toString().trim());
+    if (added.exit !== 0) return err(added.stderr.trim());
     registered = true;
     if (controller.signal.aborted) return err("record interrupted");
-    mkdirSync(temp);
-    process.stderr.write(`baseline: running ${cmd.join(" ")}\n`);
+    await mkdir(temp);
+    logger.info(`baseline: running ${cmd.join(" ")}`);
     const child = await run(cmd, workspace, controller.signal, {
       ...process.env,
       TMPDIR: temp,
@@ -146,10 +143,10 @@ export async function record(
       );
     return parsed;
   });
+  const workspaceExists =
+    registered || (await attempt(() => stat(join(workspace, ".jj")))).ok;
   const cleaned = await attempt(() =>
-    registered || existsSync(join(workspace, ".jj"))
-      ? cleanup(repo, name, root)
-      : rmOwned(root),
+    workspaceExists ? cleanup(repo, name, root) : rmOwned(root),
   );
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
     process.off(signal, interrupt);

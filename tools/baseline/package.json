@@ -1,6 +1,6 @@
 {
   "name": "@dotfiles/baseline",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "bin": {
@@ -9,6 +9,7 @@
   "dependencies": {
     "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0",
+    "consola": "3.4.2",
     "neverthrow": "8.2.0"
   }
 }

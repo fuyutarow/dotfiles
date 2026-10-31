@@ -13,6 +13,7 @@ import {
   rm,
   stat,
   symlink,
+  unlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1208,6 +1209,36 @@ async function main(
       emit(
         `[land] format: ok ${parsed.flags.dryRun ? "would format existing paths" : "formatted existing paths"}`,
       );
+      if (
+        !parsed.flags.dryRun &&
+        changed.some((path) =>
+          ["package.json", "bun.lock"].includes(basename(path)),
+        )
+      ) {
+        stage = "deps";
+        const started = performance.now();
+        const modules = join(landerRoot, "node_modules");
+        if ((await lstat(modules).catch(() => null))?.isSymbolicLink() === true)
+          await unlink(modules);
+        // Match the frozen install in mise run deps without its machine-wide bun link.
+        const installed = await run(
+          landerRoot,
+          [
+            process.env["LAND_MISE"] ?? "mise",
+            "exec",
+            "--",
+            "bun",
+            "install",
+            "--frozen-lockfile",
+          ],
+          landEnvironment(landerRoot),
+        );
+        const elapsed = Math.round(performance.now() - started);
+        emit(
+          `[land] deps: ${installed.isOk() ? "ok" : "failed"} (${elapsed} ms)`,
+        );
+        if (installed.isErr()) return installed;
+      }
       stage = "commit";
       if (!parsed.flags.dryRun) {
         const sharedConsumersResult = await runLandConsumerGates(

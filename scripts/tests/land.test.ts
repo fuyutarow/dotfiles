@@ -426,6 +426,7 @@ test("restored candidate reloads its inline registry schema after the same path 
   await mkdir(join(root, "scripts"));
   await mkdir(join(root, "standard-presets"));
   await symlink(join(REPO, "agents"), join(root, "agents"));
+  await symlink(join(REPO, "node_modules"), join(root, "node_modules"));
   const gate = join(root, "scripts/consumer-gate.ts");
   await writeFile(
     gate,
@@ -534,7 +535,7 @@ async function fixture() {
     return result.stdout.toString().trim();
   }
   await jj(temp, ["git", "init", "--colocate", main]);
-  await mkdir(join(main, "presets"), { recursive: true });
+  await mkdir(join(main, "standard-presets"), { recursive: true });
   await writeFile(
     join(main, "standard-presets/consumers.toml"),
     "consumers = []\n",
@@ -583,6 +584,14 @@ async function fixture() {
     `#!${process.execPath}\nimport { appendFileSync, writeSync } from 'node:fs';
 appendFileSync(process.env.LAND_EVENTS, JSON.stringify(process.argv.slice(2)) + '\\n');
 const argv = process.argv.slice(2);
+if (argv[0] === 'exec') {
+ const fs = await import('node:fs');
+ const path = await import('node:path');
+ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['deps-cwd', process.cwd(), fs.existsSync(path.join(process.cwd(), 'bun.lock')) ? fs.readFileSync(path.join(process.cwd(), 'bun.lock'), 'utf8') : 'missing']) + '\\n');
+ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['deps-link', String(fs.existsSync(path.join(process.cwd(), 'node_modules')) && fs.lstatSync(path.join(process.cwd(), 'node_modules')).isSymbolicLink())]) + '\\n');
+ if (process.env.LAND_FAIL_DEPS === '1') { process.stderr.write('fixture install error\\n'); process.exit(7); }
+ process.exit(0);
+}
 if (argv[1] === 'commit' && process.env.LAND_CHECK_IGNORE === '1') {
  const fs = await import('node:fs');
  const path = await import('node:path');
@@ -2216,6 +2225,84 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         await f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"]),
       ).toBe(`${name} version`);
     }
+  });
+
+  test("restores dependencies before commit only for manifest changes", async () => {
+    for (const changedPath of [
+      "package.json",
+      "tools/example/package.json",
+      "bun.lock",
+    ]) {
+      const f = await fixture();
+      await mkdir(dirname(join(f.worker, changedPath)), { recursive: true });
+      await writeFile(
+        join(f.worker, changedPath),
+        changedPath.endsWith("package.json") ? "{}\n" : "landed lock\n",
+      );
+      const result = await f.land();
+      expect(
+        result.exitCode,
+        result.stdout.toString() + result.stderr.toString(),
+      ).toBe(0);
+      const events = await f.log();
+      const install = events.findIndex((event) => event[0] === "exec");
+      const commit = events.findIndex((event) => event[1] === "commit");
+      expect(events[install]).toEqual([
+        "exec",
+        "--",
+        "bun",
+        "install",
+        "--frozen-lockfile",
+      ]);
+      expect(events[install + 1]?.[0]).toBe("deps-cwd");
+      expect(events[install + 1]?.[1]).not.toBe(f.main);
+      expect(events[install + 1]?.[2]).toBe(
+        changedPath === "bun.lock" ? "landed lock\n" : "missing",
+      );
+      expect(install).toBeLessThan(commit);
+      expect(result.stdout.toString()).toMatch(/\[land\] deps: ok \(\d+ ms\)/u);
+    }
+    const f = await fixture();
+    await writeFile(join(f.worker, "keep.txt"), "no manifest change\n");
+    const result = await f.land();
+    expect(result.exitCode).toBe(0);
+    expect((await f.log()).some((event) => event[0] === "exec")).toBe(false);
+    expect(result.stdout.toString()).not.toContain("[land] deps:");
+  });
+
+  test("dependency install failure preserves its error and stops before commit", async () => {
+    const f = await fixture();
+    await writeFile(join(f.worker, "bun.lock"), "landed lock\n");
+    const result = await f.land([], { LAND_FAIL_DEPS: "1" });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toContain("fixture install error");
+    expect(result.stdout.toString()).toMatch(
+      /\[land\] deps: failed \(\d+ ms\)/u,
+    );
+    expect(result.stdout.toString()).toContain("[land] deps: FAIL");
+    expect((await f.log()).some((event) => event[1] === "commit")).toBe(false);
+  });
+
+  test("dependency restore detaches the live node_modules link", async () => {
+    const f = await fixture();
+    await writeFile(join(f.main, "package.json"), "{}\n");
+    await f.jj(f.main, ["commit", "-m", "base manifest"]);
+    await f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
+    await f.jj(f.main, [
+      "git",
+      "push",
+      "--bookmark",
+      "alpha",
+      "--remote",
+      "origin",
+    ]);
+    await writeFile(join(f.worker, "bun.lock"), "landed lock\n");
+    const result = await f.land();
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    expect(await f.log()).toContainEqual(["deps-link", "false"]);
   });
 
   test("commit refusal preserves hook output and stops before deploy", async () => {

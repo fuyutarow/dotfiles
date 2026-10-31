@@ -178,7 +178,7 @@ test("invalid admission configuration refuses before backend startup with overri
   await installCccEntry(f.home, f.backend);
   await writeFile(
     join(f.project, ".cocoindex_code/rr.toml"),
-    "[index]\nmax_data_share = 2\n",
+    "[index]\nmax_data_share = -1\n",
   );
   const result = await f.run([
     process.execPath,

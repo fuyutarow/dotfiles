@@ -98,7 +98,7 @@ per matched file (`path`, `bytes`, `est_chunks`, `kind`), followed by a `type: "
 Stderr shows the ten largest directory/extension/kind contributors. Source and prose contributors
 are informational only; suggested exclude lines name exact files classified as data, and ccc's
 matcher checks that excluding one will not prune an included descendant. If an over-budget plan has
-no safe data contributor, it says so and points to `[index]` in `.cocoindex_code/rr.toml`.
+no safe data contributor, add suitable exclusions and re-plan.
 
 Declare the repo's budget in `.cocoindex_code/rr.toml`:
 
@@ -130,8 +130,7 @@ backstops follow the effective `[index]` budget: total candidate bytes are limit
 defaults therefore remain 40,000,000 total bytes and 8,000,000 data bytes
 (`50,000 × 800`, then `× 0.20`). The ordinary 1 MiB file / 64 KiB data-file ceilings are
 independent and unchanged. Reads remain bounded by the derived total-byte backstop.
-The existing `--accept-plan` override and advisory fallback time estimate remain unchanged.
-Project `.cocoindex_code/rr.toml` owns this setting; `retrieval.toml` configures definition
+Project `.cocoindex_code/rr.toml` owns file allowances; `retrieval.toml` configures definition
 retrieval and is not an index-policy source.
 
 ## Bringing a new root into retrieval
@@ -156,17 +155,20 @@ selection (`include_patterns`, `exclude_patterns`, and `max_file_size`). Use
 `file_byte_allowances` for exact files that should exceed the ordinary byte ceiling. Do not use
 `--accept-plan`: revise the configuration so the selected corpus itself satisfies the gate.
 
-Keep `max_seconds` at the time budget the host can afford. Set `max_est_chunks` to cover the
-curated corpus while keeping it at or below the measured indexing rate multiplied by
-`max_seconds`; this bounds estimated full-rebuild work to that time. Re-run
+The shared ceilings are 50,000 estimated chunks, 0.20 data share and 600 seconds. A root may
+lower these values, but cannot raise them. The fallback rate is capped at 50 chunks per second
+so a root cannot understate the estimate; it may select a lower rate. Both measured and fallback
+estimates above the effective time budget refuse admission. Add exclusions to the root's
+`settings.yml` and re-plan until the corpus fits. Re-run
 `rr index --plan > /tmp/<repo>-rr-plan.jsonl` after each configuration change and review both
 the saved plan and the contributor report. Repeat until it exits 0. Then run plain `rr index`
 to perform the gated index and record its freshness watermark. Confirm the final line is
 `RESULT: INDEXED` before relying on semantic retrieval.
+Semantic search rejects `--refresh`; use the gated `rr index` to refresh the index.
 
-Worked example — `research-record-v2`: `settings.yml` curation reduced the estimate from 13,381
-to 5,794 chunks; `rr.toml` used `max_est_chunks = 6000`, `max_data_share = 0.32`, and
-`max_seconds = 600`. Plain `rr index` completed in 122.8 seconds.
+Historical example — `research-record-v2`: curation reduced the estimate from 13,381 to
+5,794 chunks and indexing completed in 122.8 seconds. Its former 0.32 data-share limit
+exceeds today's ceiling and must be replaced by exclusions before the next admission.
 
 These are also the defaults when omitted. Chunks are estimates, `ceil(Unicode characters / 800)`
 per nonblank UTF-8 file; undecodable files remain in the matched file count with zero chunks,
@@ -203,14 +205,13 @@ use qualifying full runs at other loads, explicitly reporting the mismatch. Take
 the latest nine records in the selected pool, using processed chunks / elapsed seconds.
 Every plan prints one RATE HISTORY line identifying used records by JSONL line number and
 the named reason each other record was excluded. No qualifying record means the configured
-fallback, with an advisory warning; legacy rates alone cannot establish a trustworthy full-index
-rate. These thresholds favor bulk measurements without claiming that a rate alone proves work size.
-The time budget refuses a
-plan only when a measured historical rate is available; the fallback estimate is advisory.
+fallback; legacy rates alone cannot establish a trustworthy full-index rate. These thresholds
+favor bulk measurements without claiming that a rate alone proves work size. Both fallback and
+measured estimates enforce the time budget.
 
 Exceeding any bound exits 4 before ccc starts, including with `--plan`. Invalid configuration or
-an unavailable matcher exits 2. `--accept-plan` permits a normal index despite the preflight
-violations and records the override in `.cocoindex_code/RR_ACCEPTED_PLAN.json`; it cannot be
+an unavailable matcher exits 2. `--accept-plan` records an already passing plan in
+`.cocoindex_code/RR_ACCEPTED_PLAN.json`; it does not bypass violations and cannot be
 combined with `--plan`. While indexing, elapsed time over `max_seconds` exits 125 and repeats
 the contributor report. The stored chunk count measures corpus size; its net increase cannot
 measure incremental work remaining, so it never triggers a projected ETA cancellation.
@@ -339,8 +340,5 @@ regeneration. The measured 105.67 chunks/s rate came from a contended host; rate
 must remain untouched. On 2026-10-25, the slim full view contained 54,078 statements
 (95,312,479 bytes). Two shards are the minimum at that measured rate: the exact
 126,296-chunk union exceeds one 600-second job. Groups `0–7` and `8–f` contain
-63,053 and 63,243 chunks. Use `max_est_chunks = 63399`, `max_data_share = 0.20`,
-`max_seconds = 600` and fallback `est_chunks_per_second = 105` for each shard.
-Register and plan each shard directory separately, then index sequentially when
-host load permits. Earlier full-view and three-shard directories are superseded;
-the final two-shard union retains every statement.
+63,053 and 63,243 chunks. These historical two-shard plans exceed today's shared ceiling;
+use more shards and plan each separately before indexing sequentially.

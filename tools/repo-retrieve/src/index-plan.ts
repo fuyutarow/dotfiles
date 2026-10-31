@@ -13,12 +13,25 @@ const CONTENT_LIMITS = {
   max_data_file_bytes: 65_536,
 };
 
+const SHARED_CEILING = {
+  max_est_chunks: 50_000,
+  max_data_share: 0.2,
+  max_seconds: 600,
+  est_chunks_per_second: 50,
+};
 const BudgetSchema = z
   .object({
-    max_est_chunks: z.number().int().positive().default(50_000),
-    max_data_share: z.number().min(0).max(1).default(0.2),
-    max_seconds: z.number().positive().default(600),
-    est_chunks_per_second: z.number().positive().default(50),
+    max_est_chunks: z
+      .number()
+      .int()
+      .positive()
+      .default(SHARED_CEILING.max_est_chunks),
+    max_data_share: z.number().min(0).default(SHARED_CEILING.max_data_share),
+    max_seconds: z.number().positive().default(SHARED_CEILING.max_seconds),
+    est_chunks_per_second: z
+      .number()
+      .positive()
+      .default(SHARED_CEILING.est_chunks_per_second),
     file_byte_allowances: z
       .record(
         z.string().refine(
@@ -235,9 +248,9 @@ export function summarize(
     violations.push(
       `data share ${(data_share * 100).toFixed(1)}% > ${budget.max_data_share * 100}%`,
     );
-  if (rate_source === "measured" && est_seconds > budget.max_seconds)
+  if (est_seconds > budget.max_seconds)
     violations.push(
-      `estimated GPU seconds ${est_seconds.toFixed(1)} > ${budget.max_seconds}`,
+      `estimated GPU seconds ${est_seconds.toFixed(1)} > ${budget.max_seconds} (${chunks} est_chunks / ${chunks_per_second} chunks/s, ${rate_source})`,
     );
   return {
     files,
@@ -276,6 +289,19 @@ export async function computeIndexPlan(
     const defaults = BudgetSchema.safeParse({});
     if (!defaults.success) return err(new Error(defaults.error.message));
     const budget = config.data.index ?? defaults.data;
+    for (const key of [
+      "max_est_chunks",
+      "max_data_share",
+      "max_seconds",
+      "est_chunks_per_second",
+    ] as const) {
+      if (budget[key] > SHARED_CEILING[key])
+        return err(
+          new Error(
+            `${configFile.name}: ${key} root value ${budget[key]} exceeds shared ceiling ${SHARED_CEILING[key]}; add excludes to .cocoindex_code/settings.yml and re-plan`,
+          ),
+        );
+    }
     const python = await cccPython(ccc);
     if (python === null)
       return err(
@@ -418,8 +444,8 @@ export function planReport(plan: IndexPlan): string {
     .join("");
   const suggestions =
     excludes.length === 0
-      ? "No data-kind contributor can be safely excluded. Adjust [index] budgets in .cocoindex_code/rr.toml.\n"
-      : "Suggested data-only excludes for .cocoindex_code/settings.yml:\n" +
+      ? "Add excludes to .cocoindex_code/settings.yml and re-plan.\n"
+      : "Add suitable excludes to .cocoindex_code/settings.yml and re-plan. Suggested data-only excludes:\n" +
         excludes
           .slice(0, 10)
           .map((item) => item.exclude ?? "")
@@ -428,9 +454,6 @@ export function planReport(plan: IndexPlan): string {
   return (
     `PLAN: ${plan.total.files} files, ${plan.total.bytes} bytes, ${plan.total.est_chunks} est_chunks (ceil(chars / 800)); data ${(plan.data_share * 100).toFixed(1)}%; estimated GPU ${plan.est_seconds.toFixed(1)}s at ${plan.chunks_per_second.toFixed(2)} chunks/s (${plan.rate_source})\n` +
     `${plan.rate_history ?? "RATE HISTORY: no history supplied"}\n` +
-    (plan.rate_source === "fallback"
-      ? "PLAN WARNING: time estimate uses the configured fallback rate; the time budget is advisory until a measured host rate exists.\n"
-      : "") +
     `BUDGET: ${JSON.stringify(plan.budget)}\n` +
     `CONTENT LIMITS (bytes): ${JSON.stringify({ ...CONTENT_LIMITS, ...aggregateByteLimits(plan.budget) })}; blob content is refused at any size\n` +
     (plan.violations.length === 0

@@ -47,7 +47,7 @@ test("the supplied legacy history cannot establish a full v0 throughput", () => 
   );
   expect(selected.rate).toBeNull();
   expect(selected.report.match(/excluded\(legacy\/invalid/gu)).toHaveLength(12);
-  expect(selected.report).toContain("configured fallback; advisory");
+  expect(selected.report).toContain("configured fallback");
 });
 
 test("incremental, undersized, short and legacy samples have named exclusions", () => {
@@ -119,7 +119,7 @@ test("no comparable load uses qualifying history explicitly; latest nine applied
   );
 });
 
-test("no qualifying history gives configured advisory fallback and retains time gate for measurements", () => {
+test("no qualifying history gives configured fallback and enforces the time gate", () => {
   const selected = selectIndexRate(
     history({ chunksPerSecond: 105.665 }),
     current,
@@ -142,10 +142,12 @@ test("no qualifying history gives configured advisory fallback and retains time 
   const plan = summarize(files, budget, selected.rate);
   plan.rate_history = selected.report;
   expect(plan.chunks_per_second).toBe(250);
-  expect(plan.violations).toEqual([]);
-  expect(planReport(plan)).toContain("configured fallback; advisory");
+  expect(plan.violations).toContain(
+    "estimated GPU seconds 615.9 > 600 (153981 est_chunks / 250 chunks/s, fallback)",
+  );
+  expect(planReport(plan)).toContain("configured fallback");
   expect(summarize(files, budget, 100).violations).toContain(
-    "estimated GPU seconds 1539.8 > 600",
+    "estimated GPU seconds 1539.8 > 600 (153981 est_chunks / 100 chunks/s, measured)",
   );
 });
 

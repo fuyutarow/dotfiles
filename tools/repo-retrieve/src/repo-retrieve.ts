@@ -2,7 +2,7 @@
 // Agent/human CLI: declare the search shape, then route to ccc, rg, or Serena.
 //
 // Contract:
-//   concept/battery -> ccc search (freshness is explicit via --refresh; battery requires >=3 paraphrases)
+//   concept/battery -> ccc search (indexing is explicit via rr index; battery requires >=3 paraphrases)
 //   literal         -> rg --fixed-strings
 //   exhaustive      -> rg regex enumeration
 //   files           -> rg --files
@@ -632,7 +632,6 @@ async function runCccSearch(
   path: string | undefined,
   limit: number,
   timeoutMs: number,
-  refresh: boolean,
   cwd: string,
   explicitProject: boolean,
   json: boolean,
@@ -758,7 +757,6 @@ async function runCccSearch(
     }
     const searchArgs = [ccc.value, "search", query, "--limit", String(limit)];
     if (cccPath !== undefined) searchArgs.push("--path", cccPath);
-    if (refresh && index === 0) searchArgs.push("--refresh");
 
     process.stderr.write(
       `ROUTE: ${route} -> ccc search (${index + 1}/${queries.length}) project=${project}\n`,
@@ -1138,6 +1136,12 @@ async function runRoute(
   const queries = values.query ?? [];
   const paths = values.path ?? [];
   const timeoutMs = values.timeoutMs ?? 120_000;
+  if (values.refresh === true)
+    return err(
+      new Error(
+        "--refresh cannot bypass admission; run rr index --plan, then rr index",
+      ),
+    );
   const project = await targetProject(values.project);
   if (project.isErr()) return err(project.error);
   const cwd = project.value;
@@ -1161,7 +1165,6 @@ async function runRoute(
       paths[0],
       values.limit ?? 8,
       timeoutMs,
-      values.refresh ?? false,
       cwd,
       values.project !== undefined,
       values.json ?? false,
@@ -1181,7 +1184,6 @@ async function runRoute(
       paths[0],
       values.limit ?? 8,
       timeoutMs,
-      values.refresh ?? false,
       cwd,
       values.project !== undefined,
       values.json ?? false,

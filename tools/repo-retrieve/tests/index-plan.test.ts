@@ -546,6 +546,34 @@ describe.skipIf(ccc === null)(
       expect((await cli(root, ["--plan"])).code).toBe(2);
     }, 30_000);
 
+    test("root budgets cannot exceed shared ceilings and lower budgets apply", async () => {
+      const root = fixture();
+      const config = join(root, ".cocoindex_code", "rr.toml");
+      for (const [key, value, ceiling] of [
+        ["max_est_chunks", 50001, 50000],
+        ["max_data_share", 0.3, 0.2],
+        ["max_data_share", 2, 0.2],
+        ["max_seconds", 601, 600],
+        ["est_chunks_per_second", 51, 50],
+      ] as const) {
+        writeFileSync(config, `[index]\n${key} = ${value}\n`);
+        const result = await cli(root, ["--plan"]);
+        expect(result.code).not.toBe(0);
+        expect(result.stderr).toContain(config);
+        expect(result.stderr).toContain(
+          `${key} root value ${value} exceeds shared ceiling ${ceiling}`,
+        );
+        expect(result.stderr).toContain("add excludes");
+      }
+      writeFileSync(config, "[index]\nmax_est_chunks = 1\n");
+      expect((await cli(root, ["--plan"])).code).toBe(4);
+      writeFileSync(
+        config,
+        "[index]\nmax_est_chunks = 100\nmax_seconds = 600\n",
+      );
+      expect((await cli(root, ["--plan"])).code).toBe(0);
+    }, 30_000);
+
     test("a directory ending in .json is never pruned by an exclude suggestion", async () => {
       if (ccc === null) return;
       const root = fixture(true);
@@ -596,7 +624,7 @@ describe.skipIf(ccc === null)(
       settings(root, "- 'bulk/payload.json'\n");
       writeFileSync(
         join(root, ".cocoindex_code", "rr.toml"),
-        "[index]\nmax_seconds = 1\nest_chunks_per_second = 1000000\n",
+        "[index]\nmax_seconds = 1\nest_chunks_per_second = 50\n",
       );
       const bin = join(root, "bin");
       mkdirSync(bin);
@@ -870,8 +898,9 @@ test("code-only plans pass and never suggest excluding code or prose", () => {
     { ...budget, max_est_chunks: 10 },
   );
   const report = planReport(refused);
-  expect(report).toContain("No data-kind contributor can be safely excluded");
-  expect(report).toContain(".cocoindex_code/rr.toml");
+  expect(report).toContain(
+    "Add excludes to .cocoindex_code/settings.yml and re-plan",
+  );
   expect(report).not.toContain("- 'src/main.ts'");
 });
 
@@ -902,7 +931,7 @@ test("only exact data-kind paths receive exclude suggestions", () => {
   expect(planReport(plan)).not.toContain("- 'docs/notes.md'");
 });
 
-test("fallback time estimate warns without refusing; measured rate enforces the time budget", () => {
+test("fallback and measured time estimates enforce the time budget", () => {
   const files = [
     {
       path: "src/main.ts",
@@ -918,13 +947,15 @@ test("fallback time estimate warns without refusing; measured rate enforces the 
     est_chunks_per_second: 50,
   };
   const fallback = summarize(files, budget);
-  expect(fallback.violations).toEqual([]);
+  expect(fallback.violations).toEqual([
+    "estimated GPU seconds 20.0 > 10 (1000 est_chunks / 50 chunks/s, fallback)",
+  ]);
   expect(fallback.rate_source).toBe("fallback");
-  expect(planReport(fallback)).toContain(
-    "time estimate uses the configured fallback rate",
-  );
+  expect(planReport(fallback)).toContain("PLAN REFUSED");
   const measured = summarize(files, budget, 10);
-  expect(measured.violations).toEqual(["estimated GPU seconds 100.0 > 10"]);
+  expect(measured.violations).toEqual([
+    "estimated GPU seconds 100.0 > 10 (1000 est_chunks / 10 chunks/s, measured)",
+  ]);
   expect(measured.rate_source).toBe("measured");
   expect(planReport(measured)).toContain("(measured)");
 });
@@ -1042,13 +1073,18 @@ test("exact file allowance admits a bounded large specification with normal acco
 test("exact allowance admits an oversized data file while retaining the data-share gate", async () => {
   const rows = JSON.stringify({ rows: ["x".repeat(70_000)] });
   const allowed = allowanceFixture(
-    allowanceConfig("data/rows.json", rows.length, "max_data_share = 1"),
-    { "data/rows.json": rows },
+    allowanceConfig("data/rows.json", rows.length),
+    {
+      "data/rows.json": rows,
+      "src/main.ts": "const value = true;\n".repeat(20_000),
+    },
   );
   const admitted = await allowed.plan();
   expect(admitted.isErr()).toBe(false);
   if (admitted.isErr()) return;
-  expect(admitted.value.files[0]?.kind).toBe("data");
+  expect(
+    admitted.value.files.find((file) => file.path === "data/rows.json")?.kind,
+  ).toBe("data");
   expect(admitted.value.violations).toEqual([]);
 
   const overShare = allowanceFixture(

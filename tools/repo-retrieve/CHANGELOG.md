@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0 — 2026-10-31
+
+- Enforce shared admission ceilings and refuse over-time index plans
+
 ## 1.5.8 — 2026-10-30
 
 - Correct classification of multi-command stream filters and cross-project file reads.

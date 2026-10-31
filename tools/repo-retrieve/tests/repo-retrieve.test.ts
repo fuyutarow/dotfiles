@@ -1069,7 +1069,7 @@ describe("repo-retrieve route contract", () => {
     expect(result.stdout).toContain("queries=3");
   });
 
-  test("concept refreshes only when explicitly requested", () => {
+  test("semantic refresh is refused before it can bypass index admission", () => {
     const { dir } = registerFreshGitProject();
     const result = run(dir, [
       "concept",
@@ -1078,9 +1078,10 @@ describe("repo-retrieve route contract", () => {
       "--refresh",
     ]);
 
-    expect(result.code).toBe(0);
-    expect(result.log).toContain("ccc search where authorization is enforced");
-    expect(result.log).toContain("--refresh");
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("--refresh cannot bypass admission");
+    expect(result.stderr).toContain("rr index --plan");
+    expect(result.log).not.toContain("ccc search");
   });
 
   test("a completed current index still serves while ccc refresh work is indexing", () => {

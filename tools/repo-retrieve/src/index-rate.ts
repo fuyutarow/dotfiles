@@ -110,7 +110,7 @@ export function selectIndexRate(content: string, current = hostLoad()) {
   const detailReport = details.length === 0 ? "no records" : details.join("; ");
   return {
     rate,
-    report: `RATE HISTORY: load=${current.startLoad1.toFixed(2)}/${current.nproc} CPUs; ${selection}; ${detailReport}; ${rate === null ? "configured fallback; advisory" : "median of used records"}`,
+    report: `RATE HISTORY: load=${current.startLoad1.toFixed(2)}/${current.nproc} CPUs; ${selection}; ${detailReport}; ${rate === null ? "configured fallback" : "median of used records"}`,
   };
 }
 

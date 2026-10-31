@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.0 — 2026-10-31
+
+- Filter root listings to primary registrations and provide JSON and all modes.
+
 ## 1.7.0 — 2026-10-31
 
 - List existing registered roots and refuse missing or unregistered project targets

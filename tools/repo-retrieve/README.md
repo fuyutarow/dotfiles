@@ -19,7 +19,8 @@ rr absent -q a -q b -q c     -> ccc search, >=3 paraphrases, before claiming abs
 rr exists '<what it does>'   -> definition catalog + judge: "is it already written?"   (definition)
 rr shape  '<code by example>'-> ccc grep                   old name: structural
 rr symbol                    -> exit 2: known symbols belong to Serena
-rr roots                     -> existing registered directories; report missing registrations on stderr
+rr roots                     -> existing primary registrations; report stale primary and worktree count on stderr
+rr roots --all --json        -> all registrations as {path, kind, exists} objects
 rr index                     -> ccc index, record the freshness watermark, warm the definition catalog
 rr index --detach            -> request indexing in a background worker and return
 rr index --status             -> inspect the detached request and its daemon state
@@ -43,7 +44,7 @@ dir) and the PATH command `repo-retrieve` (package `bin`, installed by `mise run
 ccc's own configuration — global settings and the capped daemon unit — stays in `cocoindex/`.
 
 Search another corpus from the current repository with `--project`. It selects one target
-directory; `--path` (`-p`) narrows files inside that target. Explicit targets must be existing daemon registrations; use `rr roots` to enumerate them. Missing registrations are reported on stderr and are never removed. Semantic routes require the selected
+directory; `--path` (`-p`) narrows files inside that target. Explicit targets must be existing daemon registrations; use `rr roots --all` to enumerate them. The default listing excludes catalog caches and `<repo>.ws/ws_*` worktrees by path shape; `--all` includes them. `--json` emits an array including missing registrations, with `kind` and `exists` fields. Missing registrations are never removed. Semantic routes require the selected
 directory to be a registered ccc project root and retain its own freshness gate. The `index`
 command still operates on the current repository; enter the target first to index it.
 

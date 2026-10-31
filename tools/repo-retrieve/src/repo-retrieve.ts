@@ -54,6 +54,7 @@
 // an unearned pass for an earned one.
 
 import { access, realpath, stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
@@ -387,6 +388,27 @@ async function targetProject(
   return ok(target.value);
 }
 
+function rootKind(path: string): "primary" | "worktree" | "cache" {
+  const catalog = resolve(homedir(), ".cache/repo-retrieve/catalog");
+  const catalogRelative = relative(catalog, path);
+  if (
+    catalogRelative !== "" &&
+    !catalogRelative.startsWith(`..${sep}`) &&
+    catalogRelative !== ".." &&
+    !isAbsolute(catalogRelative)
+  )
+    return "cache";
+  const parts = resolve(path).split(sep);
+  if (
+    parts.some(
+      (part, index) =>
+        part.endsWith(".ws") && (parts[index + 1]?.startsWith("ws_") ?? false),
+    )
+  )
+    return "worktree";
+  return "primary";
+}
+
 function rootsCommand() {
   return command(
     {
@@ -396,9 +418,9 @@ function rootsCommand() {
       ignoreArgv: rejectPrototypeFlag,
       help: {
         description:
-          "List existing registered roots and report missing registrations.",
+          "List primary registered roots; use --all to include worktrees and caches.",
       },
-      flags: {},
+      flags: { all: { type: Boolean }, json: { type: Boolean } },
     },
     async (parsed) => {
       if (parsed._.length > 0) {
@@ -410,10 +432,33 @@ function rootsCommand() {
         commandResult = err(roots.error);
         return;
       }
-      for (const path of roots.value.existing)
-        process.stdout.write(`${path}\n`);
-      for (const path of roots.value.missing)
-        process.stderr.write(`stale registration: ${path} (missing)\n`);
+      const entries = [
+        ...roots.value.existing.map((path) => ({ path, exists: true })),
+        ...roots.value.missing.map((path) => ({ path, exists: false })),
+      ].map((entry) => ({
+        path: entry.path,
+        exists: entry.exists,
+        kind: rootKind(entry.path),
+      }));
+      const selected =
+        parsed.flags.all === true
+          ? entries
+          : entries.filter((entry) => entry.kind === "primary");
+      if (parsed.flags.json === true) {
+        process.stdout.write(`${JSON.stringify(selected)}\n`);
+      } else {
+        for (const entry of selected.filter((item) => item.exists))
+          process.stdout.write(`${entry.path}\n`);
+        for (const entry of selected.filter((item) => !item.exists))
+          process.stderr.write(`stale registration: ${entry.path} (missing)\n`);
+        const staleWorktrees = entries.filter(
+          (entry) => entry.kind === "worktree" && !entry.exists,
+        ).length;
+        if (parsed.flags.all !== true && staleWorktrees > 0)
+          process.stderr.write(
+            `stale worktree registrations: ${staleWorktrees}\n`,
+          );
+      }
       commandResult = ok(0);
     },
   );

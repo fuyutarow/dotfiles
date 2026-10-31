@@ -782,6 +782,51 @@ describe("repo-retrieve route contract", () => {
     }
   });
 
+  test("roots filters worktrees and catalogs and exposes all classifications as JSON", () => {
+    const home = tempDir("rr-roots-home-");
+    const primary = join(home, "project");
+    const stale = join(home, "missing");
+    const worktree = join(home, "project.ws", "ws_live");
+    const staleWorktree = join(home, "project.ws", "ws_old");
+    const cache = join(home, ".cache", "repo-retrieve", "catalog", "abc");
+    for (const path of [primary, worktree, cache])
+      mkdirSync(path, { recursive: true });
+    const projects = [primary, stale, worktree, staleWorktree, cache]
+      .map((path) => `  ${path} [idle]`)
+      .join("\n");
+    const env = { HOME: home, FAKE_CCC_PROJECTS: projects };
+    const listing = run(primary, ["roots"], env);
+    expect(listing.code).toBe(0);
+    expect(listing.stdout.trim()).toBe(primary);
+    expect(listing.stderr).toContain(`stale registration: ${stale} (missing)`);
+    expect(listing.stderr).toContain("stale worktree registrations: 1");
+    const all = run(primary, ["roots", "--all"], env);
+    expect(all.stdout).toContain(worktree);
+    expect(all.stdout).toContain(cache);
+    expect(all.stderr).toContain(staleWorktree);
+    const json = run(primary, ["roots", "--all", "--json"], env);
+    const rootSchema = z.array(
+      z.object({
+        path: z.string(),
+        kind: z.enum(["primary", "worktree", "cache"]),
+        exists: z.boolean(),
+      }),
+    );
+    expect(decodedJson(rootSchema, json.stdout)).toEqual([
+      { path: primary, kind: "primary", exists: true },
+      { path: worktree, kind: "worktree", exists: true },
+      { path: cache, kind: "cache", exists: true },
+      { path: stale, kind: "primary", exists: false },
+      { path: staleWorktree, kind: "worktree", exists: false },
+    ]);
+    const filtered = run(primary, ["roots", "--json"], env);
+    expect(decodedJson(rootSchema, filtered.stdout)).toEqual([
+      { path: primary, kind: "primary", exists: true },
+      { path: stale, kind: "primary", exists: false },
+    ]);
+    expect(filtered.stderr).toBe("");
+  });
+
   test("automatic reindex targets the selected corpus, not the caller", async () => {
     const caller = registerFreshGitProject().dir;
     const { dir: corpus } = registerGitProject();

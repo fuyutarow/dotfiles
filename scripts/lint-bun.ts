@@ -275,7 +275,7 @@ async function main(): Promise<number> {
 }
 
 async function floor(): Promise<number> {
-  const context = jjContext();
+  const context = await jjContext();
   if (context === undefined) {
     // A local verification run has no pre-commit candidate snapshot. Scan the declared production
     // surfaces directly; this works in jj-only checkouts and includes newly created scripts.
@@ -293,9 +293,9 @@ async function floor(): Promise<number> {
     );
     return check([...new Set(paths.flat())].toSorted(), process.cwd());
   }
-  const candidate = jjCandidate(context);
+  const candidate = await jjCandidate(context);
   const globs = PATTERNS.map((pattern) => new Bun.Glob(pattern));
-  const paths = jjChanged(context).filter(
+  const paths = (await jjChanged(context)).filter(
     (path) =>
       candidate.has(path) &&
       path !== EXCLUDE &&
@@ -307,7 +307,7 @@ async function floor(): Promise<number> {
   cleanup.defer(async () => {
     await rm(tmp, { recursive: true, force: true });
   });
-  return await Promise.try(() => {
+  return await Promise.try(async () => {
     // Preserve dependency declarations/zero-dep markers used by the floor, with the candidate
     // version of each declaration; checker inputs themselves are always the selected REV bytes.
     const entries = new Map(
@@ -318,7 +318,7 @@ async function floor(): Promise<number> {
           path.startsWith("tools/shared/src/"),
       ),
     );
-    jjExport(context, tmp, entries);
+    await jjExport(context, tmp, entries);
     return check(
       paths.map((path) => join(tmp, path)),
       tmp,

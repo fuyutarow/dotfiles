@@ -19,7 +19,7 @@
 // --bookmark / BOOKMARK env, default alpha outside agx workspaces.
 // Exit: 0 committed · 1 the gate refused (nothing committed) · 2 usage or empty selection.
 import { $ } from "bun";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { cli } from "cleye";
@@ -32,7 +32,7 @@ import {
 } from "./jj-precommit.ts";
 
 const die = (m: string, code = 2): never => {
-  console.error(`jj-commit: ${m}`);
+  process.stderr.write(`jj-commit: ${m}\n`);
   process.exit(code);
 };
 
@@ -166,15 +166,17 @@ const rev = await at("@");
 const base = await at("@-");
 if (!/^[0-9a-f]{40,64}$/u.test(base))
   die("the snapshot must have exactly one parent");
-const changed = jjChanged({ root, rev, base, paths: ["."] });
-const known = [...new Set([...jjFiles(rev, root), ...jjFiles(base, root)])];
+const changed = await jjChanged({ root, rev, base, paths: ["."] });
+const known = [
+  ...new Set([...(await jjFiles(rev, root)), ...(await jjFiles(base, root))]),
+];
 for (const path of named) {
   if (!known.some((candidate) => selected([path], candidate)))
     die(`path is absent from the snapshot and base: ${JSON.stringify(path)}`);
 }
 
 const wanted = new Set<string>();
-function addRecordPaths(): void {
+async function addRecordPaths(): Promise<void> {
   for (const path of changed) {
     if (!path.startsWith("research_record/")) continue;
     const match = path.match(/^research_record\/runs\/([^/]+)\//u);
@@ -182,10 +184,16 @@ function addRecordPaths(): void {
       wanted.add(path);
       continue;
     }
-    if (existsSync(`research_record/runs/${match[1]}.json`)) wanted.add(path);
+    if (
+      await access(`research_record/runs/${match[1]}.json`).then(
+        () => true,
+        () => false,
+      )
+    )
+      wanted.add(path);
   }
 }
-if (records) addRecordPaths();
+if (records) await addRecordPaths();
 // Preserve explicit paths, order and duplicates byte-for-byte in the consumer interface.
 // --records appends its resolved changed files; it never expands an explicitly named directory.
 const sel = [
@@ -194,9 +202,9 @@ const sel = [
 ];
 if (!changed.some((path) => selected(sel, path)))
   die("no changed path selected (name paths after -- or use --records)");
-console.log(`jj-commit: ${sel.length} path(s)`);
+process.stderr.write(`jj-commit: ${sel.length} path(s)\n`);
 
-const tmp = mkdtempSync(join(tmpdir(), "jj-precommit-"));
+const tmp = await mkdtemp(join(tmpdir(), "jj-precommit-"));
 const pathsFile = join(tmp, "paths");
 await Bun.write(pathsFile, `${sel.join("\0")}\0`);
 // The gate's output goes straight to the caller's stdout/stderr, never through a Bun Shell pipe:
@@ -216,13 +224,16 @@ const gate = Bun.spawn(["mise", "run", "--jobs", "1", "hook:pre-commit"], {
     PRECOMMIT_BASE: base,
   },
 });
-const gateCode = await gate.exited.finally(() => {
-  rmSync(tmp, { recursive: true, force: true });
-});
+const gateCode = await (async () => {
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(tmp, { recursive: true, force: true }),
+  };
+  return await gate.exited;
+})();
 if (gateCode !== 0) die("hook:pre-commit refused; nothing committed", 1);
 
 async function rerunGate(revision: string, parent: string): Promise<void> {
-  const rerunDir = mkdtempSync(join(tmpdir(), "jj-precommit-rebase-"));
+  const rerunDir = await mkdtemp(join(tmpdir(), "jj-precommit-rebase-"));
   const rerunPaths = join(rerunDir, "paths");
   await Bun.write(rerunPaths, `${sel.join("\0")}\0`);
   const rerun = Bun.spawn(["mise", "run", "--jobs", "1", "hook:pre-commit"], {
@@ -237,9 +248,13 @@ async function rerunGate(revision: string, parent: string): Promise<void> {
       PRECOMMIT_BASE: parent,
     },
   });
-  const code = await rerun.exited.finally(() => {
-    rmSync(rerunDir, { recursive: true, force: true });
-  });
+  const code = await (async () => {
+    await using _cleanup = {
+      [Symbol.asyncDispose]: () =>
+        rm(rerunDir, { recursive: true, force: true }),
+    };
+    return await rerun.exited;
+  })();
   if (code !== 0)
     die(
       "hook:pre-commit refused the rebased commit; commit kept, not pushed",
@@ -270,7 +285,9 @@ if ((await at(bookmark)) !== (await at("@-"))) {
 const tpl =
   'commit_id.short() ++ " " ++ change_id.short() ++ " " ++ description.first_line() ++ "\\n"';
 await $`jj log --no-graph -r @- -T ${tpl}`;
-console.log((await $`jj diff -r @- --stat`.text()).trim().split("\n").at(-1));
+process.stderr.write(
+  `${(await $`jj diff -r @- --stat`.text()).trim().split("\n").at(-1)}\n`,
+);
 await $`jj bookmark list ${bookmark}`;
 
 async function rebaseCandidate(
@@ -279,8 +296,8 @@ async function rebaseCandidate(
   remote: string,
 ): Promise<string> {
   const competing = remoteId.slice(0, 12);
-  console.error(
-    `jj-commit: push race with competing commit ${competing}; rebasing ${candidate.slice(0, 12)} onto ${remote}`,
+  process.stderr.write(
+    `jj-commit: push race with competing commit ${competing}; rebasing ${candidate.slice(0, 12)} onto ${remote}\n`,
   );
   const rebase = await $`jj rebase -b ${bookmark} -d ${remote}`.nothrow();
   if (rebase.exitCode !== 0) {
@@ -300,12 +317,12 @@ async function rebaseCandidate(
   const invalidated = rebasedPaths.filter((path) => selected(sel, path));
   if (invalidated.length > 0) {
     await rerunGate(rebased, remoteId);
-    console.log(
-      `jj-commit: pre-commit gate rerun because rebase changed selected path(s): ${invalidated.join(", ")}`,
+    process.stderr.write(
+      `jj-commit: pre-commit gate rerun because rebase changed selected path(s): ${invalidated.join(", ")}\n`,
     );
   } else {
-    console.log(
-      "jj-commit: rebase was clean and touched no selected paths; pre-commit gate not rerun",
+    process.stderr.write(
+      "jj-commit: rebase was clean and touched no selected paths; pre-commit gate not rerun\n",
     );
   }
   return rebased;
@@ -357,8 +374,8 @@ async function pushWithRetry(): Promise<void> {
         .text()
     ).trim();
     if (onRemote === "x" && r.exitCode !== 0)
-      console.log(
-        "jj-commit: push landed; the local Git refresh failed (index.lock) and is re-imported by the next jj command",
+      process.stderr.write(
+        "jj-commit: push landed; the local Git refresh failed (index.lock) and is re-imported by the next jj command\n",
       );
     if (onRemote === "x") {
       landed = true;
@@ -374,8 +391,8 @@ async function pushWithRetry(): Promise<void> {
         `push race with competing commit ${latest === "" ? "unknown" : latest.slice(0, 12)}; retry limit ${maxAttempts} reached (local commit ${original.slice(0, 12)} kept, not pushed)`,
         1,
       );
-    console.error(
-      `jj-commit: push race with competing commit ${latest === "" ? "unknown" : latest.slice(0, 12)}; fetching and retrying (${attempt + 1}/${maxAttempts})`,
+    process.stderr.write(
+      `jj-commit: push race with competing commit ${latest === "" ? "unknown" : latest.slice(0, 12)}; fetching and retrying (${attempt + 1}/${maxAttempts})\n`,
     );
   }
   if (!landed)
@@ -392,4 +409,10 @@ const postCommitHook = join(
   import.meta.dir,
   "../../../../.githooks/post-commit",
 );
-if (existsSync(postCommitHook)) await $`${postCommitHook}`.nothrow();
+if (
+  await access(postCommitHook).then(
+    () => true,
+    () => false,
+  )
+)
+  await $`${postCommitHook}`.nothrow();

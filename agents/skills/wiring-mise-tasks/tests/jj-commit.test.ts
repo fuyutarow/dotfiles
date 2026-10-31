@@ -569,7 +569,7 @@ describe("jj gated commit (J1)", () => {
     );
   });
 
-  test("candidate consumers read selected snapshot bytes and base bytes for other files", () => {
+  test("candidate consumers read selected snapshot bytes and base bytes for other files", async () => {
     const f = fixture();
     writeFileSync(join(f.root, "selected.txt"), "snapshotted\n");
     writeFileSync(join(f.root, "other.txt"), "unselected WIP\n");
@@ -581,13 +581,15 @@ describe("jj gated commit (J1)", () => {
       paths: ["selected.txt"],
     };
     writeFileSync(join(f.root, "selected.txt"), "later worktree bytes\n");
-    expect(jjChanged(context)).toEqual(["selected.txt"]);
-    expect(jjContent(context, "selected.txt").toString()).toBe("snapshotted\n");
-    const view = jjCandidate(context);
+    expect(await jjChanged(context)).toEqual(["selected.txt"]);
+    expect((await jjContent(context, "selected.txt")).toString()).toBe(
+      "snapshotted\n",
+    );
+    const view = await jjCandidate(context);
     expect(view.get("selected.txt")).toBe(context.rev);
     expect(view.get("other.txt")).toBe(context.base);
     expect(
-      jjContent(context, "other.txt", view.get("other.txt")).toString(),
+      (await jjContent(context, "other.txt", view.get("other.txt"))).toString(),
     ).toBe("base other\n");
   });
 });

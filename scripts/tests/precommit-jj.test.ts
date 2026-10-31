@@ -319,7 +319,9 @@ describe("J1 dotfiles consumers", () => {
     const bad = await f.snapshot(["new/config.toml"]);
     const r = await bad.run("scripts/config-map.ts", ["--check"]);
     expect(r.exitCode).toBe(1);
-    expect(r.stdout.toString()).toContain("unregistered: new/config.toml");
+    expect(r.stdout.toString() + r.stderr.toString()).toContain(
+      "unregistered: new/config.toml",
+    );
     expect(await readFile(f.marker, "utf8")).toBe("");
   });
 

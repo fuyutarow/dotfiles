@@ -36,13 +36,13 @@ async function listTrackedTypeScript(cwd: string): Promise<Listing> {
   return { code: code ?? 1, stdout, stderr: stderr.trim() };
 }
 
-function scanJjPath(
-  context: NonNullable<ReturnType<typeof jjContext>>,
+async function scanJjPath(
+  context: NonNullable<Awaited<ReturnType<typeof jjContext>>>,
   path: string,
   present: Set<string>,
-): number {
+): Promise<number> {
   if (!/\.tsx?$/u.test(path) || !present.has(path)) return 0;
-  const lines = jjContent(context, path).toString().split("\n");
+  const lines = (await jjContent(context, path)).toString().split("\n");
   let findings = 0;
   for (const [index, line] of lines.entries()) {
     if (!/(oxlint|eslint)-disable/u.test(line)) continue;
@@ -53,12 +53,12 @@ function scanJjPath(
 }
 
 async function scan(cwd: string): Promise<number> {
-  const context = jjContext();
+  const context = await jjContext();
   if (context !== undefined) {
-    const present = new Set(jjFiles(context.rev, context.root));
+    const present = new Set(await jjFiles(context.rev, context.root));
     let findings = 0;
-    for (const path of jjChanged(context)) {
-      findings += scanJjPath(context, path, present);
+    for (const path of await jjChanged(context)) {
+      findings += await scanJjPath(context, path, present);
     }
     process.stdout.write(
       `lint:ts-no-disable: ${findings} finding(s) in selected jj snapshot\n`,

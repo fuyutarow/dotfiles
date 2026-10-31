@@ -52,15 +52,13 @@ async function main(): Promise<number> {
   const directory = posix.normalize(parsed.flags.dir);
   const context =
     (await Promise.try(() => jjContext())) ??
-    (await Promise.try(() => {
-      const root = jjRead(["root"]).toString().trim();
-      const rev = jjRead(
-        ["log", "--no-graph", "-r", "@", "-T", "commit_id"],
-        root,
+    (await Promise.try(async () => {
+      const root = (await jjRead(["root"])).toString().trim();
+      const rev = (
+        await jjRead(["log", "--no-graph", "-r", "@", "-T", "commit_id"], root)
       ).toString();
-      const base = jjRead(
-        ["log", "--no-graph", "-r", "@-", "-T", "commit_id"],
-        root,
+      const base = (
+        await jjRead(["log", "--no-graph", "-r", "@-", "-T", "commit_id"], root)
       ).toString();
       return { root, rev, base, paths: ["."] };
     }));

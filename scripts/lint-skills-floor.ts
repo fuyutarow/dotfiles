@@ -65,7 +65,7 @@ async function copyWorktreeInputs(
 }
 
 const tmp = await mkdtemp(join(tmpdir(), "skills-floor-"));
-const context = jjContext();
+const context = await jjContext();
 const listed =
   context === undefined && process.env["SKILLS_LINT_WORKTREE"] !== "1"
     ? await run([
@@ -87,11 +87,11 @@ if (listed !== undefined && listed.exitCode !== 0) {
   process.exit(2);
 }
 if (context !== undefined) {
-  jjExport(
+  await jjExport(
     context,
     tmp,
     new Map(
-      [...jjCandidate(context)].filter(
+      [...(await jjCandidate(context))].filter(
         ([path]) =>
           path.startsWith("agents/skills/") ||
           path === BUDGET ||

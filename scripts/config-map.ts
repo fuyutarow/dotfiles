@@ -242,7 +242,7 @@ async function snapshotRows(
   // unrelated worktree edit, and validate the subprocess result at this boundary.
   const tmp = await mkdtemp(join(tmpdir(), "config-map-jj-"));
   const source = join(tmp, "registry.ts");
-  await writeFile(source, jjContent(context, path, rev));
+  await writeFile(source, await jjContent(context, path, rev));
   const result = Bun.spawn(
     [
       "bun",
@@ -307,8 +307,9 @@ async function main(): Promise<Result<number, Error>> {
   if (parsed._.length > 0)
     return err(new UsageError(`unexpected argument: ${parsed._[0]}`));
   if (parsed.flags.check) {
-    const context = jjContext();
-    const candidate = context === undefined ? undefined : jjCandidate(context);
+    const context = await jjContext();
+    const candidate =
+      context === undefined ? undefined : await jjCandidate(context);
     const rowsResult =
       context !== undefined && candidate !== undefined
         ? await snapshotRows(context, candidate)

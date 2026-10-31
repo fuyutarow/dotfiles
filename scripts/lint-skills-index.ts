@@ -32,8 +32,9 @@ const git = async (args: string[]): Promise<{ code: number; out: string }> => {
 
 const idx = "agents/skills/README.md";
 const ROOT = join(import.meta.dir, "..");
-const context = jjContext();
-const candidate = context === undefined ? undefined : jjCandidate(context);
+const context = await jjContext();
+const candidate =
+  context === undefined ? undefined : await jjCandidate(context);
 
 async function readCandidateFile(
   path: string,
@@ -51,7 +52,7 @@ async function readCandidateFile(
   const rev = candidate?.get(path);
   return rev === undefined
     ? { code: 1, out: "" }
-    : { code: 0, out: jjContent(context, path, rev).toString() };
+    : { code: 0, out: (await jjContent(context, path, rev)).toString() };
 }
 
 const readme = await readCandidateFile(idx);

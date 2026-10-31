@@ -1,6 +1,7 @@
 import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
 import {
   chmod,
+  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -134,6 +135,88 @@ if (rule === 'strict' && code === 'legacy') { process.stderr.write('lint:fixture
   const registry = `[[consumers]]\nname = "fixture-consumer"\nroot = ${JSON.stringify(consumer)}\ntrunk = "alpha"\nsetup = ["true"]\nsurfaces = [${JSON.stringify(options.surface ?? "standard-presets/demo")}]\ncommand = [${JSON.stringify(process.execPath)}, "gate.ts"]\ntimeout_ms = ${options.timeout ?? 10000}\n`;
   await writeFile(join(root, "standard-presets/consumers.toml"), registry);
   return { root, consumer, temp };
+}
+
+async function syncPathFixture(mode: "pass" | "drift" | "candidate" | "check") {
+  const f = await fixture({ surface: "standard-presets/typescript", gate: "" });
+  const repo = join(import.meta.dir, "../..");
+  await cp(join(repo, "standard-presets"), join(f.root, "standard-presets"), {
+    recursive: true,
+  });
+  await writeFile(
+    join(f.root, "standard-presets/demo/preset.toml"),
+    'name = "demo"\ndescription = "fixture"\nfiles = [{source = "rule", destination = "rule"}]\n',
+  );
+  await mkdir(join(f.root, "agents"), { recursive: true });
+  await cp(join(repo, "agents/hooks"), join(f.root, "agents/hooks"), {
+    recursive: true,
+  });
+  await mkdir(join(f.root, "tools"), { recursive: true });
+  await cp(join(repo, "tools/shared"), join(f.root, "tools/shared"), {
+    recursive: true,
+  });
+  const registry = `[[consumers]]\nname = "fixture-consumer"\nroot = ${JSON.stringify(f.consumer)}\ntrunk = "alpha"\nsurfaces = ["standard-presets/typescript"]\ncommand = [${JSON.stringify(process.execPath)}, "gate.ts"]\ntimeout_ms = 30000\n`;
+  await writeFile(join(f.root, "standard-presets/consumers.toml"), registry);
+  const house = await readFile(
+    join(f.root, "standard-presets/typescript/house.oxlintrc.json"),
+    "utf8",
+  );
+  await cp(
+    join(f.root, "standard-presets/typescript/package.json"),
+    join(f.consumer, "package.json"),
+  );
+  await cp(
+    join(f.root, "standard-presets/typescript/tsconfig.json"),
+    join(f.consumer, "tsconfig.json"),
+  );
+  await writeFile(
+    join(f.consumer, "house.oxlintrc.json"),
+    mode === "drift" ? `${house}\n` : house,
+  );
+  await writeFile(
+    join(f.consumer, ".oxlintrc.json"),
+    '{"extends":["./house.oxlintrc.json"]}',
+  );
+  await writeFile(
+    join(f.consumer, "gate.ts"),
+    mode === "check"
+      ? "process.exit(7);"
+      : `if (await Bun.file('house.oxlintrc.json').exists() || !(await Bun.file('.oxlint/house.oxlintrc.json').exists())) process.exit(8);`,
+  );
+  await snapshot(f.consumer);
+  await snapshot(f.root);
+  await writeFile(join(f.root, "standard-presets/consumers.toml"), registry);
+  await symlink(join(repo, "node_modules"), join(f.root, "node_modules"));
+  if (mode === "candidate")
+    await writeFile(
+      join(f.root, "standard-presets/typescript/house.oxlintrc.json"),
+      `${house}\n`,
+    );
+  return f;
+}
+
+for (const mode of ["pass", "drift", "candidate", "check"] as const) {
+  test(`typescript sync ${mode}`, async () => {
+    const f = await syncPathFixture(mode);
+    const result = await runConsumerGates(f.root, [
+      "standard-presets/typescript/house.oxlintrc.json",
+    ]);
+    expect(result.ok, result.lines.join("\n")).toBe(
+      mode === "pass" || mode === "drift",
+    );
+    const expected = {
+      drift:
+        "skipped: drifted from presets (house.oxlintrc.json), reconcile in the consumer",
+      pass: "PASS fixture-consumer",
+      candidate: "FAIL fixture-consumer",
+      check: "FAIL fixture-consumer",
+    };
+    expect(result.lines.join("\n")).toContain(expected[mode]);
+    if (mode === "candidate")
+      expect(result.lines.join("\n")).toContain("sync exit 1");
+    if (mode === "check")
+      expect(result.lines.join("\n")).toContain("gate.ts exit 7");
+  });
 }
 
 test("strict preset refuses the named consumer with task diagnostics and never changes the source", async () => {
@@ -475,6 +558,10 @@ if (${JSON.stringify(target)} !== '.' && await Bun.file('.oxlintrc.json').exists
   await writeFile(
     join(f.root, "standard-presets/typescript/.oxlintrc.json"),
     "candidate-policy",
+  );
+  await writeFile(
+    join(f.root, "standard-presets/src/cli.ts"),
+    `import {join} from "node:path"; const target = Bun.argv[Bun.argv.indexOf("--to") + 1]; await Bun.write(join(target, ".oxlintrc.json"), await Bun.file(join(import.meta.dir, "../typescript/.oxlintrc.json")).text());`,
   );
   if (!missing) {
     await mkdir(join(f.consumer, target), { recursive: true });

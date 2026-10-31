@@ -159,6 +159,13 @@ function diagnosticOutput(output: string): string {
   return lines.map((line) => `  ${line}`).join("\n");
 }
 
+function surfaceFailure(
+  name: string,
+  error: string | undefined,
+): string | undefined {
+  return error === undefined ? undefined : `FAIL ${name}: ${error}`;
+}
+
 // Preserve link text, including dangling links. The sandbox protects external targets.
 // Exclude VCS metadata rather than copying .git files pointing at a shared worktree store.
 async function copyTree(source: string, target: string): Promise<void> {
@@ -746,6 +753,76 @@ async function capturePathDirectory(
   return bindings;
 }
 
+async function syncTypescript(
+  root: string,
+  candidate: string,
+  copy: string,
+  scratch: string,
+  consumer: Consumer,
+  run: (argv: string[]) => ReturnType<typeof command>,
+): Promise<string | undefined> {
+  const target = join(copy, consumer.preset_dirs?.typescript ?? ".");
+  const directory = consumer.preset_dirs?.typescript;
+  if (directory !== undefined) {
+    const config = join(directory, ".oxlintrc.json");
+    if (await containsSymlink(copy, config))
+      return `FAIL ${consumer.name}: apply standard-presets/typescript: refusing write through consumer symlink ${config}`;
+    if (!(await Bun.file(join(copy, config)).exists()))
+      return `FAIL ${consumer.name}: apply standard-presets/typescript: declared preset directory ${directory} has no config file ${config}`;
+  }
+  const registry = `[[consumers]]\nroot = ${JSON.stringify(target)}\nplacement = ${JSON.stringify(consumer.placement ?? DEFAULT_PLACEMENT).replaceAll(":", " =")}\n`;
+  await writeFile(join(candidate, REGISTRY), registry);
+  const sync = (presetRoot: string, dryRun = false) =>
+    run([
+      process.execPath,
+      join(presetRoot, "standard-presets/src/cli.ts"),
+      "sync",
+      "typescript",
+      "--to",
+      target,
+      ...(dryRun ? ["--dry-run"] : []),
+    ]);
+  const applied = await sync(candidate);
+  if (applied.ok) return undefined;
+  const failure = `FAIL ${consumer.name}: sync ${applied.reason}\n${diagnosticOutput(applied.output)}`;
+  const conflicts = Array.from(
+    applied.output.matchAll(
+      /preset: conflict ([^\n:]+): local changes cannot be reconciled/gu,
+    ),
+    (match) => match[1] ?? "",
+  );
+  if (conflicts.length === 0) return failure;
+  const revision = await resolveTrunk(root, "alpha");
+  const commit = revision.stdout.trim();
+  if (!revision.ok || !/^[a-f0-9]{40,64}$/u.test(commit)) return failure;
+  const baseline = join(scratch, "baseline");
+  if ((await exportTrunk(root, baseline, commit, scratch)) !== undefined)
+    return failure;
+  await symlink(
+    join(candidate, "node_modules"),
+    join(baseline, "node_modules"),
+  );
+  await writeFile(join(baseline, REGISTRY), registry);
+  const current = await sync(baseline, true);
+  const drift = conflicts.filter((path) =>
+    current.output.includes(
+      `preset: conflict ${path}: local changes cannot be reconciled`,
+    ),
+  );
+  const candidateCount = [...applied.output.matchAll(/preset: conflict /gu)]
+    .length;
+  const currentCount = [...current.output.matchAll(/preset: conflict /gu)]
+    .length;
+  if (
+    !current.ok &&
+    drift.length === conflicts.length &&
+    candidateCount === drift.length &&
+    currentCount === drift.length
+  )
+    return `SKIP ${consumer.name}: skipped: drifted from presets (${drift.join(", ")}), reconcile in the consumer`;
+  return failure;
+}
+
 async function checkConsumer(
   root: string,
   consumer: Consumer,
@@ -924,16 +1001,18 @@ async function checkConsumer(
   const steps: { label: string; argv: string[] }[] = [];
   for (const surface of consumer.surfaces) {
     if (!surface.startsWith("standard-presets/")) continue;
-    const applied = await applyConsumerSurface(
-      candidate,
-      copy,
-      consumer,
-      surface,
-      changed,
-      run,
-    );
-    if (applied !== undefined)
-      return [...lines, `FAIL ${consumer.name}: ${applied}`];
+    const result =
+      surface === "standard-presets/typescript"
+        ? await syncTypescript(root, candidate, copy, scratch, consumer, run)
+        : await applyConsumerSurface(
+            candidate,
+            copy,
+            consumer,
+            surface,
+            changed,
+            run,
+          ).then((error) => surfaceFailure(consumer.name, error));
+    if (result !== undefined) return [...lines, result];
   }
   // Package bin names must resolve to the candidate, never to globally linked live files.
   const bins = await candidateBins(candidate, scratch);

@@ -282,7 +282,7 @@ export async function plan(
   targets: Target[],
   options: EngineOptions,
 ): Promise<EngineResult> {
-  const headroom = options.headroom ?? readHeadroom();
+  const headroom = options.headroom ?? (await readHeadroom());
   const remoteProbes: Context["remoteProbes"] = new Map();
   const liveness = (
     options.captureLiveness ??
@@ -720,7 +720,7 @@ async function executeTarget(
     if (options.cancellationSignal?.aborted !== true) check(phase);
   };
   check("target plan");
-  const headroom = options.headroom ?? readHeadroom();
+  const headroom = options.headroom ?? (await readHeadroom());
   const started = now();
   const measureFree = options.measureFree ?? freeBytes;
   const before = measureFree();
@@ -942,7 +942,7 @@ async function executeLocked(
     plan: aggregate(
       lockedPlan.targets,
       "run",
-      options.headroom ?? readHeadroom(),
+      options.headroom ?? (await readHeadroom()),
       receipt,
     ),
     error: null,
@@ -994,7 +994,7 @@ export async function run(
     };
   const runOptions = {
     ...options,
-    headroom: options.headroom ?? readHeadroom(),
+    headroom: options.headroom ?? (await readHeadroom()),
   };
   const preview = await plan(targets, runOptions);
   if (preview.plan === null) return preview;

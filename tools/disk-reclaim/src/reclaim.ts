@@ -986,7 +986,7 @@ export async function main(
   }
   const wslBefore =
     selectedCommand === "run" ? await wslStorageSnapshot() : null;
-  const measuredOptions = { ...options, headroom: readHeadroom() };
+  const measuredOptions = { ...options, headroom: await readHeadroom() };
   const result = await (
     selectedCommand === "run"
       ? run(picked, measuredOptions)

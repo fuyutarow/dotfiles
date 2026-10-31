@@ -25,7 +25,7 @@ const ctx: Context = {
   config,
   only: process.env["DISK_PURGE_ONLY"],
   underPressure: process.env["DISK_PURGE_UNDER_PRESSURE"] === "1",
-  headroom: readHeadroom(),
+  headroom: await readHeadroom(),
   log: (message) => {
     process.stderr.write(`${message}\n`);
   },

@@ -73,10 +73,11 @@ or `signalCode`. Drain stdout, stderr and `exited` concurrently in one `Promise.
 relayed output. See [Bun facts](references/bun-facts.md) for the measured failure modes.
 Prefer Bun's native primitives to a hand-rolled equivalent when they meet the need.
 
-Hook bodies use synchronous main and `spawnSync`, with only `node:`/`bun:` imports and Bun
-globals; declare fail-open or fail-closed in the header. Hook event and matcher configuration
-belongs to its declared owner. Avoid hand-drawn carriage-return progress bars: they wrapped in
-narrow panes. When interactive behavior is needed, follow the CLI owner's conditional defaults
+Hook bodies use an async main awaited at top level and `Bun.spawn` (draining stdout, stderr and
+exited together as described above), with only `node:`/`bun:` imports and Bun globals; declare
+fail-open or fail-closed in the header. Hook event and matcher configuration belongs to its
+declared owner. Avoid hand-drawn carriage-return progress bars: they wrapped in narrow panes.
+When interactive behavior is needed, follow the CLI owner's conditional defaults
 ([CLIG interactivity](https://clig.dev/#interactivity)).
 
 ## Workspace boundaries and verification

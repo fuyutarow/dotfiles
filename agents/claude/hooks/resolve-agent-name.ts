@@ -13,8 +13,7 @@
 // against the way SessionStart has). Shares the SAME cache file, so whichever of the three
 // warms it first still helps the others.
 
-import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { attempt, attemptOr } from "../../hooks/attempt.ts";
 import { arr, at, parseJson, strAt } from "../../hooks/narrow.ts";
 
@@ -72,7 +71,8 @@ function buildEntries(
 async function agentName(sid: string): Promise<string | undefined> {
   // missing / corrupt cache file -> treat as empty and refetch below
   const cache = await attemptOr(
-    (): unknown => parseJson(readFileSync(AGENT_NAME_CACHE, "utf8")),
+    async (): Promise<unknown> =>
+      parseJson(await readFile(AGENT_NAME_CACHE, "utf8")),
     {},
   );
   const hit = at(cache, sid);
@@ -83,12 +83,22 @@ async function agentName(sid: string): Promise<string | undefined> {
   )
     return strAt(hit, "name");
 
-  const fetched = await attempt(() => {
-    const out = execFileSync(CLAUDE_BIN, ["agents", "--json"], {
-      stdio: ["ignore", "pipe", "ignore"],
-      encoding: "utf8",
-      timeout: 3000,
+  const fetched = await attempt(async () => {
+    const child = Bun.spawn([CLAUDE_BIN, "agents", "--json"], {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
     });
+    const timeout = AbortSignal.timeout(3000);
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+    }, 3000);
+    const [out, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      child.exited,
+    ]);
+    clearTimeout(timer);
+    if (timeout.aborted || exitCode !== 0) return null;
     const listed = agentsOf(parseJson(out));
     if (!listed.ok) return null;
     const now = Temporal.Now.instant().epochMilliseconds;
@@ -97,9 +107,9 @@ async function agentName(sid: string): Promise<string | undefined> {
   if (!fetched.ok || fetched.value === null) return undefined; // `claude` missing/slow/errored -> caller falls back
   const next = fetched.value;
   // cache write failed (e.g. read-only fs) -> value below still returned, just not persisted
-  await attemptOr(() => {
-    mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-    writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));
+  await attemptOr(async () => {
+    await mkdir(`${HOME}/.cache/claude`, { recursive: true });
+    await writeFile(AGENT_NAME_CACHE, JSON.stringify(next));
   }, undefined);
   return next[sid]?.name;
 }

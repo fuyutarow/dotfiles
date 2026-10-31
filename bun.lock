@@ -218,7 +218,7 @@
     },
     "tools/baseline": {
       "name": "@dotfiles/baseline",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "bin": {
         "baseline": "src/baseline.ts",
       },
@@ -399,7 +399,7 @@
     },
     "tools/storage-headroom": {
       "name": "@dotfiles/storage-headroom",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "bin": {
         "storage-headroom": "src/storage-headroom.ts",
       },
@@ -421,7 +421,7 @@
     },
     "tools/tool-tiers": {
       "name": "@dotfiles/tool-tiers",
-      "version": "0.2.4",
+      "version": "0.2.5",
       "bin": {
         "tool": "src/tool.ts",
       },

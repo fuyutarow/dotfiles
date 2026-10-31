@@ -24,14 +24,7 @@ import { hookJson } from "./lib.ts";
 // command, not a prompt for Claude — silently falling through to an inference turn would be
 // the worst outcome) and say what went wrong in `reason`.
 
-import { execFileSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { tmpdir, userInfo } from "node:os";
 import { basename, join } from "node:path";
@@ -52,19 +45,79 @@ const TURN_SEPARATOR = "\n\n---\n\n";
 // would let a request past this check just to fail confusingly later.
 
 function block(reason: string): never {
-  console.log(hookJson({ decision: "block", reason }));
+  process.stdout.write(`${hookJson({ decision: "block", reason })}\n`);
   process.exit(0);
 }
 
-function copyViaHerdr(text: string): string {
-  const file = join(mkdtempSync(join(tmpdir(), "quote-")), "payload.txt");
-  writeFileSync(file, text);
-  return execFileSync("bun", [`${HOOKS}/copy-via-herdr-pane.ts`], {
+async function runChild(
+  cmd: string,
+  args: string[],
+  options: {
+    readonly env?: Record<string, string | undefined>;
+    readonly stdin?: string;
+    readonly timeoutMs: number;
+  },
+): Promise<
+  | { readonly ok: true; readonly stdout: string }
+  | { readonly ok: false; readonly reason: string }
+> {
+  const child = Bun.spawn([cmd, ...args], {
+    stdin: options.stdin === undefined ? "ignore" : "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+    ...(options.env === undefined ? {} : { env: options.env }),
+  });
+  let timedOut = false;
+  if (options.stdin !== undefined) {
+    const stdin = child.stdin;
+    if (stdin === undefined)
+      return { ok: false, reason: `${cmd} stdin pipe was unavailable` };
+    const write = stdin.write(options.stdin);
+    void stdin.end();
+    await write;
+  }
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGTERM");
+  }, options.timeoutMs);
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  clearTimeout(timer);
+  if (timedOut) {
+    return {
+      ok: false,
+      reason: `process timed out after ${options.timeoutMs}ms`,
+    };
+  }
+  if (exitCode === 0) return { ok: true, stdout };
+  const errorText = stderr.trim();
+  return {
+    ok: false,
+    reason:
+      errorText.length > 0
+        ? errorText
+        : `${cmd} exited with code ${String(exitCode)}`,
+  };
+}
+
+async function copyViaHerdr(
+  text: string,
+): Promise<
+  | { readonly ok: true; readonly pane: string }
+  | { readonly ok: false; readonly reason: string }
+> {
+  const file = join(await mkdtemp(join(tmpdir(), "quote-")), "payload.txt");
+  await writeFile(file, text);
+  const result = await runChild("bun", [`${HOOKS}/copy-via-herdr-pane.ts`], {
     env: { ...process.env, COPY_PAYLOAD_FILE: file },
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf8",
-    timeout: 15000,
-  }).trim();
+    timeoutMs: 15_000,
+  });
+  return result.ok
+    ? { ok: true, pane: result.stdout.trim() }
+    : { ok: false, reason: result.reason };
 }
 
 function failureReason(error: unknown): string {
@@ -89,7 +142,9 @@ async function copyViaSshOsc52(text: string): Promise<CopyResult> {
   if (!tty.startsWith("/dev/")) {
     return { ok: false, reason: `SSH_TTY is not a /dev terminal path: ${tty}` };
   }
-  const device = await attempt(() => statSync(tty).isCharacterDevice());
+  const device = await attempt(async () =>
+    (await stat(tty)).isCharacterDevice(),
+  );
   if (!device.ok) return { ok: false, reason: failureReason(device.error) };
   if (!device.value) {
     return {
@@ -97,8 +152,8 @@ async function copyViaSshOsc52(text: string): Promise<CopyResult> {
       reason: `SSH_TTY does not name a terminal device: ${tty}`,
     };
   }
-  const write = await attempt(() => {
-    writeFileSync(
+  const write = await attempt(async () => {
+    await writeFile(
       tty,
       `\u001B]52;c;${Buffer.from(text, "utf8").toString("base64")}\u0007`,
       { flag: "a" },
@@ -109,12 +164,14 @@ async function copyViaSshOsc52(text: string): Promise<CopyResult> {
     : { ok: false, reason: failureReason(write.error) };
 }
 
-function copyViaPbcopy(text: string): void {
-  execFileSync("pbcopy", [], {
-    input: text,
-    stdio: ["pipe", "ignore", "pipe"],
-    timeout: 5000,
+async function copyViaPbcopy(text: string): Promise<CopyResult> {
+  const result = await runChild("pbcopy", [], {
+    stdin: text,
+    timeoutMs: 5_000,
   });
+  return result.ok
+    ? { ok: true }
+    : { ok: false, reason: `pbcopy: ${result.reason}` };
 }
 
 function shellQuote(value: string): string {
@@ -193,11 +250,10 @@ if (rawArgs !== "") {
 
 // Written every turn by capture-last-response.ts (Stop hook); newest last.
 // no history file -> handled as "nothing captured" below
-const turnsRead = await attempt(() => {
+const turnsRead = await attempt(async () => {
   const turns: string[] = [];
-  for (const line of readFileSync(
-    `${HOME}/.cache/claude/last-response/${sid}.jsonl`,
-    "utf8",
+  for (const line of (
+    await readFile(`${HOME}/.cache/claude/last-response/${sid}.jsonl`, "utf8")
   )
     .split("\n")
     .filter((value) => value.trim() !== "")) {
@@ -224,15 +280,12 @@ const selected = turns.slice(-count);
 // distinction is the whole point of the from header. Falls back to the raw session id.
 let name = sid;
 // leave the session id as the name on failure
-const resolvedName = await attempt(() =>
-  execFileSync("bun", [`${HOOKS}/resolve-agent-name.ts`], {
-    env: { ...process.env, AGENT_NAME_SESSION_ID: sid },
-    stdio: ["ignore", "pipe", "ignore"],
-    encoding: "utf8",
-    timeout: 5000,
-  }).trim(),
-);
-if (resolvedName.ok && resolvedName.value !== "") name = resolvedName.value;
+const resolvedName = await runChild("bun", [`${HOOKS}/resolve-agent-name.ts`], {
+  env: { ...process.env, AGENT_NAME_SESSION_ID: sid },
+  timeoutMs: 5_000,
+});
+if (resolvedName.ok && resolvedName.stdout.trim() !== "")
+  name = resolvedName.stdout.trim();
 
 // Header carries what the reader needs to place the quote without asking: which session said it;
 // when it was quoted (`MM-DD HH:MM`, the prompt's own stamp — one home: prompt-stamp.ts); how many
@@ -256,12 +309,12 @@ if (selected.length < count) {
 // used below. The human runs it on their current local machine, so a stale SSH_CONNECTION
 // inherited by a persistent Herdr server cannot cause an unsolicited push to an old client.
 if (count > CLIPBOARD_TURN_LIMIT) {
-  const saved = await attempt(() => {
+  const saved = await attempt(async () => {
     const exportDir = join(HOME, ".cache", "claude", "quote-exports");
-    mkdirSync(exportDir, { recursive: true, mode: 0o700 });
-    const privateDir = mkdtempSync(join(exportDir, "quote-"));
+    await mkdir(exportDir, { recursive: true, mode: 0o700 });
+    const privateDir = await mkdtemp(join(exportDir, "quote-"));
     const savedFile = join(privateDir, `${basename(privateDir)}.txt`);
-    writeFileSync(savedFile, payloadText, { mode: 0o600 });
+    await writeFile(savedFile, payloadText, { mode: 0o600 });
     return savedFile;
   });
   if (!saved.ok) {
@@ -275,11 +328,11 @@ if (count > CLIPBOARD_TURN_LIMIT) {
         "If this is a remote Herdr session, set QUOTE_DOWNLOAD_SSH_TARGET to its SSH host alias and retry.",
     );
   }
-  const copied = await attempt(() => copyViaHerdr(command));
+  const copied = await copyViaHerdr(command);
   if (copied.ok) {
     block(
       `Download command copied to your local clipboard for ${header}${short}. ` +
-        `Run it in a local terminal to save the file in that terminal's current directory:\n${command}\n[${copied.value}]`,
+        `Run it in a local terminal to save the file in that terminal's current directory:\n${command}\n[${copied.pane}]`,
     );
   } else {
     block(
@@ -295,16 +348,16 @@ if (count > CLIPBOARD_TURN_LIMIT) {
 // into a command line would be a needless injection surface. The helper takes its input from the
 // environment rather than argv — hooks are zero-dep, and BG1 rules out hand-parsing process.argv
 // in a file that cannot import Cleye.
-const paneCopy = await attempt(() => copyViaHerdr(payloadText));
+const paneCopy = await copyViaHerdr(payloadText);
 if (paneCopy.ok) {
   block(
     // The header itself, not a paraphrase of it: what the human sees here is exactly the first line
     // of what they will paste (owner, 2026-10-06).
-    `Copied to clipboard — ${header}${short} [${paneCopy.value}]`,
+    `Copied to clipboard — ${header}${short} [${paneCopy.pane}]`,
   );
 }
 
-const failures = [`Herdr pane: ${failureReason(paneCopy.error)}`];
+const failures = [`Herdr pane: ${paneCopy.reason}`];
 const remote =
   (process.env["SSH_CONNECTION"]?.trim() ?? "") !== "" ||
   (process.env["SSH_TTY"]?.trim() ?? "") !== "";
@@ -315,13 +368,10 @@ if (remote) {
   }
   failures.push(`SSH OSC 52: ${osc52.reason}`);
 } else if (process.platform === "darwin") {
-  const pbcopy = await attempt(() => {
-    copyViaPbcopy(payloadText);
-  });
+  const pbcopy = await copyViaPbcopy(payloadText);
   if (pbcopy.ok) {
     block(`Copied to clipboard via pbcopy — ${header}${short}`);
-  }
-  failures.push(`macOS pbcopy: ${failureReason(pbcopy.error)}`);
+  } else failures.push(`macOS pbcopy: ${pbcopy.reason}`);
 } else {
   failures.push(
     `Direct clipboard fallback: unavailable on ${process.platform} outside SSH`,

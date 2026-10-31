@@ -72,12 +72,12 @@ the checked oxlint runner, and the knip gate.
 Dotfiles extends `typescript/tsconfig.json`, keeping its own include/exclude paths at the
 root. Consumers may tighten compiler options; weakening the preset is drift.
 
-The contract-tool `preset sync <repo>` command maintains `tsconfig.vendored.json`
-from the installed tools' `.preset-sync.json` manifests. The TypeScript config
-extends this file, and `lint-oxlint.ts` uses the same exclusions. Commit the
-generated file and rerun contract-tool sync when installing or updating tools;
-the language preset preserves it and does not report its generated contents as
-drift. Files outside those manifests remain in scope, including other files in
+The consumer owns `tsconfig.vendored.json`. The contract-tool `preset sync <repo>`
+merges paths from installed tools' `.preset-sync.json` manifests into its exclusions,
+recording the paths it adds in `tools/.preset-sync-vendored.json`. It removes obsolete
+paths only when it recorded adding them. The TypeScript config extends this file,
+and `lint-oxlint.ts` uses the same exclusions. Commit both files and rerun sync when
+installing or updating tools; the language preset preserves the consumer file. Files outside those manifests remain in scope, including other files in
 `tools/`.
 
 TypeScript's `package.json` is created only when absent and then belongs to the

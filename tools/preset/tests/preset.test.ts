@@ -120,6 +120,30 @@ describe("preset sync", () => {
     );
   });
 
+  test("merges owned exclusions without losing consumer entries", async () => {
+    const root = await fixture();
+    const scopePath = join(root, "tsconfig.vendored.json");
+    await writeFile(
+      scopePath,
+      '{\n  "exclude": ["node_modules", "dist", "src/notebooks/.observable"],\n  "compilerOptions": {"strict": true}\n}\n',
+    );
+    const first = await run(root, "--tool", "jj-push");
+    expect(first.exit, first.stderr).toBe(0);
+    const initial = await readFile(scopePath, "utf8");
+    expect(initial).toContain('"dist"');
+    expect(initial).toContain('"src/notebooks/.observable"');
+    expect(initial).toContain('"tools/jj-push/scripts/jj-push.ts"');
+    expect(initial).toContain('"strict": true');
+    const second = await run(root, "--tool", "jj-push");
+    expect(second.exit, second.stderr).toBe(0);
+    expect(await readFile(scopePath, "utf8")).toBe(initial);
+    const added = await run(root, "--tool", "jj-precommit");
+    expect(added.exit, added.stderr).toBe(0);
+    expect(await readFile(scopePath, "utf8")).toContain(
+      "tools/jj-precommit/scripts/jj-precommit.ts",
+    );
+  });
+
   test("rejects a symlinked tools directory before writing through it", async () => {
     const root = await fixture();
     const outside = await fixture();

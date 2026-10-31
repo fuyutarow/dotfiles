@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 — 2026-10-31
+
+- Preserve consumer exclusions when syncing vendored tools
+
 ## 0.3.0 — 2026-10-31
 
 - Bundle copied contract tool scripts for standalone consumer use.

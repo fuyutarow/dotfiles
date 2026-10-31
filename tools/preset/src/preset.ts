@@ -161,6 +161,7 @@ const toolManifestSchema = z.object({
   files: z.array(fileMappingSchema),
 });
 const registrySchema = z.object({ tools: z.array(z.string()) });
+const managedScopeSchema = z.object({ paths: z.array(z.string()) });
 const marker = (commit: string, source: string) =>
   `preset-sync source ${commit} ${source}`;
 const toolsRoot = (repo: string) => join(repo, "tools");
@@ -551,7 +552,7 @@ async function main(): Promise<Outcome<number>> {
   const scopePath = join(repo, "tsconfig.vendored.json");
   const safeScope = await ensureSafeFile(scopePath);
   if (!safeScope.ok) return safeScope;
-  const exclusions: string[] = ["node_modules"];
+  const desired: string[] = [];
   for (const name of new Set([...existing, ...selected])) {
     const manifest = await readJSON(
       join(toolsRoot(repo), name, ".preset-sync.json"),
@@ -566,15 +567,74 @@ async function main(): Promise<Outcome<number>> {
     );
     if (invalid !== undefined)
       return failure(`invalid manifest destination: ${invalid}`);
-    exclusions.push(...paths);
+    desired.push(...paths);
   }
-  const savedScope = await fsResult(() =>
+  const ownershipPath = join(toolsRoot(repo), ".preset-sync-vendored.json");
+  const safeOwnership = await ensureSafeFile(ownershipPath);
+  if (!safeOwnership.ok) return safeOwnership;
+  const ownershipInfo = await pathInfo(ownershipPath);
+  if (!ownershipInfo.ok) return ownershipInfo;
+  const ownership =
+    ownershipInfo.value === undefined
+      ? success({ paths: new Array<string>() })
+      : await readJSON(ownershipPath, managedScopeSchema);
+  if (!ownership.ok) return ownership;
+  const scopeInfo = await pathInfo(scopePath);
+  if (!scopeInfo.ok) return scopeInfo;
+  const original =
+    scopeInfo.value === undefined
+      ? success('{\n  "exclude": ["node_modules"]\n}\n')
+      : await fsResult(() => readFile(scopePath, "utf8"));
+  if (!original.ok) return original;
+  const parsedScope = jsonOf(z.record(z.string(), z.unknown())).safeParse(
+    original.value,
+  );
+  if (!parsedScope.success)
+    return failure(
+      `invalid tsconfig.vendored.json: ${parsedScope.error.message}`,
+    );
+  const scope = parsedScope.data;
+  const decodedExclusions = z
+    .array(z.string())
+    .optional()
+    .safeParse(scope["exclude"]);
+  if (!decodedExclusions.success)
+    return failure(
+      "invalid tsconfig.vendored.json: exclude must be an array of strings",
+    );
+  const existingExclusions = decodedExclusions.data ?? [];
+  const oldPaths = new Set(ownership.value.paths);
+  const wanted = new Set(desired);
+  const exclusions: string[] = existingExclusions.filter(
+    (path: string) => !oldPaths.has(path) || wanted.has(path),
+  );
+  const managed = ownership.value.paths.filter(
+    (path) => wanted.has(path) && exclusions.includes(path),
+  );
+  for (const path of wanted) {
+    if (!exclusions.includes(path)) {
+      exclusions.push(path);
+      managed.push(path);
+    }
+  }
+  if (
+    scopeInfo.value === undefined ||
+    JSON.stringify(existingExclusions) !== JSON.stringify(exclusions)
+  ) {
+    scope["exclude"] = exclusions;
+    const indent = original.value.match(/\n([ \t]+)"/u)?.[1] ?? "  ";
+    const saved = await fsResult(() =>
+      writeFile(scopePath, `${JSON.stringify(scope, null, indent)}\n`),
+    );
+    if (!saved.ok) return saved;
+  }
+  const savedOwnership = await fsResult(() =>
     writeFile(
-      scopePath,
-      `${JSON.stringify({ exclude: exclusions.toSorted() }, null, 2)}\n`,
+      ownershipPath,
+      `${JSON.stringify({ paths: managed }, null, 2)}\n`,
     ),
   );
-  if (!savedScope.ok) return savedScope;
+  if (!savedOwnership.ok) return savedOwnership;
   process.stdout.write(
     `PRESET SYNC ${selected.length} tool(s), ${count} file(s) from ${commit.value}\n`,
   );

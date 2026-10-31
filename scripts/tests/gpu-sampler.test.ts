@@ -125,6 +125,11 @@ test("GPU-SAMPLER-TIMER: registry links both units and service invokes only the 
 test("GPU-SAMPLER-TIMER: doctor CLI fails on an inactive timer and on last-run failures", async () => {
   const f = await fixture();
   const inactive = await f.doctor();
+  if (process.platform === "darwin") {
+    expect(inactive.code).toBe(0);
+    expect(inactive.out).toContain("SKIP  gpu-sampler  Linux only");
+    return;
+  }
   expect(inactive.code).toBe(1);
   expect(inactive.out).toContain("FAIL");
   expect(inactive.out).toContain("inactive");

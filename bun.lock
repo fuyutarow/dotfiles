@@ -187,6 +187,7 @@
       "dependencies": {
         "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
+        "consola": "3.4.2",
         "neverthrow": "8.2.0",
         "ts-pattern": "5.9.0",
       },
@@ -366,7 +367,7 @@
     },
     "tools/smart-open": {
       "name": "@dotfiles/smart-open",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "bin": {
         "smart-open": "src/smart-open.ts",
       },

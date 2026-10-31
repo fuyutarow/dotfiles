@@ -52,20 +52,20 @@ import { DoctorStatus } from "@dotfiles/shared/src/doctor-record.ts";
 // Exit: 0 no FAIL · 1 at least one FAIL · 2 FATAL (the doctor itself broke).
 
 import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  readlinkSync,
-  realpathSync,
-  rmSync,
-  statfsSync,
-  writeFileSync,
-} from "node:fs";
-import { readdir, realpath } from "node:fs/promises";
-import { fromThrowable } from "neverthrow";
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  statfs,
+  writeFile,
+  access,
+} from "node:fs/promises";
+import { constants, type Stats } from "node:fs";
+import { consola } from "consola";
 import { ownerlessRefLocks } from "@dotfiles/shared/src/ref-locks.ts";
 import { homedir, hostname, release, tmpdir, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -74,7 +74,12 @@ import {
   MAPPING_ENV,
   parseMapping,
 } from "../tools/repo-retrieve/src/ccc-db-dir.ts";
-import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
+import {
+  attempt,
+  attemptOr,
+  errorMessage,
+  type Attempt,
+} from "../agents/hooks/attempt.ts";
 import { renderedForPlatform, resolveRole } from "./config-registry.ts";
 import { googleDriveTargets } from "./link-dots.ts";
 import { brewPrefix, coreCommands, corePathProblems } from "./core-tools.ts";
@@ -224,7 +229,7 @@ const fail = (
 
 // The parsed JSON as `unknown` (null = missing or not JSON); each caller reads it through obj().
 async function readJson(path: string): Promise<unknown> {
-  const text = await attemptOr(() => readFileSync(path, "utf8"), null);
+  const text = await attemptOr(() => readFile(path, "utf8"), null);
   if (text === null) return null;
   const decoded = jsonText.safeParse(text);
   return decoded.success ? decoded.data : null;
@@ -261,66 +266,80 @@ export async function checkLinks(ctx: Ctx): Promise<Finding> {
   );
 }
 
-export function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
-  return Promise.resolve().then(() => {
-    if (!ctx.isMac && !ctx.isWsl)
-      return skip("google-drive", "Google Drive links apply to macOS and WSL");
-    if (ctx.isWsl) {
-      const mountInfo =
-        ctx.mountInfo ??
-        (existsSync("/proc/self/mountinfo")
-          ? readFileSync("/proc/self/mountinfo", "utf8")
-          : "");
-      const mounted = mountInfo
-        .split("\n")
-        .some((line) => line.split(" ")[4] === "/mnt/g");
-      if (!mounted)
-        return fail(
-          "google-drive",
-          "Windows Google Drive G: is not mounted at /mnt/g",
-          "mise run wsl:drive-mount && sudo mount /mnt/g",
-          ["/mnt/g is not a mounted filesystem"],
-        );
-    }
-    const targets = googleDriveTargets(ctx.home, ctx.isMac ? "mac" : "wsl", {
-      persistCache: false,
-    });
-    const problems: string[] = [];
-    for (const [name, target] of [
-      ["Google Drive", targets.root],
-      ["Personal-Drive", targets.personal],
-    ] as const) {
-      const path = join(ctx.home, name);
-      const actual =
-        lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink() === true
-          ? readlinkSync(path)
-          : undefined;
-      if (target === undefined)
-        problems.push(`${name}: Drive target unavailable or ambiguous`);
-      else if (actual !== target)
-        problems.push(
-          `${name}: want symlink to ${target}, have ${actual ?? "no symlink"}`,
-        );
-    }
-    return problems.length === 0
-      ? pass(
-          "google-drive",
-          "both home links resolve to the discovered Drive root and private collection",
-        )
-      : fail(
-          "google-drive",
-          `${problems.length} Google Drive link problem(s)`,
-          "mise run link:dots (ensure Drive is mounted/signed in first)",
-          problems,
-        );
+export async function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
+  if (!ctx.isMac && !ctx.isWsl)
+    return skip("google-drive", "Google Drive links apply to macOS and WSL");
+  if (ctx.isWsl) {
+    const mountInfo =
+      ctx.mountInfo ??
+      ((await fileExists("/proc/self/mountinfo"))
+        ? await readFile("/proc/self/mountinfo", "utf8")
+        : "");
+    const mounted = mountInfo
+      .split("\n")
+      .some((line) => line.split(" ")[4] === "/mnt/g");
+    if (!mounted)
+      return fail(
+        "google-drive",
+        "Windows Google Drive G: is not mounted at /mnt/g",
+        "mise run wsl:drive-mount && sudo mount /mnt/g",
+        ["/mnt/g is not a mounted filesystem"],
+      );
+  }
+  const targets = googleDriveTargets(ctx.home, ctx.isMac ? "mac" : "wsl", {
+    persistCache: false,
   });
+  const problems: string[] = [];
+  for (const [name, target] of [
+    ["Google Drive", targets.root],
+    ["Personal-Drive", targets.personal],
+  ] as const) {
+    const path = join(ctx.home, name);
+    const statResult = await lstatOrUndefined(path);
+    if (!statResult.ok)
+      return warn(
+        "google-drive",
+        `check crashed: ${errorMessage(statResult.error)}`,
+      );
+    const stat = statResult.value;
+    const actual =
+      (stat?.isSymbolicLink() ?? false) ? await readlink(path) : undefined;
+    if (target === undefined)
+      problems.push(`${name}: Drive target unavailable or ambiguous`);
+    else if (actual !== target)
+      problems.push(
+        `${name}: want symlink to ${target}, have ${actual ?? "no symlink"}`,
+      );
+  }
+  return problems.length === 0
+    ? pass(
+        "google-drive",
+        "both home links resolve to the discovered Drive root and private collection",
+      )
+    : fail(
+        "google-drive",
+        `${problems.length} Google Drive link problem(s)`,
+        "mise run link:dots (ensure Drive is mounted/signed in first)",
+        problems,
+      );
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  return (await attempt(() => access(path, constants.F_OK))).ok;
+}
+async function lstatOrUndefined(path: string): Promise<Attempt<Stats | null>> {
+  const result = await attempt(() => lstat(path));
+  if (result.ok) return { ok: true, value: result.value };
+  return obj(result.error)?.["code"] === "ENOENT"
+    ? { ok: true, value: null }
+    : { ok: false, error: result.error };
 }
 
 export async function checkRipGraveyard(
   ctx: Ctx,
   inspect: typeof inspectRipGraveyard = inspectRipGraveyard,
 ): Promise<Finding> {
-  const declaration = readFileSync(join(ctx.dotfiles, "zsh/zshenv"), "utf8");
+  const declaration = await readFile(join(ctx.dotfiles, "zsh/zshenv"), "utf8");
   const lines = declaration.split("\n");
   const hasRipDeclaration =
     lines.filter((line) => line === 'export RIP_GRAVEYARD="$GRAVEYARD"')
@@ -386,8 +405,8 @@ export async function checkRipGraveyard(
 
 export async function checkRipGraveyardTmp(): Promise<Finding> {
   const root = process.env["DOCTOR_TEST_TMP_ROOT"] ?? "/tmp";
-  const entries = await attempt(() =>
-    readdirSync(root)
+  const entries = await attempt(async () =>
+    (await readdir(root))
       .filter((name) => name.startsWith("graveyard-"))
       .map((name) => join(root, name)),
   );
@@ -416,10 +435,10 @@ async function renderedDiff(
   live: string,
   want: string,
 ): Promise<string[]> {
-  if (!existsSync(live) || lstatSync(live).isSymbolicLink())
+  if (!(await fileExists(live)) || (await lstat(live)).isSymbolicLink())
     return [`${rel}: missing, or still a symlink into the repo`];
   if (!json)
-    return readFileSync(live, "utf8") === readFileSync(want, "utf8")
+    return (await readFile(live, "utf8")) === (await readFile(want, "utf8"))
       ? []
       : [`${rel}: differs from a fresh render`];
   const have = await readJson(live);
@@ -437,25 +456,23 @@ export async function checkRendered(ctx: Ctx): Promise<Finding> {
     rel: r.dest,
     json: r.dest.endsWith(".json"),
   }));
-  if (!existsSync(join(ctx.dotfiles, "scripts/render-home.ts"))) {
+  if (!(await fileExists(join(ctx.dotfiles, "scripts/render-home.ts")))) {
     return skip("rendered", "no scripts/render-home.ts in this checkout");
   }
-  const scratch = mkdtempSync(join(tmpdir(), "doctor-rendered-"));
-  // Cleanup runs on return AND on throw: the scratch directory is removed once this block ends.
-  using _scratch = {
-    [Symbol.dispose]: () => {
-      rmSync(scratch, { recursive: true, force: true });
-    },
+  const scratch = await mkdtemp(join(tmpdir(), "doctor-rendered-"));
+  await using _scratch = {
+    [Symbol.asyncDispose]: async () =>
+      rm(scratch, { recursive: true, force: true }),
   };
   // Let the renderer apply its own allowlist to the deployed settings in the scratch home.
   // Copy bytes, never a symlink; renderedDiff still reports a deployed symlink as drift.
   const deployedSettings = join(ctx.home, ".claude/settings.json");
-  if (existsSync(deployedSettings)) {
-    const seeded = await attempt(() => {
-      mkdirSync(join(scratch, ".claude"), { recursive: true });
-      writeFileSync(
+  if (await fileExists(deployedSettings)) {
+    const seeded = await attempt(async () => {
+      await mkdir(join(scratch, ".claude"), { recursive: true });
+      await writeFile(
         join(scratch, ".claude/settings.json"),
-        readFileSync(deployedSettings),
+        await readFile(deployedSettings),
       );
     });
     if (!seeded.ok)
@@ -650,7 +667,7 @@ export async function checkBins(ctx: Ctx): Promise<Finding> {
   if (pkg === null) return skip("bins", "no package.json in this checkout");
   const binDir = join(ctx.home, ".bun", "bin");
   const problems: string[] = [];
-  // existsSync already swallows every stat failure (missing path, dangling symlink target,
+  // fileExists already swallows every access failure (missing path, dangling symlink target,
   // permission error) and reports false, so a prior real path is safe to resolve unconditionally.
   const bins = obj(obj(pkg)?.["bin"]) ?? {};
   const declaredBins = Object.entries(bins).flatMap(
@@ -658,10 +675,10 @@ export async function checkBins(ctx: Ctx): Promise<Finding> {
   );
   for (const [name, rel] of declaredBins) {
     const link = join(binDir, name);
-    const have = resolveExisting(link);
+    const have = await resolveExisting(link);
     if (have === null) {
       problems.push(`${link} is missing or dangling (declared: ${rel})`);
-    } else if (have !== resolveExisting(join(ctx.dotfiles, rel))) {
+    } else if (have !== (await resolveExisting(join(ctx.dotfiles, rel)))) {
       problems.push(`${link} resolves to ${have}, not ${rel}`);
     }
   }
@@ -700,11 +717,11 @@ type MissingSkillHelper = {
   bin: string;
 };
 
-export function missingSkillHelpers(
+export async function missingSkillHelpers(
   repo: string,
   source: string,
   home: string,
-): MissingSkillHelper[] {
+): Promise<MissingSkillHelper[]> {
   const runPattern =
     /^\s*run\s*=\s*(?:"((?:\\.|[^"\\])*)"|'([^']*)'|"""([\s\S]*?)"""|'''([\s\S]*?)''')/gmu;
   const helperPattern =
@@ -715,29 +732,42 @@ export function missingSkillHelpers(
   const paths = commands.flatMap((command) =>
     Array.from(command.matchAll(helperPattern)),
   );
-  return paths.flatMap((match) => {
-    const rawPath = match[0];
-    const target = resolve(
-      rawPath
-        .replaceAll("{{env.HOME}}", home)
-        .replaceAll("{{config_root}}", repo)
-        .replace(/^~/u, home),
-    );
-    if (existsSync(target)) return [];
-    const script = match[2] ?? "";
-    return [{ repo, rawPath, bin: script.replace(/\.ts$/u, "") }];
-  });
+  return (
+    await Promise.all(
+      paths.map(async (match) => {
+        const rawPath = match[0];
+        const target = resolve(
+          rawPath
+            .replaceAll("{{env.HOME}}", home)
+            .replaceAll("{{config_root}}", repo)
+            .replace(/^~/u, home),
+        );
+        if (await fileExists(target)) return [];
+        const script = match[2] ?? "";
+        return [{ repo, rawPath, bin: script.replace(/\.ts$/u, "") }];
+      }),
+    )
+  ).flat();
 }
 
-export function checkSkillHelperPaths(ctx: Ctx): Promise<Finding> {
-  const missing = registeredRepos(
+export async function checkSkillHelperPaths(ctx: Ctx): Promise<Finding> {
+  const repos = registeredRepos(
     ctx.home,
     process.env["WORKSPACE_ROOT"] ?? join(ctx.home, "Workspace"),
-  ).flatMap((repo) => {
-    const misePath = join(repo, "mise.toml");
-    if (!existsSync(misePath)) return [];
-    return missingSkillHelpers(repo, readFileSync(misePath, "utf8"), ctx.home);
-  });
+  );
+  const missing = (
+    await Promise.all(
+      repos.map(async (repo) => {
+        const misePath = join(repo, "mise.toml");
+        if (!(await fileExists(misePath))) return [];
+        return missingSkillHelpers(
+          repo,
+          await readFile(misePath, "utf8"),
+          ctx.home,
+        );
+      }),
+    )
+  ).flat();
   const finding =
     missing.length === 0
       ? pass(
@@ -753,11 +783,11 @@ export function checkSkillHelperPaths(ctx: Ctx): Promise<Finding> {
               `${basename(repo)}/mise.toml: ${rawPath} is missing; use ${bin}`,
           ),
         );
-  return Promise.resolve(finding);
+  return finding;
 }
 
-function resolveExisting(path: string): string | null {
-  return existsSync(path) ? realpathSync(path) : null;
+async function resolveExisting(path: string): Promise<string | null> {
+  return (await fileExists(path)) ? realpath(path) : null;
 }
 
 export async function checkGitHooks(ctx: Ctx): Promise<Finding> {
@@ -793,16 +823,29 @@ export async function checkLoginShell(ctx: Ctx): Promise<Finding> {
   // Where chsh is not ours (a shared server, sol): bash stays the login shell and hands every
   // interactive shell to zsh — zsh/bash_profile for a login, zsh/bashrc for a herdr pane. Healthy
   // only when BOTH handoffs are this repo's; doctor:remote checks the result from outside.
-  const handoff = [
-    [".bash_profile", "zsh/bash_profile"],
-    [".bashrc", "zsh/bashrc"],
-  ].every(([dst = "", src = ""]) => {
-    const link = join(ctx.home, dst);
-    return (
-      lstatSync(link, { throwIfNoEntry: false })?.isSymbolicLink() === true &&
-      readlinkSync(link) === join(ctx.dotfiles, src)
+  const handoffChecks = await Promise.all(
+    [
+      [".bash_profile", "zsh/bash_profile"],
+      [".bashrc", "zsh/bashrc"],
+    ].map(async ([dst = "", src = ""]): Promise<Attempt<boolean>> => {
+      const link = join(ctx.home, dst);
+      const stat = await lstatOrUndefined(link);
+      if (!stat.ok) return stat;
+      if (stat.value === null || !stat.value.isSymbolicLink())
+        return { ok: true, value: false };
+      const target = await attempt(() => readlink(link));
+      return target.ok
+        ? { ok: true, value: target.value === join(ctx.dotfiles, src) }
+        : target;
+    }),
+  );
+  const handoffFailure = handoffChecks.find((result) => !result.ok);
+  if (handoffFailure !== undefined)
+    return warn(
+      "login-shell",
+      `check crashed: ${errorMessage(handoffFailure.error)}`,
     );
-  });
+  const handoff = handoffChecks.every((result) => result.ok && result.value);
   return basename(shell) === "bash" && handoff
     ? pass(
         "login-shell",
@@ -911,10 +954,14 @@ export async function checkWslconfig(ctx: Ctx): Promise<Finding> {
   }
   const w = await run(["wslpath", "-u", profile], { ms: 10_000 });
   const dst = join(w.out.trim(), ".wslconfig");
-  if (!existsSync(dst))
+  if (!(await fileExists(dst)))
     return fail("wslconfig", `${dst} does not exist`, "mise run wsl:wslconfig");
-  const have = readFileSync(dst, "utf8").replaceAll("\r", "");
-  const want = readFileSync(src, "utf8").replaceAll("\r", "");
+  const [haveText, wantText] = await Promise.all([
+    readFile(dst, "utf8"),
+    readFile(src, "utf8"),
+  ]);
+  const have = haveText.replaceAll("\r", "");
+  const want = wantText.replaceAll("\r", "");
   // .wslconfig comments are `#`; a copy that differs only there is stale prose, not stale config.
   if (have !== want && effectiveConfig(have) === effectiveConfig(want)) {
     return warn(
@@ -956,19 +1003,25 @@ export async function checkCccDaemon(
     ctx.home,
     ".config/systemd/user/default.target.wants/ccc-daemon.service",
   );
-  const installed =
-    lstatSync(unit, { throwIfNoEntry: false })?.isFile() === true;
+  const unitStat = await lstatOrUndefined(unit);
+  if (!unitStat.ok)
+    return warn("ccc-daemon", `check crashed: ${errorMessage(unitStat.error)}`);
+  const installed = unitStat.value?.isFile() ?? false;
+  const [wantsExists, unitExists] = await Promise.all([
+    fileExists(wants),
+    fileExists(unit),
+  ]);
   const edge =
-    existsSync(wants) &&
-    existsSync(unit) &&
-    realpathSync(wants) === realpathSync(unit);
+    wantsExists &&
+    unitExists &&
+    (await realpath(wants)) === (await realpath(unit));
   const stateLabel = state === "" ? "unknown" : state;
   const enablementLabel =
     enabled.out.trim() === "" ? "unknown enablement" : enabled.out.trim();
   const declaration = join(ctx.dotfiles, "cocoindex/ccc-daemon.service.wsl");
-  const declared = await attemptOr(() => readFileSync(declaration, "utf8"), "");
+  const declared = await attemptOr(() => readFile(declaration, "utf8"), "");
   const actual = installed
-    ? await attemptOr(() => readFileSync(unit, "utf8"), "")
+    ? await attemptOr(() => readFile(unit, "utf8"), "")
     : "";
   const policyLines = declared
     .split("\n")
@@ -1245,10 +1298,14 @@ export async function checkCapacityGuard(ctx: Ctx): Promise<Finding> {
     unit,
   );
   const source = join(ctx.dotfiles, "wsl/wsl-capacity-recover.timer.wsl");
+  const [wantsExists, sourceExists] = await Promise.all([
+    fileExists(wants),
+    fileExists(source),
+  ]);
   const enabled =
-    existsSync(wants) &&
-    existsSync(source) &&
-    realpathSync(wants) === realpathSync(source);
+    wantsExists &&
+    sourceExists &&
+    (await realpath(wants)) === (await realpath(source));
   if (enabled && active.out.trim() === "active") {
     return pass("capacity-guard", `${unit} is enabled and active`);
   }
@@ -1263,13 +1320,20 @@ export async function checkCapacityGuard(ctx: Ctx): Promise<Finding> {
 
 export async function checkTmpfsCapacity(
   ctx: Ctx,
-  measure: () => Pick<
-    ReturnType<typeof statfsSync>,
-    "files" | "ffree" | "blocks" | "bavail" | "bsize"
-  > = () => statfsSync("/tmp", { bigint: true }),
+  measure: () =>
+    | Pick<
+        Awaited<ReturnType<typeof statfs>>,
+        "files" | "ffree" | "blocks" | "bavail" | "bsize"
+      >
+    | Promise<
+        Pick<
+          Awaited<ReturnType<typeof statfs>>,
+          "files" | "ffree" | "blocks" | "bavail" | "bsize"
+        >
+      > = () => statfs("/tmp", { bigint: true }),
 ): Promise<Finding> {
   if (!ctx.isWsl) return skip("tmpfs-capacity", "WSL only");
-  const measured = await attempt(() => tmpfsUsage(measure()));
+  const measured = await attempt(async () => tmpfsUsage(await measure()));
   if (!measured.ok)
     return warn(
       "tmpfs-capacity",
@@ -1500,33 +1564,39 @@ const REF_LOCK_SCAN_PRUNED = new Set([
 ]);
 const REF_LOCK_SCAN_DIRECTORY_LIMIT = 100_000;
 
-function discoverRegisteredRepos(searchRoot: string): {
+async function discoverRegisteredRepos(searchRoot: string): Promise<{
   roots: string[];
   complete: boolean;
-} {
+}> {
   const roots: string[] = [];
   let complete = true;
   let visitedDirectories = 0;
-  const walk = (dir: string): void => {
+  const walk = async (dir: string): Promise<void> => {
     if (visitedDirectories >= REF_LOCK_SCAN_DIRECTORY_LIMIT) {
       complete = false;
       return;
     }
     visitedDirectories += 1;
-    if (existsSync(join(dir, PROJECT_SETTINGS))) {
+    if (await fileExists(join(dir, PROJECT_SETTINGS))) {
       roots.push(dir);
       const nestedRoots = [
         join(dir, ".claude", "worktrees"),
         join(dir, ".worktrees"),
         join(dir, "worktrees"),
-      ].filter((nested) => existsSync(nested));
-      for (const nested of nestedRoots) walk(nested);
+      ];
+      const nestedExisting = await Promise.all(
+        nestedRoots.map(async (nested) =>
+          (await fileExists(nested)) ? nested : null,
+        ),
+      );
+      for (const nested of nestedExisting.flatMap((path) =>
+        path === null ? [] : [path],
+      ))
+        await walk(nested);
       return;
     }
-    const listing = fromThrowable(() =>
-      readdirSync(dir, { withFileTypes: true }),
-    )();
-    if (listing.isErr()) {
+    const listing = await attempt(() => readdir(dir, { withFileTypes: true }));
+    if (!listing.ok) {
       complete = false;
       return;
     }
@@ -1535,53 +1605,47 @@ function discoverRegisteredRepos(searchRoot: string): {
       const path = join(dir, entry.name);
       if (entry.isDirectory() && entry.name === ".cocoindex_code") continue;
       if (entry.isDirectory() && !REF_LOCK_SCAN_PRUNED.has(entry.name))
-        walk(path);
+        await walk(path);
       if (visitedDirectories >= REF_LOCK_SCAN_DIRECTORY_LIMIT) {
         complete = false;
         break;
       }
     }
   };
-  walk(searchRoot);
+  await walk(searchRoot);
   return { roots: [...new Set(roots)].toSorted(), complete };
 }
 
-export function checkGitRefLocks(
+export async function checkGitRefLocks(
   ctx: Ctx,
   registeredRoots?: string[],
 ): Promise<Finding> {
   const discovered =
     registeredRoots === undefined
-      ? discoverRegisteredRepos(ctx.home)
+      ? await discoverRegisteredRepos(ctx.home)
       : { roots: registeredRoots, complete: true };
   const findings = discovered.roots.flatMap((root) =>
     ownerlessRefLocks(root).map(({ path, ageMs }) => ({ root, path, ageMs })),
   );
   if (findings.length > 0) {
-    return Promise.resolve(
-      fail(
-        "git-ref-locks",
-        `${findings.length} ownerless Git ref lock(s) found in registered repositories`,
-        "confirm no holder, then repair each named lock with: rip <path>",
-        findings.map(
-          ({ root, path, ageMs }) =>
-            `${path} · repo=${root} · age=${Math.floor(ageMs / 1_000)}s`,
-        ),
+    return fail(
+      "git-ref-locks",
+      `${findings.length} ownerless Git ref lock(s) found in registered repositories`,
+      "confirm no holder, then repair each named lock with: rip <path>",
+      findings.map(
+        ({ root, path, ageMs }) =>
+          `${path} · repo=${root} · age=${Math.floor(ageMs / 1_000)}s`,
       ),
     );
   }
   if (!discovered.complete)
-    return Promise.resolve(
-      warn(
-        "git-ref-locks",
-        `repo scan under ${ctx.home} was incomplete; no ownerless ref lock was confirmed across ${discovered.roots.length} registered repo(s)`,
-      ),
-    );
-  return Promise.resolve(
-    pass(
+    return warn(
       "git-ref-locks",
-      `no ownerless Git ref locks across ${discovered.roots.length} registered repo(s)`,
-    ),
+      `repo scan under ${ctx.home} was incomplete; no ownerless ref lock was confirmed across ${discovered.roots.length} registered repo(s)`,
+    );
+  return pass(
+    "git-ref-locks",
+    `no ownerless Git ref locks across ${discovered.roots.length} registered repo(s)`,
   );
 }
 
@@ -1770,7 +1834,7 @@ export async function checkCodexRuntime(ctx: Ctx): Promise<Finding> {
       'set providers.wsl = "standalone" in agents/codex/runtime.toml',
     );
   const runtime = join(ctx.dotfiles, "agents/codex/codex-runtime.ts");
-  if (!existsSync(runtime))
+  if (!(await fileExists(runtime)))
     return fail(
       "codex-runtime",
       "WSL dual Codex runtime deployment script is missing",
@@ -1822,7 +1886,7 @@ export async function checkCodexSandboxNetwork(ctx: Ctx): Promise<Finding> {
       "mise run codex:runtime",
     );
   const home = configuredHome.value;
-  if (!existsSync(join(home, ".codex")))
+  if (!(await fileExists(join(home, ".codex"))))
     return skip("codex-config", "~/.codex does not exist yet");
   const declared = await readSandboxNetworkDeclared(ctx.dotfiles);
   if (declared instanceof Error)
@@ -1850,7 +1914,7 @@ export async function checkCodexSandboxNetwork(ctx: Ctx): Promise<Finding> {
 
 // Delegates to scripts/edge-policy.ts --check, which owns the destination and the comparison.
 export async function checkEdgePolicy(ctx: Ctx): Promise<Finding> {
-  if (!existsSync("/Applications/Microsoft Edge.app"))
+  if (!(await fileExists("/Applications/Microsoft Edge.app")))
     return skip("edge-policy", "Microsoft Edge is not installed");
   const r = await run(
     ["bun", join(ctx.dotfiles, "scripts/edge-policy.ts"), "--check"],
@@ -1881,7 +1945,7 @@ export async function checkEdgePolicy(ctx: Ctx): Promise<Finding> {
 const SMART_OPEN_HOST = "r99-u24";
 export async function checkSmartOpen(ctx: Ctx): Promise<Finding> {
   const config = join(ctx.dotfiles, "ssh", "config");
-  if (!existsSync(config))
+  if (!(await fileExists(config)))
     return skip("smart-open", "no ssh/config in this checkout");
   const r = await run(["ssh", "-G", "-F", config, SMART_OPEN_HOST], {
     ms: 10_000,
@@ -1996,7 +2060,7 @@ async function checkEditorAlias(
 // Probe a login shell in HOME so a doctor launched via mise does not mistake its repo toolchain
 // PATH for the owner's core environment. SSH command reach is additionally tested by migration.
 export async function checkCoreTools(ctx: Ctx): Promise<Finding> {
-  if (!existsSync(join(ctx.dotfiles, "Brewfile.core")))
+  if (!(await fileExists(join(ctx.dotfiles, "Brewfile.core"))))
     return fail(
       "core-tools",
       "no Brewfile.core in this checkout",
@@ -2278,8 +2342,8 @@ async function main(): Promise<void> {
     .filter(Boolean);
   const unknown = only.filter((n) => !CHECKS.some((c) => c.name === n));
   if (unknown.length > 0) {
-    process.stderr.write(
-      `FATAL: DOCTOR_ONLY names unknown check(s): ${unknown.join(", ")}\n`,
+    consola.error(
+      `FATAL: DOCTOR_ONLY names unknown check(s): ${unknown.join(", ")}`,
     );
     process.exitCode = 2;
     return;
@@ -2304,7 +2368,7 @@ async function main(): Promise<void> {
 if (import.meta.main) {
   const result = await attempt(main);
   if (!result.ok) {
-    process.stderr.write(`FATAL: ${errorMessage(result.error)}\n`);
+    consola.error(`FATAL: ${errorMessage(result.error)}`);
     process.exitCode = 2;
   }
 }

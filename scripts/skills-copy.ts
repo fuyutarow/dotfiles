@@ -65,11 +65,11 @@ export async function prepareSkillCopy(
   target: string,
 ): Promise<Result<{ inputs: string[] }, string>> {
   const prepared = await fromAsyncThrowable(async () => {
-    const sourceRefusal = skillLayoutRefusal(source);
+    const sourceRefusal = await skillLayoutRefusal(source);
     if (sourceRefusal !== undefined) return err(sourceRefusal);
     const inputs = new Set<string>();
     await cp(source, target, { recursive: true, dereference: true });
-    const stagedRefusal = skillLayoutRefusal(target);
+    const stagedRefusal = await skillLayoutRefusal(target);
     if (stagedRefusal !== undefined) return err(stagedRefusal);
     for (const entry of await skillEntries(source)) {
       const path = join(source, entry);

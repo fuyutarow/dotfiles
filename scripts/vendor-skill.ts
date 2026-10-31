@@ -7,11 +7,11 @@
 // `-g`, run the child from a throwaway cwd, refuse repo-owned names/targets, and remove only new
 // lock entries that were not requested.
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
+import { fromAsyncThrowable } from "neverthrow";
 import { z } from "../agents/hooks/zod.ts";
 import {
   formatDeclaration,
@@ -57,16 +57,20 @@ function rejectPrototypeFlag(
   }
 }
 
-function addRefusals(
+async function addRefusals(
   names: string[],
   dotfiles: string,
   home: string,
   declaration: ThirdPartySkill,
-): string[] {
-  const refusals = homePathRefusals(home, dotfiles, names);
+): Promise<string[]> {
+  const refusals = await homePathRefusals(home, dotfiles, names);
   const declared = new Set(declaration.skills.map((entry) => entry.skill));
   for (const name of names) {
-    if (existsSync(resolve(dotfiles, "agents/skills", name)))
+    if (
+      await Bun.file(
+        resolve(dotfiles, "agents/skills", name, "SKILL.md"),
+      ).exists()
+    )
       refusals.push(
         `COLLISION: ${name} is owned by agents/skills; third-party skills cannot replace in-house skills`,
       );
@@ -76,10 +80,14 @@ function addRefusals(
       );
     if (
       !declared.has(name) &&
-      [
-        resolve(home, ".agents/skills", name),
-        resolve(home, ".claude/skills", name),
-      ].some((path) => pathExists(path))
+      (
+        await Promise.all(
+          [
+            resolve(home, ".agents/skills", name),
+            resolve(home, ".claude/skills", name),
+          ].map((path) => pathExists(path)),
+        )
+      ).some(Boolean)
     )
       refusals.push(
         `INSTALLED: ${name} already occupies a global skill path; refusing to overwrite an undeclared skill`,
@@ -151,9 +159,10 @@ async function main(): Promise<void> {
     process.env["DOTFILES"] ??
     resolve(import.meta.dir, "..");
   const declarationPath = resolve(dotfiles, "agents/skills.thirdparty.toml");
-  const declarationText = fromThrowable((path: string) =>
-    readFileSync(path, "utf8"),
-  )(declarationPath);
+  const declarationText = await fromAsyncThrowable(
+    () => readFile(declarationPath, "utf8"),
+    errorText,
+  )();
   if (declarationText.isErr()) {
     fail(`FATAL: ${declarationPath}: ${errorText(declarationText.error)}`);
     process.exitCode = 1;
@@ -166,7 +175,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const refusals = addRefusals(names, dotfiles, home, declaration.value);
+  const refusals = await addRefusals(names, dotfiles, home, declaration.value);
   if (refusals.length > 0) {
     for (const refusal of refusals) fail(refusal);
     process.exitCode = 3;
@@ -174,7 +183,10 @@ async function main(): Promise<void> {
   }
 
   const argv = skillCliArgs(declaration.value.cli_version, source, names);
-  if (resolvesIntoRepository(process.cwd(), dotfiles) && !argv.includes("-g")) {
+  if (
+    (await resolvesIntoRepository(process.cwd(), dotfiles)) &&
+    !argv.includes("-g")
+  ) {
     fail(
       "Refusing: cwd is inside the repo and global install is not enabled; run mise run skills:migrate",
     );
@@ -188,7 +200,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const beforeResult = readInstalledLock(home);
+  const beforeResult = await readInstalledLock(home);
   if (beforeResult === undefined) {
     fail(
       "FATAL: global skills lock is unreadable; refusing to install without safe stowaway detection",
@@ -196,7 +208,7 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const namesBefore = targetSkillNames(home);
+  const namesBefore = await targetSkillNames(home);
   const outcome = await runSkillsCli(
     declaration.value.cli_version,
     source,
@@ -204,7 +216,7 @@ async function main(): Promise<void> {
     home,
   );
 
-  const afterResult = readInstalledLock(home);
+  const afterResult = await readInstalledLock(home);
   if (afterResult === undefined) {
     fail(
       "FATAL: global skills lock is unreadable after install; stowaway cleanup could not be verified",
@@ -212,7 +224,7 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const cleanup = removeNewStowaways(
+  const cleanup = await removeNewStowaways(
     home,
     beforeResult,
     afterResult,
@@ -235,14 +247,24 @@ async function main(): Promise<void> {
     return;
   }
 
-  const installedLock = readInstalledLock(home);
-  const missing = names.filter(
-    (name) =>
-      installedLock === undefined ||
-      !Object.hasOwn(installedLock.skills, name) ||
-      !existsSync(resolve(home, ".agents/skills", name, "SKILL.md")) ||
-      !existsSync(resolve(home, ".claude/skills", name, "SKILL.md")),
+  const installedLock = await readInstalledLock(home);
+  const presence = await Promise.all(
+    names.map(async (name) => ({
+      name,
+      installed: await Promise.all([
+        Bun.file(resolve(home, ".agents/skills", name, "SKILL.md")).exists(),
+        Bun.file(resolve(home, ".claude/skills", name, "SKILL.md")).exists(),
+      ]),
+    })),
   );
+  const missing = presence
+    .filter(
+      ({ name, installed }) =>
+        installedLock === undefined ||
+        !Object.hasOwn(installedLock.skills, name) ||
+        installed.some((exists) => !exists),
+    )
+    .map(({ name }) => name);
   if (missing.length > 0) {
     fail(
       `FATAL: CLI returned success without installing and recording: ${missing.join(", ")}`,
@@ -259,7 +281,7 @@ async function main(): Promise<void> {
       ...names.map((skill) => ({ source, skill })),
     ],
   };
-  writeFileSync(declarationPath, formatDeclaration(next));
+  await writeFile(declarationPath, formatDeclaration(next));
   for (const name of names) print(`installed: ${source} ${name}`);
 }
 

@@ -2,20 +2,21 @@
 // live so edits in the repo are still visible to the tools.
 
 import {
-  cpSync,
-  lstatSync,
-  mkdtempSync,
-  readdirSync,
-  realpathSync,
-  renameSync,
-  rmSync,
-  statSync,
-  unlinkSync,
-} from "node:fs";
+  cp,
+  lstat,
+  mkdtemp,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  stat,
+  unlink,
+} from "node:fs/promises";
+import consola from "consola";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
+import { fromAsyncThrowable } from "neverthrow";
 import {
   readDeclaration,
   resolvesIntoRepository,
@@ -24,13 +25,22 @@ import {
 const USAGE =
   "Usage: bun scripts/skills-migrate.ts [--dry-run] [--dotfiles <path>] [--home <path>]\n";
 
+consola.options.reporters = [
+  {
+    log: ({ args }) => {
+      process.stdout.write(`${args.join(" ")}\n`);
+    },
+  },
+];
+
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function print(line: string): void {
+const print = (line: string): void => {
+  consola.info(line);
   process.stdout.write(`${line}\n`);
-}
+};
 
 function fail(line: string): void {
   process.stderr.write(`${line}\n`);
@@ -46,21 +56,32 @@ function rejectPrototypeFlag(
   }
 }
 
-function migrateLink(path: string, dotfiles: string, dryRun: boolean): boolean {
-  const state = fromThrowable((value: string) => lstatSync(value))(path);
+async function migrateLink(
+  path: string,
+  dotfiles: string,
+  dryRun: boolean,
+): Promise<boolean> {
+  const state = await fromAsyncThrowable(() => lstat(path))();
   if (state.isErr() || !state.value.isSymbolicLink()) return false;
-  if (!resolvesIntoRepository(path, dotfiles)) {
+  if (!(await resolvesIntoRepository(path, dotfiles))) {
     print(`left unrelated link: ${path}`);
     return false;
   }
-  const source = fromThrowable((value: string) => realpathSync(value))(path);
+  const source = await fromAsyncThrowable(() => realpath(path), errorText)();
   if (source.isErr()) {
     fail(`cannot migrate ${path}: ${errorText(source.error)}`);
     process.exitCode = 1;
     return false;
   }
-  const info = fromThrowable((value: string) => statSync(value))(source.value);
-  if (info.isErr() || (!info.value.isDirectory() && !info.value.isFile())) {
+  const info = await fromAsyncThrowable(() => stat(source.value))();
+  if (info.isErr()) {
+    fail(
+      `cannot migrate ${path}: link target is not a regular file or directory`,
+    );
+    process.exitCode = 1;
+    return false;
+  }
+  if (!info.value.isDirectory() && !info.value.isFile()) {
     fail(
       `cannot migrate ${path}: link target is not a regular file or directory`,
     );
@@ -72,8 +93,9 @@ function migrateLink(path: string, dotfiles: string, dryRun: boolean): boolean {
     return true;
   }
 
-  const temp = fromThrowable(() =>
-    mkdtempSync(join(dirname(path), ".skills-migrate-")),
+  const temp = await fromAsyncThrowable(
+    () => mkdtemp(join(dirname(path), ".skills-migrate-")),
+    errorText,
   )();
   if (temp.isErr()) {
     fail(`cannot migrate ${path}: ${errorText(temp.error)}`);
@@ -82,40 +104,45 @@ function migrateLink(path: string, dotfiles: string, dryRun: boolean): boolean {
   }
   const copy = join(temp.value, "copy");
   const backup = join(temp.value, "link");
-  const copied = fromThrowable(() => {
-    cpSync(source.value, copy, {
-      recursive: info.value.isDirectory(),
-      dereference: true,
-      force: false,
-      errorOnExist: true,
-    });
-  })();
+  const copied = await fromAsyncThrowable(
+    () =>
+      cp(source.value, copy, {
+        recursive: info.value.isDirectory(),
+        dereference: true,
+        force: false,
+        errorOnExist: true,
+      }),
+    errorText,
+  )();
   if (copied.isErr()) {
-    rmSync(temp.value, { recursive: true, force: true });
+    await rm(temp.value, { recursive: true, force: true });
     fail(`cannot migrate ${path}: copy failed: ${errorText(copied.error)}`);
     process.exitCode = 1;
     return false;
   }
 
-  const movedLink = fromThrowable(() => {
-    renameSync(path, backup);
-  })();
-  if (movedLink.isErr()) {
-    rmSync(temp.value, { recursive: true, force: true });
+  const moved = await fromAsyncThrowable(
+    () => rename(path, backup),
+    errorText,
+  )();
+  if (moved.isErr()) {
+    await rm(temp.value, { recursive: true, force: true });
     fail(
-      `cannot migrate ${path}: could not stage old link: ${errorText(movedLink.error)}`,
+      `cannot migrate ${path}: could not stage old link: ${errorText(moved.error)}`,
     );
     process.exitCode = 1;
     return false;
   }
-  const installed = fromThrowable(() => {
-    renameSync(copy, path);
-  })();
+  const installed = await fromAsyncThrowable(
+    () => rename(copy, path),
+    errorText,
+  )();
   if (installed.isErr()) {
-    const restored = fromThrowable(() => {
-      renameSync(backup, path);
-    })();
-    rmSync(temp.value, { recursive: true, force: true });
+    const restored = await fromAsyncThrowable(
+      () => rename(backup, path),
+      errorText,
+    )();
+    await rm(temp.value, { recursive: true, force: true });
     fail(
       `cannot migrate ${path}: could not install copy: ${errorText(installed.error)}` +
         (restored.isErr()
@@ -125,40 +152,40 @@ function migrateLink(path: string, dotfiles: string, dryRun: boolean): boolean {
     process.exitCode = 1;
     return false;
   }
-  unlinkSync(backup);
-  rmSync(temp.value, { recursive: true, force: true });
+  await unlink(backup);
+  await rm(temp.value, { recursive: true, force: true });
   print(`migrated: ${path} -> real copy of ${source.value}`);
   return true;
 }
 
-function migrateThirdPartyLinks(
+async function migrateThirdPartyLinks(
   root: string,
   dotfiles: string,
   names: readonly string[],
   dryRun: boolean,
-): number {
+): Promise<number> {
   let changed = 0;
   for (const name of names.toSorted())
-    if (migrateLink(join(root, name), dotfiles, dryRun)) changed += 1;
+    if (await migrateLink(join(root, name), dotfiles, dryRun)) changed += 1;
 
-  const entries = fromThrowable((path: string) => readdirSync(path))(root);
+  const entries = await fromAsyncThrowable(() => readdir(root))();
   if (entries.isErr()) return changed;
   const thirdParty = new Set(names);
   for (const name of entries.value.toSorted()) {
     if (thirdParty.has(name)) continue;
     const path = join(root, name);
     if (
-      fromThrowable((value: string) => lstatSync(value))(path)
-        .map((stat) => stat.isSymbolicLink())
-        .unwrapOr(false) &&
-      resolvesIntoRepository(path, dotfiles)
+      (await lstat(path)
+        .then((value) => value.isSymbolicLink())
+        .catch(() => false)) &&
+      (await resolvesIntoRepository(path, dotfiles))
     )
       print(`left in-house link: ${path}`);
   }
   return changed;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const parsed = cli(
     {
       name: "skills-migrate.ts",
@@ -188,7 +215,7 @@ function main(): void {
     parsed.flags.dotfiles ??
     process.env["DOTFILES"] ??
     resolve(import.meta.dir, "..");
-  const declaration = readDeclaration(dotfiles);
+  const declaration = await readDeclaration(dotfiles);
   if (declaration.isErr()) {
     fail(`cannot migrate skills: ${declaration.error}`);
     process.exitCode = 1;
@@ -196,19 +223,22 @@ function main(): void {
   }
   const names = declaration.value.skills.map((entry) => entry.skill);
   const agentsRoot = resolve(home, ".agents/skills");
-  const migratedAgentsRoot = migrateLink(
+  const migratedAgentsRoot = (await migrateLink(
     agentsRoot,
     dotfiles,
     parsed.flags.dryRun,
-  )
+  ))
     ? 1
     : 0;
   const thirdPartyRoots = [agentsRoot, resolve(home, ".claude/skills")];
-  const migratedThirdParty = thirdPartyRoots.reduce(
-    (sum, root) =>
-      sum + migrateThirdPartyLinks(root, dotfiles, names, parsed.flags.dryRun),
-    0,
-  );
+  let migratedThirdParty = 0;
+  for (const root of thirdPartyRoots)
+    migratedThirdParty += await migrateThirdPartyLinks(
+      root,
+      dotfiles,
+      names,
+      parsed.flags.dryRun,
+    );
   const total = migratedAgentsRoot + migratedThirdParty;
   if (total === 0 && process.exitCode !== 1)
     print("already tool-owned: no skill links resolve into a repository");

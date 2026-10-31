@@ -1,13 +1,12 @@
-import {
-  existsSync,
-  lstatSync,
-  readFileSync,
-  readlinkSync,
-  readdirSync,
-  realpathSync,
-} from "node:fs";
+import { lstat, readFile, readlink, readdir, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import {
+  err,
+  fromAsyncThrowable,
+  fromThrowable,
+  ok,
+  type Result,
+} from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 const SkillName = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u);
@@ -53,12 +52,16 @@ export function parseDeclaration(
   return ok(parsed.data);
 }
 
-export function readDeclaration(root: string): Result<ThirdPartySkill, string> {
-  const file = fromThrowable((path: string) => readFileSync(path, "utf8"))(
-    resolve(root, DECLARATION_PATH),
-  );
-  if (file.isErr()) return err(`${DECLARATION_PATH}: ${errorText(file.error)}`);
-  return parseDeclaration(file.value);
+export async function readDeclaration(
+  root: string,
+): Promise<Result<ThirdPartySkill, string>> {
+  const file = await fromAsyncThrowable(
+    () => readFile(resolve(root, DECLARATION_PATH), "utf8"),
+    errorText,
+  )();
+  return file.isErr()
+    ? err(`${DECLARATION_PATH}: ${errorText(file.error)}`)
+    : parseDeclaration(file.value);
 }
 
 export function formatDeclaration(declaration: ThirdPartySkill): string {
@@ -80,33 +83,50 @@ export function parseSkillLock(text: string): Result<SkillLock, string> {
   return ok(parsed.data);
 }
 
-export function skillFiles(skillsDir: string): SkillFile[] {
-  if (!existsSync(skillsDir)) return [];
-  return readdirSync(skillsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
-    .map((entry) => resolve(skillsDir, entry.name, "SKILL.md"))
-    .filter((path) => existsSync(path))
-    .map((path) => ({ path, content: readFileSync(path, "utf8") }));
+export async function skillFiles(skillsDir: string): Promise<SkillFile[]> {
+  const listing = await fromAsyncThrowable(() =>
+    readdir(skillsDir, { withFileTypes: true }),
+  )();
+  if (listing.isErr()) return [];
+  const files = await Promise.all(
+    listing.value
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map(async (entry) => {
+        const path = resolve(skillsDir, entry.name, "SKILL.md");
+        const content = await fromAsyncThrowable(() =>
+          readFile(path, "utf8"),
+        )();
+        return content.isOk() ? { path, content: content.value } : null;
+      }),
+  );
+  return files.flatMap((file) => (file === null ? [] : [file]));
 }
 
 /** In-house skills have no vendor-specific agents/ scaffold, including links or empty entries. */
-export function skillLayoutRefusal(skill: string): string | undefined {
+export async function skillLayoutRefusal(
+  skill: string,
+): Promise<string | undefined> {
   const path = resolve(skill, "agents");
-  return pathExists(path)
+  return (await pathExists(path))
     ? `${path}: nested agents/ entries are forbidden in in-house skills; remove the vendor UI scaffold`
     : undefined;
 }
 
-export function inHouseLayoutRefusals(skillsDir: string): string[] {
-  // sync-ok: Startup metadata admission must finish before any skill installation effects.
-  if (!existsSync(skillsDir)) return [];
-  // sync-ok: One shallow package-directory listing, with no payload traversal or hot-path work.
-  return readdirSync(skillsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
-    .flatMap((entry) => {
-      const refusal = skillLayoutRefusal(resolve(skillsDir, entry.name));
-      return refusal === undefined ? [] : [refusal];
-    });
+export async function inHouseLayoutRefusals(
+  skillsDir: string,
+): Promise<string[]> {
+  const listing = await fromAsyncThrowable(() =>
+    readdir(skillsDir, { withFileTypes: true }),
+  )();
+  if (listing.isErr()) return [];
+  const refusals = await Promise.all(
+    listing.value
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => skillLayoutRefusal(resolve(skillsDir, entry.name))),
+  );
+  return refusals.flatMap((refusal) =>
+    refusal === undefined ? [] : [refusal],
+  );
 }
 
 function frontmatterName(content: string): string | undefined {
@@ -131,29 +151,26 @@ export function thirdPartySkillFiles(
   });
 }
 
-export function pathExists(path: string): boolean {
-  return fromThrowable((value: string) => lstatSync(value))(path).isOk();
+export async function pathExists(path: string): Promise<boolean> {
+  return (await fromAsyncThrowable(() => lstat(path))()).isOk();
 }
 
-export function isSymlink(path: string): boolean {
-  return fromThrowable((value: string) => lstatSync(value))(path)
-    .map((stat) => stat.isSymbolicLink())
+export async function isSymlink(path: string): Promise<boolean> {
+  return (await fromAsyncThrowable(() => lstat(path))())
+    .map((info) => info.isSymbolicLink())
     .unwrapOr(false);
 }
 
-function canonicalPath(path: string): string | undefined {
+async function canonicalPath(path: string): Promise<string | undefined> {
   const absolute = resolve(path);
-  const direct = fromThrowable((value: string) => realpathSync(value))(
-    absolute,
-  );
+  const direct = await fromAsyncThrowable(() => realpath(absolute))();
   if (direct.isOk()) return direct.value;
-
-  const link = fromThrowable((value: string) => readlinkSync(value))(absolute);
+  const link = await fromAsyncThrowable(() => readlink(absolute))();
   if (link.isOk()) {
     const target = isAbsolute(link.value)
       ? link.value
       : resolve(dirname(absolute), link.value);
-    return canonicalPath(target) ?? resolve(target);
+    return (await canonicalPath(target)) ?? resolve(target);
   }
   return undefined;
 }
@@ -166,12 +183,12 @@ function isWithin(root: string, path: string): boolean {
   );
 }
 
-function repositoryAncestor(path: string): string | undefined {
+async function repositoryAncestor(path: string): Promise<string | undefined> {
   let current = path;
   while (true) {
     if (
-      existsSync(resolve(current, ".git")) ||
-      existsSync(resolve(current, ".jj"))
+      (await pathExists(resolve(current, ".git"))) ||
+      (await pathExists(resolve(current, ".jj")))
     )
       return current;
     const parent = dirname(current);
@@ -181,25 +198,31 @@ function repositoryAncestor(path: string): string | undefined {
 }
 
 /** Detects both this checkout and other repo targets the pinned CLI must not write through. */
-export function resolvesIntoRepository(path: string, root: string): boolean {
-  const resolved = canonicalPath(path);
+export async function resolvesIntoRepository(
+  path: string,
+  root: string,
+): Promise<boolean> {
+  const resolved = await canonicalPath(path);
   if (resolved === undefined) return false;
-  const rootPath = canonicalPath(root) ?? resolve(root);
+  const rootPath = (await canonicalPath(root)) ?? resolve(root);
   if (isWithin(rootPath, resolved)) return true;
-  return isSymlink(path) && repositoryAncestor(resolved) !== undefined;
+  return (
+    (await isSymlink(path)) &&
+    (await repositoryAncestor(resolved)) !== undefined
+  );
 }
 
 /** Only an individual link to its namesake source in this checkout can be taken over. */
-export function isOwnInHouseLink(
+export async function isOwnInHouseLink(
   path: string,
   root: string,
   name: string,
-): boolean {
-  if (!isSymlink(path)) return false;
-  const checkout = canonicalPath(root);
-  // sync-ok: Admission must resolve the existing link before permitting any installation.
-  const target = fromThrowable((value: string) => realpathSync(value))(path);
-  if (checkout === undefined || target.isErr()) return false;
+): Promise<boolean> {
+  if (!(await isSymlink(path))) return false;
+  const checkout = await canonicalPath(root);
+  const target = await fromAsyncThrowable(() => realpath(path))();
+  if (target.isErr()) return false;
+  if (checkout === undefined) return false;
   return target.value === resolve(checkout, "agents/skills", name);
 }
 
@@ -225,12 +248,12 @@ export function skillCliArgs(
   ];
 }
 
-export function homePathRefusals(
+export async function homePathRefusals(
   home: string,
   root: string,
   names: readonly string[],
   inHouseNames: readonly string[] = [],
-): string[] {
+): Promise<string[]> {
   const paths = [
     `${home}/.agents/skills`,
     `${home}/.agents/.skill-lock.json`,
@@ -241,15 +264,31 @@ export function homePathRefusals(
     ]),
   ];
   const allowed = new Set(
-    inHouseNames.flatMap((name) =>
-      [".agents/skills", ".claude/skills"]
-        .map((base) => resolve(home, base, name))
-        .filter((path) => isOwnInHouseLink(path, root, name)),
-    ),
+    (
+      await Promise.all(
+        inHouseNames.flatMap((name) =>
+          [".agents/skills", ".claude/skills"].map(async (base) => {
+            const path = resolve(home, base, name);
+            return (await isOwnInHouseLink(path, root, name))
+              ? path
+              : undefined;
+          }),
+        ),
+      )
+    )
+      .filter((path) => path !== undefined)
+      .map((path) => resolve(path)),
   );
-  const unsafe = [...new Set(paths)].filter(
-    (path) => !allowed.has(resolve(path)) && resolvesIntoRepository(path, root),
-  );
+  const unsafe = (
+    await Promise.all(
+      [...new Set(paths)].map(async (path) =>
+        !allowed.has(resolve(path)) &&
+        (await resolvesIntoRepository(path, root))
+          ? path
+          : undefined,
+      ),
+    )
+  ).filter((path) => path !== undefined);
   if (unsafe.length === 0) return [];
   const more =
     unsafe.length > 1 ? ` (and ${unsafe.length - 1} more path(s))` : "";
@@ -262,12 +301,17 @@ export function toolLockPath(home: string): string {
   return resolve(home, ".agents/.skill-lock.json");
 }
 
-export function readToolLock(home: string): Result<SkillLock, string> {
+export async function readToolLock(
+  home: string,
+): Promise<Result<SkillLock, string>> {
   const path = toolLockPath(home);
-  if (!existsSync(path)) return ok({ skills: {} });
-  const contents = fromThrowable((value: string) =>
-    readFileSync(value, "utf8"),
-  )(path);
-  if (contents.isErr()) return err(`${path}: ${errorText(contents.error)}`);
-  return parseSkillLock(contents.value);
+  const contents = await fromAsyncThrowable(
+    () => readFile(path, "utf8"),
+    errorText,
+  )();
+  if (contents.isOk()) return parseSkillLock(contents.value);
+  const code = z.object({ code: z.string() }).safeParse(contents.error);
+  return code.success && code.data.code === "ENOENT"
+    ? ok({ skills: {} })
+    : err(`${path}: ${errorText(contents.error)}`);
 }

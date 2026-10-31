@@ -30,13 +30,13 @@ const root = process.env["DOTFILES"] ?? join(import.meta.dir, "..");
 const home = process.env["HOME"] ?? homedir();
 const violations: string[] = [];
 
-const declaration = readDeclaration(root);
+const declaration = await readDeclaration(root);
 if (declaration.isErr()) {
   violations.push(`agents/skills.thirdparty.toml: ${declaration.error}`);
 } else {
   violations.push(
     ...thirdPartySkillFiles(
-      skillFiles(join(root, "agents/skills")),
+      await skillFiles(join(root, "agents/skills")),
       declaration.value,
     ).map(
       ({ path, skill }) =>

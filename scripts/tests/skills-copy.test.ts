@@ -50,7 +50,7 @@ test("every bundled skill entry resolves in isolated Claude and Codex homes", as
     },
   };
   let count = 0;
-  for (const { path } of skillFiles(join(root, "agents/skills"))) {
+  for (const { path } of await skillFiles(join(root, "agents/skills"))) {
     const source = dirname(path);
     const prepared = join(home, "prepared", basename(source));
     const built = await prepareSkillCopy(source, prepared);

@@ -1,14 +1,7 @@
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir, homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
 import {
   parseSkillLock,
   pathExists,
@@ -24,16 +17,16 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function targetSkillNames(home: string): Set<string> {
+export async function targetSkillNames(home: string): Promise<Set<string>> {
   const names = new Set<string>();
   for (const root of [
     resolve(home, ".agents/skills"),
     resolve(home, ".claude/skills"),
   ]) {
-    if (!existsSync(root)) continue;
-    for (const name of fromThrowable((path: string) => readdirSync(path))(root)
-      .map((entries) => entries.filter((entry) => !entry.startsWith(".")))
-      .unwrapOr([]))
+    const listing = await fromAsyncThrowable(() => readdir(root))();
+    if (listing.isErr()) continue;
+    const entries = listing.value;
+    for (const name of entries.filter((entry) => !entry.startsWith(".")))
       names.add(name);
   }
   return names;
@@ -45,10 +38,10 @@ export async function runSkillsCli(
   names: readonly string[],
   home: string,
 ): Promise<{ exitCode: number; timedOut: boolean }> {
-  const cwd = mkdtempSync(join(tmpdir(), "skills-cli-cwd-"));
-  using _cwd = {
-    [Symbol.dispose]: () => {
-      rmSync(cwd, { recursive: true, force: true });
+  const cwd = await mkdtemp(join(tmpdir(), "skills-cli-cwd-"));
+  await using _cwd = {
+    [Symbol.asyncDispose]: async () => {
+      await rm(cwd, { recursive: true, force: true });
     },
   };
   const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
@@ -128,51 +121,60 @@ export function newlyInstalledStowaways(
     .toSorted();
 }
 
-export function removeNewStowaways(
+export async function removeNewStowaways(
   home: string,
   before: SkillLock,
   after: SkillLock,
   requested: readonly string[],
   namesBefore: ReadonlySet<string>,
-): Result<string[], string> {
+): Promise<Result<string[], string>> {
   const stowaways = newlyInstalledStowaways(before, after, requested);
   if (stowaways.length === 0) return ok([]);
 
-  stowaways
-    .filter((name) => !namesBefore.has(name))
-    .forEach((name) => {
-      removeStowawayTargets(home, name);
-    });
+  for (const stowaway of stowaways.filter(
+    (candidate) => !namesBefore.has(candidate),
+  ))
+    await removeStowawayTargets(home, stowaway);
 
   const removed = new Set(stowaways);
   const skills = Object.fromEntries(
     Object.entries(after.skills).filter(([name]) => !removed.has(name)),
   );
   const lockPath = toolLockPath(home);
-  const lockText = fromThrowable((path: string) => readFileSync(path, "utf8"))(
-    lockPath,
-  );
+  const lockText = await fromAsyncThrowable(
+    () => readFile(lockPath, "utf8"),
+    errorText,
+  )();
   if (lockText.isErr()) return err(errorText(lockText.error));
   const parsed = parseSkillLock(lockText.value);
   if (parsed.isErr()) return err(parsed.error);
-  const written = fromThrowable(() => {
-    writeFileSync(
-      lockPath,
-      `${JSON.stringify({ ...parsed.value, skills }, null, 2)}\n`,
-    );
-  })();
-  return written.isErr() ? err(errorText(written.error)) : ok(stowaways);
+  const written = await fromAsyncThrowable(
+    () =>
+      writeFile(
+        lockPath,
+        `${JSON.stringify({ ...parsed.value, skills }, null, 2)}\n`,
+      ),
+    errorText,
+  )();
+  if (written.isErr()) return err(errorText(written.error));
+  return ok(stowaways);
 }
 
-function removeStowawayTargets(home: string, name: string): void {
+async function removeStowawayTargets(
+  home: string,
+  name: string,
+): Promise<void> {
   for (const target of [
     resolve(home, ".agents/skills", name),
     resolve(home, ".claude/skills", name),
   ]) {
-    if (pathExists(target)) rmSync(target, { recursive: true, force: true });
+    if (await pathExists(target))
+      await rm(target, { recursive: true, force: true });
   }
 }
 
-export function readInstalledLock(home: string): SkillLock | undefined {
-  return readToolLock(home).unwrapOr(undefined);
+export async function readInstalledLock(
+  home: string,
+): Promise<SkillLock | undefined> {
+  return (await readToolLock(home)).unwrapOr(undefined);
 }

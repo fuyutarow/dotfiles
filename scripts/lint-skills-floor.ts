@@ -120,18 +120,18 @@ if (context !== undefined) {
     process.exit(2);
   }
 }
-const candidateDeclaration = readDeclaration(tmp);
+const candidateDeclaration = await readDeclaration(tmp);
 const declaration =
   candidateDeclaration.isOk() || context !== undefined
     ? candidateDeclaration
-    : readDeclaration(join(import.meta.dir, ".."));
+    : await readDeclaration(join(import.meta.dir, ".."));
 if (declaration.isErr()) {
   console.error(`lint-skills-floor: ${declaration.error}`);
   rmSync(tmp, { recursive: true, force: true });
   process.exit(2);
 }
 const thirdPartyCopies = thirdPartySkillFiles(
-  skillFiles(join(tmp, "agents/skills")),
+  await skillFiles(join(tmp, "agents/skills")),
   declaration.value,
 );
 if (thirdPartyCopies.length > 0) {

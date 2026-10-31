@@ -179,8 +179,11 @@ function isWithin(root: string, path: string): boolean {
   );
 }
 
-function codexInHouseNamesFromLock(home: string, dotfiles: string): string[] {
-  const lock = readInstalledLock(home);
+async function codexInHouseNamesFromLock(
+  home: string,
+  dotfiles: string,
+): Promise<string[]> {
+  const lock = await readInstalledLock(home);
   if (lock === undefined) return [];
   const sourceRoot = resolve(dotfiles, "agents/skills");
   return Object.entries(lock.skills)
@@ -384,7 +387,7 @@ async function syncInHouseCodex(
   if (loaded.isErr()) return loaded.error;
   const previous = new Set([
     ...Object.keys(loaded.value.skills),
-    ...codexInHouseNamesFromLock(home, root),
+    ...(await codexInHouseNamesFromLock(home, root)),
   ]);
   const digests = new Map(
     names.map((name) => [name, treeDigest(preparedSkill(prepared, name))]),
@@ -442,9 +445,19 @@ async function syncInHouseCodex(
         await rm(transaction, { recursive: true, force: true });
       },
     };
-    for (const name of install.filter((candidate) =>
-      isOwnInHouseLink(resolve(skillsRoot, candidate), root, candidate),
-    )) {
+    for (const name of (
+      await Promise.all(
+        install.map(async (candidate) =>
+          (await isOwnInHouseLink(
+            resolve(skillsRoot, candidate),
+            root,
+            candidate,
+          ))
+            ? candidate
+            : undefined,
+        ),
+      )
+    ).filter((candidate) => candidate !== undefined)) {
       const target = resolve(skillsRoot, name);
       const backup = resolve(transaction, name);
       await rename(target, backup);
@@ -566,7 +579,7 @@ async function previousInHouseNames(
   );
   return new Set([
     ...Object.keys(state.skills),
-    ...codexInHouseNamesFromLock(home, dotfiles),
+    ...(await codexInHouseNamesFromLock(home, dotfiles)),
     ...present
       .filter((entry) => entry.paths.some(Boolean))
       .map((entry) => entry.name),
@@ -689,7 +702,7 @@ function treeDigest(root: string): string | undefined {
   return result.unwrapOr(undefined);
 }
 
-function main(): Promise<void> {
+async function main(): Promise<void> {
   const parsed = cli(
     {
       name: "skills-sync.ts",
@@ -714,7 +727,7 @@ function main(): Promise<void> {
   if (parsed._.length > 0) {
     fail(`unexpected positional argument: ${parsed._[0]}\n${USAGE}`);
     process.exitCode = 2;
-    return Promise.resolve();
+    return;
   }
   const home = parsed.flags.home ?? process.env["HOME"] ?? homedir();
   const dotfiles =
@@ -728,28 +741,28 @@ function main(): Promise<void> {
   if (text.isErr()) {
     fail(`FATAL: ${declarationPath}: ${errorText(text.error)}`);
     process.exitCode = 1;
-    return Promise.resolve();
+    return;
   }
   const declaration = parseDeclaration(text.value);
   if (declaration.isErr()) {
     fail(`FATAL: ${declaration.error}`);
     process.exitCode = 1;
-    return Promise.resolve();
+    return;
   }
 
-  const layoutRefusals = inHouseLayoutRefusals(
+  const layoutRefusals = await inHouseLayoutRefusals(
     resolve(dotfiles, "agents/skills"),
   );
   if (layoutRefusals.length > 0) {
     for (const refusal of layoutRefusals) fail(`FATAL: ${refusal}`);
     process.exitCode = 1;
-    return Promise.resolve();
+    return;
   }
 
   const names = declaration.value.skills.map((entry) => entry.skill);
-  const inHouseNames = skillFiles(resolve(dotfiles, "agents/skills")).map(
-    (skill) => basename(resolve(skill.path, "..")),
-  );
+  const inHouseNames = (
+    await skillFiles(resolve(dotfiles, "agents/skills"))
+  ).map((skill) => basename(resolve(skill.path, "..")));
   const inHouseSet = new Set(inHouseNames);
   const overlap = names.filter((name) => inHouseSet.has(name));
   if (overlap.length > 0) {
@@ -757,12 +770,12 @@ function main(): Promise<void> {
       `FATAL: third-party names overlap in-house skills: ${overlap.join(", ")}`,
     );
     process.exitCode = 1;
-    return Promise.resolve();
+    return;
   }
 
   const refusals = parsed.flags.dryRun
     ? []
-    : homePathRefusals(
+    : await homePathRefusals(
         home,
         dotfiles,
         [...names, ...inHouseNames],
@@ -771,7 +784,7 @@ function main(): Promise<void> {
   for (const refusal of refusals) fail(refusal);
   if (refusals.length > 0) {
     process.exitCode = 3;
-    return Promise.resolve();
+    return;
   }
 
   if (parsed.flags.dryRun) {
@@ -972,7 +985,7 @@ function main(): Promise<void> {
       return;
     }
 
-    const initialLock = readInstalledLock(home);
+    const initialLock = await readInstalledLock(home);
     if (initialLock === undefined) {
       fail("FATAL: global skills lock is unreadable; refusing to sync");
       process.exitCode = 1;
@@ -1028,20 +1041,20 @@ function main(): Promise<void> {
         continue;
       }
 
-      const before = readInstalledLock(home);
+      const before = await readInstalledLock(home);
       if (before === undefined) {
         fail("FATAL: global skills lock became unreadable before install");
         process.exitCode = 1;
         return;
       }
-      const namesBefore = targetSkillNames(home);
+      const namesBefore = await targetSkillNames(home);
       const installed = await runSkillsCli(
         declaration.value.cli_version,
         source,
         staleNames,
         home,
       );
-      const after = readInstalledLock(home);
+      const after = await readInstalledLock(home);
       if (after === undefined) {
         fail(
           "FATAL: global skills lock is unreadable after install; stowaway cleanup could not be verified",
@@ -1049,7 +1062,7 @@ function main(): Promise<void> {
         process.exitCode = 1;
         return;
       }
-      const cleanup = removeNewStowaways(
+      const cleanup = await removeNewStowaways(
         home,
         before,
         after,
@@ -1073,7 +1086,7 @@ function main(): Promise<void> {
         return;
       }
 
-      const finalLock = readInstalledLock(home);
+      const finalLock = await readInstalledLock(home);
       const missing = staleNames.filter(
         (name) =>
           finalLock === undefined ||
@@ -1121,7 +1134,7 @@ function main(): Promise<void> {
       return;
     }
 
-    const finalLock = readInstalledLock(home);
+    const finalLock = await readInstalledLock(home);
     if (finalLock === undefined) {
       fail("FATAL: global skills lock is unreadable after sync");
       process.exitCode = 1;

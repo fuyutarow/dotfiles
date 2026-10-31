@@ -3,7 +3,6 @@
 // Fail-open: unavailable state is a diagnostic, never a gate. Stop always emits;
 // PostToolUse retains its one-minute cadence. Cadence write failures cannot hide a line.
 
-import { spawnSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
@@ -65,28 +64,46 @@ const Status = jsonOf(
   }),
 );
 
-function describe(sid: string, cwd: string): string {
+async function describe(sid: string, cwd: string): Promise<string> {
   const agx = Bun.which("agx");
   if (agx === null) return "n/a (agx not found on PATH)";
-  // sync-ok: one bounded CLI read in a short-lived hook; no npm dependencies.
-  const result = spawnSync(agx, ["status", "--json", "--cwd", cwd], {
-    encoding: "utf8",
-    timeout: STATUS_TIMEOUT_MS,
+  const signal = AbortSignal.timeout(STATUS_TIMEOUT_MS);
+  const child = Bun.spawn([agx, "status", "--json", "--cwd", cwd], {
+    stdout: "pipe",
+    stderr: "pipe",
+    signal,
     killSignal: "SIGKILL",
-    maxBuffer: 1024 * 1024,
   });
-  if (result.error !== undefined) {
-    if (
-      z.object({ code: z.literal("ETIMEDOUT") }).safeParse(result.error).success
-    )
-      return `n/a (agx status timed out after ${STATUS_TIMEOUT_MS} ms)`;
-    return `n/a (${oneLine(errorMessage(result.error))})`;
-  }
-  if (result.status !== 0)
+  const read = async (stream: ReadableStream<Uint8Array>) => {
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      size += part.value.byteLength;
+      if (size > 1024 * 1024) {
+        child.kill("SIGKILL");
+        return null;
+      }
+      chunks.push(part.value);
+    }
+    return new TextDecoder().decode(Buffer.concat(chunks));
+  };
+  const [stdout, stderr, exitCode] = await Promise.all([
+    read(child.stdout),
+    read(child.stderr),
+    child.exited,
+  ]);
+  if (signal.aborted)
+    return `n/a (agx status timed out after ${STATUS_TIMEOUT_MS} ms)`;
+  if (stdout === null || stderr === null)
+    return "n/a (agx status output exceeded maxBuffer)";
+  if (exitCode !== 0)
     return oneLine(
-      `n/a (agx status exited ${result.status ?? result.signal}: ${result.stderr.slice(0, 1024).trim()})`,
+      `n/a (agx status exited ${child.signalCode ?? exitCode}: ${stderr.slice(0, 1024).trim()})`,
     );
-  const status = Status.safeParse(result.stdout);
+  const status = Status.safeParse(stdout);
   if (!status.success) return "n/a (invalid agx status JSON)";
   const { source, reason, rows } = status.data.runs;
   if (source !== "current" || rows === null)
@@ -138,11 +155,9 @@ async function main(): Promise<void> {
       return;
   }
   const result = await attempt(() =>
-    Promise.resolve(
-      sid === undefined
-        ? "n/a (session id not supplied)"
-        : describe(sid, nonEmpty(strAt(payload, "cwd")) ?? process.cwd()),
-    ),
+    sid === undefined
+      ? Promise.resolve("n/a (session id not supplied)")
+      : describe(sid, nonEmpty(strAt(payload, "cwd")) ?? process.cwd()),
   );
   const body = result.ok
     ? result.value

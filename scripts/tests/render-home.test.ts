@@ -302,6 +302,45 @@ function assertHookCommand(command: string): void {
 }
 
 describe("render-home: base only", () => {
+  test("retains Claude-written modelSettings while rendering other keys from declarations", () => {
+    const dotfiles = makeDotfiles({ model: "opus", declared: true });
+    const home = makeHome();
+    mkdirSync(join(home, ".claude"), { recursive: true });
+    const modelSettings = {
+      "claude-opus-5-5": { autoCompactWindow: 400000, extra: [null, false] },
+      another: { autoCompactWindow: 123456 },
+    };
+    writeFileSync(
+      dest(home),
+      JSON.stringify({ modelSettings, model: "old", runtimeOnly: true }),
+    );
+    const result = run({ HOME: home, DOTFILES: dotfiles });
+    expect(result.code, result.out).toBe(0);
+    expect(readDest(home)).toEqual({
+      model: "opus",
+      declared: true,
+      modelSettings,
+      hooks: { PreToolUse: [GATE] },
+    });
+    expect(run({ HOME: home, DOTFILES: dotfiles }).out).toContain(
+      `current: ${dest(home)}`,
+    );
+    cleanup(dotfiles, home);
+  });
+
+  test("overwrites malformed deployed settings as before", () => {
+    const dotfiles = makeDotfiles({ model: "opus" });
+    const home = makeHome();
+    mkdirSync(join(home, ".claude"), { recursive: true });
+    writeFileSync(dest(home), "{ malformed");
+    const result = run({ HOME: home, DOTFILES: dotfiles });
+    expect(result.code, result.out).toBe(0);
+    expect(readDest(home)).toEqual({
+      model: "opus",
+      hooks: { PreToolUse: [GATE] },
+    });
+    cleanup(dotfiles, home);
+  });
   test("real Claude settings retain transcripts for 100 years", () => {
     const home = makeHome();
     const result = run({

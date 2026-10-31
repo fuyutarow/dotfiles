@@ -1,5 +1,5 @@
 import { DoctorStatus } from "@dotfiles/shared/src/doctor-record.ts";
-import { jsonOf } from "@dotfiles/shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 // bun test for scripts/doctor.ts — spawned end-to-end against throwaway HOME / DOTFILES trees
 // (DOCTOR_ONLY narrows to the checks a fixture can drive); the real $HOME is never touched.
 // Each FAIL case is paired with its PASS twin so a check that always passes, or always fails,
@@ -299,6 +299,7 @@ function doctor(
     XDG_DATA_HOME?: string;
     USER?: string;
     DOCTOR_TEST_TMP_ROOT?: string;
+    DOTFILES_RENDER_FROM_WORKING_COPY?: string;
   },
 ): { code: number; out: string } {
   const proc = Bun.spawnSync([process.execPath, SCRIPT], {
@@ -837,6 +838,32 @@ describe("doctor", () => {
     expect(proc.exitCode, output).toBe(0);
     expect(output).not.toContain("bun-exec: cannot resolve bun");
     expect(output).toContain("rendered");
+    mkdirSync(join(scratch, ".bun/bin"), { recursive: true });
+    writeFileSync(join(scratch, ".bun/bin/statusline"), "#!/bin/sh\n");
+    const settingsPath = join(scratch, ".claude/settings.json");
+    const parsed = jsonOf(z.record(z.string(), z.unknown())).safeParse(
+      readFileSync(settingsPath, "utf8"),
+    );
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    const settings = parsed.data;
+    settings["modelSettings"] = {
+      "claude-opus-5-5": { autoCompactWindow: 400000 },
+    };
+    writeFileSync(settingsPath, JSON.stringify(settings));
+    const env = {
+      HOME: scratch,
+      DOTFILES: REPO,
+      DOTFILES_RENDER_FROM_WORKING_COPY: "1",
+    };
+    const clean = doctor("rendered", env);
+    expect(clean.code, clean.out).toBe(0);
+    expect(clean.out).toContain("PASS  rendered");
+    settings["model"] = "unexpected-drift";
+    writeFileSync(settingsPath, JSON.stringify(settings));
+    const drift = doctor("rendered", env);
+    expect(drift.code, drift.out).toBe(1);
+    expect(drift.out).toContain("top-level key differs: model");
     rmSync(scratch, { recursive: true, force: true });
     rmSync(target, { recursive: true, force: true });
   });

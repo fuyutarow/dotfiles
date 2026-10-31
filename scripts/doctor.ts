@@ -54,6 +54,7 @@ import { DoctorStatus } from "@dotfiles/shared/src/doctor-record.ts";
 import {
   existsSync,
   lstatSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -61,6 +62,7 @@ import {
   realpathSync,
   rmSync,
   statfsSync,
+  writeFileSync,
 } from "node:fs";
 import { readdir, realpath } from "node:fs/promises";
 import { fromThrowable } from "neverthrow";
@@ -445,6 +447,23 @@ export async function checkRendered(ctx: Ctx): Promise<Finding> {
       rmSync(scratch, { recursive: true, force: true });
     },
   };
+  // Let the renderer apply its own allowlist to the deployed settings in the scratch home.
+  // Copy bytes, never a symlink; renderedDiff still reports a deployed symlink as drift.
+  const deployedSettings = join(ctx.home, ".claude/settings.json");
+  if (existsSync(deployedSettings)) {
+    const seeded = await attempt(() => {
+      mkdirSync(join(scratch, ".claude"), { recursive: true });
+      writeFileSync(
+        join(scratch, ".claude/settings.json"),
+        readFileSync(deployedSettings),
+      );
+    });
+    if (!seeded.ok)
+      return warn(
+        "rendered",
+        `cannot read deployed settings: ${errorMessage(seeded.error)}`,
+      );
+  }
   const r = await run(
     [
       join(ctx.dotfiles, "scripts/bun-exec.sh"),

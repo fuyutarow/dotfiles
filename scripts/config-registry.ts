@@ -470,7 +470,8 @@ export const RENDERED = [
       "zsh/timezone",
       "agents/hooks/hooks.toml",
     ],
-    machine: "~/.claude/settings.private.json",
+    machine:
+      "~/.claude/settings.private.json + Claude Code's deployed modelSettings",
     consumer:
       "Claude Code (user settings: hooks, permissions, autoMode, env.TZ)",
     when: "all",
@@ -1009,7 +1010,10 @@ export function surfaces(): Surface[] {
     sources: r.inputs,
     deployed: `~/${r.dest}${r.machine === "" ? "" : ` (+ ${r.machine})`}`,
     consumer: r.consumer,
-    writer: "scripts/render-home.ts (mise run link:dots)",
+    writer:
+      r.dest === ".claude/settings.json"
+        ? "scripts/render-home.ts (mise run link:dots); Claude Code (modelSettings)"
+        : "scripts/render-home.ts (mise run link:dots)",
     verify: `${DOCTOR} (rendered) · lint:one-writer`,
   }));
   const tool = TOOL_OWNED.map((p): Surface => ({

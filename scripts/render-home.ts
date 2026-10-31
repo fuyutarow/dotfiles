@@ -7,13 +7,11 @@
 // Consumer: scripts/link-dots.ts (and therefore `mise run link:dots` + the post-merge hook), and
 // `mise run doctor`, which renders into a scratch HOME and compares. Output is verdict lines.
 //
-// DATA FLOWS ONE WAY (README → Design, INV-8): declaration (repo, hand-written) → render (here) →
-// deployed ($HOME, never edited) → runtime. Every file has ONE writer: a human writes the repo
-// inputs, this script writes the outputs, and nothing writes back. Until 2026-10-06 two of these
+// DATA FLOWS from declarations to rendered outputs, except for the named Claude Code UI settings
+// carried over from the deployed settings file below. Until 2026-10-06 two of these
 // were generated INTO the repo instead (`hooks:wire` rewrote entries inside the committed vendor
 // files; `roster:render` rewrote a block inside agents/claude/CLAUDE.md): two writers per file,
-// and a hand edit inside the generated part was silently undone. The only flow back is a CHECK
-// (doctor reports a deployed file that is not a fresh render) — never data.
+// and a hand edit inside the generated part was silently undone.
 //
 // WHY settings.json IS GENERATED AND NOT SYMLINKED — the setting that forced it first:
 // `autoMode` (auto-mode classifier rules: environment / allow / soft_deny / hard_deny) is
@@ -325,6 +323,22 @@ const { specs } = registry.value;
 
 // ── ~/.claude/settings.json ──────────────────────────────────────────────────────────────────
 const settings: Record<string, unknown> = { ...baseRead.value, ...overlay };
+// Claude Code writes these keys through its UI; retain their deployed values across renders.
+const claudeWrittenKeys = ["modelSettings"];
+const deployedSettingsPath = `${home}/.claude/settings.json`;
+if (existsSync(deployedSettingsPath)) {
+  // A malformed deployed file was previously overwritten; preserve that behavior.
+  const deployed = readJson(deployedSettingsPath);
+  if (!(deployed instanceof Error))
+    Object.assign(
+      settings,
+      Object.fromEntries(
+        claudeWrittenKeys
+          .filter((key) => Object.hasOwn(deployed, key))
+          .map((key) => [key, deployed[key]]),
+      ),
+    );
+}
 const marketplaces = obj(settings["extraKnownMarketplaces"]);
 if (marketplaces !== undefined && Object.hasOwn(marketplaces, "dotfiles")) {
   const remaining = { ...marketplaces };

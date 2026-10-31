@@ -5,6 +5,7 @@
 // Human/agent consumer: JSON diagnostics and a checked file count. Exit 0 clean / 1 findings /
 // 2 fatal (including empty, malformed or zero-file reports). No network installation fallback.
 import { cli } from "cleye";
+import { delimiter, join } from "node:path";
 import { jsonOf, z } from "./zod.ts";
 
 const Report = z.looseObject({
@@ -27,18 +28,24 @@ async function main(): Promise<number> {
     ignoreArgv: rejectPrototypeFlag,
     flags: { typeAware: { type: Boolean, default: false } },
   });
+  const bin = join(process.cwd(), "node_modules", ".bin");
   const child = Bun.spawn(
     [
       process.execPath,
-      "x",
-      "--bun",
-      "--no-install",
-      "oxlint",
+      join(bin, "oxlint"),
       "--format=json",
       ...(argv.flags.typeAware ? ["--type-aware"] : []),
       ...argv._,
     ],
-    { stdout: "pipe", stderr: "pipe", timeout: 120_000 },
+    {
+      env: {
+        ...process.env,
+        PATH: `${bin}${delimiter}${process.env["PATH"] ?? ""}`,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 120_000,
+    },
   );
   const [stdout, stderr, exit] = await Promise.all([
     new Response(child.stdout).text(),

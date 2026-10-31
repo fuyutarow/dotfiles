@@ -89,9 +89,9 @@ updates the wrapper's house extends path. Root files matching the current templa
 unknown root bytes, occupied destinations, and a
 wrapper without the expected extends entry are reported as conflicts before
 any migration writes. Resolve them manually and retry; `--dry-run` previews moves.
-The `lint:ts` task still calls `lint-ts-candidate`, whose current default expects
-the runner at the repository root; its selection and runner location need to be
-decoupled before this task can run against the default placed runner.
+The `lint:ts` example passes `--dir tools` to locate the default placed runner.
+Candidate selection and oxlint resolve from the consumer root; use `--dir` to
+locate a runner in another directory.
 
 The TypeScript preset owns `house.oxlintrc.json` and `house-plugin.js`, compared
 against their placed versions by `preset diff`. The consumer owns

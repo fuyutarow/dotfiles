@@ -66,7 +66,8 @@
     "d2a4afbe81281da12f1271590f884e912c35fcda4e58a311b03aba027c7e31a7"
   ],
   "typescript/lint-oxlint.ts": [
-    "288261998aa468a2a6fa5e7c9bac59c55ce9a3b28fb825891c7ffda4e87bc40c"
+    "288261998aa468a2a6fa5e7c9bac59c55ce9a3b28fb825891c7ffda4e87bc40c",
+    "ea7c20e53e58728c2143aae31cc82a27944061569d979d7e180536238faa643a"
   ],
   "typescript/package.json": [
     "d687aea9d67ab9ea0cdb92601fcab5f3f9141aa492df2e2740cd3fca3c16ebc2"

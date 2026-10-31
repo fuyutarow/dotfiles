@@ -26,19 +26,19 @@ depends = ["fmt:staged", "lint"]
 
 [tasks."lint:ts"]
 description = "oxlint --type-aware on the selected jj commit candidate files"
-run = "lint-ts-candidate"
+run = "lint-ts-candidate --dir tools"
 
 [tasks."lint:ts:all"]
 description = "oxlint --type-aware on every TypeScript/TSX file the config does not ignore"
-run = "bun lint-oxlint.ts --type-aware"
+run = "bun tools/lint-oxlint.ts --type-aware"
 
 [tasks."lint:knip"]
 description = "Fail on unused exports, files, dependencies, and binaries"
-run = "bun lint-knip.ts"
+run = "bun tools/lint-knip.ts"
 
 [tasks.typecheck]
 description = "Type-check with bun check against tsconfig.json (requires Bun >= 1.4.3)"
-run = "bun require-bun.ts && bun check"
+run = "bun tools/require-bun.ts && bun check"
 
 # In a consumer's fix task, keep knip report-only so cleanup remains deliberate:
 # export/type fixes can leave declarations unused, dependency fixes can leave bun.lock stale,
@@ -79,8 +79,8 @@ baseline scanner enables it. Every custom entry has bad/good proof in
 `fixtures.json`, run by `../tests/oxlint-custom.test.ts`; snippets are executed
 in temporary repositories outside the checkout.
 
-The supplied `lint-oxlint.ts` runs the installed oxlint through `bun x --bun
---no-install`, avoiding its Node shebang. It requires a valid JSON report with a
+The supplied `lint-oxlint.ts` runs the consumer root's installed oxlint with Bun,
+avoiding its Node shebang. It requires a valid JSON report with a
 positive checked file count. Empty output, malformed output, or zero files
 checked fail with exit 2. A count means `number_of_files`, not diagnostics.
 
@@ -103,3 +103,7 @@ commit`, it checks changed selected TypeScript files from the immutable J1
 candidate. Direct invocation checks changed TypeScript files in the current jj
 snapshot. Missing J1 context fails closed. Merge the template's aggregates with
 existing tasks, including the repo's `fmt:staged` task.
+The example uses the default `tools/` script placement while linting from the
+repository root. Set `--dir` to the configured runner directory for another placement;
+root-layout consumers can omit it. Candidate selection and oxlint resolve from
+the consumer root.

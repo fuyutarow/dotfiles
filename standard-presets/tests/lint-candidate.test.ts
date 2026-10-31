@@ -4,6 +4,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   rm,
   symlink,
   writeFile,
@@ -24,8 +25,7 @@ test.each([".", "tools"])(
       const repo = join(scratch, "repo");
       const bin = join(scratch, "bin");
       const toolchain = join(repo, directory);
-      const selectedPath =
-        directory === "." ? "selected.ts" : directory + "/selected.ts";
+      const selectedPath = "selected.ts";
       await mkdir(repo);
       await mkdir(bin);
       await mkdir(toolchain, { recursive: true });
@@ -80,18 +80,18 @@ test.each([".", "tools"])(
       );
       const template = readme.match(/```toml\n([\s\S]*?)\n```/u)?.[1] ?? "";
       expect(template.length).toBeGreaterThan(0);
-      expect(template).toContain('run = "lint-ts-candidate"');
+      expect(template).toContain('run = "lint-ts-candidate --dir tools"');
       const fixtureTemplate = template.replace(
         'depends = ["fmt:staged", "lint"]',
         'depends = ["lint:ts"]',
       );
       const tasks =
         directory === "."
-          ? fixtureTemplate
-          : fixtureTemplate.replace(
-              'run = "lint-ts-candidate"',
-              'run = "lint-ts-candidate --dir ./tools/"',
-            );
+          ? fixtureTemplate.replace(
+              'run = "lint-ts-candidate --dir tools"',
+              'run = "lint-ts-candidate --dir ."',
+            )
+          : fixtureTemplate;
       expect(template).not.toMatch(/git diff|\$\(|\bif\s/u);
       const bunPin = (await readFile(join(root, "mise.toml"), "utf8")).match(
         /^bun = ("[^"]+")$/mu,
@@ -118,26 +118,30 @@ test.each([".", "tools"])(
       );
       await cp(
         join(root, "standard-presets/typescript/package.json"),
-        join(toolchain, "package.json"),
+        join(repo, "package.json"),
       );
-      await symlink(
-        join(root, "node_modules"),
-        join(toolchain, "node_modules"),
-      );
+      const modules = join(repo, "node_modules");
+      await mkdir(join(modules, ".bin"), { recursive: true });
+      for (const name of await readdir(join(root, "node_modules"))) {
+        if (name === ".bin") continue;
+        await symlink(join(root, "node_modules", name), join(modules, name));
+      }
+      for (const name of await readdir(join(root, "node_modules/.bin")))
+        await symlink(
+          join(root, "node_modules/.bin", name),
+          join(modules, ".bin", name),
+        );
       await writeFile(
-        join(toolchain, ".oxlintrc.json"),
+        join(repo, ".oxlintrc.json"),
         JSON.stringify({ rules: { "no-debugger": "error" } }),
       );
       await writeFile(
-        join(toolchain, "tsconfig.json"),
+        join(repo, "tsconfig.json"),
         '{"compilerOptions":{"strict":true},"include":["*.ts"]}',
       );
       await writeFile(join(repo, ".gitignore"), "node_modules\n");
-      await writeFile(
-        join(toolchain, "selected.ts"),
-        "export const value = 1;\n",
-      );
-      await writeFile(join(toolchain, "other.ts"), "export const other = 1;\n");
+      await writeFile(join(repo, "selected.ts"), "export const value = 1;\n");
+      await writeFile(join(repo, "other.ts"), "export const other = 1;\n");
       expect((await run(["jj", "git", "init", "--no-colocate"])).exit).toBe(0);
       expect((await run(["jj", "commit", "-m", "base"])).exit).toBe(0);
       const contract = await run([
@@ -146,11 +150,8 @@ test.each([".", "tools"])(
         repo,
       ]);
       expect(contract.exit, contract.out + contract.err).toBe(0);
-      await writeFile(
-        join(toolchain, "selected.ts"),
-        "export const value = 2;\n",
-      );
-      await writeFile(join(toolchain, "other.ts"), "debugger;\n");
+      await writeFile(join(repo, "selected.ts"), "export const value = 2;\n");
+      await writeFile(join(repo, "other.ts"), "debugger;\n");
       const commit = [
         "mise",
         "run",
@@ -161,26 +162,11 @@ test.each([".", "tools"])(
         "--",
         selectedPath,
       ];
-      if (directory !== ".") {
-        await mkdir(join(repo, "tools-extra"));
-        await writeFile(join(repo, "outside.ts"), "debugger;\n");
-        await writeFile(join(repo, "tools-extra/outside.ts"), "debugger;\n");
-      }
-      const good = await run(
-        directory === "."
-          ? commit
-          : [...commit, "outside.ts", "tools-extra/outside.ts"],
-      );
+      const good = await run(commit);
       expect(good.exit, good.out + good.err).toBe(0);
       expect(good.out).toContain("checked 1 file(s)");
-      if (directory !== ".") {
-        await writeFile(join(repo, "outside.ts"), "debugger; debugger;\n");
-        const outside = await run([...commit.slice(0, -1), "outside.ts"]);
-        expect(outside.exit, outside.out + outside.err).toBe(0);
-        expect(outside.out).toContain("no candidate .ts/.tsx files");
-      }
-      await writeFile(join(toolchain, ".oxlintrc.json"), "{}");
-      await writeFile(join(toolchain, "selected.ts"), "debugger;\n");
+      await writeFile(join(repo, ".oxlintrc.json"), "{}");
+      await writeFile(join(repo, "selected.ts"), "debugger;\n");
       const bad = await run(commit);
       expect(bad.exit, bad.out + bad.err).toBe(1);
       expect(bad.out + bad.err).toContain("no-debugger");
@@ -188,7 +174,7 @@ test.each([".", "tools"])(
       const skipped = await run([...commit.slice(0, -1), "note.txt"]);
       expect(skipped.exit, skipped.out + skipped.err).toBe(0);
       expect(skipped.out).toContain("no candidate .ts/.tsx files");
-      await rm(join(toolchain, "selected.ts"));
+      await rm(join(repo, "selected.ts"));
       const deleted = await run(commit);
       expect(deleted.exit, deleted.out + deleted.err).toBe(0);
       expect(deleted.out).toContain("no candidate .ts/.tsx files");

@@ -38,7 +38,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, realpath, rename } from "node:fs/promises";
+import { access, mkdir, readFile, realpath, rename } from "node:fs/promises";
 import { hostname, homedir, release } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
@@ -584,8 +584,11 @@ export async function loadSmartOpenReceiver(
   const domain = `gui/${uid}`;
   const loaded = await run(["print", `${domain}/${label}`]);
   const linkChanged = ctx.changedLinks?.has(plist) === true;
-  const expected = existsSync(plist)
-    ? plistProgramArguments(readFileSync(plist, "utf8"))
+  const expected = (await access(plist).then(
+    () => true,
+    () => false,
+  ))
+    ? plistProgramArguments(await readFile(plist, "utf8"))
     : undefined;
   const actual = loadedProgramArguments(loaded.stdout);
   const argumentsChanged =
@@ -660,11 +663,19 @@ export function prune(ctx: Ctx): void {
 // Every prune decision is "a dangling link whose target starts with <dotfiles>/", so the root must
 // be THIS checkout, absolute — a relative or foreign DOTFILES would aim the prune at the wrong tree.
 // Checked before anything is touched.
-export function assertRoots(home: string, dotfiles: string): Error | undefined {
+export async function assertRoots(
+  home: string,
+  dotfiles: string,
+): Promise<Error | undefined> {
   if (!isAbsolute(home)) return new Error(`HOME is not absolute: "${home}"`);
   if (!isAbsolute(dotfiles))
     return new Error(`DOTFILES is not absolute: "${dotfiles}"`);
-  if (!existsSync(join(dotfiles, "scripts/link-dots.ts"))) {
+  if (
+    !(await access(join(dotfiles, "scripts/link-dots.ts")).then(
+      () => true,
+      () => false,
+    ))
+  ) {
     return new Error(
       `DOTFILES is not a dotfiles checkout (no scripts/link-dots.ts): ${dotfiles}`,
     );
@@ -1192,7 +1203,7 @@ async function main(): Promise<Error | void> {
       ? {}
       : { stateHome: process.env["XDG_STATE_HOME"] }),
   };
-  const rootsError = assertRoots(ctx.home, ctx.dotfiles);
+  const rootsError = await assertRoots(ctx.home, ctx.dotfiles);
   if (rootsError !== undefined) return rootsError;
   if (ctx.mode !== "check") {
     const refused = await renderRefusal(

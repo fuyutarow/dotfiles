@@ -750,16 +750,18 @@ test.each(["mac", "wsl", "linux"] as const)(
   },
 );
 
-test("assertRoots: relative or foreign roots are refused before any mutation", () => {
+test("assertRoots: relative or foreign roots are refused before any mutation", async () => {
   const foreign = tmp("not-a-repo-");
-  expect(assertRoots("/h", "dotfiles")?.message).toContain(
+  expect((await assertRoots("/h", "dotfiles"))?.message).toContain(
     "DOTFILES is not absolute",
   );
-  expect(assertRoots("h", REPO)?.message).toContain("HOME is not absolute");
-  expect(assertRoots("/h", foreign)?.message).toContain(
+  expect((await assertRoots("h", REPO))?.message).toContain(
+    "HOME is not absolute",
+  );
+  expect((await assertRoots("/h", foreign))?.message).toContain(
     "not a dotfiles checkout",
   );
-  expect(assertRoots("/h", REPO)).toBeUndefined();
+  expect(await assertRoots("/h", REPO)).toBeUndefined();
 });
 
 describe("CLI", () => {

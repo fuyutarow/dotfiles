@@ -1,15 +1,18 @@
 import {
-  chmodSync,
-  closeSync,
   constants,
   existsSync,
   lstatSync,
-  openSync,
-  readdirSync,
   statfsSync,
   type Stats,
 } from "node:fs";
-import { rmdir as removeDir, unlink as unlinkFile } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  open,
+  readdir,
+  rmdir as removeDir,
+  unlink as unlinkFile,
+} from "node:fs/promises";
 import { fromAsyncThrowable } from "neverthrow";
 import { userInfo } from "node:os";
 import { execFileSync } from "node:child_process";
@@ -103,16 +106,14 @@ function nameForUid(uid: number): string {
   );
 }
 
-const estimatedBytes = (path: string): number => {
-  const stat = fromThrowable(() => lstatSync(path))().unwrapOr(null);
+const estimatedBytes = async (path: string): Promise<number> => {
+  const stat = (await fromAsyncThrowable(() => lstat(path))()).unwrapOr(null);
   if (stat === null) return 0;
   if (!stat.isDirectory() || stat.isSymbolicLink()) return stat.blocks * 512;
-  return fromThrowable(() => readdirSync(path))()
-    .unwrapOr([])
-    .reduce(
-      (sum, name) => sum + estimatedBytes(join(path, name)),
-      stat.blocks * 512,
-    );
+  const names = (await fromAsyncThrowable(() => readdir(path))()).unwrapOr([]);
+  let total = stat.blocks * 512;
+  for (const name of names) total += await estimatedBytes(join(path, name));
+  return total;
 };
 
 export async function removeTreeProgress(
@@ -134,7 +135,7 @@ export async function removeTreeProgress(
     }
 > {
   if (context?.progress === false) return false;
-  const totalBytes = bytes ?? estimatedBytes(path);
+  const totalBytes = bytes ?? (await estimatedBytes(path));
   return {
     entries: (await countEntries(path)) + 1,
     bytes: totalBytes,
@@ -212,26 +213,21 @@ function readLinuxFlags(fd: number): LinuxFlagResult {
     : { kind: "unknown" };
 }
 
-function linuxAttributesAt(path: string): boolean | null {
+async function linuxAttributesAt(path: string): Promise<boolean | null> {
   if (linuxLibc === null || linuxLibc.isErr()) return null;
-  const result = fromThrowable(() => {
-    const fd = openSync(
+  const result = await fromAsyncThrowable(async () => {
+    await using file = await open(
       path,
       constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
     );
-    using _fd = {
-      [Symbol.dispose]: () => {
-        closeSync(fd);
-      },
-    };
-    return readLinuxFlags(fd);
+    return readLinuxFlags(file.fd);
   })();
   if (result.isErr() || result.value.kind === "unknown") return null;
   if (result.value.kind === "unsupported") return false;
   return (result.value.value & 0x30) !== 0;
 }
 
-function attributesAt(path: string): boolean | null {
+async function attributesAt(path: string): Promise<boolean | null> {
   if (process.platform === "linux") return linuxAttributesAt(path);
   if (process.platform === "darwin") {
     const output = fromThrowable(() =>
@@ -384,11 +380,12 @@ export async function removeTree(
       repair: repairFor(entry, owner.name, reason),
     });
   };
-  const ensureOwnerWritable = (entry: string, mode: number): string | null => {
+  const ensureOwnerWritable = async (
+    entry: string,
+    mode: number,
+  ): Promise<string | null> => {
     if (options.dryRun === true || (mode & 0o700) === 0o700) return null;
-    return fromThrowable(() => {
-      chmodSync(entry, mode | 0o700);
-    })().match(
+    return (await fromAsyncThrowable(() => chmod(entry, mode | 0o700))()).match(
       () => null,
       (error) => `cannot add owner rwx: ${message(error)}`,
     );
@@ -469,7 +466,7 @@ export async function removeTree(
     }
     inspected++;
     if (inspected % 128 === 0 && !(await checkpoint())) return false;
-    const statResult = fromThrowable(() => lstatSync(entry))();
+    const statResult = await fromAsyncThrowable(() => lstat(entry))();
     if (statResult.isErr()) {
       errors.push({ path: entry, error: message(statResult.error) });
       return false;
@@ -499,7 +496,7 @@ export async function removeTree(
       return false;
     }
     if (stat.isDirectory() && !stat.isSymbolicLink()) {
-      const permissionError = ensureOwnerWritable(entry, stat.mode);
+      const permissionError = await ensureOwnerWritable(entry, stat.mode);
       if (permissionError !== null) {
         errors.push({ path: entry, error: permissionError });
         return false;
@@ -509,7 +506,9 @@ export async function removeTree(
     // mutable through the path-based Linux attribute interface, so unlink the link itself.
     const immutable = stat.isSymbolicLink()
       ? false
-      : fromThrowable(() => checkAttribute(entry))().unwrapOr(null);
+      : (
+          await fromAsyncThrowable(async () => checkAttribute(entry))()
+        ).unwrapOr(null);
     if (immutable === null) {
       refuse(entry, owner, "immutable or append-only status is unknown");
       return false;
@@ -544,7 +543,7 @@ export async function removeTree(
         refuse(entry, owner, protection);
         return false;
       }
-      const children = fromThrowable(() => readdirSync(entry))();
+      const children = await fromAsyncThrowable(() => readdir(entry))();
       if (children.isErr()) {
         errors.push({ path: entry, error: message(children.error) });
         return false;

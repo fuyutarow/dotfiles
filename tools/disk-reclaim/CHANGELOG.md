@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.22 — 2026-10-31
+
+- Use asynchronous filesystem operations during tree removal.
+
 ## 1.12.21 — 2026-10-31
 
 - Use asynchronous filesystem operations for Rust target discovery.

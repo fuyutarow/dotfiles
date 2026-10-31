@@ -16,7 +16,9 @@ import {
   agentCpuCacheInput,
   projectAgents,
   readAgentCpu,
+  paneResourcePids,
 } from "../src/herdr-projector.ts";
+import u26Witness from "./resource-u26.json" with { type: "json" };
 import { AgentSchema } from "../src/herdr-projector.ts";
 import ownerList from "./owner-list-oct21.json" with { type: "json" };
 import resourceV1 from "./resource-schema1.json" with { type: "json" };
@@ -41,6 +43,56 @@ const unit = (name: string) =>
   Bun.file(
     join(import.meta.dir, `../../../systemd/herdr-projector.${name}`),
   ).text();
+
+test("u26 foreground PIDs attribute unresolved Codex and mismatched Claude sessions", async () => {
+  const agents = [
+    {
+      agent: "claude",
+      pane_id: "w9:p1N",
+      tab_id: "a",
+      agent_session: { value: "6efd25e3-9450-4bbc-a9ec-98cf243d5779" },
+    },
+    { agent: "codex", pane_id: "w9:p29", tab_id: "b" },
+  ];
+  const processes = new Map(Object.entries(u26Witness.processes));
+  const pids = await paneResourcePids(
+    agents,
+    (pane) => Promise.resolve(JSON.stringify(processes.get(pane))),
+    "",
+  );
+  const root = await mkdtemp(join(tmpdir(), "u26-resource-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
+  };
+  await mkdir(join(root, "dotfiles"));
+  await Bun.write(
+    join(root, "dotfiles", "agent-cpu.json"),
+    JSON.stringify(u26Witness.snapshot),
+  );
+  const snapshot = await readAgentCpu(
+    { XDG_STATE_HOME: root },
+    Temporal.Instant.from(u26Witness.snapshot.at).epochMilliseconds,
+  );
+  const calls: string[][] = [];
+  await projectAgents(
+    agents,
+    new Map(),
+    (args) => {
+      calls.push(args);
+      return Promise.resolve(true);
+    },
+    new Map(),
+    new Map(),
+    new Map(),
+    snapshot,
+    pids,
+  );
+  expect(calls[1]).toContain("cpu=cpu:73%");
+  expect(calls[1]).toContain("ram=ram 1.8G");
+  expect(calls[3]).toContain("cpu=cpu:0%");
+  expect(calls[3]).toContain("ram=ram 124.7M");
+  expect(calls[3]).toContain("workers=w:?");
+});
 
 test("fleet burst activations coalesce before reading without exhausting protective limits", async () => {
   const [service, path, timer] = await Promise.all([
@@ -368,7 +420,7 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
   ]) {
     await Bun.write(path, bad);
     const result = await report();
-    expect(result[0]).toContain("cpu=cpu:?");
+    expect(result[0]).toContain("cpu=cpu:? (snapshot unavailable)");
     expect(result[0]).toContain("workers=w:?");
     expect(result[3]).toContain("unowned");
     expect(result[3]).toContain("--clear-token");

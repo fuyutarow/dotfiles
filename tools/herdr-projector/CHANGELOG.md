@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 — 2026-10-31
+
+- Attribute pane resources by foreground process tree.
+
 ## 0.3.0 — 2026-10-30
 
 - Project per-session RAM and VRAM resource tokens

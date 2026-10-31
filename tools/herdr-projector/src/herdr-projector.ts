@@ -110,6 +110,70 @@ const HERDR_TIMEOUT_MS = 2500;
 type AgentCpuSnapshot = z.output<typeof AgentCpuSchema>;
 type Agent = z.output<typeof AgentSchema>;
 type PaneTitleBinding = { sessionId: string; title: CodexNativeTitleRead };
+const PaneProcessInfo = jsonOf(
+  z.object({
+    result: z.object({
+      process_info: z.object({
+        foreground_processes: z.array(
+          z.object({ pid: z.number().int().positive(), name: z.string() }),
+        ),
+      }),
+    }),
+  }),
+);
+
+function descendants(
+  roots: number[],
+  children: Map<number, number[]>,
+): number[] {
+  const seen = new Set(roots);
+  const queue = [...roots];
+  for (let i = 0; i < queue.length; i++) {
+    for (const child of (children.get(queue[i] ?? 0) ?? []).filter(
+      (pid) => !seen.has(pid),
+    )) {
+      seen.add(child);
+      queue.push(child);
+    }
+  }
+  return queue;
+}
+
+export async function paneResourcePids(
+  agents: Agent[],
+  read: (pane: string) => Promise<string | undefined>,
+  parents: string,
+): Promise<Map<string, number[]>> {
+  const children = new Map<number, number[]>();
+  for (const line of parents.split("\n")) {
+    const match = /^\s*(\d+)\s+(\d+)\s*$/u.exec(line);
+    if (match === null) continue;
+    const pid = Number(match[1]);
+    const parent = Number(match[2]);
+    children.set(parent, [...(children.get(parent) ?? []), pid]);
+  }
+  const entries = await Promise.all(
+    agents.flatMap((agent) => {
+      if (
+        agent.pane_id === undefined ||
+        (agent.agent !== "claude" && agent.agent !== "codex")
+      )
+        return [];
+      const pane = agent.pane_id;
+      return [
+        (async () => {
+          const info = PaneProcessInfo.safeParse(await read(pane));
+          const roots =
+            info.data?.result.process_info.foreground_processes.map(
+              (p) => p.pid,
+            ) ?? [];
+          return [pane, descendants(roots, children)] as const;
+        })(),
+      ];
+    }),
+  );
+  return new Map(entries);
+}
 
 function formatMemory(byteCount: number): string {
   let value = byteCount;
@@ -781,6 +845,7 @@ export async function projectAgents(
   remoteControl: ReadonlyMap<string, string> = new Map(),
   reasons: ReadonlyMap<string, string> = new Map(),
   cpuSnapshot?: AgentCpuSnapshot,
+  panePids: ReadonlyMap<string, number[]> = new Map(),
 ): Promise<number> {
   let updated = 0;
   for (const agent of agents) {
@@ -848,15 +913,28 @@ export async function projectAgents(
       isAgent && !notApplicable && rc !== "rc:on" && rc !== "rc:off";
     const displayRc =
       unknownRc && (model !== "" || effort !== "") ? "rc?" : marker;
-    const cpuSession =
-      matchedSessionId === undefined
-        ? undefined
-        : cpuSnapshot?.sessions.find(
-            (row) =>
-              row.session_id === matchedSessionId && row.vendor === vendor,
-          );
+    const pids = panePids.get(agent.pane_id) ?? [];
+    const candidates = [
+      ...(cpuSnapshot?.sessions ?? []),
+      ...(cpuSnapshot?.unresolved_agents ?? []),
+    ].filter((row) => row.vendor === vendor && pids.includes(row.pid));
+    const fallback =
+      cpuSnapshot?.sessions.filter(
+        (row) => row.session_id === matchedSessionId && row.vendor === vendor,
+      ) ?? [];
+    const matches = candidates.length > 0 ? candidates : fallback;
+    const resource = matches.length === 1 ? matches[0] : undefined;
+    const parsedCpu =
+      AgentCpuSchemaV1.shape.sessions.element.safeParse(resource);
+    const cpuSession = parsedCpu.success ? parsedCpu.data : undefined;
+    let resourceReason = "no resource row";
+    if (cpuSnapshot === undefined) resourceReason = "snapshot unavailable";
+    else if (matches.length > 1) resourceReason = "ambiguous process";
+    else if (pids.length === 0) resourceReason = "no process";
     const cpuToken =
-      cpuSession === undefined ? "cpu:?" : `cpu:${cpuSession.cpu_pct}%`;
+      resource === undefined
+        ? `cpu:? (${resourceReason})`
+        : `cpu:${resource.cpu_pct}%`;
     let workerToken = "w:?";
     if (cpuSession?.workers !== undefined && cpuSession.workers !== null) {
       workerToken =
@@ -878,24 +956,26 @@ export async function projectAgents(
           : ["--token", `workers=${workerToken}`]),
       );
     if (isAgent) {
-      const memorySession =
-        cpuSnapshot?.schema === 2 && matchedSessionId !== undefined
-          ? cpuSnapshot.sessions.find(
-              (row) =>
-                row.session_id === matchedSessionId && row.vendor === vendor,
-            )
-          : undefined;
+      const parsedMemory =
+        AgentCpuSchemaV2.shape.unresolved_agents.element.safeParse(resource);
+      const parsedMemorySession =
+        AgentCpuSchemaV2.shape.sessions.element.safeParse(resource);
+      const memorySession = parsedMemory.success
+        ? parsedMemory.data
+        : undefined;
+      const memoryWorkers = parsedMemorySession.success
+        ? parsedMemorySession.data.workers
+        : null;
       const ram =
         memorySession === undefined
           ? undefined
-          : memorySession.ram_bytes + (memorySession.workers?.ram_bytes ?? 0);
+          : memorySession.ram_bytes + (memoryWorkers?.ram_bytes ?? 0);
       const vram =
         memorySession === undefined ||
         memorySession.vram_bytes === null ||
-        (memorySession.workers !== null &&
-          memorySession.workers.vram_bytes === null)
+        (memoryWorkers !== null && memoryWorkers.vram_bytes === null)
           ? undefined
-          : memorySession.vram_bytes + (memorySession.workers?.vram_bytes ?? 0);
+          : memorySession.vram_bytes + (memoryWorkers?.vram_bytes ?? 0);
       cpuArgs.push(
         ...(ram === undefined
           ? ["--clear-token", "ram"]
@@ -1015,6 +1095,11 @@ async function project(dryRun = false): Promise<number> {
     remoteControl.set(agent.pane_id, codexRc);
   }
   const claudeSessions = await bindClaudePanes(agents, remoteControl);
+  const panePids = await paneResourcePids(
+    agents,
+    (pane) => run("herdr", ["pane", "process-info", "--pane", pane]),
+    (await run("ps", ["-e", "-o", "pid=,ppid="])) ?? "",
+  );
   const cacheDir =
     runtime === undefined || runtime === ""
       ? undefined
@@ -1076,6 +1161,7 @@ async function project(dryRun = false): Promise<number> {
           remoteControl: [...remoteControl],
           reasons: [...reasons],
           cpuSnapshot: agentCpuCacheInput(cpuSnapshot),
+          panePids: [...panePids],
         }),
       )
       .digest("hex");
@@ -1096,6 +1182,7 @@ async function project(dryRun = false): Promise<number> {
     remoteControl,
     reasons,
     cpuSnapshot,
+    panePids,
   );
   // A failed mutation must be retried, and cache trouble must not block projection.
   if (!dryRun && applied && cacheDir !== undefined && cachePath !== undefined) {

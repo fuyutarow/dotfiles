@@ -30,7 +30,6 @@ import {
   mkdirSync,
   readdirSync,
   readlinkSync,
-  readFileSync,
   renameSync,
   statSync,
   symlinkSync,
@@ -38,7 +37,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, readFile, realpath, rename } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  writeFile,
+} from "node:fs/promises";
 import { hostname, homedir, release } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
@@ -84,10 +91,14 @@ function withReachablePath(ctx: Ctx, path: string, apply: () => void): void {
     return;
   const result = fromThrowable(apply)();
   if (result.isOk()) return;
-  const parsed = unreachableError.safeParse(result.error);
+  recordPathError(ctx, path, result.error);
+}
+
+function recordPathError(ctx: Ctx, path: string, error: unknown): void {
+  const parsed = unreachableError.safeParse(error);
   if (!parsed.success) {
     ctx.failures ??= [];
-    ctx.failures.push(new Error(errorMessage(result.error)));
+    ctx.failures.push(new Error(errorMessage(error)));
     return;
   }
   const failedPath = parsed.data.path ?? path;
@@ -207,22 +218,22 @@ function driveCachePath(home: string): string {
   return join(home, ".local/state/dotfiles", `google-drive-${host}.json`);
 }
 
-function readDriveCache(path: string): DriveCache | undefined {
-  const text = fromThrowable(() => readFileSync(path, "utf8"))();
-  if (text.isErr()) return undefined;
+async function readDriveCache(path: string): Promise<DriveCache | undefined> {
+  const text = await attempt(() => readFile(path, "utf8"));
+  if (!text.ok) return undefined;
   const parsed = driveCacheSchema.safeParse(text.value);
   return parsed.success && parsed.data.host === hostname()
     ? parsed.data
     : undefined;
 }
 
-function writeDriveCache(
+async function writeDriveCache(
   path: string,
   root: string,
   personal: string | undefined,
-): void {
-  fromThrowable(() => {
-    mkdirSync(dirname(path), { recursive: true });
+): Promise<void> {
+  await attempt(async () => {
+    await mkdir(dirname(path), { recursive: true });
     const value: DriveCache = {
       version: 1,
       host: hostname(),
@@ -230,19 +241,19 @@ function writeDriveCache(
       personal: personal ?? null,
     };
     const temp = `${path}.${randomUUID()}.tmp`;
-    writeFileSync(temp, `${JSON.stringify(value)}\n`, { mode: 0o600 });
-    renameSync(temp, path);
-  })();
+    await writeFile(temp, `${JSON.stringify(value)}\n`, { mode: 0o600 });
+    await rename(temp, path);
+  });
 }
 
-function cachedWslDriveTargets(
+async function cachedWslDriveTargets(
   home: string,
   root: string,
   cachePath: string,
   maxDiscoveryMs: number,
   persistCache: boolean,
-): { root?: string; personal?: string } {
-  const cached = readDriveCache(cachePath);
+): Promise<{ root?: string; personal?: string }> {
+  const cached = await readDriveCache(cachePath);
   if (cached !== undefined) {
     const rootResolves = isDir(cached.root);
     const personalResolves = cached.personal === null || isDir(cached.personal);
@@ -273,13 +284,13 @@ function cachedWslDriveTargets(
         relativeTarget !== ".." &&
         !relativeTarget.startsWith(`..${sep}`)))
   ) {
-    if (persistCache) writeDriveCache(cachePath, root, linkedPersonal);
+    if (persistCache) await writeDriveCache(cachePath, root, linkedPersonal);
     return { root, personal: linkedPersonal };
   }
 
   const myDrive = join(root, "My Drive");
   if (!isDir(myDrive)) {
-    if (persistCache) writeDriveCache(cachePath, root, undefined);
+    if (persistCache) await writeDriveCache(cachePath, root, undefined);
     return { root };
   }
 
@@ -318,11 +329,11 @@ function cachedWslDriveTargets(
     say(
       `Google Drive discovery stopped at its ${maxDiscoveryMs / 1000}s time limit`,
     );
-  if (persistCache) writeDriveCache(cachePath, root, personal);
+  if (persistCache) await writeDriveCache(cachePath, root, personal);
   return { root, ...(personal === undefined ? {} : { personal }) };
 }
 
-export function googleDriveTargets(
+export async function googleDriveTargets(
   home: string,
   os: Os,
   options: {
@@ -331,7 +342,7 @@ export function googleDriveTargets(
     maxDiscoveryMs?: number;
     persistCache?: boolean;
   } = {},
-): { root?: string; personal?: string } {
+): Promise<{ root?: string; personal?: string }> {
   let root: string | undefined;
   if (os === "mac") {
     const cloud = join(home, "Library/CloudStorage");
@@ -356,51 +367,54 @@ export function googleDriveTargets(
 
   const myDrive = join(root, "My Drive");
   const found: string[] = [];
-  const visit = (dir: string, depth: number): void => {
+  const visit = async (dir: string, depth: number): Promise<void> => {
     if (depth > 6 || found.length > 1) return;
-    const listed = fromThrowable(() =>
-      readdirSync(dir, { withFileTypes: true }),
-    )();
-    if (listed.isErr()) return;
+    const listed = await attempt(() => readdir(dir, { withFileTypes: true }));
+    if (!listed.ok) return;
     for (const entry of listed.value) {
       if (!entry.isDirectory()) continue;
       const child = join(dir, entry.name);
       if (entry.name === "Personal-Drive") found.push(child);
-      else visit(child, depth + 1);
+      else await visit(child, depth + 1);
     }
   };
-  if (isDir(myDrive)) visit(myDrive, 0);
+  if (isDir(myDrive)) await visit(myDrive, 0);
   return {
     root,
     ...(found.length === 1 ? { personal: found[0] } : {}),
   };
 }
 
-export function linkGoogleDrive(ctx: Ctx): void {
+export async function linkGoogleDrive(ctx: Ctx): Promise<void> {
   if (ctx.os === "linux") return;
-  withReachablePath(
-    ctx,
-    ctx.os === "wsl" ? "/mnt/g" : join(ctx.home, "Library/CloudStorage"),
-    () => {
-      const targets = googleDriveTargets(ctx.home, ctx.os, {
-        persistCache: ctx.mode !== "check",
-      });
-      for (const [, source, name] of LINKS) {
-        if (!source.startsWith("@google-drive/")) continue;
-        const isRoot = source === "@google-drive/root";
-        const token = isRoot ? "root" : "personal";
-        const target = isRoot ? targets.root : targets.personal;
-        const dst = join(ctx.home, name);
-        if (target === undefined) {
-          reportDriveUnavailable(ctx, dst, token);
-          continue;
-        }
-        withReachablePath(ctx, dst, () => {
-          linkTarget(ctx, target, dst);
-        });
+  const path =
+    ctx.os === "wsl" ? "/mnt/g" : join(ctx.home, "Library/CloudStorage");
+  if (
+    [...(ctx.unreachable ?? [])].some(
+      (root) => path === root || path.startsWith(`${root}${sep}`),
+    )
+  )
+    return;
+  const result = await attempt(async () => {
+    const targets = await googleDriveTargets(ctx.home, ctx.os, {
+      persistCache: ctx.mode !== "check",
+    });
+    for (const [, source, name] of LINKS) {
+      if (!source.startsWith("@google-drive/")) continue;
+      const isRoot = source === "@google-drive/root";
+      const token = isRoot ? "root" : "personal";
+      const target = isRoot ? targets.root : targets.personal;
+      const dst = join(ctx.home, name);
+      if (target === undefined) {
+        reportDriveUnavailable(ctx, dst, token);
+        continue;
       }
-    },
-  );
+      withReachablePath(ctx, dst, () => {
+        linkTarget(ctx, target, dst);
+      });
+    }
+  });
+  if (!result.ok) recordPathError(ctx, path, result.error);
 }
 
 function reportDriveUnavailable(ctx: Ctx, dst: string, token: string): void {
@@ -691,7 +705,7 @@ function detectOs(): Os | Error {
   return /microsoft/iu.test(release()) ? "wsl" : "linux";
 }
 
-export function linkAll(ctx: Ctx, sshV: string): void {
+export async function linkAll(ctx: Ctx, sshV: string): Promise<void> {
   withReachablePath(ctx, join(ctx.home, ".ssh"), () => {
     ensureSshDir(ctx);
   });
@@ -699,7 +713,7 @@ export function linkAll(ctx: Ctx, sshV: string): void {
     if (src.startsWith("@google-drive/")) continue;
     if (applies(when, ctx.os)) link(ctx, src, join(ctx.home, dst));
   }
-  linkGoogleDrive(ctx);
+  await linkGoogleDrive(ctx);
   withReachablePath(
     ctx,
     join(ctx.home, ".ssh/config.d/smart-open-attach.conf"),
@@ -1215,7 +1229,7 @@ async function main(): Promise<Error | void> {
   }
   const triggers = await captureDeclaredTriggers(ctx);
   if (ctx.failures?.[0] !== undefined) return ctx.failures[0];
-  linkAll(ctx, await sshVersion());
+  await linkAll(ctx, await sshVersion());
   if (ctx.failures?.[0] !== undefined) return ctx.failures[0];
   if (ctx.mode === "check") {
     say(`check: ${ctx.drift.length} drift(s)`);

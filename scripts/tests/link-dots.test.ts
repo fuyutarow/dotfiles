@@ -430,7 +430,7 @@ test("the systemd user PATH drop-in is registered and linked into XDG config", (
   expect(readlinkSync(destination)).toBe(join(REPO, entry[1]));
 });
 
-test("Google Drive targets are discovered without storing the account folder name", () => {
+test("Google Drive targets are discovered without storing the account folder name", async () => {
   const home = tmp("drive-home-");
   const root = join(home, "Library/CloudStorage/GoogleDrive-user-id");
   const personal = join(
@@ -440,15 +440,15 @@ test("Google Drive targets are discovered without storing the account folder nam
     "Personal-Drive",
   );
   mkdirSync(personal, { recursive: true });
-  expect(googleDriveTargets(home, "mac")).toEqual({ root, personal });
+  expect(await googleDriveTargets(home, "mac")).toEqual({ root, personal });
 
   const ctx: Ctx = { home, dotfiles: REPO, os: "mac", mode: "safe", drift: [] };
-  linkGoogleDrive(ctx);
+  await linkGoogleDrive(ctx);
   expect(readlinkSync(join(home, "Google Drive"))).toBe(root);
   expect(readlinkSync(join(home, "Personal-Drive"))).toBe(personal);
 });
 
-test("WSL Google Drive discovery is cached per host and reruns only when its target disappears", () => {
+test("WSL Google Drive discovery is cached per host and reruns only when its target disappears", async () => {
   const home = tmp("drive-wsl-home-");
   const root = join(home, "drive");
   const first = join(root, "My Drive", "account", "Personal-Drive");
@@ -457,37 +457,37 @@ test("WSL Google Drive discovery is cached per host and reruns only when its tar
   mkdirSync(first, { recursive: true });
   const options = { wslRoot: root, cachePath, maxDiscoveryMs: 1_000 };
 
-  expect(googleDriveTargets(home, "wsl", options)).toEqual({
+  expect(await googleDriveTargets(home, "wsl", options)).toEqual({
     root,
     personal: first,
   });
   expect(readFileSync(cachePath, "utf8")).toContain(first);
 
   mkdirSync(second, { recursive: true });
-  expect(googleDriveTargets(home, "wsl", options)).toEqual({
+  expect(await googleDriveTargets(home, "wsl", options)).toEqual({
     root,
     personal: first,
   });
 
   renameSync(first, join(root, "My Drive", "account", "saved-personal-drive"));
-  expect(googleDriveTargets(home, "wsl", options)).toEqual({
+  expect(await googleDriveTargets(home, "wsl", options)).toEqual({
     root,
     personal: second,
   });
 });
 
-test("Google Drive discovery refuses ambiguous roots and private collections", () => {
+test("Google Drive discovery refuses ambiguous roots and private collections", async () => {
   const home = tmp("drive-home-");
   const cloud = join(home, "Library/CloudStorage");
   mkdirSync(join(cloud, "GoogleDrive-one"), { recursive: true });
   mkdirSync(join(cloud, "GoogleDrive-two"), { recursive: true });
-  expect(googleDriveTargets(home, "mac")).toEqual({});
+  expect(await googleDriveTargets(home, "mac")).toEqual({});
 
   const uniqueHome = tmp("drive-home-");
   const root = join(uniqueHome, "Library/CloudStorage/GoogleDrive-one");
   mkdirSync(join(root, "My Drive", "a", "Personal-Drive"), { recursive: true });
   mkdirSync(join(root, "My Drive", "b", "Personal-Drive"), { recursive: true });
-  expect(googleDriveTargets(uniqueHome, "mac")).toEqual({ root });
+  expect(await googleDriveTargets(uniqueHome, "mac")).toEqual({ root });
 });
 
 describe("link", () => {
@@ -645,8 +645,8 @@ test.each(["ENODEV", "ENOTCONN", "EIO", "ESTALE"])(
           throw Object.assign(new Error("stale"), { code: ${JSON.stringify(code)}, path: "/mnt/g" });
         return original(...args);
       });
-      linkGoogleDrive(ctx);
-      linkGoogleDrive(ctx);
+      await linkGoogleDrive(ctx);
+      await linkGoogleDrive(ctx);
       link(ctx, "zsh/zshenv", ctx.home + "/.zshenv");
       const calls = [];
       const error = await deployStatuslineOwners(ctx, async (args) => {

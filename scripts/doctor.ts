@@ -288,9 +288,13 @@ export async function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
         ["/mnt/g is not a mounted filesystem"],
       );
   }
-  const targets = googleDriveTargets(ctx.home, ctx.isMac ? "mac" : "wsl", {
-    persistCache: false,
-  });
+  const targets = await googleDriveTargets(
+    ctx.home,
+    ctx.isMac ? "mac" : "wsl",
+    {
+      persistCache: false,
+    },
+  );
   const problems: string[] = [];
   for (const [name, target] of [
     ["Google Drive", targets.root],

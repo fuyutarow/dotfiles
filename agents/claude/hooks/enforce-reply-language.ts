@@ -3,7 +3,7 @@ import { hookJson, hookStderr } from "./lib.ts";
 // Safety: FAIL OPEN on every hook error (including unreadable/malformed transcripts), with one
 // stderr line explaining the failure. A broken language check must never trap a session.
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
@@ -41,10 +41,10 @@ async function recordDecision(
   reason: string,
   error?: string,
 ): Promise<number> {
-  const result = await attempt(() => {
+  const result = await attempt(async () => {
     const dir = join(audit.home, ".local", "state", "claude-hooks");
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
-    appendFileSync(
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    await appendFile(
       join(dir, "reply-language.jsonl"),
       `${JSON.stringify({
         at: Temporal.Now.instant().toString(),
@@ -96,9 +96,11 @@ function assistantBlocks(
   return { text: textBlocks.join("\n"), toolInputs };
 }
 
-function finalAssistantText(transcript: string): TranscriptSelection | Error {
+async function finalAssistantText(
+  transcript: string,
+): Promise<TranscriptSelection | Error> {
   const entries: unknown[] = [];
-  for (const line of readFileSync(transcript, "utf8").split("\n")) {
+  for (const line of (await readFile(transcript, "utf8")).split("\n")) {
     if (line.trim() === "") continue;
     const entry = parseJson(line);
     if (entry === undefined) return new Error("malformed transcript line");
@@ -148,9 +150,10 @@ async function main(audit: DecisionAudit): Promise<number> {
     return recordDecision(audit, "allow", "malformed_payload");
   }
 
-  if (!existsSync(audit.settings_path))
+  const settingsFile = Bun.file(audit.settings_path);
+  if (!(await settingsFile.exists()))
     return recordDecision(audit, "allow", "missing_settings");
-  const settingsText = readFileSync(audit.settings_path, "utf8");
+  const settingsText = await settingsFile.text();
   const settings = parseJson(settingsText);
   if (settings === undefined) {
     stderrLine("check failed open: malformed ~/.claude/settings.json");

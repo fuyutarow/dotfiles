@@ -34,8 +34,29 @@
 // command line: it is arbitrary assistant prose (quotes, backticks, newlines, $) and
 // shell-quoting it would be a needless injection surface.
 
-import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { execFile as execFileCallback } from "node:child_process";
+import { access } from "node:fs/promises";
+
+const execFile = (file: string, args: string[]): Promise<string> =>
+  new Promise((resolve, reject) => {
+    execFileCallback(
+      file,
+      args,
+      { encoding: "utf8", timeout: 5000 },
+      (error, stdout) => {
+        if (error !== null)
+          reject(
+            error instanceof Error ? error : new Error("herdr command failed"),
+          );
+        else resolve(stdout);
+      },
+    );
+  });
+const exists = async (path: string): Promise<boolean> =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { parseJson, strAt } from "../../hooks/narrow.ts";
 
@@ -46,7 +67,7 @@ import { parseJson, strAt } from "../../hooks/narrow.ts";
 const HERDR_BIN =
   process.env["HERDR_BIN_PATH"] !== undefined &&
   process.env["HERDR_BIN_PATH"] !== "" &&
-  existsSync(process.env["HERDR_BIN_PATH"])
+  (await exists(process.env["HERDR_BIN_PATH"]))
     ? process.env["HERDR_BIN_PATH"]
     : "herdr";
 const DOTFILES =
@@ -57,35 +78,20 @@ const CLIP_SCRIPT = `${DOTFILES}/zsh/copy-to-clipboard.sh`;
 const POLL_ATTEMPTS = 10;
 const POLL_DELAY_MS = 200;
 
-function herdr(args: string[]): unknown {
-  const out = execFileSync(HERDR_BIN, args, {
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf8",
-    timeout: 5000,
-  });
+async function herdr(args: string[]): Promise<unknown> {
+  const out = await execFile(HERDR_BIN, args);
   return parseJson(out);
 }
 
 // a stray small leftover pane is cosmetic, not a delivery failure -> never throw from here
 async function closeQuietly(paneId: string): Promise<void> {
-  await attempt(() =>
-    execFileSync(HERDR_BIN, ["pane", "close", paneId], {
-      stdio: ["ignore", "ignore", "ignore"],
-      timeout: 5000,
-    }),
-  );
+  await attempt(() => execFile(HERDR_BIN, ["pane", "close", paneId]));
 }
 
 // `pane read` prints the pane's visible text RAW — the one herdr subcommand here that does
 // not answer in JSON, so this deliberately does not go through herdr().
 async function isBarePrompt(paneId: string): Promise<boolean> {
-  const r = await attempt(() =>
-    execFileSync(HERDR_BIN, ["pane", "read", paneId], {
-      stdio: ["ignore", "pipe", "ignore"],
-      encoding: "utf8",
-      timeout: 5000,
-    }),
-  );
+  const r = await attempt(() => execFile(HERDR_BIN, ["pane", "read", paneId]));
   if (!r.ok) return false;
   const lines = r.value.replace(/\s+$/u, "").split("\n");
   const last = (lines.at(-1) ?? "").trim();
@@ -96,25 +102,29 @@ const payloadFile = process.env["COPY_PAYLOAD_FILE"];
 if (
   payloadFile === undefined ||
   payloadFile === "" ||
-  !existsSync(payloadFile)
+  !(await exists(payloadFile))
 ) {
-  console.error(
-    "COPY_PAYLOAD_FILE is missing or does not name a readable payload file",
+  process.stderr.write(
+    "COPY_PAYLOAD_FILE is missing or does not name a readable payload file\n",
   );
   process.exit(2);
 }
 if (process.env["HERDR_ENV"] !== "1") {
-  console.error("HERDR_ENV is not 1; this hook is not running in a Herdr pane");
+  process.stderr.write(
+    "HERDR_ENV is not 1; this hook is not running in a Herdr pane\n",
+  );
   process.exit(3);
 }
-if (!existsSync(CLIP_SCRIPT)) {
-  console.error(`clipboard helper is missing: ${CLIP_SCRIPT}`);
+if (!(await exists(CLIP_SCRIPT))) {
+  process.stderr.write(`clipboard helper is missing: ${CLIP_SCRIPT}\n`);
   process.exit(3);
 }
 
 const selfPane = process.env["HERDR_PANE_ID"];
 if (selfPane === undefined || selfPane === "") {
-  console.error("HERDR_PANE_ID is missing; there is no current pane to split");
+  process.stderr.write(
+    "HERDR_PANE_ID is missing; there is no current pane to split\n",
+  );
   process.exit(3);
 }
 
@@ -132,14 +142,14 @@ const split = await attempt(() =>
 );
 // split itself failed (e.g. too small to split) -> caller falls back
 if (!split.ok) {
-  console.error(
-    `could not create a disposable pane: ${errorMessage(split.error)}`,
+  process.stderr.write(
+    `could not create a disposable pane: ${errorMessage(split.error)}\n`,
   );
   process.exit(4);
 }
 const paneId = strAt(split.value, "result", "pane", "pane_id");
 if (paneId === undefined || paneId === "") {
-  console.error("herdr created no pane id for the disposable pane");
+  process.stderr.write("herdr created no pane id for the disposable pane\n");
   process.exit(4);
 }
 
@@ -153,23 +163,24 @@ for (let pollAttempt = 0; pollAttempt < POLL_ATTEMPTS; pollAttempt++) {
 }
 if (!ready) {
   await closeQuietly(paneId);
-  console.error(
-    "the new Herdr pane did not reach a bare shell prompt before timeout",
+  process.stderr.write(
+    "the new Herdr pane did not reach a bare shell prompt before timeout\n",
   );
   process.exit(5);
 }
 
 const run = await attempt(() =>
-  execFileSync(
-    HERDR_BIN,
-    ["pane", "run", paneId, `'${CLIP_SCRIPT}' < '${payloadFile}'`],
-    { stdio: ["ignore", "ignore", "pipe"], timeout: 5000 },
-  ),
+  execFile(HERDR_BIN, [
+    "pane",
+    "run",
+    paneId,
+    `'${CLIP_SCRIPT}' < '${payloadFile}'`,
+  ]),
 );
 if (!run.ok) {
   await closeQuietly(paneId);
-  console.error(
-    `could not run the clipboard helper in the new pane: ${errorMessage(run.error)}`,
+  process.stderr.write(
+    `could not run the clipboard helper in the new pane: ${errorMessage(run.error)}\n`,
   );
   process.exit(6);
 }
@@ -184,5 +195,5 @@ for (let pollAttempt = 0; pollAttempt < POLL_ATTEMPTS; pollAttempt++) {
 }
 
 await closeQuietly(paneId);
-console.log(paneId);
+process.stdout.write(`${paneId}\n`);
 process.exit(0);

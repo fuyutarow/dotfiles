@@ -15,7 +15,8 @@ import { hookMessage } from "./lib.ts";
 //                      mentions of the tags live in code spans.
 // FAIL OPEN: any error -> exit 0 (never break a turn).
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { appendFile, writeFile } from "node:fs/promises";
 import { attempt } from "../../hooks/attempt.ts";
 import { strAt } from "../../hooks/narrow.ts";
@@ -49,18 +50,24 @@ async function main(): Promise<void> {
     await writeFile("/dev/tty", "\u0007");
   }); // terminal bell (best-effort; no tty)
   const msg = hookMessage("tool-call が漏れました — Esc Esc で /rewind を");
-  await attempt(() => {
+  await attempt(async () => {
     if (process.platform === "darwin") {
-      spawnSync(
-        "osascript",
-        ["-e", `display notification "${msg}" with title "Claude Code"`],
-        {
-          stdio: "ignore",
-        },
+      await once(
+        spawn(
+          "osascript",
+          ["-e", `display notification "${msg}" with title "Claude Code"`],
+          {
+            stdio: "ignore",
+          },
+        ),
+        "close",
       );
     } else {
       // Linux / WSL2
-      spawnSync("notify-send", ["Claude Code", msg], { stdio: "ignore" });
+      await once(
+        spawn("notify-send", ["Claude Code", msg], { stdio: "ignore" }),
+        "close",
+      );
     }
   }); // best-effort
 }

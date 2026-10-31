@@ -5,6 +5,7 @@ import {
   readFileSync,
   statSync,
 } from "node:fs";
+import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
@@ -17,55 +18,53 @@ import {
 } from "../lib/version-stores.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { cachedDiscovery, checkScanDeadline } from "../lib/scan-cache.ts";
+import { cachedDiscoveryAsync, checkScanDeadline } from "../lib/scan-cache.ts";
 import { measuredTreeBytes } from "./tree.ts";
 
-function treeSize(
+async function treeSize(
   path: string,
   progress?: (path: string, entries: number, bytes: number) => void,
-): number {
+): Promise<number> {
   let total = 0;
   let entries = 0;
-  const visit = (item: string): void => {
+  const visit = async (item: string): Promise<void> => {
     entries += 1;
-    const stat = fromThrowable(() => lstatSync(item))();
-    if (stat.isErr()) {
+    const stat = await lstat(item).catch(() => null);
+    if (stat === null) {
       progress?.(path, entries, total);
       return;
     }
-    if (!stat.value.isDirectory() || stat.value.isSymbolicLink()) {
-      total += stat.value.blocks * 512;
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      total += stat.blocks * 512;
       progress?.(path, entries, total);
       return;
     }
-    const names = fromThrowable(() => readdirSync(item))().unwrapOr([]);
+    const names = await readdir(item).catch(() => []);
     progress?.(path, entries, total);
-    for (const name of names) visit(join(item, name));
+    for (const name of names) await visit(join(item, name));
   };
-  visit(path);
+  await visit(path);
   return total;
 }
 
-function rustPins(root: string, depth = 0, ctx?: Context): string[] {
+async function rustPins(
+  root: string,
+  depth = 0,
+  ctx?: Context,
+): Promise<string[]> {
   checkScanDeadline(ctx);
   if (depth > 5) return [];
-  const names = fromThrowable(() => readdirSync(root))();
-  if (names.isErr()) return [];
+  const names = await readdir(root).catch(() => []);
   const found: string[] = [];
-  for (const name of names.value.toSorted((a, b) => a.localeCompare(b))) {
+  for (const name of names.toSorted((a, b) => a.localeCompare(b))) {
     const path = join(root, name);
     if (name === "rust-toolchain" || name === "rust-toolchain.toml") {
       found.push(path);
       continue;
     }
-    const stat = fromThrowable(() => lstatSync(path))();
-    if (
-      stat.isErr() ||
-      !stat.value.isDirectory() ||
-      stat.value.isSymbolicLink()
-    )
-      continue;
-    found.push(...rustPins(path, depth + 1, ctx));
+    const stat = await lstat(path).catch(() => null);
+    if (stat === null || !stat.isDirectory() || stat.isSymbolicLink()) continue;
+    found.push(...(await rustPins(path, depth + 1, ctx)));
   }
   return found;
 }
@@ -141,22 +140,21 @@ export async function auditCandidates(
   };
   const size = (path: string) =>
     context === undefined
-      ? Promise.resolve(
-          treeSize(path, (root, entries, bytes) =>
-            progress?.("audit", root, entries, bytes),
-          ),
+      ? treeSize(path, (root, entries, bytes) =>
+          progress?.("audit", root, entries, bytes),
         )
       : measuredTreeBytes(path, context);
   const projects = env["AUDIT_PROJECTS"] ?? join(home, "Workspace");
-  const pins = projects
-    .split(":")
-    .flatMap((root) =>
-      context === undefined
+  const pins: string[] = [];
+  for (const root of projects.split(":")) {
+    pins.push(
+      ...(await (context === undefined
         ? rustPins(root)
-        : cachedDiscovery(root, "audit-pin-discovery-v1", context, () =>
+        : cachedDiscoveryAsync(root, "audit-pin-discovery-v1", context, () =>
             rustPins(root, 0, context),
-          ),
+          ))),
     );
+  }
   for (const path of pins) {
     const text = fromThrowable(() => readFileSync(path, "utf8"))();
     if (text.isErr()) continue;
@@ -232,36 +230,36 @@ export async function auditCandidates(
     }
   }
   const buildDirs: string[] = [];
-  const findBuildDirs = (root: string, depth: number): void => {
+  const findBuildDirs = async (root: string, depth: number): Promise<void> => {
     checkScanDeadline(context);
     if (depth >= 4) return;
-    const names = fromThrowable(() => readdirSync(root))();
-    if (names.isErr()) return;
-    for (const name of names.value.toSorted((a, b) => a.localeCompare(b))) {
+    const names = await readdir(root).catch(() => []);
+    for (const name of names.toSorted((a, b) => a.localeCompare(b))) {
       const path = join(root, name);
-      const stat = fromThrowable(() => lstatSync(path))();
-      if (
-        stat.isErr() ||
-        !stat.value.isDirectory() ||
-        stat.value.isSymbolicLink()
-      )
+      const stat = await lstat(path).catch(() => null);
+      if (stat === null || !stat.isDirectory() || stat.isSymbolicLink())
         continue;
       if (name === "target" || name === "node_modules" || name === ".venv") {
         buildDirs.push(path);
         continue;
       }
-      findBuildDirs(path, depth + 1);
+      await findBuildDirs(path, depth + 1);
     }
   };
   for (const root of projects.split(":")) {
-    if (context === undefined) findBuildDirs(root, 0);
+    if (context === undefined) await findBuildDirs(root, 0);
     else
       buildDirs.push(
-        ...cachedDiscovery(root, "audit-build-discovery-v1", context, () => {
-          const start = buildDirs.length;
-          findBuildDirs(root, 0);
-          return buildDirs.splice(start);
-        }),
+        ...(await cachedDiscoveryAsync(
+          root,
+          "audit-build-discovery-v1",
+          context,
+          async () => {
+            const start = buildDirs.length;
+            await findBuildDirs(root, 0);
+            return buildDirs.splice(start);
+          },
+        )),
       );
   }
   const measuredBuilds = [];

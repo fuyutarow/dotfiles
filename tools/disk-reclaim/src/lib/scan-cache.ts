@@ -158,6 +158,24 @@ export function cachedDiscovery(
   return rows;
 }
 
+export async function cachedDiscoveryAsync(
+  path: string,
+  kind: string,
+  ctx: Context,
+  discover: () => Promise<string[]>,
+): Promise<string[]> {
+  const cache = scanCache(path, kind, ctx);
+  const found = z.array(z.string()).safeParse(cache.value);
+  if (found.success) {
+    ctx.reportActivity?.(ctx.targetName ?? kind, `cache hit discovery ${path}`);
+    return found.data;
+  }
+  ctx.reportActivity?.(ctx.targetName ?? kind, `discovering ${path}`);
+  const rows = await discover();
+  cache.save(rows);
+  return rows;
+}
+
 export function checkScanDeadline(ctx?: Context): void {
   (ctx?.signal ?? scanSignal.getStore())?.throwIfAborted();
 }

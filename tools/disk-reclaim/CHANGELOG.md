@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.20 — 2026-10-31
+
+- Use asynchronous filesystem operations for audit tree sizing
+- Use asynchronous filesystem traversal for audit discovery
+
 ## 1.12.19 — 2026-10-31
 
 - Make toolchain target filesystem and process probes asynchronous

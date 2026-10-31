@@ -261,7 +261,6 @@ test("every previously good display field survives failed reads independently wi
     "jobs",
     "cpu",
     "ram",
-    "vram",
     "gpu",
     "tmpfs",
     "tmp:tmp",
@@ -278,6 +277,12 @@ test("every previously good display field survives failed reads independently wi
       expect(state.age, key).toBeGreaterThanOrEqual(60000);
       expect(plain(render(failed)), key).toContain(plain(state.value));
     }
+  }
+  expect(before["vram"]).toBeUndefined();
+  expect(before["gpu"]?.kind).toBe("fresh");
+  if (before["gpu"]?.kind === "fresh") {
+    expect(plain(before["gpu"].value)).toContain("GPU");
+    expect(plain(before["gpu"].value)).toContain("VRAM 65%");
   }
 });
 

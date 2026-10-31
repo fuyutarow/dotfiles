@@ -135,7 +135,7 @@ test.each([
     [],
   );
   expect(row).toBe(
-    `CPU ${color}${text}%${reset} ${dim}·${reset} RAM ${color}${text}%${reset} ${dim}(13.1/16.0G)${reset} ${dim}·${reset} VRAM ${color}${text}%${reset} ${dim}(3.5/12.0G)${reset} ${dim}·${reset} GPU ${amber}n/a${reset} ${dim}(no GPU sample)${reset} ${dim}·${reset} Disk / ${green}123GiB${reset}${dim}/460GiB (27%) free${reset}`,
+    `CPU ${color}${text}%${reset} ${dim}·${reset} RAM ${color}${text}%${reset} ${dim}(13.1/16.0G)${reset} ${dim}·${reset} GPU ${amber}n/a${reset} ${dim}(no GPU sample)${reset} ${dim}·${reset} VRAM ${color}${text}%${reset} ${dim}(3.5/12.0G)${reset} ${dim}·${reset} Disk / ${green}123GiB${reset}${dim}/460GiB (27%) free${reset}`,
   );
 });
 
@@ -149,12 +149,15 @@ test("Sys n/a values and reasons share the Rate roles", () => {
   for (const [label, why] of [
     ["CPU", "cpu"],
     ["RAM", "ram"],
-    ["VRAM", "gpu"],
     ["Disk /", "disk"],
   ])
     expect(row).toContain(
       `${label} ${amber}n/a${reset} ${dim}(${why})${reset}`,
     );
+  expect(row).toContain(`GPU ${amber}n/a${reset} ${dim}(gpu)${reset}`);
+  expect(row.match(/\(gpu\)/gu)).toHaveLength(1);
+  expect(row).not.toContain(`VRAM ${amber}n/a${reset}`);
+  expect(row).not.toContain(`VRAM ${amber}n/a${reset}`);
   expect(
     sysSegment(err("cpu"), err("ram"), undefined, err("storage"), []),
   ).toEndWith(`Disk ${amber}n/a${reset} ${dim}(storage)${reset}`);

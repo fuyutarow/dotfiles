@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { jsonText } from "../../agents/hooks/zod";
-import { judge, parseKv, toMntPath } from "../wsl-audit";
+import { distroFromRoot, judge, parseKv, toMntPath } from "../wsl-audit";
 
 const GB = 1024 ** 3;
 
@@ -425,6 +425,12 @@ describe("toMntPath — a wrong path would make du report 0 and read as 'tiny vh
 });
 
 describe("wsl-audit distro identity", () => {
+  test("accepts only WSL root UNC paths", () => {
+    expect(distroFromRoot("\\\\wsl.localhost\\r99-u26\\")).toBe("r99-u26");
+    expect(distroFromRoot("\\\\wsl$\\Ubuntu-24.04\\")).toBe("Ubuntu-24.04");
+    expect(distroFromRoot("C:\\WSL\\r99-u26")).toBeUndefined();
+    expect(distroFromRoot("\\\\wsl.localhost\\r99-u26\\etc")).toBeUndefined();
+  });
   test("resolves the guest distro and refuses an explicit mismatch", async () => {
     const dir = await mkdtemp(join(tmpdir(), "wsl-audit-distro-"));
     await using _cleanup = {
@@ -440,7 +446,7 @@ if (process.argv.includes('audit-host')) {
   if (!payload.includes("$p.DistributionName -eq 'r99-u26'")) process.exit(3);
   console.log('host_vhdx_base=C:\\\\WSL\\\\r99-u26');
 } else if (command.includes('WSL_DISTRO_NAME')) {
-  console.log('distro=r99-u26');
+  console.log('distro=\\ndistro_root=\\\\\\\\wsl.localhost\\\\r99-u26\\\\');
 } else {
   if (!command.includes('/mnt/c/WSL/r99-u26/ext4.vhdx')) process.exit(4);
   console.log('alloc=629906866176\\napparent=700000000000');

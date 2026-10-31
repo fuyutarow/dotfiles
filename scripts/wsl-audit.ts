@@ -259,6 +259,7 @@ export function parseKv(out: string): Map<string, string> {
 
 const GUEST_PROBE = `
 echo "distro=\${WSL_DISTRO_NAME:-}"
+printf 'distro_root=%s\n' "$(wslpath -w / 2>/dev/null)"
 echo "nproc=$(nproc)"
 awk '{print "load1="$1; print "load5="$2; print "load15="$3}' /proc/loadavg
 awk '/^some/{for(i=1;i<=NF;i++){split($i,kv,"="); if(kv[1]=="avg10")a=kv[2]; if(kv[1]=="avg300")b=kv[2]}; print "cpu_psi="a; print "cpu_psi300="b}' /proc/pressure/cpu 2>/dev/null || echo "cpu_psi=na"
@@ -327,6 +328,12 @@ export function toMntPath(winPath: string): string | null {
     /^(?:\\\\\?\\)?([A-Za-z]):\\(.*)$/u.exec(winPath.trim()) ?? [];
   if (drive === undefined || rest === undefined) return null;
   return `/mnt/${drive.toLowerCase()}/${rest.replaceAll("\\", "/")}`;
+}
+
+export function distroFromRoot(path: string): string | undefined {
+  return /^\\\\(?:wsl\.localhost|wsl\$)\\([^\\/]+)\\?$/iu.exec(
+    path.trim(),
+  )?.[1];
 }
 
 function shellQuote(value: string): string {
@@ -701,17 +708,32 @@ async function main(): Promise<void> {
 
   const gRan = await sh(guestLeg, GUEST_PROBE, GUEST_MS);
   const g = parseKv(gRan.out);
-  const distro = g.get("distro")?.trim();
+  const envDistro = g.get("distro")?.trim();
+  const rootDistro = distroFromRoot(g.get("distro_root") ?? "");
+  if (
+    envDistro !== undefined &&
+    envDistro !== "" &&
+    rootDistro !== undefined &&
+    envDistro !== rootDistro
+  ) {
+    consola.error(
+      `FATAL: WSL_DISTRO_NAME '${envDistro}' disagrees with root path distro '${rootDistro}'`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+  const distro = rootDistro ?? envDistro;
   if (
     gRan.timedOut ||
     gRan.code !== 0 ||
     distro === undefined ||
     distro === ""
   ) {
-    consola.error("FATAL: guest leg did not report WSL_DISTRO_NAME");
+    consola.error("FATAL: guest leg did not identify its WSL distro");
     process.exitCode = 2;
     return;
   }
+  g.set("distro", distro);
   if (parsed.flags.distro !== undefined && parsed.flags.distro !== distro) {
     consola.error(
       `FATAL: requested distro '${parsed.flags.distro}' disagrees with guest distro '${distro}'`,

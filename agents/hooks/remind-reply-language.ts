@@ -2,7 +2,7 @@
 // into each prompt as additional context. Errors fail open so a broken settings file cannot stop
 // prompt submission. Zero external dependencies; preserve the former onPrompt wire behavior.
 
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { attempt, errorMessage } from "./attempt.ts";
@@ -37,7 +37,7 @@ const result = await attempt(async () => {
     return new Error("wrong hook event; fail open");
   const home = process.env["HOME"] ?? homedir();
   const settings = parseJson(
-    readFileSync(join(home, ".claude", "settings.json"), "utf8"),
+    await readFile(join(home, ".claude", "settings.json"), "utf8"),
   );
   if (settings === undefined) {
     hookStderr("remind-reply-language: malformed ~/.claude/settings.json\n");

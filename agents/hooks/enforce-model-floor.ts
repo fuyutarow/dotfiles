@@ -19,7 +19,7 @@
 // that one environment variable lifts is not a floor. MODEL_FLOOR_CONFIG points the hook at another
 // config (the test suite's fixtures).
 
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { attempt, errorMessage } from "./attempt.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
@@ -39,8 +39,8 @@ const MAYBE_A_MODEL_CLI = /\b(?:codex|grok|claude|agy)\b/u;
 
 const parseToml = (text: string): unknown => Bun.TOML.parse(text);
 
-function loadConfig(): ReturnType<typeof parseFloorConfig> {
-  return parseFloorConfig(parseToml(readFileSync(CONFIG_PATH, "utf8")));
+async function loadConfig(): Promise<ReturnType<typeof parseFloorConfig>> {
+  return parseFloorConfig(parseToml(await readFile(CONFIG_PATH, "utf8")));
 }
 
 async function main(): Promise<void> {

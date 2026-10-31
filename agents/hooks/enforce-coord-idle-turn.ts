@@ -1,5 +1,5 @@
 // Claude Stop hook. Fail open on missing input, unavailable agx, or malformed output.
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { attempt } from "./attempt.ts";
 import { arr, at, parseJson, strAt } from "./narrow.ts";
 import {
@@ -64,15 +64,19 @@ async function main(): Promise<number> {
     return 0;
   const agx = Bun.which("agx");
   if (agx === null) return 0;
-  // sync-ok: one bounded subprocess at the Stop boundary.
-  const result = spawnSync(agx, ["worker", "ls", "--json"], {
-    encoding: "utf8",
+  const options = {
+    encoding: "utf8" as const,
     timeout: 15_000,
     killSignal: "SIGKILL",
     maxBuffer: 4 * 1024 * 1024,
+  };
+  const result = await new Promise<string | null>((resolve) => {
+    execFile(agx, ["worker", "ls", "--json"], options, (error, stdout) => {
+      resolve(error === null ? stdout : null);
+    });
   });
-  if (result.error !== undefined || result.status !== 0) return 0;
-  const rows = parseJson(result.stdout);
+  if (result === null) return 0;
+  const rows = parseJson(result);
   if (
     !Array.isArray(rows) ||
     rows.some(

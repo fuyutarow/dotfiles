@@ -20,7 +20,7 @@
 // FAIL CLOSED (run.sh --fail-closed): a hook error denies. An unreadable or malformed
 // settings file is that repo's own fault and denies with its path.
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { attempt, errorMessage } from "./attempt.ts";
 import { bashCwd, decidePre, readStdinJson } from "./lib.ts";
@@ -31,13 +31,32 @@ type Rule = { text: string; prefix: string; exact: boolean };
 
 const SEGMENT_SPLIT = /&&|\|\||[;|\n]|\$\(|`|\(|\)/u;
 
-function settingsRoot(start: string): string | null {
-  const st = statSync(start, { throwIfNoEntry: false });
+async function exists(path: string): Promise<boolean> {
+  return stat(path).then(
+    () => true,
+    () => false,
+  );
+}
+
+async function settingsRoot(start: string): Promise<string | null | Error> {
+  const result = await attempt(() => stat(start));
+  const code = result.ok
+    ? undefined
+    : z.looseObject({ code: z.string() }).safeParse(result.error);
+  if (
+    !result.ok &&
+    !(
+      code?.success === true &&
+      (code.data.code === "ENOENT" || code.data.code === "ENOTDIR")
+    )
+  )
+    return new Error(errorMessage(result.error));
+  const st = result.ok ? result.value : null;
   let current = resolve(
-    st !== undefined && !st.isDirectory() ? dirname(start) : start,
+    st !== null && !st.isDirectory() ? dirname(start) : start,
   );
   while (true) {
-    if (existsSync(join(current, ".claude", "settings.json"))) return current;
+    if (await exists(join(current, ".claude", "settings.json"))) return current;
     const parent = dirname(current);
     if (parent === current) return null;
     current = parent;
@@ -56,9 +75,9 @@ function ruleOf(entry: unknown): Rule | undefined {
   return undefined;
 }
 
-function bashRules(root: string): Rule[] | string {
+async function bashRules(root: string): Promise<Rule[] | string> {
   const path = join(root, ".claude", "settings.json");
-  const parsed = jsonOf(z.unknown()).safeParse(readFileSync(path, "utf8"));
+  const parsed = jsonOf(z.unknown()).safeParse(await readFile(path, "utf8"));
   if (!parsed.success)
     return `${path}: ${parsed.error.issues[0]?.message ?? "not valid JSON"}`;
   const deny = at(parsed.data, "permissions", "deny");
@@ -87,9 +106,9 @@ export function matchingRules(command: string, rules: Rule[]): Rule[] {
   return [...hit];
 }
 
-function jjAdvice(root: string, rules: Rule[]): string {
+async function jjAdvice(root: string, rules: Rule[]): Promise<string> {
   if (
-    !existsSync(join(root, ".jj")) ||
+    !(await exists(join(root, ".jj"))) ||
     !rules.some((r) => /\bgit\b/u.test(r.prefix))
   )
     return "";
@@ -105,7 +124,7 @@ type MainOutcome =
   | { readonly kind: "error"; readonly message: string }
   | null;
 
-function main(): MainOutcome {
+async function main(): Promise<MainOutcome> {
   const payload = readStdinJson();
   if (payload === undefined)
     return { kind: "error", message: "invalid JSON payload" };
@@ -117,20 +136,21 @@ function main(): MainOutcome {
   const sessionCwd = cwd !== undefined && cwd !== "" ? cwd : process.cwd();
   const roots = new Set<string>();
   for (const root of [
-    settingsRoot(sessionCwd),
-    settingsRoot(bashCwd(payload)),
+    await settingsRoot(sessionCwd),
+    await settingsRoot(bashCwd(payload)),
   ]) {
+    if (root instanceof Error) return { kind: "error", message: root.message };
     if (root !== null) roots.add(root);
   }
   const found: string[] = [];
   for (const root of roots) {
-    const loaded = bashRules(root);
+    const loaded = await bashRules(root);
     if (typeof loaded === "string") return { kind: "error", message: loaded };
     const rules = matchingRules(command, loaded);
     if (rules.length === 0) continue;
     found.push(
       `${root}/.claude/settings.json denies ${rules.map((r) => r.text).join(", ")} for agents` +
-        jjAdvice(root, rules),
+        (await jjAdvice(root, rules)),
     );
   }
   if (found.length === 0) return null;

@@ -1,12 +1,11 @@
 // PreToolUse adapter: classification, project resolution and rewrite text live in repo-retrieve.
 
-import { readFileSync } from "node:fs";
 import { attempt, errorMessage } from "../../tools/shared/src/attempt.ts";
 import { jsonText } from "../../tools/shared/src/zod.ts";
 import { decideSearchRoute } from "../../tools/repo-retrieve/src/search-route.ts";
 
 const result = await attempt(async () => {
-  const text = readFileSync(0, "utf8");
+  const text = await Bun.stdin.text();
   const parsed = jsonText.safeParse(text);
   const decision = decideSearchRoute({
     payload: parsed.success ? parsed.data : undefined,

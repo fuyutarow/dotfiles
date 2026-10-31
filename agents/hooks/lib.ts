@@ -108,15 +108,15 @@ export function decidePre(
   reason: string,
   extra: Record<string, unknown> = {},
 ): never {
-  console.log(
-    hookJson({
+  process.stdout.write(
+    `${hookJson({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: decision,
         permissionDecisionReason: reason,
         ...extra,
       },
-    }),
+    })}\n`,
   );
   process.exit(0);
 }

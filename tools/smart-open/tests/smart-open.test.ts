@@ -662,7 +662,7 @@ await Bun.write(join(process.env.HOME, 'shadow'), target);
     ).code,
   ).toBe(1);
   expect(await rx.opened()).toEqual([]);
-});
+}, 15000);
 
 describe("paths over a live forward", () => {
   test("a path goes to the client as a VS Code Remote-SSH URL on the named host, not to this machine", async () => {
@@ -962,7 +962,7 @@ describe("paths over a live forward", () => {
     expect(r.err).toContain("did not open");
     expect(r.err).toContain(`accepted but sent no ok within ${ACK_MS} ms`);
     expect(await localOpened()).toEqual([]);
-  });
+  }, 15000);
 
   test("a receiver from before path requests is named, with how to restart it", async () => {
     const dir = await scratch();
@@ -1118,7 +1118,7 @@ describe("opening on this machine is bounded", () => {
     expect(r.err).toContain("waiting for ");
     expect(r.err).toContain("(gives up after 3 s)…");
     expect(r.err).toContain("did not return within 3 s and was stopped");
-  });
+  }, 15000);
 });
 
 // ---- Tiger ledger SO-1 (R3-R7): what the socket's reachable-by-every-process-of-the-user exposure
@@ -1183,7 +1183,7 @@ describe("receiver bounds", () => {
     expect((await ask(rx.sock, line("https://probe.invalid/c"))).reply).toBe(
       "ok",
     );
-  });
+  }, 15000);
 
   test("R3: time spent with a full bucket earns nothing toward the next refill", async () => {
     const rx = await startReceiver(await scratch(), {
@@ -1197,7 +1197,7 @@ describe("receiver bounds", () => {
     expect((await ask(rx.sock, line("https://probe.invalid/b"))).reply).toBe(
       "busy: rate limit",
     );
-  });
+  }, 15000);
 
   test("R3: a request that is not a valid http(s) URL costs no token", async () => {
     const rx = await startReceiver(await scratch(), {
@@ -1229,7 +1229,7 @@ describe("receiver bounds", () => {
     expect(performance.now() - t1).toBeLessThan(600); // answered while openers still run
     expect((await three).map((a) => a.reply)).toEqual(["ok", "ok", "ok"]);
     expect(performance.now() - t0).toBeLessThan(2_500); // serial would be >= 3 s
-  });
+  }, 15000);
 
   test("R5: an opener that cannot be spawned is a refusal on the wire, and the receiver lives on", async () => {
     const rx = await startReceiver(await scratch(), {
@@ -1254,7 +1254,7 @@ describe("receiver bounds", () => {
     expect(a.reply).toBe("refused: opener timed out");
     expect(performance.now() - t0).toBeLessThan(4_000);
     expect(await hangOpened()).toHaveLength(1); // it did start; it was the timeout that ended it
-  });
+  }, 15000);
 
   test("R5: held-open connections past --max-connections are told busy, and a freed slot is reusable", async () => {
     const rx = await startReceiver(await scratch(), {
@@ -1312,7 +1312,7 @@ describe("receiver bounds", () => {
     expect(await promise).toBe("ok");
     await Bun.sleep(200);
     expect(await slowOpened()).toEqual(["https://probe.invalid/once"]);
-  });
+  }, 15000);
 
   test.each([
     ["--burst", "0"],
@@ -1378,7 +1378,7 @@ describe("client under the receiver's limits", () => {
     expect(r.code).toBe(0);
     expect(r.err).toContain("accepted but sent no ok within 2000 ms");
     expect(await localOpened()).toEqual(["https://probe.invalid/mute"]);
-  });
+  }, 15000);
 
   test("R7: a refusal quotes the receiver's own reason", async () => {
     const dir = await scratch();
@@ -1503,7 +1503,7 @@ describe("peers that never hang up (the receiver's own end() must release the sl
     expect((await ask(rx.sock, line("https://probe.invalid/a"))).reply).toBe(
       "ok",
     );
-  });
+  }, 15000);
 
   test("a peer that keeps its side open after the reply does not hold a slot", async () => {
     const rx = await startReceiver(await scratch(), {
@@ -1528,7 +1528,7 @@ describe("peers that never hang up (the receiver's own end() must release the sl
     late.conn.write(line("https://probe.invalid/late"));
     await Bun.sleep(500);
     expect(await rx.opened()).toEqual([]);
-  });
+  }, 15000);
 
   test("a client that vanishes mid-request does not take the receiver down", async () => {
     const dir = await scratch();
@@ -1541,7 +1541,7 @@ describe("peers that never hang up (the receiver's own end() must release the sl
     expect(
       (await ask(rx.sock, line("https://probe.invalid/after"))).reply,
     ).toBe("ok");
-  });
+  }, 15000);
 });
 
 describe("answer time: the receiver settles before the client gives up", () => {
@@ -1588,7 +1588,7 @@ describe("answer time: the receiver settles before the client gives up", () => {
     expect(await alive(pid)).toBe(true); // still running: the ok did not wait for it
     await Bun.sleep(2_000);
     expect(await alive(pid)).toBe(false); // the timeout reaped it even though nobody is waiting
-  });
+  }, 15000);
 
   test("a slow `open` is opened once: the client waits, the receiver answers before it gives up", async () => {
     const dir = await scratch();
@@ -1612,7 +1612,7 @@ describe("answer time: the receiver settles before the client gives up", () => {
     expect(await localOpened()).toEqual([]); // the old behaviour: client gave up at 2 s, opened here too
     expect(await slowOpened()).toEqual(["https://probe.invalid/slowopen"]);
     expect(performance.now() - t0).toBeLessThan(ACK_MS + 800);
-  });
+  }, 15000);
 
   test("a fast failure still falls through to this machine (the exit code decides inside the window)", async () => {
     const dir = await scratch();

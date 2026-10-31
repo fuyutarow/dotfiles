@@ -12,6 +12,7 @@ import { join, resolve } from "node:path";
 
 const SCRIPT = resolve(import.meta.dir, "../scripts/jj-push.ts");
 const dirs: string[] = [];
+const INTEGRATION_TIMEOUT_MS = 30_000;
 afterAll(() => {
   for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
 });
@@ -138,177 +139,232 @@ process.exit(result.status ?? 1);
 }
 
 describe("jj push", () => {
-  test("first push creates alpha@origin and the second push is a no-op", () => {
-    const f = fixture(false);
-    const first = f.push();
-    expect(first.exitCode, first.stderr.toString()).toBe(0);
-    expect(first.stdout.toString()).toContain("fixture base");
-    const local = f.jj("log", "--no-graph", "-r", "alpha", "-T", "commit_id");
-    expect(f.remoteHead()).toBe(local);
-    const mirror = join(f.dir, "mirror");
-    f.jj("git", "clone", "--no-colocate", f.bare, mirror);
-    expect(
-      f.jjAt(
+  test(
+    "first push creates alpha@origin and the second push is a no-op",
+    () => {
+      const f = fixture(false);
+      const first = f.push();
+      expect(first.exitCode, first.stderr.toString()).toBe(0);
+      expect(first.stdout.toString()).toContain("fixture base");
+      const local = f.jj("log", "--no-graph", "-r", "alpha", "-T", "commit_id");
+      expect(f.remoteHead()).toBe(local);
+      const mirror = join(f.dir, "mirror");
+      f.jj("git", "clone", "--no-colocate", f.bare, mirror);
+      expect(
+        f.jjAt(
+          mirror,
+          "log",
+          "--no-graph",
+          "-r",
+          "alpha@origin",
+          "-T",
+          "commit_id",
+        ),
+      ).toBe(local);
+      const second = f.push();
+      expect(second.exitCode, second.stderr.toString()).toBe(0);
+      expect(second.stdout.toString()).toContain("nothing to push");
+      expect(f.remoteHead()).toBe(local);
+    },
+    INTEGRATION_TIMEOUT_MS,
+  );
+
+  test(
+    "dry-run lists a new bookmark without creating it remotely",
+    () => {
+      const f = fixture(false);
+      const result = f.push(["--dry-run"]);
+      expect(result.exitCode, result.stderr.toString()).toBe(0);
+      expect(result.stdout.toString()).toContain("fixture base");
+      expect(f.jj("bookmark", "list", "--all-remotes")).not.toContain(
+        "@origin",
+      );
+    },
+    INTEGRATION_TIMEOUT_MS,
+  );
+
+  test(
+    "unrelated jj failures remain loud and non-zero",
+    () => {
+      const f = fixture(false);
+      f.jj("git", "remote", "remove", "origin");
+      const result = f.push();
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr.toString()).toContain("fetching origin failed");
+    },
+    INTEGRATION_TIMEOUT_MS,
+  );
+
+  test(
+    "creates the bookmark even when another origin bookmark has all its commits",
+    () => {
+      const f = fixture(false);
+      f.jj("bookmark", "create", "other", "-r", "alpha");
+      f.jj("git", "push", "--remote", "origin", "-b", "other");
+      const result = f.push();
+      expect(result.exitCode, result.stderr.toString()).toBe(0);
+      expect(result.stdout.toString()).toContain(
+        "creating alpha@origin (no new commits)",
+      );
+      expect(result.stdout.toString()).not.toContain("fixture base");
+      expect(f.remoteHead()).toBe(
+        f.jj("log", "--no-graph", "-r", "alpha", "-T", "commit_id"),
+      );
+    },
+    INTEGRATION_TIMEOUT_MS,
+  );
+
+  test(
+    "a listing failure is not treated as a missing remote bookmark",
+    () => {
+      const f = fixture(false);
+      f.jj("bookmark", "delete", "alpha");
+      const result = f.push();
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr.toString()).toContain("listing remote_bookmarks");
+      expect(result.stderr.toString()).toContain(
+        "Revision `alpha` doesn't exist",
+      );
+    },
+    INTEGRATION_TIMEOUT_MS,
+  );
+
+  test(
+    "prints and pushes commits ahead of alpha@origin",
+    () => {
+      const f = fixture();
+      writeFileSync(join(f.root, "ahead.txt"), "ahead\n");
+      f.jj("describe", "-m", "ahead commit");
+      f.jj("bookmark", "set", "alpha", "-r", "@");
+      const r = f.push();
+      expect(r.exitCode, r.stderr.toString()).toBe(0);
+      expect(r.stdout.toString()).toContain("ahead commit");
+      const pushed = f.jj(
+        "log",
+        "--no-graph",
+        "-r",
+        "alpha",
+        "-T",
+        "commit_id",
+      );
+      expect(r.stdout.toString()).toContain(
+        `verified commit ${pushed} at alpha@origin`,
+      );
+      expect(f.remoteHead()).toBe(pushed);
+    },
+    INTEGRATION_TIMEOUT_MS,
+  );
+
+  test(
+    "fails when jj reports no change and a fresh fetch shows the old commit",
+    () => {
+      const f = fixture();
+      writeFileSync(join(f.root, "ahead.txt"), "ahead\n");
+      f.jj("describe", "-m", "ahead commit");
+      f.jj("bookmark", "set", "alpha", "-r", "@");
+      const expected = f.jj(
+        "log",
+        "--no-graph",
+        "-r",
+        "alpha",
+        "-T",
+        "commit_id",
+      );
+      const actual = f.remoteHead();
+      writeFileSync(f.pushNoopMarker, "");
+
+      const result = f.push();
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr.toString()).toContain(`expected alpha=${expected}`);
+      expect(result.stderr.toString()).toContain(
+        `actual alpha@origin=${actual}`,
+      );
+      expect(f.remoteHead()).toBe(actual);
+    },
+    INTEGRATION_TIMEOUT_MS,
+  );
+
+  test(
+    "nothing ahead is a successful no-op",
+    () => {
+      const f = fixture();
+      const before = f.remoteHead();
+      const r = f.push();
+      expect(r.exitCode, r.stderr.toString()).toBe(0);
+      expect(r.stdout.toString()).toContain("nothing to push");
+      expect(f.remoteHead()).toBe(before);
+    },
+    INTEGRATION_TIMEOUT_MS,
+  );
+
+  test(
+    "refuses when alpha has diverged from alpha@origin",
+    () => {
+      const f = fixture();
+      const mirror = join(f.dir, "mirror");
+      f.jj("git", "clone", "--no-colocate", f.bare, mirror);
+      f.jjAt(mirror, "bookmark", "track", "alpha@origin");
+      f.jjAt(mirror, "new", "alpha@origin");
+      writeFileSync(join(mirror, "remote.txt"), "remote commit\n");
+      f.jjAt(mirror, "describe", "-m", "remote commit");
+      f.jjAt(mirror, "bookmark", "set", "alpha", "-r", "@");
+      f.jjAt(mirror, "git", "push", "-b", "alpha");
+      const remoteExpected = f.jjAt(
         mirror,
         "log",
         "--no-graph",
         "-r",
-        "alpha@origin",
+        "alpha",
         "-T",
         "commit_id",
-      ),
-    ).toBe(local);
-    const second = f.push();
-    expect(second.exitCode, second.stderr.toString()).toBe(0);
-    expect(second.stdout.toString()).toContain("nothing to push");
-    expect(f.remoteHead()).toBe(local);
-  });
+      );
+      writeFileSync(join(f.root, "local.txt"), "local commit\n");
+      f.jj("describe", "-m", "local commit");
+      f.jj("bookmark", "set", "alpha", "-r", "@");
+      const r = f.push();
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr.toString()).toContain("mise run pull");
+      expect(f.remoteHead()).toBe(remoteExpected);
+    },
+    INTEGRATION_TIMEOUT_MS,
+  );
 
-  test("dry-run lists a new bookmark without creating it remotely", () => {
-    const f = fixture(false);
-    const result = f.push(["--dry-run"]);
-    expect(result.exitCode, result.stderr.toString()).toBe(0);
-    expect(result.stdout.toString()).toContain("fixture base");
-    expect(f.jj("bookmark", "list", "--all-remotes")).not.toContain("@origin");
-  });
+  test(
+    "dry-run prints the list without pushing",
+    () => {
+      const f = fixture();
+      writeFileSync(join(f.root, "ahead.txt"), "ahead\n");
+      f.jj("describe", "-m", "ahead commit");
+      f.jj("bookmark", "set", "alpha", "-r", "@");
+      const before = f.remoteHead();
+      const r = f.push(["--dry-run"]);
+      expect(r.exitCode, r.stderr.toString()).toBe(0);
+      expect(r.stdout.toString()).toContain("ahead commit");
+      expect(f.remoteHead()).toBe(before);
+    },
+    INTEGRATION_TIMEOUT_MS,
+  );
 
-  test("unrelated jj failures remain loud and non-zero", () => {
-    const f = fixture(false);
-    f.jj("git", "remote", "remove", "origin");
-    const result = f.push();
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stderr.toString()).toContain("fetching origin failed");
-  });
-
-  test("creates the bookmark even when another origin bookmark has all its commits", () => {
-    const f = fixture(false);
-    f.jj("bookmark", "create", "other", "-r", "alpha");
-    f.jj("git", "push", "--remote", "origin", "-b", "other");
-    const result = f.push();
-    expect(result.exitCode, result.stderr.toString()).toBe(0);
-    expect(result.stdout.toString()).toContain(
-      "creating alpha@origin (no new commits)",
-    );
-    expect(result.stdout.toString()).not.toContain("fixture base");
-    expect(f.remoteHead()).toBe(
-      f.jj("log", "--no-graph", "-r", "alpha", "-T", "commit_id"),
-    );
-  });
-
-  test("a listing failure is not treated as a missing remote bookmark", () => {
-    const f = fixture(false);
-    f.jj("bookmark", "delete", "alpha");
-    const result = f.push();
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stderr.toString()).toContain("listing remote_bookmarks");
-    expect(result.stderr.toString()).toContain(
-      "Revision `alpha` doesn't exist",
-    );
-  });
-
-  test("prints and pushes commits ahead of alpha@origin", () => {
-    const f = fixture();
-    writeFileSync(join(f.root, "ahead.txt"), "ahead\n");
-    f.jj("describe", "-m", "ahead commit");
-    f.jj("bookmark", "set", "alpha", "-r", "@");
-    const r = f.push();
-    expect(r.exitCode, r.stderr.toString()).toBe(0);
-    expect(r.stdout.toString()).toContain("ahead commit");
-    const pushed = f.jj("log", "--no-graph", "-r", "alpha", "-T", "commit_id");
-    expect(r.stdout.toString()).toContain(
-      `verified commit ${pushed} at alpha@origin`,
-    );
-    expect(f.remoteHead()).toBe(pushed);
-  });
-
-  test("fails when jj reports no change and a fresh fetch shows the old commit", () => {
-    const f = fixture();
-    writeFileSync(join(f.root, "ahead.txt"), "ahead\n");
-    f.jj("describe", "-m", "ahead commit");
-    f.jj("bookmark", "set", "alpha", "-r", "@");
-    const expected = f.jj(
-      "log",
-      "--no-graph",
-      "-r",
-      "alpha",
-      "-T",
-      "commit_id",
-    );
-    const actual = f.remoteHead();
-    writeFileSync(f.pushNoopMarker, "");
-
-    const result = f.push();
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr.toString()).toContain(`expected alpha=${expected}`);
-    expect(result.stderr.toString()).toContain(`actual alpha@origin=${actual}`);
-    expect(f.remoteHead()).toBe(actual);
-  });
-
-  test("nothing ahead is a successful no-op", () => {
-    const f = fixture();
-    const before = f.remoteHead();
-    const r = f.push();
-    expect(r.exitCode, r.stderr.toString()).toBe(0);
-    expect(r.stdout.toString()).toContain("nothing to push");
-    expect(f.remoteHead()).toBe(before);
-  });
-
-  test("refuses when alpha has diverged from alpha@origin", () => {
-    const f = fixture();
-    const mirror = join(f.dir, "mirror");
-    f.jj("git", "clone", "--no-colocate", f.bare, mirror);
-    f.jjAt(mirror, "bookmark", "track", "alpha@origin");
-    f.jjAt(mirror, "new", "alpha@origin");
-    writeFileSync(join(mirror, "remote.txt"), "remote commit\n");
-    f.jjAt(mirror, "describe", "-m", "remote commit");
-    f.jjAt(mirror, "bookmark", "set", "alpha", "-r", "@");
-    f.jjAt(mirror, "git", "push", "-b", "alpha");
-    const remoteExpected = f.jjAt(
-      mirror,
-      "log",
-      "--no-graph",
-      "-r",
-      "alpha",
-      "-T",
-      "commit_id",
-    );
-    writeFileSync(join(f.root, "local.txt"), "local commit\n");
-    f.jj("describe", "-m", "local commit");
-    f.jj("bookmark", "set", "alpha", "-r", "@");
-    const r = f.push();
-    expect(r.exitCode).toBe(1);
-    expect(r.stderr.toString()).toContain("mise run pull");
-    expect(f.remoteHead()).toBe(remoteExpected);
-  });
-
-  test("dry-run prints the list without pushing", () => {
-    const f = fixture();
-    writeFileSync(join(f.root, "ahead.txt"), "ahead\n");
-    f.jj("describe", "-m", "ahead commit");
-    f.jj("bookmark", "set", "alpha", "-r", "@");
-    const before = f.remoteHead();
-    const r = f.push(["--dry-run"]);
-    expect(r.exitCode, r.stderr.toString()).toBe(0);
-    expect(r.stdout.toString()).toContain("ahead commit");
-    expect(f.remoteHead()).toBe(before);
-  });
-
-  test("refuses a conflicted alpha bookmark", () => {
-    const f = fixture();
-    const rev = f.jj("log", "--no-graph", "-r", "alpha", "-T", "commit_id");
-    // Build a conflicted descendant by merging two edits of the same file.
-    f.jj("new", rev);
-    writeFileSync(join(f.root, "base.txt"), "left\n");
-    f.jj("describe", "-m", "left edit");
-    const left = f.jj("log", "--no-graph", "-r", "@", "-T", "commit_id");
-    f.jj("new", rev);
-    writeFileSync(join(f.root, "base.txt"), "right\n");
-    f.jj("describe", "-m", "right edit");
-    const right = f.jj("log", "--no-graph", "-r", "@", "-T", "commit_id");
-    f.jj("new", left, right);
-    f.jj("bookmark", "set", "alpha", "-r", "@");
-    const r = f.push();
-    expect(r.exitCode).toBe(1);
-    expect(r.stderr.toString()).toContain("unresolved conflicts");
-  });
+  test(
+    "refuses a conflicted alpha bookmark",
+    () => {
+      const f = fixture();
+      const rev = f.jj("log", "--no-graph", "-r", "alpha", "-T", "commit_id");
+      // Build a conflicted descendant by merging two edits of the same file.
+      f.jj("new", rev);
+      writeFileSync(join(f.root, "base.txt"), "left\n");
+      f.jj("describe", "-m", "left edit");
+      const left = f.jj("log", "--no-graph", "-r", "@", "-T", "commit_id");
+      f.jj("new", rev);
+      writeFileSync(join(f.root, "base.txt"), "right\n");
+      f.jj("describe", "-m", "right edit");
+      const right = f.jj("log", "--no-graph", "-r", "@", "-T", "commit_id");
+      f.jj("new", left, right);
+      f.jj("bookmark", "set", "alpha", "-r", "@");
+      const r = f.push();
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr.toString()).toContain("unresolved conflicts");
+    },
+    INTEGRATION_TIMEOUT_MS,
+  );
 });

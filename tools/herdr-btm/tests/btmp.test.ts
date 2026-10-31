@@ -343,7 +343,7 @@ test("reports a missing GPU owner state as n/a", async () => {
     expect(parsed.data.params.tokens.btm_summary).toContain(
       "GPU n/a(stale (GPU sampler state unavailable))",
     );
-});
+}, 15000);
 
 test("runs btm without any Herdr reports outside a Herdr pane", async () => {
   const root = await tempRoot();

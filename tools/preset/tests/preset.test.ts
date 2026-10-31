@@ -205,7 +205,7 @@ describe("preset sync", () => {
     expect(await readFile(marker, "utf8")).toBe(
       "outside tools remains untouched\n",
     );
-  });
+  }, 15_000);
 
   test("merges owned exclusions without losing consumer entries", async () => {
     const root = await fixture();

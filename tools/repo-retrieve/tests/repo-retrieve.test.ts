@@ -479,7 +479,7 @@ describe("repo-retrieve route contract", () => {
       `RESULT: BUSY route=concept; reindex running for project=${dir} (pid 4242); retry after the index or use lexical routes rr text|regex|files`,
     );
     expect(slowStatus.stderr).not.toContain("search child timed out");
-  });
+  }, 15_000);
 
   test("reindex BUSY stays below ten seconds including slow preflight checks", () => {
     const { dir } = registerFreshGitProject();

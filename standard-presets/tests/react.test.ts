@@ -96,6 +96,18 @@ test("standard React override scopes hook diagnostics to declared packages", asy
       ],
     }),
   );
+  const reactConfig = await Bun.file(join(repo, ".oxlintrc.json")).text();
+  await writeFile(
+    join(repo, ".oxlintrc.json"),
+    JSON.stringify({ ...checked.data, ignorePatterns: ["ignored.ts"] }),
+  );
+  await writeFile(join(repo, "ignored.ts"), "const ignored = 1;\n");
+  const ignored = await run(repo, "lint-oxlint.ts", "ignored.ts");
+  expect(ignored.exit).toBe(0);
+  expect(ignored.stdout).toContain(
+    "checked 0 file(s); all 1 selected path(s) are ignored by the lint config: ignored.ts",
+  );
+  await writeFile(join(repo, ".oxlintrc.json"), reactConfig);
   const config = jsonOf(Config).safeParse(
     await Bun.file(join(repo, ".oxlintrc.json")).text(),
   );
@@ -194,11 +206,15 @@ test("lint runner fails loudly for silent exit 0, invalid reports, and zero file
       `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(output)});\n`,
     );
     await chmod(fake, 0o755);
-    const result = await run(repo, "lint-oxlint.ts", "input.ts");
+    const result = await run(repo, "lint-oxlint.ts");
     expect(result.exit).toBe(2);
     expect(result.stderr).toContain("FATAL");
     expect(result.stderr).toContain("oxlint exited 0");
-    expect(result.stderr).toContain("without a valid nonempty JSON report");
+    expect(result.stderr).toContain(
+      output.startsWith("{")
+        ? "valid JSON report present; files checked: 0"
+        : "valid JSON report absent; files checked: unknown",
+    );
   }
   expect((await run(repo, "lint-oxlint.ts", "--help")).stdout).toMatch(
     /usage/iu,

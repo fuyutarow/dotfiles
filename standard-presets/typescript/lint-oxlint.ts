@@ -3,14 +3,14 @@
 // runtime types explicitly so type-aware lint also works for that standalone file.
 // Consumer lint entrypoint: run the pinned local oxlint with Bun, never its Node shebang.
 // Human/agent consumer: JSON diagnostics and a checked file count. Exit 0 clean / 1 findings /
-// 2 fatal (including empty, malformed or zero-file reports). No network installation fallback.
+// 2 fatal (including empty, malformed or unexpected zero-file reports). No network installation fallback.
 import { cli } from "cleye";
 import { delimiter, join } from "node:path";
 import { jsonOf, z } from "./zod.ts";
 
 const Report = z.looseObject({
   diagnostics: z.array(z.unknown()),
-  number_of_files: z.number().int().positive(),
+  number_of_files: z.number().int().nonnegative(),
 });
 
 function rejectPrototypeFlag(type: string, flag: string): void {
@@ -45,6 +45,7 @@ async function main(): Promise<number> {
       join(bin, "oxlint"),
       "--format=json",
       ...(argv.flags.typeAware ? ["--type-aware"] : []),
+      ...(argv._.length > 0 ? ["--no-error-on-unmatched-pattern"] : []),
       ...scope.data.exclude.flatMap((pattern) => ["--ignore-pattern", pattern]),
       ...argv._,
     ],
@@ -65,14 +66,28 @@ async function main(): Promise<number> {
   ]);
   if (stderr.length > 0) process.stderr.write(stderr);
   const report = jsonOf(Report).safeParse(stdout);
-  if (!report.success) {
+  if (
+    !report.success ||
+    (report.data.number_of_files === 0 && (argv._.length === 0 || exit !== 0))
+  ) {
     if (stdout.length > 0) process.stdout.write(stdout);
     process.stderr.write(
-      `lint-oxlint: FATAL: oxlint exited ${exit} without a valid nonempty JSON report with files checked; check the local oxlint installation and runtime\n`,
+      `lint-oxlint: FATAL: oxlint exited ${exit}; valid JSON report ${report.success ? "present" : "absent"}; files checked: ${report.success ? report.data.number_of_files : "unknown"}\n`,
     );
     return 2;
   }
   process.stdout.write(`${stdout.trim()}\n`);
+  if (report.data.number_of_files === 0 && exit === 0) {
+    const listed = argv._.slice(0, 10);
+    const suffix =
+      argv._.length > listed.length
+        ? `, … (+${argv._.length - listed.length} more)`
+        : "";
+    process.stdout.write(
+      `lint-oxlint: checked 0 file(s); all ${argv._.length} selected path(s) are ignored by the lint config: ${listed.join(", ")}${suffix}\n`,
+    );
+    return 0;
+  }
   process.stdout.write(
     `lint-oxlint: checked ${report.data.number_of_files} file(s)\n`,
   );

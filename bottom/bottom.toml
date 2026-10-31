@@ -13,6 +13,10 @@
 # Still a [flags] key in 0.14.8 — unlike the two below, it is not deprecated.
 enable_gpu = true
 
+# WSL does not expose whole-GPU or per-process utilization in btm; use
+# `/usr/lib/wsl/lib/nvidia-smi dmon -s u` for whole-GPU utilization.
+# On r99-u26, btm reported 0% per process while dmon showed 81–86%. 
+
 # Start the CPU/memory/network graphs already at the widest window instead of the
 # 60s default, so a launch doesn't need a manual scroll-out to see any trend.
 # These three graphs share ONE global time axis — bottom has no per-widget window

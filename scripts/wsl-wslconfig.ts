@@ -1,5 +1,8 @@
-import { existsSync, copyFileSync } from "node:fs";
-import { fromThrowable } from "neverthrow";
+import { copyFile, stat } from "node:fs/promises";
+import { createConsola } from "consola";
+import { fromAsyncThrowable } from "neverthrow";
+
+const consola = createConsola({ level: 4 });
 
 // Bounds and failure handling, in the shape practicing-tiger-style asks for.
 //
@@ -10,13 +13,13 @@ import { fromThrowable } from "neverthrow";
 // enough that a wedged call fails in twenty seconds instead of never.
 //
 // The copies are the OTHER hazard, and it is not hypothetical: the destination lives on C:, the
-// drive that reached 1,134,592 bytes free twice in one week. copyFileSync throws on ENOSPC, and
-// an unhandled throw here would surface as a stack trace — technically visible, operationally
-// useless, and worst of all it could leave the .bak written and the real file half-replaced.
-// fromThrowable turns both copies into values so the failure is reported as what it is: an
-// OPERATIONAL error (the disk is full), not a programmer error worth crashing over.
+// drive that reached 1,134,592 bytes free twice in one week. Copy failures are caught so ENOSPC
+// is reported as an operational error, not an unhandled stack trace.
 const INTEROP_MS = 20_000;
-const copyFile = fromThrowable(copyFileSync);
+
+async function exists(path: string): Promise<boolean> {
+  return (await fromAsyncThrowable(() => stat(path))()).isOk();
+}
 
 // Same rule as scripts/reclaim-system.ts: no subprocess runs unbounded. Bun.$ has no timeout, so
 // interop goes through Bun.spawn with a native AbortSignal, and the overrun is read off the
@@ -68,16 +71,15 @@ if (
     .toLowerCase()
     .includes("microsoft")
 ) {
-  console.log(
-    "not running inside WSL — .wslconfig lives on the Windows host, so this task",
+  consola.error(
+    "not running inside WSL — .wslconfig lives on the Windows host, so this task\nmust run from inside the WSL distro that host is running.",
   );
-  console.log("must run from inside the WSL distro that host is running.");
   process.exit(1);
 }
 
 const src = `${process.env["DOTFILES"] ?? `${process.env["HOME"]}/dotfiles`}/wsl/wslconfig.win`;
-if (!existsSync(src)) {
-  console.log(`missing source: ${src}`);
+if (!(await exists(src))) {
+  consola.error(`missing source: ${src}`);
   process.exit(1);
 }
 
@@ -97,18 +99,15 @@ const profileRaw = await capture(
 );
 
 if (profileRaw === "") {
-  console.log(
-    "could not read %USERPROFILE% via powershell.exe interop — is interop enabled?",
-  );
-  console.log(
-    "  (/etc/wsl.conf [interop] enabled=true, and powershell.exe on PATH)",
+  consola.error(
+    "could not read %USERPROFILE% via powershell.exe interop — is interop enabled?\n  (/etc/wsl.conf [interop] enabled=true, and powershell.exe on PATH)",
   );
   process.exit(1);
 }
 
 const profile = await capture(["wslpath", "-u", profileRaw], INTEROP_MS);
-if (profile === "" || !existsSync(profile)) {
-  console.log(`wslpath could not map ${profileRaw} to a readable directory`);
+if (profile === "" || !(await exists(profile))) {
+  consola.error(`wslpath could not map ${profileRaw} to a readable directory`);
   process.exit(1);
 }
 const dest = `${profile}/.wslconfig`;
@@ -131,13 +130,10 @@ const totalRaw = await capture(
 const hostGb = Number(totalRaw) / 1024 ** 3;
 if (wanted?.[1] !== undefined && Number.isFinite(hostGb) && hostGb > 0) {
   const askGb = Number(wanted[1]);
-  console.log(`host RAM ${hostGb.toFixed(1)} GB, config asks for ${askGb} GB`);
+  consola.info(`host RAM ${hostGb.toFixed(1)} GB, config asks for ${askGb} GB`);
   if (askGb > hostGb - RESERVE_GB) {
-    console.log(
-      `REFUSED: memory=${askGb}GB leaves Windows under ${RESERVE_GB} GB on a ${hostGb.toFixed(1)} GB host.`,
-    );
-    console.log(
-      "Lower memory= in wsl/wslconfig.win for this machine, then re-run.",
+    consola.error(
+      `REFUSED: memory=${askGb}GB leaves Windows under ${RESERVE_GB} GB on a ${hostGb.toFixed(1)} GB host.\nLower memory= in wsl/wslconfig.win for this machine, then re-run.`,
     );
     process.exit(1);
   }
@@ -146,54 +142,46 @@ if (wanted?.[1] !== undefined && Number.isFinite(hostGb) && hostGb > 0) {
 // Idempotent: byte-identical means nothing to do. Report drift explicitly rather than silently
 // overwriting, so a hand-edit on the Windows side is noticed before it is destroyed.
 const srcBytes = await Bun.file(src).arrayBuffer();
-if (existsSync(dest)) {
+if (await exists(dest)) {
   const destBytes = await Bun.file(dest).arrayBuffer();
   const same =
     srcBytes.byteLength === destBytes.byteLength &&
     Buffer.from(srcBytes).equals(Buffer.from(destBytes));
   if (same) {
-    console.log(`already current: ${dest} (${srcBytes.byteLength} bytes)`);
+    consola.success(`already current: ${dest} (${srcBytes.byteLength} bytes)`);
     process.exit(0);
   }
   const backup = `${dest}.bak`;
   // Back up BEFORE overwriting, and stop if that fails: the point of the .bak is to survive a
   // failed replace, so a run that could not write it must not go on to replace anything.
-  const saved = copyFile(dest, backup);
+  const saved = await fromAsyncThrowable(() => copyFile(dest, backup))();
   if (saved.isErr()) {
-    console.log(
-      `could not back up ${dest} to ${backup}: ${String(saved.error)}`,
+    consola.error(
+      `could not back up ${dest} to ${backup}: ${String(saved.error)}\nhost copy left untouched — nothing was written.`,
     );
-    console.log("host copy left untouched — nothing was written.");
     process.exit(1);
   }
-  console.log(`drift found — previous host copy saved to ${backup}`);
+  consola.warn(`drift found — previous host copy saved to ${backup}`);
 }
 
 // ENOSPC here is an OPERATIONAL error on a drive this repo has watched hit 1,134,592 bytes free,
 // not a programmer error: report it as itself and leave the .bak in place, rather than exiting
 // through a stack trace that says nothing about what to do next.
-const wroteRes = copyFile(src, dest);
+const wroteRes = await fromAsyncThrowable(() => copyFile(src, dest))();
 if (wroteRes.isErr()) {
-  console.log(`could not write ${dest}: ${String(wroteRes.error)}`);
-  console.log(
-    "If this is ENOSPC, free space on C: first — the .bak (if any) still holds the",
+  consola.error(
+    `could not write ${dest}: ${String(wroteRes.error)}\nIf this is ENOSPC, free space on C: first — the .bak (if any) still holds the\nprevious contents, so the host is in its pre-run state.`,
   );
-  console.log("previous contents, so the host is in its pre-run state.");
   process.exit(1);
 }
 const wrote = (await Bun.file(dest).arrayBuffer()).byteLength;
-console.log(`deployed: ${dest} (${wrote} bytes)`);
-console.log("---");
-console.log(
-  "NOT live yet: .wslconfig is read when the WSL VM starts. To apply, stop the",
-);
-console.log(
-  "keepalive task first or `wsl --shutdown` is undone within seconds:",
-);
-console.log("  (Windows) Disable-ScheduledTask -TaskName WSL-keepalive");
-console.log(
-  "  (Windows) wsl --shutdown          # every distro and every session dies here",
-);
-console.log(
-  "  (Windows) Enable-ScheduledTask -TaskName WSL-keepalive; Start-ScheduledTask ...",
+consola.success(`deployed: ${dest} (${wrote} bytes)`);
+consola.info(
+  [
+    "NOT live yet: .wslconfig is read when the WSL VM starts. To apply, stop the",
+    "keepalive task first or `wsl --shutdown` is undone within seconds:",
+    "  (Windows) Disable-ScheduledTask -TaskName WSL-keepalive",
+    "  (Windows) wsl --shutdown          # every distro and every session dies here",
+    "  (Windows) Enable-ScheduledTask -TaskName WSL-keepalive; Start-ScheduledTask ...",
+  ].join("\n"),
 );

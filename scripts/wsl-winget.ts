@@ -1,13 +1,10 @@
-import { copyFileSync, existsSync } from "node:fs";
+import { copyFile, stat } from "node:fs/promises";
 import { cli } from "cleye";
-import {
-  err,
-  fromAsyncThrowable,
-  fromThrowable,
-  ok,
-  type Result,
-} from "neverthrow";
+import { createConsola } from "consola";
+import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
+
+const consola = createConsola({ level: 4 });
 
 // The Windows half of the tool declarations: capture what winget manages on the host into
 // wsl/winget.win.json, or restore the host from it. Consumer: human/agent running
@@ -47,12 +44,14 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    consola.error(`FATAL: unknown option '--${flag}'`);
     process.exit(2);
   }
 }
 
-const copyFile = fromThrowable(copyFileSync);
+async function exists(path: string): Promise<boolean> {
+  return (await fromAsyncThrowable(() => stat(path))()).isOk();
+}
 
 async function run(
   cmd: string[],
@@ -91,13 +90,13 @@ async function requireWsl(): Promise<void> {
     .text()
     .catch(() => "");
   if (!rel.toLowerCase().includes("microsoft")) {
-    console.log(
+    consola.error(
       "not running inside WSL — winget lives on the Windows host, so this runs from its distro",
     );
     process.exit(1);
   }
   if (Bun.which("wslpath") === null || Bun.which("powershell.exe") === null) {
-    console.log(
+    consola.error(
       "wslpath / powershell.exe not reachable — is [interop] enabled in /etc/wsl.conf?",
     );
     process.exit(1);
@@ -124,8 +123,8 @@ async function wingetPath(): Promise<string> {
   const win = `${la.out.trim()}\\Microsoft\\WindowsApps\\winget.exe`;
   const w = await run(["wslpath", "-u", win], INTEROP_MS);
   const p = w.out.trim();
-  if (p === "" || !existsSync(p)) {
-    console.log(
+  if (p === "" || !(await exists(p))) {
+    consola.error(
       `winget.exe not found at ${win} — is App Installer (winget) installed on Windows?`,
     );
     process.exit(1);
@@ -165,7 +164,7 @@ function must<S extends z.ZodType>(
 ): z.output<S> {
   const checked = schema.safeParse(value);
   if (checked.success) return checked.data;
-  console.log(
+  consola.error(
     `  ${what} is not the expected shape — nothing written: ${checked.error.message}`,
   );
   return process.exit(1);
@@ -173,7 +172,7 @@ function must<S extends z.ZodType>(
 
 async function dump(): Promise<void> {
   const { win, wsl } = await scratch();
-  console.log(
+  consola.info(
     "• winget export (resolving every installed package against its source)",
   );
   const winget = await wingetPath();
@@ -182,7 +181,7 @@ async function dump(): Promise<void> {
     EXPORT_MS,
   );
   if (r.timedOut) {
-    console.log(`  timed out after ${EXPORT_MS / 1000}s — nothing written`);
+    consola.error(`  timed out after ${EXPORT_MS / 1000}s — nothing written`);
     process.exit(1);
   }
   // winget reports each unmanageable package on its own line; surface the COUNT so a shrinking
@@ -192,8 +191,8 @@ async function dump(): Promise<void> {
     .filter((l) =>
       /not available from any source|どのソースからも/u.test(l),
     ).length;
-  if (!existsSync(wsl)) {
-    console.log(
+  if (!(await exists(wsl))) {
+    consola.error(
       `  winget produced no file (exit ${r.code}):\n${r.out.slice(0, 600)}`,
     );
     process.exit(1);
@@ -235,31 +234,33 @@ async function dump(): Promise<void> {
       ? doc
       : { ...doc, Sources: sortedSources.map((s) => s.src) };
   await Bun.write(repoFile, `${JSON.stringify(json, null, 2)}\n`);
-  console.log(
+  consola.success(
     `  ${total} packages across ${sortedSources.map((s) => `${s.name}(${s.count})`).join(", ")}`,
   );
   if (skipped > 0) {
-    console.log(
+    consola.warn(
       `  ${skipped} installed package(s) not exportable (no source resolves them) — winget's limit, not drift`,
     );
   }
-  console.log(`wrote ${repoFile}`);
-  console.log(
+  consola.success(`wrote ${repoFile}`);
+  consola.info(
     "Review with `git diff wsl/winget.win.json`; commit if the change is intended.",
   );
 }
 
 async function restore(dryRun: boolean): Promise<void> {
-  if (!existsSync(repoFile)) {
-    console.log(
+  if (!(await exists(repoFile))) {
+    consola.error(
       `missing ${repoFile} — run \`mise run wsl:winget:dump\` on a configured host first`,
     );
     process.exit(1);
   }
   const { win, wsl } = await scratch();
-  const staged = copyFile(repoFile, wsl);
+  const staged = await fromAsyncThrowable(() => copyFile(repoFile, wsl))();
   if (staged.isErr()) {
-    console.log(`could not stage manifest at ${wsl}: ${String(staged.error)}`);
+    consola.error(
+      `could not stage manifest at ${wsl}: ${String(staged.error)}`,
+    );
     process.exit(1);
   }
   const winget = await wingetPath();
@@ -274,21 +275,21 @@ async function restore(dryRun: boolean): Promise<void> {
     "--no-upgrade",
   ];
   if (dryRun) {
-    console.log(`[dry-run] would run: ${args.join(" ")}`);
+    consola.info(`[dry-run] would run: ${args.join(" ")}`);
     return;
   }
-  console.log(
+  consola.info(
     "• winget import — installs anything in the manifest that is missing; never upgrades",
   );
   const r = await run(args, IMPORT_MS);
   if (r.timedOut) {
-    console.log(
+    consola.error(
       `  timed out after ${IMPORT_MS / 1000}s — partial install is possible; re-run to continue`,
     );
     process.exit(1);
   }
-  console.log(r.out.trim().split("\n").slice(-12).join("\n"));
-  console.log(`winget import exit ${r.code}`);
+  consola.info(r.out.trim().split("\n").slice(-12).join("\n"));
+  consola.info(`winget import exit ${r.code}`);
   if (r.code !== 0) process.exit(1);
 }
 
@@ -326,7 +327,7 @@ async function main(): Promise<Result<void, Error>> {
 const attempted = await fromAsyncThrowable(main)();
 if (attempted.isErr()) {
   const error = attempted.error;
-  console.error(
+  consola.error(
     `FATAL: ${error instanceof Error ? error.message : String(error)}`,
   );
   process.exit(1);
@@ -334,7 +335,7 @@ if (attempted.isErr()) {
 const result = attempted.value;
 if (result.isErr()) {
   const error = result.error;
-  console.error(
+  consola.error(
     `FATAL: ${error instanceof Error ? error.message : String(error)}`,
   );
   process.exit(error instanceof UsageError ? 2 : 1);

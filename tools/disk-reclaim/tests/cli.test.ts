@@ -350,14 +350,14 @@ test("worker mutating commands refuse non-tmp HOME and state before touching any
   const candidate = join(root, "candidate");
   mkdirSync(candidate);
   writeFileSync(join(candidate, "data"), "fixture");
-  const realHome = process.env["HOME"] ?? root;
+  const nonTmpHome = resolve(import.meta.dir, "../worker-guard-test-home");
   const testConfig = cliEnv(root);
   const workerEnv = {
     ...testConfig,
     [AGX_WORKER_ENV]: AGX_WORKER_VALUE,
-    HOME: realHome,
+    HOME: nonTmpHome,
     RECLAIM_STATE_DIR: join(
-      realHome,
+      nonTmpHome,
       ".local/state/disk-reclaim-worker-guard-test",
     ),
   };

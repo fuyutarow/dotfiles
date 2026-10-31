@@ -188,26 +188,20 @@ test.each([0.01, 1, -1])(
   },
 );
 
-test("GPU current value is colored and average and stale detail are secondary", () => {
+test("GPU current value is colored and stale detail is secondary", () => {
   expect(
     memSegment("VRAM", {
       pct: 5,
       frac: "3.5/12.0G",
       gpuNow: 95,
-      gpuAvg15: 80,
-      gpuSamples15: 10,
       stale: { secs: 90, why: "timeout" },
     }),
   ).toBe(
-    `VRAM ${green} 5%${reset} ${dim}(3.5/12.0G)${reset} GPU ${red}95%${reset} ${dim}(15m avg 80%)${reset} ${dim}stale 90s (timeout)${reset}`,
+    `VRAM ${green} 5%${reset} ${dim}(3.5/12.0G)${reset} GPU ${red}95%${reset} ${dim}stale 90s (timeout)${reset}`,
   );
 });
 
-const gpuRow = (gpu: {
-  gpuNow?: number;
-  gpuAvg15?: number | null;
-  gpuSamples15?: number;
-}) =>
+const gpuRow = (gpu: { gpuNow?: number }) =>
   Bun.stripANSI(
     sysSegment(
       ok(1),
@@ -217,15 +211,7 @@ const gpuRow = (gpu: {
       [],
     ),
   );
-test("GPU wording covers rounded equality, sparse samples and absence", () => {
-  expect(gpuRow({ gpuNow: 43, gpuAvg15: 38, gpuSamples15: 4 })).toContain(
-    "GPU 43% (15m avg 38%)",
-  );
-  expect(gpuRow({ gpuNow: 43.2, gpuAvg15: 43.4, gpuSamples15: 4 })).toContain(
-    "GPU 43% · VRAM",
-  );
-  expect(gpuRow({ gpuNow: 43, gpuAvg15: null, gpuSamples15: 2 })).toContain(
-    "GPU 43% (2 samples)",
-  );
+test("GPU wording shows the latest value or its absence", () => {
+  expect(gpuRow({ gpuNow: 43.2 })).toContain("GPU 43% · VRAM");
   expect(gpuRow({})).toContain("GPU n/a (no GPU sample)");
 });

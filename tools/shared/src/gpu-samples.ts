@@ -21,9 +21,7 @@ export const GpuSampleSchema = Memory.extend({
 export type GpuSample = z.output<typeof GpuSampleSchema>;
 export const GpuReadingSchema = Memory.extend({
   nowPct: Pct,
-  avg15Pct: Pct.nullable(),
   avg60Pct: Pct.nullable(),
-  samples15: z.number().int().nonnegative(),
 });
 export type GpuReading = z.output<typeof GpuReadingSchema>;
 
@@ -51,12 +49,9 @@ export function gpuEstimate(
   const last = retained.at(-1);
   if (last === undefined) return "unknown";
   const window = (ms: number) => retained.filter((s) => now - s.ts <= ms);
-  const recent = window(15 * 60_000);
   const parsed = GpuReadingSchema.safeParse({
     nowPct: last.utilPct,
-    avg15Pct: mean(recent),
     avg60Pct: mean(window(60 * 60_000)),
-    samples15: recent.length,
     memUsedGiB: last.memUsedGiB,
     memTotalGiB: last.memTotalGiB,
   });

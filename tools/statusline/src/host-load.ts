@@ -70,8 +70,6 @@ function vramFromState(
     : ok({
         ...reading,
         gpuNow: d.nowPct,
-        gpuAvg15: d.avg15Pct,
-        gpuSamples15: d.samples15,
       });
 }
 // Host RAM, Linux only (reads /proc/meminfo — instant, no subprocess). MemAvailable (not

@@ -22,21 +22,8 @@ export const STALE_SHOW_S = 60;
 function gpuSegment(m: MemReading): string {
   if (m.gpuNow === undefined)
     return roles.unavailable("GPU", unavailable("no GPU sample"));
-  const { pct, text, col } = pctFmt(m.gpuNow);
-  const details: string[] = [];
-  if (
-    m.gpuAvg15 !== null &&
-    m.gpuAvg15 !== undefined &&
-    Math.round(m.gpuAvg15) !== pct
-  )
-    details.push(`15m avg ${Math.round(m.gpuAvg15)}%`);
-  if (m.gpuSamples15 !== undefined && m.gpuSamples15 < 3)
-    details.push(
-      `${m.gpuSamples15} ${m.gpuSamples15 === 1 ? "sample" : "samples"}`,
-    );
-  const context =
-    details.length > 0 ? ` ${roles.secondary(`(${details.join(", ")})`)}` : "";
-  return `${roles.label("GPU")} ${roles.value(`${text}%`, col)}${context}`;
+  const { text, col } = pctFmt(m.gpuNow);
+  return `${roles.label("GPU")} ${roles.value(`${text}%`, col)}`;
 }
 
 export function memSegment(

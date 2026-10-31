@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.23 — 2026-11-01
+
+- Show only current GPU utilization in the statusline.
+
 ## 0.22.22 — 2026-11-01
 
 - Show current GPU utilization with recent average context

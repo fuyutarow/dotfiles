@@ -38,7 +38,7 @@ const sources = {
     Promise.resolve({
       cpuPct: ok(85),
       ram: ok({ pct: 55, frac: "5.5/10G" }),
-      vram: ok({ pct: 65, frac: "6.5/10G", gpuAvg15: 75, gpuSamples15: 3 }),
+      vram: ok({ pct: 65, frac: "6.5/10G" }),
       tmpfs: ok({ availableBytes: 1073741824, freeInodes: 1000 }),
       tmp: [
         {

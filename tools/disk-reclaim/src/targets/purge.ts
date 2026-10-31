@@ -289,7 +289,8 @@ export function createPurgeTarget(
           error: "missing graveyard path",
         };
       const plannedEntry = candidate.action.argv[1] === candidate.path;
-      const entryCount = countEntries(candidate.path) + (plannedEntry ? 1 : 0);
+      const entryCount =
+        (await countEntries(candidate.path)) + (plannedEntry ? 1 : 0);
       let freed = 0;
       let removedEntries = 0;
       let removedBytes = 0;
@@ -321,7 +322,7 @@ export function createPurgeTarget(
             protectedPaths: ctx.config.protected ?? [],
             ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
           },
-          progress: removeTreeProgress(entry, null, ctx),
+          progress: await removeTreeProgress(entry, null, ctx),
         });
         ctx.reportRemoval?.(result);
         freed += result.statfs_bytes_freed;

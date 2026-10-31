@@ -310,7 +310,7 @@ export async function deleteApproved(paths: string[], options: Options) {
     };
     actions.push(action);
     const result = await removeTree(row.path, {
-      progress: removeTreeProgress(row.path, row.bytes, options.progress),
+      progress: await removeTreeProgress(row.path, row.bytes, options.progress),
       uid: process.getuid?.() ?? 0,
       graveyard: row.path !== graveyard && beneath(graveyard, row.path),
       protection: {

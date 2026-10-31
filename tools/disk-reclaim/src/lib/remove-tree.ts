@@ -115,7 +115,7 @@ const estimatedBytes = (path: string): number => {
     );
 };
 
-export function removeTreeProgress(
+export async function removeTreeProgress(
   path: string,
   bytes: number | null,
   context?: {
@@ -124,18 +124,19 @@ export function removeTreeProgress(
     targetName?: string | undefined;
     reportProgress?: ContextProgress | undefined;
   },
-):
+): Promise<
   | false
   | {
       entries: number;
       bytes: number;
       tty: boolean;
       onProgress: (entries: number, bytes: number, done: boolean) => void;
-    } {
+    }
+> {
   if (context?.progress === false) return false;
   const totalBytes = bytes ?? estimatedBytes(path);
   return {
-    entries: countEntries(path) + 1,
+    entries: (await countEntries(path)) + 1,
     bytes: totalBytes,
     tty: context?.progressTty === true,
     onProgress: (entries, currentBytes, done) =>

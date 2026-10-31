@@ -164,13 +164,13 @@ async function storeCandidates(
   return candidates;
 }
 
-function gather(
+async function gather(
   store: string,
   name: string,
   root: string,
   ctx: Context,
   options: WorkspacesOptions,
-): WorkspaceFacts {
+): Promise<WorkspaceFacts> {
   checkScanDeadline(ctx);
   const snapshot = ctx.liveness ?? createLivenessSnapshot(ctx.config);
   const open = (options.openPaths ?? snapshot.openPaths)(root);
@@ -250,7 +250,7 @@ function gather(
   );
   let foreign: string[] | null = null;
   if (tracked.ok) {
-    const scan = scanWorkspace(
+    const scan = await scanWorkspace(
       root,
       tracked.stdout.split("\n").filter((l) => l !== ""),
       ctx.config.regenerable_ignored,
@@ -394,7 +394,7 @@ async function evaluate(
       "workspace directory",
     );
   }
-  const judged = judgeWorkspace(gather(store, name, root, ctx, options));
+  const judged = judgeWorkspace(await gather(store, name, root, ctx, options));
   return {
     id,
     path: root,
@@ -642,7 +642,7 @@ export function createWorkspacesTarget(
           protectedPaths: ctx.config.protected ?? [],
           ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
         },
-        progress: removeTreeProgress(path, candidate.bytes, ctx),
+        progress: await removeTreeProgress(path, candidate.bytes, ctx),
       });
       return {
         ok: removed.ok,

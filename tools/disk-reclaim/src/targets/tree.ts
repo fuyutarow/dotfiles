@@ -235,7 +235,7 @@ export async function deleteTree(candidate: Candidate, ctx: Context) {
       protectedPaths: ctx.config.protected ?? [],
       ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
     },
-    progress: removeTreeProgress(candidate.path, candidate.bytes, ctx),
+    progress: await removeTreeProgress(candidate.path, candidate.bytes, ctx),
   });
   return {
     ok: result.ok,

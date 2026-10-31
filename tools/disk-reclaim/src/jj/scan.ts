@@ -1,6 +1,6 @@
-import { lstatSync, readdirSync } from "node:fs";
+import { lstat, readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
+import { fromAsyncThrowable } from "neverthrow";
 import { checkScanDeadline } from "../lib/scan-cache.ts";
 
 export type Scan = {
@@ -21,12 +21,12 @@ export const regenerable = (rel: string, patterns: string[]): boolean =>
  * non-tracked entry is ignored, so ignored files need no .gitignore parser: each untracked entry
  * must be regenerable. Only directories that hold tracked files are descended.
  */
-export function scanWorkspace(
+export async function scanWorkspace(
   root: string,
   tracked: string[],
   patterns: string[],
   treeStateMs: number | null,
-): Scan {
+): Promise<Scan> {
   const files = new Set(tracked);
   const dirs = new Set<string>();
   for (const file of tracked) {
@@ -34,10 +34,10 @@ export function scanWorkspace(
       dirs.add(file.slice(0, i));
   }
   const scan: Scan = { newer: [], foreign: [] };
-  const visit = (rel: string) => {
+  const visit = async (rel: string): Promise<void> => {
     checkScanDeadline();
-    const names = fromThrowable(() =>
-      readdirSync(rel === "" ? root : join(root, rel)),
+    const names = await fromAsyncThrowable(() =>
+      readdir(rel === "" ? root : join(root, rel)),
     )();
     if (names.isErr()) {
       scan.foreign.push(`${rel.length > 0 ? rel : "."} (unreadable)`);
@@ -47,7 +47,7 @@ export function scanWorkspace(
       if (rel.length === 0 && (name === ".jj" || name === ".git")) continue;
       const child = rel === "" ? name : `${rel}/${name}`;
       const abs = join(root, child);
-      const statResult = fromThrowable(() => lstatSync(abs))();
+      const statResult = await fromAsyncThrowable(() => lstat(abs))();
       if (statResult.isErr()) continue;
       const stat = statResult.value;
       if (
@@ -60,20 +60,20 @@ export function scanWorkspace(
       }
       if (files.has(child)) continue;
       if (dirs.has(child) && stat.isDirectory()) {
-        visit(child);
+        await visit(child);
         continue;
       }
       if (regenerable(child, patterns)) continue;
-      if (stat.isDirectory() && !stat.isSymbolicLink() && isEmpty(abs))
+      if (stat.isDirectory() && !stat.isSymbolicLink() && (await isEmpty(abs)))
         continue;
       scan.foreign.push(child);
     }
   };
-  visit("");
+  await visit("");
   return scan;
 }
 
-function isEmpty(path: string): boolean {
-  const entries = fromThrowable(() => readdirSync(path))();
+async function isEmpty(path: string): Promise<boolean> {
+  const entries = await fromAsyncThrowable(() => readdir(path))();
   return entries.isOk() && entries.value.length === 0;
 }

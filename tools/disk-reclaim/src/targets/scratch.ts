@@ -138,7 +138,7 @@ export function createScratchTarget(options: ScratchTargetOptions = {}) {
   const bytes = options.bytes ?? candidateBytes;
   const remove =
     options.remove ??
-    ((path, ownerUid, ctx) =>
+    (async (path, ownerUid, ctx) =>
       removeTree(path, {
         uid: ownerUid,
         protection: {
@@ -151,7 +151,7 @@ export function createScratchTarget(options: ScratchTargetOptions = {}) {
           protectedPaths: ctx?.config.protected ?? [],
           ignoreUnreadableProcs: ctx?.config.ignore_unreadable_procs ?? [],
         },
-        progress: removeTreeProgress(path, null, ctx),
+        progress: await removeTreeProgress(path, null, ctx),
       }));
   const verdicts = {
     dead: "RECLAIM",

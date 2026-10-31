@@ -62,7 +62,7 @@ describe("scanWorkspace", () => {
     expect(regenerable("a/.julia/compiled", [".julia/compiled"])).toBe(true);
     expect(regenerable(".env", ["target"])).toBe(false);
   });
-  test("untracked entries must be regenerable, including nested ones; empty dirs are fine", () => {
+  test("untracked entries must be regenerable, including nested ones; empty dirs are fine", async () => {
     const root = tempRoot("reclaim-scan-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -75,7 +75,7 @@ describe("scanWorkspace", () => {
     writeFileSync(join(root, "src/lib.ts"), "x");
     writeFileSync(join(root, "src/.env"), "secret");
     writeFileSync(join(root, "node_modules/p/i.js"), "x");
-    const scan = scanWorkspace(
+    const scan = await scanWorkspace(
       root,
       ["src/lib.ts"],
       ["node_modules"],
@@ -84,7 +84,7 @@ describe("scanWorkspace", () => {
     expect(scan.foreign).toEqual(["src/.env"]);
     expect(scan.newer).toEqual([]);
     expect(
-      scanWorkspace(root, ["src/lib.ts"], ["node_modules"], 1).newer,
+      (await scanWorkspace(root, ["src/lib.ts"], ["node_modules"], 1)).newer,
     ).toEqual(["src/lib.ts"]);
   });
 });

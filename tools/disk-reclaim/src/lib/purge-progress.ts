@@ -1,15 +1,16 @@
-import { readdirSync, type Dirent } from "node:fs";
+import { readdir } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import { join } from "node:path";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
+import { fromAsyncThrowable } from "neverthrow";
 
-export function countEntries(dir: string): number {
+export async function countEntries(dir: string): Promise<number> {
   let n = 0;
   const stack = [dir];
   while (stack.length > 0) {
     const d = stack.pop();
     if (d === undefined) continue;
-    const result = fromThrowable(() =>
-      readdirSync(d, { withFileTypes: true }),
+    const result = await fromAsyncThrowable(() =>
+      readdir(d, { withFileTypes: true }),
     )();
     if (result.isErr()) continue;
     const ents: Dirent[] = result.value;

@@ -638,13 +638,13 @@ test("existing graveyards retain only present directories and allow no matches",
   expect(existingGraveyards(candidates, () => false)).toEqual([]);
 });
 
-test("purge progress counts nested entries and symlinks without following links", () => {
+test("purge progress counts nested entries and symlinks without following links", async () => {
   const root = tempRoot("disk-reclaim-count-");
   mkdirSync(join(root, "a", "b"), { recursive: true });
   writeFileSync(join(root, "a", "b", "f"), "x");
   symlinkSync("/", join(root, "loop"));
-  expect(countEntries(root)).toBe(4);
-  expect(countEntries(join(root, "missing"))).toBe(0);
+  expect(await countEntries(root)).toBe(4);
+  expect(await countEntries(join(root, "missing"))).toBe(0);
 });
 
 test("interactive purge refuses without a terminal before touching fixture graveyards", async () => {

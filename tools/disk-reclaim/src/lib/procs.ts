@@ -5,6 +5,7 @@ import {
   readlinkSync,
   statSync,
 } from "node:fs";
+import { consola } from "consola";
 import { basename, join, resolve } from "node:path";
 import { fromThrowable, z } from "@dotfiles/shared/src/zod.ts";
 
@@ -102,7 +103,7 @@ function traceUnknown(
 ): void {
   const pid = /pid (\d+)/u.exec(item.detail)?.[1];
   if (pid === undefined) {
-    console.error(`proc scan unknown uid=${item.uid}: ${item.detail}`);
+    consola.error(`proc scan unknown uid=${item.uid}: ${item.detail}`);
     return;
   }
   const base = join(root, pid);

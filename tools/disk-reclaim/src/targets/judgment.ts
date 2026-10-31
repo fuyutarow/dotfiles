@@ -112,7 +112,7 @@ export const judgment: Target = {
         protectedPaths: ctx.config.protected ?? [],
         ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
       },
-      progress: removeTreeProgress(c.path, c.bytes, ctx),
+      progress: await removeTreeProgress(c.path, c.bytes, ctx),
     });
     for (const refusal of r.refused)
       ctx.log(

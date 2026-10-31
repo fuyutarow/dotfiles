@@ -272,6 +272,7 @@
       "dependencies": {
         "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
+        "consola": "3.4.2",
         "neverthrow": "8.2.0",
         "ts-pattern": "5.9.0",
       },
@@ -383,7 +384,7 @@
     },
     "tools/statusline": {
       "name": "@dotfiles/statusline",
-      "version": "0.22.11",
+      "version": "0.22.12",
       "bin": {
         "statusline": "src/statusline.ts",
       },

@@ -15,6 +15,7 @@ export const SessionStatusSchema = z.object({
       inputTokens: z.number().optional(),
       usedPercent: z.number().optional(),
       compactWindow: z.number().optional(),
+      modelWindow: z.number().optional(),
     })
     .optional(),
 });
@@ -32,6 +33,7 @@ export interface SessionStatus {
         inputTokens?: number | undefined;
         usedPercent?: number | undefined;
         compactWindow?: number | undefined;
+        modelWindow?: number | undefined;
       }
     | undefined;
   effort?: string | undefined;

@@ -60,6 +60,10 @@ function contextTokens(window: {
   );
 }
 
+function modelWindow(value: number | undefined): number | undefined {
+  return value !== undefined && value > 0 ? value : undefined;
+}
+
 // Claude Code's stdin contract ends here. The transformed output is the provider-neutral input
 // consumed by buildDataframe(); keep the wire keys out of the common statusline model.
 export const ClaudeStatuslineInputSchema = z
@@ -75,6 +79,7 @@ export const ClaudeStatuslineInputSchema = z
     context_window: maybe(
       z.object({
         total_input_tokens: maybe(z.number()),
+        context_window_size: maybe(z.number()),
         current_usage: maybe(
           z.object({
             input_tokens: maybe(z.number()),
@@ -120,6 +125,7 @@ export const ClaudeStatuslineInputSchema = z
             inputTokens: contextTokens(input.context_window),
             usedPercent: input.context_window.used_percentage,
             compactWindow: compactWindow(input.model?.id),
+            modelWindow: modelWindow(input.context_window.context_window_size),
           },
     effort: input.effort?.level,
     rateLimits:

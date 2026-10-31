@@ -8,6 +8,12 @@ function tokenLabel(n: number): string {
   if (rounded >= 1000) return `${(rounded / 1000).toPrecision(3)}k`;
   return String(rounded);
 }
+function windowLabel(n: number): string {
+  const rounded = Number(n.toPrecision(3));
+  if (rounded >= 1_000_000) return `${rounded / 1_000_000}M`;
+  if (rounded >= 1000) return `${rounded / 1000}k`;
+  return String(rounded);
+}
 function firstNonEmpty(primary: string | undefined, fallback: string): string {
   return primary !== undefined && primary !== "" ? primary : fallback;
 }
@@ -35,7 +41,7 @@ export function ctxSegment(
       observed(`${ESC}[${col}m${pct}%${RST}`),
     );
     if (df.ctxWindow !== undefined && df.ctx !== undefined) {
-      seg = `${label} ${percentage} (${tokens}/${tokenLabel(df.ctxWindow)})`;
+      seg = `${label} ${percentage} (${tokens}/${windowLabel(df.ctxWindow)})`;
     } else {
       const suffix =
         df.ctxWindow === undefined ? "" : `/${df.ctxWindow / 1000}k`;

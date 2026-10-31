@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.9 — 2026-10-31
+
+- Show the model context window when auto-compact is not configured.
+
 ## 0.22.8 — 2026-10-31
 
 - Display context usage in percentage-first order with three-significant-figure token labels.

@@ -473,7 +473,7 @@ export async function buildDataframe(
     ctxWindow:
       data.context?.inputTokens === undefined
         ? undefined
-        : data.context.compactWindow,
+        : (data.context.compactWindow ?? data.context.modelWindow),
     rl5: data.rateLimits?.fiveHour?.usedPercent,
     rl5Reset: data.rateLimits?.fiveHour?.resetsAt,
     rl7: data.rateLimits?.sevenDay?.usedPercent,

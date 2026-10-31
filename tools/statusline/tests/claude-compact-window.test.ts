@@ -12,7 +12,11 @@ const directory = mkdtempSync(
   join(process.env["AGX_RUN_DIR"] ?? tmpdir(), "compact-test-"),
 );
 
-function parse(settings: string, model = "claude-opus-5-5") {
+function parse(
+  settings: string,
+  model = "claude-opus-5-5",
+  modelWindow?: number,
+) {
   writeFileSync(join(directory, "settings.json"), settings);
   const previous = process.env["CLAUDE_CONFIG_DIR"];
   process.env["CLAUDE_CONFIG_DIR"] = directory;
@@ -21,6 +25,7 @@ function parse(settings: string, model = "claude-opus-5-5") {
     context_window: {
       current_usage: { input_tokens: 120000 },
       used_percentage: 12,
+      context_window_size: modelWindow,
     },
   });
   if (previous === undefined) delete process.env["CLAUDE_CONFIG_DIR"];
@@ -57,6 +62,19 @@ describe("Claude auto-compact window", () => {
     const result = ctxSegment({ ctx: "168k", ctxPct: 42, ctxWindow: 400500 });
     expect(result.replaceAll(ansi, "")).toBe("Ctx: 42% (168k/401k)");
     expect(result).toContain(`${String.fromCodePoint(27)}[38;5;71m42%`);
+    for (const [value, label] of [
+      [1000000, "1M"],
+      [400000, "400k"],
+      [200000, "200k"],
+      [123456, "123k"],
+    ] as const) {
+      expect(
+        ctxSegment({ ctx: "120k", ctxPct: 12, ctxWindow: value }).replaceAll(
+          ansi,
+          "",
+        ),
+      ).toBe(`Ctx: 12% (120k/${label})`);
+    }
     expect(
       ctxSegment({ ctx: "120k", ctxPct: 12, ctxWindow: undefined }).replaceAll(
         ansi,
@@ -72,7 +90,7 @@ describe("Claude auto-compact window", () => {
     }
   });
   test("dataframe computes the displayed percentage from the parsed window", async () => {
-    const session = parse(settings);
+    const session = parse(settings, "claude-opus-5-5", 1000000);
     expect(session).toBeDefined();
     if (session === undefined) return;
     const frame = await buildDataframe(session, {
@@ -107,5 +125,44 @@ describe("Claude auto-compact window", () => {
       },
     });
     expect(ctxSegment(frame).replaceAll(ansi, "")).toBe("Ctx: 30% (120k/400k)");
+    const modelOnly = parse("{}", "claude-opus-5-5", 1000000);
+    expect(modelOnly?.context?.modelWindow).toBe(1000000);
+    if (modelOnly === undefined) return;
+    const modelFrame = await buildDataframe(modelOnly, {
+      sources: {
+        identity: () =>
+          Promise.resolve({
+            email: undefined,
+            accountWhy: undefined,
+            rlModel: [],
+            modelCapsWhy: undefined,
+            wfOn: false,
+          }),
+        agentName: () => Promise.resolve(ok(undefined)),
+        rcState: () => Promise.resolve("off"),
+        repoState: () =>
+          Promise.resolve({ branch: undefined, branchWhy: undefined }),
+        jobScan: () => Promise.resolve({ jobs: [], orphans: 0 }),
+        hostLoad: () =>
+          Promise.resolve({
+            cpuPct: ok(0),
+            ram: ok({ frac: "0/1G", pct: 0 }),
+            vram: undefined,
+          }),
+        routes: () => Promise.resolve(undefined),
+        dispatchWarning: () => Promise.resolve(undefined),
+        storage: () => Promise.resolve(ok([])),
+        herdrReport: () => Promise.resolve(),
+        codexRate: () => Promise.resolve(ok(undefined)),
+        jevUsage: () => Promise.resolve(ok(undefined)),
+        recoverHealth: () => Promise.resolve(undefined),
+      },
+    });
+    expect(ctxSegment(modelFrame).replaceAll(ansi, "")).toBe(
+      "Ctx: 12% (120k/1M)",
+    );
+    expect(
+      parse("{}", "claude-opus-5-5", 0)?.context?.modelWindow,
+    ).toBeUndefined();
   });
 });

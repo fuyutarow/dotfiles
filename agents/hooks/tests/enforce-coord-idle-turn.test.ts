@@ -153,7 +153,7 @@ const commands = (
 test("registry wires the hook only to Claude Stop", async () => {
   const { loadRegistry, wire } =
     await import("../../../scripts/hook-registry.ts");
-  const registry = loadRegistry(join(import.meta.dir, ".."));
+  const registry = await loadRegistry(join(import.meta.dir, ".."));
   expect(registry.errors).toEqual([]);
   const claude = wire({}, registry.specs, "claude");
   const codex = wire({}, registry.specs, "codex");

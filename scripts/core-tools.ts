@@ -1,5 +1,5 @@
 // Brewfile.core owns the package list; tool-tiers owns its command map; this checks prefixes.
-import { realpathSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { LAND_HOSTS } from "./config-registry.ts";
@@ -62,23 +62,27 @@ export function prefixPaths(prefix: string): string[] {
     join(prefix, "opt/rustup/bin"),
   ];
 }
-export function corePathProblems(
+export async function corePathProblems(
   commands: readonly string[],
   prefix: string,
   path: string,
-): string[] {
+): Promise<string[]> {
   const physicalPrefix =
     Bun.which(join(prefix, "bin/brew")) === null
       ? undefined
-      : realpathSync(prefix);
-  return commands.flatMap((command) => {
-    const resolved = Bun.which(command, { PATH: path });
-    // Shared hosts can expose HOME through a mount alias (/home2 vs /export/home/home2).
-    // Ownership is filesystem identity, not whichever spelling shellenv returns.
-    return resolved !== null &&
-      physicalPrefix !== undefined &&
-      realpathSync(resolved).startsWith(`${physicalPrefix}/`)
-      ? []
-      : [`${command}: ${resolved ?? "missing"} (expected ${prefix}/)`];
-  });
+      : await realpath(prefix);
+  return Promise.all(
+    commands.map(async (command) => {
+      const resolved = Bun.which(command, { PATH: path });
+      // Shared hosts can expose HOME through a mount alias (/home2 vs /export/home/home2).
+      // Ownership is filesystem identity, not whichever spelling shellenv returns.
+      const physicalResolved =
+        resolved === null ? undefined : await realpath(resolved);
+      return resolved !== null &&
+        physicalPrefix !== undefined &&
+        (physicalResolved?.startsWith(`${physicalPrefix}/`) ?? false)
+        ? null
+        : `${command}: ${resolved ?? "missing"} (expected ${prefix}/)`;
+    }),
+  ).then((problems) => problems.filter((problem) => problem !== null));
 }

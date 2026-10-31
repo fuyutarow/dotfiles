@@ -63,18 +63,18 @@ test("core Brewfile commands include agx and semlint on every host", async () =>
   expect(await coreCommands(root, { isWsl: true })).toEqual(["agx", "semlint"]);
 });
 
-test("doctor command paths require agx and semlint under the Homebrew prefix", () => {
+test("doctor command paths require agx and semlint under the Homebrew prefix", async () => {
   const home = fixture();
   const prefix = join(home, "brew");
   const bin = join(prefix, "bin");
   mkdirSync(bin, { recursive: true });
   for (const command of ["brew", "agx", "semlint"]) exe(join(bin, command));
-  expect(corePathProblems(["agx", "semlint"], prefix, bin)).toEqual([]);
-  expect(corePathProblems(["agx", "semlint"], prefix, "/usr/bin")).toHaveLength(
-    2,
-  );
+  expect(await corePathProblems(["agx", "semlint"], prefix, bin)).toEqual([]);
+  expect(
+    await corePathProblems(["agx", "semlint"], prefix, "/usr/bin"),
+  ).toHaveLength(2);
 });
-test("core provenance rejects legacy shadowing and an outside-target symlink", () => {
+test("core provenance rejects legacy shadowing and an outside-target symlink", async () => {
   const root = fixture();
   const prefix = join(root, "brew");
   const old = join(root, "old");
@@ -84,10 +84,12 @@ test("core provenance rejects legacy shadowing and an outside-target symlink", (
   mkdirSync(join(prefix, "bin"));
   exe(join(prefix, "bin/brew"));
   exe(join(old, "bat"));
-  expect(corePathProblems(["bat"], prefix, prefix)).toEqual([]);
-  expect(corePathProblems(["bat"], prefix, `${old}:${prefix}`)).toHaveLength(1);
+  expect(await corePathProblems(["bat"], prefix, prefix)).toEqual([]);
+  expect(
+    await corePathProblems(["bat"], prefix, `${old}:${prefix}`),
+  ).toHaveLength(1);
   symlinkSync(join(old, "bat"), join(prefix, "bun"));
-  expect(corePathProblems(["bun"], prefix, prefix)).toHaveLength(1);
+  expect(await corePathProblems(["bun"], prefix, prefix)).toHaveLength(1);
 });
 test("legacy cleanup retires only replaced downloader links and preserves experiment installs", async () => {
   const home = fixture();
@@ -175,7 +177,9 @@ test("WSL core command inventory includes the Homebrew Codex cask", async () => 
     'if OS.linux? && File.read("/proc/sys/kernel/osrelease").match?(/microsoft/iu)\n  cask "codex"\nend\n',
   );
   expect(await coreCommands(root, { isWsl: true })).toEqual(["codex"]);
-  expect(corePathProblems(["codex"], prefix, join(prefix, "bin"))).toEqual([]);
+  expect(
+    await corePathProblems(["codex"], prefix, join(prefix, "bin")),
+  ).toEqual([]);
   expect(await coreCommands(root, { isWsl: false })).toEqual([]);
 });
 

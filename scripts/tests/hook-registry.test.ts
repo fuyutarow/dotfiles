@@ -15,7 +15,7 @@ import {
 const ROOT = join(import.meta.dir, "..", "..");
 
 test("Codex metadata bridge is canonical, Codex-only and wired once without replacing external Herdr ownership", async () => {
-  const { specs, errors } = loadRegistry(join(ROOT, "agents/hooks"));
+  const { specs, errors } = await loadRegistry(join(ROOT, "agents/hooks"));
   expect(errors).toEqual([]);
   const metadata = specs.filter(
     (spec) => spec.script === "report-codex-herdr-metadata.ts",

@@ -2042,7 +2042,7 @@ export async function checkCoreTools(ctx: Ctx): Promise<Finding> {
   if (shell.missing || shell.timedOut || shell.code !== 0)
     return warn("core-tools", "cannot inspect login shell PATH");
   const path = shell.out.trim().split("\n").at(-1) ?? "";
-  const missing = corePathProblems(names, prefix, path);
+  const missing = await corePathProblems(names, prefix, path);
   const repair = "mise run install:tools";
   return missing.length === 0
     ? pass(

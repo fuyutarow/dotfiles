@@ -55,7 +55,7 @@ export function lintHookLauncher(source: string): string[] {
   return [];
 }
 
-export function lintHookSlugs(root: string): string[] {
+export async function lintHookSlugs(root: string): Promise<string[]> {
   const registry = loadSlugs(join(root, "agents/hooks/hooks.toml"));
   if (registry instanceof Error)
     return [`missing or invalid slug: ${registry.message}`];
@@ -131,7 +131,7 @@ export function lintHookSlugs(root: string): string[] {
         ),
       );
   }
-  const shared = loadRegistry(join(root, "agents/hooks"));
+  const shared = await loadRegistry(join(root, "agents/hooks"));
   errors.push(...shared.errors);
   for (const hook of shared.specs) {
     const identity = registry.identities.find(

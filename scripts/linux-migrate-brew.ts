@@ -60,7 +60,7 @@ export async function migrateLinuxbrew(
         .trim()
         .split("\n")
         .at(-1) ?? "";
-    const problems = corePathProblems(commands, prefix, path);
+    const problems = await corePathProblems(commands, prefix, path);
     if (problems.length > 0) {
       problems.forEach((problem) => {
         say(`${mode}: FAIL ${problem}`);

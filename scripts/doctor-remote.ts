@@ -17,7 +17,7 @@
 // whose sshd lacks StreamLocalBindUnlink would otherwise refuse the next real attach.
 // Consumer: a human or agent reading verdict lines. Exit: 0 no FAIL · 1 a FAIL · 2 usage/FATAL.
 
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
@@ -271,10 +271,7 @@ async function checkAgents(host: string): Promise<Finding> {
 // TZ whose zone file is missing would silently fall back to UTC — so this asks the clock itself.
 // The zone NAME is read from this checkout's zsh/timezone (its one home); the offset to expect is
 // that zone's offset NOW, in `date +%z` form, so a DST zone is judged at the moment of the probe.
-const ZONE = readFileSync(
-  join(import.meta.dir, "..", "zsh", "timezone"),
-  "utf8",
-).trim();
+const ZONE_PATH = join(import.meta.dir, "..", "zsh", "timezone");
 
 /** `date +%z` for `zone` at this instant: "+09:00" -> "+0900". */
 export function wantOffset(zone: string): string {
@@ -282,6 +279,7 @@ export function wantOffset(zone: string): string {
 }
 
 async function checkTimeZone(host: string): Promise<Finding> {
+  const ZONE = (await readFile(ZONE_PATH, "utf8")).trim();
   const want = wantOffset(ZONE);
   const probe = `echo "@@""TZOFF=$(date +%z)"; echo "@@""TZ=\${TZ:-unset}"; test -e /usr/share/zoneinfo/${ZONE} && echo "@@""ZONEFILE=yes" || echo "@@""ZONEFILE=no"`;
   const r = await run([...SSH, host, probe], null, 30_000);
@@ -442,7 +440,7 @@ export function managedWslConfigFinding(
 
 async function checkSmartOpen(host: string): Promise<Finding> {
   const configLocal = await Promise.try(() =>
-    readFileSync(join(homedir(), ".ssh", "config.local"), "utf8"),
+    readFile(join(homedir(), ".ssh", "config.local"), "utf8"),
   ).catch(() => "");
   const managedFinding = managedWslConfigFinding(host, configLocal);
   if (managedFinding !== undefined) return managedFinding;

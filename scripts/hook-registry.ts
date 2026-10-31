@@ -15,7 +15,7 @@
 // is rendered. `wire` still strips owned entries first, so a stale one left in a vendor file is
 // never doubled — and `mise run lint:one-writer` fails while one is there.
 
-import { existsSync, readFileSync } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 import { z } from "../agents/hooks/zod.ts";
 
 export const RUNNER = "~/.agents/hooks/run.sh";
@@ -115,14 +115,34 @@ export function parseRegistry(
 }
 
 /** The registry beside the hooks it names: parsed specs, or every error found. */
-export function loadRegistry(hooksDir: string): {
+export async function loadRegistry(hooksDir: string): Promise<{
   specs: HookSpec[];
   errors: string[];
-} {
-  return parseRegistry(
-    Bun.TOML.parse(readFileSync(`${hooksDir}/hooks.toml`, "utf8")),
-    (name) => existsSync(`${hooksDir}/${name}`),
-  );
+}> {
+  const raw = Bun.TOML.parse(await readFile(`${hooksDir}/hooks.toml`, "utf8"));
+  const registered = RegistrySchema.safeParse(raw);
+  const existence = new Map<string, boolean>();
+  if (registered.success) {
+    const names = registered.data.hook.flatMap((entry) => {
+      const parsed = JsonObject.safeParse(entry);
+      const script = parsed.success ? parsed.data["script"] : undefined;
+      return typeof script === "string" && /^[\w.-]+\.ts$/u.test(script)
+        ? [script]
+        : [];
+    });
+    await Promise.all(
+      [...new Set(names)].map(async (name) => {
+        existence.set(
+          name,
+          await access(`${hooksDir}/${name}`).then(
+            () => true,
+            () => false,
+          ),
+        );
+      }),
+    );
+  }
+  return parseRegistry(raw, (name) => existence.get(name) ?? false);
 }
 
 export function commandFor(spec: HookSpec): string {

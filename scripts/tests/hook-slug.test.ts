@@ -41,7 +41,7 @@ test("namespaced environment slug is emitted only once by both emitters", () => 
   expect(shell.stderr.toString()).toBe("[dotfiles:fixture] probe\n");
 });
 
-test("lint rejects missing, misplaced and wrong namespace command tokens", () => {
+test("lint rejects missing, misplaced and wrong namespace command tokens", async () => {
   const dir = fixture();
   const path = join(dir, "agents/claude/settings.json");
   const original = readFileSync(path, "utf8");
@@ -55,12 +55,14 @@ test("lint rejects missing, misplaced and wrong namespace command tokens", () =>
       path,
       original.replace("HOOK_SLUG=dotfiles:dispatch-contract ", replacement),
     );
-    expect(lintHookSlugs(dir).join("\n")).toContain("unlisted unowned command");
+    expect((await lintHookSlugs(dir)).join("\n")).toContain(
+      "unlisted unowned command",
+    );
   }
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("lint rejects bare prefixes in both shared emitters", () => {
+test("lint rejects bare prefixes in both shared emitters", async () => {
   const dir = fixture();
   for (const path of ["agents/hooks/lib.ts", "agents/hooks/slug.sh"]) {
     const file = join(dir, path);
@@ -71,7 +73,7 @@ test("lint rejects bare prefixes in both shared emitters", () => {
         .replaceAll("${HOOK_NAMESPACE}:", "")
         .replaceAll("dotfiles:%s", "%s"),
     );
-    expect(lintHookSlugs(dir).join("\n")).toContain("lacks namespaced");
+    expect((await lintHookSlugs(dir)).join("\n")).toContain("lacks namespaced");
     writeFileSync(file, original);
   }
   rmSync(dir, { recursive: true, force: true });
@@ -88,8 +90,8 @@ function fixture(): string {
   return dir;
 }
 
-test("all deployed owned hooks have unique identities and external hooks have explicit owners", () => {
-  expect(lintHookSlugs(root)).toEqual([]);
+test("all deployed owned hooks have unique identities and external hooks have explicit owners", async () => {
+  expect(await lintHookSlugs(root)).toEqual([]);
   const registry = loadSlugs();
   expect(registry).not.toBeInstanceOf(Error);
   if (registry instanceof Error) return;
@@ -123,7 +125,7 @@ test("a fixture hook renders for both Claude and Codex with its nested slug", as
       identity.script.endsWith("fixture-nested.ts"),
     )?.slug,
   ).toBe("agx:workspace-add");
-  const hooks = loadRegistry(hooksDir);
+  const hooks = await loadRegistry(hooksDir);
   expect(hooks.errors).toEqual([]);
   const spec = hooks.specs.find(
     (entry) => entry.script === "fixture-nested.ts",
@@ -146,17 +148,19 @@ test("a fixture hook renders for both Claude and Codex with its nested slug", as
   }
 });
 
-test("missing slug, duplicate slug and unlisted command each fail the lint", () => {
+test("missing slug, duplicate slug and unlisted command each fail the lint", async () => {
   const dir = fixture();
   const registry = join(dir, "agents/hooks/hooks.toml");
   const original = readFileSync(registry, "utf8");
   writeFileSync(registry, original.replace('slug = "model-floor"\n', ""));
-  expect(lintHookSlugs(dir).join("\n")).toContain("missing or invalid slug");
+  expect((await lintHookSlugs(dir)).join("\n")).toContain(
+    "missing or invalid slug",
+  );
   writeFileSync(
     registry,
     original.replace('slug = "model-floor"', 'slug = "storage-headroom"'),
   );
-  expect(lintHookSlugs(dir).join("\n")).toContain("duplicate slug");
+  expect((await lintHookSlugs(dir)).join("\n")).toContain("duplicate slug");
   writeFileSync(
     registry,
     original.replace(
@@ -164,11 +168,13 @@ test("missing slug, duplicate slug and unlisted command each fail the lint", () 
       "sh ~/.codex/unlisted.sh",
     ),
   );
-  expect(lintHookSlugs(dir).join("\n")).toContain("unlisted unowned command");
+  expect((await lintHookSlugs(dir)).join("\n")).toContain(
+    "unlisted unowned command",
+  );
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("raw literal and variable protocol emissions and raw stderr fail", () => {
+test("raw literal and variable protocol emissions and raw stderr fail", async () => {
   expect(lintHookLauncher('echo "raw diagnostic" >&2')).toHaveLength(1);
   expect(lintHookLauncher('printf \'{"reason":"raw"}\'')).toHaveLength(1);
   expect(lintHookLauncher('hook_stderr "diagnostic"')).toEqual([]);
@@ -186,7 +192,9 @@ test("raw literal and variable protocol emissions and raw stderr fail", () => {
     join(dir, "agents/hooks/enforce-model-floor.ts"),
     'console.log(JSON.stringify({permissionDecisionReason:"raw"}));',
   );
-  expect(lintHookSlugs(dir).join("\n")).toContain("raw protocol message");
+  expect((await lintHookSlugs(dir)).join("\n")).toContain(
+    "raw protocol message",
+  );
   rmSync(dir, { recursive: true, force: true });
 });
 

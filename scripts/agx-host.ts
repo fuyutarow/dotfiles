@@ -1,11 +1,14 @@
-import { existsSync, readFileSync } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cli } from "cleye";
+import { consola } from "consola";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 
 type ProbeSet = Readonly<{
-  isContainer: () => boolean;
-  unshareUserNamespace: () => Readonly<{ code: number; detail: string }>;
+  isContainer: () => boolean | Promise<boolean>;
+  unshareUserNamespace: () => Promise<
+    Readonly<{ code: number; detail: string }>
+  >;
 }>;
 
 type DeclarationOptions = Readonly<{
@@ -72,22 +75,27 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 
 export function hostDeclarationProbes(): ProbeSet {
   return {
-    isContainer: () => {
-      if (existsSync("/.dockerenv")) return true;
-      const cgroup = readFileSync("/proc/1/cgroup", "utf8");
+    isContainer: async () => {
+      const hasDockerMarker = await access("/.dockerenv").then(
+        () => true,
+        () => false,
+      );
+      if (hasDockerMarker) return true;
+      const cgroup = await readFile("/proc/1/cgroup", "utf8");
       return /docker|containerd/iu.test(cgroup);
     },
-    unshareUserNamespace: () => {
-      const result = Bun.spawnSync(["unshare", "-U", "true"], {
+    unshareUserNamespace: async () => {
+      const proc = Bun.spawn(["unshare", "-U", "true"], {
         stdout: "pipe",
         stderr: "pipe",
       });
+      const [stderr, code] = await Promise.all([
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
       return {
-        code: result.exitCode,
-        detail: result.stderr
-          .toString()
-          .trim()
-          .replaceAll(/[\r\n]+/gu, " "),
+        code,
+        detail: stderr.trim().replaceAll(/[\r\n]+/gu, " "),
       };
     },
   };
@@ -117,13 +125,13 @@ export async function declareRentedCodexHost(
     );
     return "invalid";
   }
-  if (!probes.isContainer()) {
+  if (!(await probes.isContainer())) {
     say(
       "not a container: /.dockerenv and /proc/1/cgroup have no container marker",
     );
     return "skipped";
   }
-  const unshare = probes.unshareUserNamespace();
+  const unshare = await probes.unshareUserNamespace();
   if (unshare.code === 0) {
     say("user namespaces are available: unshare -U true exited 0");
     return "skipped";
@@ -198,7 +206,7 @@ async function main(): Promise<void> {
     date: Temporal.Now.plainDateISO().toString(),
     probes: hostDeclarationProbes(),
     say: (line) => {
-      process.stdout.write(line + "\n");
+      consola.info(line);
     },
   });
   if (result === "invalid") process.exitCode = 1;

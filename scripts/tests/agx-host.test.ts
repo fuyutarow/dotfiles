@@ -41,10 +41,11 @@ async function run(
     date: "2026-10-08",
     probes: {
       isContainer: (): boolean => true,
-      unshareUserNamespace: () => ({
-        code: 1,
-        detail: "Operation not permitted",
-      }),
+      unshareUserNamespace: () =>
+        Promise.resolve({
+          code: 1,
+          detail: "Operation not permitted",
+        }),
     },
     say: (line) => {
       lines.push(line);
@@ -118,7 +119,8 @@ describe("released host command provisioning", () => {
       {
         probes: {
           isContainer: (): boolean => false,
-          unshareUserNamespace: () => ({ code: 1, detail: "denied" }),
+          unshareUserNamespace: () =>
+            Promise.resolve({ code: 1, detail: "denied" }),
         },
       },
     ],
@@ -127,7 +129,7 @@ describe("released host command provisioning", () => {
       {
         probes: {
           isContainer: (): boolean => true,
-          unshareUserNamespace: () => ({ code: 0, detail: "" }),
+          unshareUserNamespace: () => Promise.resolve({ code: 0, detail: "" }),
         },
       },
     ],

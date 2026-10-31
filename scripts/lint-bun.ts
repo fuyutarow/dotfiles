@@ -1,5 +1,5 @@
 // Production Bun script floor: selected jj snapshot bytes, or local production-surface scan.
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { access } from "node:fs/promises";
 import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -211,12 +211,17 @@ async function check(paths: string[], root: string): Promise<number> {
       }).catch(() => file);
     }),
   );
-  const result = Bun.spawnSync(["bun", checker, ...stagedPaths], {
+  const proc = Bun.spawn(["bun", checker, ...stagedPaths], {
     stdout: "pipe",
     stderr: "pipe",
     timeout: 300_000,
   });
-  let output = result.stdout.toString();
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  let output = stdout;
   for (const [staged, original] of replacements)
     output = output.replaceAll(staged, original);
   await rm(stage, { recursive: true, force: true });
@@ -246,14 +251,14 @@ async function check(paths: string[], root: string): Promise<number> {
   process.stdout.write(
     lines.filter((line, i) => line !== "" || i === lines.length - 1).join("\n"),
   );
-  process.stderr.write(result.stderr);
+  process.stderr.write(stderr);
   if (
-    result.exitCode === 1 &&
+    exitCode === 1 &&
     summary >= 0 &&
     (lines[summary] ?? "").startsWith("floor: FAIL=0 ")
   )
     return 0;
-  return result.exitCode ?? 2;
+  return exitCode;
 }
 
 // TESTS-OWN-TMP rides on this task because `lint` and `gate:land` already run it: the Bun-script
@@ -281,7 +286,7 @@ async function floor(): Promise<number> {
           cwd: process.cwd(),
           onlyFiles: true,
         })) {
-          if (path !== EXCLUDE && existsSync(path)) found.push(path);
+          if (path !== EXCLUDE && (await exists(path))) found.push(path);
         }
         return found;
       }),
@@ -297,8 +302,12 @@ async function floor(): Promise<number> {
       globs.some((glob) => glob.match(path)),
   );
   if (paths.length === 0) return check([], process.cwd());
-  const tmp = mkdtempSync(join(tmpdir(), "lint-bun-jj-"));
-  return Promise.try(() => {
+  const tmp = await mkdtemp(join(tmpdir(), "lint-bun-jj-"));
+  await using cleanup = new AsyncDisposableStack();
+  cleanup.defer(async () => {
+    await rm(tmp, { recursive: true, force: true });
+  });
+  return await Promise.try(() => {
     // Preserve dependency declarations/zero-dep markers used by the floor, with the candidate
     // version of each declaration; checker inputs themselves are always the selected REV bytes.
     const entries = new Map(
@@ -314,9 +323,14 @@ async function floor(): Promise<number> {
       paths.map((path) => join(tmp, path)),
       tmp,
     );
-  }).finally(() => {
-    rmSync(tmp, { recursive: true, force: true });
   });
+}
+
+async function exists(path: string): Promise<boolean> {
+  return Promise.try(() => access(path)).then(
+    () => true,
+    () => false,
+  );
 }
 
 process.exitCode = await main().catch((error: unknown) => {

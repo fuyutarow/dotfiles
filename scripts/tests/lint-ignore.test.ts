@@ -40,7 +40,7 @@ function compatibilityFixture(root: string): void {
   symlinkSync("presets/typescript/package.json", join(root, "file-link"));
 }
 
-test("tracked directory, empty-directory and file symlinks are checked by their own names", () => {
+test("tracked directory, empty-directory and file symlinks are checked by their own names", async () => {
   const root = temporary();
   compatibilityFixture(root);
   mkdirSync(join(root, "git"));
@@ -57,30 +57,30 @@ test("tracked directory, empty-directory and file symlinks are checked by their 
   expect(init.exitCode).toBe(0);
   const baseline = Bun.spawnSync(["jj", "new"], { cwd: root, timeout: 30_000 });
   expect(baseline.exitCode).toBe(0);
-  expect(ignoreFindings(root)).toEqual([]);
+  expect(await ignoreFindings(root)).toEqual([]);
 
   // A directory-only rule must not hide the symlink leaf, even when its target is a directory.
   writeFileSync(
     join(root, ".gitignore"),
     "# Owner: fixture\n/consumer-repo/\n",
   );
-  expect(ignoreFindings(root)).toEqual([]);
+  expect(await ignoreFindings(root)).toEqual([]);
   writeFileSync(
     join(root, ".gitignore"),
     "# Owner: fixture\n/consumer-repo\n/empty-link\n/file-link\n",
   );
-  expect(ignoreFindings(root)).toEqual([
+  expect(await ignoreFindings(root)).toEqual([
     "tracked path is ignored: consumer-repo",
     "tracked path is ignored: empty-link",
     "tracked path is ignored: file-link",
   ]);
 });
 
-test("clone copying preserves relative compatibility links and omits their enumerated descendants", () => {
+test("clone copying preserves relative compatibility links and omits their enumerated descendants", async () => {
   const root = temporary();
   const clone = temporary();
   compatibilityFixture(root);
-  copyCloneSources(root, clone, [
+  await copyCloneSources(root, clone, [
     "consumer-repo",
     "consumer-repo/package.json",
     "presets/typescript/package.json",
@@ -100,11 +100,11 @@ test("clone copying preserves relative compatibility links and omits their enume
   ).toBe("preset\n");
 });
 
-test("declared ignore rules do not hide tracked files", () => {
-  expect(ignoreFindings()).toEqual([]);
+test("declared ignore rules do not hide tracked files", async () => {
+  expect(await ignoreFindings()).toEqual([]);
 });
 
-test("AGX ticket files stay hidden while agent sources remain visible", () => {
+test("AGX ticket files stay hidden while agent sources remain visible", async () => {
   const root = temporary();
   mkdirSync(join(root, ".agents/tickets"), { recursive: true });
   mkdirSync(join(root, "agents/skills"), { recursive: true });
@@ -120,12 +120,12 @@ test("AGX ticket files stay hidden while agent sources remain visible", () => {
   );
   writeFileSync(join(root, "agents/skills/example.md"), "agent source\n");
 
-  const visible = visiblePaths(root);
+  const visible = await visiblePaths(root);
   expect(visible.error).toBeNull();
   expect(visible.paths).not.toContain(".agents/tickets/probe-ticket.md");
   expect(visible.paths).toContain("agents/skills/example.md");
 });
 
-test("a fresh clone stays clean after representative land-gate tasks", () => {
-  expect(freshCloneGateFindings()).toEqual([]);
+test("a fresh clone stays clean after representative land-gate tasks", async () => {
+  expect(await freshCloneGateFindings()).toEqual([]);
 }, 300_000);

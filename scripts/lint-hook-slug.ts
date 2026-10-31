@@ -1,6 +1,6 @@
 // Consumer: lint aggregate. No argv; DOTFILES optionally selects a fixture checkout.
 // Fail closed: malformed registry, missing/duplicate identities or raw visible emission fail.
-import { readFileSync, existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { loadSlugs } from "../agents/hooks/slugs.ts";
@@ -61,36 +61,45 @@ export async function lintHookSlugs(root: string): Promise<string[]> {
     return [`missing or invalid slug: ${registry.message}`];
   const errors: string[] = [];
   // Exercise the actual shared emitters, including the missing-Bun shell fallback.
-  const emitter = Bun.spawnSync(
+  const emitterProcess = Bun.spawn(
     [
       process.execPath,
       "--eval",
       `import { hookJson, hookMessage } from ${JSON.stringify(join(root, "agents/hooks/lib.ts"))}; console.log(hookMessage("probe", "lint-probe")); console.log(hookJson({reason:"probe"}, "lint-probe"));`,
     ],
-    { timeout: 5_000 },
+    { stdout: "pipe", stderr: "pipe", timeout: 5_000 },
   );
+  const [emitterStdout, emitterExit] = await Promise.all([
+    new Response(emitterProcess.stdout).text(),
+    emitterProcess.exited,
+  ]);
   if (
-    emitter.exitCode !== 0 ||
-    emitter.stdout.toString() !==
+    emitterExit !== 0 ||
+    emitterStdout !==
       '[dotfiles:lint-probe] probe\n{"reason":"[dotfiles:lint-probe] probe"}\n'
   )
     errors.push("shared emitter lacks namespaced [dotfiles:<slug>] prefix");
-  const shell = Bun.spawnSync(
+  const shellProcess = Bun.spawn(
     [
       "sh",
       "-c",
-      '. "$1"; HOOK_SLUG=lint-probe; hook_stderr probe; hook_deny probe',
+      '. "$1"; HOOK_SLUG=dotfiles:lint-probe; hook_stderr probe; hook_deny probe',
       "sh",
       join(root, "agents/hooks/slug.sh"),
     ],
-    { timeout: 5_000 },
+    { stdout: "pipe", stderr: "pipe", timeout: 5_000 },
   );
+  const [shellStdout, shellStderr, shellExit] = await Promise.all([
+    new Response(shellProcess.stdout).text(),
+    new Response(shellProcess.stderr).text(),
+    shellProcess.exited,
+  ]);
   if (
-    shell.exitCode !== 0 ||
-    shell.stderr.toString() !== "[dotfiles:lint-probe] probe\n" ||
-    !shell.stdout
-      .toString()
-      .includes('"permissionDecisionReason":"[dotfiles:lint-probe] probe"')
+    shellExit !== 0 ||
+    shellStderr !== "[dotfiles:lint-probe] probe\n" ||
+    !shellStdout.includes(
+      '"permissionDecisionReason":"[dotfiles:lint-probe] probe"',
+    )
   )
     errors.push("shell emitter lacks namespaced [dotfiles:<slug>] prefix");
   const slugs = new Set<string>();
@@ -103,13 +112,17 @@ export async function lintHookSlugs(root: string): Promise<string[]> {
     slugs.add(identity.slug);
     scripts.add(identity.script);
     const path = join(root, "agents", identity.script);
-    if (!existsSync(path)) errors.push(`missing hook: ${identity.script}`);
-    else
+    const source = await Promise.try(() => readFile(path, "utf8")).then(
+      (value) => ({ ok: true as const, value }),
+      () => ({ ok: false as const }),
+    );
+    if (source.ok) {
       errors.push(
-        ...lintHookSource(readFileSync(path, "utf8")).map(
-          (e) => `${identity.script}: ${e}`,
-        ),
+        ...lintHookSource(source.value).map((e) => `${identity.script}: ${e}`),
       );
+    } else {
+      errors.push(`missing hook: ${identity.script}`);
+    }
   }
   const external = new Set(registry.external.map((h) => h.command));
   const owned = new Set(
@@ -123,13 +136,19 @@ export async function lintHookSlugs(root: string): Promise<string[]> {
     if (match !== null) launchers.add(`agents/${match[1]}/hooks/${match[2]}`);
   }
   for (const path of launchers) {
-    if (!existsSync(join(root, path))) errors.push(`missing launcher: ${path}`);
-    else
+    const source = await Promise.try(() =>
+      readFile(join(root, path), "utf8"),
+    ).then(
+      (value) => ({ ok: true as const, value }),
+      () => ({ ok: false as const }),
+    );
+    if (source.ok) {
       errors.push(
-        ...lintHookLauncher(readFileSync(join(root, path), "utf8")).map(
-          (e) => `${path}: ${e}`,
-        ),
+        ...lintHookLauncher(source.value).map((e) => `${path}: ${e}`),
       );
+    } else {
+      errors.push(`missing launcher: ${path}`);
+    }
   }
   const shared = await loadRegistry(join(root, "agents/hooks"));
   errors.push(...shared.errors);
@@ -146,7 +165,7 @@ export async function lintHookSlugs(root: string): Promise<string[]> {
     "agents/codex/hooks.json",
   ]) {
     const config = jsonOf(Config).safeParse(
-      readFileSync(join(root, path), "utf8"),
+      await readFile(join(root, path), "utf8"),
     );
     if (!config.success) {
       errors.push(`invalid hook config: ${path}`);

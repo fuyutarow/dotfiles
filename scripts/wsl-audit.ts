@@ -52,7 +52,6 @@ consola.setReporters([
 
 const GUEST_DEFAULT = "r99-u24";
 const HOST_DEFAULT = "r99";
-const DISTRO_DEFAULT = "Ubuntu-24.04";
 
 // Bounds, not estimates. Measured round-trips on r99 over the tailnet 2026-09-12: a guest shell
 // command 0.9-2.1s; a PowerShell -EncodedCommand round-trip 5-15s (CIM providers and Get-WinEvent
@@ -259,6 +258,7 @@ export function parseKv(out: string): Map<string, string> {
 }
 
 const GUEST_PROBE = `
+echo "distro=\${WSL_DISTRO_NAME:-}"
 echo "nproc=$(nproc)"
 awk '{print "load1="$1; print "load5="$2; print "load15="$3}' /proc/loadavg
 awk '/^some/{for(i=1;i<=NF;i++){split($i,kv,"="); if(kv[1]=="avg10")a=kv[2]; if(kv[1]=="avg300")b=kv[2]}; print "cpu_psi="a; print "cpu_psi300="b}' /proc/pressure/cpu 2>/dev/null || echo "cpu_psi=na"
@@ -327,6 +327,10 @@ export function toMntPath(winPath: string): string | null {
     /^(?:\\\\\?\\)?([A-Za-z]):\\(.*)$/u.exec(winPath.trim()) ?? [];
   if (drive === undefined || rest === undefined) return null;
   return `/mnt/${drive.toLowerCase()}/${rest.replaceAll("\\", "/")}`;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 function gb(bytes: number): string {
@@ -553,7 +557,7 @@ function reportLine(k: string, v: string): void {
 function report(
   g: Map<string, string>,
   h: Map<string, string>,
-  vhdx: { alloc: number | null; apparent: number | null },
+  vhdx: { alloc: number | null; apparent: number | null; path: string | null },
 ): void {
   consola.log("GUEST (WSL2)");
   const nproc = g.get("nproc") ?? "?";
@@ -622,6 +626,8 @@ function report(
     `spinning=${h.get("host_spin") ?? "?"}   service crashes/1h=${h.get("host_crashes_1h") ?? "?"}`,
   );
 
+  reportLine("vhdx path", vhdx.path ?? "?");
+
   // Printed together on one line precisely because printing either alone is what misleads.
   reportLine(
     "vhdx",
@@ -662,7 +668,7 @@ async function main(): Promise<void> {
           description:
             "ssh alias for the Windows host; 'local' to use interop powershell.exe",
         },
-        distro: { type: String, default: DISTRO_DEFAULT },
+        distro: { type: String, description: "expected guest distro name" },
         json: { type: Boolean, default: false },
         strict: {
           type: Boolean,
@@ -693,14 +699,32 @@ async function main(): Promise<void> {
     return;
   }
 
-  // The two legs are independent, so they go concurrently: the host leg is the slow one (5-15s of
-  // CIM providers) and there is no reason for the guest to wait behind it.
-  const [gRan, hRan] = await Promise.all([
-    sh(guestLeg, GUEST_PROBE, GUEST_MS),
-    ps(hostLeg, HOST_PROBE.replace("__DISTRO__", parsed.flags.distro), HOST_MS),
-  ]);
-
+  const gRan = await sh(guestLeg, GUEST_PROBE, GUEST_MS);
   const g = parseKv(gRan.out);
+  const distro = g.get("distro")?.trim();
+  if (
+    gRan.timedOut ||
+    gRan.code !== 0 ||
+    distro === undefined ||
+    distro === ""
+  ) {
+    consola.error("FATAL: guest leg did not report WSL_DISTRO_NAME");
+    process.exitCode = 2;
+    return;
+  }
+  if (parsed.flags.distro !== undefined && parsed.flags.distro !== distro) {
+    consola.error(
+      `FATAL: requested distro '${parsed.flags.distro}' disagrees with guest distro '${distro}'`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+  // PowerShell single-quoted literals escape a quote by doubling it.
+  const hRan = await ps(
+    hostLeg,
+    HOST_PROBE.replace("__DISTRO__", () => distro.replaceAll("'", "''")),
+    HOST_MS,
+  );
   const h = parseKv(hRan.out);
 
   // A leg that returned nothing is reported as a leg failure, never as healthy zeros. The whole
@@ -723,10 +747,11 @@ async function main(): Promise<void> {
   let apparent: number | null = null;
   const base = h.get("host_vhdx_base");
   const mnt = base === undefined ? null : toMntPath(base);
-  if (mnt !== null && !(gRan.timedOut || g.size === 0)) {
+  const vhdxPath = mnt === null ? null : `${mnt}/ext4.vhdx`;
+  if (vhdxPath !== null && !(gRan.timedOut || g.size === 0)) {
     const vRan = await sh(
       guestLeg,
-      `f="${mnt}/ext4.vhdx"; [ -f "$f" ] && { echo "alloc=$(du -B1 -s "$f" | awk '{print $1}')"; echo "apparent=$(du -B1 -s --apparent-size "$f" | awk '{print $1}')"; }`,
+      `f=${shellQuote(vhdxPath)}; [ -f "$f" ] && { echo "alloc=$(du -B1 -s "$f" | awk '{print $1}')"; echo "apparent=$(du -B1 -s --apparent-size "$f" | awk '{print $1}')"; }`,
       GUEST_MS,
     );
     const v = parseKv(vRan.out);
@@ -742,7 +767,7 @@ async function main(): Promise<void> {
         {
           guest: Object.fromEntries(g),
           host: Object.fromEntries(h),
-          vhdx: { allocated: alloc, apparent },
+          vhdx: { path: vhdxPath, allocated: alloc, apparent },
           unreachable: dead,
           findings,
         },
@@ -751,7 +776,7 @@ async function main(): Promise<void> {
       ),
     );
   } else {
-    report(g, h, { alloc, apparent });
+    report(g, h, { alloc, apparent, path: vhdxPath });
     consola.log("---");
     for (const d of dead) consola.log(`UNREACHABLE  ${d}`);
     for (const f of findings)

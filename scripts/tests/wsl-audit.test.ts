@@ -24,6 +24,7 @@ const GB = 1024 ** 3;
 function healthyGuest(over: Record<string, string> = {}): Map<string, string> {
   return new Map(
     Object.entries({
+      distro: "Ubuntu-24.04",
       nproc: "12",
       load1: "1.0",
       cpu_psi: "0.5",
@@ -420,5 +421,67 @@ describe("toMntPath — a wrong path would make du report 0 and read as 'tiny vh
     expect(toMntPath("")).toBeNull();
     expect(toMntPath("/already/posix")).toBeNull();
     expect(toMntPath("\\\\server\\share\\x")).toBeNull();
+  });
+});
+
+describe("wsl-audit distro identity", () => {
+  test("resolves the guest distro and refuses an explicit mismatch", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "wsl-audit-distro-"));
+    await using _cleanup = {
+      [Symbol.asyncDispose]: () => rm(dir, { recursive: true, force: true }),
+    };
+    const ssh = join(dir, "ssh");
+    await Bun.write(
+      ssh,
+      `#!${process.execPath}
+const command = process.argv.at(-1);
+if (process.argv.includes('audit-host')) {
+  const payload = Buffer.from(command.split(' ').at(-1), 'base64').toString('utf16le');
+  if (!payload.includes("$p.DistributionName -eq 'r99-u26'")) process.exit(3);
+  console.log('host_vhdx_base=C:\\\\WSL\\\\r99-u26');
+} else if (command.includes('WSL_DISTRO_NAME')) {
+  console.log('distro=r99-u26');
+} else {
+  if (!command.includes('/mnt/c/WSL/r99-u26/ext4.vhdx')) process.exit(4);
+  console.log('alloc=629906866176\\napparent=700000000000');
+}
+`,
+    );
+    await chmod(ssh, 0o755);
+    for (const [flags, expected] of [
+      [[], 0],
+      [["--distro", "Ubuntu-24.04"], 2],
+    ] as const) {
+      const proc = Bun.spawn(
+        [
+          process.execPath,
+          join(import.meta.dir, "../wsl-audit.ts"),
+          "--guest",
+          "r99-u26",
+          "--host",
+          "audit-host",
+          ...flags,
+        ],
+        {
+          env: { ...process.env, PATH: `${dir}:${process.env["PATH"] ?? ""}` },
+          stdout: "pipe",
+          stderr: "pipe",
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      const [out, err, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      expect(code).toBe(expected);
+      if (expected === 0) {
+        expect(out).toContain("/mnt/c/WSL/r99-u26/ext4.vhdx");
+        expect(out).toContain("allocated 586.6GB");
+      } else {
+        expect(err).toContain("r99-u26");
+        expect(err).toContain("Ubuntu-24.04");
+      }
+    }
   });
 });

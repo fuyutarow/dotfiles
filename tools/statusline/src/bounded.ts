@@ -1,7 +1,6 @@
 // Bounded subprocess calls and atomic cache files, shared by the statusline and host-load.ts.
 // Split out of the former Claude statusline (2026-10-06); the render budget below starts when this module
 // is first loaded, which is process start for both consumers — the same moment as before.
-import { execFileSync } from "node:child_process";
 import { mkdir, rename, unlink } from "node:fs/promises";
 import {
   mkdirSync,
@@ -54,7 +53,7 @@ export async function readJsonAsync<S extends z.ZodType>(
 // enrichment" subprocess call in buildDataframe() that is not already governed by its own
 // specific number (agentName's 3000ms for `claude agents --json`, herdrSend's 200ms socket timer).
 export const ENRICHMENT_TIMEOUT_MS = 2000;
-// What execFileSync's thrown error carries, parsed rather than probed with `in`/`typeof`. Each
+// What execFile's error carries, parsed rather than probed with `in`/`typeof`. Each
 // field is read on its own (.catch): an error object that lacks or mangles one still yields the
 // others, and the all-missing case falls through to the generic "<tool> failed" below.
 export const ExecErrorSchema = z.object({
@@ -103,56 +102,6 @@ export interface ExecFailure {
   why: string; // the n/a reason, from failWhy
   stderr: string; // trimmed; "" when the child printed none or never started
   ran: boolean; // false: never started (budget spent) — says nothing about the tool, so never cache it
-}
-// Run one child inside the render budget. stderr is captured (not discarded) so a caller can
-// tell git's "not a git repository" from its other fatal errors.
-export function execBounded(
-  tool: string,
-  file: string,
-  args: string[],
-  ownBoundMs: number,
-  env?: NodeJS.ProcessEnv,
-): Result<string, ExecFailure> {
-  const left = RENDER_BUDGET_MS - (performance.now() - RENDER_T0);
-  if (left <= 0) {
-    return err({
-      why: `${tool} not run, render budget ${RENDER_BUDGET_MS}ms spent`,
-      stderr: "",
-      ran: false,
-    });
-  }
-  return execWithin(
-    tool,
-    file,
-    args,
-    Math.min(ownBoundMs, Math.ceil(left)),
-    env,
-  );
-}
-// Sync subprocess API retained for standalone helpers; render collectors use execAsyncBounded.
-// One child under ONE bound, with no render budget in the way: the render path goes through
-// execBounded above; the background GPU sampler (not a render) calls this directly.
-export function execWithin(
-  tool: string,
-  file: string,
-  args: string[],
-  boundMs: number,
-  env?: NodeJS.ProcessEnv,
-): Result<string, ExecFailure> {
-  return fromThrowable(
-    () =>
-      execFileSync(file, args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf8",
-        timeout: boundMs,
-        ...(env !== undefined ? { env } : {}),
-      }),
-    (e): ExecFailure => ({
-      why: failWhy(e, tool, boundMs),
-      stderr: (execError(e).stderr ?? "").trim(),
-      ran: true,
-    }),
-  )();
 }
 /** Run a child without blocking the event loop, killing it when its signal deadline expires. */
 export async function execAsyncWithin(

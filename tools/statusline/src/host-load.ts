@@ -27,7 +27,7 @@ import {
 import {
   ENRICHMENT_TIMEOUT_MS,
   execAsyncBounded,
-  execBounded,
+  execAsyncRenderBounded,
   readJson,
   readJsonAsync,
   within,
@@ -85,8 +85,15 @@ function vramFromState(
 // files, so that would read as chronically full, the same trap MemFree is on Linux. Not `top -l 1`:
 // its PhysMem "used" counts that file cache too, and it costs a full process-table pass.
 export const VmStatPage = z.string().regex(/^\d+$/u).transform(Number);
-export function macRam(): Result<MemReading, string> {
-  return execBounded("vm_stat", "vm_stat", [], ENRICHMENT_TIMEOUT_MS)
+export async function macRam(): Promise<Result<MemReading, string>> {
+  return (
+    await execAsyncRenderBounded(
+      "vm_stat",
+      "vm_stat",
+      [],
+      ENRICHMENT_TIMEOUT_MS,
+    )
+  )
     .mapErr((f) => f.why)
     .andThen((raw) => {
       const size = raw.match(/page size of (\d+) bytes/u)?.[1];
@@ -123,7 +130,7 @@ export function macRam(): Result<MemReading, string> {
 const readIfPresent = (path: string): string | undefined =>
   fromThrowable(() => readFileSync(path, "utf8"))().unwrapOr(undefined);
 // macOS has no /proc: see macRam().
-export function ramFrac(): Result<MemReading, string> {
+export async function ramFrac(): Promise<Result<MemReading, string>> {
   if (process.platform === "darwin") return macRam();
   return fromThrowable(
     () => readFileSync("/proc/meminfo", "utf8"),
@@ -249,7 +256,7 @@ export async function readHostMetrics(): Promise<HostMetrics> {
     (value) => `${Math.round(value)}%`,
     (why) => renderUnavailable(unavailable(why)),
   );
-  const ram = ramFrac().match(
+  const ram = (await ramFrac()).match(
     (value) => value.frac,
     (why) => renderUnavailable(unavailable(why)),
   );

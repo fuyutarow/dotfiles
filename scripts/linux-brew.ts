@@ -1,14 +1,18 @@
 // Linuxbrew installation and conservative retirement of the old dotfiles downloader links.
 // Never removes mise installs or changes processes: existing jobs can keep their original executable/PATH.
 import {
-  mkdirSync,
-  readlinkSync,
-  realpathSync,
-  rmdirSync,
-  symlinkSync,
-  unlinkSync,
-} from "node:fs";
-import { access, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+  access,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readlink,
+  realpath,
+  rm,
+  rmdir,
+  symlink,
+  unlink,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { $ } from "bun";
 import { LINUXBREW } from "./core-tools.ts";
@@ -97,7 +101,7 @@ export async function installLinuxbrew(
     say(
       `bootstrap: declared user prefix ${prefix}, no sudo; source builds permitted`,
     );
-    mkdirSync(join(prefix, "bin"), { recursive: true });
+    await mkdir(join(prefix, "bin"), { recursive: true });
     // Homebrew's manual install layout. The official shell installer limits path length, so
     // long shared-host HOME paths use the documented Git checkout layout instead.
     const cloned = await attemptOr(async () => {
@@ -106,7 +110,7 @@ export async function installLinuxbrew(
     }, false);
     if (!cloned)
       await $`git clone https://github.com/Homebrew/brew ${join(prefix, "Homebrew")}`;
-    symlinkSync("../Homebrew/bin/brew", join(prefix, "bin/brew"));
+    await symlink("../Homebrew/bin/brew", join(prefix, "bin/brew"));
     await $`${prefix}/bin/brew --version`;
     return;
   }
@@ -132,7 +136,9 @@ export async function legacyPathUsers(
   if (entries === null)
     return ["/proc unavailable; cannot prove legacy PATH unused"];
   const users: string[] = [];
-  const homes = [...new Set([home, realpathSync(home)])];
+  const homes = [
+    ...new Set([home, await attemptOr(() => realpath(home), home)]),
+  ];
   const runtimes = homes.map(
     (directory) => join(directory, ".local/share/mise/installs") + "/",
   );
@@ -144,7 +150,7 @@ export async function legacyPathUsers(
       () => Bun.file(join(directory, "environ")).text(),
       "",
     );
-    const exe = await attemptOr(() => readlinkSync(join(directory, "exe")), "");
+    const exe = await attemptOr(() => readlink(join(directory, "exe")), "");
     const maps = await attemptOr(
       () => Bun.file(join(directory, "maps")).text(),
       "",
@@ -210,8 +216,10 @@ async function isReplacedLegacyLink(
   if (!(await lstat(path)).isSymbolicLink()) return false;
   const directory = resolve(path, "..");
   const name = path.split("/").at(-1) ?? "";
-  const target = resolve(directory, readlinkSync(path));
-  const homes = [...new Set([home, realpathSync(home)])];
+  const target = resolve(directory, await attemptOr(() => readlink(path), ""));
+  const homes = [
+    ...new Set([home, await attemptOr(() => realpath(home), home)]),
+  ];
   const ours =
     homes.some((taskHome) =>
       target.startsWith(join(taskHome, ".local/share/mise/installs") + "/"),
@@ -222,23 +230,26 @@ async function isReplacedLegacyLink(
         target.startsWith(join(taskHome, ".cargo/bin") + "/"),
       ));
   // Agent CLIs and cargo packages without a brew replacement remain untouched.
-  const replacement = [
+  const replacements = [
     join(prefix, "bin", name),
     join(prefix, "opt/rustup/bin", name),
-  ].find(
-    (candidate) =>
-      Bun.which(candidate) !== null &&
-      realpathSync(candidate).startsWith(`${realpathSync(prefix)}/`),
-  );
-  return ours && replacement !== undefined;
+  ];
+  let replacement = false;
+  for (const candidate of replacements) {
+    if (Bun.which(candidate) === null) continue;
+    const candidatePath = await attemptOr(() => realpath(candidate), "");
+    const prefixPath = await attemptOr(() => realpath(prefix), prefix);
+    if (candidatePath.startsWith(`${prefixPath}/`)) replacement = true;
+  }
+  return ours && replacement;
 }
 
 export async function removeLegacyLinks(
   links: readonly string[],
   home: string,
 ): Promise<void> {
-  for (const link of links) unlinkSync(link);
+  for (const link of links) await unlink(link);
   const runtime = join(home, ".local/share/dotfiles/runtime/bin");
   const entries = await attemptOr(() => readdir(runtime), null);
-  if (entries !== null && entries.length === 0) rmdirSync(runtime);
+  if (entries !== null && entries.length === 0) await rmdir(runtime);
 }

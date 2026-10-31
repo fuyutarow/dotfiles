@@ -1,6 +1,20 @@
 import { readdir, stat } from "node:fs/promises";
 
 import { cli } from "cleye";
+import { consola } from "consola";
+consola.options.formatOptions = { colors: false, compact: true, date: false };
+consola.level = 5;
+consola.setReporters([
+  {
+    log: (entry) => {
+      const stream =
+        entry.type === "error" || entry.type === "fatal"
+          ? process.stderr
+          : process.stdout;
+      stream.write(`${entry.args.map(String).join(" ")}\n`);
+    },
+  },
+]);
 
 // READ-ONLY resource evidence for a WSL2 guest AND the Windows host underneath it, in one shot,
 // with a threshold verdict. Consumer: human/agent running `mise run wsl:audit`; output is a table
@@ -533,7 +547,7 @@ function percentageText(text: string): string {
 }
 
 function reportLine(k: string, v: string): void {
-  console.log(`  ${k.padEnd(10)}${percentageText(v)}`);
+  consola.log(`  ${k.padEnd(10)}${percentageText(v)}`);
 }
 
 function report(
@@ -541,7 +555,7 @@ function report(
   h: Map<string, string>,
   vhdx: { alloc: number | null; apparent: number | null },
 ): void {
-  console.log("GUEST (WSL2)");
+  consola.log("GUEST (WSL2)");
   const nproc = g.get("nproc") ?? "?";
   reportLine(
     "cpu",
@@ -574,7 +588,7 @@ function report(
     if (v !== undefined && v !== "") reportLine(k === "top1" ? "top" : "", v);
   }
 
-  console.log("HOST (Windows)");
+  consola.log("HOST (Windows)");
   const cpu = h.get("host_cpu_pct");
   // The mean is the judged number; max is shown so a spike is visible and not actionable.
   reportLine(
@@ -620,8 +634,8 @@ function report(
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
-    process.exit(2);
+    consola.error(`FATAL: unknown option '--${flag}'`);
+    process.exitCode = 2;
   }
 }
 
@@ -661,8 +675,9 @@ async function main(): Promise<void> {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0) {
-    process.stderr.write(`FATAL: Unexpected argument '${parsed._[0]}'\n`);
-    process.exit(2);
+    consola.error(`FATAL: Unexpected argument '${parsed._[0]}'`);
+    process.exitCode = 2;
+    return;
   }
 
   const guestLeg: Leg =
@@ -673,8 +688,9 @@ async function main(): Promise<void> {
     (guestLeg !== null || hostLeg !== null) &&
     Bun.which("ssh") === undefined
   ) {
-    console.log("no ssh on PATH");
-    process.exit(1);
+    consola.error("no ssh on PATH");
+    process.exitCode = 1;
+    return;
   }
 
   // The two legs are independent, so they go concurrently: the host leg is the slow one (5-15s of
@@ -721,7 +737,7 @@ async function main(): Promise<void> {
   const findings = dead.length > 0 ? [] : judge(g, h);
 
   if (parsed.flags.json) {
-    console.log(
+    process.stdout.write(
       JSON.stringify(
         {
           guest: Object.fromEntries(g),
@@ -736,12 +752,12 @@ async function main(): Promise<void> {
     );
   } else {
     report(g, h, { alloc, apparent });
-    console.log("---");
-    for (const d of dead) console.log(`UNREACHABLE  ${d}`);
+    consola.log("---");
+    for (const d of dead) consola.log(`UNREACHABLE  ${d}`);
     for (const f of findings)
-      console.log(`${f.level}  ${percentageText(f.text)}`);
+      consola.log(`${f.level}  ${percentageText(f.text)}`);
     if (dead.length === 0 && findings.length === 0) {
-      console.log("OK  every threshold clear");
+      consola.success("OK  every threshold clear");
     }
   }
 
@@ -754,15 +770,15 @@ async function main(): Promise<void> {
   // An unreachable leg is always 2, and is never folded into 1: "I could not see" and "I saw a
   // problem" are different answers, and collapsing them is how a dead probe reads as a healthy
   // machine.
-  if (dead.length > 0) process.exit(2);
-  if (parsed.flags.strict && findings.length > 0) process.exit(1);
+  if (dead.length > 0) process.exitCode = 2;
+  else if (parsed.flags.strict && findings.length > 0) process.exitCode = 1;
 }
 
 // Guarded so the test file can import judge/parseKv/toMntPath without this script reaching for
 // ssh on import — the house pattern (reclaim-clean.ts, reclaim-toolchains.ts).
 if (import.meta.main) {
   await main().catch((err) => {
-    console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
+    consola.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
+    process.exitCode = 1;
   });
 }

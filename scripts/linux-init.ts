@@ -7,7 +7,7 @@
 // reach. ~/.local/bin holds vendor agents, not a second core downloader. Experiment versions
 // (Julia, CUDA, Python) stay in each repo's mise.toml; no global mise [tools] (INV-6).
 // Exit: 0 done · 1 a step failed (its output says which).
-import { existsSync, realpathSync } from "node:fs";
+import { access, realpath } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
@@ -110,7 +110,12 @@ await $`git -C ${DOTFILES} config core.hooksPath .githooks`;
 // Agents record and sync this repo through jj (`mise run commit` / `mise run pull`), but the
 // bootstrap clones with git: sol's checkout had no .jj and `mise run pull` failed with "There is no
 // jj repo" (2026-10-06). Colocate once; jj is a Brewfile.core tool, linked above.
-if (!existsSync(join(DOTFILES, ".jj"))) {
+if (
+  !(await access(join(DOTFILES, ".jj")).then(
+    () => true,
+    () => false,
+  ))
+) {
   say("jj: colocating the dotfiles checkout");
   await $`${join(PREFIX, "bin/jj")} git init --colocate`.cwd(DOTFILES);
   await $`${join(PREFIX, "bin/jj")} bookmark track alpha --remote=origin`.cwd(
@@ -141,8 +146,10 @@ if (await sudoIsOurs()) {
   const source = join(DOTFILES, "wsl/sshd-dotfiles.conf");
   // WSL's link:dots already links this destination to the source; GNU install refuses itself.
   const alreadyLinked =
-    existsSync(SSHD_DROPIN) &&
-    realpathSync(SSHD_DROPIN) === realpathSync(source);
+    (await access(SSHD_DROPIN).then(
+      () => true,
+      () => false,
+    )) && (await realpath(SSHD_DROPIN)) === (await realpath(source));
   if (!alreadyLinked) await $`sudo -n install -m 644 ${source} ${SSHD_DROPIN}`;
   const listener = (await $`pgrep -f "^sshd: .*\[listener\]"`.nothrow().text())
     .trim()

@@ -240,7 +240,7 @@ describe("WSL capacity recovery decisions", () => {
       },
     ]);
   });
-  test("writes an atomic, timestamped latest verdict consumable by admission", () => {
+  test("writes an atomic, timestamped latest verdict consumable by admission", async () => {
     const root = mkdtempSync(join(tmpdir(), "wsl-recovery-verdict-"));
     recoveryVerdictRoots.push(root);
     const path = join(root, "state", "latest-verdict.json");
@@ -250,7 +250,7 @@ describe("WSL capacity recovery decisions", () => {
       { availableMb: 900, pageReadsPerSecond: 900 },
       "2026-10-12T00:00:00.000Z",
     );
-    writeRecoveryVerdict(record, path);
+    await writeRecoveryVerdict(record, path);
     const parsed = jsonOf(RecoveryVerdictSchema).safeParse(
       readFileSync(path, "utf8"),
     );
@@ -279,7 +279,7 @@ describe("WSL capacity recovery decisions", () => {
       fallbackDrop: () => false,
       wait: () => Promise.resolve(),
       measure: () => ({ availableMb: 2600, pageReadsPerSecond: 10 }),
-      measureBuffCache: () => 9000,
+      measureBuffCache: () => Promise.resolve(9000),
       canAttemptDrop: () => true,
       markDropAttempt: () => {
         events.push("stamp");

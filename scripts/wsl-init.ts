@@ -1,4 +1,5 @@
 import { $ } from "bun";
+import { consola } from "consola";
 
 // Initialize WSL environment (after: install linuxbrew, brew install mise).
 await $`sudo apt install -y zsh`;
@@ -13,5 +14,5 @@ await $`topgrade`;
 await $`mise run wsl:ccc-daemon`;
 await $`mise run wsl:capacity:enable`;
 await $`chsh -s $(which zsh)`;
-console.log("---");
-console.log("Setup complete. Run: exec zsh");
+consola.log("---");
+consola.success("Setup complete. Run: exec zsh");

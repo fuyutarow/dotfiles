@@ -1,21 +1,16 @@
 import { cli } from "cleye";
+import { consola } from "consola";
 import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  statSync,
-  statfsSync,
-  writeFileSync,
-} from "node:fs";
-import {
+  access,
   mkdir,
-  open,
-  unlink,
+  readFile,
   readdir,
-  stat as fileStat,
+  rename,
+  stat,
+  statfs as statfsAsync,
+  writeFile,
 } from "node:fs/promises";
+import { open, unlink, stat as fileStat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -113,14 +108,14 @@ export function recoveryVerdictRecord(
   };
 }
 
-export function writeRecoveryVerdict(
+export async function writeRecoveryVerdict(
   record: RecoveryVerdictRecord,
   path = VERDICT_PATH,
-): void {
+): Promise<void> {
   const temporary = `${path}.${process.pid}.tmp`;
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(temporary, `${JSON.stringify(record)}\n`);
-  renameSync(temporary, path);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(temporary, `${JSON.stringify(record)}\n`);
+  await rename(temporary, path);
 }
 
 export type ComputeProcess = {
@@ -165,8 +160,8 @@ export function loadRecoveryPolicy(path = POLICY_PATH): Result<Policy, Error> {
   });
 }
 
-function freeBytes(path: string): Result<number, Error> {
-  const stats = fromThrowable(() => statfsSync(path))();
+async function freeBytes(path: string): Promise<Result<number, Error>> {
+  const stats = await fromAsyncThrowable(() => statfsAsync(path))();
   if (stats.isErr()) return err(new Error(String(stats.error)));
   const value = stats.value.bavail * stats.value.bsize;
   if (!Number.isSafeInteger(value) || value < 0) {
@@ -199,16 +194,16 @@ export type TmpfsUsage = {
 };
 
 export function tmpfsUsage(
-  statfs: Pick<
-    ReturnType<typeof statfsSync>,
+  stats: Pick<
+    Awaited<ReturnType<typeof statfsAsync>>,
     "files" | "ffree" | "blocks" | "bavail" | "bsize"
   >,
 ): Result<TmpfsUsage, Error> {
-  const total = Number(statfs.files);
-  const free = Number(statfs.ffree);
+  const total = Number(stats.files);
+  const free = Number(stats.ffree);
   const used = total - free;
-  const totalBytes = Number(statfs.blocks) * Number(statfs.bsize);
-  const availableBytes = Number(statfs.bavail) * Number(statfs.bsize);
+  const totalBytes = Number(stats.blocks) * Number(stats.bsize);
+  const availableBytes = Number(stats.bavail) * Number(stats.bsize);
   const usedBytes = totalBytes - availableBytes;
   if (
     !Number.isSafeInteger(total) ||
@@ -253,12 +248,14 @@ export function tmpfsThreshold(raw: string | undefined): Result<number, Error> {
 
 export async function recoverTmpfsCapacity(options: {
   thresholdPercent: number;
-  measure: () => Result<TmpfsUsage, Error>;
+  measure: () => Result<TmpfsUsage, Error> | Promise<Result<TmpfsUsage, Error>>;
   runTarget: () => Promise<{ code: number; timedOut: boolean; output: string }>;
   log: (message: string) => void;
   warn: (message: string) => void;
 }): Promise<void> {
-  const measuredBefore = fromThrowable(options.measure)();
+  const measuredBefore = await fromAsyncThrowable(async () =>
+    options.measure(),
+  )();
   if (measuredBefore.isErr()) {
     options.warn(
       `WARN tmpfs capacity measurement failed: ${String(measuredBefore.error)}\n`,
@@ -284,7 +281,9 @@ export async function recoverTmpfsCapacity(options: {
     options.warn(`WARN tmpfs reclaim failed: ${String(action.error)}\n`);
     return;
   }
-  const measuredAfter = fromThrowable(options.measure)();
+  const measuredAfter = await fromAsyncThrowable(async () =>
+    options.measure(),
+  )();
   if (measuredAfter.isErr()) {
     options.warn(
       `WARN tmpfs post-reclaim measurement failed: ${String(measuredAfter.error)}\n`,
@@ -310,8 +309,8 @@ export async function recoverTmpfsCapacity(options: {
   else options.log(line);
 }
 
-function measureTmpfs(): Result<TmpfsUsage, Error> {
-  return tmpfsUsage(statfsSync("/tmp", { bigint: true }));
+async function measureTmpfs(): Promise<Result<TmpfsUsage, Error>> {
+  return tmpfsUsage(await statfsAsync("/tmp", { bigint: true }));
 }
 
 const DISK_RECLAIM = join(
@@ -408,22 +407,24 @@ async function runTmpfsTarget(): Promise<{
   return runBounded(diskReclaimArgv(miseBinary(), "tmpfs"), 120_000);
 }
 
-function readLastAttemptMs(): number {
-  return fromThrowable(() => statSync(STAMP_PATH).mtimeMs)().unwrapOr(0);
+async function readLastAttemptMs(): Promise<number> {
+  return (await fromAsyncThrowable(() => stat(STAMP_PATH))())
+    .map((value) => value.mtimeMs)
+    .unwrapOr(0);
 }
 
-function markAttempt(): void {
-  const result = fromThrowable(() => {
-    mkdirSync(join(homedir(), ".local/state/wsl-capacity-recover"), {
+async function markAttempt(): Promise<void> {
+  const result = await fromAsyncThrowable(async () => {
+    await mkdir(join(homedir(), ".local/state/wsl-capacity-recover"), {
       recursive: true,
     });
-    writeFileSync(
+    await writeFile(
       STAMP_PATH,
       `${Temporal.Now.instant().toString({ fractionalSecondDigits: 3 })}\n`,
     );
   })();
   if (result.isErr()) {
-    process.stderr.write(`WARN stamp unavailable: ${String(result.error)}\n`);
+    consola.warn(`WARN stamp unavailable: ${String(result.error)}`);
   }
 }
 
@@ -434,36 +435,38 @@ export function shouldDropPageCache(
   return nowMs - lastAttemptMs >= CACHE_DROP_COOLDOWN_MS;
 }
 
-function readLastCacheDropMs(): number {
-  return fromThrowable(() =>
-    Number(readFileSync(CACHE_DROP_STAMP_PATH, "utf8").trim()),
-  )()
+async function readLastCacheDropMs(): Promise<number> {
+  return (
+    await fromAsyncThrowable(async () =>
+      Number((await readFile(CACHE_DROP_STAMP_PATH, "utf8")).trim()),
+    )()
+  )
     .map((value) => (Number.isFinite(value) ? value : 0))
     .unwrapOr(0);
 }
 
-function markCacheDropAttempt(): boolean {
-  const result = fromThrowable(() => {
-    mkdirSync(join(homedir(), ".local/state/wsl-capacity-recover"), {
+async function markCacheDropAttempt(): Promise<boolean> {
+  const result = await fromAsyncThrowable(async () => {
+    await mkdir(join(homedir(), ".local/state/wsl-capacity-recover"), {
       recursive: true,
     });
-    writeFileSync(
+    await writeFile(
       CACHE_DROP_STAMP_PATH,
       `${Temporal.Now.instant().epochMilliseconds}\n`,
     );
   })();
   if (result.isErr()) {
-    process.stderr.write(
-      `WARN cache-drop rate-limit stamp unavailable: ${String(result.error)}\n`,
+    consola.warn(
+      `WARN cache-drop rate-limit stamp unavailable: ${String(result.error)}`,
     );
     return false;
   }
   return true;
 }
 
-function cacheDropAllowed(): boolean {
+async function cacheDropAllowed(): Promise<boolean> {
   return shouldDropPageCache(
-    readLastCacheDropMs(),
+    await readLastCacheDropMs(),
     Temporal.Now.instant().epochMilliseconds,
   );
 }
@@ -549,10 +552,10 @@ type MemoryEmergencyOptions = {
   fallbackDrop: () => boolean | Promise<boolean>;
   wait: () => void | Promise<void>;
   measure: () => HostMemory | null | Promise<HostMemory | null>;
-  measureBuffCache?: () => number | null;
-  canAttemptDrop?: () => boolean;
+  measureBuffCache?: () => number | null | Promise<number | null>;
+  canAttemptDrop?: () => boolean | Promise<boolean>;
   claimEmergencyOverride?: () => boolean | Promise<boolean>;
-  markDropAttempt?: () => boolean | void;
+  markDropAttempt?: () => boolean | void | Promise<boolean>;
   fallbackWhenUnavailable?: boolean;
   isRestored?: (memory: HostMemory | null) => boolean;
   stopOnFailure?: boolean;
@@ -591,8 +594,8 @@ export async function resetEmergencyCacheDrop(
 ): Promise<void> {
   const removed = await fromAsyncThrowable(() => unlink(path))();
   if (removed.isErr() && !String(removed.error).includes("ENOENT")) {
-    process.stderr.write(
-      `WARN emergency episode reset failed: ${String(removed.error)}\n`,
+    consola.warn(
+      `WARN emergency episode reset failed: ${String(removed.error)}`,
     );
   }
 }
@@ -612,7 +615,7 @@ async function performCacheDrop(
       outcome: "unavailable",
     };
   }
-  if (options.markDropAttempt?.() === false) {
+  if ((await options.markDropAttempt?.()) === false) {
     return {
       leverAttempted: false,
       dropAttempted: false,
@@ -624,8 +627,8 @@ async function performCacheDrop(
     if (started) {
       return { leverAttempted: true, dropAttempted: true, outcome: "started" };
     }
-    process.stderr.write(
-      `WARN ${DROP_CACHE_UNIT} start failed; using existing WSL-root cache drop fallback\n`,
+    consola.warn(
+      `${DROP_CACHE_UNIT} start failed; using existing WSL-root cache drop fallback`,
     );
     const dropped = await options.fallbackDrop();
     return {
@@ -636,8 +639,8 @@ async function performCacheDrop(
         : "start-failed-fallback-failed",
     };
   }
-  process.stderr.write(
-    `INFO ${DROP_CACHE_UNIT} unavailable; using existing WSL-root cache drop fallback\n`,
+  consola.info(
+    `${DROP_CACHE_UNIT} unavailable; using existing WSL-root cache drop fallback`,
   );
   const dropped = await options.fallbackDrop();
   return {
@@ -654,7 +657,7 @@ export async function recoverMemoryEmergency(
   let leverAttempted = false;
   let dropAttempted = false;
   let outcome: string = "rate-limited";
-  const canAttempt = options.canAttemptDrop?.() ?? true;
+  const canAttempt = (await options.canAttemptDrop?.()) ?? true;
   const emergencyOverride =
     !canAttempt &&
     options.stopOnFailure !== false &&
@@ -668,7 +671,7 @@ export async function recoverMemoryEmergency(
   }
   if (dropAttempted) await options.wait();
   const after = await options.measure();
-  const afterBuffCacheMb = options.measureBuffCache?.() ?? null;
+  const afterBuffCacheMb = (await options.measureBuffCache?.()) ?? null;
   const restored =
     options.isRestored !== undefined
       ? options.isRestored(after)
@@ -679,7 +682,7 @@ export async function recoverMemoryEmergency(
         );
   if (restored && dropAttempted) outcome = "restored";
   else if (outcome === "started") outcome = "no-effect";
-  process.stdout.write(
+  consola.info(
     `MEM_RECLAIM lever=${leverAttempted ? DROP_CACHE_UNIT : "unavailable"} ` +
       `attempted=${dropAttempted} ` +
       `emergency_override=${emergencyOverride} override_limit=${EMERGENCY_CACHE_DROP_OVERRIDE_LIMIT} ` +
@@ -720,8 +723,10 @@ export async function recoverMemoryEmergency(
   return recovery;
 }
 
-function guestBuffCacheMb(): number | null {
-  const result = fromThrowable(() => readFileSync("/proc/meminfo", "utf8"))();
+async function guestBuffCacheMb(): Promise<number | null> {
+  const result = await fromAsyncThrowable(() =>
+    readFile("/proc/meminfo", "utf8"),
+  )();
   if (result.isErr()) return null;
   const values = new Map(
     [
@@ -832,9 +837,7 @@ exit $LASTEXITCODE
     ),
   )();
   if (result.isErr()) {
-    process.stderr.write(
-      `WARN page-cache drop failed: ${String(result.error)}\n`,
-    );
+    consola.warn(`WARN page-cache drop failed: ${String(result.error)}`);
     return false;
   }
   process.stdout.write(
@@ -853,7 +856,7 @@ export async function runReclaimStages(options: {
   free: number;
   denyBytes: number;
   run: (stage: ReclaimStage) => Promise<StageRun>;
-  measure: () => Result<number, Error>;
+  measure: () => Result<number, Error> | Promise<Result<number, Error>>;
   log: (message: string) => void;
   warn: (message: string) => void;
 }): Promise<Result<{ free: number; failures: string[] }, Error>> {
@@ -863,7 +866,7 @@ export async function runReclaimStages(options: {
     if (free >= options.denyBytes) break;
     const before = free;
     const result = await fromAsyncThrowable(() => options.run(stage))();
-    const measured = options.measure();
+    const measured = await options.measure();
     if (measured.isErr()) return err(measured.error);
     free = measured.value;
     if (result.isErr()) {
@@ -891,9 +894,9 @@ export async function runReclaimStages(options: {
 async function reclaim(
   policy: Policy,
 ): Promise<Result<{ free: number; failures: string[] }, Error>> {
-  const initial = freeBytes(policy.path);
+  const initial = await freeBytes(policy.path);
   if (initial.isErr()) return err(initial.error);
-  markAttempt();
+  await markAttempt();
   return runReclaimStages({
     stages: reclaimStages(miseBinary()),
     free: initial.value,
@@ -902,20 +905,20 @@ async function reclaim(
     run: (stage) => runBounded(stage.argv, stage.timeoutMs),
     measure: () => freeBytes(policy.path),
     log: (message) => {
-      process.stdout.write(message);
+      consola.info(message.trimEnd());
     },
     warn: (message) => {
-      process.stderr.write(message);
+      consola.warn(message.trimEnd());
     },
   });
 }
 
-export function startTicks(stat: string): string | null {
-  const close = stat.lastIndexOf(")");
+export function startTicks(statText: string): string | null {
+  const close = statText.lastIndexOf(")");
   if (close < 0) return null;
   // After ") ", the state field is #3; starttime is field #22, zero-based index 19.
   return (
-    stat
+    statText
       .slice(close + 2)
       .trim()
       .split(/\s+/u)[19] ?? null
@@ -946,31 +949,36 @@ export function selectStopTargets(
   return [...targets.values()];
 }
 
-function readProcess(pid: number): ComputeProcess | null {
-  const result = fromThrowable(() => {
+async function readProcess(pid: number): Promise<ComputeProcess | null> {
+  const result = await fromAsyncThrowable(async () => {
     const root = `/proc/${pid}`;
-    const comm = readFileSync(`${root}/comm`, "utf8").trim();
+    const comm = (await readFile(`${root}/comm`, "utf8")).trim();
     if (!COMPUTE_NAMES.has(comm)) return null;
-    const status = readFileSync(`${root}/status`, "utf8");
+    const status = await readFile(`${root}/status`, "utf8");
     const uid = Number(/^Uid:\s+(\d+)/mu.exec(status)?.[1]);
-    const ticks = startTicks(readFileSync(`${root}/stat`, "utf8"));
+    const ticks = startTicks(await readFile(`${root}/stat`, "utf8"));
     if (!Number.isInteger(uid) || ticks === null) return null;
     return {
       pid,
       uid,
       comm,
       startTicks: ticks,
-      cgroup: readFileSync(`${root}/cgroup`, "utf8"),
+      cgroup: await readFile(`${root}/cgroup`, "utf8"),
     };
   })();
   return result.unwrapOr(null);
 }
 
-function liveTargets(): StopTarget[] {
-  const processes = readdirSync("/proc")
-    .filter((name) => /^\d+$/u.test(name))
-    .map((name) => readProcess(Number(name)))
-    .flatMap((p) => (p === null ? [] : [p]));
+async function liveTargets(): Promise<StopTarget[]> {
+  const names = await fromAsyncThrowable(() => readdir("/proc"))();
+  if (names.isErr()) return [];
+  const processes = (
+    await Promise.all(
+      names.value
+        .filter((name) => /^\d+$/u.test(name))
+        .map((name) => readProcess(Number(name))),
+    )
+  ).flatMap((p) => (p === null ? [] : [p]));
   return selectStopTargets(processes, process.getuid?.() ?? -1);
 }
 
@@ -985,16 +993,23 @@ export function hasLiveBuildProcess(
   );
 }
 
-function buildStillRunning(): boolean {
-  const processes = readdirSync("/proc")
-    .filter((name) => /^\d+$/u.test(name))
-    .map((name) => readProcess(Number(name)))
-    .flatMap((p) => (p === null ? [] : [p]));
+async function buildStillRunning(): Promise<boolean> {
+  const names = await fromAsyncThrowable(() => readdir("/proc"))();
+  if (names.isErr()) return false;
+  const processes = (
+    await Promise.all(
+      names.value
+        .filter((name) => /^\d+$/u.test(name))
+        .map((name) => readProcess(Number(name))),
+    )
+  ).flatMap((p) => (p === null ? [] : [p]));
   return hasLiveBuildProcess(processes, process.getuid?.() ?? -1);
 }
 
-function sameProcess(target: Extract<StopTarget, { kind: "pid" }>): boolean {
-  const current = readProcess(target.pid);
+async function sameProcess(
+  target: Extract<StopTarget, { kind: "pid" }>,
+): Promise<boolean> {
+  const current = await readProcess(target.pid);
   return (
     current !== null &&
     current.startTicks === target.startTicks &&
@@ -1029,18 +1044,25 @@ export async function recordCapacityDecision(
   const path = context.recordPath ?? capacityDecisionPath();
   let members: ComputeProcess[] = [];
   if (target?.kind === "unit") {
-    members = (await readdir("/proc"))
-      .filter((name) => /^\d+$/u.test(name))
-      .map((name) => readProcess(Number(name)))
-      .flatMap((member) =>
-        member !== null &&
-        member.cgroup.split("/").some((part) => part.trim() === target.name)
-          ? [member]
-          : [],
-      );
+    const listed = await fromAsyncThrowable(() => readdir("/proc"))();
+    const candidates = listed.isErr()
+      ? []
+      : await Promise.all(
+          listed.value
+            .filter((name) => /^\d+$/u.test(name))
+            .map((name) => readProcess(Number(name))),
+        );
+    members = candidates.flatMap((member) =>
+      member !== null &&
+      member.cgroup.split("/").some((part) => part.trim() === target.name)
+        ? [member]
+        : [],
+    );
   }
   const current =
-    target?.kind === "pid" ? readProcess(target.pid) : (members[0] ?? null);
+    target?.kind === "pid"
+      ? await readProcess(target.pid)
+      : (members[0] ?? null);
   const record = {
     schema: 1,
     time: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
@@ -1121,14 +1143,14 @@ async function stopTarget(
     );
     return;
   }
-  if (!sameProcess(target)) return;
+  if (!(await sameProcess(target))) return;
   const recordPath = await recordCapacityDecision(
     "STOP",
     context,
     target,
     "TERM",
   );
-  if (!sameProcess(target)) return;
+  if (!(await sameProcess(target))) return;
   const result = fromThrowable(() => process.kill(target.pid, "SIGTERM"))();
   if (result.isOk()) {
     raw.push(target);
@@ -1155,16 +1177,21 @@ export async function stopCompute(
     await stopTarget(target, raw, context);
   }
   if (raw.length > 0) await Bun.sleep(1_000);
-  if (raw.some((target) => sameProcess(target))) await Bun.sleep(9_000);
+  if (
+    await Promise.all(raw.map((target) => sameProcess(target))).then((states) =>
+      states.some(Boolean),
+    )
+  )
+    await Bun.sleep(9_000);
   for (const target of raw) {
-    if (!sameProcess(target)) continue;
+    if (!(await sameProcess(target))) continue;
     const recordPath = await recordCapacityDecision(
       "STOP",
       context,
       target,
       "KILL",
     );
-    if (!sameProcess(target)) continue;
+    if (!(await sameProcess(target))) continue;
     const result = fromThrowable(() => process.kill(target.pid, "SIGKILL"))();
     if (result.isOk()) {
       process.stdout.write(
@@ -1184,22 +1211,27 @@ async function emergencyBuildReclaim(
   // This is a regenerable Cargo target, never research output. It is cleaned only after the
   // emergency stop, and only after every observed Cargo/rustc/clippy process has exited.
   const project = join(homedir(), "Workspace/polysearch-rs");
-  if (!existsSync(join(project, "Cargo.toml"))) {
+  if (
+    !(await access(join(project, "Cargo.toml")).then(
+      () => true,
+      () => false,
+    ))
+  ) {
     process.stdout.write("BUILD_RECLAIM skip=project-absent\n");
     return freeBytes(policy.path);
   }
-  if (buildStillRunning()) {
+  if (await buildStillRunning()) {
     process.stderr.write("BUILD_RECLAIM skip=build-still-running\n");
     return freeBytes(policy.path);
   }
   const mise = miseBinary();
-  const beforeResult = freeBytes(policy.path);
+  const beforeResult = await freeBytes(policy.path);
   if (beforeResult.isErr()) return err(beforeResult.error);
   const before = beforeResult.value;
   const result = await fromAsyncThrowable(() =>
     runBounded([mise, "exec", "--", "cargo", "clean"], 300_000, project),
   )();
-  const afterResult = freeBytes(policy.path);
+  const afterResult = await freeBytes(policy.path);
   if (afterResult.isErr()) return err(afterResult.error);
   const after = afterResult.value;
   if (result.isErr() || result.value.code !== 0 || result.value.timedOut) {
@@ -1248,7 +1280,7 @@ async function main(): Promise<void> {
   }
   const policyResult = loadRecoveryPolicy(parsed.flags.config);
   if (policyResult.isErr()) {
-    process.stderr.write(`FATAL: ${String(policyResult.error)}\n`);
+    consola.error(`FATAL: ${String(policyResult.error)}`);
     process.exit(2);
   }
   const policy = policyResult.value;
@@ -1294,15 +1326,15 @@ async function main(): Promise<void> {
       process.stderr.write(message);
     },
   });
-  const initialFree = freeBytes(policy.path);
+  const initialFree = await freeBytes(policy.path);
   if (initialFree.isErr()) {
-    process.stderr.write(`FATAL: ${String(initialFree.error)}\n`);
+    consola.error(`FATAL: ${String(initialFree.error)}`);
     process.exit(2);
   }
   let free = initialFree.value;
   const memoryBefore = await probeHostMemory();
   if (memoryBefore === null) {
-    process.stderr.write("WARN Windows memory could not be measured\n");
+    consola.warn("WARN Windows memory could not be measured");
   } else {
     process.stdout.write(
       `MEMORY windows_available_mb=${memoryBefore.availableMb} page_reads_s=${memoryBefore.pageReadsPerSecond}\n`,
@@ -1319,7 +1351,7 @@ async function main(): Promise<void> {
     memoryBefore !== null &&
     memoryBefore.availableMb < MEMORY_AVAILABLE_EMERGENCY_MB;
   if (free >= policy.denyBytes && !memoryAvailableLow) {
-    writeRecoveryVerdict(
+    await writeRecoveryVerdict(
       recoveryVerdictRecord(
         "OK",
         false,
@@ -1332,7 +1364,7 @@ async function main(): Promise<void> {
     );
     return;
   }
-  writeRecoveryVerdict(
+  await writeRecoveryVerdict(
     recoveryVerdictRecord(
       "HOLD",
       memoryLow,
@@ -1343,7 +1375,7 @@ async function main(): Promise<void> {
   const runReclaim = shouldReclaim(
     free,
     policy,
-    readLastAttemptMs(),
+    await readLastAttemptMs(),
     Temporal.Now.instant().epochMilliseconds,
   );
   const diskEmergency = free < policy.stopBytes;
@@ -1365,7 +1397,7 @@ async function main(): Promise<void> {
   if (memoryLow && memoryBefore !== null) {
     const memoryResult = await recoverMemoryEmergency({
       before: memoryBefore,
-      beforeBuffCacheMb: guestBuffCacheMb(),
+      beforeBuffCacheMb: await guestBuffCacheMb(),
       thresholdMb: MEMORY_AVAILABLE_EMERGENCY_MB,
       isLeverAvailable: dropCacheLeverAvailable,
       startLever: startDropCacheLever,
@@ -1380,7 +1412,10 @@ async function main(): Promise<void> {
         recovery = result;
         memoryLatest = result.memoryAfter;
         memoryStopPerformed = true;
-        await stopCompute(liveTargets(), decisionContext("memory-emergency"));
+        await stopCompute(
+          await liveTargets(),
+          decisionContext("memory-emergency"),
+        );
       },
     });
     recovery = memoryResult;
@@ -1391,7 +1426,7 @@ async function main(): Promise<void> {
   } else if (memoryAvailableLow) {
     const holdMemoryResult = await recoverMemoryEmergency({
       before: memoryBefore,
-      beforeBuffCacheMb: guestBuffCacheMb(),
+      beforeBuffCacheMb: await guestBuffCacheMb(),
       thresholdMb: MEMORY_AVAILABLE_EMERGENCY_MB,
       isLeverAvailable: dropCacheLeverAvailable,
       startLever: startDropCacheLever,
@@ -1423,8 +1458,8 @@ async function main(): Promise<void> {
     // Stop the known writers before a potentially slow cache walk. Once C: is at this floor,
     // spending minutes scanning while they keep writing can exhaust Windows first.
     if (!memoryStopPerformed)
-      await stopCompute(liveTargets(), decisionContext("disk-emergency"));
-    const measured = freeBytes(policy.path);
+      await stopCompute(await liveTargets(), decisionContext("disk-emergency"));
+    const measured = await freeBytes(policy.path);
     if (measured.isErr()) {
       process.stderr.write(`FATAL: ${String(measured.error)}\n`);
       process.exit(2);
@@ -1446,8 +1481,8 @@ async function main(): Promise<void> {
     }
   }
   if (!diskEmergency && free < policy.stopBytes) {
-    await stopCompute(liveTargets(), decisionContext("disk-emergency"));
-    const measured = freeBytes(policy.path);
+    await stopCompute(await liveTargets(), decisionContext("disk-emergency"));
+    const measured = await freeBytes(policy.path);
     if (measured.isErr()) {
       process.stderr.write(`FATAL: ${String(measured.error)}\n`);
       process.exit(2);
@@ -1464,8 +1499,8 @@ async function main(): Promise<void> {
   }
   if (free < policy.stopBytes) {
     // A service may have restarted while cleanup ran. Repeat the containment check.
-    await stopCompute(liveTargets(), decisionContext("disk-emergency"));
-    const measured = freeBytes(policy.path);
+    await stopCompute(await liveTargets(), decisionContext("disk-emergency"));
+    const measured = await freeBytes(policy.path);
     if (measured.isErr()) {
       process.stderr.write(`FATAL: ${String(measured.error)}\n`);
       process.exit(2);
@@ -1477,7 +1512,7 @@ async function main(): Promise<void> {
       "HOLD",
       decisionContext("capacity-hold"),
     );
-    writeRecoveryVerdict(
+    await writeRecoveryVerdict(
       recoveryVerdictRecord(
         "HOLD",
         memoryEmergency(memoryLatest),
@@ -1493,7 +1528,7 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  writeRecoveryVerdict(
+  await writeRecoveryVerdict(
     recoveryVerdictRecord(
       "OK",
       false,

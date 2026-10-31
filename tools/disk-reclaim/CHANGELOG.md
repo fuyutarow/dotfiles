@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.21 — 2026-10-31
+
+- Use asynchronous filesystem operations for Rust target discovery.
+
 ## 1.12.20 — 2026-10-31
 
 - Use asynchronous filesystem operations for audit tree sizing

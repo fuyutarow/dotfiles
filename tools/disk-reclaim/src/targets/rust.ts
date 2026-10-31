@@ -1,49 +1,52 @@
-import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
+import { access, lstat, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Candidate } from "../model.ts";
 import { collectProcesses, resolveProcRoot } from "../lib/procs.ts";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import type { Context, Target } from "./index.ts";
 import { deleteTree, treeCandidate } from "./tree.ts";
-import { cachedDiscovery, checkScanDeadline } from "../lib/scan-cache.ts";
+import { cachedDiscoveryAsync, checkScanDeadline } from "../lib/scan-cache.ts";
 
 const within = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);
 
-function findTargets(root: string, depth = 0, ctx?: Context): string[] {
+async function findTargets(
+  root: string,
+  depth = 0,
+  ctx?: Context,
+): Promise<string[]> {
   checkScanDeadline(ctx);
   if (depth > 4) return [];
-  const names = fromThrowable(() => readdirSync(root))()
-    .map((entries) => entries.toSorted())
-    .unwrapOr([]);
-  return names.flatMap((name) => {
+  const names = await readdir(root).then(
+    (entries) => entries.toSorted(),
+    () => [],
+  );
+  const targets: string[] = [];
+  for (const name of names) {
     const path = join(root, name);
-    const stat = fromThrowable(() => lstatSync(path))();
-    if (
-      stat.isErr() ||
-      !stat.value.isDirectory() ||
-      stat.value.isSymbolicLink()
-    )
-      return [];
-    if (name === "target") return [path];
-    return findTargets(path, depth + 1, ctx);
-  });
+    const entry = await lstat(path).catch(() => null);
+    if (entry === null || !entry.isDirectory() || entry.isSymbolicLink())
+      continue;
+    if (name === "target") targets.push(path);
+    else targets.push(...(await findTargets(path, depth + 1, ctx)));
+  }
+  return targets;
 }
 
-function lastBuilt(path: string): number | undefined {
-  const own = fromThrowable(() => statSync(path))();
-  if (own.isErr()) return undefined;
-  const entries = fromThrowable(() => readdirSync(path))();
-  if (entries.isErr()) return undefined;
-  return Math.floor(
-    Math.max(
-      own.value.mtimeMs,
-      ...entries.value.map((name) =>
-        fromThrowable(() => statSync(join(path, name)).mtimeMs)().unwrapOr(0),
+async function lastBuilt(path: string): Promise<number | undefined> {
+  const own = await stat(path).catch(() => null);
+  if (own === null) return undefined;
+  const entries = await readdir(path).catch(() => null);
+  if (entries === null) return undefined;
+  const times = await Promise.all(
+    entries.map((name) =>
+      stat(join(path, name)).then(
+        (entry) => entry.mtimeMs,
+        () => 0,
       ),
-    ) / 1000,
+    ),
   );
+  return Math.floor(Math.max(own.mtimeMs, ...times) / 1000);
 }
 
 const ask = (candidate: Candidate, reason: string): Candidate => ({
@@ -60,13 +63,13 @@ async function targetRows(
   ctx: Context,
 ): Promise<Candidate[]> {
   const project = dirname(path);
-  const manifest = fromThrowable(() => statSync(join(project, "Cargo.toml")))();
+  const manifest = await stat(join(project, "Cargo.toml")).catch(() => null);
   const base = await treeCandidate(
     path,
     "Rust target is idle and regenerable",
     ctx,
   );
-  if (manifest.isErr() || !manifest.value.isFile())
+  if (manifest === null || !manifest.isFile())
     return [
       ask(
         base,
@@ -121,7 +124,13 @@ async function targetRows(
   const parent = verdict === "RECLAIM" ? base : ask(base, reason);
   rows.push(parent);
   const incremental = join(path, "incremental");
-  if (verdict === "ASK" && existsSync(incremental)) {
+  if (
+    verdict === "ASK" &&
+    (await access(incremental).then(
+      () => true,
+      () => false,
+    ))
+  ) {
     const child = await treeCandidate(
       incremental,
       "incremental cache inside an unresolved Rust target",
@@ -148,15 +157,17 @@ export const createRustTarget = (root?: () => string) =>
               process.env["KONDO_DIR"] ?? home,
             ]
           : [root()];
-      const targets = [
-        ...new Set(
-          roots.flatMap((scanRoot) =>
-            cachedDiscovery(scanRoot, "rust-discovery-v1", ctx, () =>
-              findTargets(scanRoot, 0, ctx),
-            ),
-          ),
-        ),
-      ];
+      const discovered: string[] = [];
+      for (const scanRoot of roots)
+        discovered.push(
+          ...(await cachedDiscoveryAsync(
+            scanRoot,
+            "rust-discovery-v1",
+            ctx,
+            () => findTargets(scanRoot, 0, ctx),
+          )),
+        );
+      const targets = [...new Set(discovered)];
       const snapshot = collectProcesses({
         procRoot: resolveProcRoot(ctx.procDir),
         ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
@@ -182,11 +193,13 @@ export const createRustTarget = (root?: () => string) =>
           )),
         );
       }
-      return rows.toSorted((a, b) => {
-        const aBuilt = lastBuilt(a.path ?? "") ?? now;
-        const bBuilt = lastBuilt(b.path ?? "") ?? now;
-        return aBuilt - bBuilt;
-      });
+      const built = await Promise.all(
+        rows.map(async (row) => ({
+          row,
+          time: (await lastBuilt(row.path ?? "")) ?? now,
+        })),
+      );
+      return built.toSorted((a, b) => a.time - b.time).map(({ row }) => row);
     },
     act: deleteTree,
   }) satisfies Target;

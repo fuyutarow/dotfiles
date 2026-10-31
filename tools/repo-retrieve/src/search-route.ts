@@ -11,7 +11,7 @@
 // shell calls as tool_name "Bash" + tool_input.command (lib.ts) and has no Grep tool, so the Bash
 // branch is the whole gate there.
 
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { access, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { bashCwd } from "@dotfiles/shared/src/bash-cwd.ts";
@@ -78,25 +78,20 @@ const ROUTED_STREAM_FILTER = new RegExp(
 );
 // Resolved through the real path: the hook runs from ~/.agents/hooks (a symlink to this dir), and
 // the router lives in tools/repo-retrieve/ of the repo, not beside the link.
-const ROUTER = join(
-  dirname(realpathSync(import.meta.path)),
-  "repo-retrieve.ts",
-);
+const ROUTER = join(dirname(import.meta.path), "repo-retrieve.ts");
 // What to tell the caller to type: the short PATH command when it resolves to THIS router (the
 // package bin from `bun link`), else the long path that always exists beside this hook. Every deny
 // used to print the long form, so agents copied `bun ~/.claude/hooks/repo-retrieve.ts …` forever
 // although `repo-retrieve` was installed (2026-10-01, owner: 「ずっとこれに耐えるしかないの？？」).
-const ROUTER_COMMAND = ((): string => {
-  const isThisRouter = (name: string) => {
+const ROUTER_COMMAND = await (async (): Promise<string> => {
+  const isThisRouter = async (name: string): Promise<boolean> => {
     const onPath = Bun.which(name);
-    return (
-      onPath !== null &&
-      existsSync(ROUTER) &&
-      realpathSync(onPath) === realpathSync(ROUTER)
-    );
+    if (onPath === null) return false;
+    const paths = await Promise.all([realpath(onPath), realpath(ROUTER)]);
+    return paths[0] === paths[1];
   };
-  if (isThisRouter("rr")) return "rr";
-  if (isThisRouter("repo-retrieve")) return "repo-retrieve";
+  if (await isThisRouter("rr")) return "rr";
+  if (await isThisRouter("repo-retrieve")) return "repo-retrieve";
   return `bun ${ROUTER}`;
 })();
 
@@ -171,7 +166,10 @@ function isRouterProducer(c: ShellCommand): boolean {
   );
 }
 
-function readsRegisteredProjectFile(c: ShellCommand, name: string): boolean {
+async function readsRegisteredProjectFile(
+  c: ShellCommand,
+  name: string,
+): Promise<boolean> {
   const eff = effective(c);
   if (eff === undefined) return true;
   const args = eff.args;
@@ -183,13 +181,16 @@ function readsRegisteredProjectFile(c: ShellCommand, name: string): boolean {
     operands = positional.slice(1);
     operands = operands.filter((arg) => arg !== "-" && !arg.includes("="));
   }
-  return operands.some((operand) => {
+  for (const operand of operands) {
     if (operand === "-") return false;
     const target = readPath(operand, c);
-    return (
-      !target.resolved || registeredProject(physicalPath(target.path)) !== null
-    );
-  });
+    if (
+      !target.resolved ||
+      (await registeredProject(physicalPath(target.path))) !== null
+    )
+      return true;
+  }
+  return false;
 }
 
 // Resolve only a literal absolute path assigned in this shell, with no intervening command
@@ -241,10 +242,10 @@ function resolveAssignmentProducer(
   };
 }
 
-function allowedFilterStages(
+async function allowedFilterStages(
   parsed: ParsedShell,
   command: string,
-): Set<ShellCommand> {
+): Promise<Set<ShellCommand>> {
   const top = parsed.commands.filter((c) => !c.nested);
   const allowed = new Set<ShellCommand>();
   for (let start = 0; start < top.length;) {
@@ -255,13 +256,13 @@ function allowedFilterStages(
     if (
       producer !== undefined &&
       pipeline.length > 1 &&
-      isAllowedStreamFilterPipeline(
+      (await isAllowedStreamFilterPipeline(
         [
           resolveLocalProducer(producer, top.slice(0, start)),
           ...pipeline.slice(1),
         ],
         command,
-      )
+      ))
     )
       pipeline.forEach((stage) => {
         allowed.add(stage);
@@ -271,7 +272,10 @@ function allowedFilterStages(
   return allowed;
 }
 
-function isAllowedPipeProducer(c: ShellCommand, command: string): boolean {
+async function isAllowedPipeProducer(
+  c: ShellCommand,
+  command: string,
+): Promise<boolean> {
   const eff = effective(c);
   if (
     eff === undefined ||
@@ -294,7 +298,7 @@ function isAllowedPipeProducer(c: ShellCommand, command: string): boolean {
   )
     return false;
   if (["cat", "bat", "sed", "awk"].includes(eff.name))
-    return !readsRegisteredProjectFile(c, eff.name);
+    return !(await readsRegisteredProjectFile(c, eff.name));
   return true;
 }
 
@@ -530,10 +534,10 @@ function isPipePassThrough(c: ShellCommand): boolean {
   return isStreamFilter(c) || isStdinTextStage(c);
 }
 
-function isAllowedStreamFilterPipeline(
+async function isAllowedStreamFilterPipeline(
   commands: ShellCommand[],
   command: string,
-): boolean {
+): Promise<boolean> {
   const rest = [...commands];
   if (rest.length > 0 && rest[0]?.words[0] === "cd") {
     const cd = rest.shift();
@@ -541,7 +545,7 @@ function isAllowedStreamFilterPipeline(
     if (rest[0]?.sep !== "&&") return false;
   }
   if (rest.length < 2 || rest[0] === undefined) return false;
-  if (!isAllowedPipeProducer(rest[0], command)) return false;
+  if (!(await isAllowedPipeProducer(rest[0], command))) return false;
   if (rest.slice(1).some((stage) => !isPipePassThrough(stage))) return false;
   const filters = rest.slice(1).filter((stage) => isStreamFilter(stage));
   if (filters.length === 0) return false;
@@ -568,16 +572,22 @@ function isAllowedStreamFilterPipeline(
   return true;
 }
 
-function rawSearchBySyntax(parsed: ParsedShell, command: string): boolean {
-  const allowed = allowedFilterStages(parsed, command);
-  return parsed.commands.some(
-    (c) =>
+async function rawSearchBySyntax(
+  parsed: ParsedShell,
+  command: string,
+): Promise<boolean> {
+  const allowed = await allowedFilterStages(parsed, command);
+  for (const c of parsed.commands) {
+    if (
       !allowed.has(c) &&
       commandSearches(c, command) &&
       ((c.dynamic &&
         parsed.commands.some((step) => step.assignments.length > 0)) ||
-        !fileScopedSearch(c)),
-  );
+        !(await fileScopedSearch(c)))
+    )
+      return true;
+  }
+  return false;
 }
 
 function commandSearches(c: ShellCommand, command: string): boolean {
@@ -640,27 +650,36 @@ function commandSearches(c: ShellCommand, command: string): boolean {
 const OUTPUT_FILE = /\.(?:log|jsonl|tsv|txt|out|err)$/iu;
 
 /** One nonrecursive grep/rg over explicit output files or paths outside ccc roots is not a repo search. */
-function fileScopedSearch(c: ShellCommand): boolean {
+async function fileScopedSearch(c: ShellCommand): Promise<boolean> {
   const eff = effective(c);
   if (eff === undefined || (eff.name !== "grep" && eff.name !== "rg"))
     return false;
   if (eff.args.some(isRecursiveOption)) return false;
   const operands = searchOperands(c);
   if (operands.length === 0) return false;
-  const registered = operands.map((operand) => {
-    const target = readPath(operand, c);
-    if (!target.resolved) return null;
-    const outputFile =
-      operands.length === 1 &&
-      OUTPUT_FILE.test(target.path) &&
-      statSync(target.path, { throwIfNoEntry: false })?.isFile() === true;
-    if (outputFile) return true;
-    return registeredProject(target.path) === null;
-  });
+  const registered = await Promise.all(
+    operands.map(async (operand) => {
+      const target = readPath(operand, c);
+      if (!target.resolved) return null;
+      const outputFile =
+        operands.length === 1 &&
+        OUTPUT_FILE.test(target.path) &&
+        (await stat(target.path).then(
+          (stats) => stats.isFile(),
+          () => false,
+        ));
+      if (outputFile) return true;
+      const project = await registeredProject(target.path);
+      return project === null;
+    }),
+  );
   return registered.every((outside) => outside === true);
 }
 
-function isRawSearch(command: string | undefined, cwd: string): boolean {
+async function isRawSearch(
+  command: string | undefined,
+  cwd: string,
+): Promise<boolean> {
   if (command === undefined || command === "") return false;
   const parsed = parseShell(command, cwd);
   if (parsed !== undefined) return rawSearchBySyntax(parsed, command);
@@ -830,24 +849,26 @@ function searchOperands(c: ShellCommand, pipedInput = false): string[] {
     : [];
 }
 
-function searchTargets(payload: unknown): string[] {
+async function searchTargets(payload: unknown): Promise<string[]> {
   if (strAt(payload, "tool_name") === "Grep") return [startPath(payload)];
   const command = strAt(payload, "tool_input", "command") ?? "";
   let cwd = strAt(payload, "cwd") ?? process.cwd();
   if (cwd === "") cwd = process.cwd();
   const parsed = parseShell(command, cwd);
   if (parsed === undefined) return [startPath(payload)];
-  const allowed = allowedFilterStages(parsed, command);
-  const targets = parsed.commands.flatMap((c) => {
-    if (allowed.has(c)) return [];
-    if (!commandSearches(c, command)) return [];
+  const allowed = await allowedFilterStages(parsed, command);
+  const targets: string[] = [];
+  for (const c of parsed.commands) {
+    if (allowed.has(c) || !commandSearches(c, command)) continue;
     // Shell-local assignments are not the hook environment. Do not reuse its values after one.
     if (
       c.dynamic &&
       parsed.commands.some((step) => step.assignments.length > 0)
-    )
-      return [physicalPath(c.cwd)];
-    if (fileScopedSearch(c)) return [];
+    ) {
+      targets.push(physicalPath(c.cwd));
+      continue;
+    }
+    if (await fileScopedSearch(c)) continue;
     const eff = effective(c);
     // An unapproved grep stage with no explicit file operand is still part of a search pipeline:
     // its producer may be reading the registered tree. Attribute that search to the project cwd
@@ -857,18 +878,28 @@ function searchTargets(payload: unknown): string[] {
       SEARCH_PROGRAMS.has(eff.name) &&
       c.sep === "|" &&
       searchOperands(c).length === 0
-    )
-      return [physicalPath(c.cwd)];
-    const root = registeredProject(c.cwd);
-    return searchOperands(c).flatMap((operand) => {
-      const target = readPath(operand, c);
-      if (!target.resolved && !coordinatorPath(target.path))
-        return [physicalPath(c.cwd)];
-      if (root !== null && !insidePath(target.path, physicalPath(root)))
-        return [];
-      return [target.path];
-    });
-  });
+    ) {
+      targets.push(physicalPath(c.cwd));
+      continue;
+    }
+    const root = await registeredProject(c.cwd);
+    const operands = searchOperands(c).map((operand) => readPath(operand, c));
+    const unresolved = operands.some(
+      (target) => !target.resolved && !coordinatorPath(target.path),
+    );
+    if (unresolved) {
+      targets.push(physicalPath(c.cwd));
+      continue;
+    }
+    targets.push(
+      ...operands
+        .filter(
+          (target) =>
+            root === null || insidePath(target.path, physicalPath(root)),
+        )
+        .map((target) => target.path),
+    );
+  }
   // A malformed router/filter pipeline is still a repository search attempt. Only the one
   // explicitly accepted stream-filter shape above is exempt; preserve the gate for other forms.
   const hasRouter = parsed.commands.some((c) => {
@@ -903,11 +934,11 @@ function searchTargets(payload: unknown): string[] {
  *   two judgments over the same act cannot both be authoritative.** Outside governed repos
  *   nothing changes: the ban stands exactly as before.
  */
-function governedRepo(start: string): string | null {
+function governedRepo(start: string): Promise<string | null> {
   return findAncestorContaining(start, "rnd.config.json");
 }
 
-function registeredProject(start: string): string | null {
+function registeredProject(start: string): Promise<string | null> {
   return findAncestorContaining(start, ".cocoindex_code", "settings.yml");
 }
 
@@ -915,16 +946,25 @@ function registeredProject(start: string): string | null {
 // file, differing only in which one. `start` may be a file or directory, and may not exist —
 // throwIfNoEntry:false then reports no stat, and the walk falls back to treating `start`
 // itself as the starting point.
-function findAncestorContaining(
+async function findAncestorContaining(
   start: string,
   ...marker: string[]
-): string | null {
-  const st = statSync(start, { throwIfNoEntry: false });
+): Promise<string | null> {
+  const st = await stat(start).then(
+    (value) => value,
+    () => null,
+  );
   let current = start;
-  if (st !== undefined && !st.isDirectory()) current = dirname(start);
+  if (st !== null && !st.isDirectory()) current = dirname(start);
   current = resolve(current);
   while (true) {
-    if (existsSync(join(current, ...marker))) return current;
+    if (
+      await access(join(current, ...marker)).then(
+        () => true,
+        () => false,
+      )
+    )
+      return current;
     const parent = dirname(current);
     if (parent === current) return null;
     current = parent;
@@ -954,13 +994,22 @@ function searchPattern(args: string[]): string | undefined {
   return undefined;
 }
 
-function rewrittenSearch(payload: unknown, project?: string): string {
+async function rewrittenSearch(
+  payload: unknown,
+  project?: string,
+): Promise<string> {
   const command = strAt(payload, "tool_input", "command") ?? "";
   const parsed = parseShell(command, strAt(payload, "cwd") ?? process.cwd());
-  const c = parsed?.commands.find(
-    (segment) =>
-      commandSearches(segment, command) && !fileScopedSearch(segment),
-  );
+  let c: ShellCommand | undefined;
+  for (const segment of parsed?.commands ?? []) {
+    if (
+      commandSearches(segment, command) &&
+      !(await fileScopedSearch(segment))
+    ) {
+      c = segment;
+      break;
+    }
+  }
   const eff = c === undefined ? undefined : effective(c);
   const scope =
     project === undefined ? "" : ` --project ${shellQuote(project)}`;
@@ -1036,9 +1085,9 @@ function hasRrAcceptPlan(command: string | undefined, cwd: string): boolean {
   return RR_INDEX_OVERRIDE.test(command);
 }
 
-function decidePayload(
+async function decidePayload(
   payload: unknown,
-): { readonly reason: string } | undefined {
+): Promise<{ readonly reason: string } | undefined> {
   if (payload === undefined)
     return {
       reason:
@@ -1051,20 +1100,20 @@ function decidePayload(
   const cwd = strAt(payload, "cwd") ?? process.cwd();
   const indexStart = tool === "Bash" && hasIndexStart(command, cwd);
 
-  if (tool === "Bash" && !indexStart && !isRawSearch(command, cwd)) {
+  if (tool === "Bash" && !indexStart && !(await isRawSearch(command, cwd))) {
     return undefined;
   }
 
   // **A governed repo owns its own search policy.** See `governedRepo` above — one act, one
   // authoritative judgment. This is checked before the ccc registration so a repo that is both
   // governed and ccc-registered falls to its own gate.
-  const governed = governedRepo(startPath(payload));
+  const governed = await governedRepo(startPath(payload));
   if (!indexStart && governed !== null && governed !== "") return undefined;
 
   if (!indexStart && !cccIsAvailable()) return undefined;
   let project: string | null = null;
-  for (const target of searchTargets(payload)) {
-    const candidate = registeredProject(target);
+  for (const target of await searchTargets(payload)) {
+    const candidate = await registeredProject(target);
     if (candidate !== null) {
       project = candidate;
       break;
@@ -1073,7 +1122,12 @@ function decidePayload(
   if (project === null && !indexStart) return undefined;
   const target = project ?? startPath(payload);
 
-  if (!existsSync(ROUTER)) {
+  if (
+    !(await access(ROUTER).then(
+      () => true,
+      () => false,
+    ))
+  ) {
     return {
       reason:
         `search-route: configuration fault — required router is missing at ${ROUTER}. ` +
@@ -1095,7 +1149,7 @@ function decidePayload(
   return {
     reason:
       `search-route: raw ${tool} search is disabled in operational ccc project ${target}. ` +
-      `Rewrite: ${rewrittenSearch(payload, target)}. ` +
+      `Rewrite: ${await rewrittenSearch(payload, target)}. ` +
       `Declare the query shape through ${ROUTER_COMMAND}: ` +
       `${ROUTER_COMMAND} text '<exact text>'; ` +
       `${ROUTER_COMMAND} regex '<regex>'; ` +
@@ -1117,10 +1171,10 @@ function decidePayload(
 }
 
 /** Classify one hook payload and return the exact deny reason, or undefined for a silent allow. */
-export function decideSearchRoute(input: {
+export async function decideSearchRoute(input: {
   readonly payload: unknown;
   readonly error?: string;
-}): { readonly reason: string } | undefined {
+}): Promise<{ readonly reason: string } | undefined> {
   if (input.error !== undefined)
     return {
       reason:

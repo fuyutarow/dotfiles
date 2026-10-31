@@ -5,9 +5,9 @@ import { jsonText } from "../../tools/shared/src/zod.ts";
 import { decideSearchRoute } from "../../tools/repo-retrieve/src/search-route.ts";
 
 const result = await attempt(async () => {
-  const text = await Bun.stdin.text();
+  const text = await new Response(Bun.stdin).text();
   const parsed = jsonText.safeParse(text);
-  const decision = decideSearchRoute({
+  const decision = await decideSearchRoute({
     payload: parsed.success ? parsed.data : undefined,
   });
   if (decision !== undefined) {
@@ -18,7 +18,7 @@ const result = await attempt(async () => {
   }
 });
 if (!result.ok) {
-  const decision = decideSearchRoute({
+  const decision = await decideSearchRoute({
     payload: undefined,
     error: errorMessage(result.error),
   });

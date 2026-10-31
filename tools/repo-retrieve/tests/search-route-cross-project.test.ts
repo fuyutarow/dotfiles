@@ -11,7 +11,7 @@ const commands = [
   "ls /tmp/claude-1000/-home-fuyu-Workspace-firedancer/ | grep -F -e trial | head",
 ];
 
-test("recorded filters and project file producers", () => {
+test("recorded filters and project file producers", async () => {
   const root = mkdtempSync(join(tmpdir(), "route-classifier-"));
   const project = join(root, "project");
   const other = join(root, "other");
@@ -24,7 +24,7 @@ test("recorded filters and project file producers", () => {
       payload: { tool_name: "Bash", tool_input: { command }, cwd: project },
     });
   for (const command of commands)
-    expect({ command, decision: decide(command) }).toEqual({
+    expect({ command, decision: await decide(command) }).toEqual({
       command,
       decision: undefined,
     });
@@ -34,11 +34,14 @@ test("recorded filters and project file producers", () => {
       `f=${path}; wc -c $f; cat $f | grep needle`,
       `printf ok | grep ok; cat ${path} | grep needle`,
     ])
-      expect({ command, denied: decide(command) !== undefined }).toEqual({
+      expect({
+        command,
+        denied: (await decide(command)) !== undefined,
+      }).toEqual({
         command,
         denied: true,
       });
   }
   const prefixed = `cd ${project} && export PATH=/some/bin:$PATH && mise run view 2>&1 | grep -F -e x | head -14 | cut -c1-300`;
-  expect(decide(prefixed)).toBeUndefined();
+  expect(await decide(prefixed)).toBeUndefined();
 });

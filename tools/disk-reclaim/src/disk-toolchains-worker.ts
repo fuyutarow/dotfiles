@@ -122,7 +122,7 @@ async function toolchainsPreflight(
   const protection =
     injected?.protection(request.path) ??
     (injected === undefined
-      ? protectedReason(request.path, {
+      ? await protectedReason(request.path, {
           ownerTarget: "toolchains",
           repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
           protectedPaths: ctx.config.protected ?? [],

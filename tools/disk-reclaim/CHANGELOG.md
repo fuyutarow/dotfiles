@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.24 — 2026-10-31
+
+- Use asynchronous filesystem and Homebrew probes for path protection.
+
 ## 1.12.23 — 2026-10-31
 
 - Read the agx run inventory once per workspace plan.

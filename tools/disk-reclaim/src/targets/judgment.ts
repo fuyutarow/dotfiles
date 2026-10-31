@@ -42,7 +42,7 @@ export async function judgmentCandidates(
     let reason: string | null;
     if (protection.reason !== undefined) reason = protection.reason(docs);
     else
-      reason = protectedReason(docs, {
+      reason = await protectedReason(docs, {
         ownerTarget: "judgment",
         home,
         ...(protection.repoRoots === undefined

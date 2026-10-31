@@ -485,7 +485,7 @@ export function createWorkspacesTarget(
           rows.push(candidate);
           continue;
         }
-        const protection = protectedReason(candidate.path, {
+        const protection = await protectedReason(candidate.path, {
           procDir: ctx.procDir,
           repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
           protectedPaths: ctx.config.protected ?? [],

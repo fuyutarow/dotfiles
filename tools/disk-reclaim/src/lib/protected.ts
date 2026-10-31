@@ -1,7 +1,7 @@
-import { existsSync, lstatSync, readdirSync, realpathSync } from "node:fs";
+import { exists, lstat, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
+import { fromAsyncThrowable } from "neverthrow";
 import { collectProcesses, resolveProcRoot, type OpenPaths } from "./procs.ts";
 
 export type ProtectionOptions = {
@@ -17,68 +17,98 @@ export type ProtectionOptions = {
   processes?: { openPaths: (path: string) => OpenPaths } | undefined;
 };
 
-let brewPrefix: string | null | undefined;
-function brewPrefixOnce(): string | null {
-  if (brewPrefix !== undefined) return brewPrefix;
-  const brew = fromThrowable(() =>
-    Bun.spawnSync(["brew", "--prefix"], { stdout: "pipe", stderr: "ignore" }),
-  )();
-  const prefix =
-    brew.isOk() && brew.value.exitCode === 0
-      ? brew.value.stdout.toString().trim()
-      : "";
-  brewPrefix = isAbsolute(prefix) ? resolve(prefix) : null;
+let brewPrefix: Promise<string | null> | undefined;
+function brewPrefixOnce(): Promise<string | null> {
+  brewPrefix ??= (async () => {
+    const brew = await fromAsyncThrowable(async () => {
+      const child = Bun.spawn(["brew", "--prefix"], {
+        stdout: "pipe",
+        stderr: "ignore",
+      });
+      const [exitCode, output] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+      ]);
+      return { exitCode, output };
+    })();
+    const prefix =
+      brew.isOk() && brew.value.exitCode === 0 ? brew.value.output.trim() : "";
+    return isAbsolute(prefix) ? resolve(prefix) : null;
+  })();
   return brewPrefix;
 }
 
 const within = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);
 const normalized = (path: string): string => resolve(path);
-const real = (path: string): string =>
-  fromThrowable(() => realpathSync(path))().unwrapOr(normalized(path));
+const real = async (path: string): Promise<string> =>
+  (await fromAsyncThrowable(() => realpath(path))()).unwrapOr(normalized(path));
 
-function repoRoots(configured: string[], home: string): string[] {
-  return configured.flatMap((entry) => {
-    const path = entry.replace(/^~(?=\/|$)/u, home);
-    if (!path.includes("*")) return [normalized(path)];
-    const prefix = path.slice(0, path.indexOf("*"));
-    const parent = dirname(prefix.endsWith("/") ? prefix.slice(0, -1) : prefix);
-    const entries = fromThrowable(() =>
-      readdirSync(parent, { withFileTypes: true }),
-    )();
-    return entries.isErr()
-      ? []
-      : entries.value
-          .filter((item) => item.isDirectory())
-          .map((item) => join(parent, item.name));
-  });
+async function repoRoots(
+  configured: string[],
+  home: string,
+): Promise<string[]> {
+  const roots = await Promise.all(
+    configured.map(async (entry) => {
+      const path = entry.replace(/^~(?=\/|$)/u, home);
+      if (!path.includes("*")) return [normalized(path)];
+      const prefix = path.slice(0, path.indexOf("*"));
+      const parent = dirname(
+        prefix.endsWith("/") ? prefix.slice(0, -1) : prefix,
+      );
+      const entries = await fromAsyncThrowable(() =>
+        readdir(parent, { withFileTypes: true }),
+      )();
+      return entries.isErr()
+        ? []
+        : entries.value
+            .filter((item) => item.isDirectory())
+            .map((item) => join(parent, item.name));
+    }),
+  );
+  return roots.flat();
 }
 
-function hasDirectory(path: string): boolean {
-  const result = fromThrowable(() => lstatSync(path))();
+async function hasDirectory(path: string): Promise<boolean> {
+  const result = await fromAsyncThrowable(() => lstat(path))();
   return result.isOk() && result.value.isDirectory();
 }
 
-function linksInDir(dir: string): string[] {
-  const entries = fromThrowable(() => readdirSync(dir))();
+async function linksInDir(dir: string): Promise<string[]> {
+  const entries = await fromAsyncThrowable(() => readdir(dir))();
   if (entries.isErr()) return [];
-  return entries.value.flatMap((name) => {
-    const link = join(dir, name);
-    const stat = fromThrowable(() => lstatSync(link))();
-    return stat.isOk() && stat.value.isSymbolicLink() ? [real(link)] : [];
-  });
-}
-
-function linkResolvedRoots(home: string): string[] {
-  return [`${home}/.bun/bin`, `${home}/.local/bin`].flatMap((dir) =>
-    linksInDir(dir),
+  const links = await Promise.all(
+    entries.value.map(async (name) => {
+      const link = join(dir, name);
+      const stat = await fromAsyncThrowable(() => lstat(link))();
+      return stat.isOk() && stat.value.isSymbolicLink()
+        ? [await real(link)]
+        : [];
+    }),
   );
+  return links.flat();
 }
 
-function repoEnvironmentProtection(path: string, root: string): string | null {
+async function linkResolvedRoots(home: string): Promise<string[]> {
+  return (
+    await Promise.all(
+      [`${home}/.bun/bin`, `${home}/.local/bin`].map((dir) => linksInDir(dir)),
+    )
+  ).flat();
+}
+
+async function repoEnvironmentProtection(
+  path: string,
+  root: string,
+): Promise<string | null> {
   if (within(root, path)) {
     const children = [".venv", "node_modules"].map((name) => join(root, name));
-    if (children.some((child) => existsSync(child) && within(child, path)))
+    const present = await Promise.all(children.map((child) => exists(child)));
+    if (
+      children.some(
+        (child, index) => present[index] === true && within(child, path),
+      )
+    )
       return "project environment or dependencies belong to repo";
   }
   if (within(path, root)) {
@@ -89,9 +119,12 @@ function repoEnvironmentProtection(path: string, root: string): string | null {
   return null;
 }
 
-function repoProtection(path: string, roots: string[]): string | null {
+async function repoProtection(
+  path: string,
+  roots: string[],
+): Promise<string | null> {
   for (const root of roots) {
-    const reason = repoEnvironmentProtection(path, root);
+    const reason = await repoEnvironmentProtection(path, root);
     if (reason !== null) return reason;
   }
   return null;
@@ -100,14 +133,15 @@ function repoProtection(path: string, roots: string[]): string | null {
 // Home- and config-derived root lists (symlink targets of the bin dirs, expanded repo roots) are
 // read from disk. Under a stage's one process snapshot they are read once per stage, not once per
 // candidate; without a snapshot every call reads fresh.
-const stageRootLists = new WeakMap<object, Map<string, string[]>>();
+const stageRootLists = new WeakMap<object, Map<string, Promise<string[]>>>();
 function perStage(
   snapshot: object | undefined,
   key: string,
-  compute: () => string[],
-): string[] {
+  compute: () => Promise<string[]>,
+): Promise<string[]> {
   if (snapshot === undefined) return compute();
-  const lists = stageRootLists.get(snapshot) ?? new Map<string, string[]>();
+  const lists =
+    stageRootLists.get(snapshot) ?? new Map<string, Promise<string[]>>();
   stageRootLists.set(snapshot, lists);
   const known = lists.get(key);
   if (known !== undefined) return known;
@@ -116,10 +150,10 @@ function perStage(
   return fresh;
 }
 
-export function protectedReason(
+export async function protectedReason(
   candidate: string,
   options: ProtectionOptions = {},
-): string | null {
+): Promise<string | null> {
   const path = normalized(candidate);
   const home = options.home ?? process.env["HOME"] ?? homedir();
   const homePath = normalized(home);
@@ -169,27 +203,31 @@ export function protectedReason(
   if (
     options.ownerTarget !== "rust" &&
     options.ownerTarget !== "delete" &&
-    hasDirectory(join(path, "target"))
+    (await hasDirectory(join(path, "target")))
   )
     return "contains Rust target owned by rust target";
 
   const prefix =
-    options.brewPrefix === undefined ? brewPrefixOnce() : options.brewPrefix;
+    options.brewPrefix === undefined
+      ? await brewPrefixOnce()
+      : options.brewPrefix;
   if (prefix !== null) protectedRoots.push(prefix);
   if (protectedRoots.some((root) => within(path, root) || within(root, path)))
     return "tool installation root";
   if (options.ownerTarget === "toolchains" && path === rustupToolchains)
     return "tool installation root";
   if (
-    perStage(options.processes, `links:${homePath}`, () =>
-      linkResolvedRoots(homePath),
+    (
+      await perStage(options.processes, `links:${homePath}`, () =>
+        linkResolvedRoots(homePath),
+      )
     ).some((root) => within(path, root) || within(root, path))
   )
     return "resolves into tool bin symlink";
 
-  const repoRule = repoProtection(
+  const repoRule = await repoProtection(
     path,
-    perStage(
+    await perStage(
       options.processes,
       `repos:${homePath}:${JSON.stringify(options.repoRoots ?? [])}`,
       () => repoRoots(options.repoRoots ?? [], homePath),

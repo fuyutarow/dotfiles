@@ -61,7 +61,10 @@ export const createBuildsTarget = (
     scan(path, 0, undefined, ctx),
   options: {
     includeOwned?: boolean;
-    protection?: typeof protection;
+    protection?: (
+      path: string,
+      ctx: Context,
+    ) => string | null | Promise<string | null>;
     tree?: typeof treeCandidate;
     stat?: (
       path: string,
@@ -85,7 +88,7 @@ export const createBuildsTarget = (
         ctx,
         () => discover(root(), ctx),
       ).toSorted()) {
-        const reason = protect(path, ctx);
+        const reason = await protect(path, ctx);
         if (
           options.includeOwned !== true &&
           (reason === "owned by rust target" ||
@@ -131,7 +134,7 @@ export const createBuildsTarget = (
         pathStat.value.dev !== rootStat.value.dev
       )
         return null;
-      const reason = protect(path, ctx);
+      const reason = await protect(path, ctx);
       if (reason !== null)
         return {
           ...candidate,

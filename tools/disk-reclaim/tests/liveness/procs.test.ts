@@ -243,7 +243,7 @@ test("unreadable environ stays a liveness uncertainty with process identity deta
   expect(snapshot.openPaths(root).unknown).toEqual([]);
 });
 
-test("same-uid exe and mapped files resolve paths when environ is unreadable", () => {
+test("same-uid exe and mapped files resolve paths when environ is unreadable", async () => {
   const root = tempRoot("reclaim-proc-maps-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
@@ -265,7 +265,7 @@ test("same-uid exe and mapped files resolve paths when environ is unreadable", (
   });
   expect(snapshot.processes[0]?.openPaths).toContain(mapped);
   expect(
-    protectedReason(cache, {
+    await protectedReason(cache, {
       home: root,
       ownerTarget: "clean",
       procDir: proc.procRoot,

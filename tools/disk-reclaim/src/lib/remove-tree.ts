@@ -328,7 +328,7 @@ export async function removeTree(
           processes: { openPaths: () => ({ open: [], unknown: [] }) },
         }
       : options.protection;
-  const protectedPath = protectedReason(path, protectionOptions);
+  const protectedPath = await protectedReason(path, protectionOptions);
   if (protectedPath !== null)
     return {
       ok: false,

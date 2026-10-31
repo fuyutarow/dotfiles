@@ -5,7 +5,7 @@ import { tempRoot } from "../fixtures/temp.ts";
 import { removeTree } from "../../src/lib/remove-tree.ts";
 import { protectedReason } from "../../src/lib/protected.ts";
 
-test("tool install roots and bin symlink destinations are protected", () => {
+test("tool install roots and bin symlink destinations are protected", async () => {
   const home = tempRoot("reclaim-protected-home-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
@@ -13,10 +13,12 @@ test("tool install roots and bin symlink destinations are protected", () => {
   });
   const target = join(home, ".bun/install/global/node_modules");
   mkdirSync(target, { recursive: true });
-  expect(protectedReason(target, { home })).toBe("tool installation root");
+  expect(await protectedReason(target, { home })).toBe(
+    "tool installation root",
+  );
 });
 
-test("process cwd protects its containing candidate, not candidate descendants", () => {
+test("process cwd protects its containing candidate, not candidate descendants", async () => {
   const root = tempRoot("reclaim-protected-cwd-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
@@ -31,10 +33,10 @@ test("process cwd protects its containing candidate, not candidate descendants",
   symlinkSync("/bin/sh", join(processDir, "exe"));
   symlinkSync(cwd, join(processDir, "cwd"));
 
-  expect(protectedReason(cwd, { home: root, procDir })).toBe(
+  expect(await protectedReason(cwd, { home: root, procDir })).toBe(
     "contains a running process cwd",
   );
-  expect(protectedReason(child, { home: root, procDir })).toBeNull();
+  expect(await protectedReason(child, { home: root, procDir })).toBeNull();
 });
 
 test("removeTree standalone progress stays plain even on a fake TTY", async () => {

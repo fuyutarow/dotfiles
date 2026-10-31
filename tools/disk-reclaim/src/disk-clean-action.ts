@@ -8,7 +8,7 @@ export async function cleanPreflight<T>(
     target: Target;
     context: Context;
     identity: (path: string) => Promise<string>;
-    protection: (path: string) => string | null;
+    protection: (path: string) => string | null | Promise<string | null>;
     device: (path: string) => Promise<number>;
     measure: (path: string) => Promise<T>;
     fail: (message: string) => never;

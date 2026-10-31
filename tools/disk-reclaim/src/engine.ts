@@ -540,7 +540,7 @@ async function recheckAndAct(
   row.candidates[index] = found;
   if (found.verdict !== "RECLAIM") return 0;
   if (found.path !== null) {
-    const protection = protectedReason(found.path, {
+    const protection = await protectedReason(found.path, {
       ownerTarget: target.name === "rip-expire" ? "delete" : target.name,
       procDir: freshContext.procDir,
       repoRoots: [
@@ -644,7 +644,7 @@ export async function actPlannedPath(
       bytes_freed: null,
       error: "candidate is no longer safe after revalidation",
     };
-  const protection = protectedReason(candidate.path ?? path, {
+  const protection = await protectedReason(candidate.path ?? path, {
     ownerTarget: target.name,
     procDir: freshContext.procDir,
     repoRoots: [

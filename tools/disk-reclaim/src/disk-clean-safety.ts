@@ -4,7 +4,7 @@ export async function revalidateClean(
   candidates: Candidate[],
   request: { id: string; path: string; fingerprint: string },
   identity: (path: string) => Promise<string>,
-  protection: (path: string) => string | null,
+  protection: (path: string) => string | null | Promise<string | null>,
 ) {
   const candidate = candidates.find(
     (c) => c.id === request.id && c.path === request.path,
@@ -25,7 +25,7 @@ export async function revalidateClean(
       verdict: "changed",
       reason: "fingerprint changed",
     };
-  const reason = protection(request.path);
+  const reason = await protection(request.path);
   if (reason !== null)
     return {
       candidate: null,

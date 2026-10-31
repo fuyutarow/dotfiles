@@ -84,7 +84,7 @@ if (action === undefined) {
       const path = candidate.path;
       const checked = await fromAsyncThrowable(async () => {
         const fingerprint = await identity(path);
-        const reason = protectedReason(path, {
+        const reason = await protectedReason(path, {
           ownerTarget: "tmpfs",
           repoRoots: [...config.repo_roots, ...config.repos],
           protectedPaths: config.protected ?? [],

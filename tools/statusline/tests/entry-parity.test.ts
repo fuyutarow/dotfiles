@@ -370,6 +370,7 @@ async function expectGolden(
     fake(
       "agx",
       `if [ "$1" = "status" ]; then exec "${process.execPath}" -e 'process.stdout.write(await Bun.file(process.env.HOME + "/agx-status.json").text())'; fi
+if [ "$1" = "worker" ] && [ "$4" = "jev" ]; then echo '{}'; exit 0; fi
 if [ "$1" = "worker" ]; then exec "${process.execPath}" -e 'process.stdout.write(await Bun.file(process.env.AGX_STATE_DIR + "/routing-c5.json").text())'; fi
 exec "${process.execPath}" -e '${AGX_FIXTURE_RUNNER}'`,
     );

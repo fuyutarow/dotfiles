@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2 — 2026-10-31
+
+- Ship only standalone tests with their owning contract tools.
+
 ## 0.3.1 — 2026-10-31
 
 - Preserve consumer exclusions when syncing vendored tools

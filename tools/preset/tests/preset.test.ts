@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import {
   lstat,
   mkdir,
@@ -41,6 +42,39 @@ async function run(root: string, ...args: string[]) {
 }
 
 describe("preset sync", () => {
+  test.each([
+    "jj-commit",
+    "jj-push",
+    "jj-precommit",
+    "fmt-staged",
+    "mise-contract",
+    "wiring-check",
+    "lint-ts-candidate",
+    "tex-oracle",
+  ])(
+    "runs tests shipped with %s in isolation",
+    async (tool) => {
+      const root = await fixture();
+      const synced = await run(root, "--tool", tool);
+      expect(synced.exit, synced.stderr).toBe(0);
+      const tests = join(root, "tools", tool, "tests");
+      if (!existsSync(tests)) return;
+      const child = Bun.spawn([process.execPath, "test", tests], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 60_000,
+      });
+      const [stdout, stderr, exit] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      expect(exit, `${tool}: ${stdout}\n${stderr}`).toBe(0);
+    },
+    90_000,
+  );
+
   test("copies every contract tool into a fixture repo and checks recorded sources", async () => {
     const root = await fixture();
     await writeFile(join(root, "package.json"), '{"private":true}\n');

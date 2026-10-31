@@ -54,10 +54,6 @@ const tools = {
       "agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts",
       "scripts/jj-precommit.ts",
     ],
-    [
-      "agents/skills/wiring-mise-tasks/tests/jj-commit.test.ts",
-      "tests/jj-commit.test.ts",
-    ],
     ["tools/shared/src/zod.ts", "support/zod.ts"],
     ["agents/hooks/vendor/deps.js", "support/deps.js"],
   ],
@@ -70,10 +66,6 @@ const tools = {
       "agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts",
       "scripts/jj-precommit.ts",
     ],
-    [
-      "agents/skills/wiring-mise-tasks/tests/fmt-staged.test.ts",
-      "tests/fmt-staged.test.ts",
-    ],
     ["tools/shared/src/zod.ts", "support/zod.ts"],
     ["agents/hooks/vendor/deps.js", "support/deps.js"],
   ],
@@ -81,10 +73,6 @@ const tools = {
     [
       "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts",
       "scripts/mise-contract.ts",
-    ],
-    [
-      "agents/skills/wiring-mise-tasks/tests/mise-contract-pins.test.ts",
-      "tests/mise-contract-pins.test.ts",
     ],
     [
       "agents/skills/wiring-mise-tasks/tests/mise-contract-tools.test.ts",

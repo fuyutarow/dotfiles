@@ -64,9 +64,11 @@ as a configuration surface covers new kinds without registry edits.
 ## Existing presets
 
 `typescript` copies `tsconfig.json`, `package.json`, create-only `knip.jsonc`,
-`zod.ts`, `mise-tasks.toml`, `lint-oxlint.ts`, `lint-knip.ts`, `.oxlintrc.json`,
-`house.oxlintrc.json`, and its JS plugin. See [the TypeScript README](typescript/README.md)
-for React opt-in, the checked oxlint runner, and the knip gate.
+`zod.ts`, `lint-oxlint.ts`, `lint-knip.ts`, `.oxlintrc.json`,
+`house.oxlintrc.json`, and its JS plugin. It does not manage the consumer's
+`mise.toml`; its task example is documentation, and consumers verify adopted
+tasks with their existing mise contract check. See [the TypeScript README](typescript/README.md)
+for that snippet, React opt-in, the checked oxlint runner, and the knip gate.
 Dotfiles extends `typescript/tsconfig.json`, keeping its own include/exclude paths at the
 root. Consumers may tighten compiler options; weakening the preset is drift.
 

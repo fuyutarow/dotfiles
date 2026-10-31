@@ -74,10 +74,12 @@ test.each([".", "tools"])(
         ]);
         return { out, err, exit };
       };
-      const template = await readFile(
-        join(root, "standard-presets/typescript/mise-tasks.toml"),
+      const readme = await readFile(
+        join(root, "standard-presets/typescript/README.md"),
         "utf8",
       );
+      const template = readme.match(/```toml\n([\s\S]*?)\n```/u)?.[1] ?? "";
+      expect(template.length).toBeGreaterThan(0);
       expect(template).toContain('run = "lint-ts-candidate"');
       const fixtureTemplate = template.replace(
         'depends = ["fmt:staged", "lint"]',

@@ -221,6 +221,13 @@ describe("manifest preset CLI", () => {
     expect(await readFile(housePath, "utf8")).toBe(house);
   });
 
+  test("typescript apply does not create a managed mise task fragment", async () => {
+    const repo = await target();
+    expect((await run("apply", "typescript", "--to", repo)).exit).toBe(0);
+    expect(await Bun.file(join(repo, "mise-tasks.toml")).exists()).toBe(false);
+    expect((await run("diff", "typescript", "--to", repo)).exit).toBe(0);
+  });
+
   test("consumer package identity survives apply, diff and sync with house keys", async () => {
     const repo = await target();
     const consumer = {

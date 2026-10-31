@@ -1,9 +1,50 @@
 # TypeScript and optional React checks
 
-Apply with `mise run preset -- apply typescript --to /path/to/repo`, install the
-pinned dependencies with `bun install`, and merge `mise-tasks.toml` into the
-consumer's mise configuration. Include `lint:ts`, `lint:knip`, and `typecheck`
-in its check gate. `lint:ts:all` checks the whole tree deliberately.
+Apply with `mise run preset -- apply typescript --to /path/to/repo` and install
+the pinned dependencies with `bun install`. The preset does not manage the
+consumer's `mise.toml`; a consumer that adopts these tasks can merge the
+applicable entries below into its own configuration. Include `lint:ts`,
+`lint:knip`, and `typecheck` in its check gate. `lint:ts:all` checks the whole
+tree deliberately. Verify the resulting tasks with the consumer's existing
+`tools/mise-contract.ts` check.
+
+```toml
+# Merge these lint/check dependencies with the repo's existing gates.
+# Consumers lint their own committed config; preset diff is an explicit owner operation.
+#
+# lint:ts checks changed candidate .ts/.tsx files from an immutable jj snapshot.
+# lint:ts:all is the whole tree, for a deliberate sweep.
+
+[tasks.lint]
+depends = ["lint:ts"]
+
+[tasks.check]
+depends = ["lint", "lint:knip", "typecheck"]
+
+[tasks."hook:pre-commit"]
+depends = ["fmt:staged", "lint"]
+
+[tasks."lint:ts"]
+description = "oxlint --type-aware on the selected jj commit candidate files"
+run = "lint-ts-candidate"
+
+[tasks."lint:ts:all"]
+description = "oxlint --type-aware on every TypeScript/TSX file the config does not ignore"
+run = "bun lint-oxlint.ts --type-aware"
+
+[tasks."lint:knip"]
+description = "Fail on unused exports, files, dependencies, and binaries"
+run = "bun lint-knip.ts"
+
+[tasks.typecheck]
+description = "Type-check with bun check against tsconfig.json (requires Bun >= 1.4.3)"
+run = "bun require-bun.ts && bun check"
+
+# In a consumer's fix task, keep knip report-only so cleanup remains deliberate:
+# export/type fixes can leave declarations unused, dependency fixes can leave bun.lock stale,
+# and deleting files needs review.
+# run = "bun --no-env-file x --no-install --bun knip --no-progress --no-exit-code"
+```
 
 See [oxlint ownership and sync](../README.md#existing-presets) for the managed
 house config and consumer wrapper contract. Rule reasons live in entry messages

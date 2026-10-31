@@ -2,9 +2,28 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { runVcs } from "../enforce-official-execution.ts";
 import { decisionOf as decisionResult, runHook, tempDir } from "./helpers.ts";
 
 const HOOK = "enforce-official-execution.ts";
+
+test("VCS output over the spawnSync limit fails closed on either stream", async () => {
+  const limit = 1024 * 1024;
+  for (const [stream, size] of [
+    ["stdout", limit],
+    ["stdout", limit + 1],
+    ["stderr", limit],
+    ["stderr", limit + 1],
+  ]) {
+    const result = await runVcs(
+      [process.execPath, "-e", `process.${stream}.write("x".repeat(${size}))`],
+      process.cwd(),
+      process.env,
+    );
+    if (size === limit) expect(result?.status).toBe(0);
+    else expect(result).toBeUndefined();
+  }
+});
 
 // Two throwaway example-research working copies: a jj one (colocated, like the main checkout) and a
 // plain git one (like the example-research-simplify worktree), each with a committed test script, a

@@ -36,8 +36,7 @@
 // FAIL CLOSED on hook errors (registered with run.sh --fail-closed).
 
 import { readonlyCommand } from "../../../tools/shared/src/readonly-command.ts";
-import { spawnSync } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
+import { access, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
@@ -64,32 +63,36 @@ const JULIA_WORD = /(?:^|[\s;&|(`'"])(?:\S*\/)?julia(?:-[\d.]+)?(?=[\s'")]|$)/u;
 
 const rootOf = new Map<string, string | null>();
 
-function isWorkingCopyRoot(dir: string): boolean {
+async function exists(path: string): Promise<boolean> {
+  return (await attempt(() => access(path))).ok;
+}
+
+async function isWorkingCopyRoot(dir: string): Promise<boolean> {
   return (
-    existsSync(join(dir, "launcher", "launch.ts")) &&
-    existsSync(join(dir, "packages", "ModelRegistry.jl"))
+    (await exists(join(dir, "launcher", "launch.ts"))) &&
+    (await exists(join(dir, "packages", "ModelRegistry.jl")))
   );
 }
 
 /** `p` with symlinks resolved as far as it exists (the rest is appended unresolved). */
-function realish(p: string): string {
+async function realish(p: string): Promise<string> {
   let head = resolve(p);
   const tail: string[] = [];
-  while (!existsSync(head) && dirname(head) !== head) {
+  while (!(await exists(head)) && dirname(head) !== head) {
     tail.unshift(basename(head));
     head = dirname(head);
   }
-  return join(existsSync(head) ? realpathSync(head) : head, ...tail);
+  return join((await exists(head)) ? await realpath(head) : head, ...tail);
 }
 
 /** The example-research working copy root containing `p`, or null. */
-function workingCopyOf(p: string): string | null {
-  let dir = realish(p);
+async function workingCopyOf(p: string): Promise<string | null> {
+  let dir = await realish(p);
   const walked: string[] = [];
   for (;;) {
     const known = rootOf.get(dir);
     let found: string | null | undefined = known;
-    if (found === undefined && isWorkingCopyRoot(dir)) found = dir;
+    if (found === undefined && (await isWorkingCopyRoot(dir))) found = dir;
     if (found === undefined && dirname(dir) === dir) found = null;
     if (found !== undefined) {
       return cacheWorkingCopy(dir, walked, found);
@@ -124,16 +127,19 @@ const trackedCache = new Map<string, boolean | undefined>();
 
 /** Is `rel` in the parent commit (@-) of this jj working copy / in HEAD of this git one?
  *  undefined = could not tell (no vcs binary, vcs error). */
-function isTracked(root: string, rel: string): boolean | undefined {
+async function isTracked(
+  root: string,
+  rel: string,
+): Promise<boolean | undefined> {
   const key = `${root}\0${rel}`;
   if (trackedCache.has(key)) return trackedCache.get(key);
-  const answer = askVcs(root, rel);
+  const answer = await askVcs(root, rel);
   trackedCache.set(key, answer);
   return answer;
 }
 
-function askVcs(root: string, rel: string): boolean | undefined {
-  if (existsSync(join(root, ".jj"))) {
+async function askVcs(root: string, rel: string): Promise<boolean | undefined> {
+  if (await exists(join(root, ".jj"))) {
     const jj = findExe("jj", EXE_DIRS);
     if (jj === null) return undefined;
     const invocation = readonlyCommand(
@@ -151,34 +157,66 @@ function askVcs(root: string, rel: string): boolean | undefined {
       ],
       root,
     );
-    const r = spawnSync(invocation.cmd[0], invocation.cmd.slice(1), {
-      cwd: root,
-      env: invocation.env,
-      encoding: "utf8",
-      timeout: 5000,
-    });
-    if (r.error !== undefined || r.status !== 0) return undefined;
+    const r = await runVcs(invocation.cmd, root, invocation.env);
+    if (r === undefined || r.status !== 0) return undefined;
     return r.stdout.trim() !== "";
   }
-  if (existsSync(join(root, ".git"))) {
+  if (await exists(join(root, ".git"))) {
     const git = findExe("git", EXE_DIRS);
     if (git === null) return undefined;
     const invocation = readonlyCommand(
       [git, "--no-optional-locks", "cat-file", "-e", `HEAD:${rel}`],
       root,
     );
-    const r = spawnSync(invocation.cmd[0], invocation.cmd.slice(1), {
-      cwd: root,
-      env: invocation.env,
-      encoding: "utf8",
-      timeout: 5000,
-    });
-    if (r.error !== undefined) return undefined;
+    const r = await runVcs(invocation.cmd, root, invocation.env);
+    if (r === undefined) return undefined;
     // 0 = in HEAD; 128 = path (or HEAD itself) does not exist; anything else is not an answer
     if (r.status === 0) return true;
     return r.status === 128 || r.status === 1 ? false : undefined;
   }
   return undefined;
+}
+
+export async function runVcs(
+  cmd: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ status: number; stdout: string } | undefined> {
+  const signal = AbortSignal.timeout(5000);
+  const result = await attempt(async () => {
+    const proc = Bun.spawn(cmd, {
+      cwd,
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+      signal,
+    });
+    const readBounded = async (stream: ReadableStream<Uint8Array>) => {
+      const reader = stream.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > 1024 * 1024) {
+          proc.kill();
+          return null;
+        }
+        chunks.push(value);
+      }
+      return Buffer.concat(chunks).toString("utf8");
+    };
+    const [stdout, stderr, status] = await Promise.all([
+      readBounded(proc.stdout),
+      readBounded(proc.stderr),
+      proc.exited,
+    ]);
+    return signal.aborted || stdout === null || stderr === null
+      ? undefined
+      : { status, stdout };
+  });
+  return result.ok ? result.value : undefined;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -392,22 +430,22 @@ function expandHome(path: string): string {
 }
 
 /** Is example-research in play for this launch: cwd or --project/JULIA_PROJECT inside a working copy? */
-function inWorkingCopy(l: Launch, a: JuliaArgs): boolean {
-  if (workingCopyOf(l.cwd) !== null) return true;
+async function inWorkingCopy(l: Launch, a: JuliaArgs): Promise<boolean> {
+  if ((await workingCopyOf(l.cwd)) !== null) return true;
   const project =
     a.project ??
     l.env.findLast((e) => e.startsWith("JULIA_PROJECT="))?.slice(14);
   if (project === undefined || project.startsWith("@")) return false;
   if (hasVar(project)) return true; // not statically known: assume the worst
   const dir = project === "" ? l.cwd : resolve(l.cwd, expandHome(project));
-  return workingCopyOf(dir) !== null;
+  return (await workingCopyOf(dir)) !== null;
 }
 
 /** Why this julia launch is scratch execution, or undefined. */
-function judgeLaunch(l: Launch): string | undefined {
+async function judgeLaunch(l: Launch): Promise<string | undefined> {
   const a = parseJuliaArgs(l.args);
   if (a.query && a.program === undefined && !a.inline) return undefined;
-  const context = inWorkingCopy(l, a);
+  const context = await inWorkingCopy(l, a);
 
   if (a.inline) {
     return context ? "julia -e/-E/--eval runs an inline program" : undefined;
@@ -418,30 +456,32 @@ function judgeLaunch(l: Launch): string | undefined {
       : undefined;
   }
   for (const p of [a.program, ...a.loads]) {
-    const why = judgeProgram(p, l.cwd, context);
+    const why = await judgeProgram(p, l.cwd, context);
     if (why !== undefined) return why;
   }
   return undefined;
 }
 
-function judgeProgram(
+async function judgeProgram(
   program: string,
   cwd: string,
   context: boolean,
-): string | undefined {
+): Promise<string | undefined> {
   if (hasVar(program))
     return context
       ? `the julia program path ${program} is not statically known`
       : undefined;
   const abs = resolve(cwd, expandHome(program));
-  const root = workingCopyOf(abs);
+  const root = await workingCopyOf(abs);
   if (root === null) return outsideWorkingCopyReason(abs, context);
-  const rel = relative(root, realish(abs));
-  const tracked = isTracked(root, rel);
+  const rel = relative(root, await realish(abs));
+  const tracked = await isTracked(root, rel);
   if (tracked === undefined)
     return `could not verify that ${rel} is tracked in ${root} (jj/git failed) — failing closed`;
   if (tracked) return undefined;
-  const missing = existsSync(abs) ? "" : "; the file does not exist on disk";
+  const missing = (await exists(abs))
+    ? ""
+    : "; the file does not exist on disk";
   return `${rel} is untracked in ${root} (not in @-/HEAD${missing}): commit it first`;
 }
 
@@ -454,27 +494,27 @@ function outsideWorkingCopyReason(
 }
 
 /** Why this Bash command must be refused, or undefined. `cwd` is where the shell starts. */
-export function scratchReason(
+export async function scratchReason(
   command: string,
   cwd: string,
-): string | undefined {
+): Promise<string | undefined> {
   if (!/julia/u.test(command)) return undefined;
   const parsed = parseShell(command, cwd);
   if (parsed === undefined) {
     // the parser is not sure what runs: judge by text, but only where example-research is in play
     if (!JULIA_WORD.test(command)) return undefined;
-    if (workingCopyOf(cwd) === null && !/firedancer/u.test(command))
+    if ((await workingCopyOf(cwd)) === null && !/firedancer/u.test(command))
       return undefined;
     return "the command could not be parsed and runs julia";
   }
   for (const launch of juliaLaunches(parsed.commands, 0)) {
-    const why = judgeLaunch(launch);
+    const why = await judgeLaunch(launch);
     if (why !== undefined) return why;
   }
   return undefined;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const payload = readStdinJson();
   if (payload === undefined) {
     // FATAL: the payload is not JSON, so nothing could be classified; fail closed with the one fix
@@ -489,7 +529,7 @@ function main(): void {
   const command = strAt(payload, "tool_input", "command");
   if (command === undefined || !/julia/u.test(command)) return;
   const cwd = strAt(payload, "cwd");
-  const why = scratchReason(
+  const why = await scratchReason(
     command,
     cwd !== undefined && cwd !== "" ? cwd : process.cwd(),
   );

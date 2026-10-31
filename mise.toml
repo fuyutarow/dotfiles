@@ -154,6 +154,7 @@ depends = [
   "lint:live-refs",
   "typecheck",
   "lint:skills-index",
+  "lint:skills-tasks",
   "lint:skill-script-paths",
   "lint:skills-wiring",
   "lint:skills-floor",
@@ -202,6 +203,12 @@ dir = "{{config_root}}"
 env = { SKILLS_LINT_WORKTREE = "1" }
 description = "Require every in-house skill in the catalog and reject third-party provenance under agents/skills"
 run = "bun scripts/lint-skills-index.ts"
+
+[tasks."lint:skills-tasks"]
+depends = ["bun:check"]
+dir = "{{config_root}}"
+description = "Check mise task mentions in in-house skill manuals"
+run = "bun scripts/lint-skills-tasks.ts"
 
 [tasks."lint:skills-wiring"]
 depends = ["bun:check"]

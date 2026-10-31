@@ -12,7 +12,6 @@ import {
   readlinkSync,
   renameSync,
   rmSync,
-  writeFileSync,
 } from "node:fs";
 import {
   cp,
@@ -20,6 +19,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  writeFile,
   rename,
   rm,
 } from "node:fs/promises";
@@ -28,7 +28,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
 import { consola } from "consola";
-import { err, fromThrowable, ok } from "neverthrow";
+import { err, fromAsyncThrowable, fromThrowable, ok } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
   homePathRefusals,
@@ -142,38 +142,41 @@ function jsonLastLine<T>(
   return ok(checked.data);
 }
 
-function loadInHouseState(home: string) {
+async function loadInHouseState(home: string) {
   const path = resolve(home, ".agents/.dotfiles-skills.json");
-  if (!existsSync(path)) {
+  const raw = await readFile(path, "utf8").then(
+    (value) => ok(value),
+    (error: unknown) => err(error),
+  );
+  if (raw.isErr()) {
+    const code = z.object({ code: z.literal("ENOENT") }).safeParse(raw.error);
+    if (!code.success)
+      return err(`cannot read ${path}: ${errorText(raw.error)}`);
     const empty: InHouseState = { version: 1, skills: {} };
     return ok(empty);
   }
-  const raw = fromThrowable((value: string) => readFileSync(value, "utf8"))(
-    path,
-  );
-  if (raw.isErr()) return err(`cannot read ${path}: ${errorText(raw.error)}`);
   const checked = jsonOf(InHouseStateSchema).safeParse(raw.value);
   return checked.success
     ? ok(checked.data)
     : err(`invalid ${path}: ${checked.error.message}`);
 }
 
-function writeInHouseState(
+async function writeInHouseState(
   home: string,
   state: InHouseState,
-): string | undefined {
+): Promise<string | undefined> {
   const directory = resolve(home, ".agents");
   const path = resolve(directory, ".dotfiles-skills.json");
   const temporary = `${path}.${randomUUID()}.tmp`;
-  const written = fromThrowable(() => {
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, {
+  const written = await fromAsyncThrowable(async () => {
+    await mkdir(directory, { recursive: true });
+    await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, {
       flag: "wx",
     });
-    renameSync(temporary, path);
+    await rename(temporary, path);
   })();
   if (written.isOk()) return undefined;
-  rmSync(temporary, { force: true });
+  await rm(temporary, { force: true });
   return errorText(written.error);
 }
 
@@ -389,7 +392,7 @@ async function syncInHouseCodex(
   deferRemoval = false,
   prepared: PreparedSkills = resolve(root, "agents/skills"),
 ): Promise<string | undefined> {
-  const loaded = loadInHouseState(home);
+  const loaded = await loadInHouseState(home);
   if (loaded.isErr()) return loaded.error;
   const previous = new Set([
     ...Object.keys(loaded.value.skills),
@@ -523,24 +526,28 @@ async function syncInHouseCodex(
   }
 
   if (deferRemoval) return undefined;
-  const writeError = recordInHouseState(home, root, names, prepared);
+  const writeError = await recordInHouseState(home, root, names, prepared);
   return writeError;
 }
 
-function recordInHouseState(
+async function recordInHouseState(
   home: string,
   root: string,
   names: readonly string[],
   prepared: PreparedSkills = resolve(root, "agents/skills"),
   sources?: InHouseState["sources"],
-): string | undefined {
+): Promise<string | undefined> {
   const skills = Object.fromEntries(
     names.map((name) => [
       name,
       treeDigest(preparedSkill(prepared, name)) ?? "",
     ]),
   );
-  const writeError = writeInHouseState(home, { version: 1, skills, sources });
+  const writeError = await writeInHouseState(home, {
+    version: 1,
+    skills,
+    sources,
+  });
   return writeError === undefined
     ? undefined
     : `could not record in-house skill state: ${writeError}`;
@@ -562,7 +569,10 @@ async function previousInHouseNames(
   home: string,
   dotfiles: string,
 ): Promise<Set<string>> {
-  const state = loadInHouseState(home).unwrapOr({ version: 1, skills: {} });
+  const state = (await loadInHouseState(home)).unwrapOr({
+    version: 1,
+    skills: {},
+  });
   const archive = resolve(dotfiles, "archives/skills/README.md");
   const text = (await pathPresent(archive))
     ? await readFile(archive, "utf8")
@@ -853,7 +863,7 @@ async function main(): Promise<void> {
         await rm(preparedRoot, { recursive: true, force: true });
       },
     };
-    const loaded = loadInHouseState(home);
+    const loaded = await loadInHouseState(home);
     if (loaded.isErr()) {
       fail(`FATAL: ${loaded.error}`);
       process.exitCode = 1;
@@ -973,7 +983,7 @@ async function main(): Promise<void> {
         process.exitCode = 1;
         return;
       }
-      const stateError = recordInHouseState(
+      const stateError = await recordInHouseState(
         home,
         dotfiles,
         inHouseNames,
@@ -1127,7 +1137,7 @@ async function main(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    const stateError = recordInHouseState(
+    const stateError = await recordInHouseState(
       home,
       dotfiles,
       inHouseNames,

@@ -89,6 +89,7 @@ process.on("exit", () => console.error("BUILD_CALLS=" + count));
     maxBuffer: 4 * 1024 * 1024,
     env: {
       ...process.env,
+      NODE_ENV: "production",
       PATH: `${bin}:${process.env["PATH"] ?? ""}`,
       VENDOR_SKILL_CLI: FAKE,
       FAKE_SKILLS_MARKER: marker,
@@ -594,9 +595,7 @@ describe("skills:sync", () => {
     expect(result.code).toBe(0);
     const lines = result.out.trim().split("\n");
     expect(lines.length).toBeGreaterThan(0);
-    expect(lines.every((line) => line.startsWith("[dry-run] would "))).toBe(
-      true,
-    );
+    expect(lines.every((line) => line.includes("[dry-run] would "))).toBe(true);
     expect(result.out).toContain(
       "[dry-run] would uninstall dotfiles@dotfiles from every installed scope",
     );

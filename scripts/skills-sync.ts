@@ -27,6 +27,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
+import { consola } from "consola";
 import { err, fromThrowable, ok } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
@@ -59,11 +60,11 @@ function errorText(error: unknown): string {
 }
 
 function print(line: string): void {
-  process.stdout.write(`${line}\n`);
+  consola.info(line);
 }
 
 function fail(line: string): void {
-  process.stderr.write(`${line}\n`);
+  consola.error(line);
 }
 
 const InHouseStateSchema = z.strictObject({
@@ -95,14 +96,18 @@ const SkillSourceSchema = z.object({ source: z.string() });
 
 type CommandResult = { code: number; out: string; err: string };
 
-function runClaude(args: string[], home: string, cwd: string): CommandResult {
+async function runClaude(
+  args: string[],
+  home: string,
+  cwd: string,
+): Promise<CommandResult> {
   const result = fromThrowable(() =>
-    Bun.spawnSync(["claude", ...args], {
+    Bun.spawn(["claude", ...args], {
       cwd,
       env: { ...process.env, HOME: home },
       stdout: "pipe",
       stderr: "pipe",
-      timeout: 30_000,
+      signal: AbortSignal.timeout(30_000),
     }),
   )();
   if (result.isErr())
@@ -111,11 +116,12 @@ function runClaude(args: string[], home: string, cwd: string): CommandResult {
       out: "",
       err: errorText(result.error),
     };
-  return {
-    code: result.value.exitCode ?? 1,
-    out: result.value.stdout.toString(),
-    err: result.value.stderr.toString(),
-  };
+  const [code, out, stderr] = await Promise.all([
+    result.value.exited,
+    new Response(result.value.stdout).text(),
+    new Response(result.value.stderr).text(),
+  ]);
+  return { code, out, err: stderr };
 }
 
 function jsonLastLine<T>(
@@ -196,11 +202,11 @@ async function codexInHouseNamesFromLock(
     .map(([name]) => name);
 }
 
-function uninstallDotfilesPlugin(
+async function uninstallDotfilesPlugin(
   home: string,
   root: string,
   dryRun: boolean,
-): string | undefined {
+): Promise<string | undefined> {
   if (dryRun) {
     print(
       "[dry-run] would uninstall dotfiles@dotfiles from every installed scope",
@@ -223,7 +229,7 @@ function uninstallDotfilesPlugin(
   ];
   for (const scope of scopes) {
     const removed = jsonLastLine(
-      runClaude(
+      await runClaude(
         [
           "plugin",
           "uninstall",
@@ -789,7 +795,7 @@ async function main(): Promise<void> {
 
   if (parsed.flags.dryRun) {
     const plan = async (): Promise<void> => {
-      const pluginError = uninstallDotfilesPlugin(home, dotfiles, true);
+      const pluginError = await uninstallDotfilesPlugin(home, dotfiles, true);
       if (pluginError !== undefined) {
         fail(`FATAL: ${pluginError}`);
         process.exitCode = 1;
@@ -943,7 +949,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    const pluginError = uninstallDotfilesPlugin(home, dotfiles, false);
+    const pluginError = await uninstallDotfilesPlugin(home, dotfiles, false);
     if (pluginError !== undefined) {
       fail(`FATAL: ${pluginError}`);
       process.exitCode = 1;

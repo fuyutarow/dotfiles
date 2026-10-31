@@ -6,8 +6,10 @@
     ".": {
       "entry": [
         "**/*.{test,spec}.{ts,tsx,js,jsx}",
-        // Top-level task scripts are executable roots. Add each nested CLI explicitly below.
-        "scripts/*.ts"
+        // Preset-managed task scripts are executable roots at default placement.
+        "tools/lint-knip.ts",
+        "tools/lint-oxlint.ts",
+        "tools/require-bun.ts"
       ],
       "project": ["**/*.{ts,tsx,js,jsx}"],
       // These pinned tools are invoked by mise tasks and hooks, not package scripts.

@@ -210,3 +210,64 @@ test("applying the TypeScript preset creates knip.jsonc and pins Knip", async ()
   if (packageJson.success)
     expect(packageJson.data.devDependencies["knip"]).toBe("6.42.1");
 });
+
+test("default placement keeps every preset-managed file clean in Knip", async () => {
+  const target = join(SCRATCH, "applied-default-placement");
+  await mkdir(target);
+  const apply = Bun.spawn(
+    ["mise", "run", "preset", "--", "apply", "typescript", "--to", target],
+    { cwd: ROOT, stdout: "pipe", stderr: "pipe", timeout: 60_000 },
+  );
+  const [applyOut, applyErr, applyExit] = await Promise.all([
+    new Response(apply.stdout).text(),
+    new Response(apply.stderr).text(),
+    apply.exited,
+  ]);
+  expect(applyExit, `${applyErr}\n${applyOut}`).toBe(0);
+
+  await symlink(join(ROOT, "node_modules"), join(target, "node_modules"));
+  await mkdir(join(target, "agents"), { recursive: true });
+  await symlink(join(ROOT, "agents/hooks"), join(target, "agents/hooks"));
+  await mkdir(join(target, "src"), { recursive: true });
+  await writeFile(
+    join(target, "src/main.ts"),
+    'import { jsonOf } from "./zod.ts";\nimport { consola } from "consola";\nexport const main = { jsonOf, consola };\n',
+  );
+  await writeFile(
+    join(target, "tools/managed-entry.test.ts"),
+    'import { main } from "../src/main.ts";\nvoid main;\n',
+  );
+  await writeFile(
+    join(target, ".oxlintrc.json"),
+    JSON.stringify({ extends: ["./.oxlint/house.oxlintrc.json"] }),
+  );
+  const packagePath = join(target, "package.json");
+  const packageResult = jsonOf(
+    z.looseObject({ dependencies: z.record(z.string(), z.string()) }),
+  ).safeParse(await readFile(packagePath, "utf8"));
+  expect(packageResult.success).toBe(true);
+  if (!packageResult.success) return;
+  await writeFile(
+    packagePath,
+    JSON.stringify({
+      ...packageResult.data,
+      dependencies: { ...packageResult.data.dependencies, consola: "3.4.2" },
+    }),
+  );
+
+  const child = Bun.spawn(["bun", "tools/lint-knip.ts"], {
+    cwd: target,
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 120_000,
+  });
+  const [stdout, stderr, exit] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  const result = { exit, stdout, stderr };
+  expect(result.exit, `${result.stderr}\n${result.stdout}`).toBe(0);
+  expect(result.stdout).toContain("no findings");
+  expect(result.stdout).not.toContain("files:");
+});

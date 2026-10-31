@@ -23,6 +23,13 @@ import { cli } from "cleye";
 // script-check.ts parsing quirk: its executableCode() scanner mis-tokenizes the shebang line's
 // slashes as a regex literal and swallows the next source line with it, which happened to be
 // this exact `process.argv[2]` read. Removing the (unused, BG1) shebang unmasked the real F8 gap.
+const writeResult = (message: string): void => {
+  process.stdout.write(`${message}\n`);
+};
+const writeError = (message: string): void => {
+  process.stderr.write(`${message}\n`);
+};
+
 let prototypeFlagSeen = false;
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -32,11 +39,11 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 
 let failed = false;
 function fail(msg: string): void {
-  console.error(`FAIL: ${msg}`);
+  writeError(`FAIL: ${msg}`);
   failed = true;
 }
 function ok(msg: string): void {
-  console.log(`ok: ${msg}`);
+  writeResult(`ok: ${msg}`);
 }
 
 function exists(path: string): Promise<boolean> {
@@ -79,7 +86,7 @@ function checkFrontmatter(skillMd: string): void {
   if (raw.length > 1500)
     fail(`description ~${raw.length} chars exceeds the 1500 house ceiling`);
   if (raw.length > 1024)
-    console.warn(
+    writeError(
       `WARN: description ~${raw.length} chars exceeds the 1024 platform hard cap for API deployment (target-host listing limits may differ)`,
     );
   if (!/English skill; respond in the user's language/u.test(raw))
@@ -122,11 +129,11 @@ async function main(): Promise<number> {
     Bun.argv.slice(2),
   );
   if (prototypeFlagSeen) {
-    console.error("FATAL: unknown option '--__proto__'");
+    writeError("FATAL: unknown option '--__proto__'");
     return 2;
   }
   if (parsed._.length > 1) {
-    console.error(`FATAL: unexpected argument '${parsed._[1]}'`);
+    writeError(`FATAL: unexpected argument '${parsed._[1]}'`);
     return 2;
   }
   const dir =
@@ -134,7 +141,7 @@ async function main(): Promise<number> {
   const skillMdPath = join(dir, "SKILL.md");
 
   if (!(await exists(skillMdPath))) {
-    console.error(`FAIL: no SKILL.md at ${skillMdPath}`);
+    writeError(`FAIL: no SKILL.md at ${skillMdPath}`);
     return 1;
   }
   const skillMd = await readFile(skillMdPath, "utf8");

@@ -13,6 +13,13 @@ import { dirname, relative, resolve } from "node:path";
 import { $ } from "bun";
 import { cli, command } from "cleye";
 
+const writeResult = (message: string): void => {
+  process.stdout.write(`${message}\n`);
+};
+const writeError = (message: string): void => {
+  process.stderr.write(`${message}\n`);
+};
+
 const LIGATURES: Record<string, string> = {
   ﬀ: "ff",
   ﬁ: "fi",
@@ -73,7 +80,7 @@ async function census(files: string[]): Promise<number> {
           });
       const delim = line.match(/\\def\s*\\([A-Za-z]+)([0-9]+)\s*\{/u);
       if (delim !== null)
-        console.log(
+        writeResult(
           `TRAP  \\def\\${delim[1]}${delim[2]} is a DELIMITED macro (\\${delim[1]} must be followed by "${delim[2]}"), not a name with a digit  [${f}:${i + 1}]`,
         );
     });
@@ -102,11 +109,11 @@ async function census(files: string[]): Promise<number> {
       r.ds.length > 1 && last !== undefined
         ? `  REDEFINED x${r.ds.length} (last wins: ${last.at})`
         : "";
-    console.log(
+    writeResult(
       `${String(r.n).padStart(4)}  \\${r.name}  ${r.ds.map((d) => `${d.kind}@${d.at}`).join(", ")}${re}`,
     );
   }
-  console.log(
+  writeResult(
     `\n${rows.length} names; ${rows.filter((r) => r.n === 0).length} unused; ${rows.filter((r) => r.ds.length > 1).length} redefined`,
   );
   return 0;
@@ -128,7 +135,7 @@ async function bboxWords(pdf: string): Promise<Word[]> {
 
 async function boxes(a: string, b: string): Promise<number> {
   const [wa, wb] = await Promise.all([bboxWords(a), bboxWords(b)]);
-  console.log(`words: ${wa.length} vs ${wb.length}`);
+  writeResult(`words: ${wa.length} vs ${wb.length}`);
   let bad = 0;
   for (let i = 0; i < Math.min(wa.length, wb.length); i++) {
     const A = wa[i],
@@ -140,12 +147,12 @@ async function boxes(a: string, b: string): Promise<number> {
       (A.t !== B.t || Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) &&
       bad++ < 30
     )
-      console.log(
+      writeResult(
         `p${A.page} "${A.t}"${A.t !== B.t ? ` -> "${B.t}"` : ""} dx=${dx.toFixed(3)} dy=${dy.toFixed(3)}`,
       );
   }
   if (wa.length !== wb.length) bad++;
-  console.log(bad !== 0 ? `BOXES DIFFER (${bad})` : "BOXES IDENTICAL");
+  writeResult(bad !== 0 ? `BOXES DIFFER (${bad})` : "BOXES IDENTICAL");
   return bad !== 0 ? 1 : 0;
 }
 
@@ -161,9 +168,9 @@ async function words(a: string, b: string): Promise<number> {
   const [ca, cb] = [countWords(wa), countWords(wb)];
   const onlyA = subtractWords(ca, cb),
     onlyB = subtractWords(cb, ca);
-  console.log(`prose words: ${wa.length} vs ${wb.length}`);
-  console.log(`only in A: ${onlyA.join(" ") !== "" ? onlyA.join(" ") : "-"}`);
-  console.log(`only in B: ${onlyB.join(" ") !== "" ? onlyB.join(" ") : "-"}`);
+  writeResult(`prose words: ${wa.length} vs ${wb.length}`);
+  writeResult(`only in A: ${onlyA.join(" ") !== "" ? onlyA.join(" ") : "-"}`);
+  writeResult(`only in B: ${onlyB.join(" ") !== "" ? onlyB.join(" ") : "-"}`);
   return onlyA.length + onlyB.length !== 0 ? 1 : 0;
 }
 
@@ -197,11 +204,11 @@ async function paras(a: string, b: string): Promise<number> {
       .filter((paragraph) => paragraph !== "");
   };
   const [pa, pb] = await Promise.all([blocks(a), blocks(b)]);
-  console.log(`paragraphs: ${pa.length} vs ${pb.length}`);
+  writeResult(`paragraphs: ${pa.length} vs ${pb.length}`);
   let shown = 0;
   for (let i = 0; i < Math.max(pa.length, pb.length) && shown < 20; i++) {
     if (pa[i] !== pb[i]) {
-      console.log(`#${i}: ${pa[i] ?? "-"}  |  ${pb[i] ?? "-"}`);
+      writeResult(`#${i}: ${pa[i] ?? "-"}  |  ${pb[i] ?? "-"}`);
       shown++;
     }
   }
@@ -222,7 +229,7 @@ const contractError = (line: number, problem: string): ContractError => ({
 });
 type TexFile = { path: string; lines: string[] };
 const usageError = (message: string): number => {
-  console.error(`tex-oracle: ${message}`);
+  writeError(`tex-oracle: ${message}`);
   return 2;
 };
 
@@ -344,9 +351,9 @@ async function lint(main: string, contract: string): Promise<number> {
   const files = await texClosure(main);
   if (typeof files === "string") return usageError(files);
   const hits = files.flatMap((f) => lintHits(f, rules));
-  for (const h of hits) console.log(h);
+  for (const h of hits) writeResult(h);
   const scope = `${rules.length} rules, ${files.length} files`;
-  console.log(
+  writeResult(
     hits.length > 0
       ? `LINT FAILED: ${hits.length} hits (${scope})`
       : `LINT CLEAN (${scope})`,
@@ -357,7 +364,7 @@ async function lint(main: string, contract: string): Promise<number> {
 // A present --contract with no value must stop at the boundary (exit 2), never become "".
 const requiredPath = (value: string): string => {
   if (value !== "") return value;
-  console.error("tex-oracle: --contract needs a path");
+  writeError("tex-oracle: --contract needs a path");
   return process.exit(2);
 };
 
@@ -366,7 +373,7 @@ const requiredPath = (value: string): string => {
 // flag, --__proto__ included, stops here with the usage exit 2.
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag") {
-    console.error(`tex-oracle: unknown option '--${flag}'`);
+    writeError(`tex-oracle: unknown option '--${flag}'`);
     process.exit(2);
   }
 };

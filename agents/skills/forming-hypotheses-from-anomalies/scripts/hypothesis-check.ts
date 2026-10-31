@@ -473,6 +473,13 @@ const GOOD_PLAIN = `## HYPOTHESIS G3
 - Handoff: none
 `;
 
+const writeResult = (message: string): void => {
+  process.stdout.write(`${message}\n`);
+};
+const writeError = (message: string): void => {
+  process.stderr.write(`${message}\n`);
+};
+
 async function main(): Promise<void> {
   const parsed = await parseArgv();
   if (!parsed.ok) {
@@ -487,21 +494,21 @@ async function main(): Promise<void> {
     const found = [...checkPacket("<bad>", BAD), ...badBranch, ...badLicense];
     const want = ["A1", "A2", "A3", "A4", "SHAPE"];
     const missing = want.filter((w) => !found.some((x) => x.rung === w));
-    for (const x of found) console.log(`  ${x.file} ${x.rung}: ${x.detail}`);
+    for (const x of found) writeResult(`  ${x.file} ${x.rung}: ${x.detail}`);
     if (missing.length > 0) {
-      console.error(
+      writeError(
         `SELF-TEST FAILED: the known-bad packets did not trip ${missing.join(", ")}`,
       );
       failed = true;
     }
     if (badBranch.length === 0) {
-      console.error(
+      writeError(
         "SELF-TEST FAILED: an incoherent SUCCEEDED/NEW-PREDICATE packet passed",
       );
       failed = true;
     }
     if (badLicense.length === 0) {
-      console.error(
+      writeError(
         "SELF-TEST FAILED: a LICENSED packet that introduced nothing passed",
       );
       failed = true;
@@ -513,14 +520,14 @@ async function main(): Promise<void> {
     ] as const;
     if (checkGoodPackets(goods)) failed = true;
     if (failed) process.exit(1);
-    console.log(
+    writeResult(
       `SELF-TEST OK — bad packets tripped ${found.length} findings across every rung; all ${goods.length} good packets clean`,
     );
     return;
   }
   const files: string[] = argv._.files;
   if (files.length === 0) {
-    console.error(
+    writeError(
       "usage: bun scripts/hypothesis-check.ts <packet.md> [...]  |  --self-test",
     );
     process.exit(2);
@@ -529,10 +536,10 @@ async function main(): Promise<void> {
   for (const file of files) {
     const findings = checkPacket(file, await Bun.file(file).text());
     for (const x of findings)
-      console.log(`FAIL [${x.rung}] ${x.file}: ${x.detail}`);
+      writeResult(`FAIL [${x.rung}] ${x.file}: ${x.detail}`);
     bad += findings.length;
   }
-  console.log(
+  writeResult(
     bad === 0 ? `PASS ${files.length} packet(s)` : `FAIL ${bad} finding(s)`,
   );
   process.exit(bad === 0 ? 0 : 1);
@@ -545,11 +552,11 @@ function checkGoodPackets(
   for (const [name, good] of goods) {
     const noise = checkPacket(`<good-${name}>`, good);
     for (const finding of noise)
-      console.error(
+      writeError(
         `  FALSE POSITIVE ${finding.file} ${finding.rung}: ${finding.detail}`,
       );
     if (noise.length > 0) {
-      console.error(
+      writeError(
         `SELF-TEST FAILED: the good ${name} packet tripped ${noise.length} finding(s)`,
       );
       failed = true;

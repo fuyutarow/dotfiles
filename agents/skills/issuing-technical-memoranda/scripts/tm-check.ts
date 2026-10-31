@@ -15,6 +15,13 @@
 import { cli } from "cleye";
 import { z } from "../../../hooks/zod.ts";
 
+const writeResult = (message: string): void => {
+  process.stdout.write(`${message}\n`);
+};
+const writeError = (message: string): void => {
+  process.stderr.write(`${message}\n`);
+};
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
 const REQUIRED = [
   "tm",
@@ -137,7 +144,7 @@ if (!argvResult.ok) {
 
 const files: string[] = argvResult.ok ? argvResult.value._.files : [];
 if (files.length === 0) {
-  console.error("usage: bun scripts/tm-check.ts <file.md> [...]");
+  writeError("usage: bun scripts/tm-check.ts <file.md> [...]");
   process.exit(2);
 }
 
@@ -146,7 +153,7 @@ let warns = 0;
 const say = (kind: "FAIL" | "WARN", where: string, msg: string) => {
   if (kind === "FAIL") fails++;
   else warns++;
-  console.log(`${kind} [${where}] ${msg}`);
+  writeResult(`${kind} [${where}] ${msg}`);
 };
 
 const reportMissingCoverKeys = (
@@ -290,5 +297,5 @@ for (const path of files) {
   });
 }
 
-console.log(`\nFAIL=${fails} WARN=${warns}`);
+writeResult(`\nFAIL=${fails} WARN=${warns}`);
 process.exit(fails !== 0 ? 1 : 0);

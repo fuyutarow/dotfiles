@@ -10,10 +10,21 @@ const script = join(import.meta.dir, "..", "src", "statusline.ts");
 const esc = "\u001B[";
 const homes: string[] = [];
 const processes: ReturnType<typeof Bun.spawn>[] = [];
+let diagnostic: (() => Promise<void>) | undefined;
 const renderEnv = (home: string, pwd = home): NodeJS.ProcessEnv =>
-  isolatedStatuslineEnv({ ...process.env, HOME: home, PWD: pwd });
+  isolatedStatuslineEnv({
+    ...process.env,
+    HOME: home,
+    PWD: pwd,
+    CODEX_SESSION_ID: "",
+  });
+const codexEnv = (home: string): NodeJS.ProcessEnv => ({
+  ...renderEnv(home, "/fixture/codex"),
+  CODEX_SESSION_ID: "pinned-a",
+});
 
 afterEach(async () => {
+  diagnostic = undefined;
   for (const proc of processes.splice(0)) {
     if (proc.exitCode === null) {
       proc.kill("SIGKILL");
@@ -35,7 +46,30 @@ async function waitUntil(
     if (check()) return true;
     await Bun.sleep(40);
   }
-  return check();
+  const ok = check();
+  if (!ok) await diagnostic?.();
+  return ok;
+}
+
+function captureTimeout(
+  home: string,
+  proc: ReturnType<typeof Bun.spawn>,
+  output: () => string,
+  chunks: Buffer[],
+) {
+  diagnostic = async () => {
+    const bytes = output();
+    const path = join(home, "pty-timeout.txt");
+    const bytesPath = join(home, "pty-timeout.bin");
+    const report = `exitCode: ${proc.exitCode}\nsignalCode: ${proc.signalCode}\noutput: ${JSON.stringify(bytes)}\n`;
+    await writeFile(path, report);
+    await writeFile(bytesPath, Buffer.concat(chunks));
+    const index = homes.indexOf(home);
+    if (index !== -1) homes.splice(index, 1);
+    console.error(
+      `PTY timeout diagnostics: ${path}; raw bytes: ${bytesPath}\n${report}`,
+    );
+  };
 }
 
 function rollout(model: string, inputTokens: number): string {
@@ -109,6 +143,7 @@ test.each([{ flags: ["--watch", "--thread"] }, { flags: ["--thread"] }])(
     );
     await writeFile(pinned, rollout("gpt-6-luna", 1000));
     let output = "";
+    const chunks: Buffer[] = [];
     const proc = Bun.spawn([process.execPath, script, ...flags, "pinned-a"], {
       cwd: home,
       env: renderEnv(home),
@@ -117,14 +152,17 @@ test.each([{ flags: ["--watch", "--thread"] }, { flags: ["--thread"] }])(
         cols: 100,
         rows: 24,
         data: (_terminal, bytes) => {
+          chunks.push(Buffer.from(bytes));
           output += Buffer.from(bytes).toString();
         },
       },
     });
     processes.push(proc);
+    captureTimeout(home, proc, () => output, chunks);
     expect(
       await waitUntil(
-        () => output.includes("Updated every 5s") || proc.exitCode !== null,
+        () =>
+          output.includes("Display redraw every 5s") || proc.exitCode !== null,
         5000,
       ),
     ).toBe(true);
@@ -166,6 +204,7 @@ test.each(
   const home = await mkdtemp(join(tmpdir(), "statusline-thread-error-"));
   homes.push(home);
   let output = "";
+  const chunks: Buffer[] = [];
   const proc = Bun.spawn([process.execPath, script, ...flags], {
     cwd: home,
     env: renderEnv(home),
@@ -174,11 +213,13 @@ test.each(
       cols: 100,
       rows: 24,
       data: (_terminal, bytes) => {
+        chunks.push(Buffer.from(bytes));
         output += Buffer.from(bytes).toString();
       },
     },
   });
   processes.push(proc);
+  captureTimeout(home, proc, () => output, chunks);
   expect(await waitUntil(() => proc.exitCode !== null, 4000)).toBe(true);
   expect(proc.exitCode).toBe(2);
   expect(output).toContain("FATAL:");
@@ -248,25 +289,29 @@ test("live Codex PTY redraws changed pinned session and restores the terminal on
   const pinned = join(directory, "rollout-2026-10-11T00-00-00-pinned-a.jsonl");
   await writeFile(pinned, rollout("gpt-6-luna", 1000));
   let output = "";
+  const chunks: Buffer[] = [];
   const proc = Bun.spawn(
     [process.execPath, script, "--codex", "--interval", "1"],
     {
       cwd: home,
-      env: renderEnv(home, "/fixture/codex"),
+      env: codexEnv(home),
       terminal: {
         cols: 100,
         rows: 24,
         data: (_terminal, bytes) => {
+          chunks.push(Buffer.from(bytes));
           output += Buffer.from(bytes).toString();
         },
       },
     },
   );
   processes.push(proc);
+  captureTimeout(home, proc, () => output, chunks);
   expect(
     await waitUntil(
       () =>
-        output.includes("GPT-6-Luna") && output.includes("Updated every 1s"),
+        output.includes("GPT-6-Luna") &&
+        output.includes("Display redraw every 1s"),
       15000,
     ),
   ).toBe(true);
@@ -313,21 +358,24 @@ test("raw Ctrl+C cancels a frame collection with exit 130 and restores terminal 
     rollout("gpt-6-luna", 1000),
   );
   let output = "";
+  const chunks: Buffer[] = [];
   const proc = Bun.spawn(
     [process.execPath, script, "--codex", "--interval", "1"],
     {
       cwd: home,
-      env: renderEnv(home, "/fixture/codex"),
+      env: codexEnv(home),
       terminal: {
         cols: 100,
         rows: 24,
         data: (_terminal, bytes) => {
+          chunks.push(Buffer.from(bytes));
           output += Buffer.from(bytes).toString();
         },
       },
     },
   );
   processes.push(proc);
+  captureTimeout(home, proc, () => output, chunks);
   expect(await waitUntil(() => output.includes(`${esc}?1049h`), 3000)).toBe(
     true,
   );
@@ -337,7 +385,7 @@ test("raw Ctrl+C cancels a frame collection with exit 130 and restores terminal 
   expect(output).toContain(`${esc}?25h${esc}?1049l`);
 });
 
-test("live Codex rejects a selected rollout without a stable session ID", async () => {
+test("live Codex rejects a rollout without runtime identity", async () => {
   const home = await mkdtemp(join(tmpdir(), "statusline-no-id-home-"));
   homes.push(home);
   const day = Temporal.Now.plainDateISO();
@@ -355,6 +403,7 @@ test("live Codex rejects a selected rollout without a stable session ID", async 
     rolloutWithoutSessionId(),
   );
   let output = "";
+  const chunks: Buffer[] = [];
   const proc = Bun.spawn([process.execPath, script, "--codex", "--watch"], {
     cwd: home,
     env: renderEnv(home, "/fixture/codex"),
@@ -362,15 +411,17 @@ test("live Codex rejects a selected rollout without a stable session ID", async 
       cols: 100,
       rows: 24,
       data: (_terminal, bytes) => {
+        chunks.push(Buffer.from(bytes));
         output += Buffer.from(bytes).toString();
       },
     },
   });
   processes.push(proc);
+  captureTimeout(home, proc, () => output, chunks);
   expect(await waitUntil(() => proc.exitCode !== null, 5000)).toBe(true);
   expect(proc.exitCode).toBe(2);
-  expect(output).toContain("requires a session with a stable session ID");
-  expect(output).toContain(`${esc}?25h${esc}?1049l`);
+  expect(output).toContain("missing Codex runtime identity");
+  expect(output).not.toContain(`${esc}?1049h`);
 });
 
 test("SIGTERM exits 143 and restores terminal modes", async () => {
@@ -391,21 +442,24 @@ test("SIGTERM exits 143 and restores terminal modes", async () => {
     rollout("gpt-6-luna", 1000),
   );
   let output = "";
+  const chunks: Buffer[] = [];
   const proc = Bun.spawn(
     [process.execPath, script, "--codex", "--interval", "1"],
     {
       cwd: home,
-      env: renderEnv(home, "/fixture/codex"),
+      env: codexEnv(home),
       terminal: {
         cols: 100,
         rows: 24,
         data: (_terminal, bytes) => {
+          chunks.push(Buffer.from(bytes));
           output += Buffer.from(bytes).toString();
         },
       },
     },
   );
   processes.push(proc);
+  captureTimeout(home, proc, () => output, chunks);
   expect(await waitUntil(() => output.includes(`${esc}?1049h`), 3000)).toBe(
     true,
   );
@@ -417,7 +471,7 @@ test("SIGTERM exits 143 and restores terminal modes", async () => {
 
 test(
   "live CLI rejects invalid interval and explicit watch without a TTY",
-  () => {
+  async () => {
     const home = mkdtempSync(join(tmpdir(), "statusline-live-cli-"));
     homes.push(home);
     const invalid = Bun.spawnSync(
@@ -459,11 +513,25 @@ test(
     );
     expect(conflict.exitCode).toBe(2);
     expect(conflict.stderr.toString()).toContain("cannot be combined");
+    const day = Temporal.Now.plainDateISO();
+    const directory = join(
+      home,
+      ".codex",
+      "sessions",
+      String(day.year),
+      String(day.month).padStart(2, "0"),
+      String(day.day).padStart(2, "0"),
+    );
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      join(directory, "rollout-2026-10-11T00-00-00-pinned-a.jsonl"),
+      rollout("gpt-6-luna", 1000),
+    );
     const once = Bun.spawnSync(
       [process.execPath, script, "--codex", "--once"],
       {
         cwd: home,
-        env: renderEnv(home, "/fixture/codex"),
+        env: codexEnv(home),
       },
     );
     expect(once.exitCode).toBe(0);

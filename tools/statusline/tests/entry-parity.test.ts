@@ -277,18 +277,6 @@ const stateVariants: [string, (state: string) => void][] = [
         })}\n`,
       );
       utimesSync(rollout, NOW / 1000, NOW / 1000);
-      writeFileSync(
-        join(state, "runs.jsonl"),
-        `${JSON.stringify({
-          kind: "run",
-          started_at: "2026-10-08T12:33:00Z",
-          pick: {
-            jev: {
-              response: { usage: { input_tokens: 48_000, output_tokens: 100 } },
-            },
-          },
-        })}\n`,
-      );
     },
   ],
   [

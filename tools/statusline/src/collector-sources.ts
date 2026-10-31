@@ -19,6 +19,7 @@ import { readCodexRate } from "./codex-rate.ts";
 import { readJevUsage } from "./jev-usage.ts";
 import { readRecoverHealthAsync } from "./recover-health.ts";
 import type { Sources } from "./build-dataframe.ts";
+import { readAgxJobRuns } from "./agx-job-runs.ts";
 
 async function identityFacts(): ReturnType<Sources["identity"]> {
   const cjResult = await readClaudeJsonAsync();
@@ -42,6 +43,7 @@ export const COLLECTOR_SOURCES: Sources = {
   rcState: rcStateAsync,
   repoState: repoStateAsync,
   jobScan: scanOutOfHarnessAsync,
+  liveAgxJobs: readAgxJobRuns,
   hostLoad: readHostLoadAsync,
   routes: async (sid, cwd) =>
     ok(await agxRouteRunsAsync(process.env, sid, false, cwd)),

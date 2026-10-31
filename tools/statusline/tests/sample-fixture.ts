@@ -5,4 +5,6 @@ import { jsonOf } from "../src/zod.ts";
 const parsed = await jsonOf(ClaudeStatuslineInputSchema).safeParseAsync(
   await Bun.stdin.text(),
 );
-await sample(parsed.success ? [parsed.data] : []);
+await sample(parsed.success ? [parsed.data] : [], {
+  liveAgxJobs: () => Promise.resolve(undefined),
+});

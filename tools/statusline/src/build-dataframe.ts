@@ -12,6 +12,7 @@ import type { readCodexRate } from "./codex-rate.ts";
 import type { readJevUsage } from "./jev-usage.ts";
 import type { RecoverHealth } from "./recover-health.ts";
 import { ownerSources, type OwnerState } from "./owner-state.ts";
+import type { AgxJobRows } from "./agx-job-runs.ts";
 import { readCoreRuns } from "./core-runs.ts";
 
 type IdentityFacts = {
@@ -66,6 +67,7 @@ export type Sources = {
     orphans: number;
     failed?: string | undefined;
   }>;
+  liveAgxJobs: () => Promise<Result<AgxJobRows, string> | undefined>;
   hostLoad: () => Promise<Omit<HostLoad, "disks">>;
   routes: (
     sessionId?: string,
@@ -112,6 +114,7 @@ const BUDGETS_MS: Record<keyof Sources, number> = {
   rcState: 400,
   repoState: 2000,
   jobScan: 2000,
+  liveAgxJobs: 2000,
   hostLoad: 2000,
   routes: 2000,
   dispatchWarning: 1500,
@@ -252,6 +255,7 @@ export async function buildDataframe(
     rcResult,
     repoResult,
     scanResult,
+    liveAgxResult,
     hostResult,
     routesResult,
     warningResult,
@@ -316,6 +320,11 @@ export async function buildDataframe(
         { jobs: value.jobs, orphans: value.orphans, jobScanWhy: value.failed },
         ["jobs"],
       ),
+    ),
+    bounded("agx", budget("liveAgxJobs"), () =>
+      options.sources !== undefined && options.sources.liveAgxJobs === undefined
+        ? Promise.resolve(undefined)
+        : sources.liveAgxJobs(),
     ),
     bounded("host load", budget("hostLoad"), sources.hostLoad, (value) =>
       publish(value, ["cpu", "ram", "vram", "gpu", "tmpfs"], "tmp:"),
@@ -505,6 +514,12 @@ export async function buildDataframe(
     jobs,
     orphans,
     jobScanWhy: scan.why ?? scan.value.failed,
+    liveAgxJobs: (() => {
+      const result = settled(liveAgxResult, undefined, "agx");
+      return result.why === undefined
+        ? result.value
+        : err(result.why.replace(/^agx /u, ""));
+    })(),
     routes: routes.why === undefined ? routes.value : err(routes.why),
     dispatchWarning: warningFacts.dispatchWarning,
     dispatchWarningWhy: warning.why ?? warningFacts.dispatchWarningWhy,

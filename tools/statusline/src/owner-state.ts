@@ -6,6 +6,7 @@ import { jsonOf, z } from "./zod.ts";
 import { MemReadingSchema } from "./host-model.ts";
 import { RecoverHealthSchema } from "./recover-health.ts";
 import type { Sources } from "./build-dataframe.ts";
+import { Rows } from "./agx-job-runs.ts";
 import {
   AgentSessionSchema,
   sessionProcessMatches,
@@ -282,6 +283,18 @@ export function ownerSources(
           failed: z.string().optional(),
         }),
       )) ?? { jobs: [], orphans: 0, failed: "sampler unavailable" },
+    liveAgxJobs: async () => {
+      const field = (await pending)?.fields["liveAgxJobs"];
+      if (field === undefined) return err("sampler unavailable");
+      if (field.error !== undefined) return err(field.error);
+      if (field.value === null) return void field.value;
+      if (Temporal.Now.instant().epochMilliseconds - field.at > 30_000)
+        return err("sampler stale");
+      return (
+        (await read("liveAgxJobs", resultSchema(Rows))) ??
+        err("invalid worker listing")
+      );
+    },
     hostLoad: async () => {
       const legacy =
         (await pending)?.fields["cpuPct"] === undefined

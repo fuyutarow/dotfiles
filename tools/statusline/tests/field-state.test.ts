@@ -400,8 +400,8 @@ test("three disk-snapshot workers survive an outer dispatch timeout, including s
     stderr: "pipe",
     timeout: 15000,
   });
-  expect(plain(await new Response(empty.stdout).text())).not.toContain(
-    "agx n/a",
+  expect(plain(await new Response(empty.stdout).text())).toContain(
+    "agx n/a (sampler unavailable)",
   );
   expect(await empty.exited).toBe(0);
 }, 15000);

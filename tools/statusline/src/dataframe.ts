@@ -1,3 +1,4 @@
+import type { AgxJobRows } from "./agx-job-runs.ts";
 import type { Result } from "neverthrow";
 import type { MemReading } from "./host-load.ts";
 import type { DiskEntry, TmpEntry, TmpfsReading } from "./storage.ts";
@@ -60,6 +61,7 @@ export interface Dataframe {
   routes?: Result<RouteScan, string> | undefined;
   // Current-session runs from agx worker ls; optional for render-only fixtures using the legacy row source.
   jobRuns?: JobRun[] | undefined;
+  liveAgxJobs?: Result<AgxJobRows, string> | undefined;
   dispatchWarning?: string | undefined; // codex-share warning for this host, see dispatch-warning.ts
   dispatchWarningWhy?: string | undefined;
   recoverHealth?: RecoverHealth | undefined;

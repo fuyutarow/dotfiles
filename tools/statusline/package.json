@@ -1,6 +1,6 @@
 {
   "name": "@dotfiles/statusline",
-  "version": "0.22.18",
+  "version": "0.22.19",
   "private": true,
   "bin": {
     "statusline": "src/statusline.ts"

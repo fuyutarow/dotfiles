@@ -4,6 +4,7 @@ import type { Dataframe } from "./dataframe.ts";
 import { fleetLine } from "./fleet-line.ts";
 import { ctxSegment } from "./model-context.ts";
 import { rateRow } from "./rate-limits.ts";
+import { dur } from "./jobs.ts";
 import { admittedJobSegment } from "./jobs.ts";
 import { routeLines } from "./dispatch-display.ts";
 import { sysRow } from "./host-display.ts";
@@ -61,6 +62,23 @@ export function coloredHead(
     `${field("prompt-user", "user", observed(p === undefined ? undefined : `${ESC}[35m${p.user}${RST}`, "prompt unavailable"))}@${field("prompt-host", "host", observed(p === undefined ? undefined : `${ESC}[33m${p.host}${RST}`, "prompt unavailable"))}:` +
     `${field("prompt-time", "time", observed(p === undefined ? undefined : `${ESC}[36m${p.when}${RST}`, "prompt unavailable"))}${field("prompt-zone", "zone", observed(p === undefined ? undefined : `${ESC}[38;5;240m${p.zone}${RST}`, "prompt unavailable"))}|${field("prompt-cwd", "cwd", observed(p === undefined ? undefined : `${ESC}[32m${p.cwd}${RST}`, "prompt unavailable"))}`
   );
+}
+function truncateTicket(value: string): string {
+  let result = "";
+  for (const char of value) {
+    if (Bun.stringWidth(result + char) > 32) break;
+    result += char;
+  }
+  return result;
+}
+function liveJobEntries(
+  rows: import("./agx-job-runs.ts").AgxJobRows,
+  sid: string | undefined,
+): string {
+  return rows
+    .filter((row) => sid !== undefined && row.dispatcher_session === sid)
+    .map((row) => ` ${truncateTicket(row.ticket)} ${dur(row.elapsed_seconds)}`)
+    .join("");
 }
 export function render(
   df: Dataframe,
@@ -235,16 +253,35 @@ export function render(
     "Job: scan",
     observed(df.jobScanWhy === undefined ? jobValue : undefined, df.jobScanWhy),
   );
+  const live = df.liveAgxJobs;
+  if (live?.isErr() === true) jobLine += ` agx n/a (${live.error})`;
+  if (live?.isOk() === true) jobLine += liveJobEntries(live.value, df.sid);
   const scan = df.routes?.isOk() === true ? df.routes.value : undefined;
   const agxBlock = routeLines(
-    scan?.runs ?? [],
+    live === undefined ? (scan?.runs ?? []) : [],
     scan?.inventorySessions ?? scan?.sessionScope,
   ).join("\n");
-  const bottom = fleetLine(
-    scan,
-    Temporal.Now.instant().epochMilliseconds,
-    options.includeRunSource ?? true,
-  );
+  const outside =
+    live?.isOk() === true
+      ? live.value.filter(
+          (row) => df.sid === undefined || row.dispatcher_session !== df.sid,
+        ).length
+      : 0;
+  let footerScan = scan;
+  if (live !== undefined && scan !== undefined)
+    footerScan = { ...scan, fleet: undefined };
+  const bottom = [
+    fleetLine(
+      footerScan,
+      Temporal.Now.instant().epochMilliseconds,
+      options.includeRunSource ?? true,
+    ),
+    outside > 0
+      ? `+${outside} workers outside session ${df.sid ?? "unknown"}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const rows = {
     prompt: observed(

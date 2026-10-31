@@ -15,6 +15,7 @@ process.stdout.write(
     await buildDataframe(data.data, {
       sources: {
         ...COLLECTOR_SOURCES,
+        liveAgxJobs: () => Promise.resolve(undefined),
         routes: async (sessionId) =>
           ok(await agxRouteRunsAsync(process.env, sessionId, true)),
       },

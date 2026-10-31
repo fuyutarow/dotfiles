@@ -96,6 +96,7 @@ export function seedAgxSnapshot(
       ...owner,
       fields: {
         ...owner.fields,
+        liveAgxJobs: { at: snapshot.capturedAt, value: null },
         [agxStatusKey(cwd)]: { at: snapshot.capturedAt, value },
       },
     }),

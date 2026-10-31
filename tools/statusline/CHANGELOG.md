@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.19 — 2026-10-31
+
+- Show live session agx workers in the Job segment.
+
 ## 0.22.18 — 2026-10-31
 
 - Show admitted job IDs from resource manifests in the Job row.

@@ -4,6 +4,7 @@ import { acquireSamplerLock } from "./sampler-lock.ts";
 import { dirname, join } from "node:path";
 import { cli } from "cleye";
 import { buildDataframe } from "./build-dataframe.ts";
+import type { Sources } from "./build-dataframe.ts";
 import { COLLECTOR_SOURCES } from "./collector-sources.ts";
 import { sampleCodexRate } from "./codex-credit-sampler.ts";
 import {
@@ -132,7 +133,11 @@ export async function cleanRetiredCaches(
   );
 }
 
-export async function sample(payloads?: SessionStatus[]): Promise<void> {
+export async function sample(
+  payloads?: SessionStatus[],
+  overrides: Partial<Sources> = {},
+): Promise<void> {
+  const sources = { ...COLLECTOR_SOURCES, ...overrides };
   const path = ownerStatePath();
   await mkdir(dirname(path), { recursive: true });
   // systemd removes its RuntimeDirectory even after a killed collector.
@@ -156,6 +161,7 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
         failed.data.error.startsWith("⚠ GPU stalled since ");
       if (
         failed.success &&
+        key !== "liveAgxJobs" &&
         !gpuStalled &&
         prior !== undefined &&
         !previousFailed.success
@@ -177,6 +183,13 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
       if (!loaded.ok) {
         if (prior !== undefined)
           next.fields[key] = { ...prior, error: loaded.error };
+        return;
+      }
+      if (key === "liveAgxJobs" && loaded.value === undefined) {
+        next.fields[key] = {
+          at: Temporal.Now.instant().epochMilliseconds,
+          value: null,
+        };
         return;
       }
       const parsed = jsonText.safeParse(
@@ -275,6 +288,7 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
           "identity",
           "rcState",
           "jobScan",
+          "liveAgxJobs",
           "hostLoad",
           "storage",
           "codexRate",
@@ -285,9 +299,7 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
       ).map((key) =>
         save(
           key,
-          key === "codexRate"
-            ? () => Promise.resolve(codexRate)
-            : COLLECTOR_SOURCES[key],
+          key === "codexRate" ? () => Promise.resolve(codexRate) : sources[key],
         ),
       ),
       ...[...roots].map((root) =>

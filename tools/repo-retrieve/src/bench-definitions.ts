@@ -8,6 +8,7 @@
 // A case with "truth": [] is a NEGATIVE: nothing in the repo does it, so the right answer is
 // NO_DEFINITION (strength "none"); it is counted under "absent".
 import { homedir } from "node:os";
+import { consola } from "consola";
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
@@ -38,11 +39,11 @@ const argv = cli(
   cliArgv(),
 );
 if (prototypeFlag) {
-  console.error("bench-definitions: unknown option '--__proto__'");
+  consola.error("bench-definitions: unknown option '--__proto__'");
   process.exit(2);
 }
 if (argv._.length > 0 || argv.flags.cases === "") {
-  console.error("usage: bench-definitions --cases <file.json>");
+  consola.error("usage: bench-definitions --cases <file.json>");
   process.exit(2);
 }
 
@@ -60,7 +61,7 @@ const SpecSchema = z.object({
 const specText = await Bun.file(argv.flags.cases).text();
 const specRead = jsonOf(SpecSchema).safeParse(specText);
 if (!specRead.success) {
-  console.error(
+  consola.error(
     `bench-definitions: ${argv.flags.cases} is not a case spec: ${specRead.error.message}`,
   );
   process.exit(2);
@@ -85,12 +86,12 @@ async function runCase(
   if (a.isErr()) return err(a.error);
   const answer = a.value;
   ms.push(performance.now() - t0);
-  for (const n of answer.notes) console.error(`NOTE ${n}`);
+  for (const n of answer.notes) consola.warn(`NOTE ${n}`);
   if (c.truth.length === 0) {
     absentTotal += 1;
     if (answer.strength === "none") absentRight += 1;
     const verdict = answer.strength === "none" ? "OK" : "FALSE MATCH";
-    console.log(
+    consola.info(
       `${c.need} ${lang} absent  ${verdict} best=${answer.best.toFixed(2)} top=${answer.cards[0]?.name ?? "-"}`,
     );
     return ok(undefined);
@@ -105,7 +106,7 @@ async function runCase(
     .slice(0, 3)
     .map((d) => d.name)
     .join(", ");
-  console.log(
+  consola.info(
     `${c.need} ${lang} rank=${rank !== 0 ? rank : "×"} ${answer.strength} best=${answer.best.toFixed(2)} top=${top}`,
   );
   return ok(undefined);
@@ -124,19 +125,19 @@ for (const { c, lang, q } of runs) {
 }
 ms.sort((x, y) => x - y);
 for (const [lang, t] of Object.entries(tally))
-  console.log(
+  consola.info(
     `${lang}: top1 ${t.top1}/${t.n}  top3 ${t.top3}/${t.n}  top10 ${t.top10}/${t.n}`,
   );
 const all = Object.values(tally).reduce(
   (a, t) => ({ n: a.n + t.n, top3: a.top3 + t.top3 }),
   { n: 0, top3: 0 },
 );
-console.log(
+consola.info(
   `all: top3 ${all.top3}/${all.n}` +
     (absentTotal !== 0
       ? `  absent correctly ${absentRight}/${absentTotal}`
       : ""),
 );
-console.log(
+consola.info(
   `latency median ${Math.round(ms[Math.floor(ms.length / 2)] ?? 0)} ms, max ${Math.round(ms.at(-1) ?? 0)} ms`,
 );

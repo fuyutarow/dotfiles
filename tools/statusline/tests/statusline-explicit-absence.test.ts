@@ -14,7 +14,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { fromThrowable } from "neverthrow";
+import { err, fromThrowable, ok } from "neverthrow";
+import { gpuSamplingSupported } from "../src/host-load.ts";
+import { sysSegment } from "../src/host-display.ts";
 import { jsonText, z } from "../src/zod.ts";
 import {
   cleanupTempDirs,
@@ -140,6 +142,26 @@ function cacheFileState(path: string): "missing" | "valid" | "torn" {
 const SysCacheSchema = z.object({ line: z.string() });
 
 describe("statusline Sys row: VRAM", () => {
+  test("capability gate keeps missing Linux samples explicit", () => {
+    expect(gpuSamplingSupported("darwin", false)).toBe(false);
+    expect(gpuSamplingSupported("darwin", true)).toBe(true);
+    expect(gpuSamplingSupported("linux", false)).toBe(true);
+    const keys: string[] = [];
+    const row = sysSegment(
+      ok(0),
+      ok({ pct: 0, frac: "0/1G" }),
+      err("missing sampler"),
+      ok([]),
+      [],
+      (key, _label, state) => {
+        keys.push(key);
+        return state.kind === "unknown" ? state.reason : state.value;
+      },
+    );
+    expect(keys.filter((key) => key === "gpu")).toHaveLength(1);
+    expect(keys).not.toContain("vram");
+    expect(row.match(/missing sampler/gu)).toHaveLength(1);
+  });
   test("renders the owner's fresh sample without invoking a tool", async () => {
     const home = tempHome();
     const stateRoot = join(home, ".local", "state");
@@ -153,6 +175,13 @@ describe("statusline Sys row: VRAM", () => {
         devices: [],
         processes: [],
         samples: [
+          ...[2, 1].map((minutes) => ({
+            ts: at - minutes * 60_000,
+            nextTs: at - (minutes - 1) * 60_000,
+            utilPct: 0,
+            memUsedGiB: 3.5,
+            memTotalGiB: 12,
+          })),
           {
             ts: at,
             nextTs: at + 60_000,
@@ -165,15 +194,16 @@ describe("statusline Sys row: VRAM", () => {
     );
     const bin = binWith({ "nvidia-smi": "exit 99" });
     expect(sysRow(render({ home, bin }).text)).toContain(
-      "VRAM 29% ( 3.5/12.0G)",
+      "GPU 0%/15m n=3 · VRAM 29% ( 3.5/12.0G)",
     );
   });
   test("missing and unresponsive owner state are explicit", async () => {
     const home = tempHome();
     const bin = binWith({ "nvidia-smi": "exec /bin/sleep 30" });
-    expect(sysRow(render({ home, bin }).text)).toContain(
-      "VRAM n/a (stale (GPU sampler state unavailable))",
-    );
+    const row = sysRow(render({ home, bin }).text);
+    expect(row).toContain("GPU n/a (stale (GPU sampler state unavailable))");
+    expect(row.match(/GPU sampler state unavailable/gu)).toHaveLength(1);
+    expect(row).not.toContain("VRAM n/a");
     await Bun.write(
       join(home, ".local", "state", "gpu-owner.json"),
       JSON.stringify({
@@ -200,9 +230,14 @@ describe("statusline Sys row: every reading is present", () => {
     },
   );
 
-  test.skipIf(!IS_MAC)("macOS: missing owner state is explicit", () => {
-    expect(sysRow(render({ bin: binWith({}) }).text)).toContain("stale");
-  });
+  test.skipIf(!IS_MAC)(
+    "macOS: no NVIDIA tool omits GPU regardless of owner state",
+    () => {
+      const row = sysRow(render({ bin: binWith({}) }).text);
+      expect(row).not.toContain("GPU");
+      expect(row).not.toContain("VRAM");
+    },
+  );
 
   test.skipIf(!IS_MAC)(
     "macOS: RAM is Activity Monitor's used (app + wired + compressed) from vm_stat",
@@ -473,7 +508,7 @@ describe("statusline resource bounds", () => {
       // nvidia-smi is not a render child any more (O4): its hang costs the render nothing, and the
       // bar says the sample is still being taken.
       expect(sysRow(text)).toContain(
-        "VRAM n/a (stale (GPU sampler state unavailable))",
+        "GPU n/a (stale (GPU sampler state unavailable))",
       );
     },
     SLOW,

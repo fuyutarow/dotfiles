@@ -42,6 +42,27 @@ export function memSegment(
     seg += ` ${roles.secondary(`stale ${m.stale.secs}s (${m.stale.why})`)}`;
   return seg;
 }
+function gpuObservation(vram: Result<MemReading, string>) {
+  return vram.match(
+    (m) => {
+      let utilization = roles
+        .unavailable("GPU", unavailable("no GPU sample"))
+        .trimStart();
+      if (m.gpuAvg15 !== undefined && m.gpuAvg15 !== null)
+        utilization = `${roles.label("GPU")} ${roles.secondary(`${Math.round(m.gpuAvg15)}%/15m n=${m.gpuSamples15 ?? 0}`)}`;
+      return observed(
+        `${utilization}${roles.separator()}${memSegment("VRAM", m, false)}`,
+        undefined,
+        (m.stale?.secs ?? 0) * 1000,
+      );
+    },
+    (why) => {
+      if (why.startsWith("⚠ GPU stalled since "))
+        return observed(roles.value(why, "167"));
+      return observed(undefined, why);
+    },
+  );
+}
 // Disks: WHICH filesystems and at what free space they turn yellow/red are not decided here —
 // Every reading is a Result: ok renders the value, err renders `<label> n/a (<why>)` — see the
 // EXPLICIT-ABSENCE law at the top. The row therefore always carries CPU, RAM and VRAM.
@@ -59,23 +80,6 @@ export function sysSegment(
   field: FieldDisplay = fieldDisplay(),
   tmpfs?: Result<TmpfsReading, string>,
 ): string {
-  let gpu: string | undefined;
-  let gpuWhy = "no GPU sample";
-  let gpuAge = 0;
-  if (vram?.isErr() === true) gpuWhy = vram.error;
-  if (vram?.isOk() === true) {
-    const m = vram.value;
-    if (m.gpuAvg15 !== undefined && m.gpuAvg15 !== null)
-      gpu = roles.secondary(
-        `GPU≈${Math.round(m.gpuAvg15)}%/15m n=${m.gpuSamples15 ?? 0}`,
-      );
-    gpuAge = (m.stale?.secs ?? 0) * 1000;
-  }
-  const stall =
-    vram?.isErr() === true && vram.error.startsWith("⚠ GPU stalled since ")
-      ? vram.error
-      : undefined;
-  if (stall !== undefined) gpu = roles.value(stall, "167");
   const parts: string[] = [
     cpu.match(
       (v) => {
@@ -101,26 +105,7 @@ export function sysSegment(
         ),
       (why) => field("ram", "RAM", observed(undefined, why)),
     ),
-    ...(vram === undefined || stall !== undefined
-      ? []
-      : [
-          vram.match(
-            (m) =>
-              field(
-                "vram",
-                "VRAM",
-                observed(
-                  memSegment("VRAM", m, false),
-                  undefined,
-                  (m.stale?.secs ?? 0) * 1000,
-                ),
-              ),
-            (why) => field("vram", "VRAM", observed(undefined, why)),
-          ),
-        ]),
-    ...(vram === undefined
-      ? []
-      : [field("gpu", "GPU", observed(gpu, gpuWhy, gpuAge))]),
+    ...(vram === undefined ? [] : [field("gpu", "GPU", gpuObservation(vram))]),
     ...(tmpfs === undefined
       ? []
       : [

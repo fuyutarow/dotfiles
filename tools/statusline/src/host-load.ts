@@ -385,12 +385,20 @@ async function vramFracAsync(): Promise<Result<MemReading, string>> {
 async function vramGatedAsync(): Promise<
   Result<MemReading, string> | undefined
 > {
-  const vram = await vramFracAsync();
-  return process.platform === "darwin" &&
-    vram.isErr() &&
-    vram.error === "no nvidia-smi"
-    ? undefined
-    : vram;
+  if (
+    !gpuSamplingSupported(
+      process.platform,
+      Bun.which("nvidia-smi", { PATH: process.env["PATH"] ?? "" }) !== null,
+    )
+  )
+    return undefined;
+  return vramFracAsync();
+}
+export function gpuSamplingSupported(
+  platform: string,
+  nvidiaOnPath: boolean,
+): boolean {
+  return platform !== "darwin" || nvidiaOnPath;
 }
 /** The Sys row exactly as the statusline prints it. */
 // Standalone (`s`): render the available observations; cold or expired GPU state is explicit.

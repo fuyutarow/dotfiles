@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.10 — 2026-10-31
+
+- Combine GPU utilization and VRAM into one field and hide it on macOS without NVIDIA.
+
 ## 0.22.9 — 2026-10-31
 
 - Show the model context window when auto-compact is not configured.

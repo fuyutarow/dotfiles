@@ -1,5 +1,5 @@
 import { afterEach, expect, test, spyOn } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile, utimes } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ok } from "neverthrow";
@@ -12,11 +12,14 @@ import { fleetLine } from "../src/fleet-line.ts";
 const roots: string[] = [];
 const oldXdg = process.env["XDG_STATE_HOME"];
 const oldProc = process.env["STATUSLINE_PROC_ROOT"];
+const oldPath = process.env["PATH"];
 afterEach(async () => {
   if (oldXdg === undefined) delete process.env["XDG_STATE_HOME"];
   else process.env["XDG_STATE_HOME"] = oldXdg;
   if (oldProc === undefined) delete process.env["STATUSLINE_PROC_ROOT"];
   else process.env["STATUSLINE_PROC_ROOT"] = oldProc;
+  if (oldPath === undefined) delete process.env["PATH"];
+  else process.env["PATH"] = oldPath;
   await Promise.all(
     roots.splice(0).map((path) => rm(path, { recursive: true, force: true })),
   );
@@ -24,6 +27,12 @@ afterEach(async () => {
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "statusline-step4-"));
   roots.push(root);
+  return root;
+}
+async function nvidiaPath(root: string): Promise<string> {
+  const path = join(root, "nvidia-smi");
+  await writeFile(path, "#!/bin/sh\nexit 99\n");
+  await chmod(path, 0o755);
   return root;
 }
 const at = () => Temporal.Now.instant().epochMilliseconds;
@@ -197,6 +206,7 @@ test("source ages name their source only alongside an action; elapsed idle time 
 });
 test("gpu-owner stall replaces the utilization average with a JST recovery warning", async () => {
   const root = await fixture();
+  process.env["PATH"] = await nvidiaPath(root);
   process.env["XDG_STATE_HOME"] = root;
   process.env["STATUSLINE_PROC_ROOT"] = join(root, "proc");
   await mkdir(join(root, "proc/2461429"), { recursive: true });
@@ -230,6 +240,7 @@ test("gpu-owner stall replaces the utilization average with a JST recovery warni
 
 test("sampler publishes a GPU stall over a previously good utilization sample", async () => {
   const root = await fixture();
+  const path = await nvidiaPath(root);
   const owner = join(root, "statusline/owner.json");
   await mkdir(join(root, "statusline"), { recursive: true });
   await writeFile(
@@ -269,7 +280,7 @@ test("sampler publishes a GPU stall over a previously good utilization sample", 
         STATUSLINE_OWNER_STATE: owner,
         STATUSLINE_CACHE_ROOT: join(root, "cache"),
         STATUSLINE_DISK_RATE_STATE: join(root, "disk-rate.json"),
-        PATH: "",
+        PATH: path,
       },
       stdin: new Blob([JSON.stringify({ cwd: root })]),
       stdout: "pipe",
@@ -290,6 +301,7 @@ test("sampler publishes a GPU stall over a previously good utilization sample", 
 
 test("GPU owner fixtures cover first failed probe, recovery, and paused failures without driver calls", async () => {
   const root = await fixture();
+  process.env["PATH"] = await nvidiaPath(root);
   process.env["XDG_STATE_HOME"] = root;
   const now = at();
   const state = {
@@ -335,7 +347,7 @@ test("GPU owner fixtures cover first failed probe, recovery, and paused failures
     } else {
       expect(text).not.toContain("stalled");
       expect(text).not.toContain("gpu-sampler --check");
-      expect(text).toContain("GPU≈12%");
+      expect(text).toContain("GPU 12%/15m n=3 · VRAM");
     }
     expect(await Bun.file(join(root, "gpu-owner.json")).text()).toBe(before);
   }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.0 — 2026-10-31
+
+- Wait for a fresh recovery OK after a transient HOLD before refusing admission.
+
 ## 1.14.1 — 2026-10-30
 
 - Remove unused recovery verdict type export.

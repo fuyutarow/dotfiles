@@ -71,6 +71,12 @@ There is no CPU-set allocator, resource ledger, sampled monitor or peak persiste
 `--manifest`, `--check-only`, `--job-id`, `--slot julia-compile` and `status`
 retain their invocation forms. DENY is 69, recovery HOLD is 70, and bounded admission-lock
 timeout is 75. Conflicting `output_lock` keys are refused immediately with 69.
+On a fresh recovery HOLD, the runner polls for a fresh OK for at most the smaller of
+the manifest walltime and 30 minutes. `--recovery-wait-seconds` overrides this limit
+(0 through 86400 seconds). Progress goes to stderr even without a terminal; its next
+verdict time is an estimate based on the one-minute timer, whose accuracy and service
+duration can delay a write. An emergency still refuses immediately. Once waiting,
+missing, invalid or stale verdicts cannot release the HOLD. Ctrl-C cancels the wait.
 The inherited admission receipt and its digest remain available to example-search's gate;
 each scope exposes its own cgroup v2 pids.peak. CPU_IDS is compatibility metadata,
 not exclusive affinity. Thread-count environment variables remain bounded.
@@ -84,7 +90,7 @@ recovery remain caller responsibilities.
 A commandless `--check-only` invocation is the prelaunch boundary: it rejects a
 command, so no underlying workload can have run in that invocation. Proc suspicion
 admits work and requires no retry. A fresh owner incident requires operator recovery;
-see [GPU recovery](../shared/GPU-RECOVERY.md). Capacity and RAM HOLD remain unchanged.
+see [GPU recovery](../shared/GPU-RECOVERY.md). Recovery HOLD waits as described above.
 
 `DENY` (69) and flock timeout (75) are status classes, not replay predicates. A
 normal launch passes through the command's exit status; callers must not blindly

@@ -20,10 +20,7 @@ import {
   readGpuState,
   type GpuState,
 } from "@dotfiles/shared/src/gpu-samples.ts";
-import {
-  assessRecoveryVerdict,
-  readRecoveryVerdict,
-} from "./lib/recovery-verdict.ts";
+import { waitForRecoveryVerdict } from "./lib/recovery-verdict.ts";
 import {
   rejectPrototypeFlag,
   statusCommand,
@@ -131,6 +128,7 @@ type ExecuteOptions = {
   cwd?: string;
   report?: (line: string) => void;
   manifestSource?: ManifestSource;
+  recoveryWaitSeconds?: number;
 };
 const reportLine = (line: string) => process.stdout.write(`${line}\n`);
 const failure = (
@@ -1198,7 +1196,9 @@ async function runDecision(
         report,
       ),
     );
-  const recovery = assessRecoveryVerdict(await readRecoveryVerdict());
+  const recovery = await waitForRecoveryVerdict(
+    options.recoveryWaitSeconds ?? Math.min(manifest.walltime_seconds, 1800),
+  );
   if (recovery.kind === "refuse")
     return ok(failure(70, recovery.message, report));
   report(recovery.message);
@@ -1488,6 +1488,11 @@ async function main() {
         jobId: { type: String },
         slot: { type: String },
         checkOnly: { type: Boolean, default: false },
+        recoveryWaitSeconds: {
+          type: Number,
+          description:
+            "Maximum seconds to wait for a fresh recovery OK (default: min walltime, 1800)",
+        },
       },
     },
     undefined,
@@ -1504,6 +1509,19 @@ async function main() {
     return err(new UsageError("--manifest is required"));
   if (parsed.flags.slot !== undefined && parsed.flags.slot !== "julia-compile")
     return err(new UsageError('--slot must be "julia-compile"'));
+  const wait = z
+    .number()
+    .int()
+    .min(0)
+    .max(86400)
+    .optional()
+    .safeParse(parsed.flags.recoveryWaitSeconds);
+  if (!wait.success)
+    return err(
+      new UsageError(
+        "--recovery-wait-seconds must be an integer from 0 to 86400",
+      ),
+    );
   const path = resolve(parsed.flags.manifest);
   const read = await fromAsyncThrowable(() => readFile(path))();
   if (read.isErr())
@@ -1530,6 +1548,7 @@ async function main() {
       parsed._.map(String),
       {
         manifestSource: manifestSourceFromBytes(path, bytes),
+        ...(wait.data === undefined ? {} : { recoveryWaitSeconds: wait.data }),
       },
       parsed.flags.checkOnly,
     )

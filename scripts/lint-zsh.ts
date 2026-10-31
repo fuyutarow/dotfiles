@@ -1,5 +1,6 @@
 import { $ } from "bun";
-import { existsSync } from "node:fs";
+import { access } from "node:fs/promises";
+import { consola } from "consola";
 
 // zsh syntax gate: `zsh -n` parse-only on boot-critical zsh config (MUST use the zsh binary,
 // never bash -n).
@@ -15,12 +16,18 @@ const files = [
 
 let rc = 0;
 for (const f of files) {
-  if (!existsSync(f)) continue;
+  if (
+    !(await access(f).then(
+      () => true,
+      () => false,
+    ))
+  )
+    continue;
   const res = await $`zsh -n ${f}`.nothrow();
   if (res.exitCode === 0) {
-    console.log(`✅ ${f}`);
+    consola.success(`✅ ${f}`);
   } else {
-    console.log(`❌ ${f}`);
+    consola.error(`❌ ${f}`);
     rc = 1;
   }
 }

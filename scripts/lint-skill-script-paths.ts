@@ -1,13 +1,19 @@
 const root = import.meta.dir.replace(/\/scripts$/u, "");
 const files = [
   "mise.toml",
-  ...new Bun.Glob("agents/skills/**/templates/**/*.mise.toml").scanSync({
-    cwd: root,
-  }),
-  ...new Bun.Glob("agents/skills/**/SKILL.md").scanSync({ cwd: root }),
-  ...[...new Bun.Glob("scripts/**/*.ts").scanSync({ cwd: root })].filter(
-    (path) => !path.startsWith("scripts/tests/"),
-  ),
+  ...(await Array.fromAsync(
+    new Bun.Glob("agents/skills/**/templates/**/*.mise.toml").scan({
+      cwd: root,
+    }),
+  )),
+  ...(await Array.fromAsync(
+    new Bun.Glob("agents/skills/**/SKILL.md").scan({ cwd: root }),
+  )),
+  ...[
+    ...(await Array.fromAsync(
+      new Bun.Glob("scripts/**/*.ts").scan({ cwd: root }),
+    )),
+  ].filter((path) => !path.startsWith("scripts/tests/")),
 ];
 const repositoryPathPattern =
   /(?:\.\.\/)*agents\/skills\/[a-z0-9-]+\/scripts\/[a-z0-9-]+\.ts/gu;

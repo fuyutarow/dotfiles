@@ -94,10 +94,20 @@ isolated sampler probes without changing deployed host files.
 
 Claude context counts include input, cache-read and cache-creation tokens from the latest
 request. A supplied current usage takes precedence over cumulative input totals.
-For Claude stdin, Ctx uses the matching `modelSettings.<model.id>.autoCompactWindow` from
-`$CLAUDE_CONFIG_DIR/settings.json` (or `~/.claude/settings.json`) as its denominator when
-available, and displays the window. Otherwise it retains Claude's `used_percentage`. A
-launch-only `--autocompact` override is not observable from that file and is not reflected.
+For Claude stdin, Ctx uses the latest successful /autocompact record in the rendered
+session's transcript. A per-session state file under `$XDG_STATE_HOME/statusline/`
+(default `~/.local/state/statusline/`) tracks an incremental scan of at most 8 MiB per
+render. Until the scan reaches the end, or if the transcript is absent or unreadable,
+it uses the payload's model context window. Replacement, truncation, or corrupt state
+starts a new scan. Individual transcript lines over 64 KiB are skipped to keep state bounded. The percentage is
+current tokens divided by the selected window. The [Claude statusline schema](https://code.claude.com/docs/en/statusline)
+documents transcript_path and context_window_size but no session auto-compact window field.
+The observed transcript records the command and success output separately; it does not
+prove whether later external settings changes apply live. Claude's [changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md)
+notes per-model persistence, but its timing for existing sessions is unverified, so the
+host settings value is not used. Launch overrides, later commands not yet scanned, and
+other changes to the effective window may be unobserved; the fallback is the model window,
+not a claim that auto-compaction occurs at that size.
 The repository segment shows the sampled jj workspace name; payload git worktree names
 are ignored. Outside a repository there is no workspace-name segment or workspace `here` count.
 

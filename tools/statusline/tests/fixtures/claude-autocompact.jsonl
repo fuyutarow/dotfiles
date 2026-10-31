@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"<command-name>/autocompact</command-name>\n            <command-message>autocompact</command-message>\n            <command-args>400k</command-args>"}}
+{"type":"user","message":{"role":"user","content":"<local-command-stdout>Auto-compact window for Opus 5.5 set to 400k tokens</local-command-stdout>"}}
+{"type":"user","message":{"role":"user","content":"<command-name>/autocompact</command-name>\n            <command-message>autocompact</command-message>\n            <command-args>400k</command-args>"}}
+{"type":"user","message":{"role":"user","content":"<local-command-stdout>Auto-compact window for Opus 5.5 set to 400k tokens</local-command-stdout>"}}

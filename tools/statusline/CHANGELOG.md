@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.11 — 2026-10-31
+
+- Use the rendered Claude session's observed auto-compact window, falling back to the model window.
+
 ## 0.22.10 — 2026-10-31
 
 - Combine GPU utilization and VRAM into one field and hide it on macOS without NVIDIA.

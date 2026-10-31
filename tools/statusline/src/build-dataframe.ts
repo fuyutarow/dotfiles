@@ -466,9 +466,11 @@ export async function buildDataframe(
     rc: rc.value,
     ctx,
     ctxPct:
-      data.context?.compactWindow !== undefined &&
-      data.context.inputTokens !== undefined
-        ? (data.context.inputTokens / data.context.compactWindow) * 100
+      (data.context?.compactWindow ?? data.context?.modelWindow) !==
+        undefined && data.context?.inputTokens !== undefined
+        ? (data.context.inputTokens /
+            (data.context.compactWindow ?? data.context.modelWindow ?? 1)) *
+          100
         : data.context?.usedPercent,
     ctxWindow:
       data.context?.inputTokens === undefined

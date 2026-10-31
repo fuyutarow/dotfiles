@@ -1,32 +1,7 @@
 import { recoverInvalid } from "../bounded.ts";
 import { maybe, z } from "../zod.ts";
 import type { SessionStatus } from "../session-status.ts";
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { fromThrowable, jsonOf } from "../zod.ts";
-
-const SettingsSchema = z.object({
-  modelSettings: z
-    .record(z.string(), z.object({ autoCompactWindow: z.unknown().optional() }))
-    .optional(),
-});
-
-function compactWindow(modelId: string | undefined): number | undefined {
-  if (modelId === undefined) return undefined;
-  return fromThrowable(() => {
-    const directory =
-      process.env["CLAUDE_CONFIG_DIR"] ?? join(homedir(), ".claude");
-    // sync-ok: The small local settings file is read once at the synchronous stdin boundary.
-    const text = readFileSync(join(directory, "settings.json"), "utf8");
-    const settings = jsonOf(SettingsSchema).safeParse(text);
-    const models = settings.success ? settings.data.modelSettings : undefined;
-    const entry =
-      models?.[modelId] ?? models?.[modelId.replace(/\[1m\]$/u, "")];
-    const value = z.number().positive().safeParse(entry?.autoCompactWindow);
-    return value.success ? value.data : undefined;
-  })().unwrapOr(undefined);
-}
+import { claudeTranscriptWindow } from "./claude-transcript-window.ts";
 
 const RateWindowSchema = recoverInvalid(
   z.object({
@@ -70,6 +45,7 @@ export const ClaudeStatuslineInputSchema = z
   .object({
     cwd: maybe(z.string()),
     session_id: maybe(z.string()),
+    transcript_path: maybe(z.string()),
     // This is a change signal for Claude's addressable agent name cache, not necessarily its name.
     session_name: maybe(z.string()),
     workspace: maybe(z.object({ current_dir: maybe(z.string()) })),
@@ -124,7 +100,10 @@ export const ClaudeStatuslineInputSchema = z
         : {
             inputTokens: contextTokens(input.context_window),
             usedPercent: input.context_window.used_percentage,
-            compactWindow: compactWindow(input.model?.id),
+            compactWindow: claudeTranscriptWindow(
+              input.transcript_path,
+              input.session_id,
+            ),
             modelWindow: modelWindow(input.context_window.context_window_size),
           },
     effort: input.effort?.level,

@@ -1,7 +1,7 @@
 ---
 name: writing-bun-scripts
 description: >-
-  Writes Bun TypeScript scripts, hooks and CLIs; migrates Bash. PATH commands use package bin and bun link; hooks have no npm deps; resolve files via import.meta.dir. Pin one-shots with bunx package@version, permanent deps in the lockfile; freeze CLI, output and exits before migration. Use for skill scripts. CLI protocol → designing-command-line-interfaces; TypeScript idiom → writing-typescript; task graph → wiring-mise-tasks.
+  Writes Bun TypeScript scripts, hooks and CLIs; migrates Bash. PATH commands use package bin and bun link; hooks have no npm deps; resolve files via import.meta.dir. Pin one-shots with bunx package@version, permanent deps in the lockfile; freeze CLI, output and exits before migration. Use for skill scripts. CLI protocol → designing-cli-contracts; TypeScript idiom → writing-typescript; task graph → wiring-mise-tasks.
 ---
 
 # Writing Bun scripts
@@ -50,7 +50,7 @@ invariant, and relay the original tokens in order including `--`.
 The existing house consumer contract distinguishes Cleye usage exit 1 from local fatal exit 2
 by stderr; declare whether the script emits a single-line machine JSON envelope or human/agent
 verdict lines. For reusable CLI protocol, defaults, compatibility, and interaction decisions use
-`designing-command-line-interfaces`. Parser use is the conditional default for ordinary CLI
+`designing-cli-contracts`. Parser use is the conditional default for ordinary CLI
 arguments ([CLIG basics](https://clig.dev/#the-basics)).
 Preserve the existing domain exits 0/1/2; report caught fatal errors on stderr with exit 2,
 and set process exit state at the entry boundary. An error envelope must exit nonzero.
@@ -93,7 +93,7 @@ For a verification verdict, record the command and its output.
 | Refactor existing skill scripts | Here and `refactoring-code` |
 | Add a hook detector | Here for the body; inspect the event/matcher owner |
 | Add a mise task | `wiring-mise-tasks`; here if writing its script |
-| Design a reusable CLI protocol | `designing-command-line-interfaces` |
+| Design a reusable CLI protocol | `designing-cli-contracts` |
 
 These are desk-review cases, not measured selection accuracy. Historical evidence and triage
 mapping are in `tests/forge-verification-ledger.md`.

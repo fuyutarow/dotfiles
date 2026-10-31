@@ -141,7 +141,7 @@ These rows preserve the CLI-relevant part; a live usecase does not prove every o
 
 ## Historical record (through 2026-10-05; superseded)
 
-# Forge verification ledger — designing-command-line-interfaces
+# Forge verification ledger — designing-cli-contracts
 
 ## 0. Function and placement
 

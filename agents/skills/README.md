@@ -34,7 +34,7 @@ Formal Methods. `forging-skills` owns the admission test; activity counts alone 
 
 ### Design & interfaces
 
-- [`designing-command-line-interfaces`](designing-command-line-interfaces/) — Design or audit a reusable CLI's contract: consumers, grammar, effects, stdout/stderr and machine route, outcomes, compatibility.
+- [`designing-cli-contracts`](designing-cli-contracts/) — Design or audit a reusable CLI's contract: consumers, grammar, effects, stdout/stderr and machine route, outcomes, compatibility.
 - [`designing-version-schemes`](designing-version-schemes/) — Design versioning as a compatibility, chronology, and release-order contract; verify the target comparator and ranges.
 
 ### Research & thinking

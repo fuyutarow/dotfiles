@@ -18,7 +18,7 @@ test("routing cases cover CLI sourcing and configuration integrity", () => {
   expect(cases).toContain(
     "Choose CLI flags, environment variables, precedence or XDG paths.",
   );
-  expect(cases).toContain("designing-command-line-interfaces");
+  expect(cases).toContain("designing-cli-contracts");
   expect(cases).toContain("Choose a signature boundary for a policy bundle.");
   expect(skill).toContain("base-usecase-first");
 });

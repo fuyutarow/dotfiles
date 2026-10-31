@@ -1,4 +1,4 @@
-# Trigger desk-check — designing-command-line-interfaces
+# Trigger desk-check — designing-cli-contracts
 
 These are review cases, not measured live selection accuracy.
 

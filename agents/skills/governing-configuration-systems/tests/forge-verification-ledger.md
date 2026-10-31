@@ -139,7 +139,7 @@ Frozen inputs: `ufp-triage-governing-configuration-systems-1030.md` and `usecase
 | `verification-and-profiles.md:11` | trust regime/signature inputを区別する | RESIDUE-KEEP / live | Kept: SKILL.md, Decisions |
 | `verification-and-profiles.md:12` | canonical profileにalgorithm/versionを記録する | RESIDUE-KEEP / unproven | Removed |
 | `verification-and-profiles.md:13` | schema/duplicate/number-Unicode policyを記録する | RESIDUE-KEEP / unproven | Removed |
-| `verification-and-profiles.md:14-15` | precedence/mergeとdecision/exception recordを記録する | UFP-DERIVED | Moved to designing-command-line-interfaces (sourcing) and base-usecase-first (records); effective input in SKILL.md, Decisions |
+| `verification-and-profiles.md:14-15` | precedence/mergeとdecision/exception recordを記録する | UFP-DERIVED | Moved to designing-cli-contracts (sourcing) and base-usecase-first (records); effective input in SKILL.md, Decisions |
 | `verification-and-profiles.md:16` | verifier commandとpositive/negative casesを記録する | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
 | `verification-and-profiles.md:20` | checkerを contract pathに対して実行する | RESIDUE-KEEP / unproven | Removed |
 | `verification-and-profiles.md:22` | checkerはabsent fieldsとunknown regimesをrejectする | RESIDUE-KEEP / unproven | Removed |
@@ -153,4 +153,4 @@ Frozen inputs: `ufp-triage-governing-configuration-systems-1030.md` and `usecase
 | `verification-and-profiles.md:51` | validatorはauthored sourceでなくnamed effective declarationを消費する | UFP-DERIVED | Partly kept where applicable: SKILL.md, Decisions; general rule in base-usecase-first |
 | `verification-and-profiles.md:53` | green contract floorだけではacceptance receiptにならない | RESIDUE-KEEP / unproven | Removed |
 
-The package no longer prescribes the unproven contract checker, template or profile-specific examples. CLI sourcing defaults are owned by designing-command-line-interfaces. The prior source position was bounded; this rewrite has not been tested with independent readers under an attention budget.
+The package no longer prescribes the unproven contract checker, template or profile-specific examples. CLI sourcing defaults are owned by designing-cli-contracts. The prior source position was bounded; this rewrite has not been tested with independent readers under an attention budget.

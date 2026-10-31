@@ -35,7 +35,7 @@
     "tex-oracle": "agents/skills/compiling-latex/scripts/tex-oracle.ts",
     "scope-check": "scripts/harness/scope-check.ts",
     "gate-diagnostics-check": "scripts/harness/gate-diagnostics-check.ts",
-    "diagnostic-card-check": "agents/skills/designing-command-line-interfaces/scripts/diagnostic-card-check.ts",
+    "diagnostic-card-check": "agents/skills/designing-cli-contracts/scripts/diagnostic-card-check.ts",
     "script-check": "agents/skills/writing-bun-scripts/scripts/script-check.ts",
     "skill-check": "agents/skills/forging-skills/scripts/skill-check.ts",
     "lint-ts-candidate": "agents/skills/wiring-mise-tasks/scripts/lint-ts-candidate.ts",

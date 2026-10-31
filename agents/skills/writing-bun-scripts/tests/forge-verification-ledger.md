@@ -1,7 +1,7 @@
 # Forge verification ledger — writing-bun-scripts F3 artifact (2026-07-23)
 
 **PROSE-DEBT waiver (dated 2026-09-18).** The F4 description shortening and the new
-`designing-command-line-interfaces` cut add no body prose debt. Existing measured debt remains
+`designing-cli-contracts` cut add no body prose debt. Existing measured debt remains
 pre-existing: 12 sentences over 120 characters, an 11-line version header, 4 table cells over 400
 characters, and 34 reference warnings in `bun-facts.md`. Queue position: **1 — next
 writing-bun-scripts full reforge after the F4 listing swap**. This waiver expires when that reforge
@@ -507,9 +507,9 @@ Frozen source: `ufp-triage-writing-bun-scripts-1030.md` and `usecase-triage-writ
 | RESIDUE-KEEP; SKILL.md:59 | `parseArgs` と手書き `Bun.argv` parsing を禁止 | R012: kept SKILL.md#dependencies-and-argv |
 | RESIDUE-KEEP; SKILL.md:59 | 各 Cleye boundary は strict flags、prototype guard、parameters を宣言 | R013: kept SKILL.md#dependencies-and-argv |
 | RESIDUE-KEEP; SKILL.md:59 | Cleye camelCase keys を kebab flags として使う | R014: removed (unproven) |
-| CLIG-SUPPORTED; SKILL.md:59 | excess positionals は意図して宣言し、他は拒否する | Referenced: designing-command-line-interfaces |
+| CLIG-SUPPORTED; SKILL.md:59 | excess positionals は意図して宣言し、他は拒否する | Referenced: designing-cli-contracts |
 | RESIDUE-KEEP; SKILL.md:59 | Cleye usage exit 1 と local fatal exit 2 を stderr で区別する | R015: kept SKILL.md#dependencies-and-argv |
-| CLIG-SUPPORTED; SKILL.md:59 | parse 後の domain result は成功0、失敗非0 | Referenced: designing-command-line-interfaces |
+| CLIG-SUPPORTED; SKILL.md:59 | parse 後の domain result は成功0、失敗非0 | Referenced: designing-cli-contracts |
 | UFP-DERIVED; SKILL.md:59 | fatal error を entry catch で stderr に伝え exit 2 にする | Kept: SKILL.md (see mapping by locator below) |
 | RESIDUE-KEEP; SKILL.md:59 | machine consumer は一行 JSON、agent/human は verdict lines と宣言 | R016: kept SKILL.md#dependencies-and-argv |
 | CLIG-SUPPORTED; SKILL.md:59; references/bun-facts.md:147-151 | piped output には `process.stdout.write` を用いる | Removed: implementation override has no proven live usecase |
@@ -530,7 +530,7 @@ Frozen source: `ufp-triage-writing-bun-scripts-1030.md` and `usecase-triage-writ
 | UFP-DERIVED; SKILL.md:62 | green Bun run だけで typed と主張しない | Kept: SKILL.md (see mapping by locator below) |
 | RESIDUE-KEEP; SKILL.md:66-69 | CLI helper/template を使い、dotfiles adapter は static manifest import | R029: removed (unproven) |
 | RESIDUE-CUT; SKILL.md:68-69 | `cliArgv` helper を境界で宣言して再利用する | Removed (residue) |
-| CLIG-SUPPORTED; SKILL.md:70 | `-V`/`--version` は version を stdout 一行で出して成功終了 | Referenced: designing-command-line-interfaces |
+| CLIG-SUPPORTED; SKILL.md:70 | `-V`/`--version` は version を stdout 一行で出して成功終了 | Referenced: designing-cli-contracts |
 | RESIDUE-KEEP; SKILL.md:71 | aliases は最初の package bin 名を共有 | R030: removed (unproven) |
 | CLIG-SUPPORTED; SKILL.md:72-75 | help output を terminal decoration と環境変数に依存させない | Removed: implementation override has no proven live usecase |
 | RESIDUE-KEEP; SKILL.md:72-76 | root/command help を4 TTY/FORCE_COLOR 組合せで同一 bytes とし、unknown flag spelling を保つ | R031: removed (unproven) |
@@ -542,9 +542,9 @@ Frozen source: `ufp-triage-writing-bun-scripts-1030.md` and `usecase-triage-writ
 | RESIDUE-CUT; SKILL.md:87 | file IO では Bun.file/Bun.write を優先する | Removed (residue) |
 | CLIG-SUPPORTED; SKILL.md:88 | 普通の command の argv parsing は named flags/parameters を持つ parser で行う | Kept: SKILL.md#dependencies-and-argv; conditional CLIG basics citation |
 | RESIDUE-KEEP; SKILL.md:89 | named commands は各 command で prototype guard を再宣言 | R036: kept SKILL.md#dependencies-and-argv |
-| CLIG-SUPPORTED; SKILL.md:90 | excess positionals は意図して許可し、他は拒否 | Referenced: designing-command-line-interfaces |
+| CLIG-SUPPORTED; SKILL.md:90 | excess positionals は意図して許可し、他は拒否 | Referenced: designing-cli-contracts |
 | RESIDUE-KEEP; SKILL.md:91 | arbitrary downstream argv は marker 付きで原順・`--` を維持 | R037: kept SKILL.md#dependencies-and-argv |
-| CLIG-SUPPORTED; SKILL.md:92 | progress, spinner, prompt は human-facing interactive surface に用いる | Referenced: designing-command-line-interfaces |
+| CLIG-SUPPORTED; SKILL.md:92 | progress, spinner, prompt は human-facing interactive surface に用いる | Referenced: designing-cli-contracts |
 | RESIDUE-KEEP; SKILL.md:92 | prompts は exact-pinned @clack、hooks では使わず、non-TTY confirm を拒否 | R038: removed (unproven) |
 | RESIDUE-KEEP; SKILL.md:92 | hand-drawn carriage-return progress bar を避ける | R039: kept SKILL.md#processes-and-hooks |
 | RESIDUE-CUT; SKILL.md:92 | interactive example `disk-reclaim run purge --interactive` | Removed (residue) |
@@ -588,11 +588,11 @@ Frozen source: `ufp-triage-writing-bun-scripts-1030.md` and `usecase-triage-writ
 | RESIDUE-KEEP; SKILL.md:154 | React props typing routes to writing-typescript | R061: removed (unproven) |
 | RESIDUE-KEEP; SKILL.md:155 | PDF text extraction routes to running-python-tools | R062: removed (unproven) |
 | RESIDUE-KEEP; SKILL.md:156 | mise task graph routes to wiring-mise-tasks | R063: owned by wiring-mise-tasks |
-| CLIG-SUPPORTED; SKILL.md:157 | one-shot interactive pipeline is a command, not a kept script | Removed: scope example; CLI composition is owned by designing-command-line-interfaces |
+| CLIG-SUPPORTED; SKILL.md:157 | one-shot interactive pipeline is a command, not a kept script | Removed: scope example; CLI composition is owned by designing-cli-contracts |
 | RESIDUE-KEEP; SKILL.md:158 | Codex sandbox flag question routes to dispatch tool | R064: removed (unproven) |
 | RESIDUE-KEEP; SKILL.md:159 | Worker deployment routes to wrangler semantics; deployment script may co-fire here | R065: removed (unproven) |
 | RESIDUE-KEEP; SKILL.md:160 | published product CLI routes outside local automation scope | R066: removed (unproven) |
-| RESIDUE-KEEP; SKILL.md:161,171 | reusable CLI design routes to designing-command-line-interfaces, implementation returns here | R067: removed (unproven) |
+| RESIDUE-KEEP; SKILL.md:161,171 | reusable CLI design routes to designing-cli-contracts, implementation returns here | R067: removed (unproven) |
 | RESIDUE-KEEP; SKILL.md:162 | Express server refactor routes to refactoring-code and writing-typescript | R068: removed (unproven) |
 | RESIDUE-KEEP; SKILL.md:163 | zsh alias routes to shell configuration topic | R069: removed (unproven) |
 | RESIDUE-KEEP; SKILL.md:169 | config reader/generator implementation here; authority/acceptance to governing-configuration-systems | R070: removed (unproven) |

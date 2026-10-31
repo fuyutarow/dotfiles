@@ -5,8 +5,8 @@
 | Skill | Archived | Why | Successor |
 |---|---|---|---|
 | [`designing-by-contract`](designing-by-contract/SKILL.md) | 2026-10-30 | Owner-requested consolidation of live decisions | `base-usecase-first` |
-| [`designing-interactions`](designing-interactions/SKILL.md) | 2026-10-30 | Owner-requested consolidation of live decisions | `designing-command-line-interfaces` |
-| [`designing-developer-diagnostics`](designing-developer-diagnostics/SKILL.md) | 2026-10-30 | Owner-requested consolidation of live decisions | `designing-command-line-interfaces` |
+| [`designing-interactions`](designing-interactions/SKILL.md) | 2026-10-30 | Owner-requested consolidation of live decisions | `designing-cli-contracts` |
+| [`designing-developer-diagnostics`](designing-developer-diagnostics/SKILL.md) | 2026-10-30 | Owner-requested consolidation of live decisions | `designing-cli-contracts` |
 | [`practicing-unix-philosophy`](practicing-unix-philosophy/SKILL.md) | 2026-10-30 | Owner-requested consolidation of live decisions | `base-usecase-first` |
 
 The complete packages are preserved byte for byte outside discovery.

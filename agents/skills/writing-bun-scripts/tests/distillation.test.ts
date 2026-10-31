@@ -9,7 +9,7 @@ test("description and opening carry the current implementation decisions and rou
   expect(opening).toContain("bunx package@version");
   expect(opening).toContain("Freeze CLI, output and exit contracts");
   expect(opening).toContain("bounded Bun primitives and evidence");
-  expect(opening).toContain("designing-command-line-interfaces");
+  expect(opening).toContain("designing-cli-contracts");
 });
 
 test("selection cases cover local work and adjacent owners", () => {
@@ -18,5 +18,5 @@ test("selection cases cover local work and adjacent owners", () => {
   expect(cases).toContain("Refactor existing skill scripts");
   expect(cases).toContain("Add a hook detector");
   expect(cases).toContain("`wiring-mise-tasks`");
-  expect(cases).toContain("`designing-command-line-interfaces`");
+  expect(cases).toContain("`designing-cli-contracts`");
 });

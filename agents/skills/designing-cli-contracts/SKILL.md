@@ -1,5 +1,5 @@
 ---
-name: designing-command-line-interfaces
+name: designing-cli-contracts
 description: >-
   Design and audit CLIs. Use XDG config, cache and state for config, cache and history; flags > environment > project > user > system. Refuse or expose consequential defaults and fallbacks. Prompt only on TTY stdin; otherwise accept input or fail. Bound waits; say what is awaited, time out or cancel. Never claim unobserved effects succeeded; report handoff or unknown. Errors state observations and uncertainty, not guessed causes. Config integrity and authority: governing-configuration-systems; implementation: repository and language rules.
 ---

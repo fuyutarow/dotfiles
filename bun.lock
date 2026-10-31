@@ -51,8 +51,8 @@
         "neverthrow": "8.2.0",
       },
     },
-    "agents/skills/designing-command-line-interfaces": {
-      "name": "@dotfiles/skill-designing-command-line-interfaces",
+    "agents/skills/designing-cli-contracts": {
+      "name": "@dotfiles/skill-designing-cli-contracts",
       "version": "0.0.0",
       "dependencies": {
         "cleye": "2.6.0",
@@ -109,13 +109,6 @@
     },
     "agents/skills/forming-hypotheses-from-anomalies": {
       "name": "@dotfiles/skill-forming-hypotheses-from-anomalies",
-      "version": "0.0.0",
-      "dependencies": {
-        "cleye": "2.6.0",
-      },
-    },
-    "agents/skills/governing-configuration-systems": {
-      "name": "@dotfiles/skill-governing-configuration-systems",
       "version": "0.0.0",
       "dependencies": {
         "cleye": "2.6.0",
@@ -384,7 +377,7 @@
     },
     "tools/statusline": {
       "name": "@dotfiles/statusline",
-      "version": "0.22.6",
+      "version": "0.22.9",
       "bin": {
         "statusline": "src/statusline.ts",
       },
@@ -482,7 +475,7 @@
 
     "@dotfiles/skill-continuing-long-running-tasks": ["@dotfiles/skill-continuing-long-running-tasks@workspace:agents/skills/continuing-long-running-tasks"],
 
-    "@dotfiles/skill-designing-command-line-interfaces": ["@dotfiles/skill-designing-command-line-interfaces@workspace:agents/skills/designing-command-line-interfaces"],
+    "@dotfiles/skill-designing-cli-contracts": ["@dotfiles/skill-designing-cli-contracts@workspace:agents/skills/designing-cli-contracts"],
 
     "@dotfiles/skill-designing-version-schemes": ["@dotfiles/skill-designing-version-schemes@workspace:agents/skills/designing-version-schemes"],
 
@@ -499,8 +492,6 @@
     "@dotfiles/skill-forging-skills": ["@dotfiles/skill-forging-skills@workspace:agents/skills/forging-skills"],
 
     "@dotfiles/skill-forming-hypotheses-from-anomalies": ["@dotfiles/skill-forming-hypotheses-from-anomalies@workspace:agents/skills/forming-hypotheses-from-anomalies"],
-
-    "@dotfiles/skill-governing-configuration-systems": ["@dotfiles/skill-governing-configuration-systems@workspace:agents/skills/governing-configuration-systems"],
 
     "@dotfiles/skill-governing-research-documentation": ["@dotfiles/skill-governing-research-documentation@workspace:agents/skills/governing-research-documentation"],
 

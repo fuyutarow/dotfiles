@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 — 2026-10-31
+
+- Bundle copied contract tool scripts for standalone consumer use.
+
 ## 0.2.2 — 2026-10-31
 
 - Generate the TypeScript exclusion scope from installed contract tool manifests.

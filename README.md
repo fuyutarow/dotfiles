@@ -160,7 +160,9 @@ There are two tool kinds, with separate install modes:
   one installed version of each. Homebrew supplies agx and semlint as described above.
 - **B — repository contract tools** are called by a repository's own commit flow or `mise run
   check`, and must work on a fresh clone. Copy their source into each consuming repository; that
-  repository pins its copy and updates it only through an explicit pull. Consumers never symlink
+  repository pins its copy and updates it with `preset sync <repo>` (repeat `--tool <name>` to
+  select tools; use `--check` to check the recorded source). This differs from `mise run preset --
+  apply|sync ...`, which manages standard presets. Consumers never symlink
   to or name a dotfiles path, and repository gates never depend on an A tool.
 
 The root `package.json` bin map is the source inventory. Aliases are listed separately so every
@@ -310,7 +312,7 @@ Claude and Codex lives in [`AGENTS.md`](AGENTS.md).
 9. **Tools have two kinds and two install modes.** Machine-wide operator tools (A) are installed
    from the pinned root package with `bun install` / `bun link`, one version per machine.
    Repository contract tools (B), used by a repository's commit flow and `mise run check`, are
-   copied into that repository and updated only by an explicit pull. A consumer never symlinks to
+   copied into that repository and updated with `preset sync <repo>`. A consumer never symlinks to
    or names a dotfiles path; a repository gate never depends on an A tool. The full bin inventory
    and classifications live in _Architecture → Tool installation kinds_.
 

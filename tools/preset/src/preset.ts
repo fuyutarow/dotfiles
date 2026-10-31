@@ -4,6 +4,7 @@ import { mkdir, lstat, readFile, realpath, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { jsonOf, z } from "../../../agents/hooks/zod.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
+import { bundleEntry } from "@dotfiles/shared/src/bundle-entry.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const cliArgv = () => process.argv.slice(2);
@@ -251,6 +252,51 @@ async function sourceBytes(
       );
 }
 
+async function outputBytes(
+  mapping: FileMapping,
+  commit: string,
+): Promise<Outcome<Buffer>> {
+  if (!mapping[1].startsWith("scripts/") || !mapping[1].endsWith(".ts")) {
+    const source = await sourceBytes(commit, mapping[0]);
+    return source.ok
+      ? success(rendered(source.value, mapping, commit))
+      : source;
+  }
+  let loadError: Error | undefined;
+  const plugin: Bun.BunPlugin = {
+    name: "preset-recorded-source",
+    setup(build) {
+      build.onLoad({ filter: /\.[cm]?[jt]sx?$/u }, async (args) => {
+        if (
+          !inside(sourceRoot, args.path) ||
+          args.path.includes(`${sep}node_modules${sep}`)
+        )
+          // Bun treats undefined as a request to use its normal loader.
+          return void 0;
+        const source = await sourceBytes(
+          commit,
+          relative(sourceRoot, args.path),
+        );
+        if (!source.ok) {
+          loadError = source.error;
+          return { contents: "", loader: "ts" };
+        }
+        return {
+          contents: source.value.toString("utf8"),
+          loader: args.path.endsWith(".ts") ? "ts" : "js",
+        };
+      });
+    },
+  };
+  const result = await fsResult(() =>
+    bundleEntry(join(sourceRoot, mapping[0]), [plugin]),
+  );
+  if (loadError !== undefined) return failure(loadError);
+  if (!result.ok) return result;
+  if (!result.value.ok) return failure(result.value.error);
+  return success(rendered(Buffer.from(result.value.text), mapping, commit));
+}
+
 async function pathInfo(
   path: string,
 ): Promise<Outcome<Awaited<ReturnType<typeof lstat>> | undefined>> {
@@ -323,11 +369,9 @@ async function syncTool(
     if (!directory.ok) return directory;
     const file = await ensureSafeFile(destination);
     if (!file.ok) return file;
-    const source = await sourceBytes(commit, mapping[0]);
+    const source = await outputBytes(mapping, commit);
     if (!source.ok) return source;
-    const written = await fsResult(() =>
-      writeFile(destination, rendered(source.value, mapping, commit)),
-    );
+    const written = await fsResult(() => writeFile(destination, source.value));
     if (!written.ok) return written;
     files.push({ source: mapping[0], destination: mapping[1] });
   }
@@ -388,7 +432,7 @@ async function checkTool(
     return success([join("tools", name, ".preset-sync.json")]);
   const changed: string[] = [];
   for (const mapping of expectedMappings) {
-    const [source, destination] = mapping;
+    const [, destination] = mapping;
     const path = join(destinationRoot, destination);
     const info = await pathInfo(path);
     if (
@@ -405,9 +449,9 @@ async function checkTool(
       changed.push(join("tools", name, destination));
       continue;
     }
-    const sourceContent = await sourceBytes(commit, source);
+    const sourceContent = await outputBytes(mapping, commit);
     if (!sourceContent.ok) return sourceContent;
-    const expected = rendered(sourceContent.value, mapping, commit);
+    const expected = sourceContent.value;
     if (!actual.value.equals(expected))
       changed.push(join("tools", name, destination));
   }

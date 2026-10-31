@@ -37,7 +37,9 @@ write outside the consumer repository.
 ## Repository tool authority
 
 Operator tools are machine-wide Bun installs, with one version per machine. Repository contract
-tools are source copies under the consumer's `tools/` and change only through an explicit pull.
+tools are source copies under the consumer's `tools/`. Pull them with `preset sync <repo>`;
+repeat `--tool <name>` to select tools, and add `--check` to compare against the recorded source
+commit. This is distinct from `mise run preset -- apply|sync ...`, the standard-presets CLI.
 Every task and `check` gate must resolve its command through the repo's `[tools]` pins or its own
 `tools/` directory. A repository gate must not call an operator tool or name a dotfiles/skill
 path.

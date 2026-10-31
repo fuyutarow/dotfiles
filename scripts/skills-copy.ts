@@ -1,9 +1,10 @@
 // Copy skill resources, then bundle each direct script entry for standalone deployment.
 import { cp, readdir, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
 import { skillLayoutRefusal } from "./skills-declaration.ts";
+import { bundleEntry } from "../tools/shared/src/bundle-entry.ts";
 
 const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -73,20 +74,10 @@ export async function prepareSkillCopy(
     if (stagedRefusal !== undefined) return err(stagedRefusal);
     for (const entry of await skillEntries(source)) {
       const path = join(source, entry);
-      const build = await Bun.build({
-        entrypoints: [path],
-        target: "bun",
-        throw: false,
-        metafile: true,
-      });
-      if (!build.success)
-        return err(`${path}: ${build.logs.map(String).join("\n")}`);
-      for (const input of Object.keys(build.metafile?.inputs ?? {}))
-        inputs.add(resolve(input));
-      const output = build.outputs[0];
-      if (output === undefined)
-        return err(`${path}: bundler produced no output`);
-      await writeFile(join(target, entry), await output.text());
+      const build = await bundleEntry(path);
+      if (!build.ok) return err(build.error);
+      for (const input of build.inputs) inputs.add(input);
+      await writeFile(join(target, entry), build.text);
     }
     return ok({ inputs: [...inputs].toSorted() });
   }, errorText)();

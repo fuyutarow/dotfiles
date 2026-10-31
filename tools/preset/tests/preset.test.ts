@@ -43,6 +43,7 @@ async function run(root: string, ...args: string[]) {
 describe("preset sync", () => {
   test("copies every contract tool into a fixture repo and checks recorded sources", async () => {
     const root = await fixture();
+    await writeFile(join(root, "package.json"), '{"private":true}\n');
     const marker = join(root, "keep.txt");
     await writeFile(marker, "outside tools remains untouched\n");
 
@@ -69,6 +70,21 @@ describe("preset sync", () => {
       expect((await lstat(join(directory, ".preset-sync.json"))).isFile()).toBe(
         true,
       );
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "--no-install",
+          join(directory, "scripts", `${tool}.ts`),
+          "--help",
+        ],
+        { cwd: root, stdout: "pipe", stderr: "pipe", timeout: 10_000 },
+      );
+      const [, stderr, exit] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      expect(exit, `${tool}: ${stderr}`).toBe(0);
     }
     expect(
       (await lstat(join(root, "tools/jj-push/tests/jj-push.test.ts"))).isFile(),

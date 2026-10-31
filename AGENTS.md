@@ -58,7 +58,9 @@ their executable details.
   Verify scope changes with `mise run test:mise-scope`.
 - Machine-wide operator tools (A) are installed from the pinned root package through
   `bun install` / `bun link`, with agx and semlint supplied by Homebrew core. Repository contract
-  tools (B) are copied and pinned in each consumer and updated only by explicit pull.
+  tools (B) are copied and pinned in each consumer with `preset sync <repo>`; repeat `--tool
+  <name>` to select tools and use `--check` to check the recorded source. This differs from
+  `mise run preset -- apply|sync ...`, which manages standard presets.
   Consumer gates must work on a fresh clone:
   they must not depend on an A tool, symlink to dotfiles, or name a dotfiles checkout path.
   README's Tool installation kinds owns the classification inventory.

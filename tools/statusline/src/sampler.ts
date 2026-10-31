@@ -161,9 +161,9 @@ export async function sample(
         failed.data.error.startsWith("⚠ GPU stalled since ");
       if (
         failed.success &&
-        key !== "liveAgxJobs" &&
         !gpuStalled &&
         prior !== undefined &&
+        (key !== "liveAgxJobs" || prior.value !== null) &&
         !previousFailed.success
       ) {
         next.fields[key] = { ...prior, error: failed.data.error };

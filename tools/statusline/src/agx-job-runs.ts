@@ -12,15 +12,17 @@ export const Rows = z.array(
 );
 export type AgxJobRows = z.output<typeof Rows>;
 
-/** A fresh sampler listing; a failed listing never reuses old rows. */
-export async function readAgxJobRuns(): Promise<Result<AgxJobRows, string>> {
+/** A bounded sampler listing; the owner retains the last successful result. */
+export async function readAgxJobRuns(
+  boundMs = 30_000,
+): Promise<Result<AgxJobRows, string>> {
   const executable = Bun.which("agx", { PATH: process.env["PATH"] ?? "" });
   if (executable === null) return err("no agx");
   const result = await execAsyncWithin(
     "agx",
     executable,
     ["worker", "ls", "--json", "--running"],
-    2000,
+    boundMs,
   );
   if (result.isErr()) return err(result.error.why.replace(/^agx /u, ""));
   const parsed = jsonOf(Rows).safeParse(result.value);

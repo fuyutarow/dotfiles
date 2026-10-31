@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.20 — 2026-10-31
+
+- Retain bounded agx job samples and show their age.
+
 ## 0.22.19 — 2026-10-31
 
 - Show live session agx workers in the Job segment.

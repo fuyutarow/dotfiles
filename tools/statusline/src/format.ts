@@ -254,8 +254,18 @@ export function render(
     observed(df.jobScanWhy === undefined ? jobValue : undefined, df.jobScanWhy),
   );
   const live = df.liveAgxJobs;
-  if (live?.isErr() === true) jobLine += ` agx n/a (${live.error})`;
-  if (live?.isOk() === true) jobLine += liveJobEntries(live.value, df.sid);
+  if (live?.isErr() === true)
+    jobLine = `Job: agx ? (${live.error}) · ${jobLine}`;
+  if (live?.isOk() === true) {
+    const age = df.ownerAges?.["liveAgxJobs"] ?? 0;
+    if (age > 30_000) {
+      const count = live.value.filter(
+        (row) => df.sid !== undefined && row.dispatcher_session === df.sid,
+      ).length;
+      jobLine += ` ${count} agx (${Math.floor(age / 1000)}s old)`;
+    }
+    jobLine += liveJobEntries(live.value, df.sid);
+  }
   const scan = df.routes?.isOk() === true ? df.routes.value : undefined;
   const agxBlock = routeLines(
     live === undefined ? (scan?.runs ?? []) : [],

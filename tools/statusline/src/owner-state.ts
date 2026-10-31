@@ -286,10 +286,10 @@ export function ownerSources(
     liveAgxJobs: async () => {
       const field = (await pending)?.fields["liveAgxJobs"];
       if (field === undefined) return err("sampler unavailable");
-      if (field.error !== undefined) return err(field.error);
       if (field.value === null) return void field.value;
-      if (Temporal.Now.instant().epochMilliseconds - field.at > 30_000)
-        return err("sampler stale");
+      const age = Temporal.Now.instant().epochMilliseconds - field.at;
+      if (age < 0 || age > 600_000)
+        return err(field.error ?? "sample older than 10m");
       return (
         (await read("liveAgxJobs", resultSchema(Rows))) ??
         err("invalid worker listing")

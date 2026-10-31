@@ -556,6 +556,7 @@ export async function buildDataframe(
       gpu: "vram",
       tmpfs: "tmpfs",
       jobs: "jobScan",
+      liveAgxJobs: "liveAgxJobs",
       name: `name:${sid ?? ""}`,
       account: "identity",
       "model-caps": "identity",

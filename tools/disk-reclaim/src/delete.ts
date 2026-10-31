@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fromAsyncThrowable } from "neverthrow";
-import { existsSync, lstatSync, readdirSync, statfsSync } from "node:fs";
+import { lstat, readdir, statfs } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import {
   basename,
@@ -18,9 +18,8 @@ import {
   registerForegroundWaiter,
   stateDir,
   waitForLock,
-  writeReceipt,
+  writeReceiptAsync,
 } from "./receipt.ts";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import {
   directoryProtection,
   removeTree,
@@ -76,14 +75,19 @@ const beneath = (root: string, path: string): boolean => {
     (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel))
   );
 };
-const bytesAt = (path: string): number => {
-  const stat = lstatSync(path);
+const bytesAt = async (path: string): Promise<number> => {
+  const stat = await lstat(path);
   if (!stat.isDirectory()) return stat.size;
-  return readdirSync(path).reduce(
-    (sum, entry) => sum + bytesAt(join(path, entry)),
-    0,
-  );
+  const entries = await readdir(path);
+  let total = 0;
+  for (const entry of entries) total += await bytesAt(join(path, entry));
+  return total;
 };
+const lstatOrNull = async (path: string) =>
+  (await fromAsyncThrowable(() => lstat(path))()).match(
+    (stat) => stat,
+    () => null,
+  );
 function configuredRoot(path: string, roots: string[]): boolean {
   return roots.some((pattern) => {
     const root = resolve(pattern);
@@ -102,7 +106,7 @@ function configuredRoot(path: string, roots: string[]): boolean {
     });
   });
 }
-function symlinkPath(path: string): string | null {
+async function symlinkPath(path: string): Promise<string | null> {
   let cursor = resolve(path);
   const parts: string[] = [];
   while (cursor !== dirname(cursor)) {
@@ -110,8 +114,9 @@ function symlinkPath(path: string): string | null {
     cursor = dirname(cursor);
   }
   for (const part of parts) {
-    if (!existsSync(part)) return null;
-    if (lstatSync(part).isSymbolicLink()) return part;
+    const stat = await lstatOrNull(part);
+    if (stat === null) return null;
+    if (stat.isSymbolicLink()) return part;
   }
   return null;
 }
@@ -132,10 +137,11 @@ async function evaluate(
     absolute ? "path is absolute" : "path must be absolute",
   );
   if (!absolute) return { path: input, bytes: null, checks, allowed: false };
-  const exists = existsSync(path);
+  const targetStat = await lstatOrNull(path);
+  const exists = targetStat !== null;
   add("exists", exists, exists ? "path exists" : "path does not exist");
   if (!exists) return { path, bytes: null, checks, allowed: false };
-  const escaped = symlinkPath(path);
+  const escaped = await symlinkPath(path);
   add(
     "no-symlink-escape",
     escaped === null,
@@ -181,7 +187,7 @@ async function evaluate(
     !protectedPath &&
     escaped === null &&
     !inGraveyard &&
-    lstatSync(path).isDirectory()
+    targetStat?.isDirectory()
       ? await fromAsyncThrowable(() => directoryProtection(path))()
       : null;
   let protectionReason: string | null = null;
@@ -226,7 +232,7 @@ async function evaluate(
   );
   if (checks.some((check) => !check.ok))
     return { path, bytes: null, checks, allowed: false };
-  const bytes = fromThrowable(() => bytesAt(path))();
+  const bytes = await fromAsyncThrowable(() => bytesAt(path))();
   return {
     path,
     bytes: bytes.isOk() ? bytes.value : null,
@@ -280,7 +286,7 @@ export async function deleteApproved(paths: string[], options: Options) {
     firstRow !== undefined,
     new TypeError("Cannot read properties of undefined (reading 'path')"),
   );
-  const freeBefore = statfsSync(dirname(firstRow.path));
+  const freeBefore = await statfs(dirname(firstRow.path));
   const before = freeBefore.bavail * freeBefore.bsize;
   let exit = 0;
   const lockedProcesses = collectProcesses(procOptions);
@@ -347,7 +353,7 @@ export async function deleteApproved(paths: string[], options: Options) {
     for (const error of result.errors)
       lines.push(`ERROR\t${error.path}\t${error.error}`);
   }
-  const afterStat = statfsSync(dirname(firstRow.path));
+  const afterStat = await statfs(dirname(firstRow.path));
   const receipt: ReceiptV2 = {
     schema: 2,
     target: "delete",
@@ -364,6 +370,6 @@ export async function deleteApproved(paths: string[], options: Options) {
     free_after: afterStat.bavail * afterStat.bsize,
     output: null,
   };
-  writeReceipt(receipt, dir);
+  await writeReceiptAsync(receipt, dir);
   return { exit, rows, lines, refused };
 }

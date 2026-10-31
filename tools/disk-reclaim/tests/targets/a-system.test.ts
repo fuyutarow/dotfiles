@@ -19,7 +19,7 @@ const systemContext = {
 } satisfies Context;
 
 describe("system target", () => {
-  test("never invokes sudo in planning; runner is injected for actions", () => {
+  test("never invokes sudo in planning; runner is injected for actions", async () => {
     const calls: string[][] = [];
     const target = createSystemTarget({
       wsl: true,
@@ -45,17 +45,17 @@ describe("system target", () => {
       },
       log: () => {},
     };
-    const plan = target.plan(ctx);
+    const plan = await target.plan(ctx);
     expect(plan.map((c) => c.action.argv[0])).toEqual(["sudo", "sudo", "sudo"]);
     expect(calls).toEqual([]);
     const candidate = plan[0];
     assert.ok(candidate !== undefined);
-    expect(target.act(candidate, ctx)).toMatchObject({ ok: true });
+    expect(await target.act(candidate, ctx)).toMatchObject({ ok: true });
     expect(calls).toHaveLength(1);
   });
-  test("blind unmet preconditions skip; explicitly named unmet target exits 4", () => {
+  test("blind unmet preconditions skip; explicitly named unmet target exits 4", async () => {
     expect(
-      createSystemTarget({
+      await createSystemTarget({
         wsl: false,
         sudo: false,
         rootUnitSudo: false,
@@ -64,7 +64,7 @@ describe("system target", () => {
     ).toMatchObject({ available: false });
   });
 
-  test("uses the installed fstrim unit without requiring broad passwordless sudo", () => {
+  test("uses the installed fstrim unit without requiring broad passwordless sudo", async () => {
     const calls: string[][] = [];
     const target = createSystemTarget({
       wsl: true,
@@ -76,8 +76,8 @@ describe("system target", () => {
         return { code: 0, out: "", err: "" };
       },
     });
-    expect(target.available()).toMatchObject({ available: true });
-    const candidate = target.plan(systemContext)[0];
+    expect(await target.available()).toMatchObject({ available: true });
+    const candidate = (await target.plan(systemContext))[0];
     expect(candidate).toBeDefined();
     if (candidate === undefined) return;
     expect(candidate.action.argv).toEqual([
@@ -88,11 +88,13 @@ describe("system target", () => {
       "dotfiles-fstrim.service",
     ]);
     expect(candidate.reason).toContain("installed dotfiles fstrim unit");
-    expect(target.act(candidate, systemContext)).toMatchObject({ ok: true });
+    expect(await target.act(candidate, systemContext)).toMatchObject({
+      ok: true,
+    });
     expect(calls).toEqual([candidate.action.argv]);
   });
 
-  test("reports the legacy direct fstrim fallback if the unit is absent", () => {
+  test("reports the legacy direct fstrim fallback if the unit is absent", async () => {
     const target = createSystemTarget({
       wsl: true,
       sudo: true,
@@ -100,7 +102,7 @@ describe("system target", () => {
       rootUnitSudo: false,
       run: () => ({ code: 0, out: "", err: "" }),
     });
-    const candidate = target.plan(systemContext)[2];
+    const candidate = (await target.plan(systemContext))[2];
     expect(candidate).toBeDefined();
     if (candidate === undefined) return;
     expect(candidate.action.argv).toEqual(["sudo", "-n", "fstrim", "-v", "/"]);

@@ -1,10 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 
 export type CommandResult = { code: number; out: string; err: string };
-export type CommandRunner = (argv: string[]) => CommandResult;
+export type CommandRunner = (
+  argv: string[],
+) => CommandResult | Promise<CommandResult>;
 export type SystemOptions = {
   wsl?: boolean;
   sudo?: boolean;
@@ -13,49 +14,56 @@ export type SystemOptions = {
   explicit?: boolean;
   run?: CommandRunner;
 };
-const defaultRun: CommandRunner = (argv) => {
-  const result = Bun.spawnSync(argv, {
+const defaultRun: CommandRunner = async (argv) => {
+  const result = Bun.spawn(argv, {
     stdout: "pipe",
     stderr: "pipe",
     timeout: 120_000,
   });
-  return {
-    code: result.exitCode ?? 1,
-    out: result.stdout.toString(),
-    err: result.stderr.toString(),
-  };
+  const [code, out, err] = await Promise.all([
+    result.exited,
+    new Response(result.stdout).text(),
+    new Response(result.stderr).text(),
+  ]);
+  return { code, out, err };
 };
 export function createSystemTarget(options: SystemOptions = {}) {
   const run = options.run ?? defaultRun;
-  const detectedWsl = fromThrowable(() =>
-    readFileSync("/proc/sys/kernel/osrelease", "utf8")
-      .toLowerCase()
-      .includes("microsoft"),
-  )().unwrapOr(false);
-  const wsl = options.wsl ?? detectedWsl;
-  const hasSudo = () =>
+  const isWsl = async () =>
+    options.wsl ??
+    (await readFile("/proc/sys/kernel/osrelease", "utf8")
+      .then((text) => text.toLowerCase().includes("microsoft"))
+      .catch(() => false));
+  const hasSudo = async () =>
     options.sudo ??
-    (Bun.which("sudo") !== null && run(["sudo", "-n", "true"]).code === 0);
-  const fstrimUnitInstalled =
+    (Bun.which("sudo") !== null &&
+      (await run(["sudo", "-n", "true"])).code === 0);
+  const hasFstrimUnit = async () =>
     options.fstrimUnitInstalled ??
-    existsSync("/etc/systemd/system/dotfiles-fstrim.service");
-  const canStartFstrimUnit = () =>
+    (await access("/etc/systemd/system/dotfiles-fstrim.service")
+      .then(() => true)
+      .catch(() => false));
+  const canStartFstrimUnit = async () =>
     options.rootUnitSudo ??
     (Bun.which("sudo") !== null &&
-      run([
-        "sudo",
-        "-n",
-        "-l",
-        "/usr/bin/systemctl",
-        "start",
-        "dotfiles-fstrim.service",
-      ]).code === 0);
-  const fstrimCommand = fstrimUnitInstalled
-    ? ["sudo", "-n", "/usr/bin/systemctl", "start", "dotfiles-fstrim.service"]
-    : ["sudo", "-n", "fstrim", "-v", "/"];
-  const fstrimReason = fstrimUnitInstalled
-    ? "start installed dotfiles fstrim unit"
-    : "passwordless sudo fstrim fallback; dotfiles unit is not installed";
+      (
+        await run([
+          "sudo",
+          "-n",
+          "-l",
+          "/usr/bin/systemctl",
+          "start",
+          "dotfiles-fstrim.service",
+        ])
+      ).code === 0);
+  const fstrimCommand = async () =>
+    (await hasFstrimUnit())
+      ? ["sudo", "-n", "/usr/bin/systemctl", "start", "dotfiles-fstrim.service"]
+      : ["sudo", "-n", "fstrim", "-v", "/"];
+  const fstrimReason = async () =>
+    (await hasFstrimUnit())
+      ? "start installed dotfiles fstrim unit"
+      : "passwordless sudo fstrim fallback; dotfiles unit is not installed";
   const maintenance = [
     ["sudo", "-n", "apt-get", "clean"],
     ["sudo", "-n", "journalctl", "--vacuum-size=200M"],
@@ -63,20 +71,25 @@ export function createSystemTarget(options: SystemOptions = {}) {
   return {
     name: "system",
     tier: "sudo",
-    available: (_ctx?: Context) => {
-      const broadSudo = wsl && hasSudo();
-      const unitSudo = wsl && fstrimUnitInstalled && canStartFstrimUnit();
+    available: async (_ctx?: Context) => {
+      const wsl = await isWsl();
+      const unitInstalled = await hasFstrimUnit();
+      const broadSudo = wsl ? await hasSudo() : false;
+      const unitSudo =
+        wsl && unitInstalled ? await canStartFstrimUnit() : false;
       let skipReason: string | null = null;
       if (!wsl) skipReason = "not running inside WSL";
       else if (!broadSudo && !unitSudo)
         skipReason = "passwordless sudo for fstrim unavailable";
       return {
-        available: wsl && (broadSudo || unitSudo),
+        available: wsl ? broadSudo || unitSudo : false,
         skip_reason: skipReason,
       };
     },
-    plan: (_ctx: Context) => {
-      const broadSudo = wsl && hasSudo();
+    plan: async (_ctx: Context) => {
+      const wsl = await isWsl();
+      const hasUnit = await hasFstrimUnit();
+      const broadSudo = wsl ? await hasSudo() : false;
       const entries: { argv: string[]; reason: string }[] = [
         ...(broadSudo
           ? maintenance.map((argv) => ({
@@ -85,38 +98,41 @@ export function createSystemTarget(options: SystemOptions = {}) {
             }))
           : []),
         {
-          argv: fstrimCommand,
-          reason: fstrimReason,
+          argv: await fstrimCommand(),
+          reason: await fstrimReason(),
         },
       ];
-      return entries.map(({ argv, reason }): Candidate => ({
-        id: argv.join(" "),
-        path: null,
-        verdict: "RECLAIM",
-        reason,
-        checks: [
-          {
-            name: "WSL and command authorization",
-            ok:
-              wsl &&
-              (argv.includes("dotfiles-fstrim.service")
-                ? canStartFstrimUnit()
-                : hasSudo()),
-            detail: "precondition rechecked at target availability",
-          },
-        ],
-        bytes: null,
-        bytes_kind: "estimate",
-        action: { kind: "command", argv },
-        result: null,
-      }));
+      return Promise.all(
+        entries.map(async ({ argv, reason }): Promise<Candidate> => ({
+          id: argv.join(" "),
+          path: null,
+          verdict: "RECLAIM",
+          reason,
+          checks: [
+            {
+              name: "WSL and command authorization",
+              ok:
+                wsl &&
+                (hasUnit || !argv.includes("dotfiles-fstrim.service")) &&
+                (argv.includes("dotfiles-fstrim.service")
+                  ? await canStartFstrimUnit()
+                  : await hasSudo()),
+              detail: "precondition rechecked at target availability",
+            },
+          ],
+          bytes: null,
+          bytes_kind: "estimate",
+          action: { kind: "command", argv },
+          result: null,
+        })),
+      );
     },
-    act: (candidate: Candidate, ctx: Context) => {
+    act: async (candidate: Candidate, ctx: Context) => {
       ctx.reportActivity?.(
         "system",
         `waiting for ${candidate.action.argv.join(" ")}`,
       );
-      const result = run(candidate.action.argv);
+      const result = await run(candidate.action.argv);
       let error: string | null = null;
       if (result.code !== 0)
         error = result.err.length > 0 ? result.err : `exit ${result.code}`;

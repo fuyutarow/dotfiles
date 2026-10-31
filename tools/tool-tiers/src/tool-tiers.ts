@@ -178,17 +178,28 @@ export async function toolDeclaration(
   command: string,
   host: ToolHost = currentToolHost(),
 ): Promise<ToolDeclaration | undefined> {
-  const commandMap = readToolCommandMap();
+  const commandMap = await readToolCommandMap();
   const entries = await brewEntries(root, host);
+  const matching = await Promise.all(
+    entries.map(async (candidate) => ({
+      candidate,
+      commands: await commandsForFormula(candidate.name, commandMap),
+    })),
+  );
   for (const tier of TOOL_TIERS) {
-    const entry = entries.find(
-      (candidate) =>
+    const match = matching.find(
+      ({ candidate, commands }) =>
         candidate.tier === tier &&
         (candidate.kind === "formula" || commandMap.has(candidate.name)) &&
-        commandsForFormula(candidate.name, commandMap).includes(command),
+        commands.includes(command),
     );
-    if (entry !== undefined)
-      return { command, tier, kind: entry.kind, package: entry.name };
+    if (match !== undefined)
+      return {
+        command,
+        tier,
+        kind: match.candidate.kind,
+        package: match.candidate.name,
+      };
   }
   return undefined;
 }
@@ -197,20 +208,26 @@ export async function declaredToolCommands(
   root: string,
   host: ToolHost = currentToolHost(),
 ): Promise<ToolDeclaration[]> {
-  const commandMap = readToolCommandMap();
+  const commandMap = await readToolCommandMap();
   const entries = await brewEntries(root, host);
   const declarations: ToolDeclaration[] = [];
   const seen = new Set<string>();
-  const mapped = entries
-    .filter((entry) => entry.kind === "formula" || commandMap.has(entry.name))
-    .flatMap((entry) =>
-      commandsForFormula(entry.name, commandMap).map((command) => ({
-        command,
-        tier: entry.tier,
-        kind: entry.kind,
-        package: entry.name,
-      })),
-    );
+  const mapped = (
+    await Promise.all(
+      entries
+        .filter(
+          (entry) => entry.kind === "formula" || commandMap.has(entry.name),
+        )
+        .map(async (entry) =>
+          (await commandsForFormula(entry.name, commandMap)).map((command) => ({
+            command,
+            tier: entry.tier,
+            kind: entry.kind,
+            package: entry.name,
+          })),
+        ),
+    )
+  ).flat();
   for (const declaration of mapped) {
     if (seen.has(declaration.command)) continue;
     seen.add(declaration.command);

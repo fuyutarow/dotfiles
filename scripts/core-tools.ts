@@ -24,19 +24,21 @@ export async function coreCommands(
     ...detectedHost,
     isWsl: options.isWsl ?? detectedHost.isWsl,
   };
-  const commandMap = readToolCommandMap();
+  const commandMap = await readToolCommandMap();
   const text = await Bun.file(join(root, "Brewfile.core")).text();
-  const names = parseBrewEntries(text, "core", host).flatMap(
-    ({ kind, name }) => {
-      const base = name.split("/").at(-1) ?? name;
-      if (
-        (base === "codex" && !host.isWsl) ||
-        (kind === "cask" && !commandMap.has(base))
-      )
-        return [];
-      return commandsForFormula(name, commandMap);
-    },
-  );
+  const names = (
+    await Promise.all(
+      parseBrewEntries(text, "core", host).map(async ({ kind, name }) => {
+        const base = name.split("/").at(-1) ?? name;
+        if (
+          (base === "codex" && !host.isWsl) ||
+          (kind === "cask" && !commandMap.has(base))
+        )
+          return [];
+        return commandsForFormula(name, commandMap);
+      }),
+    )
+  ).flat();
   return [...new Set(names)];
 }
 

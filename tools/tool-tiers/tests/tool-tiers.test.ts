@@ -9,6 +9,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  commandsForFormula,
+  readToolCommandMap,
+} from "../src/tool-commands.ts";
+import {
   brewEntries,
   findToolCommandShadows,
   getTool,
@@ -39,6 +43,20 @@ function fixture(): string {
   );
   return root;
 }
+
+test("command map lookup retains default, qualified, and missing formula behavior", async () => {
+  const map = await readToolCommandMap();
+  expect(await commandsForFormula("poppler")).toContain("pdftoppm");
+  expect(await commandsForFormula("tap/name/unknown-formula", map)).toEqual([
+    "unknown-formula",
+  ]);
+  expect(
+    await readToolCommandMap(join(fixture(), "missing-map")).then(
+      () => false,
+      () => true,
+    ),
+  ).toBe(true);
+});
 
 test("tool declarations resolve tier and formula while honoring OS guards", async () => {
   const root = fixture();

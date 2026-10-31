@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5 — 2026-10-31
+
+- Read tool command mappings asynchronously.
+
 ## 0.2.4 — 2026-10-30
 
 - Raise the semlint core floor to 0.2.1.

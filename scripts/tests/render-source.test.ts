@@ -2,11 +2,36 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { RENDER_INPUTS } from "../render-source.ts";
+import { RENDER_INPUTS, renderNeedsDependencies } from "../render-source.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 const RESTORE = join(ROOT, "scripts/render-source.ts");
 const INPUTS = ["package.json", "bun.lock"];
+
+test("bootstrap and render import closures have no npm dependencies", async () => {
+  expect(
+    await renderNeedsDependencies(ROOT, [
+      "scripts/render-home.ts",
+      "scripts/post-merge.ts",
+      "scripts/bun-runtime.ts",
+      "scripts/deps-prune.ts",
+      "tools/tool-tiers/src/core-floor.ts",
+    ]),
+  ).toBe(false);
+});
+
+test("bootstrap import scan detects a transitive bare package import", async () => {
+  const scratch = await mkdtemp(join(tmpdir(), "bootstrap-imports-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(scratch, { recursive: true, force: true }),
+  };
+  await writeFile(join(scratch, "entry.ts"), 'import "./child.ts";\n');
+  await writeFile(
+    join(scratch, "child.ts"),
+    'import { consola } from "consola";\n',
+  );
+  expect(await renderNeedsDependencies(scratch, ["entry.ts"])).toBe(true);
+});
 
 async function unlistedImports(modulePath: string): Promise<string[]> {
   const source = await readFile(modulePath, "utf8");

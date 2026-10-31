@@ -67,7 +67,6 @@ import {
 import { homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
-import { consola } from "consola";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonText, z } from "../agents/hooks/zod.ts";
 import { loadSlugs } from "../agents/hooks/slugs.ts";
@@ -89,7 +88,7 @@ import {
 } from "./hook-registry.ts";
 
 function print(line: string): void {
-  consola.info(line);
+  process.stdout.write(`${line}\n`);
 }
 
 const exists = (path: string): Promise<boolean> =>

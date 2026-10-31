@@ -58,7 +58,8 @@ and set process exit state at the entry boundary. An error envelope must exit no
 ## Output
 
 Use consola for human-facing info, success, warning, error, and progress messages. Write a
-command’s primary machine-readable result with process.stdout.write. Hooks have no npm
+command’s primary machine-readable result with process.stdout.write. Hooks and bootstrap/render
+paths (anything run by deps, hook:post-merge, or link:dots' render export) have no npm
 dependencies at runtime: write their stderr/stdout contract with process.stderr.write /
 process.stdout.write. eslint/no-console enforces the absence of console.*.
 

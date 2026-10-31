@@ -158,8 +158,11 @@ export type RenderSource = {
 };
 
 /** Only the renderer's reachable imports require dependencies; unused manifests do not. */
-export async function renderNeedsDependencies(root: string): Promise<boolean> {
-  const pending = [join(root, "scripts/render-home.ts")];
+export async function renderNeedsDependencies(
+  root: string,
+  entries = ["scripts/render-home.ts"],
+): Promise<boolean> {
+  const pending = entries.map((entry) => join(root, entry));
   const visited = new Set<string>();
   while (pending.length > 0) {
     const path = pending.pop();

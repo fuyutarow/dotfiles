@@ -22,8 +22,7 @@ mise run preset -- sync typescript --to /path/to/repo
 additional presets in name order. `apply` copies the declared
 files and creates destination parent directories; `--dry-run` previews writes.
 `diff` prints unified diffs and exits 1 on drift, or 0 when current. The previous
-`diff <name> /path/to/repo` form remains supported. Usage or manifest errors exit
-2. The target directory must already exist.
+`diff <name> /path/to/repo` form remains supported. Usage or manifest errors exit 2. The target directory must already exist.
 
 ## Manifest contract
 
@@ -85,7 +84,11 @@ plugin, and `src/zod.ts` for the codec. A consumer entry in `consumers.toml` may
 override these relative directories with, for example,
 `placement = { scripts = "scripts", oxlint = "config/lint", source = "lib" }`.
 Omitted fields use the defaults. Apply, diff, sync and the consumer gate use the
-same placement. Existing root-layout consumers require a separate migration.
+same placement. Sync migrates matching root-layout files to that placement and
+updates the wrapper's house extends path. Since no prior version is recorded,
+root files that differ from the current template, occupied destinations, and a
+wrapper without the expected extends entry are reported as conflicts before
+any migration writes. Resolve them manually and retry; `--dry-run` previews moves.
 The `lint:ts` task still calls `lint-ts-candidate`, whose current default expects
 the runner at the repository root; its selection and runner location need to be
 decoupled before this task can run against the default placed runner.

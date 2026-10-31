@@ -4,6 +4,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  rename,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -172,6 +173,93 @@ async function requireOwnedDestination(destination: string): Promise<void> {
 // Validate every destination before the first write, including unchanged files and parent paths.
 if (writes)
   for (const file of files) await requireOwnedDestination(file.destination);
+
+// A legacy file has no recorded base version. Only relocate it automatically
+// when its bytes match the current root-layout template.
+async function migrateLegacy(): Promise<void> {
+  const moves: { from: string; to: string; content: string }[] = [];
+  const conflicts: string[] = [];
+  for (const file of files) {
+    const sourceName = relative(join(PRESETS, "typescript"), file.source);
+    const from = join(target, sourceName);
+    if (from === file.destination) continue;
+    await requireOwnedDestination(from);
+    if (!(await exists(from))) continue;
+    const original = await readFile(file.source, "utf8");
+    if ((await readFile(from, "utf8")) !== original) {
+      conflicts.push(`${sourceName}: local changes cannot be reconciled`);
+      continue;
+    }
+    if (await exists(file.destination)) {
+      conflicts.push(
+        `${relative(target, file.destination)}: destination already exists`,
+      );
+      continue;
+    }
+    moves.push({
+      from,
+      to: file.destination,
+      content: placedContent("typescript", sourceName, original, placement),
+    });
+  }
+  const wrapper = join(target, ".oxlintrc.json");
+  let wrapperUpdate: string | undefined;
+  if (
+    moves.some((move) => move.from === join(target, "house.oxlintrc.json")) &&
+    (await exists(wrapper))
+  ) {
+    const current = await readFile(wrapper, "utf8");
+    const oldPath = "./house.oxlintrc.json";
+    const newPath = placedContent(
+      "typescript",
+      ".oxlintrc.json",
+      oldPath,
+      placement,
+    );
+    const parsed = jsonOf(
+      z.looseObject({ extends: z.array(z.string()) }),
+    ).safeParse(current);
+    const entries = [...current.matchAll(/"extends"\s*:\s*\[[^\]]*\]/gu)];
+    const entry = entries.length === 1 ? entries[0]?.[0] : undefined;
+    if (
+      parsed.success &&
+      parsed.data.extends.filter((value) => value === oldPath).length === 1 &&
+      !parsed.data.extends.includes(newPath) &&
+      entry?.includes(JSON.stringify(oldPath)) === true
+    )
+      wrapperUpdate = current.replace(
+        entry,
+        entry.replace(JSON.stringify(oldPath), JSON.stringify(newPath)),
+      );
+    else if (
+      !parsed.success ||
+      parsed.data.extends.includes(oldPath) ||
+      !parsed.data.extends.includes(newPath)
+    )
+      conflicts.push(".oxlintrc.json: missing managed extends entry");
+  }
+  if (conflicts.length > 0) {
+    for (const conflict of conflicts)
+      consola.warn(`preset: conflict ${conflict}`);
+    process.exit(1);
+  }
+  for (const move of moves) {
+    const label = `${relative(target, move.from)} -> ${relative(target, move.to)}`;
+    if (argv.flags["dry-run"]) consola.log(`preset: would move ${label}`);
+    else {
+      await mkdir(dirname(move.to), { recursive: true });
+      await rename(move.from, move.to);
+      await writeFile(move.to, move.content);
+      consola.log(`preset: moved ${label}`);
+    }
+  }
+  if (wrapperUpdate !== undefined) {
+    if (argv.flags["dry-run"])
+      consola.log("preset: would update .oxlintrc.json");
+    else await writeFile(wrapper, wrapperUpdate);
+  }
+}
+if (action === "sync" && name === "typescript") await migrateLegacy();
 
 const expected = new Map<string, string>();
 for (const file of files) {

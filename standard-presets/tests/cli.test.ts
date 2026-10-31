@@ -12,6 +12,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -84,6 +85,68 @@ async function target() {
 }
 
 describe("manifest preset CLI", () => {
+  async function legacyTarget() {
+    const repo = await target();
+    expect((await run("apply", "typescript", "--to", repo)).exit).toBe(0);
+    for (const [directory, names] of [
+      [".oxlint", ["house-plugin.js", "house.oxlintrc.json"]],
+      ["tools", ["require-bun.ts", "lint-oxlint.ts", "lint-knip.ts"]],
+      ["src", ["zod.ts"]],
+    ] as const) {
+      for (const name of names) {
+        await rename(join(repo, directory, name), join(repo, name));
+        await cp(
+          join(ROOT, "standard-presets/typescript", name),
+          join(repo, name),
+        );
+      }
+    }
+    await cp(
+      join(ROOT, "standard-presets/typescript/.oxlintrc.json"),
+      join(repo, ".oxlintrc.json"),
+    );
+    return repo;
+  }
+
+  test("sync migrates the root layout and preserves wrapper customization", async () => {
+    const repo = await legacyTarget();
+    const wrapper = join(repo, ".oxlintrc.json");
+    await writeFile(
+      wrapper,
+      (await readFile(wrapper, "utf8")).replace(
+        '"ignorePatterns": []',
+        '"ignorePatterns": ["local"]',
+      ),
+    );
+    expect(
+      (await run("sync", "typescript", "--to", repo, "--dry-run")).exit,
+    ).toBe(0);
+    expect(await Bun.file(join(repo, "lint-oxlint.ts")).exists()).toBe(true);
+    expect((await run("sync", "typescript", "--to", repo)).exit).toBe(0);
+    expect(await Bun.file(join(repo, "lint-oxlint.ts")).exists()).toBe(false);
+    expect(await readFile(wrapper, "utf8")).toContain(
+      '"ignorePatterns": ["local"]',
+    );
+    expect(await readFile(wrapper, "utf8")).toContain(
+      "./.oxlint/house.oxlintrc.json",
+    );
+    expect((await run("diff", "typescript", "--to", repo)).exit).toBe(0);
+  });
+
+  test("sync reports a local legacy patch without changing any files", async () => {
+    const repo = await legacyTarget();
+    const path = join(repo, "lint-oxlint.ts");
+    const patched = `${await readFile(path, "utf8")}\n// local patch\n`;
+    await writeFile(path, patched);
+    const result = await run("sync", "typescript", "--to", repo);
+    expect(result.exit).toBe(1);
+    expect(result.stderr + result.stdout).toContain("conflict lint-oxlint.ts");
+    expect(await readFile(path, "utf8")).toBe(patched);
+    expect(await Bun.file(join(repo, "house-plugin.js")).exists()).toBe(true);
+    expect(await Bun.file(join(repo, ".oxlint/house-plugin.js")).exists()).toBe(
+      false,
+    );
+  });
   test("every language applies to an empty repo and immediately has no diff", async () => {
     const languages = ["typescript", "python", "rust", "julia", "latex"];
     const listed = Bun.spawn(

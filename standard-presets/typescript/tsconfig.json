@@ -5,6 +5,7 @@
   // (arr[i] is T | undefined) and `exactOptionalPropertyTypes` ({a?: T} refuses explicit undefined).
   // Both remain ON; the measured migration paid down the resulting errors rather than weakening them.
   "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.vendored.json",
   "compilerOptions": {
     "target": "ESNext",
     "lib": ["ESNext"],
@@ -36,6 +37,5 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
   },
-  "include": ["**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": ["**/*.ts"]
 }

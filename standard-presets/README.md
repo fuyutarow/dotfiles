@@ -62,14 +62,23 @@ as a configuration surface covers new kinds without registry edits.
 
 ## Existing presets
 
-`typescript` copies `tsconfig.json`, `package.json`, create-only `knip.jsonc`,
-`zod.ts`, `lint-oxlint.ts`, `lint-knip.ts`, `.oxlintrc.json`,
-`house.oxlintrc.json`, and its JS plugin. It does not manage the consumer's
-`mise.toml`; its task example is documentation, and consumers verify adopted
-tasks with their existing mise contract check. See [the TypeScript README](typescript/README.md)
-for that snippet, React opt-in, the checked oxlint runner, and the knip gate.
+`typescript` copies `tsconfig.json`, create-only `tsconfig.vendored.json`,
+`package.json`, create-only `knip.jsonc`, `zod.ts`, `lint-oxlint.ts`,
+`lint-knip.ts`, `.oxlintrc.json`, `house.oxlintrc.json`, and its JS plugin.
+It does not manage the consumer’s `mise.toml`; its task example is documentation,
+and consumers verify adopted tasks with their existing mise contract check. See
+[the TypeScript README](typescript/README.md) for that snippet, React opt-in,
+the checked oxlint runner, and the knip gate.
 Dotfiles extends `typescript/tsconfig.json`, keeping its own include/exclude paths at the
 root. Consumers may tighten compiler options; weakening the preset is drift.
+
+The contract-tool `preset sync <repo>` command maintains `tsconfig.vendored.json`
+from the installed tools' `.preset-sync.json` manifests. The TypeScript config
+extends this file, and `lint-oxlint.ts` uses the same exclusions. Commit the
+generated file and rerun contract-tool sync when installing or updating tools;
+the language preset preserves it and does not report its generated contents as
+drift. Files outside those manifests remain in scope, including other files in
+`tools/`.
 
 TypeScript's `package.json` is created only when absent and then belongs to the
 consumer. Its manifest selects the house devDependency pins (including knip

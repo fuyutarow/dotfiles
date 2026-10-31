@@ -504,6 +504,33 @@ async function main(): Promise<Outcome<number>> {
     ),
   );
   if (!savedRegistry.ok) return savedRegistry;
+  const scopePath = join(repo, "tsconfig.vendored.json");
+  const safeScope = await ensureSafeFile(scopePath);
+  if (!safeScope.ok) return safeScope;
+  const exclusions: string[] = ["node_modules"];
+  for (const name of new Set([...existing, ...selected])) {
+    const manifest = await readJSON(
+      join(toolsRoot(repo), name, ".preset-sync.json"),
+      toolManifestSchema,
+    );
+    if (!manifest.ok) return failure(manifest.error);
+    const paths = manifest.value.files.map((file) =>
+      join("tools", name, file.destination),
+    );
+    const invalid = paths.find(
+      (path) => !inside(join(toolsRoot(repo), name), resolve(repo, path)),
+    );
+    if (invalid !== undefined)
+      return failure(`invalid manifest destination: ${invalid}`);
+    exclusions.push(...paths);
+  }
+  const savedScope = await fsResult(() =>
+    writeFile(
+      scopePath,
+      `${JSON.stringify({ exclude: exclusions.toSorted() }, null, 2)}\n`,
+    ),
+  );
+  if (!savedScope.ok) return savedScope;
   process.stdout.write(
     `PRESET SYNC ${selected.length} tool(s), ${count} file(s) from ${commit.value}\n`,
   );

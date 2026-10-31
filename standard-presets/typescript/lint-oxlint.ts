@@ -29,12 +29,23 @@ async function main(): Promise<number> {
     flags: { typeAware: { type: Boolean, default: false } },
   });
   const bin = join(process.cwd(), "node_modules", ".bin");
+  const scopeFile = Bun.file("tsconfig.vendored.json");
+  const scope = jsonOf(z.object({ exclude: z.array(z.string()) })).safeParse(
+    (await scopeFile.exists()) ? await scopeFile.text() : '{"exclude":[]}',
+  );
+  if (!scope.success) {
+    process.stderr.write(
+      "lint-oxlint: FATAL: invalid tsconfig.vendored.json\n",
+    );
+    return 2;
+  }
   const child = Bun.spawn(
     [
       process.execPath,
       join(bin, "oxlint"),
       "--format=json",
       ...(argv.flags.typeAware ? ["--type-aware"] : []),
+      ...scope.data.exclude.flatMap((pattern) => ["--ignore-pattern", pattern]),
       ...argv._,
     ],
     {

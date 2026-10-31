@@ -12,7 +12,7 @@
 // Fires on every Stop (see settings.json's matcher). Best-effort only: never worth failing a
 // turn over a clipboard convenience feature.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { attempt, attemptOr } from "../../hooks/attempt.ts";
 import { at, parseJson, strAt } from "../../hooks/narrow.ts";
 import { MAX_QUOTE_TURNS } from "./quote.config.ts";
@@ -33,10 +33,8 @@ async function recordResponse(
   // no (readable) history yet -> start one
   const noHistory: string[] = [];
   const lines = await attemptOr(
-    () =>
-      readFileSync(file, "utf8")
-        .split("\n")
-        .filter((l) => l.trim() !== ""),
+    async () =>
+      (await readFile(file, "utf8")).split("\n").filter((l) => l.trim() !== ""),
     noHistory,
   );
   const response = JSON.stringify({
@@ -48,13 +46,13 @@ async function recordResponse(
   if (replaceLast && lines.length > 0) lines[lines.length - 1] = response;
   else lines.push(response);
 
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(file, `${lines.slice(-KEEP).join("\n")}\n`);
+  await mkdir(dir, { recursive: true });
+  await writeFile(file, `${lines.slice(-KEEP).join("\n")}\n`);
 }
 
 // best-effort snapshot -> never fail Stop over this (a bad payload OR a failed write)
 await attempt(async () => {
-  const payload = parseJson(readFileSync(0, "utf8"));
+  const payload = parseJson(await Bun.stdin.text());
   await recordResponse(
     strAt(payload, "session_id"),
     strAt(payload, "last_assistant_message"),

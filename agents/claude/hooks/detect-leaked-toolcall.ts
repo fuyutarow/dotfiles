@@ -16,7 +16,7 @@ import { hookMessage } from "./lib.ts";
 // FAIL OPEN: any error -> exit 0 (never break a turn).
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFile, writeFile } from "node:fs/promises";
 import { attempt } from "../../hooks/attempt.ts";
 import { strAt } from "../../hooks/narrow.ts";
 import { readStdinJson, readTranscript, stripCode, turnText } from "./lib.ts";
@@ -33,8 +33,8 @@ async function main(): Promise<void> {
   if (!/<(antml:)?invoke name=|<(antml:)?function_calls/u.test(stripped))
     return;
 
-  await attempt(() => {
-    appendFileSync(
+  await attempt(async () => {
+    await appendFile(
       `${process.env["HOME"] ?? ""}/.claude/leaked-toolcall.log`,
       `${Temporal.Now.instant().toString({ fractionalSecondDigits: 3 })}  leaked-toolcall  ${transcript}\n`,
     );
@@ -45,8 +45,8 @@ async function main(): Promise<void> {
     process.env["CLAUDE_HOOK_QUIET"] !== ""
   )
     return; // tests: skip bell + desktop notification
-  await attempt(() => {
-    writeFileSync("/dev/tty", "\u0007");
+  await attempt(async () => {
+    await writeFile("/dev/tty", "\u0007");
   }); // terminal bell (best-effort; no tty)
   const msg = hookMessage("tool-call が漏れました — Esc Esc で /rewind を");
   await attempt(() => {

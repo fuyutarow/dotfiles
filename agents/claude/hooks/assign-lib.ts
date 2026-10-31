@@ -13,7 +13,7 @@
 // There is no third fallback — assign-roles.toml is gone, not layered underneath.
 
 import { dirname, join } from "node:path";
-import { realpathSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { attempt } from "../../hooks/attempt.ts";
 import { at, obj, str } from "../../hooks/narrow.ts";
 import {
@@ -52,14 +52,14 @@ export interface RoleConfig {
 
 // Path to the skill-shipped default, resolved relative to THIS module's own real location
 // rather than a hardcoded absolute path — so it works both run in-repo (as the test suite
-// does) and once deployed as a symlink at ~/.claude/hooks/assign-lib.ts (realpathSync
+// does) and once deployed as a symlink at ~/.claude/hooks/assign-lib.ts (realpath
 // follows the symlink chain back to the dotfiles repo either way; measured live: Bun already
 // resolves import.meta.path to the real file when a module is loaded through a symlink, but
-// realpathSync is kept explicit rather than relying on that as an implementation detail).
+// realpath is kept explicit rather than relying on that as an implementation detail).
 // Repo shape: agents/claude/hooks/assign-lib.ts -> agents/claude/hooks -> agents/claude ->
 // agents -> agents/skills/commanding-research-fleets/fleet_policy.toml.
-function defaultPolicyPath(): string {
-  const here = realpathSync(import.meta.path);
+async function defaultPolicyPath(): Promise<string> {
+  const here = await realpath(import.meta.path);
   const agentsDir = dirname(dirname(dirname(here)));
   return join(
     agentsDir,
@@ -98,7 +98,7 @@ export async function loadFleetPolicy(
   const projectPolicy = await readPolicyFile(join(cwd, "fleet_policy.toml"));
   if (projectPolicy !== null) return projectPolicy;
 
-  const shippedDefault = await readPolicyFile(defaultPolicyPath());
+  const shippedDefault = await readPolicyFile(await defaultPolicyPath());
   return shippedDefault ?? {};
 }
 

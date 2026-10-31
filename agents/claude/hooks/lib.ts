@@ -9,7 +9,7 @@
 //   - Stop guard block    = top-level { decision: "block", reason } JSON on stdout. Existing
 //     guards may use exit 2 + stderr, but new guards should return the structured decision.
 
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 
 // The protocol primitives are vendor-neutral and live with the portable hooks; re-exported so
@@ -39,16 +39,15 @@ function entryOf(line: unknown): TranscriptEntry {
 
 // Transcript is JSONL; skip malformed lines rather than fail the whole read. An unreadable
 // file still throws (rejects), exactly as the synchronous read did.
-export function readTranscript(path: string): Promise<TranscriptEntry[]> {
-  return Promise.try(() => {
-    const entries: TranscriptEntry[] = [];
-    for (const line of readFileSync(path, "utf8").split("\n")) {
-      if (line.trim() === "") continue;
-      const parsed = parseJson(line);
-      if (parsed !== undefined) entries.push(entryOf(parsed));
-    }
-    return entries;
-  });
+export async function readTranscript(path: string): Promise<TranscriptEntry[]> {
+  const content = await readFile(path, "utf8");
+  const entries: TranscriptEntry[] = [];
+  for (const line of content.split("\n")) {
+    if (line.trim() === "") continue;
+    const parsed = parseJson(line);
+    if (parsed !== undefined) entries.push(entryOf(parsed));
+  }
+  return entries;
 }
 
 function textBlocks(content: unknown): string[] {

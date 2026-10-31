@@ -27,7 +27,7 @@ import {
 //
 // Fail-open: this is a log, never a gate. Any problem -> exit 0 with no output.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { attempt } from "../../hooks/attempt.ts";
 import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import { readStdinJson } from "./lib.ts";
@@ -85,7 +85,7 @@ async function main(): Promise<void> {
   if (sid === undefined) return; // a non-string session_id never had a usable key
 
   const now = Temporal.Now.instant().epochMilliseconds;
-  const cached = parseJson(readFileSync(CACHE, "utf8"));
+  const cached = parseJson(await readFile(CACHE, "utf8"));
   const cachedAt = at(cached, "at");
   const cachedLine = strAt(cached, "line");
   if (typeof cachedAt !== "number" || cachedLine === undefined) return;
@@ -101,8 +101,8 @@ async function main(): Promise<void> {
   // It is session-owned state, not a sampler observation: updated_at is not a TTL.
   const fleet = FleetSessionSchema.safeParse(await readFleetSession(sid));
   // Legacy rows remain a fallback while the writer migrates to the shared handoff.
-  const read = await attempt(() =>
-    parseJson(readFileSync(`${SESSION_DIR}/${key}.json`, "utf8")),
+  const read = await attempt(async () =>
+    parseJson(await readFile(`${SESSION_DIR}/${key}.json`, "utf8")),
   );
   if (!fleet.success && read.ok && read.value === null) return;
   const sess: unknown = read.ok ? read.value : {};
@@ -124,12 +124,14 @@ async function main(): Promise<void> {
   );
 
   const statePath = `${STATE_DIR}/${key}.last`;
-  const last = await attempt(() => Number(readFileSync(statePath, "utf8")));
+  const last = await attempt(async () =>
+    Number(await readFile(statePath, "utf8")),
+  );
   const lastAt = last.ok && Number.isFinite(last.value) ? last.value : 0;
   if (event === "PostToolUse" && now - lastAt < MIN_GAP_MS) return;
 
-  mkdirSync(STATE_DIR, { recursive: true });
-  writeFileSync(statePath, `${now}\n`);
+  await mkdir(STATE_DIR, { recursive: true });
+  await writeFile(statePath, `${now}\n`);
   process.stdout.write(`${hookJson({ systemMessage: shown })}\n`);
 }
 

@@ -138,8 +138,8 @@ async function main(): Promise<void> {
     );
   }
   if (findings.length === 0) return;
-  console.log(
-    hookJson({
+  process.stdout.write(
+    `${hookJson({
       hookSpecificOutput: {
         hookEventName: "PostToolUse",
         additionalContext:
@@ -149,7 +149,7 @@ async function main(): Promise<void> {
           "\nRead it. If it does what you need, use it and remove the new one; if not, keep yours and say in one " +
           "line what differs.",
       },
-    }),
+    })}\n`,
   );
 }
 

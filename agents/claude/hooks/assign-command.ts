@@ -45,7 +45,7 @@ import { attempt } from "../../hooks/attempt.ts";
 import { strAt } from "../../hooks/narrow.ts";
 
 function block(reason: string): never {
-  console.log(hookJson({ decision: "block", reason }));
+  process.stdout.write(`${hookJson({ decision: "block", reason })}\n`);
   process.exit(0);
 }
 
@@ -56,7 +56,7 @@ function allow(sessionTitle: string, additionalContext: string | null): never {
   };
   if (additionalContext !== null && additionalContext !== "")
     hookSpecificOutput["additionalContext"] = additionalContext;
-  console.log(hookJson({ hookSpecificOutput }));
+  process.stdout.write(`${hookJson({ hookSpecificOutput })}\n`);
   process.exit(0);
 }
 

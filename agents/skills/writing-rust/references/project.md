@@ -8,7 +8,7 @@
 
 ## Edition 2024 — the baseline for new work `[dated:2026-07]`
 
-The edition in [the Cargo preset](../../../../presets/rust/Cargo.toml) (stable in **Rust 1.85.0, 2025-02-20**) is the default for new crates. Adopting
+The edition in [the Cargo preset](../../../../standard-presets/rust/Cargo.toml) (stable in **Rust 1.85.0, 2025-02-20**) is the default for new crates. Adopting
 it also opts into the **MSRV-aware resolver v3** (implied by the edition), which
 prefers dependency versions compatible with your `rust-version`. Notable edition-2024 behavior a
 model must account for:
@@ -87,8 +87,8 @@ Two seams:
 Since **Rust 1.74** lints are configured in a `[lints]` / `[workspace.lints]` table, **not** via
 `RUSTFLAGS="-D warnings"` or `#![deny(...)]` inner attributes (which don't compose across a workspace):
 
-Use [the workspace lint table](../../../../presets/rust/Cargo.toml) and merge
-[the member opt-in](../../../../presets/rust/member-lints.toml) into every member manifest.
+Use [the workspace lint table](../../../../standard-presets/rust/Cargo.toml) and merge
+[the member opt-in](../../../../standard-presets/rust/member-lints.toml) into every member manifest.
 
 Strategy: **`clippy::all` denied + a handful of cherry-picked `pedantic` lints**. Do **not**
 workspace-wide `clippy::pedantic`/`clippy::nursery` — they're noisy and churn across toolchains.
@@ -114,9 +114,9 @@ Runner choice here does not establish repository-wide coverage.
 - **`cargo nextest run`** — fast parallel runner, better output. **It cannot run doctests** — CI must
   also run `cargo test --doc` (a silent coverage gap otherwise).
 - **`clippy` + `cargo fmt`** in CI (fmt is not negotiable — zero-config uniformity).
-  [rustfmt.toml](../../../../presets/rust/rustfmt.toml) and
-  [clippy.toml](../../../../presets/rust/clippy.toml) preserve tool defaults;
-  [mise.toml](../../../../presets/rust/mise.toml) supplies the Cargo task baseline.
+  [rustfmt.toml](../../../../standard-presets/rust/rustfmt.toml) and
+  [clippy.toml](../../../../standard-presets/rust/clippy.toml) preserve tool defaults;
+  [mise.toml](../../../../standard-presets/rust/mise.toml) supplies the Cargo task baseline.
 - **Large workspaces (~20+ crates)**: `cargo hakari` builds a `workspace-hack` crate that unifies
   feature selection so members share compiled deps (big build-time win). Let `hakari generate` + a
   CI `--check` own the hack crate; never hand-edit it. Skip it under ~20 crates.
@@ -135,7 +135,7 @@ Runner choice here does not establish repository-wide coverage.
 ## `[profile.release]` — build tuning
 
 Copy the release and profiling tables from
-[the Cargo preset](../../../../presets/rust/Cargo.toml).
+[the Cargo preset](../../../../standard-presets/rust/Cargo.toml).
 
 - `lto`/`codegen-units = 1` trade build time for runtime — worth it for shipped artifacts, skip for
   dev. `panic = "abort"` shrinks the binary and drops unwind tables but **breaks `catch_unwind`** and

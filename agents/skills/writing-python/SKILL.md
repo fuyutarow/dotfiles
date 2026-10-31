@@ -185,7 +185,7 @@ ANY row in this table is satisfied.
 
 ## §2 Environment discipline (inline core)
 
-Project configuration lives in [presets/python/](../../../presets/python/README.md):
+Project configuration lives in [standard-presets/python/](../../../standard-presets/python/README.md):
 apply it with `mise run preset -- apply python --to <repo>` from dotfiles.
 The preset owns the copyable settings; this skill owns their selection and reasoning.
 

@@ -33,7 +33,7 @@ afterAll(async () => {
 
 async function run(...args: string[]) {
   const child = Bun.spawn(
-    [process.execPath, join(ROOT, "presets/src/cli.ts"), ...args],
+    [process.execPath, join(ROOT, "standard-presets/src/cli.ts"), ...args],
     { cwd: scratch, stdout: "pipe", stderr: "pipe", timeout: 30_000 },
   );
   const [stdout, stderr, exit] = await Promise.all([
@@ -46,7 +46,7 @@ async function run(...args: string[]) {
 
 describe("Julia preset", () => {
   test("lists, applies to an empty repository, and detects drift", async () => {
-    const catalog = await discoverPresets(join(ROOT, "presets"));
+    const catalog = await discoverPresets(join(ROOT, "standard-presets"));
     if (!catalog.ok) expect.unreachable(catalog.error);
     const preset = catalog.presets.find((entry) => entry.name === "julia");
     if (preset === undefined) expect.unreachable("missing Julia preset");

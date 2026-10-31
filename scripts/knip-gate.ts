@@ -291,7 +291,9 @@ export async function roots(root: string): Promise<string[]> {
     ))
       await add(match[0]);
   }
-  for await (const manifest of new Bun.Glob("presets/*/preset.toml").scan({
+  for await (const manifest of new Bun.Glob(
+    "standard-presets/*/preset.toml",
+  ).scan({
     cwd: root,
   })) {
     const data = Bun.TOML.parse(await Bun.file(join(root, manifest)).text());

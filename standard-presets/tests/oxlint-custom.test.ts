@@ -5,21 +5,21 @@ import { join, resolve } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
-const PRESET = join(ROOT, "presets/typescript");
+const PRESET = join(ROOT, "standard-presets/typescript");
 const scratch = await mkdtemp(join(tmpdir(), "oxlint-standard-fixtures-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
-await mkdir(join(scratch, "presets/typescript"), { recursive: true });
+await mkdir(join(scratch, "standard-presets/typescript"), { recursive: true });
 await cp(
   join(PRESET, "house-plugin.js"),
-  join(scratch, "presets/typescript/house-plugin.js"),
+  join(scratch, "standard-presets/typescript/house-plugin.js"),
 );
 await cp(
   join(PRESET, "dotfiles-plugin.js"),
-  join(scratch, "presets/typescript/dotfiles-plugin.js"),
+  join(scratch, "standard-presets/typescript/dotfiles-plugin.js"),
 );
 await cp(
   join(PRESET, "house.oxlintrc.json"),
-  join(scratch, "presets/typescript/house.oxlintrc.json"),
+  join(scratch, "standard-presets/typescript/house.oxlintrc.json"),
 );
 await cp(join(ROOT, ".oxlintrc.json"), join(scratch, ".oxlintrc.json"));
 await mkdir(join(scratch, "node_modules"));

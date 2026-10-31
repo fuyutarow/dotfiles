@@ -424,7 +424,7 @@ test("restored candidate reloads its inline registry schema after the same path 
   const root = await mkdtemp(join(tmpdir(), "land-schema-cache-"));
   temporary.push(root);
   await mkdir(join(root, "scripts"));
-  await mkdir(join(root, "presets"));
+  await mkdir(join(root, "standard-presets"));
   await symlink(join(REPO, "agents"), join(root, "agents"));
   const gate = join(root, "scripts/consumer-gate.ts");
   await writeFile(
@@ -439,12 +439,12 @@ test("restored candidate reloads its inline registry schema after the same path 
     await Bun.file(join(REPO, "scripts/consumer-gate.ts")).text(),
   );
   await writeFile(
-    join(root, "presets/consumers.toml"),
+    join(root, "standard-presets/consumers.toml"),
     `[[consumers]]
 name = "schema-fixture"
 root = "/unused"
 setup = ["true"]
-surfaces = ["presets/typescript"]
+surfaces = ["standard-presets/typescript"]
 preset_dirs = { typescript = "tools" }
 notify = [{ paths = ["tools/agent-resource-run/**"], contact = "example-research-agt_f24v", check = "RUSTC_WRAPPER= mise run hook:pre-commit" }]
 command = ["true"]
@@ -468,7 +468,9 @@ timeout_ms = 1000
     return {ok:false,checked:0,lines:['FAIL second candidate']};
   }`,
   );
-  const second = await runLandConsumerGates(root, ["presets/consumers.toml"]);
+  const second = await runLandConsumerGates(root, [
+    "standard-presets/consumers.toml",
+  ]);
   expect(second.isOk()).toBe(true);
   if (second.isErr()) return;
   expect(second.value.lines).toEqual(["FAIL second candidate"]);
@@ -533,7 +535,10 @@ async function fixture() {
   }
   await jj(temp, ["git", "init", "--colocate", main]);
   await mkdir(join(main, "presets"), { recursive: true });
-  await writeFile(join(main, "presets/consumers.toml"), "consumers = []\n");
+  await writeFile(
+    join(main, "standard-presets/consumers.toml"),
+    "consumers = []\n",
+  );
   await writeFile(join(main, "old name.txt"), "rename content\n");
   await writeFile(join(main, "delete.txt"), "delete content\n");
   await writeFile(join(main, "keep.txt"), "keep content\n");
@@ -1075,9 +1080,9 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     await writeFile(
       join(f.main, "scripts/consumer-gate.ts"),
       `export async function runConsumerGates(root: string) {
-  const registry = Bun.TOML.parse(await Bun.file(root + '/presets/consumers.toml').text());
+  const registry = Bun.TOML.parse(await Bun.file(root + '/standard-presets/consumers.toml').text());
   const unknown = Object.keys(registry).filter((key) => key !== 'consumers');
-  return { ok: unknown.length === 0, checked: 1, lines: unknown.map((key) => 'FAIL consumer registry presets/consumers.toml: Unrecognized key: ' + key) };
+  return { ok: unknown.length === 0, checked: 1, lines: unknown.map((key) => 'FAIL consumer registry standard-presets/consumers.toml: Unrecognized key: ' + key) };
 }\n`,
     );
     await f.jj(f.main, ["commit", "-m", "add base consumer gate"]);
@@ -1085,13 +1090,13 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     await f.jj(f.worker, ["rebase", "-r", "@", "-o", "alpha"]);
     await mkdir(join(f.worker, "scripts"), { recursive: true });
     await writeFile(
-      join(f.worker, "presets/consumers.toml"),
+      join(f.worker, "standard-presets/consumers.toml"),
       'consumers = []\n"trunk/setup" = true\n',
     );
     await writeFile(
       join(f.worker, "scripts/consumer-gate.ts"),
       `export async function runConsumerGates(root: string) {
-  const registry = Bun.TOML.parse(await Bun.file(root + '/presets/consumers.toml').text());
+  const registry = Bun.TOML.parse(await Bun.file(root + '/standard-presets/consumers.toml').text());
   const accepted = registry['trunk/setup'] === true;
   return { ok: accepted, checked: 1, lines: [accepted ? 'PASS consumer registry trunk/setup' : 'FAIL consumer registry trunk/setup'] };
 }\n`,
@@ -1112,7 +1117,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
         "show",
         "-r",
         "alpha",
-        "presets/consumers.toml",
+        "standard-presets/consumers.toml",
       ]),
     ).toContain('"trunk/setup" = true');
   });
@@ -1143,7 +1148,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       `export { runConsumerGates } from ${JSON.stringify(join(REPO, "scripts/consumer-gate.ts"))};\n`,
     );
     await writeFile(
-      join(f.worker, "presets/consumers.toml"),
+      join(f.worker, "standard-presets/consumers.toml"),
       `[[consumers]]\nname = "land-path-consumer"\nroot = ${JSON.stringify(consumer)}\ntrunk = "alpha"\nsetup = [${JSON.stringify(mise)}, "run", "setup"]\nsurfaces = ["package-bins"]\ncommand = ["true"]\ntimeout_ms = 30000\n`,
     );
     await mkdir(join(f.worker, "tools/fixture"), { recursive: true });
@@ -1173,9 +1178,9 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     await writeFile(
       join(f.main, "scripts/consumer-gate.ts"),
       `export async function runConsumerGates(root: string) {
-  const registry = Bun.TOML.parse(await Bun.file(root + '/presets/consumers.toml').text());
+  const registry = Bun.TOML.parse(await Bun.file(root + '/standard-presets/consumers.toml').text());
   const unknown = Object.keys(registry).filter((key) => key !== 'consumers');
-  return { ok: unknown.length === 0, checked: 1, lines: unknown.map((key) => 'FAIL consumer registry presets/consumers.toml: Unrecognized key: ' + key) };
+  return { ok: unknown.length === 0, checked: 1, lines: unknown.map((key) => 'FAIL consumer registry standard-presets/consumers.toml: Unrecognized key: ' + key) };
 }\n`,
     );
     await f.jj(f.main, ["commit", "-m", "add base consumer gate"]);
@@ -1183,7 +1188,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     await f.jj(f.worker, ["rebase", "-r", "@", "-o", "alpha"]);
     await mkdir(join(f.worker, "scripts"), { recursive: true });
     await writeFile(
-      join(f.worker, "presets/consumers.toml"),
+      join(f.worker, "standard-presets/consumers.toml"),
       'consumers = []\n"trunk/setup" = true\n',
     );
 
@@ -2683,20 +2688,20 @@ test("shared preset refuses a red consumer before commit; compliant consumer lan
   await f.jj(consumer, ["git", "init", "--colocate"]);
   await f.jj(consumer, ["commit", "-m", "consumer fixture"]);
   await f.jj(consumer, ["bookmark", "create", "alpha", "-r", "@-"]);
-  await mkdir(join(f.worker, "presets/demo"), { recursive: true });
-  await mkdir(join(f.worker, "presets/src"), { recursive: true });
-  await writeFile(join(f.worker, "presets/demo/rule"), "strict");
+  await mkdir(join(f.worker, "standard-presets/demo"), { recursive: true });
+  await mkdir(join(f.worker, "standard-presets/src"), { recursive: true });
+  await writeFile(join(f.worker, "standard-presets/demo/rule"), "strict");
   await writeFile(
-    join(f.worker, "presets/demo/preset.toml"),
+    join(f.worker, "standard-presets/demo/preset.toml"),
     'files = [{source = "rule", destination = "rule"}]',
   );
   await writeFile(
-    join(f.worker, "presets/src/cli.ts"),
+    join(f.worker, "standard-presets/src/cli.ts"),
     `await Bun.write(Bun.argv.at(-1) + '/rule', 'strict');`,
   );
   await writeFile(
-    join(f.worker, "presets/consumers.toml"),
-    `[[consumers]]\nname = "fixture-consumer"\nroot = ${JSON.stringify(consumer)}\ntrunk = "alpha"\nsetup = ["true"]\nsurfaces = ["presets/demo"]\ncommand = [${JSON.stringify(process.execPath)}, "gate.ts"]\ntimeout_ms = 10000\n`,
+    join(f.worker, "standard-presets/consumers.toml"),
+    `[[consumers]]\nname = "fixture-consumer"\nroot = ${JSON.stringify(consumer)}\ntrunk = "alpha"\nsetup = ["true"]\nsurfaces = ["standard-presets/demo"]\ncommand = [${JSON.stringify(process.execPath)}, "gate.ts"]\ntimeout_ms = 10000\n`,
   );
   const refused = await f.land();
   expect(refused.exitCode).toBe(1);
@@ -2706,9 +2711,9 @@ test("shared preset refuses a red consumer before commit; compliant consumer lan
   );
   expect((await f.log()).some((args) => args[1] === "commit")).toBe(false);
   expect(await Bun.file(join(consumer, "gate-ran")).exists()).toBe(false);
-  expect(await Bun.file(join(f.main, "presets/demo/rule")).exists()).toBe(
-    false,
-  );
+  expect(
+    await Bun.file(join(f.main, "standard-presets/demo/rule")).exists(),
+  ).toBe(false);
   const before = await f.jj(f.main, [
     "log",
     "-r",

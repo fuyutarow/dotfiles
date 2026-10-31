@@ -13,4 +13,4 @@ files = [
   { source = "lint-oxlint.ts", destination = "lint-oxlint.ts" },
   { source = "lint-knip.ts", destination = "lint-knip.ts" },
 ]
-check = ["bun test presets/tests/presets.test.ts", "bun test presets/tests/cli.test.ts", "bun test presets/tests/knip.test.ts"]
+check = ["bun test standard-presets/tests/presets.test.ts", "bun test standard-presets/tests/cli.test.ts", "bun test standard-presets/tests/knip.test.ts"]

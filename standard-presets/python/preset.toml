@@ -7,4 +7,4 @@ files = [
   { source = "examples/pyproject-pytorch.toml", destination = "examples/pyproject-pytorch.toml" },
   { source = "examples/script.py", destination = "examples/script.py" },
 ]
-check = ["bun test presets/tests/python.test.ts"]
+check = ["bun test standard-presets/tests/python.test.ts"]

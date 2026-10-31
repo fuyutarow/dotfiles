@@ -12,12 +12,12 @@ description: >-
 
 # Modern LaTeX / Beamer Workflow
 
-Use executable repo configuration over long natural-language procedures. For project setup, use the canonical [LaTeX preset](../../../presets/latex/preset.toml):
+Use executable repo configuration over long natural-language procedures. For project setup, use the canonical [LaTeX preset](../../../standard-presets/latex/preset.toml):
 
-- [`presets/latex/mise-latex.toml`](../../../presets/latex/mise-latex.toml): task template for `latex:*` commands.
-- [`presets/latex/tex-fmt.toml`](../../../presets/latex/tex-fmt.toml): formatter config for `tex-fmt`.
-- [`presets/latex/latexmkrc`](../../../presets/latex/latexmkrc): LuaLaTeX build config that routes outputs to `build/`.
-- [`presets/latex/latex.gitignore`](../../../presets/latex/latex.gitignore): ignore snippet for generated TeX artifacts.
+- [`standard-presets/latex/mise-latex.toml`](../../../standard-presets/latex/mise-latex.toml): task template for `latex:*` commands.
+- [`standard-presets/latex/tex-fmt.toml`](../../../standard-presets/latex/tex-fmt.toml): formatter config for `tex-fmt`.
+- [`standard-presets/latex/latexmkrc`](../../../standard-presets/latex/latexmkrc): LuaLaTeX build config that routes outputs to `build/`.
+- [`standard-presets/latex/latex.gitignore`](../../../standard-presets/latex/latex.gitignore): ignore snippet for generated TeX artifacts.
 - `assets/NOTATION.md`: per-paper notation contract with the REVTeX/APS + arXiv forbidden-pattern profile.
 
 ## Core Decisions
@@ -73,10 +73,10 @@ tlmgr --usermode install <pkg>   # → TEXMFHOME; found automatically; survives 
 ## Setup Workflow
 
 1. Inspect existing `mise.toml`, `.gitignore`, paper directory layout, and build files. For an empty repo, run `mise run preset -- apply latex --to <repo>` from dotfiles, then `mise run preset -- diff latex --to <repo>`. The preset keeps the example `LATEX_DIR` and places `latexmkrc` there; adapt it for the actual paper. Applying replaces destination files, so merge the fragments into existing configs instead.
-2. If LaTeX tasks are missing or fragmented, add/adapt [`presets/latex/mise-latex.toml`](../../../presets/latex/mise-latex.toml) into the repo’s `mise.toml`.
-3. Add/adapt [`presets/latex/tex-fmt.toml`](../../../presets/latex/tex-fmt.toml) at the repo root.
-4. Add/adapt [`presets/latex/latexmkrc`](../../../presets/latex/latexmkrc) into the paper/slides directory.
-5. Add/adapt [`presets/latex/latex.gitignore`](../../../presets/latex/latex.gitignore) into `.gitignore`.
+2. If LaTeX tasks are missing or fragmented, add/adapt [`standard-presets/latex/mise-latex.toml`](../../../standard-presets/latex/mise-latex.toml) into the repo’s `mise.toml`.
+3. Add/adapt [`standard-presets/latex/tex-fmt.toml`](../../../standard-presets/latex/tex-fmt.toml) at the repo root.
+4. Add/adapt [`standard-presets/latex/latexmkrc`](../../../standard-presets/latex/latexmkrc) into the paper/slides directory.
+5. Add/adapt [`standard-presets/latex/latex.gitignore`](../../../standard-presets/latex/latex.gitignore) into `.gitignore`.
 6. Remove obsolete LaTeX build wrappers when `mise` is the repo’s task runner.
 7. Run the task surface, not ad-hoc commands:
    - `mise run latex:fmt:check`

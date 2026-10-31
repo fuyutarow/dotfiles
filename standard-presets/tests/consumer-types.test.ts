@@ -64,7 +64,7 @@ test("delivered runner retains its types with a consumer's own narrow include gl
   const applied = await run(
     scratch,
     process.execPath,
-    join(ROOT, "presets/src/cli.ts"),
+    join(ROOT, "standard-presets/src/cli.ts"),
     "apply",
     "typescript",
     "--to",

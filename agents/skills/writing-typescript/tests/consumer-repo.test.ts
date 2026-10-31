@@ -7,7 +7,7 @@ import { decodedJson } from "../../../hooks/tests/decode.ts";
 import { z } from "../../../hooks/zod.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..", "..");
-const FIXTURE = join(ROOT, "presets", "typescript");
+const FIXTURE = join(ROOT, "standard-presets", "typescript");
 const Pkg = z.looseObject({
   dependencies: z.record(z.string(), z.string()),
   devDependencies: z.record(z.string(), z.string()),
@@ -74,7 +74,7 @@ describe("consumer-repo fixture", () => {
     const dir = await mkdtemp(join(tmpdir(), "consumer-tsconfig-"));
     const applied = await run([
       "bun",
-      join(ROOT, "presets", "src", "cli.ts"),
+      join(ROOT, "standard-presets", "src", "cli.ts"),
       "apply",
       "typescript",
       "--to",
@@ -94,7 +94,7 @@ describe("consumer-repo fixture", () => {
     const dir = await mkdtemp(join(tmpdir(), "consumer-oxlint-"));
     const result = await run([
       process.execPath,
-      join(ROOT, "presets/src/cli.ts"),
+      join(ROOT, "standard-presets/src/cli.ts"),
       "apply",
       "typescript",
       "--to",
@@ -108,7 +108,8 @@ describe("consumer-repo fixture", () => {
 
 describe("consumer-repo zod.ts", () => {
   test("decodes JSON exactly like dotfiles' agents/hooks/zod.ts", async () => {
-    const theirs = await import("../../../../presets/typescript/zod.ts");
+    const theirs =
+      await import("../../../../standard-presets/typescript/zod.ts");
     const ours = await import("../../../hooks/zod.ts");
     for (const text of ['{"a":1}', "[1,2]", "{", "", "null"]) {
       const a = theirs.jsonOf(theirs.z.unknown()).safeParse(text);

@@ -28,8 +28,8 @@ const SETTLE_ROUNDS = 4;
 const SETTLE_MS = 250;
 
 const TEST_GLOBS = [
-  "{scripts,tools,agents,presets,android,obsidian,wsl,zsh}/**/*.test.ts",
-  "{scripts,tools,agents,presets,android,obsidian,wsl,zsh}/**/tests/**/*.ts",
+  "{scripts,tools,agents,standard-presets,android,obsidian,wsl,zsh}/**/*.test.ts",
+  "{scripts,tools,agents,standard-presets,android,obsidian,wsl,zsh}/**/tests/**/*.ts",
 ];
 const WRITER =
   "(?:mkdtemp|mkdtempSync|mkdir|mkdirSync|writeFile|writeFileSync|appendFile|appendFileSync|copyFile|copyFileSync|symlink|symlinkSync|rename|renameSync|Bun\\.write)";

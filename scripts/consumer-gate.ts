@@ -25,7 +25,9 @@ import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
-const Surface = z.string().regex(/^(presets\/[a-z0-9-]+|hooks|package-bins)$/u);
+const Surface = z
+  .string()
+  .regex(/^(standard-presets\/[a-z0-9-]+|hooks|package-bins)$/u);
 const RelativePath = z
   .string()
   .min(1)
@@ -73,15 +75,15 @@ export type ConsumerGateReport = {
   checked: number;
   lines: string[];
 };
-const REGISTRY = "presets/consumers.toml";
+const REGISTRY = "standard-presets/consumers.toml";
 
 /** Conservative dependency closure: shared executors and bin implementation changes affect consumers too. */
 export function sharedSurfaces(changed: readonly string[]): string[] {
   const surfaces = new Set<string>();
   for (const path of changed) {
-    const preset = /^presets\/([^/]+)\//u.exec(path)?.[1];
+    const preset = /^standard-presets\/([^/]+)\//u.exec(path)?.[1];
     if (preset !== undefined && preset !== "tests" && preset !== "src")
-      surfaces.add(`presets/${preset}`);
+      surfaces.add(`standard-presets/${preset}`);
     if (path.startsWith("agents/hooks/") || path.startsWith("agents/skills/"))
       surfaces.add("hooks");
     if (
@@ -92,7 +94,7 @@ export function sharedSurfaces(changed: readonly string[]): string[] {
     )
       surfaces.add("package-bins");
     if (
-      path.startsWith("presets/src/") ||
+      path.startsWith("standard-presets/src/") ||
       path === REGISTRY ||
       path === "scripts/config-registry.ts"
     )
@@ -412,7 +414,7 @@ async function applySurface(
       dereference: true,
     });
   }
-  if (surface !== "presets/typescript") return undefined;
+  if (surface !== "standard-presets/typescript") return undefined;
   await preserveTypescript(copy, savedPackage, savedConfig);
   if (all || changed.includes(`${surface}/package.json`)) {
     const installed = await run([
@@ -435,7 +437,7 @@ async function applyConsumerSurface(
   run: (argv: string[], cwd?: string) => ReturnType<typeof command>,
 ): Promise<string | undefined> {
   const directory =
-    surface === "presets/typescript"
+    surface === "standard-presets/typescript"
       ? consumer.preset_dirs?.typescript
       : undefined;
   const target = directory === undefined ? copy : join(copy, directory);
@@ -889,7 +891,7 @@ async function checkConsumer(
   }
   const steps: { label: string; argv: string[] }[] = [];
   for (const surface of consumer.surfaces) {
-    if (!surface.startsWith("presets/")) continue;
+    if (!surface.startsWith("standard-presets/")) continue;
     const applied = await applyConsumerSurface(
       candidate,
       copy,
@@ -1006,7 +1008,7 @@ async function main(): Promise<void> {
       : [
           "scripts/config-registry.ts",
           ...(await Array.fromAsync(
-            new Bun.Glob("presets/*/preset.toml").scan({ cwd: root }),
+            new Bun.Glob("standard-presets/*/preset.toml").scan({ cwd: root }),
           )),
         ];
   const report = await runConsumerGates(root, changed);

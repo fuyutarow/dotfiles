@@ -1,5 +1,5 @@
 {
-  "extends": "./presets/typescript/tsconfig.json",
+  "extends": "./standard-presets/typescript/tsconfig.json",
   "compilerOptions": {
     "noPropertyAccessFromIndexSignature": true,
     "paths": {
@@ -10,7 +10,7 @@
   "exclude": [
     "node_modules",
     // Intentionally invalid fixtures are compiled in their own preset test process.
-    "presets/tests/fixtures",
+    "standard-presets/tests/fixtures",
     // Retired code: nothing links or runs archives/ (see archives/skills/README.md), so it is
     // outside the audit, like node_modules.
     "archives",

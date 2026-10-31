@@ -5,4 +5,4 @@ files = [
   { source = "test/Project.toml", destination = "test/Project.toml" },
   { source = "mise-tasks.toml", destination = "mise.toml" },
 ]
-check = ["bun test presets/tests/julia.test.ts"]
+check = ["bun test standard-presets/tests/julia.test.ts"]

@@ -1,7 +1,7 @@
 # Configuration presets by language
 
-`presets/` holds one configuration preset per language: typescript, python, rust,
-julia, and latex. Each language lives in `presets/<name>/` with a
+`standard-presets/` holds one configuration preset per language: typescript, python, rust,
+julia, and latex. Each language lives in `standard-presets/<name>/` with a
 `preset.toml` and its source files. The CLI discovers manifests at runtime;
 adding a preset requires a directory, with no CLI edit. Oxlint belongs to the
 TypeScript preset. The textlint preset has been removed.
@@ -27,13 +27,13 @@ files and creates destination parent directories; `--dry-run` previews writes.
 
 ## Manifest contract
 
-For example, add `presets/demo/preset.toml` and `presets/demo/config.toml`:
+For example, add `standard-presets/demo/preset.toml` and `standard-presets/demo/config.toml`:
 
 ```toml
 name = "demo"
 description = "Example project configuration"
 files = [{ source = "config.toml", destination = ".config/demo.toml" }]
-check = ["bun test presets/demo/tests"]
+check = ["bun test standard-presets/demo/tests"]
 ```
 
 - `name` must match the directory name and contain lowercase letters, digits,
@@ -58,7 +58,7 @@ check = ["bun test presets/demo/tests"]
 
 Discovery examines immediate subdirectories containing `preset.toml`; `src/`,
 `tests/`, and other directories without a manifest are ignored. Invalid manifests
-or missing sources fail discovery before any target writes. Registering `presets/`
+or missing sources fail discovery before any target writes. Registering `standard-presets/`
 as a configuration surface covers new kinds without registry edits.
 
 ## Existing presets
@@ -98,7 +98,7 @@ mise tasks, and generated-artifact ignores.
 
 ## Fixtures
 
-`bun test presets` checks manifest discovery and CLI apply/diff behavior using
+`bun test standard-presets` checks manifest discovery and CLI apply/diff behavior using
 temporary repositories outside the workspace. It also runs TypeScript and oxlint
 fixtures against the pinned tools: good cases pass and bad cases trigger their
 declared rule. The suite checks that the consumer preset does not weaken

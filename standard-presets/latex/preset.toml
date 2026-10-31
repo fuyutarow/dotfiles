@@ -6,4 +6,4 @@ files = [
   { source = "mise-latex.toml", destination = "mise.toml" },
   { source = "latex.gitignore", destination = ".gitignore" },
 ]
-check = ["bun test presets/tests/latex.test.ts"]
+check = ["bun test standard-presets/tests/latex.test.ts"]

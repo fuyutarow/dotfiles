@@ -43,7 +43,7 @@ Each rule changes what you write. Prefer the `✅` form; flag the `❌` in revie
 
 ## What is enforced, and in other repos
 
-The enforced house rules live in dotfiles' `presets/typescript/.oxlintrc.json`,
+The enforced house rules live in dotfiles' `standard-presets/typescript/.oxlintrc.json`,
 a hand-written standard oxlint config. Each custom entry explains its reason in
 `message`; disabled rules retain their reasons as JSONC comments. Bad/good
 fixtures beside the config prove every custom entry.

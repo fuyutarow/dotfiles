@@ -23,13 +23,13 @@ import housePackage from "../typescript/package.json";
 const ROOT = resolve(import.meta.dir, "../..");
 const scratch = await mkdtemp(join(tmpdir(), "preset-manifests-"));
 const fixtureRoot = join(scratch, "dotfiles");
-const cliPath = join(fixtureRoot, "presets/src/cli.ts");
+const cliPath = join(fixtureRoot, "standard-presets/src/cli.ts");
 
 // These tests run several real CLI processes, each with its own 30-second deadline.
 setDefaultTimeout(60_000);
 
 beforeAll(async () => {
-  await mkdir(join(fixtureRoot, "presets"), { recursive: true });
+  await mkdir(join(fixtureRoot, "standard-presets"), { recursive: true });
   for (const directory of [
     "src",
     "typescript",
@@ -39,23 +39,23 @@ beforeAll(async () => {
     "latex",
   ])
     await cp(
-      join(ROOT, "presets", directory),
-      join(fixtureRoot, "presets", directory),
+      join(ROOT, "standard-presets", directory),
+      join(fixtureRoot, "standard-presets", directory),
       { recursive: true },
     );
   for (const directory of ["agents", "scripts", "node_modules"])
     await symlink(join(ROOT, directory), join(fixtureRoot, directory));
-  await mkdir(join(fixtureRoot, "presets/demo"));
+  await mkdir(join(fixtureRoot, "standard-presets/demo"));
   await writeFile(
-    join(fixtureRoot, "presets/demo/preset.toml"),
+    join(fixtureRoot, "standard-presets/demo/preset.toml"),
     `name = "demo"
 description = "Demo configuration"
 files = [{ source = "config.toml", destination = ".config/demo.toml" }]
-check = ["bun test presets/demo/tests"]
+check = ["bun test standard-presets/demo/tests"]
 `,
   );
   await writeFile(
-    join(fixtureRoot, "presets/demo/config.toml"),
+    join(fixtureRoot, "standard-presets/demo/config.toml"),
     "enabled = true\n",
   );
 });
@@ -87,7 +87,7 @@ describe("manifest preset CLI", () => {
   test("every language applies to an empty repo and immediately has no diff", async () => {
     const languages = ["typescript", "python", "rust", "julia", "latex"];
     const listed = Bun.spawn(
-      [process.execPath, join(ROOT, "presets/src/cli.ts"), "list"],
+      [process.execPath, join(ROOT, "standard-presets/src/cli.ts"), "list"],
       {
         stdout: "pipe",
         stderr: "pipe",
@@ -174,7 +174,10 @@ describe("manifest preset CLI", () => {
       false,
     );
     expect(text).toBe(
-      await readFile(join(ROOT, "presets/typescript/.oxlintrc.json"), "utf8"),
+      await readFile(
+        join(ROOT, "standard-presets/typescript/.oxlintrc.json"),
+        "utf8",
+      ),
     );
     expect(text).toContain('"./house.oxlintrc.json"');
     expect(text).not.toContain(ROOT);
@@ -182,7 +185,7 @@ describe("manifest preset CLI", () => {
     const house = await readFile(housePath, "utf8");
     expect(house).toBe(
       await readFile(
-        join(ROOT, "presets/typescript/house.oxlintrc.json"),
+        join(ROOT, "standard-presets/typescript/house.oxlintrc.json"),
         "utf8",
       ),
     );
@@ -291,7 +294,10 @@ describe("manifest preset CLI", () => {
   });
 
   test("invalid requirement sources fail discovery before any target writes", async () => {
-    const source = join(fixtureRoot, "presets/typescript/package.json");
+    const source = join(
+      fixtureRoot,
+      "standard-presets/typescript/package.json",
+    );
     const original = await readFile(source, "utf8");
     for (const [bytes, diagnostic] of [
       ["{invalid", "requiredJsonKeys needs a JSON object"],
@@ -357,7 +363,7 @@ describe("manifest preset CLI", () => {
   }, 60_000);
 
   test("missing source reports its path and prevents writes", async () => {
-    const path = join(fixtureRoot, "presets/demo/config.toml");
+    const path = join(fixtureRoot, "standard-presets/demo/config.toml");
     await rm(path);
     const repo = await target();
     const result = await run("apply", "demo", "--to", repo);
@@ -389,7 +395,7 @@ test("TypeScript apply delivers the single Bun engines declaration", async () =>
   expect((await run("apply", "typescript", "--to", consumer)).exit).toBe(0);
   const delivered = await readFile(join(consumer, "package.json"), "utf8");
   const source = await readFile(
-    join(ROOT, "presets/typescript/package.json"),
+    join(ROOT, "standard-presets/typescript/package.json"),
     "utf8",
   );
   expect(delivered).toBe(source);

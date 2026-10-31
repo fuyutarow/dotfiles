@@ -15,7 +15,7 @@ import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { handleKnipResult } from "../typescript/lint-knip.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
-const PRESET = join(ROOT, "presets/typescript");
+const PRESET = join(ROOT, "standard-presets/typescript");
 const SCRATCH = await mkdtemp(join(tmpdir(), "preset-knip-"));
 afterAll(() => rm(SCRATCH, { recursive: true, force: true }));
 

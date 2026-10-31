@@ -62,10 +62,12 @@ test("standard React override scopes hook diagnostics to declared packages", asy
     "lint-oxlint.ts",
     "house-plugin.js",
   ])
-    await cp(join(ROOT, "presets/typescript", file), join(repo, file));
+    await cp(join(ROOT, "standard-presets/typescript", file), join(repo, file));
   await symlink(join(ROOT, "node_modules"), join(repo, "node_modules"));
   const base = Bun.JSONC.parse(
-    await Bun.file(join(ROOT, "presets/typescript/house.oxlintrc.json")).text(),
+    await Bun.file(
+      join(ROOT, "standard-presets/typescript/house.oxlintrc.json"),
+    ).text(),
   );
   const checked = Config.safeParse(base);
   if (!checked.success) expect.unreachable(checked.error.message);
@@ -167,11 +169,14 @@ export function Bad({ enabled, value }: { enabled: boolean; value: string }) {
 test("lint runner fails loudly for silent exit 0, invalid reports, and zero files", async () => {
   const repo = await mkdtemp(join(scratch, "silent-"));
   await cp(
-    join(ROOT, "presets/typescript/lint-oxlint.ts"),
+    join(ROOT, "standard-presets/typescript/lint-oxlint.ts"),
     join(repo, "lint-oxlint.ts"),
   );
   // The fixture codec resolves its pinned dependencies through this link.
-  await symlink(join(ROOT, "presets/typescript/zod.ts"), join(repo, "zod.ts"));
+  await symlink(
+    join(ROOT, "standard-presets/typescript/zod.ts"),
+    join(repo, "zod.ts"),
+  );
   await mkdir(join(repo, "node_modules/.bin"), { recursive: true });
   await symlink(
     join(ROOT, "node_modules/cleye"),

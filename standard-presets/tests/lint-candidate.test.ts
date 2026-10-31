@@ -75,7 +75,7 @@ test.each([".", "tools"])(
         return { out, err, exit };
       };
       const template = await readFile(
-        join(root, "presets/typescript/mise-tasks.toml"),
+        join(root, "standard-presets/typescript/mise-tasks.toml"),
         "utf8",
       );
       expect(template).toContain('run = "lint-ts-candidate"');
@@ -107,15 +107,15 @@ test.each([".", "tools"])(
             .join(""),
       );
       await cp(
-        join(root, "presets/typescript/lint-oxlint.ts"),
+        join(root, "standard-presets/typescript/lint-oxlint.ts"),
         join(toolchain, "lint-oxlint.ts"),
       );
       await cp(
-        join(root, "presets/typescript/zod.ts"),
+        join(root, "standard-presets/typescript/zod.ts"),
         join(toolchain, "zod.ts"),
       );
       await cp(
-        join(root, "presets/typescript/package.json"),
+        join(root, "standard-presets/typescript/package.json"),
         join(toolchain, "package.json"),
       );
       await symlink(

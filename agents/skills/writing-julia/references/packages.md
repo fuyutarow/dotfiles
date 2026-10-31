@@ -35,7 +35,7 @@ These references own backend choices; declare selected dependencies through `pac
 - `Runic` — code formatter. Zero-configuration by design (formatting is fixed, not tunable).
   Run it on any package you produce; review BlueStyle naming separately under architecture.md
   §10.1.1 because formatting does not rename identifiers.
-  Copy its format/check tasks from [presets/julia/mise-tasks.toml](../../../../presets/julia/mise-tasks.toml);
+  Copy its format/check tasks from [standard-presets/julia/mise-tasks.toml](../../../../standard-presets/julia/mise-tasks.toml);
   there is no formatter settings file to copy.
 
 ## Data structures & parallelism (toolchain.md §2.9)

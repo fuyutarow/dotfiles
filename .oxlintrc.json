@@ -1,9 +1,9 @@
 {
-  "extends": ["./presets/typescript/house.oxlintrc.json"],
+  "extends": ["./standard-presets/typescript/house.oxlintrc.json"],
   "jsPlugins": [
     {
       "name": "house",
-      "specifier": "./presets/typescript/house-plugin.js"
+      "specifier": "./standard-presets/typescript/house-plugin.js"
     },
     {
       "name": "eslint-js",
@@ -11,15 +11,15 @@
     },
     {
       "name": "dotfiles-js",
-      "specifier": "./presets/typescript/dotfiles-plugin.js"
+      "specifier": "./standard-presets/typescript/dotfiles-plugin.js"
     }
   ],
   "ignorePatterns": [
     "node_modules",
     "archives",
     "agents/claude/hooks/repo-retrieve.ts",
-    "presets/tests/fixtures",
-    "presets/typescript/zod.ts",
+    "standard-presets/tests/fixtures",
+    "standard-presets/typescript/zod.ts",
     "agents/skills/writing-typescript/assets/consumer-repo",
     "agents/hooks/vendor",
     ".obsidian"

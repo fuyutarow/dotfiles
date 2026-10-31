@@ -23,7 +23,7 @@ pre-commit) — a minor bump can silently change lint or format output out from 
 
 ## 2. THE HOUSE STRICT CONFIG
 
-Use the [canonical pyproject.toml](../../../../presets/python/pyproject.toml) for the house Ruff settings. Keep the target Python floor aligned with the project metadata.
+Use the [canonical pyproject.toml](../../../../standard-presets/python/pyproject.toml) for the house Ruff settings. Keep the target Python floor aligned with the project metadata.
 
 The `DTZ` gate is the *mechanical* enforcement; the argument for why naive datetimes rot lives
 in `idioms.md`'s kill-list row — one pointer, don't restate it here.
@@ -55,7 +55,7 @@ auto-fixing, even though the fix succeeded.
 pre-commit **mutates locally**, and hook order matters (official guidance: lint-fix runs before
 format — a fix can reshape code that the formatter then normalizes; the reverse order can drift):
 
-Use the [canonical hook configuration](../../../../presets/python/.pre-commit-config.yaml); lint fixes precede formatting.
+Use the [canonical hook configuration](../../../../standard-presets/python/.pre-commit-config.yaml); lint fixes precede formatting.
 
 pre-commit vs prek:
 

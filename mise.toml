@@ -247,12 +247,12 @@ dir = "{{config_root}}"
 description = "Batched-diagnostics floor: every deny site in a PreToolUse gate declares FATAL / SINGLE-AXIS / BATCHED, and a BATCHED gate carries a test proving two violations return in one decision"
 run = "bun scripts/harness/gate-diagnostics-check.ts agents/claude/hooks && bun scripts/harness/gate-diagnostics-check.ts agents/hooks"
 
-# The hand-written TS lint config lives in presets/typescript/.oxlintrc.json.
+# The hand-written TS lint config lives in standard-presets/typescript/.oxlintrc.json.
 [tasks.preset]
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "List, apply, sync or compare project configuration presets: mise run preset -- list|apply|sync|diff <name> --to <dir>"
-run = "bun presets/src/cli.ts"
+run = "bun standard-presets/src/cli.ts"
 
 # INV-8 (README → Design): data flows one way — declaration → render → deployed → runtime — and
 # every file has ONE writer. This gate fails when a hand-written declaration carries content a
@@ -468,7 +468,7 @@ run = "bun test scripts/tests tools/*/tests"
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Prove shared preset fixture acceptance/rejection and strictness parity"
-run = "bun test presets"
+run = "bun test standard-presets"
 
 # Explicit invocation admits the live audit; directory discovery stays repository-only.
 # Deliberately outside test/check/gate:land.

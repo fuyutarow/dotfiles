@@ -12,7 +12,7 @@ afterAll(async () => {
 
 async function run(...args: string[]) {
   const child = Bun.spawn(
-    [process.execPath, join(ROOT, "presets/src/cli.ts"), ...args],
+    [process.execPath, join(ROOT, "standard-presets/src/cli.ts"), ...args],
     { cwd: scratch, stdout: "pipe", stderr: "pipe", timeout: 30_000 },
   );
   const [stdout, stderr, exit] = await Promise.all([
@@ -41,7 +41,7 @@ test("Cargo preset applies to an empty repository, preserves policy, and detects
   expect((await run("apply", "rust", "--to", scratch)).exit).toBe(0);
   for (const file of fixture.data.files)
     expect(await Bun.file(join(scratch, file)).bytes()).toEqual(
-      await Bun.file(join(ROOT, "presets/rust", file)).bytes(),
+      await Bun.file(join(ROOT, "standard-presets/rust", file)).bytes(),
     );
   const manifest = Bun.TOML.parse(
     await Bun.file(join(scratch, "Cargo.toml")).text(),

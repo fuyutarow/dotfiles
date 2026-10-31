@@ -13,7 +13,7 @@ afterAll(async () => {
 
 async function run(...args: string[]) {
   const child = Bun.spawn(
-    [process.execPath, join(ROOT, "presets/src/cli.ts"), ...args],
+    [process.execPath, join(ROOT, "standard-presets/src/cli.ts"), ...args],
     { cwd: scratch, stdout: "pipe", stderr: "pipe", timeout: 30_000 },
   );
   const [stdout, stderr, exit] = await Promise.all([
@@ -29,7 +29,7 @@ describe("uv preset", () => {
     const listed = await run("list");
     expect(listed.exit).toBe(0);
     expect(listed.stdout).toMatch(/^python\t/mu);
-    const catalog = await discoverPresets(join(ROOT, "presets"));
+    const catalog = await discoverPresets(join(ROOT, "standard-presets"));
     if (!catalog.ok) expect.unreachable(catalog.error);
     const preset = catalog.presets.find((entry) => entry.name === "python");
     if (preset === undefined) expect.unreachable("uv manifest missing");
@@ -68,7 +68,7 @@ describe("uv preset", () => {
   }, 60_000);
 
   test("preserves the prescribed values and keeps optional examples separate", async () => {
-    const directory = join(ROOT, "presets/python");
+    const directory = join(ROOT, "standard-presets/python");
     expect(
       Bun.TOML.parse(await Bun.file(join(directory, "pyproject.toml")).text()),
     ).toMatchObject({

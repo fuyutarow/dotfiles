@@ -40,7 +40,7 @@ test("production roots follow the repository's entry declarations", async () => 
     "agents/codex/codex-update.ts", // topgrade
     "agents/codex/codex-wsl.ts", // generated launcher
     "agents/codex/windows-hook.ts", // Windows hook bridge
-    "presets/typescript/lint-knip.ts", // copied preset
+    "standard-presets/typescript/lint-knip.ts", // copied preset
     "scripts/guest-capacity-recover.ts", // systemd service
     "scripts/ws-gc-log.ts", // systemd service
     "tools/shared/src/gpu-stall-notify.ts", // systemd service

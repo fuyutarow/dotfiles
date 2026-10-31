@@ -12,7 +12,7 @@ afterAll(async () => {
 
 async function run(...args: string[]) {
   const child = Bun.spawn(
-    [process.execPath, join(ROOT, "presets/src/cli.ts"), ...args],
+    [process.execPath, join(ROOT, "standard-presets/src/cli.ts"), ...args],
     { cwd: scratch, stdout: "pipe", stderr: "pipe", timeout: 30_000 },
   );
   const [stdout, stderr, exit] = await Promise.all([
@@ -45,7 +45,7 @@ test("LaTeX preset applies to an empty repo and detects drift", async () => {
   );
   for (const [source, destination] of parsed.data)
     expect(await Bun.file(join(repo, destination)).bytes()).toEqual(
-      await Bun.file(join(ROOT, "presets/latex", source)).bytes(),
+      await Bun.file(join(ROOT, "standard-presets/latex", source)).bytes(),
     );
   const tasks = Bun.TOML.parse(await Bun.file(join(repo, "mise.toml")).text());
   expect(tasks).toHaveProperty("env.LATEX_DIR", "papers/2606_001-title_name");

@@ -2,6 +2,6 @@
 [[consumers]]
 name = "example"
 root = "~/Workspace/example"
-surfaces = ["presets/typescript"]
+surfaces = ["standard-presets/typescript"]
 command = ["mise", "run", "lint:ts"]
 timeout_ms = 120000

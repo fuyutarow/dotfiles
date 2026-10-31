@@ -19,7 +19,7 @@ const SCRIPT = join(ROOT, "scripts/gate-changed.ts");
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "gate-changed-test-"));
   await symlink(join(ROOT, "node_modules"), join(root, "node_modules"));
-  await symlink(join(ROOT, "presets"), join(root, "presets"));
+  await symlink(join(ROOT, "standard-presets"), join(root, "standard-presets"));
   for (const path of [".oxlintrc.json", ".oxfmtrc.json"])
     await Bun.write(join(root, path), Bun.file(join(ROOT, path)));
   await mkdir(join(root, "lint"));
@@ -262,7 +262,7 @@ async function withRepository(
     await jj(["git", "init", "--no-colocate", root]);
     await Bun.write(
       join(root, ".gitignore"),
-      ".jj/\nnode_modules\npresets\nignored/\n*.ignored.ts\n",
+      ".jj/\nnode_modules\nstandard-presets\nignored/\n*.ignored.ts\n",
     );
     await Bun.write(join(root, "tracked.ts"), "export const value = 1;\n");
     await Bun.write(join(root, "deleted.ts"), "export const deleted = 1;\n");
@@ -311,7 +311,7 @@ test(
       await jj(["status"]);
       await Bun.write(
         join(root, ".gitignore"),
-        ".jj/\nnode_modules\npresets\nignored/\n*.ignored.ts\nsnapshot.ts\n",
+        ".jj/\nnode_modules\nstandard-presets\nignored/\n*.ignored.ts\nsnapshot.ts\n",
       );
       await Bun.write(join(root, "tracked.ts"), "export const value = 2;\n");
       await rm(join(root, "deleted.ts"));

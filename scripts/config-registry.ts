@@ -850,7 +850,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["presets/consumers.toml"],
+    sources: ["standard-presets/consumers.toml"],
     deployed: "the checkout",
     consumer: "scripts/land.ts shared-surface consumer commit gates",
     writer: "human, in the repo",
@@ -878,13 +878,13 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["presets", ".oxlintrc.json"],
+    sources: ["standard-presets", ".oxlintrc.json"],
     deployed: "the checkout (root config extends the hand-written preset)",
     consumer:
       "preset CLI and per-language configuration consumers; oxlint (mise run lint:ts)",
     writer:
-      "presets/typescript/.oxlintrc.json owns the shared lint config; root extends it locally; consumers receive committed copies",
-    verify: "bun test presets",
+      "standard-presets/typescript/.oxlintrc.json owns the shared lint config; root extends it locally; consumers receive committed copies",
+    verify: "bun test standard-presets",
   },
   {
     kind: "in-place",

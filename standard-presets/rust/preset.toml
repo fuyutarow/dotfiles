@@ -7,4 +7,4 @@ files = [
   { source = "clippy.toml", destination = "clippy.toml" },
   { source = "mise.toml", destination = "mise.toml" },
 ]
-check = ["bun test presets/tests/rust.test.ts"]
+check = ["bun test standard-presets/tests/rust.test.ts"]

@@ -16,7 +16,7 @@ import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { discoverPresets, jsonKey } from "./manifests.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
-const PRESETS = join(ROOT, "presets");
+const PRESETS = join(ROOT, "standard-presets");
 
 function exists(path: string): Promise<boolean> {
   return access(path).then(

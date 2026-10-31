@@ -15,7 +15,7 @@ timeout_ms = 120000
 name = "firedancer"
 root = "~/Workspace/firedancer"
 trunk = "alpha"
-surfaces = ["presets/typescript"]
+surfaces = ["standard-presets/typescript"]
 setup = ["bun", "install", "--frozen-lockfile"]
 # Consumers lint their owned configuration; compare preset drift explicitly.
 command = ["mise", "run", "lint:ts"]
@@ -25,7 +25,7 @@ timeout_ms = 120000
 name = "agx"
 root = "~/Workspace/agx"
 trunk = "alpha"
-surfaces = ["presets/typescript"]
+surfaces = ["standard-presets/typescript"]
 setup = ["bun", "install", "--frozen-lockfile"]
 # Run agx's TypeScript lint tasks without its full formatting and test suite.
 command = ["sh", "-c", "mise run lint:ts && mise run lint:all && mise run lint:knip"]

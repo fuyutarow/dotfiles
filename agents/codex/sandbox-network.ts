@@ -1,6 +1,6 @@
 // The declaration is repo-owned; ~/.codex/config.toml remains Codex-owned. Read with Bun's real
 // TOML parser, then edit only the declared top-level assignments to preserve every other byte.
-import { existsSync, readFileSync } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { attempt } from "../hooks/attempt.ts";
 import { jsonOf, z } from "../hooks/zod.ts";
@@ -140,8 +140,8 @@ async function declaredMcpServers(
   dotfiles: string,
 ): Promise<Record<string, McpServer> | Error> {
   const path = join(dotfiles, ".mcp.json");
-  const parsed = await attempt(() =>
-    jsonOf(McpDeclarationSchema).safeParse(readFileSync(path, "utf8")),
+  const parsed = await attempt(async () =>
+    jsonOf(McpDeclarationSchema).safeParse(await readFile(path, "utf8")),
   );
   if (!parsed.ok || !parsed.value.success)
     return new Error(`${path}: unreadable or invalid MCP declaration`);
@@ -171,8 +171,8 @@ export async function readDeclared(
   dotfiles: string,
 ): Promise<Declared | Error> {
   const path = join(dotfiles, "agents/codex/config.declared.toml");
-  const parsed = await attempt(() =>
-    Bun.TOML.parse(readFileSync(path, "utf8")),
+  const parsed = await attempt(async () =>
+    Bun.TOML.parse(await readFile(path, "utf8")),
   );
   if (!parsed.ok) return new Error(`${path}: unreadable or not TOML`);
   const result = values(parsed.value);
@@ -215,7 +215,7 @@ function managedMcpNames(contents: string | null): string[] {
 
 export async function readLive(home: string): Promise<Live | Error> {
   const path = join(home, ".codex/config.toml");
-  if (!existsSync(path)) {
+  if (!(await attempt(() => access(path))).ok) {
     return {
       contents: null,
       networkAccess: null,
@@ -229,7 +229,7 @@ export async function readLive(home: string): Promise<Live | Error> {
       managedMcpNames: [],
     };
   }
-  const read = await attempt(() => readFileSync(path, "utf8"));
+  const read = await attempt(() => readFile(path, "utf8"));
   if (!read.ok) return new Error(`${path}: unreadable or not TOML`);
   const parsed = await attempt(() => Bun.TOML.parse(read.value));
   if (!parsed.ok) return new Error(`${path}: unreadable or not TOML`);

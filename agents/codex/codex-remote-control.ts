@@ -1,3 +1,4 @@
+import { consola } from "consola";
 // `mise run codex:remote-control` — converge the Codex app-server daemon's remote control to
 // agents/codex/app-server.toml. Idempotent: no drift → no command (so a live daemon is never
 // restarted for nothing). On managed-daemon drift it runs `codex app-server daemon
@@ -15,18 +16,18 @@ const home = process.env["HOME"] ?? homedir();
 const dotfiles = process.env["DOTFILES"] ?? join(home, "dotfiles");
 
 if (Bun.which("codex") === null) {
-  console.log("codex-remote-control: codex absent — skipped");
+  consola.log("codex-remote-control: codex absent — skipped");
   process.exit(0);
 }
 const declared = await readDeclared(dotfiles);
 if (declared instanceof Error) {
-  console.error(`codex-remote-control: ${declared.message}`);
+  consola.error(`codex-remote-control: ${declared.message}`);
   process.exit(2);
 }
 const live = await readLive(home);
 const before = drift(declared, live);
 if (live.unmanaged === true) {
-  console.error(
+  consola.error(
     [
       `codex-remote-control: drift — ${before.join("; ")}`,
       "codex-remote-control: unmanaged app-server detected; daemon settings cannot synchronize it safely, so no change was made.",
@@ -36,12 +37,12 @@ if (live.unmanaged === true) {
   process.exit(1);
 }
 if (before.length === 0) {
-  console.log(
+  consola.log(
     `codex-remote-control: remote control ${declared ? "enabled" : "disabled"} — matches the declaration`,
   );
   process.exit(0);
 }
-console.log(`codex-remote-control: drift — ${before.join("; ")}`);
+consola.log(`codex-remote-control: drift — ${before.join("; ")}`);
 const verb = declared ? "enable-remote-control" : "disable-remote-control";
 const proc = Bun.spawn(["codex", "app-server", "daemon", verb], {
   stdout: "inherit",
@@ -51,9 +52,9 @@ const proc = Bun.spawn(["codex", "app-server", "daemon", verb], {
 await proc.exited;
 const after = drift(declared, await readLive(home));
 if (after.length > 0) {
-  console.error(
+  consola.error(
     `codex-remote-control: still drifting after '${verb}' — ${after.join("; ")}`,
   );
   process.exit(1);
 }
-console.log(`codex-remote-control: converged (${verb})`);
+consola.log(`codex-remote-control: converged (${verb})`);

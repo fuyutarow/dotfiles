@@ -1,3 +1,4 @@
+import { consola } from "consola";
 /**
  * Reconcile the declared Codex CLI update with the app-server version gap it can leave behind.
  *
@@ -101,7 +102,7 @@ async function daemonVersion(): Promise<DaemonVersion | null> {
 // the WSL shim would wrongly treat the app-owned executable as a standalone payload.
 const runtime = await resolveRuntime(DOTFILES);
 if (runtime.provider === "windows-desktop") {
-  console.log(
+  consola.log(
     "codex: Windows desktop owns updates — standalone update skipped",
   );
   const config = Bun.spawn(["bun", `${import.meta.dir}/codex-config.ts`], {
@@ -115,7 +116,7 @@ if (runtime.provider === "windows-desktop") {
 
 // Shared with macOS, where codex may simply be absent: skip, never fail the topgrade run.
 if (Bun.which(CODEX) === null) {
-  console.log("codex absent — skipped");
+  consola.log("codex absent — skipped");
   process.exit(0);
 }
 
@@ -123,7 +124,7 @@ let updateCode = 0;
 if (hostKind() === "wsl") {
   // Brewfile.core declares the WSL standalone CLI as a Homebrew cask. Topgrade's brew_cask
   // step owns errors from that update; this follow-up must not mask them with a second updater.
-  console.log("codex: Homebrew owns WSL CLI updates — self-update skipped");
+  consola.log("codex: Homebrew owns WSL CLI updates — self-update skipped");
 } else {
   updateCode = (await run(["update"])).code;
 }
@@ -133,7 +134,7 @@ const running = v?.appServerVersion;
 const current = v?.managedCodexVersion;
 
 if (running !== undefined && current !== undefined && running !== current) {
-  console.log(
+  consola.log(
     `codex: app-server ${running} != current ${current} — restarting daemon`,
   );
   const proc = Bun.spawn([CODEX, "app-server", "daemon", "restart"], {
@@ -145,7 +146,7 @@ if (running !== undefined && current !== undefined && running !== current) {
     // Measured 2026-08-24: a daemon launched directly (and reparented to init) is refused with
     // "app server is running but is not managed by codex app-server daemon", so the gap this
     // step exists to close stays open. Report the recovery; let a human pick the moment.
-    console.error(
+    consola.error(
       [
         `codex: 'daemon restart' refused — app-server ${running} was not started by`,
         `  'codex app-server daemon', so only a manual replacement closes the gap.`,

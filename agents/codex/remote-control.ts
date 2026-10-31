@@ -9,7 +9,7 @@
 //              exist (measured 2026-10-01).
 //   running    the live daemon's argv carries `--remote-control` (pid from app-server.pid).
 //              null = no daemon running, which is not drift: the next start reads `persisted`.
-import { existsSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { jsonOf, z } from "../hooks/zod.ts";
 import { attempt } from "../hooks/attempt.ts";
@@ -27,8 +27,8 @@ const DAEMON_DIR = (home: string) => join(home, ".codex/app-server-daemon");
 /** The declared value, or an Error naming the broken declaration (fail closed). */
 export async function readDeclared(dotfiles: string): Promise<boolean | Error> {
   const path = join(dotfiles, "agents/codex/app-server.toml");
-  const r = await attempt((): unknown =>
-    Bun.TOML.parse(readFileSync(path, "utf8")),
+  const r = await attempt(async (): Promise<unknown> =>
+    Bun.TOML.parse(await readFile(path, "utf8")),
   );
   if (!r.ok) return new Error(`${path}: unreadable or not TOML`);
   const table = RecordSchema.safeParse(r.value);
@@ -40,8 +40,7 @@ export async function readDeclared(dotfiles: string): Promise<boolean | Error> {
 }
 
 async function readJson(path: string): Promise<Record<string, unknown> | null> {
-  if (!existsSync(path)) return null;
-  const r = await attempt(() => readFileSync(path, "utf8"));
+  const r = await attempt(() => readFile(path, "utf8"));
   if (!r.ok) return null;
   const parsed = jsonOf(RecordSchema).safeParse(r.value);
   return parsed.success ? parsed.data : null;

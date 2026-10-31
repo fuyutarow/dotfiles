@@ -11,23 +11,23 @@ const dotfiles =
   process.env["DOTFILES"] ?? join(process.env["HOME"] ?? homedir(), "dotfiles");
 const checkOnly = process.argv.includes("--check");
 if (process.argv.slice(2).some((arg) => arg !== "--check")) {
-  console.error("codex:config: usage: codex-config.ts [--check]");
+  process.stderr.write("codex:config: usage: codex-config.ts [--check]\n");
   process.exit(2);
 }
 const declared = await readDeclared(dotfiles);
 if (declared instanceof Error) {
-  console.error(`codex:config: ${declared.message}`);
+  process.stderr.write(`codex:config: ${declared.message}\n`);
   process.exit(2);
 }
 const resolvedHome = await attempt(() => configHome(dotfiles));
 if (!resolvedHome.ok) {
-  console.error(`codex:config: ${errorMessage(resolvedHome.error)}`);
+  process.stderr.write(`codex:config: ${errorMessage(resolvedHome.error)}\n`);
   process.exit(2);
 }
 const home = resolvedHome.value;
 const before = await readLive(home);
 if (before instanceof Error) {
-  console.error(`codex:config: ${before.message}`);
+  process.stderr.write(`codex:config: ${before.message}\n`);
   process.exit(2);
 }
 const differences = drift(declared, before);
@@ -38,7 +38,7 @@ if (differences.length === 0) {
 }
 const path = join(home, ".codex/config.toml");
 if (checkOnly) {
-  console.error(`codex:config: drift — ${differences.join("; ")}`);
+  process.stderr.write(`codex:config: drift — ${differences.join("; ")}\n`);
   process.exit(1);
 }
 const write = await attempt(async () => {
@@ -46,14 +46,14 @@ const write = await attempt(async () => {
   await Bun.write(path, edit(before.contents, declared));
 });
 if (!write.ok) {
-  console.error(
-    `codex:config: cannot write ${path}: ${errorMessage(write.error)}`,
+  process.stderr.write(
+    `codex:config: cannot write ${path}: ${errorMessage(write.error)}\n`,
   );
   process.exit(2);
 }
 const after = await readLive(home);
 if (after instanceof Error || drift(declared, after).length > 0) {
-  console.error("codex:config: still drifting after write");
+  process.stderr.write("codex:config: still drifting after write\n");
   process.exit(1);
 }
 process.stdout.write(`codex:config: updated ${path}\n`);

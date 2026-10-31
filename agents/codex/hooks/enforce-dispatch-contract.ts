@@ -5,7 +5,7 @@ import { hookJson, hookStderr } from "./lib.ts";
 // The allowlist is mechanical only; role rationale belongs in orchestrating-agents. The generation
 // floor is shared with enforce-model-floor.ts (agents/hooks/model-floor.toml).
 
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { attempt } from "../../hooks/attempt.ts";
 import {
@@ -119,7 +119,7 @@ function output(decision: "allow" | "deny", reason: string): void {
 }
 
 async function main(): Promise<void> {
-  const parsed = await attempt(() => parseJson(readFileSync(0, "utf8")));
+  const parsed = await attempt(async () => parseJson(await Bun.stdin.text()));
   if (!parsed.ok) denyMalformed("invalid JSON payload");
   if (parsed.value === undefined) denyMalformed("invalid JSON payload");
   const payload: unknown = parsed.value;
@@ -144,8 +144,8 @@ async function main(): Promise<void> {
   const model = str(rawModel) ?? null;
   const effort = str(rawEffort) ?? null;
 
-  const floors = await attempt(() =>
-    parseFloorConfig(Bun.TOML.parse(readFileSync(CONFIG_PATH, "utf8"))),
+  const floors = await attempt(async () =>
+    parseFloorConfig(Bun.TOML.parse(await readFile(CONFIG_PATH, "utf8"))),
   );
   if (!floors.ok) denyMalformed(`cannot read ${CONFIG_PATH}`);
   if (!floors.value.ok)

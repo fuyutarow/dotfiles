@@ -63,7 +63,7 @@ function fail(message: string): never {
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
-    console.error("FATAL: unknown option '--__proto__'");
+    process.stderr.write("FATAL: unknown option '--__proto__'\n");
     process.exit(2);
   }
 };

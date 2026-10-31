@@ -1199,6 +1199,14 @@ async function runDecision(
   const recovery = await waitForRecoveryVerdict(
     options.recoveryWaitSeconds ?? Math.min(manifest.walltime_seconds, 1800),
   );
+  if (recovery.kind === "cancelled") {
+    report(recovery.message);
+    return ok({
+      ok: false,
+      exitCode: recovery.signal === "SIGTERM" ? 143 : 130,
+      reason: "cancelled",
+    });
+  }
   if (recovery.kind === "refuse")
     return ok(failure(70, recovery.message, report));
   report(recovery.message);

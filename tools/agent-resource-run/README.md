@@ -76,7 +76,8 @@ the manifest walltime and 30 minutes. `--recovery-wait-seconds` overrides this l
 (0 through 86400 seconds). Progress goes to stderr even without a terminal; its next
 verdict time is an estimate based on the one-minute timer, whose accuracy and service
 duration can delay a write. An emergency still refuses immediately. Once waiting,
-missing, invalid or stale verdicts cannot release the HOLD. Ctrl-C cancels the wait.
+missing, invalid or stale verdicts cannot release the HOLD. Ctrl-C or SIGTERM cancels
+the wait, reports the verdict age and elapsed wait, and exits 130 or 143 respectively.
 The inherited admission receipt and its digest remain available to example-search's gate;
 each scope exposes its own cgroup v2 pids.peak. CPU_IDS is compatibility metadata,
 not exclusive affinity. Thread-count environment variables remain bounded.

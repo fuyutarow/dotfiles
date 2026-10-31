@@ -20,7 +20,8 @@ const RecoveryVerdictSchema = z.object({
 });
 
 export type RecoveryVerdictAssessment = {
-  kind: "allow" | "refuse";
+  kind: "allow" | "refuse" | "cancelled";
+  signal?: "SIGINT" | "SIGTERM";
   message: string;
   state?: "ok" | "hold" | "emergency";
   recordedAtMs?: number;
@@ -105,6 +106,21 @@ export async function waitForRecoveryVerdict(
   const read = options.read ?? readRecoveryVerdict;
   const progress =
     options.progress ?? ((line: string) => process.stderr.write(`${line}\n`));
+  const controller = new AbortController();
+  const onInt = () => {
+    controller.abort("SIGINT");
+  };
+  const onTerm = () => {
+    controller.abort("SIGTERM");
+  };
+  process.on("SIGINT", onInt);
+  process.on("SIGTERM", onTerm);
+  using _signals = {
+    [Symbol.dispose]: () => {
+      process.off("SIGINT", onInt);
+      process.off("SIGTERM", onTerm);
+    },
+  };
   let assessment = assessRecoveryVerdict(await read());
   if (assessment.state !== "hold") return assessment;
   const heldAt = assessment.recordedAtMs ?? 0;
@@ -121,14 +137,36 @@ export async function waitForRecoveryVerdict(
     progress(
       `WAIT fresh OK ${assessment.message} next_expected_estimate=${next} (timer 1min, accuracy 15s; service duration varies)`,
     );
+    if (controller.signal.aborted) {
+      const detail = assessRecoveryVerdict(await read());
+      return {
+        kind: "cancelled",
+        signal: controller.signal.reason === "SIGTERM" ? "SIGTERM" : "SIGINT",
+        message: `WAIT cancelled ${detail.state === "hold" ? detail.message : last.message}; waited=${((performance.now() - start) / 1000).toFixed(3)}s`,
+      };
+    }
     const remaining = deadline - performance.now();
     if (remaining <= 0)
       return {
         kind: "refuse",
         message: `${assessment.message}; waited=${((performance.now() - start) / 1000).toFixed(3)}s`,
       };
-    await Bun.sleep(Math.min(options.pollMs ?? 1000, remaining));
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(
+        done,
+        Math.min(options.pollMs ?? 1000, remaining),
+      );
+      function done() {
+        clearTimeout(timer);
+        controller.signal.removeEventListener("abort", done);
+        resolve();
+      }
+      controller.signal.addEventListener("abort", done, { once: true });
+      if (controller.signal.aborted) done();
+    });
+    if (controller.signal.aborted) continue;
     assessment = assessRecoveryVerdict(await read());
+    if (controller.signal.aborted) continue;
     if (assessment.state === "emergency") return assessment;
     if (
       assessment.state === "ok" &&

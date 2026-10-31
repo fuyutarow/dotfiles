@@ -481,7 +481,7 @@ describe("legacy enriched Run row", () => {
     marker(dir, "a", process.pid, "lint batch 7");
     const out = await render(dir);
     expect(out).toMatch(
-      /^luna-high 1m3\d+s \$– tkt_lint batch 7 │ working · no event yet$/mu,
+      /^luna-high 1m3\d+s \$n\/a \(not reported\) tkt_lint batch 7 │ working · no event yet$/mu,
     );
   });
 
@@ -489,7 +489,7 @@ describe("legacy enriched Run row", () => {
     const dir = join(scratch, "own-session");
     marker(dir, "own", process.pid, "my worker", 90, SESSION);
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s \$– tkt_my worker │ working · no event yet$/mu,
+      /^luna-high 1m3\d+s \$n\/a \(not reported\) tkt_my worker │ working · no event yet$/mu,
     );
   });
 
@@ -532,7 +532,9 @@ describe("legacy enriched Run row", () => {
       progress("$ bun test", 1),
     );
     const out = await render(unknown);
-    expect(out).toMatch(/^luna-high 1m3\ds \$– tkt_unknown worker │/mu);
+    expect(out).toMatch(
+      /^luna-high 1m3\ds \$n\/a \(not reported\) tkt_unknown worker │/mu,
+    );
   });
 
   test("post-worker verification uses marker phase, final cost and vendor session without progress sidecar", async () => {
@@ -775,7 +777,7 @@ describe("legacy enriched Run row", () => {
     );
     const out = await render(dir);
     expect(out).toMatch(
-      /^luna-high 1m3\ds \$– tkt_Repo: dotfiles │ working · \$ bun test/mu,
+      /^luna-high 1m3\ds \$n\/a \(not reported\) tkt_Repo: dotfiles │ working · \$ bun test/mu,
     );
 
     const legacyDir = join(scratch, "legacy-session-row");
@@ -801,7 +803,7 @@ describe("legacy enriched Run row", () => {
     );
     const out = await render(dir);
     expect(out).toMatch(
-      /^sol-max 1m3\d+s \$– resume: tkt_J1 gated commit │ working · no event yet$/mu,
+      /^sol-max 1m3\d+s \$n\/a \(not reported\) resume: tkt_J1 gated commit │ working · no event yet$/mu,
     );
     expect(out).not.toContain("in other sessions");
   });
@@ -848,7 +850,7 @@ describe("legacy enriched Run row", () => {
     marker(dir, "dead-none", 2_147_483_000, "dead none", 70, null);
     const out = await render(dir);
     expect(out).toMatch(
-      /^luna-high 1m3\d+s \$– tkt_my worker │ working · no event yet$/mu,
+      /^luna-high 1m3\d+s \$n\/a \(not reported\) tkt_my worker │ working · no event yet$/mu,
     );
     expect(
       out
@@ -919,10 +921,10 @@ describe("legacy enriched Run row", () => {
     const lines = (await render(dir)).split("\n");
     const at = lines.findIndex((l) => l.startsWith("luna-high "));
     expect(lines[at]).toMatch(
-      /^luna-high 10m0\ds \$– tkt_long one +│ working · no event yet$/u,
+      /^luna-high 10m0\ds \$n\/a \(not reported\) tkt_long one +│ working · no event yet$/u,
     );
     expect(lines[at + 1]).toMatch(
-      /^luna-high +0m3\ds \$– tkt_short one │ working · no event yet$/u,
+      /^luna-high +0m3\ds \$n\/a \(not reported\) tkt_short one │ working · no event yet$/u,
     );
   });
 
@@ -986,7 +988,7 @@ describe("legacy enriched Run row", () => {
       progress("$ bun test kernel.test.ts", 2),
     );
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s \$– tkt_nothrow-0 │ working · \$ bun test kernel\.test\.ts · 12 cmd · 3 files$/mu,
+      /^luna-high 1m3\d+s \$n\/a \(not reported\) tkt_nothrow-0 │ working · \$ bun test kernel\.test\.ts · 12 cmd · 3 files$/mu,
     );
     // a quiet worker (reasoning) is shown with the age of its last event, not as if it were live
     writeFileSync(
@@ -1011,7 +1013,7 @@ describe("legacy enriched Run row", () => {
       progress("$ ls", 2, "01a1111b-7dab-7d61-8f9b-231c4cc9568a"),
     );
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s \$– tkt_nothrow-1 │ working · \$ ls · 12 cmd · 3 files$/mu,
+      /^luna-high 1m3\d+s \$n\/a \(not reported\) tkt_nothrow-1 │ working · \$ ls · 12 cmd · 3 files$/mu,
     );
   });
 
@@ -1082,7 +1084,7 @@ describe("legacy enriched Run row", () => {
       progress("$ ls", 2, "01a11a74-cd83-7de1-b627-16537d8de67d"),
     );
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s \$– resume: tkt_continued worker │ working · \$ ls · 12 cmd · 3 files$/mu,
+      /^luna-high 1m3\d+s \$n\/a \(not reported\) resume: tkt_continued worker │ working · \$ ls · 12 cmd · 3 files$/mu,
     );
   });
 
@@ -1437,7 +1439,7 @@ describe("legacy enriched Run row", () => {
       ]),
     );
     expect(out).toMatch(
-      /^luna-high n\/a \(start time unavailable\) \$– tkt_worker without time │ working · no event yet$/mu,
+      /^luna-high n\/a \(start time unavailable\) \$n\/a \(not reported\) tkt_worker without time │ working · no event yet$/mu,
     );
   });
 

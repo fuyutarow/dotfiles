@@ -2,13 +2,6 @@
 // Split out of the former Claude statusline (2026-10-06); the render budget below starts when this module
 // is first loaded, which is process start for both consumers — the same moment as before.
 import { mkdir, rename, unlink } from "node:fs/promises";
-import {
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
 import { dirname, join } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
@@ -22,18 +15,6 @@ function cachePath(path: string): string {
   return root !== undefined && path.startsWith(prefix)
     ? join(root, path.slice(prefix.length))
     : path;
-}
-// Sync cache API retained for legacy callers; statusline collectors use readJsonAsync.
-// Read a JSON file and validate it. undefined = no usable file (missing, not JSON, or the wrong
-// shape) — the caller treats that as "expired" or reports its own n/a; it is never an assertion.
-export function readJson<S extends z.ZodType>(
-  path: string,
-  schema: S,
-): z.output<S> | undefined {
-  const text = fromThrowable(() => readFileSync(path, "utf8"))();
-  if (text.isErr()) return undefined;
-  const checked = jsonOf(schema).safeParse(text.value);
-  return checked.success ? checked.data : undefined;
 }
 /** Async counterpart for the render path; unreadable or invalid files remain unknown. */
 export async function readJsonAsync<S extends z.ZodType>(
@@ -204,24 +185,6 @@ export function execAsyncBounded(
     Math.min(ownBoundMs, ENRICHMENT_TIMEOUT_MS),
     env,
   );
-}
-// Write a cache file so no reader ever sees half of it: the whole file goes to a private temp
-// name and is renamed into place (atomic on one filesystem). A plain writeFileSync truncates
-// first, and these files are read by every other session on the host every 5 s — a reader landing
-// in the gap got invalid JSON, which reads as "no cache" (a false n/a, or an nvidia-smi spawn
-// nobody needed). Best-effort like every cache write: a failure leaves the old file and no temp.
-// Sync atomic writer retained for sync callers; the statusline entry uses writeCacheAsync.
-export function writeCache(path: string, value: unknown): void {
-  const tmp = `${path}.${process.pid}.tmp`;
-  fromThrowable(() => {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(tmp, JSON.stringify(value));
-    renameSync(tmp, path);
-  })().mapErr(() => {
-    fromThrowable(() => {
-      unlinkSync(tmp);
-    })();
-  });
 }
 /** Atomic best-effort cache write for async render sources. */
 export async function writeCacheAsync(

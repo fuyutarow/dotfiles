@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.16 — 2026-10-31
+
+- Use asynchronous host CPU and memory sampling.
+
 ## 0.22.15 — 2026-10-31
 
 - Use asynchronous file operations for the remote control probe.

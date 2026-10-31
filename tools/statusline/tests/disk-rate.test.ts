@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { diskReadingsAsync, type DiskReading } from "../src/storage.ts";
 import { diskSegment } from "../src/storage-display.ts";
 import { DiskRateStateSchema, updateDiskRates } from "../src/disk-rate.ts";
-import { readJson } from "../src/bounded.ts";
+import { readJsonAsync } from "../src/bounded.ts";
 import { ESC, RST } from "../src/ansi.ts";
 import { ok } from "neverthrow";
 import { sysSegment } from "../src/host-display.ts";
@@ -164,7 +164,8 @@ describe("disk rate", () => {
           entry?.kind === "reading" ? entry.rateGibPerMin : 1,
         ).toBeUndefined();
         expect(
-          readJson(statePath, DiskRateStateSchema)?.drives[dir]?.samples,
+          (await readJsonAsync(statePath, DiskRateStateSchema))?.drives[dir]
+            ?.samples,
         ).toHaveLength(1);
         expect(readdirSync(dir).some((name) => name.endsWith(".tmp"))).toBe(
           false,

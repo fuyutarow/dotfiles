@@ -6,10 +6,9 @@ export type { HostLoad } from "./host-display.ts";
 // Host load — CPU · RAM · VRAM · Disk — read and rendered as the statusline's Sys row. Consumers:
 // tools/statusline/src/statusline.ts (row 5) and `s` in zsh/aliases.zsh (one row, now).
 // GPU data comes exclusively from tools/shared/src/gpu-sampler.ts state.
-import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { cpus, totalmem } from "node:os";
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import { err, ok, type Result } from "neverthrow";
 import {
   diskReadingsAsync,
   IS_WSL,
@@ -28,10 +27,8 @@ import {
   ENRICHMENT_TIMEOUT_MS,
   execAsyncBounded,
   execAsyncRenderBounded,
-  readJson,
   readJsonAsync,
   within,
-  writeCache,
   writeCacheAsync,
 } from "./bounded.ts";
 
@@ -126,40 +123,51 @@ export async function macRam(): Promise<Result<MemReading, string>> {
         : err("vm_stat output unparsable");
     });
 }
-/** A small kernel file's text, or undefined when it does not exist here (cgroup-memory's reader). */
-const readIfPresent = (path: string): string | undefined =>
-  fromThrowable(() => readFileSync(path, "utf8"))().unwrapOr(undefined);
-// macOS has no /proc: see macRam().
 export async function ramFrac(): Promise<Result<MemReading, string>> {
   if (process.platform === "darwin") return macRam();
-  return fromThrowable(
-    () => readFileSync("/proc/meminfo", "utf8"),
-    () => "no /proc/meminfo",
-  )().andThen((raw) => {
-    let totalKb: number | undefined;
-    let availKb: number | undefined;
-    for (const line of raw.split("\n")) {
-      if (line.startsWith("MemTotal:")) totalKb = Number(line.split(/\s+/u)[1]);
-      else if (line.startsWith("MemAvailable:"))
-        availKb = Number(line.split(/\s+/u)[1]);
-      if (totalKb !== undefined && availKb !== undefined) break;
-    }
-    if (totalKb === undefined || availKb === undefined)
-      return err("meminfo lacks MemTotal/MemAvailable");
-    // Inside a container /proc/meminfo is the HOST; the cgroup limit is what this box can use
-    // (lib/cgroup-memory.ts says how Vast read 42% at the brink of an OOM kill). Marked "cgroup".
-    const GiB = 1024 ** 3;
-    const cg = cgroupMemory(readIfPresent, totalKb * 1024);
-    if (cg !== undefined) {
-      const capped = memReading(cg.usedBytes / GiB, cg.limitBytes / GiB);
-      return capped !== undefined
-        ? ok({ ...capped, frac: `${capped.frac} cgroup` })
-        : err("cgroup memory unparsable");
-    }
-    const usedKb = totalKb - availKb;
-    const reading = memReading(usedKb / 1024 / 1024, totalKb / 1024 / 1024);
-    return reading !== undefined ? ok(reading) : err("meminfo unparsable");
+  const raw = await readFile("/proc/meminfo", "utf8").catch(() => null);
+  if (raw === null) return err("no /proc/meminfo");
+  let totalKb: number | undefined;
+  let availKb: number | undefined;
+  for (const line of raw.split("\n")) {
+    if (line.startsWith("MemTotal:")) totalKb = Number(line.split(/\s+/u)[1]);
+    else if (line.startsWith("MemAvailable:"))
+      availKb = Number(line.split(/\s+/u)[1]);
+    if (totalKb !== undefined && availKb !== undefined) break;
+  }
+  if (totalKb === undefined || availKb === undefined)
+    return err("meminfo lacks MemTotal/MemAvailable");
+  const cgPaths = [
+    "/sys/fs/cgroup/memory.max",
+    "/sys/fs/cgroup/memory.current",
+    "/sys/fs/cgroup/memory.stat",
+    "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+    "/sys/fs/cgroup/memory/memory.usage_in_bytes",
+    "/sys/fs/cgroup/memory/memory.stat",
+  ];
+  const cgTexts = await Promise.all(
+    cgPaths.map((path) => readFile(path, "utf8").catch(() => null)),
+  );
+  const cgMap = new Map<string, string>();
+  cgTexts.forEach((text, index) => {
+    const path = cgPaths[index];
+    if (text !== null && path !== undefined) cgMap.set(path, text);
   });
+  const cg = cgroupMemory((path) => cgMap.get(path), totalKb * 1024);
+  if (cg !== undefined) {
+    const capped = memReading(
+      cg.usedBytes / 1024 ** 3,
+      cg.limitBytes / 1024 ** 3,
+    );
+    return capped === undefined
+      ? err("cgroup memory unparsable")
+      : ok({ ...capped, frac: `${capped.frac} cgroup` });
+  }
+  const reading = memReading(
+    (totalKb - availKb) / 1024 / 1024,
+    totalKb / 1024 / 1024,
+  );
+  return reading === undefined ? err("meminfo unparsable") : ok(reading);
 }
 
 // One /proc/stat snapshot alone cannot give a CPU percentage — its counters are cumulative
@@ -193,49 +201,37 @@ export function macCpuSample(): Result<CpuSample, string> {
   }
   return total > 0 ? ok({ total, idle }) : err("os.cpus() counters are zero");
 }
-export function readCpuSample(): Result<CpuSample, string> {
+export async function readCpuSample(): Promise<Result<CpuSample, string>> {
   if (process.platform === "darwin") return macCpuSample();
-  return fromThrowable(
-    () => readFileSync("/proc/stat", "utf8"),
-    () => "no /proc/stat",
-  )().andThen((raw) => {
-    const line = raw.split("\n").find((l) => l.startsWith("cpu "));
-    if (line === undefined || line === "")
-      return err("/proc/stat has no cpu line");
-    const fields = line.trim().split(/\s+/u).slice(1).map(Number);
-    const idle = (fields[3] ?? 0) + (fields[4] ?? 0);
-    const total = fields.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
-    return Number.isFinite(idle) && total > 0
-      ? ok({ total, idle })
-      : err("/proc/stat cpu line unparsable");
-  });
+  const raw = await readFile("/proc/stat", "utf8").catch(() => null);
+  if (raw === null) return err("no /proc/stat");
+  const line = raw.split("\n").find((part) => part.startsWith("cpu "));
+  if (line === undefined || line === "")
+    return err("/proc/stat has no cpu line");
+  const fields = line.trim().split(/\s+/u).slice(1).map(Number);
+  const idle = (fields[3] ?? 0) + (fields[4] ?? 0);
+  const total = fields.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
+  return Number.isFinite(idle) && total > 0
+    ? ok({ total, idle })
+    : err("/proc/stat cpu line unparsable");
 }
-export function cpuPct(): Result<number, string> {
-  const sampled = readCpuSample();
-  if (sampled.isErr()) return err(sampled.error); // no /proc (mac) / malformed line
+export async function cpuPct(
+  resolveCache = false,
+): Promise<Result<number, string>> {
+  const sampled = await readCpuSample();
+  if (sampled.isErr()) return err(sampled.error);
   const sample = sampled.value;
   const now = Temporal.Now.instant().epochMilliseconds;
-  const prev = readJson(CPU_CACHE, CpuSampleSchema); // undefined: no usable baseline file
-  // Best-effort write of THIS render's sample for the NEXT render to diff against, unconditional
-  // on whether this render itself can show a value — same "write regardless, return what we
-  // have" shape as agentName()'s cache-miss path above. EXCEPT a baseline younger than
-  // CPU_BASELINE_MIN_MS is kept: the file is shared by every session, so overwriting it each
-  // render shrank the window to the gap since ANOTHER session's render (a few ms -> a coarse 0%
-  // or 100%).
+  const prev = await readJsonAsync(CPU_CACHE, CpuSampleSchema, resolveCache);
   const keep =
     prev?.at !== undefined && within(prev.at, now, CPU_BASELINE_MIN_MS);
-  if (!keep) {
-    writeCache(CPU_CACHE, { ...sample, at: now });
-  }
-  if (prev === undefined) return err("no earlier sample to diff against"); // first render on this host
-  // A baseline with no timestamp (pre-2026-10-03 file), from the future (clock stepped back) or
-  // older than CPU_BASELINE_MAX_MS would be an average over some other period than "now".
+  if (!keep)
+    await writeCacheAsync(CPU_CACHE, { ...sample, at: now }, resolveCache);
+  if (prev === undefined) return err("no earlier sample to diff against");
   if (prev.at === undefined || !within(prev.at, now, CPU_BASELINE_MAX_MS))
     return err("no earlier sample from the last 60s");
   const dTotal = sample.total - prev.total;
   const dIdle = sample.idle - prev.idle;
-  // dTotal<=0 means no jiffies elapsed between two renders (or a counter reset) -> a division
-  // here would be by ~0 or negative, not a real rate; say so rather than show a bogus number.
   if (dTotal <= 0) return err("no ticks since the last sample");
   return ok(Math.max(0, Math.min(100, (1 - dIdle / dTotal) * 100)));
 }
@@ -252,7 +248,7 @@ export interface HostMetrics {
 
 /** Plain host metrics shared with integrations that need the Sys row's CPU and RAM samplers. */
 export async function readHostMetrics(): Promise<HostMetrics> {
-  const cpu = cpuPct().match(
+  const cpu = (await cpuPct()).match(
     (value) => `${Math.round(value)}%`,
     (why) => renderUnavailable(unavailable(why)),
   );
@@ -271,43 +267,12 @@ export async function readHostMetrics(): Promise<HostMetrics> {
 /** Async render-path sample; host readings run independently and retain explicit unknowns. */
 export async function readHostLoadAsync(): Promise<Omit<HostLoad, "disks">> {
   const [cpu, ram, vram, tmp] = await Promise.all([
-    cpuPctAsync(),
+    cpuPct(true),
     ramFracAsync(),
     vramGatedAsync(),
     tmpReadingsAsync(),
   ]);
   return { cpuPct: cpu, ram, vram, tmp };
-}
-async function readCpuSampleAsync(): Promise<Result<CpuSample, string>> {
-  if (process.platform === "darwin") return macCpuSample();
-  const raw = await readFile("/proc/stat", "utf8").catch(() => null);
-  if (raw === null) return err("no /proc/stat");
-  const line = raw.split("\n").find((part) => part.startsWith("cpu "));
-  if (line === undefined || line === "")
-    return err("/proc/stat has no cpu line");
-  const fields = line.trim().split(/\s+/u).slice(1).map(Number);
-  const idle = (fields[3] ?? 0) + (fields[4] ?? 0);
-  const total = fields.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
-  return Number.isFinite(idle) && total > 0
-    ? ok({ total, idle })
-    : err("/proc/stat cpu line unparsable");
-}
-async function cpuPctAsync(): Promise<Result<number, string>> {
-  const sampled = await readCpuSampleAsync();
-  if (sampled.isErr()) return err(sampled.error);
-  const sample = sampled.value;
-  const now = Temporal.Now.instant().epochMilliseconds;
-  const prev = await readJsonAsync(CPU_CACHE, CpuSampleSchema);
-  const keep =
-    prev?.at !== undefined && within(prev.at, now, CPU_BASELINE_MIN_MS);
-  if (!keep) await writeCacheAsync(CPU_CACHE, { ...sample, at: now });
-  if (prev === undefined) return err("no earlier sample to diff against");
-  if (prev.at === undefined || !within(prev.at, now, CPU_BASELINE_MAX_MS))
-    return err("no earlier sample from the last 60s");
-  const dTotal = sample.total - prev.total;
-  const dIdle = sample.idle - prev.idle;
-  if (dTotal <= 0) return err("no ticks since the last sample");
-  return ok(Math.max(0, Math.min(100, (1 - dIdle / dTotal) * 100)));
 }
 async function ramFracAsync(): Promise<Result<MemReading, string>> {
   if (process.platform === "darwin") {

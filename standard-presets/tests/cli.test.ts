@@ -44,6 +44,10 @@ beforeAll(async () => {
       join(fixtureRoot, "standard-presets", directory),
       { recursive: true },
     );
+  await cp(
+    join(ROOT, "standard-presets/template-hashes.json"),
+    join(fixtureRoot, "standard-presets/template-hashes.json"),
+  );
   for (const directory of ["agents", "scripts", "node_modules"])
     await symlink(join(ROOT, directory), join(fixtureRoot, directory));
   await mkdir(join(fixtureRoot, "standard-presets/demo"));
@@ -146,6 +150,22 @@ describe("manifest preset CLI", () => {
     expect(await Bun.file(join(repo, ".oxlint/house-plugin.js")).exists()).toBe(
       false,
     );
+  });
+  test("sync migrates a released root template when the candidate changed", async () => {
+    const repo = await legacyTarget();
+    const candidate = join(
+      fixtureRoot,
+      "standard-presets/typescript/lint-oxlint.ts",
+    );
+    const previous = await readFile(candidate, "utf8");
+    await writeFile(candidate, `${previous}\n// candidate change\n`);
+    const result = await run("sync", "typescript", "--to", repo);
+    await writeFile(candidate, previous);
+    expect(result.exit).toBe(0);
+    expect(await Bun.file(join(repo, "lint-oxlint.ts")).exists()).toBe(false);
+    expect(
+      await readFile(join(repo, "tools/lint-oxlint.ts"), "utf8"),
+    ).toContain("// candidate change");
   });
   test("every language applies to an empty repo and immediately has no diff", async () => {
     const languages = ["typescript", "python", "rust", "julia", "latex"];
@@ -456,7 +476,8 @@ describe("manifest preset CLI", () => {
     const repo = await target();
     const result = await run("apply", "demo", "--to", repo);
     expect(result.exit).toBe(2);
-    expect(result.stderr).toContain(`missing source: ${path}`);
+    expect(result.stderr).toContain("missing source:");
+    expect(result.stderr).toContain("/standard-presets/demo/config.toml");
     expect(await Bun.file(join(repo, ".config/demo.toml")).exists()).toBe(
       false,
     );

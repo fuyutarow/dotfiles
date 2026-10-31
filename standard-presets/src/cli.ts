@@ -8,6 +8,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -16,6 +17,7 @@ import { consola } from "consola";
 import { attempt, errorMessage } from "../../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { discoverPresets, jsonKey } from "./manifests.ts";
+import templateHashes from "../template-hashes.json";
 import {
   DEFAULT_PLACEMENT,
   Placement,
@@ -69,8 +71,18 @@ const argv = cli(
 
 const [action, name, targetArg] = argv._;
 if (argv._.length > 3) fatal("too many arguments");
-if (!["apply", "sync", "diff", "list"].includes(action ?? ""))
-  fatal("use list, apply, sync or diff");
+if (!["apply", "sync", "diff", "list", "record-hashes"].includes(action ?? ""))
+  fatal("use list, apply, sync, diff or record-hashes");
+if (action === "record-hashes") {
+  if (
+    name !== undefined ||
+    argv.flags.to !== undefined ||
+    argv.flags["dry-run"]
+  )
+    fatal("record-hashes accepts no name, target or --dry-run");
+  await import("./record-hashes.ts");
+  process.exit(0);
+}
 const catalog = await discoverPresets(PRESETS);
 if (!catalog.ok) fatal(catalog.error);
 if (action === "list") {
@@ -174,8 +186,7 @@ async function requireOwnedDestination(destination: string): Promise<void> {
 if (writes)
   for (const file of files) await requireOwnedDestination(file.destination);
 
-// A legacy file has no recorded base version. Only relocate it automatically
-// when its bytes match the current root-layout template.
+// A legacy file has no recorded base; accept only known template bytes.
 async function migrateLegacy(): Promise<void> {
   const moves: { from: string; to: string; content: string }[] = [];
   const conflicts: string[] = [];
@@ -186,7 +197,13 @@ async function migrateLegacy(): Promise<void> {
     await requireOwnedDestination(from);
     if (!(await exists(from))) continue;
     const original = await readFile(file.source, "utf8");
-    if ((await readFile(from, "utf8")) !== original) {
+    const current = await readFile(from);
+    const hash = createHash("sha256").update(current).digest("hex");
+    const known: Record<string, string[]> = templateHashes;
+    if (
+      !current.equals(Buffer.from(original)) &&
+      known[`typescript/${sourceName}`]?.includes(hash) !== true
+    ) {
       conflicts.push(`${sourceName}: local changes cannot be reconciled`);
       continue;
     }

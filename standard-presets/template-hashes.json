@@ -1,0 +1,83 @@
+{
+  "julia/mise-tasks.toml": [
+    "a473751dad69513dc6d9c5c8e7b65b9cae7a50db0c7029c7841c753c8e8021ca"
+  ],
+  "julia/Project.toml": [
+    "25e904fb11482939c6159f781af5a07594f402020c89e0436cd4bc993027a2e4"
+  ],
+  "julia/test/Project.toml": [
+    "f3495932816b76b628a18a626716900cf5759d594fd678d42c3cf489da95d27c"
+  ],
+  "latex/latex.gitignore": [
+    "a1567943f513f244b68e1c035487496d80033b6450d11dc6a29225c5ae2800e4"
+  ],
+  "latex/latexmkrc": [
+    "4ca998a9b79e1f07b35b6308ca58885bb9fb5f70a303f4f73e522cb33fdb855e"
+  ],
+  "latex/mise-latex.toml": [
+    "690c947efe5931f5463e73c75b5de41053810915d7d74080ba1471aff339fd6e"
+  ],
+  "latex/tex-fmt.toml": [
+    "0b5284914c46058deef229c191b3de9659069918bcace69633e0d05bcf5ab2ea"
+  ],
+  "python/.pre-commit-config.yaml": [
+    "a609a51014840b86e68b3a066d4335cf3ea92f8a185bf88c4381c0ddc9639025"
+  ],
+  "python/examples/pyproject-pytorch.toml": [
+    "775b9a086c0ac864078821624a4e76cd293ac20de177d8a191561f1a2081d861"
+  ],
+  "python/examples/script.py": [
+    "15ab05f9d417af90f91b6056b28162f4e7eb796894cbc244c8a0098e63c681c9"
+  ],
+  "python/mise.toml": [
+    "6ef20a4da9416b242563254242f57c932084c50957b8c86d2f167325811301b8"
+  ],
+  "python/pyproject.toml": [
+    "589afd9e0f97e8405d31341a6ebe4d01aa9dc6a9b1823282928626952576432a"
+  ],
+  "rust/Cargo.toml": [
+    "5d83635af2d4ed60abadc0fad180bf0a1d76d208fa818fa7d3f3f3dd34f2a195"
+  ],
+  "rust/clippy.toml": [
+    "ed4cef91dfce59065e4a57482ee395e25384be7ea9d3501a61b274707ee055a9"
+  ],
+  "rust/member-lints.toml": [
+    "8a9b93ef3d9ec33efb144310f7b6c83b38c5c2f1c1ab18920670d0a4769bafdc"
+  ],
+  "rust/mise.toml": [
+    "504c47e84ad18f2f0a688ec8ffd833fc55ec5c1cf4a287760864dcbf0e4cd68e"
+  ],
+  "rust/rustfmt.toml": [
+    "8f0bd929bfcd182bf2d34a73b0fc0431d6950ec4eb46be92fdae01511349d505"
+  ],
+  "typescript/.oxlintrc.json": [
+    "cccad8fa737615a61a1b4d33b9b06ae3feb2a4428344daaf352853af57447fa0"
+  ],
+  "typescript/house-plugin.js": [
+    "8cd92fc6659aff9228b862464cf501c4a999e74cb2f02ccf06227069b1742c2e"
+  ],
+  "typescript/house.oxlintrc.json": [
+    "b2d9b7aa42f065ea50bb3c17479113e6e1ed735a7a75bd9d787c39a4e78f97b6"
+  ],
+  "typescript/knip.jsonc": [
+    "c8f94f2e00af487cc43f58f0462826b30889f4542d4b92d9487e28a6c94f1bf9"
+  ],
+  "typescript/lint-knip.ts": [
+    "d2a4afbe81281da12f1271590f884e912c35fcda4e58a311b03aba027c7e31a7"
+  ],
+  "typescript/lint-oxlint.ts": [
+    "288261998aa468a2a6fa5e7c9bac59c55ce9a3b28fb825891c7ffda4e87bc40c"
+  ],
+  "typescript/package.json": [
+    "d687aea9d67ab9ea0cdb92601fcab5f3f9141aa492df2e2740cd3fca3c16ebc2"
+  ],
+  "typescript/require-bun.ts": [
+    "957c753ec15f95d9e1bc9f07481de93f3333667cc4e462801c340628febc132a"
+  ],
+  "typescript/tsconfig.json": [
+    "d11d7bb16ca2165aac5b253dcd16b3a565e200cc2de86cedd6f06c47d04bc364"
+  ],
+  "typescript/zod.ts": [
+    "e0ebd8ad797825c7a982f2e6cfdc2441e03faaf52c5b2c4acf3ad1e798aad644"
+  ]
+}

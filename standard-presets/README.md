@@ -85,8 +85,8 @@ override these relative directories with, for example,
 `placement = { scripts = "scripts", oxlint = "config/lint", source = "lib" }`.
 Omitted fields use the defaults. Apply, diff, sync and the consumer gate use the
 same placement. Sync migrates matching root-layout files to that placement and
-updates the wrapper's house extends path. Since no prior version is recorded,
-root files that differ from the current template, occupied destinations, and a
+updates the wrapper's house extends path. Root files matching the current template or a recorded released hash migrate;
+unknown root bytes, occupied destinations, and a
 wrapper without the expected extends entry are reported as conflicts before
 any migration writes. Resolve them manually and retry; `--dry-run` previews moves.
 The `lint:ts` task still calls `lint-ts-candidate`, whose current default expects
@@ -119,3 +119,5 @@ fixtures against the pinned tools: good cases pass and bad cases trigger their
 declared rule. The suite checks that the consumer preset does not weaken
 dotfiles' strict TypeScript flags or oxlint levels. Each kind can add its own
 fixtures and name their verification commands in `check`.
+
+Before releasing a managed template change, run `mise run preset -- record-hashes` to append its current SHA-256 hash; keep all prior hashes. The suite requires every current managed template to be recorded.

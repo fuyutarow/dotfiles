@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { ok, err } from "neverthrow";
 import { render } from "../src/format.ts";
 import type { Dataframe } from "../src/dataframe.ts";
-import { readAgxJobRuns } from "../src/agx-job-runs.ts";
+import { readAgxJobRuns, Rows } from "../src/agx-job-runs.ts";
 import { buildDataframe } from "../src/build-dataframe.ts";
 import { mkdtemp, writeFile, chmod } from "node:fs/promises";
 import { rmSync } from "node:fs";
@@ -63,7 +63,7 @@ test("owner retains usable rows with their age and expires them after ten minute
   ];
   const now = Temporal.Now.instant().epochMilliseconds;
   for (const [age, expected] of [
-    [1_000, "one 0m42s"],
+    [1_000, "one 0m43s"],
     [42_000, "1 agx (42s old)"],
     [601_000, "agx ? (timeout 30000ms)"],
   ] as const) {
@@ -88,6 +88,34 @@ test("owner retains usable rows with their age and expires them after ten minute
   expect(
     (await ownerSources(Promise.resolve(undefined)).liveAgxJobs())?.isErr(),
   ).toBe(true);
+});
+
+test("run age advances independently of cache age", () => {
+  const nowMs = Temporal.Instant.from("2026-10-31T12:00:40Z").epochMilliseconds;
+  const row = {
+    id: "one",
+    ticket: "one",
+    dispatcher_session: "session",
+    elapsed_seconds: 20,
+    started_at: "2026-10-31T12:00:00Z",
+  };
+  const parsed = Rows.safeParse([row]);
+  expect(parsed.success && parsed.data[0]?.started_at).toBe(row.started_at);
+  const frame = {
+    ...base,
+    liveAgxJobs: ok([row]),
+    ownerAges: { liveAgxJobs: 20_000 },
+  };
+  expect(render(frame, { nowMs })).toContain("one 0m40s");
+  expect(
+    render(
+      { ...frame, liveAgxJobs: ok([{ ...row, started_at: undefined }]) },
+      { nowMs },
+    ),
+  ).toContain("one 0m40s");
+  expect(
+    render({ ...frame, ownerAges: { liveAgxJobs: 42_000 } }, { nowMs }),
+  ).toContain("1 agx (42s old) one 0m40s");
 });
 
 test("fake agx executable supplies live jobs independently of ps and times out", async () => {

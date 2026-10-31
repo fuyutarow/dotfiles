@@ -74,10 +74,21 @@ function truncateTicket(value: string): string {
 function liveJobEntries(
   rows: import("./agx-job-runs.ts").AgxJobRows,
   sid: string | undefined,
+  nowMs: number,
+  cacheAgeMs: number,
 ): string {
   return rows
     .filter((row) => sid !== undefined && row.dispatcher_session === sid)
-    .map((row) => ` ${truncateTicket(row.ticket)} ${dur(row.elapsed_seconds)}`)
+    .map((row) => {
+      const startMs = fromThrowable(
+        () => Temporal.Instant.from(row.started_at ?? "").epochMilliseconds,
+      )().unwrapOr(undefined);
+      const seconds =
+        startMs === undefined
+          ? row.elapsed_seconds + Math.max(0, cacheAgeMs) / 1000
+          : Math.max(0, (nowMs - startMs) / 1000);
+      return ` ${truncateTicket(row.ticket)} ${dur(seconds)}`;
+    })
     .join("");
 }
 export function render(
@@ -91,6 +102,7 @@ export function render(
     includeRunSource?: boolean;
     /** Terminal columns; defaults to Claude Code's documented COLUMNS environment value. */
     columns?: number;
+    nowMs?: number;
   } = {},
 ): string {
   const codex = options.codex === true;
@@ -264,7 +276,12 @@ export function render(
       ).length;
       jobLine += ` ${count} agx (${Math.floor(age / 1000)}s old)`;
     }
-    jobLine += liveJobEntries(live.value, df.sid);
+    jobLine += liveJobEntries(
+      live.value,
+      df.sid,
+      options.nowMs ?? Temporal.Now.instant().epochMilliseconds,
+      age,
+    );
   }
   const scan = df.routes?.isOk() === true ? df.routes.value : undefined;
   const agxBlock = routeLines(

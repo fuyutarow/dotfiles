@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.21 — 2026-10-31
+
+- Fix cached agx run ages at render time
+
 ## 0.22.20 — 2026-10-31
 
 - Retain bounded agx job samples and show their age.

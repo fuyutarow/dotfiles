@@ -7,6 +7,7 @@ export const Rows = z.array(
     id: z.string(),
     ticket: z.string(),
     dispatcher_session: z.string().nullable(),
+    started_at: z.string().optional(),
     elapsed_seconds: z.number().nonnegative(),
   }),
 );

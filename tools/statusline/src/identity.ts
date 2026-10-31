@@ -1,14 +1,11 @@
-import { closeSync, openSync, readSync, statSync } from "node:fs";
-import { stat } from "node:fs/promises";
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import { open, stat, type FileHandle } from "node:fs/promises";
+import { err, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, maybe, z } from "./zod.ts";
 import { writeFleetSession } from "@dotfiles/shared/src/fleet-session.ts";
 import {
   execAsyncRenderBounded,
   execAsyncWithin,
-  readJson,
   readJsonAsync,
-  writeCache,
   writeCacheAsync,
 } from "./bounded.ts";
 
@@ -117,36 +114,32 @@ const RC_PROBE_CACHE = `${HOME}/.cache/claude/statusline-rc-probe.json`;
 const RC_NEEDLE = "process.env.CLAUDE_CODE_BRIDGE_SESSION_ID=";
 
 /** Stream `fd` in 8 MB chunks; a tail carry catches a match straddling two chunks. */
-function scanFd(fd: number, pat: Buffer): boolean | undefined {
+async function scanFd(
+  fd: FileHandle,
+  pat: Buffer,
+): Promise<boolean | undefined> {
   const chunk = 8 << 20;
   const buf = Buffer.alloc(chunk + pat.length);
   let carry = 0;
   for (;;) {
-    const read = readFdChunk(fd, buf, carry, chunk);
-    if (read.isErr()) return undefined;
-    if (read.value <= 0) return false;
-    const end = carry + read.value;
+    const read = await fd.read(buf, carry, chunk, null).catch(() => null);
+    if (read === null) return undefined;
+    if (read.bytesRead <= 0) return false;
+    const end = carry + read.bytesRead;
     if (buf.subarray(0, end).indexOf(pat) !== -1) return true;
     carry = Math.min(pat.length - 1, end);
     buf.copy(buf, 0, end - carry, end);
   }
 }
-function readFdChunk(fd: number, buf: Buffer, offset: number, length: number) {
-  return fromThrowable(() => readSync(fd, buf, offset, length, null))();
-}
-
 /** true/false = scanned; undefined = could not scan (missing, unreadable). */
-function binaryContains(path: string, needle: string): boolean | undefined {
-  const opened = fromThrowable(() => openSync(path, "r"))();
-  if (opened.isErr()) return undefined;
-  // Cleanup runs on return AND on throw, same as the prior try/finally: the fd closes once this
-  // block ends, in either case.
-  using _fd = {
-    [Symbol.dispose]: () => {
-      closeSync(opened.value);
-    },
-  };
-  return scanFd(opened.value, Buffer.from(needle));
+async function binaryContains(
+  path: string,
+  needle: string,
+): Promise<boolean | undefined> {
+  const opened = await open(path, "r").catch(() => null);
+  if (opened === null) return undefined;
+  await using handle = opened;
+  return await scanFd(handle, Buffer.from(needle));
 }
 
 const RcProbeCacheSchema = z.record(z.string(), z.boolean());
@@ -155,27 +148,28 @@ const RcProbeCacheSchema = z.record(z.string(), z.boolean());
  * side by side after an auto-update, and a single slot would make them evict each other and
  * re-scan ~230 MB on every render.
  */
-function rcProbeValid(): boolean | undefined {
+async function rcProbeValid(): Promise<boolean | undefined> {
   const exe = process.env["CLAUDE_CODE_EXECPATH"];
   if (exe === undefined || exe === "") return undefined;
-  const st = fromThrowable(() => statSync(exe))();
-  if (st.isErr()) return undefined;
-  const key = `${exe}\u0000${st.value.size}\u0000${st.value.mtimeMs}`;
+  const st = await stat(exe).catch(() => null);
+  if (st === null) return undefined;
+  const key = `${exe}\u0000${st.size}\u0000${st.mtimeMs}`;
   // A cache that is not a plain {key: boolean} map is "no cache": one re-scan rewrites it clean.
-  const cache = readJson(RC_PROBE_CACHE, RcProbeCacheSchema) ?? {};
+  const cache =
+    (await readJsonAsync(RC_PROBE_CACHE, RcProbeCacheSchema, false)) ?? {};
   const hit = cache[key];
   if (hit !== undefined) return hit;
-  const valid = binaryContains(exe, RC_NEEDLE);
+  const valid = await binaryContains(exe, RC_NEEDLE);
   if (valid === undefined) return undefined;
   // The cache is an optimization; a failed write leaves the answer above standing.
-  writeCache(RC_PROBE_CACHE, { ...cache, [key]: valid });
+  await writeCacheAsync(RC_PROBE_CACHE, { ...cache, [key]: valid }, false);
   return valid;
 }
 
 // Sync compatibility probe retained for non-render callers; the renderer uses rcStateAsync.
-export function rcState(): RcState {
+export async function rcState(): Promise<RcState> {
   if ((process.env["CLAUDE_CODE_BRIDGE_SESSION_ID"] ?? "") !== "") return "on";
-  return rcProbeValid() === true ? "off" : "unknown";
+  return (await rcProbeValid()) === true ? "off" : "unknown";
 }
 async function binaryContainsAsync(
   path: string,
@@ -317,11 +311,12 @@ export async function reportToHerdr(
   m: string,
   sessionName?: string,
   effortDisplay?: string, // plain-text "xhigh" / "xhigh+WF"
-  _rc: RcState = rcState(),
+  _rc?: RcState,
   vendor: "claude" | "codex" = "claude",
   codexSessionId?: string,
   codexCwd?: string,
 ): Promise<void> {
+  if (_rc === undefined) await rcState();
   const paneId = process.env["HERDR_PANE_ID"];
   const id =
     vendor === "codex" ? codexSessionId : process.env["CLAUDE_CODE_SESSION_ID"];

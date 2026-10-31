@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   symlink,
   writeFile,
@@ -19,7 +20,8 @@ import {
 } from "../src/session-discovery.ts";
 
 test("Darwin source discovers live Claude and Codex using injected commands", async () => {
-  const { root, home, cwd } = await fixture();
+  const { root, home, cwd, spelledRoot } = await fixture();
+  const spelledCwd = join(spelledRoot, "project");
   const sessionsDir = join(home, ".claude/sessions");
   const project = join(home, ".claude/projects", cwd.replaceAll("/", "-"));
   await mkdir(sessionsDir, { recursive: true });
@@ -51,7 +53,7 @@ test("Darwin source discovers live Claude and Codex using injected commands", as
           " 101 /usr/bin/claude\n 102 /usr/bin/codex\n 103 /bin/sh -c codex\n",
       });
     if (args.includes("cwd"))
-      return Promise.resolve({ output: `p${args[3]}\nfcwd\nn${cwd}\n` });
+      return Promise.resolve({ output: `p${args[3]}\nfcwd\nn${spelledCwd}\n` });
     return Promise.resolve({ output: `p102\nf7\nn${rollout}\n` });
   });
   const found = await discoverSessions(cwd, false, fs, source);
@@ -59,6 +61,7 @@ test("Darwin source discovers live Claude and Codex using injected commands", as
     "claude-a",
     "codex-b",
   ]);
+  expect(found.map((row) => row.cwd)).toEqual([cwd, cwd]);
   expect(found.map((row) => row.pid).toSorted((a, b) => a - b)).toEqual([
     101, 102,
   ]);
@@ -106,7 +109,8 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "statusline-discovery-"));
+  const spelledRoot = await mkdtemp(join(tmpdir(), "statusline-discovery-"));
+  const root = await realpath(spelledRoot);
   roots.push(root);
   const home = join(root, "home");
   const proc = join(root, "proc");
@@ -119,7 +123,7 @@ async function fixture() {
   );
   process.env["HOME"] = home;
   process.env["STATUSLINE_PROC_ROOT"] = proc;
-  return { root, home, proc, cwd, elsewhere };
+  return { root, home, proc, cwd, elsewhere, spelledRoot };
 }
 
 async function fakeProcess(

@@ -4,6 +4,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rm,
   symlink,
   utimes,
@@ -35,7 +36,8 @@ const plain = (text: string) =>
   );
 
 test("standalone and Claude stdin render owner files without any subprocess, network, or cache writes", async () => {
-  const home = await mkdtemp(join(tmpdir(), "render-owner-"));
+  const spelledHome = await mkdtemp(join(tmpdir(), "render-owner-"));
+  const home = await realpath(spelledHome);
   roots.push(home);
   const cwd = join(home, "project");
   const outside = join(home, "outside");
@@ -77,6 +79,10 @@ test("standalone and Claude stdin render owner files without any subprocess, net
     }),
   );
   await writeFile(join(proc, "101/cmdline"), "claude\0");
+  await writeFile(
+    join(proc, "101/stat"),
+    `101 (fixture) S ${Array.from({ length: 18 }, () => "0").join(" ")} 100\n`,
+  );
   await symlink(cwd, join(proc, "101/cwd"));
   const at = Temporal.Now.instant().epochMilliseconds;
   const owner = join(home, "owner.json");
@@ -91,6 +97,7 @@ test("standalone and Claude stdin render owner files without any subprocess, net
             {
               vendor: "claude",
               pid: 101,
+              process_generation: "100",
               cwd,
               session_id: "session",
               transcript_path: transcript,
@@ -172,6 +179,7 @@ test("standalone and Claude stdin render owner files without any subprocess, net
     return plain(output);
   };
   const standalone = await invoke(cwd, "");
+  const spelledStandalone = await invoke(join(spelledHome, "project"), "");
   const claude = await invoke(
     cwd,
     JSON.stringify({
@@ -188,8 +196,8 @@ test("standalone and Claude stdin render owner files without any subprocess, net
       },
     }),
   );
-  for (const output of [standalone, claude]) {
-    expect(output).toContain("Ctx: 927.4k");
+  for (const output of [standalone, spelledStandalone, claude]) {
+    expect(output).toContain("Ctx: 927k");
     expect(output).toContain("ws: ws_context-fix");
     expect(output).not.toContain("wt");
     expect(output.split("\n")[0]).toEndWith(`v${version}`);

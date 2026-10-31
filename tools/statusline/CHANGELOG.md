@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.8 — 2026-10-31
+
+- Display context usage in percentage-first order with three-significant-figure token labels.
+
 ## 0.22.7 — 2026-10-31
 
 - Show Claude context usage against the saved per-model auto-compact window.

@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
-import { ctxSegment } from "../src/model-context.ts";
+import { contextLabel, ctxSegment } from "../src/model-context.ts";
 import { buildDataframe } from "../src/build-dataframe.ts";
 import { ok } from "neverthrow";
 
@@ -37,11 +37,32 @@ describe("Claude auto-compact window", () => {
     expect(context?.compactWindow).toBe(400000);
     expect(
       ctxSegment({
-        ctx: "120.0k",
+        ctx: "120k",
         ctxPct: (100 * 120000) / (context?.compactWindow ?? 1),
         ctxWindow: context?.compactWindow,
       }).replaceAll(ansi, ""),
-    ).toBe("Ctx: 120.0k 30%/400k");
+    ).toBe("Ctx: 30% (120k/400k)");
+  });
+  test("uses three significant figures for token and window labels", () => {
+    for (const [value, label] of [
+      [167600, "168k"],
+      [12345, "12.3k"],
+      [1234, "1.23k"],
+      [999, "999"],
+      [1000000, "1.00M"],
+      [999999, "1.00M"],
+    ] as const) {
+      expect(contextLabel(value)).toBe(label);
+    }
+    const result = ctxSegment({ ctx: "168k", ctxPct: 42, ctxWindow: 400500 });
+    expect(result.replaceAll(ansi, "")).toBe("Ctx: 42% (168k/401k)");
+    expect(result).toContain(`${String.fromCodePoint(27)}[38;5;71m42%`);
+    expect(
+      ctxSegment({ ctx: "120k", ctxPct: 12, ctxWindow: undefined }).replaceAll(
+        ansi,
+        "",
+      ),
+    ).toBe("Ctx: 120k 12%");
   });
   test("retains percentage when setting is absent, another model, or invalid JSON", () => {
     for (const input of ["{}", settings, "{"]) {
@@ -85,6 +106,6 @@ describe("Claude auto-compact window", () => {
         recoverHealth: () => Promise.resolve(undefined),
       },
     });
-    expect(ctxSegment(frame).replaceAll(ansi, "")).toBe("Ctx: 120.0k 30%/400k");
+    expect(ctxSegment(frame).replaceAll(ansi, "")).toBe("Ctx: 30% (120k/400k)");
   });
 });

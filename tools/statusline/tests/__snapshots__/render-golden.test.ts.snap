@@ -3,7 +3,7 @@
 exports[`statusline render golden fixed collector results keep the rendered rows unchanged 1`] = `
 "<prompt-head>
 fixture@example.test | Session: fixture-session
-fixture-agent | Opus | high | rc:off | Ctx: 1.0k 25%
+fixture-agent | Opus | high | rc:off | Ctx: 1.00k 25%
 Rate: claude n/a (input has no Claude rate limits) · 5h n/a (input has no Claude 5h rate limit) · 7d n/a (input has no Claude 7d rate limit) | codex n/a (unavailable) | Jev n/a (fixture unavailable)
 Sys: CPU 12% · RAM 25% (2.0/8.0G) · tmp n/a (not sampled)
 Job: idle"
@@ -12,7 +12,7 @@ Job: idle"
 exports[`statusline render golden fixed collector results keep the rendered rows unchanged 2`] = `
 "<prompt-head>
 fixture@example.test | Session: fixture-session
-fixture-agent | Opus | high | rc:off | Ctx: 1.0k 25%
+fixture-agent | Opus | high | rc:off | Ctx: 1.00k 25%
 Rate: claude n/a (input has no Claude rate limits) · 5h n/a (input has no Claude 5h rate limit) · 7d n/a (input has no Claude 7d rate limit) | codex n/a (unavailable) | Jev n/a (fixture unavailable)
 Sys: CPU 12% · RAM 25% (2.0/8.0G) · tmp n/a (not sampled)
 Job: idle

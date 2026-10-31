@@ -67,11 +67,11 @@ describe("log-sys-snapshot", () => {
     const home = homeWithCache(1_000);
     await fleetSessionFixture(home);
     writeSession(home, "s1", [
-      "Ctx: 609.8k 61%",
+      "Ctx: 42% (168k/400k)",
       "Rate: claude 5h 23% ⟳12:34(55% 23%) · 7d 47% ⟳Jan 22 23:45(62% 47%) | codex 5h 31% ⟳14:10(70% 31%) · 7d 52% ⟳Jan 25 08:00(80% 52%) | Jev n/a (usage sample unavailable)",
     ]);
     const msg = body(fire(home, "Stop").stdout);
-    expect(msg).toContain("Ctx: 609.8k 61%");
+    expect(msg).toContain("Ctx: 42% (168k/400k)");
     expect(msg).toContain("claude 5h 23% ⟳12:34(55% 23%)");
     expect(msg).toContain("7d 47% ⟳Jan 22 23:45(62% 47%)");
     expect(msg).toContain("codex 5h 31% ⟳14:10(70% 31%)");
@@ -105,7 +105,7 @@ describe("log-sys-snapshot", () => {
     const home = homeWithCache(1_000);
     await fleetSessionFixture(home);
     writeSession(home, "s1", [
-      "Ctx: 609.8k 61%",
+      "Ctx: 610k 61%",
       "Rate: claude 5h 23% ⟳12:34 · 7d 47% ⟳Jan 22 23:45 | codex n/a (no fresh Codex rate event) | Jev n/a (usage sample unavailable)",
     ]);
     const msg = body(fire(home, "Stop").stdout);
@@ -206,7 +206,7 @@ describe("log-sys-snapshot", () => {
   test("legacy bare unavailable session rows cannot reach Stop", () => {
     const home = homeWithCache(1_000);
     writeSession(home, "s1", [
-      "Ctx: 609.8k n/a",
+      "Ctx: 610k n/a",
       "Rate: claude n/a · 5h n/a · 7d n/a",
     ]);
     expect(body(fire(home, "Stop").stdout)).toBe(LINE);

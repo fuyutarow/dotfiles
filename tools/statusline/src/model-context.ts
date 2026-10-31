@@ -3,7 +3,10 @@ import type { Dataframe } from "./dataframe.ts";
 import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
 
 function tokenLabel(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+  const rounded = Number(n.toPrecision(3));
+  if (rounded >= 1_000_000) return `${(rounded / 1_000_000).toPrecision(3)}M`;
+  if (rounded >= 1000) return `${(rounded / 1000).toPrecision(3)}k`;
+  return String(rounded);
 }
 function firstNonEmpty(primary: string | undefined, fallback: string): string {
   return primary !== undefined && primary !== "" ? primary : fallback;
@@ -16,13 +19,28 @@ export function ctxSegment(
 ): string {
   const label = `${ESC}[38;5;66mCtx:${RST}`;
   // Neither figure in the payload (before the first API response): one n/a, not two.
-  let seg = `${label} ${field("context-tokens", "", observed(df.ctx, "input has no context token count"))}`;
+  const tokens = field(
+    "context-tokens",
+    "",
+    observed(df.ctx, "input has no context token count"),
+  );
+  let seg = `${label} ${tokens}`;
   // No MID here on purpose — see render()'s header note: this is one fact (context usage)
   // shown two ways, not two sibling facts, so a bare space separates them, not the middot.
   if (df.ctxPct !== null && df.ctxPct !== undefined) {
     const { text: pct, col } = pctFmt(df.ctxPct);
-    seg += ` ${field("context-percent", "context", observed(`${ESC}[${col}m${pct}%${RST}`))}`;
-    if (df.ctxWindow !== undefined) seg += `/${df.ctxWindow / 1000}k`;
+    const percentage = field(
+      "context-percent",
+      "context",
+      observed(`${ESC}[${col}m${pct}%${RST}`),
+    );
+    if (df.ctxWindow !== undefined && df.ctx !== undefined) {
+      seg = `${label} ${percentage} (${tokens}/${tokenLabel(df.ctxWindow)})`;
+    } else {
+      const suffix =
+        df.ctxWindow === undefined ? "" : `/${df.ctxWindow / 1000}k`;
+      seg += ` ${percentage}${suffix}`;
+    }
   } else {
     seg += ` ${field("context-percent", "", observed(undefined, "input has no context percentage"))}`;
   }

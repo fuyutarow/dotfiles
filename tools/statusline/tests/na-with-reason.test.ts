@@ -224,7 +224,7 @@ test.each([false, true])(
       check(message);
       if (!rich) {
         expect(plain(message)).toContain(
-          "Ctx: 609.8k n/a (input has no context percentage)",
+          "Ctx: 610k n/a (input has no context percentage)",
         );
         expect(plain(message)).toContain(
           "5h n/a (input has no Claude 5h rate limit)",
@@ -322,7 +322,7 @@ test("snapshot publication composes same-session fleet Claude with cached Codex 
     layout: "snapshot",
   }).split("\n");
   expect(cached.data.rows.map((row) => row.ansi)).toEqual(expected.slice(0, 2));
-  expect(plain(cached.data.rows[0]?.ansi ?? "")).toContain("Ctx: 609.8k 61%");
+  expect(plain(cached.data.rows[0]?.ansi ?? "")).toContain("Ctx: 610k 61%");
   const rate = plain(cached.data.rows[1]?.ansi ?? "");
   expect(rate).toContain("claude 5h  1%");
   expect(rate).toContain("7d 91%");
@@ -364,7 +364,7 @@ test("snapshot publication composes same-session fleet Claude with cached Codex 
   expect(decoded.success).toBe(true);
   if (!decoded.success) return;
   const message = plain(decoded.data.systemMessage);
-  expect(message).toContain("Ctx: 609.8k 61%");
+  expect(message).toContain("Ctx: 610k 61%");
   expect(message).toContain("claude 5h  1%");
   expect(message).toContain("7d 91%");
   expect(message).toContain("codex 7d  8%");

@@ -21,7 +21,6 @@ export const GpuSampleSchema = Memory.extend({
 export type GpuSample = z.output<typeof GpuSampleSchema>;
 export const GpuReadingSchema = Memory.extend({
   nowPct: Pct,
-  avg60Pct: Pct.nullable(),
 });
 export type GpuReading = z.output<typeof GpuReadingSchema>;
 
@@ -33,12 +32,6 @@ export function gpuStatePath(): string {
     "gpu-owner.json",
   );
 }
-function mean(rows: GpuSample[]): number | null {
-  return rows.length < 3
-    ? null
-    : rows.reduce((sum, s) => sum + s.utilPct, 0) / rows.length;
-}
-/** Arithmetic sample mean, an estimate rather than a reconstructed duty cycle. */
 export function gpuEstimate(
   samples: GpuSample[],
   now: number,
@@ -48,10 +41,8 @@ export function gpuEstimate(
   );
   const last = retained.at(-1);
   if (last === undefined) return "unknown";
-  const window = (ms: number) => retained.filter((s) => now - s.ts <= ms);
   const parsed = GpuReadingSchema.safeParse({
     nowPct: last.utilPct,
-    avg60Pct: mean(window(60 * 60_000)),
     memUsedGiB: last.memUsedGiB,
     memTotalGiB: last.memTotalGiB,
   });

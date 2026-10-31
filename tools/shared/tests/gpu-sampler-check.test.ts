@@ -142,17 +142,24 @@ test("legacy GPU state fields are ignored and the current reading omits them", a
   const { readGpuState, gpuReadFromState } =
     await import("../src/gpu-samples.ts");
   const f = await fixture();
-  const old = { ...ownerState(f.at), avg15Pct: 25, samples15: 3 };
+  const old = {
+    ...ownerState(f.at),
+    avg15Pct: 25,
+    avg60Pct: 25,
+    samples15: 3,
+  };
   await Bun.write(f.statePath, JSON.stringify(old));
   const state = await readGpuState(f.statePath);
   expect(state).toBeDefined();
   expect(state).not.toHaveProperty("avg15Pct");
+  expect(state).not.toHaveProperty("avg60Pct");
   expect(state).not.toHaveProperty("samples15");
   const reading = gpuReadFromState(state, f.at);
   expect(reading.ok).toBe(true);
   if (reading.ok) {
     expect(reading.value).toHaveProperty("nowPct");
     expect(reading.value).not.toHaveProperty("avg15Pct");
+    expect(reading.value).not.toHaveProperty("avg60Pct");
     expect(reading.value).not.toHaveProperty("samples15");
   }
 });

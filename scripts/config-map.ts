@@ -11,10 +11,11 @@
 //
 // Exit: 0 ok · 1 --check found a finding (or Cleye rejected an unknown flag) · 2 usage/FATAL.
 
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
+import { consola } from "consola";
 import { err, ok, type Result } from "neverthrow";
 import { errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
@@ -49,13 +50,13 @@ const LOCAL_TREES = new Set([
 ]);
 
 /** Files inventory: current, non-ignored paths; never consults a VCS index. */
-export function workingTreeConfigFiles(
+export async function workingTreeConfigFiles(
   root: string = ROOT,
-): Result<string[], Error> {
+): Promise<Result<string[], Error>> {
   // Use the ignore engine for nested/negated .gitignore rules and global/local Git exclusions.
   // --no-require-git also applies these rules in non-colocated jj workspaces.
   // Positive -g globs would override ignores, so filter configuration extensions afterward.
-  const listing = Bun.spawnSync(
+  const listing = Bun.spawn(
     [
       "rg",
       "--no-config",
@@ -67,21 +68,30 @@ export function workingTreeConfigFiles(
     ],
     { cwd: root, stdout: "pipe", stderr: "pipe", timeout: 30_000 },
   );
-  if (listing.exitCode !== 0 && listing.exitCode !== 1)
-    return err(
-      new Error(
-        `working-tree inventory failed: ${listing.stderr.toString().trim()}`,
-      ),
-    );
-  const files = listing.stdout
-    .toString()
-    .split("\0")
-    .filter((path) => isWorkingConfig(path, existsSync(join(root, path))));
+  const [stdout, stderr, exitCode] = await Promise.all([
+    listing.stdout.text(),
+    listing.stderr.text(),
+    listing.exited,
+  ]);
+  if (exitCode !== 0 && exitCode !== 1)
+    return err(new Error(`working-tree inventory failed: ${stderr.trim()}`));
+  const files = (
+    await Promise.all(
+      stdout
+        .split("\0")
+        .filter((path) => path !== "")
+        .map(async (path) =>
+          isWorkingConfig(path, await Bun.file(join(root, path)).exists())
+            ? path
+            : undefined,
+        ),
+    )
+  ).flatMap((path) => (path === undefined ? [] : [path]));
   return ok(files.toSorted());
 }
 
-function isWorkingConfig(path: string, isFile: boolean): boolean {
-  if (!isFile || !CONFIG_PATH.test(path)) return false;
+function isWorkingConfig(path: string, fileExists: boolean): boolean {
+  if (!fileExists || !CONFIG_PATH.test(path)) return false;
   if (
     path.startsWith(".cocoindex_code/") &&
     path !== ".cocoindex_code/settings.yml"
@@ -143,7 +153,7 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    consola.error(`FATAL: unknown option '--${flag}'`);
     process.exit(2);
   }
 }
@@ -152,12 +162,15 @@ const covers = (source: string, path: string): boolean =>
   path === source || path.startsWith(`${source}/`);
 
 /** The completeness findings: unregistered config files, and sources that do not exist. */
-export function findings(
+export async function findings(
   rows: readonly Surface[],
   files: readonly string[],
-  sourceExists: (source: string) => boolean = (source) =>
-    existsSync(join(ROOT, source)),
-): string[] {
+  sourceExists: (source: string) => boolean | Promise<boolean> = (source) =>
+    access(join(ROOT, source)).then(
+      () => true,
+      () => false,
+    ),
+): Promise<string[]> {
   const sources = rows.flatMap((r) => r.sources);
   const unregistered = files
     .filter((f) => !EXCLUDED.some((e) => e.test(f)))
@@ -166,8 +179,14 @@ export function findings(
       (f) =>
         `unregistered: ${f} — add a row to scripts/config-registry.ts (or an EXCLUDED reason in scripts/config-map.ts)`,
     );
-  const missing = [...new Set(sources)]
-    .filter((s) => !sourceExists(s))
+  const missing = (
+    await Promise.all(
+      [...new Set(sources)].map(async (s) =>
+        (await sourceExists(s)) ? undefined : s,
+      ),
+    )
+  )
+    .flatMap((s) => (s === undefined ? [] : [s]))
     .map(
       (s) =>
         `missing: ${s} — a registry row names a source that does not exist`,
@@ -211,20 +230,20 @@ function render(rows: readonly Surface[]): string {
   return `${out.join("\n").trimStart()}\n`;
 }
 
-function snapshotRows(
+async function snapshotRows(
   context: JjPrecommit,
   candidate: ReadonlyMap<string, string>,
-): Result<Surface[], Error> {
+): Promise<Result<Surface[], Error>> {
   const path = "scripts/config-registry.ts";
   const rev = candidate.get(path);
   if (rev === undefined)
     return err(new Error(`missing candidate registry: ${path}`));
   // The registry is a zero-dependency TS declaration. Evaluate its candidate copy, not an
   // unrelated worktree edit, and validate the subprocess result at this boundary.
-  const tmp = mkdtempSync(join(tmpdir(), "config-map-jj-"));
+  const tmp = await mkdtemp(join(tmpdir(), "config-map-jj-"));
   const source = join(tmp, "registry.ts");
-  writeFileSync(source, jjContent(context, path, rev));
-  const result = Bun.spawnSync(
+  await writeFile(source, jjContent(context, path, rev));
+  const result = Bun.spawn(
     [
       "bun",
       "-e",
@@ -232,13 +251,14 @@ function snapshotRows(
     ],
     { stdout: "pipe", stderr: "pipe", timeout: 30_000 },
   );
-  rmSync(tmp, { recursive: true, force: true });
-  if (result.exitCode !== 0)
-    return err(
-      new Error(
-        `candidate registry failed: ${result.stderr.toString().trim()}`,
-      ),
-    );
+  const [stdout, stderr, exitCode] = await Promise.all([
+    result.stdout.text(),
+    result.stderr.text(),
+    result.exited,
+  ]);
+  await rm(tmp, { recursive: true, force: true });
+  if (exitCode !== 0)
+    return err(new Error(`candidate registry failed: ${stderr.trim()}`));
   const parsed = jsonOf(
     z.array(
       z.object({
@@ -251,13 +271,13 @@ function snapshotRows(
         verify: z.string(),
       }),
     ),
-  ).safeParse(result.stdout.toString());
+  ).safeParse(stdout);
   return parsed.success
     ? ok(parsed.data)
     : err(new Error(`invalid candidate registry: ${parsed.error.message}`));
 }
 
-function main(): Result<number, Error> {
+async function main(): Promise<Result<number, Error>> {
   const parsed = cli(
     {
       name: "config-map.ts",
@@ -291,48 +311,51 @@ function main(): Result<number, Error> {
     const candidate = context === undefined ? undefined : jjCandidate(context);
     const rowsResult =
       context !== undefined && candidate !== undefined
-        ? snapshotRows(context, candidate)
+        ? await snapshotRows(context, candidate)
         : ok(surfaces());
     if (rowsResult.isErr()) return err(rowsResult.error);
     const rows = rowsResult.value;
     // A precommit candidate remains immutable; ordinary checks judge current working-tree files.
     const pathsResult =
       candidate === undefined
-        ? workingTreeConfigFiles()
+        ? await workingTreeConfigFiles()
         : ok([...candidate.keys()]);
     if (pathsResult.isErr()) return err(pathsResult.error);
     const paths = pathsResult.value;
     const files = paths.filter((f) => CONFIG_PATH.test(f));
-    const found = findings(rows, files, (source) =>
+    const found = await findings(rows, files, async (source) =>
       context === undefined
-        ? existsSync(join(ROOT, source))
+        ? access(join(ROOT, source)).then(
+            () => true,
+            () => false,
+          )
         : paths.some((path) => covers(source, path)),
     );
-    for (const f of found) process.stdout.write(`${f}\n`);
-    process.stdout.write(
+    for (const f of found) consola.error(f);
+    (found.length === 0 ? consola.success : consola.error)(
       found.length === 0
-        ? `config-map: every config file is registered (${rows.length} surfaces)\n`
-        : `config-map: ${found.length} finding(s)\n`,
+        ? `config-map: every config file is registered (${rows.length} surfaces)`
+        : `config-map: ${found.length} finding(s)`,
     );
     return ok(found.length === 0 ? 0 : 1);
   }
   const rows = surfaces();
-  process.stdout.write(
-    parsed.flags.json ? `${JSON.stringify(rows, null, 2)}\n` : render(rows),
-  );
+  if (parsed.flags.json)
+    process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`);
+  else consola.info(render(rows).trimEnd());
   return ok(0);
 }
 
 if (import.meta.main) {
-  const r = main();
+  const r = await main();
   const code = r.match(
     (value) => value,
     (error) => {
-      process.stderr.write(
-        `${error instanceof UsageError ? "usage" : "FATAL"}: ${errorMessage(error)}\n`,
+      consola.error(
+        `${error instanceof UsageError ? "usage" : "FATAL"}: ${errorMessage(error)}`,
       );
       return error instanceof UsageError ? 2 : 2;
     },
   );
-  process.exit(code);
+  process.exitCode = code;
 }

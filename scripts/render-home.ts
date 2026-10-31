@@ -56,17 +56,18 @@
 // Exit: 0 rendered or already current · 1 an input is missing or invalid (nothing written).
 
 import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  unlinkSync,
-} from "node:fs";
+  access,
+  lstat,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  unlink,
+} from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { consola } from "consola";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonText, z } from "../agents/hooks/zod.ts";
 import { loadSlugs } from "../agents/hooks/slugs.ts";
@@ -88,14 +89,20 @@ import {
 } from "./hook-registry.ts";
 
 function print(line: string): void {
-  process.stdout.write(`${line}\n`);
+  consola.info(line);
 }
 
-let cleanupSource = (): void => {};
+const exists = (path: string): Promise<boolean> =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
+
+let cleanupSource = async (): Promise<void> => {};
 
 function fatal(line: string, ...more: string[]): never {
   for (const l of [line, ...more]) process.stderr.write(`${l}\n`);
-  cleanupSource();
+  void cleanupSource();
   return process.exit(1);
 }
 
@@ -113,18 +120,18 @@ if (!prepared.ok)
   fatal(`FATAL: render inputs: ${errorMessage(prepared.error)}`);
 if (prepared.value instanceof Error) fatal(`warn: ${prepared.value.message}`);
 const source = prepared.value;
-cleanupSource = () => {
+cleanupSource = async () => {
   if (source.root !== liveDotfiles)
-    rmSync(source.root, { recursive: true, force: true });
+    await rm(source.root, { recursive: true, force: true });
 };
 await using _source = { [Symbol.asyncDispose]: source.release };
 const dotfiles = source.root;
 print(`render source: ${source.description}`);
 const committedRenderer = join(dotfiles, "scripts/render-home.ts");
-if (dotfiles !== liveDotfiles && existsSync(committedRenderer)) {
+if (dotfiles !== liveDotfiles && (await exists(committedRenderer))) {
   // Execute the landed renderer too: a later clean alpha may have changed the presentation/wire.
   // The exported tree has no jj metadata, so the child reads only these already pinned bytes.
-  const rendered = Bun.spawnSync([process.execPath, committedRenderer], {
+  const rendered = Bun.spawn([process.execPath, committedRenderer], {
     stdout: "inherit",
     stderr: "inherit",
     timeout: 60_000,
@@ -135,16 +142,19 @@ if (dotfiles !== liveDotfiles && existsSync(committedRenderer)) {
       DOTFILES_RENDER_FROM_WORKING_COPY: "0",
     },
   });
+  const renderExitCode = await rendered.exited;
   await source.release();
-  process.exit(rendered.exitCode ?? 1);
+  process.exit(renderExitCode);
 }
 const basePath = `${dotfiles}/agents/claude/settings.json`;
 const overlayPath =
   process.env["CLAUDE_SETTINGS_PRIVATE"] ??
   `${home}/.claude/settings.private.json`;
 
-function readJson(path: string): Record<string, unknown> | Error {
-  const decoded = jsonText.safeParse(readFileSync(path, "utf8"));
+async function readJson(
+  path: string,
+): Promise<Record<string, unknown> | Error> {
+  const decoded = jsonText.safeParse(await readFile(path, "utf8"));
   if (!decoded.success) {
     return new Error(decoded.error.issues.map((i) => i.message).join("; "));
   }
@@ -218,7 +228,7 @@ function expandHome(path: string): string {
   return path;
 }
 
-function missingTarget(command: string): string | undefined {
+async function missingTarget(command: string): Promise<string | undefined> {
   let first = firstToken(command);
   while (first !== undefined && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(first.token))
     first = firstToken(first.rest);
@@ -230,7 +240,7 @@ function missingTarget(command: string): string | undefined {
   if (target === undefined) return undefined;
   const expanded = expandHome(target);
   const found = expanded.includes("/")
-    ? existsSync(expanded)
+    ? await exists(expanded)
     : Bun.which(expanded) !== null;
   return found ? undefined : expanded;
 }
@@ -252,10 +262,10 @@ function commandTargets(value: unknown): string[] {
   return found;
 }
 
-function validateCommandTargets(
+async function validateCommandTargets(
   settings: Record<string, unknown>,
   codex: Record<string, unknown>,
-): void {
+): Promise<void> {
   const statusLine = obj(settings["statusLine"]);
   const commands: string[] = [];
   if (typeof statusLine?.["command"] === "string")
@@ -266,7 +276,7 @@ function validateCommandTargets(
   );
 
   for (const command of commands) {
-    const missing = missingTarget(command);
+    const missing = await missingTarget(command);
     if (missing === undefined) continue;
     let repair: string;
     if (missing.startsWith(`${commandTargetHome}/.bun/bin/`)) {
@@ -292,7 +302,7 @@ if (!baseRead.ok || baseRead.value instanceof Error) {
 
 let overlay: Record<string, unknown> = {};
 let overlayKeys: string[] = [];
-if (existsSync(overlayPath)) {
+if (await exists(overlayPath)) {
   const overlayRead = await attempt(() => readJson(overlayPath));
   // Hard failure, not a skip: a malformed overlay means the private rules (which include
   // soft_deny entries protecting a court-of-record file) would vanish without a word.
@@ -326,9 +336,9 @@ const settings: Record<string, unknown> = { ...baseRead.value, ...overlay };
 // Claude Code writes these keys through its UI; retain their deployed values across renders.
 const claudeWrittenKeys = ["modelSettings"];
 const deployedSettingsPath = `${home}/.claude/settings.json`;
-if (existsSync(deployedSettingsPath)) {
+if (await exists(deployedSettingsPath)) {
   // A malformed deployed file was previously overwritten; preserve that behavior.
-  const deployed = readJson(deployedSettingsPath);
+  const deployed = await readJson(deployedSettingsPath);
   if (!(deployed instanceof Error))
     Object.assign(
       settings,
@@ -359,8 +369,8 @@ if (
 }
 const tzPath = `${dotfiles}/zsh/timezone`;
 let tzNote = "";
-if (existsSync(tzPath)) {
-  const zone = readFileSync(tzPath, "utf8").trim();
+if (await exists(tzPath)) {
+  const zone = (await readFile(tzPath, "utf8")).trim();
   const known = await attempt(() => Temporal.Now.zonedDateTimeISO(zone));
   if (zone === "" || zone.includes("\n") || !known.ok) {
     fatal(
@@ -370,7 +380,7 @@ if (existsSync(tzPath)) {
   const env = obj(settings["env"]) ?? {};
   if (env["TZ"] !== undefined)
     tzNote = ` (env.TZ kept: ${JSON.stringify(env["TZ"])})`;
-  else if (existsSync(`/usr/share/zoneinfo/${zone}`)) {
+  else if (await exists(`/usr/share/zoneinfo/${zone}`)) {
     settings["env"] = { ...env, TZ: zone };
     tzNote = ` (env.TZ=${zone})`;
   } else tzNote = ` (no /usr/share/zoneinfo/${zone}: env.TZ not set)`;
@@ -420,9 +430,7 @@ const outputs: Output[] = [
 ];
 if (process.platform === "linux") {
   const directory = `${home}/.config/environment.d`;
-  if (
-    lstatSync(directory, { throwIfNoEntry: false })?.isSymbolicLink() === true
-  )
+  if ((await lstat(directory).catch(() => null))?.isSymbolicLink() === true)
     fatal(`FATAL: ${directory} is a symlink; refusing to render through it`);
   const cpuProbe = await attempt(async () => {
     const proc = Bun.spawn(["/usr/bin/getconf", "_NPROCESSORS_ONLN"], {
@@ -463,11 +471,11 @@ outputs.push({
   from: `${codexPath} + agents/hooks/hooks.toml`,
 });
 
-validateCommandTargets(settings, codex.value);
+await validateCommandTargets(settings, codex.value);
 
 // ── ~/.claude/CLAUDE.md ──────────────────────────────────────────────────────────────────────
 const mdPath = `${dotfiles}/agents/claude/CLAUDE.md`;
-const md = await attempt(() => readFileSync(mdPath, "utf8"));
+const md = await attempt(() => readFile(mdPath, "utf8"));
 if (!md.ok) fatal(`FATAL: cannot read ${mdPath} — ${errorMessage(md.error)}`);
 outputs.push({
   dest: `${home}/.claude/CLAUDE.md`,
@@ -491,13 +499,13 @@ if (!Bun.deepEquals(declared, produced)) {
 }
 for (const { dest, text, from } of outputs) {
   // One lstat per destination: undefined = absent; a symlink is the older layout (below).
-  const st = lstatSync(dest, { throwIfNoEntry: false });
+  const st = await lstat(dest).catch(() => null);
   // Already current → no write, no churn (this runs on every pull via the post-merge hook).
-  if (st?.isFile() === true && readFileSync(dest, "utf8") === text) {
+  if (st?.isFile() === true && (await readFile(dest, "utf8")) === text) {
     print(`current: ${dest} <- ${from}`);
     continue;
   }
-  mkdirSync(dirname(dest), { recursive: true });
+  await mkdir(dirname(dest), { recursive: true });
   const tmpPath = `${dest}.rendering`;
   await Bun.write(tmpPath, text);
   // The older layout had a SYMLINK here pointing into the repo. rename() would replace the link
@@ -505,8 +513,8 @@ for (const { dest, text, from } of outputs) {
   let replaced = "";
   if (st?.isSymbolicLink() === true) {
     replaced = " (replaced the old symlink into the repo)";
-    unlinkSync(dest);
+    await unlink(dest);
   }
-  renameSync(tmpPath, dest);
+  await rename(tmpPath, dest);
   print(`rendered: ${dest} <- ${from}${replaced}`);
 }

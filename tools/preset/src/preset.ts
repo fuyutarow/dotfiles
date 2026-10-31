@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { createHash } from "node:crypto";
 import { cli as cleyeCli } from "cleye";
 import {
   mkdir,
@@ -13,6 +14,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { jsonOf, z } from "../../../agents/hooks/zod.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { bundleEntry } from "@dotfiles/shared/src/bundle-entry.ts";
+import { embedHousePin } from "@dotfiles/shared/src/house-pin.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const cliArgv = () => process.argv.slice(2);
@@ -182,9 +184,11 @@ const toolNameSchema = z.enum(names);
 const fileMappingSchema = z.object({
   source: z.string(),
   destination: z.string(),
+  sha256: z.string().optional(),
 });
 const toolManifestSchema = z.object({
   sourceCommit: z.string(),
+  localChanges: z.boolean().optional(),
   files: z.array(fileMappingSchema),
 });
 const registrySchema = z.object({ tools: z.array(z.string()) });
@@ -283,14 +287,15 @@ async function sourceBytes(
 async function outputBytes(
   mapping: FileMapping,
   commit: string,
+  headerCommit = commit,
 ): Promise<Outcome<Buffer>> {
   if (!mapping[1].startsWith("scripts/") || !mapping[1].endsWith(".ts")) {
     const source = await sourceBytes(commit, mapping[0]);
     return source.ok
-      ? success(rendered(source.value, mapping, commit))
+      ? success(rendered(source.value, mapping, headerCommit))
       : source;
   }
-  let housePin: string | undefined;
+  let houseToml: unknown;
   if (
     mapping[0] === "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts"
   ) {
@@ -299,15 +304,8 @@ async function outputBytes(
     const parsed = await fsResult(() =>
       Bun.TOML.parse(toml.value.toString("utf8")),
     );
-    if (!parsed.ok) return failure(parsed.error);
-    const pin = z
-      .object({ tools: z.object({ bun: z.string().min(1) }) })
-      .safeParse(parsed.value);
-    if (!pin.success)
-      return failure(
-        "cannot determine the house bun pin from recorded mise.toml",
-      );
-    housePin = pin.data.tools.bun;
+    if (!parsed.ok) return parsed;
+    houseToml = parsed.value;
   }
   let loadError: Error | undefined;
   const plugin: Bun.BunPlugin = {
@@ -330,21 +328,15 @@ async function outputBytes(
         }
         let contents = source.value.toString("utf8");
         if (
-          housePin !== undefined &&
+          houseToml !== undefined &&
           relative(sourceRoot, args.path) === mapping[0]
         ) {
-          const declaration =
-            "const embeddedHousePin: string | undefined = undefined;";
-          if (!contents.includes(declaration)) {
-            loadError = new Error(
-              "mise-contract house pin declaration missing",
-            );
+          const embedded = embedHousePin(contents, houseToml);
+          if (!embedded.ok) {
+            loadError = new Error(embedded.error);
             return { contents: "", loader: "ts" };
           }
-          contents = contents.replace(
-            declaration,
-            `const embeddedHousePin: string | undefined = ${JSON.stringify(housePin)};`,
-          );
+          contents = embedded.value;
         }
         return {
           contents,
@@ -359,7 +351,9 @@ async function outputBytes(
   if (loadError !== undefined) return failure(loadError);
   if (!result.ok) return result;
   if (!result.value.ok) return failure(result.value.error);
-  return success(rendered(Buffer.from(result.value.text), mapping, commit));
+  return success(
+    rendered(Buffer.from(result.value.text), mapping, headerCommit),
+  );
 }
 
 async function pathInfo(
@@ -373,32 +367,25 @@ async function pathInfo(
   return absent.success ? success(undefined) : result;
 }
 
-async function ensureDirectoryNode(path: string): Promise<Outcome<void>> {
-  const info = await pathInfo(path);
-  if (!info.ok) return failure(info.error);
-  if (info.value === undefined) {
-    const made = await fsResult(() => mkdir(path));
-    return made.ok ? success(undefined) : failure(made.error);
-  }
-  if (info.value.isSymbolicLink() || !info.value.isDirectory())
-    return failure(`refusing non-directory or symlink path: ${path}`);
-  return success(undefined);
-}
-
-async function ensureDirectory(
+async function checkDirectory(
   root: string,
   destination: string,
 ): Promise<Outcome<void>> {
   if (!inside(root, destination))
     return failure(`destination escapes tools/: ${destination}`);
-  const rootResult = await ensureDirectoryNode(root);
-  if (!rootResult.ok) return failure(rootResult.error);
-  const relativePath = relative(root, destination);
   let cursor = root;
-  for (const part of relativePath.split(sep).filter(Boolean)) {
-    cursor = join(cursor, part);
-    const nodeResult = await ensureDirectoryNode(cursor);
-    if (!nodeResult.ok) return failure(nodeResult.error);
+  for (const part of [
+    "",
+    ...relative(root, destination).split(sep).filter(Boolean),
+  ]) {
+    if (part !== "") cursor = join(cursor, part);
+    const info = await pathInfo(cursor);
+    if (!info.ok) return failure(info.error);
+    if (
+      info.value !== undefined &&
+      (info.value.isSymbolicLink() || !info.value.isDirectory())
+    )
+      return failure(`refusing non-directory or symlink path: ${cursor}`);
   }
   return success(undefined);
 }
@@ -414,58 +401,64 @@ async function ensureSafeFile(path: string): Promise<Outcome<void>> {
   return success(undefined);
 }
 
-async function syncTool(
+type PlannedWrite = { path: string; bytes: Buffer };
+type Plan = {
+  writes: PlannedWrite[];
+  stale: StaleFile[];
+  files: { source: string; destination: string; sha256: string }[];
+};
+const hash = (bytes: Buffer) =>
+  createHash("sha256").update(bytes).digest("hex");
+
+async function planTool(
   repo: string,
   name: ToolName,
+  revision: string,
   commit: string,
-): Promise<Outcome<string[]>> {
-  const destinationRoot = join(toolsRoot(repo), name);
-  const rootCheck = await ensureDirectory(toolsRoot(repo), destinationRoot);
-  if (!rootCheck.ok) return rootCheck;
-  const previousManifest = await readJSON(
-    join(destinationRoot, ".preset-sync.json"),
+  localChanges: boolean,
+): Promise<Outcome<Plan>> {
+  const root = join(toolsRoot(repo), name);
+  const directory = await checkDirectory(toolsRoot(repo), root);
+  if (!directory.ok) return directory;
+  const previous = await readJSON(
+    join(root, ".preset-sync.json"),
     toolManifestSchema,
   );
-  const previousPaths = previousManifest.ok
-    ? new Set(previousManifest.value.files.map((file) => file.destination))
-    : new Set<string>();
-  const stale = await staleFiles(repo, name, previousPaths);
+  const stale = await staleFiles(
+    repo,
+    name,
+    previous.ok ? previous.value.files : [],
+  );
   if (!stale.ok) return stale;
-  for (const file of stale.value) {
-    const handled = await handleStaleFile(file);
-    if (!handled.ok) return handled;
-  }
-  const files: { source: string; destination: string }[] = [];
+  const writes: PlannedWrite[] = [];
+  const files: Plan["files"] = [];
   for (const mapping of tools[name]) {
-    const destination = join(destinationRoot, mapping[1]);
-    if (!inside(destinationRoot, destination))
+    const path = join(root, mapping[1]);
+    if (!inside(root, path))
       return failure(`invalid destination ${mapping[1]}`);
-    const directory = await ensureDirectory(
-      destinationRoot,
-      dirname(destination),
-    );
-    if (!directory.ok) return directory;
-    const file = await ensureSafeFile(destination);
-    if (!file.ok) return file;
-    const source = await outputBytes(mapping, commit);
-    if (!source.ok) return source;
-    const written = await fsResult(() => writeFile(destination, source.value));
-    if (!written.ok) return written;
-    files.push({ source: mapping[0], destination: mapping[1] });
+    const dir = await checkDirectory(toolsRoot(repo), dirname(path));
+    if (!dir.ok) return dir;
+    const safe = await ensureSafeFile(path);
+    if (!safe.ok) return safe;
+    const output = await outputBytes(mapping, revision, commit);
+    if (!output.ok) return output;
+    writes.push({ path, bytes: output.value });
+    files.push({
+      source: mapping[0],
+      destination: mapping[1],
+      sha256: hash(output.value),
+    });
   }
-  const manifestPath = join(destinationRoot, ".preset-sync.json");
-  const safeManifest = await ensureSafeFile(manifestPath);
-  if (!safeManifest.ok) return safeManifest;
-  const written = await fsResult(() =>
-    writeFile(
-      manifestPath,
-      `${JSON.stringify({ sourceCommit: commit, files }, null, 2)}\n`,
+  const manifest = join(root, ".preset-sync.json");
+  const safe = await ensureSafeFile(manifest);
+  if (!safe.ok) return safe;
+  writes.push({
+    path: manifest,
+    bytes: Buffer.from(
+      `${JSON.stringify({ sourceCommit: commit, localChanges, files }, null, 2)}\n`,
     ),
-  );
-  if (!written.ok) return written;
-  return success(
-    files.map(({ destination }) => join("tools", name, destination)),
-  );
+  });
+  return success({ writes, stale: stale.value, files });
 }
 
 async function readJSON<T>(
@@ -483,17 +476,6 @@ type StaleFile = {
   displayPath: string;
   managed: boolean;
 };
-
-async function handleStaleFile(file: StaleFile): Promise<Outcome<void>> {
-  if (!file.managed) {
-    process.stdout.write(`unmanaged: ${file.displayPath}\n`);
-    return success(undefined);
-  }
-  const removed = await fsResult(() => unlink(file.absolutePath));
-  if (!removed.ok) return failure(removed.error);
-  process.stdout.write(`REMOVE ${file.displayPath}\n`);
-  return success(undefined);
-}
 
 async function filesUnder(root: string): Promise<Outcome<string[]>> {
   return fsResult(async () => {
@@ -514,14 +496,21 @@ async function filesUnder(root: string): Promise<Outcome<string[]>> {
 async function staleFiles(
   repo: string,
   name: ToolName,
-  previousPaths: ReadonlySet<string>,
+  previousFiles: readonly {
+    source: string;
+    destination: string;
+    sha256?: string | undefined;
+  }[],
 ): Promise<Outcome<StaleFile[]>> {
   const destinationRoot = join(toolsRoot(repo), name);
   const currentPaths = new Set<string>(
     tools[name].map((mapping) => mapping[1]),
   );
   const listed = await filesUnder(destinationRoot);
-  if (!listed.ok) return listed;
+  if (!listed.ok) {
+    const info = await pathInfo(destinationRoot);
+    return info.ok && info.value === undefined ? success([]) : listed;
+  }
   const stale: StaleFile[] = [];
   for (const absolutePath of listed.value) {
     const destination = relative(destinationRoot, absolutePath);
@@ -529,23 +518,23 @@ async function staleFiles(
       continue;
     const actual = await fsResult(() => readFile(absolutePath));
     if (!actual.ok) return actual;
-    const hasHeader = /preset-sync source [0-9a-f]{40,64} /u.test(
-      actual.value.toString("utf8"),
+    const previous = previousFiles.find(
+      (file) => file.destination === destination,
     );
-    let managed = previousPaths.has(destination) || hasHeader;
-    const legacy = (legacyMappings[name] ?? []).filter(
-      (candidate) => candidate.mapping[1] === destination,
-    );
-    const expectedOutputs = await Promise.all(
-      legacy.map((candidate) =>
-        outputBytes(candidate.mapping, candidate.commit),
-      ),
-    );
-    const failedOutput = expectedOutputs.find((output) => !output.ok);
-    if (failedOutput?.ok === false) return failure(failedOutput.error);
-    managed ||= expectedOutputs.some(
-      (output) => output.ok && actual.value.equals(output.value),
-    );
+    const text = actual.value.toString("utf8");
+    const source =
+      previous?.source ??
+      (legacyMappings[name] ?? []).find(
+        (item) => item.mapping[1] === destination,
+      )?.mapping[0];
+    const hasHeader =
+      source !== undefined &&
+      /preset-sync source [0-9a-f]{40,64} /u.test(text) &&
+      text.includes(` ${source}`);
+    const managed =
+      previous?.sha256 !== undefined
+        ? hash(actual.value) === previous.sha256
+        : hasHeader;
     stale.push({
       absolutePath,
       displayPath: join("tools", name, destination),
@@ -561,6 +550,20 @@ function validNames(values: string[]): ToolName[] {
     if (valid.success) return [valid.data];
     return [];
   });
+}
+
+async function matchesRecorded(
+  actual: Buffer,
+  mapping: FileMapping,
+  commit: string,
+  sha256: string | undefined,
+): Promise<boolean> {
+  if (sha256 !== undefined)
+    return /^[0-9a-f]{64}$/u.test(sha256) && hash(actual) === sha256;
+  const text = actual.toString("utf8");
+  if (text.includes(marker(commit, mapping[0]))) return true;
+  const current = await outputBytes(mapping, "@", commit);
+  return current.ok && actual.equals(current.value);
 }
 
 async function checkTool(
@@ -604,18 +607,21 @@ async function checkTool(
       changed.push(join("tools", name, destination));
       continue;
     }
-    const sourceContent = await outputBytes(mapping, commit);
-    if (!sourceContent.ok) return sourceContent;
-    const expected = sourceContent.value;
-    if (!actual.value.equals(expected))
-      changed.push(join("tools", name, destination));
+    const recorded = manifest.value.files.find(
+      (file) => file.destination === destination && file.source === mapping[0],
+    );
+    const matches = await matchesRecorded(
+      actual.value,
+      mapping,
+      commit,
+      recorded?.sha256,
+    );
+    if (!matches) changed.push(join("tools", name, destination));
   }
-  const stale = await staleFiles(
-    repo,
-    name,
-    new Set(manifest.value.files.map((file) => file.destination)),
-  );
+  const stale = await staleFiles(repo, name, manifest.value.files);
   if (!stale.ok) return stale;
+  for (const file of stale.value.filter((item) => !item.managed))
+    process.stdout.write(`unmanaged: ${file.displayPath}\n`);
   changed.push(
     ...stale.value
       .filter((file) => file.managed)
@@ -632,7 +638,7 @@ async function main(): Promise<Outcome<number>> {
       check: {
         type: Boolean,
         default: false,
-        description: "check copied tools against their recorded source commit",
+        description: "check copied tools against their recorded hashes",
       },
       tool: {
         type: [String],
@@ -694,35 +700,74 @@ async function main(): Promise<Outcome<number>> {
     );
     return success(count === 0 ? 0 : 1);
   }
-  const commit = await currentCommit();
-  if (!commit.ok) return commit;
-  let count = 0;
+  const revision = await currentCommit();
+  if (!revision.ok) return revision;
+  const published = await runJj([
+    "log",
+    "--no-graph",
+    "-r",
+    "heads(ancestors(@) & ancestors(alpha@origin))",
+    "-T",
+    "commit_id",
+  ]);
+  if (!published.ok) return published;
+  const commit = published.value.stdout.toString().trim();
+  if (published.value.code !== 0 || !/^[0-9a-f]{40,64}$/u.test(commit))
+    return failure("cannot identify published source ancestor");
+  const diff = await runJj([
+    "diff",
+    "--summary",
+    "--from",
+    commit,
+    "--to",
+    revision.value,
+  ]);
+  if (!diff.ok) return diff;
+  if (diff.value.code !== 0) return failure(diff.value.stderr);
+  const localChanges = diff.value.stdout.length > 0;
+  const plans = new Map<ToolName, Plan>();
   for (const name of selected) {
-    const result = await syncTool(repo, name, commit.value);
-    if (!result.ok) return result;
-    count += result.value.length;
+    const plan = await planTool(
+      repo,
+      name,
+      revision.value,
+      commit,
+      localChanges,
+    );
+    if (!plan.ok) return plan;
+    plans.set(name, plan.value);
   }
   const registryPath = join(toolsRoot(repo), ".preset-sync.json");
   const safeRegistry = await ensureSafeFile(registryPath);
   if (!safeRegistry.ok) return safeRegistry;
   const registry = await readJSON(registryPath, registrySchema);
   const existing = registry.ok ? validNames(registry.value.tools) : [];
-  const savedRegistry = await fsResult(() =>
-    writeFile(
-      registryPath,
+  const writes: PlannedWrite[] = [...plans.values()].flatMap(
+    (plan) => plan.writes,
+  );
+  writes.push({
+    path: registryPath,
+    bytes: Buffer.from(
       `${JSON.stringify({ tools: [...new Set([...existing, ...selected])] }, null, 2)}\n`,
     ),
+  });
+  const count = [...plans.values()].reduce(
+    (sum, plan) => sum + plan.files.length,
+    0,
   );
-  if (!savedRegistry.ok) return savedRegistry;
   const scopePath = join(repo, "tsconfig.vendored.json");
   const safeScope = await ensureSafeFile(scopePath);
   if (!safeScope.ok) return safeScope;
   const desired: string[] = [];
   for (const name of new Set([...existing, ...selected])) {
-    const manifest = await readJSON(
-      join(toolsRoot(repo), name, ".preset-sync.json"),
-      toolManifestSchema,
-    );
+    const planned = plans.get(name);
+    const manifest =
+      planned === undefined
+        ? await readJSON(
+            join(toolsRoot(repo), name, ".preset-sync.json"),
+            toolManifestSchema,
+          )
+        : success({ sourceCommit: commit, files: planned.files });
     if (!manifest.ok) return failure(manifest.error);
     const paths = manifest.value.files.map((file) =>
       join("tools", name, file.destination),
@@ -788,20 +833,62 @@ async function main(): Promise<Outcome<number>> {
   ) {
     scope["exclude"] = exclusions;
     const indent = original.value.match(/\n([ \t]+)"/u)?.[1] ?? "  ";
-    const saved = await fsResult(() =>
-      writeFile(scopePath, `${JSON.stringify(scope, null, indent)}\n`),
-    );
-    if (!saved.ok) return saved;
+    writes.push({
+      path: scopePath,
+      bytes: Buffer.from(`${JSON.stringify(scope, null, indent)}\n`),
+    });
   }
-  const savedOwnership = await fsResult(() =>
-    writeFile(
-      ownershipPath,
-      `${JSON.stringify({ paths: managed }, null, 2)}\n`,
-    ),
+  writes.push({
+    path: ownershipPath,
+    bytes: Buffer.from(`${JSON.stringify({ paths: managed }, null, 2)}\n`),
+  });
+  // Snapshot every affected file before mutation, then restore it if a write fails.
+  const removals = [...plans.values()].flatMap((plan) =>
+    plan.stale.filter((file) => file.managed),
   );
-  if (!savedOwnership.ok) return savedOwnership;
+  const before = new Map<string, Buffer | undefined>();
+  for (const path of [
+    ...writes.map((write) => write.path),
+    ...removals.map((file) => file.absolutePath),
+  ]) {
+    const info = await pathInfo(path);
+    if (!info.ok) return info;
+    if (info.value === undefined) {
+      before.set(path, undefined);
+      continue;
+    }
+    const bytes = await fsResult(() => readFile(path));
+    if (!bytes.ok) return bytes;
+    before.set(path, bytes.value);
+  }
+  const applied = await fsResult(async () => {
+    for (const write of writes) {
+      if (before.get(write.path)?.equals(write.bytes) === true) continue;
+      await mkdir(dirname(write.path), { recursive: true });
+      await writeFile(write.path, write.bytes);
+    }
+    for (const file of removals) await unlink(file.absolutePath);
+  });
+  if (!applied.ok) {
+    const rollback = await fsResult(async () => {
+      for (const [path, bytes] of before) {
+        if (bytes === undefined) await unlink(path).catch(() => {});
+        else await writeFile(path, bytes);
+      }
+    });
+    return rollback.ok
+      ? applied
+      : failure(
+          `${applied.error.message}; rollback failed: ${rollback.error.message}`,
+        );
+  }
+  for (const plan of plans.values())
+    for (const file of plan.stale)
+      process.stdout.write(
+        `${file.managed ? "REMOVE" : "unmanaged:"} ${file.displayPath}\n`,
+      );
   process.stdout.write(
-    `PRESET SYNC ${selected.length} tool(s), ${count} file(s) from ${commit.value}\n`,
+    `PRESET SYNC ${selected.length} tool(s), ${count} file(s) from ${commit}\n`,
   );
   return success(0);
 }

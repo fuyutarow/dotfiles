@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { z } from "../../../agents/hooks/zod.ts";
+import { jsonOf, z } from "../../../agents/hooks/zod.ts";
 
 const SCRIPT = resolve(import.meta.dir, "../src/preset.ts");
 const roots: string[] = [];
@@ -243,5 +243,97 @@ describe("preset sync", () => {
     expect(
       await readFile(join(outside, "target/.preset-sync.json")).catch(() => ""),
     ).toBe("");
+  });
+  test("unreachable legacy record preserves unproven stale files and never aborts", async () => {
+    const root = await fixture();
+    const first = await run(root, "--tool", "fmt-staged");
+    expect(first.exit, first.stderr).toBe(0);
+    const manifestPath = join(root, "tools/fmt-staged/.preset-sync.json");
+    const parsed = jsonOf(
+      z.object({
+        sourceCommit: z.string(),
+        files: z.array(
+          z.object({
+            source: z.string(),
+            destination: z.string(),
+            sha256: z.string().optional(),
+          }),
+        ),
+      }),
+    ).safeParse(await readFile(manifestPath, "utf8"));
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    const manifest = parsed.data;
+    manifest.sourceCommit = "a".repeat(40);
+    for (const file of manifest.files) delete file.sha256;
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    const stale = join(root, "tools/fmt-staged/tests/fmt-staged.test.ts");
+    await mkdir(join(root, "tools/fmt-staged/tests"), { recursive: true });
+    await writeFile(stale, "consumer data\n");
+    const synced = await run(root, "--tool", "fmt-staged");
+    expect(synced.exit, synced.stderr).toBe(0);
+    expect(synced.stdout).toContain(
+      "unmanaged: tools/fmt-staged/tests/fmt-staged.test.ts",
+    );
+    expect(await readFile(stale, "utf8")).toBe("consumer data\n");
+  });
+
+  test("fourth tool planning failure leaves previous tools unchanged", async () => {
+    const root = await fixture();
+    const args = [
+      "--tool",
+      "jj-commit",
+      "--tool",
+      "jj-push",
+      "--tool",
+      "jj-precommit",
+      "--tool",
+      "fmt-staged",
+    ];
+    const initial = await run(root, ...args);
+    expect(initial.exit, initial.stderr).toBe(0);
+    const target = join(root, "tools/jj-commit/scripts/jj-commit.ts");
+    await writeFile(target, "local change\n");
+    const before = await readFile(target);
+    const bad = join(root, "tools/fmt-staged/scripts/fmt-staged.ts");
+    await rm(bad);
+    await symlink(target, bad);
+    const result = await run(root, ...args);
+    expect(result.exit).toBe(2);
+    expect(await readFile(target)).toEqual(before);
+  });
+
+  test("second sync is a no-op and checks hashes without a reachable commit", async () => {
+    const root = await fixture();
+    const first = await run(root, "--tool", "jj-push");
+    expect(first.exit, first.stderr).toBe(0);
+    const file = join(root, "tools/jj-push/scripts/jj-push.ts");
+    const before = await lstat(file);
+    const second = await run(root, "--tool", "jj-push");
+    expect(second.exit, second.stderr).toBe(0);
+    expect((await lstat(file)).mtimeMs).toBe(before.mtimeMs);
+    const manifestPath = join(root, "tools/jj-push/.preset-sync.json");
+    const parsed = jsonOf(
+      z.object({
+        sourceCommit: z.string(),
+        files: z.array(
+          z.object({
+            source: z.string(),
+            destination: z.string(),
+            sha256: z.string().optional(),
+          }),
+        ),
+      }),
+    ).safeParse(await readFile(manifestPath, "utf8"));
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    const manifest = parsed.data;
+    manifest.sourceCommit = "a".repeat(40);
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    expect((await run(root, "--check", "--tool", "jj-push")).exit).toBe(0);
+    await writeFile(file, "drift\n");
+    const drift = await run(root, "--check", "--tool", "jj-push");
+    expect(drift.exit).toBe(1);
+    expect(drift.stdout).toContain("DIFF tools/jj-push/scripts/jj-push.ts");
   });
 });

@@ -587,6 +587,28 @@ test("owner declarations select only the declared shared surfaces", async () => 
   expect(parsed.data.pending).toHaveLength(0);
 });
 
+test("candidate mise-contract receives the house pin and rejects a missing pin", async () => {
+  const f = await fixture({ surface: "package-bins" });
+  await writeFile(
+    join(f.root, "package.json"),
+    JSON.stringify({ bin: { "mise-contract": "mise-contract.ts" } }),
+  );
+  await writeFile(
+    join(f.root, "mise-contract.ts"),
+    '#!/usr/bin/env bun\nconst embeddedHousePin: string | undefined = undefined;\nif (embeddedHousePin !== "1.2.3") process.exit(9);\n',
+  );
+  await writeFile(join(f.root, "mise.toml"), '[tools]\nbun = "1.2.3"\n');
+  await writeFile(
+    join(f.root, "standard-presets/consumers.toml"),
+    `[[consumers]]\nname = "pin"\nroot = ${JSON.stringify(f.consumer)}\ntrunk = "alpha"\nsurfaces = ["package-bins"]\nbins = ["mise-contract"]\ncommand = ["mise-contract"]\ntimeout_ms = 10000\n`,
+  );
+  const pass = await runConsumerGates(f.root, ["tools/example.ts"]);
+  expect(pass.lines.join("\n")).toContain("PASS pin: mise-contract exit 0");
+  await writeFile(join(f.root, "mise.toml"), "[tools]\n");
+  const fail = await runConsumerGates(f.root, ["tools/example.ts"]);
+  expect(fail.lines.join("\n")).toContain("cannot determine the house bun pin");
+});
+
 async function typescriptFixture(directory?: string, missing = false) {
   const target = directory ?? ".";
   const f = await fixture({

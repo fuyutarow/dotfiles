@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.5 — 2026-10-31
+
+- Make sync plan all tools before writing and verify recorded content hashes.
+
 ## 0.3.4 — 2026-10-31
 
 - Embed the recorded house Bun pin in copied mise-contract checkers.

@@ -24,6 +24,8 @@ import {
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { embedHousePin } from "../tools/shared/src/house-pin.ts";
+import { bundleEntry } from "../tools/shared/src/bundle-entry.ts";
 import {
   DEFAULT_PLACEMENT,
   Placement,
@@ -341,6 +343,46 @@ async function preserveTypescript(
   );
 }
 
+async function buildMiseContract(
+  entry: string,
+  candidate: string,
+  destination: string,
+) {
+  const toml = Bun.TOML.parse(
+    await Bun.file(join(candidate, "mise.toml")).text(),
+  );
+  const source = embedHousePin(await Bun.file(entry).text(), toml);
+  if (!source.ok) return source.error;
+  const plugin: Bun.BunPlugin = {
+    name: "house-pin",
+    setup(build) {
+      build.onLoad({ filter: /mise-contract\.ts$/u }, (args) =>
+        args.path === entry
+          ? { contents: source.value, loader: "ts" }
+          : undefined,
+      );
+    },
+  };
+  const built = await bundleEntry(entry, [plugin]);
+  if (!built.ok) return built.error;
+  await writeFile(destination, built.text, { mode: 0o755 });
+  return null;
+}
+
+async function installCandidateBin(
+  candidate: string,
+  scratch: string,
+  name: string,
+  target: string,
+) {
+  const entry = join(candidate, target);
+  const destination = join(scratch, "bin", name);
+  if (name === "mise-contract")
+    return buildMiseContract(entry, candidate, destination);
+  await symlink(entry, destination);
+  return null;
+}
+
 async function candidateBins(
   candidate: string,
   scratch: string,
@@ -359,7 +401,8 @@ async function candidateBins(
       relative(candidate, resolve(candidate, target)).startsWith("..")
     )
       return `invalid candidate bin ${name}`;
-    await symlink(join(candidate, target), join(scratch, "bin", name));
+    const error = await installCandidateBin(candidate, scratch, name, target);
+    if (error !== null) return error;
   }
   return undefined;
 }
@@ -1001,6 +1044,7 @@ async function checkConsumer(
   const bins = await candidateBins(candidate, scratch);
   if (bins !== undefined) return [`FAIL ${consumer.name}: ${bins}`];
   env.PATH = `${join(scratch, "bin")}:${env.PATH}`;
+  for (const name of consumer.bins ?? []) executables.paths.delete(name);
   steps.push(
     { label: "stage copied tree", argv: ["git", "add", "--all", "--", "."] },
     { label: consumer.command.join(" "), argv: consumer.command },

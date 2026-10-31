@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterAll, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -48,7 +49,13 @@ test("removes record-proven stale files and reports unmanaged files", async () =
   const manifestResult = jsonOf(
     z.object({
       sourceCommit: z.string(),
-      files: z.array(z.object({ source: z.string(), destination: z.string() })),
+      files: z.array(
+        z.object({
+          source: z.string(),
+          destination: z.string(),
+          sha256: z.string().optional(),
+        }),
+      ),
     }),
   ).safeParse(await readFile(manifestPath, "utf8"));
   expect(manifestResult.success).toBe(true);
@@ -57,6 +64,9 @@ test("removes record-proven stale files and reports unmanaged files", async () =
   manifest.files.push({
     source: "agents/skills/wiring-mise-tasks/tests/jj-commit.test.ts",
     destination: "tests/jj-commit.test.ts",
+    sha256: createHash("sha256")
+      .update("previously shipped test\n")
+      .digest("hex"),
   });
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 

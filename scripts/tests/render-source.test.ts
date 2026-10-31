@@ -54,7 +54,7 @@ async function unlistedImports(modulePath: string): Promise<string[]> {
 }
 
 test("immutable render inputs include shared adapters and root dependency declarations", () => {
-  expect(RENDER_INPUTS).toContain("agents/agx/agx.toml");
+  expect(RENDER_INPUTS).not.toContain("agents/agx/agx.toml");
   expect(RENDER_INPUTS).not.toContain("agents/models");
   expect(RENDER_INPUTS).toContain("tools/shared/src");
   expect(RENDER_INPUTS).toContain("package.json");

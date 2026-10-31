@@ -5,7 +5,7 @@ files = [
   { source = "house.oxlintrc.json", destination = "house.oxlintrc.json" },
   { source = ".oxlintrc.json", destination = ".oxlintrc.json", createOnly = true },
   { source = "tsconfig.json", destination = "tsconfig.json" },
-  { source = "package.json", destination = "package.json", createOnly = true, requiredJsonKeys = ["devDependencies.@types/bun", "devDependencies.knip", "devDependencies.oxfmt", "devDependencies.oxlint", "devDependencies.oxlint-plugin-eslint", "devDependencies.oxlint-tsgolint", "engines.bun"] },
+  { source = "package.json", destination = "package.json", createOnly = true, requiredJsonKeys = ["dependencies.consola", "devDependencies.@types/bun", "devDependencies.knip", "devDependencies.oxfmt", "devDependencies.oxlint", "devDependencies.oxlint-plugin-eslint", "devDependencies.oxlint-tsgolint", "engines.bun"] },
   { source = "knip.jsonc", destination = "knip.jsonc", createOnly = true },
   { source = "zod.ts", destination = "zod.ts" },
   { source = "mise-tasks.toml", destination = "mise-tasks.toml" },

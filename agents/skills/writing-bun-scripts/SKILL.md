@@ -6,7 +6,7 @@ description: >-
 
 # Writing Bun scripts
 
-> **Version**: v2610.2.0 (2026-10-30) — principle-first distillation.
+> **Version**: v2610.2.1 (2026-10-31) — route human-facing messages through consola.
 
 PATH commands use package bin and `bun link`; hooks have no npm dependencies. Resolve script-owned
 files via `import.meta.dir`. Pin one-shot tools with `bunx package@version` and permanent
@@ -54,6 +54,13 @@ verdict lines. For reusable CLI protocol, defaults, compatibility, and interacti
 arguments ([CLIG basics](https://clig.dev/#the-basics)).
 Preserve the existing domain exits 0/1/2; report caught fatal errors on stderr with exit 2,
 and set process exit state at the entry boundary. An error envelope must exit nonzero.
+
+## Output
+
+Use consola for human-facing info, success, warning, error, and progress messages. Write a
+command’s primary machine-readable result with process.stdout.write. Hooks have no npm
+dependencies at runtime: write their stderr/stdout contract with process.stderr.write /
+process.stdout.write. eslint/no-console enforces the absence of console.*.
 
 ## Processes and hooks
 

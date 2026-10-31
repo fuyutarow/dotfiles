@@ -42,6 +42,7 @@ import { readFile, stat } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
+import { createConsola } from "consola";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
 import {
@@ -58,11 +59,14 @@ import { z } from "@dotfiles/shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
 import { OBSIDIAN_ACK_MS } from "./protocol.ts";
 
+const consola = createConsola({ level: 4 });
+const progress = createConsola({ level: 4, stdout: process.stderr });
+
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);
 
 const die = (msg: string, code = 2): never => {
-  console.error(`smart-open: ${msg}`);
+  consola.error(`smart-open: ${msg}`);
   process.exit(code);
 };
 const rejectPrototypeFlag = (type: string, flag: string): void => {
@@ -283,7 +287,7 @@ async function waitSaying<T>(
 ): Promise<{ value: T; took: string }> {
   const t0 = performance.now();
   const timer = setTimeout(() => {
-    console.error(`smart-open: ${what}…`);
+    progress.info(`smart-open: ${what}…`);
   }, SAY_AFTER_MS);
   const value = await work;
   clearTimeout(timer);
@@ -306,7 +310,9 @@ async function routeUrl(url: string): Promise<Routed> {
     const otherwise = OVER_SSH
       ? "not opened (this shell is over ssh)"
       : "this machine";
-    console.log(`${url} -> client if ${SOCKET} answers, else ${otherwise}`);
+    process.stdout.write(
+      `${url} -> client if ${SOCKET} answers, else ${otherwise}\n`,
+    );
     return { to: "client" };
   }
   const { value: probe, took } = await waitSaying(
@@ -314,11 +320,11 @@ async function routeUrl(url: string): Promise<Routed> {
     toClient({ url }),
   );
   if (probe.outcome === "client") {
-    console.log(`opened on the client${took}: ${url}`);
+    consola.success(`opened on the client${took}: ${url}`);
     return { to: "client" };
   }
   if (probe.outcome === "busy") {
-    console.error(
+    consola.error(
       `smart-open: the client is busy (${probe.reply}); not opened: ${url} — run it again, or use --here`,
     );
     return { to: "stop" };
@@ -359,8 +365,8 @@ async function routePath(path: string): Promise<Routed> {
       otherwise = OVER_SSH
         ? "not opened (this shell is over ssh)"
         : `${(await localCommand(path)).join(" ")} only if no client is attached (no socket, or a dead one); otherwise not opened`;
-    console.log(
-      `${path} -> the client's ${destination} if ${SOCKET} answers; ${otherwise}`,
+    process.stdout.write(
+      `${path} -> the client's ${destination} if ${SOCKET} answers; ${otherwise}\n`,
     );
     return { to: "client" };
   }
@@ -377,14 +383,14 @@ async function routePath(path: string): Promise<Routed> {
   );
   if (probe.outcome === "client") {
     // `sent`, not `opened`: VS Code asks before opening a remote path, and a No is invisible here.
-    console.log(`sent to the client's ${destination}${took}: ${path}`);
+    consola.success(`sent to the client's ${destination}${took}: ${path}`);
     return { to: "client" };
   }
   if (probe.outcome === "no-socket") return HERE;
   if (probe.outcome === "stale")
     return { to: "here", why: await dropStale(probe) };
   const why = probe.outcome === "no-receiver" ? probe.why : probe.reply;
-  console.error(
+  consola.error(
     `smart-open: attached from a client, but it did not open ${path} (${why})${refusalHint(probe.reply)}. Not opened on this machine's screen either, which nobody attached remotely can see — use --here for that.`,
   );
   return { to: "stop" };
@@ -397,7 +403,7 @@ async function landHere(
   why: string | undefined,
 ): Promise<boolean> {
   if (argv.flags.app === "obsidian") {
-    console.error(
+    consola.error(
       `smart-open: Obsidian needs a live Mac receiver and SSH forward (${why ?? LOOKED_FOR}); reattach with herdr --remote <alias>`,
     );
     return false;
@@ -406,7 +412,7 @@ async function landHere(
     // One finding per line, in the order a developer acts on them: what failed, what was looked
     // for, why it matters, the fix (where to run it), and the escape hatch. <alias> is the client's
     // ssh alias for this box — this side cannot know it, so it stays a placeholder.
-    console.error(
+    consola.error(
       [
         "smart-open: not opened — no forward from your machine reaches this shell",
         `  looked for: ${LOOKED_FOR} (${why ?? "none bound"})`,
@@ -416,10 +422,10 @@ async function landHere(
         `  or:   ${isUrl(target) ? "o" : "oo"} --here ${isUrl(target) ? "<url>" : "<path>"}  opens it on this machine instead`,
       ].join("\n"),
     );
-    if (isUrl(target)) console.log(target);
+    if (isUrl(target)) process.stdout.write(`${target}\n`);
     return false;
   }
-  if (why !== undefined) console.error(`smart-open: ${why} — opening here`);
+  if (why !== undefined) consola.error(`smart-open: ${why} — opening here`);
   return openHere(target);
 }
 
@@ -440,7 +446,7 @@ function refusalHint(reply: string): string {
 async function openHere(target: string): Promise<boolean> {
   const cmd = await localCommand(target);
   if (argv.flags.dryRun) {
-    console.log(`${target} -> ${cmd.join(" ")}`);
+    process.stdout.write(`${target} -> ${cmd.join(" ")}\n`);
     return true;
   }
   const deadline = AbortSignal.timeout(LOCAL_WAIT_MS);
@@ -453,7 +459,7 @@ async function openHere(target: string): Promise<boolean> {
     }),
   );
   if (!spawned.ok) {
-    console.error(
+    consola.error(
       `smart-open: cannot run ${cmd[0]}: ${errorMessage(spawned.error)}`,
     );
     return false;
@@ -472,14 +478,14 @@ async function openHere(target: string): Promise<boolean> {
     const hint = (await isWsl())
       ? " — is someone logged in, unlocked, at this machine's Windows desktop?"
       : "";
-    console.error(
+    consola.error(
       `smart-open: ${cmd[0]} did not return within ${LOCAL_WAIT_MS / 1000} s and was stopped; nothing is known to have opened${hint}`,
     );
     return false;
   }
   // explorer.exe exits 1 even when it opened the target; only a spawn failure means anything there.
   if (cmd[0] === "explorer.exe" || code === 0) return true;
-  console.error(`smart-open: ${cmd.join(" ")} failed: ${err.trim()}`);
+  consola.error(`smart-open: ${cmd.join(" ")} failed: ${err.trim()}`);
   return false;
 }
 
@@ -489,7 +495,7 @@ async function openOne(raw: string): Promise<boolean> {
       (await stat(resolve(raw))).isDirectory(),
     );
     if (isUrl(raw) || !directory.ok || !directory.value) {
-      console.error(`smart-open: --app obsidian requires a directory: ${raw}`);
+      consola.error(`smart-open: --app obsidian requires a directory: ${raw}`);
       return false;
     }
   }
@@ -500,7 +506,7 @@ async function openOne(raw: string): Promise<boolean> {
   }
   const path = resolve(raw);
   if (!(await pathExists(path))) {
-    console.error(`smart-open: no such file or directory: ${raw}`);
+    consola.error(`smart-open: no such file or directory: ${raw}`);
     return false;
   }
   const routed = argv.flags.here ? HERE : await routePath(path);

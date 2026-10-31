@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 — 2026-10-31
+
+- Route human-facing smart-open messages through consola.
+
 ## 1.2.0 — 2026-10-19
 
 - Add vouched Obsidian shadow removal with --app obsidian --forget.

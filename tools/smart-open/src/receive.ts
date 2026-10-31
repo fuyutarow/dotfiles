@@ -62,6 +62,7 @@ import { chmod, lstat, mkdir, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { cli as cleyeCli } from "cleye";
+import { createConsola } from "consola";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
 import { attempt } from "@dotfiles/shared/src/attempt.ts";
@@ -74,12 +75,14 @@ import {
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { OBSIDIAN_OPEN_MS } from "./protocol.ts";
 
+const consola = createConsola({ level: 4 });
+
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
-    console.error(`receive: unknown option '--${flag}'`);
+    consola.error(`receive: unknown option '--${flag}'`);
     process.exit(2);
   }
 };
@@ -143,7 +146,7 @@ const argv = cli(
 );
 // Cleye leaves stray positionals in `_`; this command takes none.
 if (argv._.length > 0) {
-  console.error(
+  consola.error(
     `receive: unexpected argument: ${argv._[0]} (this command takes no positionals)`,
   );
   process.exit(2);
@@ -154,7 +157,7 @@ if (argv._.length > 0) {
 const MAX_FLAG = 2_147_483_647;
 const positive = (name: string, v: number): number => {
   if (Number.isInteger(v) && v >= 1 && v <= MAX_FLAG) return v;
-  console.error(
+  consola.error(
     `receive: --${name} must be an integer from 1 to ${MAX_FLAG}, got ${v}`,
   );
   return process.exit(2);
@@ -166,7 +169,7 @@ const idleMs = positive("idle-ms", argv.flags.idleMs);
 const openTimeoutMs = positive("open-timeout-ms", argv.flags.openTimeoutMs);
 const settleMs = positive("settle-ms", argv.flags.settleMs);
 if (settleMs >= ACK_MS) {
-  console.error(
+  consola.error(
     `receive: --settle-ms must be below ${ACK_MS} (the client's ack patience, tools/shared/src/sockets.ts), got ${settleMs}`,
   );
   process.exit(2);
@@ -209,7 +212,7 @@ function note(kind: string): void {
   lastReport = now;
   const summary = [...anomalies].map(([k, n]) => `${k} x${n}`).join(", ");
   anomalies.clear();
-  console.error(`${Temporal.Now.instant().toString()} receive: ${summary}`);
+  consola.error(`${Temporal.Now.instant().toString()} receive: ${summary}`);
 }
 
 // The opener runs asynchronously, so one slow `open` never holds up the next request; a spawn
@@ -538,4 +541,4 @@ Bun.listen<Conn>({
   },
 });
 await chmod(sock, 0o600);
-console.log(`receive: listening on ${sock}`);
+consola.info(`receive: listening on ${sock}`);

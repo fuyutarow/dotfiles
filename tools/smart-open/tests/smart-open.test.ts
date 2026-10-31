@@ -1607,7 +1607,7 @@ describe("answer time: the receiver settles before the client gives up", () => {
       "smart-open: waiting for the client to open https://probe.invalid/slowopen…",
     );
     expect(r.out).toMatch(
-      /^opened on the client \(1\.\d s\): https:\/\/probe\.invalid\/slowopen$/mu,
+      /^\[success\] opened on the client \(1\.\d s\): https:\/\/probe\.invalid\/slowopen$/mu,
     );
     expect(await localOpened()).toEqual([]); // the old behaviour: client gave up at 2 s, opened here too
     expect(await slowOpened()).toEqual(["https://probe.invalid/slowopen"]);
@@ -1636,7 +1636,7 @@ describe("client diagnostics say what actually happened", () => {
       [
         "bun",
         "-e",
-        `Bun.listen({ unix: ${JSON.stringify(sock)}, socket: { open() {}, data(s) { s.end(); } } }); console.log("listening"); setInterval(() => {}, 1000);`,
+        `Bun.listen({ unix: ${JSON.stringify(sock)}, socket: { open() {}, data(s) { s.end(); } } }); process.stdout.write("listening\\n"); setInterval(() => {}, 1000);`,
       ],
       { stdout: "pipe", stderr: "ignore" },
     );

@@ -1,6 +1,6 @@
 {
   "name": "@dotfiles/smart-open",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "type": "module",
   "bin": {
@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@dotfiles/shared": "workspace:*",
-    "cleye": "2.6.0"
+    "cleye": "2.6.0",
+    "consola": "3.4.2"
   }
 }

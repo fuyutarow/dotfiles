@@ -7,6 +7,7 @@
   "description": "The house TypeScript toolchain, pinned. The TypeScript and oxlint presets are maintained in dotfiles/standard-presets/ and applied with the preset CLI.",
   "dependencies": {
     "cleye": "2.6.0",
+    "consola": "3.4.2",
     "neverthrow": "8.2.0",
     "zod": "4.6.5"
   },

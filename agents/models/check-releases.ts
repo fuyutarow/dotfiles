@@ -21,6 +21,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { cli } from "cleye";
+import { consola } from "consola";
 import { fromAsyncThrowable, fromThrowable } from "neverthrow";
 import { z } from "../hooks/zod.ts";
 import releases from "./releases.toml";
@@ -84,11 +85,11 @@ let forcedExitCode: number | undefined;
 
 function fail(msg: string): void {
   failures++;
-  console.log(`FAIL ${msg}`);
+  consola.error(`FAIL ${msg}`);
 }
 function warn(msg: string): void {
   warnings++;
-  if (!quiet) console.log(`WARN ${msg}`);
+  if (!quiet) consola.warn(`WARN ${msg}`);
 }
 
 function parseDay(s: string): number | null {
@@ -280,7 +281,7 @@ async function main(): Promise<void> {
   }
 
   if (!quiet) {
-    console.log(
+    consola.info(
       `checked ${models.length} models across ` +
         `${new Set(models.map((m) => m.vendor)).size} vendors; ` +
         `${failures} FAIL, ${warnings} WARN`,

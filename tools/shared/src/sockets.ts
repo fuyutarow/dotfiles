@@ -7,8 +7,12 @@
 // language and cannot import this file, so the doctor compares what ssh RESOLVES it to against the
 // two path functions.
 import { lstatSync, readdirSync, unlinkSync } from "node:fs";
+import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { attempt } from "./attempt.ts";
+
+// Bun supports the same missing-entry option on async lstat as on lstatSync.
+const missingEntryOptions = { bigint: false as const, throwIfNoEntry: false };
 
 /**
  * Where sshd binds the forward on the REMOTE box: one per user AND client alias. The alias is in
@@ -83,6 +87,13 @@ export function fileKey(path: string): FileKey | undefined {
   return s === undefined
     ? undefined
     : { dev: s.dev, ino: s.ino, socket: s.isSocket() };
+}
+
+export async function fileKeyAsync(path: string): Promise<FileKey | undefined> {
+  const info = await lstat(path, missingEntryOptions);
+  return info === undefined
+    ? undefined
+    : { dev: info.dev, ino: info.ino, socket: info.isSocket() };
 }
 
 /**

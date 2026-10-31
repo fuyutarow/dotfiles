@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.2 — 2026-10-31
+
+- Use async socket discovery.
+
 ## 1.2.1 — 2026-10-31
 
 - Route human-facing smart-open messages through consola.

@@ -48,7 +48,7 @@ import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
 import {
   ACK_MS,
   editorHost,
-  fileKey,
+  fileKeyAsync,
   remoteForwards,
   remoteSocket,
   SSH_HOST_ENV,
@@ -121,11 +121,6 @@ if (argv.flags.forget && argv.flags.app !== "obsidian")
 
 const pathExists = async (path: string): Promise<boolean> =>
   (await attempt(() => stat(path))).ok;
-// The sockets.ts helpers are sync until their own unit makes them async; awaiting through this keeps
-// each call correct either way.
-const settled = <T>(value: T | PromiseLike<T>): Promise<T> =>
-  Promise.resolve(value);
-
 // The forward to use, and the client alias its socket name carries (sockets.ts, remoteSocket):
 // SMART_OPEN_SOCKET pins one (tests, a hand-bound forward); otherwise the newest bound in
 // SMART_OPEN_SOCKET_DIR (default /tmp). With none bound, SOCKET names the pattern, for messages.
@@ -138,7 +133,7 @@ async function pickForward(): Promise<{ socket: string; alias: string }> {
   }
   const dir = process.env["SMART_OPEN_SOCKET_DIR"] ?? "/tmp";
   const newest = (await pathExists(dir))
-    ? (await settled(remoteForwards(user, dir)))[0]
+    ? remoteForwards(user, dir)[0]
     : undefined;
   return newest ?? { socket: remoteSocket(user, "<alias>", dir), alias: "" };
 }
@@ -210,7 +205,7 @@ const ErrorCodeSchema = z.object({ code: z.unknown() });
 // One line out, one line back. Resolves to the outcome; never throws.
 async function toClient(request: Record<string, string>): Promise<Probe> {
   const ackMs = request["app"] === "obsidian" ? OBSIDIAN_ACK_MS : ACK_MS;
-  const seen = await settled(fileKey(SOCKET));
+  const seen = await fileKeyAsync(SOCKET);
   if (seen === undefined || !seen.socket)
     return { outcome: "no-socket", reply: "", why: "", seen };
   const { promise, resolve: done } = Promise.withResolvers<Probe>();

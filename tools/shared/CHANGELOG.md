@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.7 — 2026-10-31
+
+- Add async socket discovery helpers.
+
 ## 0.19.6 — 2026-10-30
 
 - Correct lsof normal exit signal handling for stale ref locks.

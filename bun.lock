@@ -265,7 +265,7 @@
     },
     "tools/disk-reclaim": {
       "name": "@dotfiles/disk-reclaim",
-      "version": "1.12.18",
+      "version": "1.12.19",
       "bin": {
         "disk-reclaim": "src/reclaim.ts",
       },

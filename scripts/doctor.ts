@@ -66,6 +66,8 @@ import {
 } from "node:fs/promises";
 import { constants, type Stats } from "node:fs";
 import { consola } from "consola";
+import { bunRequirement, checkBunRuntime } from "./bun-runtime.ts";
+export { checkBunRuntime } from "./bun-runtime.ts";
 import { ownerlessRefLocks } from "@dotfiles/shared/src/ref-locks.ts";
 import { homedir, hostname, release, tmpdir, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -1663,41 +1665,6 @@ export async function checkIterm2(ctx: Ctx): Promise<Finding> {
         "iterm2",
         `iTerm2 prefs folder is ${haveLabel}, not ${want}`,
         "mise run mac:iterm2",
-      );
-}
-
-// package.json owns the runtime requirement; directory aliases are not version evidence.
-async function bunRequirement(ctx: Ctx): Promise<string | undefined> {
-  const source = await attempt(() =>
-    Bun.file(join(ctx.dotfiles, "package.json")).text(),
-  );
-  if (!source.ok) return undefined;
-  const parsed = jsonText.safeParse(source.value);
-  const required = parsed.success
-    ? obj(obj(parsed.data)?.["engines"])?.["bun"]
-    : undefined;
-  return typeof required === "string" && /^>=\d+\.\d+\.\d+$/u.test(required)
-    ? required
-    : undefined;
-}
-
-export async function checkBunRuntime(ctx: Ctx): Promise<Finding> {
-  const required = await bunRequirement(ctx);
-  if (required === undefined)
-    return fail(
-      "bun-runtime",
-      "package.json engines.bun must declare a minimum",
-      "repair package.json engines.bun",
-    );
-  return Bun.semver.satisfies(Bun.version, required)
-    ? pass(
-        "bun-runtime",
-        `${process.execPath} reports ${Bun.version} (required ${required})`,
-      )
-    : fail(
-        "bun-runtime",
-        `${process.execPath} reports ${Bun.version}; required ${required}`,
-        "mise install bun; brew upgrade bun",
       );
 }
 

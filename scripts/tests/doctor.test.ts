@@ -132,6 +132,51 @@ const sshV = Bun.spawnSync(["ssh", "-V"], { stderr: "pipe" }).stderr.toString();
 const OLD_SSH = !sshSupportsAttachMatch(sshV);
 
 const REPO = join(import.meta.dir, "..", "..");
+test("bun:check runs without installed packages", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "doctor-bootstrap-"));
+  using _cleanup = {
+    [Symbol.dispose]: () => {
+      rmSync(fixture, { recursive: true, force: true });
+    },
+  };
+  mkdirSync(join(fixture, "scripts"));
+  cpSync(
+    join(REPO, "scripts/bun-runtime.ts"),
+    join(fixture, "scripts/bun-runtime.ts"),
+  );
+  mkdirSync(join(fixture, "tools/shared/src"), { recursive: true });
+  mkdirSync(join(fixture, "agents/hooks/vendor"), { recursive: true });
+  cpSync(
+    join(REPO, "tools/shared/src/zod.ts"),
+    join(fixture, "tools/shared/src/zod.ts"),
+  );
+  cpSync(
+    join(REPO, "agents/hooks/vendor/deps.js"),
+    join(fixture, "agents/hooks/vendor/deps.js"),
+  );
+  cpSync(join(REPO, "package.json"), join(fixture, "package.json"));
+  const config = z
+    .object({ tasks: z.object({ "bun:check": z.object({ run: z.string() }) }) })
+    .safeParse(Bun.TOML.parse(readFileSync(join(REPO, "mise.toml"), "utf8")));
+  expect(config.success).toBe(true);
+  if (!config.success) return;
+  const command = config.data.tasks["bun:check"].run;
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    HOME: fixture,
+    DOTFILES: fixture,
+  };
+  delete env["NODE_PATH"];
+  const result = Bun.spawnSync(["sh", "-c", command], {
+    cwd: fixture,
+    env,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  expect(result.stderr.toString()).toBe("");
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout.toString()).toContain("PASS  bun-runtime");
+});
 const SCRIPT = join(REPO, "scripts", "doctor.ts");
 const BUN_EXEC = join(REPO, "scripts", "bun-exec.sh");
 const RENDER_HOME = join(REPO, "scripts", "render-home.ts");

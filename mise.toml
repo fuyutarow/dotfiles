@@ -1023,4 +1023,4 @@ run = "bun scripts/lint-no-new-bash.ts"
 [tasks."bun:check"]
 dir = "{{config_root}}"
 description = "Enforce package.json engines.bun for the task runtime"
-run = "DOCTOR_ONLY=bun-runtime bun scripts/doctor.ts"
+run = "bun scripts/bun-runtime.ts"

@@ -40,7 +40,7 @@ test("LaTeX preset applies to an empty repo and detects drift", async () => {
   expect(applied.stderr).toBe("");
   expect(applied.stdout).toBe(
     parsed.data
-      .map(([, destination]) => `preset: wrote ${destination}\n`)
+      .map(([, destination]) => `[log] preset: wrote ${destination}\n`)
       .join(""),
   );
   for (const [source, destination] of parsed.data)
@@ -52,7 +52,7 @@ test("LaTeX preset applies to an empty repo and detects drift", async () => {
   expect(await run("diff", "latex", "--to", repo)).toEqual({
     exit: 0,
     stderr: "",
-    stdout: "preset: latex is up to date\n",
+    stdout: "[log] preset: latex is up to date\n",
   });
   for (const [, destination] of parsed.data) {
     await writeFile(join(repo, destination), "drift\n");

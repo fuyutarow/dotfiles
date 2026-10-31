@@ -70,7 +70,7 @@ describe("Julia preset", () => {
     expect(await run("diff", "julia", "--to", target)).toEqual({
       exit: 0,
       stderr: "",
-      stdout: "preset: julia is up to date\n",
+      stdout: "[log] preset: julia is up to date\n",
     });
     const project = Bun.TOML.parse(
       await Bun.file(join(target, "Project.toml")).text(),

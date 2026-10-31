@@ -55,7 +55,7 @@ describe("uv preset", () => {
       );
     }
     expect(await run("diff", "python", "--to", repo)).toEqual({
-      stdout: "preset: python is up to date\n",
+      stdout: "[log] preset: python is up to date\n",
       stderr: "",
       exit: 0,
     });

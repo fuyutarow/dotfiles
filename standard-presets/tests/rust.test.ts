@@ -70,7 +70,7 @@ test("Cargo preset applies to an empty repository, preserves policy, and detects
   });
   expect(await run("diff", "rust", "--to", scratch)).toEqual({
     exit: 0,
-    stdout: "preset: rust is up to date\n",
+    stdout: "[log] preset: rust is up to date\n",
     stderr: "",
   });
   await writeFile(join(scratch, "rustfmt.toml"), "max_width = 80\n");

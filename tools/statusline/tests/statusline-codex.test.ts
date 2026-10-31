@@ -11,7 +11,7 @@ afterEach(async () => {
   );
 });
 
-test("statusline --codex defaults to PWD and reports a missing interactive session once", async () => {
+test("statusline --codex refuses selection without an explicit identity", async () => {
   const home = await mkdtemp(join(tmpdir(), "statusline-codex-home-"));
   homes.push(home);
   const sessions = join(home, ".codex", "sessions");
@@ -26,11 +26,9 @@ test("statusline --codex defaults to PWD and reports a missing interactive sessi
     }),
   });
   const output = result.stdout.toString();
-  expect(result.exitCode).toBe(0);
-  expect(result.stderr.toString()).toBe("");
-  expect(output).toContain("Codex: no interactive session for /fixture/codex");
-  expect(output.startsWith("\u001B[2m")).toBe(true);
-  expect(output.split("\n")).toHaveLength(1);
+  expect(result.exitCode).toBe(2);
+  expect(output).toBe("");
+  expect(result.stderr.toString()).toContain("missing Codex runtime identity");
 
   const threadResult = Bun.spawnSync(
     [process.execPath, script, "--codex", "--thread", "missing-thread-id"],

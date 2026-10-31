@@ -66,7 +66,11 @@ test("Codex rollout normalizes cwd, model, effort, context and token window", as
   const root = await fixtureRoot([
     { name: "codex-rollout.jsonl", session: "fixture-codex-session" },
   ]);
-  const result = await readCodexSessionStatus("/fixture/codex", root);
+  const result = await readCodexSessionStatus(
+    "fixture-codex-session",
+    "/fixture/codex",
+    root,
+  );
   expect(result).toMatchObject({
     cwd: "/fixture/codex",
     sessionId: "fixture-codex-session",
@@ -90,7 +94,11 @@ test("Codex rollout without token/rate data leaves those slots absent", async ()
   const root = await fixtureRoot([
     { name: "codex-rollout-no-rate.jsonl", session: "fixture-codex-no-rate" },
   ]);
-  const result = await readCodexSessionStatus("/fixture/codex", root);
+  const result = await readCodexSessionStatus(
+    "fixture-codex-no-rate",
+    "/fixture/codex",
+    root,
+  );
   expect(result).toMatchObject({
     model: { name: "gpt-6-luna" },
     effort: "medium",
@@ -103,7 +111,7 @@ test("Codex rollout without token/rate data leaves those slots absent", async ()
   expect(codexRateSegment(undefined)).toContain("n/a");
 });
 
-test("Codex rollout selects an interactive TUI session over a newer exec session", async () => {
+test("Codex rollout selects the explicit interactive thread, not a newer exec session", async () => {
   const root = await fixtureRoot([
     {
       name: "codex-rollout-interactive.jsonl",
@@ -119,7 +127,13 @@ test("Codex rollout selects an interactive TUI session over a newer exec session
   const exec = join(day, "rollout-fixture-fixture-exec-session.jsonl");
   await utimes(interactive, 1, 1);
   await utimes(exec, 2, 2);
-  expect(await readCodexSessionStatus("/fixture/codex", root)).toMatchObject({
+  expect(
+    await readCodexSessionStatus(
+      "fixture-interactive-session",
+      "/fixture/codex",
+      root,
+    ),
+  ).toMatchObject({
     sessionId: "fixture-interactive-session",
     model: { name: "gpt-6-luna" },
   });
@@ -137,7 +151,9 @@ test("Codex rollout selects an interactive TUI session over a newer exec session
 test("missing rollout for a pane cwd returns no session facts", async () => {
   const root = await mkdtemp(join(tmpdir(), "statusline-codex-missing-"));
   roots.push(root);
-  expect(await readCodexSessionStatus("/missing/cwd", root)).toBeUndefined();
+  expect(
+    await readCodexSessionStatus("missing-thread", "/missing/cwd", root),
+  ).toBeUndefined();
 });
 
 const record = (type: string, payload: unknown) =>
@@ -209,7 +225,7 @@ test("current schema survives a >512 KiB gap without a legacy model", async () =
   for (const result of [
     await readCodexThreadStatus("long-thread", root),
     await readCodexPinnedSessionStatus("long-thread", root),
-    await readCodexSessionStatus("/fixture/settings", root),
+    await readCodexSessionStatus("long-thread", "/fixture/settings", root),
   ]) {
     expect(result).toMatchObject({
       sessionId: "long-thread",

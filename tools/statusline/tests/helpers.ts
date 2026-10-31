@@ -125,6 +125,8 @@ export function isolatedStatuslineEnv(
     AGX_STATE_DIR: state,
     AGX_DISPATCHER_SESSION: "",
     CLAUDE_CODE_SESSION_ID: "",
+    CODEX_SESSION_ID: "",
+    CODEX_THREAD_ID: "",
   };
 }
 export function cleanupTempDirs(): void {

@@ -15,6 +15,7 @@ import {
   readFleetSession,
 } from "@dotfiles/shared/src/fleet-session.ts";
 import { writeStatuslineFleetSession } from "../src/fleet-session.ts";
+import { isolatedStatuslineEnv } from "./helpers.ts";
 
 const root = await mkdtemp(join(tmpdir(), "fleet-session-writer-"));
 afterAll(() => rm(root, { recursive: true, force: true }));
@@ -221,12 +222,17 @@ test("Codex rollout selection writes its session handoff on the entrypoint", asy
       process.execPath,
       join(import.meta.dir, "../src/statusline-main.ts"),
       "--codex",
-      "--cwd",
-      cwd,
+      "--thread",
+      sessionId,
       "--once",
     ],
     {
-      env: { ...process.env, HOME: home, PWD: cwd, XDG_RUNTIME_DIR: runtime },
+      env: isolatedStatuslineEnv({
+        ...process.env,
+        HOME: home,
+        PWD: cwd,
+        XDG_RUNTIME_DIR: runtime,
+      }),
       stdout: "pipe",
       stderr: "pipe",
       timeout: 20000,

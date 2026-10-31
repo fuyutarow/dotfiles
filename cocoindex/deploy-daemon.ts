@@ -1,67 +1,84 @@
-// Consumer: link:dots deploy. Install and enable the unit; never start or restart it.
-// Only the operator (or default.target at login) owns activation. The .wsl source suffix
-// must not become a systemd alias through a renamed symlink.
 import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readlinkSync,
-  realpathSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+  access,
+  lstat,
+  mkdir,
+  readFile,
+  readlink,
+  realpath,
+  rename,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { attemptOr } from "../tools/shared/src/attempt.ts";
 
 export const CCC_UNIT = "ccc-daemon.service";
 export type SystemctlResult = { code: number; out: string };
-export type Systemctl = (args: string[]) => SystemctlResult;
-export function systemctl(args: string[]): SystemctlResult {
-  const r = Bun.spawnSync(["systemctl", "--user", ...args], {
+export type Systemctl = (args: string[]) => Promise<SystemctlResult>;
+
+export async function systemctl(args: string[]): Promise<SystemctlResult> {
+  const child = Bun.spawn(["systemctl", "--user", ...args], {
     stdout: "pipe",
     stderr: "pipe",
     timeout: 5000,
   });
-  return {
-    code: r.exitCode,
-    out: `${r.stdout.toString()}${r.stderr.toString()}`.trim(),
-  };
+  const [out, err, code] = await Promise.all([
+    child.stdout.text(),
+    child.stderr.text(),
+    child.exited,
+  ]);
+  return { code, out: `${out}${err}`.trim() };
 }
 
-export function deployCccDaemon(
+async function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
+async function lstatOrUndefined(path: string) {
+  return attemptOr(() => lstat(path), null);
+}
+
+export async function deployCccDaemon(
   ctx: { home: string; dotfiles: string; os: string; mode: string },
   run: Systemctl = systemctl,
-  available = Bun.which("systemctl") !== null &&
-    Bun.which("systemctl") !== undefined &&
-    existsSync("/run/systemd/system"),
-): Error | undefined {
+  available?: boolean,
+): Promise<Error | undefined> {
   if (ctx.os === "mac" || ctx.mode === "check") return undefined;
-  if (!available) {
+  const systemdAvailable =
+    available ??
+    (Bun.which("systemctl") !== null &&
+      Bun.which("systemctl") !== undefined &&
+      (await exists("/run/systemd/system")));
+  if (!systemdAvailable) {
     process.stdout.write("skip: ccc-daemon (no systemd on this host)\n");
     return undefined;
   }
   const source = join(ctx.dotfiles, "cocoindex/ccc-daemon.service.wsl");
   const unit = join(ctx.home, ".config/systemd/user", CCC_UNIT);
-  const wanted = readFileSync(source, "utf8");
-  const st = lstatSync(unit, { throwIfNoEntry: false });
-  if (st?.isSymbolicLink() === true) {
-    if (readlinkSync(unit) !== source)
+  const wanted = await readFile(source, "utf8");
+  const stResult = await lstatOrUndefined(unit);
+  const st = stResult;
+  const unitIsSymlink = st?.isSymbolicLink() === true;
+  if (unitIsSymlink) {
+    if ((await readlink(unit)) !== source)
       return new Error(
         `${unit} is a foreign symlink; inspect it before mise run link:dots`,
       );
-  } else if (st !== undefined && !st.isFile()) {
+  } else if (st !== null && !st.isFile()) {
     return new Error(`${unit} is not a regular file`);
   }
   if (
-    st?.isSymbolicLink() === true ||
-    !existsSync(unit) ||
-    readFileSync(unit, "utf8") !== wanted
+    unitIsSymlink ||
+    !(await exists(unit)) ||
+    (await readFile(unit, "utf8")) !== wanted
   ) {
-    mkdirSync(dirname(unit), { recursive: true });
+    await mkdir(dirname(unit), { recursive: true });
     const temporary = `${unit}.deploy-${process.pid}`;
-    writeFileSync(temporary, wanted, { mode: 0o644 });
-    renameSync(temporary, unit);
+    await writeFile(temporary, wanted, { mode: 0o644 });
+    await rename(temporary, unit);
   }
   // Old enables may have linked the .wsl source directly. Remove only that repo-owned edge so
   // enable can replace it with an edge to the installed real unit; leave foreign edges alone.
@@ -70,14 +87,16 @@ export function deployCccDaemon(
     ".config/systemd/user/default.target.wants",
     CCC_UNIT,
   );
-  if (
-    lstatSync(edge, { throwIfNoEntry: false })?.isSymbolicLink() === true &&
-    existsSync(edge) &&
-    realpathSync(edge) === realpathSync(source)
-  )
-    unlinkSync(edge);
+  const edgeStat = await lstatOrUndefined(edge);
+  const edgeIsSymlink = edgeStat?.isSymbolicLink() === true;
+  const edgeExists = edgeIsSymlink && (await exists(edge));
+  if (edgeExists) {
+    const edgeTarget = await realpath(edge);
+    const sourceTarget = await realpath(source);
+    if (edgeTarget === sourceTarget) await unlink(edge);
+  }
   for (const args of [["daemon-reload"], ["enable", CCC_UNIT]]) {
-    const r = run(args);
+    const r = await run(args);
     if (r.code !== 0)
       return new Error(
         `systemctl --user ${args.join(" ")} failed: ${r.out}; repair: mise run link:dots`,

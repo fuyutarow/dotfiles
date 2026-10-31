@@ -6,6 +6,7 @@ import {
   mkdtemp,
   readFile,
   symlink,
+  unlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -16,10 +17,8 @@ import { z } from "../../agents/hooks/zod.ts";
 
 const REPO = join(import.meta.dir, "../..");
 
-// deployCccDaemon is owned by a later async unit; Promise.resolve keeps this call
-// correct whether it returns the result directly or a Promise.
 const deploy = (...args: Parameters<typeof deployCccDaemon>) =>
-  Promise.resolve(deployCccDaemon(...args));
+  deployCccDaemon(...args);
 const pathExists = async (path: string) =>
   access(path).then(
     () => true,
@@ -30,7 +29,15 @@ async function fixture(enabled = "disabled", active = "inactive") {
   const state = { enabled, active };
   const calls: string[] = [];
   const ctx = { home, dotfiles: REPO, os: "linux", mode: "safe" };
-  const run = (args: string[]) => {
+  const enableEdge = async () => {
+    const dir = join(home, ".config/systemd/user/default.target.wants");
+    await mkdir(dir, { recursive: true });
+    await symlink(
+      "../ccc-daemon.service",
+      join(dir, "ccc-daemon.service"),
+    ).catch(() => null);
+  };
+  const run = async (args: string[]) => {
     calls.push(`--user ${args.join(" ")}`);
     const checked = z
       .object({ enabled: z.string(), active: z.string() })
@@ -46,31 +53,25 @@ async function fixture(enabled = "disabled", active = "inactive") {
           current.enabled === "enabled" || current.enabled === "alias" ? 0 : 1,
         out: current.enabled,
       };
-    if (verb === "enable") {
-      current.enabled = "enabled";
-    }
+    if (verb === "enable") current.enabled = "enabled";
     if (verb === "start") current.active = "active";
     Object.assign(state, current);
+    if (verb === "enable") await enableEdge();
     return { code: 0, out: "" };
   };
   const doctor = () =>
     checkCccDaemon(
       { home, dotfiles: REPO, isMac: false, isWsl: false, isCoreBox: true },
-      (cmd) => {
-        const result = run(cmd.slice(2));
-        return Promise.resolve({
+      async (cmd) => {
+        const result = await run(cmd.slice(2));
+        return {
           ...result,
           err: "",
           timedOut: false,
           missing: false,
-        });
+        };
       },
     );
-  const enableEdge = async () => {
-    const dir = join(home, ".config/systemd/user/default.target.wants");
-    await mkdir(dir, { recursive: true });
-    await symlink("../ccc-daemon.service", join(dir, "ccc-daemon.service"));
-  };
   return { home, ctx, run, doctor, calls, pathExists, enableEdge, state };
 }
 
@@ -125,7 +126,15 @@ test("an old enable edge pointing directly at the repo declaration migrates to t
     join(REPO, "cocoindex/ccc-daemon.service.wsl"),
     join(dir, "ccc-daemon.service"),
   );
-  expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
+  const run = async (args: string[]) => {
+    const result = await f.run(args);
+    if (args[0] === "enable") {
+      await unlink(join(dir, "ccc-daemon.service"));
+      await f.enableEdge();
+    }
+    return result;
+  };
+  expect(await deploy(f.ctx, run, true)).toBeUndefined();
   expect(await f.pathExists(join(dir, "ccc-daemon.service"))).toBe(false);
   await f.enableEdge();
   expect((await f.doctor()).verdict).toBe("PASS");
@@ -203,7 +212,9 @@ test.each(["daemon-reload", "enable"])(
   async (verb) => {
     const f = await fixture();
     const run = (args: string[]) =>
-      args[0] === verb ? { code: 9, out: "fixture failure" } : f.run(args);
+      args[0] === verb
+        ? Promise.resolve({ code: 9, out: "fixture failure" })
+        : f.run(args);
     const error = await deploy(f.ctx, run, true);
     expect(error?.message).toContain("mise run link:dots");
   },

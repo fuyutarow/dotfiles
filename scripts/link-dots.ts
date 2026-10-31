@@ -1239,7 +1239,7 @@ async function main(): Promise<Error | void> {
     );
     if (agentCpuError !== undefined) return agentCpuError;
   }
-  const daemonError = deployCccDaemon(ctx);
+  const daemonError = await deployCccDaemon(ctx);
   if (daemonError !== undefined) return daemonError;
   const triggersError = await deployDeclaredTriggers(ctx, triggers);
   if (triggersError !== undefined) return triggersError;

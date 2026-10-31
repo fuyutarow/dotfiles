@@ -69,7 +69,9 @@ Type=simple
 # failures defer with a named status, and CUDA OOM retries only on CUDA or surfaces visibly.
 ExecStart=%h/.local/share/uv/tools/cocoindex-code/bin/python %h/dotfiles/cocoindex/ccc-daemon-launch.py
 Environment="CCC_GPU_BATCH_SIZE=8"
+Environment="CCC_GPU_UTILIZATION_PERCENT=80"
 Environment="CCC_GPU_WAIT_SECONDS=1"
+Environment="CCC_GPU_WINDOW=30"
 Environment="XDG_RUNTIME_DIR=%t"
 Environment="COCOINDEX_RUN_GPU_IN_SUBPROCESS=0"
 Restart=always

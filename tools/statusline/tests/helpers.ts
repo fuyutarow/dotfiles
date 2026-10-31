@@ -24,6 +24,12 @@ export function seedAgxSnapshot(
     capturedAt: number;
     findings?: FleetFindings;
     workspaces?: WorkspaceCounts;
+    judgments?: {
+      bySession?: Record<string, number>;
+      repository?: number;
+      land?: number;
+      why?: string | null;
+    };
   },
   cwd = process.cwd(),
 ) {
@@ -36,6 +42,7 @@ export function seedAgxSnapshot(
   );
   const findings = snapshot.findings;
   const workspaces = snapshot.workspaces;
+  const judgments = snapshot.judgments;
   const value = {
     schema: 1,
     runs: {
@@ -68,7 +75,12 @@ export function seedAgxSnapshot(
             ),
             captured_at: findings.capturedAt,
           },
-    judgments: { by_session: {}, repository: 0, land: 0, why: null },
+    judgments: {
+      by_session: judgments?.bySession ?? {},
+      repository: judgments?.repository ?? 0,
+      land: judgments?.land ?? 0,
+      why: judgments?.why ?? null,
+    },
   };
   const path = ownerStatePath(env);
   const previous = fromThrowable(() => readFileSync(path, "utf8"))();

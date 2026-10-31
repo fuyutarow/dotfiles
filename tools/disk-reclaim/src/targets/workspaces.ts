@@ -17,7 +17,7 @@ import {
   type Listed,
 } from "../jj/discover.ts";
 import { jj, unpushedRevset, workingCopyRevset } from "../jj/jj.ts";
-import { runProtection } from "../jj/run-guard.ts";
+import { createRunProtection, runProtection } from "../jj/run-guard.ts";
 import type { OpenPaths } from "../lib/procs.ts";
 import { resolveProcRoot } from "../lib/procs.ts";
 import { createLivenessSnapshot, scratchRef } from "../liveness/facts.ts";
@@ -421,6 +421,10 @@ export function createWorkspacesTarget(
         ? { available: false, skip_reason: "jj is not installed" }
         : { available: true, skip_reason: null },
     plan: async (ctx) => {
+      const planOptions = {
+        ...options,
+        runProtection: options.runProtection ?? createRunProtection(),
+      };
       const context = {
         ...ctx,
         liveness:
@@ -451,7 +455,13 @@ export function createWorkspacesTarget(
       for (const store of [...stores].toSorted()) {
         checkScanDeadline(ctx);
         candidates.push(
-          ...(await storeCandidates(store, context, options, covered, ctx.log)),
+          ...(await storeCandidates(
+            store,
+            context,
+            planOptions,
+            covered,
+            ctx.log,
+          )),
         );
       }
       for (const dir of found.workspaces) {

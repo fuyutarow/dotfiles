@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
-import { runProtection } from "../../src/jj/run-guard.ts";
+import { createRunProtection, runProtection } from "../../src/jj/run-guard.ts";
 
 const originalPath = process.env["PATH"];
 let root: string | undefined;
@@ -62,4 +62,27 @@ test("full agx inventory protects old unjudged runs and incomplete responses", a
 
   writeFileSync(modePath, "fail");
   expect(await runProtection(store, path)).toContain("run inventory");
+});
+
+test("a plan reads agx once, including failures, and a new plan reads again", async () => {
+  root = tempRoot("run-guard-count-");
+  const bin = join(root, "bin");
+  const count = join(root, "calls");
+  mkdirSync(bin);
+  writeFileSync(
+    join(bin, "agx"),
+    `#!${process.execPath}\nawait Bun.write(${JSON.stringify(count)}, (await Bun.file(${JSON.stringify(count)}).text().catch(() => "")) + "x");\nprocess.exit(1);\n`,
+  );
+  chmodSync(join(bin, "agx"), 0o755);
+  process.env["PATH"] = `${bin}:${originalPath}`;
+  const guard = createRunProtection();
+  expect(await guard(root, join(root, "one"))).toContain(
+    "cannot read agx run inventory",
+  );
+  expect(await guard(root, join(root, "two"))).toContain(
+    "cannot read agx run inventory",
+  );
+  expect(await Bun.file(count).text()).toBe("x");
+  await createRunProtection()(root, join(root, "three"));
+  expect(await Bun.file(count).text()).toBe("xx");
 });

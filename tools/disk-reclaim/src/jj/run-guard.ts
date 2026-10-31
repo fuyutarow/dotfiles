@@ -46,17 +46,51 @@ async function command(argv: string[], cwd: string) {
   });
 }
 
+type Inventory =
+  | { kind: "ok"; runs: z.output<typeof Runs> }
+  | { kind: "error"; error: string };
+
+async function readInventory(store: string): Promise<Inventory> {
+  const read = await command(["agx", "worker", "ls", "--all", "--json"], store);
+  if (!read.ok)
+    return {
+      kind: "error",
+      error: `cannot read agx run inventory (${read.detail}); keep workspace`,
+    };
+  const parsed = jsonOf(Runs).safeParse(read.stdout);
+  if (!parsed.success)
+    return {
+      kind: "error",
+      error: "invalid agx run inventory; keep workspace",
+    };
+  return { kind: "ok", runs: parsed.data };
+}
+
+/** One inventory per plan; create a new guard for each independent operation. */
+export function createRunProtection() {
+  let inventory: Promise<Inventory> | undefined;
+  return async (store: string, path: string, forgottenCommit?: string) => {
+    inventory ??= readInventory(store);
+    return protect(await inventory, store, path, forgottenCommit);
+  };
+}
+
 /** Fresh owner inventory, never the verdict cache: unknown judgment/landing retains data. */
 export async function runProtection(
   store: string,
   path: string,
   forgottenCommit?: string,
 ): Promise<string | null> {
-  const read = await command(["agx", "worker", "ls", "--all", "--json"], store);
-  if (!read.ok)
-    return `cannot read run inventory (${read.detail}); keep workspace`;
-  const parsed = jsonOf(Runs).safeParse(read.stdout);
-  if (!parsed.success) return "invalid run inventory; keep workspace";
+  return protect(await readInventory(store), store, path, forgottenCommit);
+}
+
+async function protect(
+  inventory: Inventory,
+  store: string,
+  path: string,
+  forgottenCommit?: string,
+): Promise<string | null> {
+  if (inventory.kind === "error") return inventory.error;
   const dir = await real(path);
   const inside = async (p: string | null | undefined) => {
     if (p === null || p === undefined || p === "") return false;
@@ -64,13 +98,13 @@ export async function runProtection(
     return resolved === dir || resolved.startsWith(dir + sep);
   };
   const links = new Map<string, string[]>();
-  for (const r of parsed.data) {
+  for (const r of inventory.runs) {
     if (r.continues === null || r.continues === undefined) continue;
     links.set(r.id, [...(links.get(r.id) ?? []), r.continues]);
     links.set(r.continues, [...(links.get(r.continues) ?? []), r.id]);
   }
   const pending: string[] = [];
-  for (const r of parsed.data) {
+  for (const r of inventory.runs) {
     if ((await inside(r.workspace)) || (await inside(r.cwd)))
       pending.push(r.id);
   }
@@ -80,7 +114,7 @@ export async function runProtection(
     selected.add(id);
     pending.push(...(links.get(id) ?? []));
   }
-  const lineage = parsed.data.filter((r) => selected.has(r.id));
+  const lineage = inventory.runs.filter((r) => selected.has(r.id));
   const live = lineage.find((r) => !["ended", "orphaned"].includes(r.state));
   if (live !== undefined)
     return `live or continuing run ${live.id}; keep workspace`;

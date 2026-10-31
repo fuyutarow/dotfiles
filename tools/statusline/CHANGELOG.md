@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.12 — 2026-10-31
+
+- Read standalone disk metrics asynchronously.
+
 ## 0.22.11 — 2026-10-31
 
 - Use the rendered Claude session's observed auto-compact window, falling back to the model window.

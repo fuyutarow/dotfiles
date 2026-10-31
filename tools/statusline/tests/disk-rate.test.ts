@@ -1,11 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { readdirSync, statfsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  diskReadings,
-  diskReadingsAsync,
-  type DiskReading,
-} from "../src/storage.ts";
+import { diskReadingsAsync, type DiskReading } from "../src/storage.ts";
 import { diskSegment } from "../src/storage-display.ts";
 import { DiskRateStateSchema, updateDiskRates } from "../src/disk-rate.ts";
 import { readJson } from "../src/bounded.ts";
@@ -146,7 +142,7 @@ describe("disk rate", () => {
     ).toBeUndefined();
   });
 
-  test("missing/corrupt state is silent and repaired atomically by both read paths", async () => {
+  test("missing/corrupt state is silent and repaired atomically", async () => {
     const dir = tempDir("disk-rate-");
     const configPath = join(dir, "storage.toml");
     const statePath = join(dir, "disk-rate.json");
@@ -160,7 +156,7 @@ describe("disk rate", () => {
       '{"schema":1,"drives":{"x":42}}',
     ]) {
       if (corrupt !== undefined) writeFileSync(statePath, corrupt);
-      for (const read of [diskReadings, diskReadingsAsync]) {
+      for (const read of [diskReadingsAsync]) {
         const result = await read({ configPath, statePath, now: 60_000 });
         expect(result.isOk()).toBe(true);
         const entry = result.unwrapOr([])[0];

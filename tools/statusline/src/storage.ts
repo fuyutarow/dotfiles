@@ -1,4 +1,3 @@
-import { readFileSync, statfsSync } from "node:fs";
 import { readFile, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -9,13 +8,7 @@ import {
   type Result,
 } from "neverthrow";
 import { z } from "./zod.ts";
-import {
-  execError,
-  readJson,
-  readJsonAsync,
-  writeCache,
-  writeCacheAsync,
-} from "./bounded.ts";
+import { execError, readJsonAsync, writeCacheAsync } from "./bounded.ts";
 import {
   DiskRateStateSchema,
   diskRateStatePath,
@@ -219,77 +212,14 @@ export interface DiskReadOptions {
   configPath?: string;
   statePath?: string;
   now?: number;
-}
-// Sync compatibility reader retained for standalone callers; the renderer uses diskReadingsAsync.
-export function diskReadings(
-  options: DiskReadOptions = {},
-): Result<DiskEntry[], string> {
-  const raw = fromThrowable(
-    (): unknown =>
-      Bun.TOML.parse(
-        readFileSync(options.configPath ?? STORAGE_CONFIG, "utf8"),
-      ),
-    () => "storage-headroom.toml unreadable",
-  )();
-  if (raw.isErr()) return err(raw.error);
-  const parsed = StorageConfigSchema.safeParse(raw.value);
-  if (!parsed.success)
-    return err("storage-headroom.toml has an unexpected shape");
-  const drives = Object.values(parsed.data.drive ?? {});
-  // The config says WHICH disks to show: an empty list is the config failing to say, not "no disks".
-  if (drives.length === 0) return err("no [drive.*] in storage-headroom.toml");
-  const out: DiskEntry[] = [];
-  for (const d of drives) {
-    if (d.path === undefined) {
-      out.push({
-        kind: "miss",
-        label: "Disk",
-        why: "drive entry has no path",
-      });
-      continue;
-    }
-    const path = d.path;
-    const st = fromThrowable(
-      () => statfsSync(path),
-      (e): string => execError(e).code ?? "statfs failed",
-    )();
-    // ENOENT off WSL: this OS has no such drive (/mnt/c on macOS) — nothing to show. Under WSL
-    // /mnt/c is the host drive the storage gate exists to protect, so a missing mount is a drive
-    // that could not be read, like any other failure: shown as n/a.
-    if (st.isErr() && st.error === "ENOENT" && !IS_WSL) continue;
-    if (st.isErr()) {
-      out.push({ kind: "miss", label: diskLabel(path), why: st.error });
-      continue;
-    }
-    const { bsize, blocks, bfree, bavail } = st.value;
-    const usedG = ((blocks - bfree) * bsize) / 1024 ** 3;
-    const freeG = (bavail * bsize) / 1024 ** 3;
-    const totalG = (blocks * bsize) / 1024 ** 3;
-    out.push({
-      kind: "reading",
-      label: diskLabel(path),
-      path,
-      rateRedMinutes: d.rate_red_minutes,
-      rateYellowMinutes: d.rate_yellow_minutes,
-      usedG,
-      totalG,
-      freeG,
-    });
-  }
-  const statePath = options.statePath ?? diskRateStatePath();
-  const rated = updateDiskRates(
-    out,
-    readJson(statePath, DiskRateStateSchema),
-    options.now ?? Temporal.Now.instant().epochMilliseconds,
-  );
-  writeCache(statePath, rated.state);
-  return ok(rated.entries);
+  resolveCache?: boolean;
 }
 /** Async render-path disk read, so config and filesystem probes do not block rendering. */
 export async function diskReadingsAsync(
   options: DiskReadOptions = {},
+  isWslOverride?: boolean,
 ): Promise<Result<DiskEntry[], string>> {
-  const isWsl = await isWslAsync();
+  const isWsl = isWslOverride ?? (await isWslAsync());
   const text = await Bun.file(options.configPath ?? STORAGE_CONFIG)
     .text()
     .catch(() => null);
@@ -343,9 +273,9 @@ export async function diskReadingsAsync(
   const statePath = options.statePath ?? diskRateStatePath();
   const rated = updateDiskRates(
     out,
-    await readJsonAsync(statePath, DiskRateStateSchema),
+    await readJsonAsync(statePath, DiskRateStateSchema, options.resolveCache),
     options.now ?? Temporal.Now.instant().epochMilliseconds,
   );
-  await writeCacheAsync(statePath, rated.state);
+  await writeCacheAsync(statePath, rated.state, options.resolveCache);
   return ok(rated.entries);
 }

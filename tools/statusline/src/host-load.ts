@@ -10,7 +10,12 @@ import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { cpus, totalmem } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
-import { diskReadings, tmpfsReading, tmpReadingsAsync } from "./storage.ts";
+import {
+  diskReadingsAsync,
+  IS_WSL,
+  tmpfsReading,
+  tmpReadingsAsync,
+} from "./storage.ts";
 import { cgroupMemory } from "./cgroup-memory.ts";
 import { z } from "./zod.ts";
 import { sampleCccIndexing } from "./ccc-indexing.ts";
@@ -405,7 +410,7 @@ export function gpuSamplingSupported(
 async function main(): Promise<void> {
   const tmp = await tmpReadingsAsync();
   process.stdout.write(
-    `${sysRow({ ...(await readHostLoadAsync()), disks: diskReadings(), tmp })}\n`,
+    `${sysRow({ ...(await readHostLoadAsync()), disks: await diskReadingsAsync({ resolveCache: false }, IS_WSL), tmp })}\n`,
   );
 }
 

@@ -40,8 +40,9 @@ export function readJson<S extends z.ZodType>(
 export async function readJsonAsync<S extends z.ZodType>(
   path: string,
   schema: S,
+  resolveCache = true,
 ): Promise<z.output<S> | undefined> {
-  path = cachePath(path);
+  if (resolveCache) path = cachePath(path);
   const text = await Bun.file(path)
     .text()
     .catch(() => null);
@@ -277,8 +278,9 @@ export function writeCache(path: string, value: unknown): void {
 export async function writeCacheAsync(
   path: string,
   value: unknown,
+  resolveCache = true,
 ): Promise<void> {
-  path = cachePath(path);
+  if (resolveCache) path = cachePath(path);
   const tmp = `${path}.${process.pid}.${crypto.randomUUID()}.tmp`;
   await mkdir(dirname(path), { recursive: true })
     .then(() => Bun.write(tmp, JSON.stringify(value)))

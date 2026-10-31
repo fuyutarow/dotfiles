@@ -26,14 +26,16 @@ const paths = (home: string) => [
 export const createCleanTarget = (
   home: () => string = () => process.env["HOME"] ?? homedir(),
   isBusy: ProcessProbe = processBusy,
-  bunGc: (homePath: string) => boolean | Promise<boolean> = (homePath) => {
-    const result = Bun.spawnSync(["bun", "pm", "cache", "rm"], {
-      stdout: "pipe",
-      stderr: "pipe",
+  bunGc: (homePath: string) => boolean | Promise<boolean> = async (
+    homePath,
+  ) => {
+    const child = Bun.spawn(["bun", "pm", "cache", "rm"], {
+      stdout: "ignore",
+      stderr: "ignore",
       timeout: 120_000,
       env: { ...process.env, HOME: homePath },
     });
-    return result.exitCode === 0;
+    return (await child.exited) === 0;
   },
   fs = defaultFs,
 ) =>

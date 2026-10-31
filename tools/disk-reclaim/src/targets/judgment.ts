@@ -1,11 +1,11 @@
-import { existsSync, lstatSync, readdirSync } from "node:fs";
+import { exists, lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
 import { protectedReason } from "../lib/protected.ts";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
+import { fromAsyncThrowable } from "neverthrow";
 
 const candidate = (id: string, path: string, bytes: number): Candidate => ({
   id,
@@ -19,7 +19,7 @@ const candidate = (id: string, path: string, bytes: number): Candidate => ({
   result: null,
 });
 
-export function judgmentCandidates(
+export async function judgmentCandidates(
   env = process.env,
   home = homedir(),
   protection: {
@@ -29,16 +29,16 @@ export function judgmentCandidates(
     ignoreUnreadableProcs?: readonly string[];
     reason?: (path: string) => string | null;
   } = {},
-): Candidate[] {
+): Promise<Candidate[]> {
   const result: Candidate[] = [];
   const rustup = env["RUSTUP_HOME"] ?? join(home, ".rustup");
   const toolchains = join(rustup, "toolchains");
-  const toolchainNames = fromThrowable(() =>
-    readdirSync(toolchains),
-  )().unwrapOr([]);
+  const toolchainNames = (
+    await fromAsyncThrowable(() => readdir(toolchains))()
+  ).unwrapOr([]);
   for (const toolchain of toolchainNames) {
     const docs = join(toolchains, toolchain, "share/doc/rust/html");
-    if (!existsSync(docs)) continue;
+    if (!(await exists(docs))) continue;
     let reason: string | null;
     if (protection.reason !== undefined) reason = protection.reason(docs);
     else
@@ -56,7 +56,7 @@ export function judgmentCandidates(
           : { procDir: protection.procDir }),
         ignoreUnreadableProcs: protection.ignoreUnreadableProcs ?? [],
       });
-    const item = candidate(docs, docs, estimate(docs));
+    const item = candidate(docs, docs, await estimate(docs));
     if (reason === null) result.push(item);
     else {
       const verdict = reason === "process paths are unknown" ? "ASK" : "KEEP";
@@ -71,19 +71,19 @@ export function judgmentCandidates(
   return result;
 }
 
-function estimate(path: string): number {
+async function estimate(path: string): Promise<number> {
   let size = 0;
-  const walk = (p: string): void => {
-    const stat = fromThrowable(() => lstatSync(p))();
+  const walk = async (p: string): Promise<void> => {
+    const stat = await fromAsyncThrowable(() => lstat(p))();
     if (stat.isErr()) return;
     if (!stat.value.isDirectory() || stat.value.isSymbolicLink()) {
       size += stat.value.blocks * 512;
       return;
     }
-    const names = fromThrowable(() => readdirSync(p))().unwrapOr([]);
-    for (const name of names) walk(join(p, name));
+    const names = (await fromAsyncThrowable(() => readdir(p))()).unwrapOr([]);
+    for (const name of names) await walk(join(p, name));
   };
-  walk(path);
+  await walk(path);
   return size;
 }
 
@@ -91,7 +91,7 @@ export const judgment: Target = {
   name: "judgment",
   tier: "owner",
   available: () => ({ available: true, skip_reason: null }),
-  plan: (ctx: Context) =>
+  plan: async (ctx: Context) =>
     judgmentCandidates(process.env, homedir(), {
       repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
       ...(ctx.config.protected === undefined

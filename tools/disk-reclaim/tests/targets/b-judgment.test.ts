@@ -9,7 +9,7 @@ afterAll(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-test("judgment owns rust-docs only; Rust target directories belong to rust", () => {
+test("judgment owns rust-docs only; Rust target directories belong to rust", async () => {
   const project = join(root, "project");
   const target = join(project, "target");
   const docs = join(root, ".rustup/toolchains/stable/share/doc/rust/html");
@@ -17,7 +17,7 @@ test("judgment owns rust-docs only; Rust target directories belong to rust", () 
   mkdirSync(docs, { recursive: true });
   writeFileSync(join(project, "Cargo.toml"), "[package]\nname='fixture'\n");
   writeFileSync(join(target, "old-artifact"), "fixture");
-  const selected = judgmentCandidates(
+  const selected = await judgmentCandidates(
     { RUSTUP_HOME: join(root, ".rustup") },
     root,
   );

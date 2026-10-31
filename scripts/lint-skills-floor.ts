@@ -6,14 +6,8 @@
 // alone). wiring-repositories HOOK-1c: the commit gate judges only what is committed. So the index
 // copy of agents/skills/ and the budget file are exported to a temp dir and checked there.
 // J1 jj mode exports BASE with only selected REV paths overlaid; unrelated WIP is excluded.
-import {
-  cpSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-} from "node:fs";
+import { cp, copyFile, mkdtemp, mkdir, rm, stat } from "node:fs/promises";
+import { fromAsyncThrowable } from "neverthrow";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -29,45 +23,52 @@ import {
 
 const BUDGET = "agents/skills-listing-budget.json";
 const ROOT = join(import.meta.dir, "..");
-const run = (cmd: string[], stdin?: Uint8Array) =>
-  Bun.spawnSync(cmd, {
+const run = async (cmd: string[], stdin?: Uint8Array) => {
+  const child = Bun.spawn(cmd, {
     stdin,
     stdout: "pipe",
     stderr: "pipe",
     timeout: 120_000,
   });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).arrayBuffer(),
+    new Response(child.stderr).arrayBuffer(),
+  ]);
+  return { exitCode, stdout: Buffer.from(stdout), stderr: Buffer.from(stderr) };
+};
 
-function copyWorktreeInputs(
+async function copyWorktreeInputs(
   root: string,
   destination: string,
-): string | undefined {
+): Promise<string | undefined> {
   const sourceSkills = join(root, "agents/skills");
   const candidateSkills = join(destination, "agents/skills");
-  mkdirSync(candidateSkills, { recursive: true });
-  for (const directory of new Bun.Glob("*/").scanSync({
+  await mkdir(candidateSkills, { recursive: true });
+  for await (const directory of new Bun.Glob("*/").scan({
     cwd: sourceSkills,
     onlyFiles: false,
   })) {
-    cpSync(join(sourceSkills, directory), join(candidateSkills, directory), {
+    await cp(join(sourceSkills, directory), join(candidateSkills, directory), {
       recursive: true,
       dereference: true,
     });
   }
   for (const path of [BUDGET, "agents/skills.thirdparty.toml"]) {
     const source = join(root, path);
-    if (!existsSync(source)) return path;
+    if ((await fromAsyncThrowable(() => stat(source))()).isErr()) return path;
     const target = join(destination, path);
-    mkdirSync(join(target, ".."), { recursive: true });
-    copyFileSync(source, target);
+    await mkdir(join(target, ".."), { recursive: true });
+    await copyFile(source, target);
   }
   return undefined;
 }
 
-const tmp = mkdtempSync(join(tmpdir(), "skills-floor-"));
+const tmp = await mkdtemp(join(tmpdir(), "skills-floor-"));
 const context = jjContext();
 const listed =
   context === undefined && process.env["SKILLS_LINT_WORKTREE"] !== "1"
-    ? run([
+    ? await run([
         "bun",
         "scripts/tracked-files.ts",
         "--git-index",
@@ -78,9 +79,10 @@ const listed =
       ])
     : undefined;
 if (listed !== undefined && listed.exitCode !== 0) {
-  console.error(
+  process.stderr.write(
     "lint-skills-floor: tracked-files failed: " +
-      listed.stderr.toString().trim(),
+      listed.stderr.toString().trim() +
+      "\n",
   );
   process.exit(2);
 }
@@ -98,25 +100,26 @@ if (context !== undefined) {
     ),
   );
 } else if (process.env["SKILLS_LINT_WORKTREE"] === "1") {
-  const missing = copyWorktreeInputs(ROOT, tmp);
+  const missing = await copyWorktreeInputs(ROOT, tmp);
   if (missing !== undefined) {
-    console.error(`lint-skills-floor: missing ${missing}`);
-    rmSync(tmp, { recursive: true, force: true });
+    process.stderr.write(`lint-skills-floor: missing ${missing}\n`);
+    await rm(tmp, { recursive: true, force: true });
     process.exit(2);
   }
 } else {
   // J1 migration fallback; TODO(J1): remove after jj consumer rollout. Standalone mise tasks set
   // SKILLS_LINT_WORKTREE; commit hooks provide PRECOMMIT_VCS and use the selected J1 candidate.
-  const exported = run(
+  const exported = await run(
     ["git", "checkout-index", "-z", "--stdin", "--prefix=" + tmp + "/"],
     listed?.stdout,
   );
   if (exported.exitCode !== 0) {
-    console.error(
+    process.stderr.write(
       "lint-skills-floor: Git-index export failed: " +
-        exported.stderr.toString().trim(),
+        exported.stderr.toString().trim() +
+        "\n",
     );
-    rmSync(tmp, { recursive: true, force: true });
+    await rm(tmp, { recursive: true, force: true });
     process.exit(2);
   }
 }
@@ -126,8 +129,8 @@ const declaration =
     ? candidateDeclaration
     : await readDeclaration(join(import.meta.dir, ".."));
 if (declaration.isErr()) {
-  console.error(`lint-skills-floor: ${declaration.error}`);
-  rmSync(tmp, { recursive: true, force: true });
+  process.stderr.write(`lint-skills-floor: ${declaration.error}\n`);
+  await rm(tmp, { recursive: true, force: true });
   process.exit(2);
 }
 const thirdPartyCopies = thirdPartySkillFiles(
@@ -136,19 +139,21 @@ const thirdPartyCopies = thirdPartySkillFiles(
 );
 if (thirdPartyCopies.length > 0) {
   for (const { path, skill } of thirdPartyCopies)
-    console.error(
-      `lint-skills-floor: third-party skill "${skill}" reappeared: ${path}`,
+    process.stderr.write(
+      `lint-skills-floor: third-party skill "${skill}" reappeared: ${path}\n`,
     );
-  rmSync(tmp, { recursive: true, force: true });
+  await rm(tmp, { recursive: true, force: true });
   process.exit(1);
 }
 const dirs = [
-  ...new Bun.Glob("*/").scanSync({
-    cwd: join(tmp, "agents/skills"),
-    onlyFiles: false,
-  }),
+  ...(await Array.fromAsync(
+    new Bun.Glob("*/").scan({
+      cwd: join(tmp, "agents/skills"),
+      onlyFiles: false,
+    }),
+  )),
 ].map((d) => join(tmp, "agents/skills", d));
-const check = Bun.spawnSync(
+const child = Bun.spawn(
   [
     "bun",
     join(
@@ -162,5 +167,6 @@ const check = Bun.spawnSync(
   ],
   { stdout: "inherit", stderr: "inherit", timeout: 300_000 },
 );
-rmSync(tmp, { recursive: true, force: true });
-process.exit(check.exitCode ?? 1);
+const checkExit = await child.exited;
+await rm(tmp, { recursive: true, force: true });
+process.exit(checkExit);

@@ -76,7 +76,7 @@ test("staticFindings honors a tmp-ok reason in the comment block directly above"
   ).toHaveLength(1);
 });
 
-test("lintStatic reports file:line for a test under tests/", () => {
+test("lintStatic reports file:line for a test under tests/", async () => {
   const root = scratch();
   const name = "tmp";
   mkdirSync(join(root, "scripts/tests"), { recursive: true });
@@ -88,39 +88,43 @@ test("lintStatic reports file:line for a test under tests/", () => {
     join(root, "scripts/tests/good.test.ts"),
     `mkdtempSync(join(tmpdir(), "good-"));\n`,
   );
-  const found = lintStatic(root);
+  const found = await lintStatic(root);
   expect(found).toHaveLength(1);
   expect(found[0]).toContain("scripts/tests/bad.test.ts:2:");
 });
 
-test("the repository's own tests pass the static check", () => {
-  expect(lintStatic(REPO)).toEqual([]);
+test("the repository's own tests pass the static check", async () => {
+  expect(await lintStatic(REPO)).toEqual([]);
 });
 
-test("leakedBy names an entry the run leaves and ignores one it removes", () => {
+test("leakedBy names an entry the run leaves and ignores one it removes", async () => {
   const root = scratch();
-  const leaked = leakedBy(root, () => {
-    mkdirSync(join(root, "kept"));
-    mkdirSync(join(root, "transient"));
-    Bun.spawnSync(["rmdir", join(root, "transient")]);
-  });
+  const leaked = await leakedBy(root, () =>
+    Promise.try(() => {
+      mkdirSync(join(root, "kept"));
+      mkdirSync(join(root, "transient"));
+      Bun.spawnSync(["rmdir", join(root, "transient")]);
+    }),
+  );
   expect(leaked).toEqual(["kept"]);
 });
 
-test("leakedBy ignores an entry that disappears within the settle window", () => {
+test("leakedBy ignores an entry that disappears within the settle window", async () => {
   const root = scratch();
   const dir = join(root, "late");
-  const leaked = leakedBy(root, () => {
-    mkdirSync(dir);
-    Bun.spawn(["sh", "-c", `sleep 0.3; rmdir '${dir}'`]);
-  });
+  const leaked = await leakedBy(root, () =>
+    Promise.try(() => {
+      mkdirSync(dir);
+      Bun.spawn(["sh", "-c", `sleep 0.3; rmdir '${dir}'`]);
+    }),
+  );
   expect(leaked).toEqual([]);
 });
 
-test("probeProblems names a descendant's leak and removes its private parent", () => {
+test("probeProblems names a descendant's leak and removes its private parent", async () => {
   const ambientTmp = scratch();
   const leaker = `require("node:fs").mkdirSync(require("node:path").join(require("node:os").tmpdir(), "leaky-fixture"))`;
-  const problems = probeProblems(REPO, {
+  const problems = await probeProblems(REPO, {
     command: [
       "bun",
       "-e",
@@ -134,9 +138,9 @@ test("probeProblems names a descendant's leak and removes its private parent", (
   expect(readdirSync(ambientTmp)).toEqual([]);
 });
 
-test("probeProblems fails when the probe exits nonzero", () => {
+test("probeProblems fails when the probe exits nonzero", async () => {
   const ambientTmp = scratch();
-  const problems = probeProblems(REPO, {
+  const problems = await probeProblems(REPO, {
     command: ["bun", "-e", "process.exit(7)"],
     ambientTmp,
   });
@@ -145,8 +149,8 @@ test("probeProblems fails when the probe exits nonzero", () => {
   expect(readdirSync(ambientTmp)).toEqual([]);
 });
 
-test("probeProblems passes for the real preload probe", () => {
-  expect(probeProblems(REPO, { ambientTmp: scratch() })).toEqual([]);
+test("probeProblems passes for the real preload probe", async () => {
+  expect(await probeProblems(REPO, { ambientTmp: scratch() })).toEqual([]);
 });
 
 test("an unrelated process writing shared /tmp cannot change clean or leaky verdicts", async () => {
@@ -171,7 +175,7 @@ test("an unrelated process writing shared /tmp cannot change clean or leaky verd
       ],
       { timeout: 10_000, stdout: "pipe", stderr: "pipe" },
     );
-    const problems = probeProblems(REPO, {
+    const problems = await probeProblems(REPO, {
       ambientTmp: control,
       command: [
         process.execPath,

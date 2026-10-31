@@ -17,8 +17,8 @@ function matchingLineNumbers(content: string): number[] {
     );
 }
 
-function listTrackedTypeScript(cwd: string): Listing {
-  const result = Bun.spawnSync(
+async function listTrackedTypeScript(cwd: string): Promise<Listing> {
+  const child = Bun.spawn(
     [
       "bun",
       join(import.meta.dir, "tracked-files.ts"),
@@ -28,11 +28,12 @@ function listTrackedTypeScript(cwd: string): Listing {
     ],
     { cwd, stdout: "pipe", stderr: "pipe", timeout: 30_000 },
   );
-  return {
-    code: result.exitCode ?? 1,
-    stdout: result.stdout.toString(),
-    stderr: result.stderr.toString().trim(),
-  };
+  const [code, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  return { code: code ?? 1, stdout, stderr: stderr.trim() };
 }
 
 function scanJjPath(
@@ -65,7 +66,7 @@ async function scan(cwd: string): Promise<number> {
     return findings === 0 ? 0 : 1;
   }
 
-  const listing = listTrackedTypeScript(cwd);
+  const listing = await listTrackedTypeScript(cwd);
   if (listing.code !== 0) {
     process.stderr.write(
       `FATAL: could not list tracked TypeScript files${listing.stderr === "" ? "" : `: ${listing.stderr}`}\n`,

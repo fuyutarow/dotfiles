@@ -263,14 +263,14 @@ async function check(paths: string[], root: string): Promise<number> {
 
 // TESTS-OWN-TMP rides on this task because `lint` and `gate:land` already run it: the Bun-script
 // floor is where a test-support script's temp-dir discipline is judged (scripts/lint-tmp-leaks.ts).
-function tmpLeaks(): number {
-  const problems = lintTmpLeaks(resolve(import.meta.dir, ".."));
+async function tmpLeaks(): Promise<number> {
+  const problems = await lintTmpLeaks(resolve(import.meta.dir, ".."));
   for (const problem of problems) process.stderr.write(`FAIL: ${problem}\n`);
   return problems.length === 0 ? 0 : 1;
 }
 
 async function main(): Promise<number> {
-  const leaks = tmpLeaks();
+  const leaks = await tmpLeaks();
   return Math.max(leaks, await floor());
 }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.7 — 2026-10-31
+
+- Show Claude context usage against the saved per-model auto-compact window.
+
 ## 0.22.6 — 2026-10-29
 
 - Recover interrupted sampler locks using a kernel lock; during the one-time rollout an old sampler can overlap until it exits.

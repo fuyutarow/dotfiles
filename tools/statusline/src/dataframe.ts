@@ -34,6 +34,7 @@ export interface Dataframe {
   rc: RcState;
   ctx?: string | undefined; // undefined = the payload carried no token count (NOT zero tokens)
   ctxPct?: number | undefined;
+  ctxWindow?: number | undefined;
   rl5?: number | undefined;
   rl5Reset?: number | undefined;
   rl7?: number | undefined;

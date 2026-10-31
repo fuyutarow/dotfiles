@@ -465,7 +465,15 @@ export async function buildDataframe(
     workflowWhy: identity.why ?? identity.value.workflowWhy,
     rc: rc.value,
     ctx,
-    ctxPct: data.context?.usedPercent,
+    ctxPct:
+      data.context?.compactWindow !== undefined &&
+      data.context.inputTokens !== undefined
+        ? (data.context.inputTokens / data.context.compactWindow) * 100
+        : data.context?.usedPercent,
+    ctxWindow:
+      data.context?.inputTokens === undefined
+        ? undefined
+        : data.context.compactWindow,
     rl5: data.rateLimits?.fiveHour?.usedPercent,
     rl5Reset: data.rateLimits?.fiveHour?.resetsAt,
     rl7: data.rateLimits?.sevenDay?.usedPercent,

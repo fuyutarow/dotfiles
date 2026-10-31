@@ -94,6 +94,10 @@ isolated sampler probes without changing deployed host files.
 
 Claude context counts include input, cache-read and cache-creation tokens from the latest
 request. A supplied current usage takes precedence over cumulative input totals.
+For Claude stdin, Ctx uses the matching `modelSettings.<model.id>.autoCompactWindow` from
+`$CLAUDE_CONFIG_DIR/settings.json` (or `~/.claude/settings.json`) as its denominator when
+available, and displays the window. Otherwise it retains Claude's `used_percentage`. A
+launch-only `--autocompact` override is not observable from that file and is not reflected.
 The repository segment shows the sampled jj workspace name; payload git worktree names
 are ignored. Outside a repository there is no workspace-name segment or workspace `here` count.
 

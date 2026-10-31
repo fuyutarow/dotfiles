@@ -11,7 +11,7 @@ function firstNonEmpty(primary: string | undefined, fallback: string): string {
 
 // Ctx segment: "Ctx: <tokens> NN%". One builder for the bar's agent row and the snapshot.
 export function ctxSegment(
-  df: Pick<Dataframe, "ctx" | "ctxPct" | "fields">,
+  df: Pick<Dataframe, "ctx" | "ctxPct" | "ctxWindow" | "fields">,
   field: FieldDisplay = fieldDisplay(df.fields),
 ): string {
   const label = `${ESC}[38;5;66mCtx:${RST}`;
@@ -22,6 +22,7 @@ export function ctxSegment(
   if (df.ctxPct !== null && df.ctxPct !== undefined) {
     const { text: pct, col } = pctFmt(df.ctxPct);
     seg += ` ${field("context-percent", "context", observed(`${ESC}[${col}m${pct}%${RST}`))}`;
+    if (df.ctxWindow !== undefined) seg += `/${df.ctxWindow / 1000}k`;
   } else {
     seg += ` ${field("context-percent", "", observed(undefined, "input has no context percentage"))}`;
   }

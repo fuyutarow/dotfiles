@@ -83,6 +83,7 @@ export interface ExecFailure {
   why: string; // the n/a reason, from failWhy
   stderr: string; // trimmed; "" when the child printed none or never started
   ran: boolean; // false: never started (budget spent) — says nothing about the tool, so never cache it
+  stdout?: string;
 }
 /** Run a child without blocking the event loop, killing it when its signal deadline expires. */
 export async function execAsyncWithin(
@@ -142,7 +143,12 @@ export async function execAsyncWithin(
       ran: true,
     });
   if (status !== 0)
-    return err({ why: `${tool} exit ${status}`, stderr: trimmed, ran: true });
+    return err({
+      why: `${tool} exit ${status}`,
+      stderr: trimmed,
+      ran: true,
+      stdout,
+    });
   return ok(stdout);
 }
 /** Apply a child bound and the remaining whole-render budget. */

@@ -8,7 +8,12 @@ import {
   type Result,
 } from "neverthrow";
 import { z } from "./zod.ts";
-import { execError, readJsonAsync, writeCacheAsync } from "./bounded.ts";
+import {
+  execAsyncBounded,
+  execError,
+  readJsonAsync,
+  writeCacheAsync,
+} from "./bounded.ts";
 import {
   DiskRateStateSchema,
   diskRateStatePath,
@@ -214,6 +219,26 @@ export interface DiskReadOptions {
   now?: number;
   resolveCache?: boolean;
 }
+// Linux quota reports per-user capacity, which can be exhausted while statfs has free space.
+export function parseQuota(text: string): DiskReading[] {
+  const out: DiskReading[] = [];
+  for (const line of text.split("\n")) {
+    const m = line.match(/^\S+\s+(\/\S*)\s+(\d+)\*?\s+(\d+)\s+(\d+)/u);
+    if (m?.[1] === undefined) continue;
+    const [used, soft, hard] = [m[2], m[3], m[4]].map(Number);
+    const limits = [soft ?? 0, hard ?? 0].filter((n) => n > 0);
+    if (used === undefined || limits.length === 0) continue;
+    const limit = Math.min(...limits);
+    out.push({
+      kind: "reading",
+      label: `Quota ${m[1]}`,
+      usedG: used / 1024 ** 2,
+      totalG: limit / 1024 ** 2,
+      freeG: Math.max(0, limit - used) / 1024 ** 2,
+    });
+  }
+  return out;
+}
 /** Async render-path disk read, so config and filesystem probes do not block rendering. */
 export async function diskReadingsAsync(
   options: DiskReadOptions = {},
@@ -269,6 +294,22 @@ export async function diskReadingsAsync(
       totalG,
       freeG,
     });
+  }
+  if (process.platform === "linux") {
+    const quota = await execAsyncBounded(
+      "quota",
+      "quota",
+      ["-w", "--show-mntpoint"],
+      1000,
+    );
+    out.push(
+      ...parseQuota(
+        quota.match(
+          (stdout) => stdout,
+          (failure) => failure.stdout ?? "",
+        ),
+      ),
+    );
   }
   const statePath = options.statePath ?? diskRateStatePath();
   const rated = updateDiskRates(

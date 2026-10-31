@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.17 — 2026-10-31
+
+- Show Linux user block quotas in the disk status.
+
 ## 0.22.16 — 2026-10-31
 
 - Use asynchronous host CPU and memory sampling.

@@ -813,8 +813,10 @@ async function duBytes(
     r.exited,
   ]);
   if (exitCode !== 0 && output.length === 0) return null;
-  const kib = Number(output.split(/\s/u)[0]);
-  return Number.isFinite(kib) && kib > 0 ? kib * 1024 : null;
+  const field = output.split(/\s/u)[0] ?? "";
+  if (!/^\d+$/u.test(field)) return null;
+  const kib = Number(field);
+  return Number.isFinite(kib) ? kib * 1024 : null;
 }
 
 // --- Locating an artifact ---------------------------------------------------------------------

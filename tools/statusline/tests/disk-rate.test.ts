@@ -1,16 +1,46 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { readdirSync, statfsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { diskReadingsAsync, type DiskReading } from "../src/storage.ts";
+import {
+  diskReadingsAsync,
+  parseQuota,
+  type DiskReading,
+} from "../src/storage.ts";
 import { diskSegment } from "../src/storage-display.ts";
 import { DiskRateStateSchema, updateDiskRates } from "../src/disk-rate.ts";
-import { readJsonAsync } from "../src/bounded.ts";
+import { execAsyncWithin, readJsonAsync } from "../src/bounded.ts";
 import { ESC, RST } from "../src/ansi.ts";
 import { ok } from "neverthrow";
 import { sysSegment } from "../src/host-display.ts";
 import { cleanupTempDirs, tempDir } from "./helpers.ts";
 
 const GiB = 1024 ** 3;
+test("nonzero subprocess exit preserves quota output", async () => {
+  const result = await execAsyncWithin(
+    "quota",
+    "sh",
+    ["-c", "printf 'quota output'; exit 1"],
+    1000,
+  );
+  expect(result.isErr()).toBe(true);
+  expect(
+    result.match(
+      () => null,
+      (failure) => failure.stdout,
+    ),
+  ).toBe("quota output");
+});
+test("quota uses the nearer block limit and displays exhausted capacity", () => {
+  const [full, partial] = parseQuota(
+    "/dev/home /home 31457280* 31457280 31457280\n/dev/data /data 10485760 20971520 31457280\n/dev/none /none 1 0 0\n",
+  );
+  expect(full === undefined ? undefined : plain(diskSegment(full))).toBe(
+    "Quota /home 0GiB/30.0GiB (0%) free",
+  );
+  expect(partial?.freeG).toBe(10);
+  expect(partial?.totalG).toBe(20);
+  expect(parseQuota("")).toEqual([]);
+});
 const disk = (freeG: number): DiskReading => ({
   kind: "reading",
   path: "/mnt/c",

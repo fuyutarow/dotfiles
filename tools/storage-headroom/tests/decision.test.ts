@@ -810,6 +810,24 @@ describe("enforce-storage-headroom", () => {
       expect(d?.permissionDecisionReason).toContain("could not be sized");
     });
 
+    test("a zero KiB target is measured", () => {
+      const { root, home } = workspace();
+      const fakeBin = mkdtempSync(join(tmpdir(), "storage-fake-bin-"));
+      writeFileSync(join(fakeBin, "du"), '#!/bin/sh\necho "0\t$2"\n', {
+        mode: 0o755,
+      });
+      const r = runHook(
+        HOOK,
+        { ...bash("mise run test"), cwd: root },
+        {
+          ...HUGE,
+          HOME: home,
+          PATH: `${fakeBin}:${process.env["PATH"] ?? ""}`,
+        },
+      );
+      expect(r.stdout).not.toContain("could not be sized");
+    });
+
     test("under budget: silent", () => {
       const { root, home } = workspace();
       const r = runHook(

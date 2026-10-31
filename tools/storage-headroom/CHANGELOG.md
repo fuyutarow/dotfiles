@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.7 — 2026-10-31
+
+- Accept zero-byte directory measurements.
+
 ## 0.2.6 — 2026-10-31
 
 - Use asynchronous filesystem and process operations for storage decisions.

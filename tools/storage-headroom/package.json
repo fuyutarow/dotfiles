@@ -1,6 +1,6 @@
 {
   "name": "@dotfiles/storage-headroom",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "type": "module",
   "bin": {
@@ -8,7 +8,6 @@
   },
   "dependencies": {
     "@dotfiles/shared": "workspace:*",
-    "cleye": "2.6.0",
-    "neverthrow": "8.2.0"
+    "cleye": "2.6.0"
   }
 }

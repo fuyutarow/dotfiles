@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.6 — 2026-10-31
+
+- Use asynchronous filesystem and process operations for storage decisions.
+
 ## 0.2.5 — 2026-10-23
 
 - Generalize consumer identifiers in fixtures and source comments

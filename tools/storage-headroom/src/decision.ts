@@ -39,13 +39,13 @@ import {
 } from "@dotfiles/shared/src/storage-headroom.ts";
 import { readReclaimPlanCache } from "@dotfiles/shared/src/reclaim-plan-cache.ts";
 import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  statfsSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+  access,
+  mkdir,
+  readFile,
+  stat,
+  statfs,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -69,6 +69,12 @@ import {
   str,
   strAt,
 } from "@dotfiles/shared/src/narrow.ts";
+
+const exists = (path: string): Promise<boolean> =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
 
 const GiB = 1024 ** 3;
 // Shared with statusline; configuration migration belongs to capacity-unify.
@@ -375,7 +381,7 @@ async function loadConfig(): Promise<{
   config: Config | null;
   errors: string[];
 }> {
-  const read = await attempt(() => readFileSync(CONFIG_PATH, "utf8"));
+  const read = await attempt(() => readFile(CONFIG_PATH, "utf8"));
   if (!read.ok) {
     return {
       config: null,
@@ -499,7 +505,7 @@ const READ_ONLY = new Set([
   "rr",
 ]);
 
-function cargoCleanInProject(c: ShellCommand): boolean {
+async function cargoCleanInProject(c: ShellCommand): Promise<boolean> {
   const eff = effectiveCommand(c);
   if (eff?.name !== "cargo" || eff.args[0] !== "clean") return false;
   const args = eff.args.slice(1);
@@ -534,13 +540,16 @@ function cargoCleanInProject(c: ShellCommand): boolean {
     }
   }
   return (
-    existsSync(join(c.cwd, "Cargo.toml")) ||
+    (await exists(join(c.cwd, "Cargo.toml"))) ||
     (manifestPath !== undefined &&
-      existsSync(join(dirname(resolve(c.cwd, manifestPath)), "Cargo.toml")))
+      (await exists(join(dirname(resolve(c.cwd, manifestPath)), "Cargo.toml"))))
   );
 }
 
-export function isRecoveryOrRead(command: string, cwd: string): boolean {
+export async function isRecoveryOrRead(
+  command: string,
+  cwd: string,
+): Promise<boolean> {
   const parsed = parseShell(command, cwd);
   if (parsed === undefined || parsed.commands.length === 0) return false;
   const commands = parsed.commands.filter(
@@ -549,38 +558,45 @@ export function isRecoveryOrRead(command: string, cwd: string): boolean {
   if (commands.length === 0) return false;
   return (
     commands.length === parsed.commands.length &&
-    commands.every((c) => {
-      const eff = effectiveCommand(c);
-      if (
-        eff === undefined ||
-        c.words[0] !== eff.name ||
-        c.redirects.some((r) => r.op !== "<" && r.op !== "<<" && r.op !== "<<<")
+    (
+      await Promise.all(
+        commands.map(async (c) => {
+          const eff = effectiveCommand(c);
+          if (
+            eff === undefined ||
+            c.words[0] !== eff.name ||
+            c.redirects.some(
+              (r) => r.op !== "<" && r.op !== "<<" && r.op !== "<<<",
+            )
+          )
+            return false;
+          const [sub = "", third = ""] = eff.args;
+          if (eff.name === "cargo" && sub === "clean")
+            return cargoCleanInProject(c);
+          // The released worker commands write bounded records and remain available for recovery.
+          if (
+            eff.name === "agx" &&
+            sub === "worker" &&
+            ["run", "check", "ls", "judge", "stats"].includes(third)
+          )
+            return true;
+          if (eff.name === "disk-reclaim" || eff.name === "storage-headroom")
+            return true;
+          if (eff.name === "mise" && sub === "run")
+            return third.startsWith("reclaim");
+          if (eff.name === "m") return sub.startsWith("reclaim");
+          if (eff.name === "jj")
+            return (
+              (sub === "workspace" &&
+                (third === "forget" || third === "list")) ||
+              sub === "abandon" ||
+              sub === "st" ||
+              sub === "log"
+            );
+          return READ_ONLY.has(eff.name);
+        }),
       )
-        return false;
-      const [sub = "", third = ""] = eff.args;
-      if (eff.name === "cargo" && sub === "clean")
-        return cargoCleanInProject(c);
-      // The released worker commands write bounded records and remain available for recovery.
-      if (
-        eff.name === "agx" &&
-        sub === "worker" &&
-        ["run", "check", "ls", "judge", "stats"].includes(third)
-      )
-        return true;
-      if (eff.name === "disk-reclaim" || eff.name === "storage-headroom")
-        return true;
-      if (eff.name === "mise" && sub === "run")
-        return third.startsWith("reclaim");
-      if (eff.name === "m") return sub.startsWith("reclaim");
-      if (eff.name === "jj")
-        return (
-          (sub === "workspace" && (third === "forget" || third === "list")) ||
-          sub === "abandon" ||
-          sub === "st" ||
-          sub === "log"
-        );
-      return READ_ONLY.has(eff.name);
-    })
+    ).every(Boolean)
   );
 }
 
@@ -628,8 +644,8 @@ async function space(path: string): Promise<Space | null> {
     cacheDir,
     `${createHash("sha1").update(path).digest("hex")}.statfs.json`,
   );
-  const cached = await attemptOr(() => {
-    const value = parseJson(readFileSync(cacheFile, "utf8"));
+  const cached = await attemptOr(async () => {
+    const value = parseJson(await readFile(cacheFile, "utf8"));
     const free = num(at(value, "free"));
     const total = num(at(value, "total"));
     const atMs = num(at(value, "at"));
@@ -650,8 +666,8 @@ async function space(path: string): Promise<Space | null> {
   }, null);
   if (cached !== null) return cached;
 
-  const measuredSpace = await attemptOr(() => {
-    const s = statfsSync(path);
+  const measuredSpace = await attemptOr(async () => {
+    const s = await statfs(path);
     return {
       free: s.bavail * s.bsize,
       total: s.blocks * s.bsize,
@@ -661,9 +677,9 @@ async function space(path: string): Promise<Space | null> {
     };
   }, null);
   if (measuredSpace === null) return null;
-  await attempt(() => {
-    mkdirSync(cacheDir, { recursive: true });
-    writeFileSync(
+  await attempt(async () => {
+    await mkdir(cacheDir, { recursive: true });
+    await writeFile(
       cacheFile,
       JSON.stringify({
         ...measuredSpace,
@@ -684,19 +700,22 @@ async function requestRecovery(): Promise<string> {
     ".local/state/wsl-capacity-recover/last-request",
   );
   // First request, or an unavailable stamp: still attempt to queue recovery.
-  const mtimeMs = await attemptOr(() => statSync(stamp).mtimeMs, null);
+  const mtimeMs = await attemptOr(
+    async () => (await stat(stamp)).mtimeMs,
+    null,
+  );
   if (
     mtimeMs !== null &&
     Temporal.Now.instant().epochMilliseconds - mtimeMs < 60_000
   )
     return " Automatic recovery was recently queued.";
   // The drive may already be critically low. systemd still gets a chance below.
-  await attempt(() => {
-    mkdirSync(dirname(stamp), { recursive: true });
-    writeFileSync(stamp, `${Temporal.Now.instant().epochMilliseconds}\n`);
+  await attempt(async () => {
+    await mkdir(dirname(stamp), { recursive: true });
+    await writeFile(stamp, `${Temporal.Now.instant().epochMilliseconds}\n`);
   });
   // bounded: GNU timeout caps this non-blocking systemd recovery request at three seconds.
-  const result = Bun.spawnSync(
+  const result = Bun.spawn(
     [
       "timeout",
       "3s",
@@ -708,7 +727,7 @@ async function requestRecovery(): Promise<string> {
     ],
     { stdout: "ignore", stderr: "ignore" },
   );
-  return result.exitCode === 0
+  return (await result.exited) === 0
     ? " Automatic recovery was queued."
     : " Automatic recovery could not be queued; inspect wsl-capacity-recover.service.";
 }
@@ -748,7 +767,7 @@ async function measured(
   );
   // no or unreadable cache: measure
   const cached = await attemptOr(
-    () => parseSize(parseJson(readFileSync(cacheFile, "utf8"))),
+    async () => parseSize(parseJson(await readFile(cacheFile, "utf8"))),
     null,
   );
   if (
@@ -757,36 +776,44 @@ async function measured(
       m.cache_minutes * 60_000
   )
     return cached;
-  const bytes = duBytes(path, m);
+  const bytes = await duBytes(path, m);
   if (bytes === null) return null;
-  const incremental = withIncremental
-    ? ["debug", "release"]
-        .map((p) => join(path, p, "incremental"))
-        .filter((p) => existsSync(p))
-        .reduce((sum, p) => sum + (duBytes(p, m) ?? 0), 0)
-    : 0;
+  let incremental = 0;
+  if (withIncremental) {
+    for (const part of ["debug", "release"]) {
+      const p = join(path, part, "incremental");
+      incremental += (await exists(p)) ? ((await duBytes(p, m)) ?? 0) : 0;
+    }
+  }
   const size: Size = {
     bytes,
     incremental,
     at: Temporal.Now.instant().epochMilliseconds,
   };
   // an unwritable cache only costs a re-measure next time
-  await attempt(() => {
-    mkdirSync(cacheDir, { recursive: true });
-    writeFileSync(cacheFile, JSON.stringify(size));
+  await attempt(async () => {
+    await mkdir(cacheDir, { recursive: true });
+    await writeFile(cacheFile, JSON.stringify(size));
   });
   return size;
 }
 
 // `du -sk` (KiB) is the spelling GNU and BSD du share; -b is GNU-only.
-function duBytes(path: string, m: Config["measure"]): number | null {
-  const r = Bun.spawnSync(["du", "-sk", path], {
+async function duBytes(
+  path: string,
+  m: Config["measure"],
+): Promise<number | null> {
+  const r = Bun.spawn(["du", "-sk", path], {
     timeout: m.du_timeout_seconds * 1000,
     stdout: "pipe",
     stderr: "ignore",
   });
-  if (r.exitCode !== 0 && r.stdout.length === 0) return null;
-  const kib = Number(r.stdout.toString().split(/\s/u)[0]);
+  const [output, exitCode] = await Promise.all([
+    new Response(r.stdout).text(),
+    r.exited,
+  ]);
+  if (exitCode !== 0 && output.length === 0) return null;
+  const kib = Number(output.split(/\s/u)[0]);
   return Number.isFinite(kib) && kib > 0 ? kib * 1024 : null;
 }
 
@@ -798,7 +825,10 @@ const expand = (p: string) =>
 // The target dir cargo will use: CARGO_TARGET_DIR (command text, then env), else the workspace
 // root's .cargo/config.toml `target-dir`, else <workspace root>/target. The start dir honours a
 // leading `cd <dir>` and `--manifest-path`, the two ways an agent points cargo elsewhere.
-function cargoTargetDir(command: string, cwd: string): string | null {
+async function cargoTargetDir(
+  command: string,
+  cwd: string,
+): Promise<string | null> {
   const envDir =
     /\bCARGO_TARGET_DIR=(\S+)/u.exec(command)?.[1] ??
     process.env["CARGO_TARGET_DIR"];
@@ -813,25 +843,30 @@ function cargoTargetDir(command: string, cwd: string): string | null {
   for (let d = start; ; d = dirname(d)) {
     const toml = join(d, "Cargo.toml");
     // The nearest package is the start; an enclosing [workspace] root replaces it.
-    if (existsSync(toml) && (dir === null || isWorkspace(toml))) dir = d;
+    if ((await exists(toml)) && (dir === null || (await isWorkspace(toml))))
+      dir = d;
     if (dirname(d) === d) break;
   }
   if (dir === null) return null;
   const config = join(dir, ".cargo", "config.toml");
-  if (existsSync(config)) {
+  if (await exists(config)) {
     const td = /^\s*target-dir\s*=\s*"([^"]+)"/mu.exec(
-      readFileSync(config, "utf8"),
+      await readFile(config, "utf8"),
     )?.[1];
     if (td !== undefined) return resolve(dir, expand(td));
   }
   return join(dir, "target");
 }
 
-function isWorkspace(toml: string): boolean {
-  return /^\s*\[workspace\]/mu.test(readFileSync(toml, "utf8"));
+async function isWorkspace(toml: string): Promise<boolean> {
+  return /^\s*\[workspace\]/mu.test(await readFile(toml, "utf8"));
 }
 
-function locate(b: Budget, command: string, cwd: string): string | null {
+async function locate(
+  b: Budget,
+  command: string,
+  cwd: string,
+): Promise<string | null> {
   return b.locate === "cargo-target"
     ? cargoTargetDir(command, cwd)
     : expand(b.path ?? "");
@@ -848,8 +883,8 @@ async function budgetStatus(
   cwd: string,
   m: Config["measure"],
 ): Promise<{ warning?: string; denial?: string } | null> {
-  const path = locate(b, command, cwd);
-  if (path === null || !existsSync(path)) return null;
+  const path = await locate(b, command, cwd);
+  if (path === null || !(await exists(path))) return null;
   const size = await measured(path, b.incremental === true, m);
   if (size === null) {
     const message =
@@ -931,7 +966,7 @@ export async function decide(payload: unknown): Promise<Verdict> {
     toolName === "Bash" ? strAt(payload, "tool_input", "command") : undefined;
   const cwd = strAt(payload, "cwd") ?? process.cwd();
   // Cleanup and explicit inspection commands remain available even if the declaration is broken.
-  if (command !== undefined && isRecoveryOrRead(command, cwd))
+  if (command !== undefined && (await isRecoveryOrRead(command, cwd)))
     return { decision: "allow" };
 
   const { config, errors } = await loadConfig();
@@ -1002,8 +1037,8 @@ export async function decide(payload: unknown): Promise<Verdict> {
   );
   const wsl =
     process.platform === "linux" &&
-    existsSync("/proc/sys/kernel/osrelease") &&
-    readFileSync("/proc/sys/kernel/osrelease", "utf8")
+    (await exists("/proc/sys/kernel/osrelease")) &&
+    (await readFile("/proc/sys/kernel/osrelease", "utf8"))
       .toLowerCase()
       .includes("microsoft");
   const hostUnreadable =

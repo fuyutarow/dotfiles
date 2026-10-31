@@ -2,7 +2,7 @@
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
-import { fromThrowable } from "neverthrow";
+import { attempt } from "@dotfiles/shared/src/attempt.ts";
 import { headroom } from "./headroom.ts";
 import type { StorageMeasurement } from "@dotfiles/shared/src/storage-headroom.ts";
 
@@ -20,10 +20,10 @@ function rejectPrototypeFlag(type: string, flag: string): void {
   }
 }
 
-export function main(
+export async function main(
   argv = cliArgv(),
   measure?: (path: string) => StorageMeasurement | null,
-): number {
+): Promise<number> {
   process.on("exit", usageExit);
   const parsed = cli(
     {
@@ -47,7 +47,7 @@ export function main(
     process.stderr.write("storage-headroom: unexpected positional arguments\n");
     return 2;
   }
-  const result = headroom({
+  const result = await headroom({
     ...(parsed.flags.path === undefined ? {} : { path: parsed.flags.path }),
     ...(measure === undefined ? {} : { measure }),
   });
@@ -69,8 +69,8 @@ export function main(
 }
 
 if (import.meta.main) {
-  const result = fromThrowable(() => main())();
-  if (result.isErr()) {
+  const result = await attempt(() => main());
+  if (!result.ok) {
     process.stderr.write(
       `storage-headroom: ${result.error instanceof Error ? result.error.message : String(result.error)}\n`,
     );

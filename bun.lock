@@ -405,7 +405,6 @@
       "dependencies": {
         "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
-        "neverthrow": "8.2.0",
       },
     },
     "tools/sui-keystore-merge": {

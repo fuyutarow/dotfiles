@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { access } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   assess,
@@ -20,14 +20,14 @@ type Headroom = {
   }[];
 };
 
-export function headroom(
+export async function headroom(
   options: {
     path?: string;
     policy?: string;
     measure?: (path: string) => StorageMeasurement | null;
     drives?: Drive[];
   } = {},
-): { exit: number; headroom: Headroom; errors: string[] } {
+): Promise<{ exit: number; headroom: Headroom; errors: string[] }> {
   const loaded =
     options.drives === undefined
       ? loadStorageHeadroom(
@@ -57,7 +57,10 @@ export function headroom(
     if (
       options.path === undefined &&
       options.measure === undefined &&
-      !existsSync(path)
+      !(await access(path).then(
+        () => true,
+        () => false,
+      ))
     )
       continue;
     const measurement = measure(path);

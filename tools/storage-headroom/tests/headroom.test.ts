@@ -13,13 +13,13 @@ const drive = {
 };
 const script = resolve(import.meta.dir, "../src/storage-headroom.ts");
 
-test("injected measurements produce the agreed exit codes and headroom JSON shape", () => {
+test("injected measurements produce the agreed exit codes and headroom JSON shape", async () => {
   for (const [free, exit] of [
     [0, 11],
     [2 ** 30, 10],
     [2 * 2 ** 30, 0],
   ] as const) {
-    const result = headroom({
+    const result = await headroom({
       drives: [drive],
       measure: () => ({ free, total: 10 * 2 ** 30 }),
     });
@@ -44,7 +44,8 @@ test("injected measurements produce the agreed exit codes and headroom JSON shap
     ).toBe(true);
   }
   expect(
-    headroom({ drives: [drive], path: "/tmp", measure: () => null }).exit,
+    (await headroom({ drives: [drive], path: "/tmp", measure: () => null }))
+      .exit,
   ).toBe(2);
 });
 

@@ -409,7 +409,10 @@ export async function checkRipGraveyard(
       );
 }
 
-export async function checkRipGraveyardTmp(): Promise<Finding> {
+export async function checkRipGraveyardTmp(
+  filesystemType: (path: string) => Promise<number> = async (path) =>
+    (await statfs(path)).type,
+): Promise<Finding> {
   const root = process.env["DOCTOR_TEST_TMP_ROOT"] ?? "/tmp";
   const entries = await attempt(async () =>
     (await readdir(root))
@@ -422,11 +425,24 @@ export async function checkRipGraveyardTmp(): Promise<Finding> {
       `cannot inspect ${root}: ${errorMessage(entries.error)}`,
       "disk-reclaim plan",
     );
-  if (entries.value.length === 0)
-    return pass("rip-graveyard-tmp", "no leftover /tmp graveyard");
+  const measured = await attempt(async () => {
+    const ramPaths: string[] = [];
+    for (const path of entries.value) {
+      const type = await filesystemType(path);
+      if (type === 0x01021994 || type === 0x858458f6) ramPaths.push(path);
+    }
+    return ramPaths;
+  });
+  if (!measured.ok)
+    return warn(
+      "rip-graveyard-tmp",
+      `cannot inspect filesystem: ${errorMessage(measured.error)}`,
+    );
+  if (measured.value.length === 0)
+    return pass("rip-graveyard-tmp", "no RAM-backed /tmp graveyard");
   return fail(
     "rip-graveyard-tmp",
-    `leftover RAM graveyard(s): ${entries.value.join(", ")}`,
+    `leftover RAM graveyard(s): ${measured.value.join(", ")}`,
     "disk-reclaim run --tier blind --yes",
   );
 }
@@ -2179,7 +2195,11 @@ export const CHECKS: Check[] = [
   { name: "core-floor", run: checkToolFloor, applies: always },
   { name: "role", run: checkRole, applies: always },
   { name: "rip-graveyard", run: checkRipGraveyard, applies: always },
-  { name: "rip-graveyard-tmp", run: checkRipGraveyardTmp, applies: always },
+  {
+    name: "rip-graveyard-tmp",
+    run: () => checkRipGraveyardTmp(),
+    applies: always,
+  },
   { name: "links", run: checkLinks, applies: always },
   { name: "google-drive", run: checkGoogleDrive, applies: always },
   { name: "rendered", run: checkRendered, applies: always },

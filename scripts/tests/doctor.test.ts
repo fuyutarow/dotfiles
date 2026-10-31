@@ -36,6 +36,7 @@ import {
   checkGoogleDrive,
   checkGitRefLocks,
   checkRipGraveyard,
+  checkRipGraveyardTmp,
   checkRecoverHealth,
   checkTmpfsCapacity,
   checkWslGpuManagerPath,
@@ -780,23 +781,27 @@ describe("doctor", () => {
     );
   });
 
-  test("rip-graveyard-tmp fails for any leftover and names reclaim", () => {
+  test("rip-graveyard-tmp identifies RAM filesystems, not paths", async () => {
     const user = `doctor-${Temporal.Now.instant().epochMilliseconds}-${crypto.randomUUID().slice(0, 8)}`;
     const root = tmp("doctor-stale-root-");
     const stale = join(root, `graveyard-${user}`);
     mkdirSync(stale);
     writeFileSync(join(stale, "old-entry"), "deleted");
-    const result = doctor("rip-graveyard-tmp", {
-      HOME: tmp("doctor-rip-graveyard-tmp-home-"),
-      DOTFILES: REPO,
-      USER: user,
-      DOCTOR_TEST_TMP_ROOT: root,
-    });
+    const previous = process.env["DOCTOR_TEST_TMP_ROOT"];
+    process.env["DOCTOR_TEST_TMP_ROOT"] = root;
+    const result = await checkRipGraveyardTmp(() =>
+      Promise.resolve(0x01021994),
+    );
+    const apfs = await checkRipGraveyardTmp(() => Promise.resolve(0x1a));
+    const ramfs = await checkRipGraveyardTmp(() => Promise.resolve(0x858458f6));
+    if (previous === undefined) delete process.env["DOCTOR_TEST_TMP_ROOT"];
+    else process.env["DOCTOR_TEST_TMP_ROOT"] = previous;
     rmSync(stale, { recursive: true, force: true });
-    expect(result.code).toBe(1);
-    expect(result.out).toContain("FAIL  rip-graveyard-tmp");
-    expect(result.out).toContain("disk-reclaim run --tier blind --yes");
-    expect(result.out).toContain(stale);
+    expect(result.verdict).toBe("FAIL");
+    expect(result.fix).toBe("disk-reclaim run --tier blind --yes");
+    expect(result.detail).toContain(stale);
+    expect(apfs.verdict).toBe("PASS");
+    expect(ramfs.verdict).toBe("FAIL");
     expect(
       doctor("rip-graveyard-tmp", {
         HOME: tmp("doctor-stale-home-"),

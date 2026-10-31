@@ -1,6 +1,14 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
-import { mkdir, lstat, readFile, realpath, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  lstat,
+  readFile,
+  readdir,
+  realpath,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { jsonOf, z } from "../../../agents/hooks/zod.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
@@ -139,6 +147,37 @@ const tools = {
     ],
   ],
 } as const satisfies Record<ToolName, readonly FileMapping[]>;
+const legacyMappings: Partial<
+  Record<ToolName, readonly { commit: string; mapping: FileMapping }[]>
+> = {
+  "jj-precommit": [
+    {
+      commit: "5b83352e6562d39c9ff3d3697625ceb0122d7075",
+      mapping: [
+        "agents/skills/wiring-mise-tasks/tests/jj-commit.test.ts",
+        "tests/jj-commit.test.ts",
+      ],
+    },
+  ],
+  "fmt-staged": [
+    {
+      commit: "5b83352e6562d39c9ff3d3697625ceb0122d7075",
+      mapping: [
+        "agents/skills/wiring-mise-tasks/tests/fmt-staged.test.ts",
+        "tests/fmt-staged.test.ts",
+      ],
+    },
+  ],
+  "mise-contract": [
+    {
+      commit: "5b83352e6562d39c9ff3d3697625ceb0122d7075",
+      mapping: [
+        "agents/skills/wiring-mise-tasks/tests/mise-contract-pins.test.ts",
+        "tests/mise-contract-pins.test.ts",
+      ],
+    },
+  ],
+};
 const toolNameSchema = z.enum(names);
 const fileMappingSchema = z.object({
   source: z.string(),
@@ -346,6 +385,19 @@ async function syncTool(
   const destinationRoot = join(toolsRoot(repo), name);
   const rootCheck = await ensureDirectory(toolsRoot(repo), destinationRoot);
   if (!rootCheck.ok) return rootCheck;
+  const previousManifest = await readJSON(
+    join(destinationRoot, ".preset-sync.json"),
+    toolManifestSchema,
+  );
+  const previousPaths = previousManifest.ok
+    ? new Set(previousManifest.value.files.map((file) => file.destination))
+    : new Set<string>();
+  const stale = await staleFiles(repo, name, previousPaths);
+  if (!stale.ok) return stale;
+  for (const file of stale.value) {
+    const handled = await handleStaleFile(file);
+    if (!handled.ok) return handled;
+  }
   const files: { source: string; destination: string }[] = [];
   for (const mapping of tools[name]) {
     const destination = join(destinationRoot, mapping[1]);
@@ -389,6 +441,83 @@ async function readJSON<T>(
   return parsed.success ? success(parsed.data) : failure(parsed.error);
 }
 
+type StaleFile = {
+  absolutePath: string;
+  displayPath: string;
+  managed: boolean;
+};
+
+async function handleStaleFile(file: StaleFile): Promise<Outcome<void>> {
+  if (!file.managed) {
+    process.stdout.write(`unmanaged: ${file.displayPath}\n`);
+    return success(undefined);
+  }
+  const removed = await fsResult(() => unlink(file.absolutePath));
+  if (!removed.ok) return failure(removed.error);
+  process.stdout.write(`REMOVE ${file.displayPath}\n`);
+  return success(undefined);
+}
+
+async function filesUnder(root: string): Promise<Outcome<string[]>> {
+  return fsResult(async () => {
+    const files: string[] = [];
+    const visit = async (directory: string): Promise<void> => {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isSymbolicLink()) continue;
+        if (entry.isDirectory()) await visit(path);
+        else if (entry.isFile()) files.push(path);
+      }
+    };
+    await visit(root);
+    return files;
+  });
+}
+
+async function staleFiles(
+  repo: string,
+  name: ToolName,
+  previousPaths: ReadonlySet<string>,
+): Promise<Outcome<StaleFile[]>> {
+  const destinationRoot = join(toolsRoot(repo), name);
+  const currentPaths = new Set<string>(
+    tools[name].map((mapping) => mapping[1]),
+  );
+  const listed = await filesUnder(destinationRoot);
+  if (!listed.ok) return listed;
+  const stale: StaleFile[] = [];
+  for (const absolutePath of listed.value) {
+    const destination = relative(destinationRoot, absolutePath);
+    if (destination === ".preset-sync.json" || currentPaths.has(destination))
+      continue;
+    const actual = await fsResult(() => readFile(absolutePath));
+    if (!actual.ok) return actual;
+    const hasHeader = /preset-sync source [0-9a-f]{40,64} /u.test(
+      actual.value.toString("utf8"),
+    );
+    let managed = previousPaths.has(destination) || hasHeader;
+    const legacy = (legacyMappings[name] ?? []).filter(
+      (candidate) => candidate.mapping[1] === destination,
+    );
+    const expectedOutputs = await Promise.all(
+      legacy.map((candidate) =>
+        outputBytes(candidate.mapping, candidate.commit),
+      ),
+    );
+    const failedOutput = expectedOutputs.find((output) => !output.ok);
+    if (failedOutput?.ok === false) return failure(failedOutput.error);
+    managed ||= expectedOutputs.some(
+      (output) => output.ok && actual.value.equals(output.value),
+    );
+    stale.push({
+      absolutePath,
+      displayPath: join("tools", name, destination),
+      managed,
+    });
+  }
+  return success(stale);
+}
+
 function validNames(values: string[]): ToolName[] {
   return values.flatMap((name) => {
     const valid = toolNameSchema.safeParse(name);
@@ -414,12 +543,12 @@ async function checkTool(
       manifest.value.files[index]?.source === mapping[0] &&
       manifest.value.files[index]?.destination === mapping[1],
   );
+  const changed: string[] = [];
   if (
     !matchesMapping ||
     manifest.value.files.length !== expectedMappings.length
   )
-    return success([join("tools", name, ".preset-sync.json")]);
-  const changed: string[] = [];
+    changed.push(join("tools", name, ".preset-sync.json"));
   for (const mapping of expectedMappings) {
     const [, destination] = mapping;
     const path = join(destinationRoot, destination);
@@ -444,6 +573,17 @@ async function checkTool(
     if (!actual.value.equals(expected))
       changed.push(join("tools", name, destination));
   }
+  const stale = await staleFiles(
+    repo,
+    name,
+    new Set(manifest.value.files.map((file) => file.destination)),
+  );
+  if (!stale.ok) return stale;
+  changed.push(
+    ...stale.value
+      .filter((file) => file.managed)
+      .map((file) => file.displayPath),
+  );
   return success(changed);
 }
 

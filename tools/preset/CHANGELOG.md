@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3 — 2026-10-31
+
+- Remove stale files previously shipped by preset sync
+
 ## 0.3.2 — 2026-10-31
 
 - Ship only standalone tests with their owning contract tools.

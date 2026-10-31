@@ -130,7 +130,7 @@ describe("manifest preset CLI", () => {
     expect(await run("apply", "demo", "--to", repo, "--dry-run")).toEqual({
       exit: 0,
       stderr: "",
-      stdout: "preset: would write .config/demo.toml\n",
+      stdout: "[log] preset: would write .config/demo.toml\n",
     });
     expect(await Bun.file(join(repo, ".config/demo.toml")).exists()).toBe(
       false,
@@ -139,7 +139,7 @@ describe("manifest preset CLI", () => {
     expect(await run("apply", "demo", "--to", repo)).toEqual({
       exit: 0,
       stderr: "",
-      stdout: "preset: wrote .config/demo.toml\n",
+      stdout: "[log] preset: wrote .config/demo.toml\n",
     });
     expect(await readFile(join(repo, ".config/demo.toml"), "utf8")).toBe(
       "enabled = true\n",
@@ -147,7 +147,7 @@ describe("manifest preset CLI", () => {
     expect(await run("diff", "demo", "--to", repo)).toEqual({
       exit: 0,
       stderr: "",
-      stdout: "preset: demo is up to date\n",
+      stdout: "[log] preset: demo is up to date\n",
     });
     expect((await run("diff", "demo", repo)).exit).toBe(0);
     await writeFile(join(repo, ".config/demo.toml"), "enabled = false\n");
@@ -228,7 +228,7 @@ describe("manifest preset CLI", () => {
       bin: { consumer: "src/cli.ts", worker: "src/worker.ts" },
       workspaces: ["packages/*"],
       type: "module",
-      dependencies: { "type-flag": "4.5.0" },
+      dependencies: { "type-flag": "4.5.0", consola: "3.4.2" },
       devDependencies: { ...housePackage.devDependencies, extra: "1.0.0" },
       engines: { ...housePackage.engines, node: ">=22" },
     };
@@ -301,7 +301,7 @@ describe("manifest preset CLI", () => {
     const original = await readFile(source, "utf8");
     for (const [bytes, diagnostic] of [
       ["{invalid", "requiredJsonKeys needs a JSON object"],
-      ["{}", "missing required JSON key: devDependencies.@types/bun"],
+      ["{}", "missing required JSON key: dependencies.consola"],
     ] as const) {
       const repo = await target();
       await writeFile(source, bytes);

@@ -11,9 +11,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { cli } from "cleye";
+import { consola } from "consola";
 import { attempt, errorMessage } from "../../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { discoverPresets, jsonKey } from "./manifests.ts";
+
+consola.level = 3;
 
 const ROOT = resolve(import.meta.dir, "../..");
 const PRESETS = join(ROOT, "standard-presets");
@@ -79,7 +82,7 @@ if (action === "list") {
     const difference = rank(a.name) - rank(b.name);
     return difference === 0 ? a.name.localeCompare(b.name) : difference;
   }))
-    console.log(`${preset.name}\t${preset.description}`);
+    process.stdout.write(`${preset.name}\t${preset.description}\n`);
   process.exit(0);
 }
 const preset = catalog.presets.find((entry) => entry.name === name);
@@ -152,13 +155,13 @@ async function applyOne(destination: string, content: string): Promise<void> {
     ? await readFile(destination, "utf8")
     : undefined;
   if (current === content) {
-    console.log(`preset: current ${relative(target, destination)}`);
+    consola.log(`preset: current ${relative(target, destination)}`);
   } else if (argv.flags["dry-run"]) {
-    console.log(`preset: would write ${relative(target, destination)}`);
+    consola.log(`preset: would write ${relative(target, destination)}`);
   } else {
     await mkdir(dirname(destination), { recursive: true });
     await writeFile(destination, content);
-    console.log(`preset: wrote ${relative(target, destination)}`);
+    consola.log(`preset: wrote ${relative(target, destination)}`);
   }
 }
 
@@ -174,14 +177,14 @@ async function checkJsonFile(
     ? jsonOf(z.record(z.string(), z.unknown())).safeParse(content.value)
     : undefined;
   if (json === undefined || !json.success) {
-    console.log(`preset: ${destination}: missing or invalid JSON object`);
+    consola.log(`preset: ${destination}: missing or invalid JSON object`);
     return true;
   }
   let drift = false;
   for (const requirement of requirements) {
     const actual = jsonKey(json.data, requirement.key);
     if (isDeepStrictEqual(actual, requirement.expected)) continue;
-    console.log(
+    consola.log(
       `preset: ${destination}: ${requirement.key}: expected ${JSON.stringify(requirement.expected)}, found ${actual === undefined ? "missing" : JSON.stringify(actual)}`,
     );
     drift = true;
@@ -255,4 +258,4 @@ for (const [destination, content] of expected) {
 }
 await rm(scratch, { recursive: true, force: true });
 if (drift) process.exit(1);
-console.log(`preset: ${name} is up to date`);
+consola.log(`preset: ${name} is up to date`);

@@ -8,17 +8,18 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
-  readlinkSync,
   renameSync,
   rmSync,
 } from "node:fs";
 import {
+  access,
   cp,
   lstat,
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
+  readlink,
   writeFile,
   rename,
   rm,
@@ -217,9 +218,13 @@ async function uninstallDotfilesPlugin(
     return undefined;
   }
   const installedPath = resolve(home, ".claude/plugins/installed_plugins.json");
-  if (!existsSync(installedPath)) return undefined;
+  const present = await access(installedPath).then(
+    () => true,
+    () => false,
+  );
+  if (!present) return undefined;
   const installed = jsonOf(InstalledPluginsSchema).safeParse(
-    readFileSync(installedPath, "utf8"),
+    await readFile(installedPath, "utf8"),
   );
   if (!installed.success)
     return `cannot inspect ${installedPath}: ${installed.error.message}`;
@@ -263,10 +268,15 @@ async function syncInHouseClaude(
   prepared: PreparedSkills = resolve(root, "agents/skills"),
 ): Promise<string | undefined> {
   const source = resolve(root, "agents/skills");
-  const install = names.filter((name) => {
+  const install: string[] = [];
+  for (const name of names) {
     const target = resolve(home, ".claude/skills", name);
-    return treeDigest(target) !== treeDigest(preparedSkill(prepared, name));
-  });
+    if (
+      (await treeDigest(target)) !==
+      (await treeDigest(preparedSkill(prepared, name)))
+    )
+      install.push(name);
+  }
   if (dryRun) {
     for (const name of names.toSorted())
       print(
@@ -398,23 +408,25 @@ async function syncInHouseCodex(
     ...Object.keys(loaded.value.skills),
     ...(await codexInHouseNamesFromLock(home, root)),
   ]);
-  const digests = new Map(
-    names.map((name) => [name, treeDigest(preparedSkill(prepared, name))]),
-  );
+  const digests = new Map<string, string | undefined>();
+  for (const name of names)
+    digests.set(name, await treeDigest(preparedSkill(prepared, name)));
   if ([...digests.values()].some((digest) => digest === undefined))
     return "could not read a complete in-house skill tree";
-  const install = names.filter((name) => {
+  const install: string[] = [];
+  for (const name of names) {
     const target = resolve(home, ".agents/skills", name);
     const state = fromThrowable((path: string) => lstatSync(path))(target);
-    return (
+    if (
       loaded.value.skills[name] !== digests.get(name) ||
-      treeDigest(target) !== digests.get(name) ||
+      (await treeDigest(target)) !== digests.get(name) ||
       state.isErr() ||
       state.value.isSymbolicLink() ||
       !state.value.isDirectory() ||
       !existsSync(resolve(target, "SKILL.md"))
-    );
-  });
+    )
+      install.push(name);
+  }
   const thirdParty = new Set(thirdPartyNames);
   const stale = [...previous].filter(
     (name) => !names.includes(name) && !thirdParty.has(name),
@@ -537,12 +549,9 @@ async function recordInHouseState(
   prepared: PreparedSkills = resolve(root, "agents/skills"),
   sources?: InHouseState["sources"],
 ): Promise<string | undefined> {
-  const skills = Object.fromEntries(
-    names.map((name) => [
-      name,
-      treeDigest(preparedSkill(prepared, name)) ?? "",
-    ]),
-  );
+  const skills: Record<string, string> = {};
+  for (const name of names)
+    skills[name] = (await treeDigest(preparedSkill(prepared, name))) ?? "";
   const writeError = await writeInHouseState(home, {
     version: 1,
     skills,
@@ -687,32 +696,32 @@ function rejectPrototypeFlag(
   }
 }
 
-function treeDigest(root: string): string | undefined {
-  const exists = fromThrowable((path: string) => lstatSync(path))(root);
+async function treeDigest(root: string): Promise<string | undefined> {
+  const exists = await fromAsyncThrowable(lstat)(root);
   if (exists.isErr() || !exists.value.isDirectory()) return undefined;
-  const result = fromThrowable(() => {
+  const result = await fromAsyncThrowable(async () => {
     const hash = createHash("sha256");
-    const visit = (directory: string, prefix: string): void => {
-      const entries = readdirSync(directory, { withFileTypes: true }).toSorted(
-        (left, right) => left.name.localeCompare(right.name),
-      );
+    const visit = async (directory: string, prefix: string): Promise<void> => {
+      const entries = (
+        await readdir(directory, { withFileTypes: true })
+      ).toSorted((left, right) => left.name.localeCompare(right.name));
       for (const entry of entries) {
         const fullPath = join(directory, entry.name);
         const relPath = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
-        const info = lstatSync(fullPath);
+        const info = await lstat(fullPath);
         if (info.isSymbolicLink()) {
-          hash.update(`link\0${relPath}\0${readlinkSync(fullPath)}\0`);
+          hash.update(`link\0${relPath}\0${await readlink(fullPath)}\0`);
         } else if (info.isDirectory()) {
           hash.update(`dir\0${relPath}\0`);
-          visit(fullPath, relPath);
+          await visit(fullPath, relPath);
         } else {
           hash.update(`file\0${relPath}\0`);
-          hash.update(readFileSync(fullPath));
+          hash.update(await readFile(fullPath));
           hash.update("\0");
         }
       }
     };
-    visit(root, "");
+    await visit(root, "");
     return hash.digest("hex");
   })();
   return result.unwrapOr(undefined);
@@ -890,9 +899,9 @@ async function main(): Promise<void> {
         digest !== undefined &&
         previous.digest === digest &&
         deployed !== undefined &&
-        [".agents/skills", ".claude/skills"].every(
-          (base) => treeDigest(resolve(home, base, name)) === deployed,
-        )
+        (await treeDigest(resolve(home, ".agents/skills", name))) ===
+          deployed &&
+        (await treeDigest(resolve(home, ".claude/skills", name))) === deployed
       ) {
         prepared.reused.set(name, resolve(home, ".agents/skills", name));
         sources[name] = previous;
@@ -1012,10 +1021,10 @@ async function main(): Promise<void> {
       (entry) => entry.source,
     );
     for (const [source, entries] of bySource) {
-      const stageHome = mkdtempSync(join(tmpdir(), "skills-sync-home-"));
-      using _stage = {
-        [Symbol.dispose]: () => {
-          rmSync(stageHome, { recursive: true, force: true });
+      const stageHome = await mkdtemp(join(tmpdir(), "skills-sync-home-"));
+      await using _stage = {
+        [Symbol.asyncDispose]: async () => {
+          await rm(stageHome, { recursive: true, force: true });
         },
       };
       const requested = entries.map((entry) => entry.skill);
@@ -1033,17 +1042,21 @@ async function main(): Promise<void> {
         return;
       }
 
-      const outOfDate = entries.filter((entry) => {
-        const upstream = treeDigest(
+      const outOfDate: typeof entries = [];
+      for (const entry of entries) {
+        const upstream = await treeDigest(
           resolve(stageHome, ".agents/skills", entry.skill),
         );
-        return [
-          resolve(home, ".agents/skills", entry.skill),
-          resolve(home, ".claude/skills", entry.skill),
-        ].some(
-          (target) => upstream === undefined || treeDigest(target) !== upstream,
+        outOfDate.push(
+          ...(upstream === undefined ||
+          (await treeDigest(resolve(home, ".agents/skills", entry.skill))) !==
+            upstream ||
+          (await treeDigest(resolve(home, ".claude/skills", entry.skill))) !==
+            upstream
+            ? [entry]
+            : []),
         );
-      });
+      }
       if (outOfDate.length === 0) {
         print(`up to date: ${source} (${requested.length} skill(s))`);
         continue;
@@ -1103,13 +1116,25 @@ async function main(): Promise<void> {
       }
 
       const finalLock = await readInstalledLock(home);
-      const missing = staleNames.filter(
-        (name) =>
-          finalLock === undefined ||
+      const missing: string[] = [];
+      for (const name of staleNames) {
+        missing.push(
+          ...(finalLock === undefined ||
           !Object.hasOwn(finalLock.skills, name) ||
-          !existsSync(resolve(home, ".agents/skills", name, "SKILL.md")) ||
-          !existsSync(resolve(home, ".claude/skills", name, "SKILL.md")),
-      );
+          (
+            await fromAsyncThrowable(access)(
+              resolve(home, ".agents/skills", name, "SKILL.md"),
+            )
+          ).isErr() ||
+          (
+            await fromAsyncThrowable(access)(
+              resolve(home, ".claude/skills", name, "SKILL.md"),
+            )
+          ).isErr()
+            ? [name]
+            : []),
+        );
+      }
       if (missing.length > 0) {
         fail(
           `FATAL: CLI returned success without installing and recording: ${missing.join(", ")}`,

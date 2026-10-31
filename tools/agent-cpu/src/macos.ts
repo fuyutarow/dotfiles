@@ -3,6 +3,7 @@ import { cpus } from "node:os";
 import { readFile } from "node:fs/promises";
 import {
   claudeFile,
+  codexResumeId,
   descriptorId,
   vendorOf,
   workers,
@@ -17,6 +18,7 @@ type Process = {
   seconds: number;
   rss: number;
   name: string;
+  args: string[];
   vendor?: "claude" | "codex";
 };
 async function command(cmd: string[]): Promise<string | null> {
@@ -68,6 +70,7 @@ export function parsePs(raw: string): Map<number, Process> {
       seconds: elapsed,
       rss: Number(rss) * 1024,
       name: basename(argv[0] ?? ""),
+      args: argv,
       ...(vendor === undefined ? {} : { vendor }),
     });
   }
@@ -94,7 +97,8 @@ async function idOf(p: Process, options: Options): Promise<string | undefined> {
     const id = await descriptorId(line.slice(1), p.vendor);
     if (id !== undefined) ids.add(id);
   }
-  return ids.size === 1 ? [...ids][0] : undefined;
+  if (ids.size > 0) return ids.size === 1 ? [...ids][0] : undefined;
+  return p.vendor === "codex" ? codexResumeId(p.args) : undefined;
 }
 function memory(raw: string, totalRaw: string) {
   const page = /page size of (\d+) bytes/u.exec(raw)?.[1];

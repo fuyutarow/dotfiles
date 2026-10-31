@@ -451,6 +451,16 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
   expect(calls[0]).toContain("workers=w:2·53%");
   expect(calls[1]).toContain("cpu=cpu:4%");
   expect(calls[1]).toContain("workers");
+  await Bun.write(
+    path,
+    JSON.stringify({
+      ...doc,
+      sessions: doc.sessions.map((row) =>
+        row.pid === 2 ? { ...row, workers: { count: 3, cpu_pct: 12 } } : row,
+      ),
+    }),
+  );
+  expect((await report())[1]).toContain("workers=w:3·12%");
   expect(calls[2]).toContain("workers=w:?");
   expect(calls[3]).toContain("unowned=orphan:foo 8% · bar.service 5%");
   await Bun.write(path, JSON.stringify({ ...doc, unowned: [] }));

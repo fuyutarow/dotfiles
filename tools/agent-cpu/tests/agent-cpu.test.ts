@@ -15,7 +15,7 @@ import { produce, run, type Options } from "../src/agent-cpu.ts";
 import { deployMacStatusline } from "../../../scripts/link-dots.ts";
 
 const id = "12345678-1234-4234-8234-123456789abc";
-async function fixture(mode = "ok") {
+async function fixture(mode = "ok", codexCommand = "codex\0") {
   const root = await mkdtemp(join(tmpdir(), "agent-cpu-test-"));
   const proc = join(root, "proc"),
     cgroup = join(root, "cgroup"),
@@ -82,7 +82,10 @@ async function fixture(mode = "ok") {
         join(dir, "stat"),
         `${pid} (${name}) ${fields.join(" ")}\n`,
       );
-      await writeFile(join(dir, "cmdline"), `${name}\0`);
+      await writeFile(
+        join(dir, "cmdline"),
+        pid === 12 ? codexCommand : `${name}\0`,
+      );
       await writeFile(join(dir, "cgroup"), `0::${group}\n`);
       await writeFile(
         join(dir, "status"),
@@ -165,6 +168,16 @@ test("resolves a Codex session from its open rollout", async () => {
   if (doc === null) return;
   expect(doc.sessions.find((row) => row.pid === 12)?.session_id).toBe(id);
   expect(doc.unresolved_agents).toEqual([]);
+});
+test("resolves a resumed Codex process without an open rollout", async () => {
+  const f = await fixture("ok", `codex\0resume\0${id}\0`);
+  const doc = await produce(f.options);
+  expect(doc?.sessions.find((row) => row.pid === 12)).toMatchObject({
+    session_id: id,
+    vendor: "codex",
+    workers: { count: 1, cpu_pct: 50, ram_bytes: 4096 },
+  });
+  expect(doc?.unresolved_agents).toEqual([]);
 });
 test("unowned excludes values below five percent", async () => {
   const f = await fixture();

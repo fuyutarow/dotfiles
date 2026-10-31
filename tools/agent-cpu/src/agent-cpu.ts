@@ -31,6 +31,7 @@ type Proc = {
   ticks: number;
   start: string;
   name: string;
+  args: string[];
   vendor?: Vendor;
   unit?: string;
   group: string;
@@ -141,6 +142,7 @@ async function sample(options: Options, rows: Row[]): Promise<Sample | null> {
           ticks,
           start,
           name: basename(args[0] ?? s.slice(s.indexOf("(") + 1, close)),
+          args,
           group,
         };
         const vendor = vendorOf(args);
@@ -277,6 +279,12 @@ function hostMemory(raw: string) {
   };
 }
 export const claudeFile = jsonOf(z.object({ sessionId: uuid }));
+export function codexResumeId(args: string[]): string | undefined {
+  const offset = /^(node|bun)$/u.test(basename(args[0] ?? "")) ? 2 : 1;
+  if (args[offset] !== "resume") return undefined;
+  const id = args[offset + 1];
+  return uuid.safeParse(id).success ? id : undefined;
+}
 const rolloutMeta = jsonOf(
   z.object({
     type: z.literal("session_meta"),
@@ -319,7 +327,8 @@ async function sessionId(
     const id = await descriptorId(target, proc.vendor);
     if (id !== undefined) ids.add(id);
   }
-  return ids.size === 1 ? [...ids][0] : undefined;
+  if (ids.size > 0) return ids.size === 1 ? [...ids][0] : undefined;
+  return proc.vendor === "codex" ? codexResumeId(proc.args) : undefined;
 }
 export async function workers(options: Options): Promise<Row[] | null> {
   return Promise.try(async () => {

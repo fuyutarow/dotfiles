@@ -4,6 +4,7 @@ import { CccIndexSchema } from "./ccc-model.ts";
 export const MemReadingSchema = z.object({
   frac: z.string(), // e.g. "16.2/54.9G"
   pct: z.number(), // used/total*100, unrounded — pctFmt() rounds at render time
+  gpuNow: z.number().optional(),
   gpuAvg15: z.number().nullable().optional(),
   gpuSamples15: z.number().optional(),
   cccIndexing: CccIndexSchema.optional(),

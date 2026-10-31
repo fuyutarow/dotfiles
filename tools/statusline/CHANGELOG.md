@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.22 — 2026-11-01
+
+- Show current GPU utilization with recent average context
+
 ## 0.22.21 — 2026-10-31
 
 - Fix cached agx run ages at render time

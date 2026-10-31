@@ -194,7 +194,7 @@ describe("statusline Sys row: VRAM", () => {
     );
     const bin = binWith({ "nvidia-smi": "exit 99" });
     expect(sysRow(render({ home, bin }).text)).toContain(
-      "GPU 0%/15m n=3 · VRAM 29% ( 3.5/12.0G)",
+      "GPU  0% · VRAM 29% ( 3.5/12.0G)",
     );
   });
   test("missing and unresponsive owner state are explicit", async () => {

@@ -69,6 +69,7 @@ function vramFromState(
     ? err("stale (invalid GPU memory)")
     : ok({
         ...reading,
+        gpuNow: d.nowPct,
         gpuAvg15: d.avg15Pct,
         gpuSamples15: d.samples15,
       });

@@ -19,6 +19,26 @@ import type { MemReading } from "./host-model.ts";
 import { cccBadge } from "./ccc-model.ts";
 export const STALE_SHOW_S = 60;
 
+function gpuSegment(m: MemReading): string {
+  if (m.gpuNow === undefined)
+    return roles.unavailable("GPU", unavailable("no GPU sample"));
+  const { pct, text, col } = pctFmt(m.gpuNow);
+  const details: string[] = [];
+  if (
+    m.gpuAvg15 !== null &&
+    m.gpuAvg15 !== undefined &&
+    Math.round(m.gpuAvg15) !== pct
+  )
+    details.push(`15m avg ${Math.round(m.gpuAvg15)}%`);
+  if (m.gpuSamples15 !== undefined && m.gpuSamples15 < 3)
+    details.push(
+      `${m.gpuSamples15} ${m.gpuSamples15 === 1 ? "sample" : "samples"}`,
+    );
+  const context =
+    details.length > 0 ? ` ${roles.secondary(`(${details.join(", ")})`)}` : "";
+  return `${roles.label("GPU")} ${roles.value(`${text}%`, col)}${context}`;
+}
+
 export function memSegment(
   label: string,
   m: MemReading,
@@ -26,8 +46,7 @@ export function memSegment(
 ): string {
   const { text: pct, col } = pctFmt(m.pct);
   let seg = `${roles.label(label)} ${roles.value(`${pct}%`, col)} ${roles.secondary(`(${m.frac})`)}`;
-  if (includeGpu && m.gpuAvg15 !== undefined && m.gpuAvg15 !== null)
-    seg += ` ${roles.secondary(`GPU≈${Math.round(m.gpuAvg15)}%/15m n=${m.gpuSamples15 ?? 0}`)}`;
+  if (includeGpu && m.gpuNow !== undefined) seg += ` ${gpuSegment(m)}`;
   const badge = cccBadge(
     m.cccIndexing,
     Temporal.Now.instant().epochMilliseconds,
@@ -45,11 +64,7 @@ export function memSegment(
 function gpuObservation(vram: Result<MemReading, string>) {
   return vram.match(
     (m) => {
-      let utilization = roles
-        .unavailable("GPU", unavailable("no GPU sample"))
-        .trimStart();
-      if (m.gpuAvg15 !== undefined && m.gpuAvg15 !== null)
-        utilization = `${roles.label("GPU")} ${roles.secondary(`${Math.round(m.gpuAvg15)}%/15m n=${m.gpuSamples15 ?? 0}`)}`;
+      const utilization = gpuSegment(m);
       return observed(
         `${utilization}${roles.separator()}${memSegment("VRAM", m, false)}`,
         undefined,

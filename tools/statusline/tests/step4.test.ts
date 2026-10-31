@@ -318,7 +318,7 @@ test("GPU owner fixtures cover first failed probe, recovery, and paused failures
     } else {
       expect(text).not.toContain("stalled");
       expect(text).not.toContain("gpu-sampler --check");
-      expect(text).toContain("GPU 12%/15m n=3 · VRAM");
+      expect(text).toContain("GPU 12% · VRAM");
     }
     expect(await Bun.file(join(root, "gpu-owner.json")).text()).toBe(before);
   }

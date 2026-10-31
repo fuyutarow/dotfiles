@@ -22,7 +22,7 @@ const sample = [
   `repo ${ESC}[32m/home/fuyu/日本語-project${ESC}[0m${pipe}branch ${ESC}[35mfeature/wrap${ESC}[0m${separator}worktree ${ESC}[33mws: sl1-test${ESC}[0m`,
   `Claude${pipe}session ${ESC}[36magent-123456789${ESC}[0m${separator}model Opus${separator}ctx 328.9k 33%${separator}email fuyutarow@example.test`,
   `Rate: claude 5h 7% reset 16:20${separator}7d 75% reset 10-29${separator}codex 7d 36%`,
-  `Sys: CPU 100%${separator}RAM 35% (19.3/54.9G)${separator}VRAM 23% (2.7/12.0G)${separator}GPU≈1%/15m n=7${separator}tmpfs 34G free`,
+  `Sys: CPU 100%${separator}RAM 35% (19.3/54.9G)${separator}VRAM 23% (2.7/12.0G)${separator}GPU  1% (15m avg 2%)${separator}tmpfs 34G free`,
   "Job: scan n/a (ps timeout 2000ms)",
   "warning: unchanged after Sys",
 ].join("\n");

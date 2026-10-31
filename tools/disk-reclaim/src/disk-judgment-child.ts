@@ -1,3 +1,7 @@
+const emit = (value: string): void => {
+  process.stdout.write(`${value}\n`);
+};
+
 import { lstat, statfs } from "node:fs/promises";
 import { dirname } from "node:path";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
@@ -54,7 +58,7 @@ if (action === undefined) {
         candidate.path === null ? null : await identity(candidate.path),
     })),
   );
-  console.log(JSON.stringify(rows));
+  emit(JSON.stringify(rows));
 } else {
   const parsed = jsonOf(
     z.object({ id: z.string(), path: z.string(), fingerprint: z.string() }),
@@ -62,7 +66,7 @@ if (action === undefined) {
   const request = parsed.success
     ? parsed.data
     : fail("invalid judgment action");
-  console.log(
+  emit(
     JSON.stringify(
       await judgmentAction(request, {
         target,

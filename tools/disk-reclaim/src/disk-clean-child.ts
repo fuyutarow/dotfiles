@@ -1,3 +1,7 @@
+const emit = (value: string): void => {
+  process.stdout.write(`${value}\n`);
+};
+
 import { lstat, statfs } from "node:fs/promises";
 import { dirname } from "node:path";
 import { loadConfig } from "./engine.ts";
@@ -92,7 +96,7 @@ if (process.env["DISK_CLEAN_ACTION"] === undefined) {
         candidate.path === null ? null : await identity(candidate.path),
     })),
   );
-  console.log(JSON.stringify(rows));
+  emit(JSON.stringify(rows));
 } else {
-  console.log(JSON.stringify(await act(process.env["DISK_CLEAN_ACTION"])));
+  emit(JSON.stringify(await act(process.env["DISK_CLEAN_ACTION"])));
 }

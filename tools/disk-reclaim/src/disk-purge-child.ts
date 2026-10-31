@@ -1,3 +1,7 @@
+const emit = (value: string): void => {
+  process.stdout.write(`${value}\n`);
+};
+
 import { lstat, statfs } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
@@ -68,13 +72,13 @@ if (action === undefined) {
           : null,
     })),
   );
-  console.log(JSON.stringify(rows));
+  emit(JSON.stringify(rows));
 } else {
   const parsed = jsonOf(
     z.object({ id: z.string(), path: z.string(), fingerprint: z.string() }),
   ).safeParse(action);
   const request = parsed.success ? parsed.data : fail("invalid purge action");
-  console.log(
+  emit(
     JSON.stringify(
       await purgeAction(request, {
         target: purge,

@@ -1,3 +1,7 @@
+const emit = (value: string): void => {
+  process.stdout.write(`${value}\n`);
+};
+
 import { lstat, statfs } from "node:fs/promises";
 import { homedir } from "node:os";
 import { loadConfig } from "./engine.ts";
@@ -60,7 +64,7 @@ const fingerprint = async (path: string) => {
     s.ctimeMs,
   ]);
 };
-console.log(
+emit(
   JSON.stringify(
     await runRipExpiry({
       target: createRipExpiryTarget().target,

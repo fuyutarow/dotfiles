@@ -1,3 +1,7 @@
+const emit = (value: string): void => {
+  process.stdout.write(`${value}\n`);
+};
+
 import { lstat, readdir, statfs } from "node:fs/promises";
 import { fromAsyncThrowable } from "neverthrow";
 import { dirname } from "node:path";
@@ -126,7 +130,7 @@ if (action === undefined) {
       return checked.value;
     }),
   );
-  console.log(JSON.stringify(rows));
+  emit(JSON.stringify(rows));
 } else {
   const parsed = jsonOf(
     z.object({
@@ -137,7 +141,7 @@ if (action === undefined) {
     }),
   ).safeParse(action);
   const request = parsed.success ? parsed.data : fail("invalid tmpfs action");
-  console.log(
+  emit(
     JSON.stringify(
       await (request.preview === true ? cleanPreflight : cleanAction)(request, {
         target,

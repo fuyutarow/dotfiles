@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { z } from "../../../agents/hooks/zod.ts";
 
 const SCRIPT = resolve(import.meta.dir, "../src/preset.ts");
 const roots: string[] = [];
@@ -42,6 +43,58 @@ async function run(root: string, ...args: string[]) {
 }
 
 describe("preset sync", () => {
+  test("shipped mise checker uses the recorded house pin, not a parent decoy", async () => {
+    const parent = await fixture();
+    const root = join(parent, "consumer");
+    await mkdir(root);
+    await writeFile(join(parent, "mise.toml"), '[tools]\nbun = "9.9.9"\n');
+    const house = Bun.TOML.parse(
+      await readFile(resolve(import.meta.dir, "../../../mise.toml"), "utf8"),
+    );
+    const parsed = z
+      .object({ tools: z.object({ bun: z.string() }) })
+      .safeParse(house);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    const pin = parsed.data.tools.bun;
+    const tasks = ["fmt", "f", "fmt:check", "lint", "test", "up", "check"]
+      .map((name) => `[tasks."${name}"]\nrun = "true"`)
+      .join("\n");
+    await writeFile(
+      join(root, "mise.toml"),
+      `[tools]\nbun = "${pin}"\n${tasks}\n`,
+    );
+    const synced = await run(root, "--tool", "mise-contract");
+    expect(synced.exit, synced.stderr).toBe(0);
+    const checker = join(root, "tools/mise-contract/scripts/mise-contract.ts");
+    const check = async () => {
+      const child = Bun.spawn([process.execPath, checker, root], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 30_000,
+      });
+      const [stdout, stderr, exit] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return { output: stdout + stderr, exit };
+    };
+    const good = await check();
+    expect(good.exit, good.output).toBe(0);
+    await writeFile(
+      join(root, "mise.toml"),
+      `[tools]\nbun = "9.9.9"\n${tasks}\n`,
+    );
+    const bad = await check();
+    expect(bad.exit).toBe(1);
+    expect(bad.output).toContain(`the house pin is bun = "${pin}"`);
+    expect((await run(root, "--check", "--tool", "mise-contract")).exit).toBe(
+      0,
+    );
+  }, 60_000);
+
   test.each([
     "jj-commit",
     "jj-push",

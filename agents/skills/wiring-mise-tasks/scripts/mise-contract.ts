@@ -263,6 +263,8 @@ function declaredTools(source: string): Set<string> {
 // A later ticket removes that exception; all other mismatches fail now.
 // Other tools still warn on patch pins, since their owners choose the version.
 const HOUSE_TOML = join(import.meta.dir, "..", "..", "..", "..", "mise.toml");
+// preset sync replaces this declaration with the pin from its recorded source commit.
+const embeddedHousePin: string | undefined = undefined;
 async function exists(path: string): Promise<boolean> {
   return access(path).then(
     () => true,
@@ -283,9 +285,15 @@ function toolPins(source: string): Map<string, string> {
 async function checkPins(source: string): Promise<[number, number]> {
   let failures = 0;
   let warnings = 0;
-  const house = (await exists(HOUSE_TOML))
-    ? toolPins(await readFile(HOUSE_TOML, "utf8")).get("bun")
-    : undefined;
+  const house =
+    embeddedHousePin ??
+    ((await exists(HOUSE_TOML))
+      ? toolPins(await readFile(HOUSE_TOML, "utf8")).get("bun")
+      : undefined);
+  if (house === undefined || house === "") {
+    process.stdout.write("FAIL  pin: cannot determine the house bun pin\n");
+    return [1, 0];
+  }
   for (const [tool, pin] of toolPins(source)) {
     if (tool === "bun" && house !== undefined && pin !== house) {
       const migrating = house === "1.4.3" && pin === "1.4";

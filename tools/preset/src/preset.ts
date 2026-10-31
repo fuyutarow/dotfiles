@@ -290,6 +290,25 @@ async function outputBytes(
       ? success(rendered(source.value, mapping, commit))
       : source;
   }
+  let housePin: string | undefined;
+  if (
+    mapping[0] === "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts"
+  ) {
+    const toml = await sourceBytes(commit, "mise.toml");
+    if (!toml.ok) return toml;
+    const parsed = await fsResult(() =>
+      Bun.TOML.parse(toml.value.toString("utf8")),
+    );
+    if (!parsed.ok) return failure(parsed.error);
+    const pin = z
+      .object({ tools: z.object({ bun: z.string().min(1) }) })
+      .safeParse(parsed.value);
+    if (!pin.success)
+      return failure(
+        "cannot determine the house bun pin from recorded mise.toml",
+      );
+    housePin = pin.data.tools.bun;
+  }
   let loadError: Error | undefined;
   const plugin: Bun.BunPlugin = {
     name: "preset-recorded-source",
@@ -309,8 +328,26 @@ async function outputBytes(
           loadError = source.error;
           return { contents: "", loader: "ts" };
         }
+        let contents = source.value.toString("utf8");
+        if (
+          housePin !== undefined &&
+          relative(sourceRoot, args.path) === mapping[0]
+        ) {
+          const declaration =
+            "const embeddedHousePin: string | undefined = undefined;";
+          if (!contents.includes(declaration)) {
+            loadError = new Error(
+              "mise-contract house pin declaration missing",
+            );
+            return { contents: "", loader: "ts" };
+          }
+          contents = contents.replace(
+            declaration,
+            `const embeddedHousePin: string | undefined = ${JSON.stringify(housePin)};`,
+          );
+        }
         return {
-          contents: source.value.toString("utf8"),
+          contents,
           loader: args.path.endsWith(".ts") ? "ts" : "js",
         };
       });

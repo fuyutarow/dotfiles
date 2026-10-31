@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.4 — 2026-10-31
+
+- Embed the recorded house Bun pin in copied mise-contract checkers.
+
 ## 0.3.3 — 2026-10-31
 
 - Remove stale files previously shipped by preset sync

@@ -37,9 +37,10 @@ const Report = z.looseObject({
 });
 
 async function run(cwd: string, ...args: string[]) {
+  const { FORCE_COLOR: _forceColor, ...env } = process.env;
   const child = Bun.spawn([process.execPath, ...args], {
     cwd,
-    env: { ...process.env, PATH: bin },
+    env: { ...env, PATH: bin, NO_COLOR: "1" },
     stdout: "pipe",
     stderr: "pipe",
     timeout: 60_000,
@@ -199,8 +200,8 @@ test("lint runner fails loudly for silent exit 0, invalid reports, and zero file
     expect(result.stderr).toContain("oxlint exited 0");
     expect(result.stderr).toContain("without a valid nonempty JSON report");
   }
-  expect((await run(repo, "lint-oxlint.ts", "--help")).stdout).toContain(
-    "USAGE",
+  expect((await run(repo, "lint-oxlint.ts", "--help")).stdout).toMatch(
+    /usage/iu,
   );
   for (const flag of ["--unknown", "--__proto__"])
     expect((await run(repo, "lint-oxlint.ts", flag)).exit).not.toBe(0);

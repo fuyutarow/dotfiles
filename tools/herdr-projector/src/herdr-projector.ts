@@ -205,6 +205,39 @@ function formatMemory(byteCount: number): string {
   return `${Number(value.toFixed(1))}${unit}`;
 }
 
+export function resourceLine(
+  workers: number | undefined,
+  cpu: number | undefined,
+  ram: number | undefined,
+  vram: number | undefined,
+  width = 28,
+): string {
+  const prefix = [
+    `workers ${workers ?? "?"}`,
+    `cpu ${cpu === undefined ? "?" : `${cpu}%`}`,
+  ];
+  const memory = (value: number, compact: boolean) => {
+    const formatted = formatMemory(value);
+    if (!compact || value >= 1024 ** 3) return formatted;
+    return formatted.replace(/\.\d+(?=[KM]$)/u, "");
+  };
+  const parts = (compact: boolean) => [
+    ...prefix,
+    ...(ram === undefined ? [] : [`ram ${memory(ram, compact)}`]),
+    ...(vram === undefined ? [] : [`vram ${memory(vram, compact)}`]),
+  ];
+  let line = parts(false).join(" · ");
+  if (line.length <= width) return line;
+  line = parts(false).join(" ");
+  if (line.length <= width) return line;
+  line = parts(true).join(" ");
+  if (line.length <= width) return line;
+  line = parts(true)
+    .filter((part) => !part.startsWith("vram "))
+    .join(" ");
+  return line.slice(0, width);
+}
+
 /** Native session_index is an append log: a rename adds a newer exact-ID row. */
 export async function readProjectorTitle(
   id: string,
@@ -971,34 +1004,11 @@ export async function projectAgents(
     const parsedCpu =
       AgentCpuSchemaV1.shape.sessions.element.safeParse(resource);
     const cpuSession = parsedCpu.success ? parsedCpu.data : undefined;
-    let resourceReason = "no resource row";
-    if (cpuSnapshot === undefined) resourceReason = "snapshot unavailable";
-    else if (matches.length > 1) resourceReason = "ambiguous process";
-    else if (processIds.pids.length === 0) resourceReason = "no process";
-    const cpuToken =
-      resource === undefined
-        ? `cpu:? (${resourceReason})`
-        : `cpu:${resource.cpu_pct}%`;
-    let workerToken = "w:?";
-    if (cpuSession?.workers !== undefined && cpuSession.workers !== null) {
-      workerToken =
-        cpuSession.workers.count === 0
-          ? ""
-          : `w:${cpuSession.workers.count}·${cpuSession.workers.cpu_pct}%`;
-    }
     const unowned =
       cpuSnapshot?.unowned
         .map((row) => `${row.label} ${row.cpu_pct}%`)
         .join(" · ") ?? "";
     const cpuArgs: string[] = [];
-    if (isAgent)
-      cpuArgs.push(
-        "--token",
-        `cpu=${cpuToken}`,
-        ...(workerToken === ""
-          ? ["--clear-token", "workers"]
-          : ["--token", `workers=${workerToken}`]),
-      );
     if (isAgent) {
       const parsedMemory =
         AgentCpuSchemaV2.shape.unresolved_agents.element.safeParse(resource);
@@ -1015,18 +1025,20 @@ export async function projectAgents(
           ? undefined
           : memorySession.ram_bytes + (memoryWorkers?.ram_bytes ?? 0);
       const vram =
-        memorySession === undefined ||
-        memorySession.vram_bytes === null ||
-        (memoryWorkers !== null && memoryWorkers.vram_bytes === null)
+        memorySession === undefined || memorySession.vram_bytes === null
           ? undefined
-          : memorySession.vram_bytes + (memoryWorkers?.vram_bytes ?? 0);
+          : memorySession.vram_bytes;
       cpuArgs.push(
-        ...(ram === undefined
-          ? ["--clear-token", "ram"]
-          : ["--token", `ram=ram ${formatMemory(ram)}`]),
-        ...(vram === undefined || vram === 0
-          ? ["--clear-token", "vram"]
-          : ["--token", `vram=vram ${formatMemory(vram)}`]),
+        "--token",
+        `resources=${resourceLine(cpuSession?.workers?.count, resource?.cpu_pct, ram, vram)}`,
+        "--clear-token",
+        "workers",
+        "--clear-token",
+        "cpu",
+        "--clear-token",
+        "ram",
+        "--clear-token",
+        "vram",
       );
     }
     if (vendor === "btm")

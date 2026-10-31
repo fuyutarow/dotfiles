@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3 — 2026-10-31
+
+- Show worker count and width-bounded resource usage in the agent sidebar.
+
 ## 0.3.2 — 2026-10-31
 
 - Resolve nested Claude pane resource ambiguity

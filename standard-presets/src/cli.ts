@@ -7,7 +7,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { cli } from "cleye";
@@ -15,6 +15,12 @@ import { consola } from "consola";
 import { attempt, errorMessage } from "../../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { discoverPresets, jsonKey } from "./manifests.ts";
+import {
+  DEFAULT_PLACEMENT,
+  Placement,
+  placedContent,
+  placedDestination,
+} from "./placement.ts";
 
 consola.level = 3;
 
@@ -104,10 +110,43 @@ if (action === "diff" && argv.flags.to !== undefined && targetArg !== undefined)
 const target = resolve(targetText);
 if (!(await exists(target))) fatal(`target does not exist: ${target}`);
 
+const Registry = z.looseObject({
+  consumers: z
+    .array(
+      z.looseObject({
+        root: z.string(),
+        placement: Placement.optional(),
+        preset_dirs: z
+          .looseObject({ typescript: z.string().optional() })
+          .optional(),
+      }),
+    )
+    .default([]),
+});
+const registryPath = join(PRESETS, "consumers.toml");
+let placement = DEFAULT_PLACEMENT;
+if (name === "typescript" && (await Bun.file(registryPath).exists())) {
+  const raw = await attempt(async () =>
+    Bun.TOML.parse(await Bun.file(registryPath).text()),
+  );
+  const parsed = raw.ok ? Registry.safeParse(raw.value) : undefined;
+  if (parsed?.success !== true)
+    fatal(`invalid consumer registry: ${registryPath}`);
+  const consumer = parsed.data.consumers.find((row) => {
+    const root = row.root.startsWith("~/")
+      ? join(homedir(), row.root.slice(2))
+      : resolve(row.root);
+    return resolve(root, row.preset_dirs?.typescript ?? ".") === target;
+  });
+  placement = consumer?.placement ?? placement;
+}
 const files = preset.files.map((file) => ({
   createOnly: file.createOnly,
   source: join(preset.directory, file.source),
-  destination: join(target, file.destination),
+  destination: join(
+    target,
+    placedDestination(preset.name, file.destination, placement),
+  ),
 }));
 
 async function requireOwnedDestination(destination: string): Promise<void> {
@@ -147,7 +186,15 @@ for (const file of files) {
   )
     continue;
   if (file.createOnly === true && (await exists(file.destination))) continue;
-  expected.set(file.destination, await readFile(file.source, "utf8"));
+  expected.set(
+    file.destination,
+    placedContent(
+      preset.name,
+      relative(preset.directory, file.source),
+      await readFile(file.source, "utf8"),
+      placement,
+    ),
+  );
 }
 
 async function applyOne(destination: string, content: string): Promise<void> {

@@ -80,10 +80,20 @@ Consumers retain their own name, bins, workspaces, type, dependencies and extra
 devDependencies. Fix reported package key drift in the consumer; sync preserves
 the package bytes.
 
-The TypeScript preset owns `house.oxlintrc.json` and `house-plugin.js`, copied to
-the consumer root and compared byte for byte by `preset diff`. The consumer owns
+TypeScript defaults to `tools/` for scripts, `.oxlint/` for the house config and
+plugin, and `src/zod.ts` for the codec. A consumer entry in `consumers.toml` may
+override these relative directories with, for example,
+`placement = { scripts = "scripts", oxlint = "config/lint", source = "lib" }`.
+Omitted fields use the defaults. Apply, diff, sync and the consumer gate use the
+same placement. Existing root-layout consumers require a separate migration.
+The `lint:ts` task still calls `lint-ts-candidate`, whose current default expects
+the runner at the repository root; its selection and runner location need to be
+decoupled before this task can run against the default placed runner.
+
+The TypeScript preset owns `house.oxlintrc.json` and `house-plugin.js`, compared
+against their placed versions by `preset diff`. The consumer owns
 `.oxlintrc.json`: apply creates it only when absent, with
-`"extends": ["./house.oxlintrc.json"]` and an empty `ignorePatterns` list.
+`"extends": ["./.oxlint/house.oxlintrc.json"]` by default and an empty `ignorePatterns` list.
 Put repository ignores and optional React overrides in that wrapper; its edits
 are excluded from drift checks and preserved by apply and sync.
 `preset sync typescript` refreshes the managed house config and plugin, creating

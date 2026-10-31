@@ -86,7 +86,7 @@ test("delivered runner retains its types with a consumer's own narrow include gl
     "oxlint",
     "--type-aware",
     "--format=json",
-    "lint-oxlint.ts",
+    "tools/lint-oxlint.ts",
   );
   expect(lint.exit, lint.out + lint.err).toBe(0);
   const report = Report.safeParse(lint.out);
@@ -98,7 +98,7 @@ test("delivered runner retains its types with a consumer's own narrow include gl
   // own included source, without broadening or replacing that consumer's tsconfig.
   await writeFile(
     join(repo, "scripts/use-runner.ts"),
-    'import "../lint-oxlint.ts";\n',
+    'import "../tools/lint-oxlint.ts";\n',
   );
   const checked = await run(repo, "bun", "check", "--project", "tsconfig.json");
   expect(checked.exit, checked.out + checked.err).toBe(0);

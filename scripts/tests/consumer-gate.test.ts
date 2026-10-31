@@ -22,6 +22,30 @@ import {
 // Individual consumer-command deadlines (including the timeout test) stay short.
 setDefaultTimeout(60_000);
 
+test("consumer placement accepts defaults and rejects unsafe directories", () => {
+  const row = {
+    name: "example",
+    root: "/tmp/example",
+    surfaces: ["standard-presets/typescript"],
+    command: ["true"],
+    timeout_ms: 1000,
+  };
+  expect(ConsumerRegistry.safeParse({ consumers: [row] }).success).toBe(true);
+  const custom = ConsumerRegistry.safeParse({
+    consumers: [{ ...row, placement: { scripts: "checks" } }],
+  });
+  expect(custom.success && custom.data.consumers[0]?.placement).toEqual({
+    scripts: "checks",
+    oxlint: ".oxlint",
+    source: "src",
+  });
+  expect(
+    ConsumerRegistry.safeParse({
+      consumers: [{ ...row, placement: { source: "../outside" } }],
+    }).success,
+  ).toBe(false);
+});
+
 async function snapshot(cwd: string) {
   for (const argv of [
     ["git", "init", "-q", "-b", "alpha"],

@@ -117,6 +117,32 @@ describe("manifest preset CLI", () => {
     }
   }, 60_000);
 
+  test("default and declared placement emit relative imports", async () => {
+    const repo = await target();
+    expect((await run("apply", "typescript", "--to", repo)).exit).toBe(0);
+    expect(
+      await Array.fromAsync(new Bun.Glob("*.{ts,js}").scan({ cwd: repo })),
+    ).toEqual([]);
+    for (const script of ["lint-oxlint.ts", "lint-knip.ts"])
+      expect(await Bun.file(join(repo, "tools", script)).text()).toContain(
+        '"../src/zod.ts"',
+      );
+    expect((await run("diff", "typescript", "--to", repo)).exit).toBe(0);
+    const custom = await target();
+    await writeFile(
+      join(fixtureRoot, "standard-presets/consumers.toml"),
+      `[[consumers]]\nroot = ${JSON.stringify(custom)}\nplacement = { scripts = "scripts/checks", oxlint = "config/lint", source = "lib" }\n`,
+    );
+    expect((await run("apply", "typescript", "--to", custom)).exit).toBe(0);
+    expect(
+      await Bun.file(join(custom, "scripts/checks/lint-knip.ts")).text(),
+    ).toContain('"../../lib/zod.ts"');
+    expect(await Bun.file(join(custom, ".oxlintrc.json")).text()).toContain(
+      "./config/lint/house.oxlintrc.json",
+    );
+    expect((await run("diff", "typescript", "--to", custom)).exit).toBe(0);
+  });
+
   test("a directory-only demo addition lists, applies, and diffs", async () => {
     const listed = await run("list");
     expect(listed.exit).toBe(0);
@@ -173,22 +199,11 @@ describe("manifest preset CLI", () => {
     expect((await lstat(join(repo, ".oxlintrc.json"))).isSymbolicLink()).toBe(
       false,
     );
-    expect(text).toBe(
-      await readFile(
-        join(ROOT, "standard-presets/typescript/.oxlintrc.json"),
-        "utf8",
-      ),
-    );
-    expect(text).toContain('"./house.oxlintrc.json"');
+    expect(text).toContain('"./.oxlint/house.oxlintrc.json"');
     expect(text).not.toContain(ROOT);
-    const housePath = join(repo, "house.oxlintrc.json");
+    const housePath = join(repo, ".oxlint/house.oxlintrc.json");
     const house = await readFile(housePath, "utf8");
-    expect(house).toBe(
-      await readFile(
-        join(ROOT, "standard-presets/typescript/house.oxlintrc.json"),
-        "utf8",
-      ),
-    );
+    expect(house).toContain("../node_modules/oxlint/configuration_schema.json");
     expect((await lstat(housePath)).isSymbolicLink()).toBe(false);
     expect(house).not.toContain('"ignorePatterns"');
     expect((await run("diff", "typescript", repo)).exit).toBe(0);
@@ -363,7 +378,10 @@ describe("manifest preset CLI", () => {
     const bad = lint("bad.ts");
     expect(bad.exitCode, bad.stderr.toString()).toBe(1);
     expect(bad.stdout.toString()).toContain("Date is banned");
-    await writeFile(join(repo, "house-plugin.js"), "// consumer edit\n");
+    await writeFile(
+      join(repo, ".oxlint/house-plugin.js"),
+      "// consumer edit\n",
+    );
     const drift = await run("diff", "typescript", repo);
     expect(drift.exit).toBe(1);
     expect(drift.stdout).toContain("house-plugin.js (target)");

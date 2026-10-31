@@ -24,6 +24,12 @@ import {
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
+import {
+  DEFAULT_PLACEMENT,
+  Placement,
+  placedContent,
+  placedDestination,
+} from "../standard-presets/src/placement.ts";
 
 const Surface = z
   .string()
@@ -43,6 +49,7 @@ const ConsumerDeclaration = z.strictObject({
   bins: z.array(z.string().min(1)).optional(),
   full_gate_rule: z.string().optional(),
   surfaces: z.array(Surface).min(1),
+  placement: Placement.optional(),
   preset_dirs: z
     .strictObject({ typescript: RelativePath.optional() })
     .optional(),
@@ -376,6 +383,7 @@ async function applySurface(
   surface: string,
   changed: readonly string[],
   run: (argv: string[]) => ReturnType<typeof command>,
+  placement: Placement,
 ): Promise<string | undefined> {
   const manifest = join(candidate, surface, "preset.toml");
   const raw = await attempt(async () =>
@@ -386,7 +394,13 @@ async function applySurface(
     return `apply ${surface}: invalid or missing manifest`;
   // Parent-process writes must not traverse consumer links outside the isolated export.
   for (const path of [
-    ...parsed.data.files.map((file) => file.destination),
+    ...parsed.data.files.map((file) =>
+      placedDestination(
+        surface.split("/").at(-1) ?? "",
+        file.destination,
+        placement,
+      ),
+    ),
     "package.json",
     "tsconfig.json",
   ]) {
@@ -405,14 +419,27 @@ async function applySurface(
   for (const file of parsed.data.files) {
     const source = `${surface}/${file.source}`;
     if (!all && !changed.includes(source)) continue;
-    const destination = join(copy, file.destination);
+    const destination = join(
+      copy,
+      placedDestination(
+        surface.split("/").at(-1) ?? "",
+        file.destination,
+        placement,
+      ),
+    );
     if (file.createOnly === true && (await Bun.file(destination).exists()))
       continue;
     await mkdir(dirname(destination), { recursive: true });
-    await cp(join(candidate, source), destination, {
-      recursive: true,
-      dereference: true,
-    });
+    const content = await Bun.file(join(candidate, source)).text();
+    await writeFile(
+      destination,
+      placedContent(
+        surface.split("/").at(-1) ?? "",
+        file.source,
+        content,
+        placement,
+      ),
+    );
   }
   if (surface !== "standard-presets/typescript") return undefined;
   await preserveTypescript(copy, savedPackage, savedConfig);
@@ -448,8 +475,13 @@ async function applyConsumerSurface(
     if (!(await Bun.file(join(copy, config)).exists()))
       return `apply ${surface}: declared preset directory ${directory} has no config file ${config}`;
   }
-  return applySurface(candidate, target, surface, changed, (argv) =>
-    run(argv, target),
+  return applySurface(
+    candidate,
+    target,
+    surface,
+    changed,
+    (argv) => run(argv, target),
+    consumer.placement ?? DEFAULT_PLACEMENT,
   );
 }
 

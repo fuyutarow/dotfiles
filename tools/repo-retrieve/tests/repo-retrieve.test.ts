@@ -221,10 +221,11 @@ exec /bin/sh "$@"
     const path = join(bin, name);
     writeFileSync(
       path,
-      `#!${name === "ccc" ? python : "/bin/sh"}
+      `#!/bin/sh
+${name === "ccc" ? "# // dotfiles:ccc-index-entry" : ""}
 printf '%s\\n' '${name} '"$*" >> "$FAKE_SEARCH_LOG"
-if [ -n "\${FAKE_SEARCH_EXPECT_CWD:-}" ] && [ "$(pwd -P)" != "$(cd "$FAKE_SEARCH_EXPECT_CWD" && pwd -P)" ]; then exit 9; fi
 if [ "${name}" = ccc ] && [ "$1" = daemon ] && [ "$2" = status ]; then
+if [ -n "\${FAKE_CCC_PROJECTS:-}" ]; then printf 'Projects:\n%s\n' "$FAKE_CCC_PROJECTS"; exit 0; fi
 sleep "\${FAKE_CCC_STATUS_SLEEP_SECONDS:-0}"
 if [ -f "$FAKE_SEARCH_LOG.search-started" ]; then sleep "\${FAKE_CCC_STATUS_SLEEP_AFTER_SEARCH_SECONDS:-0}"; fi
 if [ "\${FAKE_CCC_DAEMON_DOWN:-0}" = 1 ]; then
@@ -240,6 +241,7 @@ if [ "\${FAKE_CCC_INDEXING:-0}" = 1 ] || { [ "\${FAKE_CCC_INDEXING_AFTER_SEARCH:
   fi
   exit 0
 fi
+if [ -n "\${FAKE_SEARCH_EXPECT_CWD:-}" ] && [ "$(pwd -P)" != "$(cd "$FAKE_SEARCH_EXPECT_CWD" && pwd -P)" ]; then exit 9; fi
 if [ "${name}" = ccc ] && [ "$1" = status ]; then
   printf 'Indexing in progress: 18 files listed | 7 added, 0 deleted, 0 reprocessed, 0 unchanged\\n'
   if [ "\${FAKE_CCC_CHUNK_DELTA:-0}" = 1 ]; then
@@ -301,6 +303,12 @@ exit "\${FAKE_SEARCH_EXIT:-0}"
     );
     chmodSync(path, 0o755);
   }
+  const backend = join(bin, "ccc-backend");
+  writeFileSync(
+    backend,
+    readFileSync(join(bin, "ccc"), "utf8").replace("#!/bin/sh", `#!${python}`),
+  );
+  chmodSync(backend, 0o755);
   const git = Bun.which("git");
   if (git !== null) {
     const path = join(bin, "git");
@@ -340,6 +348,18 @@ function run(
       XDG_STATE_HOME: join(tools.bin, "state"),
       XDG_RUNTIME_DIR: join(tools.bin, "runtime"),
       REPO_RETRIEVE_INDEX_WORKER: "0",
+      ...(args.includes("--project") &&
+      existsSync(
+        join(
+          args[args.indexOf("--project") + 1] ?? "",
+          ".cocoindex_code",
+          "settings.yml",
+        ),
+      )
+        ? {
+            FAKE_CCC_PROJECTS: `  ${args[args.indexOf("--project") + 1]} [idle]`,
+          }
+        : {}),
       ...env,
     },
   });
@@ -730,8 +750,36 @@ describe("repo-retrieve route contract", () => {
     ]);
 
     expect(result.code).toBe(2);
-    expect(result.stderr).toContain("not ccc-registered at that project root");
-    expect(result.log).toBe("");
+    expect(result.stderr).toContain(
+      `unknown root ${unregistered}; registered roots that exist:`,
+    );
+    expect(result.log).toContain("ccc daemon status");
+    expect(result.log).not.toContain("ccc search");
+  });
+
+  test("roots excludes missing registrations and explicit missing roots fail before search", () => {
+    const caller = registerProject();
+    const existing = registerProject();
+    const missing = join(caller, "missing root");
+    const projects = `  ${existing} [idle]\n  ${missing} [idle]`;
+    const listing = run(caller, ["roots"], { FAKE_CCC_PROJECTS: projects });
+    expect(listing.code).toBe(0);
+    expect(listing.stdout.trim()).toBe(existing);
+    expect(listing.stderr).toContain(
+      `stale registration: ${missing} (missing)`,
+    );
+    for (const route of ["text", "about", "exists"]) {
+      const result = run(
+        caller,
+        [route, "--project", missing, "--query", "needle"],
+        { FAKE_CCC_PROJECTS: projects },
+      );
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain(
+        `unknown root ${missing}; registered roots that exist: ${existing}`,
+      );
+      expect(result.log.trim()).toBe("ccc daemon status");
+    }
   });
 
   test("automatic reindex targets the selected corpus, not the caller", async () => {

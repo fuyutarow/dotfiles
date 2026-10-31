@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.0 — 2026-10-31
+
+- List existing registered roots and refuse missing or unregistered project targets
+
 ## 1.6.0 — 2026-10-31
 
 - Enforce shared admission ceilings and refuse over-time index plans

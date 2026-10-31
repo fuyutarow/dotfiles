@@ -323,23 +323,100 @@ function atMostOnePath(route: string, paths: string[]): Result<void, Error> {
 
 // --project selects the working directory for the backend. --path remains a filter INSIDE it.
 // Keep the default cwd behavior for callers that do not select another project.
+async function registeredRoots(): Promise<
+  Result<{ existing: string[]; missing: string[] }, Error>
+> {
+  const ccc = requireExecutable("ccc");
+  if (ccc.isErr()) return err(ccc.error);
+  const status = await fromAsyncThrowable(
+    () =>
+      runChildCaptured(
+        [ccc.value, "daemon", "status"],
+        2_000,
+        false,
+        process.cwd(),
+        false,
+      ),
+    asError,
+  )();
+  if (status.isErr()) return err(status.error);
+  if (status.value.exitCode !== 0 || status.value.timedOut)
+    return err(new Error("could not read ccc daemon registrations"));
+  if (!/^Projects:\s*$/mu.test(status.value.stdout))
+    return err(new Error("ccc daemon status did not contain a project list"));
+  const paths = [
+    ...status.value.stdout.matchAll(/^\s*(\/[^\n]+?) \[.+\]\s*$/gmu),
+  ].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
+  const checked = await Promise.all(
+    paths.map(async (path) => {
+      const info = await fromAsyncThrowable(() => stat(path), asError)();
+      return { path, exists: info.isOk() && info.value.isDirectory() };
+    }),
+  );
+  return ok({
+    existing: checked.filter((item) => item.exists).map((item) => item.path),
+    missing: checked.filter((item) => !item.exists).map((item) => item.path),
+  });
+}
+
 async function targetProject(
   path: string | undefined,
 ): Promise<Result<string, Error>> {
   if (path === undefined) return ok(process.cwd());
+  const roots = await registeredRoots();
+  if (roots.isErr()) return err(roots.error);
   const target = await fromAsyncThrowable(
     () => realpath(resolve(path)),
     asError,
   )();
-  if (target.isErr()) return err(target.error);
-  const statResult = await fromAsyncThrowable(
-    () => stat(target.value),
-    asError,
-  )();
-  if (statResult.isErr()) return err(statResult.error);
-  if (!statResult.value.isDirectory())
-    return err(new Error(`--project must name a directory: ${path}`));
+  const canonicalRoots = await Promise.all(
+    roots.value.existing.map(async (root) => {
+      const canonical = await fromAsyncThrowable(
+        () => realpath(root),
+        asError,
+      )();
+      return canonical.isOk() ? canonical.value : root;
+    }),
+  );
+  if (target.isErr() || !canonicalRoots.includes(target.value))
+    return err(
+      new Error(
+        `unknown root ${path}; registered roots that exist: ${roots.value.existing.length === 0 ? "(none)" : roots.value.existing.join(", ")}`,
+      ),
+    );
   return ok(target.value);
+}
+
+function rootsCommand() {
+  return command(
+    {
+      name: "roots",
+      parameters: [],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      help: {
+        description:
+          "List existing registered roots and report missing registrations.",
+      },
+      flags: {},
+    },
+    async (parsed) => {
+      if (parsed._.length > 0) {
+        commandResult = err(new Error("roots takes no arguments"));
+        return;
+      }
+      const roots = await registeredRoots();
+      if (roots.isErr()) {
+        commandResult = err(roots.error);
+        return;
+      }
+      for (const path of roots.value.existing)
+        process.stdout.write(`${path}\n`);
+      for (const path of roots.value.missing)
+        process.stderr.write(`stale registration: ${path} (missing)\n`);
+      commandResult = ok(0);
+    },
+  );
 }
 
 function cccResultCount(stdout: string): number {
@@ -1614,6 +1691,7 @@ async function main(): Promise<Result<number, Error>> {
       commands: [
         ...ROUTES.map((route) => routeCommand(route)),
         definitionCommand(),
+        rootsCommand(),
         indexCommand(),
       ],
     },

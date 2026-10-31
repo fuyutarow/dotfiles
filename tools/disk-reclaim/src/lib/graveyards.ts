@@ -23,17 +23,17 @@ export const RIP_GRAVEYARD_MAX_BYTES = 10 * 1024 ** 3;
 const TMPFS_MAGIC = 0x01021994n;
 const RAMFS_MAGIC = 0x858458f6n;
 
-export function inspectRipGraveyard(
+export async function inspectRipGraveyard(
   path: string,
   timeoutMs = 40_000,
-): {
+): Promise<{
   bytes: number;
   ramBacked: boolean;
   complete: boolean;
   timedOut: boolean;
   visited: number;
   elapsedMs: number;
-} {
+}> {
   let bytes = 0;
   const started = Temporal.Now.instant().epochMilliseconds;
   const elapsed = (): number =>
@@ -41,18 +41,18 @@ export function inspectRipGraveyard(
   let visited = 0;
   let timedOut = false;
   const pending = existsSync(path) ? [path] : [];
-  const inspect = (entry: string): boolean => {
-    const stat = lstatSync(entry, { bigint: true });
+  const inspect = async (entry: string): Promise<boolean> => {
+    const stat = await lstat(entry, { bigint: true });
     visited += 1;
     if (!stat.isDirectory() || stat.isSymbolicLink()) {
       bytes += Number(stat.size);
       return false;
     }
-    for (const child of readdirSync(entry, { withFileTypes: true })) {
+    for (const child of await readdir(entry, { withFileTypes: true })) {
       const childPath = join(entry, child.name);
       if (child.isDirectory()) pending.push(childPath);
       else {
-        bytes += Number(lstatSync(childPath, { bigint: true }).size);
+        bytes += Number((await lstat(childPath, { bigint: true })).size);
         visited += 1;
       }
       if (elapsed() >= timeoutMs) return true;
@@ -66,7 +66,7 @@ export function inspectRipGraveyard(
     }
     const entry = pending.pop();
     if (entry === undefined) break;
-    timedOut = inspect(entry);
+    timedOut = await inspect(entry);
     if (timedOut) break;
   }
 

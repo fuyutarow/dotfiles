@@ -125,7 +125,7 @@ test("an old large payload starts deletion after a bounded measurement slice", a
     join(root, ".record"),
     `${old.toString()}\t/original\t${payload}`,
   );
-  const actual = inspectRipGraveyard(payload).bytes;
+  const actual = (await inspectRipGraveyard(payload)).bytes;
   let ticks = 0;
   const { target, candidates } = createRipExpiryTarget({
     clock: () => {
@@ -214,7 +214,7 @@ test("timer expires nested eligible rip payloads by ctime record order until bou
   }
   await writeFile(join(env.RIP_GRAVEYARD, ".record"), records.join("\n"));
   expect(ripRecords(env.RIP_GRAVEYARD)).toHaveLength(3);
-  const before = inspectRipGraveyard(env.RIP_GRAVEYARD).bytes;
+  const before = (await inspectRipGraveyard(env.RIP_GRAVEYARD)).bytes;
   const invoke = (dryRun: boolean) =>
     expireGraveyard(
       dryRun,
@@ -251,7 +251,7 @@ test("timer expires nested eligible rip payloads by ctime record order until bou
   expect(plan.data.totals.reclaim_bytes).toBeGreaterThanOrEqual(
     before - RIP_GRAVEYARD_MAX_BYTES,
   );
-  expect(inspectRipGraveyard(env.RIP_GRAVEYARD).bytes).toBe(before);
+  expect((await inspectRipGraveyard(env.RIP_GRAVEYARD)).bytes).toBe(before);
   const applied = await invoke(false);
   expect(applied.code).toBe(0);
   const result = jsonOf(Plan).safeParse(applied.output);
@@ -263,9 +263,9 @@ test("timer expires nested eligible rip payloads by ctime record order until bou
       .map((row) => row.path),
   ).toEqual(names.slice(0, 2).map((name) => join(parent, name)));
   expect(await stat(join(parent, "b-newest")).then(() => true)).toBe(true);
-  expect(inspectRipGraveyard(env.RIP_GRAVEYARD).bytes).toBeLessThanOrEqual(
-    RIP_GRAVEYARD_MAX_BYTES,
-  );
+  expect(
+    (await inspectRipGraveyard(env.RIP_GRAVEYARD)).bytes,
+  ).toBeLessThanOrEqual(RIP_GRAVEYARD_MAX_BYTES);
   const logs = await readdir(join(env.RECLAIM_STATE_DIR, "runs"));
   const output = await Promise.all(
     logs
@@ -415,7 +415,7 @@ test("timer work budgets retain progress and converge over two fresh runs", asyn
       .map((row) => row.path),
   ).toEqual([join(env.RIP_GRAVEYARD, names[0] ?? "")]);
   expect(firstPlan.data.totals.freed_bytes).toBeGreaterThan(0);
-  expect(inspectRipGraveyard(env.RIP_GRAVEYARD).bytes).toBeGreaterThan(
+  expect((await inspectRipGraveyard(env.RIP_GRAVEYARD)).bytes).toBeGreaterThan(
     RIP_GRAVEYARD_MAX_BYTES,
   );
   const second = await invoke();
@@ -428,9 +428,9 @@ test("timer work budgets retain progress and converge over two fresh runs", asyn
       .filter((row) => row.result?.ok === true)
       .map((row) => row.path),
   ).toEqual([join(env.RIP_GRAVEYARD, names[1] ?? "")]);
-  expect(inspectRipGraveyard(env.RIP_GRAVEYARD).bytes).toBeLessThanOrEqual(
-    RIP_GRAVEYARD_MAX_BYTES,
-  );
+  expect(
+    (await inspectRipGraveyard(env.RIP_GRAVEYARD)).bytes,
+  ).toBeLessThanOrEqual(RIP_GRAVEYARD_MAX_BYTES);
   expect(await readFile(join(env.RIP_GRAVEYARD, ".record"), "utf8")).toBe(
     record,
   );

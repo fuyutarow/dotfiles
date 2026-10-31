@@ -48,7 +48,7 @@ test("timer expiry bounds a fresh graveyard oldest-first, then preserves its res
     )
     .join("\n");
   await writeFile(join(env.RIP_GRAVEYARD, ".record"), record);
-  const before = inspectRipGraveyard(env.RIP_GRAVEYARD).bytes;
+  const before = (await inspectRipGraveyard(env.RIP_GRAVEYARD)).bytes;
   expect(before).toBeGreaterThan(RIP_GRAVEYARD_MAX_BYTES);
   const invoke = (dryRun: boolean) =>
     expireGraveyard(
@@ -84,7 +84,7 @@ test("timer expiry bounds a fresh graveyard oldest-first, then preserves its res
     join(env.RIP_GRAVEYARD, "oldest"),
     join(env.RIP_GRAVEYARD, "middle"),
   ]);
-  expect(inspectRipGraveyard(env.RIP_GRAVEYARD).bytes).toBe(before);
+  expect((await inspectRipGraveyard(env.RIP_GRAVEYARD)).bytes).toBe(before);
   const applied = await invoke(false);
   expect(applied.code).toBe(0);
   const result = jsonOf(Plan).safeParse(applied.output);
@@ -107,9 +107,9 @@ test("timer expiry bounds a fresh graveyard oldest-first, then preserves its res
   expect(await readFile(join(env.RIP_GRAVEYARD, ".record"), "utf8")).toBe(
     record,
   );
-  expect(inspectRipGraveyard(env.RIP_GRAVEYARD).bytes).toBeLessThanOrEqual(
-    RIP_GRAVEYARD_MAX_BYTES,
-  );
+  expect(
+    (await inspectRipGraveyard(env.RIP_GRAVEYARD)).bytes,
+  ).toBeLessThanOrEqual(RIP_GRAVEYARD_MAX_BYTES);
   const again = await invoke(false);
   expect(again.code).toBe(0);
 }, 120_000);

@@ -687,14 +687,15 @@ describe("doctor", () => {
     const home = tmp("doctor-rip-graveyard-bounded-");
     const finding = await checkRipGraveyard(
       { home, dotfiles: REPO, isMac: false, isWsl: true, isCoreBox: false },
-      () => ({
-        bytes: 512,
-        ramBacked: false,
-        complete: false,
-        timedOut: true,
-        visited: 12,
-        elapsedMs: 5_000,
-      }),
+      () =>
+        Promise.resolve({
+          bytes: 512,
+          ramBacked: false,
+          complete: false,
+          timedOut: true,
+          visited: 12,
+          elapsedMs: 5_000,
+        }),
     );
     expect(finding.verdict).toBe("WARN");
     expect(finding.detail).toContain("measured at least 512 bytes");
@@ -731,12 +732,12 @@ describe("doctor", () => {
     expect(missing.fix?.includes("systemctl --user daemon-reexec")).toBe(true);
   });
 
-  test("rip-graveyard evaluates both zshenv variables and rejects bad locations", () => {
+  test("rip-graveyard evaluates both zshenv variables and rejects bad locations", async () => {
     const home = tmp("doctor-rip-graveyard-");
     const xdg = join(home, ".local/share");
     const graveyard = join(xdg, "graveyard");
     mkdirSync(graveyard, { recursive: true });
-    if (!inspectRipGraveyard(graveyard).ramBacked) {
+    if (!(await inspectRipGraveyard(graveyard)).ramBacked) {
       const valid = doctor("rip-graveyard", {
         HOME: home,
         DOTFILES: REPO,

@@ -15,7 +15,7 @@ import {
   RIP_GRAVEYARD_MAX_BYTES,
 } from "../../src/lib/graveyards.ts";
 
-test("a bounded graveyard scan measures a sparse file above the safety limit", () => {
+test("a bounded graveyard scan measures a sparse file above the safety limit", async () => {
   const root = mkdtempSync(join(tmpdir(), "graveyard-bounded-"));
   const entry = join(root, "large-file");
   writeFileSync(entry, "");
@@ -23,19 +23,19 @@ test("a bounded graveyard scan measures a sparse file above the safety limit", (
   ftruncateSync(fd, RIP_GRAVEYARD_MAX_BYTES + 1);
   closeSync(fd);
 
-  const measured = inspectRipGraveyard(root);
+  const measured = await inspectRipGraveyard(root);
   expect(measured.complete).toBe(true);
   expect(measured.bytes).toBeGreaterThan(RIP_GRAVEYARD_MAX_BYTES);
   expect(measured.visited).toBeGreaterThan(0);
   rmSync(root, { recursive: true, force: true });
 });
 
-test("a zero-time budget reports an incomplete lower bound", () => {
+test("a zero-time budget reports an incomplete lower bound", async () => {
   const root = mkdtempSync(join(tmpdir(), "graveyard-timeout-"));
   mkdirSync(join(root, "nested"));
   writeFileSync(join(root, "nested", "entry"), "content");
 
-  const measured = inspectRipGraveyard(root, 0);
+  const measured = await inspectRipGraveyard(root, 0);
   expect(measured).toMatchObject({
     bytes: 0,
     complete: false,

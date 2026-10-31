@@ -19,7 +19,7 @@
 // project's DB dir as a whole — recursive size, whole-directory rename — therefore sweeps up the
 // nested project's DB. Operate on DB_ARTIFACTS by name instead.
 
-import { existsSync, realpathSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -28,7 +28,12 @@ import {
   relative,
   resolve,
 } from "node:path";
-import { err, ok, type Result } from "neverthrow";
+import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+
+const asError = (error: unknown): Error =>
+  error instanceof Error ? error : new Error(String(error));
+const resolveRealpath = (path: string) =>
+  fromAsyncThrowable(() => realpath(path), asError)();
 
 export const MAPPING_ENV = "COCOINDEX_CODE_DB_PATH_MAPPING";
 export const SETTINGS_DIR_NAME = ".cocoindex_code";
@@ -46,14 +51,16 @@ export type PathMapping = { source: string; target: string };
 
 // Python's Path.resolve() follows symlinks and tolerates a missing tail; mirror both, or a
 // symlinked project root maps differently here than in the daemon.
-function resolveLikePython(path: string): string {
+async function resolveLikePython(path: string): Promise<string> {
   const absolute = resolve(path);
   let head = absolute;
   const tail: string[] = [];
   while (true) {
-    if (existsSync(head)) {
-      return join(realpathSync(head), ...tail.toReversed());
+    const resolved = await resolveRealpath(head);
+    if (resolved.isOk()) {
+      return join(resolved.value, ...tail.toReversed());
     }
+    // Python Path.resolve() tolerates a missing tail; keep walking to its existing parent.
     const parent = dirname(head);
     if (parent === head) return absolute;
     tail.push(basename(head));
@@ -63,9 +70,9 @@ function resolveLikePython(path: string): string {
 
 // Returns an error for malformed values, as ccc does — a mapping this module cannot parse is one
 // the daemon also refuses, and guessing past it would split the two apart.
-export function parseMapping(
+export async function parseMapping(
   raw: string | undefined,
-): Result<PathMapping[], Error> {
+): Promise<Result<PathMapping[], Error>> {
   if (raw === undefined || raw.trim() === "") return ok([]);
   const mappings: PathMapping[] = [];
   for (const piece of raw.split(",")) {
@@ -87,19 +94,19 @@ export function parseMapping(
       );
     }
     mappings.push({
-      source: resolveLikePython(source),
-      target: resolveLikePython(target),
+      source: await resolveLikePython(source),
+      target: await resolveLikePython(target),
     });
   }
   return ok(mappings);
 }
 
-export function resolveDbDir(
+export async function resolveDbDir(
   projectRoot: string,
   env: Record<string, string | undefined> = process.env,
-): Result<string, Error> {
-  const root = resolveLikePython(projectRoot);
-  return parseMapping(env[MAPPING_ENV]).map((mappings) => {
+): Promise<Result<string, Error>> {
+  const root = await resolveLikePython(projectRoot);
+  return (await parseMapping(env[MAPPING_ENV])).map((mappings) => {
     for (const { source, target } of mappings) {
       const rel = relative(source, root);
       if (

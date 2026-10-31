@@ -8,7 +8,7 @@
 // never by a reimplementation of its globs. Any failure to answer returns null, which callers
 // treat as "in scope" — the old, conservative verdict.
 
-import { readFileSync, realpathSync } from "node:fs";
+import { readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { readonlyCommand } from "@dotfiles/shared/src/readonly-command.ts";
 import { attempt } from "@dotfiles/shared/src/attempt.ts";
@@ -19,9 +19,11 @@ import { cccBackend } from "./ccc-entry.ts";
 // shebang names the interpreter that can import cocoindex_code.
 export async function cccPython(ccc: string): Promise<string | null> {
   const read = await attempt(
-    () =>
-      readFileSync(realpathSync(cccBackend(ccc)), "utf8").split("\n", 1)[0] ??
-      "",
+    async () =>
+      (await readFile(await realpath(await cccBackend(ccc)), "utf8")).split(
+        "\n",
+        1,
+      )[0] ?? "",
   );
   if (!read.ok) return null;
   const interpreter = read.value.startsWith("#!/")

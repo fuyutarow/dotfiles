@@ -835,8 +835,11 @@ interface Ctx {
   dbDirError: Error | undefined;
 }
 
-function dbDirForCommand(project: string, ctx: Ctx): string | null {
-  return resolveDbDir(project, ctx.env).match(
+async function dbDirForCommand(
+  project: string,
+  ctx: Ctx,
+): Promise<string | null> {
+  return (await resolveDbDir(project, ctx.env)).match(
     (directory) => directory,
     (error) => {
       ctx.dbDirError = error;
@@ -865,7 +868,7 @@ async function cmdDiscover(ctx: Ctx): Promise<number> {
     size: number;
   }> = [];
   for (const root of projects) {
-    const dbDir = dbDirForCommand(root, ctx);
+    const dbDir = await dbDirForCommand(root, ctx);
     if (dbDir === null) return 2;
     const dbPath = join(dbDir, TARGET_SQLITE_DB);
     rows.push({
@@ -989,7 +992,7 @@ async function cmdBuild(
   // hazard.
   const liveSnapshots = new Map<string, Map<string, FileSnapshot>>();
   for (const root of projects) {
-    const dbDir = dbDirForCommand(root, ctx);
+    const dbDir = await dbDirForCommand(root, ctx);
     if (dbDir === null) return 2;
     liveSnapshots.set(root, await snapshotDbArtifacts(dbDir));
   }
@@ -1062,7 +1065,7 @@ async function cmdBuild(
   for (const root of projects) {
     const before = liveSnapshots.get(root);
     if (before === undefined) continue;
-    const dbDir = dbDirForCommand(root, ctx);
+    const dbDir = await dbDirForCommand(root, ctx);
     if (dbDir === null) return 2;
     const diff = diffSnapshots(before, await snapshotDbArtifacts(dbDir));
     if (diff.length > 0) liveTouched.push(`${root}: ${diff.join(", ")}`);
@@ -1141,7 +1144,7 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     const dim = await computeIndexDimension(shadowDb);
     const rowCount = await countIndexedRows(shadowDb);
     const exists = (await fromAsyncThrowable(() => access(shadowDb))()).isOk();
-    const liveDbDir = dbDirForCommand(root, ctx);
+    const liveDbDir = await dbDirForCommand(root, ctx);
     if (liveDbDir === null) return 2;
     const ready = exists && dim !== null && (rowCount ?? 0) > 0;
     checks.push({
@@ -1305,7 +1308,7 @@ async function cmdRollback(
     gens: PrevGeneration[];
   }> = [];
   for (const root of projects) {
-    const liveDbDir = dbDirForCommand(root, ctx);
+    const liveDbDir = await dbDirForCommand(root, ctx);
     if (liveDbDir === null) return 2;
     perProject.push({
       root,
@@ -1480,7 +1483,7 @@ async function cmdGc(
   });
   const perProject: Array<{ root: string; gens: PrevGeneration[] }> = [];
   for (const root of projects) {
-    const dbDir = dbDirForCommand(root, ctx);
+    const dbDir = await dbDirForCommand(root, ctx);
     if (dbDir === null) return 2;
     perProject.push({ root, gens: await listPrevGenerations(dbDir) });
   }
@@ -1550,7 +1553,7 @@ async function cmdGc(
  * settings.yml is never touched, so `from` (`<root>/.cocoindex_code/`) ends up holding only it.
  */
 async function cmdRelocate(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
-  const mappingResult = parseMapping(ctx.env[MAPPING_ENV]);
+  const mappingResult = await parseMapping(ctx.env[MAPPING_ENV]);
   if (mappingResult.isErr()) {
     ctx.dbDirError = mappingResult.error;
     return 2;
@@ -1576,7 +1579,7 @@ async function cmdRelocate(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
 
   const plans: Array<{ root: string; from: string; to: string }> = [];
   for (const root of projects) {
-    const to = dbDirForCommand(root, ctx);
+    const to = await dbDirForCommand(root, ctx);
     if (to === null) return 2;
     plans.push({ root, from: join(root, SETTINGS_DIR_NAME), to });
   }

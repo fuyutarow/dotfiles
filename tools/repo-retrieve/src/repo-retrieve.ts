@@ -53,18 +53,12 @@
 // calling convention -- see repo-retrieve.test.ts and driving-cocoindex) can therefore never mistake
 // an unearned pass for an earned one.
 
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { access, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import {
-  err,
-  fromAsyncThrowable,
-  fromThrowable,
-  ok,
-  type Result,
-} from "neverthrow";
+import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
 import {
   checkIndexFreshness,
   citationToken,
@@ -284,20 +278,20 @@ const GLOB_MAGIC = /[*?[\]{}]/u;
 // symlink to an outside directory from accidentally widening the search scope.
 // This is accidental-scope normalization, not a hostile TOCTOU security boundary: the filesystem
 // may change after these checks and before ccc consumes the resulting glob.
-function cccSearchPath(project: string, path: string): string {
+async function cccSearchPath(project: string, path: string): Promise<string> {
   if (GLOB_MAGIC.test(path)) return path;
 
   // A nonexistent path is still a caller-supplied file/path glob. Do not invent a broader
   // recursive scope for it.
-  const r = fromThrowable(() => {
-    const projectPath = realpathSync(project);
-    const candidate = realpathSync(resolve(projectPath, path));
+  const r = await fromAsyncThrowable(async () => {
+    const projectPath = await realpath(project);
+    const candidate = await realpath(resolve(projectPath, path));
     const insideProject = relative(projectPath, candidate);
     if (
       insideProject === ".." ||
       insideProject.startsWith(`..${sep}`) ||
       isAbsolute(insideProject) ||
-      !statSync(candidate).isDirectory()
+      !(await stat(candidate)).isDirectory()
     ) {
       return path;
     }
@@ -329,13 +323,21 @@ function atMostOnePath(route: string, paths: string[]): Result<void, Error> {
 
 // --project selects the working directory for the backend. --path remains a filter INSIDE it.
 // Keep the default cwd behavior for callers that do not select another project.
-function targetProject(path: string | undefined): Result<string, Error> {
+async function targetProject(
+  path: string | undefined,
+): Promise<Result<string, Error>> {
   if (path === undefined) return ok(process.cwd());
-  const target = fromThrowable(() => realpathSync(resolve(path)), asError)();
+  const target = await fromAsyncThrowable(
+    () => realpath(resolve(path)),
+    asError,
+  )();
   if (target.isErr()) return err(target.error);
-  const stat = fromThrowable(() => statSync(target.value), asError)();
-  if (stat.isErr()) return err(stat.error);
-  if (!stat.value.isDirectory())
+  const statResult = await fromAsyncThrowable(
+    () => stat(target.value),
+    asError,
+  )();
+  if (statResult.isErr()) return err(statResult.error);
+  if (!statResult.value.isDirectory())
     return err(new Error(`--project must name a directory: ${path}`));
   return ok(target.value);
 }
@@ -471,21 +473,38 @@ function backingIndexNote(project: string): void {
   );
 }
 
-function mapBackingResultPaths(
+async function mapBackingResultPaths(
   output: string,
   project: string,
   workspace: string | null,
-): string {
+): Promise<string> {
   if (workspace === null) return output;
   const prefix = project.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return output.replaceAll(
-    new RegExp(`${prefix}([/\\\\][^\\s:|]+)`, "gu"),
-    (match, suffix: string) => {
+  const matches = [
+    ...output.matchAll(new RegExp(`${prefix}([/\\\\][^\\s:|]+)`, "gu")),
+  ];
+  const replacements = await Promise.all(
+    matches.map(async (match) => {
+      const suffix = match[1];
+      if (suffix === undefined) return match[0];
       const relativePath = suffix.replaceAll("\\", "/").replace(/^[/\\]+/u, "");
       const workspacePath = resolve(workspace, relativePath);
-      return existsSync(workspacePath) ? workspacePath : match;
-    },
+      const exists = await fromAsyncThrowable(
+        () => access(workspacePath),
+        asError,
+      )();
+      return exists.isOk() ? workspacePath : match[0];
+    }),
   );
+  let mapped = "";
+  let cursor = 0;
+  matches.forEach((match, index) => {
+    const start = match.index;
+    if (start === undefined) return;
+    mapped += output.slice(cursor, start) + (replacements[index] ?? match[0]);
+    cursor = start + match[0].length;
+  });
+  return mapped + output.slice(cursor);
 }
 
 async function daemonAvailability(project: string): Promise<string> {
@@ -618,7 +637,7 @@ async function runCccSearch(
   explicitProject: boolean,
   json: boolean,
 ): Promise<Result<number, Error>> {
-  const resolution = resolveRegisteredProject(cwd);
+  const resolution = await resolveRegisteredProject(cwd);
   const project = resolution?.project;
   if (
     resolution === null ||
@@ -722,7 +741,8 @@ async function runCccSearch(
     ? Temporal.Now.instant().epochMilliseconds +
       Math.min(timeoutMs, Math.floor(9_000 - process.uptime() * 1_000))
     : null;
-  const cccPath = path === undefined ? undefined : cccSearchPath(project, path);
+  const cccPath =
+    path === undefined ? undefined : await cccSearchPath(project, path);
   let matchedQueries = 0;
 
   for (const [index, query] of queries.entries()) {
@@ -756,7 +776,7 @@ async function runCccSearch(
     )();
     if (searchResult.isErr()) return err(searchResult.error);
     const result = searchResult.value;
-    const mappedOutput = mapBackingResultPaths(
+    const mappedOutput = await mapBackingResultPaths(
       result.stdout,
       project,
       resolution.workspace,
@@ -1118,7 +1138,7 @@ async function runRoute(
   const queries = values.query ?? [];
   const paths = values.path ?? [];
   const timeoutMs = values.timeoutMs ?? 120_000;
-  const project = targetProject(values.project);
+  const project = await targetProject(values.project);
   if (project.isErr()) return err(project.error);
   const cwd = project.value;
   if (rawRoute === "symbol") {
@@ -1346,7 +1366,7 @@ async function runDefinition(
   cwd: string,
   json: boolean,
 ): Promise<Result<number, Error>> {
-  const resolution = resolveRegisteredProject(cwd);
+  const resolution = await resolveRegisteredProject(cwd);
   const project = resolution?.project;
   if (resolution === null || project === undefined || project === "") {
     return err(
@@ -1370,10 +1390,16 @@ async function runDefinition(
   const answer = await findDefinitions(project, query, limit);
   if (answer.isErr()) return err(answer.error);
   const a = answer.value;
-  const cards = a.cards.map((card) => ({
-    ...card,
-    file: mapBackingResultPaths(card.file, project, resolution.workspace),
-  }));
+  const cards = await Promise.all(
+    a.cards.map(async (card) => ({
+      ...card,
+      file: await mapBackingResultPaths(
+        card.file,
+        project,
+        resolution.workspace,
+      ),
+    })),
+  );
   for (const n of a.notes) process.stderr.write(`NOTE: ${n}\n`);
   if (json) {
     process.stdout.write(
@@ -1448,7 +1474,7 @@ function definitionCommand() {
         commandResult = err(limit.error);
         return;
       }
-      const project = targetProject(parsed.flags.project);
+      const project = await targetProject(parsed.flags.project);
       if (project.isErr()) {
         commandResult = err(project.error);
         return;
@@ -1540,7 +1566,7 @@ function indexCommand() {
       if (indexResult.value.kind !== "indexed") return;
       // Warm the definition catalog too, so the first `definition` query after an index does not
       // pay the build. Its failure is reported, never turned into an index failure.
-      const project = findRegisteredProject(process.cwd());
+      const project = await findRegisteredProject(process.cwd());
       if (project !== null && project !== "") {
         const notes: string[] = [];
         const warmed = await fromAsyncThrowable(

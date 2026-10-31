@@ -95,7 +95,9 @@ async function main(): Promise<void> {
   // A test file defines fixtures and helpers by design; reusing them is not the point.
   if (HEADERS[ext] === undefined || isTest({ file })) return;
   const directory = file.slice(0, file.lastIndexOf("/"));
-  const project = findRegisteredProject(directory !== "" ? directory : ".");
+  const project = await findRegisteredProject(
+    directory !== "" ? directory : ".",
+  );
   if (project === null || project === "") return;
 
   const { added, removed } = insertedAndReplaced(input);
@@ -110,7 +112,7 @@ async function main(): Promise<void> {
   // One budget for the whole check: past it, say nothing rather than stall the edit.
   const deadline = Temporal.Now.instant().epochMilliseconds + BUDGET_MS;
   // Per judge, retrieval.toml thresholds.<judge>.hook (stricter than the route's "strong").
-  const config = loadRetrievalConfig();
+  const config = await loadRetrievalConfig();
   if (config.isErr()) return;
   const { thresholds } = config.value;
   const hookMin = { jev: thresholds.jev.hook, local: thresholds.local.hook };

@@ -14,55 +14,57 @@ const valueOrError = (result: Result<string, Error>) =>
   );
 
 describe("resolveDbDir mirrors ccc's settings.resolve_db_dir", () => {
-  test("unset or blank mapping keeps the DB in <root>/.cocoindex_code", () => {
-    expect(valueOrError(resolveDbDir("/p/proj", env(undefined)))).toBe(
+  test("unset or blank mapping keeps the DB in <root>/.cocoindex_code", async () => {
+    expect(valueOrError(await resolveDbDir("/p/proj", env(undefined)))).toBe(
       "/p/proj/.cocoindex_code",
     );
-    expect(valueOrError(resolveDbDir("/p/proj", env("  ")))).toBe(
+    expect(valueOrError(await resolveDbDir("/p/proj", env("  ")))).toBe(
       "/p/proj/.cocoindex_code",
     );
   });
 
-  test("a root under the source maps to target/<relative path>", () => {
+  test("a root under the source maps to target/<relative path>", async () => {
     expect(
-      valueOrError(resolveDbDir("/h/Workspace/fd", env("/h=/h/.cache/db"))),
+      valueOrError(
+        await resolveDbDir("/h/Workspace/fd", env("/h=/h/.cache/db")),
+      ),
     ).toBe("/h/.cache/db/Workspace/fd");
   });
 
-  test("a root equal to the source maps to the target itself", () => {
-    expect(valueOrError(resolveDbDir("/h/proj", env("/h/proj=/db")))).toBe(
-      "/db",
-    );
+  test("a root equal to the source maps to the target itself", async () => {
+    expect(
+      valueOrError(await resolveDbDir("/h/proj", env("/h/proj=/db"))),
+    ).toBe("/db");
   });
 
-  test("a sibling sharing a name prefix is not under the source", () => {
-    expect(valueOrError(resolveDbDir("/h2/proj", env("/h=/db")))).toBe(
+  test("a sibling sharing a name prefix is not under the source", async () => {
+    expect(valueOrError(await resolveDbDir("/h2/proj", env("/h=/db")))).toBe(
       "/h2/proj/.cocoindex_code",
     );
   });
 
-  test("the first matching entry wins", () => {
+  test("the first matching entry wins", async () => {
     expect(
-      valueOrError(resolveDbDir("/h/a/b", env("/h/a=/first,/h=/second"))),
+      valueOrError(await resolveDbDir("/h/a/b", env("/h/a=/first,/h=/second"))),
     ).toBe("/first/b");
   });
 
-  test("a nested project maps INSIDE its parent's DB dir (the hazard callers must respect)", () => {
+  test("a nested project maps INSIDE its parent's DB dir (the hazard callers must respect)", async () => {
     const m = env("/h=/db");
     expect(
-      valueOrError(resolveDbDir("/h/fd/.claude/worktrees/x", m)).startsWith(
-        `${valueOrError(resolveDbDir("/h/fd", m))}/`,
-      ),
+      valueOrError(
+        await resolveDbDir("/h/fd/.claude/worktrees/x", m),
+      ).startsWith(`${valueOrError(await resolveDbDir("/h/fd", m))}/`),
     ).toBe(true);
   });
 
-  test("symlinks resolve on both sides, as Python's Path.resolve() does", () => {
+  test("symlinks resolve on both sides, as Python's Path.resolve() does", async () => {
     const base = realpathSync(mkdtempSync(join(tmpdir(), "ccc-db-dir-")));
     mkdirSync(join(base, "real", "proj"), { recursive: true });
     symlinkSync(join(base, "real"), join(base, "link"));
     expect(
       valueOrError(
-        resolveDbDir(
+        await resolveDbDir(
           join(base, "link", "proj"),
           env(`${join(base, "real")}=/db`),
         ),
@@ -70,16 +72,16 @@ describe("resolveDbDir mirrors ccc's settings.resolve_db_dir", () => {
     ).toBe("/db/proj");
   });
 
-  test("malformed entries return an error, as ccc does", () => {
-    const first = parseMapping("/a").match(
+  test("malformed entries return an error, as ccc does", async () => {
+    const first = (await parseMapping("/a")).match(
       () => "unexpected success",
       (error) => error.message,
     );
-    const second = parseMapping("rel=/db").match(
+    const second = (await parseMapping("rel=/db")).match(
       () => "unexpected success",
       (error) => error.message,
     );
-    const third = parseMapping("/a=rel").match(
+    const third = (await parseMapping("/a=rel")).match(
       () => "unexpected success",
       (error) => error.message,
     );

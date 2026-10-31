@@ -26,16 +26,16 @@
 
 import { createHash } from "node:crypto";
 import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+  access,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -120,11 +120,16 @@ const clampProbability = (p: number): number =>
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
+const pathExists = async (path: string): Promise<boolean> =>
+  (await fromAsyncThrowable(() => access(path), asError)()).isOk();
 
-export function loadRetrievalConfig(
+export async function loadRetrievalConfig(
   path = CONFIG,
-): Result<RetrievalConfig, Error> {
-  const text = fromThrowable(() => readFileSync(path, "utf8"), asError)();
+): Promise<Result<RetrievalConfig, Error>> {
+  const text = await fromAsyncThrowable(
+    () => readFile(path, "utf8"),
+    asError,
+  )();
   if (text.isErr()) return err(text.error);
   const parsed = fromThrowable(
     (): unknown => Bun.TOML.parse(text.value),
@@ -259,8 +264,8 @@ export function loadRetrievalConfig(
   });
 }
 
-function judgeFor(project: string, cfg: RetrievalConfig): Judge {
-  const real = realpathSync(project);
+async function judgeFor(project: string, cfg: RetrievalConfig): Promise<Judge> {
+  const real = await realpath(project);
   const blocked = cfg.noEgress.some(
     (p) => real === p || real.startsWith(`${p.replace(/\/$/u, "")}/`),
   );
@@ -269,11 +274,14 @@ function judgeFor(project: string, cfg: RetrievalConfig): Judge {
 const RERANK_TIMEOUT_MS = 45_000; // first query after idle loads the model (~16 s measured)
 const SCRIPT = join(import.meta.dir, "ccc_defs.py");
 
-export const catalogDir = (project: string): string =>
+export const catalogDir = async (project: string): Promise<string> =>
   join(
     homedir(),
     ".cache/repo-retrieve/catalog",
-    createHash("sha1").update(realpathSync(project)).digest("hex").slice(0, 16),
+    createHash("sha1")
+      .update(await realpath(project))
+      .digest("hex")
+      .slice(0, 16),
   );
 
 const MetaSchema = z.object({
@@ -289,14 +297,17 @@ const SCAN_EVERY_MS = 60_000;
 
 // The interpreter that can import cocoindex: the uv-owned backend's shebang, even when the
 // installed public entry is a Bun wrapper.
-export function cccPython(entry: string): Result<string, Error> {
-  const resolved = fromThrowable(
-    () => realpathSync(cccBackend(entry)),
+export async function cccPython(entry: string): Promise<Result<string, Error>> {
+  const backend = await fromAsyncThrowable(() => cccBackend(entry), asError)();
+  if (backend.isErr()) return err(backend.error);
+  const resolved = await fromAsyncThrowable(
+    () => realpath(backend.value),
     asError,
   )();
   if (resolved.isErr()) return err(resolved.error);
-  const shebangLine = fromThrowable(
-    () => readFileSync(resolved.value, "utf8").split("\n", 1)[0] ?? "",
+  const shebangLine = await fromAsyncThrowable(
+    async () =>
+      (await readFile(resolved.value, "utf8")).split("\n", 1)[0] ?? "",
     asError,
   )();
   if (shebangLine.isErr()) return err(shebangLine.error);
@@ -366,11 +377,14 @@ const mdName = (text: string) =>
 
 // A JSON file's content, decoded and validated by the caller's schema in one zod step. A file that
 // does not match is an error NAMING the file (callers already treat an error here as "no catalog").
-function readJsonOf<S extends z.ZodType>(
+async function readJsonOf<S extends z.ZodType>(
   schema: S,
   path: string,
-): Result<z.output<S>, Error> {
-  const text = fromThrowable(() => readFileSync(path, "utf8"), asError)();
+): Promise<Result<z.output<S>, Error>> {
+  const text = await fromAsyncThrowable(
+    () => readFile(path, "utf8"),
+    asError,
+  )();
   if (text.isErr()) return err(text.error);
   const parsed = jsonOf(schema).safeParse(text.value);
   return parsed.success
@@ -389,14 +403,16 @@ const DefsCacheSchema = z.object({
 });
 const RecordsSchema = z.record(z.string(), z.array(DefinitionSchema));
 
-function loadDefinitions(cachePath: string): Result<
-  {
-    defs: Definition[];
-    files: string[];
-  },
-  Error
+async function loadDefinitions(cachePath: string): Promise<
+  Result<
+    {
+      defs: Definition[];
+      files: string[];
+    },
+    Error
+  >
 > {
-  const cache = readJsonOf(DefsCacheSchema, cachePath);
+  const cache = await readJsonOf(DefsCacheSchema, cachePath);
   if (cache.isErr()) return err(cache.error);
   const publics = new Set(
     Object.values(cache.value.files).flatMap((f) => f.publics),
@@ -407,9 +423,14 @@ function loadDefinitions(cachePath: string): Result<
   return ok({ defs, files: Object.keys(cache.value.files) });
 }
 
-const statKey = (project: string, rel: string): string => {
-  const st = statSync(join(project, rel), { throwIfNoEntry: false });
-  return st !== undefined ? `${st.size} ${st.mtimeMs}` : "gone";
+const statKey = async (project: string, rel: string): Promise<string> => {
+  const result = await fromAsyncThrowable(
+    () => stat(join(project, rel)),
+    asError,
+  )();
+  return result.isOk()
+    ? `${result.value.size} ${result.value.mtimeMs}`
+    : "gone";
 };
 
 type Catalog = {
@@ -431,12 +452,10 @@ export async function refreshCatalog(
   project: string,
   notes: string[],
 ): Promise<Result<Catalog, Error>> {
-  const directory = fromThrowable(() => catalogDir(project), asError)();
-  if (directory.isErr()) return err(directory.error);
-  const dir = directory.value;
+  const dir = await catalogDir(project);
   const metaPath = join(dir, "catalog.json");
   const recordsPath = join(dir, "records.json");
-  const meta = readJsonOf(MetaSchema, metaPath).match(
+  const meta = (await readJsonOf(MetaSchema, metaPath)).match(
     (value) => value,
     () => null,
   );
@@ -444,40 +463,34 @@ export async function refreshCatalog(
   const now = Temporal.Now.instant().epochMilliseconds;
   const recent =
     meta !== null &&
-    existsSync(recordsPath) &&
+    (await pathExists(recordsPath)) &&
     meta.head === head &&
     now - meta.checkedAt < SCAN_EVERY_MS;
 
   let only: string[] | null = null;
   let checkedAt = now;
   if (recent) {
-    const scanned = fromThrowable(
-      () =>
-        Object.entries(meta.files)
-          .filter(([rel, k]) => statKey(project, rel) !== k)
-          .map(([rel]) => rel),
-      asError,
-    )();
-    if (scanned.isErr()) return err(scanned.error);
-    only = scanned.value;
+    const scanned = await Promise.all(
+      Object.entries(meta.files).map(async ([rel, key]) =>
+        (await statKey(project, rel)) === key ? null : rel,
+      ),
+    );
+    only = scanned.flatMap((rel) => (rel === null ? [] : [rel]));
     checkedAt = meta.checkedAt;
-  } else if (meta !== null && existsSync(recordsPath)) {
+  } else if (meta !== null && (await pathExists(recordsPath))) {
     only = await changedSince(project, meta.head);
   }
   if (recent && only?.length === 0) return readCatalog(dir);
   const rebuiltResult = await rebuild(dir, project, only);
   if (rebuiltResult.isErr()) return err(rebuiltResult.error);
   const rebuilt = rebuiltResult.value;
-  const filesResult = fromThrowable(
-    () =>
-      Object.fromEntries(
-        rebuilt.files.map((rel) => [rel, statKey(project, rel)]),
-      ),
-    asError,
-  )();
-  if (filesResult.isErr()) return err(filesResult.error);
-  const files = filesResult.value;
-  const written = writeAtomic(
+  const fileKeys = await Promise.all(
+    rebuilt.files.map(
+      async (rel) => [rel, await statKey(project, rel)] as const,
+    ),
+  );
+  const files = Object.fromEntries(fileKeys);
+  const written = await writeAtomic(
     metaPath,
     JSON.stringify({
       project,
@@ -496,8 +509,8 @@ export async function refreshCatalog(
   return readCatalog(dir);
 }
 
-function readCatalog(dir: string): Result<Catalog, Error> {
-  const records = readJsonOf(RecordsSchema, join(dir, "records.json"));
+async function readCatalog(dir: string): Promise<Result<Catalog, Error>> {
+  const records = await readJsonOf(RecordsSchema, join(dir, "records.json"));
   if (records.isErr()) return err(records.error);
   const byFile = new Map(Object.entries(records.value));
   return ok({ dir, defs: [...byFile.values()].flat(), byFile });
@@ -512,13 +525,13 @@ async function rebuild(
 ): Promise<Result<{ count: number; files: string[] }, Error>> {
   const cachePath = join(dir, "defs-cache.json");
   const onlyPath = join(dir, `only.${process.pid}.json`);
-  const setup = fromThrowable(() => {
-    if (only !== null) writeFileSync(onlyPath, JSON.stringify(only));
-    mkdirSync(join(dir, "defs"), { recursive: true });
-    mkdirSync(join(dir, ".cocoindex_code"), { recursive: true });
+  const setup = await fromAsyncThrowable(async () => {
+    if (only !== null) await writeFile(onlyPath, JSON.stringify(only));
+    await mkdir(join(dir, "defs"), { recursive: true });
+    await mkdir(join(dir, ".cocoindex_code"), { recursive: true });
     const settings = join(dir, ".cocoindex_code/settings.yml");
-    if (!existsSync(settings)) {
-      writeFileSync(
+    if (!(await pathExists(settings))) {
+      await writeFile(
         settings,
         "include_patterns:\n- 'defs/**/*.md'\nexclude_patterns:\n- '**/.cocoindex_code'\n",
       );
@@ -526,10 +539,10 @@ async function rebuild(
   }, asError)();
   if (setup.isErr()) return err(setup.error);
   const onlyArgs =
-    only !== null && existsSync(cachePath) ? ["--only", onlyPath] : [];
+    only !== null && (await pathExists(cachePath)) ? ["--only", onlyPath] : [];
   const executable = requireExecutable("ccc");
   if (executable.isErr()) return err(executable.error);
-  const python = cccPython(executable.value);
+  const python = await cccPython(executable.value);
   if (python.isErr()) return err(python.error);
   const extract = await fromAsyncThrowable(
     () =>
@@ -541,8 +554,8 @@ async function rebuild(
     asError,
   )();
   if (extract.isErr()) return err(extract.error);
-  const cleanup = fromThrowable(() => {
-    if (only !== null && existsSync(onlyPath)) unlinkSync(onlyPath);
+  const cleanup = await fromAsyncThrowable(async () => {
+    if (only !== null && (await pathExists(onlyPath))) await unlink(onlyPath);
   }, asError)();
   if (cleanup.isErr()) return err(cleanup.error);
   if (extract.value.exitCode !== 0)
@@ -551,28 +564,30 @@ async function rebuild(
         `ccc_defs.py failed: ${extract.value.stderr.trim().slice(-400)}`,
       ),
     );
-  const definitions = loadDefinitions(cachePath);
+  const definitions = await loadDefinitions(cachePath);
   if (definitions.isErr()) return err(definitions.error);
   const { defs, files } = definitions.value;
   const wanted = new Map<string, Definition[]>();
   let written = 0;
-  const generated = fromThrowable(() => {
+  const generated = await fromAsyncThrowable(async () => {
     for (const d of defs) {
       const text = mdText(d);
       const name = mdName(text);
       wanted.set(name, [...(wanted.get(name) ?? []), d]);
       const path = join(dir, "defs", name);
-      if (existsSync(path)) continue;
-      writeFileSync(path, text);
+      if (await pathExists(path)) continue;
+      await writeFile(path, text);
       written += 1;
     }
-    const stale = readdirSync(join(dir, "defs")).filter((f) => !wanted.has(f));
-    for (const f of stale) unlinkSync(join(dir, "defs", f));
+    const stale = (await readdir(join(dir, "defs"))).filter(
+      (f) => !wanted.has(f),
+    );
+    for (const f of stale) await unlink(join(dir, "defs", f));
     return stale;
   }, asError)();
   if (generated.isErr()) return err(generated.error);
   const stale = generated.value;
-  const recordsWrite = writeAtomic(
+  const recordsWrite = await writeAtomic(
     join(dir, "records.json"),
     JSON.stringify(Object.fromEntries(wanted)),
   );
@@ -598,11 +613,14 @@ async function rebuild(
 }
 
 // A reader in another session must never see half a file.
-function writeAtomic(path: string, text: string): Result<void, Error> {
+async function writeAtomic(
+  path: string,
+  text: string,
+): Promise<Result<void, Error>> {
   const tmp = `${path}.${process.pid}.tmp`;
-  return fromThrowable(() => {
-    writeFileSync(tmp, text);
-    renameSync(tmp, path);
+  return fromAsyncThrowable(async () => {
+    await writeFile(tmp, text);
+    await rename(tmp, path);
   }, asError)();
 }
 
@@ -672,7 +690,7 @@ export async function rerank(
   query: string,
   docs: string[],
 ): Promise<RerankResult> {
-  if (!existsSync(rerankSocket()))
+  if (!(await pathExists(rerankSocket())))
     return { reason: "reranker socket absent (enable: mise run wsl:rerank)" };
   const { promise, resolve } = Promise.withResolvers<RerankResult>();
   let reply = "";
@@ -759,10 +777,8 @@ export async function findDefinitions(
   refresh = true,
 ): Promise<Result<DefinitionAnswer, Error>> {
   const notes: string[] = [];
-  const directory = fromThrowable(() => catalogDir(project), asError)();
-  if (directory.isErr()) return err(directory.error);
-  const catalogPath = directory.value;
-  if (!refresh && !existsSync(join(catalogPath, "records.json"))) {
+  const catalogPath = await catalogDir(project);
+  if (!refresh && !(await pathExists(join(catalogPath, "records.json")))) {
     return ok({
       cards: [],
       strength: "none",
@@ -775,10 +791,10 @@ export async function findDefinitions(
   }
   const catalog = refresh
     ? await refreshCatalog(project, notes)
-    : readCatalog(catalogPath);
+    : await readCatalog(catalogPath);
   if (catalog.isErr()) return err(catalog.error);
   const { dir, defs, byFile } = catalog.value;
-  const cfg = loadRetrievalConfig();
+  const cfg = await loadRetrievalConfig();
   if (cfg.isErr()) return err(cfg.error);
   const hits = await recall(dir, query, cfg.value.recall);
   if (hits.isErr()) return err(hits.error);
@@ -789,11 +805,11 @@ export async function findDefinitions(
     cfg.value.pool,
   );
   const judged = await fromAsyncThrowable(
-    () =>
+    async () =>
       judgeCandidates(
         query,
         order.map((definition) => rerankText(definition)),
-        judgeFor(project, cfg.value),
+        await judgeFor(project, cfg.value),
         cfg.value.jevEndpoint,
         notes,
       ),

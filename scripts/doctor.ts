@@ -1483,7 +1483,7 @@ export async function checkCccDbMap(
 ): Promise<Finding> {
   if (probe === run && Bun.which("ccc") === undefined)
     return skip("ccc-db-map", "ccc is not installed");
-  const parsed = parseMapping(rawMapping).map((mappings) =>
+  const parsed = (await parseMapping(rawMapping)).map((mappings) =>
     mappings.map((m) => `${m.source}=${m.target}`),
   );
   if (parsed.isErr()) {

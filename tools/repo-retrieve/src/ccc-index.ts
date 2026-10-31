@@ -29,7 +29,7 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { access, lstat, readFile, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
@@ -54,36 +54,45 @@ import {
 
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
+const pathAccessible = (path: string) =>
+  fromAsyncThrowable(() => access(path), asError)();
 
 export type RegisteredProject = {
   project: string;
   workspace: string | null;
 };
 
-function jjBackingRepo(current: string): string | null | undefined {
+async function jjBackingRepo(
+  current: string,
+): Promise<string | null | undefined> {
   const marker = join(current, ".jj", "repo");
-  const info = fromThrowable(() => lstatSync(marker))();
+  const info = await fromAsyncThrowable(() => lstat(marker), asError)();
   if (info.isErr() || !info.value.isFile()) return undefined;
-  const target = fromThrowable(() =>
-    realpathSync(
-      resolve(join(current, ".jj"), readFileSync(marker, "utf8").trim()),
-    ),
+  const target = await fromAsyncThrowable(
+    async () =>
+      realpath(
+        resolve(join(current, ".jj"), (await readFile(marker, "utf8")).trim()),
+      ),
+    asError,
   )();
   return target.isErr() ? null : dirname(dirname(target.value));
 }
 
-export function resolveRegisteredProject(
+export async function resolveRegisteredProject(
   start: string,
-): RegisteredProject | null {
+): Promise<RegisteredProject | null> {
   let current = resolve(start);
   while (true) {
-    const backingRepo = jjBackingRepo(current);
+    const backingRepo = await jjBackingRepo(current);
     if (backingRepo === null) return null;
     if (backingRepo !== undefined) {
-      const project = findRegisteredProject(backingRepo);
+      const project = await findRegisteredProject(backingRepo);
       return project === null ? null : { project, workspace: current };
     }
-    if (existsSync(join(current, ".cocoindex_code", "settings.yml"))) {
+    const settings = await pathAccessible(
+      join(current, ".cocoindex_code", "settings.yml"),
+    );
+    if (settings.isOk()) {
       return { project: current, workspace: null };
     }
     const parent = dirname(current);
@@ -92,8 +101,10 @@ export function resolveRegisteredProject(
   }
 }
 
-export function findRegisteredProject(start: string): string | null {
-  return resolveRegisteredProject(start)?.project ?? null;
+export async function findRegisteredProject(
+  start: string,
+): Promise<string | null> {
+  return (await resolveRegisteredProject(start))?.project ?? null;
 }
 
 export function headLabel(head: string | null): string {
@@ -213,7 +224,7 @@ async function acquireAutoReindexLock(
 export async function requestAutoReindex(
   project: string,
 ): Promise<Result<{ started: boolean; pid?: number }, Error>> {
-  const directory = resolveDbDir(project);
+  const directory = await resolveDbDir(project);
   if (directory.isErr()) return err(directory.error);
   const created = await fromAsyncThrowable(
     () => mkdir(directory.value, { recursive: true }),
@@ -393,8 +404,8 @@ async function waitForProjectIdle(
 
 // The watermark lives beside the DB it certifies — in ccc's DB dir, which is outside the repo
 // whenever COCOINDEX_CODE_DB_PATH_MAPPING relocates it (see ccc-db-dir.ts).
-function watermarkPath(project: string): Result<string, Error> {
-  return resolveDbDir(project).map((directory) =>
+async function watermarkPath(project: string): Promise<Result<string, Error>> {
+  return (await resolveDbDir(project)).map((directory) =>
     join(directory, WATERMARK_BASENAME),
   );
 }
@@ -419,14 +430,16 @@ const IndexRequestSchema = z.object({
   state: z.enum(["pending", "complete", "stale", "failed"]),
 });
 
-function indexRequestPath(project: string): Result<string, Error> {
-  return resolveDbDir(project).map((directory) =>
+async function indexRequestPath(
+  project: string,
+): Promise<Result<string, Error>> {
+  return (await resolveDbDir(project)).map((directory) =>
     join(directory, INDEX_REQUEST_BASENAME),
   );
 }
 
 async function readIndexRequest(project: string): Promise<IndexRequest | null> {
-  const path = indexRequestPath(project);
+  const path = await indexRequestPath(project);
   if (path.isErr()) return null;
   const file = Bun.file(path.value);
   if (!(await file.exists())) return null;
@@ -446,7 +459,7 @@ async function writeIndexRequest(
   request: IndexRequest,
   expected?: IndexRequest,
 ): Promise<Result<void, Error>> {
-  const path = indexRequestPath(project);
+  const path = await indexRequestPath(project);
   if (path.isErr()) return err(path.error);
   const lockPath = path.value + ".lock";
   const acquired = await acquireRequestLock(lockPath);
@@ -520,7 +533,7 @@ type WatermarkRead =
 async function readWatermark(
   project: string,
 ): Promise<Result<WatermarkRead, Error>> {
-  const path = watermarkPath(project);
+  const path = await watermarkPath(project);
   if (path.isErr()) return err(path.error);
   const file = Bun.file(path.value);
   if (!(await file.exists())) return ok({ kind: "missing" });
@@ -546,7 +559,7 @@ async function writeWatermark(
     indexedAt: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
     source,
   };
-  const path = watermarkPath(project);
+  const path = await watermarkPath(project);
   if (path.isErr()) return err(path.error);
   const tmp = `${path.value}.tmp-${process.pid}`;
   return fromAsyncThrowable(async () => {
@@ -570,7 +583,7 @@ const SETTINGS_BASENAME = "settings.yml";
 async function hasIndexArtifacts(
   project: string,
 ): Promise<Result<boolean, Error>> {
-  const resolved = resolveDbDir(project);
+  const resolved = await resolveDbDir(project);
   if (resolved.isErr()) return err(resolved.error);
   const dir = resolved.value;
   // Wrapped in a plain (non-overloaded) local function so `ReturnType<typeof list>` resolves to
@@ -712,7 +725,7 @@ export async function checkIndexFreshness(
   project: string,
   route: string,
 ): Promise<Result<Freshness, Error>> {
-  const watermarkFile = watermarkPath(project);
+  const watermarkFile = await watermarkPath(project);
   if (watermarkFile.isErr()) return err(watermarkFile.error);
   const headResult = await gitHead(project);
   if (headResult.isErr()) return err(headResult.error);
@@ -992,7 +1005,7 @@ async function reindexCertified(
   const artifacts = await hasIndexArtifacts(project);
   if (artifacts.isErr()) return err(artifacts.error);
   if (!artifacts.value) {
-    const dbDir = resolveDbDir(project);
+    const dbDir = await resolveDbDir(project);
     if (dbDir.isErr()) return err(dbDir.error);
     process.stderr.write(
       `FATAL: 'ccc index' succeeded but no index artifacts exist under ${dbDir.value}; ` +
@@ -1132,7 +1145,7 @@ export async function runIndexWrapper(
   mode: "wait" | "detach" = "wait",
   options: { plan?: boolean; acceptPlan?: boolean } = {},
 ): Promise<Result<IndexOutcome, Error>> {
-  const resolution = resolveRegisteredProject(process.cwd());
+  const resolution = await resolveRegisteredProject(process.cwd());
   if (resolution?.workspace !== null && resolution?.workspace !== undefined) {
     return err(
       new Error(
@@ -1149,7 +1162,7 @@ export async function runIndexWrapper(
   const ccc = requireExecutable("ccc");
   if (ccc.isErr()) return err(ccc.error);
 
-  const backend = cccBackend(ccc.value);
+  const backend = await cccBackend(ccc.value);
   const planned = await computeIndexPlan(project, backend);
   if (planned.isErr()) return err(planned.error);
   const plan = planned.value;
@@ -1322,7 +1335,7 @@ export async function runIndexWrapper(
 }
 
 export async function runIndexStatus(): Promise<Result<number, Error>> {
-  const resolution = resolveRegisteredProject(process.cwd());
+  const resolution = await resolveRegisteredProject(process.cwd());
   const project = resolution?.project;
   if (project === undefined || project === null || project === "")
     return err(
@@ -1395,7 +1408,7 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
   let state = fresh ? "idle" : "stale";
   if (request === null && fresh && head.value === null) state = "complete";
   if (request === null) {
-    const requestPath = indexRequestPath(project);
+    const requestPath = await indexRequestPath(project);
     if (requestPath.isErr()) return err(requestPath.error);
     if (await Bun.file(requestPath.value).exists()) state = "invalid";
     else if (watermark.value.kind === "missing") state = "none";

@@ -68,7 +68,7 @@ export async function installCccEntry(
   entry: string,
 ): Promise<void> {
   const bin = join(home, ".local", "bin");
-  const backend = await realpath(cccBackend(entry));
+  const backend = await realpath(await cccBackend(entry));
   const source = await readFile(
     new URL("../cocoindex/ccc-entry", import.meta.url),
   );

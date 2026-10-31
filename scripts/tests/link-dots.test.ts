@@ -566,17 +566,19 @@ describe("loadSmartOpenReceiver", () => {
     return ctx;
   }
 
-  test("reboots a loaded agent when its arguments differ from the plist", () => {
+  test("reboots a loaded agent when its arguments differ from the plist", async () => {
     const ctx = receiverFixture();
     const calls: string[][] = [];
-    loadSmartOpenReceiver(ctx, (args) => {
+    await loadSmartOpenReceiver(ctx, (args) => {
       calls.push(args);
-      return args[0] === "print"
-        ? {
-            exitCode: 0,
-            stdout: `arguments = {\n    /bin/zsh\n    -lc\n    exec bun "$HOME/dotfiles/smart-open/smart-open.ts"\n}\n`,
-          }
-        : { exitCode: 0, stdout: "" };
+      return Promise.resolve(
+        args[0] === "print"
+          ? {
+              exitCode: 0,
+              stdout: `arguments = {\n    /bin/zsh\n    -lc\n    exec bun "$HOME/dotfiles/smart-open/smart-open.ts"\n}\n`,
+            }
+          : { exitCode: 0, stdout: "" },
+      );
     });
     expect(calls.map(([verb]) => verb)).toEqual([
       "print",
@@ -585,20 +587,20 @@ describe("loadSmartOpenReceiver", () => {
     ]);
   });
 
-  test("does not reload when the loaded arguments match the plist", () => {
+  test("does not reload when the loaded arguments match the plist", async () => {
     const ctx = receiverFixture();
     const calls: string[][] = [];
-    loadSmartOpenReceiver(ctx, (args) => {
+    await loadSmartOpenReceiver(ctx, (args) => {
       calls.push(args);
-      return {
+      return Promise.resolve({
         exitCode: 0,
         stdout: `arguments = {\n    /bin/zsh\n    -lc\n    exec bun "$HOME/dotfiles/tools/smart-open/src/receive.ts"\n}\n`,
-      };
+      });
     });
     expect(calls.map(([verb]) => verb)).toEqual(["print"]);
   });
 
-  test("reloads when the plist link target changed even if arguments match", () => {
+  test("reloads when the plist link target changed even if arguments match", async () => {
     const ctx = receiverFixture();
     const plist = join(
       ctx.home,
@@ -606,12 +608,12 @@ describe("loadSmartOpenReceiver", () => {
     );
     ctx.changedLinks = new Set([plist]);
     const calls: string[][] = [];
-    loadSmartOpenReceiver(ctx, (args) => {
+    await loadSmartOpenReceiver(ctx, (args) => {
       calls.push(args);
-      return {
+      return Promise.resolve({
         exitCode: 0,
         stdout: `arguments = {\n    /bin/zsh\n    -lc\n    exec bun "$HOME/dotfiles/tools/smart-open/src/receive.ts"\n}\n`,
-      };
+      });
     });
     expect(calls.map(([verb]) => verb)).toEqual([
       "print",

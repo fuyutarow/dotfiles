@@ -441,14 +441,19 @@ export function sshSupportsAttachMatch(sshV: string): boolean {
   return Number(m[1]) * 100 + Number(m[2]) >= 909;
 }
 
-function sshVersion(): string {
+async function sshVersion(): Promise<string> {
   if (Bun.which("ssh") === null) return "no ssh client";
-  const r = Bun.spawnSync(["ssh", "-V"], {
+  const proc = Bun.spawn(["ssh", "-V"], {
     stdout: "pipe",
     stderr: "pipe",
     timeout: 10_000,
   });
-  return `${r.stderr.toString()}${r.stdout.toString()}`.trim();
+  const [stderr, stdout] = await Promise.all([
+    proc.stderr.text(),
+    proc.stdout.text(),
+  ]);
+  await proc.exited;
+  return `${stderr}${stdout}`.trim();
 }
 
 // The smart-open attach forward uses Match keywords OpenSSH added in 9.9; an older client treats
@@ -503,8 +508,11 @@ function linkEtc(ctx: Ctx, rel: string, dst: string, apply: string): void {
 // each is a function of several declarations plus machine facts, and a symlink can point at only
 // one of them. scripts/render-home.ts is zero-dependency (it runs before `mise run deps` on a fresh
 // machine) and all-or-nothing (a bad input leaves every deployed file as it was).
-function renderHome(ctx: Ctx, fromWorkingCopy: boolean): Error | undefined {
-  const r = Bun.spawnSync(
+async function renderHome(
+  ctx: Ctx,
+  fromWorkingCopy: boolean,
+): Promise<Error | undefined> {
+  const r = Bun.spawn(
     [process.execPath, join(ctx.dotfiles, "scripts/render-home.ts")],
     {
       stdout: "inherit",
@@ -518,21 +526,25 @@ function renderHome(ctx: Ctx, fromWorkingCopy: boolean): Error | undefined {
       },
     },
   );
-  if (r.exitCode !== 0)
+  if ((await r.exited) !== 0)
     return new Error("render-home failed; link:dots did not complete");
   return undefined;
 }
 
 type LaunchctlResult = { exitCode: number; stdout: string };
-type LaunchctlRunner = (args: string[]) => LaunchctlResult;
+type LaunchctlRunner = (args: string[]) => Promise<LaunchctlResult>;
 
-function runLaunchctl(args: string[]): LaunchctlResult {
-  const r = Bun.spawnSync(["launchctl", ...args], {
+async function runLaunchctl(args: string[]): Promise<LaunchctlResult> {
+  const proc = Bun.spawn(["launchctl", ...args], {
     stdout: "pipe",
     stderr: "ignore",
     timeout: 10_000,
   });
-  return { exitCode: r.exitCode, stdout: r.stdout.toString() };
+  const [stdout, exitCode] = await Promise.all([
+    proc.stdout.text(),
+    proc.exited,
+  ]);
+  return { exitCode, stdout };
 }
 
 function plistProgramArguments(xml: string): string[] | undefined {
@@ -560,17 +572,17 @@ function loadedProgramArguments(output: string): string[] | undefined {
     .filter((line) => line.length > 0);
 }
 
-export function loadSmartOpenReceiver(
+export async function loadSmartOpenReceiver(
   ctx: Ctx,
   run: LaunchctlRunner = runLaunchctl,
-): void {
+): Promise<void> {
   if (ctx.os !== "mac") return;
   const uid = process.getuid?.();
   if (uid === undefined) return;
   const label = "dotfiles.smart-open-receiver";
   const plist = join(ctx.home, "Library/LaunchAgents", `${label}.plist`);
   const domain = `gui/${uid}`;
-  const loaded = run(["print", `${domain}/${label}`]);
+  const loaded = await run(["print", `${domain}/${label}`]);
   const linkChanged = ctx.changedLinks?.has(plist) === true;
   const expected = existsSync(plist)
     ? plistProgramArguments(readFileSync(plist, "utf8"))
@@ -583,12 +595,12 @@ export function loadSmartOpenReceiver(
       JSON.stringify(actual) !== JSON.stringify(expected));
 
   if (loaded.exitCode === 0 && (linkChanged || argumentsChanged)) {
-    const bootout = run(["bootout", `${domain}/${label}`]);
+    const bootout = await run(["bootout", `${domain}/${label}`]);
     if (bootout.exitCode !== 0) {
       say(`warn: launchctl bootout ${label} failed (exit ${bootout.exitCode})`);
       return;
     }
-    const r = run(["bootstrap", domain, plist]);
+    const r = await run(["bootstrap", domain, plist]);
     if (r.exitCode === 0) {
       const why = [
         linkChanged ? "plist link target changed" : undefined,
@@ -605,7 +617,7 @@ export function loadSmartOpenReceiver(
     return;
   }
   if (loaded.exitCode === 0) return;
-  const r = run(["bootstrap", domain, plist]);
+  const r = await run(["bootstrap", domain, plist]);
   say(
     r.exitCode === 0
       ? `loaded: ${label} (launchd)`
@@ -1192,14 +1204,14 @@ async function main(): Promise<Error | void> {
   }
   const triggers = await captureDeclaredTriggers(ctx);
   if (ctx.failures?.[0] !== undefined) return ctx.failures[0];
-  linkAll(ctx, sshVersion());
+  linkAll(ctx, await sshVersion());
   if (ctx.failures?.[0] !== undefined) return ctx.failures[0];
   if (ctx.mode === "check") {
     say(`check: ${ctx.drift.length} drift(s)`);
     process.exitCode = ctx.drift.length > 0 ? 1 : 0;
     return;
   }
-  const renderError = renderHome(ctx, parsed.flags.fromWorkingCopy);
+  const renderError = await renderHome(ctx, parsed.flags.fromWorkingCopy);
   if (renderError !== undefined) return renderError;
   const gcError = await deployWsGc(ctx);
   if (gcError !== undefined) return gcError;
@@ -1231,7 +1243,7 @@ async function main(): Promise<Error | void> {
   if (daemonError !== undefined) return daemonError;
   const triggersError = await deployDeclaredTriggers(ctx, triggers);
   if (triggersError !== undefined) return triggersError;
-  if (ctx.os === "mac") loadSmartOpenReceiver(ctx);
+  if (ctx.os === "mac") await loadSmartOpenReceiver(ctx);
   const skipped = ctx.unreachable?.size ?? 0;
   say(skipped === 0 ? "done." : `done with ${skipped} unreachable path(s).`);
   process.exitCode = skipped > 0 ? 1 : 0;

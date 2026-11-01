@@ -443,6 +443,87 @@ test("hooks and package bins run consumers against candidate implementations", a
   expect(sharedSurfaces(["agents/hooks/test.ts"])).toContain("hooks");
 });
 
+test("linked candidate dependencies resolve while bundling mise-contract", async () => {
+  const f = await fixture({
+    surface: "package-bins",
+    gate: `const child = Bun.spawn(['mise-contract', '--help'], {stdout: 'pipe', stderr: 'pipe'});
+const [out, err, exit] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+if (exit !== 0 || !out.includes('mise-contract')) { process.stderr.write(out + err); process.exit(4); }`,
+  });
+  const repo = join(import.meta.dir, "../..");
+  await mkdir(join(f.root, "agents/skills/wiring-mise-tasks/scripts"), {
+    recursive: true,
+  });
+  await mkdir(join(f.root, "agents/skills/wiring-mise-tasks/node_modules"), {
+    recursive: true,
+  });
+  await mkdir(join(f.root, "agents/hooks"), { recursive: true });
+  await cp(
+    join(repo, "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts"),
+    join(f.root, "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts"),
+  );
+  await cp(
+    join(repo, "agents/hooks/zod.ts"),
+    join(f.root, "agents/hooks/zod.ts"),
+  );
+  await cp(
+    join(repo, "agents/hooks/vendor"),
+    join(f.root, "agents/hooks/vendor"),
+    { recursive: true },
+  );
+  await mkdir(join(f.root, "tools/shared/src"), { recursive: true });
+  await cp(
+    join(repo, "tools/shared/src/zod.ts"),
+    join(f.root, "tools/shared/src/zod.ts"),
+  );
+  await symlink(
+    "../../../../node_modules/.bun/cleye@2.6.0/node_modules/cleye",
+    join(f.root, "agents/skills/wiring-mise-tasks/node_modules/cleye"),
+  );
+  const home = join(f.temp, "host-home");
+  const liveModules = join(home, "dotfiles/node_modules");
+  await mkdir(join(liveModules, ".bun"), { recursive: true });
+  for (const name of [
+    "cleye@2.6.0",
+    "type-flag@4.5.0",
+    "terminal-columns@2.0.0",
+  ])
+    await cp(
+      join(repo, "node_modules/.bun", name),
+      join(liveModules, ".bun", name),
+      { recursive: true, verbatimSymlinks: true },
+    );
+  await symlink(liveModules, join(f.root, "node_modules"));
+  await writeFile(join(f.root, "mise.toml"), '[tools]\nbun = "1.4.3"\n');
+  await writeFile(
+    join(f.root, "package.json"),
+    JSON.stringify({
+      bin: {
+        "mise-contract":
+          "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts",
+      },
+    }),
+  );
+  const runner = join(f.temp, "linked-deps-probe.ts");
+  await writeFile(
+    runner,
+    `import {runConsumerGates} from ${JSON.stringify(join(import.meta.dir, "../consumer-gate.ts"))}; const result = await runConsumerGates(${JSON.stringify(f.root)}, ['agents/skills/wiring-mise-tasks/scripts/mise-contract.ts']); process.stdout.write(JSON.stringify(result)); process.exitCode = result.ok ? 0 : 1;`,
+  );
+  const child = Bun.spawn([process.execPath, runner], {
+    env: { ...process.env, HOME: home },
+    stdout: "pipe",
+    stderr: "pipe",
+    signal: AbortSignal.timeout(60_000),
+  });
+  const [out, err, exit] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  expect(exit, out + err).toBe(0);
+  expect(out).toContain("PASS fixture-consumer");
+});
+
 test("captured declared Bun bin retains sibling and transitive imports inside isolation", async () => {
   const f = await fixture({ compliant: true });
   // Uncommitted source is absent from the trunk export mounted over the live consumer.

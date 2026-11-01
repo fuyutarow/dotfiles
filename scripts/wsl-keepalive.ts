@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { PRIMARY_DISTRO_RECORD } from "./wsl-distro";
+import { pressureInstallPowerShell } from "./wsl-host-pressure";
 
 export type ManagedDistro = { alias: string; distro: string; wake: boolean };
 
@@ -107,10 +108,7 @@ $DistroLine = $WslState -split '\\r?\\n' | Where-Object { $_ -match ('^\\s*\\*?\
 if (-not $DistroLine) { throw 'WSL distro is not Running: ${escapedDistro}' }
 Write-Output ('${alias}: keepalive ${result} (S4U, task Running); {0}' -f $DistroLine.Trim())`;
   });
-  const setup =
-    enabled.length === 0
-      ? ""
-      : `$ExpectedPrincipal = $env:USERNAME
+  const setup = `$ExpectedPrincipal = $env:USERNAME
 $Principal = New-ScheduledTaskPrincipal -UserId $ExpectedPrincipal -LogonType S4U -RunLevel Limited`;
   const stateRead =
     enabled.length === 0
@@ -121,6 +119,7 @@ if ($LASTEXITCODE -ne 0) { throw 'wsl.exe -l -v failed' }`;
 $ProgressPreference = 'SilentlyContinue'
 ${setup}
 ${install.join("\n\n")}
+${pressureInstallPowerShell(checkOnly)}
 ${stateRead}
 ${skipped.join("\n")}
 ${checks.join("\n")}
@@ -173,6 +172,12 @@ async function main(): Promise<number | Error> {
           default: "",
           description: "limit installation or check to one managed SSH alias",
         },
+        pressureOnly: {
+          type: Boolean,
+          default: false,
+          description:
+            "install or check only the host pressure recorder without invoking WSL",
+        },
       },
     },
     undefined,
@@ -180,6 +185,36 @@ async function main(): Promise<number | Error> {
   );
   if (parsed._.length > 0)
     return new Error(`Unexpected argument '${String(parsed._[0])}'`);
+  if (parsed.flags.pressureOnly) {
+    const script = `$ErrorActionPreference = 'Stop'\n${pressureInstallPowerShell(parsed.flags.check)}`;
+    if (parsed.flags.dryRun) {
+      process.stdout.write(`${script}\n`);
+      return 0;
+    }
+    if (Bun.which("ssh") === null) return new Error("ssh must be on PATH");
+    const encoded = encodePowerShell(script);
+    const proc = Bun.spawn(
+      [
+        "ssh",
+        parsed.flags.host,
+        "pwsh",
+        "-NoProfile",
+        "-EncodedCommand",
+        encoded,
+      ],
+      { stdout: "pipe", stderr: "pipe", signal: AbortSignal.timeout(30_000) },
+    );
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    process.stdout.write(stdout);
+    process.stderr.write(stderr);
+    return code === 0
+      ? 0
+      : new Error(`ssh pressure recorder installation failed (${code})`);
+  }
   const distros = await managedDistrosFromConfig();
   if (distros instanceof Error) return distros;
   const hasAlias = parsed.flags.alias !== "";

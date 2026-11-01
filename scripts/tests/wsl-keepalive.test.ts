@@ -62,7 +62,7 @@ describe("managed WSL keepalive", () => {
     if (distros instanceof Error) return;
     const script = keepalivePowerShell(distros);
     expect(script.match(/Register-ScheduledTask\s+-TaskName/gu)).toHaveLength(
-      1,
+      2,
     );
     expect(script.match(/New-ScheduledTaskTrigger -AtStartup/gu)).toHaveLength(
       1,
@@ -93,6 +93,9 @@ describe("managed WSL keepalive", () => {
       "Get-ScheduledTask -TaskName 'dotfiles-wsl-keepalive-r99-u26'",
     );
     expect(script).toContain("wsl.exe -l -v");
+    expect(script).toContain(
+      "pressure recorder installed (60-second interval; 5 MB rotation)",
+    );
     expect(script).not.toContain(".Replace([char]0");
   });
 

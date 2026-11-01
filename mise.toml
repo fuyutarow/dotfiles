@@ -878,9 +878,15 @@ run = "bun scripts/wsl-wake.ts"
 
 [tasks."wsl:keepalive"]
 depends = ["bun:check"]
-description = "Install or check S4U startup and logon keepalive tasks for managed WSL distros. --alias selects one; --check verifies principal, triggers, and Running state; --dry-run prints PowerShell."
+description = "Install or check S4U startup and logon keepalive tasks plus the host pressure recorder. --alias selects one; --pressure-only avoids WSL calls; --check verifies; --dry-run prints PowerShell."
 dir = "{{config_root}}"
 run = "bun scripts/wsl-keepalive.ts"
+
+[tasks."wsl:pressure:log"]
+depends = ["bun:check"]
+description = "Read the tail of the Windows-host WSL pressure recorder log over bounded SSH. --tail selects JSONL samples."
+dir = "{{config_root}}"
+run = "bun scripts/wsl-host-pressure.ts"
 
 [tasks."wsl:distro"]
 depends = ["bun:check"]

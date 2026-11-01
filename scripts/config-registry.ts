@@ -579,6 +579,18 @@ const OTHER: readonly Surface[] = [
   },
   {
     kind: "applied",
+    when: "wsl",
+    sources: ["scripts/wsl-host-pressure.ts", "scripts/wsl-keepalive.ts"],
+    deployed:
+      "r99 Windows Task Scheduler task dotfiles-wsl-host-pressure-r99 and %LOCALAPPDATA%\\dotfiles-wsl-host-pressure\\sample.ps1 / pressure.jsonl",
+    consumer:
+      "Windows host WSL pressure diagnostics; operator reads the JSONL tail over SSH",
+    writer:
+      "human, in the repo; mise run wsl:keepalive installs the recorder alongside managed WSL keepalive tasks",
+    verify: "mise run wsl:keepalive -- --pressure-only --check",
+  },
+  {
+    kind: "applied",
     when: "all",
     sources: [
       "Brewfile",

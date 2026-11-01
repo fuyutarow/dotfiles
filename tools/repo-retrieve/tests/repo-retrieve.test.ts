@@ -225,6 +225,7 @@ exec /bin/sh "$@"
 ${name === "ccc" ? "# // dotfiles:ccc-index-entry" : ""}
 printf '%s\\n' '${name} '"$*" >> "$FAKE_SEARCH_LOG"
 if [ "${name}" = ccc ] && [ "$1" = daemon ] && [ "$2" = status ]; then
+if [ -n "\${FAKE_CCC_EMPTY_STATUS:-}" ]; then printf '%s\\n' "$FAKE_CCC_EMPTY_STATUS"; exit 0; fi
 if [ -n "\${FAKE_CCC_PROJECTS:-}" ]; then printf 'Projects:\n%s\n' "$FAKE_CCC_PROJECTS"; exit 0; fi
 sleep "\${FAKE_CCC_STATUS_SLEEP_SECONDS:-0}"
 if [ -f "$FAKE_SEARCH_LOG.search-started" ]; then sleep "\${FAKE_CCC_STATUS_SLEEP_AFTER_SEARCH_SECONDS:-0}"; fi
@@ -270,6 +271,7 @@ if [ "${name}" = rg ] && [ "\${FAKE_RG_THREE_LINES:-0}" = 1 ]; then
   sleep 0.1
   exit 0
 fi
+if [ "${name}" = rg ] && [ "\${FAKE_RG_RESULT:-0}" = 1 ]; then printf '%s\\n' 'example.txt:1:needle'; fi
 if [ "${name}" = ccc ] && [ "\${FAKE_SEARCH_NOISE:-0}" = 1 ]; then printf '%s\\n' 'Indexing: 10 files listed | error: 0'; fi
 if [ "${name}" = ccc ] && [ "$1" = grep ]; then
   if [ "\${FAKE_SEARCH_EMPTY:-0}" = 1 ]; then
@@ -375,6 +377,49 @@ function run(
 }
 
 describe("repo-retrieve route contract", () => {
+  for (const status of [
+    "No projects loaded.",
+    "Daemon version: 0.2.42\nProjects:",
+  ]) {
+    test(`empty daemon status is degraded and lexical routes remain usable: ${status}`, () => {
+      const dir = registerProject();
+      const env = { FAKE_CCC_EMPTY_STATUS: status, FAKE_RG_RESULT: "1" };
+      for (const route of ["text", "literal", "regex", "exhaustive", "files"]) {
+        const args = route === "files" ? [route] : [route, "needle"];
+        const result = run(tmpdir(), [...args, "--project", dir], env);
+        expect(result.code).toBe(0);
+        expect(result.log).toContain("rg ");
+        expect(result.stdout).toContain("example.txt:1:needle");
+        expect(result.log).not.toContain("ccc daemon status");
+        expect(result.stderr).not.toContain("FATAL");
+      }
+      for (const args of [["roots"], ["roots", "--json"]]) {
+        const result = run(tmpdir(), args, env);
+        expect(result.code).toBe(0);
+        expect(result.stderr).toContain("daemon has no projects loaded");
+        expect(result.stderr).not.toContain("FATAL");
+      }
+      const semantic = run(
+        tmpdir(),
+        ["about", "needle", "--project", dir],
+        env,
+      );
+      expect(semantic.code).toBe(2);
+      expect(semantic.stderr).toContain("daemon has no projects loaded");
+      expect(semantic.stderr).not.toContain("did not contain a project list");
+    });
+  }
+
+  test("lexical explicit project rejects an unregistered root with an empty daemon", () => {
+    const dir = tempDir("repo-retrieve-unregistered-");
+    const result = run(tmpdir(), ["text", "needle", "--project", dir], {
+      FAKE_CCC_EMPTY_STATUS: "No projects loaded.",
+    });
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("unknown root");
+    expect(result.log).not.toContain("rg ");
+  });
+
   test("tools/repo-retrieve owns the executable router and the compatibility hook path resolves to it", () => {
     expect(existsSync(ROUTER)).toBe(true);
     expect(statSync(ROUTER).mode & 0o111).not.toBe(0);

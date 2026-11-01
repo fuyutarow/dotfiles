@@ -343,7 +343,10 @@ async function registeredRoots(): Promise<
   if (status.isErr()) return err(status.error);
   if (status.value.exitCode !== 0 || status.value.timedOut)
     return err(new Error("could not read ccc daemon registrations"));
-  if (!/^Projects:\s*$/mu.test(status.value.stdout))
+  if (
+    !/^Projects:[ \t]*$/mu.test(status.value.stdout) &&
+    !/^No projects loaded\.[ \t]*$/mu.test(status.value.stdout)
+  )
     return err(new Error("ccc daemon status did not contain a project list"));
   const paths = [
     ...status.value.stdout.matchAll(/^\s*(\/[^\n]+?) \[.+\]\s*$/gmu),
@@ -362,10 +365,28 @@ async function registeredRoots(): Promise<
 
 async function targetProject(
   path: string | undefined,
+  lexical: boolean,
 ): Promise<Result<string, Error>> {
   if (path === undefined) return ok(process.cwd());
+  if (lexical) {
+    const target = await fromAsyncThrowable(
+      () => realpath(resolve(path)),
+      asError,
+    )();
+    if (target.isOk() && (await hasRootSettings(target.value)))
+      return ok(target.value);
+    const roots = await registeredRoots();
+    const existing = roots.isOk() ? roots.value.existing : [];
+    return err(
+      new Error(
+        `unknown root ${path}; registered roots that exist: ${existing.length === 0 ? "(none)" : existing.join(", ")}`,
+      ),
+    );
+  }
   const roots = await registeredRoots();
   if (roots.isErr()) return err(roots.error);
+  if (roots.value.existing.length === 0 && roots.value.missing.length === 0)
+    return err(new Error("ccc daemon has no projects loaded"));
   const target = await fromAsyncThrowable(
     () => realpath(resolve(path)),
     asError,
@@ -386,6 +407,14 @@ async function targetProject(
       ),
     );
   return ok(target.value);
+}
+
+async function hasRootSettings(path: string): Promise<boolean> {
+  const settings = await fromAsyncThrowable(
+    () => stat(resolve(path, ".cocoindex_code/settings.yml")),
+    asError,
+  )();
+  return settings.isOk() && settings.value.isFile();
 }
 
 function rootKind(path: string): "primary" | "worktree" | "cache" {
@@ -432,6 +461,10 @@ function rootsCommand() {
         commandResult = err(roots.error);
         return;
       }
+      if (roots.value.existing.length === 0 && roots.value.missing.length === 0)
+        process.stderr.write(
+          "DEGRADED: ccc daemon has no projects loaded; registered roots are unknown.\n",
+        );
       const entries = [
         ...roots.value.existing.map((path) => ({ path, exists: true })),
         ...roots.value.missing.map((path) => ({ path, exists: false })),
@@ -1264,7 +1297,10 @@ async function runRoute(
         "--refresh cannot bypass admission; run rr index --plan, then rr index",
       ),
     );
-  const project = await targetProject(values.project);
+  const project = await targetProject(
+    values.project,
+    rawRoute === "literal" || rawRoute === "exhaustive" || rawRoute === "files",
+  );
   if (project.isErr()) return err(project.error);
   const cwd = project.value;
   if (rawRoute === "symbol") {
@@ -1598,7 +1634,7 @@ function definitionCommand() {
         commandResult = err(limit.error);
         return;
       }
-      const project = await targetProject(parsed.flags.project);
+      const project = await targetProject(parsed.flags.project, false);
       if (project.isErr()) {
         commandResult = err(project.error);
         return;

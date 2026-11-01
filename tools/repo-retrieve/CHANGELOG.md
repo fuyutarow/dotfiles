@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.3 — 2026-11-01
+
+- Treat an empty ccc daemon as degraded: lexical --project resolves registered roots without it and rr roots no longer dies.
+
 ## 1.8.2 — 2026-11-01
 
 - Allow external search operands resolved from shell-local paths.

@@ -60,6 +60,7 @@ import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import { parseDaemonStatus, type DaemonStatus } from "./ccc-daemon-status.ts";
 import {
   checkIndexFreshness,
   citationToken,
@@ -343,14 +344,11 @@ async function registeredRoots(): Promise<
   if (status.isErr()) return err(status.error);
   if (status.value.exitCode !== 0 || status.value.timedOut)
     return err(new Error("could not read ccc daemon registrations"));
-  if (
-    !/^Projects:[ \t]*$/mu.test(status.value.stdout) &&
-    !/^No projects loaded\.[ \t]*$/mu.test(status.value.stdout)
-  )
-    return err(new Error("ccc daemon status did not contain a project list"));
-  const paths = [
-    ...status.value.stdout.matchAll(/^\s*(\/[^\n]+?) \[.+\]\s*$/gmu),
-  ].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
+  const parsed = parseDaemonStatus(status.value.stdout);
+  if (parsed.kind === "unrecognized")
+    return err(new Error("ccc daemon status unknown: unrecognized output"));
+  const paths =
+    parsed.kind === "projects" ? parsed.projects.map((item) => item.path) : [];
   const checked = await Promise.all(
     paths.map(async (path) => {
       const info = await fromAsyncThrowable(() => stat(path), asError)();
@@ -376,7 +374,13 @@ async function targetProject(
     if (target.isOk() && (await hasRootSettings(target.value)))
       return ok(target.value);
     const roots = await registeredRoots();
-    const existing = roots.isOk() ? roots.value.existing : [];
+    if (roots.isErr())
+      return err(
+        new Error(
+          `unknown root ${path}; registered roots unknown: ${roots.error.message}`,
+        ),
+      );
+    const existing = roots.value.existing;
     return err(
       new Error(
         `unknown root ${path}; registered roots that exist: ${existing.length === 0 ? "(none)" : existing.join(", ")}`,
@@ -561,11 +565,25 @@ async function reportBusySearch(
   );
 }
 
-function daemonIndexingActivity(output: string): string {
-  const projects = [...output.matchAll(/^\s+(.+) \[indexing\]\s*$/gmu)].map(
-    (match) => `project=${JSON.stringify(match[1])} state=indexing`,
-  );
+function daemonIndexingActivity(status: DaemonStatus): string {
+  if (status.kind === "unrecognized")
+    return "unknown (unrecognized daemon status)";
+  const projects =
+    status.kind === "projects"
+      ? status.projects
+          .filter((item) => item.state === "indexing")
+          .map((item) => `project=${JSON.stringify(item.path)} state=indexing`)
+      : [];
   return projects.length === 0 ? "none reported" : projects.join("; ");
+}
+
+function projectIndexing(status: DaemonStatus, project: string): boolean {
+  return (
+    status.kind === "projects" &&
+    status.projects.some(
+      (item) => item.path === project && item.state === "indexing",
+    )
+  );
 }
 
 async function classifyTimedOutSearch(
@@ -575,11 +593,12 @@ async function classifyTimedOutSearch(
   timeoutMs: number,
   indexing: boolean,
   statusOutput: string,
+  parsedStatus: DaemonStatus,
   indexPid: number | null,
 ): Promise<Result<number, Error>> {
   if (indexing) {
     process.stderr.write(
-      `DAEMON: indexing observed before search: ${daemonIndexingActivity(statusOutput)}\n`,
+      `DAEMON: indexing observed before search: ${daemonIndexingActivity(parsedStatus)}\n`,
     );
     await reportBusySearch(
       ccc,
@@ -606,18 +625,21 @@ async function classifyTimedOutSearch(
     asError,
   )();
   const statusAvailable =
-    timeoutStatus.isOk() && timeoutStatus.value.exitCode === 0;
+    timeoutStatus.isOk() &&
+    timeoutStatus.value.exitCode === 0 &&
+    !timeoutStatus.value.timedOut;
   const observed = statusAvailable ? timeoutStatus.value.stdout : "";
-  if (observed.includes(`${project} [indexing]`)) {
+  const parsedTimeout = statusAvailable ? parseDaemonStatus(observed) : null;
+  if (parsedTimeout !== null && projectIndexing(parsedTimeout, project)) {
     process.stderr.write(
-      `DAEMON: indexing observed at timeout: ${daemonIndexingActivity(observed)}\n`,
+      `DAEMON: indexing observed at timeout: ${daemonIndexingActivity(parsedTimeout)}\n`,
     );
     await reportBusySearch(ccc, route, project, observed, null, timeoutMs);
     return ok(75);
   }
 
   process.stderr.write(
-    `FATAL: search child timed out after ${timeoutMs}ms: ${ccc}; daemon-wide indexing observed before search: ${daemonIndexingActivity(statusOutput)}; at timeout: ${statusAvailable ? daemonIndexingActivity(observed) : "status unavailable"}\n`,
+    `FATAL: search child timed out after ${timeoutMs}ms: ${ccc}; daemon-wide indexing observed before search: ${daemonIndexingActivity(parsedStatus)}; at timeout: ${parsedTimeout === null ? "status unavailable" : daemonIndexingActivity(parsedTimeout)}\n`,
   );
   return ok(124);
 }
@@ -674,12 +696,16 @@ async function daemonAvailability(project: string): Promise<string> {
     return `ccc daemon status could not be read: ${status.error.message}`;
   if (status.value.exitCode !== 0)
     return `ccc daemon status failed (exit ${status.value.exitCode}); the daemon is unavailable`;
-  const projectStatus = status.value.stdout
-    .split("\n")
-    .find((line) => line.startsWith(`${project} [`));
+  const parsed = parseDaemonStatus(status.value.stdout);
+  if (parsed.kind === "unrecognized")
+    return "ccc daemon status unknown: unrecognized output";
+  const projectStatus =
+    parsed.kind === "projects"
+      ? parsed.projects.find((item) => item.path === project)
+      : undefined;
   return projectStatus === undefined
     ? "ccc daemon is available; this project has no listed index"
-    : `ccc daemon is available (${projectStatus.trim()})`;
+    : `ccc daemon is available (${projectStatus.path} [${projectStatus.state}])`;
 }
 
 async function writeNoIndexDiagnostic(
@@ -883,7 +909,12 @@ async function runCccSearch(
     );
     return ok(status.exitCode);
   }
-  const reindexing = status.stdout.includes(`${project} [indexing]`);
+  const parsedStatus = parseDaemonStatus(status.stdout);
+  if (parsedStatus.kind === "unrecognized")
+    process.stderr.write(
+      "DAEMON: indexing state unknown (unrecognized daemon status)\n",
+    );
+  const reindexing = projectIndexing(parsedStatus, project);
   const indexPid = reindexing ? requestedIndexPid : null;
   if (reindexing)
     process.stderr.write(
@@ -943,6 +974,7 @@ async function runCccSearch(
         Math.min(timeoutMs, remainingMs),
         reindexing,
         status.stdout,
+        parsedStatus,
         indexPid,
       );
     }

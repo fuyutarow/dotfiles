@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.5 — 2026-11-01
+
+- Read ccc daemon status through one typed parser; unrecognized output is reported as unknown, never as idle or zero roots.
+
 ## 1.8.4 — 2026-11-01
 
 - Let a single lexical grep/rg through, naming the degradation, when the rr router is unusable.

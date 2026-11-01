@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.6 — 2026-11-01
+
+- Index status and idle waits read ccc daemon status through the typed parser and report unknown instead of idle or not-running.
+
 ## 1.8.5 — 2026-11-01
 
 - Read ccc daemon status through one typed parser; unrecognized output is reported as unknown, never as idle or zero roots.

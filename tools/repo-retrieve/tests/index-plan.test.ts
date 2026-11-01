@@ -116,7 +116,7 @@ if (script === 'ccc_plan.py') {
 } else if (script === 'ccc' && args[1] === 'status') {
   console.log('Files: 1\\nChunks: 18');
 } else if (script === 'ccc' && args[1] === 'daemon' && args[2] === 'status') {
-  console.log(process.cwd() + ' [idle]');
+  console.log('Projects:\\n  ' + process.cwd() + ' [idle]');
 } else {
   console.error('Unexpected fixture command', args);
   process.exitCode = 99;
@@ -268,7 +268,7 @@ describe.skipIf(ccc === null)(
       // disposable success stub. No daemon or real indexer can be invoked.
       writeFileSync(
         join(bin, "ccc"),
-        `#!${interpreter}\nimport sys\nfrom pathlib import Path\nif sys.argv[1] == 'index':\n    Path('fixture-index-called').write_text('yes')\n    Path('.cocoindex_code/fake_target.db').write_text('fixture artifact')\nelif sys.argv[1] == 'daemon':\n    print(str(Path.cwd()) + ' [idle]')\n`,
+        `#!${interpreter}\nimport sys\nfrom pathlib import Path\nif sys.argv[1] == 'index':\n    Path('fixture-index-called').write_text('yes')\n    Path('.cocoindex_code/fake_target.db').write_text('fixture artifact')\nelif sys.argv[1] == 'daemon':\n    print('Projects:\\n  ' + str(Path.cwd()) + ' [idle]')\n`,
       );
       chmodSync(join(bin, "ccc"), 0o755);
       const env = {

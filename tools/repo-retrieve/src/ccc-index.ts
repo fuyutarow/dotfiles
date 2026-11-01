@@ -41,6 +41,7 @@ import {
   type Result,
 } from "neverthrow";
 import { resolveDbDir } from "./ccc-db-dir.ts";
+import { parseDaemonStatus } from "./ccc-daemon-status.ts";
 import { cccBackend } from "./ccc-entry.ts";
 import { hostLoad, processedWork, recordIndexRate } from "./index-rate.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
@@ -340,14 +341,28 @@ export async function waitForIndexChild(
   return { exitCode, origin: "ccc" };
 }
 
-async function indexProgressSample(
+export function projectDaemonState(
+  stdout: string,
+  exitCode: number,
   project: string,
-): Promise<{ signature: string; indexing: boolean; chunks?: number }> {
+): "idle" | "indexing" | "unknown" {
+  if (exitCode !== 0) return "unknown";
+  const parsed = parseDaemonStatus(stdout);
+  if (parsed.kind !== "projects") return "unknown";
+  const state = parsed.projects.find((item) => item.path === project)?.state;
+  return state === "idle" || state === "indexing" ? state : "unknown";
+}
+
+async function indexProgressSample(project: string): Promise<{
+  signature: string;
+  daemon: "idle" | "indexing" | "unknown";
+  chunks?: number;
+}> {
   const ccc = requireExecutable("ccc");
   if (ccc.isErr())
     return {
       signature: `ccc unavailable: ${ccc.error.message}`,
-      indexing: false,
+      daemon: "unknown",
     };
   const [status, daemon] = await Promise.all([
     runChildCaptured([ccc.value, "status"], 10_000, false, project),
@@ -356,29 +371,28 @@ async function indexProgressSample(
   const statusLine = status.stdout
     .split("\n")
     .find((line) => line.includes("Indexing in progress:"));
-  const daemonLine = daemon.stdout
-    .split("\n")
-    .find((line) => line.trimStart().startsWith(`${project} [`));
+  const daemonState = projectDaemonState(
+    daemon.stdout,
+    daemon.exitCode,
+    project,
+  );
   return {
-    signature: `${statusLine ?? status.stdout.trim()}\n${/\bChunks:\s*(\d+)/u.exec(status.stdout)?.[0] ?? ""}\n${daemonLine ?? daemon.stdout.trim()}`,
+    signature: `${statusLine ?? status.stdout.trim()}\n${/\bChunks:\s*(\d+)/u.exec(status.stdout)?.[0] ?? ""}\n${daemonState}`,
     ...(/\bChunks:\s*(\d+)/u.exec(status.stdout)?.[1] === undefined
       ? {}
       : { chunks: Number(/\bChunks:\s*(\d+)/u.exec(status.stdout)?.[1]) }),
-    indexing:
-      daemon.exitCode !== 0 ||
-      daemonLine === undefined ||
-      daemonLine.includes("[indexing]"),
+    daemon: daemonState,
   };
 }
 
-async function waitForProjectIdle(
+export async function waitForProjectIdle(
   project: string,
   stallMs: number,
   timeBudget?: { plan: IndexPlan; startedAt: number },
 ): Promise<number> {
   let progressAt = Temporal.Now.instant().epochMilliseconds;
   let state = await indexProgressSample(project);
-  while (state.indexing) {
+  while (state.daemon === "indexing") {
     if (
       timeBudget !== undefined &&
       (Temporal.Now.instant().epochMilliseconds - timeBudget.startedAt) / 1000 >
@@ -391,6 +405,10 @@ async function waitForProjectIdle(
     }
     await Bun.sleep(INDEX_POLL_MS);
     const next = await indexProgressSample(project);
+    if (next.daemon !== "indexing") {
+      state = next;
+      break;
+    }
     if (next.signature !== state.signature) {
       state = next;
       progressAt = Temporal.Now.instant().epochMilliseconds;
@@ -398,6 +416,12 @@ async function waitForProjectIdle(
     }
     if (Temporal.Now.instant().epochMilliseconds - progressAt >= stallMs)
       return 124;
+  }
+  if (state.daemon === "unknown") {
+    process.stderr.write(
+      `FATAL: ccc daemon status is unknown for ${project}; watermark left unwritten\n`,
+    );
+    return 2;
   }
   return 0;
 }
@@ -1070,6 +1094,7 @@ async function runChildToStderr(
     }
   })();
   let stderrTail = "";
+  let lastDaemonState: "idle" | "indexing" | "unknown" | undefined;
   const relayStderr = (async () => {
     const decoder = new TextDecoder();
     for await (const chunk of child.stderr) {
@@ -1083,6 +1108,9 @@ async function runChildToStderr(
   })();
   const sample = async () => {
     const state = await indexProgressSample(cwd);
+    if (state.daemon === "unknown" && lastDaemonState !== "unknown")
+      process.stderr.write(`NOTE: ccc daemon status is unknown for ${cwd}\n`);
+    lastDaemonState = state.daemon;
     if (
       plan !== undefined &&
       (Temporal.Now.instant().epochMilliseconds - startedAt) / 1000 >
@@ -1374,20 +1402,18 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
     if (count.exitCode === 0) gap = count.stdout.trim();
   }
   const ccc = requireExecutable("ccc");
-  if (ccc.isErr()) return err(ccc.error);
-  const status = await runChildCaptured(
-    [ccc.value, "daemon", "status"],
-    10_000,
-    false,
-    project,
-  );
-  const projectLine = status.stdout
-    .split("\n")
-    .find((line) => line.trimStart().startsWith(`${project} [`));
+  const daemonStatus = ccc.isErr()
+    ? null
+    : await runChildCaptured(
+        [ccc.value, "daemon", "status"],
+        10_000,
+        false,
+        project,
+      );
   const daemon =
-    status.exitCode === 0 && projectLine !== undefined
-      ? (/\[([^\]]+)\]/u.exec(projectLine)?.[1] ?? "unknown")
-      : "unknown";
+    daemonStatus === null
+      ? "unknown"
+      : projectDaemonState(daemonStatus.stdout, daemonStatus.exitCode, project);
   let pidAlive = false;
   if (request?.state === "pending" && request.pid !== undefined) {
     const pid = request.pid;
@@ -1396,7 +1422,7 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
   }
   const running = daemon === "indexing" || pidAlive;
   let reindex = daemon === "unknown" ? "unknown" : "not-running";
-  if (running) reindex = "running";
+  if (running && daemon !== "unknown") reindex = "running";
   const artifacts = await hasIndexArtifacts(project);
   if (artifacts.isErr()) return err(artifacts.error);
   const fresh =
@@ -1422,6 +1448,7 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
     state = request.state;
     if (request.head !== head.value) state = "stale";
   }
+  if (daemon === "unknown") state = "unknown";
   process.stdout.write(
     `RESULT: INDEX_STATUS project=${project} state=${state} daemon=${daemon} built=${head.value === null && fresh ? "none-verified" : headLabel(builtHead)} gap=${gap} reindex=${reindex} current=${headLabel(head.value)}` +
       (request === null

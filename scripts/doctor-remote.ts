@@ -90,16 +90,73 @@ const finding = (
     ? { name, verdict, detail }
     : { name, verdict, detail, fix };
 
-async function checkReach(host: string): Promise<Finding> {
-  const r = await run([...SSH, host, "true"], null, 30_000);
+export function reachFailure(
+  host: string,
+  r: Ran,
+  jump: string | undefined,
+  wsl: boolean,
+): Finding {
+  const raw = r.err.trim();
+  const detail = `ssh ${host} failed (exit ${r.code}${r.timedOut ? ", timed out" : ""}): ${raw}`;
+  const jumpFailure =
+    /ssh: (?:connect to host|could not resolve hostname) ([^\s:]+)(?: port \d+)?:/iu.exec(
+      raw,
+    )?.[1];
+  if (jump !== undefined && jumpFailure !== undefined)
+    return finding(
+      "reach",
+      "FAIL",
+      `${detail}\njump host ${jump} could not be reached (${jumpFailure})`,
+    );
+  if (/Permission denied \(publickey/iu.test(raw))
+    return finding(
+      "reach",
+      "FAIL",
+      detail,
+      `ssh-copy-id -i ~/.ssh/id_ed25519.pub ${host}`,
+    );
+  if (/could not resolve hostname/iu.test(raw))
+    return finding(
+      "reach",
+      "FAIL",
+      detail,
+      `check the Host block for ${host} in ~/.ssh/config.local`,
+    );
+  if (
+    jump !== undefined &&
+    /(?:UNKNOWN port 65535.*timed out|timed out during banner exchange|channel .*open confirmation)/iu.test(
+      raw,
+    )
+  )
+    return finding(
+      "reach",
+      "FAIL",
+      `${detail}\njump host ${jump} answered, but ${host} behind it did not send an SSH banner`,
+      wsl
+        ? "investigate with mise run wsl:wake / mise run wsl:audit"
+        : undefined,
+    );
+  return finding("reach", "FAIL", detail);
+}
+
+export async function checkReach(
+  host: string,
+  runProbe: typeof run = run,
+): Promise<Finding> {
+  const r = await runProbe([...SSH, host, "true"], null, 30_000);
   if (r.code === 0)
     return finding("reach", "PASS", `ssh ${host} answers with key auth`);
-  return finding(
-    "reach",
-    "FAIL",
-    `ssh ${host} failed (exit ${r.code}${r.timedOut ? ", timed out" : ""}): ${r.err.trim().split("\n").pop() ?? ""}`,
-    `ssh-copy-id -i ~/.ssh/id_ed25519.pub ${host} (and a Host block in ~/.ssh/config.local)`,
+  const config = await runProbe(["ssh", "-G", host], null, 10_000);
+  const proxy = /^proxyjump\s+(\S+)/imu.exec(config.out)?.[1];
+  const jump = proxy === "none" ? undefined : proxy;
+  const configLocal = await readFile(
+    join(homedir(), ".ssh", "config.local"),
+    "utf8",
+  ).catch(() => "");
+  const wsl = normalizeManagedWslConfig(configLocal).blocks.some(
+    (block) => block.id === host,
   );
+  return reachFailure(host, r, jump, wsl);
 }
 
 async function checkSshCmd(host: string): Promise<Finding> {

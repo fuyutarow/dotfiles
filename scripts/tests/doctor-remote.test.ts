@@ -1,7 +1,68 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { checkCodexRoute, managedWslConfigFinding } from "../doctor-remote.ts";
+import {
+  checkCodexRoute,
+  checkReach,
+  managedWslConfigFinding,
+  reachFailure,
+} from "../doctor-remote.ts";
+
+const failure = (err: string, jump?: string, wsl = false) =>
+  reachFailure(
+    "r99-u26",
+    { code: 255, out: "", err, timedOut: false },
+    jump,
+    wsl,
+  );
+
+test("reach classifies SSH stderr and preserves unknown diagnostics", () => {
+  expect(failure("fuyu@host: Permission denied (publickey). ").fix).toContain(
+    "ssh-copy-id",
+  );
+  expect(
+    failure(
+      "ssh: Could not resolve hostname missing: nodename nor servname provided",
+    ).fix,
+  ).toContain("Host block");
+  for (const err of [
+    "Connection to UNKNOWN port 65535 timed out",
+    "Connection timed out during banner exchange",
+    "debug2: channel 0: open confirmation",
+  ]) {
+    const result = failure(err, "r99", true);
+    expect(result.detail).toContain("jump host r99 answered");
+    expect(result.fix).toContain("mise run wsl:audit");
+  }
+  const jump = failure(
+    "ssh: connect to host r99 port 22: Connection timed out\nConnection closed by UNKNOWN port 65535",
+    "r99",
+  );
+  expect(jump.detail).toContain("jump host r99 could not be reached");
+  expect(jump.fix).toBeUndefined();
+  const unknown = failure("first line\nhost key verification failed");
+  expect(unknown.detail).toContain("first line\nhost key verification failed");
+  expect(unknown.fix).toBeUndefined();
+});
+
+test("reach reads ProxyJump from ssh -G after failure", async () => {
+  const calls: string[][] = [];
+  const result = await checkReach("example", (cmd) => {
+    calls.push([...cmd]);
+    return Promise.resolve(
+      cmd[1] === "-G"
+        ? { code: 0, out: "proxyjump jumpbox\n", err: "", timedOut: false }
+        : {
+            code: 255,
+            out: "",
+            err: "Connection to UNKNOWN port 65535 timed out",
+            timedOut: false,
+          },
+    );
+  });
+  expect(calls[1]).toEqual(["ssh", "-G", "example"]);
+  expect(result.detail).toContain("jump host jumpbox answered");
+});
 
 const PROBE_FIXTURE = join(import.meta.dir, "fixtures/remote-agx-probe.ts");
 

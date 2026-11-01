@@ -49,7 +49,7 @@ async function fixture() {
   const backend = join(vendor, "ccc");
   await writeFile(
     backend,
-    `#!${interpreter}\nimport json, os, sys\nfrom pathlib import Path\nargs = sys.argv[1:]\nwith open(${JSON.stringify(calls)}, 'a') as stream: stream.write(json.dumps(args) + '\\n')\nif args and args[0] == 'index': Path('.cocoindex_code/target_sqlite.db').write_text('fixture')\nelif args and args[0] == 'status': print('Chunks: 10')\nelif args[:2] == ['daemon', 'status']: print(os.getcwd() + ' [idle]')\nelif args and args[0] == 'search': print(json.dumps(args)); sys.exit(7)\n`,
+    `#!${interpreter}\nimport json, os, sys\nfrom pathlib import Path\nargs = sys.argv[1:]\nwith open(${JSON.stringify(calls)}, 'a') as stream: stream.write(json.dumps(args) + '\\n')\nif args and args[0] == 'index': Path('.cocoindex_code/target_sqlite.db').write_text('fixture')\nelif args and args[0] == 'status': print('Chunks: 10')\nelif args[:2] == ['daemon', 'status']: print('Projects:\\n  ' + os.getcwd() + ' [idle]')\nelif args and args[0] == 'search': print(json.dumps(args)); sys.exit(7)\n`,
   );
   await chmod(backend, 0o755);
   const entry = join(bin, "ccc");

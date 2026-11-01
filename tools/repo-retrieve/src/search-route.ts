@@ -277,9 +277,18 @@ async function isAllowedPipeProducer(
   command: string,
 ): Promise<boolean> {
   const eff = effective(c);
+  // Literal assignments and simple variable references do not make command words dynamic.
+  const assignmentPrefix =
+    c.assignments.length > 0 &&
+    c.assignments.every((assignment) =>
+      /^[A-Za-z_]\w*=(?:[\w/.:+-]|\$(?:[A-Za-z_]\w*|\{[A-Za-z_]\w*\}))*$/u.test(
+        assignment,
+      ),
+    ) &&
+    c.rawWords.every((word) => !/[$`]/u.test(word));
   if (
     eff === undefined ||
-    c.dynamic ||
+    (c.dynamic && !assignmentPrefix) ||
     c.heredocs.length > 0 ||
     c.redirects.some(
       (redirect) =>
@@ -292,8 +301,8 @@ async function isAllowedPipeProducer(
       eff.args.some((arg) => arg === "--recursive" || /^-[^-]*R/u.test(arg))) ||
     eff.name === "xargs" ||
     (RUNTIMES.test(eff.name) &&
-      !(eff.name === "bun" && eff.args[0] === "test") &&
-      !isRouterProducer(c)) ||
+      (eff.args.some((arg) => /^-[ce]/u.test(arg)) ||
+        eff.args.includes("-"))) ||
     (commandSearches(c, command) && !isRouterProducer(c))
   )
     return false;

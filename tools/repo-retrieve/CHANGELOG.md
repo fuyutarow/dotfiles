@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.1 — 2026-11-01
+
+- Allow grep filters over the stdout of PATH-prefixed commands and script runtimes.
+
 ## 1.8.0 — 2026-10-31
 
 - Filter root listings to primary registrations and provide JSON and all modes.

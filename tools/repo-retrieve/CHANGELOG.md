@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.4 — 2026-11-01
+
+- Let a single lexical grep/rg through, naming the degradation, when the rr router is unusable.
+
 ## 1.8.3 — 2026-11-01
 
 - Treat an empty ccc daemon as degraded: lexical --project resolves registered roots without it and rr roots no longer dies.

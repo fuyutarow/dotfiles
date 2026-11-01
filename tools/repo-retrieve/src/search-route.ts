@@ -11,6 +11,7 @@
 // shell calls as tool_name "Bash" + tool_input.command (lib.ts) and has no Grep tool, so the Bash
 // branch is the whole gate there.
 
+import { constants } from "node:fs";
 import { access, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -87,8 +88,10 @@ const ROUTER_COMMAND = await (async (): Promise<string> => {
   const isThisRouter = async (name: string): Promise<boolean> => {
     const onPath = Bun.which(name);
     if (onPath === null) return false;
-    const paths = await Promise.all([realpath(onPath), realpath(ROUTER)]);
-    return paths[0] === paths[1];
+    return Promise.all([realpath(onPath), realpath(ROUTER)]).then(
+      (paths) => paths[0] === paths[1],
+      () => false,
+    );
   };
   if (await isThisRouter("rr")) return "rr";
   if (await isThisRouter("repo-retrieve")) return "repo-retrieve";
@@ -1243,16 +1246,37 @@ async function decidePayload(
   const target = project ?? startPath(payload);
 
   if (
-    !(await access(ROUTER).then(
+    !(await access(ROUTER, constants.R_OK | constants.X_OK).then(
       () => true,
       () => false,
     ))
   ) {
+    // The adapter treats returned verdicts as denials. Emit a non-decision context only for
+    // a single, statically classified lexical command; other search surfaces remain denied.
+    const parsed = command === undefined ? undefined : parseShell(command, cwd);
+    const segment =
+      parsed?.commands.length === 1 ? parsed.commands[0] : undefined;
+    const eff = segment === undefined ? undefined : effective(segment);
+    if (
+      !indexStart &&
+      tool === "Bash" &&
+      segment !== undefined &&
+      !segment.dynamic &&
+      eff !== undefined &&
+      (eff.name === "grep" || eff.name === "rg")
+    ) {
+      process.stdout.write(
+        `${JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            additionalContext: `[dotfiles:search-route] Router unavailable or not executable at ${ROUTER}; allowing lexical search in degraded mode.`,
+          },
+        })}\n`,
+      );
+      return undefined;
+    }
     return {
-      reason:
-        `search-route: configuration fault — required router is missing at ${ROUTER}. ` +
-        `Do not bypass this gate with Python, Node, shell loops, or another search ` +
-        `implementation. Restore tools/repo-retrieve/src/repo-retrieve.ts in dotfiles, then retry. Rewrite: repo-retrieve files '*'.`,
+      reason: `search-route: router unavailable or not executable at ${ROUTER}; this search remains denied. Restore the router and retry.`,
     };
   }
 

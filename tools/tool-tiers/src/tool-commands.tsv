@@ -3,6 +3,7 @@ coreutils	-
 espanso	espanso
 git-delta	delta
 git-lfs	git-lfs
+neovim	nvim
 ripgrep	rg
 rm-improved	rip
 choose-rust	choose

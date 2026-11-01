@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.7 — 2026-11-01
+
+- Map the neovim formula to its nvim command.
+
 ## 0.2.6 — 2026-10-31
 
 - Allow slower Homebrew core-floor probes and report timeouts accurately

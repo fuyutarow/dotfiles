@@ -47,6 +47,7 @@ function fixture(): string {
 test("command map lookup retains default, qualified, and missing formula behavior", async () => {
   const map = await readToolCommandMap();
   expect(await commandsForFormula("poppler")).toContain("pdftoppm");
+  expect(await commandsForFormula("neovim")).toEqual(["nvim"]);
   expect(await commandsForFormula("tap/name/unknown-formula", map)).toEqual([
     "unknown-formula",
   ]);

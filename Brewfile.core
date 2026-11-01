@@ -13,6 +13,7 @@ brew "git-delta"    # better diff
 brew "jq"
 brew "just"         # task runner (j)
 brew "mise"
+brew "neovim"       # nvim — shared view, vd, sp and vs aliases
 brew "ripgrep"      # better grep (gr)
 brew "rm-improved"  # rip — the ONLY sanctioned file remover (rm is disabled)
 brew "sheldon"      # zsh plugins → zsh/aliases.zsh

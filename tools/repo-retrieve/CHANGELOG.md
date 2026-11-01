@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.7 — 2026-11-01
+
+- rr index --status: drop the duplicated head= field, which printed the request's head; current HEAD is current=, the request's is requested=
+
 ## 1.8.6 — 2026-11-01
 
 - Index status and idle waits read ccc daemon status through the typed parser and report unknown instead of idle or not-running.

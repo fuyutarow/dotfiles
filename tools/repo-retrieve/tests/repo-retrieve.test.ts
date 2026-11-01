@@ -1676,6 +1676,22 @@ describe("repo-retrieve route contract", () => {
     expect(recorded.completedHead).toBe(head);
   });
 
+  test("index status distinguishes the current head from a stale requested head", () => {
+    const { dir, head } = registerGitProject();
+    const requested = "a".repeat(40);
+    expect(requested).not.toBe(head);
+    writeFileSync(
+      join(dir, ".cocoindex_code", "INDEX_REQUEST.json"),
+      JSON.stringify({ head: requested, requestedAt: "old", state: "pending" }),
+    );
+
+    const status = run(dir, ["index", "--status"]);
+    expect(status.code).toBe(0);
+    expect(status.stdout).toContain(` current=${head} requested=${requested}`);
+    expect(status.stdout).not.toContain(" head=");
+    expect(status.stdout.match(/ requested=/gu)).toHaveLength(1);
+  });
+
   test("request reconciliation completes legacy current-head requests and leaves request-free indexes idle", () => {
     const { dir, head } = registerGitProject();
     expect(run(dir, ["index"]).code).toBe(0);

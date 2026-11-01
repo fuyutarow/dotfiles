@@ -1451,9 +1451,7 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
   if (daemon === "unknown") state = "unknown";
   process.stdout.write(
     `RESULT: INDEX_STATUS project=${project} state=${state} daemon=${daemon} built=${head.value === null && fresh ? "none-verified" : headLabel(builtHead)} gap=${gap} reindex=${reindex} current=${headLabel(head.value)}` +
-      (request === null
-        ? ""
-        : ` head=${headLabel(request.head)} requested=${headLabel(request.head)}`) +
+      (request === null ? "" : ` requested=${headLabel(request.head)}`) +
       (state === "invalid" || state === "pending" || state === "stale"
         ? " remedy=run-repo-retrieve-index"
         : "") +

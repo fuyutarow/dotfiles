@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.2 — 2026-11-01
+
+- Allow external search operands resolved from shell-local paths.
+
 ## 1.8.1 — 2026-11-01
 
 - Allow grep filters over the stdout of PATH-prefixed commands and script runtimes.

@@ -11,7 +11,7 @@
 // shell calls as tool_name "Bash" + tool_input.command (lib.ts) and has no Grep tool, so the Bash
 // branch is the whole gate there.
 
-import { access, realpath, stat } from "node:fs/promises";
+import { access, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { bashCwd } from "@dotfiles/shared/src/bash-cwd.ts";
@@ -183,63 +183,146 @@ async function readsRegisteredProjectFile(
   }
   for (const operand of operands) {
     if (operand === "-") return false;
-    const target = readPath(operand, c);
+    const target = operandPath(operand, c);
     if (
       !target.resolved ||
-      (await registeredProject(physicalPath(target.path))) !== null
+      (await registeredProject(physicalPath(target.path))) !== null ||
+      (await globReadsProject(operand, target.path))
     )
       return true;
   }
   return false;
 }
 
-// Resolve only a literal absolute path assigned in this shell, with no intervening command
-// capable of changing it. Everything else remains dynamic and is denied conservatively.
-function resolveLocalProducer(
-  c: ShellCommand,
-  preceding: ShellCommand[],
-): ShellCommand {
-  if (!c.dynamic || c.words[0] !== "cat" || c.words.length !== 2) return c;
-  const ref = /^\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})$/u.exec(
-    c.rawWords[1] ?? "",
-  );
-  if (ref === null) return c;
-  const name = ref[1] ?? ref[2];
-  for (const step of preceding.toReversed()) {
+// Resolve only literal assignments from this command list. Shell mutators invalidate the
+// remembered values; unknown expansions stay dynamic and are never taken from hook environment.
+function resolveLocalOperands(parsed: ParsedShell): ParsedShell {
+  const values = new Map<string, string>();
+  const patterns = new Set<string>();
+  const shadowed = new Set<string>();
+  const commands = parsed.commands.map((c) => {
+    if (c.nested) return c;
+    const assignments = [...c.assignments];
+    if (c.words.length === 1 && /^[A-Za-z_]\w*=/u.test(c.words[0] ?? ""))
+      assignments.push(c.rawWords[0] ?? "");
+    for (const assignment of assignments) {
+      const name = /^([A-Za-z_]\w*)=/u.exec(assignment)?.[1];
+      if (name === undefined) continue;
+      values.delete(name);
+      patterns.delete(name);
+      shadowed.add(name);
+      const literal =
+        /^[A-Za-z_]\w*=(?:'([^'$\u0060]*)'|"([^"$\u0060]*)"|(\/[^\s$\u0060*?"']*))$/u.exec(
+          assignment,
+        );
+      const value = literal?.[1] ?? literal?.[2] ?? literal?.[3];
+      if (
+        value !== undefined &&
+        isAbsolute(value) &&
+        !/[*?\\]/u.test(value) &&
+        !value.includes("[") &&
+        !value.includes("]") &&
+        ["", ";"].includes(c.sep)
+      )
+        values.set(name, value);
+    }
+    const name = c.words[0];
+    if (c.header && c.leading.includes("for") && name !== undefined) {
+      values.delete(name);
+      patterns.delete(name);
+      if (
+        c.words[1] === "in" &&
+        c.rawWords.slice(2).every((word) => !/[$\u0060]/u.test(word))
+      )
+        patterns.add(name);
+    }
     if (
-      step.nested ||
-      step.leading.length > 0 ||
-      ![";", "", "&&"].includes(step.sep)
-    )
-      return c;
-    if (
-      step.words.length === 0 &&
-      step.assignments.length === 1 &&
-      !step.dynamic
-    )
-      return resolveAssignmentProducer(c, step, name ?? "");
-    if (step.words[0] !== "wc" || step.assignments.length > 0) return c;
-  }
-  return c;
+      [
+        "eval",
+        "source",
+        ".",
+        "read",
+        "unset",
+        "export",
+        "declare",
+        "typeset",
+        "let",
+      ].includes(c.words[0] ?? "")
+    ) {
+      values.clear();
+      patterns.clear();
+    }
+    const words = [...c.words];
+    const rawWords = [...c.rawWords];
+    for (let i = 1; i < words.length; i++) {
+      const raw = rawWords[i] ?? "";
+      const match =
+        /^(?:"\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))"|\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))(\/[^$\u0060]*)?)$/u.exec(
+          raw,
+        );
+      const variable = match?.[1] ?? match?.[2] ?? match?.[3] ?? match?.[4];
+      if (variable === undefined) continue;
+      const value = values.get(variable);
+      if (value !== undefined) {
+        words[i] = value + (match?.[5] ?? "");
+        rawWords[i] = words[i] ?? "";
+      } else if (
+        patterns.has(variable) &&
+        i > 0 &&
+        ["-e", "--regexp"].includes(words[i - 1] ?? "")
+      ) {
+        words[i] = "literal-loop-pattern";
+        rawWords[i] = "literal-loop-pattern";
+      } else if (shadowed.has(variable)) {
+        words[i] = "$(unresolved)";
+        rawWords[i] = "$(unresolved)";
+      }
+    }
+    const dynamic =
+      rawWords.some((word) => /[$\u0060]/u.test(word)) ||
+      c.redirects.some((r) => /[$\u0060]/u.test(r.target));
+    return { ...c, words, rawWords, dynamic: c.dynamic && dynamic };
+  });
+  return { ...parsed, commands };
 }
 
-function resolveAssignmentProducer(
+// A glob is classified by its physical, fixed directory prefix. Traversal after a
+// wildcard is ambiguous and remains unresolved.
+function operandPath(
+  operand: string,
   c: ShellCommand,
-  step: ShellCommand,
-  name: string,
-): ShellCommand {
-  const assignment = new RegExp(
-    `^${name}=(/[^\\s$\u0060*?\\[\\]"']+)$`,
-    "u",
-  ).exec(step.assignments[0] ?? "");
-  if (assignment === null) return c;
-  const path = assignment[1] ?? "";
+): { path: string; resolved: boolean } {
+  if (operand.includes("$(") || operand.includes("`"))
+    return { path: physicalPath(c.cwd), resolved: false };
+  const wildcard = operand.search(/[*?[]/u);
+  if (wildcard < 0) return readPath(operand, c);
+  if (operand.slice(wildcard).includes("/"))
+    return { path: physicalPath(c.cwd), resolved: false };
+  const prefix = operand.slice(0, wildcard);
+  if (!isAbsolute(prefix) || /[$\u0060]/u.test(prefix))
+    return readPath(operand, c);
   return {
-    ...c,
-    words: ["cat", path],
-    rawWords: ["cat", path],
-    dynamic: false,
+    path: physicalPath(prefix.endsWith("/") ? prefix : dirname(prefix)),
+    resolved: true,
   };
+}
+
+// A match can be a symlink into a registered project even if its directory is outside.
+async function globReadsProject(
+  operand: string,
+  directory: string,
+): Promise<boolean> {
+  if (!/[*?[]/u.test(operand)) return false;
+  const pattern = operand.slice(operand.lastIndexOf("/") + 1);
+  const entries = await readdir(directory).catch(() => []);
+  for (const entry of entries) {
+    if (
+      new Bun.Glob(pattern).match(entry) &&
+      (await registeredProject(physicalPath(join(directory, entry)))) !== null
+    )
+      return true;
+  }
+  return false;
 }
 
 async function allowedFilterStages(
@@ -257,10 +340,7 @@ async function allowedFilterStages(
       producer !== undefined &&
       pipeline.length > 1 &&
       (await isAllowedStreamFilterPipeline(
-        [
-          resolveLocalProducer(producer, top.slice(0, start)),
-          ...pipeline.slice(1),
-        ],
+        [producer, ...pipeline.slice(1)],
         command,
       ))
     )
@@ -590,9 +670,7 @@ async function rawSearchBySyntax(
     if (
       !allowed.has(c) &&
       commandSearches(c, command) &&
-      ((c.dynamic &&
-        parsed.commands.some((step) => step.assignments.length > 0)) ||
-        !(await fileScopedSearch(c)))
+      !(await fileScopedSearch(c))
     )
       return true;
   }
@@ -668,8 +746,9 @@ async function fileScopedSearch(c: ShellCommand): Promise<boolean> {
   if (operands.length === 0) return false;
   const registered = await Promise.all(
     operands.map(async (operand) => {
-      const target = readPath(operand, c);
+      const target = operandPath(operand, c);
       if (!target.resolved) return null;
+      if (await globReadsProject(operand, target.path)) return false;
       const outputFile =
         operands.length === 1 &&
         OUTPUT_FILE.test(target.path) &&
@@ -691,7 +770,8 @@ async function isRawSearch(
 ): Promise<boolean> {
   if (command === undefined || command === "") return false;
   const parsed = parseShell(command, cwd);
-  if (parsed !== undefined) return rawSearchBySyntax(parsed, command);
+  if (parsed !== undefined)
+    return rawSearchBySyntax(resolveLocalOperands(parsed), command);
   if (ROUTED_STREAM_FILTER.test(command)) return false;
   return (
     GREP_SEARCH.test(command) ||
@@ -863,20 +943,13 @@ async function searchTargets(payload: unknown): Promise<string[]> {
   const command = strAt(payload, "tool_input", "command") ?? "";
   let cwd = strAt(payload, "cwd") ?? process.cwd();
   if (cwd === "") cwd = process.cwd();
-  const parsed = parseShell(command, cwd);
-  if (parsed === undefined) return [startPath(payload)];
+  const syntax = parseShell(command, cwd);
+  if (syntax === undefined) return [startPath(payload)];
+  const parsed = resolveLocalOperands(syntax);
   const allowed = await allowedFilterStages(parsed, command);
   const targets: string[] = [];
   for (const c of parsed.commands) {
     if (allowed.has(c) || !commandSearches(c, command)) continue;
-    // Shell-local assignments are not the hook environment. Do not reuse its values after one.
-    if (
-      c.dynamic &&
-      parsed.commands.some((step) => step.assignments.length > 0)
-    ) {
-      targets.push(physicalPath(c.cwd));
-      continue;
-    }
     if (await fileScopedSearch(c)) continue;
     const eff = effective(c);
     // An unapproved grep stage with no explicit file operand is still part of a search pipeline:
@@ -892,7 +965,20 @@ async function searchTargets(payload: unknown): Promise<string[]> {
       continue;
     }
     const root = await registeredProject(c.cwd);
-    const operands = searchOperands(c).map((operand) => readPath(operand, c));
+    const spellings = searchOperands(c);
+    const operands = spellings.map((operand) => operandPath(operand, c));
+    if (
+      (
+        await Promise.all(
+          spellings.map((operand, i) =>
+            globReadsProject(operand, operands[i]?.path ?? c.cwd),
+          ),
+        )
+      ).some(Boolean)
+    ) {
+      targets.push(physicalPath(c.cwd));
+      continue;
+    }
     const unresolved = operands.some(
       (target) => !target.resolved && !coordinatorPath(target.path),
     );
@@ -1094,6 +1180,31 @@ function hasRrAcceptPlan(command: string | undefined, cwd: string): boolean {
   return RR_INDEX_OVERRIDE.test(command);
 }
 
+function unresolvedOperands(
+  command: string | undefined,
+  cwd: string,
+): string[] {
+  const syntax = command === undefined ? undefined : parseShell(command, cwd);
+  if (syntax === undefined) return [];
+  const normalized = resolveLocalOperands(syntax);
+  return normalized.commands.flatMap((segment, i) => {
+    const original = syntax.commands[i];
+    if (original === undefined) return [];
+    const eff = effective(segment);
+    let operands: string[] = [];
+    if (commandSearches(segment, command ?? ""))
+      operands = searchOperands(segment);
+    else if (eff?.name === "cat")
+      operands = eff.args.filter((arg) => !arg.startsWith("-"));
+    return operands
+      .filter((operand) => !operandPath(operand, segment).resolved)
+      .map(
+        (operand) =>
+          original.rawWords[segment.words.indexOf(operand)] ?? operand,
+      );
+  });
+}
+
 async function decidePayload(
   payload: unknown,
 ): Promise<{ readonly reason: string } | undefined> {
@@ -1155,8 +1266,12 @@ async function decidePayload(
         : `search-route: raw ccc index entry points are denied for ${target}. Use rr index; it runs the exclusion admission plan before ccc.`,
     };
   }
+  const unresolved = unresolvedOperands(command, cwd);
   return {
     reason:
+      (unresolved.length > 0
+        ? `Unresolved operand: ${unresolved.join(", ")}. `
+        : "") +
       `search-route: raw ${tool} search is disabled in operational ccc project ${target}. ` +
       `Rewrite: ${await rewrittenSearch(payload, target)}. ` +
       `Declare the query shape through ${ROUTER_COMMAND}: ` +

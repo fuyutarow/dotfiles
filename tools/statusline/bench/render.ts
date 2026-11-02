@@ -74,8 +74,6 @@ const makeOptions = (): BuildDataframeOptions => ({
       measure("repoState", () =>
         Promise.resolve({ branch: "fixture", branchWhy: "fixture" }),
       ),
-    jobScan: () =>
-      measure("jobScan", () => Promise.resolve({ jobs: [], orphans: 0 })),
     hostLoad: () =>
       measure("hostLoad", () =>
         Promise.resolve({

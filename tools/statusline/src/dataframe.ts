@@ -6,7 +6,6 @@ import type { RcState } from "./identity.ts";
 import type { ModelLimit } from "./rate-limits.ts";
 import type { CodexRate } from "./codex-rate.ts";
 import type { JevUsage } from "./jev-usage.ts";
-import type { Admitted } from "./jobs.ts";
 import type { JobRun, RouteScan } from "./dispatch-runs.ts";
 import type { RecoverHealth } from "./recover-health.ts";
 import type { DisplayFields } from "./field-state.ts";
@@ -54,9 +53,6 @@ export interface Dataframe {
   del?: number | undefined;
   wt?: string | undefined;
   workspace?: string | undefined;
-  jobs: Admitted[];
-  orphans: number;
-  jobScanWhy?: string | undefined; // the process scan failed: jobs/orphans are unknown, not zero
   // agx workers. undefined = agx has never run on this machine (no state dir).
   routes?: Result<RouteScan, string> | undefined;
   // Current-session runs from agx worker ls; optional for render-only fixtures using the legacy row source.

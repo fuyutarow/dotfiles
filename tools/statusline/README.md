@@ -59,7 +59,7 @@ The Claude adapter parses Claude Code statusline JSON on stdin and normalizes it
 `SessionStatus` contract; stdout retains the existing ANSI rows and graceful invalid-input messages.
 With empty stdin or a terminal, `statusline` discovers live Claude Code and Codex processes in the
 current directory and renders one location line, one line per session, then shared Rate, Sys,
-Job, agx and worker lines once. `--session ID` selects one live session; `--session stdin`
+agx and worker lines once. `--session ID` selects one live session; `--session stdin`
 uses Claude's supplied session payload. `statusline sessions --cwd DIR
 --json` emits one JSON record per session; `statusline payload SESSION_ID` emits the renderer
 payload for that live session. When no session is present, host and
@@ -209,13 +209,13 @@ outside this scaffolding step.
 | src/build-dataframe.ts            |   544 | Orchestrate enrichment and short-TTL source caches                        |
 | src/cgroup-memory.ts              |    64 | Read cgroup v1/v2 memory limits and working sets                          |
 | src/dataframe.ts                  |    54 | Typed facts passed to rendering                                           |
-| src/dispatch-runs.ts              |   102 | Adapt collected C2 listing rows for worker and Job display                 |
+| src/dispatch-runs.ts              |   102 | Adapt collected C2 listing rows for worker display                        |
 | src/dispatch-warning.ts           |    35 | Codex-share warning projected from public C5 routing statistics           |
 | src/dispatch-state.ts             |    46 | Project public C2 progress fields; preserve unknown values                 |
 | src/format.ts                     |   146 | Row assembly and prompt-head colors                                       |
 | src/host-load.ts                  |   537 | CPU/RAM/VRAM sampling, GPU lock/cache, Sys formatting                     |
 | src/identity.ts                   |   409 | Account, agent-name cache, Remote Control probe, herdr updates            |
-| src/jobs.ts                       |   109 | Admitted jobs, scratchpad orphans, elapsed formatting                     |
+| src/jobs.ts                       |     7 | Worker elapsed formatting                                                 |
 | src/live.ts                       |     — | Serialized Codex TTY refresh loop and terminal cleanup                    |
 | src/model-context.ts              |    60 | Model normalization and context labels                                    |
 | src/prompt-stamp.ts               |    95 | Temporal clock, offset, tilde path and prompt fields                      |
@@ -229,20 +229,20 @@ outside this scaffolding step.
 
 - `src/ansi.ts`:
 - `src/bounded.ts`: `node:child_process`, `node:fs`, `node:path`, `neverthrow`, `./zod.ts`
-- `src/build-dataframe.ts`: `node:fs/promises`, `node:path`, `neverthrow`, `./session-status.ts`, `./dataframe.ts`, `./identity.ts`, `./rate-limits.ts`, `./model-context.ts`, `./repo-state.ts`, `./jobs.ts`, `./host-load.ts`, `./dispatch-runs.ts`, `./dispatch-warning.ts`, `./storage.ts`, `./zod.ts`, `./dispatch-state.ts`, `./bounded.ts`, `./codex-rate.ts`, `./jev-usage.ts`
+- `src/build-dataframe.ts`: `node:fs/promises`, `node:path`, `neverthrow`, `./session-status.ts`, `./dataframe.ts`, `./identity.ts`, `./rate-limits.ts`, `./model-context.ts`, `./repo-state.ts`, `./host-load.ts`, `./dispatch-runs.ts`, `./dispatch-warning.ts`, `./storage.ts`, `./zod.ts`, `./dispatch-state.ts`, `./bounded.ts`, `./codex-rate.ts`, `./jev-usage.ts`
 - `src/cgroup-memory.ts`:
-- `src/dataframe.ts`: `neverthrow`, `./host-load.ts`, `./storage.ts`, `./identity.ts`, `./rate-limits.ts`, `./jobs.ts`, `./dispatch-runs.ts`
+- `src/dataframe.ts`: `neverthrow`, `./host-load.ts`, `./storage.ts`, `./identity.ts`, `./rate-limits.ts`, `./dispatch-runs.ts`
 - `src/dispatch-runs.ts`: `./zod.ts`, `./core-runs.ts`, `./agx-snapshot.ts`, `./dispatch-display.ts`
 - `src/dispatch-warning.ts`: `node:os`, `./zod.ts`
 - `src/dispatch-state.ts`: `neverthrow`, `./zod.ts`, `./dispatch-display.ts`, `./dispatch-runs.ts`
-- `src/format.ts`: `./ansi.ts`, `./prompt-stamp.ts`, `./dataframe.ts`, `./model-context.ts`, `./rate-limits.ts`, `./jobs.ts`, `./dispatch-runs.ts`, `./host-load.ts`
+- `src/format.ts`: `./ansi.ts`, `./prompt-stamp.ts`, `./dataframe.ts`, `./model-context.ts`, `./rate-limits.ts`, `./dispatch-runs.ts`, `./host-load.ts`
 - `src/host-load.ts`: `node:child_process`, `node:fs`, `node:path`, `node:os`, `neverthrow`, `./storage.ts`, `./cgroup-memory.ts`, `./zod.ts`, `./ansi.ts`, `./bounded.ts`
 - `src/identity.ts`: `node:fs`, `node:net`, `neverthrow`, `./zod.ts`, `./bounded.ts`
 - `src/live.ts`:
 - `src/session-status.ts`: (types only)
 - `src/adapters/claude-statusline.ts`: `../bounded.ts`, `../zod.ts`, `../session-status.ts`
 - `src/adapters/codex-rollout.ts`: `node:fs/promises`, `node:path`, `../session-status.ts`, `../../../shared/src/jsonl.ts`, `./codex-settings-stream.ts`, `../zod.ts`
-- `src/jobs.ts`: `./bounded.ts`, `./ansi.ts`, `./prompt-stamp.ts`
+- `src/jobs.ts`: `./prompt-stamp.ts`
 - `src/model-context.ts`: `./ansi.ts`, `./dataframe.ts`
 - `src/prompt-stamp.ts`: `node:os`
 - `src/rate-limits.ts`: `neverthrow`, `./zod.ts`, `./prompt-stamp.ts`, `./ansi.ts`, `./dataframe.ts`

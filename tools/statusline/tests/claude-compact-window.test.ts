@@ -227,7 +227,7 @@ describe("Claude auto-compact window", () => {
         rcState: () => Promise.resolve("off"),
         repoState: () =>
           Promise.resolve({ branch: undefined, branchWhy: undefined }),
-        jobScan: () => Promise.resolve({ jobs: [], orphans: 0 }),
+
         hostLoad: () =>
           Promise.resolve({
             cpuPct: ok(0),
@@ -267,7 +267,7 @@ describe("Claude auto-compact window", () => {
         rcState: () => Promise.resolve("off"),
         repoState: () =>
           Promise.resolve({ branch: undefined, branchWhy: undefined }),
-        jobScan: () => Promise.resolve({ jobs: [], orphans: 0 }),
+
         hostLoad: () =>
           Promise.resolve({
             cpuPct: ok(0),

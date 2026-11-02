@@ -18,9 +18,6 @@ const base: Dataframe = {
   wfOn: false,
   rc: "off",
   rlModel: [],
-  jobs: [],
-  orphans: 0,
-  jobScanWhy: "ps timeout",
   cpuPct: ok(1),
   ram: err("unknown"),
   vram: undefined,
@@ -75,9 +72,7 @@ test("live rows render the session's workers with their complete activity", () =
   );
   expect(plain).not.toContain("tkt_other");
   expect(plain).toContain("+1 workers outside session");
-  expect(plain.split("\n").find((line) => line.includes("Job:"))).not.toContain(
-    "first",
-  );
+  expect(plain).not.toMatch(/^Job:/mu);
   expect(dur(70.289)).toBe("1m10s");
 });
 test("live agx jobs survive a process scan timeout and count other sessions", () => {
@@ -92,21 +87,6 @@ test("live agx jobs survive a process scan timeout and count other sessions", ()
     expect(output).toContain(`tkt_${ticket}`);
   expect(output).toContain("+2 workers outside session");
 });
-test("unknown agx precedes unrelated process jobs", () => {
-  const line =
-    render({
-      ...base,
-      jobs: [{ name: "unrelated", secs: 5 }],
-      jobScanWhy: undefined,
-      liveAgxJobs: err("sampler unavailable"),
-    })
-      .split("\n")
-      .find((value) => value.includes("agx ?")) ?? "";
-  expect(line.indexOf("agx ? (sampler unavailable)")).toBeLessThan(
-    line.indexOf("unrelated"),
-  );
-});
-
 test("owner retains usable rows with their age and expires them after ten minutes", async () => {
   const rows = [
     {
@@ -117,11 +97,7 @@ test("owner retains usable rows with their age and expires them after ten minute
     },
   ];
   const now = Temporal.Now.instant().epochMilliseconds;
-  for (const [age, expected] of [
-    [1_000, "0m43s"],
-    [42_000, "1 agx (42s old)"],
-    [601_000, "agx ? (timeout 30000ms)"],
-  ] as const) {
+  for (const age of [1_000, 42_000, 601_000]) {
     const snapshot = {
       schema: 1 as const,
       fields: {
@@ -133,12 +109,16 @@ test("owner retains usable rows with their age and expires them after ten minute
       },
     };
     const result = await ownerSources(Promise.resolve(snapshot)).liveAgxJobs();
-    const output = render({
-      ...base,
-      liveAgxJobs: result,
-      ownerAges: { liveAgxJobs: age },
-    });
-    expect(output).toContain(expected);
+    if (age < 600_000) {
+      expect(result?.unwrapOr([])).toEqual(rows);
+      expect(
+        render({
+          ...base,
+          liveAgxJobs: result,
+          ownerAges: { liveAgxJobs: age },
+        }),
+      ).toContain(age === 1_000 ? "0m43s" : "1m24s");
+    } else expect(result?.isErr()).toBe(true);
   }
   expect(
     (await ownerSources(Promise.resolve(undefined)).liveAgxJobs())?.isErr(),
@@ -170,7 +150,7 @@ test("run age advances independently of cache age", () => {
   ).toContain("0m40s");
   expect(
     render({ ...frame, ownerAges: { liveAgxJobs: 42_000 } }, { nowMs }),
-  ).toContain("1 agx (42s old)");
+  ).toContain("0m40s");
 });
 
 test("fake agx executable supplies live jobs independently of ps and times out", async () => {
@@ -195,8 +175,6 @@ test("fake agx executable supplies live jobs independently of ps and times out",
       {
         sources: {
           liveAgxJobs: readAgxJobRuns,
-          jobScan: () =>
-            Promise.resolve({ jobs: [], orphans: 0, failed: "ps timeout" }),
         },
       },
     );
@@ -208,12 +186,32 @@ test("fake agx executable supplies live jobs independently of ps and times out",
     expect(output).toContain("+2 workers outside session");
     await writeFile(path, "#!/bin/sh\nexec /bin/sleep 3\n");
     const timeout = await readAgxJobRuns(50);
-    expect(render({ ...base, liveAgxJobs: timeout })).toContain(
-      "agx ? (timeout 50ms)",
-    );
+    expect(timeout.isErr()).toBe(true);
   })().finally(() => {
     if (originalPath === undefined) delete process.env["PATH"];
     else process.env["PATH"] = originalPath;
     rmSync(dir, { recursive: true, force: true });
   });
 }, 10000);
+
+test("render omits the Job row for live agx results", () => {
+  for (const liveAgxJobs of [
+    undefined,
+    ok([]),
+    ok([
+      {
+        id: "one",
+        ticket: "one",
+        dispatcher_session: "session",
+        elapsed_seconds: 42,
+      },
+    ]),
+    err("unavailable"),
+  ]) {
+    const plain = render({ ...base, liveAgxJobs }).replaceAll(
+      new RegExp(`${String.fromCodePoint(27)}\\[[0-9;]*m`, "gu"),
+      "",
+    );
+    expect(plain).not.toMatch(/^Job:/mu);
+  }
+});

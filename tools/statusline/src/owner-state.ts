@@ -274,15 +274,6 @@ export function ownerSources(
         }
       );
     },
-    jobScan: async () =>
-      (await read(
-        "jobScan",
-        z.object({
-          jobs: z.array(z.object({ name: z.string(), secs: z.number() })),
-          orphans: z.number(),
-          failed: z.string().optional(),
-        }),
-      )) ?? { jobs: [], orphans: 0, failed: "sampler unavailable" },
     liveAgxJobs: async () => {
       const field = (await pending)?.fields["liveAgxJobs"];
       if (field === undefined) return err("sampler unavailable");

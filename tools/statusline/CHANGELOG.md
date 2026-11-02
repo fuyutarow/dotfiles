@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.0 — 2026-11-02
+
+- Remove the Job statusline row and its process scan
+
 ## 0.22.25 — 2026-11-02
 
 - Restore live dispatch worker rows in the statusline.

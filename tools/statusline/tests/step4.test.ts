@@ -73,8 +73,7 @@ function output(scan: Awaited<ReturnType<typeof readCoreRuns>>) {
       wfOn: false,
       rc: "off",
       rlModel: [],
-      jobs: [],
-      orphans: 0,
+
       routes: ok(scan),
       vram: undefined,
       disks: ok([]),

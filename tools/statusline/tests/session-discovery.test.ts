@@ -351,7 +351,7 @@ test("finds Claude and Codex only in the selected cwd and builds recorded payloa
   expect(automatic.stdout.toString()).toContain("Codex (transcript)");
   expect(automatic.stdout.toString()).toContain("Claude (transcript)");
   const output = automatic.stdout.toString();
-  for (const label of ["Rate:", "Sys:", "Job:", "codex-session-b"])
+  for (const label of ["Rate:", "Sys:", "codex-session-b"])
     expect(output.split(label)).toHaveLength(2);
   expect(output).not.toContain("0s old");
   const selected = Bun.spawn(
@@ -522,7 +522,7 @@ test("no-session invocation renders shared rows and the explicit absence line", 
   expect(run.exitCode, run.stderr.toString()).toBe(0);
   expect(output).toContain("Rate:");
   expect(output).toContain("Sys:");
-  expect(output).toContain("Job:");
+  expect(output).not.toContain("Job:");
   expect(output).toContain(`no agent session in ${cwd}`);
 });
 

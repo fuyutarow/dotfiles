@@ -3,7 +3,6 @@ import type { SessionStatus } from "./session-status.ts";
 import type { Dataframe } from "./dataframe.ts";
 import type { HostLoad } from "./host-load.ts";
 import type { RouteScan } from "./dispatch-runs.ts";
-import type { Admitted } from "./jobs.ts";
 import type { DiskEntry } from "./storage.ts";
 import type { ModelLimit } from "./rate-limits.ts";
 import type { RcState } from "./identity.ts";
@@ -62,11 +61,6 @@ export type Sources = {
     add?: number | undefined;
     del?: number | undefined;
   }>;
-  jobScan: () => Promise<{
-    jobs: Admitted[];
-    orphans: number;
-    failed?: string | undefined;
-  }>;
   liveAgxJobs: () => Promise<Result<AgxJobRows, string> | undefined>;
   hostLoad: () => Promise<Omit<HostLoad, "disks">>;
   routes: (
@@ -113,7 +107,6 @@ const BUDGETS_MS: Record<keyof Sources, number> = {
   agentName: 3000,
   rcState: 400,
   repoState: 2000,
-  jobScan: 2000,
   liveAgxJobs: 2000,
   hostLoad: 2000,
   routes: 2000,
@@ -254,7 +247,6 @@ export async function buildDataframe(
     nameResult,
     rcResult,
     repoResult,
-    scanResult,
     liveAgxResult,
     hostResult,
     routesResult,
@@ -314,12 +306,6 @@ export async function buildDataframe(
       budget("repoState"),
       () => sources.repoState(cwd),
       (value) => publish(value, ["branch"]),
-    ),
-    bounded("process scan", budget("jobScan"), sources.jobScan, (value) =>
-      publish(
-        { jobs: value.jobs, orphans: value.orphans, jobScanWhy: value.failed },
-        ["jobs"],
-      ),
     ),
     bounded("agx", budget("liveAgxJobs"), () =>
       options.sources !== undefined && options.sources.liveAgxJobs === undefined
@@ -391,11 +377,6 @@ export async function buildDataframe(
     { branch: undefined, branchWhy: "git unavailable" },
     "git",
   );
-  const scan = settled(
-    scanResult,
-    { jobs: [], orphans: 0, failed: "process scan unavailable" },
-    "process scan",
-  );
   const host = settled(
     hostResult,
     {
@@ -452,7 +433,6 @@ export async function buildDataframe(
     sessionNameWhy = nameResultValue.error;
   const branch = repo.value.branch;
   const branchWhy = repo.why ?? repo.value.branchWhy;
-  const { jobs, orphans } = scan.value;
   const cpu = host.value.cpuPct;
   const ram = host.value.ram;
   const vram = host.value.vram;
@@ -511,9 +491,6 @@ export async function buildDataframe(
     add: repo.value.add ?? data.changes?.linesAdded,
     del: repo.value.del ?? data.changes?.linesRemoved,
     workspace: repo.value.workspace,
-    jobs,
-    orphans,
-    jobScanWhy: scan.why ?? scan.value.failed,
     liveAgxJobs: (() => {
       const result = settled(liveAgxResult, undefined, "agx");
       return result.why === undefined
@@ -555,7 +532,6 @@ export async function buildDataframe(
       vram: "vram",
       gpu: "vram",
       tmpfs: "tmpfs",
-      jobs: "jobScan",
       liveAgxJobs: "liveAgxJobs",
       name: `name:${sid ?? ""}`,
       account: "identity",

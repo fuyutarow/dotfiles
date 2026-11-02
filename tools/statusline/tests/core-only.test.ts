@@ -132,8 +132,7 @@ test("fixed core outputs are rendered verbatim; bf3bb781 has no working row and 
     wfOn: false,
     rc: "off",
     rlModel: [],
-    jobs: [],
-    orphans: 0,
+
     routes: ok(scan),
     vram: undefined,
     disks: ok([]),
@@ -250,8 +249,7 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
       wfOn: false,
       rc: "off",
       rlModel: [],
-      jobs: [],
-      orphans: 0,
+
       routes: ok(inventory),
       vram: undefined,
       disks: ok([]),
@@ -280,8 +278,7 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
       wfOn: false,
       rc: "off",
       rlModel: [],
-      jobs: [],
-      orphans: 0,
+
       routes: ok(ambient),
       vram: undefined,
       disks: ok([]),
@@ -310,8 +307,7 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
       wfOn: false,
       rc: "off",
       rlModel: [],
-      jobs: [],
-      orphans: 0,
+
       routes: ok(emptyInventory),
       vram: undefined,
       disks: ok([]),

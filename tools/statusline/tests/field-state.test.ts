@@ -32,8 +32,6 @@ const sources = {
   rcState: () => Promise.resolve("on" as const),
   repoState: () =>
     Promise.resolve({ branch: "sticky-branch", branchWhy: undefined }),
-  jobScan: () =>
-    Promise.resolve({ jobs: [{ name: "sticky-job", secs: 100 }], orphans: 1 }),
   hostLoad: () =>
     Promise.resolve({
       cpuPct: ok(85),
@@ -122,15 +120,8 @@ test("R3: every row kind renders when every reader times out before any good obs
   const errors = await new Response(child.stderr).text();
   expect(await child.exited, errors).toBe(0);
   const lines = output.trim().split("\n");
-  expect(lines).toHaveLength(6);
-  const labels = [
-    "|",
-    "account n/a",
-    "Model n/a",
-    "Rate:",
-    "Sys:",
-    "Job: scan n/a",
-  ];
+  expect(lines).toHaveLength(5);
+  const labels = ["|", "account n/a", "Model n/a", "Rate:", "Sys:"];
   for (const [index, label] of labels.entries())
     expect(lines[index]).toContain(label);
   expect(output).not.toContain("agx fresh");
@@ -144,17 +135,16 @@ test("R3: the closed row record cannot silently omit or empty any row", () => {
     agent: observed("agent"),
     rate: observed("rate"),
     sys: observed("sys"),
-    job: observed("job"),
     agx: observed("agx"),
     fleet: observed("workers unknown running"),
     "dispatch-warning": observed("dispatch warning"),
     recover: observed("recover"),
   } satisfies DisplayRows;
   expect(renderRows(rows).split("\n")).toHaveLength(ROW_KINDS.length - 2);
-  expect(plain(renderRows({ ...rows, job: observed("") }))).toContain(
-    "Job: n/a",
+  expect(plain(renderRows({ ...rows, sys: observed("") }))).toContain(
+    "Sys: n/a",
   );
-  Reflect.deleteProperty(rows, "job");
+  Reflect.deleteProperty(rows, "sys");
   expect(() => renderRows(rows)).toThrow("missing statusline row");
 });
 
@@ -224,8 +214,6 @@ test("every previously good display field survives failed reads independently wi
         rcState: () => Promise.resolve("unknown"),
         repoState: () =>
           Promise.resolve({ branch: undefined, branchWhy: "failed" }),
-        jobScan: () =>
-          Promise.resolve({ jobs: [], orphans: 0, failed: "failed" }),
         hostLoad: () =>
           Promise.resolve({
             cpuPct: err("failed"),
@@ -258,7 +246,6 @@ test("every previously good display field survives failed reads independently wi
     "jev",
     "branch",
     "diff",
-    "jobs",
     "cpu",
     "ram",
     "gpu",
@@ -400,8 +387,6 @@ test("three disk-snapshot workers survive an outer dispatch timeout, including s
     stderr: "pipe",
     timeout: 15000,
   });
-  expect(plain(await new Response(empty.stdout).text())).toContain(
-    "agx ? (sampler unavailable)",
-  );
+  expect(plain(await new Response(empty.stdout).text())).not.toContain("Job:");
   expect(await empty.exited).toBe(0);
 }, 15000);

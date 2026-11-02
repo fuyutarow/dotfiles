@@ -17,7 +17,6 @@ const HOST_FIELDS = new Set([
   "vram",
   "gpu",
   "tmpfs",
-  "jobs",
   "dispatch-warning",
   "recover",
   "jev",

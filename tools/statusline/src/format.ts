@@ -4,7 +4,6 @@ import type { Dataframe } from "./dataframe.ts";
 import { fleetLine } from "./fleet-line.ts";
 import { ctxSegment } from "./model-context.ts";
 import { rateRow } from "./rate-limits.ts";
-import { admittedJobSegment } from "./jobs.ts";
 import { routeLines } from "./dispatch-display.ts";
 import { listingProgress } from "./dispatch-state.ts";
 import type { RouteRun } from "./dispatch-runs.ts";
@@ -45,9 +44,7 @@ const BR = "⎇";
 // where the two values ARE independent siblings (the 5h window vs the 7d window), so they keep
 // the middot between them — same role MID plays between Sys's CPU/RAM/VRAM readings below (each
 // an independent host-resource sibling, unlike Ctx's count+percent pair). Line 5 (always present)
-// is Sys — host CPU/RAM/VRAM, distinct from Rate's API budget — and Line 6 is Job, including
-// an explicit idle value after a successful empty scan; each is always its own row
-// so neither can ever be silently dropped by a missing sibling value.
+// is Sys — host CPU/RAM/VRAM, distinct from Rate's API budget — and is always its own row.
 // Rate row, 5h window: "5h NN% [⟳reset]". The three window segments carry no separator of their
 // The PS1 head in PS1's own colors (%F{magenta}%n@%F{yellow}%m:%F{cyan}date|%F{green}%~). The
 // uncolored shape has one home, hooks/prompt-stamp.ts, shared with the /quote header.
@@ -256,34 +253,7 @@ export function render(
   // Always present: every reading in it is either a value or an explicit n/a.
   const sysLine = sysRow(df, field);
 
-  let jobLine: string | undefined;
-  if (df.jobs.length > 0 || df.orphans > 0) {
-    jobLine = `${ESC}[38;5;173mJob:${RST}`;
-    if (df.jobs.length > 0) {
-      jobLine += admittedJobSegment(df.jobs, df.orphans);
-    } else {
-      jobLine += ` ${DIM}—${RST} ${ESC}[38;5;167morphan×${df.orphans}${RST}`;
-    }
-  }
-
-  const jobValue = jobLine ?? "Job: idle";
-  jobLine = field(
-    "jobs",
-    "Job: scan",
-    observed(df.jobScanWhy === undefined ? jobValue : undefined, df.jobScanWhy),
-  );
   const live = df.liveAgxJobs;
-  if (live?.isErr() === true)
-    jobLine = `Job: agx ? (${live.error}) · ${jobLine}`;
-  if (live?.isOk() === true) {
-    const age = df.ownerAges?.["liveAgxJobs"] ?? 0;
-    if (age > 30_000) {
-      const count = live.value.filter(
-        (row) => df.sid !== undefined && row.dispatcher_session === df.sid,
-      ).length;
-      jobLine += ` ${count} agx (${Math.floor(age / 1000)}s old)`;
-    }
-  }
   const scan = df.routes?.isOk() === true ? df.routes.value : undefined;
   let runs = live === undefined ? (scan?.runs ?? []) : [];
   if (live?.isOk() === true)
@@ -331,7 +301,6 @@ export function render(
     agent: observed(agentLine),
     rate: observed(rateLine),
     sys: observed(sysLine),
-    job: observed(jobLine),
     agx: observed(agxBlock),
     fleet: observed(bottom),
     "dispatch-warning": observed(""),

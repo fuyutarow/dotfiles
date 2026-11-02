@@ -47,7 +47,7 @@ describe("buildDataframe source budgets", () => {
           gitStarted = true;
           return new Promise(() => {});
         },
-        jobScan: () => Promise.resolve({ jobs: [], orphans: 0 }),
+
         hostLoad: () =>
           Promise.resolve({
             cpuPct: err("host unavailable"),
@@ -106,7 +106,7 @@ describe("buildDataframe source budgets", () => {
         rcState: () => Promise.resolve("unknown"),
         repoState: () =>
           Promise.resolve({ branch: undefined, branchWhy: undefined }),
-        jobScan: () => Promise.resolve({ jobs: [], orphans: 0 }),
+
         hostLoad: () =>
           Promise.resolve({
             cpuPct: err("host unavailable"),

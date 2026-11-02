@@ -49,7 +49,7 @@ const quietSources = {
   agentName: () => Promise.resolve(ok(undefined)),
   rcState: () => Promise.resolve("unknown" as const),
   repoState: () => Promise.resolve({ branch: undefined, branchWhy: undefined }),
-  jobScan: () => Promise.resolve({ jobs: [], orphans: 0 }),
+
   hostLoad: () =>
     Promise.resolve({
       cpuPct: err("fixture"),

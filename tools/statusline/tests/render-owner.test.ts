@@ -121,7 +121,6 @@ test("standalone and Claude stdin render owner files without any subprocess, net
             ram: { value: { pct: 50, frac: "1/2G" } },
           },
         },
-        jobScan: { at, value: { jobs: [], orphans: 0 } },
       },
     }),
   );

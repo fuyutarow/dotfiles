@@ -287,7 +287,6 @@ export async function sample(
         [
           "identity",
           "rcState",
-          "jobScan",
           "liveAgxJobs",
           "hostLoad",
           "storage",

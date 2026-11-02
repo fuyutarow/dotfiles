@@ -90,8 +90,7 @@ test("two live sessions render one location and one machine block; corrupt view 
             line: "Opus 5.5 | Session: claude",
           },
         ],
-        shared:
-          "Rate: sampled\nSys: CPU 42%\nJob: idle\nagx 0 workers\nworkers 0 running",
+        shared: "Rate: sampled\nSys: CPU 42%\nagx 0 workers\nworkers 0 running",
         runSource: { kind: "current", capturedAt: at },
       },
     ],
@@ -99,7 +98,7 @@ test("two live sessions render one location and one machine block; corrupt view 
   await writeFile(presentationPath(), encodePresentation(view));
   await writeFile(`${presentationPath()}.last-good`, encodePresentation(view));
   const output = await presentation(root);
-  for (const label of ["location", "Rate:", "Sys:", "Job:", "agx", "workers 0"])
+  for (const label of ["location", "Rate:", "Sys:", "agx", "workers 0"])
     expect(output?.split(label)).toHaveLength(2);
   expect(output?.split("Session:")).toHaveLength(3);
   expect(output).not.toContain("old");

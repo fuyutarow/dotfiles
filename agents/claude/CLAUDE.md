@@ -18,8 +18,7 @@
   stoppable, journal-streamed, and exit-status recorded) stay open. Order of preference:
   `run_in_background:true` to watch it now → `agent-resource-run --manifest` for compute →
   `agx worker dispatch <ticket>` for durable agx runs.
-  If none fit, STOP and say so; do not invent another way. Live jobs and orphan count render in
-  the statusline's `Job:` segment.
+  If none fit, STOP and say so; do not invent another way.
 - **ccc-registered repos: raw search is banned; say WHAT you are looking for through `rr`.**
   (覆せる既定 2026-07-30) When ccc is installed and `.cocoindex_code/settings.yml` exists,
   a PreToolUse hook denies raw Grep/rg/grep/find/fd/tree, direct ccc search/grep, and obvious

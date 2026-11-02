@@ -43,7 +43,7 @@ describe("statusline render golden", () => {
         rcState: () => Promise.resolve("off"),
         repoState: () =>
           Promise.resolve({ branch: "fixture-branch", branchWhy: undefined }),
-        jobScan: () => Promise.resolve({ jobs: [], orphans: 0 }),
+
         hostLoad: () =>
           Promise.resolve({
             cpuPct: ok(12),

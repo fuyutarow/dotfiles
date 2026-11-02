@@ -9,7 +9,6 @@ import {
 } from "./identity.ts";
 import { modelWeeklyLimits } from "./rate-limits.ts";
 import { repoStateAsync } from "./repo-state.ts";
-import { scanOutOfHarnessAsync } from "./jobs.ts";
 import { readHostLoadAsync } from "./host-load.ts";
 import { agxRouteRunsAsync } from "./dispatch-runs.ts";
 import { dispatchWarning } from "./dispatch-warning.ts";
@@ -42,7 +41,6 @@ export const COLLECTOR_SOURCES: Sources = {
   agentName: agentNameAsync,
   rcState: rcStateAsync,
   repoState: repoStateAsync,
-  jobScan: scanOutOfHarnessAsync,
   liveAgxJobs: readAgxJobRuns,
   hostLoad: readHostLoadAsync,
   routes: async (sid, cwd) =>

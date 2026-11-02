@@ -306,53 +306,6 @@ describe("statusline Sys row: every reading is present", () => {
 });
 
 describe("statusline other rows", () => {
-  test(
-    "Job: a failed process scan is n/a, not 'no jobs'",
-    () => {
-      const text = render({ bin: binWith({}) }).text;
-      expect(text).toContain("Job: scan n/a (no ps)");
-    },
-    SLOW,
-  );
-
-  test("Job: a successful empty scan shows idle", () => {
-    const bin = binWith({ ps: "exit 0" });
-    expect(render({ bin }).text).toContain("Job: idle");
-  });
-
-  test.each([
-    ["02:00", "2m00s"],
-    ["1-02:03:04", "26h03m"],
-    ["120", "2m00s"], // a bare number is seconds (etimes' shape)
-  ])(
-    "Job: ps's etime %s ([[dd-]hh:]mm:ss on both procps and BSD ps) reads as %s",
-    (etime, shown) => {
-      const bin = binWith({
-        ps: `echo '    9  ${etime} /x/agent-resource-run --manifest /m/jobx.resource.json'`,
-      });
-      expect(render({ bin }).text).toContain(`Job: m ${shown}`);
-    },
-    SLOW,
-  );
-
-  test("Job: an orphan with nothing admitted is spelled out, not `det×`", () => {
-    const bin = binWith({ ps: "echo '    1  120 /x/scratchpad/leak.sh'" });
-    const text = render({ bin }).text;
-    expect(text).toContain("orphan×1");
-    expect(text).not.toContain("det×");
-  });
-
-  test("Job: an orphan beside an admitted job is spelled out too", () => {
-    const bin = binWith({
-      ps:
-        "echo '    9  120 /x/agent-resource-run --manifest /m/jobx.resource.json'\n" +
-        "echo '    1  300 /x/scratchpad/leak.sh'",
-    });
-    const text = render({ bin }).text;
-    expect(text).toContain("Job: m 2m00s orphan×1");
-    expect(text).not.toContain("det×");
-  });
-
   test("an empty payload prints n/a for Ctx, Rate and diff instead of 0 or nothing", () => {
     const text = render({ bin: binWith({}), payload: {} }).text;
     expect(text).toContain("Ctx: n/a");
@@ -504,7 +457,7 @@ describe("statusline resource bounds", () => {
       expect(result.renderMs).toBeLessThan(4000);
       expect(text).toContain("name n/a (claude agents timeout 3000ms)");
       expect(text).not.toContain("branch n/a");
-      expect(text).toMatch(/scan n\/a \(ps timeout \d+ms\)/u);
+      expect(text).not.toContain("Job:");
       // nvidia-smi is not a render child any more (O4): its hang costs the render nothing, and the
       // bar says the sample is still being taken.
       expect(sysRow(text)).toContain(

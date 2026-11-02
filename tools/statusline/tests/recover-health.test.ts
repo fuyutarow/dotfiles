@@ -27,8 +27,7 @@ const frame: Dataframe = {
   wfOn: false,
   rc: "off",
   rlModel: [],
-  jobs: [],
-  orphans: 0,
+
   vram: undefined,
   disks: ok([]),
   cpuPct: ok(10),

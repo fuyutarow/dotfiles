@@ -4,9 +4,10 @@ import type { Dataframe } from "./dataframe.ts";
 import { fleetLine } from "./fleet-line.ts";
 import { ctxSegment } from "./model-context.ts";
 import { rateRow } from "./rate-limits.ts";
-import { dur } from "./jobs.ts";
 import { admittedJobSegment } from "./jobs.ts";
 import { routeLines } from "./dispatch-display.ts";
+import { listingProgress } from "./dispatch-state.ts";
+import type { RouteRun } from "./dispatch-runs.ts";
 import { sysRow } from "./host-display.ts";
 import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
 import { fromThrowable } from "neverthrow";
@@ -63,33 +64,39 @@ export function coloredHead(
     `${field("prompt-time", "time", observed(p === undefined ? undefined : `${ESC}[36m${p.when}${RST}`, "prompt unavailable"))}${field("prompt-zone", "zone", observed(p === undefined ? undefined : `${ESC}[38;5;240m${p.zone}${RST}`, "prompt unavailable"))}|${field("prompt-cwd", "cwd", observed(p === undefined ? undefined : `${ESC}[32m${p.cwd}${RST}`, "prompt unavailable"))}`
   );
 }
-function truncateTicket(value: string): string {
-  let result = "";
-  for (const char of value) {
-    if (Bun.stringWidth(result + char) > 32) break;
-    result += char;
-  }
-  return result;
-}
-function liveJobEntries(
+function liveRouteRuns(
   rows: import("./agx-job-runs.ts").AgxJobRows,
-  sid: string | undefined,
   nowMs: number,
   cacheAgeMs: number,
-): string {
-  return rows
-    .filter((row) => sid !== undefined && row.dispatcher_session === sid)
-    .map((row) => {
-      const startMs = fromThrowable(
-        () => Temporal.Instant.from(row.started_at ?? "").epochMilliseconds,
-      )().unwrapOr(undefined);
-      const seconds =
-        startMs === undefined
-          ? row.elapsed_seconds + Math.max(0, cacheAgeMs) / 1000
-          : Math.max(0, (nowMs - startMs) / 1000);
-      return ` ${truncateTicket(row.ticket)} ${dur(seconds)}`;
-    })
-    .join("");
+): RouteRun[] {
+  return rows.map((row) => {
+    const startMs = fromThrowable(
+      () => Temporal.Instant.from(row.started_at ?? "").epochMilliseconds,
+    )().unwrapOr(undefined);
+    const seconds =
+      startMs === undefined
+        ? row.elapsed_seconds + Math.max(0, cacheAgeMs) / 1000
+        : Math.max(0, (nowMs - startMs) / 1000);
+    return {
+      displayId: undefined,
+      choice: row.row ?? "n/a",
+      label: row.ticket,
+      workerName: row.worker_name,
+      workspaceName: row.workspace_name,
+      pickSource:
+        row.pick_source ??
+        (row.continues === null || row.continues === undefined
+          ? "agx"
+          : "resume"),
+      phase: row.phase,
+      workerSession: undefined,
+      markerCostUsd: undefined,
+      secs: seconds,
+      alive: true,
+      dispatcherSession: row.dispatcher_session ?? undefined,
+      doing: listingProgress(row.progress, row.cwd),
+    };
+  });
 }
 export function render(
   df: Dataframe,
@@ -276,17 +283,20 @@ export function render(
       ).length;
       jobLine += ` ${count} agx (${Math.floor(age / 1000)}s old)`;
     }
-    jobLine += liveJobEntries(
-      live.value,
-      df.sid,
-      options.nowMs ?? Temporal.Now.instant().epochMilliseconds,
-      age,
-    );
   }
   const scan = df.routes?.isOk() === true ? df.routes.value : undefined;
+  let runs = live === undefined ? (scan?.runs ?? []) : [];
+  if (live?.isOk() === true)
+    runs = liveRouteRuns(
+      live.value,
+      options.nowMs ?? Temporal.Now.instant().epochMilliseconds,
+      df.ownerAges?.["liveAgxJobs"] ?? 0,
+    );
   const agxBlock = routeLines(
-    live === undefined ? (scan?.runs ?? []) : [],
-    scan?.inventorySessions ?? scan?.sessionScope,
+    runs,
+    live?.isOk() === true
+      ? (df.sid ?? undefined)
+      : (scan?.inventorySessions ?? scan?.sessionScope),
   ).join("\n");
   const outside =
     live?.isOk() === true

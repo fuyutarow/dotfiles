@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.25 — 2026-11-02
+
+- Restore live dispatch worker rows in the statusline.
+
 ## 0.22.24 — 2026-11-01
 
 - Remove unused GPU utilization average

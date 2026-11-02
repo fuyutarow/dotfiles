@@ -1,6 +1,6 @@
 import { err, ok, type Result } from "neverthrow";
 import { execAsyncWithin } from "./bounded.ts";
-import { jsonOf, z } from "./zod.ts";
+import { jsonOf, recoverInvalid, z } from "./zod.ts";
 
 export const Rows = z.array(
   z.object({
@@ -9,6 +9,14 @@ export const Rows = z.array(
     dispatcher_session: z.string().nullable(),
     started_at: z.string().optional(),
     elapsed_seconds: z.number().nonnegative(),
+    row: recoverInvalid(z.string()),
+    worker_name: recoverInvalid(z.string()),
+    workspace_name: recoverInvalid(z.string()),
+    phase: recoverInvalid(z.string()),
+    progress: z.unknown().optional(),
+    cwd: recoverInvalid(z.string()),
+    pick_source: recoverInvalid(z.string()),
+    continues: z.string().nullable().optional(),
   }),
 );
 export type AgxJobRows = z.output<typeof Rows>;

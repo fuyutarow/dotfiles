@@ -128,10 +128,12 @@ export async function scanOutOfHarnessAsync(): Promise<{
   return { jobs, orphans };
 }
 // elapsed: <h>h<mm>m past an hour, else <m>m<ss>s — same shape as the rate-limit countdowns.
-export const dur = (s: number) =>
-  s >= 3600
+export const dur = (seconds: number) => {
+  const s = Math.floor(seconds);
+  return s >= 3600
     ? `${Math.floor(s / 3600)}h${pad2(Math.floor((s % 3600) / 60))}m`
     : `${Math.floor(s / 60)}m${pad2(s % 60)}s`;
+};
 // to keep its nesting under max-depth. `orphan` spelled out (it was `det×N`, which named nothing
 // a reader could look up): a process reparented to init that still points at a Claude scratchpad.
 // VRAM used to ride this segment (only while a job was admitted); it now lives unconditionally

@@ -1177,7 +1177,7 @@ network_access = true
     expect(r.code).toBe(1);
     expect(r.out).toContain("model_context_window=100000, declared 1000000");
     expect(r.out).toContain(
-      "model_auto_compact_token_limit=940000, declared 950000",
+      "model_auto_compact_token_limit=940000, declared 500000",
     );
     expect(r.out).toContain("mcp_servers.context7 differs from .mcp.json");
     expect(r.out).toContain("fix: mise run codex:config");

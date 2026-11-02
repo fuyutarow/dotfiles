@@ -17,7 +17,7 @@ const fullscreenTranscriptLine = "fullscreen_transcript = false";
 const declared = {
   networkAccess: true,
   modelContextWindow: 1000000,
-  modelAutoCompactTokenLimit: 950000,
+  modelAutoCompactTokenLimit: 500000,
   approvalPolicy: "on-request",
   approvalsReviewer: "auto_review",
   tuiStatusLine: statusLine,
@@ -60,7 +60,7 @@ describe("Codex settings convergence", () => {
       '# user comment\nother = "unchanged"\n\n[sandbox_workspace_write]\nnetwork_access = true\n';
     const result = edit(source, declared);
     expect(result).toBe(
-      `# user comment\nother = "unchanged"\n\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n\n[sandbox_workspace_write]\nnetwork_access = true\n\n[tui]\n${fullscreenTranscriptLine}\n${statusLineLine}\n`,
+      `# user comment\nother = "unchanged"\n\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n\n[sandbox_workspace_write]\nnetwork_access = true\n\n[tui]\n${fullscreenTranscriptLine}\n${statusLineLine}\n`,
     );
   });
 
@@ -70,21 +70,21 @@ describe("Codex settings convergence", () => {
       "model_context_window = 100000\nmodel_auto_compact_token_limit = 900000 # retain\n[sandbox_workspace_write]\nnetwork_access = false\n";
     expect(edit(source, declared)).toBe(
       approvals +
-        `model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000 # retain\n[sandbox_workspace_write]\nnetwork_access = true\n\n[tui]\n${fullscreenTranscriptLine}\n${statusLineLine}\n`,
+        `model_context_window = 1000000\nmodel_auto_compact_token_limit = 500000 # retain\n[sandbox_workspace_write]\nnetwork_access = true\n\n[tui]\n${fullscreenTranscriptLine}\n${statusLineLine}\n`,
     );
   });
 
   test("a converged file is a byte-identical no-op", () => {
     const source =
       approvals +
-      `# leading\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true # note\n[tui]\n${fullscreenTranscriptLine}\n${statusLineLine}\n`;
+      `# leading\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\n[sandbox_workspace_write]\nnetwork_access = true # note\n[tui]\n${fullscreenTranscriptLine}\n${statusLineLine}\n`;
     expect(edit(source, declared)).toBe(source);
     expect(
       drift(declared, {
         contents: source,
         networkAccess: true,
         modelContextWindow: 1000000,
-        modelAutoCompactTokenLimit: 950000,
+        modelAutoCompactTokenLimit: 500000,
         approvalPolicy: "on-request",
         approvalsReviewer: "auto_review",
         tuiStatusLine: statusLine,
@@ -103,7 +103,7 @@ describe("Codex settings convergence", () => {
       "[custom]\nmodel_context_window = 123\nmodel_auto_compact_token_limit = 456\n",
     );
     expect(result).toContain(
-      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n\n[custom]',
+      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n\n[custom]',
     );
   });
 
@@ -113,7 +113,7 @@ describe("Codex settings convergence", () => {
     writeFileSync(
       join(home, ".codex/config.toml"),
       approvals +
-        `model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n[tui]\n${fullscreenTranscriptLine}\n${statusLineLine}\n`,
+        `model_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\n[sandbox_workspace_write]\nnetwork_access = true\n[tui]\n${fullscreenTranscriptLine}\n${statusLineLine}\n`,
     );
     const live = await readLive(home);
     expect(live).not.toBeInstanceOf(Error);
@@ -125,7 +125,7 @@ describe("Codex settings convergence", () => {
 
   test("appends a [tui] table after the sandbox table when the file has none", () => {
     const head =
-      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
+      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
     expect(edit(head, declared)).toBe(
       `${head}\n[tui]\n${fullscreenTranscriptLine}\n${statusLineLine}\n`,
     );
@@ -133,7 +133,7 @@ describe("Codex settings convergence", () => {
 
   test("replaces only status_line inside an existing [tui] table", () => {
     const head =
-      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
+      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
     const source = `${head}[tui]\nanimations = true # keep\nstatus_line = ["git-branch", "five-hour-limit"]\nnotifications = false\n\n[mcp_servers.x]\nenabled = true\n`;
     expect(edit(source, declared)).toBe(
       `${head}[tui]\nanimations = true # keep\n${fullscreenTranscriptLine}\n${statusLineLine}\nnotifications = false\n\n[mcp_servers.x]\nenabled = true\n`,
@@ -142,7 +142,7 @@ describe("Codex settings convergence", () => {
 
   test("replaces a multi-line status_line array as one value", () => {
     const head =
-      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
+      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
     const source = `${head}[tui]\nstatus_line = [\n  "git-branch",\n  "current-dir",\n]\nanimations = true\n`;
     expect(edit(source, declared)).toBe(
       `${head}[tui]\n${fullscreenTranscriptLine}\n${statusLineLine}\nanimations = true\n`,
@@ -153,7 +153,7 @@ describe("Codex settings convergence", () => {
     "replaces terminal multi-line status_line arrays and preserves a following table (newline=%s)",
     (trailingNewline) => {
       const head =
-        'model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
+        'model_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
       const table = '[mcp_servers.keep]\ncommand = "preserved"';
       const cases = [
         `${head}[tui]\nstatus_line = [\n  "git-branch",\n  "current-dir",\n]`,
@@ -174,7 +174,7 @@ describe("Codex settings convergence", () => {
 
   test("adds status_line to an existing empty [tui] table", () => {
     const head =
-      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
+      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
     expect(edit(`${head}[tui]\n`, declared)).toBe(
       `${head}[tui]\n${fullscreenTranscriptLine}\n${statusLineLine}\n`,
     );
@@ -185,7 +185,7 @@ describe("Codex settings convergence", () => {
       contents: null,
       networkAccess: true,
       modelContextWindow: 1000000,
-      modelAutoCompactTokenLimit: 950000,
+      modelAutoCompactTokenLimit: 500000,
       approvalPolicy: "on-request",
       approvalsReviewer: "auto_review",
       tuiStatusLine: null,
@@ -222,7 +222,7 @@ describe("Codex settings convergence", () => {
       },
     };
     const source = `model_context_window = 1000000
-model_auto_compact_token_limit = 950000
+model_auto_compact_token_limit = 500000
 [sandbox_workspace_write]
 network_access = true
 

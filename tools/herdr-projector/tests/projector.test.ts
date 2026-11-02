@@ -89,7 +89,7 @@ test("u26 foreground PIDs attribute unresolved Codex and mismatched Claude sessi
     pids,
   );
   expect(calls[1]).toContain("resources=workers 0 cpu 73% ram 1.8G");
-  expect(calls[3]).toContain("resources=workers ? cpu 0% ram 124.7M");
+  expect(calls[3]).toContain("resources=workers ? cpu 0% ram 120M");
 });
 
 test("foreground Claude ancestor wins over nested and other-pane Claude rows", async () => {
@@ -135,7 +135,7 @@ test("foreground Claude ancestor wins over nested and other-pane Claude rows", a
   expect(reports[0]).toContain("resources=workers 0 cpu 73% ram 1.8G");
   expect(
     reports[1]?.some(
-      (arg) => arg.includes("cpu 88%") && arg.includes("ram 3G"),
+      (arg) => arg.includes("cpu 88%") && arg.includes("ram 3.0G"),
     ),
   ).toBe(true);
 });
@@ -559,12 +559,12 @@ test("resource fixtures preserve CPU and project memory sums or clear absent tok
     ...resourceV2,
     sessions: [{ ...row, workers: null }],
   });
-  expect(noWorkers.args).toContain("resources=workers ? cpu 32% ram 1G");
+  expect(noWorkers.args).toContain("resources=workers ? cpu 32% ram 1.0G");
   const zero = await report({
     ...resourceV2,
     sessions: [{ ...row, ram_bytes: 0, vram_bytes: 0, workers: null }],
   });
-  expect(zero.args.some((arg) => arg.includes("ram 0B"))).toBe(true);
+  expect(zero.args.some((arg) => arg.includes("ram 0.0B"))).toBe(true);
   expect(zero.args).toContain("vram");
   expect(zero.args).toContain("--clear-token");
 });

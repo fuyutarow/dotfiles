@@ -202,7 +202,16 @@ function formatMemory(byteCount: number): string {
     value /= 1024;
     unit = next;
   }
-  return `${Number(value.toFixed(1))}${unit}`;
+  if (Math.round(value) >= 1024 && unit !== "P") {
+    value /= 1024;
+    unit =
+      ["B", "K", "M", "G", "T", "P"][
+        ["B", "K", "M", "G", "T", "P"].indexOf(unit) + 1
+      ] ?? unit;
+  }
+  const rounded = Number(value.toPrecision(2));
+  const text = rounded < 10 ? rounded.toFixed(1) : String(rounded);
+  return `${text}${unit}`;
 }
 
 export function resourceLine(
@@ -216,23 +225,16 @@ export function resourceLine(
     `workers ${workers ?? "?"}`,
     `cpu ${cpu === undefined ? "?" : `${cpu}%`}`,
   ];
-  const memory = (value: number, compact: boolean) => {
-    const formatted = formatMemory(value);
-    if (!compact || value >= 1024 ** 3) return formatted;
-    return formatted.replace(/\.\d+(?=[KM]$)/u, "");
-  };
-  const parts = (compact: boolean) => [
+  const parts = () => [
     ...prefix,
-    ...(ram === undefined ? [] : [`ram ${memory(ram, compact)}`]),
-    ...(vram === undefined ? [] : [`vram ${memory(vram, compact)}`]),
+    ...(ram === undefined ? [] : [`ram ${formatMemory(ram)}`]),
+    ...(vram === undefined ? [] : [`vram ${formatMemory(vram)}`]),
   ];
-  let line = parts(false).join(" · ");
+  let line = parts().join(" · ");
   if (line.length <= width) return line;
-  line = parts(false).join(" ");
+  line = parts().join(" ");
   if (line.length <= width) return line;
-  line = parts(true).join(" ");
-  if (line.length <= width) return line;
-  line = parts(true)
+  line = parts()
     .filter((part) => !part.startsWith("vram "))
     .join(" ");
   return line.slice(0, width);

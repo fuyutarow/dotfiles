@@ -45,14 +45,40 @@ function doingText(
   return `${DIM}│${RST} working · ${activity}`;
 }
 
-function costText(value: number | undefined, width: number): string {
+function costText(label: string, width: number): string {
   if (width === 0) return "";
-  return `${padDisplay(costLabel(value), width)} `;
+  return `${padDisplay(label, width)} `;
 }
-function costLabel(value: number | undefined): string {
-  return value === undefined
-    ? `$${renderUnavailable(unavailable("not reported"))}`
-    : formatCostUsd(value);
+function compactTokens(n: number): string {
+  if (n < 1000) return `${n}`;
+  const [div, unit] = n < 1e6 ? [1e3, "k"] : [1e6, "M"];
+  const v = n / (div ?? 1);
+  return `${v < 10 ? v.toFixed(1) : Math.round(v)}${unit}`;
+}
+/** Token usage of a run whose vendor has not reported cost yet, or undefined. */
+function usageLabel(
+  usage: NonNullable<RouteRun["doing"]>["usage"],
+): string | undefined {
+  if (usage === undefined) return undefined;
+  let input: string | undefined;
+  if (usage.cached !== undefined && usage.cached > 0)
+    input = `${compactTokens(usage.cached)} cached`;
+  else if (usage.input !== undefined)
+    input = `${compactTokens(usage.input)} in`;
+  const output =
+    usage.output === undefined
+      ? undefined
+      : `${compactTokens(usage.output)} out`;
+  const parts = [input, output].filter((v) => v !== undefined);
+  return parts.length === 0 ? undefined : parts.join(" · ");
+}
+function costLabel(value: number | undefined, run: RouteRun): string {
+  if (value !== undefined) return formatCostUsd(value);
+  if (run.coreState !== "ended") {
+    const usage = usageLabel(run.doing?.usage);
+    if (usage !== undefined) return usage;
+  }
+  return `$${renderUnavailable(unavailable("not reported"))}`;
 }
 const RUN_LABEL_WIDTH = 32;
 const TICKET_NAME_WIDTH = 48;
@@ -122,7 +148,7 @@ export function routeLines(
       ? (r.doing?.costUsd ?? r.markerCostUsd)
       : (r.markerCostUsd ?? r.doing?.costUsd),
   );
-  const costLabels = costs.map((value) => costLabel(value));
+  const costLabels = shown.map((run, i) => costLabel(costs[i], run));
   const costWidth = Math.max(
     0,
     ...costLabels.map((value) => Bun.stringWidth(value)),
@@ -142,7 +168,7 @@ export function routeLines(
   );
   const lines = shown.map(
     (r, i) =>
-      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${DIM}${padDisplay(names[i] ?? "", nameWidth)}${RST} ${doingText(r.doing, r.phase, r.coreState)}`,
+      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costLabels[i] ?? "", costWidth)}${DIM}${padDisplay(names[i] ?? "", nameWidth)}${RST} ${doingText(r.doing, r.phase, r.coreState)}`,
   );
   return lines;
 }

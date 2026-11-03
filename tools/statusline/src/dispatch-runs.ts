@@ -26,6 +26,12 @@ export interface RouteRun {
         files: number | undefined;
         ageSecs: number | undefined;
         costUsd?: number;
+        // tokens agx recorded while the vendor has not reported cost yet
+        usage?: {
+          input: number | undefined;
+          cached: number | undefined;
+          output: number | undefined;
+        };
         session?: string; // the vendor's id for the worker (codex thread, claude session)
       }
     | undefined;

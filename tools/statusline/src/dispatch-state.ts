@@ -10,6 +10,13 @@ const Progress = z.object({
   commands: z.number().nonnegative().nullable(),
   files: z.number().nonnegative().nullable(),
   cost_usd: z.number().nonnegative().nullable(),
+  usage: z
+    .object({
+      input_tokens: z.number().nonnegative().nullish(),
+      cached_input_tokens: z.number().nonnegative().nullish(),
+      output_tokens: z.number().nonnegative().nullish(),
+    })
+    .nullish(),
   session: z.string().nullable(),
 });
 export function listingProgress(
@@ -39,6 +46,15 @@ export function listingProgress(
     files: p.files ?? undefined,
     ageSecs,
     ...(p.cost_usd === null ? {} : { costUsd: p.cost_usd }),
+    ...(p.usage === null || p.usage === undefined
+      ? {}
+      : {
+          usage: {
+            input: p.usage.input_tokens ?? undefined,
+            cached: p.usage.cached_input_tokens ?? undefined,
+            output: p.usage.output_tokens ?? undefined,
+          },
+        }),
     ...(p.session === null ? {} : { session: p.session }),
   };
 }

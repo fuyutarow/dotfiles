@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.2 — 2026-11-03
+
+- Worker rows show recorded token usage while the vendor has not reported cost; 'not reported' only after the run ends
+
 ## 0.23.1 — 2026-11-03
 
 - Dispatch worker rows name the ticket once; worker and workspace appear only when they differ from it

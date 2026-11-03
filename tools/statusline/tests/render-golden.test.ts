@@ -108,7 +108,7 @@ describe("statusline render golden", () => {
     workerLines[0] = "<prompt-head>";
     expect(workerLines.join("\n")).toMatchSnapshot();
     expect(workerLines.join("\n")).toContain(
-      "agt_x@ws_x tkt_STATUSLINE-WORKER-ROWS",
+      "STATUSLINE-WORKER-ROWS @x (agt_x)",
     );
     expect(workerLines.join("\n")).not.toMatch(/01a1|082b|agx-x/u);
 

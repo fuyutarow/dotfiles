@@ -14,5 +14,5 @@ fixture@example.test | Session: fixture-session
 fixture-agent | Opus | high | rc:off | Ctx: 1.00k 25%
 Rate: claude n/a (input has no Claude rate limits) · 5h n/a (input has no Claude 5h rate limit) · 7d n/a (input has no Claude 7d rate limit) | codex n/a (unavailable) | Jev n/a (fixture unavailable)
 Sys: CPU 12% · RAM 25% (2.0/8.0G) · tmp n/a (not sampled)
-terra-high 1m30s $0.03 agt_x@ws_x tkt_STATUSLINE-WORKER-ROWS │ working · no event yet"
+terra-high 1m30s $0.03 STATUSLINE-WORKER-ROWS @x (agt_x) │ working · no event yet"
 `;

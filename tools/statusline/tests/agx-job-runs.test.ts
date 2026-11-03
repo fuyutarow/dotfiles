@@ -65,10 +65,10 @@ test("live rows render the session's workers with their complete activity", () =
   const lines = plain.split("\n").filter((line) => line.startsWith("sol-high"));
   expect(lines).toHaveLength(2);
   expect(lines[0]).toMatch(
-    /sol-high\s+1m10s\s+\$0\.12\s+agt_first@ws_first\s+tkt_first\s+│ working · \$ test · 3 cmd · 2 files/u,
+    /sol-high\s+1m10s\s+\$0\.12\s+first\s+│ working · \$ test · 3 cmd · 2 files/u,
   );
   expect(lines[1]).toMatch(
-    /sol-high\s+0m40s\s+\$0\.12\s+agt_second@ws_second\s+tkt_second\s+│ working · \$ test · 3 cmd · 2 files/u,
+    /sol-high\s+0m40s\s+\$0\.12\s+second\s+│ working · \$ test · 3 cmd · 2 files/u,
   );
   expect(plain).not.toContain("tkt_other");
   expect(plain).toContain("+1 workers outside session");
@@ -84,7 +84,7 @@ test("live agx jobs survive a process scan timeout and count other sessions", ()
   }));
   const output = render({ ...base, liveAgxJobs: ok(rows) });
   for (const ticket of ["one", "two", "three"])
-    expect(output).toContain(`tkt_${ticket}`);
+    expect(output).toContain(ticket);
   expect(output).toContain("+2 workers outside session");
 });
 test("owner retains usable rows with their age and expires them after ten minutes", async () => {
@@ -182,7 +182,7 @@ test("fake agx executable supplies live jobs independently of ps and times out",
     expect(frame.liveAgxJobs?.isOk()).toBe(true);
     expect(frame.liveAgxJobs?.unwrapOr([])).toHaveLength(5);
     for (const ticket of ["one", "two", "three"])
-      expect(output).toContain(`tkt_${ticket}`);
+      expect(output).toContain(ticket);
     expect(output).toContain("+2 workers outside session");
     await writeFile(path, "#!/bin/sh\nexec /bin/sleep 3\n");
     const timeout = await readAgxJobRuns(50);

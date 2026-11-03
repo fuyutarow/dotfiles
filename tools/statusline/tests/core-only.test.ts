@@ -141,7 +141,7 @@ test("fixed core outputs are rendered verbatim; bf3bb781 has no working row and 
   });
   expect(out).toContain("+11 workers outside session here");
   expect(out).not.toContain("outside-home 2");
-  expect(out).toContain("tkt_live-ticket");
+  expect(out).toContain("live-ticket");
   expect(out).toContain("0m42s");
   expect(out).not.toContain("finished-ticket");
   expect(out).not.toContain("lost 8");
@@ -222,8 +222,11 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
   expect(scan.runs.filter((run) => run.alive)).toHaveLength(3);
   const rows = routeLines(scan.runs, codexSession);
   expect(rows).toHaveLength(2);
-  expect(rows.join("\n")).toContain("agt_herdr-display-regression-oct21");
-  expect(rows.join("\n")).toContain("agt_gpu-self-clear-window");
+  expect(rows.join("\n")).toContain("herdr-display-regression-oct21");
+  expect(rows.join("\n")).toContain("gpu-self-clear-window");
+  // The worker and workspace default to the ticket's name, so it appears once.
+  expect(rows.join("\n")).not.toContain("agt_gpu-self-clear-window");
+  expect(rows.join("\n")).not.toContain("@gpu-self-clear-window");
   expect(rows.join("\n")).not.toContain("claude-session-worker");
   expect(fleetLine(scan)).toContain(
     `+1 workers outside session ${codexSession}`,
@@ -258,8 +261,8 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
     },
     { layout: "shared" },
   );
-  expect(shared).toContain("agt_herdr-display-regression-oct21");
-  expect(shared).toContain("agt_gpu-self-clear-window");
+  expect(shared).toContain("herdr-display-regression-oct21");
+  expect(shared).toContain("gpu-self-clear-window");
   expect(shared).not.toContain("agt_claude-session-worker");
   expect(shared).not.toContain("agt_outside-inventory-worker");
   expect(shared).toContain("+1 workers outside 2 displayed sessions");
@@ -287,7 +290,7 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
     },
     { layout: "shared" },
   );
-  expect(ambientShared).toContain("agt_herdr-display-regression-oct21");
+  expect(ambientShared).toContain("herdr-display-regression-oct21");
   expect(ambientShared).toContain(`+1 workers outside session ${codexSession}`);
 
   const explicit = await readCoreRuns(

@@ -1,6 +1,6 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`worker snapshot uses doctor's classification and hides vendor sessions 1`] = `
-"terra-high 1m30s $n/a (not reported) agt_x@ws_x tkt_old-unit │ working
-terra-high 1m30s $n/a (not reported) agt_x@ws_x tkt_new-unit │ working"
+"terra-high 1m30s $n/a (not reported) old-unit @x (agt_x) │ working
+terra-high 1m30s $n/a (not reported) new-unit @x (agt_x) │ working"
 `;

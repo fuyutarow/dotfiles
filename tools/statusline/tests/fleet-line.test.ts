@@ -268,7 +268,7 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
       const df = {cwd:${JSON.stringify(home)},sid:"here",model:"fixture",wfOn:false,rc:"off",rlModel:[],
         routes:ok(scan),vram:undefined,disks:ok([]),cpuPct:ok(0),ram:ok({pct:0,frac:"0/1G"})};
       const lines = render(df).split("\\n").filter(line => line.includes("workers outside session"));
-      if (${age} >= 0) expect(render(df)).toContain("agt_model-layer@ws_model-layer tkt_model-layer");
+      if (${age} >= 0) expect(render(df)).toContain("model-layer");
       expect(lines).toHaveLength(${age >= 0 ? 1 : 0});
       expect(spawned).not.toHaveBeenCalled();
       for (const spy of childSpies) expect(spy).not.toHaveBeenCalled();

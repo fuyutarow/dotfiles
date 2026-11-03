@@ -87,7 +87,7 @@ test("only running workers: worker rows remain and the bottom row is absent", as
   seed(root, baseSnapshot());
   const scan = await readCoreRuns(ownerEnv(root), "here", root);
   const text = output(scan);
-  expect(text.split("\n").at(-1)).toContain("tkt_working │ working");
+  expect(text.split("\n").at(-1)).toContain("working │ working");
   expect(fleetLine(scan)).toBe("");
   for (const token of [
     "agx fresh",

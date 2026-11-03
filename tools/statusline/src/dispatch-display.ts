@@ -55,6 +55,30 @@ function costLabel(value: number | undefined): string {
     : formatCostUsd(value);
 }
 const RUN_LABEL_WIDTH = 32;
+const TICKET_NAME_WIDTH = 48;
+const WORKER_NAME_PREFIX = /^(?:agx-|agt_)/u;
+const WORKSPACE_NAME_PREFIX = /^ws_/u;
+/**
+ * The ticket is the row's name. The workspace and worker are appended only
+ * when they carry something the ticket does not: agx names the worker
+ * agx-<ticket> and the workspace ws_<ticket> by default.
+ */
+function runName(run: RouteRun): string {
+  const resume = run.pickSource === "resume";
+  const ticket = resume
+    ? run.label.replace(/^resume(?::|\b)\s*/iu, "")
+    : run.label;
+  const shownTicket = truncateDisplay(ticket, TICKET_NAME_WIDTH);
+  const head = resume ? `resume: ${shownTicket}` : shownTicket;
+  const workspace = run.workspaceName?.replace(WORKSPACE_NAME_PREFIX, "");
+  const worker = run.workerName?.replace(WORKER_NAME_PREFIX, "");
+  const parts = [head];
+  if (workspace !== undefined && workspace !== "" && workspace !== ticket)
+    parts.push(`@${workspace}`);
+  if (worker !== undefined && worker !== "" && worker !== ticket)
+    parts.push(`(agt_${worker})`);
+  return parts.join(" ");
+}
 function truncateDisplay(value: string, width: number): string {
   let result = "";
   for (const char of value) {
@@ -103,23 +127,7 @@ export function routeLines(
     0,
     ...costLabels.map((value) => Bun.stringWidth(value)),
   );
-  const labels = shown.map((r) =>
-    truncateDisplay(
-      r.pickSource === "resume"
-        ? `resume: tkt_${r.label.replace(/^resume(?::|\b)\s*/iu, "")}`
-        : `tkt_${r.label}`,
-      RUN_LABEL_WIDTH,
-    ),
-  );
-  const identities = shown.map((run) =>
-    run.workerName === undefined || run.workspaceName === undefined
-      ? ""
-      : `${run.workerName.replace(/^agx-/u, "agt_")}@${run.workspaceName}`,
-  );
-  const identityWidth = Math.max(
-    0,
-    ...identities.map((value) => Bun.stringWidth(value)),
-  );
+  const names = shown.map((run) => runName(run));
   const choiceWidth = Math.max(
     0,
     ...choices.map((value) => Bun.stringWidth(value)),
@@ -128,13 +136,13 @@ export function routeLines(
     0,
     ...elapsed.map((value) => Bun.stringWidth(value)),
   );
-  const labelWidth = Math.max(
+  const nameWidth = Math.max(
     0,
-    ...labels.map((value) => Bun.stringWidth(value)),
+    ...names.map((value) => Bun.stringWidth(value)),
   );
   const lines = shown.map(
     (r, i) =>
-      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${DIM}${padDisplay(identities[i] ?? "", identityWidth)}${identities[i] === "" ? "" : " "}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing, r.phase, r.coreState)}`,
+      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${DIM}${padDisplay(names[i] ?? "", nameWidth)}${RST} ${doingText(r.doing, r.phase, r.coreState)}`,
   );
   return lines;
 }

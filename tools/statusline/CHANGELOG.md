@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.1 — 2026-11-03
+
+- Dispatch worker rows name the ticket once; worker and workspace appear only when they differ from it
+
 ## 0.23.0 — 2026-11-02
 
 - Remove the Job statusline row and its process scan

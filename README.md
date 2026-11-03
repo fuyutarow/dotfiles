@@ -349,7 +349,10 @@ When Google Drive for Windows is available as `G:`, `wsl/wsl.conf` enables WSL a
 `/mnt`. Google Drive's virtual `G:` is not found by WSL automount. Run `mise run wsl:drive-mount`
 once to install the declared drvfs entry from `wsl/gdrive.fstab` into `/etc/fstab`; WSL will mount
 it at `/mnt/g` on later distro starts. `mise run doctor` reports when
-that mount is absent. `mise run link:dots` declares `~/Google Drive` for the drive root and
+that mount is absent. If `G:` goes away on the Windows side, the drvfs mount stays behind and
+`stat /mnt/g` fails with ENODEV; `link:dots` and `doctor` then print
+`sudo umount -l /mnt/g && mise run wsl:drive-mount && sudo mount /mnt/g` (the lazy unmount detaches
+the stale mount; `wsl:drive-mount` treats an existing mount point as prepared). `mise run link:dots` declares `~/Google Drive` for the drive root and
 discovers the `Personal-Drive` directory under `My Drive` for `~/Personal-Drive`. The discovered
 target is cached in an untracked host-specific file under `~/.local/state/dotfiles/`; an existing
 valid link seeds the cache on already-deployed hosts. A fresh discovery walks at most six levels

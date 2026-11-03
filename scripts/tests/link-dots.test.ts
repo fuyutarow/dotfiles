@@ -366,7 +366,11 @@ test.each(["mac", "wsl", "linux"] as const)(
     expect(readFileSync(join(directory, "repos/kept.toml"), "utf8")).toBe(
       "repo fixture\n",
     );
-    expect(surfaces().filter((row) => row.sources.includes(entry[1]))).toEqual([
+    expect(
+      surfaces().filter(
+        (row) => row.kind === "link" && row.sources.includes(entry[1]),
+      ),
+    ).toEqual([
       {
         kind: "link",
         when: "all",
@@ -662,7 +666,7 @@ test.each(["ENODEV", "ENOTCONN", "EIO", "ESTALE"])(
     );
     expect(result.exitCode, result.stderr.toString()).toBe(0);
     expect(result.stderr.toString()).toBe(
-      `skip (unreachable ${code}): /mnt/g; repair: mise run wsl:drive-mount && sudo mount /mnt/g\n`,
+      `skip (unreachable ${code}): /mnt/g; repair: sudo umount -l /mnt/g && mise run wsl:drive-mount && sudo mount /mnt/g\n`,
     );
     expect(readlinkSync(join(ctx.home, ".zshenv"))).toBe(
       join(REPO, "zsh/zshenv"),
@@ -815,7 +819,7 @@ describe("CLI", () => {
       }
       expect(r.exitCode, r.stderr.toString()).toBe(1);
       expect(r.stderr.toString().trim().split("\n")).toEqual([
-        `skip (unreachable ${code}): ${failed}; repair: mise run wsl:drive-mount && sudo mount /mnt/g`,
+        `skip (unreachable ${code}): ${failed}; repair: sudo umount -l /mnt/g && mise run wsl:drive-mount && sudo mount /mnt/g`,
       ]);
       for (const [when, src, dst] of LINKS) {
         if (

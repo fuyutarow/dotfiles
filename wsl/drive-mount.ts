@@ -4,8 +4,34 @@ import { chmod, mkdir, rename, stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { obj } from "../agents/hooks/narrow.ts";
 
 const FSTAB = "/etc/fstab";
+
+/** Repair for a /mnt/g that is not mounted at all. One definition; link:dots and doctor print it. */
+export const DRIVE_MOUNT_REPAIR =
+  "mise run wsl:drive-mount && sudo mount /mnt/g";
+/**
+ * Repair for a stale drvfs mount (listed in /proc/mounts, stat fails ENODEV): G: went away on the
+ * Windows side and the 9p mount was left behind. A lazy unmount detaches it even though stat fails.
+ */
+export const STALE_DRIVE_MOUNT_REPAIR =
+  "sudo umount -l /mnt/g && mise run wsl:drive-mount && sudo mount /mnt/g";
+
+/** A mount point that exists, even one whose stat fails (stale mount), is already prepared. */
+export function mountDirOutcome(
+  dir: string,
+  error: unknown,
+): Error | undefined {
+  return obj(error)?.["code"] === "EEXIST"
+    ? undefined
+    : new Error(`cannot prepare ${dir}: ${errorMessage(error)}`);
+}
+
+async function prepareMountDir(dir: string): Promise<Error | undefined> {
+  const made = await attempt(() => mkdir(dir, { recursive: true }));
+  return made.ok ? undefined : mountDirOutcome(dir, made.error);
+}
 
 export function ensureFstabEntry(
   current: string,
@@ -100,11 +126,9 @@ async function main(): Promise<void> {
     }
     return;
   }
-  const mountDir = await attempt(() => mkdir("/mnt/g", { recursive: true }));
-  if (!mountDir.ok) {
-    process.stderr.write(
-      `FATAL: cannot prepare /mnt/g: ${errorMessage(mountDir.error)}\n`,
-    );
+  const mountDir = await prepareMountDir("/mnt/g");
+  if (mountDir !== undefined) {
+    process.stderr.write(`FATAL: ${mountDir.message}\n`);
     process.exitCode = 2;
     return;
   }

@@ -53,6 +53,7 @@ import { fromThrowable } from "neverthrow";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { deployCccDaemon } from "../cocoindex/deploy-daemon.ts";
+import { STALE_DRIVE_MOUNT_REPAIR } from "../wsl/drive-mount.ts";
 import { renderRefusal } from "./render-source.ts";
 import {
   ETC_LINKS,
@@ -106,7 +107,7 @@ function recordPathError(ctx: Ctx, path: string, error: unknown): void {
   if (ctx.unreachable.has(failedPath)) return;
   ctx.unreachable.add(failedPath);
   process.stderr.write(
-    `skip (unreachable ${parsed.data.code}): ${failedPath}; repair: mise run wsl:drive-mount && sudo mount /mnt/g\n`,
+    `skip (unreachable ${parsed.data.code}): ${failedPath}; repair: ${STALE_DRIVE_MOUNT_REPAIR}\n`,
   );
   if (ctx.mode === "check")
     drift(ctx, `${failedPath} (unreachable ${parsed.data.code})`);

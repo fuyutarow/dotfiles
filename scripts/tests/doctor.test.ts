@@ -850,6 +850,24 @@ describe("doctor", () => {
     expect(finding.fix).toBe("mise run wsl:drive-mount && sudo mount /mnt/g");
   });
 
+  test("google-drive: WSL stale drvfs mount (listed, stat ENODEV) prints the unmount-first repair", async () => {
+    const finding = await checkGoogleDrive({
+      home: tmp("doctor-drive-stale-home-"),
+      dotfiles: REPO,
+      isMac: false,
+      isWsl: true,
+      isCoreBox: false,
+      mountInfo:
+        "99 23 0:50 / /mnt/g rw,relatime - 9p G: rw,aname=drvfs;path=G:\n",
+      statMountCode: () => Promise.resolve("ENODEV"),
+    });
+    expect(finding.verdict).toBe("FAIL");
+    expect(finding.detail).toContain("stale mount at /mnt/g (ENODEV)");
+    expect(finding.fix).toBe(
+      "sudo umount -l /mnt/g && mise run wsl:drive-mount && sudo mount /mnt/g",
+    );
+  });
+
   test("rendered reference uses resolved Bun with a temporary HOME", () => {
     const scratch = tmp("doctor-render-home-");
     const target = tmp("doctor-render-target-");

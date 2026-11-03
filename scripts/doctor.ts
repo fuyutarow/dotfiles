@@ -60,10 +60,15 @@ import {
   readlink,
   realpath,
   rm,
+  stat as statPath,
   statfs,
   writeFile,
   access,
 } from "node:fs/promises";
+import {
+  DRIVE_MOUNT_REPAIR,
+  STALE_DRIVE_MOUNT_REPAIR,
+} from "../wsl/drive-mount.ts";
 import { constants, type Stats } from "node:fs";
 import { consola } from "consola";
 import { bunRequirement, checkBunRuntime } from "./bun-runtime.ts";
@@ -137,6 +142,8 @@ export type Ctx = {
   isMac: boolean;
   isWsl: boolean;
   mountInfo?: string;
+  /** Test seam: the errno code of stat(/mnt/g), undefined when it succeeds (default: real stat). */
+  statMountCode?: (path: string) => Promise<string | undefined>;
   /** Plain Linux carries core only; on-demand tools are installed as needed. */
   isCoreBox: boolean;
 };
@@ -268,6 +275,15 @@ export async function checkLinks(ctx: Ctx): Promise<Finding> {
   );
 }
 
+const STALE_CODES = new Set(["ENODEV", "ENOTCONN", "EIO", "ESTALE"]);
+
+async function statErrorCode(path: string): Promise<string | undefined> {
+  const probe = await attempt(() => statPath(path));
+  if (probe.ok) return undefined;
+  const code = obj(probe.error)?.["code"];
+  return typeof code === "string" ? code : undefined;
+}
+
 export async function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
   if (!ctx.isMac && !ctx.isWsl)
     return skip("google-drive", "Google Drive links apply to macOS and WSL");
@@ -284,8 +300,16 @@ export async function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
       return fail(
         "google-drive",
         "Windows Google Drive G: is not mounted at /mnt/g",
-        "mise run wsl:drive-mount && sudo mount /mnt/g",
+        DRIVE_MOUNT_REPAIR,
         ["/mnt/g is not a mounted filesystem"],
+      );
+    const code = await (ctx.statMountCode ?? statErrorCode)("/mnt/g");
+    if (code !== undefined && STALE_CODES.has(code))
+      return fail(
+        "google-drive",
+        `Windows Google Drive G: is a stale mount at /mnt/g (${code})`,
+        STALE_DRIVE_MOUNT_REPAIR,
+        [`/mnt/g is listed in mountinfo but stat fails ${code}`],
       );
   }
   const targets = await googleDriveTargets(

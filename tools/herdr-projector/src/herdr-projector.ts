@@ -195,23 +195,12 @@ export async function paneResourcePids(
 }
 
 function formatMemory(byteCount: number): string {
-  let value = byteCount;
-  let unit = "B";
-  for (const next of ["K", "M", "G", "T", "P"]) {
-    if (value < 1024) break;
-    value /= 1024;
-    unit = next;
-  }
-  if (Math.round(value) >= 1024 && unit !== "P") {
-    value /= 1024;
-    unit =
-      ["B", "K", "M", "G", "T", "P"][
-        ["B", "K", "M", "G", "T", "P"].indexOf(unit) + 1
-      ] ?? unit;
-  }
-  const rounded = Number(value.toPrecision(2));
-  const text = rounded < 10 ? rounded.toFixed(1) : String(rounded);
-  return `${text}${unit}`;
+  // Always GiB with two significant figures, so sessions compare at a glance.
+  const gib = byteCount / 1024 ** 3;
+  const rounded = Number(gib.toPrecision(2));
+  const text =
+    rounded < 10 ? rounded.toPrecision(2) : String(Math.round(rounded));
+  return `${text}G`;
 }
 
 export function resourceLine(

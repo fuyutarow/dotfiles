@@ -2,6 +2,12 @@
 // n/a segment, and the usage-percent color thresholds. Split out of the former Claude statusline
 // (2026-10-06) so a reader of host load needs none of the statusline's stdin machinery.
 
+import {
+  USAGE_RED_PCT,
+  USAGE_YELLOW_PCT,
+  usageLevel,
+} from "@dotfiles/shared/src/usage-level.ts";
+
 // Presentation thresholds mirror the storage gate; tmp-headroom.test.ts enforces parity.
 // Importing that executable gate here loads its shell parser on every statusline render.
 export const TMP_INODE_WARN_PCT = 85;
@@ -40,9 +46,15 @@ export function naSegment(label: string, why: string): string {
   return roles.unavailable(label, unavailable(why));
 }
 // Usage-percent -> rounded int + threshold color (green <70 / yellow <90 / red >=90).
-export function pctColor(i: number, yellow = 70, red = 90): string {
-  if (i >= red) return "38;5;167";
-  if (i >= yellow) return "38;5;178";
+// The thresholds live in tools/shared (also read by the herdr projector's cpu token).
+export function pctColor(
+  i: number,
+  yellow = USAGE_YELLOW_PCT,
+  red = USAGE_RED_PCT,
+): string {
+  const level = usageLevel(i, yellow, red);
+  if (level === "hi") return "38;5;167";
+  if (level === "mid") return "38;5;178";
   return "38;5;71";
 }
 // Rate usage is colored by its pace through the reset window. Until 2% has elapsed,

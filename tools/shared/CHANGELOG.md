@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.0 — 2026-11-03
+
+- add usage-level.ts: one declaration of the green/yellow/red usage thresholds
+
 ## 0.19.7 — 2026-10-31
 
 - Add async socket discovery helpers.

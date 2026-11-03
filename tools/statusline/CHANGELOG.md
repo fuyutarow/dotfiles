@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.4 — 2026-11-03
+
+- usage-percent thresholds now come from tools/shared/usage-level.ts (rendering unchanged)
+
 ## 0.23.3 — 2026-11-03
 
 - Claude rate row: omit a rate window Claude Code did not send (e.g. no 5h on plans without one) and print 'claude none (no API response yet)' before the first API response; only a sent-but-unreadable window stays an amber n/a

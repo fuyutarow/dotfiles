@@ -20,6 +20,7 @@ import {
   readCodexNativeTitle,
   type CodexNativeTitleRead,
 } from "@dotfiles/shared/src/codex-native-title.ts";
+import { usageLevel } from "@dotfiles/shared/src/usage-level.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const argv = process.argv.slice(2);
@@ -203,22 +204,27 @@ function formatMemory(byteCount: number): string {
   return `${text}G`;
 }
 
-export function resourceLine(
-  workers: number | undefined,
-  cpu: number | undefined,
-  ram: number | undefined,
-  vram: number | undefined,
-  width = 28,
-): string {
-  const prefix = [
-    `workers ${workers ?? "?"}`,
-    `cpu ${cpu === undefined ? "?" : `${cpu}%`}`,
-  ];
-  const parts = () => [
-    ...prefix,
-    ...(ram === undefined ? [] : [`ram ${formatMemory(ram)}`]),
-    ...(vram === undefined ? [] : [`vram ${formatMemory(vram)}`]),
-  ];
+/** herdr joins adjacent sidebar tokens with this separator; it is not ours to shorten. */
+const HERDR_TOKEN_SEPARATOR = " · ";
+export const CPU_TOKENS = ["cpu_lo", "cpu_mid", "cpu_hi"] as const;
+export type CpuToken = (typeof CPU_TOKENS)[number];
+export type ResourceTokens = {
+  /** The cpu reading as its own token so herdr can style it; absent when cpu is unknown. */
+  cpu?: { token: CpuToken; text: string };
+  /** Everything else, one grey token. A cpu reading that is unknown ("cpu ?") stays here. */
+  resources: string;
+};
+
+/** Exactly one cpu_* token is reported; the other two are cleared. */
+export function cpuTokenArgs(cpu: ResourceTokens["cpu"]): string[] {
+  return CPU_TOKENS.flatMap((name) =>
+    cpu?.token === name
+      ? ["--token", `${name}=${cpu.text}`]
+      : ["--clear-token", name],
+  );
+}
+
+function fitParts(parts: () => string[], width: number): string {
   let line = parts().join(" · ");
   if (line.length <= width) return line;
   line = parts().join(" ");
@@ -227,6 +233,39 @@ export function resourceLine(
     .filter((part) => !part.startsWith("vram "))
     .join(" ");
   return line.slice(0, width);
+}
+
+/**
+ * The sidebar row is `cpu NN% · workers N ram X`: cpu is a token of its own, chosen by load
+ * level (thresholds from tools/shared), so herdr/config.toml can color it; the rest is one token.
+ * `width` bounds the whole row as herdr will draw it, so the rest gets what the cpu token and
+ * herdr's single separator leave over.
+ */
+export function resourceTokens(
+  workers: number | undefined,
+  cpu: number | undefined,
+  ram: number | undefined,
+  vram: number | undefined,
+  width = 28,
+): ResourceTokens {
+  const memory = [
+    ...(ram === undefined ? [] : [`ram ${formatMemory(ram)}`]),
+    ...(vram === undefined ? [] : [`vram ${formatMemory(vram)}`]),
+  ];
+  const head = `workers ${workers ?? "?"}`;
+  if (cpu === undefined)
+    return {
+      resources: fitParts(() => [head, "cpu ?", ...memory], width),
+    };
+  const text = `cpu ${cpu}%`;
+  const level = usageLevel(Math.round(cpu));
+  return {
+    cpu: { token: `cpu_${level}`, text },
+    resources: fitParts(
+      () => [head, ...memory],
+      width - text.length - HERDR_TOKEN_SEPARATOR.length,
+    ),
+  };
 }
 
 /** Native session_index is an append log: a rename adds a newer exact-ID row. */
@@ -1019,9 +1058,16 @@ export async function projectAgents(
         memorySession === undefined || memorySession.vram_bytes === null
           ? undefined
           : memorySession.vram_bytes;
+      const tokens = resourceTokens(
+        cpuSession?.workers?.count,
+        resource?.cpu_pct,
+        ram,
+        vram,
+      );
       cpuArgs.push(
         "--token",
-        `resources=${resourceLine(cpuSession?.workers?.count, resource?.cpu_pct, ram, vram)}`,
+        `resources=${tokens.resources}`,
+        ...cpuTokenArgs(tokens.cpu),
         "--clear-token",
         "workers",
         "--clear-token",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 — 2026-11-03
+
+- sidebar reports cpu as its own cpu_lo/cpu_mid/cpu_hi token by load level so herdr colors it; the rest stays one grey resources token
+
 ## 0.3.5 — 2026-11-03
 
 - sidebar resource row prints ram and vram always in GiB with two significant figures

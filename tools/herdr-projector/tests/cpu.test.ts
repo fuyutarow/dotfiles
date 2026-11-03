@@ -135,4 +135,4 @@ if (process.argv[2] === "agent") {
   });
   for await (const path of cache) await Bun.write(path, "corrupt");
   expect((await cycle()).stdout).not.toContain("unchanged");
-});
+}, 60_000); // spawns several CLI cycles; ~11 s on a loaded host, above bun's 5 s default

@@ -120,12 +120,19 @@ agent_panel_sort = "spaces"
 # matters more than looking extra-subdued. A bare token would fall back to the hardcoded
 # `overlay0`+dim pairing, which measured near-invisible against this theme's background (found
 # 2026-09-03) — hence the explicit `fg` on all three.
-# Row 3 is the projector’s width-bounded workers, CPU, RAM and available VRAM line.
+# Row 3 is the projector's width-bounded CPU / workers / RAM / VRAM line. CPU is its own token so
+# it can be colored alone (herdr strips control characters from reported values and styles per
+# token): the projector reports exactly one of $cpu_lo / $cpu_mid / $cpu_hi (the others are
+# cleared and unreported tokens disappear), chosen with the statusline's thresholds
+# (tools/shared/src/usage-level.ts: green <70, yellow 70-89, red >=90), and each is styled with the
+# statusline's colors (ANSI-256 idx 71 / 178 / 167 = #5faf5f / #d7af00 / #d75f5f). Everything else
+# stays one grey $resources token, so the row gains a single herdr " · " separator:
+# "cpu 99% · workers 3 ram 8.5G". The projector budgets the grey token for that separator.
 [ui.sidebar.agents]
 rows = [
   ["state_icon", { token = "tab", fg = "#7f848e", bold = true, dim = false }],
   [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc"],
-  [{ token = "$resources", fg = "#7f848e", bold = false, dim = false }],
+  [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
   # Custom reported agents use these default rows, not rows_by_agent overrides.
   # Unreported tokens disappear. See https://herdr.dev/docs/configuration/#sidebar-row-layouts.
   ["$btm_summary"],
@@ -144,12 +151,12 @@ rows = [
 claude = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
   [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc"],
-  [{ token = "$resources", fg = "#7f848e", bold = false, dim = false }],
+  [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
 ]
 codex = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
   [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc"],
-  [{ token = "$resources", fg = "#7f848e", bold = false, dim = false }],
+  [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
 ]
 [session]
 # resume_agents_on_restore = true (default)

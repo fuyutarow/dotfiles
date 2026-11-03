@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.3 — 2026-11-03
+
+- Claude rate row: omit a rate window Claude Code did not send (e.g. no 5h on plans without one) and print 'claude none (no API response yet)' before the first API response; only a sent-but-unreadable window stays an amber n/a
+
 ## 0.23.2 — 2026-11-03
 
 - Worker rows show recorded token usage while the vendor has not reported cost; 'not reported' only after the run ends

@@ -39,6 +39,11 @@ export interface Dataframe {
   rl5Reset?: number | undefined;
   rl7?: number | undefined;
   rl7Reset?: number | undefined;
+  /** The payload carried `rate_limits` at all (Claude Code sends it only after the first API response). */
+  rlSent?: boolean | undefined;
+  /** Set only when that window was sent but unreadable; an unsent window is a legitimate absence. */
+  rl5Why?: string | undefined;
+  rl7Why?: string | undefined;
   rlModel: ModelLimit[];
   accountWhy?: string | undefined; // ~/.claude.json unreadable / unexpected shape: email unknown
   modelCapsWhy?: string | undefined; // same, for the per-model weekly caps

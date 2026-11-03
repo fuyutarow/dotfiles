@@ -309,14 +309,14 @@ describe("statusline other rows", () => {
   test("an empty payload prints n/a for Ctx, Rate and diff instead of 0 or nothing", () => {
     const text = render({ bin: binWith({}), payload: {} }).text;
     expect(text).toContain("Ctx: n/a");
-    expect(text).toContain(
-      "Rate: claude n/a (input has no Claude rate limits) · 5h n/a (input has no Claude 5h rate limit) · 7d n/a (input has no Claude 7d rate limit)",
-    );
+    // Claude Code sends rate_limits only after the first API response: an absence, not a failure.
+    expect(text).toContain("Rate: claude none (no API response yet)");
+    expect(text).not.toContain("5h n/a");
     expect(text).toContain("diff n/a (repository not sampled)");
     expect(text).not.toContain("(+0,-0)");
   });
 
-  test("a payload with only the 7d window says the 5h window is n/a", () => {
+  test("a payload with only the 7d window omits the 5h cell instead of printing n/a", () => {
     const text = render({
       bin: binWith({}),
       payload: {
@@ -325,7 +325,8 @@ describe("statusline other rows", () => {
         cost: { total_lines_added: 3, total_lines_removed: 1 },
       },
     }).text;
-    expect(text).toContain("5h n/a");
+    expect(text).toContain("claude 7d 40%");
+    expect(text).not.toContain("5h");
     expect(text).toContain("7d 40%");
     expect(text).toContain("Ctx: 12.3k n/a"); // tokens known, percentage not
     expect(text).toContain("(+3,-1)");
@@ -529,9 +530,7 @@ describe("statusline trust boundaries (zod)", () => {
       },
     }).text;
     expect(text).toContain("Ctx: 12.3k n/a");
-    expect(text).toContain(
-      "Rate: claude n/a (input has no Claude rate limits) · 5h n/a (input has no Claude 5h rate limit) · 7d n/a (input has no Claude 7d rate limit)",
-    );
+    expect(text).toContain("Rate: claude none (no API response yet)");
   });
 
   test("a CPU cache of the wrong shape is no baseline, not a crash", () => {

@@ -51,6 +51,8 @@ export interface SessionStatus {
               resetsAt?: number | undefined;
             }
           | undefined;
+        /** Windows the payload sent but could not be read; an unsent window is not listed. */
+        unreadable?: readonly ("fiveHour" | "sevenDay")[] | undefined;
       }
     | undefined;
   changes?:

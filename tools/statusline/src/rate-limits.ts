@@ -11,7 +11,12 @@ import { ESC, RST, paceColor, pctFmt, roles } from "./ansi.ts";
 import type { Dataframe } from "./dataframe.ts";
 import { codexCreditsSegment, codexRateSegment } from "./provider-display.ts";
 import { jevUsageSegment } from "./provider-display.ts";
-import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
+import {
+  fieldDisplay,
+  observed,
+  type FieldDisplay,
+  type FieldState,
+} from "./field-state.ts";
 
 const RSET = "⟳";
 // the account's own /usage screen ("Current week (Fable)"). This is NOT in the statusline's own
@@ -173,6 +178,9 @@ type RateFacts = Pick<
   | "rl5Reset"
   | "rl7"
   | "rl7Reset"
+  | "rlSent"
+  | "rl5Why"
+  | "rl7Why"
   | "rlModel"
   | "modelCapsWhy"
   | "codexRate"
@@ -181,6 +189,30 @@ type RateFacts = Pick<
   | "jevUsage"
   | "jevUsageWhy"
 >;
+
+// A state that is allowed to be empty: plain `none` with a dim reason, never the amber `n/a`
+// that marks a failed read (see roles.unavailable).
+function absentCell(label: string, why: string): string {
+  return `${roles.label(label)} none ${roles.secondary(`(${why})`)}`;
+}
+
+function noWindowsWhy(rateLimitsSent: boolean): string {
+  if (rateLimitsSent) return "no rate-limit window sent";
+  return "no API response yet";
+}
+
+// One Claude window: the segment when its numbers arrived, a failure `n/a` when the payload sent
+// the window but it could not be read, and undefined (no cell at all) when Claude Code sent no such
+// window — a plan without that limit (e.g. no 5h window) gives the reader nothing to read there.
+function windowCell(
+  segment: string | undefined,
+  unreadable: string | undefined,
+  age: number,
+): FieldState<string> | undefined {
+  if (segment !== undefined) return observed(segment, undefined, age);
+  if (unreadable !== undefined) return observed(undefined, unreadable);
+  return undefined;
+}
 
 function claudeRateSegment(
   df: RateFacts & Pick<Dataframe, "fields">,
@@ -198,48 +230,55 @@ function claudeRateSegment(
     ),
   );
   const parts: string[] = [];
-  const claude: string[] = [
-    field(
-      "claude-5h",
-      "5h",
-      observed(
-        rl5 === undefined ? undefined : rl5Segment(rl5, df.rl5Reset, now),
-        "input has no Claude 5h rate limit",
-        df.rl5Reset !== undefined && df.rl5Reset <= now
-          ? (now - df.rl5Reset + 1) * 1000
-          : 0,
-      ),
-    ),
-    field(
-      "claude-7d",
-      "7d",
-      observed(
-        rl7 === undefined ? undefined : rl7Segment(rl7, df.rl7Reset, now),
-        "input has no Claude 7d rate limit",
-        df.rl7Reset !== undefined && df.rl7Reset <= now
-          ? (now - df.rl7Reset + 1) * 1000
-          : 0,
-      ),
-    ),
-  ];
+  // Claude Code documents each window as independently absent, and sends `rate_limits` only after
+  // the first API response. An unsent window is dropped, and no response yet is a plain `none`
+  // (never the amber `n/a` of a failed read); only a window that was sent but could not be read
+  // is a failure.
+  const windowed =
+    rl5 !== undefined ||
+    rl7 !== undefined ||
+    df.rl5Why !== undefined ||
+    df.rl7Why !== undefined;
   const claudeLabel = field(
     "claude-label",
     "claude",
     observed(
-      rl5 !== undefined || rl7 !== undefined
+      windowed
         ? roles.label("claude")
-        : undefined,
-      "input has no Claude rate limits",
+        : absentCell("claude", noWindowsWhy(df.rlSent === true)),
     ),
   );
-  const claudeSeparator =
-    rl5 === undefined &&
-    rl7 === undefined &&
-    df.fields?.["claude-label"]?.kind !== "stale"
-      ? roles.separator()
-      : " ";
+  const windows = [
+    {
+      key: "claude-5h",
+      label: "5h",
+      state: windowCell(
+        rl5 === undefined ? undefined : rl5Segment(rl5, df.rl5Reset, now),
+        df.rl5Why,
+        df.rl5Reset !== undefined && df.rl5Reset <= now
+          ? (now - df.rl5Reset + 1) * 1000
+          : 0,
+      ),
+    },
+    {
+      key: "claude-7d",
+      label: "7d",
+      state: windowCell(
+        rl7 === undefined ? undefined : rl7Segment(rl7, df.rl7Reset, now),
+        df.rl7Why,
+        df.rl7Reset !== undefined && df.rl7Reset <= now
+          ? (now - df.rl7Reset + 1) * 1000
+          : 0,
+      ),
+    },
+  ];
+  const claude = windows.flatMap(({ key, label, state }) =>
+    state === undefined ? [] : [field(key, label, state)],
+  );
   parts.push(
-    `${claudeLabel}${claudeSeparator}${claude.join(roles.separator())}`,
+    claude.length === 0
+      ? claudeLabel
+      : `${claudeLabel} ${claude.join(roles.separator())}`,
     field(
       "model-caps",
       "model caps",

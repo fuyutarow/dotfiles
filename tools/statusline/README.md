@@ -160,6 +160,12 @@ Codex from `fields.codexRate`, and Jev from `fields.jevUsage`. No first-Codex-se
 lookup is performed by standalone rendering. A redraw every five seconds can display samples
 59 seconds old because `owner.json.view` is produced independently by the sampler.
 
+Claude Code documents each `rate_limits` window as independently absent and sends the object only
+after the first API response. The Claude slot therefore tells absence from failure: a window the
+payload does not carry (for example no `five_hour` on a plan without a 5-hour limit) is omitted
+from the row; a payload without `rate_limits` prints one `claude none (no API response yet)` cell;
+only a window that was sent but cannot be parsed prints the amber `n/a (<why>)`.
+
 The Jev sampler makes one bounded call to Homebrew's `agx` on PATH:
 `agx worker stats --usage jev --window 7d` (C6). It displays the owner's
 `estimated_cost_usd` directly, without reconstructing usage or pricing. Unknown

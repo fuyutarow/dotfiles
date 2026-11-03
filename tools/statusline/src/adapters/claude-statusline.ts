@@ -1,19 +1,56 @@
-import { recoverInvalid } from "../bounded.ts";
 import { maybe, z } from "../zod.ts";
 import type { SessionStatus } from "../session-status.ts";
 import { claudeTranscriptWindow } from "./claude-transcript-window.ts";
 
-const RateWindowSchema = recoverInvalid(
-  z.object({
-    used_percentage: maybe(z.number()),
-    resets_at: maybe(z.number()), // Unix epoch seconds
-  }),
-);
+const RateWindowSchema = z.object({
+  used_percentage: maybe(z.number()),
+  resets_at: maybe(z.number()), // Unix epoch seconds
+});
+const RateLimitsSchema = z.object({
+  five_hour: z.unknown().optional(),
+  seven_day: z.unknown().optional(),
+});
 
-function rateWindow(window: z.output<typeof RateWindowSchema>) {
-  return window === undefined
-    ? undefined
-    : { usedPercent: window.used_percentage, resetsAt: window.resets_at };
+type RateWindowRead = {
+  window: { usedPercent: number; resetsAt: number | undefined } | undefined;
+  unreadable: boolean;
+};
+// Claude Code documents each window as independently absent: a missing key is a legitimate
+// absence, while a sent value that cannot be read is a failure. Keep the two apart here.
+function readRateWindow(raw: unknown): RateWindowRead {
+  if (raw === undefined || raw === null)
+    return { window: undefined, unreadable: false };
+  const parsed = RateWindowSchema.safeParse(raw);
+  if (!parsed.success || parsed.data.used_percentage === undefined)
+    return { window: undefined, unreadable: true };
+  return {
+    window: {
+      usedPercent: parsed.data.used_percentage,
+      resetsAt: parsed.data.resets_at,
+    },
+    unreadable: false,
+  };
+}
+
+function readRateLimits(raw: unknown): SessionStatus["rateLimits"] {
+  if (raw === undefined || raw === null) return undefined;
+  const parsed = RateLimitsSchema.safeParse(raw);
+  if (!parsed.success)
+    return {
+      fiveHour: undefined,
+      sevenDay: undefined,
+      unreadable: ["fiveHour", "sevenDay"],
+    };
+  const five = readRateWindow(parsed.data.five_hour);
+  const seven = readRateWindow(parsed.data.seven_day);
+  return {
+    fiveHour: five.window,
+    sevenDay: seven.window,
+    unreadable: [
+      ...(five.unreadable ? (["fiveHour"] as const) : []),
+      ...(seven.unreadable ? (["sevenDay"] as const) : []),
+    ],
+  };
 }
 
 function contextTokens(window: {
@@ -73,14 +110,8 @@ export const ClaudeStatuslineInputSchema = z
       }),
     ),
     effort: maybe(z.object({ level: maybe(z.string()) })),
-    rate_limits: maybe(
-      recoverInvalid(
-        z.object({
-          five_hour: maybe(RateWindowSchema),
-          seven_day: maybe(RateWindowSchema),
-        }),
-      ),
-    ),
+    // Read by readRateLimits(): absent and unreadable must stay distinguishable.
+    rate_limits: z.unknown().optional(),
     worktree: maybe(z.object({ name: maybe(z.string()) })),
   })
   .transform(async (input): Promise<SessionStatus> => ({
@@ -107,13 +138,7 @@ export const ClaudeStatuslineInputSchema = z
             modelWindow: modelWindow(input.context_window.context_window_size),
           },
     effort: input.effort?.level,
-    rateLimits:
-      input.rate_limits === undefined
-        ? undefined
-        : {
-            fiveHour: rateWindow(input.rate_limits.five_hour),
-            sevenDay: rateWindow(input.rate_limits.seven_day),
-          },
+    rateLimits: readRateLimits(input.rate_limits),
     changes:
       input.cost === undefined
         ? undefined

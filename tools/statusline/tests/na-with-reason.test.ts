@@ -226,9 +226,8 @@ test.each([false, true])(
         expect(plain(message)).toContain(
           "Ctx: 610k n/a (input has no context percentage)",
         );
-        expect(plain(message)).toContain(
-          "5h n/a (input has no Claude 5h rate limit)",
-        );
+        // no rate_limits before the first API response is an absence, not a failed read
+        expect(plain(message)).toContain("claude none (no API response yet)");
       }
     }
   },
@@ -301,7 +300,7 @@ test("snapshot publication composes same-session fleet Claude with cached Codex 
   ).toBe(frame);
   expect(
     plain(render(frame, { layout: "snapshot" }).split("\n")[1] ?? ""),
-  ).toContain("claude n/a");
+  ).toContain("claude none (no API response yet)");
   expect(
     plain(render(frame, { layout: "snapshot" }).split("\n")[1] ?? ""),
   ).toContain("codex 7d  8%");

@@ -114,11 +114,35 @@ test("Rate missing values keep plain names/windows, amber n/a and dim reasons", 
     codexRateWhy: "timeout",
     jevUsageWhy: "unreadable",
   });
-  expect(row).toContain(
-    `claude ${amber}n/a${reset} ${dim}(input has no Claude rate limits)${reset} ${dim}·${reset} 5h ${amber}n/a${reset} ${dim}(input has no Claude 5h rate limit)${reset} ${dim}·${reset} 7d ${amber}n/a${reset} ${dim}(input has no Claude 7d rate limit)${reset}`,
-  );
+  // Claude Code sends rate_limits only after the first API response: a legitimate absence is a
+  // plain `none` with a dim reason, never the amber failure `n/a`.
+  expect(row).toContain(`claude none ${dim}(no API response yet)${reset}`);
+  expect(row).not.toContain(`claude ${amber}n/a${reset}`);
   expect(row).toContain(`codex ${amber}n/a${reset} ${dim}(timeout)${reset}`);
   expect(row).toEndWith(`Jev ${amber}n/a${reset} ${dim}(unreadable)${reset}`);
+});
+
+test("Rate: an unsent Claude window is dropped, a sent-but-unreadable one stays amber n/a", () => {
+  const sent = rateRow({ rlSent: true, rl7: 48, rlModel: [] }, 1_000, [
+    "claude",
+  ]);
+  expect(sent).toContain(`claude 7d `);
+  expect(sent).not.toContain("5h");
+  expect(sent).not.toContain("none");
+  expect(sent).not.toContain(amber);
+  const unreadable = rateRow(
+    {
+      rlSent: true,
+      rl7: 48,
+      rl5Why: "input has an unreadable Claude 5h rate limit",
+      rlModel: [],
+    },
+    1_000,
+    ["claude"],
+  );
+  expect(unreadable).toContain(
+    `5h ${amber}n/a${reset} ${dim}(input has an unreadable Claude 5h rate limit)${reset}`,
+  );
 });
 
 test.each([

@@ -469,6 +469,15 @@ export async function buildDataframe(
     rl5Reset: data.rateLimits?.fiveHour?.resetsAt,
     rl7: data.rateLimits?.sevenDay?.usedPercent,
     rl7Reset: data.rateLimits?.sevenDay?.resetsAt,
+    rlSent: data.rateLimits !== undefined,
+    rl5Why:
+      data.rateLimits?.unreadable?.includes("fiveHour") === true
+        ? "input has an unreadable Claude 5h rate limit"
+        : undefined,
+    rl7Why:
+      data.rateLimits?.unreadable?.includes("sevenDay") === true
+        ? "input has an unreadable Claude 7d rate limit"
+        : undefined,
     rlModel: identity.value.rlModel,
     accountWhy: identityWhy ?? identity.value.accountWhy,
     modelCapsWhy: identityWhy ?? identity.value.modelCapsWhy,

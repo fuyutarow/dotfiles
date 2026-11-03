@@ -228,6 +228,60 @@ describe("enforce-reply-language", () => {
     });
   });
 
+  const agxReportJson = JSON.stringify({
+    summary: "Exempted agx worker sessions from the reply-language Stop hook.",
+    changes: [
+      {
+        path: "agents/claude/hooks/enforce-reply-language.ts",
+        what: "allow when AGX_RUN_ID is non-empty",
+      },
+    ],
+    checks: [{ cmd: "bun test", exit: 0, result: "all pass" }],
+  });
+  const englishReportTranscript = () =>
+    writeTranscript([user("report"), assistant(agxReportJson)]);
+
+  test("agx worker session (non-empty AGX_RUN_ID) allows an English JSON final report", () => {
+    const home = settingsHome("japanese");
+    const result = runHook(
+      HOOK,
+      {
+        ...stopPayload(englishReportTranscript()),
+        last_assistant_message: agxReportJson,
+      },
+      { HOME: home, AGX_RUN_ID: "run-agx-1103" },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+    expect(
+      parseJson(
+        readFileSync(
+          join(home, ".local/state/claude-hooks/reply-language.jsonl"),
+          "utf8",
+        ).trim(),
+      ),
+    ).toMatchObject({ decision: "allow", reason: "agx_worker_run" });
+  });
+
+  test.each([
+    { label: "AGX_RUN_ID unset", env: {} },
+    { label: "AGX_RUN_ID empty", env: { AGX_RUN_ID: "" } },
+  ])("$label: English JSON final report still blocks", ({ env }) => {
+    const result = runHook(
+      HOOK,
+      {
+        ...stopPayload(englishReportTranscript()),
+        last_assistant_message: agxReportJson,
+      },
+      { HOME: settingsHome("japanese"), ...env },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('"decision":"block"');
+  });
+
   test("English prose reply -> blocks with a Japanese rewrite reason", () => {
     const transcript = writeTranscript([
       user("説明してください"),

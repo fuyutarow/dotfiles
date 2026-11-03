@@ -173,6 +173,13 @@ async function main(audit: DecisionAudit): Promise<number> {
   if (audit.language !== policy.value)
     return recordDecision(audit, "allow", "language_not_japanese");
 
+  // agx workers end with a JSON report (summary/changes/checks) that agx parses as the run
+  // result. A Japanese rewrite of that report makes agx fail the run as malformed, so an
+  // agx-dispatched session (non-empty AGX_RUN_ID) is exempt from the reply-language check.
+  const agxRunId = process.env["AGX_RUN_ID"];
+  if (agxRunId !== undefined && agxRunId !== "")
+    return recordDecision(audit, "allow", "agx_worker_run");
+
   // Keep the Stop response when it contains visible prose, but remove tool_use input strings
   // echoed into it. The transcript supplies typed text blocks when the response is only tool data
   // or older clients do not provide last_assistant_message.

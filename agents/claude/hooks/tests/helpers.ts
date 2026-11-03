@@ -20,8 +20,14 @@ export function runHook(
   cwd?: string,
   options: { inheritEnvironment?: boolean } = {},
 ): { code: number | null; stdout: string; stderr: string } {
-  const childEnv: NodeJS.ProcessEnv = {
+  // AGX_RUN_ID is stripped from the inherited environment so that a test run inside an agx
+  // worker does not leak its run identity into hooks; a test opts in through `env`.
+  const inherited: NodeJS.ProcessEnv = {
     ...(options.inheritEnvironment === false ? {} : process.env),
+  };
+  delete inherited["AGX_RUN_ID"];
+  const childEnv: NodeJS.ProcessEnv = {
+    ...inherited,
     CLAUDE_HOOK_QUIET: "1",
     ...env,
   };

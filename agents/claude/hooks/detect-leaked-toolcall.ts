@@ -20,14 +20,14 @@ import { once } from "node:events";
 import { appendFile, writeFile } from "node:fs/promises";
 import { attempt } from "../../hooks/attempt.ts";
 import { strAt } from "../../hooks/narrow.ts";
-import { readStdinJson, readTranscript, stripCode, turnText } from "./lib.ts";
+import { readStdinJson, stripCode, turnTextTail } from "./lib.ts";
 
 async function main(): Promise<void> {
   const payload = readStdinJson();
   const transcript = strAt(payload, "transcript_path");
   if (transcript === undefined || transcript === "") return;
 
-  const turn = turnText(await readTranscript(transcript));
+  const turn = await turnTextTail(transcript);
   if (turn === "") return;
 
   const stripped = stripCode(turn);

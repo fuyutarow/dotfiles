@@ -5,9 +5,49 @@ import { arr, at, parseJson, strAt } from "./narrow.ts";
 import {
   hookStderr,
   readStdinJson,
-  readTranscript,
-  turnText,
+  readTranscriptTail,
+  textBlocks,
+  type TranscriptEntry,
 } from "../claude/hooks/lib.ts";
+
+// A human prompt: a user entry with string content or a text block. Tool results are user
+// entries too, but they do not start a new human turn.
+function isHumanPrompt(entry: TranscriptEntry): boolean {
+  const content = entry.message?.content;
+  return (
+    typeof content === "string" ||
+    (arr(content) ?? []).some((block) => strAt(block, "type") === "text")
+  );
+}
+
+function dispatchesWorker(entry: TranscriptEntry): boolean {
+  return (arr(entry.message?.content) ?? []).some(
+    (block) =>
+      strAt(block, "type") === "tool_use" &&
+      strAt(block, "name") === "Bash" &&
+      /\bagx\s+worker\s+dispatch\b/u.test(
+        strAt(block, "input", "command") ?? "",
+      ),
+  );
+}
+
+// Reads backward from the end and stops at the current human prompt, so the cost follows the
+// current turn, not the session. Returns whether this turn dispatched a worker, and the turn's
+// assistant prose (assistant text after the last user-type entry; see turnText in lib.ts).
+async function readCurrentTurn(
+  path: string,
+): Promise<{ dispatched: boolean; text: string }> {
+  const pieces: string[][] = [];
+  let seenUser = false;
+  for await (const entry of readTranscriptTail(path)) {
+    if (entry.type === "user" && isHumanPrompt(entry)) break;
+    if (entry.type === "user") seenUser = true;
+    if (entry.type !== "assistant") continue;
+    if (dispatchesWorker(entry)) return { dispatched: true, text: "" };
+    if (!seenUser) pieces.push(textBlocks(entry.message?.content));
+  }
+  return { dispatched: false, text: pieces.toReversed().flat().join("\n") };
+}
 
 async function main(): Promise<number> {
   const payload = readStdinJson();
@@ -21,34 +61,8 @@ async function main(): Promise<number> {
     path === ""
   )
     return 0;
-  const entries = await readTranscript(path);
-  // Tool results are user entries but do not start a new human turn.
-  let start = 0;
-  entries.forEach((entry, index) => {
-    if (entry.type !== "user") return;
-    const content = entry.message?.content;
-    if (
-      typeof content === "string" ||
-      (arr(content) ?? []).some((block) => strAt(block, "type") === "text")
-    )
-      start = index + 1;
-  });
-  const dispatched = entries
-    .slice(start)
-    .some(
-      (entry) =>
-        entry.type === "assistant" &&
-        (arr(entry.message?.content) ?? []).some(
-          (block) =>
-            strAt(block, "type") === "tool_use" &&
-            strAt(block, "name") === "Bash" &&
-            /\bagx\s+worker\s+dispatch\b/u.test(
-              strAt(block, "input", "command") ?? "",
-            ),
-        ),
-    );
+  const { dispatched, text } = await readCurrentTurn(path);
   if (dispatched) return 0;
-  const text = turnText(entries);
   if (
     text
       .split("\n")

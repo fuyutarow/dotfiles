@@ -20,11 +20,10 @@ import { hookStderr } from "./lib.ts";
 import { attempt } from "../../hooks/attempt.ts";
 import { at, strAt } from "../../hooks/narrow.ts";
 import {
-  lastUserText,
+  lastUserTextTail,
   readStdinJson,
-  readTranscript,
   stripCode,
-  turnText,
+  turnTextTail,
 } from "./lib.ts";
 
 async function main(): Promise<number> {
@@ -33,11 +32,10 @@ async function main(): Promise<number> {
   const transcript = strAt(payload, "transcript_path");
   if (transcript === undefined || transcript === "") return 0;
 
-  const entries = await readTranscript(transcript);
-  const turn = turnText(entries);
+  const turn = await turnTextTail(transcript);
   if (turn === "") return 0;
 
-  const user = lastUserText(entries);
+  const user = await lastUserTextTail(transcript);
   const ctx =
     /prose audit|prose review|文体|style (review|rewrite)|skill ?review|skill ?レビュー|レビュー|audit|監査/iu.test(
       user,

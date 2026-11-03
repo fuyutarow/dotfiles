@@ -22,7 +22,7 @@ import { hookJson } from "./lib.ts";
 
 import { attempt } from "../../hooks/attempt.ts";
 import { at, strAt } from "../../hooks/narrow.ts";
-import { readStdinJson, readTranscript, stripCode, turnText } from "./lib.ts";
+import { readStdinJson, stripCode, turnTextTail } from "./lib.ts";
 
 const MIN_LINES = 8;
 
@@ -72,8 +72,7 @@ async function main(): Promise<number> {
   const transcript = strAt(payload, "transcript_path");
   if (transcript === undefined || transcript === "") return 0;
 
-  const entries = await readTranscript(transcript);
-  const turn = turnText(entries);
+  const turn = await turnTextTail(transcript);
   if (turn === "") return 0;
 
   // CONTEXT GATE — short conversational replies are exempt.

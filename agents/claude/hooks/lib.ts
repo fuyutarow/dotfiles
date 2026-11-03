@@ -9,8 +9,7 @@
 //   - Stop guard block    = top-level { decision: "block", reason } JSON on stdout. Existing
 //     guards may use exit 2 + stderr, but new guards should return the structured decision.
 
-import { readFile } from "node:fs/promises";
-import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
+import { readTranscriptTail, textBlocks } from "./lib/transcript-tail.ts";
 
 // The protocol primitives are vendor-neutral and live with the portable hooks; re-exported so
 // Claude-only hooks keep importing everything from ./lib.ts.
@@ -24,65 +23,31 @@ export {
   hookStderr,
 } from "../../hooks/lib.ts";
 
-export type TranscriptEntry = {
-  type?: string | undefined;
-  message?: { content?: unknown } | undefined;
-};
+export type { TranscriptEntry } from "./lib/transcript-tail.ts";
+export { readTranscriptTail, textBlocks } from "./lib/transcript-tail.ts";
 
-// One transcript line, read field by field (a field of the wrong type is simply absent).
-function entryOf(line: unknown): TranscriptEntry {
-  return {
-    type: strAt(line, "type"),
-    message: { content: at(line, "message", "content") },
-  };
-}
-
-// Transcript is JSONL; skip malformed lines rather than fail the whole read. An unreadable
-// file still throws (rejects), exactly as the synchronous read did.
-export async function readTranscript(path: string): Promise<TranscriptEntry[]> {
-  const content = await readFile(path, "utf8");
-  const entries: TranscriptEntry[] = [];
-  for (const line of content.split("\n")) {
-    if (line.trim() === "") continue;
-    const parsed = parseJson(line);
-    if (parsed !== undefined) entries.push(entryOf(parsed));
+// This turn's assistant prose, read backward from the end of the transcript: the assistant
+// text blocks after the last user-type entry (tool_result carriers count as user entries, which
+// is what scopes us to the turn). The read stops at that user entry, so its cost follows the
+// turn, not the session.
+export async function turnTextTail(path: string): Promise<string> {
+  const pieces: string[][] = [];
+  for await (const entry of readTranscriptTail(path)) {
+    if (entry.type === "user") break;
+    if (entry.type === "assistant")
+      pieces.push(textBlocks(entry.message?.content));
   }
-  return entries;
+  return pieces.toReversed().flat().join("\n");
 }
 
-function textBlocks(content: unknown): string[] {
-  const whole = str(content);
-  if (whole !== undefined) return [whole];
-  return (arr(content) ?? []).flatMap((b) => {
-    const text = strAt(b, "text");
-    return strAt(b, "type") === "text" && text !== undefined ? [text] : [];
-  });
-}
-
-// This turn's assistant prose = assistant text blocks after the last user-type entry
-// (tool_result carriers count as user entries too, which is what scopes us to the turn).
-export function turnText(entries: TranscriptEntry[]): string {
-  const rel = entries.filter(
-    (e) => e.type === "assistant" || e.type === "user",
-  );
-  let lastUser = -1;
-  rel.forEach((e, i) => {
-    if (e.type === "user") lastUser = i;
-  });
-  return rel
-    .slice(lastUser + 1)
-    .filter((e) => e.type === "assistant")
-    .flatMap((e) => textBlocks(e.message?.content))
-    .join("\n");
-}
-
-// Most recent HUMAN prompt text (tool_result user entries carry no text blocks).
-export function lastUserText(entries: TranscriptEntry[]): string {
-  const texts = entries
-    .filter((e) => e.type === "user")
-    .map((e) => textBlocks(e.message?.content).join("\n"))
-    .filter((t) => t !== "");
-  return texts.at(-1) ?? "";
+// Most recent HUMAN prompt text, read backward; stops at the first user entry carrying text.
+export async function lastUserTextTail(path: string): Promise<string> {
+  for await (const entry of readTranscriptTail(path)) {
+    if (entry.type !== "user") continue;
+    const text = textBlocks(entry.message?.content).join("\n");
+    if (text !== "") return text;
+  }
+  return "";
 }
 
 // Remove ``` fences, `inline` spans (line-scoped, like the sed it replaces), and

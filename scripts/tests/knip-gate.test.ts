@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { resolve } from "node:path";
+import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import { declaredBinaries, roots } from "../knip-gate.ts";
 
 test("binary allowances follow declared packages and installer commands", () => {
@@ -57,3 +60,62 @@ test("production roots follow the repository's entry declarations", async () => 
     expect(entries).toContain(entry);
   expect(entries).not.toContain("scripts/skills-links.ts");
 });
+
+test("knip ignores jj's internal working copies but still reports unlisted production files", async () => {
+  const repo = resolve(import.meta.dir, "../..");
+  const dir = await mkdtemp(join(tmpdir(), "knip-jj-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: async () => {
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+  const write = async (path: string, text: string) => {
+    await mkdir(dirname(join(dir, path)), { recursive: true });
+    await Bun.write(join(dir, path), text);
+  };
+  await write(
+    "package.json",
+    JSON.stringify({
+      name: "fixture",
+      private: true,
+      bin: { main: "./bin/main.ts" },
+    }),
+  );
+  await write("bin/main.ts", "console.log(1);\n");
+  await write("src/unlisted.ts", "export const unlisted = 1;\n");
+  await write(
+    ".jj/run/default/1/working_copy/archives/x/index.ts",
+    "export const jj = 1;\n",
+  );
+  await Bun.write(
+    join(dir, "knip.jsonc"),
+    await Bun.file(join(repo, "knip.jsonc")).text(),
+  );
+  const child = Bun.spawn(
+    [
+      join(repo, "node_modules/.bin/knip"),
+      "--production",
+      "--no-progress",
+      "--reporter",
+      "json",
+      "--config",
+      "knip.jsonc",
+    ],
+    { cwd: dir, stdout: "pipe", stderr: "pipe" },
+  );
+  const [stdout] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  const report = z
+    .object({ issues: z.array(z.object({ file: z.string() }).loose()) })
+    .loose()
+    .safeParse(Bun.JSONC.parse(stdout));
+  expect(report.success).toBe(true);
+  const files = report.success
+    ? report.data.issues.map((issue) => issue.file)
+    : [];
+  expect(files).toContain("src/unlisted.ts");
+  expect(files.filter((file) => file.startsWith(".jj/"))).toEqual([]);
+}, 60_000);

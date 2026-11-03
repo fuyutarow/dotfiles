@@ -1,7 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6.42.1/schema-jsonc.json",
   "ignoreExportsUsedInFile": true,
-  "ignore": ["archives/**", ".obsidian/**"],
+  // jj's internal run working copies (.jj/run/**) hold tracked-looking copies, not repo content.
+  "ignore": ["archives/**", ".obsidian/**", ".jj/**"],
   "workspaces": {
     ".": {
       // The mise plugin labels task scripts as development entries, which otherwise

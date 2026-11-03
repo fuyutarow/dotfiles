@@ -3,7 +3,7 @@ schema = 1
 [route]
 allow = ["claude"]
 on_window_exhausted = { codex = "continue", claude = "stop" }
-default = "luna-high"
+default = "sonnet-medium"
 exclude = []
 max_task_chars = 6000
 timeout_ms = 20000

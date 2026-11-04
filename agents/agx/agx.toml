@@ -1,9 +1,9 @@
 schema = 1
 
 [route]
-allow = ["claude"]
+allow = ["codex"]
 on_window_exhausted = { codex = "continue", claude = "stop" }
-default = "sonnet-medium"
+default = "luna-high"
 exclude = []
 max_task_chars = 6000
 timeout_ms = 20000

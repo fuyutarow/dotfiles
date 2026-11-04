@@ -475,6 +475,41 @@ describe("enforce-search-route", () => {
     }
   });
 
+  for (const [action, flag] of [
+    ["init", "--help"],
+    ["init", "-h"],
+    ["index", "--help"],
+    ["index", "-h"],
+  ]) {
+    test(`allows ccc ${action} ${flag} through the live Bash hook`, () => {
+      const project = registerProject();
+      for (const command of [
+        `ccc ${action} ${flag}`,
+        `COCOINDEX_CODE_LOG=warn ccc ${action} ${flag}`,
+        `env COCOINDEX_CODE_LOG=warn ccc ${action} ${flag}`,
+        `/usr/bin/env COCOINDEX_CODE_LOG=warn ccc ${action} ${flag}`,
+        `timeout 20s ccc ${action} ${flag}`,
+        `uvx ccc ${action} ${flag}`,
+        `uvx --from cocoindex-code ccc ${action} ${flag}`,
+        `uv run uvx --from cocoindex-code ccc ${action} ${flag}`,
+        `python -m cocoindex_code.cli ${action} ${flag}`,
+        `sh -c 'ccc ${action} ${flag}'`,
+        `bash -c "uvx ccc ${action} ${flag}"`,
+      ]) {
+        const result = runHook(HOOK, bashPayload(project, command), withCcc());
+        expect({
+          command,
+          code: result.code,
+          decision: decisionOf(result.stdout),
+        }).toEqual({
+          command,
+          code: 0,
+          decision: null,
+        });
+      }
+    });
+  }
+
   test("denies ccc index entry points through the live Bash hook and directs to rr index", () => {
     const project = registerProject();
     for (const command of [
@@ -482,6 +517,9 @@ describe("enforce-search-route", () => {
       "ccc init",
       "ccc mcp",
       "ccc init && ccc index",
+      "ccc index --help && ccc index",
+      "ccc index --help; ccc init",
+      "ccc index --help extra",
       "COCOINDEX_CODE_LOG=warn ccc index",
       "env COCOINDEX_CODE_LOG=warn ccc index",
       "/usr/bin/env COCOINDEX_CODE_LOG=warn ccc init",

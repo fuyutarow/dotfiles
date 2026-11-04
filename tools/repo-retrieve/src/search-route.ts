@@ -683,6 +683,7 @@ async function rawSearchBySyntax(
 function commandSearches(c: ShellCommand, command: string): boolean {
   const eff = effective(c);
   if (eff === undefined) return false;
+  if (!c.dynamic && isCccActionHelp(eff)) return false;
   const { name, args } = eff;
   if (isIndexStart(eff)) return true;
   if (SEARCH_PROGRAMS.has(name) || ENUMERATORS.has(name)) return true;
@@ -795,7 +796,11 @@ function hasIndexStart(command: string | undefined, cwd: string): boolean {
   if (parsed !== undefined)
     return parsed.commands.some((segment) => {
       const eff = effective(segment);
-      return eff !== undefined && isIndexStart(eff);
+      return (
+        eff !== undefined &&
+        (segment.dynamic || !isCccActionHelp(eff)) &&
+        isIndexStart(eff)
+      );
     });
   return (
     CCC_INDEX_WRAPPER.test(command) ||
@@ -1118,6 +1123,32 @@ async function rewrittenSearch(
   if (eff !== undefined && SEARCH_PROGRAMS.has(eff.name))
     query = searchPattern(eff.args);
   return `${ROUTER_COMMAND} regex ${shellQuote(query ?? command)}${scope}`;
+}
+
+function isHelpArgs(args: string[]): boolean {
+  return (
+    args.length === 2 &&
+    (args[0] === "index" || args[0] === "init") &&
+    (args[1] === "--help" || args[1] === "-h")
+  );
+}
+
+function isCccActionHelp(eff: { name: string; args: string[] }): boolean {
+  if (eff.name === "ccc") return isHelpArgs(eff.args);
+  if (PACKAGE_RUNNERS.has(eff.name))
+    return eff.args.some(
+      (arg, index) =>
+        (arg === "ccc" || arg === "cocoindex-code") &&
+        isHelpArgs(eff.args.slice(index + 1)),
+    );
+  if (RUNTIMES.test(eff.name))
+    return eff.args.some(
+      (arg, index) =>
+        arg === "-m" &&
+        eff.args[index + 1] === "cocoindex_code.cli" &&
+        isHelpArgs(eff.args.slice(index + 2)),
+    );
+  return false;
 }
 
 function isIndexStart(eff: { name: string; args: string[] }): boolean {

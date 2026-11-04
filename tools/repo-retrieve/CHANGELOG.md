@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.8 — 2026-11-05
+
+- Allow ccc init and index help through the search-route hook.
+
 ## 1.8.7 — 2026-11-01
 
 - rr index --status: drop the duplicated head= field, which printed the request's head; current HEAD is current=, the request's is requested=

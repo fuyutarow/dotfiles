@@ -298,10 +298,11 @@ describe("statusline Sys row: every reading is present", () => {
   );
 
   test("the snapshot the log hook reads carries the n/a too", () => {
-    const { home } = render({ bin: binWith({}) });
+    const { home, text } = render({ bin: binWith({}) });
     const cached = readCache(home, "statusline-sys.json", SysCacheSchema);
-    // No tool on PATH: Linux lacks nvidia-smi, macOS lacks vm_stat — each is n/a there.
-    expect(cached.line).toContain(IS_MAC ? "RAM n/a (no vm_stat)" : "VRAM ");
+    // The cached line carries the same unavailable reading as the rendered Sys row.
+    expect(cached.line).toBe(sysRow(text));
+    expect(cached.line).toContain(IS_MAC ? "RAM n/a (no vm_stat)" : "GPU n/a");
   });
 });
 

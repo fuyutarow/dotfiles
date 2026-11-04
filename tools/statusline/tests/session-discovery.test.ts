@@ -657,12 +657,10 @@ test("exact Desktop identity survives a newer auxiliary rollout and same-cwd ses
     expect(selected?.context?.inputTokens).toBe(21000);
     expect(selected?.context?.usedPercent).toBe(10.5);
   }
-  process.env["CODEX_SESSION_ID"] = "";
-  expect(await readCodexSessionStatus(cwd, root)).toBeUndefined();
-  process.env["CODEX_SESSION_ID"] = "desktop-owner";
-  expect((await readCodexSessionStatus(cwd, root))?.sessionId).toBe(
-    "desktop-owner",
-  );
+  expect(await readCodexSessionStatus("", cwd, root)).toBeUndefined();
+  expect(
+    (await readCodexSessionStatus("desktop-owner", cwd, root))?.sessionId,
+  ).toBe("desktop-owner");
 });
 
 test("prepared displays require source labels protocol and report sample age separately", async () => {

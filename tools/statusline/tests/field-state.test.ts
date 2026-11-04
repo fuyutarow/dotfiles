@@ -197,7 +197,15 @@ test("every previously good display field survives failed reads independently wi
       );
   }
   const failed = await buildDataframe(
-    { cwd: root, sessionId: payload.sessionId },
+    {
+      cwd: root,
+      sessionId: payload.sessionId,
+      rateLimits: {
+        fiveHour: undefined,
+        sevenDay: undefined,
+        unreadable: ["fiveHour", "sevenDay"],
+      },
+    },
     {
       fieldStoreRoot: store,
       sources: {

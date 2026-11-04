@@ -244,7 +244,24 @@ test.each([...modes])("claude slot: %s", async (mode) => {
   if (mode === "stale") {
     expect(text).toContain("5h 20%");
     expect(text).toContain("old");
-  } else expectSlots(text, "claude");
+  } else if (mode === "no rate info" || mode === "unparseable") {
+    expectSlots(text, "5h");
+    expect(text).toContain(
+      "7d n/a (input has an unreadable Claude 7d rate limit)",
+    );
+    expect(text).toContain(
+      "5h n/a (input has an unreadable Claude 5h rate limit)",
+    );
+  } else {
+    expectSlots(text, "codex");
+    expect(text).toContain(
+      mode === "empty"
+        ? "claude none (no rate-limit window sent)"
+        : "claude none (no API response yet)",
+    );
+    if (mode === "read error" || mode === "exception")
+      expect(text).toContain("model caps n/a (account unavailable)");
+  }
   if (mode === "timeout") expect(text).toContain("account timeout 10ms");
 });
 
@@ -335,7 +352,12 @@ test("completed sources cannot bypass an exhausted budget", async () => {
       budgets: { identity: 0, codexRate: 0, jevUsage: 0 },
     },
   );
-  for (const source of RATE_SOURCES) expectSlots(text, source);
+  expectSlots(text, "codex");
+  expectSlots(text, "Jev");
+  expect(text).toContain("claude none (no API response yet)");
+  expect(text).toContain("model caps n/a (account timeout 0ms)");
+  expect(text).toContain("codex rate timeout 0ms");
+  expect(text).toContain("Jev usage timeout 0ms");
 });
 
 test.each([...RATE_SOURCES])(

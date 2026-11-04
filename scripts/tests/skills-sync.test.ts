@@ -7,6 +7,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -336,7 +337,10 @@ describe("skills:sync", () => {
     expect(localInstall?.[4]).toBe("house-skill");
     expect(
       calls.some(
-        (row) => row[0] === home && row[3] === join(dotfiles, "agents/skills"),
+        (row) =>
+          (row[0]?.startsWith(join(tmpdir(), "skills-sync-codex-home-")) ??
+            false) &&
+          row[3] === join(dotfiles, "agents/skills"),
       ),
     ).toBe(true);
     expect(calls.filter((row) => row[3] === "vendor/repo")).toHaveLength(2);
@@ -373,7 +377,11 @@ describe("skills:sync", () => {
     ]);
     const calls = readFileSync(marker, "utf8").trim().split("\n");
     expect(calls).toHaveLength(3); // Claude copy + Codex copy + upstream comparison
-    expect(calls.some((line) => line.startsWith(`${home}\t`))).toBe(true);
+    expect(
+      calls.some((line) =>
+        line.startsWith(join(tmpdir(), "skills-sync-codex-home-")),
+      ),
+    ).toBe(true);
     cleanup(dotfiles, home);
   });
 
@@ -689,4 +697,104 @@ test("source changes bundle only the owning skill; shared resolved inputs invali
   expect(
     readFileSync(join(home, ".claude/skills/beta/scripts/entry.ts"), "utf8"),
   ).toContain("after");
-});
+}, 30_000);
+
+test.each([".claude/skills", ".agents/skills"])(
+  "SIGKILL during staging preserves %s and a rerun repairs it",
+  async (base) => {
+    const dotfiles = makeDotfiles([]);
+    const home = makeHome();
+    const bin = fakeBin();
+    using _cleanup = {
+      [Symbol.dispose]: () => {
+        cleanup(dotfiles, home, bin);
+      },
+    };
+    const old = "old complete skill\n";
+    writeInstalled(home, "house-skill", old);
+    const source = readFileSync(
+      join(dotfiles, "agents/skills/house-skill/SKILL.md"),
+      "utf8",
+    );
+    const preload = join(bin, "pause-copy.ts");
+    writeFileSync(
+      preload,
+      `
+import { mock } from "bun:test";
+import * as fs from "node:fs/promises";
+const copy = fs.cp;
+mock.module("node:fs/promises", () => ({ ...fs, cp: async (from, to, options) => {
+  if (String(to).includes(process.env.PAUSE_ROOT + "/.dotfiles-skills-sync-")) {
+    await fs.mkdir(to, { recursive: true });
+    await fs.writeFile(String(to) + "/partial", "partial");
+    process.stdout.write("COPY_PAUSED\\n");
+    await new Promise(() => setInterval(() => {}, 1000));
+  }
+  return copy(from, to, options);
+}}));
+`,
+    );
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--preload",
+        preload,
+        SCRIPT,
+        "--dotfiles",
+        dotfiles,
+        "--home",
+        home,
+        "--in-house-only",
+      ],
+      {
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env["PATH"] ?? ""}`,
+          VENDOR_SKILL_CLI: FAKE,
+          PAUSE_ROOT: join(home, base),
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const stderr = new Response(child.stderr).text();
+    const reader = child.stdout.getReader();
+    let output = "";
+    const waitForPause = async () => {
+      while (!output.includes("COPY_PAUSED")) {
+        const chunk = await reader.read();
+        if (chunk.done) return false;
+        output += new TextDecoder().decode(chunk.value);
+      }
+      return true;
+    };
+    const paused = await Promise.race([
+      waitForPause(),
+      Bun.sleep(30_000).then(() => false),
+    ]);
+    child.kill("SIGKILL");
+    await child.exited;
+    const errors = await stderr;
+    expect(paused, `${output}\n${errors}`).toBe(true);
+    for (const targetBase of [".claude/skills", ".agents/skills"]) {
+      const skill = join(home, targetBase, "house-skill");
+      expect([old, source]).toContain(
+        readFileSync(join(skill, "SKILL.md"), "utf8"),
+      );
+      expect(existsSync(join(skill, "partial"))).toBe(false);
+    }
+    const repaired = run(dotfiles, home, join(home, "calls"), true);
+    expect(repaired.code, repaired.out).toBe(0);
+    for (const targetBase of [".claude/skills", ".agents/skills"]) {
+      expect(
+        readFileSync(join(home, targetBase, "house-skill/SKILL.md"), "utf8"),
+      ).toBe(source);
+      expect(
+        readdirSync(join(home, targetBase)).filter((name) =>
+          name.startsWith(".dotfiles-skills-sync-"),
+        ),
+      ).toHaveLength(0);
+    }
+  },
+  60_000,
+);

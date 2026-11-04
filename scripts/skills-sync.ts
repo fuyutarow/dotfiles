@@ -3,12 +3,10 @@
 
 import {
   existsSync,
-  cpSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  renameSync,
   rmSync,
 } from "node:fs";
 import {
@@ -17,6 +15,7 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   readdir,
   readlink,
@@ -25,6 +24,7 @@ import {
   rm,
 } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
+import { dlopen, FFIType, ptr } from "bun:ffi";
 import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
@@ -34,7 +34,6 @@ import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
   homePathRefusals,
   inHouseLayoutRefusals,
-  isOwnInHouseLink,
   parseDeclaration,
   skillCliArgs,
 } from "./skills-declaration.ts";
@@ -83,6 +82,82 @@ const InHouseStateSchema = z.strictObject({
 });
 
 type PreparedSkills = string | { root: string; reused: Map<string, string> };
+
+// Both names are on the same filesystem. Exchange is the only mutation of an
+// existing live skill; a killed copy or cleanup cannot expose a partial tree.
+function exchangeSkills(left: string, right: string): string | undefined {
+  const a = Buffer.from(`${left}\0`);
+  const b = Buffer.from(`${right}\0`);
+  if (process.platform === "linux") {
+    const libc = dlopen("libc.so.6", {
+      renameat2: {
+        args: [FFIType.i32, FFIType.ptr, FFIType.i32, FFIType.ptr, FFIType.u32],
+        returns: FFIType.i32,
+      },
+    });
+    using _libc = {
+      [Symbol.dispose]: () => {
+        libc.close();
+      },
+    };
+    return libc.symbols.renameat2(-100, ptr(a), -100, ptr(b), 2) === 0
+      ? undefined
+      : `atomic skill exchange failed: ${left}`;
+  }
+  if (process.platform === "darwin") {
+    const libc = dlopen("/usr/lib/libSystem.B.dylib", {
+      renamex_np: {
+        args: [FFIType.ptr, FFIType.ptr, FFIType.u32],
+        returns: FFIType.i32,
+      },
+    });
+    using _libc = {
+      [Symbol.dispose]: () => {
+        libc.close();
+      },
+    };
+    return libc.symbols.renamex_np(ptr(a), ptr(b), 2) === 0
+      ? undefined
+      : `atomic skill exchange failed: ${left}`;
+  }
+  return `atomic skill exchange unsupported on ${process.platform}`;
+}
+
+async function installPreparedSkills(
+  root: string,
+  names: readonly string[],
+  prepared: PreparedSkills,
+): Promise<string | undefined> {
+  await mkdir(root, { recursive: true });
+  const transaction = await mkdtemp(join(root, ".dotfiles-skills-sync-"));
+  await using _transaction = {
+    [Symbol.asyncDispose]: () =>
+      rm(transaction, { recursive: true, force: true }),
+  };
+  for (const name of names) {
+    const staged = join(transaction, name);
+    const target = join(root, name);
+    await cp(preparedSkill(prepared, name), staged, {
+      recursive: true,
+      dereference: true,
+    });
+    if (!(await pathPresent(target))) {
+      await rename(staged, target);
+      continue;
+    }
+    const error = exchangeSkills(staged, target);
+    if (error !== undefined) return error;
+  }
+  return undefined;
+}
+
+async function cleanSkillStages(root: string): Promise<void> {
+  await mkdir(root, { recursive: true });
+  for (const entry of await readdir(root)) {
+    if (entry.startsWith(".dotfiles-skills-sync-"))
+      await rm(join(root, entry), { recursive: true, force: true });
+  }
+}
 function preparedSkill(prepared: PreparedSkills, name: string): string {
   if (typeof prepared === "string") return resolve(prepared, name);
   return prepared.reused.get(name) ?? resolve(prepared.root, name);
@@ -336,45 +411,12 @@ async function syncInHouseClaude(
     );
 
   const skillsRoot = resolve(home, ".claude/skills");
-  mkdirSync(skillsRoot, { recursive: true });
-  const transaction = mkdtempSync(join(skillsRoot, ".dotfiles-skills-sync-"));
-  using _transaction = {
-    [Symbol.dispose]: () => {
-      rmSync(transaction, { recursive: true, force: true });
-    },
-  };
-  const replaced: { target: string; backup: string }[] = [];
-  const committed = fromThrowable(() => {
-    for (const name of install) {
-      const staged = resolve(transaction, name);
-      cpSync(resolve(stageHome, ".claude/skills", name), staged, {
-        recursive: true,
-      });
-    }
-    for (const name of install) {
-      const target = resolve(skillsRoot, name);
-      const staged = resolve(transaction, name);
-      const backup = resolve(transaction, `${name}.previous`);
-      const targetInfo = lstatSync(target, { throwIfNoEntry: false });
-      if (targetInfo !== undefined) {
-        renameSync(target, backup);
-        replaced.push({ target, backup });
-      }
-      renameSync(staged, target);
-    }
-  })();
-  if (committed.isErr()) {
-    const rollback = fromThrowable(() => {
-      for (const { target, backup } of replaced.toReversed()) {
-        rmSync(target, { recursive: true, force: true });
-        if (lstatSync(backup, { throwIfNoEntry: false }) !== undefined)
-          renameSync(backup, target);
-      }
-    })();
-    if (rollback.isErr())
-      return `could not install staged Claude copies: ${errorText(committed.error)}; rollback failed: ${errorText(rollback.error)}`;
-    return `could not install staged Claude copies: ${errorText(committed.error)}`;
-  }
+  const installError = await installPreparedSkills(
+    skillsRoot,
+    install,
+    resolve(stageHome, ".claude/skills"),
+  );
+  if (installError !== undefined) return installError;
 
   const mismatched = install.filter((name) => {
     const target = resolve(skillsRoot, name);
@@ -450,40 +492,16 @@ async function syncInHouseCodex(
   if (install.length > 0) {
     const skillsRoot = resolve(home, ".agents/skills");
     await mkdir(skillsRoot, { recursive: true });
-    const transaction = await mkdtemp(
-      join(skillsRoot, ".dotfiles-skills-sync-"),
-    );
-    const links: { target: string; backup: string }[] = [];
-    let succeeded = false;
-    await using _transaction = {
+    const stageHome = await mkdtemp(join(tmpdir(), "skills-sync-codex-home-"));
+    await using _stage = {
       [Symbol.asyncDispose]: async () => {
-        if (!succeeded) {
-          for (const { target, backup } of links.toReversed()) {
-            await rm(target, { recursive: true, force: true });
-            await rename(backup, target);
-          }
-        }
-        await rm(transaction, { recursive: true, force: true });
+        await rm(stageHome, { recursive: true, force: true });
       },
     };
-    for (const name of (
-      await Promise.all(
-        install.map(async (candidate) =>
-          (await isOwnInHouseLink(
-            resolve(skillsRoot, candidate),
-            root,
-            candidate,
-          ))
-            ? candidate
-            : undefined,
-        ),
-      )
-    ).filter((candidate) => candidate !== undefined)) {
-      const target = resolve(skillsRoot, name);
-      const backup = resolve(transaction, name);
-      await rename(target, backup);
-      links.push({ target, backup });
-    }
+    await mkdir(resolve(stageHome, ".agents/skills"), { recursive: true });
+    const lockPath = resolve(home, ".agents/.skill-lock.json");
+    const stageLock = resolve(stageHome, ".agents/.skill-lock.json");
+    if (await pathPresent(lockPath)) await cp(lockPath, stageLock);
     const installed = await runPinnedSkillsCommand(
       cliVersion,
       [
@@ -496,13 +514,13 @@ async function syncInHouseCodex(
         "--copy",
         "-y",
       ],
-      home,
+      stageHome,
       root,
     );
     if (installed.timedOut || installed.exitCode !== 0)
       return `skills add for Codex ${installed.timedOut ? "timed out" : `exited ${installed.exitCode}`}`;
     const missing = install.filter((name) => {
-      const target = resolve(home, ".agents/skills", name);
+      const target = resolve(stageHome, ".agents/skills", name);
       const state = fromThrowable((path: string) => lstatSync(path))(target);
       return (
         state.isErr() ||
@@ -515,15 +533,17 @@ async function syncInHouseCodex(
     });
     if (missing.length > 0)
       return `skills CLI returned success without copy-installing: ${missing.join(", ")}`;
-    for (const name of install)
-      await cp(
-        preparedSkill(prepared, name),
-        resolve(home, ".agents/skills", name),
-        {
-          recursive: true,
-        },
-      );
-    succeeded = true;
+    const installError = await installPreparedSkills(
+      skillsRoot,
+      install,
+      prepared,
+    );
+    if (installError !== undefined) return installError;
+    if (await pathPresent(stageLock)) {
+      const temporaryLock = `${lockPath}.${randomUUID()}.tmp`;
+      await cp(stageLock, temporaryLock);
+      await rename(temporaryLock, lockPath);
+    }
   }
 
   if (stale.length > 0 && !deferRemoval) {
@@ -866,6 +886,32 @@ async function main(): Promise<void> {
   }
 
   const run = async (): Promise<void> => {
+    await mkdir(resolve(home, ".agents"), { recursive: true });
+    const lockFile = await open(
+      resolve(home, ".agents/.dotfiles-skills-sync.lock"),
+      "a",
+    );
+    const libc = dlopen(
+      process.platform === "darwin"
+        ? "/usr/lib/libSystem.B.dylib"
+        : "libc.so.6",
+      {
+        flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 },
+      },
+    );
+    await using _lock = {
+      [Symbol.asyncDispose]: async () => {
+        await lockFile.close();
+        libc.close();
+      },
+    };
+    if (libc.symbols.flock(lockFile.fd, 2 | 4) !== 0) {
+      fail("FATAL: another skills sync holds the installation lock");
+      process.exitCode = 1;
+      return;
+    }
+    for (const base of [".claude/skills", ".agents/skills"])
+      await cleanSkillStages(resolve(home, base));
     const preparedRoot = await mkdtemp(join(tmpdir(), "skills-sync-copies-"));
     await using _prepared = {
       [Symbol.asyncDispose]: async () => {

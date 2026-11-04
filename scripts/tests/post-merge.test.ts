@@ -163,6 +163,12 @@ test("a hung step is killed, named, timed and prevents subsequent work", async (
   expect(lines.join("\n")).not.toContain("never");
 });
 
+test("the in-house step has a generous finite bound", () => {
+  expect(
+    STEPS.find((step) => step.name === "skills:sync:in-house")?.boundMs,
+  ).toBe(120_000);
+});
+
 test("a failed step stays failed and prevents subsequent work", async () => {
   const lines: string[] = [];
   expect(

@@ -25,7 +25,7 @@ export const STEPS: Step[] = [
   {
     name: "skills:sync:in-house",
     args: ["scripts/skills-sync.ts", "--in-house-only"],
-    boundMs: 10_000,
+    boundMs: 120_000,
   },
 ];
 
@@ -35,7 +35,7 @@ export async function runSteps(
   report: (line: string) => void = (line) => process.stderr.write(`${line}\n`),
 ): Promise<number> {
   let findings = 0;
-  const deadline = performance.now() + 50_000;
+  const deadline = performance.now() + 180_000;
   for (const step of steps) {
     const started = performance.now();
     const boundMs = Math.min(

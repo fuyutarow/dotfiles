@@ -32,6 +32,9 @@ processors=12
 # Backed by %TEMP%\<guid>\swap.vhdx, which is materialised on distro start and counts against C:.
 # Measured 2026-09-08: 16 GB on disk while only 350 MB was in use. It cannot be relocated off C:
 # with swapFile= here, because the only other volume (E:) is exFAT and cannot host a sparse vhdx.
+# C: fell from 53.7 GB free to 0.36 GB on 2026-11-01 and recovered after termination; swap
+# could have contributed, but its allocated-byte change was not measured. Keep the cap until
+# workload and host measurements justify reducing it; do not infer the cause from this alone.
 swap=16GB
 
 # Bridges Windows 127.0.0.1:<port> to a WSL listener. Keeps the ProxyJump fallback route into
@@ -45,6 +48,11 @@ nestedVirtualization=true
 # the default retention is a standing disk cost on a drive that has hit zero free twice this
 # week. Two is enough to compare a repeat crash against its predecessor.
 maxCrashDumpCount=2
+
+# debugConsoleLogFile is unset: WSL documents append, but no rotation or size limit. Kernel
+# output would help diagnose the 2026-11-01 and 2026-11-04 stops, but an unbounded log on C:
+# risks another full disk. Enable only with a tested host-side size bound and cleanup; a suitable
+# destination is C:\\Users\\fuyutarow\\AppData\\Local\\wsl-kernel.log (outside Temp).
 
 # Ceiling for the file system of any distro created FROM NOW ON (600 GiB in bytes; this key takes
 # a byte count and is spelled out rather than "600GB" so a suffix-parsing difference can never
@@ -66,28 +74,27 @@ defaultVhdSize=644245094400
 # compute server. Note also that the crash-dump cap above did not contain it: ten dumps were
 # on disk against maxCrashDumpCount=2, so the cap is not a defence against a crash LOOP.
 # If a GUI is ever genuinely needed here, turn this back on deliberately, with the reason.
+# WSL 3.0.5 fixes global guiApplications=false suppression of a distro GUI opt-in:
+# https://github.com/microsoft/WSL/pull/41973
 guiApplications=false
 
-# NOT EFFECTIVE - kept only so a future WSL that honours it does the right thing.
-# Note also that -1 is NOT a documented value: the published contract is "the number of
-# milliseconds that a VM is idle, before it is shut down", default 60000, with no documented
-# meaning for a negative number. So there is no basis for expecting this to work, independent of
-# the regression below.
-# Measured 2026-09-06 on WSL 2.9.8.0: with this set, WSL still cleanly terminated the distro
-# (SIGTERM from PID 1, ext4 unmount) about 60s after the last Windows-side wsl.exe attachment
-# detached - even while an ssh session was actively running a job inside the distro. An
-# in-distro workload does NOT count as activity. Known regression: microsoft/WSL #13291, #13416.
-# What actually keeps the distro resident is the Windows scheduled task WSL-keepalive:
-#   wsl.exe -d Ubuntu-24.04 -u root --exec /usr/bin/tail -f /dev/null
-vmIdleTimeout=-1
+[general]
+
+# Disable the distro idle shutdown timer; vmIdleTimeout governs the VM after distros stop.
+# WSL 2.9.8 stopped the distro despite vmIdleTimeout=-1, interrupting reachability. Keep the
+# existing Windows keepalive task until this setting has been tested on r99 after deployment.
+# https://learn.microsoft.com/en-us/windows/wsl/wsl-config#general-wsl-settings
+instanceIdleTimeout=-1
 
 [experimental]
 
-# Any NEWLY created vhdx becomes sparse automatically. The existing Ubuntu-24.04 vhdx is already
-# sparse (verified with `fsutil sparse queryflag`), so this changes nothing today; it only keeps
-# the next distro from starting out non-sparse.
-sparseVhd=true
+# Newly created VHDs stay non-sparse: offline compaction refuses sparse VHDs, and enabling sparse
+# on existing VHDs requires --allow-unsafe because of corruption reports. This does not change
+# the sparse attribute of an existing VHD.
+sparseVhd=false
 
-# autoMemoryReclaim is DELIBERATELY UNSET. Its default is already dropCache, the most aggressive
-# of the three values (disabled / gradual / dropCache). Setting "gradual" reads like an
-# improvement but is strictly LESS aggressive reclaim. Do not add it expecting more memory back.
+# autoMemoryReclaim is DELIBERATELY UNSET (default dropCache). WSL 2.9 changed idle reclaim:
+# after two minutes idle, dropCache runs once; gradual continues reclaiming cold cache toward a
+# floor and can retain less memory. Keep the default until r99 workload measurements justify a
+# change; the 56 GB cap alone does not reclaim cache during sustained work.
+# https://github.com/microsoft/WSL/pull/41096

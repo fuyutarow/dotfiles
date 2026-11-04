@@ -41,7 +41,6 @@ const ENTRY = "`agx worker run <ticket>` or `agx-worker run <ticket>`";
 // zod is the committed hook bundle, so this adds no install-time dependency.
 const RosterJson = jsonOf(
   z.object({
-    default: z.string().optional(),
     choice: z.array(AgxRosterChoiceSchema),
   }),
 );
@@ -109,13 +108,13 @@ async function main(): Promise<void> {
         own === undefined || prices.length === 0
           ? "—"
           : `${Math.round((own / cheapest) * 10) / 10}x`;
-      return `| ${row.id === roster.default ? "●" : "○"} | \`${row.id}\` | ${row.route} | ${num(row.aa_index)} | ${num(row.tb4)}${row.tb4_source === undefined ? "" : ` ([AA](${row.tb4_source}))`} | ${num(row.scicode)}${row.scicode_source === undefined ? "" : ` ([AA](${row.scicode_source}))`} | ${price(row.price_in)}/${price(row.price_cached_in)}/${price(row.price_out)} | ${cost} | ${row.use_for ?? "–"} |`;
+      return `| \`${row.id}\` | ${row.route} | ${num(row.aa_index)} | ${num(row.tb4)}${row.tb4_source === undefined ? "" : ` ([AA](${row.tb4_source}))`} | ${num(row.scicode)}${row.scicode_source === undefined ? "" : ` ([AA](${row.scicode_source}))`} | ${price(row.price_in)}/${price(row.price_cached_in)}/${price(row.price_out)} | ${cost} | ${row.use_for ?? "–"} |`;
     });
     return {
       ok: true,
       value: [
-        "| default | id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |",
-        "| :-: | --- | --- | --: | --: | --: | --- | --: | --- |",
+        "| id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |",
+        "| --- | --- | --: | --: | --: | --- | --: | --- |",
         ...table,
       ].join("\n"),
     };

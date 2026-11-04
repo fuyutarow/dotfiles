@@ -41,7 +41,7 @@ const ENTRY = "`agx worker run <ticket>` or `agx-worker run <ticket>`";
 // zod is the committed hook bundle, so this adds no install-time dependency.
 const RosterJson = jsonOf(
   z.object({
-    default: z.string(),
+    default: z.string().optional(),
     choice: z.array(AgxRosterChoiceSchema),
   }),
 );

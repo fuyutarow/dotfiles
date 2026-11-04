@@ -37,6 +37,7 @@ const PRODUCTION_DENIAL_WITHOUT_USE_FOR: string | null = (() => {
   const reason = strAt(output, "permissionDecisionReason");
   if (output === undefined || reason === undefined) return null;
   const projected = reason
+    .replace("| ● | `luna-high`", "| ○ | `luna-high`")
     .split("\n")
     .map((line) => {
       if (!line.startsWith("| ● |") && !line.startsWith("| ○ |")) return line;
@@ -90,6 +91,7 @@ case "$DISPATCH_ROSTER_FIXTURE_MODE" in
   invalid-json) printf '%s' 'not json'; exit 0 ;;
   invalid-shape) printf '%s' '{}'; exit 0 ;;
   invalid-choice) printf '%s' '{"default":"missing-route","choice":[{"id":"missing-route"}]}'; exit 0 ;;
+  no-default) printf '%s' '{"choice":[{"id":"first","route":"codex"},{"id":"second","route":"claude"}]}'; exit 0 ;;
   no-use-for) cat "$DISPATCH_ROSTER_FIXTURE_PATH"; exit 0 ;;
   slow) sleep 2.2; cat "$DISPATCH_ROSTER_FIXTURE_PATH"; exit 0 ;;
   timeout) exec sleep 30 ;;
@@ -156,7 +158,7 @@ describe("enforce-dispatch-contract", () => {
         /\bagx (?:run|dispatch|check|ls|judge|stats|roster|doctor|jev)\b/u,
       );
       // the table names every candidate, claude rows included, with its measured numbers and cost
-      expect(d.reason).toContain("| ● | `luna-high` | codex | 33 | 4.5 |");
+      expect(d.reason).toContain("| ○ | `luna-high` | codex | 33 | 4.5 |");
       expect(d.reason).toContain("| ○ | `sonnet-high` | claude | 47 | 43.9 |");
     },
   );
@@ -172,6 +174,21 @@ describe("enforce-dispatch-contract", () => {
     expect(d.decision).toBe("deny");
     expect(d.reason).toContain("agx worker roster --json");
     expect(d.reason).toContain("enabled");
+  });
+
+  test("a roster without default renders every row unmarked", () => {
+    const result = dispatchHook(
+      "Agent",
+      {},
+      { DISPATCH_ROSTER_FIXTURE_MODE: "no-default" },
+    );
+    expect(result.code).toBe(0);
+    const d = decisionOf(result.stdout);
+    expect(d.decision).toBe("deny");
+    expect(d.reason).toContain("Roster (agx worker roster --json):");
+    expect(d.reason).toContain("| ○ | `first` | codex |");
+    expect(d.reason).toContain("| ○ | `second` | claude |");
+    expect(d.reason).not.toContain("| ● |");
   });
 
   test("missing use_for displays as an en dash and present text is retained", () => {

@@ -45,6 +45,10 @@ async function parse(
 
 const record = (content: string) =>
   JSON.stringify({ type: "user", message: { role: "user", content } });
+const sonnet = (n: number) =>
+  JSON.stringify({
+    modelSettings: { "claude-sonnet-5-5": { autoCompactWindow: n } },
+  });
 
 describe("Claude auto-compact window", () => {
   const settings = JSON.stringify({
@@ -53,7 +57,7 @@ describe("Claude auto-compact window", () => {
   test("matches model and displays usage against its window", async () => {
     const context = (
       await parse(
-        settings,
+        "{}",
         "claude-opus-5-5[1m]",
         1000000,
         join(import.meta.dir, "fixtures/claude-autocompact.jsonl"),
@@ -102,7 +106,20 @@ describe("Claude auto-compact window", () => {
       ),
     ).toBe("Ctx: 120k 12%");
   });
-  test("ignores host settings regardless of their contents", async () => {
+  test("reads the model setting on each render", async () => {
+    for (const n of [400000, 500000]) {
+      const context = (
+        await parse(sonnet(n), "claude-sonnet-5-5", 1000000, undefined, 90600)
+      )?.context;
+      expect(context?.compactWindow).toBe(n);
+      expect(
+        ctxSegment({
+          ctx: "90.6k",
+          ctxPct: (90600 / n) * 100,
+          ctxWindow: context?.compactWindow,
+        }).replaceAll(ansi, ""),
+      ).toBe(`Ctx: ${Math.round((90600 / n) * 100)}% (90.6k/${n / 1000}k)`);
+    }
     for (const input of ["{}", settings, "{"]) {
       const context = (await parse(input, "claude-sonnet-5-5"))?.context;
       expect(context?.compactWindow).toBeUndefined();
@@ -122,11 +139,11 @@ describe("Claude auto-compact window", () => {
       prefix + command + "\n" + output + "\n" + "x".repeat(300000) + "\n",
     );
     expect(
-      (await parse(settings, "claude-opus-5-5", 1000000, path, 120000, "large"))
+      (await parse("{}", "claude-opus-5-5", 1000000, path, 120000, "large"))
         ?.context?.compactWindow,
     ).toBeUndefined();
     expect(
-      (await parse(settings, "claude-opus-5-5", 1000000, path, 120000, "large"))
+      (await parse("{}", "claude-opus-5-5", 1000000, path, 120000, "large"))
         ?.context?.compactWindow,
     ).toBe(400000);
   });
@@ -139,16 +156,8 @@ describe("Claude auto-compact window", () => {
       );
     writeFileSync(path, [command, output(400), ""].join("\n"));
     expect(
-      (
-        await parse(
-          settings,
-          "claude-opus-5-5",
-          1000000,
-          path,
-          120000,
-          "replace",
-        )
-      )?.context?.compactWindow,
+      (await parse("{}", "claude-opus-5-5", 1000000, path, 120000, "replace"))
+        ?.context?.compactWindow,
     ).toBe(400000);
     const replacement = path + ".new";
     writeFileSync(
@@ -157,29 +166,13 @@ describe("Claude auto-compact window", () => {
     );
     renameSync(replacement, path);
     expect(
-      (
-        await parse(
-          settings,
-          "claude-opus-5-5",
-          1000000,
-          path,
-          120000,
-          "replace",
-        )
-      )?.context?.compactWindow,
+      (await parse("{}", "claude-opus-5-5", 1000000, path, 120000, "replace"))
+        ?.context?.compactWindow,
     ).toBe(600000);
     writeFileSync(path, [command, output(300), ""].join("\n"));
     expect(
-      (
-        await parse(
-          settings,
-          "claude-opus-5-5",
-          1000000,
-          path,
-          120000,
-          "replace",
-        )
-      )?.context?.compactWindow,
+      (await parse("{}", "claude-opus-5-5", 1000000, path, 120000, "replace"))
+        ?.context?.compactWindow,
     ).toBe(300000);
     const key = createHash("sha256").update("replace").digest("hex");
     writeFileSync(
@@ -187,25 +180,17 @@ describe("Claude auto-compact window", () => {
       "{corrupt",
     );
     expect(
-      (
-        await parse(
-          settings,
-          "claude-opus-5-5",
-          1000000,
-          path,
-          120000,
-          "replace",
-        )
-      )?.context?.compactWindow,
+      (await parse("{}", "claude-opus-5-5", 1000000, path, 120000, "replace"))
+        ?.context?.compactWindow,
     ).toBe(300000);
     expect(
-      (await parse(settings, "claude-opus-5-5", 1000000, path + "-missing"))
+      (await parse("{}", "claude-opus-5-5", 1000000, path + "-missing"))
         ?.context?.compactWindow,
     ).toBeUndefined();
   });
   test("dataframe computes the displayed percentage from the parsed window", async () => {
     const session = await parse(
-      settings,
+      "{}",
       "claude-opus-5-5",
       1000000,
       join(import.meta.dir, "fixtures/claude-autocompact.jsonl"),
@@ -245,7 +230,7 @@ describe("Claude auto-compact window", () => {
     });
     expect(ctxSegment(frame).replaceAll(ansi, "")).toBe("Ctx: 30% (120k/400k)");
     const modelOnly = await parse(
-      settings,
+      "{}",
       "claude-opus-5-5",
       1000000,
       undefined,

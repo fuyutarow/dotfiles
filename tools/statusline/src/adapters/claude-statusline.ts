@@ -1,4 +1,7 @@
-import { maybe, z } from "../zod.ts";
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { jsonOf, maybe, z } from "../zod.ts";
 import type { SessionStatus } from "../session-status.ts";
 import { claudeTranscriptWindow } from "./claude-transcript-window.ts";
 
@@ -76,6 +79,30 @@ function modelWindow(value: number | undefined): number | undefined {
   return value !== undefined && value > 0 ? value : undefined;
 }
 
+async function configuredWindow(
+  model: string | undefined,
+): Promise<number | undefined> {
+  if (model === undefined) return undefined;
+  const key = model.replace(/\[1m\]$/iu, "");
+  const schema = z.object({
+    modelSettings: z
+      .record(
+        z.string(),
+        z.object({ autoCompactWindow: z.number().positive().optional() }),
+      )
+      .optional(),
+  });
+  return Promise.try(async () => {
+    const root = process.env["CLAUDE_CONFIG_DIR"] ?? join(homedir(), ".claude");
+    const parsed = jsonOf(schema).safeParse(
+      await readFile(join(root, "settings.json"), "utf8"),
+    );
+    return parsed.success
+      ? parsed.data.modelSettings?.[key]?.autoCompactWindow
+      : undefined;
+  }).catch(() => void 0);
+}
+
 // Claude Code's stdin contract ends here. The transformed output is the provider-neutral input
 // consumed by buildDataframe(); keep the wire keys out of the common statusline model.
 export const ClaudeStatuslineInputSchema = z
@@ -131,10 +158,12 @@ export const ClaudeStatuslineInputSchema = z
         : {
             inputTokens: contextTokens(input.context_window),
             usedPercent: input.context_window.used_percentage,
-            compactWindow: await claudeTranscriptWindow(
-              input.transcript_path,
-              input.session_id,
-            ),
+            compactWindow:
+              (await configuredWindow(input.model?.id)) ??
+              (await claudeTranscriptWindow(
+                input.transcript_path,
+                input.session_id,
+              )),
             modelWindow: modelWindow(input.context_window.context_window_size),
           },
     effort: input.effort?.level,

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.5 — 2026-11-04
+
+- Read model auto-compact window from Claude settings.
+
 ## 0.23.4 — 2026-11-03
 
 - usage-percent thresholds now come from tools/shared/usage-level.ts (rendering unchanged)

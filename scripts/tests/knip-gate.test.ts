@@ -35,7 +35,7 @@ test("production roots follow the repository's entry declarations", async () => 
     "scripts/linux-init.ts", // mise task
     "scripts/post-merge.ts", // mise task using mise which bun
     "agents/hooks/enforce-storage-headroom.ts", // shared hook
-    "agents/codex/hooks/enforce-math-delimiters.ts", // vendor hook
+    "agents/codex/hooks/enforce-dispatch-contract.ts", // vendor hook
     "agents/skills/compiling-latex/scripts/tex-oracle.ts", // skill
     "scripts/ccc-swap.ts", // skill references checkout CLI
     "agents/goal-kernel/cli.ts", // documented CLI

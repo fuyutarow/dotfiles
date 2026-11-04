@@ -33,6 +33,7 @@ import {
 } from "./receipt.ts";
 import type { Context, Target } from "./targets/index.ts";
 import { defaultScanCacheDir, withScanSignal } from "./lib/scan-cache.ts";
+import { acquirePlanLock } from "./lib/plan-lock.ts";
 
 const expand = (p: string) =>
   p
@@ -279,6 +280,16 @@ async function planTarget(
 }
 
 export async function plan(
+  targets: Target[],
+  options: EngineOptions,
+): Promise<EngineResult> {
+  const lock = await acquirePlanLock(options.state ?? stateDir());
+  if (!lock.ok) return { exit: 2, plan: null, error: lock.error };
+  using _lock = { [Symbol.dispose]: lock.release };
+  return await planUnlocked(targets, options);
+}
+
+async function planUnlocked(
   targets: Target[],
   options: EngineOptions,
 ): Promise<EngineResult> {

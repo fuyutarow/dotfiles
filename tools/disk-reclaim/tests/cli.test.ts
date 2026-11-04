@@ -456,3 +456,43 @@ test("wrap spawn failure still records a failed v1-compatible receipt", () => {
   expect(readReceipts(1, state).receipts[0]?.exit).toBe(1);
   expect(existsSync(join(state, "lock"))).toBe(false);
 });
+
+test("concurrent plan and run refuse a held scan and a killed holder releases it", async () => {
+  const root = fixture();
+  const env = cliEnv(root);
+  const holder = Bun.spawn(
+    [process.execPath, resolve(import.meta.dir, "fixtures/holding-plan.ts")],
+    {
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const reader = holder.stdout.getReader();
+  {
+    await using _holder = {
+      async [Symbol.asyncDispose]() {
+        holder.kill("SIGKILL");
+        await holder.exited;
+        reader.releaseLock();
+      },
+    };
+    const first = await Promise.race([reader.read(), Bun.sleep(10_000)]);
+    expect(first).toBeDefined();
+    expect(new TextDecoder().decode(first?.value)).toContain("scanning");
+    for (const args of [
+      ["plan", "clean", "--json"],
+      ["run", "clean", "--yes", "--json"],
+    ]) {
+      const result = invoke(args, env.RECLAIM_STATE_DIR, env);
+      expect(result.exit).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain(
+        `plan already running (pid ${holder.pid})`,
+      );
+    }
+  }
+  const next = invoke(["plan", "clean", "--json"], env.RECLAIM_STATE_DIR, env);
+  expect(next.exit).toBe(0);
+  expect(jsonOf(Plan).safeParse(next.stdout).success).toBe(true);
+}, 30_000);

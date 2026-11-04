@@ -47,6 +47,11 @@ fingerprint-changed records do not run.
 When a deletion run is cancelled, stderr reports `cancelled during deletion` and each
 successfully deleted path as `deleted before cancellation: <path>`.
 
+Only one plan scan may run per reclaim state directory at a time, including the previews used by
+`run` and `--yes`. A concurrent plan exits 2 with the holder PID on stderr and no plan on stdout.
+The operating system releases the plan lock when its holder exits, including after SIGKILL; the
+lock file persists and is reused.
+
 A timer run stopped by SIGTERM exits 143; SIGINT exits 130. It writes a receipt
 containing the items completed before the signal before exiting.
 

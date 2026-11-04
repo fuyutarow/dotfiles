@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.26 — 2026-11-04
+
+- Refuse concurrent planning scans and recover automatically when a planner exits
+
 ## 1.12.25 — 2026-10-31
 
 - Make bounded graveyard inspection asynchronous.

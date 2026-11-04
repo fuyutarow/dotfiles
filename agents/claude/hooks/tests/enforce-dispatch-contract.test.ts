@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   mkdirSync,
@@ -13,6 +14,7 @@ import { at, obj, parseJson, strAt } from "../../../hooks/narrow.ts";
 import {
   HOMEBREW_AGX,
   isolatedTestEnv,
+  TEST_HOST_PATH,
   TEST_TMPDIR,
   testPathWithStub,
 } from "../../../../scripts/tests/support/test-isolation.ts";
@@ -70,6 +72,24 @@ const call = (tool: string, input: Record<string, unknown> = {}) => ({
 });
 
 const scratch = mkdtempSync(join(TEST_TMPDIR, "dispatch-roster-"));
+// Initialize jj's secure per-repository config in the isolated HOME before the hook runs.
+const jjSetup = spawnSync(
+  "jj",
+  [
+    "--ignore-working-copy",
+    "--at-operation=@",
+    "workspace",
+    "root",
+    "--name",
+    "default",
+  ],
+  {
+    cwd: dotfilesRoot,
+    env: isolatedTestEnv(scratch, TEST_HOST_PATH),
+    encoding: "utf8",
+  },
+);
+expect(jjSetup.status, jjSetup.stderr).toBe(0);
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });

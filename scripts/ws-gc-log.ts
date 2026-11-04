@@ -56,6 +56,12 @@ async function main() {
       "--all",
       "--legacy",
       "--json",
+      "--repo-budget-seconds",
+      "600",
+      "--inventory-budget-seconds",
+      "300",
+      "--all-budget-seconds",
+      "1500",
     ],
     { stdout: "pipe", stderr: "pipe" },
   );

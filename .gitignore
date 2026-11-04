@@ -19,6 +19,9 @@
 # Owner: ccc MCP. Root-level runtime logs are local diagnostic output.
 /ccc_mcp_*.log
 
+# Owner: Obsidian. A vault's .obsidian/ is per-user app state (workspace, caches, plugin logs); the declared settings live in obsidian/ and are merged into vaults, never read from here.
+**/.obsidian/
+
 # Owner: the human using this checkout. Only root-level local overrides and backup trees.
 /local/
 /backups/

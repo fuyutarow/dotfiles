@@ -21,7 +21,8 @@
 // project's DB dir as a whole — recursive size, whole-directory rename — therefore sweeps up the
 // nested project's DB. Operate on DB_ARTIFACTS by name instead.
 
-import { realpath } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
+import { homedir } from "node:os";
 import {
   basename,
   dirname,
@@ -39,6 +40,44 @@ const resolveRealpath = (path: string) =>
 
 export const MAPPING_ENV = "COCOINDEX_CODE_DB_PATH_MAPPING";
 export const SETTINGS_DIR_NAME = ".cocoindex_code";
+export const DB_ROOT_DECLARATION = resolve(
+  import.meta.dir,
+  "../../../cocoindex/db-root",
+);
+
+/** Establish the daemon's declared mapping before any watermark read or ccc child. */
+export async function declaredDbEnv(
+  env: Record<string, string | undefined> = process.env,
+  declaration = DB_ROOT_DECLARATION,
+): Promise<Result<Record<string, string | undefined>, Error>> {
+  const read = await fromAsyncThrowable(
+    () => readFile(declaration, "utf8"),
+    asError,
+  )();
+  if (read.isErr())
+    return err(new Error(`${declaration}: ${read.error.message}`));
+  const root = read.value.trim();
+  if (root === "" || isAbsolute(root) || root.split("/").includes(".."))
+    return err(
+      new Error(`${declaration}: expected a non-empty path relative to $HOME`),
+    );
+  const home = env["HOME"] ?? homedir();
+  const declared = `${home}=${join(home, root)}`;
+  const actual = env[MAPPING_ENV];
+  if (actual === undefined || actual === "")
+    return ok({ ...env, [MAPPING_ENV]: declared });
+  const [given, expected] = await Promise.all([
+    parseMapping(actual),
+    parseMapping(declared),
+  ]);
+  if (given.isErr()) return err(given.error);
+  if (expected.isErr()) return err(expected.error);
+  if (JSON.stringify(given.value) !== JSON.stringify(expected.value))
+    return err(
+      new Error(`${MAPPING_ENV} locates DBs differently from ${declaration}`),
+    );
+  return ok(env);
+}
 
 // Every file ccc's daemon or repo-retrieve writes into a project's DB dir. `INDEXED_AT` is the
 // house freshness watermark (ccc-index.ts), kept next to the DB it certifies so that moving one

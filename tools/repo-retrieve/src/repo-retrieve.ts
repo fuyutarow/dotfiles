@@ -61,6 +61,7 @@ import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
 import { parseDaemonStatus, type DaemonStatus } from "./ccc-daemon-status.ts";
+import { declaredDbEnv, MAPPING_ENV } from "./ccc-db-dir.ts";
 import {
   checkIndexFreshness,
   citationToken,
@@ -1807,6 +1808,9 @@ function indexCommand() {
 }
 
 async function main(): Promise<Result<number, Error>> {
+  const dbEnv = await declaredDbEnv();
+  if (dbEnv.isErr()) return err(dbEnv.error);
+  process.env[MAPPING_ENV] = dbEnv.value[MAPPING_ENV];
   argumentError = undefined;
   commandResult = ok(0);
   const argv = normalizeNegativeNumericValues(cliArgv());

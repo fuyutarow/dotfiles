@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.1 — 2026-11-05
+
+- Resolve the ccc database mapping from its shared declaration before routing.
+
 ## 1.12.0 — 2026-11-05
 
 - rr about, absent and shape accept --lang, passed unchanged to ccc search/grep so ccc's language partition narrows the hits; routes without --lang are unchanged

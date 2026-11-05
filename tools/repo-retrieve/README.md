@@ -167,12 +167,11 @@ the saved plan and the contributor report. Repeat until it exits 0. Then run pla
 to perform the gated index and record its freshness watermark. Confirm the final line is
 `RESULT: INDEXED` before relying on semantic retrieval.
 Semantic search rejects `--refresh`; use the gated `rr index` to refresh the index.
-The managed ccc daemon also refuses search on an unindexed project and reports an empty status
-without starting an index. On an existing index it serves the stored contents, even after a daemon
-restart; stale contents are not refreshed by the daemon. `rr` applies its own freshness checks and
-may request an auto-reindex through the same admission plan. The public `ccc` entry refuses both
-`ccc index` and `ccc search --refresh`. The daemon protocol itself does not authenticate explicit
-index requests, so a client bypassing that entry can still send one.
+The managed ccc daemon behaves as ccc is designed: the first status or search on a project starts
+its indexing. `rr` applies its own freshness checks and may request an auto-reindex through the
+same admission plan. The public `ccc` entry refuses both `ccc index` and `ccc search --refresh`.
+The daemon protocol itself does not authenticate explicit index requests, so a client bypassing
+that entry can still send one.
 
 Historical example — `research-record-v2`: curation reduced the estimate from 13,381 to
 5,794 chunks and indexing completed in 122.8 seconds. Its former 0.32 data-share limit

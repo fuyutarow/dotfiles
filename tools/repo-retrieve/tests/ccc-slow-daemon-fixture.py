@@ -13,9 +13,6 @@ import numpy as np
 from cocoindex.resources.schema import VectorSchema
 from cocoindex_code import daemon
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "cocoindex"))
-from ccc_no_implicit_index import install
-
 LOG = Path(os.environ["RR_FIXTURE_EMBED_LOG"])
 DELAY = float(os.environ.get("RR_FIXTURE_EMBED_DELAY", "0.25"))
 
@@ -37,7 +34,6 @@ class Embedder:
 
 
 daemon.create_embedder = lambda *args, **kwargs: Embedder()
-install()
 from cocoindex_code.cli import app
 
 sys.argv = ["ccc", "run-daemon"]

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.1 — 2026-11-05
+
+- Restore ccc's own first-status/search indexing in the managed daemon: the ensure_indexing_started override and its fixtures and tests are removed
+
 ## 1.9.0 — 2026-11-05
 
 - A root whose .cocoindex_code/rr.toml declares [shards] is searched across every content-pinned shard copy by rr about/battery; stale, added, corrupted or failed shards are refused instead of reported as success or absence

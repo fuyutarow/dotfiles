@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.0 — 2026-11-05
+
+- A root may exceed the shared index ceilings (max_est_chunks, max_data_share, max_seconds, max_total_bytes) by stating [index] over_ceiling_reason in its rr.toml; an empty reason or none is refused. The [shards] mechanism and shards.ts are removed
+
 ## 1.9.1 — 2026-11-05
 
 - Restore ccc's own first-status/search indexing in the managed daemon: the ensure_indexing_started override and its fixtures and tests are removed

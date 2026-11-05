@@ -157,10 +157,16 @@ selection (`include_patterns`, `exclude_patterns`, and `max_file_size`). Use
 `file_byte_allowances` for exact files that should exceed the ordinary byte ceiling. Do not use
 `--accept-plan`: revise the configuration so the selected corpus itself satisfies the gate.
 
-The shared ceilings are 50,000 estimated chunks, 0.20 data share and 600 seconds. A root may
-lower these values, but cannot raise them. The fallback rate is capped at 50 chunks per second
-so a root cannot understate the estimate; it may select a lower rate. Both measured and fallback
-estimates above the effective time budget refuse admission. Add exclusions to the root's
+The shared ceilings are 50,000 estimated chunks, 0.20 data share and 600 seconds. They are
+defaults: a root raises `max_est_chunks` (and with it the aggregate byte ceilings, which derive
+from it as `max_est_chunks × 800`), `max_data_share` or `max_seconds` only by writing why in
+`[index] over_ceiling_reason` in its `.cocoindex_code/rr.toml`. A raised value with no reason, or
+with an empty or blank reason, is refused. Lowering needs no reason. The reason is printed with
+the budget in every plan, so a reader of the plan sees the claim. Set `max_seconds` from the
+measured chunks-per-second of `rr index --plan` rather than from hope: the plan prints the
+estimate. The fallback rate is capped at 50 chunks per second unless the same reason is stated,
+so a root cannot silently understate the estimate; it may select a lower rate. Both measured and
+fallback estimates above the effective time budget refuse admission. Add exclusions to the root's
 `settings.yml` and re-plan until the corpus fits. Re-run
 `rr index --plan > /tmp/<repo>-rr-plan.jsonl` after each configuration change and review both
 the saved plan and the contributor report. Repeat until it exits 0. Then run plain `rr index`

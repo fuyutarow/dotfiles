@@ -546,7 +546,7 @@ describe.skipIf(ccc === null)(
       expect((await cli(root, ["--plan"])).code).toBe(2);
     }, 30_000);
 
-    test("root budgets cannot exceed shared ceilings and lower budgets apply", async () => {
+    test("root budgets cannot exceed shared ceilings without a reason and lower budgets apply", async () => {
       const root = fixture();
       const config = join(root, ".cocoindex_code", "rr.toml");
       for (const [key, value, ceiling] of [
@@ -561,7 +561,7 @@ describe.skipIf(ccc === null)(
         expect(result.code).not.toBe(0);
         expect(result.stderr).toContain(config);
         expect(result.stderr).toContain(
-          `${key} root value ${value} exceeds shared ceiling ${ceiling}`,
+          `${key} root value ${value} exceeds the default ${ceiling} with no [index] over_ceiling_reason`,
         );
         expect(result.stderr).toContain("add excludes");
       }

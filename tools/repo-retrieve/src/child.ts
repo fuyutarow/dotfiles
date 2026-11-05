@@ -47,7 +47,6 @@ export async function runChildCaptured(
   relay = true,
   cwd = process.cwd(),
   reportTimeout = true,
-  env: Record<string, string | undefined> = process.env,
 ): Promise<{
   exitCode: number;
   stdout: string;
@@ -58,7 +57,7 @@ export async function runChildCaptured(
   const invocation =
     basename(command[0] ?? "") === "git"
       ? readonlyCommand(command, cwd)
-      : { cmd: command, env };
+      : { cmd: command, env: process.env };
   const child = Bun.spawn({
     cmd: invocation.cmd,
     cwd,

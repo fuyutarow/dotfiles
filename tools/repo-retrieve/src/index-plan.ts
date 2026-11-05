@@ -1,5 +1,5 @@
 // A read-only admission gate. The Python bridge owns enumeration; all policy is here.
-import { isAbsolute, join, posix } from "node:path";
+import { join, posix } from "node:path";
 import { err, ok, type Result } from "neverthrow";
 import { z, jsonOf } from "@dotfiles/shared/src/zod.ts";
 import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
@@ -13,11 +13,14 @@ const CONTENT_LIMITS = {
   max_data_file_bytes: 65_536,
 };
 
+// Defaults that every root gets. A root raises one only by stating
+// `over_ceiling_reason` in its rr.toml `[index]`; lowering needs no reason.
 const SHARED_CEILING = {
   max_est_chunks: 50_000,
   max_data_share: 0.2,
   max_seconds: 600,
   est_chunks_per_second: 50,
+  max_total_bytes: 50_000 * 800,
 };
 const BudgetSchema = z
   .object({
@@ -32,6 +35,14 @@ const BudgetSchema = z
       .number()
       .positive()
       .default(SHARED_CEILING.est_chunks_per_second),
+    // Aggregate candidate bytes. Absent: max_est_chunks × 800 (the chunk estimate's own bound).
+    max_total_bytes: z
+      .number()
+      .int()
+      .positive()
+      .max(Number.MAX_SAFE_INTEGER)
+      .optional(),
+    over_ceiling_reason: z.string().trim().min(1).optional(),
     file_byte_allowances: z
       .record(
         z.string().refine(
@@ -57,14 +68,6 @@ const BudgetSchema = z
       .optional(),
   })
   .strict();
-// `[shards]` in rr.toml declares that this root's semantic retrieval is served by
-// independently indexed copies listed in a content-pinned manifest (see shards.ts).
-export const ShardsDeclarationSchema = z
-  .object({
-    manifest: z.string().refine(isAbsolute, "expected an absolute path"),
-    sha256: z.string().regex(/^[a-f0-9]{64}$/u),
-  })
-  .strict();
 const FileSchema = z.object({
   path: z.string(),
   bytes: z.number().nonnegative(),
@@ -75,7 +78,7 @@ const FileSchema = z.object({
 export type PlanFile = z.infer<typeof FileSchema>;
 export type Budget = z.infer<typeof BudgetSchema>;
 const aggregateByteLimits = (budget: Budget) => {
-  const max_total_bytes = budget.max_est_chunks * 800;
+  const max_total_bytes = budget.max_total_bytes ?? budget.max_est_chunks * 800;
   return {
     max_total_bytes,
     max_data_bytes: max_total_bytes * budget.max_data_share,
@@ -211,6 +214,10 @@ export function summarize(
     .filter((file) => file.kind === "data")
     .reduce((sum, file) => sum + file.bytes, 0);
   const aggregateLimits = aggregateByteLimits(budget);
+  const byteSource =
+    budget.max_total_bytes === undefined
+      ? "budget.max_est_chunks × 800"
+      : "budget.max_total_bytes";
   const inadequate =
     "effective candidate remains included; .gitignore/exclude_patterns or max_file_size in .cocoindex_code/settings.yml must exclude it";
   for (const file of files) {
@@ -236,7 +243,7 @@ export function summarize(
   }
   if (bytes > aggregateLimits.max_total_bytes)
     violations.push(
-      `aggregate candidate bytes ${bytes} > ${aggregateLimits.max_total_bytes} (budget.max_est_chunks × 800); exclusions are inadequate; largest paths: ${files
+      `aggregate candidate bytes ${bytes} > ${aggregateLimits.max_total_bytes} (${byteSource}); exclusions are inadequate; largest paths: ${files
         .toSorted((a, b) =>
           a.bytes === b.bytes
             ? a.path.localeCompare(b.path)
@@ -248,7 +255,7 @@ export function summarize(
     );
   if (dataBytes > aggregateLimits.max_data_bytes)
     violations.push(
-      `aggregate data bytes ${dataBytes} > ${aggregateLimits.max_data_bytes} (budget.max_est_chunks × 800 × budget.max_data_share); exclusions are inadequate; exclude dump/data candidates`,
+      `aggregate data bytes ${dataBytes} > ${aggregateLimits.max_data_bytes} (${byteSource} × budget.max_data_share); exclusions are inadequate; exclude dump/data candidates`,
     );
   if (chunks > budget.max_est_chunks)
     violations.push(`est_chunks ${chunks} > ${budget.max_est_chunks}`);
@@ -290,28 +297,32 @@ export async function computeIndexPlan(
     const raw = (await configFile.exists())
       ? Bun.TOML.parse(await configFile.text())
       : {};
-    const configSchema = z
-      .object({
-        index: BudgetSchema.optional(),
-        shards: ShardsDeclarationSchema.optional(),
-      })
-      .strict();
+    const configSchema = z.object({ index: BudgetSchema.optional() }).strict();
     const config = configSchema.safeParse(raw);
     if (!config.success)
       return err(new Error(`invalid rr.toml: ${config.error.message}`));
     const defaults = BudgetSchema.safeParse({});
     if (!defaults.success) return err(new Error(defaults.error.message));
     const budget = config.data.index ?? defaults.data;
+    const effective = {
+      max_est_chunks: budget.max_est_chunks,
+      max_data_share: budget.max_data_share,
+      max_seconds: budget.max_seconds,
+      est_chunks_per_second: budget.est_chunks_per_second,
+      max_total_bytes: aggregateByteLimits(budget).max_total_bytes,
+    };
+    const hasReason = budget.over_ceiling_reason !== undefined;
     for (const key of [
       "max_est_chunks",
       "max_data_share",
       "max_seconds",
       "est_chunks_per_second",
+      "max_total_bytes",
     ] as const) {
-      if (budget[key] > SHARED_CEILING[key])
+      if (effective[key] > SHARED_CEILING[key] && !hasReason)
         return err(
           new Error(
-            `${configFile.name}: ${key} root value ${budget[key]} exceeds shared ceiling ${SHARED_CEILING[key]}; add excludes to .cocoindex_code/settings.yml and re-plan`,
+            `${configFile.name}: ${key} root value ${effective[key]} exceeds the default ${SHARED_CEILING[key]} with no [index] over_ceiling_reason; state why this root needs more, or add excludes to .cocoindex_code/settings.yml and re-plan`,
           ),
         );
     }

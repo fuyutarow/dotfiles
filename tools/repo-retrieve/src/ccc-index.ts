@@ -385,6 +385,33 @@ async function indexProgressSample(project: string): Promise<{
   };
 }
 
+// ccc's protocol has no cancel request: a build runs in a daemon-owned task that survives client
+// disconnect, and `remove_project` merely hides it from `daemon status` (tests/rr-index-budget-
+// bound.test.ts proves both on a disposable daemon). So when a budget expires rr can stop only its
+// own client; the text below states what the daemon was OBSERVED doing afterwards and never
+// claims a stop that did not occur.
+export function buildAfterClientStop(daemon: "idle" | "indexing" | "unknown"): {
+  token: "still-indexing" | "idle" | "unobservable";
+  text: string;
+} {
+  if (daemon === "indexing")
+    return {
+      token: "still-indexing",
+      text:
+        "the daemon is STILL INDEXING this project: the build continues and its CPU/GPU use is NOT bounded by max_seconds. " +
+        "ccc has no cancel request; only restarting the daemon stops the build (and also interrupts every other project it is indexing), which rr does not do",
+    };
+  if (daemon === "idle")
+    return {
+      token: "idle",
+      text: "the daemon reports this project idle (its build ended on its own); this run is uncertified and no watermark was written",
+    };
+  return {
+    token: "unobservable",
+    text: "the daemon state could not be observed; assume the build continues, because ccc has no cancel request and rr stopped only its client",
+  };
+}
+
 export async function waitForProjectIdle(
   project: string,
   stallMs: number,
@@ -399,7 +426,8 @@ export async function waitForProjectIdle(
         timeBudget.plan.budget.max_seconds
     ) {
       process.stderr.write(
-        `FATAL: repo-retrieve elapsed time exceeds max_seconds=${timeBudget.plan.budget.max_seconds} while daemon is still indexing (exit 125); left the daemon running; watermark left unchanged\n${planReport(timeBudget.plan)}`,
+        `FATAL: repo-retrieve elapsed time exceeds max_seconds=${timeBudget.plan.budget.max_seconds} while daemon is still indexing (exit 125); ` +
+          `left the daemon running; BUILD_AFTER_BUDGET=${buildAfterClientStop("indexing").token}: ${buildAfterClientStop("indexing").text}; watermark left unchanged\n${planReport(timeBudget.plan)}`,
       );
       return 125;
     }
@@ -1136,16 +1164,18 @@ async function runChildToStderr(
     const elapsed =
       (Temporal.Now.instant().epochMilliseconds - startedAt) / 1000;
     if (plan !== undefined) process.stderr.write(planReport(plan));
+    const after = buildAfterClientStop((await indexProgressSample(cwd)).daemon);
     return {
       exitCode: 125,
-      cause: `repo-retrieve elapsed ${elapsed.toFixed(1)}s exceeds max_seconds=${plan?.budget.max_seconds}; stopped the client and left the daemon running`,
+      cause: `repo-retrieve elapsed ${elapsed.toFixed(1)}s exceeds max_seconds=${plan?.budget.max_seconds}; stopped the client and left the daemon running; BUILD_AFTER_BUDGET=${after.token}: ${after.text}`,
     };
   }
   if (result.origin === "stall") {
     child.kill("SIGTERM");
+    const after = buildAfterClientStop((await indexProgressSample(cwd)).daemon);
     return {
       exitCode: 124,
-      cause: `repo-retrieve observed no progress for ${timeoutMs}ms; stopped the client and left the daemon running`,
+      cause: `repo-retrieve observed no progress for ${timeoutMs}ms; stopped the client and left the daemon running; BUILD_AFTER_STALL=${after.token}: ${after.text}`,
     };
   }
   return {

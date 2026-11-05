@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.11 — 2026-11-05
+
+- rr index states plainly that max_seconds expiry stops only the client: after exit 125/124 it samples the daemon and reports BUILD_AFTER_BUDGET/BUILD_AFTER_STALL (still-indexing, idle or unobservable); a disposable-daemon test proves the build continues, remove_project does not cancel it and only a daemon restart does
+
 ## 1.8.10 — 2026-11-05
 
 - ccc-db-dir documents cocoindex/db-root as the single declaration of the ccc index DB root

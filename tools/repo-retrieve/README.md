@@ -223,8 +223,21 @@ an unavailable matcher exits 2. `--accept-plan` records an already passing plan 
 combined with `--plan`. While indexing, elapsed time over `max_seconds` exits 125 and repeats
 the contributor report. The stored chunk count measures corpus size; its net increase cannot
 measure incremental work remaining, so it never triggers a projected ETA cancellation.
-Only the client stops; the daemon remains running. The final FATAL names the wrapper limit and
-its bound. The existing no-progress guard exits 124. A nonzero ccc child exit is identified as
+`max_seconds` bounds rr's wait and the pre-index admission estimate; it does **not** stop the
+build. ccc's daemon protocol has no cancel request (a build is a daemon-owned task that survives
+client disconnect), and its only request that touches a running project, `remove_project`, hides
+the build from `ccc daemon status` while it keeps running. Only restarting the daemon ends a
+build, which also interrupts every other project it is indexing, so rr never does it. After
+stopping its client rr samples the daemon and says what it saw: `BUILD_AFTER_BUDGET=still-indexing`
+(the build continues and its CPU/GPU use is unbounded by `max_seconds`), `idle` (it ended on its
+own; the run is still uncertified and the watermark unwritten), or `unobservable` (assume it
+continues). `tests/rr-index-budget-bound.test.ts` proves all of this on a disposable daemon with a
+slow embedder: embeds keep arriving after exit 125 and after `remove_project`, and stop only when
+the daemon process dies. The upstream change that would let rr honor the budget is one cancel
+request that cancels the project's index task and releases its lock; until then, bound a build
+by what you admit (`max_est_chunks`, excludes), not by `max_seconds`. The final FATAL names the
+wrapper limit and its bound. The existing no-progress guard exits 124 and reports the same
+daemon observation as `BUILD_AFTER_STALL`. A nonzero ccc child exit is identified as
 a child exit status, with the last 16,384 characters of its stderr included in the final FATAL
 (escaped onto one line). A native ccc exit 124 or 125 is never labeled as a wrapper limit.
 

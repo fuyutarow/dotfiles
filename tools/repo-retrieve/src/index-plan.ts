@@ -74,8 +74,33 @@ const FileSchema = z.object({
   est_chunks: z.number().int().nonnegative(),
   kind: z.enum(["data", "text"]),
   blob: z.boolean().optional(),
+  // false: an incremental plan found this file unchanged, so ccc reuses its memo entry.
+  billed: z.boolean().optional(),
+});
+// Trailer of ccc_plan.py: the ccc it ran under and whether it billed only `changed`.
+const EnumerationSchema = z.object({
+  type: z.literal("enumeration"),
+  ccc: z.string(),
+  incremental: z.boolean(),
 });
 export type PlanFile = z.infer<typeof FileSchema>;
+// What `rr index` will make ccc embed. ccc memoizes process_file per file (cocoindex memo):
+// a file whose path, content and the logic/embedder fingerprints are unchanged is reused, so a
+// root already indexed at a certified watermark is charged for its changed files only. Anything
+// that cannot be ruled out as a memo miss for every file is charged as a full rebuild.
+export type IncrementalBasis =
+  | { mode: "full"; reason: string }
+  | {
+      mode: "incremental";
+      since: string;
+      recordedCcc: string;
+      changed: readonly string[];
+    };
+export type Charge = {
+  mode: "incremental" | "full";
+  reason: string;
+  corpus: { files: number; est_chunks: number };
+};
 export type Budget = z.infer<typeof BudgetSchema>;
 const aggregateByteLimits = (budget: Budget) => {
   const max_total_bytes = budget.max_total_bytes ?? budget.max_est_chunks * 800;
@@ -92,6 +117,7 @@ type Totals = {
 };
 export type IndexPlan = {
   files: PlanFile[];
+  charge: Charge;
   budget: Budget;
   total: Totals;
   data_share: number;
@@ -119,11 +145,49 @@ const directory = (file: PlanFile) =>
   posix.dirname(file.path).split("/").slice(0, 3).join("/");
 const contributorKey = (file: PlanFile) =>
   `${directory(file)}\0${extension(file.path)}\0${file.kind}`;
+function chargeReason(
+  basis: IncrementalBasis,
+  incremental: boolean,
+  billed: number,
+  included: number,
+  installedCcc: string | null,
+): string {
+  if (basis.mode === "full") return basis.reason;
+  if (incremental)
+    return `${billed} of ${included} included files changed since ${basis.since}; the rest are memo hits and are not re-embedded`;
+  return `ccc ${basis.recordedCcc} built the index, ${installedCcc ?? "unknown"} is installed: process_file's logic fingerprint may differ, which misses every memo entry`;
+}
+
 export function summarize(
-  files: PlanFile[],
+  allFiles: PlanFile[],
   budget: Budget,
   measuredRate: number | null = null,
+  requested?: IncrementalBasis,
+  installedCcc: string | null = null,
 ): IndexPlan {
+  const basis: IncrementalBasis = requested ?? {
+    mode: "full",
+    reason: "complete enumeration",
+  };
+  const incremental =
+    basis.mode === "incremental" && installedCcc === basis.recordedCcc;
+  const files = incremental
+    ? allFiles.filter((file) => file.billed !== false)
+    : allFiles;
+  const charge: Charge = {
+    mode: incremental ? "incremental" : "full",
+    reason: chargeReason(
+      basis,
+      incremental,
+      files.length,
+      allFiles.length,
+      installedCcc,
+    ),
+    corpus: {
+      files: allFiles.length,
+      est_chunks: allFiles.reduce((sum, file) => sum + file.est_chunks, 0),
+    },
+  };
   const chunks = files.reduce((sum, file) => sum + file.est_chunks, 0);
   const aggregate = (key: (file: PlanFile) => string) => {
     const groups = new Map<string, Totals>();
@@ -269,6 +333,7 @@ export function summarize(
     );
   return {
     files,
+    charge,
     budget,
     total: {
       files: files.length,
@@ -290,7 +355,7 @@ export function summarize(
 export async function computeIndexPlan(
   project: string,
   ccc: string,
-  options: { validationTimeoutMs?: number } = {},
+  options: { validationTimeoutMs?: number; basis?: IncrementalBasis } = {},
 ): Promise<Result<IndexPlan, Error>> {
   const result = await attempt(async () => {
     const configFile = Bun.file(join(project, ".cocoindex_code", "rr.toml"));
@@ -326,6 +391,10 @@ export async function computeIndexPlan(
           ),
         );
     }
+    const basis: IncrementalBasis = options.basis ?? {
+      mode: "full",
+      reason: "no incremental basis supplied",
+    };
     const python = await cccPython(ccc);
     if (python === null)
       return err(
@@ -341,6 +410,9 @@ export async function computeIndexPlan(
           ...CONTENT_LIMITS,
           ...aggregateByteLimits(budget),
           file_byte_allowances: budget.file_byte_allowances ?? {},
+          ...(basis.mode === "incremental"
+            ? { changed: basis.changed, recorded_ccc: basis.recordedCcc }
+            : {}),
         }),
       ],
       cwd: project,
@@ -363,15 +435,28 @@ export async function computeIndexPlan(
       return err(
         new Error(`index plan failed (exit ${code}): ${stderr.trim()}`),
       );
-    const files: PlanFile[] = [];
+    const enumerated: PlanFile[] = [];
+    let installedCcc: string | null = null;
     for (const line of stdout.split("\n").filter(Boolean)) {
+      const trailer = jsonOf(EnumerationSchema).safeParse(line);
+      if (trailer.success) {
+        installedCcc = trailer.data.ccc;
+        continue;
+      }
       const file = jsonOf(FileSchema).safeParse(line);
       if (!file.success)
         return err(new Error(`invalid planner output: ${file.error.message}`));
-      files.push(file.data);
+      enumerated.push(file.data);
     }
     const measuredRate = await readIndexRate();
-    const plan = summarize(files, budget, measuredRate.rate);
+    const plan = summarize(
+      enumerated,
+      budget,
+      measuredRate.rate,
+      basis,
+      installedCcc,
+    );
+    const files = plan.files;
     plan.rate_history = measuredRate.report;
     // A directory can itself end in '.json'. Ask ccc whether a proposed glob would
     // prune any ancestor of an included file; extension-scoping alone is insufficient.
@@ -477,6 +562,7 @@ export function planReport(plan: IndexPlan): string {
         "\n";
   return (
     `PLAN: ${plan.total.files} files, ${plan.total.bytes} bytes, ${plan.total.est_chunks} est_chunks (ceil(chars / 800)); data ${(plan.data_share * 100).toFixed(1)}%; estimated GPU ${plan.est_seconds.toFixed(1)}s at ${plan.chunks_per_second.toFixed(2)} chunks/s (${plan.rate_source})\n` +
+    `CHARGE: ${plan.charge.mode === "incremental" ? "incremental" : "full rebuild"} (${plan.charge.reason}); charged ${plan.total.est_chunks} of ${plan.charge.corpus.est_chunks} est_chunks in ${plan.charge.corpus.files} included files\n` +
     `${plan.rate_history ?? "RATE HISTORY: no history supplied"}\n` +
     `BUDGET: ${JSON.stringify(plan.budget)}\n` +
     `CONTENT LIMITS (bytes): ${JSON.stringify({ ...CONTENT_LIMITS, ...aggregateByteLimits(plan.budget) })}; blob content is refused at any size\n` +

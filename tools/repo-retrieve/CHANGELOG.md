@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.0 — 2026-11-05
+
+- rr index admission charges an already indexed root for the files ccc will re-embed (memo misses), not a full rebuild; first index, missing/unreadable watermark, changed settings, other ccc or .gitignore stay full rebuilds, and the plan states which it used
+
 ## 1.10.0 — 2026-11-05
 
 - A root may exceed the shared index ceilings (max_est_chunks, max_data_share, max_seconds, max_total_bytes) by stating [index] over_ceiling_reason in its rr.toml; an empty reason or none is refused. The [shards] mechanism and shards.ts are removed

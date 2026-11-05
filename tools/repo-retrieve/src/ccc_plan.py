@@ -7,6 +7,7 @@ Unreadable files abort the plan rather than silently undercounting the workload.
 import json
 import math
 import re
+from importlib.metadata import PackageNotFoundError, version as package_version
 import stat
 import sys
 from pathlib import Path, PurePath
@@ -109,6 +110,26 @@ def main() -> None:
     if limits is None:
         raise ValueError("planner requires content limits from index-plan.ts")
     allowances = limits.get("file_byte_allowances", {})
+    try:
+        installed = package_version("cocoindex-code")
+    except PackageNotFoundError:
+        installed = "unknown"  # never equals a recorded version: bill everything
+    # Incremental charge: ccc re-embeds only files whose memo entry misses, so only
+    # the caller's changed paths are billed (read, classified, counted against the
+    # aggregate caps). A different installed ccc may change process_file's logic
+    # fingerprint, which misses every memo entry: then every file is billed.
+    changed = limits.get("changed")
+    incremental = changed is not None and limits.get("recorded_ccc") == installed
+    changed_exact = set(changed or [])
+    changed_dirs = {c.rstrip("/") for c in changed_exact}
+
+    def billed(relative: PurePath) -> bool:
+        if not incremental:
+            return True
+        return relative.as_posix() in changed_exact or any(
+            parent.as_posix() in changed_dirs for parent in relative.parents
+        )
+
     for name in allowances:
         candidate = root / name
         if candidate.resolve() != candidate or candidate.is_dir():
@@ -120,11 +141,18 @@ def main() -> None:
         file_limit = allowances.get(relative.as_posix(), limits["max_file_bytes"])
         metadata = absolute.stat()
         size = metadata.st_size
-        total_bytes += size
+        is_billed = billed(relative)
+        if is_billed:
+            total_bytes += size
         blob = not stat.S_ISREG(metadata.st_mode)
         category = kind(absolute, "")
         chunks = math.ceil(size / 800)
-        if not blob and size <= file_limit and total_bytes <= limits["max_total_bytes"]:
+        if (
+            is_billed
+            and not blob
+            and size <= file_limit
+            and total_bytes <= limits["max_total_bytes"]
+        ):
             with absolute.open("rb") as stream:
                 # One extra byte detects growth after stat without reading a
                 # concurrently growing file to EOF. Oversized files aren't opened.
@@ -157,10 +185,15 @@ def main() -> None:
                     "est_chunks": chunks,
                     "kind": category,
                     "blob": blob,
+                    **({} if is_billed else {"billed": False}),
                 }
             ),
             flush=True,
         )
+    print(
+        json.dumps({"type": "enumeration", "ccc": installed, "incremental": incremental}),
+        flush=True,
+    )
 
 
 main()

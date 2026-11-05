@@ -43,6 +43,13 @@ import {
 import { resolveDbDir } from "./ccc-db-dir.ts";
 import { parseDaemonStatus } from "./ccc-daemon-status.ts";
 import { cccBackend } from "./ccc-entry.ts";
+import {
+  BasisRecordSchema,
+  captureBasisRecord,
+  incrementalBasis,
+  mergeBasisRecords,
+  type BasisRecord,
+} from "./index-basis.ts";
 import { hostLoad, processedWork, recordIndexRate } from "./index-rate.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
@@ -169,12 +176,16 @@ type Watermark = {
   // path, so checkIndexFreshness can name it specifically and refuse it -- never silently treat
   // it as equivalent to "index" just because its shape matches.
   source: "index" | "stamp";
+  // What the certifying run saw of the memo's inputs; absent on older watermarks, which
+  // `rr index` then charges as a full rebuild (index-basis.ts).
+  basis?: BasisRecord | undefined;
 };
 
 const WatermarkSchema = z.object({
   head: z.union([z.null(), z.string().regex(/^[0-9a-f]{40}$/iu)]),
   indexedAt: z.string(),
   source: z.enum(["index", "stamp"]),
+  basis: BasisRecordSchema.optional(),
 });
 
 const WATERMARK_BASENAME = "INDEXED_AT";
@@ -605,11 +616,13 @@ async function writeWatermark(
   // this file. Widening this parameter type is itself the signal that someone is trying to
   // reintroduce the deleted command's write path.
   source: "index",
+  basis?: BasisRecord,
 ): Promise<Result<void, Error>> {
   const value: Watermark = {
     head,
     indexedAt: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
     source,
+    ...(basis === undefined ? {} : { basis }),
   };
   const path = await watermarkPath(project);
   if (path.isErr()) return err(path.error);
@@ -982,6 +995,8 @@ async function reindexCertified(
     false,
     project,
   );
+  const cccVersion = version.exitCode === 0 ? version.stdout.trim() : "unknown";
+  const basisBefore = await captureBasisRecord(project, cccVersion);
   const startLoad = hostLoad();
   const startedAt = Temporal.Now.instant().epochMilliseconds;
   let head: string | null = null;
@@ -1068,7 +1083,11 @@ async function reindexCertified(
     return ok({ code: 2, head: null });
   }
 
-  const watermarkWrite = await writeWatermark(project, head, "index");
+  const basis = mergeBasisRecords(
+    basisBefore,
+    await captureBasisRecord(project, cccVersion),
+  );
+  const watermarkWrite = await writeWatermark(project, head, "index", basis);
   if (watermarkWrite.isErr()) return err(watermarkWrite.error);
   const completed = await indexProgressSample(project);
   const completedChunks = completed.chunks;
@@ -1085,8 +1104,7 @@ async function reindexCertified(
           ...processedWork(initialChunks, completedChunks),
           elapsedSeconds,
           ...startLoad,
-          cccVersion:
-            version.exitCode === 0 ? version.stdout.trim() : "unknown",
+          cccVersion,
         }),
       asError,
     )();
@@ -1221,7 +1239,20 @@ export async function runIndexWrapper(
   if (ccc.isErr()) return err(ccc.error);
 
   const backend = await cccBackend(ccc.value);
-  const planned = await computeIndexPlan(project, backend);
+  const watermark = await readWatermark(project);
+  if (watermark.isErr()) return err(watermark.error);
+  const basis = await incrementalBasis(
+    project,
+    watermark.value.kind === "ok"
+      ? {
+          kind: "ok",
+          source: watermark.value.value.source,
+          head: watermark.value.value.head,
+          basis: watermark.value.value.basis,
+        }
+      : { kind: watermark.value.kind },
+  );
+  const planned = await computeIndexPlan(project, backend, { basis });
   if (planned.isErr()) return err(planned.error);
   const plan = planned.value;
   process.stderr.write(planReport(plan));

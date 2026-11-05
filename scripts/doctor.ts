@@ -1076,10 +1076,8 @@ export async function checkCccDaemon(
     );
   const gpuPolicy =
     [
-      "CCC_GPU_UTILIZATION_PERCENT",
       "CCC_GPU_BATCH_SIZE",
       "CCC_GPU_WAIT_SECONDS",
-      "CCC_GPU_WINDOW",
       "COCOINDEX_RUN_GPU_IN_SUBPROCESS",
     ].every((key) =>
       policyLines.some((line) => line.startsWith(`Environment="${key}=`)),

@@ -53,6 +53,29 @@ rr about --project ~/Workspace/soks --path knowledge --query 'known reduction'
 rr text --project ~/Workspace/soks --path knowledge --query 'exact phrase'
 ```
 
+## Narrow by language: `--lang`
+
+`rr about`, `rr absent` and `rr shape` take `--lang <name>`, which is handed to `ccc search` /
+`ccc grep` unchanged. rr keeps no list of languages and does not normalise, check or filter the
+name: it is ccc's own language name, the same one printed after each hit as `File: path:1-9
+[markdown]`. For `about` / `absent` the filter is ccc's index-level partition — the nearest-neighbour
+search runs inside that language only, so a Markdown-heavy root can be asked for code (or the
+reverse) without the other kind crowding the `--limit`. For `shape` it limits which files ccc
+parses. Give the flag more than once to pass several names; ccc decides whether and how they
+combine. It composes with `--path`, and a route without `--lang` runs exactly as before. The
+lexical routes (`text`, `regex`, `files`) do not take it — use `--glob`/`--path` there.
+
+```sh
+rr about --lang markdown 'language filter for semantic search'
+rr absent --lang python -q 'retry with backoff' -q 'exponential delay' -q '再試行'
+rr shape --lang python 'def \NAME(\(ARGS*\)):'
+```
+
+`tests/rr-lang-filter.test.ts` pins this: a fake ccc owns the language partition (so only a flag
+that reaches ccc can narrow the hits), repeated values and the no-flag case are checked, and one
+test runs a real `rr about --lang markdown` through the live daemon and requires every hit to be
+`[markdown]`.
+
 The search hook permits one stream-only display filter after a classified route, for example
 `rr text --query 'phrase' | grep -F -- 'file.md'`. The filter accepts a pattern
 only, with no file operand or second pipeline stage. Filtered output is not an absence check:

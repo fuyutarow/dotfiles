@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.0 — 2026-11-05
+
+- rr about, absent and shape accept --lang, passed unchanged to ccc search/grep so ccc's language partition narrows the hits; routes without --lang are unchanged
+
 ## 1.11.0 — 2026-11-05
 
 - rr index admission charges an already indexed root for the files ccc will re-embed (memo misses), not a full rebuild; first index, missing/unreadable watermark, changed settings, other ccc or .gitignore stay full rebuilds, and the plan states which it used

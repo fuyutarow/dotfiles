@@ -170,13 +170,14 @@ const PRIMARY: Record<Route, string> = {
 };
 const DESCRIBE: Record<Route, string> = {
   concept:
-    "Code and notes ABOUT a meaning (semantic; English or Japanese): rr about 'retry with backoff'.",
+    "Code and notes ABOUT a meaning (semantic; English or Japanese): rr about 'retry with backoff' [--lang markdown].",
   battery:
-    "Check that something is ABSENT: >=3 paraphrases (JA/EN); all must miss before claiming it does not exist.",
+    "Check that something is ABSENT: >=3 paraphrases (JA/EN); all must miss before claiming it does not exist [--lang <ccc language>].",
   literal: "Exact TEXT, as written: rr text 'INDEXED_AT'.",
   exhaustive: "Every match of a REGEX: rr regex 'fn\\s+main'.",
   files: "FILES by glob: rr files '**/*.toml'.",
-  structural: "Code of a given SHAPE, by example: rr shape 'foo(\\(ARGS*\\))'.",
+  structural:
+    "Code of a given SHAPE, by example: rr shape 'foo(\\(ARGS*\\))' [--lang python].",
   symbol:
     "A known symbol's definition/references belong to Serena (this route only says so).",
 };
@@ -203,6 +204,7 @@ const VALUE_FLAGS: Record<string, string> = {
   "--project": "project",
   "--glob": "glob",
   "-g": "glob",
+  "--lang": "lang",
   "--limit": "limit",
   "--timeout-ms": "timeout-ms",
   "--timeoutMs": "timeout-ms",
@@ -811,6 +813,7 @@ async function runCccSearch(
   route: "concept" | "battery",
   queries: string[],
   path: string | undefined,
+  langs: string[],
   limit: number,
   timeoutMs: number,
   cwd: string,
@@ -943,6 +946,7 @@ async function runCccSearch(
     }
     const searchArgs = [ccc.value, "search", query, "--limit", String(limit)];
     if (cccPath !== undefined) searchArgs.push("--path", cccPath);
+    for (const lang of langs) searchArgs.push("--lang", lang);
 
     process.stderr.write(
       `ROUTE: ${route} -> ccc search (${index + 1}/${queries.length}) project=${project}\n`,
@@ -1064,6 +1068,7 @@ function isOutsideProjectPath(project: string, path: string): boolean {
 async function runCccGrep(
   query: string,
   path: string | undefined,
+  langs: string[],
   timeoutMs: number,
   cwd: string,
 ): Promise<Result<number, Error>> {
@@ -1071,6 +1076,7 @@ async function runCccGrep(
   if (ccc.isErr()) return err(ccc.error);
   const grepArgs = [ccc.value, "grep", query];
   if (path !== undefined) grepArgs.push("--path", path);
+  for (const lang of langs) grepArgs.push("--lang", lang);
   process.stderr.write(`ROUTE: structural -> ccc grep project=${cwd}\n`);
   const child = await fromAsyncThrowable(
     () => runChildCaptured(grepArgs, timeoutMs, true, cwd),
@@ -1198,6 +1204,7 @@ function lexicalMissLine(
 type SearchFlags = {
   query?: string[] | undefined;
   path?: string[] | undefined;
+  lang?: string[] | undefined;
   project?: string | undefined;
   glob?: string[] | undefined;
   limit?: number | undefined;
@@ -1243,6 +1250,7 @@ function validateSearchFlags(raw: RawSearchFlags): Result<SearchFlags, Error> {
   const empty =
     validateNonEmpty(raw.query, "query") ??
     validateNonEmpty(raw.path, "path") ??
+    validateNonEmpty(raw.lang, "lang") ??
     validateNonEmpty(raw.glob, "glob");
   if (empty !== undefined) return err(empty);
   if (raw.project === "") return err(new Error("--project requires a value"));
@@ -1278,6 +1286,17 @@ function pathFlag() {
     path: {
       type: [rawString] as const,
       alias: "p",
+      default: () => [],
+    },
+  };
+}
+
+// ccc's own language names (the values ccc stores in its index's `language` partition), passed to
+// `ccc search` / `ccc grep` unchanged: rr keeps no list of them. Repeated values are ccc's to accept.
+function langFlag() {
+  return {
+    lang: {
+      type: [rawString] as const,
       default: () => [],
     },
   };
@@ -1353,6 +1372,7 @@ async function runRoute(
       rawRoute,
       queries,
       paths[0],
+      values.lang ?? [],
       values.limit ?? 8,
       timeoutMs,
       cwd,
@@ -1372,6 +1392,7 @@ async function runRoute(
       rawRoute,
       queries,
       paths[0],
+      values.lang ?? [],
       values.limit ?? 8,
       timeoutMs,
       cwd,
@@ -1384,7 +1405,7 @@ async function runRoute(
     if (query.isErr()) return err(query.error);
     const pathCount = atMostOnePath(rawRoute, paths);
     if (pathCount.isErr()) return err(pathCount.error);
-    return runCccGrep(query.value, paths[0], timeoutMs, cwd);
+    return runCccGrep(query.value, paths[0], values.lang ?? [], timeoutMs, cwd);
   }
   if (rawRoute === "files") {
     return runRg(
@@ -1466,6 +1487,7 @@ function routeCommand(route: Route) {
         flags: {
           ...queryFlag(),
           ...pathFlag(),
+          ...langFlag(),
           ...projectFlag(),
           limit: rawString,
           ...timeoutFlag(),
@@ -1529,6 +1551,7 @@ function routeCommand(route: Route) {
         flags: {
           ...queryFlag(),
           ...pathFlag(),
+          ...langFlag(),
           ...projectFlag(),
           ...timeoutFlag(),
         },

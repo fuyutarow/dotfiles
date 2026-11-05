@@ -974,7 +974,7 @@ export function agentSecondLine(
   let rcDisplay = "rc:?";
   if (rc === "rc:on") rcDisplay = "🔗";
   if (rc === "rc:off") rcDisplay = "rc:off";
-  return [row ?? "?", `ctx ${pct}/${limit}`, rcDisplay].join(" ・ ");
+  return [row ?? "?", `ctx ${pct}/${limit}`, rcDisplay].join(" · ");
 }
 
 export async function projectAgents(

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2 — 2026-11-06
+
+- Use middle dot separators in agent detail
+
 ## 0.5.1 — 2026-11-06
 
 - Show session context and restore native Claude remote control detection

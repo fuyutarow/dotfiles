@@ -69,21 +69,20 @@ test("hidden footer: session context and native remote control form the second l
       new Map(),
       rows,
     );
-    expect(calls[1]).toContain(
-      `agent_detail=${expected} ・ ctx 29%/700k ・ 🔗`,
-    );
+    expect(calls[1]).toContain(`agent_detail=${expected} · ctx 29%/700k · 🔗`);
+    expect(calls[1]?.join(" ")).not.toContain("\u30FB");
   }
   expect(agentSecondLine("opus-medium", "29% (203k/700k)", "rc:off")).toBe(
-    "opus-medium ・ ctx 29%/700k ・ rc:off",
+    "opus-medium · ctx 29%/700k · rc:off",
   );
   expect(agentSecondLine("opus-medium", "29% (203k/700k)", "rc:?")).toBe(
-    "opus-medium ・ ctx 29%/700k ・ rc:?",
+    "opus-medium · ctx 29%/700k · rc:?",
   );
   expect(agentSecondLine(undefined, undefined, undefined)).toBe(
-    "? ・ ctx ?/? ・ rc:?",
+    "? · ctx ?/? · rc:?",
   );
   expect(agentSecondLine("opus-medium", "203k 29%", "rc:on")).toBe(
-    "opus-medium ・ ctx ?/? ・ 🔗",
+    "opus-medium · ctx ?/? · 🔗",
   );
   expect(rosterRow(rows, "claude", "unknown", "medium")).toBeUndefined();
 });

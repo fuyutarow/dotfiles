@@ -49,6 +49,10 @@ def grant_ccc_partition(service: str) -> str:
 install(admission, grant_ccc_partition)
 ignore_research_signal()
 
+from ccc_no_implicit_index import install as prevent_implicit_index  # noqa: E402
+
+prevent_implicit_index()
+
 from cocoindex_code.cli import app  # noqa: E402
 
 sys.argv = ["ccc", "run-daemon"]

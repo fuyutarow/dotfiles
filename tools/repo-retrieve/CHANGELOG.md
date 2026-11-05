@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.9 — 2026-11-05
+
+- Prevent daemon status and search from implicitly starting an index.
+
 ## 1.8.8 — 2026-11-05
 
 - Allow ccc init and index help through the search-route hook.

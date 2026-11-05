@@ -1,5 +1,5 @@
 // A read-only admission gate. The Python bridge owns enumeration; all policy is here.
-import { join, posix } from "node:path";
+import { isAbsolute, join, posix } from "node:path";
 import { err, ok, type Result } from "neverthrow";
 import { z, jsonOf } from "@dotfiles/shared/src/zod.ts";
 import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
@@ -55,6 +55,14 @@ const BudgetSchema = z
         z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
       )
       .optional(),
+  })
+  .strict();
+// `[shards]` in rr.toml declares that this root's semantic retrieval is served by
+// independently indexed copies listed in a content-pinned manifest (see shards.ts).
+export const ShardsDeclarationSchema = z
+  .object({
+    manifest: z.string().refine(isAbsolute, "expected an absolute path"),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/u),
   })
   .strict();
 const FileSchema = z.object({
@@ -282,7 +290,12 @@ export async function computeIndexPlan(
     const raw = (await configFile.exists())
       ? Bun.TOML.parse(await configFile.text())
       : {};
-    const configSchema = z.object({ index: BudgetSchema.optional() }).strict();
+    const configSchema = z
+      .object({
+        index: BudgetSchema.optional(),
+        shards: ShardsDeclarationSchema.optional(),
+      })
+      .strict();
     const config = configSchema.safeParse(raw);
     if (!config.success)
       return err(new Error(`invalid rr.toml: ${config.error.message}`));

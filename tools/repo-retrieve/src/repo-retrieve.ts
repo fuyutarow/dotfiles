@@ -74,6 +74,7 @@ import {
 } from "./ccc-index.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
 import { findDefinitions, refreshCatalog, renderCards } from "./definitions.ts";
+import { searchShards } from "./shards.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const cliArgv = () => process.argv.slice(2);
@@ -1316,6 +1317,44 @@ function rgSearchFlags() {
   };
 }
 
+// A root whose rr.toml declares `[shards]` is searched through its copies; any other root
+// falls through (ok(null)) to the ordinary route.
+async function runShardedRoute(
+  route: "concept" | "battery",
+  values: SearchFlags,
+  timeoutMs: number,
+): Promise<Result<number | null, Error>> {
+  const queries = values.query ?? [];
+  const paths = values.path ?? [];
+  if (route === "concept") {
+    const query = exactlyOneQuery(route, queries);
+    if (query.isErr()) return err(query.error);
+  } else if (
+    queries.length < 3 ||
+    queries.some((query) => query.trim() === "")
+  ) {
+    return err(
+      new Error("battery requires at least 3 non-empty --query values"),
+    );
+  }
+  const pathCount = atMostOnePath(route, paths);
+  if (pathCount.isErr()) return err(pathCount.error);
+  const sharded = await searchShards({
+    project: values.project ?? process.cwd(),
+    route,
+    queries,
+    path: paths[0],
+    limit: values.limit ?? 8,
+    timeoutMs,
+    json: values.json ?? false,
+  });
+  if (sharded.isErr()) return err(sharded.error);
+  if (sharded.value === null) return ok(null);
+  process.stderr.write(sharded.value.stderr);
+  process.stdout.write(sharded.value.stdout);
+  return ok(sharded.value.exitCode);
+}
+
 async function runRoute(
   rawRoute: Route,
   values: SearchFlags,
@@ -1329,6 +1368,12 @@ async function runRoute(
         "--refresh cannot bypass admission; run rr index --plan, then rr index",
       ),
     );
+  if (rawRoute === "concept" || rawRoute === "battery") {
+    const sharded = await runShardedRoute(rawRoute, values, timeoutMs);
+    if (sharded.isErr()) return err(sharded.error);
+    // null means no [shards] declaration: only then does the ordinary route run.
+    if (sharded.value !== null) return ok(sharded.value);
+  }
   const project = await targetProject(
     values.project,
     rawRoute === "literal" || rawRoute === "exhaustive" || rawRoute === "files",

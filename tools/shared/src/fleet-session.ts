@@ -33,6 +33,7 @@ export const FleetSessionSchema = z.strictObject({
     z.strictObject({
       tokens: z.number().int().nonnegative(),
       pct: z.number().min(0).max(100),
+      window: z.number().int().positive().optional(),
     }),
     FleetSessionUnavailableSchema,
   ]),

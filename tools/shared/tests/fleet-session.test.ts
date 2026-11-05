@@ -62,6 +62,18 @@ afterEach(async () => {
 
 test("parses a valid schema 1 session and rejects invalid known fields", () => {
   expect(parseFleetSession(JSON.stringify(record))).toEqual(record);
+  expect(
+    FleetSessionSchema.safeParse({
+      ...record,
+      ctx: { ...record.ctx, window: 200000 },
+    }).success,
+  ).toBe(true);
+  expect(
+    FleetSessionSchema.safeParse({
+      ...record,
+      ctx: { ...record.ctx, window: 0 },
+    }).success,
+  ).toBe(false);
   expect(FleetSessionSchema.safeParse({ ...record, schema: 2 }).success).toBe(
     false,
   );

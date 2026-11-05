@@ -108,16 +108,27 @@ export async function writeStatuslineFleetSession(
   await attempt(async () => {
     const context = session.context;
     let ctx: FleetSession["ctx"];
+    const window = context?.compactWindow ?? context?.modelWindow;
+    const pct =
+      window !== undefined && window > 0 && context?.inputTokens !== undefined
+        ? (context.inputTokens / window) * 100
+        : context?.usedPercent;
     if (
       context?.inputTokens !== undefined &&
       Number.isInteger(context.inputTokens) &&
       context.inputTokens >= 0 &&
-      context.usedPercent !== undefined &&
-      Number.isFinite(context.usedPercent) &&
-      context.usedPercent >= 0 &&
-      context.usedPercent <= 100
+      pct !== undefined &&
+      Number.isFinite(pct) &&
+      pct >= 0 &&
+      pct <= 100
     ) {
-      ctx = { tokens: context.inputTokens, pct: context.usedPercent };
+      ctx = {
+        tokens: context.inputTokens,
+        pct,
+        ...(window !== undefined && Number.isInteger(window) && window > 0
+          ? { window }
+          : {}),
+      };
     } else {
       ctx = unavailable("context tokens and percentage are not both available");
     }

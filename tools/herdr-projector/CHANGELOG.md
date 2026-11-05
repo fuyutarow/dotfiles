@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 — 2026-11-06
+
+- Show session context and restore native Claude remote control detection
+
 ## 0.5.0 — 2026-11-05
 
 - Show roster identity and observed context in agent sidebar rows

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.1 — 2026-11-06
+
+- Preserve the context window in fleet session records
+
 ## 0.20.0 — 2026-11-03
 
 - add usage-level.ts: one declaration of the green/yellow/red usage thresholds

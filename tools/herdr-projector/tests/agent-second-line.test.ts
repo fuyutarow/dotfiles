@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import {
   agentSecondLine,
-  claudeFooterObservation,
   projectAgents,
   rosterRow,
 } from "../src/herdr-projector.ts";
@@ -22,7 +21,7 @@ const rows = [
   },
 ];
 
-test("roster names, statusline context and verified remote control form the second line", async () => {
+test("hidden footer: session context and native remote control form the second line", async () => {
   for (const [vendor, model, effort, expected] of [
     ["claude", "Opus 5.5", "medium", "opus-medium"],
     ["codex", "GPT-6.1-Terra", "low", "terra-low"],
@@ -47,7 +46,7 @@ test("roster names, statusline context and verified remote control form the seco
           name: { na: true as const, why: "unknown" },
           model,
           effort,
-          ctx: { na: true as const, why: "unknown" },
+          ctx: { tokens: 203000, pct: 29, window: 700000 },
           rate: { na: true as const, why: "unknown" },
           cwd: "/tmp",
           pane_id: "pane",
@@ -69,7 +68,6 @@ test("roster names, statusline context and verified remote control form the seco
       undefined,
       new Map(),
       rows,
-      new Map([["pane", "29% (203k/700k)"]]),
     );
     expect(calls[1]).toContain(
       `agent_detail=${expected} ・ ctx 29%/700k ・ 🔗`,
@@ -88,20 +86,4 @@ test("roster names, statusline context and verified remote control form the seco
     "opus-medium ・ ctx ?/? ・ 🔗",
   );
   expect(rosterRow(rows, "claude", "unknown", "medium")).toBeUndefined();
-});
-
-test("reads the context already rendered in a verified Claude footer", () => {
-  const id = "c602d8dc-0a46-438f-aca5-88a88ff0f0dd";
-  const footer = `  user@host:11-05 12:00+09|~/repo\n  Claude (stdin) | name | Opus 5.5 | medium | 🔗 | Ctx: 29% (203k/700k) | account | Session: ${id}\n  ⏵⏵ auto mode on (shift+tab to cycle)`;
-  expect(claudeFooterObservation(footer)).toMatchObject({
-    id,
-    context: "29% (203k/700k)",
-    rc: "rc:on",
-  });
-  expect(claudeFooterObservation(footer.replace("🔗", "rc:off"))?.rc).toBe(
-    "rc:off",
-  );
-  expect(
-    claudeFooterObservation(footer.replace("🔗", "rc n/a (unavailable)"))?.rc,
-  ).toBe("rc:?");
 });

@@ -42,7 +42,12 @@ test("Claude status writes its normalized statusline facts atomically", async ()
       cwd: "/work/example-project",
       model: { name: "Claude Example" },
       effort: "high",
-      context: { inputTokens: 1200, usedPercent: 12.5 },
+      context: {
+        inputTokens: 1200,
+        usedPercent: 12.5,
+        compactWindow: 10000,
+        modelWindow: 20000,
+      },
       rateLimits: {
         fiveHour: { usedPercent: 10, resetsAt: 1_800_000_000 },
         sevenDay: { usedPercent: 25, resetsAt: 1_800_000_000 },
@@ -62,7 +67,7 @@ test("Claude status writes its normalized statusline facts atomically", async ()
     name: "dotfiles-agt_fixture",
     model: "Claude Example",
     effort: "high",
-    ctx: { tokens: 1200, pct: 12.5 },
+    ctx: { tokens: 1200, pct: 12, window: 10000 },
     rate: {
       five_h_pct: 10,
       seven_d_pct: 25,

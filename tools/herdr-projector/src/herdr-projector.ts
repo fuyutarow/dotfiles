@@ -797,18 +797,7 @@ export async function bindClaudePanes(
   agents: Agent[],
   remoteControl: Map<string, string>,
   env: NodeJS.ProcessEnv = process.env,
-  readTail = (pane: string) =>
-    run("herdr", [
-      "pane",
-      "read",
-      pane,
-      "--source",
-      "visible",
-      "--format",
-      "text",
-      "--lines",
-      "20",
-    ]),
+  readTail?: (pane: string) => Promise<string | undefined>,
   contexts: Map<string, string> = new Map(),
 ): Promise<Map<string, FleetSessionRead>> {
   const sessions = new Map<string, FleetSessionRead>();
@@ -819,6 +808,9 @@ export async function bindClaudePanes(
       agent.cwd === undefined
     )
       continue;
+    const nativeRc = await nativeClaudeRc(agent, env);
+    if (nativeRc !== undefined) remoteControl.set(agent.pane_id, nativeRc);
+    if (readTail === undefined) continue;
     const observed = claudeFooterObservation(
       (await readTail(agent.pane_id)) ?? "",
     );
@@ -995,7 +987,7 @@ export async function projectAgents(
   cpuSnapshot?: AgentCpuSnapshot,
   panePids: ReadonlyMap<string, PaneProcessIds> = new Map(),
   roster: RosterRows = [],
-  contexts: ReadonlyMap<string, string> = new Map(),
+  _contexts: ReadonlyMap<string, string> = new Map(),
 ): Promise<number> {
   let updated = 0;
   for (const agent of agents) {
@@ -1063,6 +1055,19 @@ export async function projectAgents(
       isAgent && !notApplicable && rc !== "rc:on" && rc !== "rc:off";
     const displayRc =
       unknownRc && (model !== "" || effort !== "") ? "rc?" : marker;
+    const context = z
+      .object({
+        tokens: z.number(),
+        pct: z.number(),
+        window: z.number().positive(),
+      })
+      .safeParse(identity?.ctx);
+    let contextText: string | undefined;
+    if (context.success) {
+      const { tokens, pct, window } = context.data;
+      const limit = window >= 1000 ? `${window / 1000}k` : String(window);
+      contextText = `${Math.round(pct)}% (${tokens}/${limit})`;
+    }
     const processIds = panePids.get(agent.pane_id) ?? {
       pids: [],
       ancestorPids: [],
@@ -1168,7 +1173,7 @@ export async function projectAgents(
       ...(isAgent
         ? [
             "--token",
-            `agent_detail=${agentSecondLine(rosterRow(roster, vendor, model, effort), contexts.get(agent.pane_id), rc)}`,
+            `agent_detail=${agentSecondLine(rosterRow(roster, vendor, model, effort), contextText, rc)}`,
           ]
         : []),
       ...(displayRc !== ""
@@ -1264,13 +1269,7 @@ async function project(dryRun = false): Promise<number> {
     );
   }
   const contexts = new Map<string, string>();
-  const claudeSessions = await bindClaudePanes(
-    agents,
-    remoteControl,
-    process.env,
-    undefined,
-    contexts,
-  );
+  await bindClaudePanes(agents, remoteControl);
   const rosterResult = jsonOf(Roster).safeParse(
     (await run("agx", ["worker", "roster", "--json"])) ?? "",
   );
@@ -1310,15 +1309,14 @@ async function project(dryRun = false): Promise<number> {
   );
   const sessions = new Map(results);
   for (const [id, session] of nativeSessions) sessions.set(id, session);
-  for (const [id, session] of claudeSessions) sessions.set(id, session);
   const identities = () =>
     [...sessions.entries()]
       .toSorted(([a], [b]) => a.localeCompare(b))
       .map(([id, session]) => {
         const parsed = FleetSessionSchema.safeParse(session);
         if (!parsed.success) return [id, session];
-        const { vendor, session_id, name, model, effort } = parsed.data;
-        return [id, { vendor, session_id, name, model, effort }];
+        const { vendor, session_id, name, model, effort, ctx } = parsed.data;
+        return [id, { vendor, session_id, name, model, effort, ctx }];
       });
   const panes = agents.map((agent) => ({
     ...agent,

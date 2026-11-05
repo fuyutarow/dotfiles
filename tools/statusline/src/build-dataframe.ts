@@ -438,9 +438,6 @@ export async function buildDataframe(
   const vram = host.value.vram;
   const disks = storage.why === undefined ? storage.value : err(storage.why);
   const wfOn = identity.value.wfOn && effort === "xhigh";
-  let effortDisplay = effort;
-  if (effort !== undefined && effort !== "")
-    effortDisplay = `${effort}${wfOn ? "+WF" : ""}`;
 
   const dataframe: Dataframe = {
     cwd,
@@ -518,12 +515,7 @@ export async function buildDataframe(
     tmpfs: host.value.tmpfs,
     tmp: host.value.tmp,
   };
-  // Codex has an exact-session hook that owns its sidebar tokens. Its statusline
-  // has no Claude agent name/RC identity and must not overwrite those tokens.
-  if (options.codex !== true)
-    void bounded("herdr", budget("herdrReport"), () =>
-      sources.herdrReport(model, sessionName, effortDisplay, rc.value),
-    ).catch(() => null);
+  // The statusline entrypoint writes the complete session once after building this frame.
   if (options.fieldStoreRoot !== undefined) {
     const { prepareDisplayFields } = await import("./display-fields.ts");
     await prepareDisplayFields(

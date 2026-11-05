@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.6 — 2026-11-06
+
+- Publish the context window with session usage
+
 ## 0.23.5 — 2026-11-04
 
 - Read model auto-compact window from Claude settings.

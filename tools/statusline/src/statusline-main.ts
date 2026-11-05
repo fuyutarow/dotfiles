@@ -528,7 +528,9 @@ if (liveMode) {
   const df = await buildDataframe(current, { codex: codexMode });
   if (session !== undefined)
     await writeStatuslineFleetSession(
-      session,
+      df.wfOn && session.effort !== undefined
+        ? { ...session, effort: `${session.effort}+WF` }
+        : session,
       codexMode ? "codex" : "claude",
       codexMode ? undefined : df.sessionName,
     );

@@ -1,7 +1,7 @@
 schema = 1
 
 [route]
-allow = ["claude"]
+allow = ["codex"]
 on_window_exhausted = { codex = "continue", claude = "stop" }
 exclude = []
 max_task_chars = 6000

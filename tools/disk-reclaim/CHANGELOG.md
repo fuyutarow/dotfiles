@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.27 — 2026-11-05
+
+- ccc-index-db resolves the index DB root from the one declaration cocoindex/db-root (~/.local/share/cocoindex-code/db), outside the deletable ~/.cache
+
 ## 1.12.26 — 2026-11-04
 
 - Refuse concurrent planning scans and recover automatically when a planner exits

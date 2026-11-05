@@ -136,7 +136,9 @@ scratch; both share one liveness snapshot per plan and recheck facts under the l
 and host require owner selection, purge must be named, and vhdx/audit are plan-only.
 `targets --json` lists their tiers and availability without scanning candidates.
 
-The `ccc-index-db` target walks `~/.cache/cocoindex-code/db` and acts only on ccc's named
+The `ccc-index-db` target walks the index DB root declared once in `cocoindex/db-root`
+(`~/.local/share/cocoindex-code/db`, outside every `delete_roots` entry; zsh/zshenv and the ccc
+daemon launcher read the same file) and acts only on ccc's named
 artifacts: `cocoindex.db`, `target_sqlite.db`, and `INDEXED_AT` (the list mirrors
 `tools/repo-retrieve/src/ccc-db-dir.ts`). It maps each artifact's directory back to the same
 relative project path under `$HOME`; a project is registered when that exact root has

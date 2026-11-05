@@ -62,9 +62,11 @@ ibm-granite/granite-embedding-311m-multilingual-r2`, `indexing_params: {}`,
   DBs + settings + the gitignore entry) then `git checkout -- .gitignore` if a conflict
   remains.
 - Creates `.cocoindex_code/{settings.yml, cocoindex.db/, target_sqlite.db}` in the project root —
-  **on house hosts only `settings.yml` lands there** (2026-09-23): zsh/zshenv and the WSL unit
-  export `COCOINDEX_CODE_DB_PATH_MAPPING=$HOME=$HOME/.cache/cocoindex-code/db`, so the DBs and
-  repo-retrieve's `INDEXED_AT` live at `~/.cache/cocoindex-code/db/<path under $HOME>/`. Reason:
+  **on house hosts only `settings.yml` lands there** (2026-09-23): zsh/zshenv and the WSL
+  daemon launcher both derive `COCOINDEX_CODE_DB_PATH_MAPPING=$HOME=$HOME/<cocoindex/db-root>` from
+  the one-line declaration `cocoindex/db-root` (`.local/share/cocoindex-code/db`), so the DBs and
+  repo-retrieve's `INDEXED_AT` live at `~/.local/share/cocoindex-code/db/<path under $HOME>/` (moved
+  out of `~/.cache` 2026-11-05: disk-reclaim treats that as deletable). Reason:
   an in-repo DB is rewritten on every commit, and every tool that walks the repo pays for it
   (research project: records store landing 21–36 s vs 0.65–0.88 s). Client and daemon MUST carry the same
   value — `mise run doctor` (`ccc-db-map`) compares them; `ccc-swap.ts relocate` moves old DBs.

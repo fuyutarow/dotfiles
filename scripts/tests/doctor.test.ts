@@ -718,7 +718,7 @@ describe("doctor", () => {
           missing: false,
         });
       },
-      "/home/fuyu=/home/fuyu/.cache/cocoindex-code/db",
+      "/home/fuyu=/home/fuyu/.local/share/cocoindex-code/db",
     );
     expect(finding.verdict).toBe("WARN");
     expect(finding.detail).toContain("timed out after 8s");

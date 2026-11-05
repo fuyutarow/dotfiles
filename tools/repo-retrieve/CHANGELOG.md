@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.10 — 2026-11-05
+
+- ccc-db-dir documents cocoindex/db-root as the single declaration of the ccc index DB root
+
 ## 1.8.9 — 2026-11-05
 
 - Prevent daemon status and search from implicitly starting an index.

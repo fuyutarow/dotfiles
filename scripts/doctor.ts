@@ -1517,9 +1517,9 @@ async function checkWslGpuPath(): Promise<Finding> {
 
 // ccc resolves a project's DB dir in TWO processes: the daemon writes the index where its own
 // COCOINDEX_CODE_DB_PATH_MAPPING points, while `ccc reset`/`ccc status` and repo-retrieve's
-// watermark look where the client's points. zsh/zshenv declares the client value and
-// cocoindex/ccc-daemon.service.wsl the daemon's; a daemon started before either changed keeps
-// the old one until restarted. `ccc doctor` is the only CLI that reports the daemon's mapping.
+// watermark look where the client's points. Both values derive from cocoindex/db-root (zsh/zshenv
+// for clients, cocoindex/ccc-daemon-launch.py for the daemon); a daemon started before it
+// changed keeps the old value until restarted. `ccc doctor` is the only CLI that reports the daemon's mapping.
 export async function checkCccDbMap(
   ctx: Ctx,
   probe: typeof run = run,

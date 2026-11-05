@@ -265,13 +265,22 @@ fi
 # <project>/.cocoindex_code/, where the daemon rewrites GBs on every commit and every tool that
 # walks the repo tree pays for derived bytes (example-research measured 2026-09-23: example-records landing
 # 21–36 s while the in-repo DB was being rewritten, 0.65–0.88 s otherwise). ccc's prefix mapping
-# moves a project under $HOME to ~/.cache/cocoindex-code/db/<path relative to $HOME>/; only
-# settings.yml stays in the repo. Every CLIENT needs this (`ccc reset`/`ccc status` and
-# repo-retrieve's watermark resolve the DB dir client-side); the daemon needs the SAME value —
-# lazily spawned (macOS) it inherits it from here, supervised (WSL) it gets it from
-# cocoindex/ccc-daemon.service.wsl. A mismatch makes client and daemon open different DBs;
-# `repo-retrieve index` refuses to certify one it cannot see, and `mise run doctor` compares both.
-export COCOINDEX_CODE_DB_PATH_MAPPING="$HOME=$HOME/.cache/cocoindex-code/db"
+# moves a project under $HOME to $HOME/<cocoindex/db-root>/<path relative to $HOME>/; only
+# settings.yml stays in the repo. The root lives only in cocoindex/db-root (one line, relative
+# to $HOME; `$(<f)` is a builtin read, no fork). It is outside ~/.cache because disk-reclaim
+# treats that as deletable and an index is expensive derived state. Every CLIENT needs this
+# (`ccc reset`/`ccc status` and repo-retrieve's watermark resolve the DB dir client-side); the
+# daemon needs the SAME value — lazily spawned (macOS) it inherits it from here, supervised
+# (WSL) cocoindex/ccc-daemon-launch.py derives it from the same file, and disk-reclaim's
+# ccc-index-db target reads it too. scripts/tests/ccc-db-location.test.ts fails if they diverge.
+# A mismatch makes client and daemon open different DBs; `repo-retrieve index` refuses to
+# certify one it cannot see, and `mise run doctor` compares both.
+_zshenv_ccc_db_root=
+[[ -r $_zshenv_dotfiles_root/cocoindex/db-root ]] && _zshenv_ccc_db_root=$(<$_zshenv_dotfiles_root/cocoindex/db-root)
+if [[ -n $_zshenv_ccc_db_root ]]; then
+  export COCOINDEX_CODE_DB_PATH_MAPPING="$HOME=$HOME/$_zshenv_ccc_db_root"
+fi
+unset _zshenv_ccc_db_root
 
 # Resolve missing commands from the Homebrew tier declarations without starting a process.
 # This function reads the declarations only after zsh has failed to resolve a command.

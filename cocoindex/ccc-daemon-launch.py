@@ -19,6 +19,12 @@ from ccc_gpu_only import (  # noqa: E402
 from gpu_partition import _free_bytes, apply  # noqa: E402
 
 os.environ["COCOINDEX_RUN_GPU_IN_SUBPROCESS"] = "0"
+
+from ccc_db_mapping import install as install_db_mapping  # noqa: E402
+
+# The index DB root comes from cocoindex/db-root, the same declaration zsh/zshenv reads.
+install_db_mapping()
+
 with (DOTFILES / "tools" / "agent-resource-run" / "resource-policy.toml").open(
     "rb"
 ) as policy_file:

@@ -1,4 +1,4 @@
-import { lstat, readdir } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
@@ -18,6 +18,30 @@ const artifactNames = new Set([
   "target_sqlite.db",
   "INDEXED_AT",
 ]);
+// The one declaration of the index DB root (relative to $HOME), shared with zsh/zshenv and the
+// daemon launcher. It is outside ~/.cache so this tool's cache rules cannot reach the live index.
+export const DB_ROOT_DECLARATION = resolve(
+  import.meta.dir,
+  "../../../../cocoindex/db-root",
+);
+export async function declaredDbRoot(
+  home: string,
+  declaration: string = DB_ROOT_DECLARATION,
+): Promise<Result<string, Error>> {
+  const read = await fromAsyncThrowable(() => readFile(declaration, "utf8"))();
+  if (read.isErr())
+    return err(new Error(`${declaration}: ${errorMessage(read.error)}`));
+  const relativeRoot = read.value.trim();
+  if (
+    relativeRoot === "" ||
+    isAbsolute(relativeRoot) ||
+    relativeRoot.split("/").includes("..")
+  )
+    return err(
+      new Error(`${declaration}: expected a non-empty path relative to $HOME`),
+    );
+  return ok(join(home, relativeRoot));
+}
 const settingsPath = join(".cocoindex_code", "settings.yml");
 const workspaceRepoPointer = join(".jj", "repo");
 const errorCode = (error: unknown): string | undefined => {
@@ -101,7 +125,7 @@ async function newestMtime(path: string): Promise<Result<number, unknown>> {
 export function createCccIndexDbTarget(
   options: {
     home?: () => string;
-    dbRoot?: (home: string) => string;
+    dbRoot?: (home: string) => string | Promise<string>;
     isRegisteredRoot?: (project: string) => boolean | Promise<boolean>;
     loadPolicy?: typeof loadCollectionPolicy;
     now?: () => number;
@@ -109,8 +133,10 @@ export function createCccIndexDbTarget(
   } = {},
 ): Target {
   const home = options.home ?? (() => process.env["HOME"] ?? homedir());
-  const dbRoot =
-    options.dbRoot ?? ((root) => join(root, ".cache/cocoindex-code/db"));
+  const dbRoot = async (root: string): Promise<Result<string, Error>> =>
+    options.dbRoot === undefined
+      ? declaredDbRoot(root)
+      : ok(await options.dbRoot(root));
   const loadPolicy = options.loadPolicy ?? loadCollectionPolicy;
   const now = options.now ?? (() => Temporal.Now.instant().epochMilliseconds);
 
@@ -120,7 +146,14 @@ export function createCccIndexDbTarget(
     available: () => ({ available: true, skip_reason: null }),
     plan: async (ctx) => {
       const homePath = resolve(home());
-      const cacheRoot = resolve(dbRoot(homePath));
+      const declaredRoot = await dbRoot(homePath);
+      if (declaredRoot.isErr()) {
+        ctx.reportPlanError?.(
+          `ccc index DB root is not declared: ${declaredRoot.error.message}`,
+        );
+        return [];
+      }
+      const cacheRoot = resolve(declaredRoot.value);
       const rootStat = await inspectPath(cacheRoot);
       if (rootStat.isErr()) {
         ctx.reportPlanError?.(

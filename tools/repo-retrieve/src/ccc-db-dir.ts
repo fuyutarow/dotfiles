@@ -12,7 +12,9 @@
 // before/after file scan, a backup, rip — pays for bytes that are derived state, not project
 // content. The indexed tool's landing took 21–36 s while the daemon rewrote the
 // in-repo DB, against 0.65–0.88 s otherwise. zsh/zshenv exports the mapping for every client,
-// and cocoindex/ccc-daemon.service.wsl sets the same value for the supervised daemon.
+// and cocoindex/ccc-daemon-launch.py sets the same value for the supervised daemon. Both derive
+// it from the one declaration cocoindex/db-root (a root relative to $HOME, outside ~/.cache,
+// which disk-reclaim treats as deletable).
 //
 // Consequence of prefix mapping: a project nested inside another project (a git worktree under
 // `.claude/worktrees/`) gets a DB dir nested inside its parent's DB dir. A tool that treats a

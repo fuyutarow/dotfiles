@@ -526,6 +526,18 @@ const OTHER: readonly Surface[] = [
     verify: `${DOCTOR} (ccc-daemon)`,
   },
   {
+    kind: "in-place",
+    when: "all",
+    sources: ["cocoindex/db-root", "cocoindex/ccc_db_mapping.py"],
+    deployed:
+      "the checkout: zsh/zshenv (client COCOINDEX_CODE_DB_PATH_MAPPING), ccc-daemon-launch.py (daemon) and disk-reclaim's ccc-index-db target read cocoindex/db-root directly",
+    consumer:
+      "ccc clients, the supervised ccc daemon, tools/disk-reclaim ccc-index-db",
+    writer:
+      "human, in the repo; the index DB root, relative to $HOME, outside ~/.cache (disk-reclaim treats that as deletable)",
+    verify: "bun test scripts/tests/ccc-db-location.test.ts",
+  },
+  {
     kind: "fan-out",
     when: "all",
     sources: ["agents/skills", "agents/commands", "agents/codex/AGENTS.md"],

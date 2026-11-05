@@ -676,10 +676,15 @@ function unavailableLabel(agent: Agent, why: string): string {
 }
 
 /** Only the owned statusline in the visible native footer, never an agx row. */
-export function claudeFooterObservation(
-  text: string,
-):
-  | { id: string; name: string; model: string; effort: string; rc: string }
+export function claudeFooterObservation(text: string):
+  | {
+      id: string;
+      name: string;
+      model: string;
+      effort: string;
+      rc: string;
+      context: string;
+    }
   | undefined {
   if (text.length > 32 * 1024 || text.includes("\u001B")) return undefined;
   const rows = text.trimEnd().split(/\r?\n/u);
@@ -698,26 +703,31 @@ export function claudeFooterObservation(
     )
       return [];
     const match =
-      /^\s*Claude \(stdin\) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| (🔗|rc:on|rc:off|rc:\?) \| Ctx: [^|]+ \| [^|]+ \| Session: ([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\s*$/u.exec(
+      /^\s*Claude \(stdin\) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| (🔗|rc:on|rc:off|rc:\?|rc n\/a \([^|]+\)) \| Ctx: ([^|]+) \| [^|]+ \| Session: ([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\s*$/u.exec(
         row,
       );
     if (match === null) return [];
-    const [, name, model, effort, rc, id] = match;
+    const [, name, model, effort, rc, context, id] = match;
     if (
       name === undefined ||
       model === undefined ||
       effort === undefined ||
       rc === undefined ||
+      context === undefined ||
       id === undefined
     )
       return [];
+    let observedRc = rc;
+    if (rc === "🔗") observedRc = "rc:on";
+    if (rc.startsWith("rc n/a ")) observedRc = "rc:?";
     return [
       {
         id,
         name: name.trim(),
         model: model.trim(),
         effort: effort.trim(),
-        rc: rc === "🔗" ? "rc:on" : rc,
+        rc: observedRc,
+        context: context.trim(),
       },
     ];
   });
@@ -799,6 +809,7 @@ export async function bindClaudePanes(
       "--lines",
       "20",
     ]),
+  contexts: Map<string, string> = new Map(),
 ): Promise<Map<string, FleetSessionRead>> {
   const sessions = new Map<string, FleetSessionRead>();
   for (const agent of agents) {
@@ -808,8 +819,6 @@ export async function bindClaudePanes(
       agent.cwd === undefined
     )
       continue;
-    const nativeRc = await nativeClaudeRc(agent, env);
-    if (nativeRc !== undefined) remoteControl.set(agent.pane_id, nativeRc);
     const observed = claudeFooterObservation(
       (await readTail(agent.pane_id)) ?? "",
     );
@@ -875,6 +884,7 @@ export async function bindClaudePanes(
     agent.agent_session = { value: id };
     if (observed.rc !== "rc:?" || !remoteControl.has(agent.pane_id))
       remoteControl.set(agent.pane_id, observed.rc);
+    contexts.set(agent.pane_id, observed.context);
     sessions.set(id, parsed.data);
   }
   return sessions;
@@ -919,6 +929,62 @@ export async function nativeCodexRc(
   return settings.data.remoteControlEnabled ? "rc:on" : "rc:off";
 }
 
+const Roster = z.object({
+  choice: z.array(
+    z.object({
+      id: z.string(),
+      route: z.string(),
+      model: z.string(),
+      effort: z.string(),
+    }),
+  ),
+});
+type RosterRows = z.output<typeof Roster>["choice"];
+
+function rosterModelKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/^(?:claude|gpt)[- ]/u, "")
+    .replaceAll(/[^a-z0-9]/gu, "");
+}
+
+/** Match observed model and effort to an agx roster row; ambiguous matches are unknown. */
+export function rosterRow(
+  rows: RosterRows,
+  vendor: string,
+  model: string,
+  effort: string,
+): string | undefined {
+  if (model === "" || effort === "") return undefined;
+  const workflow = effort.endsWith("+WF");
+  const baseEffort = workflow ? effort.slice(0, -3) : effort;
+  const matches = rows.filter(
+    (row) =>
+      row.route === vendor &&
+      rosterModelKey(row.model) === rosterModelKey(model) &&
+      row.effort.toLowerCase() === baseEffort.toLowerCase(),
+  );
+  if (matches.length !== 1) return workflow ? "?+WF" : undefined;
+  return `${matches[0]?.id}${workflow ? "+WF" : ""}`;
+}
+
+/** Consume the statusline's own rendered percentage and window without inferring either. */
+export function agentSecondLine(
+  row: string | undefined,
+  context: string | undefined,
+  rc: string | undefined,
+): string {
+  const match = /^(\d+(?:\.\d+)?%) \([^/()]+\/([\d.]+[kM]?)\)$/u.exec(
+    context ?? "",
+  );
+  const pct = match?.[1] ?? "?";
+  const limit = match?.[2] ?? "?";
+  let rcDisplay = "rc:?";
+  if (rc === "rc:on") rcDisplay = "🔗";
+  if (rc === "rc:off") rcDisplay = "rc:off";
+  return [row ?? "?", `ctx ${pct}/${limit}`, rcDisplay].join(" ・ ");
+}
+
 export async function projectAgents(
   agents: Agent[],
   sessions: ReadonlyMap<string, FleetSessionRead>,
@@ -928,6 +994,8 @@ export async function projectAgents(
   reasons: ReadonlyMap<string, string> = new Map(),
   cpuSnapshot?: AgentCpuSnapshot,
   panePids: ReadonlyMap<string, PaneProcessIds> = new Map(),
+  roster: RosterRows = [],
+  contexts: ReadonlyMap<string, string> = new Map(),
 ): Promise<number> {
   let updated = 0;
   for (const agent of agents) {
@@ -1097,6 +1165,12 @@ export async function projectAgents(
       `model=${model}`,
       "--token",
       `effort=${effort}`,
+      ...(isAgent
+        ? [
+            "--token",
+            `agent_detail=${agentSecondLine(rosterRow(roster, vendor, model, effort), contexts.get(agent.pane_id), rc)}`,
+          ]
+        : []),
       ...(displayRc !== ""
         ? ["--token", `rc=${displayRc}`]
         : ["--clear-token", "rc"]),
@@ -1182,12 +1256,25 @@ async function project(dryRun = false): Promise<number> {
   );
   const remoteControl = new Map<string, string>();
   const codexPanes = agents.filter((pane) => pane.agent === "codex");
-  const codexRc = codexPanes.length === 0 ? "" : await nativeCodexRc();
   for (const agent of codexPanes) {
     if (agent.pane_id === undefined) continue;
-    remoteControl.set(agent.pane_id, codexRc);
+    remoteControl.set(
+      agent.pane_id,
+      "session Remote Control state unavailable",
+    );
   }
-  const claudeSessions = await bindClaudePanes(agents, remoteControl);
+  const contexts = new Map<string, string>();
+  const claudeSessions = await bindClaudePanes(
+    agents,
+    remoteControl,
+    process.env,
+    undefined,
+    contexts,
+  );
+  const rosterResult = jsonOf(Roster).safeParse(
+    (await run("agx", ["worker", "roster", "--json"])) ?? "",
+  );
+  const roster = rosterResult.success ? rosterResult.data.choice : [];
   const panePids = await paneResourcePids(
     agents,
     (pane) => run("herdr", ["pane", "process-info", "--pane", pane]),
@@ -1255,6 +1342,8 @@ async function project(dryRun = false): Promise<number> {
           reasons: [...reasons],
           cpuSnapshot: agentCpuCacheInput(cpuSnapshot),
           panePids: [...panePids],
+          contexts: [...contexts],
+          roster,
         }),
       )
       .digest("hex");
@@ -1276,6 +1365,8 @@ async function project(dryRun = false): Promise<number> {
     reasons,
     cpuSnapshot,
     panePids,
+    roster,
+    contexts,
   );
   // A failed mutation must be retried, and cache trouble must not block projection.
   if (!dryRun && applied && cacheDir !== undefined && cachePath !== undefined) {

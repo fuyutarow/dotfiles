@@ -87,22 +87,11 @@ show_agent_labels_on_pane_borders = true
 agent_panel_sort = "spaces"
 
 # Line 1: state icon + tab (the per-pane agent name, see agents/claude/hooks/herdr-tab-name.ts).
-# Line 2: $model, then $effort, then $rc — all three custom tokens reported via
-# pane.report_metadata (see tools/statusline). $effort mirrors that statusline's own
-# unlabeled effort readout (e.g. "xhigh", or "xhigh+WF" while ultracode's dynamic-workflow
-# orchestration is genuinely engaged — see effortDisplay in tools/statusline/src/build-dataframe.ts, folded in
-# 2026-09-05 on request, replacing an earlier separate WF segment); added 2026-09-03, on request,
-# between $model and $rc. $rc is a
-# three-state Remote Control indicator: "🔗" connected, "rc:off" disconnected, "rc:?" probe
-# unverified (see rcState() in tools/statusline/src/identity.ts — changed 2026-09-22 from 🔗-or-empty, because
-# an empty token made "off" and "cannot tell" look the same) added 2026-09-03, on request. Order was flipped twice the same day (rc-first,
-# then back to model-first) — model-first is the settled one; $effort slotted in after that
-# settled, so it did not get flipped. $rc is left unstyled on purpose: it's an emoji, not text,
-# so an fg override wouldn't reliably repaint it anyway — nudge this if it reads oddly once seen
-# live. Verified end-to-end against a fake herdr socket (2026-09-03): the tokens payload
-# correctly carries `"rc":"🔗"` with $CLAUDE_CODE_BRIDGE_SESSION_ID set and `"rc":""` with it
-# unset — herdr's own on-screen rendering of an empty-string token is still unseen, same caveat
-# now applies to `"effort":""` when the current model has no reasoning-effort param.
+# Line 2: the projector reports $agent_detail using the agx roster, the observed
+# Claude statusline context, and session Remote Control evidence. Unknown values use ?.
+# RC has three states from the statusline probe: 🔗 connected, rc:off disconnected,
+# rc:? unverified; absence cannot distinguish disconnected from an unreadable probe.
+# The roster row retains +WF when the statusline reports active workflow orchestration.
 # Workspace was dropped from here entirely 2026-09-03, on request:
 # agent_panel_sort="spaces" already groups rows by workspace with its own header, so repeating
 # the workspace name on every row was pure redundancy once someone looked for it.
@@ -111,15 +100,7 @@ agent_panel_sort = "spaces"
 # `overlay0` + dim; bold/dim flags alone only toggle modifiers on top of that base color, they
 # don't repaint it). `tab` keeps bold weight for scanability but drops to a muted `#7f848e` fg
 # (tuned by eye against Claude Code's own native status line) so it doesn't overpower the row.
-# `$model` is deliberately inconspicuous too, but matches a real fixed reference instead of an
-# eyeballed one: `#008787`, the exact ANSI-256 idx-30 color that dotfiles's own
-# tools/statusline hardcodes for its `Model:` label (`head` assembly) — read
-# straight from that file's source, not approximated. `$effort` gets the same treatment: `#ff8787`
-# is ANSI-256 idx-209, the exact color that same file hardcodes for its `Eff:` label, on request.
-# `dim` was considered and rejected here since it fades the fg color itself, and legibility
-# matters more than looking extra-subdued. A bare token would fall back to the hardcoded
-# `overlay0`+dim pairing, which measured near-invisible against this theme's background (found
-# 2026-09-03) — hence the explicit `fg` on all three.
+# $agent_detail uses the statusline model label's ANSI-256 idx-30 color.
 # Row 3 is the projector's width-bounded CPU / workers / RAM / VRAM line. CPU is its own token so
 # it can be colored alone (herdr strips control characters from reported values and styles per
 # token): the projector reports exactly one of $cpu_lo / $cpu_mid / $cpu_hi (the others are
@@ -131,7 +112,7 @@ agent_panel_sort = "spaces"
 [ui.sidebar.agents]
 rows = [
   ["state_icon", { token = "tab", fg = "#7f848e", bold = true, dim = false }],
-  [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc"],
+  [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }],
   [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
   # Custom reported agents use these default rows, not rows_by_agent overrides.
   # Unreported tokens disappear. See https://herdr.dev/docs/configuration/#sidebar-row-layouts.
@@ -150,12 +131,12 @@ rows = [
 # same dropped-workspace layout as the default rows above — see that block's comment for why.
 claude = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
-  [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc"],
+  [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }],
   [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
 ]
 codex = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
-  [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc"],
+  [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }],
   [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
 ]
 [session]

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0 — 2026-11-05
+
+- Show roster identity and observed context in agent sidebar rows
+
 ## 0.4.0 — 2026-11-03
 
 - sidebar reports cpu as its own cpu_lo/cpu_mid/cpu_hi token by load level so herdr colors it; the rest stays one grey resources token

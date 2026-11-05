@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.28 — 2026-11-05
+
+- plan vhdx reports the named WSL distro's VHDX, its reclaimable gap, and the operator step, and names plan-only candidates on stderr instead of printing nothing
+
 ## 1.12.27 — 2026-11-05
 
 - ccc-index-db resolves the index DB root from the one declaration cocoindex/db-root (~/.local/share/cocoindex-code/db), outside the deletable ~/.cache

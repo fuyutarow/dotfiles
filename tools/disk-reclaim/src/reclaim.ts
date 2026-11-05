@@ -511,6 +511,21 @@ function formatApplySummary(
   ].join("\n");
 }
 
+// Plan-only candidates without a path never become JSONL records, so stdout alone
+// would hide the finding; they are named on stderr like FAILED and SKIP.
+export function planOnlyNotices(value: Plan): string[] {
+  return value.targets
+    .filter((target) => target.tier === "plan-only")
+    .flatMap((target) =>
+      target.candidates
+        .filter((c) => c.path === null && c.host_lever === undefined)
+        .map(
+          (c) =>
+            `disk-reclaim: PLAN ${safeStderr(target.name)} ${c.verdict}: ${safeStderr(c.reason)}`,
+        ),
+    );
+}
+
 function outputPlan(
   value: Plan,
   records: ReclaimRecord[],
@@ -525,6 +540,8 @@ function outputPlan(
       process.stderr.write(
         `disk-reclaim: FAILED ${target.name}: ${safeStderr(target.skip_reason ?? "target failed")}\n`,
       );
+    for (const line of planOnlyNotices(value))
+      process.stderr.write(`${line}\n`);
     process.stdout.write(
       `${records.map((record) => JSON.stringify(record)).join("\n")}${records.length === 0 ? "" : "\n"}`,
     );

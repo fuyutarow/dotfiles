@@ -1,6 +1,7 @@
 // The declaration is repo-owned; ~/.codex/config.toml remains Codex-owned. Read with Bun's real
 // TOML parser, then edit only the declared top-level assignments to preserve every other byte.
 import { access, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { attempt } from "../hooks/attempt.ts";
 import { jsonOf, z } from "../hooks/zod.ts";
@@ -54,14 +55,22 @@ const McpDeclarationSchema = z.object({
   mcpServers: z.record(McpNameSchema, McpEntrySchema),
 });
 
-export type McpServer =
+// Codex-only table keys (not in .mcp.json, which Claude Code also reads). They come from the
+// `[mcp_servers.<name>]` overlay in config.declared.toml and are rendered after `env`.
+export type McpExtras = {
+  toolTimeoutSec?: number;
+  defaultToolsApprovalMode?: string;
+};
+export type McpServer = (
   | { type: "http"; url: string }
   | {
       type: "stdio";
       command: string;
       args: string[];
       env: Record<string, string>;
-    };
+    }
+) &
+  McpExtras;
 
 export type Declared = {
   networkAccess: boolean;
@@ -167,8 +176,68 @@ async function declaredMcpServers(
   return servers;
 }
 
+const HOME_TOKEN = "${HOME}";
+const McpOverlaySchema = z.strictObject({
+  env: z.record(z.string(), z.string()).optional(),
+  tool_timeout_sec: z.number().int().positive().optional(),
+  default_tools_approval_mode: z.enum(["auto", "prompt", "approve"]).optional(),
+});
+
+/** Layer the Codex-only `[mcp_servers.<name>]` overlay of config.declared.toml onto the servers
+ * declared in .mcp.json. An overlay may only name a declared server; `env` is stdio-only, and
+ * `${HOME}` in its values is the machine's home (never a tracked absolute path). */
+function applyMcpOverlay(
+  servers: Record<string, McpServer>,
+  overlay: unknown,
+  home: string,
+): Record<string, McpServer> | Error {
+  if (overlay === undefined) return servers;
+  const table = RecordSchema.safeParse(overlay);
+  if (!table.success) return new Error("mcp_servers must be a table");
+  const merged = { ...servers };
+  for (const [name, raw] of Object.entries(table.data)) {
+    const server = merged[name];
+    if (server === undefined)
+      return new Error(`mcp_servers.${name} is not declared in .mcp.json`);
+    const parsed = McpOverlaySchema.safeParse(raw);
+    if (!parsed.success)
+      return new Error(
+        `mcp_servers.${name}: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
+      );
+    const { env, tool_timeout_sec, default_tools_approval_mode } = parsed.data;
+    if (env !== undefined && server.type !== "stdio")
+      return new Error(`mcp_servers.${name}.env needs a stdio server`);
+    const withEnv =
+      env === undefined || server.type !== "stdio"
+        ? server
+        : {
+            ...server,
+            env: {
+              ...server.env,
+              ...Object.fromEntries(
+                Object.entries(env).map(([key, value]) => [
+                  key,
+                  value.replaceAll(HOME_TOKEN, home),
+                ]),
+              ),
+            },
+          };
+    merged[name] = {
+      ...withEnv,
+      ...(tool_timeout_sec === undefined
+        ? {}
+        : { toolTimeoutSec: tool_timeout_sec }),
+      ...(default_tools_approval_mode === undefined
+        ? {}
+        : { defaultToolsApprovalMode: default_tools_approval_mode }),
+    };
+  }
+  return merged;
+}
+
 export async function readDeclared(
   dotfiles: string,
+  home: string = process.env["HOME"] ?? homedir(),
 ): Promise<Declared | Error> {
   const path = join(dotfiles, "agents/codex/config.declared.toml");
   const parsed = await attempt(async () =>
@@ -177,15 +246,32 @@ export async function readDeclared(
   if (!parsed.ok) return new Error(`${path}: unreadable or not TOML`);
   const result = values(parsed.value);
   if (result instanceof Error) return new Error(`${path}: ${result.message}`);
-  const mcpServers = await declaredMcpServers(dotfiles);
-  return mcpServers instanceof Error ? mcpServers : { ...result, mcpServers };
+  const declaredServers = await declaredMcpServers(dotfiles);
+  if (declaredServers instanceof Error) return declaredServers;
+  const root = RecordSchema.safeParse(parsed.value);
+  const mcpServers = applyMcpOverlay(
+    declaredServers,
+    root.success ? root.data["mcp_servers"] : undefined,
+    home,
+  );
+  return mcpServers instanceof Error
+    ? new Error(`${path}: ${mcpServers.message}`)
+    : { ...result, mcpServers };
 }
 
 function liveMcpServer(value: unknown): McpServer | undefined {
   const entry = RecordSchema.safeParse(value);
   if (!entry.success) return undefined;
+  const timeout = z.number().safeParse(entry.data["tool_timeout_sec"]);
+  const approval = z
+    .string()
+    .safeParse(entry.data["default_tools_approval_mode"]);
+  const extras: McpExtras = {
+    ...(timeout.success ? { toolTimeoutSec: timeout.data } : {}),
+    ...(approval.success ? { defaultToolsApprovalMode: approval.data } : {}),
+  };
   const url = z.string().safeParse(entry.data["url"]);
-  if (url.success) return { type: "http", url: url.data };
+  if (url.success) return { type: "http", url: url.data, ...extras };
   const command = z.string().safeParse(entry.data["command"]);
   if (!command.success) return undefined;
   const args = z.array(z.string()).safeParse(entry.data["args"]);
@@ -195,6 +281,7 @@ function liveMcpServer(value: unknown): McpServer | undefined {
     command: command.data,
     args: args.success ? args.data : [],
     env: env.success ? env.data : {},
+    ...extras,
   };
 }
 
@@ -306,7 +393,7 @@ export function drift(declared: Declared, live: Live): string[] {
   const managed = new Set(live.managedMcpNames);
   const mcpLines = Object.entries(declared.mcpServers).flatMap(
     ([name, server]) =>
-      JSON.stringify(live.mcpServers[name]) === JSON.stringify(server)
+      Bun.deepEquals(live.mcpServers[name], server)
         ? []
         : [`mcp_servers.${name} differs from .mcp.json`],
   );
@@ -386,9 +473,26 @@ function mcpTableName(line: string): string | undefined {
   return match?.[1];
 }
 
+function renderMcpExtras(server: McpExtras): string[] {
+  return [
+    ...(server.toolTimeoutSec === undefined
+      ? []
+      : [`tool_timeout_sec = ${server.toolTimeoutSec}`]),
+    ...(server.defaultToolsApprovalMode === undefined
+      ? []
+      : [
+          `default_tools_approval_mode = ${JSON.stringify(server.defaultToolsApprovalMode)}`,
+        ]),
+  ];
+}
+
 function renderMcpServer(name: string, server: McpServer): string[] {
   if (server.type === "http")
-    return [`[mcp_servers.${name}]`, `url = ${JSON.stringify(server.url)}`];
+    return [
+      `[mcp_servers.${name}]`,
+      `url = ${JSON.stringify(server.url)}`,
+      ...renderMcpExtras(server),
+    ];
   const env = Object.entries(server.env)
     .toSorted(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `${JSON.stringify(key)} = ${JSON.stringify(value)}`)
@@ -398,6 +502,7 @@ function renderMcpServer(name: string, server: McpServer): string[] {
     `command = ${JSON.stringify(server.command)}`,
     `args = [${server.args.map((arg) => JSON.stringify(arg)).join(", ")}]`,
     ...(env === "" ? [] : [`env = { ${env} }`]),
+    ...renderMcpExtras(server),
   ];
 }
 

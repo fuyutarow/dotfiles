@@ -22,3 +22,18 @@ status_line = [
   "current-dir",
   "run-state",
 ]
+
+# Codex-only keys layered onto servers declared in .mcp.json (which Claude Code also reads, so
+# these cannot live there). Values follow what `reason-network setup` writes for Codex
+# (reason-network src/setup.rs codex(), commit e4b8d50e): the daemon registers a session under
+# its agent name and home; check_inbox(wait_secs) long-polls need room beyond Codex's default
+# tool timeout; and approval policy `never` otherwise refuses every call with "MCP tool call
+# requires approval". The approve mode is set for this one server only.
+# ${HOME} in env values is the machine's home, substituted when the declaration is read.
+[mcp_servers.reason-network]
+tool_timeout_sec = 660
+default_tools_approval_mode = "approve"
+
+[mcp_servers.reason-network.env]
+REASON_NETWORK_AGENT = "codex"
+REASON_NETWORK_HOME = "${HOME}"

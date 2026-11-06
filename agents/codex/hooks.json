@@ -38,6 +38,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{reason-network} hook codex session-start",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionEnd": [
@@ -46,6 +56,15 @@
           {
             "type": "command",
             "command": "HOOK_SLUG=dotfiles:codex-goal-kernel sh ~/.codex/hooks/run-goal-kernel.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{reason-network} hook codex session-end",
             "timeout": 3
           }
         ]
@@ -58,6 +77,15 @@
             "type": "command",
             "command": "HOOK_SLUG=dotfiles:codex-goal-kernel sh ~/.codex/hooks/run-goal-kernel.sh --enforce",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{reason-network} hook codex user-prompt-submit",
+            "timeout": 10
           }
         ]
       }
@@ -129,6 +157,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{reason-network} hook codex post-tool-use",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Stop": [
@@ -155,6 +193,15 @@
           {
             "type": "command",
             "command": "HOOK_SLUG=dotfiles:reply-language sh ~/.codex/hooks/run-reply-language.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{reason-network} hook codex stop",
+            "timeout": 10
           }
         ]
       }

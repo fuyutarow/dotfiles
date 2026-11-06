@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "../../hooks/zod.ts";
 
 const repo = join(import.meta.dir, "..", "..", "..");
 const script = join(repo, "agents/codex/codex-config.ts");
@@ -141,11 +142,80 @@ describe("codex:config", () => {
     // The values match agents/codex/config.declared.toml.
     writeFileSync(
       join(home, ".codex/config.toml"),
-      `approval_policy = "never"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\n[sandbox_workspace_write]\nnetwork_access = true\n\n# codex-dotfiles-mcp-managed: context7, deepwiki, exa, reason-network\n\n[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"\n\n[mcp_servers.deepwiki]\nurl = "https://mcp.deepwiki.com/mcp"\n\n[mcp_servers.exa]\nurl = "https://mcp.exa.ai/mcp"\n\n[mcp_servers.reason-network]\ncommand = "reason-network"\nargs = ["mcp"]\n\n[tui]\nfullscreen_transcript = true\n${statusLine}\n`,
+      `approval_policy = "never"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\n[sandbox_workspace_write]\nnetwork_access = true\n\n# codex-dotfiles-mcp-managed: context7, deepwiki, exa, reason-network\n\n[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"\n\n[mcp_servers.deepwiki]\nurl = "https://mcp.deepwiki.com/mcp"\n\n[mcp_servers.exa]\nurl = "https://mcp.exa.ai/mcp"\n\n[mcp_servers.reason-network]\ncommand = "reason-network"\nargs = ["mcp"]\nenv = { "REASON_NETWORK_AGENT" = "codex", "REASON_NETWORK_HOME" = "${home}" }\ntool_timeout_sec = 660\ndefault_tools_approval_mode = "approve"\n\n[tui]\nfullscreen_transcript = true\n${statusLine}\n`,
     );
     const result = run(home, ["--check"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout.toString() + result.stderr.toString()).toBe("");
+  });
+
+  test("declares reason-network's Codex-only MCP keys and approves no other server", () => {
+    const home = mkdtempSync(join(tmpdir(), "codex-config-reason-network-"));
+    mkdirSync(join(home, ".codex"));
+    const path = join(home, ".codex/config.toml");
+    writeFileSync(path, 'model = "owner-model"\n');
+    expect(run(home).exitCode).toBe(0);
+    const parsed = z
+      .object({
+        mcp_servers: z.record(z.string(), z.record(z.string(), z.unknown())),
+      })
+      .safeParse(Bun.TOML.parse(readFileSync(path, "utf8")));
+    expect(parsed.success).toBe(true);
+    const servers = parsed.success ? parsed.data.mcp_servers : {};
+    expect(servers["reason-network"]).toEqual({
+      command: "reason-network",
+      args: ["mcp"],
+      env: { REASON_NETWORK_AGENT: "codex", REASON_NETWORK_HOME: home },
+      tool_timeout_sec: 660,
+      default_tools_approval_mode: "approve",
+    });
+    for (const [name, server] of Object.entries(servers)) {
+      if (name === "reason-network") continue;
+      expect(server).not.toHaveProperty("default_tools_approval_mode");
+      expect(server).not.toHaveProperty("tool_timeout_sec");
+    }
+    expect(run(home, ["--check"]).exitCode).toBe(0);
+    // Dropping the approve mode is drift, and the next run restores it.
+    writeFileSync(
+      path,
+      readFileSync(path, "utf8").replace(
+        'default_tools_approval_mode = "approve"\n',
+        "",
+      ),
+    );
+    const stale = run(home, ["--check"]);
+    expect(stale.exitCode).toBe(1);
+    expect(stale.stderr.toString()).toContain(
+      "mcp_servers.reason-network differs",
+    );
+    expect(run(home).exitCode).toBe(0);
+    expect(run(home, ["--check"]).exitCode).toBe(0);
+  });
+
+  test("an overlay naming a server that .mcp.json does not declare is a bad declaration", () => {
+    const home = mkdtempSync(join(tmpdir(), "codex-config-overlay-home-"));
+    const dotfiles = mkdtempSync(join(tmpdir(), "codex-config-overlay-"));
+    mkdirSync(join(dotfiles, "agents/codex"), { recursive: true });
+    writeFileSync(
+      join(dotfiles, "agents/codex/config.declared.toml"),
+      readFileSync(
+        join(repo, "agents/codex/config.declared.toml"),
+        "utf8",
+      ).replaceAll("mcp_servers.reason-network", "mcp_servers.ghost"),
+    );
+    writeFileSync(
+      join(dotfiles, ".mcp.json"),
+      readFileSync(join(repo, ".mcp.json")),
+    );
+    const result = Bun.spawnSync([process.execPath, script, "--check"], {
+      env: { ...process.env, HOME: home, DOTFILES: dotfiles },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr.toString()).toContain(
+      "mcp_servers.ghost is not declared in .mcp.json",
+    );
   });
 
   test("--check reports tui.status_line drift when [tui] is absent", () => {

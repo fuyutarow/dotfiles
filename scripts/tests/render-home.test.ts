@@ -1032,3 +1032,81 @@ describe("render-home: agx guidance", () => {
     );
   });
 });
+
+describe("Reason Network Codex hooks", () => {
+  const EVENTS = [
+    ["SessionStart", "session-start", "*", 10],
+    ["UserPromptSubmit", "user-prompt-submit", undefined, 10],
+    ["PostToolUse", "post-tool-use", "*", 10],
+    ["Stop", "stop", undefined, 10],
+    ["SessionEnd", "session-end", undefined, 3],
+  ] as const;
+
+  function renderReal(home: string): { out: string; code: number } {
+    return run({
+      HOME: home,
+      DOTFILES: ROOT,
+      DOTFILES_RENDER_FROM_WORKING_COPY: "1",
+      CLAUDE_SETTINGS_PRIVATE: join(home, "missing-overlay.json"),
+    });
+  }
+
+  function reasonNetworkHooks(home: string) {
+    const decoded = HooksConfigSchema.safeParse(
+      readObject(join(home, ".codex/hooks.json"))["hooks"],
+    );
+    expect(decoded.success).toBe(true);
+    return Object.entries(decoded.success ? decoded.data : {}).flatMap(
+      ([event, groups]) =>
+        groups.flatMap((group) =>
+          group.hooks.flatMap((hook) =>
+            String(hook["command"]).includes("reason-network")
+              ? [{ event, matcher: group["matcher"], hook }]
+              : [],
+          ),
+        ),
+    );
+  }
+
+  test("renders the five groups with the machine's quoted absolute path and keeps existing hooks", () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".local/bin"), { recursive: true });
+    const exe = join(home, ".local/bin/reason-network");
+    writeFileSync(exe, "#!/bin/sh\n");
+    chmodSync(exe, 0o755);
+    const r = renderReal(home);
+    expect(r.code).toBe(0);
+    const found = reasonNetworkHooks(home);
+    expect(found).toHaveLength(EVENTS.length);
+    for (const [event, name, matcher, timeout] of EVENTS) {
+      const entry = found.find((candidate) => candidate.event === event);
+      expect(entry?.hook).toEqual({
+        type: "command",
+        command: `'${exe}' hook codex ${name}`,
+        timeout,
+      });
+      expect(entry?.matcher).toBe(matcher);
+    }
+    const text = readFileSync(join(home, ".codex/hooks.json"), "utf8");
+    expect(text).not.toContain("{reason-network}");
+    expect(text).toContain("codex-goal-kernel");
+    expect(text).toContain("herdr-agent-state.sh session");
+    // The tracked declaration never carries the machine path.
+    expect(
+      readFileSync(join(ROOT, "agents/codex/hooks.json"), "utf8"),
+    ).not.toContain("/.local/bin/reason-network");
+    cleanup(home);
+  });
+
+  test("a machine without reason-network omits only those hooks and says so", () => {
+    const home = makeHome();
+    const r = renderReal(home);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("5 Reason Network Codex hook(s) omitted");
+    expect(reasonNetworkHooks(home)).toEqual([]);
+    expect(readFileSync(join(home, ".codex/hooks.json"), "utf8")).toContain(
+      "codex-goal-kernel",
+    );
+    cleanup(home);
+  });
+});

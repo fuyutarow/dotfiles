@@ -290,6 +290,63 @@ async function validateCommandTargets(
   }
 }
 
+// Reason Network's Codex hooks are tracked with this token in place of the executable, because the
+// absolute path is a machine fact (README: no machine-absolute paths in tracked declarations).
+const REASON_NETWORK_TOKEN = "{reason-network}";
+
+async function reasonNetworkExecutable(): Promise<string | undefined> {
+  const onPath = Bun.which("reason-network");
+  if (onPath !== null) return onPath;
+  // reason-network/install.ts installs here; a PATH without ~/.local/bin must not drop the hooks.
+  const installed = `${commandTargetHome}/.local/bin/reason-network`;
+  return (await exists(installed)) ? installed : undefined;
+}
+
+/** `config` with each token-led Reason Network hook command resolved to the quoted absolute
+ * executable. Reason Network is bootstrapped on Linux x86_64 only, so on a machine without it
+ * those hooks are omitted (and said so) rather than failing the whole render. */
+async function withReasonNetwork(
+  config: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const hooks = HooksConfigSchema.safeParse(config["hooks"] ?? {});
+  if (!hooks.success) return config; // withHooks reports the invalid shape
+  const executable = await reasonNetworkExecutable();
+  const quoted =
+    executable === undefined
+      ? undefined
+      : `'${executable.replaceAll("'", "'\\''")}'`;
+  let omitted = 0;
+  const resolved = Object.entries(hooks.data).flatMap(([event, groups]) => {
+    const kept = groups.flatMap((group) => {
+      const entries = group.hooks.flatMap((hook) => {
+        const command = hook["command"];
+        if (
+          typeof command !== "string" ||
+          !command.startsWith(REASON_NETWORK_TOKEN)
+        )
+          return [hook];
+        if (quoted === undefined) {
+          omitted += 1;
+          return [];
+        }
+        return [
+          {
+            ...hook,
+            command: `${quoted}${command.slice(REASON_NETWORK_TOKEN.length)}`,
+          },
+        ];
+      });
+      return entries.length === 0 ? [] : [{ ...group, hooks: entries }];
+    });
+    return kept.length === 0 ? [] : [[event, kept] as const];
+  });
+  if (omitted > 0)
+    print(
+      `note: reason-network not found; ${omitted} Reason Network Codex hook(s) omitted (mise run reason-network:install)`,
+    );
+  return { ...config, hooks: Object.fromEntries(resolved) };
+}
+
 // ── inputs ───────────────────────────────────────────────────────────────────────────────────
 const baseRead = await attempt(() => readJson(basePath));
 if (!baseRead.ok || baseRead.value instanceof Error) {
@@ -464,13 +521,14 @@ if (!codex.ok || codex.value instanceof Error) {
   const error = codex.ok ? codex.value : codex.error;
   fatal(`FATAL: cannot read ${codexPath} — ${errorMessage(error)}`);
 }
+const codexConfig = await withReasonNetwork(codex.value);
 outputs.push({
   dest: `${home}/.codex/hooks.json`,
-  text: json(withHooks(codex.value, specs, "codex", codexPath)),
+  text: json(withHooks(codexConfig, specs, "codex", codexPath)),
   from: `${codexPath} + agents/hooks/hooks.toml`,
 });
 
-await validateCommandTargets(settings, codex.value);
+await validateCommandTargets(settings, codexConfig);
 
 // ── ~/.claude/CLAUDE.md ──────────────────────────────────────────────────────────────────────
 const mdPath = `${dotfiles}/agents/claude/CLAUDE.md`;

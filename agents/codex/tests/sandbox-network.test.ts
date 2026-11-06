@@ -247,4 +247,54 @@ command = "user-server"
     expect(first).toContain('[mcp_servers.user]\ncommand = "user-server"');
     expect(edit(first, mcpDeclared)).toBe(first);
   });
+
+  test("renders Codex-only table keys after env and compares them as drift", () => {
+    const withExtras = {
+      ...declared,
+      mcpServers: {
+        approved: {
+          type: "stdio" as const,
+          command: "approved-bin",
+          args: ["mcp"],
+          env: { AGENT: "codex" },
+          toolTimeoutSec: 660,
+          defaultToolsApprovalMode: "approve",
+        },
+        plain: { type: "http" as const, url: "https://plain.example/mcp" },
+      },
+    };
+    const result = edit("", withExtras);
+    expect(result).toContain(
+      '[mcp_servers.approved]\ncommand = "approved-bin"\nargs = ["mcp"]\nenv = { "AGENT" = "codex" }\ntool_timeout_sec = 660\ndefault_tools_approval_mode = "approve"\n\n[mcp_servers.plain]\nurl = "https://plain.example/mcp"\n',
+    );
+    expect(edit(result, withExtras)).toBe(result);
+    expect(Bun.TOML.parse(result)).toMatchObject({
+      mcp_servers: { approved: { default_tools_approval_mode: "approve" } },
+    });
+    expect(result.split("default_tools_approval_mode")).toHaveLength(2);
+    const live = {
+      contents: result,
+      networkAccess: true,
+      modelContextWindow: 1000000,
+      modelAutoCompactTokenLimit: 500000,
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      tuiStatusLine: statusLine,
+      tuiFullscreenTranscript: false,
+      mcpServers: {
+        approved: {
+          type: "stdio" as const,
+          command: "approved-bin",
+          args: ["mcp"],
+          env: { AGENT: "codex" },
+          toolTimeoutSec: 660,
+        },
+        plain: withExtras.mcpServers.plain,
+      },
+      managedMcpNames: ["approved", "plain"],
+    };
+    expect(drift(withExtras, live)).toEqual([
+      "mcp_servers.approved differs from .mcp.json",
+    ]);
+  });
 });

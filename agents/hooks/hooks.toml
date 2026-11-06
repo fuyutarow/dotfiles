@@ -216,3 +216,31 @@ event = "Stop"
 fail_closed = false
 timeout = 20
 vendors = ["claude"]
+
+# Reason Network's own hooks for Codex (what `reason-network setup` writes; reason-network
+# src/setup.rs codex()). The tracked command carries the {reason-network} token; scripts/render-home.ts
+# resolves it to the machine's absolute executable path, so no machine path is ever tracked.
+[[external]]
+command = "{reason-network} hook codex session-start"
+owner = "reason-network"
+reason = "Registers an idle Codex session with the Reason Network daemon at SessionStart, without any tool call."
+
+[[external]]
+command = "{reason-network} hook codex user-prompt-submit"
+owner = "reason-network"
+reason = "Marks the Codex session busy and surfaces incoming mail; owned by Reason Network."
+
+[[external]]
+command = "{reason-network} hook codex post-tool-use"
+owner = "reason-network"
+reason = "Keeps the Codex session alive in the registry and surfaces incoming mail after tools."
+
+[[external]]
+command = "{reason-network} hook codex stop"
+owner = "reason-network"
+reason = "Marks the Codex session idle and blocks the stop when mail is waiting; owned by Reason Network."
+
+[[external]]
+command = "{reason-network} hook codex session-end"
+owner = "reason-network"
+reason = "Removes the Codex session from the Reason Network registry at SessionEnd."

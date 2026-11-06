@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3 — 2026-11-06
+
+- Show Codex context usage from the session rollout.
+
 ## 0.5.2 — 2026-11-06
 
 - Use middle dot separators in agent detail

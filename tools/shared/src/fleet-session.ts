@@ -216,6 +216,40 @@ const CodexApplied = z.object({
     thread_settings: CodexSettings,
   }),
 });
+const CodexTokenCount = jsonOf(
+  z.object({
+    type: z.literal("event_msg"),
+    payload: z.object({
+      type: z.literal("token_count"),
+      info: z
+        .object({
+          last_token_usage: z.object({
+            total_tokens: z.number().int().nonnegative(),
+          }),
+          model_context_window: z.number().int().positive(),
+        })
+        .nullish(),
+    }),
+  }),
+);
+
+function tokenCountFromLines(
+  lines: string[],
+): { ctx: FleetSession["ctx"] } | undefined {
+  for (const line of lines.toReversed()) {
+    const count = CodexTokenCount.safeParse(line);
+    if (!count.success) continue;
+    const usage = count.data.payload.info;
+    if (usage === null || usage === undefined)
+      return { ctx: unavailable("no native token count") };
+    const tokens = usage.last_token_usage.total_tokens;
+    const window = usage.model_context_window;
+    return {
+      ctx: { tokens, window, pct: Math.min(100, (100 * tokens) / window) },
+    };
+  }
+  return undefined;
+}
 
 async function rolloutDirectory(
   directory: string,
@@ -331,10 +365,36 @@ export async function readCodexNativeSession(
       model = settings.model ?? model;
       effort = settings.effort ?? settings.reasoning_effort ?? effort;
     }
+    // Search backwards from the end: a large later tool response can push the
+    // latest token count outside the settings tail. Ignore incomplete writes.
+    let position = info.size;
+    let suffix = "";
+    let completeEnd = false;
+    let ctx: FleetSession["ctx"] = unavailable("no native token count");
+    let found = false;
+    while (position > 0 && !found) {
+      const length = Math.min(position, 256 * 1024);
+      position -= length;
+      const chunk = Buffer.alloc(length);
+      const chunkRead = await handle.read(chunk, 0, length, position);
+      const records = (
+        chunk.subarray(0, chunkRead.bytesRead).toString("utf8") + suffix
+      ).split("\n");
+      if (!completeEnd) {
+        records.pop();
+        completeEnd = true;
+      }
+      suffix = records.shift() ?? "";
+      if (position === 0) records.unshift(suffix);
+      const observation = tokenCountFromLines(records);
+      found = observation !== undefined;
+      ctx = observation?.ctx ?? ctx;
+    }
     return {
       ...session,
       model: model ?? unavailable("no bounded native model observation"),
       effort: effort ?? unavailable("no bounded native effort observation"),
+      ctx,
       updated_at: Temporal.Now.instant().toString(),
     };
   });

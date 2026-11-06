@@ -1099,6 +1099,45 @@ test("bounded exact rollout reads do not inherit stale fleet model when tail has
   });
 });
 
+const tokenCountEvent = (tokens: number) =>
+  JSON.stringify({
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: {
+        last_token_usage: { total_tokens: tokens },
+        model_context_window: 828400,
+      },
+    },
+  });
+
+test("native context uses the latest complete token count of the exact rollout", async () => {
+  await using fixture = await nativeFixture();
+  const path = await fixture.rollout(footerThread);
+  const parsed = FleetSessionSchema.safeParse(
+    session({ vendor: "codex", session_id: footerThread }),
+  );
+  expect(parsed.success).toBe(true);
+  if (!parsed.success) return;
+  await Bun.write(
+    path,
+    (await Bun.file(path).text()) +
+      tokenCountEvent(1000) +
+      "\n" +
+      tokenCountEvent(165680) +
+      "\n" +
+      JSON.stringify({
+        type: "response_item",
+        payload: "x".repeat(512 * 1024),
+      }) +
+      "\n" +
+      tokenCountEvent(700000).slice(0, -2),
+  );
+  expect(
+    await readCodexNativeSession(parsed.data, fixture.env, path),
+  ).toMatchObject({ ctx: { tokens: 165680, window: 828400, pct: 20 } });
+});
+
 test("native footer retains model and effort only from the same complete observation", () => {
   expect(nativeFooterObservation(footer())).toEqual({
     id: footerThread,
@@ -1141,7 +1180,7 @@ test("identical footer projections preserve fleet file inode, content, timestamp
   const observed = await readFleetSession(footerThread, fixture.env);
   expect(observed).toMatchObject({
     name: prior.name,
-    ctx: prior.ctx,
+    ctx: { na: true, why: "no native token count" },
     rate: prior.rate,
     model: "GPT-6.1-Sol",
     effort: "medium",
@@ -1165,7 +1204,7 @@ test("identical footer projections preserve fleet file inode, content, timestamp
   expect(third.get(footerThread)).toMatchObject({
     model: "GPT-6-Astra",
     effort: "high",
-    ctx: prior.ctx,
+    ctx: { na: true, why: "no native token count" },
     rate: prior.rate,
   });
   expect(calls.at(-1)).toContain("model=GPT-6-Astra");
@@ -1463,7 +1502,7 @@ test("fallback cwd requires verified equivalence while native runtime cwd ignore
   );
   expect(result.get(footerThread)).toMatchObject({
     cwd: alias,
-    ctx: prior.ctx,
+    ctx: { na: true, why: "no native token count" },
     rate: prior.rate,
     name: prior.name,
   });
@@ -1567,7 +1606,7 @@ test("same-ID creation cwd and verified native runtime cwd have distinct authori
     cwd: runtime,
     model: "GPT-6.1-Sol",
     effort: "medium",
-    ctx: prior.ctx,
+    ctx: { na: true, why: "no native token count" },
     rate: prior.rate,
     name: prior.name,
   });

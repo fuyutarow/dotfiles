@@ -1065,7 +1065,8 @@ export async function projectAgents(
     let contextText: string | undefined;
     if (context.success) {
       const { tokens, pct, window } = context.data;
-      const limit = window >= 1000 ? `${window / 1000}k` : String(window);
+      const limit =
+        window >= 1000 ? `${Math.round(window / 1000)}k` : String(window);
       contextText = `${Math.round(pct)}% (${tokens}/${limit})`;
     }
     const processIds = panePids.get(agent.pane_id) ?? {

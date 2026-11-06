@@ -20,7 +20,7 @@ description: >-
 
 # Wiring mise tasks — one verb contract, per-language bodies
 
-> **Version**: v2610.6.0 (2026-10-19) — repository-owned contract tools and optional SDK portability pattern.
+> **Version**: v2611.1.0 (2026-11-06) — grammar rule 4 admits a standalone read-only report as a bare word (`loc`).
 > Owns the task graph, naming, template fragments and resolution gate.
 > Dated tool facts, provenance and rulings live in `references/recipes.md`.
 
@@ -143,9 +143,12 @@ Missing or malformed jj variables must fail closed; never silently use the Git f
 2. do/verify pairs are `X` + `X:check` (`fmt`/`fmt:check`, `up`/`up:check`, `solver:render`/`solver:check`).
 3. `check` is the aggregate CI gate. Every gate task you adopt lands in `check.depends` **in the
    same edit** that creates it — a gate outside `check` is decoration.
-4. Single clean words are RESERVED for the contract verbs and cross-cutting hygiene gates
-   (`banned`, `records`, `claims`, `taxonomy`). Two or more siblings on one object → namespace
-   them (`lint:*`, `slides:*`, `papers:*`).
+4. A single clean word carries one of three things: a contract verb, a cross-cutting hygiene
+   gate (`banned`, `records`, `claims`, `taxonomy`), or a read-only report that stands alone on
+   its object (`loc` — prints, mutates nothing, gates nothing). A mutating task or a gate outside
+   `check` is never a bare word. Two or more siblings on one object → namespace them
+   (`lint:*`, `slides:*`, `papers:*`); the second sibling renames the bare word in the same edit
+   (`loc` → `stats:loc`). A bare word must not shadow a mise built-in (`ls`, `run`, `use`…).
 5. Polyglot: repo-level verbs are depends-only; language bodies live in `<verb>:<lang>` subtasks
    (`references/recipes.md` §6, consumer repository exemplar).
 6. Git hooks: `hook:<event>` is the task a `.githooks/<event>` shim runs. Its name repeats git's

@@ -194,3 +194,21 @@ This skill now cites that predicate instead of restating it.
 The full record is in `keeping-research-notebooks` tests/forge-verification-ledger.md §7: the incident, the findings
 (workflow `wf_d7608669-493`, 46 findings across four lenses), the fixes, and owner-named deferrals.
 Prose-debt WARN counts equal the pre-edit copy (standing debt, not added).
+
+## 2026-11-06 — grammar rule 4 admits a standalone read-only report (v2611.1.0)
+
+Source: user decision 2026-11-06 in coralbase: 「wiring-mise-tasks を revise しましょうよ。loc も認められるべきです」.
+Observed cost: coralbase renamed `loc` → `stats:loc` on 2026-11-06 (15d54101) only because rule 4 said
+single words are RESERVED for contract verbs and hygiene gates; `stats:` has one member, so the
+namespace carried no information and lengthened a muscle-memory token.
+
+Change (prose only; the gate never enforced rule 4 — `scripts/mise-contract.ts` checks hyphens,
+`check.depends` and dangling depends, nothing about bare words): rule 4 now names three legitimate
+bare words — a contract verb, a cross-cutting hygiene gate, or a read-only report standing alone on
+its object (`loc`). Guards kept: a mutating task or a gate outside `check` is never a bare word; the
+second sibling renames the bare word in the same edit (`loc` → `stats:loc`); a bare word must not
+shadow a mise built-in. Templates unchanged (none ships a report task).
+
+Checks: `mise-contract.test.ts` unaffected (no rule-4 assertions exist to update). Consumers:
+coralbase to rename `stats:loc` back to `loc` (a report, no siblings). Limitation: desk review only;
+no live-selection measurement.

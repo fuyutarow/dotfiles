@@ -978,6 +978,94 @@ export async function checkMcp(ctx: Ctx): Promise<Finding> {
       );
 }
 
+/** Inspect a single process-table snapshot; only executable names, not arbitrary arguments,
+ * identify agents and the MCP process. An absent ancestor cannot establish liveness. */
+function hasLiveAgentAncestor(
+  pid: number,
+  parentPid: number,
+  processes: Map<
+    number,
+    { parent: number; state: string; command: string; args: string }
+  >,
+): boolean {
+  const visited = new Set([pid]);
+  let parent = parentPid;
+  while (parent > 0 && !visited.has(parent)) {
+    visited.add(parent);
+    const ancestor = processes.get(parent);
+    if (ancestor === undefined) return false;
+    if (
+      !ancestor.state.startsWith("Z") &&
+      ["claude", "codex"].includes(ancestor.command)
+    )
+      return true;
+    parent = ancestor.parent;
+  }
+  return false;
+}
+
+export function orphanedReasonNetworkProcesses(output: string): number[] {
+  const processes = new Map<
+    number,
+    { parent: number; state: string; command: string; args: string }
+  >();
+  for (const line of output.split("\n")) {
+    const match = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s*(.*)$/u.exec(line);
+    if (
+      match?.[1] === undefined ||
+      match[2] === undefined ||
+      match[3] === undefined ||
+      match[4] === undefined
+    )
+      continue;
+    processes.set(Number(match[1]), {
+      parent: Number(match[2]),
+      state: match[3],
+      command: basename(match[4]),
+      args: match[5] ?? "",
+    });
+  }
+  const orphaned: number[] = [];
+  for (const [pid, proc] of processes) {
+    if (
+      proc.command !== "reason-network" ||
+      !/^\S+\s+mcp(?:\s|$)/u.test(proc.args)
+    )
+      continue;
+    if (!hasLiveAgentAncestor(pid, proc.parent, processes)) orphaned.push(pid);
+  }
+  return orphaned;
+}
+
+export async function checkReasonNetworkReaping(): Promise<Finding> {
+  const result = await run(["ps", "-axo", "pid=,ppid=,stat=,comm=,args="], {
+    ms: 10_000,
+  });
+  if (
+    result.missing ||
+    result.timedOut ||
+    result.code !== 0 ||
+    result.out.trim() === ""
+  )
+    return warn(
+      "reason-network-reaping",
+      "could not inspect the process table",
+    );
+  const orphans = orphanedReasonNetworkProcesses(result.out);
+  return orphans.length === 0
+    ? pass(
+        "reason-network-reaping",
+        "no reason-network mcp processes lack a live agent ancestor",
+      )
+    : {
+        ...warn(
+          "reason-network-reaping",
+          `${orphans.length} reason-network mcp process(es) lack a live agent ancestor`,
+        ),
+        lines: orphans.map(String),
+      };
+}
+
 export async function checkWslconfig(ctx: Ctx): Promise<Finding> {
   const src = join(ctx.dotfiles, "wsl", "wslconfig.win");
   // Same interop path as scripts/wsl-wslconfig.ts: cmd.exe is deliberately off this PATH.
@@ -2247,6 +2335,11 @@ export const CHECKS: Check[] = [
   { name: "bun-floor", run: checkBunFloor, applies: always },
   { name: "bun-runtime", run: checkBunRuntime, applies: always },
   { name: "mcp", run: checkMcp, applies: always },
+  {
+    name: "reason-network-reaping",
+    run: checkReasonNetworkReaping,
+    applies: always,
+  },
   {
     name: "codex-runtime",
     run: checkCodexRuntime,

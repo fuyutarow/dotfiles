@@ -40,9 +40,28 @@ import {
   checkRecoverHealth,
   checkTmpfsCapacity,
   checkWslGpuManagerPath,
+  orphanedReasonNetworkProcesses,
   type Ctx,
 } from "../doctor.ts";
 import type { FloorIO } from "../../tools/tool-tiers/src/core-floor.ts";
+
+test("reason-network orphan detection follows ancestors and ignores argument lookalikes", () => {
+  const snapshot = [
+    "1 0 S systemd /sbin/init",
+    "10 1 S codex /usr/bin/codex app-server",
+    "11 10 S helper helper",
+    "12 11 S reason-network /usr/bin/reason-network mcp",
+    "13 1 S reason-network /usr/bin/reason-network mcp",
+    "14 1 S reason-network /usr/bin/reason-network daemon",
+    "15 1 S shell shell reason-network mcp",
+    "16 99 S reason-network /usr/bin/reason-network mcp",
+    "17 1 S claude /usr/bin/claude",
+    "18 17 S reason-network /usr/bin/reason-network mcp",
+    "19 1 Z codex [codex] <defunct>",
+    "20 19 S reason-network /usr/bin/reason-network mcp",
+  ].join("\n");
+  expect(orphanedReasonNetworkProcesses(snapshot)).toEqual([13, 16, 20]);
+});
 
 test("doctor uses the same floor without upgrading", async () => {
   let upgrades = 0;

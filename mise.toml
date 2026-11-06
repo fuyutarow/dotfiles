@@ -30,6 +30,18 @@ description = "READ-ONLY acceptance view for the latest selected agx worker run;
 dir = "{{config_root}}"
 run = "bun scripts/agx-accept.ts"
 
+[tasks."reason-network:install"]
+depends = ["bun:check"]
+dir = "{{config_root}}"
+description = "Bootstrap Reason Network when absent; preserve existing installs and upstream updates"
+run = "bun reason-network/install.ts install"
+
+[tasks."reason-network:check"]
+depends = ["bun:check"]
+dir = "{{config_root}}"
+description = "Check that Reason Network on PATH runs"
+run = "bun reason-network/install.ts check"
+
 [tasks.up]
 depends = ["bun:check"]
 alias = "u"

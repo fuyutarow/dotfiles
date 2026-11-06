@@ -627,6 +627,17 @@ const OTHER: readonly Surface[] = [
     verify: `${DOCTOR} (deps, bins)`,
   },
   {
+    kind: "applied",
+    when: "linux",
+    sources: ["reason-network/install.ts"],
+    deployed:
+      "~/.local/bin/reason-network on first install; thereafter upstream updates",
+    consumer: "Reason Network callers on PATH",
+    writer:
+      "mise run reason-network:install on first install; Reason Network updater thereafter",
+    verify: "mise run reason-network:check",
+  },
+  {
     kind: "in-place",
     when: "all",
     sources: ["bunfig.toml"],

@@ -1,5 +1,10 @@
 # Dotfiles
 
+Reason Network is bootstrapped on Linux x86_64 with `mise run reason-network:install`.
+The first install verifies the release archive and binary; subsequent runs preserve any
+existing executable on PATH, including upstream updates. `mise run reason-network:check`
+checks that the executable on PATH runs. Upstream auto-update remains enabled by default.
+
 知者不惑，仁者不憂，勇者不懼。
 
 > **Dotfiles for the agent era.** One repo configures both my machines (macOS + WSL2) _and_ my AI

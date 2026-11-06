@@ -367,7 +367,7 @@ describe("enforce-search-route", () => {
     const project = registerProject();
     const cases: ReadonlyArray<readonly [string, string | undefined]> = [
       [
-        "PATH=/home/linuxbrew/.linuxbrew/bin:$PATH timeout 30 agx msg list 2>&1 | grep -F -e 'mac9' | head -5",
+        "PATH=/home/linuxbrew/.linuxbrew/bin:$PATH timeout 30 reason-network who 2>&1 | grep -F -e 'mac9' | head -5",
         undefined,
       ],
       [
@@ -378,17 +378,17 @@ describe("enforce-search-route", () => {
         "bun /tmp/claude-1000/x/scratchpad/probe.ts /home/fuyu/Workspace/firedancer.ws/ws_cc-capacity-1101 2>&1 | grep -v '^ *$'",
         undefined,
       ],
-      ["PATH=/bin:$PATH agx msg list | grep x", undefined],
+      ["PATH=/bin:$PATH reason-network who | grep x", undefined],
       [
         `cd '${project}' && PATH=/bin:$PATH timeout 120 agx worker dispatch t1 2>&1 | grep -v '^WARN' | cut -c1-600 | tail -8`,
         undefined,
       ],
       [
-        "NAME=value timeout 30 agx msg list 2>/dev/null | rg x | sort | uniq | wc -l",
+        "NAME=value timeout 30 reason-network who 2>/dev/null | rg x | sort | uniq | wc -l",
         undefined,
       ],
-      ["timeout 30 agx msg list | grep x", undefined],
-      ["agx msg list 2>&1 | grep x | cut -c1-600 | tail -8", undefined],
+      ["timeout 30 reason-network who | grep x", undefined],
+      ["reason-network who 2>&1 | grep x | cut -c1-600 | tail -8", undefined],
       ["grep -r foo packages-2611/", "deny"],
       ["rg foo", "deny"],
       ["rg foo | head", "deny"],

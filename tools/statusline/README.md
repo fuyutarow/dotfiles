@@ -43,6 +43,10 @@ input separately. The unavailable renderer then suppressed its default reason, p
 `n/a`. Reusing the sampled frames removes that reconstruction; transcript-only inputs still
 explain missing fields rather than inventing a percentage or rate.
 
+Claude stdin invocations publish their supplied rate windows to
+`~/.cache/claude/statusline/subscription-usage.json` for routing. The sampler publishes Codex
+usage to the same file; updates are serialized and retain the latest observation per window.
+
 ## Codex display contract
 
 | Invocation                                              | Behavior                                                                                                             |
@@ -85,8 +89,7 @@ finding and judgment counts; failed collection retains the prior value as stale.
 The legacy enriched progress reader still resolves agx state until its separate
 `agx worker ls --json` / `last_progress_path` migration.
 On first use, the full renderer reads the owner file, transcripts and the selected
-PIDs under `/proc`. It never launches a collector, fetches a rate, writes a cache or waits
-for a session render lock. Standalone discovery uses the sampler's live session inventory;
+PIDs under `/proc`. It never launches a collector or fetches a rate. Standalone discovery uses the sampler's live session inventory;
 `statusline sessions` explicitly performs discovery when requested. The sampler removes
 the retired `fields/`, `renders/` and `sources/` directories and old temporary files.
 `STATUSLINE_OWNER_STATE`, `STATUSLINE_CACHE_ROOT` and `STATUSLINE_DISK_RATE_STATE` allow

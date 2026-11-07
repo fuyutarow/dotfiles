@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.7 — 2026-11-07
+
+- Publish Claude statusline rate limits to subscription usage.
+
 ## 0.23.6 — 2026-11-06
 
 - Publish the context window with session usage

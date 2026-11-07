@@ -3,8 +3,10 @@ import {
   subscriptionUsagePath,
   SubscriptionUsageSnapshotSchema,
   type SubscriptionUsageSnapshot,
+  type SubscriptionUsageWindow,
 } from "@dotfiles/shared/src/subscription-usage.ts";
 import { readJsonAsync, writeCacheAsync } from "./bounded.ts";
+import { acquireSamplerLock } from "./sampler-lock.ts";
 
 type RateFacts = Pick<
   Dataframe,
@@ -37,6 +39,15 @@ function windowUsage(
     };
   return usage;
 }
+
+const newest = (
+  current: SubscriptionUsageWindow | undefined,
+  prior: SubscriptionUsageWindow | undefined,
+) =>
+  current === undefined ||
+  (prior !== undefined && prior.measured_at > current.measured_at)
+    ? prior
+    : current;
 
 /** Persist the subscription facts already consumed by the statusline renderers. */
 function usageSnapshot(
@@ -77,23 +88,38 @@ function usageSnapshot(
   };
 }
 
-/** The timer owns publication; absent windows retain the previous source observation. */
+/** Serialize read/merge/write across the timer and concurrent Claude invocations. */
 export async function writeUsageSnapshotAsync(
   facts: RateFacts,
   nowSeconds: number,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
   const path = subscriptionUsagePath(env);
-  const previous = await readJsonAsync(path, SubscriptionUsageSnapshotSchema);
   const next = usageSnapshot(facts, nowSeconds);
+  if (
+    next.routes.claude["5h"] === undefined &&
+    next.routes.claude["7d"] === undefined &&
+    next.routes.codex["7d"] === undefined
+  )
+    return;
+  let lock: AsyncDisposable | undefined;
+  for (let attempt = 0; attempt < 50 && lock === undefined; attempt++) {
+    lock = await acquireSamplerLock(`${path}.lock`).catch(() => void 0);
+    if (lock === undefined) await Bun.sleep(10);
+  }
+  if (lock === undefined) return;
+  await using _lock = lock;
+  const previous = await readJsonAsync(path, SubscriptionUsageSnapshotSchema);
   await writeCacheAsync(path, {
     version: 1,
     routes: {
       claude: {
-        "5h": next.routes.claude["5h"] ?? previous?.routes.claude["5h"],
-        "7d": next.routes.claude["7d"] ?? previous?.routes.claude["7d"],
+        "5h": newest(next.routes.claude["5h"], previous?.routes.claude["5h"]),
+        "7d": newest(next.routes.claude["7d"], previous?.routes.claude["7d"]),
       },
-      codex: { "7d": next.routes.codex["7d"] ?? previous?.routes.codex["7d"] },
+      codex: {
+        "7d": newest(next.routes.codex["7d"], previous?.routes.codex["7d"]),
+      },
     },
   });
 }

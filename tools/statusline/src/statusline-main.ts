@@ -17,6 +17,7 @@ import { coloredHead, render } from "./format.ts";
 import { statuslineColumns, wrapThroughSys } from "./wrap.ts";
 import { buildDataframe } from "./build-dataframe.ts";
 import { writeStatuslineFleetSession } from "./fleet-session.ts";
+import { writeUsageSnapshotAsync } from "./usage-snapshot.ts";
 import { runLive, type LiveFrame } from "./live.ts";
 import { readRenderSessions, readOwnerState } from "./owner-state.ts";
 import {
@@ -526,6 +527,16 @@ if (liveMode) {
 } else {
   const current = session ?? {};
   const df = await buildDataframe(current, { codex: codexMode });
+  if (!codexMode && session !== undefined)
+    await writeUsageSnapshotAsync(
+      {
+        rl5: df.rl5,
+        rl5Reset: df.rl5Reset,
+        rl7: df.rl7,
+        rl7Reset: df.rl7Reset,
+      },
+      Temporal.Now.instant().epochMilliseconds / 1000,
+    );
   if (session !== undefined)
     await writeStatuslineFleetSession(
       df.wfOn && session.effort !== undefined

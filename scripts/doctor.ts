@@ -24,6 +24,8 @@ import { DoctorStatus } from "@dotfiles/shared/src/doctor-record.ts";
 //   codex-config agents/codex/config.declared.toml + .mcp.json
 //                                                Codex settings and managed MCP entries match declarations
 //   codex-remote agents/codex/app-server.toml     Codex daemon remote control (mobile app) as declared
+//   codex-hook-trust ~/.codex/hooks.json          every hook is trusted by the installed Codex (its
+//                                                own `hooks/list` status, read from a copy; READ-ONLY)
 //   wslconfig   wsl/wslconfig.win   (WSL only)   %USERPROFILE%\.wslconfig is a byte-equal copy
 //   wsl-gpu-path environment.d      (WSL only)   systemd user manager PATH contains WSL GPU tools
 //   ccc-daemon  cocoindex unit      (Linux)      enabled in default.target and active
@@ -101,6 +103,7 @@ import {
 } from "../tools/tool-tiers/src/tool-tiers.ts";
 import { configHome, declaredProvider } from "../agents/codex/runtime.ts";
 import { danglingRepoBins } from "./deps-prune.ts";
+import { checkCodexHookTrust } from "./doctor/codex-hook-trust.ts";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonOf, jsonText } from "../agents/hooks/zod.ts";
 import {
@@ -2424,6 +2427,7 @@ export const CHECKS: Check[] = [
     run: checkCodexSandboxNetwork,
     applies: always,
   },
+  { name: "codex-hook-trust", run: checkCodexHookTrust, applies: always },
   { name: "smart-open", run: checkSmartOpen, applies: always },
   {
     name: "edge-policy",

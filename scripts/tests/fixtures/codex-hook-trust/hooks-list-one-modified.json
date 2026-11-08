@@ -1,0 +1,43 @@
+{
+  "data": [
+    {
+      "cwd": "/fixture/work",
+      "errors": [],
+      "warnings": [],
+      "hooks": [
+        {
+          "key": "__HOOKS__:pre_tool_use:0:0",
+          "eventName": "preToolUse",
+          "handlerType": "command",
+          "command": "HOOK_SLUG=dotfiles:graveyard-scope sh ~/.agents/hooks/run.sh --fail-closed enforce-graveyard-scope",
+          "matcher": "Bash",
+          "timeoutSec": 600,
+          "statusMessage": null,
+          "source": "user",
+          "sourcePath": "__HOOKS__",
+          "displayOrder": 0,
+          "enabled": true,
+          "isManaged": false,
+          "currentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "trustStatus": "modified"
+        },
+        {
+          "key": "__HOOKS__:pre_tool_use:1:0",
+          "eventName": "preToolUse",
+          "handlerType": "command",
+          "command": "HOOK_SLUG=dotfiles:repo-bash-deny sh ~/.agents/hooks/run.sh --fail-closed enforce-repo-bash-deny",
+          "matcher": "Bash",
+          "timeoutSec": 600,
+          "statusMessage": null,
+          "source": "user",
+          "sourcePath": "__HOOKS__",
+          "displayOrder": 1,
+          "enabled": true,
+          "isManaged": false,
+          "currentHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "trustStatus": "trusted"
+        }
+      ]
+    }
+  ]
+}

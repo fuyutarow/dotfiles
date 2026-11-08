@@ -1,0 +1,7 @@
+# Fixture home config for doctor.test.ts "codex hook trust". The trust entries are fixture data,
+# not a copy of any machine's state. __HOOKS__ stands for the hooks file path.
+[hooks.state."__HOOKS__:pre_tool_use:0:0"]
+trusted_hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+[hooks.state."__HOOKS__:pre_tool_use:1:0"]
+trusted_hash = "sha256:1111111111111111111111111111111111111111111111111111111111111111"

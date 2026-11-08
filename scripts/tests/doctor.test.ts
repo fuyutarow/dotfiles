@@ -46,6 +46,12 @@ import {
 } from "../doctor.ts";
 import { reasonNetworkHomeViolations } from "../lint-reason-network-home.ts";
 import type { FloorIO } from "../../tools/tool-tiers/src/core-floor.ts";
+import {
+  checkCodexHookTrust,
+  type HookStatusRead,
+  readCodexHookStatus,
+  rewriteTrustKeys,
+} from "../doctor/codex-hook-trust.ts";
 
 test("reason-network one-home detects split processes and keys", async () => {
   const root = mkdtempSync(join(tmpdir(), "reason-home-"));
@@ -1673,4 +1679,160 @@ network_access = true
     expect(clean.code).toBe(0);
     expect(clean.out).toMatch(/^PASS {2}brew-shadows/mu);
   });
+});
+
+// codex-hook-trust: Codex's own hooks/list status, read through scripts/tests/fixtures/codex-hook-trust/
+// fake-app-server.ts. Every home is a fixture under tmpdir; no test reads or writes the real ~/.codex.
+const CODEX_FIXTURES = join(import.meta.dir, "fixtures/codex-hook-trust");
+
+function codexFixtureHome(): Ctx & { [Symbol.dispose]: () => void } {
+  const root = mkdtempSync(join(tmpdir(), "codex-trust-test-"));
+  const home = join(root, "home");
+  const codexDir = join(home, ".codex");
+  mkdirSync(codexDir, { recursive: true });
+  const hooksPath = join(codexDir, "hooks.json");
+  writeFileSync(
+    hooksPath,
+    readFileSync(join(CODEX_FIXTURES, "hooks.json"), "utf8"),
+  );
+  writeFileSync(
+    join(codexDir, "config.toml"),
+    readFileSync(join(CODEX_FIXTURES, "config.toml"), "utf8")
+      .split("__HOOKS__")
+      .join(hooksPath),
+  );
+  return {
+    home,
+    dotfiles: REPO,
+    isMac: false,
+    isWsl: false,
+    isCoreBox: true,
+    [Symbol.dispose]: () => {
+      rmSync(root, { recursive: true, force: true });
+    },
+  };
+}
+
+function codexFakeReader(
+  list: string,
+  mode = "",
+  timeoutMs = 10_000,
+): (hooksPath: string, configPath: string) => Promise<HookStatusRead> {
+  return (hooksPath, configPath) =>
+    readCodexHookStatus(hooksPath, configPath, {
+      codex: [process.execPath, join(CODEX_FIXTURES, "fake-app-server.ts")],
+      timeoutMs,
+      env: { FAKE_HOOKS_LIST: join(CODEX_FIXTURES, list), FAKE_MODE: mode },
+    });
+}
+
+test("codex hook trust: all hooks trusted by Codex passes", async () => {
+  using home = codexFixtureHome();
+  const finding = await checkCodexHookTrust(
+    home,
+    codexFakeReader("hooks-list-all-trusted.json"),
+  );
+  expect(finding.verdict).toBe("PASS");
+  expect(finding.detail).toContain("2 hook(s)");
+});
+
+test("codex hook trust: one untrusted hook fails and names slug, event, index, status and remedy", async () => {
+  using home = codexFixtureHome();
+  const finding = await checkCodexHookTrust(
+    home,
+    codexFakeReader("hooks-list-one-untrusted.json"),
+  );
+  expect(finding.verdict).toBe("FAIL");
+  expect(finding.lines).toEqual([
+    "dotfiles:repo-bash-deny preToolUse index=1:0 status=untrusted",
+  ]);
+  expect(finding.fix).toContain("review them with /hooks in Codex");
+});
+
+test("codex hook trust: one modified hook fails and names it with status modified", async () => {
+  using home = codexFixtureHome();
+  const finding = await checkCodexHookTrust(
+    home,
+    codexFakeReader("hooks-list-one-modified.json"),
+  );
+  expect(finding.verdict).toBe("FAIL");
+  expect(finding.lines).toEqual([
+    "dotfiles:graveyard-scope preToolUse index=0:0 status=modified",
+  ]);
+  expect(finding.fix).toContain("review them with /hooks in Codex");
+});
+
+test("codex hook trust: status unavailable warns and never passes", async () => {
+  using home = codexFixtureHome();
+  const absent = await checkCodexHookTrust(home, (hooksPath, configPath) =>
+    readCodexHookStatus(hooksPath, configPath, {
+      codex: ["/nonexistent/codex-for-doctor-test", "app-server"],
+    }),
+  );
+  expect(absent.verdict).toBe("WARN");
+  expect(absent.detail).toContain("not on PATH");
+
+  const errored = await checkCodexHookTrust(
+    home,
+    codexFakeReader("hooks-list-all-trusted.json", "error"),
+  );
+  expect(errored.verdict).toBe("WARN");
+  expect(errored.detail).toContain("fake failure");
+
+  const silent = await checkCodexHookTrust(
+    home,
+    codexFakeReader("hooks-list-all-trusted.json", "hang", 300),
+  );
+  expect(silent.verdict).toBe("WARN");
+  expect(silent.detail).toContain("did not answer hooks/list within 300 ms");
+});
+
+test("codex hook trust: a list that omits the declared hooks warns, never passes", async () => {
+  using home = codexFixtureHome();
+  const finding = await checkCodexHookTrust(home, () =>
+    Promise.resolve({ ok: true, hooks: [] }),
+  );
+  expect(finding.verdict).toBe("WARN");
+});
+
+test("codex hook trust: no hooks file is skipped, the rendered check owns it", async () => {
+  using home = codexFixtureHome();
+  rmSync(join(home.home, ".codex", "hooks.json"));
+  const finding = await checkCodexHookTrust(
+    home,
+    codexFakeReader("hooks-list-all-trusted.json"),
+  );
+  expect(finding.verdict).toBe("SKIP");
+});
+
+test("codex hook trust: the check leaves the home it inspects byte-identical", async () => {
+  using home = codexFixtureHome();
+  const codexDir = join(home.home, ".codex");
+  const files = ["hooks.json", "config.toml"];
+  const before = files.map((name) =>
+    readFileSync(join(codexDir, name), "utf8"),
+  );
+  const entriesBefore = readdirSync(codexDir).toSorted();
+  const finding = await checkCodexHookTrust(
+    home,
+    codexFakeReader("hooks-list-one-untrusted.json"),
+  );
+  expect(finding.verdict).toBe("FAIL");
+  expect(
+    files.map((name) => readFileSync(join(codexDir, name), "utf8")),
+  ).toEqual(before);
+  expect(readdirSync(codexDir).toSorted()).toEqual(entriesBefore);
+});
+
+test("codex hook trust: trust keys are pointed at the copy's hooks path only", () => {
+  const live = "/home/u/.codex/hooks.json";
+  const copy = "/tmp/doctor-codex-trust-x/home/.codex/hooks.json";
+  const config = `[hooks.state."${live}:pre_tool_use:1:0"]\ntrusted_hash = "sha256:ab"\n`;
+  const rewritten = rewriteTrustKeys(config, live, copy);
+  expect(rewritten).toContain(`"${copy}:pre_tool_use:1:0"`);
+  expect(rewritten).not.toContain(live);
+});
+
+test("codex hook trust: the check is registered with the doctor", () => {
+  expect(CHECKS.map((c) => c.name)).toContain("codex-hook-trust");
 });

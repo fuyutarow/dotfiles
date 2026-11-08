@@ -1731,7 +1731,7 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
     });
     expect(result.exitCode).toBe(1);
     expect(result.stdout.toString()).toContain(
-      'ticket landsplit has no current accept judgment; import legacy runs if needed with `agx worker stats --import-legacy`, inspect `agx worker ls --json`, then judge run `landsplit-resume` with `agx worker judge landsplit-resume accept --note "<reason>"`',
+      'ticket landsplit has no current accept judgment; inspect `agx worker ls --json`, then judge run `landsplit-resume` with `agx worker judge landsplit-resume accept --note "<reason>"`',
     );
     expect(
       (await f.log()).some(

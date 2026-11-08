@@ -1081,8 +1081,7 @@ async function main(
       for (const { ticket, run_id, accept } of verdicts) {
         if (!accept) {
           return reject(
-            `ticket ${ticket} has no current accept judgment; import legacy runs if needed with ` +
-              `\`agx worker stats --import-legacy\`, inspect \`agx worker ls --json\`, then judge run \`${run_id}\` ` +
+            `ticket ${ticket} has no current accept judgment; inspect \`agx worker ls --json\`, then judge run \`${run_id}\` ` +
               (parsed.flags.review === undefined
                 ? `with \`agx worker judge ${run_id} accept --note "<reason>"\``
                 : `with \`agx worker judge ${run_id} accept --note "independent review ${parsed.flags.review}"\``),

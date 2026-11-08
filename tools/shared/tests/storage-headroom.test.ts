@@ -258,3 +258,47 @@ describe("read-only Bash is decided by effect", () => {
     expect(isReadOnlyBash(command, cwd)).toBe(false);
   });
 });
+
+test("state budgets deduplicate hard links and reuse cached measurements", async () => {
+  const { mkdtemp, mkdir, writeFile, link, rm } =
+    await import("node:fs/promises");
+  const { stateSubtreeBudget, measureStateSubtrees } =
+    await import("../src/storage-headroom.ts");
+  const home = await mkdtemp(join(tmpdir(), "state-budget-"));
+  {
+    const state = join(home, ".local/state");
+    await Promise.all(
+      ["a", "b", "c"].map((name) =>
+        mkdir(join(state, name), { recursive: true }),
+      ),
+    );
+    await writeFile(join(state, "a", "one"), new Uint8Array(10 * 1024 * 1024));
+    await link(join(state, "a", "one"), join(state, "a", "two"));
+    await writeFile(join(state, "b", "one"), new Uint8Array(20 * 1024 * 1024));
+    const config = join(home, "config.toml");
+    await writeFile(
+      config,
+      "[measure]\ndu_timeout_seconds = 20\ncache_minutes = 5\n[state_budget]\na = 0.0146484375\nb = 0.0146484375\n",
+    );
+    const first = await stateSubtreeBudget(config, home);
+    const measured = await measureStateSubtrees(config, home);
+    const a = measured.entries.find((entry) => entry.name === "a");
+    expect(a?.bytes).toBeGreaterThanOrEqual(10 * 1024 * 1024);
+    expect(a?.bytes).toBeLessThan(11 * 1024 * 1024);
+    expect(first.some((line) => line.includes("state subtree a:"))).toBe(false);
+    expect(
+      first.some(
+        (line) => line.includes("state subtree b:") && line.includes("exceeds"),
+      ),
+    ).toBe(true);
+    expect(
+      first.some(
+        (line) =>
+          line.includes("state subtree c:") && line.includes("undeclared"),
+      ),
+    ).toBe(true);
+    await rm(join(state, "b", "one"));
+    expect(await stateSubtreeBudget(config, home)).toEqual(first);
+  }
+  await rm(home, { recursive: true, force: true });
+});

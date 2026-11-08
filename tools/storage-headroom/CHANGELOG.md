@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.9 — 2026-11-08
+
+- Report state subtree budgets as advisory storage warnings
+
 ## 0.2.8 — 2026-11-08
 
 - Allow safe agx workspace cleanup under storage pressure.

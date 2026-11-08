@@ -318,3 +318,19 @@ test.each([
     expect(out.permissionDecision).toBe("deny");
   },
 );
+
+test.each([0, 10])(
+  "state budget warnings do not change drive decision at deny %s",
+  (deny) => {
+    const env = fixture(deny, deny === 0 ? 0 : 20);
+    mkdirSync(join(env.HOME, ".local/state/c"), { recursive: true });
+    writeFileSync(env.STORAGE_HEADROOM_CONFIG, "\n[state_budget]\nb = 1\n", {
+      flag: "a",
+    });
+    const result = runHook(HOOK, payload(), env);
+    expect(result.code).toBe(0);
+    const out = decodedJson(envelope, result.stdout).hookSpecificOutput;
+    expect(out.permissionDecision).toBe(deny === 0 ? undefined : "deny");
+    expect(out.additionalContext).toContain("state subtree c: undeclared");
+  },
+);

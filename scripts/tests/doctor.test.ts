@@ -1674,3 +1674,38 @@ network_access = true
     expect(clean.out).toMatch(/^PASS {2}brew-shadows/mu);
   });
 });
+
+test("state subtree budget doctor warns for excess and missing declaration, then passes", async () => {
+  const { checkStateSubtreeBudget } = await import("../doctor.ts");
+  const home = mkdtempSync(join(tmpdir(), "doctor-state-home-"));
+  const repo = mkdtempSync(join(tmpdir(), "doctor-state-repo-"));
+  await Promise.try(async () => {
+    mkdirSync(join(home, ".local/state/b"), { recursive: true });
+    mkdirSync(join(home, ".local/state/c"), { recursive: true });
+    mkdirSync(join(repo, "agents/hooks"), { recursive: true });
+    const config = join(repo, "agents/hooks/storage-headroom.toml");
+    writeFileSync(
+      config,
+      "[measure]\ndu_timeout_seconds = 10\ncache_minutes = 5\n[state_budget]\nb = 0\n",
+    );
+    const ctx = {
+      home,
+      dotfiles: repo,
+      isMac: false,
+      isWsl: false,
+      isCoreBox: false,
+    };
+    const warning = await checkStateSubtreeBudget(ctx);
+    expect(warning.verdict).toBe("WARN");
+    expect(warning.lines?.join(" ")).toContain("state subtree b:");
+    expect(warning.lines?.join(" ")).toContain("state subtree c: undeclared");
+    writeFileSync(
+      config,
+      "[measure]\ndu_timeout_seconds = 10\ncache_minutes = 5\n[state_budget]\nb = 1\nc = 1\n",
+    );
+    expect((await checkStateSubtreeBudget(ctx)).verdict).toBe("PASS");
+  }).finally(() => {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
+  });
+});

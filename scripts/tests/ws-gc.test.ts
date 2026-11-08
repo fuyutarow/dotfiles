@@ -230,7 +230,6 @@ test("WS-GC-TIMER: wrapper journals both streams and keeps the newest 48 run fil
       "ws",
       "gc",
       "--all",
-      "--legacy",
       "--json",
       "--repo-budget-seconds",
       "600",

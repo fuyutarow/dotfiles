@@ -54,7 +54,6 @@ async function main() {
       "ws",
       "gc",
       "--all",
-      "--legacy",
       "--json",
       "--repo-budget-seconds",
       "600",

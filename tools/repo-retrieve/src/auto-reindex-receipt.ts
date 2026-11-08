@@ -1,10 +1,12 @@
-import { readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { gitHead } from "./ccc-index.ts";
 
 const prefix = "AUTO_REINDEX_RECEIPT-";
+// Declared once: how many of the newest auto-reindex receipts a DB directory keeps.
+export const AUTO_REINDEX_RECEIPT_RETENTION = 20;
 export const ReceiptSchema = z.object({
   startedAt: z.string(),
   pid: z.number(),
@@ -13,6 +15,42 @@ export const ReceiptSchema = z.object({
   exitCode: z.number(),
   stderrTail: z.string(),
 });
+
+function isReceiptName(name: string) {
+  return name.startsWith(prefix) && name.endsWith(".json");
+}
+
+// Newest first, by the same order as the status query. Unparseable receipt-named
+// files rank oldest so they are pruned before any valid receipt.
+async function rankedReceiptFiles(directory: string) {
+  const names = (await readdir(directory).catch(() => [])).filter((name) =>
+    isReceiptName(name),
+  );
+  const ranked = await Promise.all(
+    names.map(async (name) => {
+      const raw = await readFile(join(directory, name), "utf8").catch(() => "");
+      const parsed = jsonOf(ReceiptSchema).safeParse(raw);
+      return { name, receipt: parsed.success ? parsed.data : null };
+    }),
+  );
+  return ranked.toSorted((a, b) => {
+    if (a.receipt === null || b.receipt === null)
+      return Number(b.receipt !== null) - Number(a.receipt !== null);
+    const order = b.receipt.endedAt.localeCompare(a.receipt.endedAt);
+    return order === 0 ? b.receipt.pid - a.receipt.pid : order;
+  });
+}
+
+// Keeps the newest `retention` receipt files. Non-receipt files are never listed,
+// so they are never removed.
+export async function retainAutoReindexReceipts(
+  directory: string,
+  retention: number = AUTO_REINDEX_RECEIPT_RETENTION,
+) {
+  const ranked = await rankedReceiptFiles(directory);
+  for (const { name } of ranked.slice(Math.max(0, retention)))
+    await rm(join(directory, name), { force: true });
+}
 
 export async function latestAutoReindexReceipt(directory: string) {
   const names = await readdir(directory).catch(() => []);
@@ -77,6 +115,7 @@ export async function superviseAutoReindex(
   const temporary = `${path}.tmp`;
   await writeFile(temporary, `${JSON.stringify(receipt)}\n`);
   await rename(temporary, path);
+  await retainAutoReindexReceipts(directory);
   return exitCode;
 }
 

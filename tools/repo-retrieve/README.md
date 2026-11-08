@@ -213,7 +213,9 @@ same admission plan. Each auto-reindex supervisor writes an atomic
 `pid`, `requestedHead`, `endedAt`, `exitCode`, and up to 16,384 characters of `stderrTail`.
 `rr index --status` shows the latest completed receipt. The exit describes `index --detach`
 admission and launch; the existing index request state tracks the later detached worker. A null
-requested head also covers an unavailable Git executable. The public `ccc` entry refuses both
+requested head also covers an unavailable Git executable. After each write the supervisor keeps
+only the newest `AUTO_REINDEX_RECEIPT_RETENTION` (20, `src/auto-reindex-receipt.ts`) receipt
+files in that directory and removes older ones; other files are never removed. The public `ccc` entry refuses both
 `ccc index` and `ccc search --refresh`.
 The daemon protocol itself does not authenticate explicit index requests, so a client bypassing
 that entry can still send one.

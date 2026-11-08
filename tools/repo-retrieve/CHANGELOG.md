@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.6 — 2026-11-09
+
+- Bound auto-reindex receipts to the newest AUTO_REINDEX_RECEIPT_RETENTION files per DB directory
+
 ## 1.12.5 — 2026-11-09
 
 - Report status relation to recorded origin alpha.

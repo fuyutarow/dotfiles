@@ -49,7 +49,69 @@ export type WorkspacesOptions = {
   immutable?: RemoveTreeOptions["immutable"];
   discover?: (roots: string[]) => Found;
   list?: typeof listWorkspaces;
+  /** Time bounds for one plan; defaults are the declared WORKSPACES_* constants below. */
+  budget?: { planMs?: number; workspaceMs?: number };
 };
+
+/** Declared bound on one workspaces plan (discovery, judgement and sizing together). */
+export const WORKSPACES_PLAN_BUDGET_MS = 10 * 60_000;
+/** Declared bound on the walks for one workspace: its judgement scan and its size walk. */
+export const WORKSPACES_WORKSPACE_BUDGET_MS = 60_000;
+
+/**
+ * A plan-wide deadline. Every walk stops at a deadline and reports a bounded result
+ * (a named "not judged" row or a lower-bound size), never a silent partial one.
+ */
+type PlanBudget = {
+  planMs: number;
+  workspaceMs: number;
+  deadline: number;
+  /** set when a bound stopped any walk or row; the plan is then incomplete */
+  hit: boolean;
+};
+const planExpired = (budget: PlanBudget): boolean => {
+  const expired = performance.now() >= budget.deadline;
+  if (expired) budget.hit = true;
+  return expired;
+};
+const workspaceDeadline = (budget: PlanBudget): number =>
+  Math.min(budget.deadline, performance.now() + budget.workspaceMs);
+/** Size one tree within the bounds; a bounded walk is a lower bound (`truncated`). */
+async function boundedBytes(
+  path: string,
+  ctx: Context,
+  budget: PlanBudget,
+): Promise<{ bytes: number | null; truncated: boolean }> {
+  if (planExpired(budget)) return { bytes: null, truncated: false };
+  let truncated = false;
+  const bytes = await fromAsyncThrowable(() =>
+    measuredTreeBytes(path, ctx, {
+      deadline: workspaceDeadline(budget),
+      onTruncated: () => {
+        truncated = true;
+        budget.hit = true;
+      },
+    }),
+  )().unwrapOr(null);
+  return { bytes, truncated };
+}
+const lowerBound = (budget: PlanBudget): string =>
+  `size is a lower bound: walk stopped at the ${budget.workspaceMs} ms workspace bound`;
+function annotateLowerBound(candidate: Candidate, budget: PlanBudget): void {
+  candidate.bytes_kind = "estimate";
+  candidate.reason = `${candidate.reason}; ${lowerBound(budget)}`;
+}
+/** Fill a row's size when the plan has not measured it, within the bounds. */
+async function sizeRow(
+  candidate: Candidate,
+  ctx: Context,
+  budget: PlanBudget,
+): Promise<void> {
+  if (candidate.bytes !== null || candidate.path === null) return;
+  const sized = await boundedBytes(candidate.path, ctx, budget);
+  candidate.bytes = sized.bytes;
+  if (sized.truncated) annotateLowerBound(candidate, budget);
+}
 
 const real = (path: string): string => {
   return fromThrowable(() => realpathSync(path))().unwrapOr(resolve(path));
@@ -115,6 +177,7 @@ async function storeCandidates(
   options: WorkspacesOptions,
   covered: Set<string>,
   log: (line: string) => void,
+  budget: PlanBudget,
 ): Promise<Candidate[]> {
   let fetchError: string | null = null;
   if ((options.fetch ?? context.fetch) === true) {
@@ -148,7 +211,7 @@ async function storeCandidates(
     if (entry.root !== null) covered.add(entry.root);
     if (entry.name === "default" || entry.root === store) continue;
     if (fetchError === null) {
-      candidates.push(await evaluate(store, entry, context, options));
+      candidates.push(await evaluate(store, entry, context, options, budget));
       continue;
     }
     candidates.push(
@@ -170,6 +233,7 @@ async function gather(
   root: string,
   ctx: Context,
   options: WorkspacesOptions,
+  budget: PlanBudget,
 ): Promise<WorkspaceFacts> {
   checkScanDeadline(ctx);
   const snapshot = ctx.liveness ?? createLivenessSnapshot(ctx.config);
@@ -255,9 +319,19 @@ async function gather(
       tracked.stdout.split("\n").filter((l) => l !== ""),
       ctx.config.regenerable_ignored,
       treeStateMs,
+      workspaceDeadline(budget),
     );
-    foreign = scan.foreign;
-    if (scan.newer.length > 0)
+    if (scan.bounded === true) {
+      // Neither the freshness nor the foreign-entry verdict is complete: both stay unknown (ASK).
+      budget.hit = true;
+      fresh = {
+        ok: null,
+        detail: `scan stopped at the ${budget.workspaceMs} ms workspace bound before the freshness check finished`,
+      };
+    } else {
+      foreign = scan.foreign;
+    }
+    if (scan.bounded !== true && scan.newer.length > 0)
       fresh = {
         ok: false,
         detail: `modified since the last snapshot: ${scan.newer.slice(0, 3).join(", ")}`,
@@ -304,16 +378,30 @@ const FoundRoots = z.object({
   stores: z.array(z.string()),
   workspaces: z.array(z.string()),
 });
-function cachedWorkspaceRoots(patterns: string[], ctx: Context): Found {
+function cachedWorkspaceRoots(
+  patterns: string[],
+  ctx: Context,
+  budget: PlanBudget,
+): Found {
   const found: Found = { stores: [], workspaces: [] };
   for (const root of patterns.flatMap((pattern) => expandRoot(pattern))) {
     checkScanDeadline(ctx);
     const cache = scanCache(root, "workspace-discovery-v1", ctx);
     const saved = FoundRoots.safeParse(cache.value);
-    const current = saved.success ? saved.data : walkRoots([root]);
+    let bounded = false;
+    const current = saved.success
+      ? saved.data
+      : walkRoots([root], {
+          deadline: budget.deadline,
+          onBounded: () => {
+            bounded = true;
+            budget.hit = true;
+          },
+        });
     if (saved.success)
       ctx.reportActivity?.("workspaces", `cache hit discovery ${root}`);
-    else cache.save(current);
+    // A bounded walk is partial: caching it would hide the missing workspaces on later plans.
+    else if (!bounded) cache.save(current);
     found.stores.push(...current.stores);
     found.workspaces.push(...current.workspaces);
   }
@@ -348,6 +436,7 @@ async function evaluate(
   entry: Listed,
   ctx: Context,
   options: WorkspacesOptions,
+  budget: PlanBudget,
 ): Promise<Candidate> {
   const { name, root } = entry;
   const id = root ?? `${store}#${name}`;
@@ -358,6 +447,14 @@ async function evaluate(
       `root of workspace ${name} could not be determined`,
       name,
       "workspace root",
+    );
+  if (planExpired(budget))
+    return ask(
+      id,
+      root,
+      `plan bound of ${budget.planMs} ms reached before this workspace was judged; not judged`,
+      name,
+      "plan time bound",
     );
   const run = await (options.runProtection ?? runProtection)(store, root);
   if (run !== null) return ask(id, root, run, name, "run judged and landed");
@@ -394,17 +491,23 @@ async function evaluate(
       "workspace directory",
     );
   }
-  const judged = judgeWorkspace(await gather(store, name, root, ctx, options));
+  const judged = judgeWorkspace(
+    await gather(store, name, root, ctx, options, budget),
+  );
+  const sized = await boundedBytes(root, ctx, budget);
   return {
     id,
     path: root,
     verdict: judged.verdict,
-    reason: judged.reason,
+    reason: sized.truncated
+      ? `${judged.reason}; ${lowerBound(budget)}`
+      : judged.reason,
     checks: judged.checks,
-    bytes: (
-      await fromAsyncThrowable(() => measuredTreeBytes(root, ctx))()
-    ).unwrapOr(null),
-    bytes_kind: judged.verdict === "RECLAIM" ? "freed_now" : "estimate",
+    bytes: sized.bytes,
+    bytes_kind:
+      judged.verdict === "RECLAIM" && !sized.truncated
+        ? "freed_now"
+        : "estimate",
     action: { kind: "jj-forget+delete", argv: FORGET(store, name) },
     result: null,
   };
@@ -425,6 +528,14 @@ export function createWorkspacesTarget(
         ...options,
         runProtection: options.runProtection ?? createRunProtection(),
       };
+      const planMs = options.budget?.planMs ?? WORKSPACES_PLAN_BUDGET_MS;
+      const budget: PlanBudget = {
+        planMs,
+        workspaceMs:
+          options.budget?.workspaceMs ?? WORKSPACES_WORKSPACE_BUDGET_MS,
+        deadline: performance.now() + planMs,
+        hit: false,
+      };
       const context = {
         ...ctx,
         liveness:
@@ -443,7 +554,7 @@ export function createWorkspacesTarget(
       ];
       const found =
         options.discover === undefined
-          ? cachedWorkspaceRoots(roots, ctx)
+          ? cachedWorkspaceRoots(roots, ctx, budget)
           : options.discover(roots);
       const stores = new Set(found.stores);
       for (const workspace of found.workspaces) {
@@ -461,6 +572,7 @@ export function createWorkspacesTarget(
             planOptions,
             covered,
             ctx.log,
+            budget,
           )),
         );
       }
@@ -476,11 +588,7 @@ export function createWorkspacesTarget(
       const rows: Candidate[] = [];
       for (const candidate of candidates) {
         checkScanDeadline(ctx);
-        const path = candidate.path;
-        if (candidate.bytes === null && path !== null)
-          candidate.bytes = (
-            await fromAsyncThrowable(() => measuredTreeBytes(path, ctx))()
-          ).unwrapOr(null);
+        await sizeRow(candidate, ctx, budget);
         if (candidate.path === null || candidate.verdict !== "RECLAIM") {
           rows.push(candidate);
           continue;
@@ -501,6 +609,11 @@ export function createWorkspacesTarget(
         candidate.action.argv = [];
         rows.push(candidate);
       }
+      if (budget.hit)
+        ctx.reportPlanError?.(
+          `workspaces: plan incomplete: the ${budget.planMs} ms plan bound or the ${budget.workspaceMs} ms workspace bound stopped part of the scan; rows marked "not judged" or "lower bound" are not final`,
+          true,
+        );
       return rows;
     },
     act: async (candidate, ctx): Promise<ActionResult> => {

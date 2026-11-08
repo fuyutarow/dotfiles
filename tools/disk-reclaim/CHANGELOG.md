@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.30 — 2026-11-08
+
+- workspaces plan: bound judgement scans, size walks and workspace discovery by a declared time budget; a bounded result is an explicit ASK row or lower-bound size, and the plan reports itself incomplete
+
 ## 1.12.29 — 2026-11-08
 
 - Discover and expire foreign rip graveyards in workspace and state roots.

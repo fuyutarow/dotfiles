@@ -17,6 +17,11 @@ export async function treeBytes(
     maxEntries?: number;
     onTruncated?: () => void;
     onMetadataProgress?: (probes: number) => void;
+    /**
+     * performance.now() instant after which the walk stops. The result is then the bytes
+     * measured so far (a lower bound) and `onTruncated` fires, exactly as for `maxEntries`.
+     */
+    deadline?: number;
   } = {},
 ): Promise<number> {
   signal?.throwIfAborted();
@@ -26,6 +31,7 @@ export async function treeBytes(
     );
     let settled = false;
     let lastEntries = 0;
+    let lastBytes = 0;
     let lastProbes = 0;
     let lastProgress = performance.now();
     let lastTick = lastProgress;
@@ -33,6 +39,13 @@ export async function treeBytes(
       () => {
         if (settled) return;
         const tick = performance.now();
+        if (options.deadline !== undefined && tick >= options.deadline) {
+          settled = true;
+          cleanup();
+          options.onTruncated?.();
+          resolve(lastBytes);
+          return;
+        }
         // Synchronous discovery/jj can delay delivery of worker counters.
         if (tick - lastTick > Math.max(500, (options.stallMs ?? 10_000) / 2))
           lastProgress = tick;
@@ -71,6 +84,7 @@ export async function treeBytes(
           return;
         }
         if (event.data.kind === "progress") {
+          lastBytes = event.data.bytes;
           if (event.data.entries > lastEntries) {
             lastEntries = event.data.entries;
             lastProgress = performance.now();
@@ -97,7 +111,16 @@ export async function treeBytes(
     });
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted === true) abort();
-    else
+    else if (
+      options.deadline !== undefined &&
+      performance.now() >= options.deadline
+    ) {
+      // A walk that starts past its deadline does not start: the bound is reached at once.
+      settled = true;
+      cleanup();
+      options.onTruncated?.();
+      resolve(0);
+    } else
       worker.postMessage(
         { path, cacheDir: options.cacheDir, maxEntries: options.maxEntries },
         [],
@@ -114,7 +137,7 @@ type TreeScanMessage =
 export async function measuredTreeBytes(
   path: string,
   ctx?: Context,
-  bound?: { maxEntries?: number; onTruncated: () => void },
+  bound?: { maxEntries?: number; deadline?: number; onTruncated: () => void },
 ): Promise<number> {
   let lastMetadataReport = 0;
   const onMetadataProgress = (probes: number) => {
@@ -168,6 +191,7 @@ export async function measuredTreeBytes(
       ...(bound?.maxEntries === undefined
         ? {}
         : { maxEntries: bound.maxEntries }),
+      ...(bound?.deadline === undefined ? {} : { deadline: bound.deadline }),
       ...(ctx?.mode === "plan"
         ? { cacheDir: ctx.scanCacheDir ?? defaultScanCacheDir() }
         : {}),

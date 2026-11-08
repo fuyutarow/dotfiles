@@ -8,6 +8,8 @@ export type Scan = {
   newer: string[];
   /** entries with no tracked file under them that do not match regenerable_ignored */
   foreign: string[];
+  /** set when the deadline stopped the walk: `newer` and `foreign` are then incomplete */
+  bounded?: true;
 };
 
 /** `target` matches by basename; `.julia/compiled` matches as a path suffix. */
@@ -26,6 +28,7 @@ export async function scanWorkspace(
   tracked: string[],
   patterns: string[],
   treeStateMs: number | null,
+  deadline?: number,
 ): Promise<Scan> {
   const files = new Set(tracked);
   const dirs = new Set<string>();
@@ -34,8 +37,15 @@ export async function scanWorkspace(
       dirs.add(file.slice(0, i));
   }
   const scan: Scan = { newer: [], foreign: [] };
+  // Checked before each entry so a huge directory cannot run past the deadline by much.
+  const expired = (): boolean => {
+    if (deadline !== undefined && performance.now() >= deadline)
+      scan.bounded = true;
+    return scan.bounded === true;
+  };
   const visit = async (rel: string): Promise<void> => {
     checkScanDeadline();
+    if (expired()) return;
     const names = await fromAsyncThrowable(() =>
       readdir(rel === "" ? root : join(root, rel)),
     )();
@@ -44,6 +54,7 @@ export async function scanWorkspace(
       return;
     }
     for (const name of names.value) {
+      if (expired()) return;
       if (rel.length === 0 && (name === ".jj" || name === ".git")) continue;
       const child = rel === "" ? name : `${rel}/${name}`;
       const abs = join(root, child);

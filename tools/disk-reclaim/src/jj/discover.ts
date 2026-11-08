@@ -89,12 +89,19 @@ const jjKind = (dir: string): "store" | "workspace" | null => {
 };
 
 /** Walk roots to depth 6 for `.jj/repo`: a directory is a store holder, a FILE is a secondary workspace. */
-export function walkRoots(roots: string[]): Found {
+export function walkRoots(
+  roots: string[],
+  bound: { deadline?: number; onBounded?: () => void } = {},
+): Found {
   const stores = new Set<string>();
   const workspaces = new Set<string>();
   const seen = new Set<string>();
   const visit = (dir: string, depth: number) => {
     checkScanDeadline();
+    if (bound.deadline !== undefined && performance.now() >= bound.deadline) {
+      bound.onBounded?.();
+      return;
+    }
     const key = real(dir);
     if (seen.has(key)) return;
     seen.add(key);

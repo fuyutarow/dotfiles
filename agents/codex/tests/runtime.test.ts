@@ -35,8 +35,8 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true });
 });
 
-function fixture(): string {
-  const root = mkdtempSync(join(tmpdir(), "codex-runtime-"));
+function fixture(base = tmpdir()): string {
+  const root = mkdtempSync(join(base, "codex-runtime-"));
   roots.push(root);
   return root;
 }
@@ -257,7 +257,8 @@ describe("WSL dual Codex runtime", () => {
   });
 
   test("backs up an existing skill directory before replacing it with copied contents", async () => {
-    const root = fixture();
+    // Keep the path short for the Windows C# compiler invoked by asset deployment.
+    const root = fixture(process.platform === "linux" ? "/tmp" : tmpdir());
     const dotfiles = join(root, "dotfiles");
     const home = join(root, "windows-home");
     const linuxHome = join(root, "linux-home");

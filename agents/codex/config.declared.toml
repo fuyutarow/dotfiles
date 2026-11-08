@@ -34,6 +34,7 @@ status_line = [
 tool_timeout_sec = 660
 default_tools_approval_mode = "approve"
 
+# REASON_NETWORK_HOME names the state directory; leave it unset to use ~/.reason/network.
+# Upstream setup's $HOME value is wrong here because it points at the whole machine home.
 [mcp_servers.reason-network.env]
 REASON_NETWORK_AGENT = "codex"
-REASON_NETWORK_HOME = "${HOME}"

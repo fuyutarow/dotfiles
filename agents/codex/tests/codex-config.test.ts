@@ -142,7 +142,7 @@ describe("codex:config", () => {
     // The values match agents/codex/config.declared.toml.
     writeFileSync(
       join(home, ".codex/config.toml"),
-      `approval_policy = "never"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\n[sandbox_workspace_write]\nnetwork_access = true\n\n# codex-dotfiles-mcp-managed: context7, deepwiki, exa, reason-network\n\n[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"\n\n[mcp_servers.deepwiki]\nurl = "https://mcp.deepwiki.com/mcp"\n\n[mcp_servers.exa]\nurl = "https://mcp.exa.ai/mcp"\n\n[mcp_servers.reason-network]\ncommand = "reason-network"\nargs = ["mcp"]\nenv = { "REASON_NETWORK_AGENT" = "codex", "REASON_NETWORK_HOME" = "${home}" }\ntool_timeout_sec = 660\ndefault_tools_approval_mode = "approve"\n\n[tui]\nfullscreen_transcript = true\n${statusLine}\n`,
+      `approval_policy = "never"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 500000\n[sandbox_workspace_write]\nnetwork_access = true\n\n# codex-dotfiles-mcp-managed: context7, deepwiki, exa, reason-network\n\n[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"\n\n[mcp_servers.deepwiki]\nurl = "https://mcp.deepwiki.com/mcp"\n\n[mcp_servers.exa]\nurl = "https://mcp.exa.ai/mcp"\n\n[mcp_servers.reason-network]\ncommand = "reason-network"\nargs = ["mcp"]\nenv = { "REASON_NETWORK_AGENT" = "codex" }\ntool_timeout_sec = 660\ndefault_tools_approval_mode = "approve"\n\n[tui]\nfullscreen_transcript = true\n${statusLine}\n`,
     );
     const result = run(home, ["--check"]);
     expect(result.exitCode).toBe(0);
@@ -165,7 +165,7 @@ describe("codex:config", () => {
     expect(servers["reason-network"]).toEqual({
       command: "reason-network",
       args: ["mcp"],
-      env: { REASON_NETWORK_AGENT: "codex", REASON_NETWORK_HOME: home },
+      env: { REASON_NETWORK_AGENT: "codex" },
       tool_timeout_sec: 660,
       default_tools_approval_mode: "approve",
     });

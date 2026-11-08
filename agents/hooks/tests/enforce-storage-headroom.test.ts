@@ -239,3 +239,39 @@ test("the queue never changes the verdict: a failing systemctl still allows", ()
   expect(result.code).toBe(0);
   expect(queuedCalls(calls)).toEqual([]);
 });
+
+// Below the deny line (5 GiB free, 10 GiB line): read-only Bash is silent; file output and
+// disk-growing commands are denied. Decided by effect, see tools/shared/src/storage-headroom.ts.
+test.each([
+  "cat /proc/1/cmdline | tr '\\0' ' '",
+  "cd /home/x && df -h /",
+  "ps -o pid,etime,args -p 1",
+  "jq -c . ~/.claude/settings.json",
+  "while [ -d /proc/1 ]; do sleep 5; done; df -h /",
+  "agx worker ls --running | rg x",
+  "agx worker judge some-id accept --note n",
+])("read-only Bash below the deny line passes silently: %s", (command) => {
+  expect(runHook(HOOK, payload(command), fixture(10, 20))).toEqual({
+    code: 0,
+    stdout: "",
+    stderr: "",
+  });
+});
+
+test.each([
+  "echo x > /home/f",
+  "cat a | tee /home/f",
+  "cp a b",
+  "curl -o f u",
+  "cargo build",
+  "bun script.ts",
+  "ps; echo x > /home/f",
+])(
+  "file output or disk growth below the deny line is denied: %s",
+  (command) => {
+    const result = runHook(HOOK, payload(command), fixture(10, 20));
+    expect(result.code).toBe(0);
+    const out = decodedJson(envelope, result.stdout).hookSpecificOutput;
+    expect(out.permissionDecision).toBe("deny");
+  },
+);

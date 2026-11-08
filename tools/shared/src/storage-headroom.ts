@@ -4,6 +4,12 @@ import { mkdirSync, readFileSync, statfsSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, rm, statfs, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import {
+  effective,
+  parseShell,
+  type Redirect,
+  type ShellCommand,
+} from "./shell-syntax.ts";
 import { fromThrowable, jsonOf, z } from "./zod.ts";
 
 const GiB = 1024 ** 3;
@@ -489,4 +495,146 @@ export async function requestGuestRecovery(
   await writeEpisode(stateDir, step.next);
   const queued = step.queue && (await (options.start ?? startGuestRecovery)());
   return { level, queued };
+}
+
+// --- Read-only Bash: decided by effect, not by name ------------------------------------------------
+//
+// A Bash command is read-only when it cannot create or grow a file on any drive: every command in
+// its pipes and chains is listed below with the arguments it accepts, and no output redirect reaches
+// a file. The list lives HERE, not in storage-headroom.toml, because this exemption must survive a
+// broken declaration (the hook reads it before the config loads, as it always has). The contract
+// (agents/hooks/storage-headroom.contract.md, "Tool gating") names this list.
+
+type ArgRule = (args: readonly string[]) => boolean;
+const ANY_ARGS: ArgRule = () => true;
+
+const hasShortFlag = (args: readonly string[], letter: string): boolean =>
+  args.some((a) => /^-[^-]/u.test(a) && a.includes(letter));
+const hasLongFlag = (args: readonly string[], prefix: string): boolean =>
+  args.some((a) => a.startsWith(prefix));
+
+// sed: `-n` only, no in-place or script-file options. The script may not contain a write (`w`, `W`)
+// or execute (`e`) command; `/…/` address text is removed first, so `/error/p` still reads.
+const SED_OPTIONS = new Set([
+  "-n",
+  "--quiet",
+  "--silent",
+  "-s",
+  "-E",
+  "-r",
+  "-u",
+  "-z",
+  "--regexp-extended",
+  "--separate",
+  "--unbuffered",
+  "--null-data",
+]);
+const sedReadsOnly: ArgRule = (args) => {
+  if (!args.some((a) => a === "-n" || a === "--quiet" || a === "--silent"))
+    return false;
+  if (args.some((a) => a.startsWith("-") && !SED_OPTIONS.has(a))) return false;
+  const script = args.find((a) => !a.startsWith("-"));
+  if (script === undefined) return false;
+  return !/[wWe]/u.test(script.replaceAll(/\/[^/]*\//gu, "//"));
+};
+
+// awk: no program or library file (-f, -i, -l, -E, --file…), no output redirect, pipe or system().
+const awkReadsOnly: ArgRule = (args) =>
+  args.every(
+    (a) =>
+      !a.startsWith("-") ||
+      a.startsWith("-F") ||
+      a.startsWith("-v") ||
+      a === "--",
+  ) && !args.some((a) => /[>|]|\bsystem\s*\(/u.test(a));
+
+const READ_ONLY_RULES: ReadonlyMap<string, ArgRule> = new Map<string, ArgRule>([
+  // Read, filter or print; none opens a file for writing.
+  ...[
+    "df",
+    "du",
+    "dust",
+    "ls",
+    "cat",
+    "head",
+    "tail",
+    "rr",
+    "ps",
+    "jq",
+    "tr",
+    "cut",
+    "wc",
+    "grep",
+    "sleep",
+    "true",
+    "false",
+    "echo",
+    "printf",
+    "test",
+    "[",
+    "cd",
+    "pwd",
+    "stat",
+    "findmnt",
+    "free",
+    "uptime",
+  ].map((name): [string, ArgRule] => [name, ANY_ARGS]),
+  // date -s sets the clock; sort/uniq take an output file; rg --pre runs a program.
+  ["date", (args) => !hasShortFlag(args, "s") && !hasLongFlag(args, "--set")],
+  [
+    "sort",
+    (args) =>
+      !hasShortFlag(args, "o") &&
+      !hasLongFlag(args, "--output") &&
+      !hasLongFlag(args, "--compress-program"),
+  ],
+  ["uniq", (args) => args.filter((a) => !a.startsWith("-")).length <= 1],
+  ["rg", (args) => !hasLongFlag(args, "--pre")],
+  ["sed", sedReadsOnly],
+  ["awk", awkReadsOnly],
+  // Bounded JSON records only: `agx worker judge` writes one small record under ~/.local/state/agx.
+  [
+    "agx",
+    (args) =>
+      (args.length === 1 && (args[0] === "-V" || args[0] === "--version")) ||
+      (args[0] === "worker" &&
+        ["ls", "check", "judge"].includes(args[1] ?? "")),
+  ],
+  [
+    "jj",
+    (args) =>
+      args[0] === "st" ||
+      args[0] === "log" ||
+      (args[0] === "workspace" && args[1] === "list"),
+  ],
+]);
+
+// Input redirects and heredocs are reads. Output goes nowhere (/dev/null) or to an fd (2>&1).
+const OUTPUT_OP = /^\d*(?:>&|>\||>>|>|&>>|&>|<>)$/u;
+function harmlessRedirect(r: Redirect): boolean {
+  if (!OUTPUT_OP.test(r.op)) return true;
+  if (r.target === "/dev/null") return true;
+  return /^\d*>&$/u.test(r.op) && /^\d+$/u.test(r.target);
+}
+
+function readOnlyCommand(c: ShellCommand): boolean {
+  if (!c.redirects.every(harmlessRedirect)) return false;
+  // A for-header's words are data; a bare assignment or reserved word runs nothing.
+  if (c.header) return true;
+  const eff = effective(c);
+  if (eff === undefined) return c.words.length === 0;
+  // Wrappers (env, timeout, sudo…) and paths (/bin/ps) are not read-only names.
+  if (c.words[0] !== eff.name) return false;
+  const rule = READ_ONLY_RULES.get(eff.name);
+  if (rule === undefined) return false;
+  // Expanded words can hide options (`rg $X`), so only argument-free rules accept them.
+  if (c.dynamic && rule !== ANY_ARGS) return false;
+  return rule(eff.args);
+}
+
+/** True when `command` (run in `cwd`) writes no file: every command read-only, no file output. */
+export function isReadOnlyBash(command: string, cwd: string): boolean {
+  const parsed = parseShell(command, cwd);
+  if (parsed === undefined) return false;
+  return parsed.commands.every(readOnlyCommand);
 }

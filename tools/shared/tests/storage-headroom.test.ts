@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { jsonOf, z } from "../src/zod.ts";
 import {
   assess,
+  isReadOnlyBash,
   loadStorageHeadroom,
   measureStorage,
   storageLine,
@@ -178,5 +179,82 @@ describe("storage headroom", () => {
     expect(measured?.free).toBeGreaterThan(0);
     expect(measured?.total).toBeGreaterThan(0);
     expect(measureStorage(join(tmpdir(), "missing-storage-path"))).toBeNull();
+  });
+});
+
+describe("read-only Bash is decided by effect", () => {
+  const cwd = "/tmp";
+  test.each([
+    "cat /proc/1/cmdline | tr '\\0' ' '",
+    "cd /home/x && df -h /",
+    "while [ -d /proc/1 ]; do sleep 5; done; df -h /",
+    "ps -o pid,etime,args -p 1",
+    "jq -c . ~/.claude/settings.json",
+    "agx worker ls --running | rg x",
+    "agx worker judge some-id accept --note n",
+    "agx worker check some-id",
+    "agx -V",
+    "echo x 2>&1 >/dev/null; ls 2>/dev/null",
+    "ps x &>/dev/null",
+    "ps x >/dev/null",
+    "sort a | uniq -c | sort -rn | head -5",
+    "uniq a",
+    "date +%s",
+    "test -d /tmp && [ -f /etc/hostname ]",
+    "for f in a b; do echo $f; done",
+    "rg -n foo src",
+    "sed -n '1,5p' /etc/hostname",
+    "sed -n '/error/p' /var/log/x",
+    "awk '{print $1}' /etc/hostname",
+    "jj st",
+    "jj workspace list",
+    "cd /tmp && pwd",
+    "cat $X",
+  ])("passes below the deny line: %s", (command) => {
+    expect(isReadOnlyBash(command, cwd)).toBe(true);
+  });
+
+  test.each([
+    "echo x > /home/f",
+    "echo x >> /home/f",
+    "cat a | tee /home/f",
+    "cp a b",
+    "curl -o f u",
+    "cargo build",
+    "bun script.ts",
+    "cat a 2>&1 > f",
+    "ps x >f",
+    "ps x &>f",
+    "ps x &>> f",
+    "ps x >| f",
+    "ps; echo x > /home/f",
+    "ps && cp a b",
+    "echo x | sh",
+    "echo $(cp a b)",
+    "for f in a b; do cp a $f; done",
+    "sort -o out in",
+    "sort --output=out in",
+    "sort --compress-program=x in",
+    "uniq a b",
+    "sed -i 's/a/b/' f",
+    "sed -n 'w out' f",
+    "sed -n '1e date' f",
+    "sed -n p -f script.sed",
+    "sed p f",
+    "awk '{print > \"f\"}' a",
+    "awk '{print | \"sh\"}' a",
+    "awk -f prog.awk a",
+    "rg --pre sh x",
+    "date -s '2020-01-01'",
+    "env rm x",
+    "timeout 5 cp a b",
+    "/bin/cp a b",
+    "rg $X",
+    "agx worker run x",
+    "jj abandon",
+    "jj workspace add ../x",
+    "mise run test",
+  ])("denies below the deny line: %s", (command) => {
+    expect(isReadOnlyBash(command, cwd)).toBe(false);
   });
 });

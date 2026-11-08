@@ -2,7 +2,11 @@
 // FAIL CLOSED on runtime errors (run.sh --fail-closed); policy lives in tools/storage-headroom.
 import { join } from "node:path";
 import { decide } from "../../tools/storage-headroom/src/decision.ts";
-import { requestGuestRecovery } from "../../tools/shared/src/storage-headroom.ts";
+import {
+  isReadOnlyBash,
+  requestGuestRecovery,
+} from "../../tools/shared/src/storage-headroom.ts";
+import { strAt } from "../../tools/shared/src/narrow.ts";
 import { decidePre, hookJson, hookStderr, readStdinJson } from "./lib.ts";
 
 const CONFIG_PATH =
@@ -23,6 +27,14 @@ async function main(): Promise<void> {
     () => {},
     () => {},
   );
+  // Read-only Bash (no file output, every chained command read-only) passes below the deny line.
+  const command = strAt(payload, "tool_input", "command");
+  if (
+    strAt(payload, "tool_name") === "Bash" &&
+    command !== undefined &&
+    isReadOnlyBash(command, strAt(payload, "cwd") ?? process.cwd())
+  )
+    return;
   const verdict = await decide(payload);
   if (verdict.decision !== "warn" && verdict.reason !== undefined) {
     decidePre(

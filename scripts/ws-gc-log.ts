@@ -62,6 +62,7 @@ async function main() {
       "300",
       "--all-budget-seconds",
       "1500",
+      "--apply",
     ],
     { stdout: "pipe", stderr: "pipe" },
   );

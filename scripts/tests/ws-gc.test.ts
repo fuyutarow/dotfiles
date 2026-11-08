@@ -197,7 +197,7 @@ test("WS-GC-TIMER: wrapper journals both streams and keeps the newest 48 run fil
   const mise = join(f.home, "bin/mise");
   await Bun.write(
     mise,
-    `#!${process.execPath}\nprocess.stdout.write('{"rows":1}\\n');\nprocess.stderr.write('gc removed /example reason=test\\n');\nprocess.exitCode = 7;\n`,
+    `#!${process.execPath}\nawait Bun.write(${JSON.stringify(join(f.home, "gc-args.json"))}, JSON.stringify(process.argv.slice(2)));\nprocess.stdout.write('{"rows":1}\\n');\nprocess.stderr.write('gc removed /example reason=test\\n');\nprocess.exitCode = 7;\n`,
   );
   await chmod(mise, 0o755);
   const child = Bun.spawn(
@@ -220,6 +220,27 @@ test("WS-GC-TIMER: wrapper journals both streams and keeps the newest 48 run fil
     child.exited,
   ]);
   expect(code).toBe(7);
+  expect(await Bun.file(join(f.home, "gc-args.json")).text()).toBe(
+    JSON.stringify([
+      "-C",
+      join(f.home, "dotfiles"),
+      "exec",
+      "--",
+      "agx",
+      "ws",
+      "gc",
+      "--all",
+      "--legacy",
+      "--json",
+      "--repo-budget-seconds",
+      "600",
+      "--inventory-budget-seconds",
+      "300",
+      "--all-budget-seconds",
+      "1500",
+      "--apply",
+    ]),
+  );
   expect(out).toBe('{"rows":1}\n');
   expect(err).toBe("gc removed /example reason=test\n");
   const { readdir } = await import("node:fs/promises");

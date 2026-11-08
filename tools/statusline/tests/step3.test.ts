@@ -190,5 +190,5 @@ test("display names, freshness, and actionable anomaly counts", () => {
   for (const historical of ["outside-home", "unjudged", "orphaned", "legacy"])
     expect(text).not.toContain(historical);
   expect(text).toContain("agx ws refresh 2");
-  expect(text).toContain("agx ticket gc 3");
+  expect(text).toContain("agx ticket gc --apply 3");
 });

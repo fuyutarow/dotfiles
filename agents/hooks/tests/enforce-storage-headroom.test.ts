@@ -74,9 +74,11 @@ function guestDenyFixture() {
 
 test.each([
   "agx ws gc",
+  "agx ws gc --apply",
   "agx ws gc --dry-run",
   "agx ws gc --help",
   "cd /x && agx ws gc --dry-run",
+  "cd /x && agx ws gc --apply",
 ])("guest deny line permits recovery: %s", (command) => {
   expect(runHook(HOOK, payload(command), guestDenyFixture())).toEqual({
     code: 0,
@@ -87,11 +89,15 @@ test.each([
 
 test.each([
   "agx ws gc --abandoned",
+  "agx ws gc --apply --abandoned",
+  "agx ws gc --apply --dry-run",
+  "agx ws gc --dry-run --apply",
   "agx ws gc --dry-run --abandoned",
   "agx ws gc $FLAGS",
   "agx ws new x",
   "agx worker dispatch t",
   "agx ws gc && cp a b",
+  "agx ws gc --apply && cp a b",
   "agx worker dispatch t && cp a b",
   "agx ws gc > output",
 ])("guest deny line rejects other writes: %s", (command) => {

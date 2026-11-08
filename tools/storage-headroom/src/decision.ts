@@ -555,7 +555,7 @@ function isWorkspaceGc(c: ShellCommand): boolean {
     eff.args[1] === "gc" &&
     (eff.args.length === 2 ||
       (eff.args.length === 3 &&
-        ["--dry-run", "--help"].includes(eff.args[2] ?? "")))
+        ["--apply", "--dry-run", "--help"].includes(eff.args[2] ?? "")))
   );
 }
 

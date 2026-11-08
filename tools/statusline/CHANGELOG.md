@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.8 — 2026-11-08
+
+- Keep suggested GC removal commands explicit with --apply.
+
 ## 0.23.7 — 2026-11-07
 
 - Publish Claude statusline rate limits to subscription usage.

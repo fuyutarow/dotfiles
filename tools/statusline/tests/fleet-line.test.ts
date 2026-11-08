@@ -178,6 +178,28 @@ test("fleet counts gc verdicts, including legacy and abandoned, without implying
   ).toBe(0);
 });
 
+test("every actionable gc verdict suggests explicit removal", () => {
+  const kinds = {
+    abandoned: 1,
+    "legacy-empty": 1,
+    "legacy-layout": 1,
+    empty: 1,
+    collectable: 1,
+    "accepted-landed-present": 1,
+  };
+  for (const [kind, count] of Object.entries(kinds)) {
+    const text = fleetLine(
+      {
+        runs: [],
+        unreadable: 0,
+        findings: { capturedAt: at, lost: 0, kinds: { [kind]: count } },
+      },
+      at,
+    );
+    expect(text).toMatch(/⚠ agx (?:ws|ticket) gc (?:--[\w-]+ )?--apply 1$/u);
+  }
+});
+
 test("snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj", async () => {
   await mkdir(env.AGX_STATE_DIR, { recursive: true });
   // Live leases use this test process; missing leases become doctor-classified orphans.

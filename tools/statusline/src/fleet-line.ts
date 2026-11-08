@@ -4,13 +4,13 @@ import type { RouteScan } from "./dispatch-runs.ts";
 // Only findings with a clearing command belong here. Historical counters stay in doctor.
 const ACTIONS: Record<string, string> = {
   stale: "agx ws refresh",
-  abandoned: "agx ws gc --abandoned",
-  "legacy-empty": "agx ws gc --legacy",
-  "legacy-layout": "agx ws gc --legacy",
-  empty: "agx ws gc --include-unrecorded",
-  collectable: "agx ws gc --include-unrecorded",
+  abandoned: "agx ws gc --abandoned --apply",
+  "legacy-empty": "agx ws gc --legacy --apply",
+  "legacy-layout": "agx ws gc --legacy --apply",
+  empty: "agx ws gc --include-unrecorded --apply",
+  collectable: "agx ws gc --include-unrecorded --apply",
   "unlanded-72h": "mise run land",
-  "accepted-landed-present": "agx ticket gc",
+  "accepted-landed-present": "agx ticket gc --apply",
 };
 
 /** Source age belongs to the run snapshot, not the time this view was published. */

@@ -301,7 +301,7 @@ published status response, with repository/session scope supplied by agx.
 Prepared standalone rows use repository scope even when agent sessions are discovered. Prepared views carry an action-scope protocol marker so historical counters cannot survive in an older cached view; a selected session rebuilds its own actions.
 
 The anomaly suffix counts only workspace/ticket findings with clearing actions from
-`agx worker doctor`, labeled with those commands (`agx ws refresh`, `agx ws gc …`, `agx ticket gc`, or
+`agx worker doctor`, labeled with those commands (`agx ws refresh`, `agx ws gc … --apply`, `agx ticket gc --apply`, or
 `mise run land`). Historical outside-home, unjudged, orphaned and legacy counters
 remain available in `agx worker doctor`; they do not appear in that suffix.
 

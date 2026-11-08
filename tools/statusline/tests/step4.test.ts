@@ -138,7 +138,7 @@ test("completed session judgments, accepted unlanded runs and remedy findings sh
       const scan = await readCoreRuns(ownerEnv(root), "here", root);
       expect(scan.actions).toEqual({ judge: 1, land: 1 });
       expect(output(scan).split("\n").at(-1)).toBe(
-        "judge 1 (agx worker judge) · land 1 (mise run land) · ⚠ agx ticket gc 14",
+        "judge 1 (agx worker judge) · land 1 (mise run land) · ⚠ agx ticket gc --apply 14",
       );
       expect(spawned).not.toHaveBeenCalled();
     })

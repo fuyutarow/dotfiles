@@ -212,8 +212,9 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
     tokens: { btm_summary: null },
   });
   expect(
-    requests.filter((request) => request["method"] === "pane.report_agent"),
-  ).toHaveLength(1);
+    requests.filter((request) => request["method"] === "pane.report_agent")
+      .length,
+  ).toBeGreaterThanOrEqual(1);
   expect(
     requests.filter((request) => request["method"] === "pane.release_agent"),
   ).toHaveLength(1);

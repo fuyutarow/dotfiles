@@ -152,16 +152,31 @@ type RunState =
 async function monitorBtm(
   paneId: string,
   appExit: Promise<number>,
+  args: string[],
 ): Promise<number> {
   let appIsRunning = true;
   const waitForExit = appExit.then((code): RunState => {
     appIsRunning = false;
     return { kind: "exit", code };
   });
-  const report = (): Promise<RunState> =>
-    reportMetadata(paneId, () => appIsRunning).then(() => ({
-      kind: "reported",
-    }));
+  const report = async (): Promise<RunState> => {
+    await herdr([
+      "pane",
+      "report-agent",
+      paneId,
+      "--source",
+      "btm",
+      "--agent",
+      "btm",
+      "--state",
+      "idle",
+      "--",
+      "btmp",
+      ...args,
+    ]);
+    if (appIsRunning) await reportMetadata(paneId, () => appIsRunning);
+    return { kind: "reported" };
+  };
   const reportOrExit = async (): Promise<RunState> => {
     const inFlightReport = report();
     const state = await Promise.race([waitForExit, inFlightReport]);
@@ -211,22 +226,6 @@ async function runBtm(args: string[]): Promise<number> {
     app.kill("SIGHUP");
   });
 
-  const registered = await herdr([
-    "pane",
-    "report-agent",
-    paneId,
-    "--source",
-    "btm",
-    "--agent",
-    "btm",
-    "--state",
-    "idle",
-    "--",
-    "btmp",
-    ...args,
-  ]);
-  if (!registered) return appExit;
-
   await using _release = {
     [Symbol.asyncDispose]: async (): Promise<void> => {
       await herdr([
@@ -240,7 +239,7 @@ async function runBtm(args: string[]): Promise<number> {
       ]);
     },
   };
-  const status = await monitorBtm(paneId, appExit);
+  const status = await monitorBtm(paneId, appExit, args);
   await herdr([
     "pane",
     "report-metadata",

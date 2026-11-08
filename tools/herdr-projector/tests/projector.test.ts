@@ -45,6 +45,25 @@ const unit = (name: string) =>
     join(import.meta.dir, `../../../systemd/herdr-projector.${name}`),
   ).text();
 
+test("never renames tabs of non-vendor agents", async () => {
+  const calls: string[][] = [];
+  await projectAgents(
+    [
+      { agent: "btm", pane_id: "p1", tab_id: "t1" },
+      { agent: "other", pane_id: "p2", tab_id: "t2" },
+      { agent: "codex", pane_id: "p3", tab_id: "t3" },
+    ],
+    new Map(),
+    (args) => {
+      calls.push(args);
+      return Promise.resolve(true);
+    },
+  );
+  expect(
+    calls.filter((args) => args[0] === "tab" && args[1] === "rename"),
+  ).toEqual([["tab", "rename", "t3", "codex · n/a(no session id)"]]);
+});
+
 test("u26 foreground PIDs attribute unresolved Codex and mismatched Claude sessions", async () => {
   const agents = [
     {
@@ -308,17 +327,22 @@ test("keeps unavailable labels within 40 characters", async () => {
   await projectAgents(
     [
       {
-        agent: "codex-agent-name-that-is-much-too-long-to-fit",
+        agent: "codex",
         pane_id: "pane-2",
         tab_id: "tab-2",
       },
     ],
     new Map(),
     (args) => Promise.resolve(calls.push(args)).then(() => true),
+    new Map(),
+    new Map(),
+    new Map([
+      ["pane-2", "a reason that is much longer than twenty characters"],
+    ]),
   );
   const label = calls[0]?.[3] ?? "";
   expect(label.length).toBeLessThanOrEqual(40);
-  expect(label).toContain(" · n/a(no session id)");
+  expect(label).toBe("codex · n/a(a reason that is muc)");
 });
 
 test("missing session clears stale identity tokens and explains the missing file", async () => {

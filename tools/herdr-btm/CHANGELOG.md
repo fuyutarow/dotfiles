@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.7 — 2026-11-08
+
+- Restore the agent report while btm remains running.
+
 ## 0.2.6 — 2026-10-30
 
 - Keep automatic btm presence to one per Herdr server while respecting close.

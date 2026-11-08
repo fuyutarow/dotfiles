@@ -67,10 +67,10 @@ test.each(displayCases)(
       (model !== "" || effort !== "")
     )
       marker = "rc?";
-    expect(calls[1]?.filter((token) => token.startsWith("rc="))).toEqual(
+    const args = calls.find((call) => call[1] === "report-metadata") ?? [];
+    expect(args.filter((token) => token.startsWith("rc="))).toEqual(
       marker === "" ? [] : [`rc=${marker}`],
     );
-    const args = calls[1] ?? [];
     expect(
       args.some(
         (arg, index) => arg === "--clear-token" && args[index + 1] === "rc",
@@ -79,7 +79,7 @@ test.each(displayCases)(
     let reason = "";
     if (isAgent && state !== "rc:on" && state !== "rc:off")
       reason = state ?? "remote-control observation unavailable";
-    expect(calls[1]).toContain(`rc_reason=${reason}`);
+    expect(args).toContain(`rc_reason=${reason}`);
   },
 );
 

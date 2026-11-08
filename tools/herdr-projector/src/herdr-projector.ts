@@ -1158,7 +1158,9 @@ export async function projectAgents(
           ? ["--clear-token", "unowned"]
           : ["--token", `unowned=${unowned}`]),
       );
-    const renamed = await apply(["tab", "rename", agent.tab_id, name]);
+    const renamed = isAgent
+      ? await apply(["tab", "rename", agent.tab_id, name])
+      : true;
     const reported = await apply([
       "pane",
       "report-metadata",

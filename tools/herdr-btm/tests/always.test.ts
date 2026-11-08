@@ -132,6 +132,22 @@ test("ensure creates at most one btm across workspaces and respects close", asyn
     label = await tabLabel();
   }
   expect(label).toBe("btm");
+  await run([
+    "herdr",
+    "pane",
+    "release-agent",
+    first.pane_id,
+    "--source",
+    "btm",
+    "--agent",
+    "btm",
+  ]);
+  expect(await agents()).toHaveLength(0);
+  await run(["herdr", "tab", "rename", first.tab_id, "wrong"]);
+  await run([process.execPath, entry, "ensure"]);
+  expect(await waitForOne()).toEqual(first);
+  await run([process.execPath, entry, "ensure"]);
+  expect(await tabLabel()).toBe("btm");
   await run([process.execPath, entry, "ensure"]);
   await Promise.all([
     run([process.execPath, entry, "ensure"]),

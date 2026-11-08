@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4 — 2026-11-08
+
+- Leave non-vendor agent tab labels unchanged.
+
 ## 0.5.3 — 2026-11-06
 
 - Show Codex context usage from the session rollout.

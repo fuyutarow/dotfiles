@@ -198,7 +198,13 @@ to perform the gated index and record its freshness watermark. Confirm the final
 Semantic search rejects `--refresh`; use the gated `rr index` to refresh the index.
 The managed ccc daemon behaves as ccc is designed: the first status or search on a project starts
 its indexing. `rr` applies its own freshness checks and may request an auto-reindex through the
-same admission plan. The public `ccc` entry refuses both `ccc index` and `ccc search --refresh`.
+same admission plan. Each auto-reindex supervisor writes an atomic
+`AUTO_REINDEX_RECEIPT-<uuid>.json` in the project DB directory with `startedAt`, supervisor
+`pid`, `requestedHead`, `endedAt`, `exitCode`, and up to 16,384 characters of `stderrTail`.
+`rr index --status` shows the latest completed receipt. The exit describes `index --detach`
+admission and launch; the existing index request state tracks the later detached worker. A null
+requested head also covers an unavailable Git executable. The public `ccc` entry refuses both
+`ccc index` and `ccc search --refresh`.
 The daemon protocol itself does not authenticate explicit index requests, so a client bypassing
 that entry can still send one.
 

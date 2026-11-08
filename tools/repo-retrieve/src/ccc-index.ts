@@ -41,6 +41,7 @@ import {
   type Result,
 } from "neverthrow";
 import { resolveDbDir } from "./ccc-db-dir.ts";
+import { latestAutoReindexReceipt } from "./auto-reindex-receipt.ts";
 import { parseDaemonStatus } from "./ccc-daemon-status.ts";
 import { cccBackend } from "./ccc-entry.ts";
 import {
@@ -279,13 +280,16 @@ export async function requestAutoReindex(
         Bun.spawn(
           [
             process.execPath,
-            fileURLToPath(new URL("./repo-retrieve.ts", import.meta.url)),
-            "index",
-            "--detach",
+            fileURLToPath(
+              new URL("./auto-reindex-receipt.ts", import.meta.url),
+            ),
           ],
           {
             cwd: project,
-            env: process.env,
+            env: {
+              ...process.env,
+              REPO_RETRIEVE_AUTO_RECEIPT_DIR: directory.value,
+            },
             stdin: "ignore",
             stdout: "ignore",
             stderr: "ignore",
@@ -712,7 +716,9 @@ async function hasIndexArtifacts(
 // any unindexed project gets: NO_INDEX (exit 3), never a silent pass. One `repo-retrieve index`
 // closes that gap permanently, including for a project that never has and never will have a git
 // HEAD.
-async function gitHead(project: string): Promise<Result<string | null, Error>> {
+export async function gitHead(
+  project: string,
+): Promise<Result<string | null, Error>> {
   const git = requireExecutable("git");
   if (git.isErr()) return err(git.error);
   const child = await fromAsyncThrowable(
@@ -1433,6 +1439,9 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
       ),
     );
   const request = await readIndexRequest(project);
+  const receiptDir = await resolveDbDir(project);
+  if (receiptDir.isErr()) return err(receiptDir.error);
+  const receipt = await latestAutoReindexReceipt(receiptDir.value);
   const head = await gitHead(project);
   if (head.isErr()) return err(head.error);
   const watermark = await readWatermark(project);
@@ -1513,6 +1522,9 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
   process.stdout.write(
     `RESULT: INDEX_STATUS project=${project} state=${state} daemon=${daemon} built=${head.value === null && fresh ? "none-verified" : headLabel(builtHead)} gap=${gap} reindex=${reindex} current=${headLabel(head.value)}` +
       (request === null ? "" : ` requested=${headLabel(request.head)}`) +
+      (receipt === undefined
+        ? ""
+        : ` auto_reindex_exit=${receipt.exitCode} auto_reindex_pid=${receipt.pid} auto_reindex_head=${receipt.requestedHead ?? "none"} auto_reindex_ended=${receipt.endedAt} auto_reindex_stderr=${JSON.stringify(receipt.stderrTail)}`) +
       (state === "invalid" || state === "pending" || state === "stale"
         ? " remedy=run-repo-retrieve-index"
         : "") +

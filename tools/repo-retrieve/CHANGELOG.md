@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.3 — 2026-11-09
+
+- Record detached auto-reindex outcomes in project DB receipts.
+
 ## 1.12.2 — 2026-11-09
 
 - Index definition catalogs through the admitted root backend and preserve failed refreshes.

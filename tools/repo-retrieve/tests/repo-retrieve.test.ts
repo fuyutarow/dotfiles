@@ -324,6 +324,8 @@ exit "\${FAKE_SEARCH_EXIT:-0}"
     writeFileSync(
       path,
       `#!/bin/sh
+case " $* " in *" fetch "*) exit 99 ;; esac
+case "$*" in *refs/remotes/origin/alpha*) [ "\${GIT_NO_LAZY_FETCH:-}" = 1 ] || exit 99 ;; esac
 for argument in "$@"; do
   if [ "$argument" = rev-parse ]; then sleep "\${FAKE_GIT_HEAD_SLEEP_SECONDS:-0}"; break; fi
 done
@@ -1781,7 +1783,7 @@ describe("repo-retrieve route contract", () => {
     expect(run(dir, ["index"]).code).toBe(0);
     const idle = run(dir, ["index", "--status"]);
     expect(idle.stdout).toBe(
-      `RESULT: INDEX_STATUS project=${dir} state=idle daemon=idle built=${head} gap=0 reindex=not-running current=${head}\n`,
+      `RESULT: INDEX_STATUS project=${dir} state=idle daemon=idle built=${head} gap=0 reindex=not-running current=${head} remote-relation=unknown\n`,
     );
     const path = join(dir, ".cocoindex_code", "INDEX_REQUEST.json");
     writeFileSync(
@@ -1795,6 +1797,35 @@ describe("repo-retrieve route contract", () => {
     );
     expect(run(dir, ["index"]).code).toBe(0);
     expect(run(dir, ["index", "--status"]).stdout).toContain("state=complete");
+  });
+
+  test("status compares HEAD with the recorded origin alpha without fetching", () => {
+    const { dir, head } = registerFreshGitProject();
+    const status = (relation: string) => {
+      const result = run(dir, ["index", "--status"]);
+      expect(result.code).toBe(0);
+      const current = gitCmd(dir, ["rev-parse", "HEAD"]).trim();
+      expect(result.stdout).toBe(
+        `RESULT: INDEX_STATUS project=${dir} state=idle daemon=idle built=${current} gap=0 reindex=not-running current=${current} remote-relation=${relation}\n`,
+      );
+    };
+    status("unknown");
+    gitCmd(dir, ["update-ref", "refs/remotes/origin/alpha", head]);
+    status("equal");
+    gitCmd(dir, ["commit", "--allow-empty", "-q", "-m", "one"]);
+    gitCmd(dir, ["commit", "--allow-empty", "-q", "-m", "two"]);
+    const advanced = gitCmd(dir, ["rev-parse", "HEAD"]).trim();
+    writeWatermarkFile(dir, { head: advanced });
+    status("ahead 2");
+    gitCmd(dir, ["update-ref", "refs/remotes/origin/alpha", advanced]);
+    gitCmd(dir, ["reset", "--hard", head]);
+    writeWatermarkFile(dir, { head });
+    status("behind 2");
+    gitCmd(dir, ["commit", "--allow-empty", "-q", "-m", "other"]);
+    writeWatermarkFile(dir, {
+      head: gitCmd(dir, ["rev-parse", "HEAD"]).trim(),
+    });
+    status("diverged");
   });
 
   test("request reconciliation preserves a newer same-head request created during foreground or worker indexing", () => {

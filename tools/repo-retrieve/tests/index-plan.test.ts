@@ -393,7 +393,7 @@ describe.skipIf(ccc === null)(
       const refused = await cli(root, [], {
         PATH: `${bin}:${process.env["PATH"] ?? ""}`,
       });
-      expect(refused.code).toBe(4);
+      expect(refused.code, refused.stderr).toBe(4);
       expect(await Bun.file(called).exists()).toBe(false);
       expect(
         await Bun.file(join(root, ".cocoindex_code", "INDEXED_AT")).exists(),
@@ -493,7 +493,7 @@ describe.skipIf(ccc === null)(
       chmodSync(fake, 0o755);
       const env = { PATH: `${bin}:${process.env["PATH"] ?? ""}` };
       const refused = await cli(root, [], env);
-      expect(refused.code).toBe(4);
+      expect(refused.code, refused.stderr).toBe(4);
       expect(refused.stderr).toContain(suggestion);
       expect(await Bun.file(called).exists()).toBe(false);
       expect(
@@ -652,7 +652,7 @@ else:
       const result = await cli(root, ["--accept-plan"], {
         PATH: `${bin}:${process.env["PATH"] ?? ""}`,
       });
-      expect(result.code).toBe(125);
+      expect(result.code, result.stderr).toBe(125);
       expect(result.stderr).toContain("repo-retrieve elapsed");
       expect(result.stderr).toContain("exceeds max_seconds=1");
       expect(result.stderr.trim().split("\n").at(-1)).toContain(

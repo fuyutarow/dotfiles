@@ -137,7 +137,7 @@ test("max_seconds stops only the client; rr says the daemon build continues, and
 
   // 1. The budget expires mid-build: rr exits 125 and writes no watermark.
   const indexed = await run([process.execPath, router, "index"]);
-  expect(indexed.code).toBe(125);
+  expect(indexed.code, indexed.stderr).toBe(125);
   expect(indexed.stderr).toContain("exceeds max_seconds=3");
   expect(
     await Bun.file(join(project, ".cocoindex_code", "INDEXED_AT")).exists(),

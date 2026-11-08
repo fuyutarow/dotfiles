@@ -118,6 +118,11 @@ an observed indexing daemon or a live recorded worker PID. An idle daemon withou
 worker reports `not-running`; unavailable activity information reports `unknown`. Status is
 read-only. Counts describe ccc's stored corpus, while `gap` counts commits since the build;
 neither counts pending requests.
+`remote-relation` compares current HEAD with the locally recorded
+`refs/remotes/origin/alpha`: `equal`, `behind N`, `ahead N`, `diverged`, or `unknown`
+when the ref or a usable comparison is unavailable. N counts commits reachable only from
+the indicated side. Status never fetches, so this relation reflects the last recorded ref,
+not necessarily the live remote. A zero gap does not imply coverage of that ref.
 
 Every `rr index` first plans the current file set with ccc's installed matcher and walker,
 including nested `.gitignore`, exclude pruning, and `max_file_size`. Run `rr index --plan`

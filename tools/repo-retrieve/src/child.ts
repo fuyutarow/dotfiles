@@ -47,6 +47,7 @@ export async function runChildCaptured(
   relay = true,
   cwd = process.cwd(),
   reportTimeout = true,
+  environment: NodeJS.ProcessEnv = process.env,
 ): Promise<{
   exitCode: number;
   stdout: string;
@@ -56,8 +57,8 @@ export async function runChildCaptured(
   const signal = AbortSignal.timeout(timeoutMs);
   const invocation =
     basename(command[0] ?? "") === "git"
-      ? readonlyCommand(command, cwd)
-      : { cmd: command, env: process.env };
+      ? readonlyCommand(command, cwd, environment)
+      : { cmd: command, env: environment };
   const child = Bun.spawn({
     cmd: invocation.cmd,
     cwd,

@@ -1555,6 +1555,34 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
     builtHead === head.value &&
     artifacts.value;
   if (head.value === null && fresh) gap = "0";
+  let remoteRelation = "unknown";
+  if (head.value !== null) {
+    const git = requireExecutable("git");
+    if (git.isErr()) return err(git.error);
+    const relation = await runChildCaptured(
+      [
+        git.value,
+        "--no-optional-locks",
+        "-C",
+        project,
+        "rev-list",
+        "--left-right",
+        "--count",
+        `${head.value}...refs/remotes/origin/alpha`,
+      ],
+      10_000,
+      false,
+      project,
+      true,
+      { ...process.env, GIT_NO_LAZY_FETCH: "1" },
+    );
+    const counts = /^(\d+)\s+(\d+)$/u.exec(relation.stdout.trim());
+    if (relation.exitCode === 0 && counts !== null)
+      remoteRelation = classifyRemoteRelation(
+        Number(counts[1]),
+        Number(counts[2]),
+      );
+  }
   let state = fresh ? "idle" : "stale";
   if (request === null && fresh && head.value === null) state = "complete";
   if (request === null) {
@@ -1589,7 +1617,15 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
       (state === "invalid" || state === "pending" || state === "stale"
         ? " remedy=run-repo-retrieve-index"
         : "") +
+      ` remote-relation=${remoteRelation}` +
       "\n",
   );
   return ok(0);
+}
+
+function classifyRemoteRelation(ahead: number, behind: number): string {
+  if (ahead === 0 && behind === 0) return "equal";
+  if (ahead === 0) return `behind ${behind}`;
+  if (behind === 0) return `ahead ${ahead}`;
+  return "diverged";
 }

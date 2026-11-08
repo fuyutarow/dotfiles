@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.5 — 2026-11-09
+
+- Report status relation to recorded origin alpha.
+
 ## 1.12.4 — 2026-11-09
 
 - Record detached index worker outcomes in request status.

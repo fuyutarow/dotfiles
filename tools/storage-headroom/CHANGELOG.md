@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.8 — 2026-11-08
+
+- Allow safe agx workspace cleanup under storage pressure.
+
 ## 0.2.7 — 2026-10-31
 
 - Accept zero-byte directory measurements.

@@ -546,6 +546,19 @@ async function cargoCleanInProject(c: ShellCommand): Promise<boolean> {
   );
 }
 
+function isWorkspaceGc(c: ShellCommand): boolean {
+  const eff = effectiveCommand(c);
+  return (
+    !c.dynamic &&
+    eff?.name === "agx" &&
+    eff.args[0] === "ws" &&
+    eff.args[1] === "gc" &&
+    (eff.args.length === 2 ||
+      (eff.args.length === 3 &&
+        ["--dry-run", "--help"].includes(eff.args[2] ?? "")))
+  );
+}
+
 export async function isRecoveryOrRead(
   command: string,
   cwd: string,
@@ -556,6 +569,7 @@ export async function isRecoveryOrRead(
     (c) => effectiveCommand(c) !== undefined,
   );
   if (commands.length === 0) return false;
+  const hasWorkspaceGc = commands.some((c) => isWorkspaceGc(c));
   return (
     commands.length === parsed.commands.length &&
     (
@@ -571,6 +585,8 @@ export async function isRecoveryOrRead(
           )
             return false;
           const [sub = "", third = ""] = eff.args;
+          if (isWorkspaceGc(c)) return true;
+          if (eff.name === "cd" && hasWorkspaceGc) return true;
           if (eff.name === "cargo" && sub === "clean")
             return cargoCleanInProject(c);
           // The released worker commands write bounded records and remain available for recovery.

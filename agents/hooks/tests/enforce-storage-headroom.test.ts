@@ -59,6 +59,49 @@ cache_minutes = 1
   };
 }
 
+function guestDenyFixture() {
+  const env = fixture(0, 0);
+  const policy = env.STORAGE_HEADROOM_CONFIG;
+  writeFileSync(
+    policy,
+    readFileSync(policy, "utf8").replace(
+      "[deny]",
+      `[drive.guest]\nlabel = "guest /"\npath = "/"\ndeny_gib = 10\ndeny_pct = 100\n[deny]`,
+    ),
+  );
+  return env;
+}
+
+test.each([
+  "agx ws gc",
+  "agx ws gc --dry-run",
+  "agx ws gc --help",
+  "cd /x && agx ws gc --dry-run",
+])("guest deny line permits recovery: %s", (command) => {
+  expect(runHook(HOOK, payload(command), guestDenyFixture())).toEqual({
+    code: 0,
+    stdout: "",
+    stderr: "",
+  });
+});
+
+test.each([
+  "agx ws gc --abandoned",
+  "agx ws gc --dry-run --abandoned",
+  "agx ws gc $FLAGS",
+  "agx ws new x",
+  "agx worker dispatch t",
+  "agx ws gc && cp a b",
+  "agx worker dispatch t && cp a b",
+  "agx ws gc > output",
+])("guest deny line rejects other writes: %s", (command) => {
+  const result = runHook(HOOK, payload(command), guestDenyFixture());
+  expect(result.code).toBe(0);
+  expect(
+    decodedJson(envelope, result.stdout).hookSpecificOutput.permissionDecision,
+  ).toBe("deny");
+});
+
 const envelope = z
   .object({
     hookSpecificOutput: z

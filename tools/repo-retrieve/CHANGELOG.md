@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.4 — 2026-11-09
+
+- Record detached index worker outcomes in request status.
+
 ## 1.12.3 — 2026-11-09
 
 - Record detached auto-reindex outcomes in project DB receipts.

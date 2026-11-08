@@ -263,6 +263,7 @@ if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_MUTATE_GIT_DURING_I
 fi
 if [ "${name}" = ccc ] && [ "$1" = index ]; then
   if [ -n "\${FAKE_CCC_STDERR:-}" ]; then printf '%s\\n' "$FAKE_CCC_STDERR" >&2; fi
+  if [ "\${FAKE_CCC_KILL_WORKER:-0}" = 1 ]; then kill -KILL "$PPID"; exit 0; fi
   # Stand-in for the real artifacts a genuine ccc index writes under .cocoindex_code -- lets
   # hasIndexArtifacts() (ccc-index.ts) see a project the router just indexed as non-empty.
   if [ "\${FAKE_CCC_NO_ARTIFACT:-0}" != 1 ]; then touch "$PWD/.cocoindex_code/fake_target.db"; fi
@@ -1754,6 +1755,9 @@ describe("repo-retrieve route contract", () => {
     );
     expect(recorded.head).toBe(request.head);
     expect(recorded.completedHead).toBe(head);
+    expect(status.stdout).toContain(
+      `requested=${request.head} completed=${head}`,
+    );
   });
 
   test("index status distinguishes the current head from a stale requested head", () => {
@@ -1913,13 +1917,60 @@ describe("repo-retrieve route contract", () => {
 
     let status = run(dir, ["index", "--status"]);
     for (let attempt = 0; attempt < 60; attempt += 1) {
-      if (status.stdout.includes("state=complete")) break;
+      if (status.stdout.includes("worker_exit=0")) break;
       status = run(dir, ["index", "--status"]);
       Bun.sleepSync(50);
     }
     expect(status.code).toBe(0);
     expect(status.stdout).toContain("state=complete");
+    expect(status.stdout).toContain(
+      `requested=${head} completed=${head} worker_exit=0`,
+    );
     expect(readWrittenWatermark(dir).head).toBe(head);
+  });
+
+  test("detached worker records a failing backend exit and stderr tail", () => {
+    const { dir, head } = registerGitProject();
+    const requested = run(dir, ["index", "--detach"], {
+      FAKE_SEARCH_EXIT: "7",
+      FAKE_CCC_STDERR: "backend failure marker",
+    });
+    expect(requested.code).toBe(0);
+    let status = run(dir, ["index", "--status"]);
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      if (status.stdout.includes("worker_exit=")) break;
+      Bun.sleepSync(50);
+      status = run(dir, ["index", "--status"]);
+    }
+    expect(status.stdout).toContain("state=failed");
+    expect(status.stdout).toContain(`requested=${head} worker_exit=7`);
+    expect(status.stdout).toContain("backend failure marker");
+    const request = decodedJson(
+      z.object({
+        state: z.string(),
+        exitCode: z.number(),
+        stderrTail: z.string(),
+      }),
+      readFileSync(join(dir, ".cocoindex_code", "INDEX_REQUEST.json"), "utf8"),
+    );
+    expect(request.state).toBe("failed");
+    expect(request.exitCode).toBe(7);
+    expect(request.stderrTail).toContain("backend failure marker");
+  });
+
+  test("a killed detached worker is recorded as failed", () => {
+    const { dir } = registerGitProject();
+    expect(
+      run(dir, ["index", "--detach"], { FAKE_CCC_KILL_WORKER: "1" }).code,
+    ).toBe(0);
+    let status = run(dir, ["index", "--status"]);
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      if (status.stdout.includes("worker_exit=")) break;
+      Bun.sleepSync(50);
+      status = run(dir, ["index", "--status"]);
+    }
+    expect(status.stdout).toContain("state=failed");
+    expect(status.stdout).toContain("worker_exit=137");
   });
 
   test("detached index reports stale and leaves the watermark unwritten when HEAD moves", () => {

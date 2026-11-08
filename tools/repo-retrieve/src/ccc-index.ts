@@ -480,6 +480,8 @@ async function watermarkPath(project: string): Promise<Result<string, Error>> {
 type IndexRequest = {
   id?: string | undefined;
   completedHead?: string | null | undefined;
+  exitCode?: number | undefined;
+  stderrTail?: string | undefined;
   head: string | null;
   pid?: number | undefined;
   requestedAt: string;
@@ -491,6 +493,8 @@ const IndexRequestSchema = z.object({
   completedHead: z
     .union([z.null(), z.string().regex(/^[0-9a-f]{40}$/iu)])
     .optional(),
+  exitCode: z.number().int().optional(),
+  stderrTail: z.string().optional(),
   head: z.union([z.null(), z.string().regex(/^[0-9a-f]{40}$/iu)]),
   pid: z.number().int().positive().optional(),
   requestedAt: z.string(),
@@ -590,6 +594,54 @@ async function markWorkerRequest(
     process.stderr.write(
       `NOTE: could not update index request status: ${result.error.message}\n`,
     );
+}
+
+// The supervisor observes exits even when the worker fails before reaching its own updates.
+export async function superviseIndexWorker(
+  project: string,
+  requestId: string,
+  acceptPlan: boolean,
+) {
+  let stderrTail = "";
+  const exitCode = await Promise.try(async () => {
+    // bounded: the worker enforces its own progress and admission limits.
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        fileURLToPath(new URL("./repo-retrieve.ts", import.meta.url)),
+        "index",
+        ...(acceptPlan ? ["--accept-plan"] : []),
+      ],
+      { cwd: project, stdin: "ignore", stdout: "ignore", stderr: "pipe" },
+    );
+    const drain = (async () => {
+      const decoder = new TextDecoder();
+      for await (const chunk of child.stderr)
+        stderrTail = (
+          stderrTail + decoder.decode(chunk, { stream: true })
+        ).slice(-16_384);
+      stderrTail = (stderrTail + decoder.decode()).slice(-16_384);
+    })();
+    const [code] = await Promise.all([child.exited, drain]);
+    return code;
+  }).catch((error: unknown) => {
+    stderrTail = (stderrTail + String(error)).slice(-16_384);
+    return 1;
+  });
+  const request = await readIndexRequest(project);
+  if (request?.id !== requestId) return exitCode;
+  const state =
+    exitCode === 0 && request.state === "complete" ? "complete" : "failed";
+  const saved = await writeIndexRequest(
+    project,
+    { ...request, state, exitCode, stderrTail },
+    request,
+  );
+  if (saved.isErr())
+    process.stderr.write(
+      `could not record worker outcome: ${saved.error.message}\n`,
+    );
+  return exitCode;
 }
 
 type WatermarkRead =
@@ -1307,9 +1359,9 @@ export async function runIndexWrapper(
         Bun.spawn(
           [
             process.execPath,
-            fileURLToPath(new URL("./repo-retrieve.ts", import.meta.url)),
-            "index",
-            ...(options.acceptPlan === true ? ["--accept-plan"] : []),
+            fileURLToPath(
+              new URL("./index-worker-supervisor.ts", import.meta.url),
+            ),
           ],
           {
             cwd: project,
@@ -1318,6 +1370,8 @@ export async function runIndexWrapper(
               REPO_RETRIEVE_INDEX_WORKER: "1",
               REPO_RETRIEVE_INDEX_REQUEST_HEAD: head.value ?? "none",
               REPO_RETRIEVE_INDEX_REQUEST_ID: request.id,
+              REPO_RETRIEVE_INDEX_ACCEPT_PLAN:
+                options.acceptPlan === true ? "1" : "0",
             },
             stdin: "ignore",
             stdout: "ignore",
@@ -1516,12 +1570,19 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
     state = fresh && completedHead === builtHead ? "complete" : "stale";
   } else {
     state = request.state;
-    if (request.head !== head.value) state = "stale";
+    if (request.state !== "failed" && request.head !== head.value)
+      state = "stale";
   }
   if (daemon === "unknown") state = "unknown";
   process.stdout.write(
     `RESULT: INDEX_STATUS project=${project} state=${state} daemon=${daemon} built=${head.value === null && fresh ? "none-verified" : headLabel(builtHead)} gap=${gap} reindex=${reindex} current=${headLabel(head.value)}` +
       (request === null ? "" : ` requested=${headLabel(request.head)}`) +
+      (request?.completedHead === undefined
+        ? ""
+        : ` completed=${headLabel(request.completedHead)}`) +
+      (request?.exitCode === undefined
+        ? ""
+        : ` worker_exit=${request.exitCode} worker_stderr=${JSON.stringify(request.stderrTail ?? "")}`) +
       (receipt === undefined
         ? ""
         : ` auto_reindex_exit=${receipt.exitCode} auto_reindex_pid=${receipt.pid} auto_reindex_head=${receipt.requestedHead ?? "none"} auto_reindex_ended=${receipt.endedAt} auto_reindex_stderr=${JSON.stringify(receipt.stderrTail)}`) +

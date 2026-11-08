@@ -103,6 +103,11 @@ records `completedHead`; a newer request survives completion of older work, even
 HEAD. New detached requests carry unique IDs. Request writes and identity checks share a short
 exclusive lock beside `INDEX_REQUEST.json`; an interrupted lock is reported for operator
 inspection rather than expired automatically.
+The detached worker's supervisor records its exit code and the last 16,384 characters of stderr;
+failure is recorded as `failed`. Status displays these as `worker_exit` and `worker_stderr`,
+and displays `completed` alongside `requested` when a completed head is recorded. If the
+supervisor itself is killed or cannot write the request, its outcome cannot be recorded; a
+pending request with `reindex=not-running` exposes an abandoned worker.
 
 `index --status` reports `complete` for a fulfilled request with a current index, or `idle`
 for a current git-backed index without a request. A verified no-HEAD watermark with ccc index

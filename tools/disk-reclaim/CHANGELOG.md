@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.31 — 2026-11-08
+
+- rip-expire and purge estimate burial time of unrecorded graveyard entries from ctime, reported as estimated
+
 ## 1.12.30 — 2026-11-08
 
 - workspaces plan: bound judgement scans, size walks and workspace discovery by a declared time budget; a bounded result is an explicit ASK row or lower-bound size, and the plan reports itself incomplete

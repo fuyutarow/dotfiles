@@ -593,11 +593,124 @@ test("graveyard record time is used and missing records are held regardless of m
   expect(candidates.find((item) => item.path === recorded)?.verdict).toBe(
     "KEEP",
   );
+  // The unrecorded entry's ctime is fresh (just created), so it is estimated and still recent.
   expect(candidates.find((item) => item.path === fallback)).toMatchObject({
+    verdict: "KEEP",
+  });
+  expect(candidates.find((item) => item.path === fallback)?.reason).toContain(
+    "burial time estimated from ctime",
+  );
+});
+
+for (const ripOnly of [false, true]) {
+  test(`unrecorded entry expires on its ctime estimate, reported as estimated (ripOnly=${ripOnly})`, async () => {
+    const root = tempRoot("disk-reclaim-ctime-old-");
+    const grave = join(root, "grave");
+    const payload = join(grave, "unrecorded");
+    mkdirSync(payload, { recursive: true });
+    writeFileSync(join(payload, "data"), "unrecorded");
+    const candidates = await purgeCandidates(
+      {
+        RIP_GRAVEYARD: grave,
+        USER: "fixture",
+        XDG_DATA_HOME: join(root, "xdg"),
+      },
+      root,
+      {
+        ripOnly,
+        config: { graveyard_min_age_hours: 24, scratch_roots: [] },
+        // Its ctime was set at creation, so judging 72 hours later sees an old estimate.
+        now: Temporal.Now.instant().add({ hours: 72 }).epochMilliseconds,
+      },
+    );
+    const row = candidates.find((item) => item.path === payload);
+    expect(row?.verdict).toBe("RECLAIM");
+    expect(row?.reason).toMatch(
+      /^older than .*; burial time estimated from ctime$/u,
+    );
+  });
+}
+
+test("an unrecorded entry with a recent ctime stays kept, estimated and not unknown", async () => {
+  const root = tempRoot("disk-reclaim-ctime-recent-");
+  const grave = join(root, "grave");
+  const payload = join(grave, "unrecorded");
+  mkdirSync(payload, { recursive: true });
+  writeFileSync(join(payload, "data"), "unrecorded");
+  const candidates = await purgeCandidates(
+    { RIP_GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
+    root,
+    { config: { graveyard_min_age_hours: 24, scratch_roots: [] } },
+  );
+  const row = candidates.find((item) => item.path === payload);
+  expect(row?.verdict).toBe("KEEP");
+  expect(row?.reason).toContain("burial time estimated from ctime");
+  expect(row?.reason).not.toContain("burial time unknown");
+});
+
+test("an unrecorded entry whose ctime is in the future stays kept", async () => {
+  const root = tempRoot("disk-reclaim-ctime-future-");
+  const grave = join(root, "grave");
+  const payload = join(grave, "unrecorded");
+  mkdirSync(payload, { recursive: true });
+  writeFileSync(join(payload, "data"), "unrecorded");
+  const candidates = await purgeCandidates(
+    { RIP_GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
+    root,
+    {
+      config: { graveyard_min_age_hours: 24, scratch_roots: [] },
+      // The injected clock sits an hour before the real ctime.
+      now: Temporal.Now.instant().subtract({ hours: 1 }).epochMilliseconds,
+    },
+  );
+  const row = candidates.find((item) => item.path === payload);
+  expect(row?.verdict).toBe("KEEP");
+  expect(row?.reason).not.toMatch(/^older than/u);
+});
+
+test("an unrecorded symlink keeps its burial unknown and is never estimated", async () => {
+  const root = tempRoot("disk-reclaim-ctime-symlink-");
+  const grave = join(root, "grave");
+  const target = join(root, "target");
+  const link = join(grave, "link");
+  mkdirSync(grave, { recursive: true });
+  mkdirSync(target);
+  symlinkSync(target, link);
+  const candidates = await purgeCandidates(
+    { RIP_GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
+    root,
+    {
+      config: { graveyard_min_age_hours: 24, scratch_roots: [] },
+      now: Temporal.Now.instant().add({ hours: 72 }).epochMilliseconds,
+    },
+  );
+  expect(candidates.find((item) => item.path === link)).toMatchObject({
     verdict: "KEEP",
     reason:
       "burial time unknown: missing, unreadable, or invalid burial record",
   });
+});
+
+test("a valid record time overrides a fresh ctime", async () => {
+  const root = tempRoot("disk-reclaim-ctime-record-");
+  const grave = join(root, "grave");
+  const payload = join(grave, "recorded");
+  mkdirSync(payload, { recursive: true });
+  writeFileSync(join(payload, "data"), "recorded");
+  // The record says 72 hours ago while the ctime is fresh: the record wins.
+  const buried = Temporal.Now.instant().subtract({ hours: 72 }).toString();
+  writeFileSync(
+    join(grave, ".record"),
+    `Time\t Original\t Destination\n${buried}\t/recorded\t${payload}\n`,
+  );
+  const candidates = await purgeCandidates(
+    { RIP_GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
+    root,
+    { config: { graveyard_min_age_hours: 24, scratch_roots: [] } },
+  );
+  const row = candidates.find((item) => item.path === payload);
+  expect(row?.verdict).toBe("RECLAIM");
+  expect(row?.reason).not.toContain("estimated");
 });
 
 test("graveyard candidates include the declared rip and XDG trash content directories", () => {

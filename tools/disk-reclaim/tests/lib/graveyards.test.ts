@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   closeSync,
   ftruncateSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -15,7 +16,49 @@ import {
   inspectRipGraveyard,
   RIP_GRAVEYARD_MAX_BYTES,
   discoverRipGraveyards,
+  ripBurial,
+  ripRecords,
 } from "../../src/lib/graveyards.ts";
+
+test("ripBurial estimates only a top-level unrecorded entry, from its own ctime", async () => {
+  const root = mkdtempSync(join(tmpdir(), "rip-burial-estimate-"));
+  const recorded = join(root, "recorded");
+  const top = join(root, "top");
+  const parent = join(root, "parent");
+  const nested = join(parent, "nested");
+  const link = join(root, "link");
+  mkdirSync(recorded);
+  mkdirSync(top);
+  mkdirSync(join(parent, "recorded-child"), { recursive: true });
+  mkdirSync(nested);
+  symlinkSync(top, link);
+  const buried = Temporal.Instant.from(
+    "2000-01-01T00:00:00Z",
+  ).epochMilliseconds;
+  writeFileSync(
+    join(root, ".record"),
+    `2000-01-01T00:00:00Z\t/source\t${join(recorded, "x")}\n` +
+      `2000-01-01T00:00:00Z\t/source\t${join(parent, "recorded-child")}\n`,
+  );
+  const records = ripRecords(root);
+
+  expect(await ripBurial(root, top, records)).toEqual({
+    time: Math.floor(lstatSync(top).ctimeMs),
+    estimated: true,
+  });
+  // A record inside the recorded payload dates it; it is not estimated.
+  expect(await ripBurial(root, recorded, records)).toEqual({
+    time: buried,
+    estimated: false,
+  });
+  // Nested unrecorded entries never receive a top-level estimate.
+  expect(await ripBurial(root, nested, records)).toBeUndefined();
+  // Symlinks keep the refusal: no estimate from the link itself.
+  expect(await ripBurial(root, link, records)).toBeUndefined();
+  // The restore record is metadata, never a payload with a burial.
+  expect(await ripBurial(root, join(root, ".record"), records)).toBeUndefined();
+  rmSync(root, { recursive: true, force: true });
+});
 
 test("discovers only valid records within bounded roots without following links", async () => {
   const home = mkdtempSync(join(tmpdir(), "foreign-graveyard-"));

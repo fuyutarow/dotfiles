@@ -3,14 +3,17 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
 import {
-  ripRecords,
+  ripBurial,
   ripBurialTime,
+  ripCtimeEstimate,
+  ripRecords,
   UNKNOWN_RIP_BURIAL,
   RIP_GRAVEYARD_MAX_BYTES,
   ripGraveyardRoot,
   discoverRipGraveyards,
   inspectRipGraveyard,
 } from "../lib/graveyards.ts";
+import type { RipBurial } from "../lib/graveyards.ts";
 import { removeTree } from "../lib/remove-tree.ts";
 import { loadGraveyardAgePolicy } from "../graveyard-age.ts";
 import type { Candidate, Config } from "../model.ts";
@@ -20,6 +23,12 @@ type AvailableBytesProbe = (path: string) => number | Promise<number>;
 
 export const RIP_EXPIRY_BUDGET_MS = 120_000;
 const capacityReason = "oldest-first capacity expiry";
+
+function burialHoldReason(found: RipBurial | undefined): string {
+  if (found === undefined) return UNKNOWN_RIP_BURIAL;
+  if (found.estimated) return "undo window: estimated burial is too recent";
+  return "undo window: recorded burial is too recent";
+}
 type Payload = {
   candidate: Candidate;
   time: number | undefined;
@@ -143,14 +152,23 @@ export async function enumerateRipPayloads(
       resolve(only) === root ||
       path === resolve(only) ||
       inside(resolve(only), path);
-    const time = times.get(path);
+    const recorded = times.get(path);
+    const estimate =
+      recorded === undefined && !metadata
+        ? await ripCtimeEstimate(root, path)
+        : undefined;
+    const time = recorded ?? estimate;
+    const estimated = recorded === undefined && estimate !== undefined;
     const unknown = !metadata && time === undefined;
     const undo = time !== undefined && now - time < undoMs;
     const old = time !== undefined && now - time >= minimumAgeMs;
     let reason = "expiry rechecked before deletion";
     if (metadata) reason = "required to restore kept graveyard entries";
     else if (unknown) reason = UNKNOWN_RIP_BURIAL;
-    else if (undo) reason = "undo window: recorded burial is too recent";
+    else if (undo)
+      reason = estimated
+        ? "undo window: estimated burial is too recent"
+        : "undo window: recorded burial is too recent";
     let hold: Payload["hold"];
     if (unknown) hold = "unknown";
     else if (undo) hold = "undo";
@@ -165,6 +183,15 @@ export async function enumerateRipPayloads(
           ok: true,
           detail: "top-level graveyard payload",
         },
+        ...(estimated
+          ? [
+              {
+                name: "burial-time",
+                ok: true,
+                detail: "estimated from ctime; no burial record",
+              },
+            ]
+          : []),
       ],
       bytes: directory ? null : stat.size,
       bytes_kind: "estimate",
@@ -172,7 +199,7 @@ export async function enumerateRipPayloads(
       result: null,
     } satisfies Candidate;
     if (!metadata && scoped && old && !undo)
-      candidate.reason = `older than ${minimumAgeMs / 3_600_000}h`;
+      candidate.reason = `older than ${minimumAgeMs / 3_600_000}h${estimated ? "; burial time estimated from ctime" : ""}`;
     payloads.push({
       candidate,
       selected: scoped,
@@ -286,19 +313,17 @@ export function createRipExpiryTarget(
           verdict: "ASK" as const,
           reason: "graveyard payload changed; retry next timer",
         };
-      const burial = await ripBurialTime(root, candidate.path ?? root);
-      if (burial === undefined || state.now - burial < state.undoMs) {
-        row.hold = burial === undefined ? "unknown" : "undo";
+      const found = await ripBurial(root, candidate.path ?? root);
+      if (found === undefined || state.now - found.time < state.undoMs) {
+        row.hold = found === undefined ? "unknown" : "undo";
         return {
           ...candidate,
           verdict: "KEEP" as const,
-          reason:
-            burial === undefined
-              ? UNKNOWN_RIP_BURIAL
-              : "undo window: recorded burial is too recent",
+          reason: burialHoldReason(found),
         };
       }
-      const old = state.now - burial >= state.ageMs;
+      const basis = found.estimated ? "; burial time estimated from ctime" : "";
+      const old = state.now - found.time >= state.ageMs;
       if (!old && !(await overLimit(state)))
         return {
           ...candidate,
@@ -328,8 +353,8 @@ export function createRipExpiryTarget(
         verdict: "RECLAIM" as const,
         bytes: row.logical,
         reason: old
-          ? `older than ${state.ageMs / 3_600_000}h`
-          : `graveyard exceeds ${RIP_GRAVEYARD_MAX_BYTES} bytes; ${capacityReason}`,
+          ? `older than ${state.ageMs / 3_600_000}h${basis}`
+          : `graveyard exceeds ${RIP_GRAVEYARD_MAX_BYTES} bytes; ${capacityReason}${basis}`,
       };
     })();
     return judged.isOk()

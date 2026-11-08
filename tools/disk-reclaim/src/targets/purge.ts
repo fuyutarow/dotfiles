@@ -7,7 +7,7 @@ import {
   existingGraveyards,
   graveyardEntries,
   ripRecords,
-  ripBurialTime,
+  ripBurial,
   UNKNOWN_RIP_BURIAL,
 } from "../lib/graveyards.ts";
 import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
@@ -145,17 +145,21 @@ export async function purgeCandidates(
         const stat = fromThrowable(() => lstatSync(entry))();
         const mtime = stat.isOk() ? stat.value.mtimeMs : 0;
         let newestTime: number | undefined = mtime;
+        let estimated = false;
         if (
           graveyard.label === "rip graveyard" &&
           entry !== join(graveyard.path, ".record")
-        )
-          newestTime = await ripBurialTime(
+        ) {
+          const found = await ripBurial(
             resolve(graveyard.path),
             entry,
             records,
           );
-        else if (entryRecords.length > 0)
+          newestTime = found?.time;
+          estimated = found?.estimated === true;
+        } else if (entryRecords.length > 0)
           newestTime = Math.max(...entryRecords.map((record) => record.time));
+        const basis = estimated ? "; burial time estimated from ctime" : "";
         // rip already deleted this payload. Open fds retain their inode until close;
         // process-use evidence (including unreadable processes) cannot block expiry.
         const isRecent =
@@ -178,13 +182,14 @@ export async function purgeCandidates(
             : "RECLAIM";
         let reason: string;
         if (newestTime === undefined) reason = UNKNOWN_RIP_BURIAL;
-        else if (insideUndoWindow) reason = `undo window: rip'd ${age} ago`;
+        else if (insideUndoWindow)
+          reason = `undo window: rip'd ${age} ago${basis}`;
         else if (isRecent && belowDenyLine && options.underPressure !== true)
           reason =
             "recent; host is below the deny line: rerun with --under-pressure to purge";
         else if (isRecent && !belowDenyLine)
-          reason = `recent: rip'd ${age} ago`;
-        else reason = `older than ${agePolicy.minimumAgeMinutes / 60}h`;
+          reason = `recent: rip'd ${age} ago${basis}`;
+        else reason = `older than ${agePolicy.minimumAgeMinutes / 60}h${basis}`;
         const cache = scanCache(entry, "purge-allocated-v1", options.context);
         const cached = z.number().nonnegative().safeParse(cache?.value);
         const bytes = cached.success
@@ -202,6 +207,15 @@ export async function purgeCandidates(
               ok: true,
               detail: "top-level graveyard entry",
             },
+            ...(estimated
+              ? [
+                  {
+                    name: "burial-time",
+                    ok: true,
+                    detail: "estimated from ctime; no burial record",
+                  },
+                ]
+              : []),
           ],
           bytes,
           bytes_kind: "estimate" as const,

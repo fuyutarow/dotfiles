@@ -8,6 +8,7 @@ import {
 import { homedir } from "node:os";
 import { lstat, readdir } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
+import { fromAsyncThrowable } from "neverthrow";
 import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 
 export type Graveyard = { readonly label: string; readonly path: string };
@@ -239,15 +240,63 @@ export function ripGraveyardRoot(env = process.env, home = homedir()): string {
   );
 }
 
-/** A mirrored parent is dated only when every payload below it has a record.
- * Descendants of a recorded payload share its burial, never their source mtime.
+export type RipBurial = {
+  /** Epoch milliseconds. */
+  readonly time: number;
+  /** True when no record exists and the time is the entry's own ctime. */
+  readonly estimated: boolean;
+};
+
+/** Estimate for a top-level graveyard entry with no record anywhere beneath it.
+ * A rename into the graveyard sets ctime and later changes only move it later, so the
+ * estimate never precedes burial. Symlinks, unreadable entries, `.record`, and entries
+ * nested below the top level have no estimate and stay unknown.
  */
+export async function ripCtimeEstimate(
+  root: string,
+  path: string,
+): Promise<number | undefined> {
+  const entry = resolve(path);
+  if (
+    dirname(entry) !== resolve(root) ||
+    entry === join(resolve(root), ".record")
+  )
+    return undefined;
+  const stat = await fromAsyncThrowable(() => lstat(entry))();
+  if (stat.isErr() || stat.value.isSymbolicLink()) return undefined;
+  const ctime = Math.floor(stat.value.ctimeMs);
+  return Number.isFinite(ctime) ? ctime : undefined;
+}
+
+async function estimatedBurial(
+  root: string,
+  path: string,
+): Promise<RipBurial | undefined> {
+  const estimate = await ripCtimeEstimate(root, path);
+  return estimate === undefined
+    ? undefined
+    : { time: estimate, estimated: true };
+}
+
 export async function ripBurialTime(
   root: string,
   path: string,
   records = ripRecords(root),
   check: () => void = () => {},
 ): Promise<number | undefined> {
+  return (await ripBurial(root, path, records, check))?.time;
+}
+
+/** A mirrored parent is dated only when every payload below it has a record.
+ * Descendants of a recorded payload share its burial, never their source mtime.
+ * A top-level entry with no record at all falls back to its own ctime, marked estimated.
+ */
+export async function ripBurial(
+  root: string,
+  path: string,
+  records = ripRecords(root),
+  check: () => void = () => {},
+): Promise<RipBurial | undefined> {
   const times = new Map<string, number>();
   const containers = new Set<string>();
   for (const record of records) {
@@ -271,7 +320,10 @@ export async function ripBurialTime(
       const newer = records.filter((record) =>
         resolve(record.destination).startsWith(`${path}${sep}`),
       );
-      return Math.max(time, ...newer.map((record) => record.time));
+      return {
+        time: Math.max(time, ...newer.map((record) => record.time)),
+        estimated: false,
+      };
     }
     ancestor = dirname(ancestor);
   }
@@ -290,7 +342,9 @@ export async function ripBurialTime(
       newest = Math.max(newest ?? -Infinity, time);
       continue;
     }
-    if (entry !== root && !containers.has(entry)) return undefined;
+    // Only the requested entry itself can be estimated: no record lies beneath it.
+    if (entry !== root && !containers.has(entry))
+      return entry === path ? estimatedBurial(root, path) : undefined;
     const stat = await lstat(entry);
     if (!stat.isDirectory() || stat.isSymbolicLink()) return undefined;
     pending.push(
@@ -299,5 +353,5 @@ export async function ripBurialTime(
         .map((name) => join(entry, name)),
     );
   }
-  return newest;
+  return newest === undefined ? undefined : { time: newest, estimated: false };
 }

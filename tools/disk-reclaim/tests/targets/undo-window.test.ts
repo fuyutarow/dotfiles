@@ -7,12 +7,17 @@ import {
   writeFile,
   utimes,
   access,
+  readFile,
+  symlink,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { loadConfig } from "../../src/engine.ts";
 import { loadCollectionPolicy } from "../../src/policy.ts";
-import { createRipExpiryTarget } from "../../src/targets/rip-expire.ts";
+import {
+  createRipExpiryTarget,
+  createMultiRipExpiryTarget,
+} from "../../src/targets/rip-expire.ts";
 import { purgeCandidates } from "../../src/targets/purge.ts";
 import { deleteApproved } from "../../src/delete.ts";
 import { RIP_GRAVEYARD_MAX_BYTES } from "../../src/lib/graveyards.ts";
@@ -30,6 +35,72 @@ const config = {
   graveyard_min_age_hours: 24,
   graveyard_pressure_undo_minutes: 10,
 };
+
+test("foreign graveyard expires old entries and preserves undo records and symlink targets", async () => {
+  const home = await mkdtemp(join(tmpdir(), "rip-foreign-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: async () => {
+      await rm(home, { recursive: true, force: true });
+    },
+  };
+  const declared = join(home, "declared");
+  const root = join(home, "Workspace/project.ws/.graveyard-gc");
+  const outside = join(home, "outside");
+  await mkdir(root, { recursive: true });
+  await mkdir(declared);
+  await mkdir(outside);
+  await writeFile(join(outside, "keep"), "safe");
+  const old = join(root, "old");
+  const fresh = join(root, "fresh");
+  const link = join(root, "link");
+  await writeFile(old, "old payload");
+  await writeFile(fresh, "fresh payload");
+  await symlink(outside, link);
+  const record = `2000-01-01T00:00:00Z\t/old\t${old}\n${Temporal.Now.instant().toString()}\t/fresh\t${fresh}\n2000-01-01T00:00:00Z\t/link\t${link}\n`;
+  await writeFile(join(root, ".record"), record);
+  const purgeRip = createMultiRipExpiryTarget(home, {
+    RIP_GRAVEYARD: declared,
+  });
+  const planContext: Context = { mode: "plan", config, log: () => {} };
+  const planRows = await purgeRip.plan(planContext);
+  expect(planRows.find((row) => row.path === root)?.bytes).toBeGreaterThan(0);
+  await purgeRip.finish?.(planContext);
+  const processResult = Bun.spawn(
+    [
+      process.execPath,
+      resolve(import.meta.dir, "../../src/reclaim.ts"),
+      "run",
+      "rip-expire",
+      "--yes",
+      "--json",
+    ],
+    {
+      env: {
+        ...process.env,
+        HOME: home,
+        RIP_GRAVEYARD: declared,
+        RECLAIM_STATE_DIR: join(home, "state"),
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const [exit, stdout, stderr] = await Promise.all([
+    processResult.exited,
+    new Response(processResult.stdout).text(),
+    new Response(processResult.stderr).text(),
+  ]);
+  expect({ exit, stderr, stdout }).toMatchObject({ exit: 0 });
+  expect(
+    await access(old).then(
+      () => true,
+      () => false,
+    ),
+  ).toBe(false);
+  expect(await readFile(fresh, "utf8")).toBe("fresh payload");
+  expect(await readFile(join(outside, "keep"), "utf8")).toBe("safe");
+  expect(await readFile(join(root, ".record"), "utf8")).toBe(record);
+});
 
 for (const underPressure of [false, true]) {
   for (const age of [0, 599_000, 600_000, 601_000]) {

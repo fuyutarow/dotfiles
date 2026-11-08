@@ -8,6 +8,8 @@ import {
   UNKNOWN_RIP_BURIAL,
   RIP_GRAVEYARD_MAX_BYTES,
   ripGraveyardRoot,
+  discoverRipGraveyards,
+  inspectRipGraveyard,
 } from "../lib/graveyards.ts";
 import { removeTree } from "../lib/remove-tree.ts";
 import { loadGraveyardAgePolicy } from "../graveyard-age.ts";
@@ -597,5 +599,111 @@ function capacityShortfall(state: Expiry): string | null {
 }
 
 const expiry = createRipExpiryTarget();
-export const purgeRip = expiry.target;
+const routes = new WeakMap<
+  Context,
+  Map<string, { target: Target; context: Context; original: Candidate }>
+>();
+const children = new WeakMap<Context, { target: Target; context: Context }[]>();
+async function discoveredRootCandidate(root: string): Promise<Candidate[]> {
+  const measurement = await fromAsyncThrowable(() =>
+    inspectRipGraveyard(root, 2000),
+  )();
+  if (measurement.isErr()) return [];
+  return [
+    {
+      id: `rip graveyard root: ${root}`,
+      path: root,
+      verdict: "KEEP",
+      reason: measurement.value.complete
+        ? "discovered rip graveyard"
+        : "discovered rip graveyard; size is a lower bound",
+      checks: [{ name: "rip record", ok: true, detail: root }],
+      bytes: measurement.value.bytes,
+      bytes_kind: "estimate",
+      action: { kind: "command", argv: [] },
+      result: null,
+    },
+  ];
+}
+export function createMultiRipExpiryTarget(
+  home = homedir(),
+  env = process.env,
+): Target {
+  return {
+    ...expiry.target,
+    plan: async (ctx) => {
+      const declared = ripGraveyardRoot(env, home);
+      const roots = [
+        declared,
+        ...(await discoverRipGraveyards(home)).filter(
+          (root) => root !== declared,
+        ),
+      ];
+      const routesForContext = new Map<
+        string,
+        { target: Target; context: Context; original: Candidate }
+      >();
+      const instances: { target: Target; context: Context }[] = [];
+      const rows: Candidate[] = [];
+      for (const root of roots) {
+        if (
+          root !== declared &&
+          ctx.mode === "plan" &&
+          ctx.only === undefined
+        ) {
+          rows.push(...(await discoveredRootCandidate(root)));
+        }
+        const child = createRipExpiryTarget();
+        const context = { ...ctx };
+        instances.push({ target: child.target, context });
+        const candidates = await child.candidates(
+          { ...env, RIP_GRAVEYARD: root },
+          home,
+          {
+            context,
+            config: ctx.config,
+            ...(ctx.only === undefined ? {} : { only: ctx.only }),
+          },
+        );
+        for (const original of candidates) {
+          const id =
+            root === declared ? original.id : `${root}: ${original.id}`;
+          routesForContext.set(id, { target: child.target, context, original });
+          rows.push({ ...original, id });
+        }
+      }
+      routes.set(ctx, routesForContext);
+      children.set(ctx, instances);
+      return rows;
+    },
+    recheck: async (candidate, ctx) => {
+      const route = routes.get(ctx)?.get(candidate.id);
+      if (route === undefined)
+        return (await expiry.target.recheck?.(candidate, ctx)) ?? null;
+      const checked = await route.target.recheck?.(
+        route.original,
+        route.context,
+      );
+      return checked === null || checked === undefined
+        ? null
+        : { ...checked, id: candidate.id };
+    },
+    act: async (candidate, ctx) => {
+      const route = routes.get(ctx)?.get(candidate.id);
+      if (route === undefined) return expiry.target.act(candidate, ctx);
+      return route.target.act(
+        { ...candidate, id: route.original.id },
+        route.context,
+      );
+    },
+    finish: async (ctx) => {
+      if (!children.has(ctx)) return expiry.target.finish?.(ctx);
+      for (const child of children.get(ctx) ?? [])
+        await child.target.finish?.(child.context);
+      children.delete(ctx);
+      routes.delete(ctx);
+    },
+  };
+}
+export const purgeRip = createMultiRipExpiryTarget();
 export const ripExpiryCandidates = expiry.candidates;

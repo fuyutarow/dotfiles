@@ -9,7 +9,12 @@ import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
-import { graveyardCandidates, existingGraveyards } from "../lib/graveyards.ts";
+import {
+  graveyardCandidates,
+  existingGraveyards,
+  discoverRipGraveyards,
+  inspectRipGraveyard,
+} from "../lib/graveyards.ts";
 import {
   liveExecutables,
   readStore,
@@ -299,6 +304,28 @@ export async function auditCandidates(
         },
       ],
       bytes: null,
+      bytes_kind: "estimate",
+      action: { kind: "command", argv: [] },
+      result: null,
+    });
+  }
+  for (const path of await discoverRipGraveyards(home)) {
+    if (
+      existingGraveyards(graveyardCandidates(env, home)).some(
+        (g) => g.path === path,
+      )
+    )
+      continue;
+    const measurement = await inspectRipGraveyard(path, 2000);
+    rows.push({
+      id: `graveyard:${path}`,
+      path,
+      verdict: "KEEP",
+      reason: measurement.complete
+        ? "discovered rip graveyard"
+        : "discovered rip graveyard; size is a lower bound",
+      checks: [{ name: "rip record", ok: true, detail: path }],
+      bytes: measurement.bytes,
       bytes_kind: "estimate",
       action: { kind: "command", argv: [] },
       result: null,

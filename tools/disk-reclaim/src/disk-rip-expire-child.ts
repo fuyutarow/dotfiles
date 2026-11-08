@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import { loadConfig } from "./engine.ts";
 import { ripGraveyardRoot } from "./lib/graveyards.ts";
 import { hasForegroundWaiter } from "./receipt.ts";
-import { createRipExpiryTarget, safeScope } from "./targets/rip-expire.ts";
+import { purgeRip, safeScope } from "./targets/rip-expire.ts";
 import { runRipExpiry } from "./disk-rip-expire-run.ts";
 import type { Context } from "./targets/index.ts";
 
@@ -67,7 +67,7 @@ const fingerprint = async (path: string) => {
 emit(
   JSON.stringify(
     await runRipExpiry({
-      target: createRipExpiryTarget().target,
+      target: purgeRip,
       context: ctx,
       fingerprint,
       measure,

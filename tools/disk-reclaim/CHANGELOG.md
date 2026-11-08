@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.29 — 2026-11-08
+
+- Discover and expire foreign rip graveyards in workspace and state roots.
+
 ## 1.12.28 — 2026-11-05
 
 - plan vhdx reports the named WSL distro's VHDX, its reclaimable gap, and the operator step, and names plan-only candidates on stderr instead of printing nothing

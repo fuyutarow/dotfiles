@@ -177,6 +177,58 @@ export function ripRecords(path: string): RipRecord[] {
   });
 }
 
+/** Search only workspace and state roots, breadth first, without traversing links. */
+export async function discoverRipGraveyards(
+  home = homedir(),
+): Promise<string[]> {
+  const pending = [
+    { path: join(home, "Workspace"), depth: 0, limit: 3 },
+    { path: join(home, "dotfiles.ws"), depth: 0, limit: 3 },
+    { path: join(home, ".local/state"), depth: 0, limit: 4 },
+  ];
+  const found: string[] = [];
+  const deadline = performance.now() + 2000;
+  for (let index = 0; index < pending.length && index < 20_000; index++) {
+    if (performance.now() >= deadline) break;
+    const item = pending[index];
+    if (item === undefined) break;
+    const stat = await lstat(item.path).catch(() => null);
+    if (stat === null || !stat.isDirectory() || stat.isSymbolicLink()) continue;
+    const entries = await readdir(item.path, { withFileTypes: true }).catch(
+      () => [],
+    );
+    const record = entries.find(
+      (entry) => entry.name === ".record" && entry.isFile(),
+    );
+    const recordStat =
+      record === undefined
+        ? null
+        : await lstat(join(item.path, ".record")).catch(() => null);
+    if (
+      recordStat !== null &&
+      ripRecords(item.path).some(
+        (row) =>
+          row.original.length > 0 &&
+          resolve(row.destination).startsWith(`${resolve(item.path)}${sep}`),
+      )
+    ) {
+      found.push(resolve(item.path));
+      continue;
+    }
+    if (item.depth >= item.limit) continue;
+    pending.push(
+      ...entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => ({
+          path: join(item.path, entry.name),
+          depth: item.depth + 1,
+          limit: item.limit,
+        })),
+    );
+  }
+  return found;
+}
+
 export const UNKNOWN_RIP_BURIAL =
   "burial time unknown: missing, unreadable, or invalid burial record";
 

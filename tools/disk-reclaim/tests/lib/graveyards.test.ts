@@ -7,13 +7,40 @@ import {
   openSync,
   rmSync,
   writeFileSync,
+  symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   inspectRipGraveyard,
   RIP_GRAVEYARD_MAX_BYTES,
+  discoverRipGraveyards,
 } from "../../src/lib/graveyards.ts";
+
+test("discovers only valid records within bounded roots without following links", async () => {
+  const home = mkdtempSync(join(tmpdir(), "foreign-graveyard-"));
+  const graveyard = join(home, "Workspace/project.ws/.graveyard-gc");
+  const invalid = join(home, "Workspace/project.ws/not-graveyard");
+  const outside = join(home, "outside");
+  mkdirSync(graveyard, { recursive: true });
+  mkdirSync(invalid, { recursive: true });
+  mkdirSync(outside, { recursive: true });
+  writeFileSync(
+    join(graveyard, ".record"),
+    `2000-01-01T00:00:00Z\t/source\t${join(graveyard, "old")}\n`,
+  );
+  writeFileSync(
+    join(invalid, ".record"),
+    `2000-01-01T00:00:00Z\t/source\t${join(outside, "old")}\n`,
+  );
+  writeFileSync(
+    join(outside, ".record"),
+    `2000-01-01T00:00:00Z\t/source\t${join(outside, "old")}\n`,
+  );
+  symlinkSync(outside, join(home, "Workspace/link"));
+  expect(await discoverRipGraveyards(home)).toEqual([graveyard]);
+  rmSync(home, { recursive: true, force: true });
+});
 
 test("a bounded graveyard scan measures a sparse file above the safety limit", async () => {
   const root = mkdtempSync(join(tmpdir(), "graveyard-bounded-"));

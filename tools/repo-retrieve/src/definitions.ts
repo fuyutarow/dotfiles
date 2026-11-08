@@ -12,8 +12,8 @@
 //               name, signature, attached doc, location, public-ness. One small markdown file per
 //               definition goes into a private ccc project under ~/.cache/repo-retrieve/catalog/,
 //               indexed by the same daemon and embedder as the repo itself. Kept fresh against the
-//               working tree: nothing changed since the last build (git) → reuse; else re-parse the
-//               changed files only, rewrite their entries, `ccc index` the catalog (incremental).
+//               working tree: nothing changed since the last build (git) → reuse; an admitted root
+//               index can re-parse changed files and index the catalog through the same backend.
 //   2. recall   ccc search over the catalog, 40 hits. A private helper (`_name`) hands its hit to
 //               the public definition in the same file that calls it — the kernel is not the API.
 //   3. rerank   the resident cross-encoder (rerank_server.py, socket-activated) scores each
@@ -451,10 +451,13 @@ type Catalog = {
 export async function refreshCatalog(
   project: string,
   notes: string[],
+  admittedBackend?: string,
 ): Promise<Result<Catalog, Error>> {
   const dir = await catalogDir(project);
   const metaPath = join(dir, "catalog.json");
   const recordsPath = join(dir, "records.json");
+  const pendingPath = join(dir, "index-pending");
+  const pending = await pathExists(pendingPath);
   const meta = (await readJsonOf(MetaSchema, metaPath)).match(
     (value) => value,
     () => null,
@@ -480,8 +483,14 @@ export async function refreshCatalog(
   } else if (meta !== null && (await pathExists(recordsPath))) {
     only = await changedSince(project, meta.head);
   }
-  if (recent && only?.length === 0) return readCatalog(dir);
-  const rebuiltResult = await rebuild(dir, project, only);
+  if (only?.length === 0 && !pending) return readCatalog(dir);
+  if (admittedBackend === undefined)
+    return err(
+      new Error(
+        "definition catalog needs refresh; retry the root's admitted indexing operation",
+      ),
+    );
+  const rebuiltResult = await rebuild(dir, project, only, admittedBackend);
   if (rebuiltResult.isErr()) return err(rebuiltResult.error);
   const rebuilt = rebuiltResult.value;
   const fileKeys = await Promise.all(
@@ -522,6 +531,7 @@ async function rebuild(
   dir: string,
   project: string,
   only: string[] | null,
+  backend: string,
 ): Promise<Result<{ count: number; files: string[] }, Error>> {
   const cachePath = join(dir, "defs-cache.json");
   const onlyPath = join(dir, `only.${process.pid}.json`);
@@ -569,6 +579,11 @@ async function rebuild(
   const { defs, files } = definitions.value;
   const wanted = new Map<string, Definition[]>();
   let written = 0;
+  // Set before touching generated entries: interruption or failed indexing must survive a retry.
+  const pendingPath = join(dir, "index-pending");
+  const wasPending = await pathExists(pendingPath);
+  const marked = await writeAtomic(pendingPath, "pending\n");
+  if (marked.isErr()) return err(marked.error);
   const generated = await fromAsyncThrowable(async () => {
     for (const d of defs) {
       const text = mdText(d);
@@ -594,11 +609,9 @@ async function rebuild(
   if (recordsWrite.isErr()) return err(recordsWrite.error);
   // An edit that only moved definitions (line numbers live in records.json, not in the indexed
   // text) changes no catalog file: nothing to embed, no daemon round trip.
-  if (written + stale.length > 0) {
-    const ccc = requireExecutable("ccc");
-    if (ccc.isErr()) return err(ccc.error);
+  if (written + stale.length > 0 || wasPending) {
     const index = await fromAsyncThrowable(
-      () => runChildCaptured([ccc.value, "index"], 900_000, false, dir),
+      () => runChildCaptured([backend, "index"], 900_000, false, dir),
       asError,
     )();
     if (index.isErr()) return err(index.error);
@@ -609,6 +622,11 @@ async function rebuild(
         ),
       );
   }
+  const cleared = await fromAsyncThrowable(
+    () => unlink(pendingPath),
+    asError,
+  )();
+  if (cleared.isErr()) return err(cleared.error);
   return ok({ count: defs.length, files });
 }
 

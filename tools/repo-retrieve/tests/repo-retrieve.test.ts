@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
@@ -210,6 +211,7 @@ function fakeTools(): { bin: string; log: string } {
     python,
     `#!/bin/sh
 case "$1" in
+  */ccc_defs.py) if [ -n "\${FAKE_DEFS_FILE:-}" ]; then cp "$FAKE_DEFS_FILE" "$3"; exit 0; fi ;;
   */ccc_plan.py) if [ -n "\${FAKE_PLAN_TRACE:-}" ]; then printf 'planner %s\n' "$*" >> "$FAKE_SEARCH_LOG"; fi; if [ "\${3:-}" = --validate-excludes ]; then printf '[]'; elif [ -n "\${FAKE_PLAN_FILE:-}" ]; then cat "$FAKE_PLAN_FILE"; fi; exit 0 ;;
   */ccc_scope.py) exit 1 ;;
 esac
@@ -224,6 +226,10 @@ exec /bin/sh "$@"
       `#!/bin/sh
 ${name === "ccc" ? "# // dotfiles:ccc-index-entry" : ""}
 printf '%s\\n' '${name} '"$*" >> "$FAKE_SEARCH_LOG"
+if [ "${name}" = ccc ] && [ "$1" = index ] && [ -n "\${FAKE_INDEX_TRACE:-}" ]; then
+  printf '%s %s\\n' "$0" "$PWD" >> "$FAKE_INDEX_TRACE"
+  if [ -n "\${FAKE_FAIL_CATALOG:-}" ] && [ "$PWD" != "$FAKE_ROOT" ]; then printf 'stub catalog failure\\n' >&2; exit 7; fi
+fi
 if [ "${name}" = ccc ] && [ "$1" = daemon ] && [ "$2" = status ]; then
 if [ -n "\${FAKE_CCC_EMPTY_STATUS:-}" ]; then printf '%s\\n' "$FAKE_CCC_EMPTY_STATUS"; exit 0; fi
 if [ -n "\${FAKE_CCC_PROJECTS:-}" ]; then printf 'Projects:\n%s\n' "$FAKE_CCC_PROJECTS"; exit 0; fi
@@ -375,6 +381,79 @@ function run(
     log,
   };
 }
+
+test("catalog indexing follows root admission and retries a failed unchanged catalog", () => {
+  const dir = registerProject();
+  const home = tempDir("rr-catalog-home-");
+  const trace = join(home, "index.log");
+  const defs = join(home, "defs.json");
+  writeFileSync(
+    defs,
+    JSON.stringify({
+      files: {
+        "a.ts": {
+          publics: [],
+          records: [
+            {
+              name: "example",
+              kind: "function",
+              lang: "typescript",
+              file: "a.ts",
+              start: 1,
+              end: 1,
+              signature: "example()",
+              doc: "Example.",
+              body: "",
+              public: true,
+            },
+          ],
+        },
+      },
+    }),
+  );
+  const catalog = join(
+    home,
+    ".cache/repo-retrieve/catalog",
+    createHash("sha1").update(dir).digest("hex").slice(0, 16),
+  );
+  const env = {
+    HOME: home,
+    FAKE_DEFS_FILE: defs,
+    FAKE_INDEX_TRACE: trace,
+    FAKE_ROOT: dir,
+  };
+  const planned = run(dir, ["index", "--plan"], env);
+  expect(planned.code).toBe(0);
+  expect(existsSync(trace)).toBe(false);
+  expect(existsSync(catalog)).toBe(false);
+  const failed = run(dir, ["index"], { ...env, FAKE_FAIL_CATALOG: "1" });
+  expect(failed.code).toBe(0);
+  expect(failed.stderr).toContain("definition catalog not refreshed");
+  expect(failed.stderr).toContain("stub catalog failure");
+  expect(failed.stderr).not.toContain("run rr index");
+  expect(existsSync(join(catalog, "records.json"))).toBe(true);
+  expect(existsSync(join(catalog, "index-pending"))).toBe(true);
+  const query = run(dir, ["definition", "example"], env);
+  expect(query.stderr).toContain("catalog needs refresh");
+  expect(readFileSync(trace, "utf8").trim().split("\n")).toHaveLength(2);
+  const retry = run(dir, ["index"], env);
+  expect(retry.code).toBe(0);
+  expect(retry.stderr).toContain("catalog built");
+  expect(existsSync(join(catalog, "index-pending"))).toBe(false);
+  const calls = readFileSync(trace, "utf8").trim().split("\n");
+  expect(calls).toHaveLength(4);
+  expect(calls.every((call) => call.includes("/ccc-backend "))).toBe(true);
+  expect(calls.map((call) => call.endsWith(catalog))).toEqual([
+    false,
+    true,
+    false,
+    true,
+  ]);
+  const other = registerProject();
+  const rejected = run(other, ["definition", "example"], env);
+  expect(rejected.stderr).toContain("NO_INDEX");
+  expect(readFileSync(trace, "utf8").trim().split("\n")).toHaveLength(4);
+});
 
 describe("repo-retrieve route contract", () => {
   for (const status of [
@@ -919,11 +998,12 @@ describe("repo-retrieve route contract", () => {
           PATH: `${tools.bin}:${process.env["PATH"] ?? ""}`,
           FAKE_SEARCH_LOG: tools.log,
           FAKE_RG_THREE_LINES: "1",
+          COCOINDEX_CODE_DB_PATH_MAPPING: "",
         },
       },
     );
 
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toBe("first\nsecond\nthird\n");
     expect(result.stderr).not.toContain("EPIPE");
     expect(result.stderr).not.toContain("at runRg");

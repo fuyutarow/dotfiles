@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.2 — 2026-11-09
+
+- Index definition catalogs through the admitted root backend and preserve failed refreshes.
+
 ## 1.12.1 — 2026-11-05
 
 - Resolve the ccc database mapping from its shared declaration before routing.

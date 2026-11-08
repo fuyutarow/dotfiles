@@ -1213,7 +1213,7 @@ export type IndexOutcome =
   | { kind: "plan"; exitCode: 0 | 4 }
   | { kind: "refused"; exitCode: 4 }
   | { kind: "detached"; exitCode: 0 }
-  | { kind: "indexed"; exitCode: 0 }
+  | { kind: "indexed"; exitCode: 0; project: string; backend: string }
   | { kind: "failed"; exitCode: number };
 
 export async function runIndexWrapper(
@@ -1420,7 +1420,7 @@ export async function runIndexWrapper(
   if (currentHead.value === head)
     await markWorkerRequest(project, capturedRequest, "complete", head);
   else if (worker) await markWorkerRequest(project, capturedRequest, "stale");
-  return ok({ kind: "indexed", exitCode: 0 });
+  return ok({ kind: "indexed", exitCode: 0, project, backend });
 }
 
 export async function runIndexStatus(): Promise<Result<number, Error>> {

@@ -305,8 +305,10 @@ reading the catalog as it stands.
 
 1. **Catalog** (`~/.cache/repo-retrieve/catalog/<hash>/`): one markdown entry per definition,
    indexed as its own ccc project by the shared daemon. Freshness: same HEAD and unchanged known
-   files → reuse (a few ms); otherwise only the changed files are re-parsed; a full git check at
-   most once a minute, so a brand-new file joins within 60 s.
+   files → reuse (a few ms). A completed admitted root index refreshes changed files and indexes
+   the catalog using that root's backend. A definition query that detects a needed refresh does
+   not index on its own; repeat the root index first. A failed catalog index remains pending for
+   the next admitted root index, even when the generated files have not changed.
 2. **Recall**: 40 hits from the catalog; an internal helper (`_x`, `x_kernel!`, `_impl`…) nominates
    the public definition in its file that calls it.
 3. **Rerank**: `rerank_server.py`, enabled by `mise run wsl:rerank` (systemd socket activation,

@@ -65,7 +65,6 @@ import { declaredDbEnv, MAPPING_ENV } from "./ccc-db-dir.ts";
 import {
   checkIndexFreshness,
   citationToken,
-  findRegisteredProject,
   headLabel,
   requestAutoReindex,
   resolveRegisteredProject,
@@ -1780,13 +1779,13 @@ function indexCommand() {
       // Only a completed index admits post-index work. In particular, a successful
       // read-only plan also exits zero, but must never build or index the catalog.
       if (indexResult.value.kind !== "indexed") return;
+      const admitted = indexResult.value;
       // Warm the definition catalog too, so the first `definition` query after an index does not
       // pay the build. Its failure is reported, never turned into an index failure.
-      const project = await findRegisteredProject(process.cwd());
-      if (project !== null && project !== "") {
+      {
         const notes: string[] = [];
         const warmed = await fromAsyncThrowable(
-          () => refreshCatalog(project, notes),
+          () => refreshCatalog(admitted.project, notes, admitted.backend),
           asError,
         )();
         for (const n of notes) process.stderr.write(`NOTE: ${n}\n`);
@@ -1794,12 +1793,12 @@ function indexCommand() {
           (result) => {
             if (result.isErr())
               process.stderr.write(
-                `NOTE: definition catalog not refreshed: ${String(result.error)}\n`,
+                `NOTE: definition catalog not refreshed: ${String(result.error)}; retry the root's admitted indexing operation to refresh the catalog\n`,
               );
           },
           (error) =>
             process.stderr.write(
-              `NOTE: definition catalog not refreshed: ${String(error)}\n`,
+              `NOTE: definition catalog not refreshed: ${String(error)}; retry the root's admitted indexing operation to refresh the catalog\n`,
             ),
         );
       }

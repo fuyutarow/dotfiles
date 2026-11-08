@@ -1,3 +1,4 @@
+import { dlopen, FFIType } from "bun:ffi";
 import {
   mkdir,
   open,
@@ -8,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { type as osType } from "node:os";
 import { attempt, errorMessage, type Attempt } from "./attempt.ts";
 import { jsonOf, z } from "./zod.ts";
 
@@ -105,14 +107,21 @@ export async function readFleetSession(
 ): Promise<FleetSessionRead> {
   const path = sessionPath(sessionId, env);
   if (!path.ok) return unavailable(errorMessage(path.error));
-  const text = await attempt(async (): Promise<string | undefined> => {
-    await using handle = await open(path.value, "r");
-    const info = await handle.stat();
-    if (!info.isFile() || info.size > 64 * 1024) return undefined;
-    const buffer = Buffer.alloc(info.size);
-    const read = await handle.read(buffer, 0, buffer.length, 0);
-    return buffer.subarray(0, read.bytesRead).toString("utf8");
-  });
+  const text = await attempt(
+    async (): Promise<string | FleetSessionUnavailable> => {
+      await using handle = await open(path.value, "r");
+      const info = await handle.stat();
+      if (!info.isFile())
+        return unavailable(
+          `fleet session ${sessionId} could not be read: not a file`,
+        );
+      if (info.size > 64 * 1024)
+        return unavailable("invalid oversized fleet session");
+      const buffer = Buffer.alloc(info.size);
+      const read = await handle.read(buffer, 0, buffer.length, 0);
+      return buffer.subarray(0, read.bytesRead).toString("utf8");
+    },
+  );
   if (!text.ok) {
     const missing = z
       .object({ code: z.literal("ENOENT") })
@@ -123,8 +132,7 @@ export async function readFleetSession(
         : `fleet session ${sessionId} could not be read: ${errorMessage(text.error)}`,
     );
   }
-  if (text.value === undefined)
-    return unavailable("invalid oversized fleet session");
+  if (typeof text.value !== "string") return text.value;
   const parsed = parseFleetSession(text.value);
   const session = FleetSessionSchema.safeParse(parsed);
   if (session.success && session.data.session_id !== sessionId)
@@ -134,27 +142,87 @@ export async function readFleetSession(
   return parsed;
 }
 
-/** Write a complete record by atomically replacing its destination with a same-directory temp. */
-export async function writeFleetSession(
+const libc = dlopen(
+  osType() === "Darwin" ? "/usr/lib/libSystem.B.dylib" : "libc.so.6",
+  { flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } },
+);
+
+async function writeTransition(
   session: unknown,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<Attempt<void>> {
+  env: NodeJS.ProcessEnv,
+  ifChanged: boolean,
+): Promise<Attempt<FleetSession>> {
   const parsed = FleetSessionSchema.safeParse(session);
   if (!parsed.success) return { ok: false, error: parsed.error };
   const path = sessionPath(parsed.data.session_id, env);
   if (!path.ok) return path;
-  const temp = `${path.value}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  const written = await attempt(async () => {
+  const transition = await attempt(async (): Promise<Attempt<FleetSession>> => {
     await mkdir(dirname(path.value), { recursive: true, mode: 0o700 });
-    await writeFile(temp, `${JSON.stringify(parsed.data)}\n`, {
-      mode: 0o600,
-      flag: "wx",
+    const lockDir = join(dirname(dirname(path.value)), "locks");
+    await mkdir(lockDir, { recursive: true, mode: 0o700 });
+    // Never unlink the lock file: all writers must lock the same inode.
+    await using lock = await open(
+      join(lockDir, `${parsed.data.session_id}.lock`),
+      "a",
+      0o600,
+    );
+    const deadline = Temporal.Now.instant().epochMilliseconds + 3000;
+    while (libc.symbols.flock(lock.fd, 2 | 4) !== 0) {
+      if (Temporal.Now.instant().epochMilliseconds >= deadline)
+        return { ok: false, error: new Error("fleet session lock timed out") };
+      await Bun.sleep(10);
+    }
+    const prior = await readFleetSession(parsed.data.session_id, env);
+    const existing = FleetSessionSchema.safeParse(prior);
+    const priorUnavailable = FleetSessionUnavailableSchema.safeParse(prior);
+    if (
+      !existing.success &&
+      typeof parsed.data.name !== "string" &&
+      priorUnavailable.success &&
+      priorUnavailable.data.why !==
+        `fleet session ${parsed.data.session_id} is missing`
+    )
+      return { ok: false, error: new Error(priorUnavailable.data.why) };
+    const next = {
+      ...parsed.data,
+      name:
+        typeof parsed.data.name !== "string" &&
+        existing.success &&
+        typeof existing.data.name === "string"
+          ? existing.data.name
+          : parsed.data.name,
+    };
+    if (
+      ifChanged &&
+      existing.success &&
+      fleetSessionContent(existing.data) === fleetSessionContent(next)
+    )
+      return { ok: true, value: existing.data };
+    if (ifChanged) next.updated_at = Temporal.Now.instant().toString();
+    const temp = `${path.value}.${process.pid}.${crypto.randomUUID()}.tmp`;
+    const written = await attempt(async () => {
+      await writeFile(temp, `${JSON.stringify(next)}\n`, {
+        mode: 0o600,
+        flag: "wx",
+      });
+      await rename(temp, path.value);
     });
-    await rename(temp, path.value);
+    if (!written.ok) {
+      await attempt(() => unlink(temp));
+      return written;
+    }
+    return { ok: true, value: next };
   });
-  // Preserve the original error even if best-effort temporary-file cleanup fails.
-  if (!written.ok) await attempt(() => unlink(temp));
-  return written;
+  return transition.ok ? transition.value : transition;
+}
+
+/** Write a complete record by atomically replacing its destination. */
+export async function writeFleetSession(
+  session: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Attempt<void>> {
+  const written = await writeTransition(session, env, false);
+  return written.ok ? { ok: true, value: undefined } : written;
 }
 
 function fleetSessionContent(value: FleetSession): string {
@@ -168,22 +236,7 @@ export async function writeFleetSessionIfChanged(
   session: unknown,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Attempt<FleetSession>> {
-  const parsed = FleetSessionSchema.safeParse(session);
-  if (!parsed.success) return { ok: false, error: parsed.error };
-  const existing = FleetSessionSchema.safeParse(
-    await readFleetSession(parsed.data.session_id, env),
-  );
-  if (
-    existing.success &&
-    fleetSessionContent(existing.data) === fleetSessionContent(parsed.data)
-  )
-    return { ok: true, value: existing.data };
-  const next = {
-    ...parsed.data,
-    updated_at: Temporal.Now.instant().toString(),
-  };
-  const written = await writeFleetSession(next, env);
-  return written.ok ? { ok: true, value: next } : written;
+  return writeTransition(session, env, true);
 }
 
 const CodexMeta = z.object({

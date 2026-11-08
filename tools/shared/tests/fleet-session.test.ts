@@ -17,6 +17,7 @@ import {
   parseFleetSession,
   readFleetSession,
   writeFleetSession,
+  writeFleetSessionIfChanged,
   type FleetSession,
   type FleetSessionRead,
   type FleetSessionUnavailable,
@@ -117,6 +118,66 @@ test("write atomically publishes a private file that read can parse", async () =
   expect((await stat(path)).mode & 0o777).toBe(0o600);
   expect(await readFile(path, "utf8")).toBe(`${JSON.stringify(record)}\n`);
   expect(await readFleetSession(record.session_id, env)).toEqual(record);
+});
+
+test("name transitions preserve known names on unavailable and accept new observations", async () => {
+  const { env } = await fixture();
+  const missingName = { ...record, name: unavailable("lookup timeout") };
+  expect((await writeFleetSession(missingName, env)).ok).toBe(true);
+  expect(await readFleetSession(record.session_id, env)).toEqual(missingName);
+  expect((await writeFleetSession(record, env)).ok).toBe(true);
+  const retained = await writeFleetSessionIfChanged(
+    { ...missingName, model: "new model" },
+    env,
+  );
+  expect(retained).toMatchObject({
+    ok: true,
+    value: { name: record.name, model: "new model" },
+  });
+  expect(await readFleetSession(record.session_id, env)).toMatchObject({
+    name: record.name,
+    model: "new model",
+  });
+  expect(
+    (await writeFleetSession({ ...record, name: "new-project-agt_456" }, env))
+      .ok,
+  ).toBe(true);
+  expect(await readFleetSession(record.session_id, env)).toMatchObject({
+    name: "new-project-agt_456",
+  });
+  expect((await writeFleetSession(missingName, env)).ok).toBe(true);
+  expect(await readFleetSession(record.session_id, env)).toMatchObject({
+    name: "new-project-agt_456",
+  });
+});
+
+test("concurrent unavailable writes cannot overwrite a known name", async () => {
+  const { env } = await fixture();
+  const results = await Promise.all([
+    writeFleetSession(record, env),
+    ...Array.from({ length: 12 }, () =>
+      writeFleetSession(
+        { ...record, name: unavailable("lookup timeout") },
+        env,
+      ),
+    ),
+  ]);
+  expect(results.every((result) => result.ok)).toBe(true);
+  expect(await readFleetSession(record.session_id, env)).toMatchObject({
+    name: record.name,
+  });
+});
+
+test("unavailable name cannot overwrite an unreadable record", async () => {
+  const { root, env } = await fixture();
+  const path = join(root, "fleet", "sessions", `${record.session_id}.json`);
+  await mkdir(join(root, "fleet", "sessions"), { recursive: true });
+  await writeFile(path, "invalid");
+  expect(
+    (await writeFleetSession({ ...record, name: unavailable("timeout") }, env))
+      .ok,
+  ).toBe(false);
+  expect(await readFile(path, "utf8")).toBe("invalid");
 });
 
 test("writer refuses invalid records and missing runtime directories", async () => {

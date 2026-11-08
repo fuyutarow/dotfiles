@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.2 — 2026-11-08
+
+- Preserve known fleet session names across unavailable observations.
+
 ## 0.20.1 — 2026-11-06
 
 - Preserve the context window in fleet session records

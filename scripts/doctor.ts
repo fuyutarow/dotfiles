@@ -1066,6 +1066,74 @@ export async function checkReasonNetworkReaping(): Promise<Finding> {
       };
 }
 
+async function reasonNetworkProcessDir(
+  base: string,
+  home: string,
+): Promise<string | undefined> {
+  const comm = (await readFile(join(base, "comm"), "utf8")).trim();
+  if (comm !== "reason-network") return undefined;
+  const env = Object.fromEntries(
+    (await readFile(join(base, "environ"), "utf8"))
+      .split("\0")
+      .filter((v) => v.includes("="))
+      .map((v) => {
+        const i = v.indexOf("=");
+        return [v.slice(0, i), v.slice(i + 1)];
+      }),
+  );
+  const raw =
+    env["REASON_NETWORK_HOME"] ??
+    env["TINCAN_HOME"] ??
+    join(env["HOME"] ?? home, ".reason/network");
+  const cwd = isAbsolute(raw) ? "/" : await readlink(join(base, "cwd"));
+  const path = resolve(cwd, raw);
+  return attemptOr(() => realpath(path), path);
+}
+
+// A process disappearing during the scan is harmless; unreadable live processes are unknown.
+export async function checkReasonNetworkOneHome(
+  ctx: Ctx,
+  procRoot = "/proc",
+): Promise<Finding> {
+  const name = "reason-network-one-home";
+  const keys = [
+    join(ctx.home, ".reason/network/machine.key"),
+    join(ctx.home, ".tincan/machine.key"),
+    join(ctx.home, "machine.key"),
+  ];
+  const present: string[] = [];
+  for (const key of keys) {
+    const result = await attempt(() => statPath(key));
+    if (result.ok) present.push(key);
+    else if (obj(result.error)?.["code"] !== "ENOENT")
+      return warn(name, `cannot inspect key ${key}: ${String(result.error)}`);
+  }
+  const listing = await attempt(() => readdir(procRoot));
+  if (!listing.ok)
+    return warn(name, `cannot inspect ${procRoot}: ${String(listing.error)}`);
+  const pids = listing.value.filter((p) => /^\d+$/u.test(p));
+  const dirs = new Map<string, string[]>();
+  for (const pid of pids) {
+    const base = join(procRoot, pid);
+    const result = await attempt(() => reasonNetworkProcessDir(base, ctx.home));
+    if (!result.ok && obj(result.error)?.["code"] === "ENOENT") continue;
+    if (!result.ok)
+      return warn(name, `cannot inspect pid ${pid}: ${String(result.error)}`);
+    if (result.value === undefined) continue;
+    const members = dirs.get(result.value) ?? [];
+    members.push(pid);
+    dirs.set(result.value, members);
+  }
+  const lines = [...dirs].map(
+    ([dir, members]) => `${dir}: pids ${members.join(", ")}`,
+  );
+  lines.push(...present.map((key) => `key: ${key}`));
+  const detail = `${dirs.size} state directories, ${present.length} machine.key file(s); detection only, other writers can still override the directory`;
+  return dirs.size <= 1 && present.length === 1
+    ? { ...pass(name, detail), lines }
+    : { ...fail(name, detail, "inspect the listed processes and keys"), lines };
+}
+
 export async function checkWslconfig(ctx: Ctx): Promise<Finding> {
   const src = join(ctx.dotfiles, "wsl", "wslconfig.win");
   // Same interop path as scripts/wsl-wslconfig.ts: cmd.exe is deliberately off this PATH.
@@ -2344,6 +2412,11 @@ export const CHECKS: Check[] = [
     name: "codex-runtime",
     run: checkCodexRuntime,
     applies: (c) => (c.isWsl ? null : "WSL only"),
+  },
+  {
+    name: "reason-network-one-home",
+    run: checkReasonNetworkOneHome,
+    applies: (c) => (c.isMac ? "Linux procfs only" : null),
   },
   { name: "codex-remote", run: checkCodexRemote, applies: always },
   {

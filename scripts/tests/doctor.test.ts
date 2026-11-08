@@ -38,12 +38,76 @@ import {
   checkRipGraveyard,
   checkRipGraveyardTmp,
   checkRecoverHealth,
+  checkReasonNetworkOneHome,
   checkTmpfsCapacity,
   checkWslGpuManagerPath,
   orphanedReasonNetworkProcesses,
   type Ctx,
 } from "../doctor.ts";
+import { reasonNetworkHomeViolations } from "../lint-reason-network-home.ts";
 import type { FloorIO } from "../../tools/tool-tiers/src/core-floor.ts";
+
+test("reason-network one-home detects split processes and keys", async () => {
+  const root = mkdtempSync(join(tmpdir(), "reason-home-"));
+  using _cleanup = {
+    [Symbol.dispose]: () => {
+      rmSync(root, { recursive: true, force: true });
+    },
+  };
+  const home = join(root, "home");
+  const proc = join(root, "proc");
+  mkdirSync(join(home, ".reason/network"), { recursive: true });
+  writeFileSync(join(home, ".reason/network/machine.key"), "key");
+  for (const pid of ["10", "11"]) {
+    mkdirSync(join(proc, pid), { recursive: true });
+    writeFileSync(join(proc, pid, "comm"), "reason-network\n");
+    writeFileSync(join(proc, pid, "environ"), `HOME=${home}\0`);
+  }
+  const ctx = {
+    home,
+    dotfiles: root,
+    isMac: false,
+    isWsl: false,
+    isCoreBox: false,
+  };
+  expect((await checkReasonNetworkOneHome(ctx, proc)).verdict).toBe("PASS");
+  writeFileSync(
+    join(proc, "11/environ"),
+    `HOME=${home}\0REASON_NETWORK_HOME=${home}\0`,
+  );
+  const split = await checkReasonNetworkOneHome(ctx, proc);
+  expect(split.verdict).toBe("FAIL");
+  expect(split.lines?.join(" ")).toContain(`${home}: pids 11`);
+  writeFileSync(join(proc, "11/environ"), `HOME=${home}\0`);
+  writeFileSync(join(home, "machine.key"), "other");
+  const keys = await checkReasonNetworkOneHome(ctx, proc);
+  expect(keys.verdict).toBe("FAIL");
+  expect(keys.lines?.join(" ")).toContain(join(home, "machine.key"));
+});
+
+test("reason-network declaration gate rejects both override names", async () => {
+  const root = mkdtempSync(join(tmpdir(), "reason-decl-"));
+  using _cleanup = {
+    [Symbol.dispose]: () => {
+      rmSync(root, { recursive: true, force: true });
+    },
+  };
+  for (const file of [
+    ".mcp.json",
+    "agents/codex/config.declared.toml",
+    "agents/hooks/hooks.toml",
+    "agents/codex/hooks.json",
+    "agents/claude/settings.json",
+    "zsh/aliases.zsh",
+  ]) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), "# no override\n");
+  }
+  expect(await reasonNetworkHomeViolations(root)).toEqual([]);
+  writeFileSync(join(root, ".mcp.json"), '{"REASON_NETWORK_HOME": "x"}');
+  writeFileSync(join(root, "zsh/aliases.zsh"), 'export TINCAN_HOME="x"');
+  expect(await reasonNetworkHomeViolations(root)).toHaveLength(2);
+});
 
 test("reason-network orphan detection follows ancestors and ignores argument lookalikes", () => {
   const snapshot = [

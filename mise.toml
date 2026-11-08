@@ -162,6 +162,7 @@ depends = [
   "lint:one-writer",
   "lint:hook-slug",
   "lint:config-map",
+  "lint:reason-network-home",
   "lint:ignore",
   "lint:live-refs",
   "typecheck",
@@ -290,6 +291,12 @@ depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Print every configuration surface (source → deployed, consumer, writer, verifier) from scripts/config-registry.ts. --json for a tool"
 run = "bun scripts/config-map.ts"
+
+[tasks."lint:reason-network-home"]
+depends = ["bun:check"]
+dir = "{{config_root}}"
+description = "Reject reason-network state directory overrides in declarations"
+run = "bun scripts/lint-reason-network-home.ts"
 
 [tasks."lint:config-map"]
 depends = ["bun:check"]

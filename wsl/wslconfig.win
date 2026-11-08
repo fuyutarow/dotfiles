@@ -66,17 +66,17 @@ maxCrashDumpCount=2
 # ~300 GiB still free on C:. 600 GiB keeps the ceiling below C: (930 GB).
 defaultVhdSize=644245094400
 
-# WSLg is OFF. It was left on out of caution ("a julia plot window would break silently"), and
-# that caution had no basis and a real cost. On 2026-09-11 weston - WSLg's compositor - crashed
-# ten times in sixteen minutes (09:46:48 to 10:02:24, every ~100 s) and took the whole VM down
-# with it at 10:03; the previous boot's journal holds ZERO references to DISPLAY, WAYLAND or
-# Xwayland, i.e. nothing had ever asked WSLg for a window. A compositor nobody uses crashed a
-# compute server. Note also that the crash-dump cap above did not contain it: ten dumps were
-# on disk against maxCrashDumpCount=2, so the cap is not a defence against a crash LOOP.
-# If a GUI is ever genuinely needed here, turn this back on deliberately, with the reason.
+# WSLg is ON again (2026-11-09), deliberately and on owner request: Claude Code in this distro
+# pastes clipboard images through X11 (Alt+V) and fails with "X11 server connection timed out"
+# when WSLg is off (DISPLAY is empty, /mnt/wslg has no X socket).
+# History: it was OFF from 2026-09-11. weston - WSLg's compositor - crashed ten times in sixteen
+# minutes (09:46:48 to 10:02:24, every ~100 s) and took the whole VM down at 10:03, while nothing
+# had ever asked WSLg for a window. The crash-dump cap above does not contain a crash LOOP. The
+# root cause was the NVIDIA container storm described at the top of this file, since removed.
+# If weston crash-loops again, set this back to false FIRST and investigate after.
 # WSL 3.0.5 fixes global guiApplications=false suppression of a distro GUI opt-in:
 # https://github.com/microsoft/WSL/pull/41973
-guiApplications=false
+guiApplications=true
 
 [general]
 

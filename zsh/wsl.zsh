@@ -34,6 +34,14 @@ case ":$WSLENV:" in
   *) export WSLENV="NODE_UNC_HOST_ALLOWLIST/w:${WSLENV:-}" ;;
 esac
 
+# ── Truecolor ─────────────────────────────────────────────────────────────────
+# Windows Terminal does not export COLORTERM into WSL (iTerm2 does on macOS), so apps saw only
+# TERM=xterm-256color and fell back to 256 colours: Claude Code and herdr looked washed out
+# next to the Mac. Verified 2026-11-09: COLORTERM was empty in a Windows Terminal WSL session.
+# Windows Terminal renders 24-bit colour, so declaring it is accurate. tmux's own RGB feature
+# is in tmux/clipboard.conf.
+export COLORTERM=truecolor
+
 # ── Windows-exe symlink farm ──────────────────────────────────────────────────
 # Curated allowlist, NOT full interop:
 #  * Windows-ONLY tools earn a symlink into ~/.local/bin (explorer, powershell, agy, the IDE

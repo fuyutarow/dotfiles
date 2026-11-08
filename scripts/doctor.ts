@@ -1,4 +1,3 @@
-import { stateSubtreeBudget } from "@dotfiles/shared/src/storage-headroom.ts";
 import { DoctorStatus } from "@dotfiles/shared/src/doctor-record.ts";
 // `mise run doctor` — does THIS machine realize what the dotfiles declare? READ-ONLY: every check
 // compares a declared source of truth against the live machine and changes nothing. Consumer: a
@@ -2370,27 +2369,7 @@ export function checkRole(_ctx?: Ctx, host = hostname()): Promise<Finding> {
     ),
   );
 }
-export async function checkStateSubtreeBudget(ctx: Ctx): Promise<Finding> {
-  const warnings = await stateSubtreeBudget(
-    join(ctx.dotfiles, "agents/hooks/storage-headroom.toml"),
-    ctx.home,
-  );
-  return warnings.length === 0
-    ? pass("state-subtree-budget", "all state subtrees are within budget")
-    : {
-        ...warn(
-          "state-subtree-budget",
-          `${warnings.length} state subtree issue(s)`,
-        ),
-        lines: warnings,
-      };
-}
 export const CHECKS: Check[] = [
-  {
-    name: "state-subtree-budget",
-    run: checkStateSubtreeBudget,
-    applies: always,
-  },
   { name: "core-floor", run: checkToolFloor, applies: always },
   { name: "role", run: checkRole, applies: always },
   { name: "rip-graveyard", run: checkRipGraveyard, applies: always },

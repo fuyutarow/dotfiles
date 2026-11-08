@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.10 — 2026-11-08
+
+- Remove advisory state subtree budget reporting
+
 ## 0.2.9 — 2026-11-08
 
 - Report state subtree budgets as advisory storage warnings

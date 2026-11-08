@@ -133,38 +133,3 @@ current version, `using Pkg; Pkg.gc()` drops caches of packages no manifest refe
 [measure]
 du_timeout_seconds = 20
 cache_minutes = 5
-
-# Direct state directories, advisory only. 2026-11-08 measured with du -x -sk;
-# small directories get 1 GiB room, larger directories approximately double their use.
-[state_budget]
-agent-resource = 1 # 31 MiB; operational headroom
-agx = 70 # 32.59 GiB measured; roughly double
-agx-coordinator = 1 # under 1 MiB; operational headroom
-agx-hotfix = 1 # under 1 MiB; operational headroom
-claude = 1 # under 1 MiB; operational headroom
-claude-bash-durations = 1 # 21 MiB; operational headroom
-claude-hooks = 1 # 27 MiB; operational headroom
-coralbase = 5 # 2.42 GiB; roughly double
-distill-1030 = 1 # under 1 MiB; operational headroom
-dotfiles = 1 # 163 MiB; operational headroom
-dotfiles-handoff = 1 # under 1 MiB; operational headroom
-dotfiles-tickets = 1 # under 1 MiB; operational headroom
-firedancer-admission = 75 # 36.10 GiB; roughly double
-firedancer-evidence = 1 # 10 MiB; operational headroom
-firedancer-retention = 1 # under 1 MiB; operational headroom
-firedancer-runs = 1 # 131 MiB; operational headroom
-firedancer-runtime-canary = 1 # 4 MiB; operational headroom
-firedancer-tickets = 25 # 12.22 GiB measured; roughly double
-gh = 1 # under 1 MiB; operational headroom
-guest-capacity-recover = 1 # under 1 MiB; operational headroom
-herdr = 1 # under 1 MiB; operational headroom
-mise = 1 # 114 MiB; operational headroom
-nvim = 1 # under 1 MiB; operational headroom
-reason-network-quarantine-1108 = 1 # 10 MiB; operational headroom
-reclaim = 1 # 321 MiB; operational headroom
-repo-retrieve = 1 # under 1 MiB; operational headroom
-rr-about-repair-1105 = 1 # 2 MiB; operational headroom
-statusline = 1 # 3 MiB; operational headroom
-ws-gc = 1 # 15 MiB; operational headroom
-ws-retire-patches-1030 = 1 # 3 MiB; operational headroom
-wsl-capacity-recover = 1 # under 1 MiB; operational headroom

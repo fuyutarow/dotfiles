@@ -333,7 +333,6 @@ function validate(
       "launcher",
       "budget",
       "measure",
-      "state_budget",
     ],
     "top level",
     errors,

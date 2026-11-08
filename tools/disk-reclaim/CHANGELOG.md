@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.32 — 2026-11-08
+
+- workspace-gc: drop the --legacy option, which agx 9.0.0 removed; it is no longer accepted or offered in usage
+
 ## 1.12.31 — 2026-11-08
 
 - rip-expire and purge estimate burial time of unrecorded graveyard entries from ctime, reported as estimated

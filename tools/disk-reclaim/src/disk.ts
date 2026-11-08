@@ -32,11 +32,11 @@ const grammar: Record<string, string[]> = {
     "targets [TARGET... | --target TARGET]... [--tier TIER | --all] [--on windows] [--host ALIAS] [--only ABS] [--fetch] [--approve ITEM]... [--within DURATION]",
     "paths ABS... [--within DURATION]",
     "capacity --path ABS --min-available SIZE [--within DURATION]",
-    "workspace-gc [--all] [--legacy] [--within DURATION]",
+    "workspace-gc [--all] [--within DURATION]",
   ],
   move: [
     "paths ABS... [--within DURATION]",
-    "workspace-gc [--all] [--legacy] [--within DURATION]",
+    "workspace-gc [--all] [--within DURATION]",
   ],
   free: [
     "targets (TARGET... | --tier blind) [--only ABS] [--fetch] [--approve ITEM]... [--under-pressure] [--stop-on-error] [--within DURATION]",
@@ -66,9 +66,9 @@ const allowed: Record<string, string[]> = {
   ],
   "plan paths": ["within"],
   "plan capacity": ["path", "min-available", "within"],
-  "plan workspace-gc": ["all", "legacy", "within"],
+  "plan workspace-gc": ["all", "within"],
   "move paths": ["within"],
-  "move workspace-gc": ["all", "legacy", "within"],
+  "move workspace-gc": ["all", "within"],
   "free targets": [
     "tier",
     "only",
@@ -90,7 +90,6 @@ const allowed: Record<string, string[]> = {
 const flags = new Set([
   "all",
   "fetch",
-  "legacy",
   "under-pressure",
   "stop-on-error",
   "no-progress",
@@ -445,7 +444,6 @@ export async function main(
         fetch: Boolean,
         approve: [String],
         within: String,
-        legacy: Boolean,
         path: String,
         minAvailable: String,
         amount: String,

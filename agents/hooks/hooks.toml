@@ -46,6 +46,17 @@ matcher = "Grep|Bash"
 fail_closed = true
 vendors = ["claude", "codex"]
 
+# Both vendors: a Bash command may not name a rip graveyard other than the declared one
+# (`rip --graveyard X`, `GRAVEYARD=X rip`, …). Owner decision 2026-11-08: the rule lives here, not in
+# a PATH shim or zsh function; disk-reclaim covers the graveyards that already exist.
+[[hook]]
+slug = "graveyard-scope"
+script = "enforce-graveyard-scope.ts"
+event = "PreToolUse"
+matcher = "Bash"
+fail_closed = true
+vendors = ["claude", "codex"]
+
 # Codex only: Claude Code enforces .claude/settings.json permissions.deny itself.
 [[hook]]
 slug = "repo-bash-deny"

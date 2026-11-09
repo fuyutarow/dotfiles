@@ -52,6 +52,7 @@
 // is ever allowed to appear on stdout. A caller that reads only stdout+exit code (the documented
 // calling convention -- see repo-retrieve.test.ts and driving-cocoindex) can therefore never mistake
 // an unearned pass for an earned one.
+// The bounded-serving branch in ccc-index.ts conflicts with this law, is labelled `serving-stale-within-bound`, and awaits an owner ruling.
 
 import { access, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -844,7 +845,7 @@ async function runCccSearch(
     await writeNoIndexDiagnostic(route, project, freshness.message, json);
     return ok(3);
   }
-  // freshness.status === "fresh" here -- the branch above returns unconditionally. A watermark
+  // Both served states carry a watermark; the refusal branch above returns unconditionally. A watermark
   // can only reach this point if checkIndexFreshness confirmed source === "index" (a legacy
   // "stamp" watermark is refused as stale before it ever gets here -- see the source === "stamp"
   // branch there), so every fresh result was produced by `index` observing a real `ccc index`
@@ -870,6 +871,10 @@ async function runCccSearch(
   // PASS made today keeps `cite=` pointing at the commit it actually searched even after HEAD
   // moves on without it -- the claim was never about "current HEAD" to begin with.
   const confidence =
+    `status=${freshness.status} ` +
+    (freshness.status === "serving-stale-within-bound"
+      ? `gap=${freshness.gap} changed=${freshness.changed} `
+      : "") +
     `confidence=verified(index) indexedAt=${freshness.watermark.indexedAt} ` +
     `head=${headLabel(freshness.watermark.head)} cite=${citationToken(freshness.watermark)}`;
 

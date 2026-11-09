@@ -213,7 +213,7 @@ function fakeTools(): { bin: string; log: string } {
 case "$1" in
   */ccc_defs.py) if [ -n "\${FAKE_DEFS_FILE:-}" ]; then cp "$FAKE_DEFS_FILE" "$3"; exit 0; fi ;;
   */ccc_plan.py) if [ -n "\${FAKE_PLAN_TRACE:-}" ]; then printf 'planner %s\n' "$*" >> "$FAKE_SEARCH_LOG"; fi; if [ "\${3:-}" = --validate-excludes ]; then printf '[]'; elif [ -n "\${FAKE_PLAN_FILE:-}" ]; then cat "$FAKE_PLAN_FILE"; fi; exit 0 ;;
-  */ccc_scope.py) exit 1 ;;
+  */ccc_scope.py) if [ -n "\${FAKE_SCOPE_RESULT:-}" ]; then printf '%s' "$FAKE_SCOPE_RESULT"; exit 0; fi; exit 1 ;;
 esac
 exec /bin/sh "$@"
 `,
@@ -2059,6 +2059,44 @@ describe("repo-retrieve route contract", () => {
     expect(result.code).toBe(0);
     expect(result.stderr).toContain(`INDEX: built at`);
     expect(result.stdout).toContain("RESULT: PASS route=concept");
+    expect(result.stdout).toContain(
+      "status=serving-stale-within-bound gap=1 changed=1",
+    );
+  });
+
+  test("fresh, bounded stale and beyond-bound semantic results retain their serving decisions", () => {
+    const { dir } = registerGitProject();
+    run(dir, ["index"]);
+    const fresh = run(dir, ["about", "x"]);
+    expect(fresh.code).toBe(0);
+    expect(fresh.stdout).toContain("status=fresh");
+    writeFileSync(join(dir, "later.md"), "later\n");
+    gitCmd(dir, ["add", "later.md"]);
+    gitCmd(dir, ["commit", "-q", "-m", "later"]);
+    const stale = run(dir, ["about", "x"], {
+      FAKE_SCOPE_RESULT: '["later.md"]',
+    });
+    expect(stale.code).toBe(0);
+    expect(stale.stdout).toContain(
+      "status=serving-stale-within-bound gap=1 changed=1",
+    );
+    const refused = run(dir, ["about", "x"], {
+      FAKE_SCOPE_RESULT: '["later.md"]',
+      REPO_RETRIEVE_MAX_STALE_COMMITS: "0",
+    });
+    expect(refused.code).toBe(3);
+    expect(refused.stderr).toContain(
+      "RESULT: NO_INDEX route=concept engine=ccc",
+    );
+    expect(refused.log).not.toContain("ccc search");
+    const noMatch = run(dir, ["about", "x"], {
+      FAKE_SCOPE_RESULT: '["later.md"]',
+      FAKE_SEARCH_EMPTY: "1",
+    });
+    expect(noMatch.code).toBe(1);
+    expect(noMatch.stderr).toContain(
+      "status=serving-stale-within-bound gap=1 changed=1",
+    );
   });
 
   test("stale search requests detached reindex even while the daemon is busy", () => {
@@ -2097,6 +2135,19 @@ describe("repo-retrieve route contract", () => {
     const result = run(dir, ["concept", "--query", "x"]);
     expect(result.code).toBe(0);
     expect(result.stderr).toContain("all 0 path(s) changed since are outside");
+    expect(result.stdout).toContain("status=fresh");
+  });
+
+  test("out-of-scope changed files still produce a fresh result", () => {
+    const { dir } = registerGitProject();
+    run(dir, ["index"]);
+    writeFileSync(join(dir, "excluded.txt"), "excluded\n");
+    gitCmd(dir, ["add", "excluded.txt"]);
+    gitCmd(dir, ["commit", "-q", "-m", "excluded"]);
+    const result = run(dir, ["about", "x"], { FAKE_SCOPE_RESULT: "[]" });
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain("all 1 path(s) changed since are outside");
+    expect(result.stdout).toContain("status=fresh");
   });
 
   test("index leaves the watermark unchanged when ccc index itself fails", () => {

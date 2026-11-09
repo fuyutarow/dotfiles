@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.7 — 2026-11-09
+
+- Label bounded stale semantic search results with their commit and file gap.
+
 ## 1.12.6 — 2026-11-09
 
 - Bound auto-reindex receipts to the newest AUTO_REINDEX_RECEIPT_RETENTION files per DB directory

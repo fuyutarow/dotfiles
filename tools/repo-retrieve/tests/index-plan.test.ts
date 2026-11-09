@@ -5,7 +5,6 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
-  realpathSync,
   rmSync,
   truncateSync,
   symlinkSync,
@@ -69,7 +68,12 @@ async function cli(
   const child = Bun.spawn({
     cmd: [process.execPath, router, "index", ...args],
     cwd: root,
-    env: { ...process.env, REPO_RETRIEVE_AUTO_INDEX: "0", ...env },
+    env: {
+      ...process.env,
+      COCOINDEX_CODE_DB_PATH_MAPPING: "",
+      REPO_RETRIEVE_AUTO_INDEX: "0",
+      ...env,
+    },
     stdout: "pipe",
     stderr: "pipe",
     timeout: 30_000,
@@ -380,14 +384,14 @@ describe.skipIf(ccc === null)(
       expect(report).toContain("data-file limit 65536");
       const bin = join(root, "bin");
       mkdirSync(bin);
-      const shebang = readFileSync(realpathSync(ccc), "utf8").split("\n")[0];
-      expect(shebang).toBeDefined();
-      if (shebang === undefined) return;
+      const interpreter = await cccPython(ccc);
+      expect(interpreter).not.toBeNull();
+      if (interpreter === null) return;
       const called = join(root, "called");
       const fake = join(bin, "ccc");
       writeFileSync(
         fake,
-        `${shebang}\nfrom pathlib import Path\nPath(${JSON.stringify(called)}).write_text('called')\nraise SystemExit(1)\n`,
+        `#!${interpreter}\nfrom pathlib import Path\nPath(${JSON.stringify(called)}).write_text('called')\nraise SystemExit(1)\n`,
       );
       chmodSync(fake, 0o755);
       const refused = await cli(root, [], {
@@ -480,10 +484,9 @@ describe.skipIf(ccc === null)(
       // Same interpreter for scope, but every attempt to run ccc itself leaves evidence.
       const bin = join(root, "bin");
       mkdirSync(bin);
-      const [shebang] = readFileSync(realpathSync(ccc), "utf8").split("\n");
-      expect(shebang).toBeDefined();
-      if (shebang === undefined) return;
-      const interpreter = shebang.slice(2);
+      const interpreter = await cccPython(ccc);
+      expect(interpreter).not.toBeNull();
+      if (interpreter === null) return;
       const fake = join(bin, "ccc");
       const called = join(root, "called");
       writeFileSync(
@@ -628,10 +631,9 @@ describe.skipIf(ccc === null)(
       );
       const bin = join(root, "bin");
       mkdirSync(bin);
-      const [shebang] = readFileSync(realpathSync(ccc), "utf8").split("\n");
-      expect(shebang).toBeDefined();
-      if (shebang === undefined) return;
-      const interpreter = shebang.slice(2);
+      const interpreter = await cccPython(ccc);
+      expect(interpreter).not.toBeNull();
+      if (interpreter === null) return;
       const fake = join(bin, "ccc");
       writeFileSync(
         fake,

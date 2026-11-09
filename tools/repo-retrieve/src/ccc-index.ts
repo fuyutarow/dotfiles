@@ -834,6 +834,13 @@ type Freshness =
       note?: string;
       reindexPid?: number;
     }
+  | {
+      status: "serving-stale-within-bound";
+      watermark: Watermark;
+      gap: number;
+      changed: number;
+      reindexPid?: number;
+    }
   | { status: "stale"; message: string };
 
 // Deliberately NOT self-healing: an earlier design considered treating "the index DB's mtime is
@@ -979,9 +986,10 @@ export async function checkIndexFreshness(
       );
       const reindex = await requestAutoReindex(project);
       return ok({
-        status: "fresh",
+        status: "serving-stale-within-bound",
         watermark: watermark.value,
-        note: `INDEX: built at ${watermark.value.head.slice(0, 12)}, ${distance} commits / ${changedPaths.length} changed files behind; changed files: ${changed}`,
+        gap: distance,
+        changed: changedPaths.length,
         ...(reindex.isOk() &&
         reindex.value.started &&
         reindex.value.pid !== undefined

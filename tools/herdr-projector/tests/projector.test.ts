@@ -40,6 +40,12 @@ const session = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const fleetRead = (overrides: Record<string, unknown>): FleetSessionRead => {
+  const parsed = FleetSessionSchema.safeParse(session(overrides));
+  expect(parsed.success).toBe(true);
+  return parsed.success ? parsed.data : { na: true, why: "invalid fixture" };
+};
+
 const unit = (name: string) =>
   Bun.file(
     join(import.meta.dir, `../../../systemd/herdr-projector.${name}`),
@@ -705,7 +711,7 @@ async function writeNativeTitleIndex(
   );
 }
 
-test("bound native title preserves the canonical fleet name in projection", async () => {
+test("bound native title is the Codex projected label; fleet name stays the identity", async () => {
   await using fixture = await nativeFixture();
   await fixture.rollout(footerThread);
   await writeNativeTitleIndex(fixture, footerThread, "レビュー 🧭");
@@ -736,13 +742,128 @@ test("bound native title preserves the canonical fleet name in projection", asyn
     title: { kind: "known", displayTitle: "レビュー 🧭" },
   });
   await projectAgents(agents, sessions, apply, titles);
-  expect(calls[1]).toEqual(["tab", "rename", "tab", "canonical-agt_abcd"]);
-  expect(calls[2]).toContain("fullname=canonical-agt_abcd");
-  expect(calls.flat()).not.toContain("レビュー 🧭");
+  expect(calls[1]).toEqual(["tab", "rename", "tab", "レビュー 🧭"]);
+  expect(calls[2]).toContain("fullname=レビュー 🧭");
+  expect(calls.flat()).not.toContain("canonical-agt_abcd");
   expect(await readFleetSession(footerThread, fixture.env)).toMatchObject({
     name: "canonical-agt_abcd",
     session_id: footerThread,
   });
+});
+
+test("Codex with a known fleet name but no bound native title projects the fleet name", async () => {
+  await using fixture = await nativeFixture();
+  await fixture.rollout(footerThread);
+  await writeNativeTitleIndex(fixture, footerThread, "unbound title");
+  const prior = session({
+    vendor: "codex",
+    session_id: footerThread,
+    pane_id: "pane",
+    name: "canonical-agt_abcd",
+  });
+  expect((await writeFleetSession(prior, fixture.env)).ok).toBe(true);
+
+  // No footer observation binds the title to this pane, so no title is projected.
+  const agents = makeAgents();
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const sessions = new Map([
+    [
+      "stale",
+      fleetRead(
+        session({
+          vendor: "codex",
+          session_id: "stale",
+          pane_id: "pane",
+          name: "canonical-agt_abcd",
+        }),
+      ),
+    ],
+  ]);
+  await projectAgents(agents, sessions, apply, new Map());
+  expect(calls).toContainEqual(["tab", "rename", "tab", "canonical-agt_abcd"]);
+  expect(calls.flat()).toContain("fullname=canonical-agt_abcd");
+  expect(calls.flat()).not.toContain("unbound title");
+  expect(calls.flat()).not.toContain("fullname=codex · n/a(no session id)");
+});
+
+test("Codex with an unavailable title and known fleet name projects the fleet name", async () => {
+  const agents = makeAgents();
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const sessions = new Map([
+    [
+      "stale",
+      fleetRead(
+        session({
+          vendor: "codex",
+          session_id: "stale",
+          pane_id: "pane",
+          name: "canonical-agt_abcd",
+        }),
+      ),
+    ],
+  ]);
+  await projectAgents(agents, sessions, apply, new Map());
+  expect(calls).toContainEqual(["tab", "rename", "tab", "canonical-agt_abcd"]);
+  expect(calls.flat()).toContain("fullname=canonical-agt_abcd");
+});
+
+test("Codex with no title and no fleet name projects the unavailable label", async () => {
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  await projectAgents(makeAgents(), new Map(), apply, new Map());
+  expect(calls).toContainEqual([
+    "tab",
+    "rename",
+    "tab",
+    "codex · n/a(no session id)",
+  ]);
+});
+
+test("Claude projection keeps the fleet name as its label", async () => {
+  const calls: string[][] = [];
+  const apply = (args: string[]) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  };
+  const sessions = new Map([
+    [
+      "sid-claude",
+      fleetRead(
+        session({
+          session_id: "sid-claude",
+          vendor: "claude",
+          pane_id: "pane",
+          name: "claude-agt_1234",
+        }),
+      ),
+    ],
+  ]);
+  await projectAgents(
+    [
+      {
+        agent: "claude",
+        pane_id: "pane",
+        tab_id: "tab",
+        agent_session: { value: "sid-claude" },
+      },
+    ],
+    sessions,
+    apply,
+    new Map(),
+  );
+  expect(calls).toContainEqual(["tab", "rename", "tab", "claude-agt_1234"]);
+  expect(calls.flat()).toContain("fullname=claude-agt_1234");
 });
 
 test("native title is the Codex projection fallback when fleet name is unavailable", async () => {
@@ -876,8 +997,10 @@ test("unavailable native title keeps the fleet name in projection", async () => 
     knownTitles,
   );
   await projectAgents(agents, known, apply, knownTitles);
-  expect(calls.at(-2)).toEqual(["tab", "rename", "tab", "canonical-agt_abcd"]);
-  expect(calls.at(-1)).toContain("fullname=canonical-agt_abcd");
+  expect(calls.at(-2)).toEqual(["tab", "rename", "tab", "previous title"]);
+  expect(calls.at(-1)).toContain("fullname=previous title");
+  expect(calls.at(-1)).not.toContain("fullname=canonical-agt_abcd");
+  const beforeUnavailable = calls.length;
 
   await Bun.write(
     join(fixture.root, "session_index.jsonl"),
@@ -899,9 +1022,15 @@ test("unavailable native title keeps the fleet name in projection", async () => 
     title: { kind: "unavailable" },
   });
   await projectAgents(agents, unavailable, apply, unavailableTitles);
-  expect(calls.at(-2)).toEqual(["tab", "rename", "tab", "canonical-agt_abcd"]);
-  expect(calls.at(-1)).toContain("fullname=canonical-agt_abcd");
-  expect(calls.flat()).not.toContain("previous title");
+  const afterUnavailable = calls.slice(beforeUnavailable);
+  expect(afterUnavailable.at(-2)).toEqual([
+    "tab",
+    "rename",
+    "tab",
+    "canonical-agt_abcd",
+  ]);
+  expect(afterUnavailable.at(-1)).toContain("fullname=canonical-agt_abcd");
+  expect(afterUnavailable.flat()).not.toContain("previous title");
 });
 
 test("native title cache inputs react to source changes but ignore observation time", () => {

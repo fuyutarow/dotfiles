@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.9 — 2026-11-09
+
+- Show running Claude background shells with elapsed time
+
 ## 0.23.8 — 2026-11-08
 
 - Keep suggested GC removal commands explicit with --apply.

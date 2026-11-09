@@ -5,6 +5,7 @@ import { fleetLine } from "./fleet-line.ts";
 import { ctxSegment } from "./model-context.ts";
 import { rateRow } from "./rate-limits.ts";
 import { routeLines } from "./dispatch-display.ts";
+import { shellLines } from "./shells.ts";
 import { listingProgress } from "./dispatch-state.ts";
 import type { RouteRun } from "./dispatch-runs.ts";
 import { sysRow } from "./host-display.ts";
@@ -301,7 +302,11 @@ export function render(
     agent: observed(agentLine),
     rate: observed(rateLine),
     sys: observed(sysLine),
-    agx: observed(agxBlock),
+    agx: observed(
+      [agxBlock, df.shells === undefined ? "" : shellLines(df.shells)]
+        .filter(Boolean)
+        .join("\n"),
+    ),
     fleet: observed(bottom),
     "dispatch-warning": observed(""),
     recover: observed(""),

@@ -23,6 +23,17 @@ bun test tools/statusline/tests
 
 ## Unavailable values and Stop snapshots
 
+Claude stdin renders a `shell` row per session task whose output file is held
+open for writing by a same-UID Linux process. The task ID is the label; the
+output file's creation time approximates its start time. A shell that redirects
+its own stdout and stderr away from its output file is not shown. An unreadable
+or incomplete scan, including on macOS, displays `shells: unknown`. The scan
+caps the task directory at 2048 entries, `/proc` at 8192 entries, and each
+process at 256 descriptors; exceeding a cap is unknown. The scan runs in the
+statusline process with no time limit, so a slow filesystem can delay rendering.
+Only task names and metadata are read, not task output contents. Each matching
+fdinfo read is limited to 4096 bytes.
+
 Session discovery uses `/proc` on Linux and `ps` plus `lsof` on macOS. The
 sampler records a `sessions` field with a null value and an error explaining a
 discovery failure; an empty array means discovery succeeded with no sessions.

@@ -546,7 +546,12 @@ exec "${process.execPath}" -e '${AGX_FIXTURE_RUNNER}'`,
       .replaceAll("5ab1a046da60", HOST)
       // Land bumps package.json after admitting a changeset; the suffix follows that import.
       .replaceAll(/v\d+\.\d+\.\d+/gu, `v${version}`);
-    expect(decodedJson(z.json(), JSON.stringify(await run(NEW)) ?? "")).toEqual(
+    const actual = await run(NEW);
+    if (input.startsWith("{") && !input.includes('"bad"'))
+      expect(actual.stdout).toContain("\nshells: unknown");
+    if (actual.stdout.includes("\nshells: unknown"))
+      actual.stdout = actual.stdout.replace("\nshells: unknown", "");
+    expect(decodedJson(z.json(), JSON.stringify(actual) ?? "")).toEqual(
       decodedJson(z.json(), expected),
     );
   }

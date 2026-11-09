@@ -1,6 +1,7 @@
 // Stdin JSON -> the existing statusline bytes; no harness configuration cutover.
 import { DIM, ESC, RST } from "./ansi.ts";
 import { readInput } from "./stdin.ts";
+import { scanShells } from "./shells.ts";
 import { presentation } from "./presentation.ts";
 import { readCoreRuns } from "./core-runs.ts";
 import cliPackage from "../package.json" with { type: "json" };
@@ -527,6 +528,8 @@ if (liveMode) {
 } else {
   const current = session ?? {};
   const df = await buildDataframe(current, { codex: codexMode });
+  if (!codexMode && session !== undefined)
+    df.shells = await scanShells(session.cwd, session.sessionId);
   if (!codexMode && session !== undefined)
     await writeUsageSnapshotAsync(
       {

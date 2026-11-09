@@ -9,6 +9,7 @@ import type { JevUsage } from "./jev-usage.ts";
 import type { JobRun, RouteScan } from "./dispatch-runs.ts";
 import type { RecoverHealth } from "./recover-health.ts";
 import type { DisplayFields } from "./field-state.ts";
+import type { ShellScan } from "./shells.ts";
 
 // Every value this file can show, already computed — the sole output of buildDataframe() and
 // sole input to render(). Raw facts remain separate from `fields`, the retained presentation
@@ -19,6 +20,7 @@ import type { DisplayFields } from "./field-state.ts";
 // buildDataframe() assembles this object as one literal rather than conditionally spreading each
 // of the ~11 optional keys in and out.
 export interface Dataframe {
+  shells?: ShellScan | undefined;
   fields?: DisplayFields;
   ownerAges?: Record<string, number>;
   cwd: string;

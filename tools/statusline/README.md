@@ -28,8 +28,13 @@ open for writing by a same-UID Linux process. The task ID is the label; the
 output file's creation time approximates its start time. A shell that redirects
 its own stdout and stderr away from its output file is not shown. An unreadable
 or incomplete scan, including on macOS, displays `shells: unknown`. The scan
-caps the task directory at 2048 entries, `/proc` at 8192 entries, and each
-process at 256 descriptors; exceeding a cap is unknown. The scan runs in the
+caps the task directory at 2048 entries and `/proc` at 8192 entries; exceeding
+either cap is unknown. Two kinds of process are skipped rather than making the
+scan unknown: a same-UID process whose descriptor listing or any descriptor
+`readlink` the kernel refuses with `EACCES`/`EPERM` (non-dumpable processes such
+as `sshd-session`, `ssh-agent`, and `sd-pam`), and a process with more than 256
+descriptors. Skipped descriptors are not counted as holders, so a shell seen only
+through a skipped process is not shown. The scan runs in the
 statusline process with no time limit, so a slow filesystem can delay rendering.
 Only task names and metadata are read, not task output contents. Each matching
 fdinfo read is limited to 4096 bytes.

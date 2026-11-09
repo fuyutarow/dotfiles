@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.10 — 2026-11-09
+
+- statusline: count running background shells when same-UID processes refuse fd inspection
+
 ## 0.23.9 — 2026-11-09
 
 - Show running Claude background shells with elapsed time

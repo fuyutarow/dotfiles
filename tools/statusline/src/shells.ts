@@ -29,6 +29,18 @@ function gone(error: unknown): boolean {
   const parsed = errorSchema.safeParse(error);
   return parsed.success && parsed.data.code === "ENOENT";
 }
+/**
+ * The kernel refuses the fd listing of a same-UID process that is not dumpable
+ * (sshd-session, ssh-agent, sd-pam). Such a process is not inspectable by any
+ * same-UID reader, so it is skipped rather than turning the whole scan unknown.
+ */
+function refused(error: unknown): boolean {
+  const parsed = errorSchema.safeParse(error);
+  return (
+    parsed.success &&
+    (parsed.data.code === "EACCES" || parsed.data.code === "EPERM")
+  );
+}
 
 /** Read only same-UID proc entries. Any incomplete scan is unknown, never an empty result. */
 export async function scanShells(
@@ -68,12 +80,25 @@ export async function scanShells(
           const base = join(proc, pid);
           return Promise.try(async () => {
             if ((await stat(base)).uid !== uid) return true;
-            const fds = await entries(join(base, "fd"), FD_LIMIT);
-            if (fds === undefined) return false;
+            const listed = await entries(join(base, "fd"), FD_LIMIT).then(
+              (fds) => ({ failed: false as const, fds }),
+              (error: unknown) => ({ failed: true as const, error }),
+            );
+            if (listed.failed)
+              return refused(listed.error) || gone(listed.error);
+            // undefined: over FD_LIMIT. Skipped, not evidence of an unreadable source; see README.
+            if (listed.fds === undefined) return true;
+            const fds = listed.fds;
             const results = await Promise.all(
               fds.map(async (fd) =>
                 Promise.try(async () => {
-                  const target = await readlink(join(base, "fd", fd));
+                  const linked = await readlink(join(base, "fd", fd)).then(
+                    (target) => ({ failed: false as const, target }),
+                    (error: unknown) => ({ failed: true as const, error }),
+                  );
+                  if (linked.failed)
+                    return refused(linked.error) || gone(linked.error);
+                  const target = linked.target;
                   const name = target.startsWith(`${taskDir}/`)
                     ? target.slice(taskDir.length + 1)
                     : "";

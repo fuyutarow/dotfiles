@@ -1,5 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import {
+  chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   statSync,
@@ -15,6 +17,8 @@ import { ok } from "neverthrow";
 
 const root = mkdtempSync(join(tmpdir(), "shells-fixture-"));
 afterAll(() => {
+  const refusedFd = join(root, "proc-refused", "21", "fd");
+  if (existsSync(refusedFd)) chmodSync(refusedFd, 0o755);
   rmSync(root, { recursive: true, force: true });
 });
 const uid = process.getuid?.() ?? 0;
@@ -74,4 +78,40 @@ test("unreadable source remains unknown", async () => {
     proc: join(root, "missing"),
   });
   expect(shellLines(scan)).toBe("shells: unknown");
+});
+// Live cause: /proc/<pid>/fd of a non-dumpable same-UID process (sshd-session,
+// ssh-agent) is refused with EACCES; that used to turn the whole scan unknown.
+test.skipIf(uid === 0)(
+  "refused non-dumpable process is skipped, writer row kept",
+  async () => {
+    const refusedProc = join(root, "proc-refused");
+    mkdirSync(join(refusedProc, "20", "fd"), { recursive: true });
+    mkdirSync(join(refusedProc, "20", "fdinfo"));
+    symlinkSync(output, join(refusedProc, "20", "fd", "1"));
+    writeFileSync(join(refusedProc, "20", "fdinfo", "1"), "flags:\t0100001\n");
+    mkdirSync(join(refusedProc, "21", "fd"), { recursive: true });
+    chmodSync(join(refusedProc, "21", "fd"), 0o000);
+    const scan = await scanShells(cwd, sid, { ...options, proc: refusedProc });
+    expect(scan).toEqual({
+      kind: "known",
+      rows: [{ id: "running", seconds: 90 }],
+    });
+  },
+);
+// Over FD_LIMIT (256) descriptors: the process is skipped (documented blind spot),
+// the scan stays known, and a holder in a small process still renders.
+test("over-cap descriptor list is skipped, other holders still render", async () => {
+  const capProc = join(root, "proc-cap");
+  mkdirSync(join(capProc, "30", "fd"), { recursive: true });
+  for (let fd = 0; fd <= 256; fd += 1)
+    symlinkSync("/dev/null", join(capProc, "30", "fd", String(fd)));
+  mkdirSync(join(capProc, "31", "fd"), { recursive: true });
+  mkdirSync(join(capProc, "31", "fdinfo"));
+  symlinkSync(output, join(capProc, "31", "fd", "1"));
+  writeFileSync(join(capProc, "31", "fdinfo", "1"), "flags:\t0100001\n");
+  const scan = await scanShells(cwd, sid, { ...options, proc: capProc });
+  expect(scan).toEqual({
+    kind: "known",
+    rows: [{ id: "running", seconds: 90 }],
+  });
 });

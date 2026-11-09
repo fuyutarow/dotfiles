@@ -400,20 +400,23 @@ export async function computeIndexPlan(
       return err(
         new Error("index plan refused: cannot locate ccc's Python interpreter"),
       );
+    // The limits document carries the changed-path list, which grows with the watermark gap.
+    // Linux caps each argv string at MAX_ARG_STRLEN (128 KiB), so it travels on stdin.
+    const limits = JSON.stringify({
+      ...CONTENT_LIMITS,
+      ...aggregateByteLimits(budget),
+      file_byte_allowances: budget.file_byte_allowances ?? {},
+      ...(basis.mode === "incremental"
+        ? { changed: basis.changed, recorded_ccc: basis.recordedCcc }
+        : {}),
+    });
     const child = Bun.spawn({
       cmd: [
         python,
         join(import.meta.dir, "ccc_plan.py"),
         project,
         "--limits",
-        JSON.stringify({
-          ...CONTENT_LIMITS,
-          ...aggregateByteLimits(budget),
-          file_byte_allowances: budget.file_byte_allowances ?? {},
-          ...(basis.mode === "incremental"
-            ? { changed: basis.changed, recorded_ccc: basis.recordedCcc }
-            : {}),
-        }),
+        "-",
       ],
       cwd: project,
       env: {
@@ -422,6 +425,7 @@ export async function computeIndexPlan(
         RUST_LOG: "error",
         OTEL_SDK_DISABLED: "true",
       },
+      stdin: new Response(limits),
       stdout: "pipe",
       stderr: "pipe",
       timeout: 120_000,

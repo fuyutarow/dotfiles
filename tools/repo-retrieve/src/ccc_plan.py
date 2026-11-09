@@ -106,9 +106,10 @@ def main() -> None:
     )
     # Policy lives in index-plan.ts. Metadata for every effective candidate is
     # retained, but rejected workloads never require unbounded content reads.
-    limits = json.loads(sys.argv[3]) if sys.argv[2:3] == ["--limits"] else None
-    if limits is None:
-        raise ValueError("planner requires content limits from index-plan.ts")
+    # Limits arrive on stdin (`--limits -`): the changed-path list can exceed one argv string.
+    if sys.argv[2:4] != ["--limits", "-"]:
+        raise ValueError("planner requires content limits on stdin from index-plan.ts")
+    limits = json.load(sys.stdin)
     allowances = limits.get("file_byte_allowances", {})
     try:
         installed = package_version("cocoindex-code")

@@ -1203,3 +1203,48 @@ test("allowances reject directory and symlink aliases and never add excluded can
   if (result.isErr()) return;
   expect(result.value.files.map((file) => file.path)).toEqual(["source.ts"]);
 });
+
+// A changed list grows with the watermark gap; one argv string tops out at 128 KiB on Linux.
+// The limits document therefore travels on stdin, and the plan must not depend on the gap size.
+test.skipIf(ccc === null)(
+  "a changed-path list beyond one argv string plans through stdin and keeps incremental charge",
+  async () => {
+    if (ccc === null) return;
+    const root = fixture();
+    const interpreter = await cccPython(ccc);
+    expect(interpreter).not.toBeNull();
+    if (interpreter === null) return;
+    const version = (
+      await new Response(
+        Bun.spawn(
+          [
+            interpreter,
+            "-c",
+            "from importlib.metadata import version as v; print(v('cocoindex-code'))",
+          ],
+          { stdout: "pipe" },
+        ).stdout,
+      ).text()
+    ).trim();
+    const changed = Array.from(
+      { length: 5000 },
+      (_, i) => `docs/generated/section-${String(i).padStart(6, "0")}/entry.md`,
+    );
+    expect(changed.join("").length).toBeGreaterThan(128 * 1024);
+    const result = await computeIndexPlan(root, ccc, {
+      basis: {
+        mode: "incremental",
+        since: "fixture-watermark",
+        recordedCcc: version,
+        changed,
+      },
+    });
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    expect(result.value.violations).toEqual([]);
+    expect(result.value.charge.mode).toBe("incremental");
+    // Unchanged fixture files are not billed, so the incremental plan lists none of them.
+    expect(result.value.files).toEqual([]);
+  },
+  60_000,
+);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.8 — 2026-11-09
+
+- index plan: pass the planner's limits document on stdin so a large changed-path list no longer hits E2BIG
+
 ## 1.12.7 — 2026-11-09
 
 - Label bounded stale semantic search results with their commit and file gap.

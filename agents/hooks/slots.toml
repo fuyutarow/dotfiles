@@ -1,0 +1,50 @@
+# Append-only history of the registry's hook positions (agents/hooks/hooks.toml `position`).
+#
+# WHY. Codex keys hook trust by <hooks.json path>:<event>:<group>:<handler> and a rendered group
+# index is the hook's place in its event's array. A hook inserted above another shifts that
+# other's index, so Codex stops trusting it and silently skips it (incident 2026-11-08: the
+# repo-bash-deny gate). scripts/hook-registry.ts checks this file against hooks.toml:
+#   - a live hook's [[slot]] must match its event and position; positions never change;
+#   - a new hook needs a [[slot]] whose position is above every earlier one of its event;
+#   - a removed hook is marked retired = true, and only the last position of its event may go.
+# Entries are only ever appended; never edit or delete a line that has been committed.
+
+[[slot]]
+script = "enforce-storage-headroom.ts"
+event = "PreToolUse"
+position = 0
+
+[[slot]]
+script = "enforce-model-floor.ts"
+event = "PreToolUse"
+position = 1
+
+[[slot]]
+script = "enforce-search-route.ts"
+event = "PreToolUse"
+position = 2
+
+[[slot]]
+script = "enforce-graveyard-scope.ts"
+event = "PreToolUse"
+position = 3
+
+[[slot]]
+script = "enforce-repo-bash-deny.ts"
+event = "PreToolUse"
+position = 4
+
+[[slot]]
+script = "remind-reply-language.ts"
+event = "UserPromptSubmit"
+position = 0
+
+[[slot]]
+script = "report-codex-herdr-metadata.ts"
+event = "PostToolUse"
+position = 0
+
+[[slot]]
+script = "enforce-coord-idle-turn.ts"
+event = "Stop"
+position = 0

@@ -22,7 +22,12 @@ import { resolve, join } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { brewPrefix } from "../core-tools.ts";
 import { resolveRole } from "../config-registry.ts";
-import { HooksConfigSchema } from "../hook-registry.ts";
+import {
+  type HooksConfig,
+  HooksConfigSchema,
+  loadRegistry,
+  wire,
+} from "../hook-registry.ts";
 import {
   isolatedTestEnv,
   TEST_TMPDIR,
@@ -109,7 +114,7 @@ function writeOtherInputs(dir: string, productionCli = false): void {
   writeFileSync(join(dir, "agents", "hooks", "gate.ts"), "// fixture\n");
   writeFileSync(
     join(dir, "agents", "hooks", "hooks.toml"),
-    '[[hook]]\nslug = "gate"\nscript = "gate.ts"\nevent = "PreToolUse"\nmatcher = "Bash"\nfail_closed = true\nvendors = ["claude", "codex"]\n',
+    '[[hook]]\nslug = "gate"\nscript = "gate.ts"\nevent = "PreToolUse"\nposition = 0\nmatcher = "Bash"\nfail_closed = true\nvendors = ["claude", "codex"]\n',
   );
 }
 
@@ -1108,5 +1113,168 @@ describe("Reason Network Codex hooks", () => {
       "codex-goal-kernel",
     );
     cleanup(home);
+  });
+});
+
+const hookEntry = (script: string, position: number): string =>
+  `[[hook]]\nslug = "${script.replace(/\.ts$/u, "")}"\nscript = "${script}"\nevent = "PreToolUse"\nposition = ${position}\nmatcher = "Bash"\nfail_closed = true\nvendors = ["codex"]\n`;
+const slotEntry = (script: string, position: number, retired = false): string =>
+  `[[slot]]\nscript = "${script}"\nevent = "PreToolUse"\nposition = ${position}\n${retired ? "retired = true\n" : ""}`;
+
+describe("render-home: Codex PreToolUse indices are declared, not listed", () => {
+  // Two hand-written groups precede the registry's, as in agents/codex/hooks.json.
+  const staticGroups: HooksConfig = {
+    PreToolUse: [
+      {
+        matcher: "Agent",
+        hooks: [{ type: "command", command: "static dispatch" }],
+      },
+      { matcher: "*", hooks: [{ type: "command", command: "static goal" }] },
+    ],
+  };
+  const made: string[] = [];
+  afterAll(() => {
+    for (const dir of made) rmSync(dir, { recursive: true, force: true });
+  });
+
+  async function registry(
+    hooks: [script: string, position: number][],
+    slots: string,
+  ) {
+    const dir = mkdtempSync(join(TEST_TMPDIR, "hook-order-"));
+    made.push(dir);
+    for (const [script] of hooks)
+      writeFileSync(join(dir, script), "// fixture\n");
+    writeFileSync(
+      join(dir, "hooks.toml"),
+      hooks.map(([script, position]) => hookEntry(script, position)).join("\n"),
+    );
+    writeFileSync(join(dir, "slots.toml"), slots);
+    return loadRegistry(dir);
+  }
+
+  // The rendered PreToolUse group index of every registry hook, keyed by script.
+  function indices(specs: Awaited<ReturnType<typeof loadRegistry>>["specs"]) {
+    const groups = wire(staticGroups, specs, "codex")["PreToolUse"] ?? [];
+    const out: Record<string, number> = {};
+    groups.forEach((group, index) => {
+      for (const hook of group.hooks) {
+        const script = String(hook["command"]).split(" ").at(-1) ?? "";
+        if (script.endsWith(".ts")) out[script] = index;
+      }
+    });
+    return out;
+  }
+
+  const base: [string, number][] = [
+    ["a.ts", 0],
+    ["b.ts", 1],
+    ["c.ts", 2],
+  ];
+  const baseSlots =
+    slotEntry("a.ts", 0) + slotEntry("b.ts", 1) + slotEntry("c.ts", 2);
+
+  test("the base order renders at the static-group offset", async () => {
+    const before = await registry(base, baseSlots);
+    expect(before.errors).toEqual([]);
+    expect(indices(before.specs)).toEqual({ "a.ts": 2, "b.ts": 3, "c.ts": 4 });
+  });
+
+  test("inserting a hook at a new tail position keeps every existing index", async () => {
+    const before = indices((await registry(base, baseSlots)).specs);
+    const after = await registry(
+      [...base, ["d.ts", 3]],
+      `${baseSlots}${slotEntry("d.ts", 3)}`,
+    );
+    expect(after.errors).toEqual([]);
+    const now = indices(after.specs);
+    for (const script of Object.keys(before))
+      expect(now[script]).toBe(before[script]);
+    expect(now["d.ts"]).toBe(5);
+  });
+
+  test("inserting a hook above an existing position is refused, not rendered", async () => {
+    const inserted = await registry(
+      [
+        ["a.ts", 0],
+        ["d.ts", 1],
+        ["b.ts", 2],
+        ["c.ts", 3],
+      ],
+      `${baseSlots}${slotEntry("d.ts", 3)}`,
+    );
+    expect(inserted.errors.join("\n")).toContain(
+      "b.ts: hooks.toml says PreToolUse position 2",
+    );
+  });
+
+  test("removing the last position keeps every remaining index", async () => {
+    const before = indices((await registry(base, baseSlots)).specs);
+    const after = await registry(
+      [
+        ["a.ts", 0],
+        ["b.ts", 1],
+      ],
+      baseSlots.replace(slotEntry("c.ts", 2), slotEntry("c.ts", 2, true)),
+    );
+    expect(after.errors).toEqual([]);
+    expect(indices(after.specs)).toEqual({ "a.ts": 2, "b.ts": 3 });
+    expect(indices(after.specs)).toEqual(
+      Object.fromEntries(Object.entries(before).filter(([s]) => s !== "c.ts")),
+    );
+  });
+
+  test("removing a middle hook is refused, because later hooks would shift", async () => {
+    const removed = await registry(
+      [
+        ["a.ts", 0],
+        ["c.ts", 2],
+      ],
+      baseSlots.replace(slotEntry("b.ts", 1), slotEntry("b.ts", 1, true)),
+    );
+    expect(removed.errors.join("\n")).toContain("removing b.ts");
+    expect(removed.errors.join("\n")).toContain("would shift c.ts");
+  });
+
+  test("the rendered order follows declared positions, not list order", async () => {
+    const shuffled = await registry(
+      [
+        ["c.ts", 2],
+        ["a.ts", 0],
+        ["b.ts", 1],
+      ],
+      baseSlots,
+    );
+    expect(shuffled.errors).toEqual([]);
+    expect(indices(shuffled.specs)).toEqual({
+      "a.ts": 2,
+      "b.ts": 3,
+      "c.ts": 4,
+    });
+  });
+
+  test("the live declarations keep today's Codex PreToolUse indices", async () => {
+    const root = join(import.meta.dir, "..", "..");
+    const live = await loadRegistry(join(root, "agents", "hooks"));
+    expect(live.errors).toEqual([]);
+    const codexFile = jsonOf(z.object({ hooks: HooksConfigSchema })).safeParse(
+      readFileSync(join(root, "agents", "codex", "hooks.json"), "utf8"),
+    );
+    expect(codexFile.success).toBe(true);
+    if (!codexFile.success) return;
+    const groups =
+      wire(codexFile.data.hooks, live.specs, "codex")["PreToolUse"] ?? [];
+    // Groups 0 and 1 are the hand-written entries; the registry's start at 2, in declared order.
+    const registryScripts = groups
+      .slice(2)
+      .map((group) => String(group.hooks[0]?.["command"]).split(" ").at(-1));
+    expect(groups).toHaveLength(7);
+    expect(registryScripts).toEqual([
+      "enforce-storage-headroom.ts",
+      "enforce-model-floor.ts",
+      "enforce-search-route.ts",
+      "enforce-graveyard-scope.ts",
+      "enforce-repo-bash-deny.ts",
+    ]);
   });
 });

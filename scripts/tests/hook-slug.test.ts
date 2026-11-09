@@ -111,7 +111,12 @@ test("a fixture hook renders for both Claude and Codex with its nested slug", as
   await Bun.write(join(hooksDir, "fixture-nested.ts"), "// Fixture hook.\n");
   await Bun.write(
     registryPath,
-    `${await Bun.file(registryPath).text()}\n[[hook]]\nslug = "agx:workspace-add"\nscript = "fixture-nested.ts"\nevent = "PreToolUse"\nmatcher = "Bash"\nfail_closed = true\nvendors = ["claude", "codex"]\n`,
+    `${await Bun.file(registryPath).text()}\n[[hook]]\nslug = "agx:workspace-add"\nscript = "fixture-nested.ts"\nevent = "PreToolUse"\nposition = 9\nmatcher = "Bash"\nfail_closed = true\nvendors = ["claude", "codex"]\n`,
+  );
+  const slotsPath = join(hooksDir, "slots.toml");
+  await Bun.write(
+    slotsPath,
+    `${await Bun.file(slotsPath).text()}\n[[slot]]\nscript = "fixture-nested.ts"\nevent = "PreToolUse"\nposition = 9\n`,
   );
   await using cleanup = new AsyncDisposableStack();
   cleanup.defer(async () => {

@@ -28,6 +28,7 @@ test("Codex metadata bridge is canonical, Codex-only and wired once without repl
       fail_closed: false,
       timeout: 10,
       vendors: ["codex"],
+      position: 0,
     },
   ]);
   const vendor = jsonOf(z.object({ hooks: HooksConfigSchema })).safeParse(
@@ -84,6 +85,7 @@ const storage: HookSpec = {
   matcher: "Bash",
   fail_closed: true,
   vendors: ["claude", "codex"],
+  position: 0,
 };
 
 const vendorOnly: HooksConfig = {
@@ -207,8 +209,10 @@ describe("parseRegistry", () => {
       "hook[0].script must be a bare <name>.ts",
       "hook[0].event must be a non-empty string",
       "hook[0].fail_closed must be true or false",
+      "hook[0].position must be a non-negative integer",
       "hook[0].vendors must be a non-empty subset of claude, codex",
       "hook[1].script missing.ts is not in agents/hooks",
+      "hook[1].position must be a non-negative integer",
     ]);
   });
 

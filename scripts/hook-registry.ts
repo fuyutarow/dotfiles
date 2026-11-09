@@ -29,7 +29,28 @@ export type HookSpec = {
   fail_closed: boolean;
   timeout?: number;
   vendors: Vendor[];
+  /** Declared slot within its event. Rendered order follows it, never the list order in hooks.toml. */
+  position: number;
 };
+
+/** One line of agents/hooks/slots.toml: the append-only history of a hook's position. */
+export type Slot = {
+  script: string;
+  event: string;
+  position: number;
+  retired: boolean;
+};
+
+const SlotsSchema = z.object({
+  slot: z.array(
+    z.object({
+      script: z.string(),
+      event: z.string(),
+      position: z.number().int().nonnegative(),
+      retired: z.boolean().optional(),
+    }),
+  ),
+});
 
 // Vendor files carry fields this module does not own (matcher, command, timeout, and whatever a
 // vendor adds), so the schemas are LOOSE: parsing validates the fields the logic reads and keeps
@@ -56,10 +77,63 @@ const knownVendorsOf = (vendors: unknown): Vendor[] =>
     return p.success ? [p.data] : [];
   });
 
+/** Every live position must be the one the append-only history records (slots.toml). Positions
+ * are per event and never reused; a new hook takes a position above all recorded ones; a removed
+ * hook must be the last live position of its event, else the hooks after it would shift index. */
+export function checkHistory(specs: HookSpec[], history: Slot[]): string[] {
+  const errors: string[] = [];
+  const highest = new Map<string, number>();
+  const bySlot = new Map<string, Slot>();
+  history.forEach((slot, i) => {
+    const at = `slots.toml slot[${i}] ${slot.script}`;
+    const top = highest.get(slot.event);
+    if (top !== undefined && slot.position <= top)
+      errors.push(
+        `${at}: ${slot.event} position ${slot.position} does not follow ${top}; positions are append-only`,
+      );
+    highest.set(slot.event, Math.max(top ?? -1, slot.position));
+    if (bySlot.has(slot.script)) errors.push(`${at}: listed more than once`);
+    else bySlot.set(slot.script, slot);
+  });
+  const live = new Set(specs.map((spec) => spec.script));
+  for (const spec of specs) {
+    const slot = bySlot.get(spec.script);
+    if (slot === undefined)
+      errors.push(
+        `${spec.script} has no slots.toml entry; append a [[slot]] with its event and position`,
+      );
+    else if (
+      slot.retired ||
+      slot.event !== spec.event ||
+      slot.position !== spec.position
+    )
+      errors.push(
+        `${spec.script}: hooks.toml says ${spec.event} position ${spec.position}, slots.toml says ${slot.event} position ${slot.position}${slot.retired ? " (retired)" : ""}; positions never change`,
+      );
+  }
+  for (const slot of history) {
+    if (live.has(slot.script)) continue;
+    if (!slot.retired) {
+      errors.push(
+        `${slot.script} is gone from hooks.toml; mark its slots.toml entry retired = true`,
+      );
+      continue;
+    }
+    for (const spec of specs.filter(
+      (s) => s.event === slot.event && s.position > slot.position,
+    ))
+      errors.push(
+        `removing ${slot.script} (${slot.event} position ${slot.position}) would shift ${spec.script} (position ${spec.position}); only the last position may be removed`,
+      );
+  }
+  return errors;
+}
+
 // Every error is collected, not the first one — a fixed typo should not reveal the next.
 export function parseRegistry(
   raw: unknown,
   scriptExists: (name: string) => boolean,
+  history?: Slot[],
 ): { specs: HookSpec[]; errors: string[] } {
   const errors: string[] = [];
   const specs: HookSpec[] = [];
@@ -67,13 +141,14 @@ export function parseRegistry(
   if (!registry.success || registry.data.hook.length === 0) {
     return { specs, errors: ["no [[hook]] entries"] };
   }
+  const claimed = new Map<string, number>(); // `${event} ${position}` -> hook index
   registry.data.hook.forEach((entry, i) => {
     const at = `hook[${i}]`;
     const before = errors.length;
     // A non-table entry reads as an empty one: every field below is then absent.
     const parsed = JsonObject.safeParse(entry);
     const h = parsed.success ? parsed.data : {};
-    const { script, event, matcher, timeout, vendors } = h;
+    const { script, event, matcher, timeout, vendors, position } = h;
     const failClosed = h["fail_closed"];
     if (typeof script !== "string" || !/^[\w.-]+\.ts$/u.test(script))
       errors.push(`${at}.script must be a bare <name>.ts`);
@@ -87,6 +162,12 @@ export function parseRegistry(
       errors.push(`${at}.fail_closed must be true or false`);
     if (timeout !== undefined && (typeof timeout !== "number" || timeout <= 0))
       errors.push(`${at}.timeout must be a positive number`);
+    if (
+      typeof position !== "number" ||
+      !Number.isInteger(position) ||
+      position < 0
+    )
+      errors.push(`${at}.position must be a non-negative integer`);
     const knownVendors = knownVendorsOf(vendors);
     if (
       !Array.isArray(vendors) ||
@@ -100,8 +181,16 @@ export function parseRegistry(
       errors.length === before &&
       typeof script === "string" &&
       typeof event === "string" &&
-      typeof failClosed === "boolean"
-    )
+      typeof failClosed === "boolean" &&
+      typeof position === "number"
+    ) {
+      const key = `${event} ${position}`;
+      const other = claimed.get(key);
+      if (other !== undefined)
+        errors.push(
+          `${at}.position ${position} on ${event} duplicates hook[${other}]`,
+        );
+      else claimed.set(key, i);
       specs.push({
         script,
         event,
@@ -109,12 +198,16 @@ export function parseRegistry(
         fail_closed: failClosed,
         ...(typeof timeout === "number" ? { timeout } : {}),
         vendors: knownVendors,
+        position,
       });
+    }
   });
+  if (history !== undefined) errors.push(...checkHistory(specs, history));
   return { specs, errors };
 }
 
-/** The registry beside the hooks it names: parsed specs, or every error found. */
+/** The registry beside the hooks it names: parsed specs, or every error found. The append-only
+ * history in `slots.toml` beside it is checked when present. */
 export async function loadRegistry(hooksDir: string): Promise<{
   specs: HookSpec[];
   errors: string[];
@@ -142,7 +235,34 @@ export async function loadRegistry(hooksDir: string): Promise<{
       }),
     );
   }
-  return parseRegistry(raw, (name) => existence.get(name) ?? false);
+  const slotsPath = `${hooksDir}/slots.toml`;
+  const slotsPresent = await access(slotsPath).then(
+    () => true,
+    () => false,
+  );
+  if (!slotsPresent) {
+    return parseRegistry(raw, (name) => existence.get(name) ?? false);
+  }
+  const slots = SlotsSchema.safeParse(
+    Bun.TOML.parse(await readFile(slotsPath, "utf8")),
+  );
+  if (!slots.success) {
+    const parsed = parseRegistry(raw, (name) => existence.get(name) ?? false);
+    return {
+      specs: parsed.specs,
+      errors: [
+        ...parsed.errors,
+        `slots.toml is invalid: ${slots.error.message}`,
+      ],
+    };
+  }
+  const history: Slot[] = slots.data.slot.map((s) => ({
+    script: s.script,
+    event: s.event,
+    position: s.position,
+    retired: s.retired ?? false,
+  }));
+  return parseRegistry(raw, (name) => existence.get(name) ?? false, history);
 }
 
 export function commandFor(spec: HookSpec): string {
@@ -170,19 +290,27 @@ export function wire(
       .filter((g) => g.hooks.length > 0);
     if (kept.length > 0) out[event] = kept;
   }
+  // Per event, the declared position decides the order (a new entry cannot shift the others);
+  // events keep their first-appearance order in `specs`, so the rendered key order is unchanged.
+  const byEvent = new Map<string, HookSpec[]>();
   for (const spec of specs) {
     if (!spec.vendors.includes(vendor)) continue;
-    const group: MatcherGroup = {
-      ...(spec.matcher === undefined ? {} : { matcher: spec.matcher }),
-      hooks: [
-        {
-          type: "command",
-          command: commandFor(spec),
-          ...(spec.timeout === undefined ? {} : { timeout: spec.timeout }),
-        },
-      ],
-    };
-    (out[spec.event] ??= []).push(group);
+    byEvent.set(spec.event, [...(byEvent.get(spec.event) ?? []), spec]);
+  }
+  for (const [event, eventSpecs] of byEvent) {
+    for (const spec of eventSpecs.toSorted((a, b) => a.position - b.position)) {
+      const group: MatcherGroup = {
+        ...(spec.matcher === undefined ? {} : { matcher: spec.matcher }),
+        hooks: [
+          {
+            type: "command",
+            command: commandFor(spec),
+            ...(spec.timeout === undefined ? {} : { timeout: spec.timeout }),
+          },
+        ],
+      };
+      (out[event] ??= []).push(group);
+    }
   }
   return out;
 }

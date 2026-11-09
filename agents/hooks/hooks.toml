@@ -17,13 +17,17 @@
 # vendor_hook declares vendor-only identities; external lists third-party commands, owner and reason.
 # vendor_hook.script is relative to agents/; commands lists its exact hand-written registrations.
 # external.command is an exact allowlist match; an unlisted unowned command fails lint:hook-slug.
-# Fields: slug, script (file in agents/hooks), event, matcher (optional), fail_closed (a policy gate
-# must never fail open when bun is missing), timeout (seconds, optional), vendors.
+# Fields: slug, script (file in agents/hooks), event, position (per event, declared, never reused;
+# the rendered order follows it, not this list's order), matcher (optional), fail_closed (a policy
+# gate must never fail open when bun is missing), timeout (seconds, optional), vendors.
+# History: agents/hooks/slots.toml records every position append-only; a new [[hook]] needs a
+# [[slot]] above all recorded ones, and only the last position of an event may be retired.
 
 [[hook]]
 slug = "storage-headroom"
 script = "enforce-storage-headroom.ts"
 event = "PreToolUse"
+position = 0
 fail_closed = true
 vendors = ["claude", "codex"]
 
@@ -34,6 +38,7 @@ vendors = ["claude", "codex"]
 slug = "model-floor"
 script = "enforce-model-floor.ts"
 event = "PreToolUse"
+position = 1
 matcher = "Bash"
 fail_closed = true
 vendors = ["claude", "codex"]
@@ -42,6 +47,7 @@ vendors = ["claude", "codex"]
 slug = "search-route"
 script = "enforce-search-route.ts"
 event = "PreToolUse"
+position = 2
 matcher = "Grep|Bash"
 fail_closed = true
 vendors = ["claude", "codex"]
@@ -53,6 +59,7 @@ vendors = ["claude", "codex"]
 slug = "graveyard-scope"
 script = "enforce-graveyard-scope.ts"
 event = "PreToolUse"
+position = 3
 matcher = "Bash"
 fail_closed = true
 vendors = ["claude", "codex"]
@@ -62,6 +69,7 @@ vendors = ["claude", "codex"]
 slug = "repo-bash-deny"
 script = "enforce-repo-bash-deny.ts"
 event = "PreToolUse"
+position = 4
 matcher = "Bash"
 fail_closed = true
 vendors = ["codex"]
@@ -71,6 +79,7 @@ vendors = ["codex"]
 slug = "reply-language-reminder"
 script = "remind-reply-language.ts"
 event = "UserPromptSubmit"
+position = 0
 fail_closed = false
 vendors = ["claude"]
 
@@ -192,6 +201,7 @@ commands = ["sh ~/.codex/hooks/run-herdr-metadata.sh"]
 slug = "codex-herdr-metadata-post-tool"
 script = "report-codex-herdr-metadata.ts"
 event = "PostToolUse"
+position = 0
 matcher = "*"
 fail_closed = false
 timeout = 10
@@ -224,6 +234,7 @@ reason = "Vendored Herdr integration; upstream owns and overwrites its implement
 slug = "coord-idle-turn"
 script = "enforce-coord-idle-turn.ts"
 event = "Stop"
+position = 0
 fail_closed = false
 timeout = 20
 vendors = ["claude"]

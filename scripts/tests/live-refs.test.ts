@@ -64,7 +64,7 @@ async function fixture(): Promise<{ home: string; repo: string }> {
   );
   await writeFile(
     join(repo, "agents/hooks/hooks.toml"),
-    '[[hook]]\nscript = "shared.ts"\nevent = "PreToolUse"\nfail_closed = true\nvendors = ["claude", "codex"]\n',
+    '[[hook]]\nscript = "shared.ts"\nevent = "PreToolUse"\nposition = 0\nfail_closed = true\nvendors = ["claude", "codex"]\n',
   );
   await writeFile(join(repo, "agents/claude/hooks/run.sh"), "#!/bin/sh\n");
   await writeFile(join(repo, "agents/codex/hooks/run.sh"), "#!/bin/sh\n");
@@ -217,7 +217,7 @@ describe("live repo references", () => {
     );
     await writeFile(
       join(repo, "agents/hooks/hooks.toml"),
-      '[[hook]]\nscript = "gone.ts"\nevent = "PreToolUse"\nfail_closed = true\nvendors = ["claude"]\n',
+      '[[hook]]\nscript = "gone.ts"\nevent = "PreToolUse"\nposition = 0\nfail_closed = true\nvendors = ["claude"]\n',
     );
     await writeFile(
       join(repo, "agents/claude/settings.json"),

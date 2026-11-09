@@ -469,6 +469,7 @@ export const RENDERED = [
       "agents/claude/settings.json",
       "zsh/timezone",
       "agents/hooks/hooks.toml",
+      "agents/hooks/slots.toml",
     ],
     machine:
       "~/.claude/settings.private.json + Claude Code's deployed modelSettings",
@@ -478,7 +479,11 @@ export const RENDERED = [
   },
   {
     dest: ".codex/hooks.json",
-    inputs: ["agents/codex/hooks.json", "agents/hooks/hooks.toml"],
+    inputs: [
+      "agents/codex/hooks.json",
+      "agents/hooks/hooks.toml",
+      "agents/hooks/slots.toml",
+    ],
     machine: "",
     consumer: "Codex (user hooks)",
     when: "all",

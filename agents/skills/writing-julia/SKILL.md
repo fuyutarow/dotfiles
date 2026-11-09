@@ -8,7 +8,7 @@ description: >-
   modules: public-only API, no export/@reexport, and explicit dependency imports.
   Read before Julia code or a recordable run; retain the numerical-method and resource rules.
   Performance changes must preserve numerical semantics and measure startup separately from warm execution.
-  Refactoring is governed by refactoring-code; GPU kernels use optimizing-julia-gpu-kernels.
+  Refactoring is governed by refactoring-code; GPU kernels use writing-julia-gpu-kernels.
   Formal proofs and exact identities use their own skills. Prose, VCS-only, and legal asks stay out.
 ---
 
@@ -70,7 +70,7 @@ They remain binding here; do not misattribute them to universal Julia language r
 | `practicing-tiger-style` | **LANGUAGE:** Julia mechanism → HERE. Source-faithful TigerStyle safety/performance/DX → there. |
 | `proving-theorems` | **PURPOSE:** formal theorem → there. Julia computation or experiment → HERE. |
 | `verifying-symbolic-identities` | **PURPOSE:** whether an identity holds, which exact-CAS tool decides it, its rung and RECEIPT → there. Packages for building or generating code, codegen, install/TTFX and the Julia it runs → HERE (JG gates co-fire). |
-| `optimizing-julia-gpu-kernels` | **DEVICE:** GPU path design, work/span mapping, timing and state oracle → there; compiling host-style code on a device is insufficient. Host types/packages and state/API device ownership (JG8) → HERE. |
+| `writing-julia-gpu-kernels` | **DEVICE:** GPU path design, work/span mapping, timing and state oracle → there; compiling host-style code on a device is insufficient. Host types/packages and state/API device ownership (JG8) → HERE. |
 | `running-python-tools` | **LANGUAGE:** Python CLI → there. Python called from Julia → HERE under JG6. |
 | `writing-python` | **LANGUAGE:** Python source/project → there. PythonCall boundary → HERE. |
 | `raising-resolution` | Inspect `versioninfo()`, `Pkg.status`, or `@which` before a Julia fact. |
@@ -225,7 +225,7 @@ The references govern *how* to implement that choice.
 LLMs habitually fall into three numerical-method pitfalls. All three are denied as the primary
 approach. A permitted exception requires a one-line code comment naming the exception.
 
-### 2.0.1 Finite-difference derivative *estimation* — FORBIDDEN. Use AD.
+### 2.0.1 Finite-difference derivative *estimation* — FORBIDDEN. Use AD
 
 This forbids finite-difference estimates of derivatives for smooth numerical objectives.
 It does not forbid finite-difference discretizations. PDE stencils and method-of-lines spatial
@@ -259,7 +259,7 @@ and differentiates the implemented program. Verify the required derivative seman
 - The function calls an opaque external solver with no AD support. Prefer wrapping the solver in
   a `ChainRulesCore.rrule` over reaching for FD.
 
-### 2.0.2 Grid sampling — FORBIDDEN. Solve the optimization or compute directly.
+### 2.0.2 Grid sampling — FORBIDDEN. Solve the optimization or compute directly
 
 ```julia
 # WRONG — sweeping a continuous parameter to find an optimum
@@ -286,7 +286,7 @@ result = Optim.optimize(v -> f(v[1], v[2]), [x0, y0], LBFGS();
 - The problem is provably non-smooth / non-convex / NP and grid is the agreed approximation.
   Document the agreement.
 
-### 2.0.3 Linear interpolation (lerp) as a substitute for evaluation — FORBIDDEN. Evaluate exactly.
+### 2.0.3 Linear interpolation (lerp) as a substitute for evaluation — FORBIDDEN. Evaluate exactly
 
 ```julia
 # WRONG — tabulate on coarse grid, lerp to query points

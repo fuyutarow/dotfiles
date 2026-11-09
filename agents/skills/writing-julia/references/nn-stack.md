@@ -2,7 +2,7 @@
 
 **SOLE owner:** model API, NN primitives, execution mode, device, and AD selection at their intersection.
 General host-function differentiation belongs to `autodiff.md`; dependency declarations to `packaging.md`.
-Device-kernel implementation belongs to `optimizing-julia-gpu-kernels`.
+Device-kernel implementation belongs to `writing-julia-gpu-kernels`.
 Device ownership of authored, non-framework states belongs to `architecture.md` §10.10.
 
 ## Select the execution contract first
@@ -32,7 +32,7 @@ Treat an unsupported combination as unresolved; do not silently switch framework
 | Lux layer or primitive customization | Lux API first; documented LuxLib API where the operation requires it | NNlib and LuxLib coexist; do not replace Lux internals wholesale with NNlib. |
 | Ordinary Julia array function requiring XLA execution | Reactant | A model framework is unnecessary unless the computation actually contains a model. |
 | Lux model requiring XLA execution | Lux with Reactant integration | Check backend/device compatibility before committing to this execution mode. |
-| Custom device kernel | `optimizing-julia-gpu-kernels` | Existing NNlib/LuxLib operations are candidates before authoring a kernel. |
+| Custom device kernel | `writing-julia-gpu-kernels` | Existing NNlib/LuxLib operations are candidates before authoring a kernel. |
 
 When directly importing a package, declare it as a direct dependency under `packaging.md` PK3.
 For example, direct `NNlib.softmax` calls require NNlib even if a framework also depends on it.

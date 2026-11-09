@@ -316,7 +316,7 @@ isolation to the architecture rules above.
 ## §10.10 Device ownership — the device is a type parameter of the owning state (SOLE home)
 
 SOLE home of state- and API-level device ownership. Kernel launch and step residency (GKR) stay in
-`optimizing-julia-gpu-kernels`, which points here. Lux models follow `nn-stack.md`: device-free model,
+`writing-julia-gpu-kernels`, which points here. Lux models follow `nn-stack.md`: device-free model,
 `ps`/`st` moved by a device object. This section governs authored learner or model states.
 
 A part may pick a method from the array type it receives. The device POLICY is chosen once, by the caller.
@@ -331,7 +331,7 @@ A part may pick a method from the array type it receives. The device POLICY is c
 | A part allocates scratch or output | `similar(x)` or `KA.allocate(state.device, T, dims)`; never `CuArray(…)`, `cu`, or `Array(…)` | parts transferring on their own (house ruling, 2026-09-24, item 5) |
 | Data must cross devices | Only inside named boundary functions (e.g. `to_host`), each counting its calls and declaring a max per warmed step; never a loop body or a step function registered as a boundary | 60 D2H reads per call in the round loop (finding2610_0122as8aq); `_fw_merge!` pulls learned tables to host |
 | A hot-path step runs in a test | Assert each boundary's calls in one warmed step stay within its declared max (0 inside the round loop). This package counter and GKR's trace count the same invariant: the counter gates every test run, the trace confirms on hardware | the same 60 reads, found only by a 30-minute profile |
-| A GPU error appears in a part | Repair per `optimizing-julia-gpu-kernels` GKR (§0b) | `Array()` host evacuation that hid GPU errors in an earlier edition |
+| A GPU error appears in a part | Repair per `writing-julia-gpu-kernels` GKR (§0b) | `Array()` host evacuation that hid GPU errors in an earlier edition |
 | A run writes its receipt or a registered result row | Write `device = string(nameof(typeof(state.device)))` in that row; per-step metric rows need not | run2610_0121sqxbq: rows had no device, `vram_peak_measured_bytes = 0` under WSL |
 
 ### §10.10.1 Executable gate

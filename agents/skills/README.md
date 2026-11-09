@@ -127,7 +127,7 @@ qualify the result, and revise the affected theory. These are feedback loops, no
 - [`practicing-tiger-style`](practicing-tiger-style/) — Apply the complete pinned TigerStyle guide: Safety, Performance, and Developer Experience, including naming and formatting.
 - [`refactoring-code`](refactoring-code/) — Behavior-preserving structural change toward 責務分界/局所化; harshly refuses 場当たり churn; enforces the two hats and name-your-oracle.
 - [`writing-julia`](writing-julia/) — Write correct, fast Julia for research — reach for it before any Julia coding or numerics.
-- [`optimizing-julia-gpu-kernels`](optimizing-julia-gpu-kernels/) — Write and optimize CUDA.jl GPU kernels — or prove you shouldn't (vendor libs and fusion beat hand kernels).
+- [`writing-julia-gpu-kernels`](writing-julia-gpu-kernels/) — Write and optimize CUDA.jl GPU kernels — or prove you shouldn't (vendor libs and fusion beat hand kernels).
 - [`verifying-symbolic-identities`](verifying-symbolic-identities/) — Decide whether an identity holds with exact computer algebra, and label the rung it reached (never call random points symbolic).
 - [`writing-rust`](writing-rust/) — Write modern (2025/2026) Rust with crate selection as the spine: right crate for the job, sync-before-async, ownership-before-clone, verify-before-recommend; performance is measured, not automatic.
 - [`writing-python`](writing-python/) — Modern (2026) Python with library SELECTION as the spine: uv owns env/deps, ruff owns lint+format, typed surfaces, pydantic v2 at boundaries.

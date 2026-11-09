@@ -76,7 +76,7 @@ N3 and N4 detail: `references/launch-and-land.md`. N5 detail: `references/editio
 |---|---|---|---|
 | claim, run, measurement, hypothesis, finding | RECORDS STORE | its typed commands; runs only through the launcher | `records-store CLI owner`; meaning `validating-experimental-evidence` |
 | library or model code | a package under `packages/`, as an EDITION REVISION | working-copy edit, landed by the COMMITTER | the language skill |
-| shared device primitive | the shared-primitive library, additive only | new public name plus oracle test | language skill; device design `optimizing-julia-gpu-kernels` |
+| shared device primitive | the shared-primitive library, additive only | new public name plus oracle test | language skill; device design `writing-julia-gpu-kernels` |
 | experiment runner code | an apparatus record | the store's apparatus command | `records-store CLI owner` |
 | benchmark semantics, literature values | the benchmark package | schema-validated data plus its tests | `validating-experimental-evidence` |
 | research document, report, plan | the document portfolio | DOC ADMISSION | `governing-research-documentation` |

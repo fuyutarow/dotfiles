@@ -1,7 +1,7 @@
 # Editions — gate N5 detail
 
 > Scope: the EDITION / REVISION lifecycle and acceptance for model code in a notebook repo. Language-agnostic.
-> Julia module mechanics are `writing-julia`'s. Device kernel design is `optimizing-julia-gpu-kernels`'. Evidence meaning is `validating-experimental-evidence`'.
+> Julia module mechanics are `writing-julia`'s. Device kernel design is `writing-julia-gpu-kernels`'. Evidence meaning is `validating-experimental-evidence`'.
 
 ## §1 Revise or new edition
 

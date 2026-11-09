@@ -43,7 +43,7 @@ specific repair. It does not block unrelated exploratory work.
 
 This skill owns the *meaning* of measurement validity and comparability. It does not launch
 the run, choose a research bet, allocate resources, or implement the target's gate.
-GPU design/profiling belongs to `optimizing-julia-gpu-kernels`; EV3 qualifies what those measurements can compare.
+GPU design/profiling belongs to `writing-julia-gpu-kernels`; EV3 qualifies what those measurements can compare.
 In records store-backed research, **records store owns the question/hypothesis/run/finding
 schema and promotion gates**. Arena owns its registered stream and scoring contract.
 Do not create a sidecar card, validator, or second result store in this skill.

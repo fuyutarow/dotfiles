@@ -1,4 +1,4 @@
-# optimizing-julia-gpu-kernels — fire / no-fire trigger set (F3 artifact)
+# writing-julia-gpu-kernels — fire / no-fire trigger set (F3 artifact)
 
 Desk-check this table against the FULL skill collection (not just this description) after any
 description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary is the

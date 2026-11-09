@@ -128,7 +128,7 @@ CPU deviceの `gpu_status` と `rationale` は任意で、未指定時は `not-b
 
 `gpu_status` は `compatible | incompatible | not-beneficial`。これらは呼出側がdevice選択の理由を記録する
 互換schemaである。実行器はGPU性能や空きVRAMを判定しない。
-GPU primitiveと実行場所の判断は `optimizing-julia-gpu-kernels` が所有する。
+GPU primitiveと実行場所の判断は `writing-julia-gpu-kernels` が所有する。
 
 ### pilot前の算術上限
 

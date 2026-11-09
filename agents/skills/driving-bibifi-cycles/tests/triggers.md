@@ -21,7 +21,7 @@ Read name/description with plausible siblings. Tests are routing expectations, n
 | N2 | Generate five new research theses with no selected candidate | `forging-novel-theses` with its entry requirements |
 | N3 | Reallocate next quarter's research programme | `supervising-research-programmes` |
 | N4 | Write the exact resource-envelope JSON | `orchestrating-agents` |
-| N5 | Optimize this CUDA kernel | `optimizing-julia-gpu-kernels` plus implementation owner |
+| N5 | Optimize this CUDA kernel | `writing-julia-gpu-kernels` plus implementation owner |
 | N6 | Audit a frozen historical research episode | `auditing-research-processes` |
 | N7 | Update theorem dependencies after this validated finding | `systematizing-theories` |
 | N8 | Decide whether to commit to an expensive irreversible rewrite | `acting-on-hypotheses` |

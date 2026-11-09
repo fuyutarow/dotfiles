@@ -1,5 +1,5 @@
 ---
-name: optimizing-julia-gpu-kernels
+name: writing-julia-gpu-kernels
 description: >-
   For Julia GPU paths, choose a suitable library primitive → cuTile.jl tile kernel → thread-level
   KernelAbstractions.jl or CUDA.jl kernel only when the work does not fit a tile, stating why.

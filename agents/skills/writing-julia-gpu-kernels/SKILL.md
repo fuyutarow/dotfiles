@@ -36,12 +36,15 @@ description: >-
 |---|---|---|---|
 | 3 | Put loops, tuples, multi-output or non-inlinable helpers in a cuTile element function | Scalar, side-effect-free element functions; carry state across a counted `for` loop as one tile per value, never fully unrolled | cuTile.jl model |
 | 3a | Widen a narrow integer tile with a literal (`t .+ 0x0100`) | The literal converts to the tile's type; `convert(Tile{UInt16}, t)` first | cuTile.jl model |
+| 3b | Fuse a scalar-only subexpression into a tile broadcast (`Int32(2) * j .+ Int32(1) .- t`) | Compute the scalar first: `(Int32(2) * j + Int32(1)) .- t` | `cutile-practice.md` |
+| 3c | Scatter through clamped lane indices without a live-lane mask, or count a value-oracle pass as proof of one writer | `mask = live` lanes, first-lane mask for shared values; state when no writer-ownership check ran | `cutile-practice.md` |
+| 3d | Carry limb arithmetic where a proven bound fits a native integer | Write the bound; `Int32` below 2^31; limbs only beyond | `cutile-practice.md` |
 | 9 | Depend on an unreleased branch without a pinned commit | Pin the commit; record when a release can replace it | cuTile.jl model |
 | 1 | Hand-write what a library call or fused broadcast already does | The GK0 row | GK0 |
 | 2 | Write dense tile-shaped work thread by thread on CC 8.0+ | A cuTile.jl tile kernel | Principle 1 |
 | 4 | Send a hand kernel through AD without a backward | rrule/Enzyme rule plus gradient oracle | GK3-AD |
 | 5 | Kernelize without a reference result | Keep the array version as the oracle | GK3 |
-| 6 | Kernelize before measuring, or time compilation with execution | Profile first; warm up, then synchronized timing | GKB, GK2 |
+| 6 | Kernelize before measuring, time compilation with execution, or take a cost while another GPU job runs | Profile first; admission, GPU alone, warm up, then synchronized timing | GKB, GK2 |
 | 7 | Read or write CuArray elements one by one from the host | Device broadcast, gather or kernel | §0b |
 | 8 | Write CUDA.jl-only code where portability is required | KernelAbstractions.jl | `portable-kernels.md` |
 
@@ -86,7 +89,9 @@ Re-check them when the commit changes. SoK position:
   same-category tile element type, so a literal never widens a narrow tile
   (B/src/language/broadcast.jl#L69-L71); widen with `convert(Tile{T}, t)` first. FP8/FP4 have no
   general arithmetic; `ct.muladd_scaled` needs sm_100+ (B/docs/src/man/element_types.md#L25-L35).
-  [urn:uuid:01a1c32b-f5ce-7645-9773-889cda8461e6]
+  [urn:uuid:01a1c32b-f5ce-7645-9773-889cda8461e6] Probe-verified conversions (Int32 → UInt8 truncation
+  and 0-d scalar widening are rejected; Int8/Int16 sign extension and Int32 `div`/`rem` work), lane
+  ownership, compile-cost and harness patterns: `references/cutile-practice.md`.
 - **Indexing and boundaries.** Partial-tile loads fill by `padding_mode` (default Undetermined),
   stores drop out-of-bounds elements, and a tile wholly outside is undefined
   (B/src/language/operations.jl#L635-L646, #L944-L951). Scalar load `arr[i]` exists (#L769-L777);
@@ -101,13 +106,13 @@ Re-check them when the commit changes. SoK position:
 
 ## Scope
 
-> **Version**: v2611.1.0 (2026-11-10) — principles and negative space first; cuTile.jl model at main
-> c55543dc. Earlier history: v2610.2.0 launch shape typed, in-loop transfer budget 0, typed stage outcome.
+> **Version**: v2611.2.0 (2026-11-11) — field-verified cuTile practice in `references/cutile-practice.md`;
+> history in `tests/forge-verification-ledger.md`.
 > **Scope**: cuTile.jl, KernelAbstractions.jl and CUDA.jl kernels and CuArray device paths; NVIDIA-first.
 
 ```bash
 test -f references/execution-design.md || exit 1
-for f in writing-kernels memory-and-warps host-performance reduced-precision-formats measuring debugging portable-kernels differentiating-kernels api-changes; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done
+for f in writing-kernels cutile-practice memory-and-warps host-performance reduced-precision-formats measuring debugging portable-kernels differentiating-kernels api-changes; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done
 ```
 
 Out of scope: driver installation, `nvidia-smi` plumbing, multi-GPU/distributed work, and CUDA C++.

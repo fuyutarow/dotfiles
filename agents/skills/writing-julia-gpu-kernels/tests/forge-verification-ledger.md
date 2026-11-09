@@ -415,3 +415,24 @@ are enforced by the consumer's tests (bound/time/transfer-count/outcome), not by
 Not verified here: no CUDA code was run and no speedup is claimed; the three incidents are cited from the
 research project records, not re-measured.
 skill-check 2026-10-02: 0 FAIL, 2 WARN (references long-sentence debt 205; 4 long sentences in core). PROSE-DEBT waiver 2026-10-02: reference count was 204 at 2026-09-30 and later edits were not re-baselined; the new rules are tables plus short paragraphs. Whether the 4 core long sentences predate this edit was not checked against HEAD. Older reference prose stays out of scope.
+
+## 2026-11-11 — field-verified cuTile practice, v2611.2.0
+
+Observed failure (F1): writing firedancer's cm_gln/2 and cm_dgn/1 cuTile kernels (RTX 3060 sm_86,
+cuTile fork ed1e483), the skill gave the gates but not the compiler facts and work patterns the
+kernels hit, so each was rediscovered by a probe kernel or a failed multi-minute compile, and a
+duplicate-writer defect on clamped padding lanes passed the value oracle until an observer review.
+Prior history lines (v2611.1.0 principles and negative space first; v2610.2.0 launch shape typed,
+in-loop transfer budget 0) moved here from the version header.
+
+Change (F2: one home): `references/cutile-practice.md` holds the dated conversion table, the
+width-from-bound rule with an `rne32` helper, lane ownership (`live` / first-lane masks), compile
+cost and harness batching, wrong controls, and solo measurement. SKILL.md gained negative-space
+rows 3b–3d, a widened row 6, one pointer sentence in the cuTile model and the reference-file check.
+
+Verification (F3): every table row of the reference was observed in that work (probe kernel for
+Int8/Int32 sign extension, `div`/`rem`, Int8 scatter and the UInt16 truncation chain; compile
+errors for `trunc_int`, the 0-d scalar widening and the fused scalar broadcast; GK3 runs of
+cm_gln/2 at 9452734d and cm_dgn/1 with all wrong controls detected). `skill-check` passes with
+the pre-existing long-sentence warnings. Not checked: selection accuracy (description unchanged)
+and any measured benefit of the revision on a future kernel.

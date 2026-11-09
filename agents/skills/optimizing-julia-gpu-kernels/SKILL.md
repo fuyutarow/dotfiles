@@ -1,7 +1,8 @@
 ---
 name: optimizing-julia-gpu-kernels
 description: >-
-  Designs and optimizes parallel CUDA.jl kernels and CuArray paths; prefers suitable library primitives.
+  For Julia GPU paths, choose a suitable library primitive → cuTile.jl tile kernel → thread-level
+  KernelAbstractions.jl or CUDA.jl kernel only when the work does not fit a tile, stating why.
   MANDATORY before @cuda, KernelAbstractions @kernel,
   or Julia device storage/decode/performance edits, and for GPU-first model/learner step performance
   (host round-trips, Array() pulls, GPU first). Use for GPU カーネル/最適化, occupancy,
@@ -14,7 +15,48 @@ description: >-
   GK2; costly bet → acting-on-hypotheses. English skill; answer in the user's language.
 ---
 
-# Optimizing Julia GPU kernels — CUDA.jl discipline
+# Choose the execution model before writing a kernel
+
+> Use a semantics-preserving library primitive first, a cuTile.jl tile kernel second, and a
+> thread-level KernelAbstractions.jl/CUDA.jl kernel only for work that does not fit a tile; state why.
+> Then bind the full path and work budget (GKB), map dependencies onto execution (GKD), reject
+> unnecessary kernels (GK0), and meet device legality, measurement, oracle and precision gates (GK1–GK4).
+
+This ordering is the default, not a claim that every operation has a library primitive or fits a tile.
+cuTile.jl expresses block work as whole-tile operations; its compiler maps them onto threads and hardware.
+Choose a thread-level kernel for genuinely irregular work such as scatter, hashing or scalar atomics only
+when it does not fit the tile model, and name that reason. cuTile.jl's versioned conditions are below.
+
+## cuTile.jl conditions (v1.0.0, commit c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe)
+
+- Launching requires importing CUDA.jl; it supplies `CuArray`, compiler artifacts and the stream
+  ([execution.md:37–42](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/execution.md#L37-L42)).
+  CUDA.jl is absent from cuTile.jl's deps, weakdeps and extensions; do not attribute this to an extension
+  ([Project.toml:11–33](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/Project.toml#L11-L33)).
+- Launch arguments convert `CuArray{T,N}` to `ct.TileArray{T,N,I,Spec}`
+  ([execution.md:104–119](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/execution.md#L104-L119)).
+- Baseline: Julia 1.11+, NVIDIA driver 580 (CUDA 13), compute capability 8.0+.
+  Feature availability also depends on Tile IR bytecode version
+  ([compatibility.md:1–46](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/compatibility.md#L1-L46)).
+- Numeric FP8/FP4 formats do not support general arithmetic, reductions or scans; convert to an
+  arithmetic float for elementwise computation. `ct.muladd_scaled` requires Blackwell (sm_100+)
+  ([element_types.md:25–35](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/element_types.md#L25-L35),
+  [compatibility.md:94–103](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/compatibility.md#L94-L103)).
+- Listed integer types are Int8/UInt8 through Int64/UInt64; docs provide no complete operation-by-type
+  matrix ([element_types.md:5–8](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/element_types.md#L5-L8)).
+- Sparse view indexing supports rank 2+ arrays with one 1-D integer tile index; other indices are
+  unit ranges or `:`. Scalar indices are not supported
+  ([compatibility.md:64–69](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/compatibility.md#L64-L69),
+  [operations.jl:50–78](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/src/language/operations.jl#L50-L78)).
+  v1.0.0 adds view-based atomic reductions and `ct.@atomic`
+  ([release notes](https://github.com/JuliaGPU/cuTile.jl/releases/tag/v1.0.0)); do not generalize beyond
+  the documented operations and architecture/version gates.
+- Tile shapes are compile-time values; changed constants or converted argument types specialize a new
+  kernel ([execution.md:125–176](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/execution.md#L125-L176)).
+- The inspected README/docs/release notes do not state an automatic-differentiation guarantee; this is
+  an evidence limit, not a claim of non-support (capture urn:uuid:01a1bf08-e39f-74e6-97c5-9d030c426b63).
+
+## THE LAW
 
 > **Version**: v2610.2.0 (2026-10-02) — launch shape typed (Parallel/Serial), in-loop transfer budget 0, typed stage outcome; device ownership stays at writing-julia JG8 (§10.10).
 > **Scope**: CUDA.jl/KernelAbstractions kernels and CuArray/device paths; NVIDIA-first.
@@ -78,7 +120,6 @@ An unknown stage blocks unsupported whole-path forecasts, not a separately justi
 | `orchestrating-agents` | P7 selects and admits device resources. P7 placement alone does not trigger GKR; a model-step GPU performance objective does, even without an explicit residency declaration. |
 | `validating-experimental-evidence` | EV2 owns update-order equivalence; EV3 owns throughput units and comparison footing. Consume those contracts before interpreting a faster kernel or batch. |
 | `driving-bibifi-cycles` | Chooses the next bounded experiment and allocates useful work; HERE specifies GPU design, timing and oracle obligations for that slice. |
-| `prompting-llms` / `driving-*` | Not adjacent — no overlap; listed only because Fan-out fan-out language sounds similar. Fleet mechanics live in the harness, not here. |
 
 ## MUST NOT FIRE
 
@@ -212,23 +253,6 @@ the old graph against new addresses. The acceptance pattern is `references/debug
 
 Write the GK0 comment naming the rejected row, then proceed to GK1.
 
-## §2 The device-compiler contract (the 5 errors you will actually see)
-
-The CPU intuition "type instability makes it slow" becomes "it does not compile" on the GPU.
-The five classes, each with its literal error string, live in `references/writing-kernels.md`
-— headline forms:
-
-1. **Missing `return nothing`** → `KernelError: kernel returns a value of type Float32`.
-2. **Type instability / unresolvable dispatch** → `InvalidIRError … unsupported dynamic
-   function invocation`. Read multi-`Reason:` errors BOTTOM-UP — the last one is the cause,
-   earlier ones are symptoms.
-3. **Non-isbits argument** → `KernelError: passing non-bitstype argument` — a struct holding
-   a CuArray needs `Adapt.@adapt_structure`.
-4. **GC allocation in kernel** → `InvalidIRError … unsupported call to the Julia runtime`.
-   Preallocate outside; use `SVector`/`MVector` only for small fixed scratch.
-5. **Boxed capture** → a dynamic-invocation error may hide the non-`const` global.
-   Use a `let`-bound capture or typed callable struct.
-
 ## Reference index — load the file you need
 
 | File | Covers | Read when |
@@ -244,35 +268,7 @@ The five classes, each with its literal error string, live in `references/writin
 | `references/differentiating-kernels.md` | GK3-AD routes, mutating AD paths and gradient oracles | This operation must participate in differentiation; package presence alone is insufficient |
 | `references/api-changes.md` | CUDA.jl v6 split, changed signatures, target flags, fast features, vendor naming, and the KernelIntrinsics negative `[dated:2026-07]` | version confusion, deprecation, or source/docs conflict |
 
-## §9 Checklist — run before claiming a kernel is done
+## Acceptance
 
-- [ ] GKB binds the complete claimed path; the predeclared measured criterion passes or its miss is explicit.
-- [ ] GKD maps independent work and serial span; unexplained one-thread bulk work remains a performance defect.
-- [ ] GPU-performance step: `STAGE MAP` names the hot-path boundary. Each data stage and output inside it is
-      device-resident. Its warmed trace has zero HtoD/DtoH copies inside that boundary (GKR).
-- [ ] Every launch declares `Parallel(ndrange)` or `Serial(work_bound)`; in-loop `Serial` bounds and measured times pass the budget test.
-- [ ] In-loop host transfers: declared count ≤ budget (default 0), flags read one check late; skipped stages report a typed outcome.
-- [ ] A selected K-of-C stage materializes and writes K outputs, or its C-cost is charged and passes GKB.
-- [ ] Every bottleneck claim names its counted quantity (`references/measuring.md` §11).
-- [ ] GK0 comment names the checked and rejected vendor/broadcast alternative.
-- [ ] Kernel ends in `return nothing`; arguments are isbits; no allocation occurs inside.
-- [ ] Index formula is 1-based; bounds guard precedes access; block count uses `cld`.
-- [ ] `CUDA.allowscalar(false)` is active; logs contain no scalar-indexing warnings.
-- [ ] Device code has no bare Float64 literals; hot index arithmetic uses Int32.
-- [ ] Reduced precision: `PRECISION CONTRACT` is complete. Storage, target, compute, and outcome
-      claims each have their own oracle (`references/reduced-precision-formats.md`).
-- [ ] The oracle covers required output/state, repeated updates, ties, resets and relevant tail batches.
-- [ ] `compute-sanitizer` is clean if shared memory or atomics are used.
-- [ ] Timing uses `CUDA.@sync` after warmup; every performance claim cites a profile.
-- [ ] Derivative paths pass GK3-AD. Non-gradient learning passes its update-state oracle.
-- [ ] `@inbounds` appears only after the oracle passes.
-- [ ] Cached/graph-capture path: cache key fingerprints EVERY closed-over device array
-      (CAPTURE-PINS-ADDRESSES, §1). The state-separation test and permanent in-body
-      consistency assert both pass (`references/debugging.md` §11).
-- [ ] A GPU-path change gets a real GPU parity run; CPU-only green does not clear it.
-- [ ] Device-specific methods dispatch on `CUDA.AnyCuArray`, not `CuArray`; a `@view` or reshape of
-      a `CuArray` otherwise falls to the CPU method. Tests cover a partial (tail) batch as well.
-- [ ] Graph-captured path: `CUDA.@allocated(step(...)) == 0` is asserted before capture.
-      One leftover allocation can record an unfreed alloc node and make launch fail.
-      Check range slices, cuBLAS `CuRef` creation, and scalar reductions.
-      Find the allocation by bisecting unbroken prefixes, not per-function calls.
+Apply the gate artifacts above to the whole claimed path. The references give the detailed
+compiler, launch, timing, oracle and precision procedures; this skill does not duplicate their checklists.

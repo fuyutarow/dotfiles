@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.5 — 2026-11-09
+
+- Show the agent resource row as two sidebar rows: cpu with ram and vram, then workers and plain shell panes in the agent's tab; unknown counts read ? workers and ? shells.
+
 ## 0.5.4 — 2026-11-08
 
 - Leave non-vendor agent tab labels unchanged.

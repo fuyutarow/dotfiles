@@ -211,8 +211,10 @@ export type CpuToken = (typeof CPU_TOKENS)[number];
 export type ResourceTokens = {
   /** The cpu reading as its own token so herdr can style it; absent when cpu is unknown. */
   cpu?: { token: CpuToken; text: string };
-  /** Everything else, one grey token. A cpu reading that is unknown ("cpu ?") stays here. */
+  /** Row 3's grey token: ram and vram. A cpu reading that is unknown ("cpu ?") stays here. */
   resources: string;
+  /** Row 4's grey token: workers and shells, each count number-first or "?". */
+  counts: string;
 };
 
 /** Exactly one cpu_* token is reported; the other two are cleared. */
@@ -224,48 +226,114 @@ export function cpuTokenArgs(cpu: ResourceTokens["cpu"]): string[] {
   );
 }
 
-function fitParts(parts: () => string[], width: number): string {
-  let line = parts().join(" · ");
-  if (line.length <= width) return line;
-  line = parts().join(" ");
-  if (line.length <= width) return line;
-  line = parts()
-    .filter((part) => !part.startsWith("vram "))
-    .join(" ");
-  return line.slice(0, width);
-}
+/** One grey-token part; `key` names it in that token's drop order. */
+type RowPart = { key: string; text: string };
 
 /**
- * The sidebar row is `cpu NN% · workers N ram X`: cpu is a token of its own, chosen by load
- * level (thresholds from tools/shared), so herdr/config.toml can color it; the rest is one token.
- * `width` bounds the whole row as herdr will draw it, so the rest gets what the cpu token and
- * herdr's single separator leave over.
+ * Fit rule for one grey token: whole parts are removed, never cut inside a part. Parts are
+ * removed in `dropOrder` (first key goes first) until the joined text fits `width`; if none
+ * fits, the token is empty and nothing is cut.
+ */
+function fitParts(
+  parts: RowPart[],
+  width: number,
+  dropOrder: readonly string[],
+): string {
+  let kept = parts;
+  for (const key of [undefined, ...dropOrder]) {
+    if (key !== undefined) kept = kept.filter((part) => part.key !== key);
+    const line = kept.map((part) => part.text).join(HERDR_TOKEN_SEPARATOR);
+    if (line.length <= width) return line;
+  }
+  return "";
+}
+
+/** Row 3 drops vram first, then ram; cpu's own token is never in this list. */
+const RESOURCE_DROP_ORDER = ["vram", "ram", "cpu"] as const;
+/** Row 4 drops shells first, then workers. */
+const COUNT_DROP_ORDER = ["shells", "workers"] as const;
+
+/**
+ * The sidebar has four rows for an agent: row 3 is `cpu NN%` (its own token, chosen by load
+ * level, thresholds from tools/shared, so herdr/config.toml can color it) plus the grey
+ * `ram X · vram Y`; row 4 is the grey `N workers · M shells`. Unknown counts read `? workers`
+ * and `? shells`; vram appears only when reported. Each token gets its own fit: row 3 gets the
+ * width the cpu token and herdr's separator leave over, row 4 gets the full width.
  */
 export function resourceTokens(
   workers: number | undefined,
   cpu: number | undefined,
   ram: number | undefined,
   vram: number | undefined,
+  shells: number | undefined,
   width = 28,
 ): ResourceTokens {
-  const memory = [
-    ...(ram === undefined ? [] : [`ram ${formatMemory(ram)}`]),
-    ...(vram === undefined ? [] : [`vram ${formatMemory(vram)}`]),
+  const memory: RowPart[] = [
+    ...(ram === undefined
+      ? []
+      : [{ key: "ram", text: `ram ${formatMemory(ram)}` }]),
+    ...(vram === undefined
+      ? []
+      : [{ key: "vram", text: `vram ${formatMemory(vram)}` }]),
   ];
-  const head = `workers ${workers ?? "?"}`;
+  const counts = fitParts(
+    [
+      { key: "workers", text: `${workers ?? "?"} workers` },
+      { key: "shells", text: `${shells ?? "?"} shells` },
+    ],
+    width,
+    COUNT_DROP_ORDER,
+  );
   if (cpu === undefined)
     return {
-      resources: fitParts(() => [head, "cpu ?", ...memory], width),
+      resources: fitParts(
+        [{ key: "cpu", text: "cpu ?" }, ...memory],
+        width,
+        RESOURCE_DROP_ORDER,
+      ),
+      counts,
     };
   const text = `cpu ${cpu}%`;
   const level = usageLevel(Math.round(cpu));
   return {
     cpu: { token: `cpu_${level}`, text },
     resources: fitParts(
-      () => [head, ...memory],
+      memory,
       width - text.length - HERDR_TOKEN_SEPARATOR.length,
+      RESOURCE_DROP_ORDER,
     ),
+    counts,
   };
+}
+
+const PaneListSchema = z.object({
+  result: z.object({
+    panes: z.array(
+      z.object({
+        pane_id: z.string(),
+        tab_id: z.string(),
+        agent: z.string().nullish(),
+      }),
+    ),
+  }),
+});
+
+/**
+ * Plain shell panes per tab, from herdr's live `pane list`. A pane that herdr reports with an
+ * `agent` (the agent panes) is not a shell. Undefined when the list is unreadable, so the row
+ * says `? shells` instead of a guessed count. A tab with no plain panes counts as 0.
+ */
+export function plainShellCounts(
+  listing: string | undefined,
+): ReadonlyMap<string, number> | undefined {
+  const parsed = jsonOf(PaneListSchema).safeParse((listing ?? "").trim());
+  if (!parsed.success) return undefined;
+  const counts = new Map<string, number>();
+  for (const pane of parsed.data.result.panes) {
+    if (pane.agent !== undefined && pane.agent !== null) continue;
+    counts.set(pane.tab_id, (counts.get(pane.tab_id) ?? 0) + 1);
+  }
+  return counts;
 }
 
 /** Native session_index is an append log: a rename adds a newer exact-ID row. */
@@ -988,6 +1056,7 @@ export async function projectAgents(
   panePids: ReadonlyMap<string, PaneProcessIds> = new Map(),
   roster: RosterRows = [],
   _contexts: ReadonlyMap<string, string> = new Map(),
+  shellCounts?: ReadonlyMap<string, number>,
 ): Promise<number> {
   let updated = 0;
   for (const agent of agents) {
@@ -1132,15 +1201,24 @@ export async function projectAgents(
         memorySession === undefined || memorySession.vram_bytes === null
           ? undefined
           : memorySession.vram_bytes;
+      const shells =
+        shellCounts === undefined
+          ? undefined
+          : (shellCounts.get(agent.tab_id) ?? 0);
       const tokens = resourceTokens(
         cpuSession?.workers?.count,
         resource?.cpu_pct,
         ram,
         vram,
+        shells,
       );
       cpuArgs.push(
-        "--token",
-        `resources=${tokens.resources}`,
+        ...(tokens.resources === ""
+          ? ["--clear-token", "resources"]
+          : ["--token", `resources=${tokens.resources}`]),
+        ...(tokens.counts === ""
+          ? ["--clear-token", "counts"]
+          : ["--token", `counts=${tokens.counts}`]),
         ...cpuTokenArgs(tokens.cpu),
         "--clear-token",
         "workers",
@@ -1272,6 +1350,7 @@ async function project(dryRun = false): Promise<number> {
     );
   }
   const contexts = new Map<string, string>();
+  const shellCounts = plainShellCounts(await run("herdr", ["pane", "list"]));
   await bindClaudePanes(agents, remoteControl);
   const rosterResult = jsonOf(Roster).safeParse(
     (await run("agx", ["worker", "roster", "--json"])) ?? "",
@@ -1345,6 +1424,7 @@ async function project(dryRun = false): Promise<number> {
           panePids: [...panePids],
           contexts: [...contexts],
           roster,
+          shellCounts: shellCounts === undefined ? null : [...shellCounts],
         }),
       )
       .digest("hex");
@@ -1368,6 +1448,7 @@ async function project(dryRun = false): Promise<number> {
     panePids,
     roster,
     contexts,
+    shellCounts,
   );
   // A failed mutation must be retried, and cache trouble must not block projection.
   if (!dryRun && applied && cacheDir !== undefined && cachePath !== undefined) {

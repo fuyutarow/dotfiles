@@ -107,9 +107,12 @@ test("u26 foreground PIDs attribute unresolved Codex and mismatched Claude sessi
     snapshot,
     pids,
   );
-  expect(calls[1]).toContain("resources=workers 0 ram 1.8G");
+  // Width 28 leaves 18 columns after "cpu 73% · ": shells, then workers, drop first.
+  expect(calls[1]).toContain("resources=ram 1.8G");
+  expect(calls[1]).toContain("counts=0 workers · ? shells");
   expect(calls[1]).toContain("cpu_mid=cpu 73%");
-  expect(calls[3]).toContain("resources=workers ? ram 0.12G");
+  expect(calls[3]).toContain("resources=ram 0.12G");
+  expect(calls[3]).toContain("counts=? workers · ? shells");
   expect(calls[3]).toContain("cpu_lo=cpu 0%");
 });
 
@@ -153,7 +156,7 @@ test("foreground Claude ancestor wins over nested and other-pane Claude rows", a
     paneIds,
   );
   const reports = calls.filter((args) => args[1] === "report-metadata");
-  expect(reports[0]).toContain("resources=workers 0 ram 1.8G");
+  expect(reports[0]).toContain("resources=ram 1.8G");
   expect(reports[0]).toContain("cpu_mid=cpu 73%");
   expect(reports[1]).toContain("cpu_mid=cpu 88%");
   expect(reports[1]?.some((arg) => arg.includes("ram 3.0G"))).toBe(true);
@@ -469,9 +472,9 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
   await Bun.write(path, JSON.stringify(doc));
   const firstSnapshot = await readAgentCpu(env, now);
   const calls = await report();
-  expect(calls[0]).toContain("resources=workers 2");
+  expect(calls[0]).toContain("counts=2 workers · ? shells");
   expect(calls[0]).toContain("cpu_lo=cpu 32%");
-  expect(calls[1]).toContain("resources=workers 0");
+  expect(calls[1]).toContain("counts=0 workers · ? shells");
   expect(calls[1]).toContain("cpu_lo=cpu 4%");
   await Bun.write(
     path,
@@ -482,8 +485,8 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
       ),
     }),
   );
-  expect((await report())[1]).toContain("resources=workers 3");
-  expect(calls[2]).toContain("resources=workers ?");
+  expect((await report())[1]).toContain("counts=3 workers · ? shells");
+  expect(calls[2]).toContain("counts=? workers · ? shells");
   expect(calls[2]).toContain("cpu_lo=cpu 7%");
   expect(calls[3]).toContain("unowned=orphan:foo 8% · bar.service 5%");
   await Bun.write(path, JSON.stringify({ ...doc, unowned: [] }));
@@ -501,7 +504,8 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
   ]) {
     await Bun.write(path, bad);
     const result = await report();
-    expect(result[0]).toContain("resources=workers ? · cpu ?");
+    expect(result[0]).toContain("resources=cpu ?");
+    expect(result[0]).toContain("counts=? workers · ? shells");
     for (const name of ["cpu_lo", "cpu_mid", "cpu_hi"])
       expect(result[0]?.join(" ")).toContain(`--clear-token ${name}`);
     expect(result[0]?.some((arg) => /^cpu_\w+=/u.test(arg))).toBe(false);
@@ -561,14 +565,15 @@ test("resource fixtures preserve CPU and project memory sums or clear absent tok
   };
   const v1 = await report(resourceV1);
   expect(v1.snapshot?.schema).toBe(1);
-  expect(v1.args).toContain("resources=workers 2");
+  expect(v1.args).toContain("counts=2 workers · ? shells");
   expect(v1.args).toContain("cpu_lo=cpu 32%");
   expect(v1.args).toContain("--clear-token");
   expect(v1.args).toContain("ram");
   expect(v1.args).toContain("vram");
   const v2 = await report(resourceV2);
   expect(v2.snapshot?.schema).toBe(2);
-  expect(v2.args).toContain("resources=workers 2 ram 1.2G");
+  expect(v2.args).toContain("resources=ram 1.2G");
+  expect(v2.args).toContain("counts=2 workers · ? shells");
   expect(v2.args).toContain("cpu_lo=cpu 32%");
   expect(agentCpuCacheInput(v2.snapshot)).not.toBe(
     agentCpuCacheInput(v1.snapshot),
@@ -591,7 +596,7 @@ test("resource fixtures preserve CPU and project memory sums or clear absent tok
     ...resourceV2,
     sessions: [{ ...row, workers: null }],
   });
-  expect(noWorkers.args).toContain("resources=workers ? ram 1.0G");
+  expect(noWorkers.args).toContain("resources=ram 1.0G");
   const zero = await report({
     ...resourceV2,
     sessions: [{ ...row, ram_bytes: 0, vram_bytes: 0, workers: null }],
@@ -1796,4 +1801,33 @@ test("untrusted provenance receives no provisional display ID", async () => {
     expect(agents[0]?.agent_session).toBeUndefined();
     expect(calls.at(-1)).not.toContain("--agent-session-id");
   }
+});
+
+test("shell count reaches each agent's row from its own tab; a tab with no plain panes reads 0", async () => {
+  const agents = [
+    { agent: "claude", pane_id: "w9:p1", tab_id: "w9:tE" },
+    { agent: "codex", pane_id: "w9:p2", tab_id: "w9:tY" },
+  ];
+  const calls: string[][] = [];
+  await projectAgents(
+    agents,
+    new Map(),
+    (args) => {
+      calls.push(args);
+      return Promise.resolve(true);
+    },
+    new Map(),
+    new Map(),
+    new Map(),
+    undefined,
+    new Map(),
+    [],
+    new Map(),
+    new Map([["w9:tE", 2]]),
+  );
+  const reports = calls.filter((args) => args[1] === "report-metadata");
+  // No cpu reading: row 3 is "cpu ?" and row 4 carries the counts, each fitted at width 28.
+  expect(reports[0]).toContain("resources=cpu ?");
+  expect(reports[0]).toContain("counts=? workers · 2 shells");
+  expect(reports[1]).toContain("counts=? workers · 0 shells");
 });

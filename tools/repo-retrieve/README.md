@@ -357,11 +357,9 @@ mise run bench:definitions -- --cases ~/.local/share/repo-retrieve/bench/<name>.
 
 ## Search while another project indexes
 
-Semantic `RESULT` lines include `status=fresh` when the indexed state is current,
-including when only out-of-scope files changed. When a stale index is served within
-the existing bound, they instead include `status=serving-stale-within-bound gap=N
-changed=M`: `gap` counts commits since the watermark and `changed` counts all paths
-in the diff, including out-of-scope paths. Beyond the bound the query is refused.
+Semantic search and shape routes refuse an index with in-scope changes since its watermark
+with NO_INDEX (exit 3), reporting the commit gap and auto-reindex request state.
+An unchanged index, including one with only out-of-scope drift, is fresh.
 
 Semantic searches retain their configured child timeout while another project indexes.
 `RESULT: BUSY` (exit 75) names the queried project and is reserved for its own reindex;

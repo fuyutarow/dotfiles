@@ -197,8 +197,6 @@ const INDEX_ATTEMPTS = 3;
 const INDEX_POLL_MS = 1_000;
 const INDEX_STALL_MS = 600_000;
 const AUTO_REINDEX_WINDOW_MS = 120_000;
-const DEFAULT_MAX_STALE_COMMITS = 200;
-const DEFAULT_MAX_STALE_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const ErrnoCodeSchema = z.object({ code: z.string() });
 
 function errnoCode(error: unknown): string | null {
@@ -834,13 +832,6 @@ type Freshness =
       note?: string;
       reindexPid?: number;
     }
-  | {
-      status: "serving-stale-within-bound";
-      watermark: Watermark;
-      gap: number;
-      changed: number;
-      reindexPid?: number;
-    }
   | { status: "stale"; message: string };
 
 // Deliberately NOT self-healing: an earlier design considered treating "the index DB's mtime is
@@ -962,41 +953,6 @@ export async function checkIndexFreshness(
         "the index scope (ccc's own matcher), so the index is current\n",
     );
   } else if (watermark.value.head !== currentHead) {
-    const maxCommits = Number(
-      process.env["REPO_RETRIEVE_MAX_STALE_COMMITS"] ??
-        DEFAULT_MAX_STALE_COMMITS,
-    );
-    const maxAgeMs = Number(
-      process.env["REPO_RETRIEVE_MAX_STALE_AGE_MS"] ?? DEFAULT_MAX_STALE_AGE_MS,
-    );
-    const ageMs =
-      Temporal.Now.instant().epochMilliseconds -
-      Temporal.Instant.from(watermark.value.indexedAt).epochMilliseconds;
-    if (
-      watermark.value.head !== null &&
-      currentHead !== null &&
-      distance !== null &&
-      distance <= maxCommits &&
-      ageMs <= maxAgeMs
-    ) {
-      const changed =
-        changedPaths.length > 0 ? changedPaths.join(", ") : "none";
-      process.stderr.write(
-        `INDEX: built at ${watermark.value.head.slice(0, 12)}, ${distance} commits / ${changedPaths.length} changed files behind; changed files: ${changed}\n`,
-      );
-      const reindex = await requestAutoReindex(project);
-      return ok({
-        status: "serving-stale-within-bound",
-        watermark: watermark.value,
-        gap: distance,
-        changed: changedPaths.length,
-        ...(reindex.isOk() &&
-        reindex.value.started &&
-        reindex.value.pid !== undefined
-          ? { reindexPid: reindex.value.pid }
-          : {}),
-      });
-    }
     // Refuse this semantic request immediately. The caller starts one rate-limited detached
     // `index --detach` request while keeping NO_INDEX as the observable result.
     return ok({
@@ -1013,7 +969,7 @@ export async function checkIndexFreshness(
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
         `index was built at HEAD=${headLabel(watermark.value.head)} (indexedAt=${watermark.value.indexedAt}) ` +
         `but the working tree is now at HEAD=${headLabel(currentHead)}; gap=${distance} commits / ` +
-        `${changedPaths.length} changed files, age=${ageMs}ms (bounds ${maxCommits} commits / ${maxAgeMs}ms). ` +
+        `${changedPaths.length} changed files. ` +
         `cite=${citationToken(watermark.value)} names the index's own ` +
         `(now-superseded) state for a citation such as --hit NO_INDEX:${citationToken(watermark.value)}. ` +
         scopeLine(drift) +

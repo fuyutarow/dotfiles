@@ -27,18 +27,8 @@
 // The rg routes read the working tree directly and are correctly current always — re-verified
 // live 2026-09-04 (a brand-new file with a unique marker was found by `literal` immediately).
 //
-// `structural` (ccc grep) was ALSO believed to read the working tree directly, on an earlier
-// claim of empirical verification with a named reproduction. That claim is CONTRADICTED by live
-// measurement (2026-09-04): the same brand-new-file test that confirms the rg routes above
-// returns NO_MATCH from `structural` for content `literal` finds instantly, reproduced
-// independently twice (by gnya, and separately by this forge with a different marker/file, after
-// ruling out a dotfile-naming confound in its own first attempt). Bounded claim, not
-// generalized: contradicted for this ccc version, this project — not established as a universal
-// property, and not yet resolved into a fix. Until resolved, do NOT assume `structural` sees
-// content newer than its last `ccc index` run; this row is NOT gated by checkIndexFreshness
-// either, so there is currently no refusal to protect a caller from a stale `structural` result —
-// see the forge ledger for the open item (orderer decision pending, behaviour deliberately
-// unchanged pending it).
+// Structural (ccc grep) can miss changes newer than its index and is therefore gated by
+// the same watermark freshness check as semantic search and definition retrieval.
 //
 // Exit: 0 success, 1 no rg/ccc-search matches or Cleye ordinary-unknown refusal, 2 other
 // usage/environment failure, 3 stale/missing/corrupt/unrecorded index watermark (NO_INDEX), 75 ccc
@@ -52,7 +42,6 @@
 // is ever allowed to appear on stdout. A caller that reads only stdout+exit code (the documented
 // calling convention -- see repo-retrieve.test.ts and driving-cocoindex) can therefore never mistake
 // an unearned pass for an earned one.
-// The bounded-serving branch in ccc-index.ts conflicts with this law, is labelled `serving-stale-within-bound`, and awaits an owner ruling.
 
 import { access, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -732,7 +721,7 @@ async function writeNoIndexDiagnostic(
     );
   } else {
     process.stderr.write(
-      `INDEX: stale since ${staleSince}; reindex already requested within 2m; check progress with 'rr index --status'; lexical routes now: rr text/regex/files\n`,
+      `INDEX: stale since ${staleSince}; reindex not requested by this call (recent request or request in progress); check progress with 'rr index --status'; lexical routes now: rr text/regex/files\n`,
     );
   }
   const daemon = await daemonAvailability(project);
@@ -845,7 +834,7 @@ async function runCccSearch(
     await writeNoIndexDiagnostic(route, project, freshness.message, json);
     return ok(3);
   }
-  // Both served states carry a watermark; the refusal branch above returns unconditionally. A watermark
+  // The fresh state carries a watermark; the refusal branch above returns unconditionally. A watermark
   // can only reach this point if checkIndexFreshness confirmed source === "index" (a legacy
   // "stamp" watermark is refused as stale before it ever gets here -- see the source === "stamp"
   // branch there), so every fresh result was produced by `index` observing a real `ccc index`
@@ -872,9 +861,6 @@ async function runCccSearch(
   // moves on without it -- the claim was never about "current HEAD" to begin with.
   const confidence =
     `status=${freshness.status} ` +
-    (freshness.status === "serving-stale-within-bound"
-      ? `gap=${freshness.gap} changed=${freshness.changed} `
-      : "") +
     `confidence=verified(index) indexedAt=${freshness.watermark.indexedAt} ` +
     `head=${headLabel(freshness.watermark.head)} cite=${citationToken(freshness.watermark)}`;
 
@@ -1077,6 +1063,23 @@ async function runCccGrep(
   timeoutMs: number,
   cwd: string,
 ): Promise<Result<number, Error>> {
+  const resolution = await resolveRegisteredProject(cwd);
+  if (resolution === null)
+    return err(
+      new Error(`structural requested, but ${cwd} is not ccc-registered`),
+    );
+  const project = resolution.project;
+  const freshness = await checkIndexFreshness(project, "structural");
+  if (freshness.isErr()) return err(freshness.error);
+  if (freshness.value.status === "stale") {
+    await writeNoIndexDiagnostic(
+      "structural",
+      project,
+      freshness.value.message,
+      false,
+    );
+    return ok(3);
+  }
   const ccc = requireExecutable("ccc");
   if (ccc.isErr()) return err(ccc.error);
   const grepArgs = [ccc.value, "grep", query];
@@ -1120,7 +1123,9 @@ async function runCccGrep(
     );
     return ok(1);
   }
-  process.stdout.write("RESULT: PASS route=structural engine=ccc-grep\n");
+  process.stdout.write(
+    "RESULT: PASS route=structural engine=ccc-grep status=fresh\n",
+  );
   return ok(0);
 }
 
@@ -1648,7 +1653,7 @@ async function runDefinition(
     return ok(1);
   }
   process.stdout.write(
-    `RESULT: PASS route=definition strength=${a.strength} best=${a.best.toFixed(2)} ` +
+    `RESULT: PASS route=definition status=fresh strength=${a.strength} best=${a.best.toFixed(2)} ` +
       `judge=${a.judge} (strong: the same function; likely: read it before writing a new one)\n`,
   );
   return ok(0);

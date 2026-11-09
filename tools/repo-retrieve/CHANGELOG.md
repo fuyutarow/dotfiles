@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.0 — 2026-11-09
+
+- Refuse semantic searches when in-scope changes make the index stale.
+
 ## 1.12.8 — 2026-11-09
 
 - index plan: pass the planner's limits document on stdin so a large changed-path list no longer hits E2BIG

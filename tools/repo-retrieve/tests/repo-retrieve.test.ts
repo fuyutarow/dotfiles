@@ -813,7 +813,9 @@ describe("repo-retrieve route contract", () => {
       expect(result.code).toBe(3);
       expect(result.stderr).toContain("NO_INDEX");
       expect(result.stderr).toContain(
-        index === 0 ? "reindex is running (pid" : "reindex already requested",
+        index === 0
+          ? "reindex is running (pid"
+          : "reindex not requested by this call",
       );
       expect(result.stderr).toContain(`project=${backing}`);
     }
@@ -855,7 +857,7 @@ describe("repo-retrieve route contract", () => {
 
   test("--project also selects the cwd for lexical and structural routes", () => {
     const caller = registerProject();
-    const corpus = registerProject();
+    const corpus = registerFreshGitProject().dir;
     for (const route of ["literal", "exhaustive", "files", "structural"]) {
       const args = [route, "--project", corpus, "--path", "knowledge"];
       if (route !== "files") args.push("--query", "needle");
@@ -1322,7 +1324,7 @@ describe("repo-retrieve route contract", () => {
     expect(result.stderr).toContain("INDEX: reindex running");
   });
 
-  test("a completed stale index still serves results while its detached reindex runs", () => {
+  test("a stale index is refused while its detached reindex runs", () => {
     const { dir } = registerGitProject();
     run(dir, ["index"]);
     writeFileSync(join(dir, "later.md"), "later\n");
@@ -1334,12 +1336,11 @@ describe("repo-retrieve route contract", () => {
       REPO_RETRIEVE_MAX_STALE_COMMITS: "2000",
       REPO_RETRIEVE_MAX_STALE_AGE_MS: "999999999999",
     });
-    expect(result.code).toBe(0);
-    expect(result.stdout).toContain("--- Result 1");
-    expect(result.stdout).toContain("RESULT: PASS route=concept");
-    expect(result.stderr).toContain("INDEX: built at");
-    expect(result.stderr).toMatch(/INDEX: reindex running \(pid \d+\)/u);
-    expect(result.log).toContain("ccc search semantic request");
+    expect(result.code).toBe(3);
+    expect(result.stdout).not.toContain("RESULT: PASS");
+    expect(result.stderr).toContain("gap=1 commits");
+    expect(result.stderr).toContain("reindex is running");
+    expect(result.log).not.toContain("ccc search semantic request");
   });
 
   test("a fresh watermark matching current HEAD lets concept search proceed", () => {
@@ -1585,19 +1586,6 @@ describe("repo-retrieve route contract", () => {
     expect(result.code).toBe(0);
     expect(result.log).toContain("rg --fixed-strings");
     expect(result.stdout).toContain("RESULT: PASS route=literal engine=rg");
-  });
-
-  test("a stale watermark does not block the structural ccc-grep route", () => {
-    const { dir } = registerGitProject();
-    writeWatermarkFile(dir, { head: "d".repeat(40) });
-
-    const result = run(dir, ["structural", "--query", "foo(\\(ARGS*\\))"]);
-
-    expect(result.code).toBe(0);
-    expect(result.log).toContain("ccc grep foo(\\(ARGS*\\))");
-    expect(result.stdout).toContain(
-      "RESULT: PASS route=structural engine=ccc-grep",
-    );
   });
 
   // --- `stamp` deletion regressions: the subcommand asserted freshness without ever running an
@@ -2034,8 +2022,8 @@ describe("repo-retrieve route contract", () => {
 
     // Before re-indexing, the watermark from the first commit is now stale for the new HEAD.
     const stale = run(dir, ["concept", "--query", "x"]);
-    expect(stale.code).toBe(0);
-    expect(stale.stderr).toContain("INDEX: built at");
+    expect(stale.code).toBe(3);
+    expect(stale.stderr).toContain("gap=1");
 
     // repo-retrieve index closes the gap in one step: reindex + record the watermark at the
     // CURRENT head.
@@ -2049,82 +2037,68 @@ describe("repo-retrieve route contract", () => {
     expect(fresh.code).toBe(0);
   });
 
-  test("in-scope drift starts a detached reindex and serves the completed index", () => {
-    const { dir } = registerGitProject();
-    run(dir, ["index"]);
-    writeFileSync(join(dir, "later.md"), "later\n");
-    gitCmd(dir, ["add", "later.md"]);
-    gitCmd(dir, ["commit", "-q", "-m", "later"]);
-    const result = run(dir, ["concept", "--query", "x"]);
-    expect(result.code).toBe(0);
-    expect(result.stderr).toContain(`INDEX: built at`);
-    expect(result.stdout).toContain("RESULT: PASS route=concept");
-    expect(result.stdout).toContain(
-      "status=serving-stale-within-bound gap=1 changed=1",
-    );
+  test("fresh and out-of-scope indexes serve search and shape routes", () => {
+    const routes = [
+      ["about", "x"],
+      ["absent", "-q", "x", "-q", "y", "-q", "z"],
+      ["shape", "x"],
+    ];
+    const { dir } = registerFreshGitProject();
+    for (const route of routes) {
+      const fresh = run(dir, route);
+      expect(fresh.code).toBe(0);
+      expect(fresh.stdout).toContain("status=fresh");
+    }
+    writeFileSync(join(dir, "excluded.txt"), "excluded\n");
+    gitCmd(dir, ["add", "excluded.txt"]);
+    gitCmd(dir, ["commit", "-q", "-m", "excluded"]);
+    for (const route of routes) {
+      const fresh = run(dir, route, { FAKE_SCOPE_RESULT: "[]" });
+      expect(fresh.code).toBe(0);
+      expect(fresh.stdout).toContain("status=fresh");
+    }
   });
 
-  test("fresh, bounded stale and beyond-bound semantic results retain their serving decisions", () => {
-    const { dir } = registerGitProject();
-    run(dir, ["index"]);
-    const fresh = run(dir, ["about", "x"]);
-    expect(fresh.code).toBe(0);
-    expect(fresh.stdout).toContain("status=fresh");
+  test("all semantic routes refuse in-scope drift with gap and reindex state", () => {
+    const routes = [
+      ["about", "x"],
+      ["absent", "-q", "x", "-q", "y", "-q", "z"],
+      ["shape", "x"],
+      ["exists", "x"],
+      ["definition", "x"],
+    ];
+    const { dir } = registerFreshGitProject();
     writeFileSync(join(dir, "later.md"), "later\n");
     gitCmd(dir, ["add", "later.md"]);
     gitCmd(dir, ["commit", "-q", "-m", "later"]);
-    const stale = run(dir, ["about", "x"], {
-      FAKE_SCOPE_RESULT: '["later.md"]',
-    });
-    expect(stale.code).toBe(0);
-    expect(stale.stdout).toContain(
-      "status=serving-stale-within-bound gap=1 changed=1",
+    gitCmd(dir, ["commit", "--allow-empty", "-q", "-m", "next"]);
+    writeFileSync(
+      join(dir, ".cocoindex_code", "AUTO_REINDEX_AT"),
+      `${Temporal.Now.instant().epochMilliseconds}\n`,
     );
-    const refused = run(dir, ["about", "x"], {
-      FAKE_SCOPE_RESULT: '["later.md"]',
-      REPO_RETRIEVE_MAX_STALE_COMMITS: "0",
-    });
-    expect(refused.code).toBe(3);
-    expect(refused.stderr).toContain(
-      "RESULT: NO_INDEX route=concept engine=ccc",
-    );
-    expect(refused.log).not.toContain("ccc search");
-    const noMatch = run(dir, ["about", "x"], {
-      FAKE_SCOPE_RESULT: '["later.md"]',
-      FAKE_SEARCH_EMPTY: "1",
-    });
-    expect(noMatch.code).toBe(1);
-    expect(noMatch.stderr).toContain(
-      "status=serving-stale-within-bound gap=1 changed=1",
-    );
+    for (const route of routes) {
+      const result = run(dir, route, { FAKE_SCOPE_RESULT: '["later.md"]' });
+      expect(result.code, `${route.join(" ")}: ${result.stderr}`).toBe(3);
+      expect(result.stderr).toContain("RESULT: NO_INDEX");
+      expect(result.stderr).toContain("gap=2 commits");
+      expect(result.stderr).toContain("reindex");
+      expect(result.stdout).not.toContain("RESULT: PASS");
+      expect(result.log).not.toContain("ccc search");
+      expect(result.log).not.toContain("ccc grep");
+    }
   });
 
-  test("stale search requests detached reindex even while the daemon is busy", () => {
-    const { dir } = registerGitProject();
-    run(dir, ["index"]);
+  test("a stale request reports a newly requested reindex", () => {
+    const { dir } = registerFreshGitProject();
     writeFileSync(join(dir, "later.md"), "later\n");
     gitCmd(dir, ["add", "later.md"]);
     gitCmd(dir, ["commit", "-q", "-m", "later"]);
-
-    const result = run(dir, ["concept", "--query", "x"], {
-      FAKE_CCC_INDEXING: "1",
+    const result = run(dir, ["about", "x"], {
+      FAKE_SCOPE_RESULT: '["later.md"]',
     });
-    expect(result.code).toBe(0);
-    expect(result.stdout).toContain("RESULT: PASS route=concept");
-    expect(result.stderr).toMatch(/INDEX: reindex running \(pid \d+\)/u);
-  });
-
-  test("automatic reindex leaves the stale completed index available for search", () => {
-    const { dir } = registerGitProject();
-    run(dir, ["index"]);
-    writeFileSync(join(dir, "later.md"), "later\n");
-    gitCmd(dir, ["add", "later.md"]);
-    gitCmd(dir, ["commit", "-q", "-m", "later"]);
-
-    const result = run(dir, ["concept", "--query", "x"]);
-    expect(result.code).toBe(0);
-    expect(result.stderr).toContain("INDEX: built at");
-    expect(result.stdout).toContain("RESULT: PASS route=concept");
+    expect(result.code).toBe(3);
+    expect(result.stderr).toContain("gap=1 commits");
+    expect(result.stderr).toContain("reindex is running (pid");
   });
 
   test("a HEAD drift that changes no path is not staleness: served, with a NOTE", () => {
@@ -2406,7 +2380,7 @@ describe("repo-retrieve route contract", () => {
       /INDEX: stale since .*; reindex is running \(pid \d+\); check progress with 'rr index --status'/u,
     );
     expect(second.code).toBe(3);
-    expect(second.stderr).toContain("reindex already requested within 2m");
+    expect(second.stderr).toContain("reindex not requested by this call");
     await Bun.sleep(2_250);
     expect(readFileSync(log, "utf8").match(/ccc index\n/gu)?.length).toBe(1);
   });
@@ -2427,8 +2401,8 @@ describe("repo-retrieve route contract", () => {
     expect(result.log).toContain("agents");
   });
 
-  test("structural routes to ccc grep without requiring registration", () => {
-    const result = run(tempDir("repo-retrieve-unregistered-"), [
+  test("structural routes to ccc grep with a fresh index", () => {
+    const result = run(registerFreshGitProject().dir, [
       "structural",
       "--query",
       "foo(\\(ARGS*\\))",
@@ -2452,7 +2426,7 @@ describe("repo-retrieve route contract", () => {
 
   test("ccc grep's own literal 'No matches found.' sentinel is read as NO_MATCH, never PASS", () => {
     const result = run(
-      tempDir("repo-retrieve-unregistered-"),
+      registerFreshGitProject().dir,
       ["structural", "--query", "foo(\\(ARGS*\\))"],
       { FAKE_SEARCH_EMPTY: "1" },
     );
@@ -2471,7 +2445,7 @@ describe("repo-retrieve route contract", () => {
     // the whole output would misreport this as NO_MATCH; exact whole-output equality does not,
     // because a real match's output always leads with a "path\nline| content" block.
     const result = run(
-      tempDir("repo-retrieve-unregistered-"),
+      registerFreshGitProject().dir,
       ["structural", "--query", "foo(\\(ARGS*\\))"],
       { FAKE_CCC_GREP_SPOOF: "1" },
     );
@@ -2484,7 +2458,7 @@ describe("repo-retrieve route contract", () => {
 
   test("a genuinely empty ccc grep stdout is also read as NO_MATCH (defensive branch, not observed on real ccc)", () => {
     const result = run(
-      tempDir("repo-retrieve-unregistered-"),
+      registerFreshGitProject().dir,
       ["structural", "--query", "foo(\\(ARGS*\\))"],
       { FAKE_SEARCH_EMPTY: "1", FAKE_CCC_GREP_BLANK: "1" },
     );

@@ -209,6 +209,18 @@ export function treeCandidate(
   ctx?: Context,
   maxEntries?: number,
 ): Promise<Candidate> {
+  if (maxEntries === 0)
+    return Promise.resolve({
+      id: path,
+      path,
+      verdict: "RECLAIM",
+      reason,
+      checks: [],
+      bytes: null,
+      bytes_kind: "estimate",
+      action: { kind: "delete", argv: [path] },
+      result: null,
+    });
   let truncated = false;
   const bound = {
     ...(maxEntries === undefined ? {} : { maxEntries }),
@@ -274,7 +286,12 @@ export async function deleteTree(candidate: Candidate, ctx: Context) {
       protectedPaths: ctx.config.protected ?? [],
       ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
     },
-    progress: await removeTreeProgress(candidate.path, candidate.bytes, ctx),
+    progress: await removeTreeProgress(
+      candidate.path,
+      candidate.bytes,
+      ctx,
+      candidate.bytes !== null,
+    ),
   });
   return {
     ok: result.ok,

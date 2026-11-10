@@ -36,6 +36,46 @@ const context = (repoRoots: string[], procDir: string) => ({
 });
 
 describe("builds target", () => {
+  test("run discovery and recheck defer sizing without skipping protection", async () => {
+    const home = tempRoot("reclaim-builds-defer-size-");
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      rmSync(home, { recursive: true, force: true });
+    });
+    const path = join(home, "dist");
+    mkdirSync(path);
+    let probes = 0;
+    let scans = 0;
+    const target = createBuildsTarget(
+      () => home,
+      () => [path],
+      {
+        protection: () => {
+          probes += 1;
+          return null;
+        },
+      },
+    );
+    const ctx = {
+      ...context([], home),
+      mode: "run" as const,
+      reportActivity: () => {
+        scans += 1;
+      },
+    };
+    const rows = await target.plan(ctx);
+    expect(rows[0]).toMatchObject({ verdict: "RECLAIM", bytes: null });
+    const item = rows[0];
+    expect(item).toBeDefined();
+    if (item === undefined) return;
+    expect(await target.recheck(item, ctx)).toMatchObject({
+      verdict: "RECLAIM",
+      bytes: null,
+    });
+    expect(probes).toBe(2);
+    // Discovery reports once; neither preview nor recheck starts a sizing walk.
+    expect(scans).toBe(1);
+  });
   test("protected and unknown-use builds do not consume the sizing budget", async () => {
     const home = tempRoot("reclaim-builds-no-protected-scan-");
     using cleanup = new DisposableStack();

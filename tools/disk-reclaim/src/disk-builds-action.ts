@@ -5,7 +5,10 @@ import type { createBuildsTarget } from "./targets/builds.ts";
 export async function buildsPreflight<T>(
   request: { id: string; path: string; fingerprint: string },
   deps: {
-    target: ReturnType<typeof createBuildsTarget>;
+    target: Pick<
+      ReturnType<typeof createBuildsTarget>,
+      "plan" | "recheck" | "act"
+    >;
     context: Context;
     identity: (path: string) => Promise<string>;
     device: (path: string) => Promise<number>;

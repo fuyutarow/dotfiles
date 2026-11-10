@@ -1,6 +1,6 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { cpus, homedir, hostname } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
 import { fromThrowable, z } from "@dotfiles/shared/src/zod.ts";
 import { readHeadroom } from "./storage.ts";
@@ -34,6 +34,10 @@ import {
 import type { Context, Target } from "./targets/index.ts";
 import { defaultScanCacheDir, withScanSignal } from "./lib/scan-cache.ts";
 import { acquirePlanLock } from "./lib/plan-lock.ts";
+import {
+  checkpointCandidate,
+  resumeCandidateOrder,
+} from "./lib/candidate-cursor.ts";
 
 const expand = (p: string) =>
   p
@@ -691,7 +695,7 @@ async function executeCandidates(
   const bytesAt = (index: number): number =>
     row.candidates[index]?.bytes ?? Number.POSITIVE_INFINITY;
   // Infinity - Infinity is NaN, which falls through to the stable index tie-break.
-  const order =
+  let order =
     target.fastFirst === true
       ? indexes.toSorted((left, right) => {
           const difference = bytesAt(left) - bytesAt(right);
@@ -699,10 +703,30 @@ async function executeCandidates(
           return difference;
         })
       : indexes;
+  // Persist scheduling only, never a safety verdict. If a candidate consumes the
+  // stage budget, the next invocation starts after it and still rechecks every act.
+  const cursorPath =
+    target.resumeCandidates === true
+      ? join(
+          options.state ?? stateDir(),
+          `candidate-cursor-${target.name}.json`,
+        )
+      : undefined;
+  order = await resumeCandidateOrder(order, row.candidates, cursorPath);
   for (const index of order) {
     if (options.cancellationSignal?.aborted === true) break;
     if (ctx.foregroundLockYielded?.() === true) break;
     options.deadlineCheck?.("candidate recheck");
+    const candidate = row.candidates[index];
+    if (candidate?.verdict !== "RECLAIM") continue;
+    const checkpointError = await checkpointCandidate(cursorPath, candidate.id);
+    if (checkpointError !== null) {
+      row.exit = 1;
+      ctx.log(
+        `${target.name}: cannot checkpoint candidate cursor: ${checkpointError}`,
+      );
+      return;
+    }
     const exit = await recheckAndAct(
       target,
       row,

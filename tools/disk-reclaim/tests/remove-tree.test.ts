@@ -7,7 +7,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { removeTree } from "../src/lib/remove-tree.ts";
+import { removeTree, removeTreeProgress } from "../src/lib/remove-tree.ts";
 import { deleteTree } from "../src/targets/tree.ts";
 import {
   hasForegroundWaiter,
@@ -15,6 +15,24 @@ import {
   waitForLock,
 } from "../src/receipt.ts";
 import { tempRoot } from "./fixtures/temp.ts";
+
+test("unmeasured removal progress reports counters without a preliminary tree walk", async () => {
+  const reports: unknown[][] = [];
+  const progress = await removeTreeProgress(
+    "/not-a-measured-tree",
+    null,
+    {
+      reportProgress: (...values) => {
+        reports.push(values);
+      },
+    },
+    false,
+  );
+  expect(progress).toMatchObject({ entries: 0, bytes: 0 });
+  if (progress === false) return;
+  progress.onProgress(3, 4096, false);
+  expect(reports[0]?.slice(2)).toEqual([3, 4096, false, "delete", undefined]);
+});
 
 function fixture() {
   const root = tempRoot("reclaim-tree-signal-");

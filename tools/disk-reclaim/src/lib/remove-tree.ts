@@ -125,6 +125,7 @@ export async function removeTreeProgress(
     targetName?: string | undefined;
     reportProgress?: ContextProgress | undefined;
   },
+  measureTotals = true,
 ): Promise<
   | false
   | {
@@ -135,9 +136,11 @@ export async function removeTreeProgress(
     }
 > {
   if (context?.progress === false) return false;
-  const totalBytes = bytes ?? (await estimatedBytes(path));
+  const totalBytes = measureTotals
+    ? (bytes ?? (await estimatedBytes(path)))
+    : 0;
   return {
-    entries: (await countEntries(path)) + 1,
+    entries: measureTotals ? (await countEntries(path)) + 1 : 0,
     bytes: totalBytes,
     tty: context?.progressTty === true,
     onProgress: (entries, currentBytes, done) =>
@@ -148,7 +151,7 @@ export async function removeTreeProgress(
         currentBytes,
         done,
         "delete",
-        totalBytes,
+        measureTotals ? totalBytes : undefined,
       ),
   };
 }
@@ -292,7 +295,10 @@ export async function removeTree(
       progress.bytes === 0
         ? 100
         : Math.min(100, Math.floor((bytesFreed / progress.bytes) * 100));
-    const line = `[reclaim] ${path}: deleting ${bytesFreed}/${progress.bytes} bytes · ${entriesDone}/${progress.entries} entries · ${percent}%`;
+    const line =
+      progress.entries === 0
+        ? `[reclaim] ${path}: deleted ${bytesFreed} bytes · ${entriesDone} entries · total unmeasured`
+        : `[reclaim] ${path}: deleting ${bytesFreed}/${progress.bytes} bytes · ${entriesDone}/${progress.entries} entries · ${percent}%`;
     if (progress.onProgress !== undefined) {
       progress.onProgress(entriesDone, bytesFreed, final);
       return;

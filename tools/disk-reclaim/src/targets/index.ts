@@ -90,6 +90,8 @@ export interface Target {
   tier: Tier;
   /** Run previews enumerate ownership only; measurement is deferred until each recheck. */
   incremental?: boolean;
+  /** Persist a fair action cursor across bounded recovery invocations. */
+  resumeCandidates?: boolean;
   description?: { what: string; why: string };
   available(this: void, ctx: Context): Availability | Promise<Availability>;
   plan(this: void, ctx: Context): Candidate[] | Promise<Candidate[]>;

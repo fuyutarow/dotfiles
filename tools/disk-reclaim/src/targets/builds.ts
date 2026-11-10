@@ -53,6 +53,7 @@ const protection = (path: string, ctx: Context) =>
     repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
     protectedPaths: ctx.config.protected ?? [],
     ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
+    processes: ctx.liveness,
   });
 export const createBuildsTarget = (
   root: () => string = () =>
@@ -78,6 +79,8 @@ export const createBuildsTarget = (
   return {
     name: "builds",
     tier: "blind",
+    incremental: true,
+    resumeCandidates: true,
     fastFirst: true,
     available: () => ({ available: true, skip_reason: null }),
     plan: async (ctx: Context) => {
@@ -116,7 +119,7 @@ export const createBuildsTarget = (
               path,
               "regenerable build output (kondo --all parity)",
               ctx,
-              BUILD_SCAN_MAX_ENTRIES,
+              ctx.mode === "run" ? 0 : BUILD_SCAN_MAX_ENTRIES,
             ),
           );
       }
@@ -146,7 +149,7 @@ export const createBuildsTarget = (
         path,
         "regenerable build output (kondo --all parity)",
         ctx,
-        BUILD_SCAN_MAX_ENTRIES,
+        ctx.mode === "run" ? 0 : BUILD_SCAN_MAX_ENTRIES,
       );
     },
     act: async (candidate, ctx) => {

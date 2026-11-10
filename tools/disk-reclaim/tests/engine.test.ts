@@ -79,6 +79,40 @@ afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
 });
 
+test("bounded runs resume after the interrupted candidate and recheck later candidates", async () => {
+  let expire = noop;
+  const opts = options({
+    scheduleDeadline: (callback) => {
+      expire = callback;
+      return noop;
+    },
+  });
+  const { target, acted } = fakeTarget({
+    candidates: ["heavy", "held", "tail"].map((id) =>
+      Object.assign(candidate(id), { path: null }),
+    ),
+  });
+  target.resumeCandidates = true;
+  const checked: string[] = [];
+  target.recheck = (item) => {
+    checked.push(item.id);
+    if (item.id === "heavy") expire();
+    return item.id === "held" ? { ...item, verdict: "KEEP" } : item;
+  };
+  expect((await run([target], opts)).exit).toBe(1);
+  expect(checked).toEqual(["heavy"]);
+  expect(acted).toEqual([]);
+  expect(
+    jsonOf(z.object({ after: z.string() })).safeParse(
+      readFileSync(join(opts.state, "candidate-cursor-fake.json"), "utf8"),
+    ),
+  ).toEqual({ success: true, data: { after: "heavy" } });
+  checked.length = 0;
+  expect((await run([target], opts)).exit).toBe(1);
+  expect(checked).toEqual(["held", "tail", "heavy"]);
+  expect(acted).toEqual(["tail"]);
+});
+
 test.each([
   "locked plan",
   "target plan",

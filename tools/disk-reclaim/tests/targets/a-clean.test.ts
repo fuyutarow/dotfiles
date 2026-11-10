@@ -31,6 +31,29 @@ const context = {
 };
 
 describe("clean target", () => {
+  test("run previews defer cache sizing so a large cache cannot starve later candidates", async () => {
+    const home = tempRoot("reclaim-clean-defer-size-");
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      rmSync(home, { recursive: true, force: true });
+    });
+    mkdirSync(join(home, ".cache/uv"), { recursive: true });
+    let scans = 0;
+    const target = createCleanTarget(
+      () => home,
+      () => false,
+    );
+    const rows = await target.plan({
+      ...context,
+      mode: "run",
+      reportActivity: () => {
+        scans += 1;
+      },
+    });
+    expect(target.incremental).toBe(true);
+    expect(rows[0]).toMatchObject({ verdict: "RECLAIM", bytes: null });
+    expect(scans).toBe(0);
+  });
   test("busy caches return unmeasured KEEP without starting a tree scan", async () => {
     const home = tempRoot("reclaim-clean-no-busy-scan-");
     using cleanup = new DisposableStack();

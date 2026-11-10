@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.34 — 2026-11-10
+
+- Resume bounded clean and builds runs after the interrupted candidate; defer run sizing.
+
 ## 1.12.33 — 2026-11-10
 
 - Avoid sizing busy caches and protected build directories during recovery.

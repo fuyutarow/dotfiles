@@ -43,6 +43,8 @@ export const createCleanTarget = (
   ({
     name: "clean",
     tier: "blind",
+    incremental: true,
+    resumeCandidates: true,
     available: (_ctx?: Context) => ({ available: true, skip_reason: null }),
     plan: async (_ctx: Context) => {
       const root = home();
@@ -75,7 +77,12 @@ export const createCleanTarget = (
               return fs.keep(p, "busy: cargo", _ctx);
             if (comm !== undefined && isBusy(comm))
               return fs.keep(p, `busy: ${comm}`, _ctx);
-            return fs.tree(p, "regenerable package cache", _ctx);
+            return fs.tree(
+              p,
+              "regenerable package cache",
+              _ctx,
+              _ctx.mode === "run" ? 0 : undefined,
+            );
           }),
       );
     },
@@ -84,7 +91,7 @@ export const createCleanTarget = (
         if (isBusy("bun"))
           return { ok: false, bytes_freed: null, error: "busy: bun" };
         if (await bunGc(home()))
-          return { ok: true, bytes_freed: candidate.bytes ?? 0, error: null };
+          return { ok: true, bytes_freed: candidate.bytes, error: null };
       }
       return deleteTree(candidate, ctx);
     },

@@ -1,70 +1,104 @@
 ---
 name: writing-julia-gpu-kernels
 description: >-
-  For Julia GPU paths, choose a suitable library primitive → cuTile.jl tile kernel → thread-level
-  KernelAbstractions.jl or CUDA.jl kernel only when the work does not fit a tile, stating why.
-  MANDATORY before @cuda, KernelAbstractions @kernel,
-  or Julia device storage/decode/performance edits, and for GPU-first model/learner step performance
-  (host round-trips, Array() pulls, GPU first). Use for GPU カーネル/最適化, occupancy,
-  coalescing/shared memory/warps/atomics, InvalidIRError, profiling/roofline, tensor cores,
-  reduced precision/低精度, FP8/6/4, MXFP/NVFP4, microscaling/マイクロスケーリング/ブロック浮動小数点,
-  packed/パック済み storage, Microfloats/cuTile, GPU rrule, scan, or SSM/Mamba—only with a
-  Julia/CUDA.jl/CuArray device path. Cuts:
-  host Julia → writing-julia; terminology/surveys/shopping/PyTorch-JAX → plain or
-  systematizing-knowledge; behavior change → follow repository instructions and the relevant owner. Cheap benchmark →
-  GK2; costly bet → acting-on-hypotheses. English skill; answer in the user's language.
+  For Julia GPU paths, pick the highest stage that keeps semantics and the work budget — library
+  primitive or fused broadcast → cuTile.jl tile kernel → KernelAbstractions.jl (portability) or
+  CUDA.jl thread kernel (work no tile expresses) — stay inside that stage's compiler model and lower
+  only the part that falls outside; a hand kernel carries an oracle, an rrule if differentiated,
+  synchronized timing and a pinned version. MANDATORY before @cuda, cuTile/KernelAbstractions
+  kernels, or Julia device storage/decode/performance edits, and for GPU-first model/learner step
+  performance (host round-trips, Array() pulls). Use for GPU カーネル/最適化, occupancy,
+  coalescing/shared memory/warps/atomics, InvalidIRError, Tile IR rejections, profiling/roofline,
+  tensor cores, reduced precision/低精度, FP8/6/4, MXFP/NVFP4, packed storage, GPU rrule, scan,
+  or SSM/Mamba—only with a Julia/CUDA.jl/CuArray device path. Cuts: host Julia → writing-julia;
+  terminology/surveys/PyTorch-JAX → plain or systematizing-knowledge; behavior change → repository
+  instructions and the relevant owner. Cheap benchmark → GK2; costly bet → acting-on-hypotheses.
+  English skill; answer in the user's language.
 ---
 
-# Choose the execution model before writing a kernel
+# Choose the highest stage, then stay inside its compiler model
 
-> Use a semantics-preserving library primitive first, a cuTile.jl tile kernel second, and a
-> thread-level KernelAbstractions.jl/CUDA.jl kernel only for work that does not fit a tile; state why.
-> Then bind the full path and work budget (GKB), map dependencies onto execution (GKD), reject
-> unnecessary kernels (GK0), and meet device legality, measurement, oracle and precision gates (GK1–GK4).
+> 1. **Highest stage that keeps semantics and budget.** Library primitive or one fused broadcast →
+>    cuTile.jl tile kernel (NVIDIA CC 8.0+, dense tile-shaped work) → KernelAbstractions.jl when
+>    portability is required → CUDA.jl thread kernel for work no tile expresses (per-thread irregular
+>    control, warp intrinsics, generation-specific features, CC < 8.0). Name the reason for each step down.
+> 2. **Stay inside the chosen stage's compiler model.** When one part is rejected or inexpressible,
+>    lower only that part; do not lower the whole path.
+> 3. **A hand kernel carries its obligations:** an oracle against a reference (GK3), a backward rule
+>    when differentiated (GK3-AD), synchronized measurement (GK2) and a pinned package version or commit.
+>
+> Then bind the path and budget (GKB), map dependencies onto execution (GKD), reject unnecessary
+> kernels (GK0) and meet GK1–GK4 below.
 
-This ordering is the default, not a claim that every operation has a library primitive or fits a tile.
-cuTile.jl expresses block work as whole-tile operations; its compiler maps them onto threads and hardware.
-Choose a thread-level kernel for genuinely irregular work such as scatter, hashing or scalar atomics only
-when it does not fit the tile model, and name that reason. cuTile.jl's versioned conditions are below.
+## Negative space — what each stage rejects or punishes
 
-## cuTile.jl conditions (v1.0.0, commit c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe)
+| # | Do not | Instead | Home |
+|---|---|---|---|
+| 3 | Put loops, tuples, multi-output or non-inlinable helpers in a cuTile element function | Scalar, side-effect-free element functions; carry state across a counted `for` loop as one tile per value, never fully unrolled | cuTile.jl model |
+| 3a | Widen a narrow integer tile with a literal (`t .+ 0x0100`) | The literal converts to the tile's type; `convert(Tile{UInt16}, t)` first | cuTile.jl model |
+| 9 | Depend on an unreleased branch without a pinned commit | Pin the commit; record when a release can replace it | cuTile.jl model |
+| 1 | Hand-write what a library call or fused broadcast already does | The GK0 row | GK0 |
+| 2 | Write dense tile-shaped work thread by thread on CC 8.0+ | A cuTile.jl tile kernel | Principle 1 |
+| 4 | Send a hand kernel through AD without a backward | rrule/Enzyme rule plus gradient oracle | GK3-AD |
+| 5 | Kernelize without a reference result | Keep the array version as the oracle | GK3 |
+| 6 | Kernelize before measuring, or time compilation with execution | Profile first; warm up, then synchronized timing | GKB, GK2 |
+| 7 | Read or write CuArray elements one by one from the host | Device broadcast, gather or kernel | §0b |
+| 8 | Write CUDA.jl-only code where portability is required | KernelAbstractions.jl | `portable-kernels.md` |
 
-- Launching requires importing CUDA.jl; it supplies `CuArray`, compiler artifacts and the stream
-  ([execution.md:37–42](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/execution.md#L37-L42)).
-  CUDA.jl is absent from cuTile.jl's deps, weakdeps and extensions; do not attribute this to an extension
-  ([Project.toml:11–33](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/Project.toml#L11-L33)).
-- Launch arguments convert `CuArray{T,N}` to `ct.TileArray{T,N,I,Spec}`
-  ([execution.md:104–119](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/execution.md#L104-L119)).
-- Baseline: Julia 1.11+, NVIDIA driver 580 (CUDA 13), compute capability 8.0+.
-  Feature availability also depends on Tile IR bytecode version
-  ([compatibility.md:1–46](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/compatibility.md#L1-L46)).
-- Numeric FP8/FP4 formats do not support general arithmetic, reductions or scans; convert to an
-  arithmetic float for elementwise computation. `ct.muladd_scaled` requires Blackwell (sm_100+)
-  ([element_types.md:25–35](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/element_types.md#L25-L35),
-  [compatibility.md:94–103](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/compatibility.md#L94-L103)).
-- Listed integer types are Int8/UInt8 through Int64/UInt64; docs provide no complete operation-by-type
-  matrix ([element_types.md:5–8](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/element_types.md#L5-L8)).
-- Sparse view indexing supports rank 2+ arrays with one 1-D integer tile index; other indices are
-  unit ranges or `:`. Scalar indices are not supported
-  ([compatibility.md:64–69](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/compatibility.md#L64-L69),
-  [operations.jl:50–78](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/src/language/operations.jl#L50-L78)).
-  v1.0.0 adds view-based atomic reductions and `ct.@atomic`
-  ([release notes](https://github.com/JuliaGPU/cuTile.jl/releases/tag/v1.0.0)); do not generalize beyond
-  the documented operations and architecture/version gates.
-- Tile shapes are compile-time values; changed constants or converted argument types specialize a new
-  kernel ([execution.md:125–176](https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe/docs/src/man/execution.md#L125-L176)).
-- The inspected README/docs/release notes do not state an automatic-differentiation guarantee; this is
-  an evidence limit, not a claim of non-support (capture urn:uuid:01a1bf08-e39f-74e6-97c5-9d030c426b63).
+## cuTile.jl model (main commit c55543dc, 56 commits after v1.0.0; checked 2026-11-10)
 
-## THE LAW
+Facts below cite [`B`] = `https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe`.
+Re-check them when the commit changes.
 
-> **Version**: v2610.2.0 (2026-10-02) — launch shape typed (Parallel/Serial), in-loop transfer budget 0, typed stage outcome; device ownership stays at writing-julia JG8 (§10.10).
-> **Scope**: CUDA.jl/KernelAbstractions kernels and CuArray/device paths; NVIDIA-first.
-> **History and source grades**: `tests/forge-verification-ledger.md`.
+- **Version `[dated:2026-11]`.** Registered v1.0.0 pins `CUDA_Compiler_jll = "0.5"` and
+  `CompilerCaching = "0.3.1 - 0.4"`; main allows `"0.5, 0.6"` and `"0.5"`. Pairing main with CUDA.jl
+  waits for a GPUCompiler release containing JuliaGPU/GPUCompiler.jl#922 (cuTile.jl PR #310).
+- **Launch.** Importing CUDA.jl is required; it supplies `CuArray`, compiler artifacts and the stream
+  (B/docs/src/man/execution.md#L37-L42). CUDA.jl is absent from deps, weakdeps and extensions
+  (B/Project.toml#L11-L33). `CuArray{T,N}` converts to a mutable `ct.TileArray`
+  (B/docs/src/man/execution.md#L104-L119); no read-only array, `Const` wrapper or read-only view was found.
+- **Requirements.** Julia 1.11+, driver 580 (CUDA 13), CC 8.0+; features also depend on the Tile IR
+  bytecode version (B/docs/src/man/compatibility.md#L1-L46).
+- **Element functions.** A scalar function broadcast or mapped over a tile runs once for the whole
+  tile; per-element branches compute both arms, so arms must be side-effect free
+  (B/docs/src/man/julia_differences.md#L19-L21). Functions with source are force-inlined
+  (B/src/compiler/interpreter.jl#L270-L285); a call left without a Tile IR intrinsic fails with
+  `Unsupported function call during Tile IR compilation: … has no Tile IR equivalent`
+  (B/src/compiler/codegen/expressions.jl#L189-L203).
+- **Types.** A value without a Tile IR type fails with `Unsupported Julia type for Tile IR`
+  (B/test/codegen/operations.jl#L1363-L1367). The docs recommend no form for tile tuples carried
+  through loops, multi-output element functions, `@generated`/`ntuple` helpers or dynamic tuple
+  indexing; treat them as unverified. Measured precedent `[dated:2026-11]` (RTX 3060 sm_86, main
+  c55543dc, tile 128): fully unrolled limb arithmetic compiled in 1–8 s for small cases, but a 16-step
+  2-limb division ran past 600 s and a 16-table kernel past 25 min; the same division as a counted
+  `for i in Int32(1):Int32(8N)` loop carrying one tile per limb compiled in 3–7 s and matched a host
+  oracle. Bitwise `.~` on an integer tile is rejected (`not_int … has no Tile IR equivalent`); use
+  `xor.(u, typemax(T))`.
+- **Integers and scalars.** Listed integers are Int8/UInt8–Int64/UInt64 with no operation-by-type
+  matrix (B/docs/src/man/element_types.md#L5-L8). A broadcast scalar converts to the first
+  same-category tile element type, so a literal never widens a narrow tile
+  (B/src/language/broadcast.jl#L69-L71); widen with `convert(Tile{T}, t)` first. FP8/FP4 have no
+  general arithmetic; `ct.muladd_scaled` needs sm_100+ (B/docs/src/man/element_types.md#L25-L35).
+- **Indexing and boundaries.** Partial-tile loads fill by `padding_mode` (default Undetermined),
+  stores drop out-of-bounds elements, and a tile wholly outside is undefined
+  (B/src/language/operations.jl#L635-L646, #L944-L951). Scalar load `arr[i]` exists (#L769-L777);
+  scalar store is unconfirmed. `ct.arange` defaults to `Int32` (#L1141-L1153). Gather/scatter views
+  take rank 2+ with one 1-D integer tile index; scalar indices are rejected (#L43-L62). v1.0.0 adds
+  view-based atomics and `ct.@atomic`, so scatter or a documented atomic reduction alone is not a
+  reason to drop to threads.
+- **Specialization and AD.** Tile shapes are compile-time values; new constants or argument types
+  compile a new kernel (B/docs/src/man/execution.md#L125-L176). No automatic-differentiation
+  guarantee was found (urn:uuid:01a1bf08-e39f-74e6-97c5-9d030c426b63); pair a backward rule (GK3-AD).
+
+## Scope
+
+> **Version**: v2611.1.0 (2026-11-10) — principles and negative space first; cuTile.jl model at main
+> c55543dc. Earlier history: v2610.2.0 launch shape typed, in-loop transfer budget 0, typed stage outcome.
+> **Scope**: cuTile.jl, KernelAbstractions.jl and CUDA.jl kernels and CuArray device paths; NVIDIA-first.
 
 ```bash
 test -f references/execution-design.md || exit 1
-for f in writing-kernels memory-and-warps host-performance reduced-precision-formats measuring debugging portable-kernels differentiating-kernels api-changes; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done; test -f tests/trigger-set.md || echo "MISSING trigger-set"; test -f tests/forge-verification-ledger.md || echo "MISSING ledger"
+for f in writing-kernels memory-and-warps host-performance reduced-precision-formats measuring debugging portable-kernels differentiating-kernels api-changes; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done
 ```
 
 Out of scope: driver installation, `nvidia-smi` plumbing, multi-GPU/distributed work, and CUDA C++.
@@ -75,9 +109,7 @@ Before allocation, warmup, profiling, or a pilot, obtain P7 resource admission t
 Inside a BIBIFI loop, use its short experiment cap for GPU tests and profiling as well as benchmarks.
 A microticket may use a targeted oracle under its cap; it does not waive required GK3 acceptance tests.
 Schedule any broader release tests with explicit coverage and a separate finite budget, not an unbounded suite.
-
-Fast-moving facts are tagged `[dated:YYYY-MM]`. Re-check a row after two quarters.
-Re-check sooner when the target or toolchain differs.
+Fast-moving facts are tagged `[dated:YYYY-MM]`; re-check a row after two quarters or on a toolchain change.
 
 ## THE LAW
 
@@ -102,7 +134,7 @@ An unknown stage blocks unsupported whole-path forecasts, not a separately justi
 | **GKD EXECUTION DESIGN** (`execution-design.md`) | Map work, serial span, independent axes, ownership, communication and launch boundaries before a kernel rewrite. | Per-stage execution map; serialized work is justified or marked a repair, not hidden behind CUDA syntax |
 | **GKR DEVICE RESIDENCY** (§0b) | A model step with a GPU performance objective gets a STAGE MAP before code, even if written as host Julia. Profile its steady-state hot path for device execution and zero host↔device transfers. | `STAGE MAP`, device-output checks, and a trace showing zero HtoD/DtoH copies inside the boundary. |
 | **GK0 SHOULD-THIS-KERNEL-EXIST** (§1) | Prefer a primitive preserving semantics and whole-path cost; justify custom mapping/fusion against that alternative. | Checked alternative and the measured or derived reason for departing from it |
-| **GK1 DEVICE LEGALITY** (`writing-kernels.md`) | Use isbits arguments, no GC allocation, `return nothing`, specialized helpers, and no boxed captures. | Kernel compiles; `@device_code_warntype` is clean on hot paths. |
+| **GK1 DEVICE LEGALITY** (`writing-kernels.md`; cuTile.jl model above) | Use isbits arguments, no GC allocation, `return nothing`, specialized helpers, and no boxed captures; for cuTile.jl, element functions and values that lower to Tile IR. | Kernel compiles; `@device_code_warntype` is clean on hot paths; a cuTile.jl kernel compiles without a Tile IR rejection. |
 | **GK2 MEASUREMENT** (`measuring.md`) | After P7, separate warmup/profile/timing; synchronize inside the timer and bind workload, state reset and statistics. | Measurement receipt, complete stage accounting and actual profile; normalized metrics retain their scope |
 | **GK3 CORRECTNESS ORACLE** (`debugging.md`) | Compare required outputs and mutable state across the claimed update sequence; check actual device dispatch and races. | Real GPU oracle/negative cases; SKIP is unverified, not pass; cached paths pass §11 |
 | **GK3-AD DIFFERENTIABILITY** (`differentiating-kernels.md`) | Only when derivatives through this op are required: provide the AD route and gradient oracle. | `rrule`/Enzyme or supported composable AD path; non-AD state update uses GK3 instead |

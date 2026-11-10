@@ -55,7 +55,7 @@ test("one row per writing task, not per holder; finished tasks absent", async ()
     kind: "known",
     rows: [{ id: "running", seconds: 90 }],
   });
-  expect(shellLines(scan)).toBe("shell 1m30s running");
+  expect(shellLines(scan)).toBe("sh_running 1m30s");
   const frame = {
     cwd,
     model: "?",
@@ -68,7 +68,7 @@ test("one row per writing task, not per holder; finished tasks absent", async ()
     ram: ok({ frac: "0/1G", pct: 0 }),
     shells: scan,
   };
-  expect(render(frame, { layout: "block" })).toContain("shell 1m30s running");
+  expect(render(frame, { layout: "block" })).toContain("sh_running 1m30s");
 });
 test("read-only holders do not create running rows", async () => {
   writeFileSync(join(proc, "10", "fdinfo", "1"), "flags:\t0100000\n");
@@ -163,7 +163,7 @@ test("a readable wrapper labels its row; a plain holder keeps the task id", asyn
     ],
   });
   expect(shellLines(scan, 200)).toBe(
-    "shell 1m30s bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
+    "sh_running 1m30s bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
   );
 });
 
@@ -197,7 +197,7 @@ test("compaction shortens paths, cuts at whole tokens, and never inside one", ()
   }
 });
 
-test("rows sharing a command add their id; labels stay within the width", () => {
+test("task prefixes distinguish identical commands and command budgets include the prefix", () => {
   const scan = {
     kind: "known" as const,
     rows: [
@@ -209,14 +209,15 @@ test("rows sharing a command add their id; labels stay within the width", () => 
   };
   const wide = shellLines(scan, 200).split("\n");
   expect(wide).toEqual([
-    "shell 2m00s bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md aaa",
-    "shell 0m05s bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md bbb",
-    "shell 0m09s sleep 100",
-    "shell 0m09s ddd",
+    "sh_aaa 2m00s bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
+    "sh_bbb 0m05s bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
+    "sh_ccc 0m09s sleep 100",
+    "sh_ddd 0m09s",
   ]);
   const narrow = shellLines(scan, 60).split("\n");
-  expect(narrow[0]).toBe("shell 2m00s bun dispatch-when-calm.ts … aaa");
-  expect(narrow[2]).toBe("shell 0m09s sleep 100");
+  expect(narrow[0]).toBe("sh_aaa 2m00s bun dispatch-when-calm.ts …");
+  expect(narrow[2]).toBe("sh_ccc 0m09s sleep 100");
   for (const line of narrow)
     expect(Array.from(line).length).toBeLessThanOrEqual(60);
+  expect(shellLines(scan, 15).split("\n")[0]).toBe("sh_aaa 2m00s");
 });

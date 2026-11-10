@@ -207,7 +207,7 @@ function shortenToken(token: string): string {
 /**
  * Compact a command for one row: whole tokens only, absolute paths reduced to
  * their basename, and a trailing " …" when tokens were dropped. Undefined when
- * even the first token does not fit, so the caller shows the task id instead.
+ * even the first token does not fit, so the caller omits the command.
  */
 export function compactCommand(
   command: string,
@@ -235,38 +235,20 @@ export function compactCommand(
 }
 
 /**
- * One line per running shell. The label is its compacted command, or the task
- * id when no command is readable. Rows sharing a command add their id to tell
- * them apart. `columns` bounds each label to the row width.
+ * One line per running shell, identified by task id and elapsed time.
+ * `columns` bounds the command to the remaining row width.
  */
 export function shellLines(scan: ShellScan, columns?: number): string {
   if (scan.kind === "unknown") return "shells: unknown";
   const width = columns ?? DEFAULT_COLUMNS;
-  const prefixes = scan.rows.map((row) => `shell ${dur(row.seconds)} `);
-  const labels = scan.rows.map((row, index) =>
-    row.command === undefined
-      ? undefined
-      : compactCommand(row.command, width - cells(prefixes[index] ?? "")),
-  );
-  const counts = new Map<string, number>();
-  for (const label of labels)
-    if (label !== undefined) counts.set(label, (counts.get(label) ?? 0) + 1);
   return scan.rows
-    .map((row, index) => {
-      const prefix = prefixes[index] ?? "";
-      const label = labels[index];
-      if (label === undefined) return `${prefix}${row.id}`;
-      if ((counts.get(label) ?? 0) < 2) return `${prefix}${label}`;
-      const shared =
+    .map((row) => {
+      const prefix = `sh_${row.id} ${dur(row.seconds)}`;
+      const command =
         row.command === undefined
           ? undefined
-          : compactCommand(
-              row.command,
-              width - cells(prefix) - cells(row.id) - 1,
-            );
-      return shared === undefined
-        ? `${prefix}${row.id}`
-        : `${prefix}${shared} ${row.id}`;
+          : compactCommand(row.command, width - cells(prefix) - 1);
+      return command === undefined ? prefix : `${prefix} ${command}`;
     })
     .join("\n");
 }

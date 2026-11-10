@@ -23,15 +23,14 @@ bun test tools/statusline/tests
 
 ## Unavailable values and Stop snapshots
 
-Claude stdin renders a `shell` row per session task whose output file is held
-open for writing by a same-UID Linux process. The label is the command the shell
+Claude stdin renders a `sh_<task id> <elapsed> [<command>]` row per session task
+whose output file is held open for writing by a same-UID Linux process. The command is what the shell
 runs: the wrapper process holding the output file has the argv
 `/usr/bin/zsh -c source …/shell-snapshots/… && … && eval '<command>' < /dev/null && pwd -P >| …`,
 and only `<command>` is shown. Absolute path tokens are reduced to their basename,
-and the label keeps whole tokens, ending in `…` when it must shorten to fit the
-row width (never cut inside a token). Rows whose commands are identical add their
-task ID to tell them apart. When no wrapper command is readable, the row shows the
-task ID. The output file's creation time approximates its start time. A shell that redirects
+and the command keeps whole tokens, ending in `…` when it must shorten to fit the
+row width after the prefix (never cut inside a token). When no wrapper command is
+readable or fits, the row contains only the task ID and elapsed time. The output file's creation time approximates its start time. A shell that redirects
 its own stdout and stderr away from its output file is not shown. An unreadable
 or incomplete scan, including on macOS, displays `shells: unknown`. The scan
 caps the task directory at 2048 entries and `/proc` at 8192 entries; exceeding

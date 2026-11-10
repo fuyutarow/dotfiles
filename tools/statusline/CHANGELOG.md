@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.12 — 2026-11-10
+
+- Show shell task IDs before elapsed time and compacted commands.
+
 ## 0.23.11 — 2026-11-10
 
 - shells: label each running shell row with its compacted command, falling back to the task id

@@ -1077,17 +1077,13 @@ export function rosterRow(
 export function agentSecondLine(
   row: string | undefined,
   context: string | undefined,
-  rc: string | undefined,
 ): string {
   const match = /^(\d+(?:\.\d+)?%) \([^/()]+\/([\d.]+[kM]?)\)$/u.exec(
     context ?? "",
   );
   const pct = match?.[1] ?? "?";
   const limit = match?.[2] ?? "?";
-  let rcDisplay = "rc:?";
-  if (rc === "rc:on") rcDisplay = "🔗";
-  if (rc === "rc:off") rcDisplay = "rc:off";
-  return [row ?? "?", `ctx ${pct}/${limit}`, rcDisplay].join(" · ");
+  return [row ?? "?", `ctx ${pct}/${limit}`].join(" · ");
 }
 
 export async function projectAgents(
@@ -1170,8 +1166,6 @@ export async function projectAgents(
       isAgent && rc?.startsWith("not applicable: ") === true;
     const unknownRc =
       isAgent && !notApplicable && rc !== "rc:on" && rc !== "rc:off";
-    const displayRc =
-      unknownRc && (model !== "" || effort !== "") ? "rc?" : marker;
     const context = z
       .object({
         tokens: z.number(),
@@ -1302,11 +1296,11 @@ export async function projectAgents(
       ...(isAgent
         ? [
             "--token",
-            `agent_detail=${agentSecondLine(rosterRow(roster, vendor, model, effort), contextText, rc)}`,
+            `agent_detail=${agentSecondLine(rosterRow(roster, vendor, model, effort), contextText)}`,
           ]
         : []),
-      ...(displayRc !== ""
-        ? ["--token", `rc=${displayRc}`]
+      ...(marker !== ""
+        ? ["--token", `rc=${marker}`]
         : ["--clear-token", "rc"]),
       "--token",
       `rc_reason=${unknownRc || notApplicable ? (rc ?? "remote-control observation unavailable") : ""}`,

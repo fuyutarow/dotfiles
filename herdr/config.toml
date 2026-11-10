@@ -86,11 +86,9 @@ show_agent_labels_on_pane_borders = true
 
 agent_panel_sort = "spaces"
 
-# Line 1: state icon + tab (the per-pane agent name, see agents/claude/hooks/herdr-tab-name.ts).
+# Line 1: state icon + name + Remote Control mark when confirmed on.
 # Line 2: the projector reports $agent_detail using the agx roster, the observed
-# Claude statusline context, and session Remote Control evidence. Unknown values use ?.
-# RC has three states from the statusline probe: 🔗 connected, rc:off disconnected,
-# rc:? unverified; absence cannot distinguish disconnected from an unreadable probe.
+# session context. Unknown values use ?. RC off and unknown both omit the mark.
 # The roster row retains +WF when the statusline reports active workflow orchestration.
 # Workspace was dropped from here entirely 2026-09-03, on request:
 # agent_panel_sort="spaces" already groups rows by workspace with its own header, so repeating
@@ -121,7 +119,7 @@ agent_panel_sort = "spaces"
 # Each override under rows_by_agent repeats row 3, since an override replaces rows.
 [ui.sidebar.agents]
 rows = [
-  ["state_icon", { token = "tab", fg = "#7f848e", bold = true, dim = false }],
+  ["state_icon", { token = "tab", fg = "#7f848e", bold = true, dim = false }, { token = "$rc", fg = "#7f848e", bold = false, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }],
   [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
   # Custom reported agents use these default rows, not rows_by_agent overrides.
@@ -140,12 +138,12 @@ rows = [
 # that instead, so the sidebar keeps the full name independently of the tab bar. Same colors and
 # same dropped-workspace layout as the default rows above — see that block's comment for why.
 claude = [
-  ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
+  ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }, { token = "$rc", fg = "#7f848e", bold = false, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }],
   [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
 ]
 codex = [
-  ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
+  ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }, { token = "$rc", fg = "#7f848e", bold = false, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }],
   [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
 ]

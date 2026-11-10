@@ -59,14 +59,7 @@ test.each(displayCases)(
       state === undefined ? new Map() : new Map([["pane", state]]),
     );
     const isAgent = vendor === "claude" || vendor === "codex";
-    let marker = "";
-    if (isAgent && state === "rc:on") marker = "🔗";
-    if (
-      isAgent &&
-      (state === "read failed" || state === undefined) &&
-      (model !== "" || effort !== "")
-    )
-      marker = "rc?";
+    const marker = isAgent && state === "rc:on" ? "🔗" : "";
     const args = calls.find((call) => call[1] === "report-metadata") ?? [];
     expect(args.filter((token) => token.startsWith("rc="))).toEqual(
       marker === "" ? [] : [`rc=${marker}`],
@@ -80,6 +73,12 @@ test.each(displayCases)(
     if (isAgent && state !== "rc:on" && state !== "rc:off")
       reason = state ?? "remote-control observation unavailable";
     expect(args).toContain(`rc_reason=${reason}`);
+    const detail = args.find((arg) => arg.startsWith("agent_detail="));
+    if (isAgent) {
+      expect(detail).toBeDefined();
+      expect(detail).not.toContain("rc");
+      expect(detail).not.toContain("🔗");
+    }
   },
 );
 

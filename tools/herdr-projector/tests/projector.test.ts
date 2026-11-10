@@ -251,7 +251,8 @@ test("projects known identity metadata and labels unknown agents without model",
   expect(calls[1]).toContain("fullname=project-agt_abcd");
   expect(calls[1]).toContain("model=Opus 5.5");
   expect(calls[1]).toContain("effort=high");
-  expect(calls[1]).toContain("rc=rc?");
+  expect(calls[1]).toContain("--clear-token");
+  expect(calls[1]).not.toContain("rc=rc?");
   expect(calls[2]).toEqual([
     "tab",
     "rename",

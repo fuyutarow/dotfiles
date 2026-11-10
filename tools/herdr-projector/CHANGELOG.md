@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.10 — 2026-11-10
+
+- Show confirmed Remote Control on the first sidebar row.
+
 ## 0.5.9 — 2026-11-10
 
 - Row 3's grey token separates memory from counts with the statusline bar (│), so a live row loses its shell count at 31 columns when the bar no longer fits; the bar drops with the last count part.

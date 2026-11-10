@@ -21,7 +21,7 @@ const rows = [
   },
 ];
 
-test("hidden footer: session context and native remote control form the second line", async () => {
+test("hidden footer: session context forms the second line", async () => {
   for (const [vendor, model, effort, expected] of [
     ["claude", "Opus 5.5", "medium", "opus-medium"],
     ["codex", "GPT-6.1-Terra", "low", "terra-low"],
@@ -69,20 +69,15 @@ test("hidden footer: session context and native remote control form the second l
       new Map(),
       rows,
     );
-    expect(calls[1]).toContain(`agent_detail=${expected} · ctx 29%/700k · 🔗`);
+    expect(calls[1]).toContain(`agent_detail=${expected} · ctx 29%/700k`);
     expect(calls[1]?.join(" ")).not.toContain("\u30FB");
   }
-  expect(agentSecondLine("opus-medium", "29% (203k/700k)", "rc:off")).toBe(
-    "opus-medium · ctx 29%/700k · rc:off",
+  expect(agentSecondLine("opus-medium", "29% (203k/700k)")).toBe(
+    "opus-medium · ctx 29%/700k",
   );
-  expect(agentSecondLine("opus-medium", "29% (203k/700k)", "rc:?")).toBe(
-    "opus-medium · ctx 29%/700k · rc:?",
-  );
-  expect(agentSecondLine(undefined, undefined, undefined)).toBe(
-    "? · ctx ?/? · rc:?",
-  );
-  expect(agentSecondLine("opus-medium", "203k 29%", "rc:on")).toBe(
-    "opus-medium · ctx ?/? · 🔗",
+  expect(agentSecondLine(undefined, undefined)).toBe("? · ctx ?/?");
+  expect(agentSecondLine("opus-medium", "203k 29%")).toBe(
+    "opus-medium · ctx ?/?",
   );
   expect(rosterRow(rows, "claude", "unknown", "medium")).toBeUndefined();
 });

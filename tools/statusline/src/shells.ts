@@ -1,5 +1,5 @@
 import { opendir, open, readlink, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { dur } from "./jobs.ts";
 import { z } from "./zod.ts";
@@ -7,8 +7,14 @@ import { z } from "./zod.ts";
 const PID_LIMIT = 8192;
 const FD_LIMIT = 256;
 const TASK_LIMIT = 2048;
+const CMDLINE_LIMIT = 16384;
+/** Label budget when the render has no known terminal width. */
+const DEFAULT_COLUMNS = 80;
+const EVAL_OPEN = "eval '";
+const WRAPPER_TAIL = "' < /dev/null && pwd -P >|";
+export type ShellRow = { id: string; seconds: number; command?: string };
 export type ShellScan =
-  | { kind: "known"; rows: { id: string; seconds: number }[] }
+  | { kind: "known"; rows: ShellRow[] }
   | { kind: "unknown" };
 const unknown: ShellScan = { kind: "unknown" };
 const errorSchema = z.object({ code: z.string().optional() });
@@ -39,6 +45,38 @@ function refused(error: unknown): boolean {
   return (
     parsed.success &&
     (parsed.data.code === "EACCES" || parsed.data.code === "EPERM")
+  );
+}
+
+/**
+ * The command a Claude Code shell runs, from the argv of its wrapper process:
+ * `/usr/bin/zsh -c source …/shell-snapshots/… && … && eval '<cmd>' < /dev/null && pwd -P >| …`.
+ * Undefined for any other argv, or when the wrapper's tail is not in the bounded read.
+ */
+export function commandFromWrapper(argv: string): string | undefined {
+  if (!argv.includes("/shell-snapshots/")) return undefined;
+  const start = argv.indexOf(EVAL_OPEN);
+  const end = argv.lastIndexOf(WRAPPER_TAIL);
+  if (start < 0 || end < start + EVAL_OPEN.length) return undefined;
+  return argv.slice(start + EVAL_OPEN.length, end).replaceAll("'\\''", "'");
+}
+
+/** A holder's command line, bounded. Unreadable means no command, never an unknown scan. */
+async function wrapperCommand(base: string): Promise<string | undefined> {
+  const opened = await open(join(base, "cmdline"), "r").then(
+    (handle) => ({ handle }),
+    () => null,
+  );
+  if (opened === null) return undefined;
+  await using handle = opened.handle;
+  const buffer = Buffer.alloc(CMDLINE_LIMIT);
+  const bytes = await handle.read(buffer, 0, buffer.length, 0).then(
+    (read) => read.bytesRead,
+    () => null,
+  );
+  if (bytes === null) return undefined;
+  return commandFromWrapper(
+    buffer.toString("utf8", 0, bytes).replaceAll("\0", " "),
   );
 }
 
@@ -73,7 +111,7 @@ export async function scanShells(
       names.filter((name) => /^[a-zA-Z0-9-]+\.output$/u.test(name)),
     );
     const pids = processes.filter((name) => /^\d+$/u.test(name));
-    const found = new Set<string>();
+    const found = new Map<string, { command: string | undefined }>();
     for (let offset = 0; offset < pids.length; offset += 32) {
       const outcomes = await Promise.all(
         pids.slice(offset, offset + 32).map(async (pid) => {
@@ -113,7 +151,14 @@ export async function scanShells(
                   const info = buffer.toString("utf8", 0, read.bytesRead);
                   const flags = /^flags:\s+([0-7]+)/mu.exec(info)?.[1];
                   if (flags === undefined) return false;
-                  if ((Number.parseInt(flags, 8) & 3) !== 0) found.add(name);
+                  if ((Number.parseInt(flags, 8) & 3) !== 0) {
+                    // Only the wrapper's argv carries the command; other holders add no command.
+                    const command = await wrapperCommand(base);
+                    const known = found.get(name);
+                    if (known === undefined) found.set(name, { command });
+                    else known.command ??= command;
+                    // known.command stays undefined until a wrapper argv supplies one.
+                  }
                   return true;
                 }).catch(gone),
               ),
@@ -126,13 +171,15 @@ export async function scanShells(
     }
     const now = options.now ?? Temporal.Now.instant().epochMilliseconds;
     const rows = await Promise.all(
-      [...found].map(async (name) => {
+      [...found].map(async ([name, { command }]) => {
         const birth = (await stat(join(taskDir, name))).birthtimeMs;
         if (!Number.isFinite(birth) || birth <= 0 || birth > now) return null;
-        return {
+        const row: ShellRow = {
           id: name.slice(0, -7),
           seconds: Math.floor((now - birth) / 1000),
         };
+        if (command !== undefined) row.command = command;
+        return row;
       }),
     );
     if (rows.some((row) => row === null)) return unknown;
@@ -145,9 +192,81 @@ export async function scanShells(
   };
   return work().catch(() => unknown);
 }
-export function shellLines(scan: ShellScan): string {
+
+const cells = (text: string) => Array.from(text).length;
+
+/** `/abs/dir/name` becomes `name`, keeping shell quotes; other tokens are unchanged. */
+function shortenToken(token: string): string {
+  const match = /^(["']?)((?:~)?\/.*?)(["']?)$/u.exec(token);
+  if (match === null) return token;
+  const path = (match[2] ?? "").replace(/\/+$/u, "");
+  const name = basename(path);
+  return name === "" || name === "/" ? token : `${match[1]}${name}${match[3]}`;
+}
+
+/**
+ * Compact a command for one row: whole tokens only, absolute paths reduced to
+ * their basename, and a trailing " …" when tokens were dropped. Undefined when
+ * even the first token does not fit, so the caller shows the task id instead.
+ */
+export function compactCommand(
+  command: string,
+  budget: number,
+): string | undefined {
+  const tokens = command
+    .split(/\s+/u)
+    .filter((token) => token !== "")
+    .map((token) => shortenToken(token));
+  if (tokens.length === 0) return undefined;
+  const whole = tokens.join(" ");
+  if (cells(whole) <= budget) return whole;
+  let kept = 0;
+  let length = 0;
+  for (const token of tokens) {
+    const next = kept === 0 ? cells(token) : length + 1 + cells(token);
+    // Reserve room for " …" while tokens remain after this one.
+    const reserve = kept + 1 < tokens.length ? 2 : 0;
+    if (next + reserve > budget) break;
+    length = next;
+    kept += 1;
+  }
+  if (kept === 0) return undefined;
+  return `${tokens.slice(0, kept).join(" ")} …`;
+}
+
+/**
+ * One line per running shell. The label is its compacted command, or the task
+ * id when no command is readable. Rows sharing a command add their id to tell
+ * them apart. `columns` bounds each label to the row width.
+ */
+export function shellLines(scan: ShellScan, columns?: number): string {
   if (scan.kind === "unknown") return "shells: unknown";
+  const width = columns ?? DEFAULT_COLUMNS;
+  const prefixes = scan.rows.map((row) => `shell ${dur(row.seconds)} `);
+  const labels = scan.rows.map((row, index) =>
+    row.command === undefined
+      ? undefined
+      : compactCommand(row.command, width - cells(prefixes[index] ?? "")),
+  );
+  const counts = new Map<string, number>();
+  for (const label of labels)
+    if (label !== undefined) counts.set(label, (counts.get(label) ?? 0) + 1);
   return scan.rows
-    .map((row) => `shell ${dur(row.seconds)} ${row.id}`)
+    .map((row, index) => {
+      const prefix = prefixes[index] ?? "";
+      const label = labels[index];
+      if (label === undefined) return `${prefix}${row.id}`;
+      if ((counts.get(label) ?? 0) < 2) return `${prefix}${label}`;
+      const shared =
+        row.command === undefined
+          ? undefined
+          : compactCommand(
+              row.command,
+              width - cells(prefix) - cells(row.id) - 1,
+            );
+      return shared === undefined
+        ? `${prefix}${row.id}`
+        : `${prefix}${shared} ${row.id}`;
+    })
     .join("\n");
 }

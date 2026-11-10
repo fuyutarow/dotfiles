@@ -291,6 +291,7 @@ export function render(
     .filter(Boolean)
     .join(" · ");
 
+  const columns = options.columns ?? statuslineColumns();
   const rows = {
     prompt: observed(
       `${repoLine === "" ? line1 : joinText(line1, repoLine)}${SEP}${DIM}v${version}${RST}`,
@@ -303,7 +304,7 @@ export function render(
     rate: observed(rateLine),
     sys: observed(sysLine),
     agx: observed(
-      [agxBlock, df.shells === undefined ? "" : shellLines(df.shells)]
+      [agxBlock, df.shells === undefined ? "" : shellLines(df.shells, columns)]
         .filter(Boolean)
         .join("\n"),
     ),
@@ -311,7 +312,6 @@ export function render(
     "dispatch-warning": observed(""),
     recover: observed(""),
   } satisfies DisplayRows;
-  const columns = options.columns ?? statuslineColumns();
   const wrap = (output: string) =>
     columns === undefined ? output : wrapThroughSys(output, columns);
   if (options.layout !== undefined) {

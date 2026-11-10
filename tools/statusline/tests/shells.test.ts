@@ -11,7 +11,12 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { scanShells, shellLines } from "../src/shells.ts";
+import {
+  commandFromWrapper,
+  compactCommand,
+  scanShells,
+  shellLines,
+} from "../src/shells.ts";
 import { render } from "../src/format.ts";
 import { ok } from "neverthrow";
 
@@ -114,4 +119,104 @@ test("over-cap descriptor list is skipped, other holders still render", async ()
     kind: "known",
     rows: [{ id: "running", seconds: 90 }],
   });
+});
+
+const wrapperArgv = (command: string) =>
+  `/usr/bin/zsh -c source /home/fuyu/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && eval '${command}' < /dev/null && pwd -P >| /tmp/claude-1000/-home-fuyu-dotfiles/cwd-1.txt`;
+const dispatch =
+  "bun /tmp/claude-1000/-home-fuyu-dotfiles/2c05f20d-6268-446b-96dd-bb19296924e5/scratchpad/dispatch-when-calm.ts /home/fuyu/dotfiles/.agents/tickets/mise-gc-task-dotfiles-1110.md";
+
+test("wrapper argv yields the user's command; the wrapper text is stripped", () => {
+  expect(commandFromWrapper(wrapperArgv(dispatch))).toBe(dispatch);
+  expect(commandFromWrapper(wrapperArgv("echo 'it'\\''s'"))).toBe(
+    "echo 'it's'",
+  );
+  expect(commandFromWrapper("/usr/bin/zsh -c sleep 100")).toBeUndefined();
+  expect(
+    commandFromWrapper(
+      "/usr/bin/zsh -c source /home/x/shell-snapshots/s.sh && eval 'sleep 1'",
+    ),
+  ).toBeUndefined();
+});
+
+test("a readable wrapper labels its row; a plain holder keeps the task id", async () => {
+  const cmdProc = join(root, "proc-cmd");
+  mkdirSync(join(cmdProc, "40", "fd"), { recursive: true });
+  mkdirSync(join(cmdProc, "40", "fdinfo"));
+  symlinkSync(output, join(cmdProc, "40", "fd", "1"));
+  writeFileSync(join(cmdProc, "40", "fdinfo", "1"), "flags:\t0100001\n");
+  writeFileSync(join(cmdProc, "40", "cmdline"), wrapperArgv(dispatch));
+  mkdirSync(join(cmdProc, "41", "fd"), { recursive: true });
+  mkdirSync(join(cmdProc, "41", "fdinfo"));
+  symlinkSync(output, join(cmdProc, "41", "fd", "1"));
+  writeFileSync(join(cmdProc, "41", "fdinfo", "1"), "flags:\t0100001\n");
+  writeFileSync(join(cmdProc, "41", "cmdline"), "sleep\u0000100\u0000");
+  const scan = await scanShells(cwd, sid, { ...options, proc: cmdProc });
+  expect(scan).toEqual({
+    kind: "known",
+    rows: [
+      {
+        id: "running",
+        seconds: 90,
+        command: dispatch,
+      },
+    ],
+  });
+  expect(shellLines(scan, 200)).toBe(
+    "shell 1m30s bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
+  );
+});
+
+test("compaction shortens paths, cuts at whole tokens, and never inside one", () => {
+  const long =
+    "bun /a/b/dispatch-when-calm.ts /home/fuyu/x/mise-gc-task-dotfiles-1110.md";
+  expect(compactCommand(long, 200)).toBe(
+    "bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
+  );
+  expect(compactCommand(long, 40)).toBe("bun dispatch-when-calm.ts …");
+  expect(compactCommand(long, 20)).toBe("bun …");
+  expect(compactCommand(long, 3)).toBeUndefined();
+  expect(compactCommand("'/x/y/a.md'", 40)).toBe("'a.md'");
+  expect(compactCommand("cd /", 40)).toBe("cd /");
+  const shortTokens = [
+    "bun",
+    "dispatch-when-calm.ts",
+    "mise-gc-task-dotfiles-1110.md",
+  ];
+  for (const budget of [4, 10, 25, 33, 60]) {
+    const label = compactCommand(long, budget);
+    if (label === undefined) continue;
+    expect(Array.from(label).length).toBeLessThanOrEqual(budget);
+    // Whatever survives is a whole-token prefix of the shortened command.
+    const kept = label.replace(/ …$/u, "");
+    expect(
+      shortTokens.some(
+        (_, k) => shortTokens.slice(0, k + 1).join(" ") === kept,
+      ),
+    ).toBe(true);
+  }
+});
+
+test("rows sharing a command add their id; labels stay within the width", () => {
+  const scan = {
+    kind: "known" as const,
+    rows: [
+      { id: "aaa", seconds: 120, command: dispatch },
+      { id: "bbb", seconds: 5, command: dispatch },
+      { id: "ccc", seconds: 9, command: "sleep 100" },
+      { id: "ddd", seconds: 9 },
+    ],
+  };
+  const wide = shellLines(scan, 200).split("\n");
+  expect(wide).toEqual([
+    "shell 2m00s bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md aaa",
+    "shell 0m05s bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md bbb",
+    "shell 0m09s sleep 100",
+    "shell 0m09s ddd",
+  ]);
+  const narrow = shellLines(scan, 60).split("\n");
+  expect(narrow[0]).toBe("shell 2m00s bun dispatch-when-calm.ts … aaa");
+  expect(narrow[2]).toBe("shell 0m09s sleep 100");
+  for (const line of narrow)
+    expect(Array.from(line).length).toBeLessThanOrEqual(60);
 });

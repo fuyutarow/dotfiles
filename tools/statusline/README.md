@@ -24,8 +24,14 @@ bun test tools/statusline/tests
 ## Unavailable values and Stop snapshots
 
 Claude stdin renders a `shell` row per session task whose output file is held
-open for writing by a same-UID Linux process. The task ID is the label; the
-output file's creation time approximates its start time. A shell that redirects
+open for writing by a same-UID Linux process. The label is the command the shell
+runs: the wrapper process holding the output file has the argv
+`/usr/bin/zsh -c source …/shell-snapshots/… && … && eval '<command>' < /dev/null && pwd -P >| …`,
+and only `<command>` is shown. Absolute path tokens are reduced to their basename,
+and the label keeps whole tokens, ending in `…` when it must shorten to fit the
+row width (never cut inside a token). Rows whose commands are identical add their
+task ID to tell them apart. When no wrapper command is readable, the row shows the
+task ID. The output file's creation time approximates its start time. A shell that redirects
 its own stdout and stderr away from its output file is not shown. An unreadable
 or incomplete scan, including on macOS, displays `shells: unknown`. The scan
 caps the task directory at 2048 entries and `/proc` at 8192 entries; exceeding
@@ -36,8 +42,9 @@ as `sshd-session`, `ssh-agent`, and `sd-pam`), and a process with more than 256
 descriptors. Skipped descriptors are not counted as holders, so a shell seen only
 through a skipped process is not shown. The scan runs in the
 statusline process with no time limit, so a slow filesystem can delay rendering.
-Only task names and metadata are read, not task output contents. Each matching
-fdinfo read is limited to 4096 bytes.
+Only task names, metadata and the wrapper's command line are read, not task output contents.
+Each matching fdinfo read is limited to 4096 bytes, and each holder's command line read
+to 16384 bytes; a command line whose wrapper tail is not inside that read shows the task ID.
 
 Session discovery uses `/proc` on Linux and `ps` plus `lsof` on macOS. The
 sampler records a `sessions` field with a null value and an error explaining a

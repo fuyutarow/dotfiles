@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.11 — 2026-11-10
+
+- shells: label each running shell row with its compacted command, falling back to the task id
+
 ## 0.23.10 — 2026-11-09
 
 - statusline: count running background shells when same-UID processes refuse fd inspection

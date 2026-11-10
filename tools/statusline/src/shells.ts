@@ -301,8 +301,8 @@ export function shellLines(scan: ShellScan, columns?: number): string {
       const command =
         row.command === undefined
           ? undefined
-          : compactCommand(row.command, width - cells(prefix) - 1);
-      return command === undefined ? prefix : `${prefix} ${command}`;
+          : compactCommand(row.command, width - cells(prefix) - 3);
+      return command === undefined ? prefix : `${prefix} │ ${command}`;
     })
     .join("\n");
 }

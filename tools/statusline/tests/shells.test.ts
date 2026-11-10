@@ -208,7 +208,7 @@ test("a readable wrapper labels its row; a plain holder keeps the task id", asyn
     ],
   });
   expect(shellLines(scan, 200)).toBe(
-    "sh_running 1m30s bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
+    "sh_running 1m30s │ bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
   );
 });
 
@@ -254,15 +254,17 @@ test("task prefixes distinguish identical commands and command budgets include t
   };
   const wide = shellLines(scan, 200).split("\n");
   expect(wide).toEqual([
-    "sh_aaa 2m00s bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
-    "sh_bbb 0m05s bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
-    "sh_ccc 0m09s sleep 100",
+    "sh_aaa 2m00s │ bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
+    "sh_bbb 0m05s │ bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
+    "sh_ccc 0m09s │ sleep 100",
     "sh_ddd 0m09s",
   ]);
   const narrow = shellLines(scan, 60).split("\n");
-  expect(narrow[0]).toBe("sh_aaa 2m00s bun dispatch-when-calm.ts …");
-  expect(narrow[2]).toBe("sh_ccc 0m09s sleep 100");
+  expect(narrow[0]).toBe("sh_aaa 2m00s │ bun dispatch-when-calm.ts …");
+  expect(narrow[2]).toBe("sh_ccc 0m09s │ sleep 100");
   for (const line of narrow)
     expect(Array.from(line).length).toBeLessThanOrEqual(60);
   expect(shellLines(scan, 15).split("\n")[0]).toBe("sh_aaa 2m00s");
+  expect(shellLines(scan, 19).split("\n")[0]).toBe("sh_aaa 2m00s");
+  expect(shellLines(scan, 20).split("\n")[0]).toBe("sh_aaa 2m00s │ bun …");
 });

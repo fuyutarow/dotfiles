@@ -75,16 +75,28 @@ export function codexCreditsSegment(rate: CodexRate): string | undefined {
   return parts.join(" ");
 }
 
+/** The sampler refreshes Jev on its timer; an older sample is shown with its age. */
+const JEV_STALE_MS = 300_000;
+
 export function jevUsageSegment(
   usage: JevUsage | undefined,
   why?: string,
+  ageMs = 0,
 ): string {
   if (usage?.costUsd === undefined)
     return roles.unavailable(
       "Jev",
       unavailable(why ?? "usage sample unavailable"),
     );
-  const cost = formatCostUsd(usage.costUsd);
+  const formatted = formatCostUsd(usage.costUsd);
+  // A known-subtotal lower bound reads "≥"; below one cent that is "≥$0", not "≥<$0.01".
+  let cost = formatted;
+  if (usage.partial === true)
+    cost = `≥${formatted.startsWith("<") ? "$0" : formatted}`;
+  const age =
+    ageMs > JEV_STALE_MS
+      ? ` ${roles.secondary(`· ${Math.floor(ageMs / 60_000)}m old`)}`
+      : "";
   // Seven-day spend: green below $1, yellow below $5, red at $5 and above.
-  return `${roles.label("Jev")} ${roles.window("7d")} ${roles.secondary("spend")} ${roles.value(cost, pctColor(usage.costUsd, 1, 5))}`;
+  return `${roles.label("Jev")} ${roles.window("7d")} ${roles.secondary("spend")} ${roles.value(cost, pctColor(usage.costUsd, 1, 5))}${age}`;
 }

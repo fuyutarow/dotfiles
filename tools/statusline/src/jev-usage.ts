@@ -11,15 +11,29 @@ const USAGE = z.object({
   to: z.string(),
   captured_at: z.string(),
   estimated_cost_usd: z.number().nonnegative().nullable(),
+  known_tokens_at_effective_price_usd: z.number().nonnegative().nullable(),
+  completeness: z.string(),
 });
 const MAX_AGE_MS = 300_000;
+/**
+ * The real command took 2.8–7 s on a 1,963-record journal and grows with it. This runs only in
+ * the background sampler (systemd TimeoutStartSec=30s); the renderer reads the cached sample.
+ */
+const READ_BUDGET_MS = 15_000;
 
-export type JevUsage = { costUsd: number | undefined };
+export type JevUsage = {
+  costUsd: number | undefined;
+  /** The value is agx's known-token subtotal, a lower bound: unknown runs are not priced. */
+  partial?: boolean | undefined;
+  /** When agx captured the sample, so a cached value can show its age. */
+  capturedMs?: number | undefined;
+};
 
 /** Sampler-only projection of released C6; no private state or local pricing. */
 export async function readJevUsage(
   nowMs?: number,
   env: NodeJS.ProcessEnv = process.env,
+  budgetMs = READ_BUDGET_MS,
 ): Promise<Result<JevUsage | undefined, string>> {
   const executable = Bun.which("mise", { PATH: env["PATH"] ?? "" });
   if (executable === null) return err("Jev usage unavailable: no mise on PATH");
@@ -39,7 +53,7 @@ export async function readJevUsage(
       "--window",
       "7d",
     ],
-    5000,
+    budgetMs,
     env,
   );
   if (result.isErr()) return err(result.error.why);
@@ -61,5 +75,21 @@ export async function readJevUsage(
     latest - times.value.captured > MAX_AGE_MS
   )
     return err("Jev usage observation stale or in the future");
-  return ok({ costUsd: usage.estimated_cost_usd ?? undefined });
+  if (usage.estimated_cost_usd !== null)
+    return ok({
+      costUsd: usage.estimated_cost_usd,
+      partial: false,
+      capturedMs: times.value.captured,
+    });
+  // agx leaves the estimate null while any run in the window has no usage; its known
+  // subtotal is the only spend it vouches for, so show that as a lower bound.
+  if (usage.known_tokens_at_effective_price_usd !== null)
+    return ok({
+      costUsd: usage.known_tokens_at_effective_price_usd,
+      partial: true,
+      capturedMs: times.value.captured,
+    });
+  return err(
+    `Jev usage has no priced usage in the window (completeness ${usage.completeness})`,
+  );
 }

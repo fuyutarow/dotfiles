@@ -130,7 +130,7 @@ test.each([
   if (hasCodex) expected += " | codex 5h 10% · codex 7d 12%";
   else expected += " | codex n/a (unavailable)";
   if (hasJev) expected += " | Jev 7d spend <$0.01";
-  else expected += " | Jev n/a (unavailable)";
+  else expected += " | Jev n/a (usage sample unavailable)";
   expect(row).toBe(expected);
 });
 
@@ -145,7 +145,7 @@ test("a payload without rate_limits keeps one claude cell and no per-window cell
     "Rate: claude none (no API response yet) | codex n/a (unavailable) | Jev 7d spend <$0.01",
   );
   expect(stripAnsi(rateRow({ rlModel: [] }))).toBe(
-    "Rate: claude none (no API response yet) | codex n/a (unavailable) | Jev n/a (unavailable)",
+    "Rate: claude none (no API response yet) | codex n/a (unavailable) | Jev n/a (usage sample unavailable)",
   );
 });
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.24.2 — 2026-11-10
+
+- Jev shows agx's known-token spend as a ≥ lower bound when the estimate is null, keeps the specific failure reason on the row, and samples with a 15 s budget
+
 ## 0.24.1 — 2026-11-10
 
 - Remove the Claude API credit token from the Rate row: no API returns the balance

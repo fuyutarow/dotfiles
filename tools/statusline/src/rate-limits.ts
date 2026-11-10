@@ -297,6 +297,10 @@ function claudeRateSegment(
 }
 
 // One builder for both the statusline and its snapshot. Every provider always owns one slot.
+function jevAgeMs(capturedMs: number | undefined): number {
+  if (capturedMs === undefined) return 0;
+  return Math.max(0, Temporal.Now.instant().epochMilliseconds - capturedMs);
+}
 export const RATE_SOURCES = ["claude", "codex", "Jev"] as const;
 export function rateRow(
   df: RateFacts & Pick<Dataframe, "sid" | "fields">,
@@ -358,8 +362,12 @@ export function rateRow(
         observed(
           df.jevUsage?.costUsd === undefined
             ? undefined
-            : jevUsageSegment(df.jevUsage),
-          df.jevUsageWhy,
+            : jevUsageSegment(
+                df.jevUsage,
+                undefined,
+                jevAgeMs(df.jevUsage.capturedMs),
+              ),
+          df.jevUsageWhy ?? "usage sample unavailable",
         ),
       );
     })().unwrapOr(undefined);

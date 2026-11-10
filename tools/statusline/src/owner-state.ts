@@ -323,8 +323,16 @@ export function ownerSources(
         "jevUsage",
         resultSchema(
           z
-            .object({ costUsd: z.number().optional() })
-            .transform((v) => ({ costUsd: v.costUsd }))
+            .object({
+              costUsd: z.number().optional(),
+              partial: z.boolean().optional(),
+              capturedMs: z.number().optional(),
+            })
+            .transform((v) => ({
+              costUsd: v.costUsd,
+              partial: v.partial,
+              capturedMs: v.capturedMs,
+            }))
             .optional(),
         ),
       )) ?? ok(undefined),

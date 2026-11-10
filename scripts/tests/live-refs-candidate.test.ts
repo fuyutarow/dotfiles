@@ -33,6 +33,13 @@ test("candidate render includes imported siblings and refuses an unselected decl
     await mkdir(dirname(dest), { recursive: true });
     await cp(join(import.meta.dir, "../..", path), dest, { recursive: true });
   }
+  // The agx policy is a linked declaration but not a render input: copy the real
+  // file so the candidate's deployed link has a target (no placeholder content).
+  await mkdir(join(base, "agents/agx"), { recursive: true });
+  await cp(
+    join(import.meta.dir, "../../agents/agx/agx.toml"),
+    join(base, "agents/agx/agx.toml"),
+  );
   for (const [, source] of LINKS) {
     if (
       source.startsWith("@google-drive/") ||

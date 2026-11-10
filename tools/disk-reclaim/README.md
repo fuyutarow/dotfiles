@@ -97,9 +97,18 @@ operation-head and workspace-index metadata in their keys. Their classification 
 includes the normalized `regenerable_ignored` policy, so changing allowed tool caches reclassifies
 unchanged workspaces.
 
+Build discovery keeps a separate per-root cursor under the measurement cache's `build-discovery`
+directory. Each call visits at most 4,096 directories or ten seconds of cooperative work, saving
+the remaining frontier after each completed directory. The next call continues there. Discovered
+paths remain hints: planning rechecks existence, device and canonical path, and action safety is
+still checked independently. Discovery does not follow directory symlinks or cross filesystems.
+Partial discovery is reported as incomplete while already discovered safe candidates may act.
+A completed cycle starts another cycle to find additions and discard removed paths. A blocking
+filesystem call must return before the cooperative time limit can be observed.
+
 Progress reports scan starts, cache hits and elapsed time on stderr. A tree worker stops after
 ten seconds without advancing entry counters; heartbeats alone do not count as progress.
-Progressing plans have no total elapsed-time limit. Only a lack of advancing scan counters or
+Progressing size walks have no total elapsed-time limit. Only a lack of advancing scan counters or
 metadata probes stops a tree worker; user cancellation remains available. Pipe output includes
 periodic progress lines on stderr. A cold scan can take as long as needed to complete every target.
 An unreachable Windows host is skipped after one probe bounded to five seconds (three seconds

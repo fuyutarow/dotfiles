@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.35 — 2026-11-10
+
+- Checkpoint bounded build discovery and return partial candidates for safe reclamation.
+
 ## 1.12.34 — 2026-11-10
 
 - Resume bounded clean and builds runs after the interrupted candidate; defer run sizing.

@@ -12,6 +12,7 @@ import { run } from "../../src/engine.ts";
 import { createLivenessSnapshot } from "../../src/liveness/facts.ts";
 import { createBuildsTarget } from "../../src/targets/builds.ts";
 import { treeCandidate } from "../../src/targets/tree.ts";
+import { discoverBuilds } from "../../src/targets/build-discovery.ts";
 
 const cacheRoot = tempRoot("reclaim-builds-cache-");
 afterAll(() => {
@@ -73,8 +74,41 @@ describe("builds target", () => {
       bytes: null,
     });
     expect(probes).toBe(2);
-    // Discovery reports once; neither preview nor recheck starts a sizing walk.
-    expect(scans).toBe(1);
+    // Injected discovery does no IO; neither preview nor recheck starts a sizing walk.
+    expect(scans).toBe(0);
+  });
+  test("partial discovery still lets the engine reclaim discovered candidates", async () => {
+    const temp = tempRoot("reclaim-builds-partial-");
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      rmSync(temp, { recursive: true, force: true });
+    });
+    const home = join(temp, "home");
+    const procDir = join(temp, "proc");
+    mkdirSync(procDir);
+    const paths = ["a", "b", "c", "d"].map((name) => join(home, name, "dist"));
+    for (const path of paths) {
+      mkdirSync(path, { recursive: true });
+      writeFileSync(join(path, "artifact"), "x");
+    }
+    const target = createBuildsTarget(
+      () => home,
+      (root, ctx) => discoverBuilds(root, ctx, { directories: 1 }),
+    );
+    const result = await run([target], {
+      context: { ...context([], procDir), scanCacheDir: join(temp, "cache") },
+      state: join(temp, "state"),
+      headroom: { drives: [] },
+      yes: true,
+      captureLiveness: (config) =>
+        createLivenessSnapshot(config, { home, procs: { procRoot: procDir } }),
+    });
+    expect(result.exit).toBe(1);
+    expect(result.plan?.targets[0]?.skip_reason).toContain(
+      "partial build discovery",
+    );
+    expect(paths.some((path) => !existsSync(path))).toBe(true);
+    expect(paths.some((path) => existsSync(path))).toBe(true);
   });
   test("protected and unknown-use builds do not consume the sizing budget", async () => {
     const home = tempRoot("reclaim-builds-no-protected-scan-");
@@ -83,6 +117,7 @@ describe("builds target", () => {
       rmSync(home, { recursive: true, force: true });
     });
     const paths = [join(home, "a/node_modules"), join(home, "b/node_modules")];
+    for (const path of paths) mkdirSync(path, { recursive: true });
     let scans = 0;
     const target = createBuildsTarget(
       () => home,

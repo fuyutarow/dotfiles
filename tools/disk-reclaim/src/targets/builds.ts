@@ -1,51 +1,16 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { stat } from "node:fs/promises";
+import { lstat, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import { protectedReason } from "../lib/protected.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 import { deleteTree, keepTreeCandidate, treeCandidate } from "./tree.ts";
-import { cachedDiscovery, checkScanDeadline } from "../lib/scan-cache.ts";
+import { BUILD_NAMES, discoverBuilds } from "./build-discovery.ts";
 
 // Each build directory is sized by a bounded walk: a huge node_modules is a lower-bound
 // estimate instead of the whole stage budget, and fast-first acting frees the small ones first.
 const BUILD_SCAN_MAX_ENTRIES = 20_000;
-const BUILD_NAMES = new Set([
-  "target",
-  "node_modules",
-  "build",
-  "dist",
-  ".venv",
-]);
-function scan(
-  root: string,
-  depth = 0,
-  device?: number,
-  ctx?: Context,
-): string[] {
-  checkScanDeadline(ctx);
-  if (depth > 4 || !existsSync(root)) return [];
-  const rootStat = fromThrowable(() => statSync(root))();
-  if (rootStat.isErr()) return [];
-  const rootDevice = device ?? rootStat.value.dev;
-  if (rootStat.value.dev !== rootDevice) return [];
-  const names = fromThrowable(() => readdirSync(root))().unwrapOr([]);
-  return names.flatMap((name) => {
-    const path = join(root, name);
-    const entry = fromThrowable(() => statSync(path))();
-    if (
-      entry.isErr() ||
-      !entry.value.isDirectory() ||
-      entry.value.dev !== rootDevice
-    )
-      return [];
-    if (BUILD_NAMES.has(name)) return [path];
-    return scan(path, depth + 1, rootDevice, ctx);
-  });
-}
 const protection = (path: string, ctx: Context) =>
   protectedReason(path, {
     home: process.env["HOME"] ?? homedir(),
@@ -58,8 +23,10 @@ const protection = (path: string, ctx: Context) =>
 export const createBuildsTarget = (
   root: () => string = () =>
     process.env["KONDO_DIR"] ?? process.env["HOME"] ?? homedir(),
-  discover: (root: string, ctx: Context) => string[] = (path, ctx) =>
-    scan(path, 0, undefined, ctx),
+  discover: (
+    root: string,
+    ctx: Context,
+  ) => string[] | Promise<string[]> = discoverBuilds,
   options: {
     includeOwned?: boolean;
     protection?: (
@@ -85,12 +52,18 @@ export const createBuildsTarget = (
     available: () => ({ available: true, skip_reason: null }),
     plan: async (ctx: Context) => {
       const rows: Candidate[] = [];
-      for (const path of cachedDiscovery(
-        root(),
-        "build-discovery-v1",
-        ctx,
-        () => discover(root(), ctx),
-      ).toSorted()) {
+      const device = (await stat(root())).dev;
+      for (const path of (await discover(root(), ctx)).toSorted()) {
+        // Persisted discovery is a hint: moved, removed or symlinked paths are not candidates.
+        const present = await fromAsyncThrowable(async () => {
+          const current = await lstat(path);
+          return (
+            current.isDirectory() &&
+            current.dev === device &&
+            (await realpath(path)) === path
+          );
+        })();
+        if (present.isErr() || !present.value) continue;
         const reason = await protect(path, ctx);
         if (
           options.includeOwned !== true &&

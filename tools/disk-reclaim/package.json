@@ -1,5 +1,5 @@
 {
-  "version": "1.12.34",
+  "version": "1.12.35",
   "name": "@dotfiles/disk-reclaim",
   "private": true,
   "type": "module",

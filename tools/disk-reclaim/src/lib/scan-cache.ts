@@ -140,24 +140,6 @@ function evictOldEntries(dir: string): void {
     })();
 }
 
-export function cachedDiscovery(
-  path: string,
-  kind: string,
-  ctx: Context,
-  discover: () => string[],
-): string[] {
-  const cache = scanCache(path, kind, ctx);
-  const found = z.array(z.string()).safeParse(cache.value);
-  if (found.success) {
-    ctx.reportActivity?.(ctx.targetName ?? kind, `cache hit discovery ${path}`);
-    return found.data;
-  }
-  ctx.reportActivity?.(ctx.targetName ?? kind, `discovering ${path}`);
-  const rows = discover();
-  cache.save(rows);
-  return rows;
-}
-
 export async function cachedDiscoveryAsync(
   path: string,
   kind: string,

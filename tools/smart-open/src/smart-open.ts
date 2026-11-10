@@ -16,17 +16,22 @@
 // client cannot do that, the path is NOT opened here either: someone attached remotely is not
 // looking at this box's screen (on WSL, an unattended Windows desktop). --here opens it here anyway.
 //
-// OVER SSH, "HERE" IS NOT A SCREEN. When this shell itself came in over ssh ($SSH_CONNECTION — herdr
-// panes inherit it) and the client cannot take the target, nothing is opened on this machine: the
-// reason and the repair are said, a URL is printed so the terminal can open it, exit 1. --here opens
-// it here anyway. (Before 2026-10-03 a URL fell through to explorer.exe on r99's unattended desktop —
-// which, locked, never returns: `g o` sat silent for 15 s and then claimed success.)
+// OVER SSH, "HERE" IS NOT A SCREEN. When this shell itself came in over ssh from a REMOTE client
+// ($SSH_CONNECTION — herdr panes inherit it) and the client cannot take the target, nothing is opened
+// on this machine: the reason and the repair are said, a URL is printed so the terminal can open it,
+// exit 1. --here opens it here anyway. (Before 2026-10-03 a URL fell through to explorer.exe on r99's
+// unattended desktop — which, locked, never returns: `g o` sat silent for 15 s and then claimed success.)
+// LOOPBACK IS HERE. An ssh client whose address is loopback (::1, 127.0.0.0/8, ::ffff:127.x — the first
+// field of $SSH_CONNECTION) is the terminal on this same machine: WSL mirrored networking lets the
+// Windows terminal ssh to localhost. The person IS at this screen, so with no live forward the target
+// opens here like a shell not over ssh. Why: the 2026-11-10 report (R99-U26, herdr server started from
+// a loopback ssh login, `g o` refused in every pane). A live forward still wins over this, in both cases.
 // Opening on this machine is bounded to LOCAL_WAIT_MS: an opener still running then is stopped and
 // reported, never waited out in silence.
 //
 // The receiver must ANSWER `ok`. What else the socket can do, and what is said about it (stderr;
 // a missing socket is the everyday local case and stays silent). "→ here" below is for a shell NOT
-// over ssh (see above); a path also stops at `no answer` and `refused` (exit 1):
+// over ssh, or over a loopback ssh (see above); a path also stops at `no answer` and `refused` (exit 1):
 //   no socket    not attached over ssh, or no forward         → open here, silently
 //   dead bind    ECONNREFUSED: left by a dropped connection.  → open here. sshd re-binds over it where
 //                wsl/sshd-dotfiles.conf is installed; elsewhere it is removed here — but only if it is
@@ -167,8 +172,18 @@ const SAY_AFTER_MS =
     ? 400
     : configuredSayAfterMs;
 const LOCAL_WAIT_MS = 3_000;
-// This shell came in over ssh, so this machine's own screen is not the one being looked at.
-const OVER_SSH = (process.env["SSH_CONNECTION"] ?? "") !== "";
+// SSH_CONNECTION is "client-addr client-port server-addr server-port"; the client address decides
+// whether this shell came in from another machine (its screen is not the one being looked at) or
+// from loopback (the terminal on this machine: its screen is). Loopback covers ::1, 127.0.0.0/8 and
+// the v4-mapped ::ffff:127.x form sshd can report for an IPv4 client on a dual-stack listener.
+const sshClientAddress = (): string =>
+  (process.env["SSH_CONNECTION"] ?? "").trim().split(/\s+/u)[0] ?? "";
+const isLoopbackAddress = (addr: string): boolean =>
+  /^(?:::1|127\.\d+\.\d+\.\d+|::ffff:127\.\d+\.\d+\.\d+)$/iu.test(addr);
+const SSH_CLIENT = sshClientAddress();
+// Over ssh from a client that is NOT on this machine: this machine's own screen is not the one being
+// looked at. An ssh session from loopback is this machine's terminal, so it is not "over ssh" here.
+const OVER_SSH = SSH_CLIENT !== "" && !isLoopbackAddress(SSH_CLIENT);
 const isUrl = (t: string) =>
   /^[a-z][a-z0-9+.-]*:\/\//iu.test(t) || /^mailto:/iu.test(t);
 const isWsl = async (): Promise<boolean> => {

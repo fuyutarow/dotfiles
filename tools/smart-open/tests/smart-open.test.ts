@@ -1103,6 +1103,127 @@ describe("a shell over ssh never opens on this machine's own screen", () => {
   });
 });
 
+// ---- Loopback ssh (2026-11-10 report, R99-U26): an ssh session whose client address is loopback is the
+// terminal on THIS machine (WSL mirrored networking), so with no live forward its target opens here.
+// A remote client keeps the refusal above; a live forward still goes to the client first.
+const LOOPBACK_CLIENTS = ["::1", "127.0.0.1", "::ffff:127.0.0.1", "127.12.3.4"];
+const REMOTE_CLIENTS = ["100.81.222.57", "2001:db8::1", "::ffff:10.0.0.7"];
+const sshFrom = (addr: string) => ({
+  SSH_CONNECTION: `${addr} 47574 ::1 2226`,
+});
+
+// A bind left behind by a dropped connection: a listener that was SIGKILLed, its file still there.
+async function deadBind(dir: string, name: string): Promise<string> {
+  const sock = join(dir, name);
+  const holder = Bun.spawn(
+    [
+      "bun",
+      "-e",
+      `Bun.listen({ unix: ${JSON.stringify(sock)}, socket: { data() {} } }); setInterval(() => {}, 1000);`,
+    ],
+    { stdout: "ignore", stderr: "ignore" },
+  );
+  cleanups.push(async () => {
+    holder.kill();
+    await holder.exited;
+  });
+  for (let i = 0; i < 200 && !(await exists(sock)); i++) await Bun.sleep(25);
+  holder.kill("SIGKILL");
+  await holder.exited;
+  return sock;
+}
+
+describe("a loopback ssh session opens on this machine when no forward answers", () => {
+  test.each(LOOPBACK_CLIENTS)(
+    "client %s with a dead forward: the URL opens here, exit 0",
+    async (addr) => {
+      const dir = await scratch();
+      const sock = await deadBind(dir, "dead.sock");
+      const [local, localOpened] = await recorder(dir, "local-opened");
+      const r = await client(["https://probe.invalid/loop"], {
+        ...sshFrom(addr),
+        SMART_OPEN_SOCKET: sock,
+        SMART_OPEN_LOCAL_OPENER: local,
+      });
+      expect(r.code).toBe(0);
+      expect(r.err).toContain("had no listener");
+      expect(r.err).toContain("opening here");
+      expect(r.err).not.toContain("not opened");
+      expect(await localOpened()).toEqual(["https://probe.invalid/loop"]);
+    },
+  );
+
+  test.each(LOOPBACK_CLIENTS)(
+    "client %s with a dead forward: a path opens here, exit 0",
+    async (addr) => {
+      const dir = await scratch();
+      const sock = await deadBind(dir, "dead.sock");
+      const [local, localOpened] = await recorder(dir, "local-opened");
+      const r = await client([dir], {
+        ...sshFrom(addr),
+        SMART_OPEN_SOCKET: sock,
+        SMART_OPEN_LOCAL_OPENER: local,
+        SMART_OPEN_SSH_HOST: "probe-host",
+      });
+      expect(r.code).toBe(0);
+      expect(r.err).not.toContain("not opened");
+      expect(await localOpened()).toEqual([dir]);
+    },
+  );
+
+  test("loopback with no socket at all opens here silently", async () => {
+    const dir = await scratch();
+    const [local, localOpened] = await recorder(dir, "local-opened");
+    const r = await client(["https://probe.invalid/quiet"], {
+      ...sshFrom("::1"),
+      SMART_OPEN_SOCKET: join(dir, "absent.sock"),
+      SMART_OPEN_LOCAL_OPENER: local,
+    });
+    expect(r.code).toBe(0);
+    expect(r.err).toBe("");
+    expect(await localOpened()).toEqual(["https://probe.invalid/quiet"]);
+  });
+
+  test.each(LOOPBACK_CLIENTS)(
+    "client %s with a live forward: the client gets it, nothing opens here",
+    async (addr) => {
+      const dir = await scratch();
+      const rx = await startReceiver(dir);
+      const [local, localOpened] = await recorder(dir, "local-opened");
+      const r = await client(["https://probe.invalid/live-loop"], {
+        ...sshFrom(addr),
+        SMART_OPEN_SOCKET: rx.sock,
+        SMART_OPEN_LOCAL_OPENER: local,
+      });
+      expect(r.code).toBe(0);
+      expect(await rx.opened()).toEqual(["https://probe.invalid/live-loop"]);
+      expect(await localOpened()).toEqual([]);
+    },
+  );
+});
+
+describe("a remote ssh client keeps the refusal with a dead forward", () => {
+  test.each(REMOTE_CLIENTS)(
+    "client %s with a dead forward: not opened here, exit 1",
+    async (addr) => {
+      const dir = await scratch();
+      const sock = await deadBind(dir, "dead.sock");
+      const [local, localOpened] = await recorder(dir, "local-opened");
+      const r = await client(["https://probe.invalid/remote"], {
+        ...sshFrom(addr),
+        SMART_OPEN_SOCKET: sock,
+        SMART_OPEN_LOCAL_OPENER: local,
+      });
+      expect(r.code).toBe(1);
+      expect(r.out.trim()).toBe("https://probe.invalid/remote");
+      expect(r.err).toContain(
+        "not opened — no forward from your machine reaches this shell",
+      );
+      expect(await localOpened()).toEqual([]);
+    },
+  );
+});
+
 describe("opening on this machine is bounded", () => {
   test("an opener that never returns is stopped at 3 s and reported, not waited out silently", async () => {
     const dir = await scratch();

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.3 — 2026-11-10
+
+- A loopback ssh session (the terminal on this same machine) opens locally when no forward answers
+
 ## 1.2.2 — 2026-10-31
 
 - Use async socket discovery.

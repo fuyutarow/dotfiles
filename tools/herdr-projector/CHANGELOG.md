@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2 — 2026-11-11
+
+- Split pane metadata reports at herdr's 16-token limit so row 3 renders again
+
 ## 0.6.1 — 2026-11-11
 
 - Row 3 fits the 48-column sidebar

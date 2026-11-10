@@ -15,6 +15,7 @@ import {
   nativeTitleCacheInputs,
   agentCpuCacheInput,
   claudeFooterShells,
+  HERDR_MAX_METADATA_TOKENS,
   projectAgents,
   readAgentCpu,
   paneResourcePids,
@@ -45,6 +46,36 @@ const fleetRead = (overrides: Record<string, unknown>): FleetSessionRead => {
   const parsed = FleetSessionSchema.safeParse(session(overrides));
   expect(parsed.success).toBe(true);
   return parsed.success ? parsed.data : { na: true, why: "invalid fixture" };
+};
+
+/** The token names one report updates: the entry after each `--token` or `--clear-token` flag. */
+const tokenNamesOf = (report: string[]): string[] =>
+  [...report.keys()]
+    .filter(
+      (i) =>
+        i > 0 &&
+        (report[i - 1] === "--token" || report[i - 1] === "--clear-token"),
+    )
+    .map((i) => (report[i] ?? "").split("=")[0] ?? "");
+
+/**
+ * Joins a pane's report chunks back into one call, so content assertions read a whole pane report.
+ * Only a full chunk is continued, so separate reports stay separate; the widest-pane test asserts
+ * the chunk sizes themselves.
+ */
+const mergeReports = (calls: string[][]): string[][] => {
+  const merged: string[][] = [];
+  for (const call of calls) {
+    const previous = merged.at(-1);
+    const continues =
+      previous?.[1] === "report-metadata" &&
+      call[1] === "report-metadata" &&
+      previous[2] === call[2] &&
+      previous.length === 5 + HERDR_MAX_METADATA_TOKENS * 2;
+    if (continues) previous.push(...call.slice(5));
+    else merged.push([...call]);
+  }
+  return merged;
 };
 
 const unit = (name: string) =>
@@ -115,14 +146,14 @@ test("u26 foreground PIDs attribute unresolved Codex and mismatched Claude sessi
     pids,
   );
   // Row 3 at the default width: "cpu 73% · ram 1.8G · 0 wkr · ? sh" (33 columns) fits whole.
-  expect(calls[1]).toContain("ram=ram 1.8G");
-  expect(calls[1]).toContain("workers_off=0 wkr");
-  expect(calls[1]).toContain("shells_off=? sh");
-  expect(calls[1]).toContain("cpu_mid=cpu 73%");
-  expect(calls[3]).toContain("ram=ram 0.1G");
-  expect(calls[3]).toContain("workers_off=? wkr");
-  expect(calls[3]).toContain("shells_off=? sh");
-  expect(calls[3]).toContain("cpu_lo=cpu 0%");
+  expect(mergeReports(calls)[1]).toContain("ram=ram 1.8G");
+  expect(mergeReports(calls)[1]).toContain("workers_off=0 wkr");
+  expect(mergeReports(calls)[1]).toContain("shells_off=? sh");
+  expect(mergeReports(calls)[1]).toContain("cpu_mid=cpu 73%");
+  expect(mergeReports(calls)[3]).toContain("ram=ram 0.1G");
+  expect(mergeReports(calls)[3]).toContain("workers_off=? wkr");
+  expect(mergeReports(calls)[3]).toContain("shells_off=? sh");
+  expect(mergeReports(calls)[3]).toContain("cpu_lo=cpu 0%");
 });
 
 test("foreground Claude ancestor wins over nested and other-pane Claude rows", async () => {
@@ -165,11 +196,13 @@ test("foreground Claude ancestor wins over nested and other-pane Claude rows", a
     paneIds,
   );
   const reports = calls.filter((args) => args[1] === "report-metadata");
-  expect(reports[0]).toContain("ram=ram 1.8G");
-  expect(reports[0]).toContain("workers_off=0 wkr");
-  expect(reports[0]).toContain("cpu_mid=cpu 73%");
-  expect(reports[1]).toContain("cpu_mid=cpu 88%");
-  expect(reports[1]?.some((arg) => arg.includes("ram 3.0G"))).toBe(true);
+  expect(mergeReports(reports)[0]).toContain("ram=ram 1.8G");
+  expect(mergeReports(reports)[0]).toContain("workers_off=0 wkr");
+  expect(mergeReports(reports)[0]).toContain("cpu_mid=cpu 73%");
+  expect(mergeReports(reports)[1]).toContain("cpu_mid=cpu 88%");
+  expect(
+    mergeReports(reports)[1]?.some((arg) => arg.includes("ram 3.0G")),
+  ).toBe(true);
 });
 
 test("fleet burst activations coalesce before reading without exhausting protective limits", async () => {
@@ -253,19 +286,24 @@ test("projects known identity metadata and labels unknown agents without model",
     ]),
     (args) => Promise.resolve(calls.push(args)).then(() => true),
   );
-  expect(calls[0]).toEqual(["tab", "rename", "tab-1", "project-agt_abcd"]);
-  expect(calls[1]).toContain("fullname=project-agt_abcd");
-  expect(calls[1]).toContain("model=Opus 5.5");
-  expect(calls[1]).toContain("effort=high");
-  expect(calls[1]).toContain("--clear-token");
-  expect(calls[1]).not.toContain("rc=rc?");
-  expect(calls[2]).toEqual([
+  expect(mergeReports(calls)[0]).toEqual([
+    "tab",
+    "rename",
+    "tab-1",
+    "project-agt_abcd",
+  ]);
+  expect(mergeReports(calls)[1]).toContain("fullname=project-agt_abcd");
+  expect(mergeReports(calls)[1]).toContain("model=Opus 5.5");
+  expect(mergeReports(calls)[1]).toContain("effort=high");
+  expect(mergeReports(calls)[1]).toContain("--clear-token");
+  expect(mergeReports(calls)[1]).not.toContain("rc=rc?");
+  expect(mergeReports(calls)[2]).toEqual([
     "tab",
     "rename",
     "tab-2",
     "codex · n/a(no session file)",
   ]);
-  expect(calls[3]).toContain("model=");
+  expect(mergeReports(calls)[3]).toContain("model=");
 });
 
 test("rejects a Claude session for a Codex pane and clears its identity", async () => {
@@ -285,14 +323,14 @@ test("rejects a Claude session for a Codex pane and clears its identity", async 
     new Map([["sid-1", parsedClaude.data]]),
     (args) => Promise.resolve(calls.push(args)).then(() => true),
   );
-  expect(calls[0]).toEqual([
+  expect(mergeReports(calls)[0]).toEqual([
     "tab",
     "rename",
     "tab-2",
     "codex · n/a(no session id)",
   ]);
-  expect(calls[1]).toContain("model=");
-  expect(calls[1]).toContain("fleet_session_id=");
+  expect(mergeReports(calls)[1]).toContain("model=");
+  expect(mergeReports(calls)[1]).toContain("fleet_session_id=");
 });
 
 test("matches the Codex rollout only by Herdr's exact session id", async () => {
@@ -325,15 +363,15 @@ test("matches the Codex rollout only by Herdr's exact session id", async () => {
     new Map([["codex-thread", parsedCodex.data]]),
     (args) => Promise.resolve(calls.push(args)).then(() => true),
   );
-  expect(calls[1]).toContain("model=gpt-6.1-sol");
-  expect(calls[2]).toEqual([
+  expect(mergeReports(calls)[1]).toContain("model=gpt-6.1-sol");
+  expect(mergeReports(calls)[2]).toEqual([
     "tab",
     "rename",
     "tab-3",
     "codex · n/a(no session id)",
   ]);
-  expect(calls[3]).toContain("model=");
-  expect(calls[3]).toContain("fleet_session_id=");
+  expect(mergeReports(calls)[3]).toContain("model=");
+  expect(mergeReports(calls)[3]).toContain("fleet_session_id=");
 });
 
 test("keeps unavailable labels within 40 characters", async () => {
@@ -382,18 +420,20 @@ test("missing session clears stale identity tokens and explains the missing file
     ]),
     (args) => Promise.resolve(calls.push(args)).then(() => true),
   );
-  expect(calls[0]).toEqual([
+  expect(mergeReports(calls)[0]).toEqual([
     "tab",
     "rename",
     "tab-2",
     "codex · n/a(no session file)",
   ]);
-  expect(calls[1]).toContain("fullname=codex · n/a(no session file)");
-  expect(calls[1]).toContain("model=");
-  expect(calls[1]).toContain("effort=");
-  expect(calls[1]).toContain("--clear-token");
-  expect(calls[1]).not.toContain("rc=rc?");
-  expect(calls[1]).toContain("fleet_session_id=");
+  expect(mergeReports(calls)[1]).toContain(
+    "fullname=codex · n/a(no session file)",
+  );
+  expect(mergeReports(calls)[1]).toContain("model=");
+  expect(mergeReports(calls)[1]).toContain("effort=");
+  expect(mergeReports(calls)[1]).toContain("--clear-token");
+  expect(mergeReports(calls)[1]).not.toContain("rc=rc?");
+  expect(mergeReports(calls)[1]).toContain("fleet_session_id=");
 });
 
 test("agent CPU snapshot projects contract tokens and invalid snapshots clear them", async () => {
@@ -483,11 +523,11 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
   await Bun.write(path, JSON.stringify(doc));
   const firstSnapshot = await readAgentCpu(env, now);
   const calls = await report();
-  expect(calls[0]).toContain("workers_on=2 wkr");
-  expect(calls[0]).toContain("shells_off=? sh");
-  expect(calls[0]).toContain("cpu_lo=cpu 32%");
-  expect(calls[1]).toContain("workers_off=0 wkr");
-  expect(calls[1]).toContain("cpu_lo=cpu 4%");
+  expect(mergeReports(calls)[0]).toContain("workers_on=2 wkr");
+  expect(mergeReports(calls)[0]).toContain("shells_off=? sh");
+  expect(mergeReports(calls)[0]).toContain("cpu_lo=cpu 32%");
+  expect(mergeReports(calls)[1]).toContain("workers_off=0 wkr");
+  expect(mergeReports(calls)[1]).toContain("cpu_lo=cpu 4%");
   await Bun.write(
     path,
     JSON.stringify({
@@ -497,12 +537,14 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
       ),
     }),
   );
-  expect((await report())[1]).toContain("workers_on=3 wkr");
-  expect(calls[2]).toContain("workers_off=? wkr");
-  expect(calls[2]).toContain("cpu_lo=cpu 7%");
-  expect(calls[3]).toContain("unowned=orphan:foo 8% · bar.service 5%");
+  expect(mergeReports(await report())[1]).toContain("workers_on=3 wkr");
+  expect(mergeReports(calls)[2]).toContain("workers_off=? wkr");
+  expect(mergeReports(calls)[2]).toContain("cpu_lo=cpu 7%");
+  expect(mergeReports(calls)[3]).toContain(
+    "unowned=orphan:foo 8% · bar.service 5%",
+  );
   await Bun.write(path, JSON.stringify({ ...doc, unowned: [] }));
-  expect((await report())[3]).toContain("unowned");
+  expect(mergeReports(await report())[3]).toContain("unowned");
   expect(agentCpuCacheInput(await readAgentCpu(env, now))).not.toBe(
     agentCpuCacheInput(firstSnapshot),
   );
@@ -515,7 +557,7 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
     }),
   ]) {
     await Bun.write(path, bad);
-    const result = await report();
+    const result = mergeReports(await report());
     expect(result[0]).toContain("ram=cpu ?");
     expect(result[0]).toContain("workers_off=? wkr");
     expect(result[0]).toContain("shells_off=? sh");
@@ -574,7 +616,7 @@ test("resource fixtures preserve CPU and project memory sums or clear absent tok
       new Map(),
       snapshot,
     );
-    return { snapshot, args: calls[1] ?? [] };
+    return { snapshot, args: mergeReports(calls)[1] ?? [] };
   };
   const v1 = await report(resourceV1);
   expect(v1.snapshot?.schema).toBe(1);
@@ -756,8 +798,13 @@ test("bound native title is the Codex projected label; fleet name stays the iden
     title: { kind: "known", displayTitle: "レビュー 🧭" },
   });
   await projectAgents(agents, sessions, apply, titles);
-  expect(calls[1]).toEqual(["tab", "rename", "tab", "レビュー 🧭"]);
-  expect(calls[2]).toContain("fullname=レビュー 🧭");
+  expect(mergeReports(calls)[1]).toEqual([
+    "tab",
+    "rename",
+    "tab",
+    "レビュー 🧭",
+  ]);
+  expect(mergeReports(calls)[2]).toContain("fullname=レビュー 🧭");
   expect(calls.flat()).not.toContain("canonical-agt_abcd");
   expect(await readFleetSession(footerThread, fixture.env)).toMatchObject({
     name: "canonical-agt_abcd",
@@ -911,8 +958,13 @@ test("native title is the Codex projection fallback when fleet name is unavailab
     title: { kind: "known", displayTitle: "レビュー 🧭" },
   });
   await projectAgents(agents, sessions, apply, titles);
-  expect(calls[1]).toEqual(["tab", "rename", "tab", "レビュー 🧭"]);
-  expect(calls[2]).toContain("fullname=レビュー 🧭");
+  expect(mergeReports(calls)[1]).toEqual([
+    "tab",
+    "rename",
+    "tab",
+    "レビュー 🧭",
+  ]);
+  expect(mergeReports(calls)[2]).toContain("fullname=レビュー 🧭");
 });
 
 test("registration-only identity cannot create a native title binding", async () => {
@@ -1011,9 +1063,16 @@ test("unavailable native title keeps the fleet name in projection", async () => 
     knownTitles,
   );
   await projectAgents(agents, known, apply, knownTitles);
-  expect(calls.at(-2)).toEqual(["tab", "rename", "tab", "previous title"]);
-  expect(calls.at(-1)).toContain("fullname=previous title");
-  expect(calls.at(-1)).not.toContain("fullname=canonical-agt_abcd");
+  expect(mergeReports(calls).at(-2)).toEqual([
+    "tab",
+    "rename",
+    "tab",
+    "previous title",
+  ]);
+  expect(mergeReports(calls).at(-1)).toContain("fullname=previous title");
+  expect(mergeReports(calls).at(-1)).not.toContain(
+    "fullname=canonical-agt_abcd",
+  );
   const beforeUnavailable = calls.length;
 
   await Bun.write(
@@ -1036,7 +1095,7 @@ test("unavailable native title keeps the fleet name in projection", async () => 
     title: { kind: "unavailable" },
   });
   await projectAgents(agents, unavailable, apply, unavailableTitles);
-  const afterUnavailable = calls.slice(beforeUnavailable);
+  const afterUnavailable = mergeReports(calls.slice(beforeUnavailable));
   expect(afterUnavailable.at(-2)).toEqual([
     "tab",
     "rename",
@@ -1124,8 +1183,10 @@ test("native footer validates exact rollout then reports identity and normal fle
     session_id: footerThread,
   });
   await projectAgents(agents, sessions, apply);
-  expect(calls.at(-1)).toContain(`fleet_session_id=${footerThread}`);
-  expect(calls.at(-1)).toContain("model=GPT-6.1-Sol");
+  expect(mergeReports(calls).at(-1)).toContain(
+    `fleet_session_id=${footerThread}`,
+  );
+  expect(mergeReports(calls).at(-1)).toContain("model=GPT-6.1-Sol");
   await fixture.rollout(nextThread);
   const next = await bindNativeCodexFooters(
     agents,
@@ -1135,7 +1196,9 @@ test("native footer validates exact rollout then reports identity and normal fle
   );
   await projectAgents(agents, next, apply);
   expect(agents[0]?.agent_session?.value).toBe(nextThread);
-  expect(calls.at(-1)).toContain(`fleet_session_id=${nextThread}`);
+  expect(mergeReports(calls).at(-1)).toContain(
+    `fleet_session_id=${nextThread}`,
+  );
   const missing = await bindNativeCodexFooters(
     agents,
     () => Promise.resolve("missing footer"),
@@ -1144,7 +1207,7 @@ test("native footer validates exact rollout then reports identity and normal fle
   );
   await projectAgents(agents, missing, apply);
   expect(agents[0]?.agent_session).toBeUndefined();
-  expect(calls.at(-1)).toContain("fleet_session_id=");
+  expect(mergeReports(calls).at(-1)).toContain("fleet_session_id=");
 });
 
 const makeAgents = () => [
@@ -1379,7 +1442,7 @@ test("identical footer projections preserve fleet file inode, content, timestamp
     ctx: { na: true, why: "no native token count" },
     rate: prior.rate,
   });
-  expect(calls.at(-1)).toContain("model=GPT-6-Astra");
+  expect(mergeReports(calls).at(-1)).toContain("model=GPT-6-Astra");
 });
 
 test("owner's long rollout displays verified native GPT-6.1-Sol medium without tail settings", async () => {
@@ -1415,8 +1478,8 @@ test("owner's long rollout displays verified native GPT-6.1-Sol medium without t
     cwd,
   });
   await projectAgents(agents, sessions, apply);
-  expect(calls.at(-1)).toContain("model=GPT-6.1-Sol");
-  expect(calls.at(-1)).toContain("effort=medium");
+  expect(mergeReports(calls).at(-1)).toContain("model=GPT-6.1-Sol");
+  expect(mergeReports(calls).at(-1)).toContain("effort=medium");
 });
 
 test("same-thread model, effort, cwd or state changes during validation cannot bind a pane", async () => {
@@ -1472,7 +1535,7 @@ test("footer switch while native report is pending cannot persist stale fleet ob
   );
   expect(result.size).toBe(0);
   expect(agents[0]?.agent_session).toBeUndefined();
-  expect(calls.at(-1)).toEqual([
+  expect(mergeReports(calls).at(-1)).toEqual([
     "pane",
     "report-agent-session",
     "pane",
@@ -1594,8 +1657,8 @@ test("seven native witnesses bind Ready, warning and selection variants and repe
       effort: "medium",
     });
     await projectAgents(agents, first, apply);
-    expect(calls.at(-1)).toContain(`model=${witness.model}`);
-    expect(calls.at(-1)).toContain("effort=medium");
+    expect(mergeReports(calls).at(-1)).toContain(`model=${witness.model}`);
+    expect(mergeReports(calls).at(-1)).toContain("effort=medium");
     const path = join(fixture.root, "fleet", "sessions", `${witness.id}.json`);
     await using original = await open(path, "r");
     const before = await original.stat({ bigint: true });
@@ -1717,11 +1780,10 @@ test("native source authority binds selected agent_session and clears that same 
       expect(args[args.indexOf("--source") + 1]).toBe(
         "dotfiles:herdr-projector",
       );
+      // Only the chunk that carries fleet_session_id speaks for it; later chunks leave it alone.
       const token = args.find((value) => value.startsWith("fleet_session_id="));
-      metadata.set(
-        args[2] ?? "",
-        token?.slice("fleet_session_id=".length) ?? "",
-      );
+      if (token !== undefined)
+        metadata.set(args[2] ?? "", token.slice("fleet_session_id=".length));
     }
     return Promise.resolve(true);
   };
@@ -1902,15 +1964,15 @@ test("registered exact rollout supplies display metadata without refreshing flee
   expect(after.ino).toBe(before.ino);
   expect(after.mtimeNs).toBe(before.mtimeNs);
   expect(await readFile(path, "utf8")).toBe(content);
-  expect(calls[0]).toEqual([
+  expect(mergeReports(calls)[0]).toEqual([
     "tab",
     "rename",
     "same-cwd-tab",
     "codex · n/a(name unavailable)",
   ]);
-  expect(calls[1]).toContain(`fleet_session_id=${footerThread}`);
-  expect(calls[1]).toContain("model=gpt-6-astra");
-  expect(calls[1]).toContain("effort=high");
+  expect(mergeReports(calls)[1]).toContain(`fleet_session_id=${footerThread}`);
+  expect(mergeReports(calls)[1]).toContain("model=gpt-6-astra");
+  expect(mergeReports(calls)[1]).toContain("effort=high");
 });
 
 test("untrusted provenance receives no provisional display ID", async () => {
@@ -1942,7 +2004,7 @@ test("untrusted provenance receives no provisional display ID", async () => {
     );
     expect(sessions.size).toBe(0);
     expect(agents[0]?.agent_session).toBeUndefined();
-    expect(calls.at(-1)).not.toContain("--agent-session-id");
+    expect(mergeReports(calls).at(-1)).not.toContain("--agent-session-id");
   }
 });
 
@@ -1986,10 +2048,89 @@ test("row 3 sh is each agent pane's own footer count, never the plain panes of i
   const reports = calls.filter((args) => args[1] === "report-metadata");
   // No cpu reading: the ram token reads "cpu ?" and the count tokens follow it. A count of 1 or
   // more is the cyan `shells_on` token; 0 and `?` are the grey `shells_off`.
-  expect(reports[0]).toContain("ram=cpu ?");
-  expect(reports[0]).toContain("shells_on=1 sh");
-  expect(reports[0]).toContain("workers_off=? wkr");
-  expect(reports[1]).toContain("shells_off=0 sh");
-  expect(reports[2]).toContain("shells_off=? sh");
-  expect(reports[3]).toContain("shells_off=? sh");
+  expect(mergeReports(reports)[0]).toContain("ram=cpu ?");
+  expect(mergeReports(reports)[0]).toContain("shells_on=1 sh");
+  expect(mergeReports(reports)[0]).toContain("workers_off=? wkr");
+  expect(mergeReports(reports)[1]).toContain("shells_off=0 sh");
+  expect(mergeReports(reports)[2]).toContain("shells_off=? sh");
+  expect(mergeReports(reports)[3]).toContain("shells_off=? sh");
+});
+
+test("widest agent pane splits its metadata into reports of at most 16 tokens", async () => {
+  const pane = "w9:p1N";
+  const agents = [{ agent: "claude", pane_id: pane, tab_id: "t1" }];
+  // Identity 3 + agent_detail + rc + rc_reason + fleet_session_id, the cpu trio, ram, the workers
+  // and shells pairs, and the 5 retired clears: 20 token entries in all, one per name below.
+  const expectedNames = [
+    "fullname",
+    "model",
+    "effort",
+    "agent_detail",
+    "rc",
+    "rc_reason",
+    "fleet_session_id",
+    "cpu_lo",
+    "cpu_mid",
+    "cpu_hi",
+    "ram",
+    "workers_on",
+    "workers_off",
+    "shells_on",
+    "shells_off",
+    "resources",
+    "counts",
+    "workers",
+    "cpu",
+    "vram",
+  ];
+  // projectAgents reports its updated count on stdout ("projected N pane(s)"); it returns 0.
+  const run = (apply: (args: string[]) => Promise<boolean>) => {
+    const original = process.stdout.write.bind(process.stdout);
+    let out = "";
+    process.stdout.write = (chunk: string | Uint8Array) => {
+      out += String(chunk);
+      return true;
+    };
+    return projectAgents(
+      agents,
+      new Map(),
+      apply,
+      new Map(),
+      new Map([[pane, "on"]]),
+      new Map(),
+      undefined,
+      new Map(),
+      [],
+      new Map(),
+      new Map([[pane, 1]]),
+    )
+      .finally(() => {
+        process.stdout.write = original;
+      })
+      .then(() => Number(/projected (\d+) pane\(s\)/u.exec(out)?.[1] ?? -1));
+  };
+  const calls: string[][] = [];
+  const updated = await run((args) => {
+    calls.push(args);
+    return Promise.resolve(true);
+  });
+  const reports = calls.filter((args) => args[1] === "report-metadata");
+  for (const report of reports) {
+    expect(report[2]).toBe(pane);
+    expect(report[report.indexOf("--source") + 1]).toBe(
+      "dotfiles:herdr-projector",
+    );
+    expect(tokenNamesOf(report).length).toBeLessThanOrEqual(16);
+  }
+  const names = reports.flatMap((report) => tokenNamesOf(report));
+  expect(names.toSorted()).toEqual(expectedNames.toSorted());
+  expect(updated).toBe(1);
+
+  // The pane counts as updated only when every call succeeded: a failing later call means 0.
+  let reportCalls = 0;
+  const failed = await run((args) =>
+    Promise.resolve(args[1] !== "report-metadata" || ++reportCalls === 1),
+  );
+  expect(reportCalls).toBe(2);
+  expect(failed).toBe(0);
 });

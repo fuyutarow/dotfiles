@@ -90,10 +90,11 @@ if (process.argv[2] === "agent") {
   expect(preview.stdout).toContain("wouldApply");
   expect(await Bun.file(callsFile).exists()).toBe(false);
   expect(await Bun.file(join(root, "herdr-projector")).exists()).toBe(false);
+  // One rename and two report calls: the codex pane's 20 token entries split at herdr's 16 limit.
   expect((await cycle()).exit).toBe(0);
-  expect(await readFile(callsFile, "utf8")).toBe("apply\napply\n");
+  expect(await readFile(callsFile, "utf8")).toBe("apply\napply\napply\n");
   expect((await cycle()).stdout).toContain("unchanged");
-  expect(await readFile(callsFile, "utf8")).toBe("apply\napply\n");
+  expect(await readFile(callsFile, "utf8")).toBe("apply\napply\napply\n");
   // Same-cwd rollout and fleet records are ignored until Herdr reports that exact ID.
   expect(
     await writeFleetSession(

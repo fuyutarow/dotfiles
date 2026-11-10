@@ -1179,6 +1179,47 @@ export function agentSecondLine(
   return [row ?? "?", `ctx ${pct}/${limit}`].join(" · ");
 }
 
+/**
+ * herdr 0.9.5 rejects a `pane report-metadata` that updates more tokens than this:
+ * `{"error":{"code":"invalid_metadata_token","message":"a metadata report may update at most 16 tokens"}}`.
+ */
+export const HERDR_MAX_METADATA_TOKENS = 16;
+
+/**
+ * Splits token arguments (`--token k=v` or `--clear-token k`, each one pair of argv entries) into
+ * reports of at most HERDR_MAX_METADATA_TOKENS tokens, keeping their order.
+ */
+export function metadataReportChunks(tokenArgs: readonly string[]): string[][] {
+  const pairsPerChunk = HERDR_MAX_METADATA_TOKENS * 2;
+  const chunks: string[][] = [];
+  for (let i = 0; i < tokenArgs.length; i += pairsPerChunk)
+    chunks.push(tokenArgs.slice(i, i + pairsPerChunk));
+  return chunks;
+}
+
+/**
+ * Reports one pane's tokens as sequential calls, each at most HERDR_MAX_METADATA_TOKENS tokens.
+ * Stops at the first failed call; the pane is updated only when every call succeeded.
+ */
+async function reportPaneMetadata(
+  apply: (args: string[]) => Promise<boolean>,
+  paneId: string,
+  tokenArgs: readonly string[],
+): Promise<boolean> {
+  for (const chunk of metadataReportChunks(tokenArgs)) {
+    const ok = await apply([
+      "pane",
+      "report-metadata",
+      paneId,
+      "--source",
+      "dotfiles:herdr-projector",
+      ...chunk,
+    ]);
+    if (!ok) return false;
+  }
+  return true;
+}
+
 export async function projectAgents(
   agents: Agent[],
   sessions: ReadonlyMap<string, FleetSessionRead>,
@@ -1317,6 +1358,7 @@ export async function projectAgents(
         .map((row) => `${row.label} ${row.cpu_pct}%`)
         .join(" · ") ?? "";
     const cpuArgs: string[] = [];
+    const retiredArgs: string[] = [];
     if (isAgent) {
       const parsedMemory =
         AgentCpuSchemaV2.shape.unresolved_agents.element.safeParse(resource);
@@ -1345,10 +1387,11 @@ export async function projectAgents(
         vram,
         shells,
       );
-      cpuArgs.push(
-        ...resourceTokenArgs(tokens),
-        // Retired tokens (the row-4 counts, the single grey resources token and older per-field
-        // names): cleared so a value reported by an earlier version does not linger.
+      cpuArgs.push(...resourceTokenArgs(tokens));
+      // Retired tokens (the row-4 counts, the single grey resources token and older per-field
+      // names): cleared so a value reported by an earlier version does not linger. They come last
+      // so that a split report never drops a live token to make room for them.
+      retiredArgs.push(
         "--clear-token",
         "resources",
         "--clear-token",
@@ -1370,12 +1413,7 @@ export async function projectAgents(
     const renamed = isAgent
       ? await apply(["tab", "rename", agent.tab_id, name])
       : true;
-    const reported = await apply([
-      "pane",
-      "report-metadata",
-      agent.pane_id,
-      "--source",
-      "dotfiles:herdr-projector",
+    const reported = await reportPaneMetadata(apply, agent.pane_id, [
       "--token",
       `fullname=${name}`,
       "--token",
@@ -1396,6 +1434,7 @@ export async function projectAgents(
       "--token",
       `fleet_session_id=${matchedSessionId ?? ""}`,
       ...cpuArgs,
+      ...retiredArgs,
     ]);
     if (renamed && reported) updated++;
   }

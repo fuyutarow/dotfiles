@@ -1,3 +1,4 @@
+import type { Result } from "neverthrow";
 import { clockHM, nowEpochSec, pad2, stampMDHM } from "./prompt-stamp.ts";
 import { pctColor, roles, paceColor, pctFmt, unavailable } from "./ansi.ts";
 import { formatCostUsd } from "@dotfiles/shared/src/dispatch-pricing.ts";
@@ -73,6 +74,23 @@ export function codexCreditsSegment(rate: CodexRate): string | undefined {
     parts.push(roles.secondary(`${change}/${span}`));
   }
   return parts.join(" ");
+}
+
+// Anthropic API credit token. No endpoint returns the prepaid balance, so this is never a number:
+// `n/a` normally, and `out→sub` while agx's credits-unavailable marker (mtime in `credits`) is
+// younger than 24 h. A marker exactly 24 h old is back to `n/a`.
+const CLAUDE_CREDITS_EXHAUSTED_MS = 24 * 60 * 60 * 1000;
+export function claudeApiCreditSegment(
+  credits: Result<number | undefined, string> | undefined,
+  nowMs: number,
+): string {
+  if (credits !== undefined && credits.isErr())
+    return roles.unavailable("claude api", unavailable(credits.error));
+  const markerMs = credits?.unwrapOr(undefined);
+  if (markerMs !== undefined && nowMs - markerMs < CLAUDE_CREDITS_EXHAUSTED_MS)
+    return `${roles.label("claude api")} ${roles.value("out→sub", pctColor(70))}`;
+  // The reason keeps this an explicit absence (a bare `n/a` is refused by hasBareUnavailable).
+  return `${roles.label("claude api")} ${roles.secondary("n/a (no balance source)")}`;
 }
 
 export function jevUsageSegment(

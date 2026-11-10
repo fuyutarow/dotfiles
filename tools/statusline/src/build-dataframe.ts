@@ -9,6 +9,7 @@ import type { RcState } from "./identity.ts";
 import { contextLabel, firstNonEmpty, modelName } from "./model-context.ts";
 import type { readCodexRate } from "./codex-rate.ts";
 import type { readJevUsage } from "./jev-usage.ts";
+import { readClaudeCreditsMarker } from "./claude-credits.ts";
 import type { RecoverHealth } from "./recover-health.ts";
 import { ownerSources, type OwnerState } from "./owner-state.ts";
 import type { AgxJobRows } from "./agx-job-runs.ts";
@@ -77,6 +78,8 @@ export type Sources = {
   ) => Promise<void>;
   codexRate: () => ReturnType<typeof readCodexRate>;
   jevUsage: () => ReturnType<typeof readJevUsage>;
+  /** Optional: a fixture that injects other sources reads no marker unless it injects this too. */
+  claudeCredits?: () => ReturnType<typeof readClaudeCreditsMarker>;
   recoverHealth: () => Promise<HealthRead>;
 };
 export interface BuildDataframeOptions {
@@ -115,6 +118,7 @@ const BUDGETS_MS: Record<keyof Sources, number> = {
   herdrReport: 200,
   codexRate: 1000,
   jevUsage: 1000,
+  claudeCredits: 500,
   recoverHealth: 1000,
 };
 type Outcome<T> = { ok: true; value: T } | { ok: false; why: string };
@@ -254,6 +258,7 @@ export async function buildDataframe(
     storageResult,
     codexRateResult,
     jevUsageResult,
+    claudeCreditsResult,
     recoverHealthResult,
   ] = await Promise.allSettled([
     bounded(
@@ -353,6 +358,16 @@ export async function buildDataframe(
       ),
     ),
     bounded(
+      "claude credits",
+      budget("claudeCredits"),
+      // Injected fixtures read nothing unless they inject this source (no host state in tests).
+      options.sources !== undefined &&
+        options.sources.claudeCredits === undefined
+        ? () => Promise.resolve(ok(undefined))
+        : (sources.claudeCredits ?? readClaudeCreditsMarker),
+      (value) => publish({ claudeCredits: value }, []),
+    ),
+    bounded(
       "recover health",
       budget("recoverHealth"),
       sources.recoverHealth,
@@ -415,6 +430,11 @@ export async function buildDataframe(
     jevUsageResult,
     err("Jev usage unavailable"),
     "Jev usage",
+  );
+  const claudeCredits = settled(
+    claudeCreditsResult,
+    err("claude credits unavailable"),
+    "claude credits",
   );
   const recoverHealth = settled(
     recoverHealthResult,
@@ -492,6 +512,10 @@ export async function buildDataframe(
     jevUsageWhy:
       jevUsage.why ??
       (jevUsage.value.isErr() ? jevUsage.value.error : undefined),
+    claudeCredits:
+      claudeCredits.why === undefined
+        ? claudeCredits.value
+        : err(claudeCredits.why),
     branch,
     branchWhy,
     add: repo.value.add ?? data.changes?.linesAdded,

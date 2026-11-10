@@ -127,8 +127,12 @@ test.each([
     }),
   );
   let expected = "Rate: claude 5h 15% · 7d 50% · Fable 20%";
-  if (hasCodex) expected += " | codex 5h 10% · codex 7d 12%";
-  else expected += " | codex n/a (unavailable)";
+  if (hasCodex)
+    expected +=
+      " | codex 5h 10% · codex 7d 12% · claude api n/a (no balance source)";
+  else
+    expected +=
+      " | codex n/a (unavailable) · claude api n/a (no balance source)";
   if (hasJev) expected += " | Jev 7d spend <$0.01";
   else expected += " | Jev n/a (unavailable)";
   expect(row).toBe(expected);
@@ -142,10 +146,10 @@ test("a payload without rate_limits keeps one claude cell and no per-window cell
     }),
   );
   expect(row).toBe(
-    "Rate: claude none (no API response yet) | codex n/a (unavailable) | Jev 7d spend <$0.01",
+    "Rate: claude none (no API response yet) | codex n/a (unavailable) · claude api n/a (no balance source) | Jev 7d spend <$0.01",
   );
   expect(stripAnsi(rateRow({ rlModel: [] }))).toBe(
-    "Rate: claude none (no API response yet) | codex n/a (unavailable) | Jev n/a (unavailable)",
+    "Rate: claude none (no API response yet) | codex n/a (unavailable) · claude api n/a (no balance source) | Jev n/a (unavailable)",
   );
 });
 

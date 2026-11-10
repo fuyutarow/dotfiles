@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.24.0 — 2026-11-10
+
+- Rate row shows the Claude API credit state: n/a, or out→sub while agx's credits-unavailable marker is under 24 h old
+
 ## 0.23.14 — 2026-11-10
 
 - Separate shell commands from task IDs and elapsed times.

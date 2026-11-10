@@ -182,6 +182,10 @@ remain eligible. Target failures make `run --yes` exit 1; invocation errors exit
 only Julia's `compiled` and `scratchspaces` directories; it keeps
 both while a same-uid Julia process is live. It keeps Cargo registry and git caches while a
 same-uid `cargo`, `rustc`, or `rust-analyzer` process is live.
+Busy clean caches and protected or unknown-use build directories are not walked for sizing.
+Their rows retain the KEEP/ASK reason and report `bytes: null` with `bytes_kind: "estimate"`.
+This prevents retained trees from consuming the recovery stage's time budget; eligible trees
+still use the existing measurement and removal checks.
 `--fetch` is opt-in for plan/run: it refreshes jj Git remotes before judging workspaces; failure
 leaves them ASK. The pushed-content revset excludes the colocated `@git` pseudo-remote.
 

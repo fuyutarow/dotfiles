@@ -7,7 +7,7 @@ import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import { protectedReason } from "../lib/protected.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { deleteTree, treeCandidate } from "./tree.ts";
+import { deleteTree, keepTreeCandidate, treeCandidate } from "./tree.ts";
 import { cachedDiscovery, checkScanDeadline } from "../lib/scan-cache.ts";
 
 // Each build directory is sized by a bounded walk: a huge node_modules is a lower-bound
@@ -97,11 +97,11 @@ export const createBuildsTarget = (
           continue;
         if (reason !== null)
           rows.push({
-            ...(await tree(
+            ...(await keepTreeCandidate(
               path,
-              `regenerable build output (kondo --all parity)`,
+              `protected: ${reason}`,
               ctx,
-              BUILD_SCAN_MAX_ENTRIES,
+              false,
             )),
             verdict:
               reason === "process paths are unknown"

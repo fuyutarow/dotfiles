@@ -36,6 +36,35 @@ const context = (repoRoots: string[], procDir: string) => ({
 });
 
 describe("builds target", () => {
+  test("protected and unknown-use builds do not consume the sizing budget", async () => {
+    const home = tempRoot("reclaim-builds-no-protected-scan-");
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      rmSync(home, { recursive: true, force: true });
+    });
+    const paths = [join(home, "a/node_modules"), join(home, "b/node_modules")];
+    let scans = 0;
+    const target = createBuildsTarget(
+      () => home,
+      () => paths,
+      {
+        protection: (path) =>
+          path === paths[0] ? "in use" : "process paths are unknown",
+        tree: (...args) => {
+          scans += 1;
+          return treeCandidate(...args);
+        },
+      },
+    );
+    const rows = await target.plan(context([], home));
+    expect(scans).toBe(0);
+    expect(
+      rows.map(({ verdict, bytes, action }) => ({ verdict, bytes, action })),
+    ).toEqual([
+      { verdict: "KEEP", bytes: null, action: { kind: "delete", argv: [] } },
+      { verdict: "ASK", bytes: null, action: { kind: "delete", argv: [] } },
+    ]);
+  });
   test("discovery count stays fixed as the engine acts on more build directories", async () => {
     const runWithCandidates = async (candidateCount: number) => {
       const temp = tempRoot("reclaim-builds-run-");

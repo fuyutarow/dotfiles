@@ -235,7 +235,22 @@ export async function keepTreeCandidate(
   path: string,
   reason: string,
   ctx?: Context,
+  measure = true,
 ): Promise<Candidate> {
+  // Recovery must not spend its action budget sizing paths it already has to retain.
+  // null means unmeasured, not an empty tree; no safety fact is inferred from its size.
+  if (!measure)
+    return {
+      id: path,
+      path,
+      verdict: "KEEP",
+      reason,
+      checks: [],
+      bytes: null,
+      bytes_kind: "estimate",
+      action: { kind: "delete", argv: [] },
+      result: null,
+    };
   return {
     ...(await treeCandidate(path, reason, ctx)),
     verdict: "KEEP",

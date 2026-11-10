@@ -8,7 +8,8 @@ export type ProcessProbe = (comm: string) => boolean;
 const defaultFs = {
   exists: existsSync,
   tree: treeCandidate,
-  keep: keepTreeCandidate,
+  keep: (path: string, reason: string, ctx: Context) =>
+    keepTreeCandidate(path, reason, ctx, false),
 };
 
 const paths = (home: string) => [

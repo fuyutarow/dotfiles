@@ -31,6 +31,38 @@ const context = {
 };
 
 describe("clean target", () => {
+  test("busy caches return unmeasured KEEP without starting a tree scan", async () => {
+    const home = tempRoot("reclaim-clean-no-busy-scan-");
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      rmSync(home, { recursive: true, force: true });
+    });
+    const path = join(home, ".bun/install/cache");
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, "package"), "retained");
+    const target = createCleanTarget(
+      () => home,
+      () => true,
+    );
+    let scans = 0;
+    const rows = await target.plan({
+      ...context,
+      reportActivity: () => {
+        scans += 1;
+      },
+    });
+    expect(scans).toBe(0);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      path,
+      verdict: "KEEP",
+      reason: "busy: bun",
+      bytes: null,
+      bytes_kind: "estimate",
+      action: { kind: "delete", argv: [] },
+    });
+    expect(existsSync(join(path, "package"))).toBe(true);
+  });
   test("declared sccache and Homebrew caches are regenerable and kept while busy", async () => {
     const home = tempRoot("reclaim-declared-caches-");
     using cleanup = new DisposableStack();

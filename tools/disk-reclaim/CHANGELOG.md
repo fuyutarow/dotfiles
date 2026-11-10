@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.33 — 2026-11-10
+
+- Avoid sizing busy caches and protected build directories during recovery.
+
 ## 1.12.32 — 2026-11-08
 
 - workspace-gc: drop the --legacy option, which agx 9.0.0 removed; it is no longer accepted or offered in usage

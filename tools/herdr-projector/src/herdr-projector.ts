@@ -211,10 +211,11 @@ export type CpuToken = (typeof CPU_TOKENS)[number];
 export type ResourceTokens = {
   /** The cpu reading as its own token so herdr can style it; absent when cpu is unknown. */
   cpu?: { token: CpuToken; text: string };
-  /** Row 3's grey token: ram and vram. A cpu reading that is unknown ("cpu ?") stays here. */
+  /**
+   * Row 3's grey token: `ram X[ vram Y] N wkr M sh`, parts separated by single spaces. A cpu
+   * reading that is unknown ("cpu ?") stays here. Unknown counts read `? wkr` / `? sh`.
+   */
   resources: string;
-  /** Row 4's grey token: workers and shells, each count number-first or "?". */
-  counts: string;
 };
 
 /** Exactly one cpu_* token is reported; the other two are cleared. */
@@ -228,6 +229,8 @@ export function cpuTokenArgs(cpu: ResourceTokens["cpu"]): string[] {
 
 /** One grey-token part; `key` names it in that token's drop order. */
 type RowPart = { key: string; text: string };
+/** Parts inside the grey token are separated by one space; herdr's separator sits only before it. */
+const PART_SEPARATOR = " ";
 
 /**
  * Fit rule for one grey token: whole parts are removed, never cut inside a part. Parts are
@@ -242,23 +245,26 @@ function fitParts(
   let kept = parts;
   for (const key of [undefined, ...dropOrder]) {
     if (key !== undefined) kept = kept.filter((part) => part.key !== key);
-    const line = kept.map((part) => part.text).join(HERDR_TOKEN_SEPARATOR);
+    const line = kept.map((part) => part.text).join(PART_SEPARATOR);
     if (line.length <= width) return line;
   }
   return "";
 }
 
-/** Row 3 drops vram first, then ram; cpu's own token is never in this list. */
-const RESOURCE_DROP_ORDER = ["vram", "ram", "cpu"] as const;
-/** Row 4 drops shells first, then workers. */
-const COUNT_DROP_ORDER = ["shells", "workers"] as const;
+/**
+ * Row 3's grey token drops whole parts from the right, so the priority is the reverse of the
+ * on-screen order: vram first, then shells, then workers. ram and cpu are never in this list;
+ * cpu's own token is never in the grey token at all.
+ */
+const RESOURCE_DROP_ORDER = ["vram", "shells", "workers"] as const;
 
 /**
- * The sidebar has four rows for an agent: row 3 is `cpu NN%` (its own token, chosen by load
- * level, thresholds from tools/shared, so herdr/config.toml can color it) plus the grey
- * `ram X · vram Y`; row 4 is the grey `N workers · M shells`. Unknown counts read `? workers`
- * and `? shells`; vram appears only when reported. Each token gets its own fit: row 3 gets the
- * width the cpu token and herdr's separator leave over, row 4 gets the full width.
+ * The sidebar has three rows for an agent: row 3 is `cpu NN%` (its own token, chosen by load
+ * level, thresholds from tools/shared, so herdr/config.toml can color it) followed by the grey
+ * `ram X N wkr M sh vram Y`, joined to the cpu token by herdr's separator. Unknown counts read
+ * `? wkr` and `? sh`. vram appears only when reported as a non-zero value: a session that uses
+ * no vram reports 0, which is treated as not reported. The grey token gets the width the cpu
+ * token and herdr's separator leave over.
  */
 export function resourceTokens(
   workers: number | undefined,
@@ -268,41 +274,28 @@ export function resourceTokens(
   shells: number | undefined,
   width = 28,
 ): ResourceTokens {
-  const memory: RowPart[] = [
+  const parts: RowPart[] = [
+    ...(cpu === undefined ? [{ key: "cpu", text: "cpu ?" }] : []),
     ...(ram === undefined
       ? []
       : [{ key: "ram", text: `ram ${formatMemory(ram)}` }]),
-    ...(vram === undefined
+    { key: "workers", text: `${workers ?? "?"} wkr` },
+    { key: "shells", text: `${shells ?? "?"} sh` },
+    ...(vram === undefined || vram === 0
       ? []
       : [{ key: "vram", text: `vram ${formatMemory(vram)}` }]),
   ];
-  const counts = fitParts(
-    [
-      { key: "workers", text: `${workers ?? "?"} workers` },
-      { key: "shells", text: `${shells ?? "?"} shells` },
-    ],
-    width,
-    COUNT_DROP_ORDER,
-  );
   if (cpu === undefined)
-    return {
-      resources: fitParts(
-        [{ key: "cpu", text: "cpu ?" }, ...memory],
-        width,
-        RESOURCE_DROP_ORDER,
-      ),
-      counts,
-    };
+    return { resources: fitParts(parts, width, RESOURCE_DROP_ORDER) };
   const text = `cpu ${cpu}%`;
   const level = usageLevel(Math.round(cpu));
   return {
     cpu: { token: `cpu_${level}`, text },
     resources: fitParts(
-      memory,
+      parts,
       width - text.length - HERDR_TOKEN_SEPARATOR.length,
       RESOURCE_DROP_ORDER,
     ),
-    counts,
   };
 }
 
@@ -1219,9 +1212,9 @@ export async function projectAgents(
         ...(tokens.resources === ""
           ? ["--clear-token", "resources"]
           : ["--token", `resources=${tokens.resources}`]),
-        ...(tokens.counts === ""
-          ? ["--clear-token", "counts"]
-          : ["--token", `counts=${tokens.counts}`]),
+        // Retired row-4 token: cleared so a value reported before this change does not linger.
+        "--clear-token",
+        "counts",
         ...cpuTokenArgs(tokens.cpu),
         "--clear-token",
         "workers",

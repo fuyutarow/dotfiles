@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.7 — 2026-11-10
+
+- Move worker and shell counts onto row 3 as wkr/sh parts of the grey resources token, space-separated with vram last and dropped first; a zero vram reading is not reported; retire the separate counts token for the three-row sidebar.
+
 ## 0.5.6 — 2026-11-09
 
 - Show a bound Codex native title as the projected tab label and sidebar fullname; the fleet name stays the session identity and the fallback when no title is bound. Claude projection is unchanged.

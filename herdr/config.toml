@@ -101,25 +101,25 @@ agent_panel_sort = "spaces"
 # don't repaint it). `tab` keeps bold weight for scanability but drops to a muted `#7f848e` fg
 # (tuned by eye against Claude Code's own native status line) so it doesn't overpower the row.
 # $agent_detail uses the statusline model label's ANSI-256 idx-30 color.
-# The projector fills two rows per agent, each width-bounded (the real sidebar is about 30 columns).
-# Row 3 is CPU / RAM / VRAM. CPU is its own token so it can be colored alone (herdr strips control
-# characters from reported values and styles per token): the projector reports exactly one of
-# $cpu_lo / $cpu_mid / $cpu_hi (the others are cleared and unreported tokens disappear), chosen
-# with the statusline's thresholds (tools/shared/src/usage-level.ts: green <70, yellow 70-89,
+# The projector fills three rows per agent, each width-bounded (the real sidebar is about 30 columns;
+# the installed client renders three rows per agent, so counts live on row 3).
+# Row 3 is CPU / RAM / VRAM / WORKERS / SHELLS. CPU is its own token so it can be colored alone
+# (herdr strips control characters from reported values and styles per token): the projector reports
+# exactly one of $cpu_lo / $cpu_mid / $cpu_hi (the others are cleared and unreported tokens disappear),
+# chosen with the statusline's thresholds (tools/shared/src/usage-level.ts: green <70, yellow 70-89,
 # red >=90), and each is styled with the statusline's colors (ANSI-256 idx 71 / 178 / 167 =
-# #5faf5f / #d7af00 / #d75f5f). The rest of row 3 is one grey $resources token, "ram 8.5G" or
-# "ram 8.5G · vram 12G", joined by herdr's " · " separator after the cpu token.
-# Row 4 is one grey $counts token, "3 workers · 2 shells" (unknown counts read "? workers" /
-# "? shells"); it is a row of its own, so it fits the full width.
-# Each token is fitted separately and drops whole parts, never cut mid-token: $resources drops
-# vram, then ram (cpu is never dropped); $counts drops shells, then workers.
-# Each override under rows_by_agent repeats row 4, since an override replaces rows.
+# #5faf5f / #d7af00 / #d75f5f). The rest of row 3 is one grey $resources token, "ram 20G 1 wkr 4 sh"
+# or "ram 20G 1 wkr 4 sh vram 12G": its parts are separated by single spaces, and herdr's " · "
+# separator sits only between the cpu token and that grey token. Unknown counts read "? wkr" / "? sh".
+# vram is reported only when non-zero (a 0 reading means no vram in use and is omitted).
+# The grey token is fitted to the width the cpu token leaves and drops whole parts from the right, never
+# cut mid-token: vram first, then shells, then workers. cpu and ram are never dropped while they fit.
+# Each override under rows_by_agent repeats row 3, since an override replaces rows.
 [ui.sidebar.agents]
 rows = [
   ["state_icon", { token = "tab", fg = "#7f848e", bold = true, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }],
   [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
-  [{ token = "$counts", fg = "#7f848e", bold = false, dim = false }],
   # Custom reported agents use these default rows, not rows_by_agent overrides.
   # Unreported tokens disappear. See https://herdr.dev/docs/configuration/#sidebar-row-layouts.
   ["$btm_summary"],
@@ -139,13 +139,11 @@ claude = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }],
   [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
-  [{ token = "$counts", fg = "#7f848e", bold = false, dim = false }],
 ]
 codex = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }],
   [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
-  [{ token = "$counts", fg = "#7f848e", bold = false, dim = false }],
 ]
 [session]
 # resume_agents_on_restore = true (default)

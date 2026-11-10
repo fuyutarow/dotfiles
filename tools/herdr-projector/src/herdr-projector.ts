@@ -259,6 +259,13 @@ function fitParts(
 const RESOURCE_DROP_ORDER = ["vram", "shells", "workers"] as const;
 
 /**
+ * Default row width for row 3, in sidebar columns. Measured on the owner's screenshot: row 2
+ * `opus-high · ctx 69%/600k · 🔗` renders whole and `· rc:?` is cut at about column 31, so the
+ * sidebar is 31 columns wide.
+ */
+export const ROW3_FIT_WIDTH = 31;
+
+/**
  * The sidebar has three rows for an agent: row 3 is `cpu NN%` (its own token, chosen by load
  * level, thresholds from tools/shared, so herdr/config.toml can color it) followed by the grey
  * `ram X N wkr M sh vram Y`, joined to the cpu token by herdr's separator. Unknown counts read
@@ -272,7 +279,7 @@ export function resourceTokens(
   ram: number | undefined,
   vram: number | undefined,
   shells: number | undefined,
-  width = 28,
+  width = ROW3_FIT_WIDTH,
 ): ResourceTokens {
   const parts: RowPart[] = [
     ...(cpu === undefined ? [{ key: "cpu", text: "cpu ?" }] : []),

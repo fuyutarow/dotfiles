@@ -3,6 +3,7 @@ import {
   cpuTokenArgs,
   plainShellCounts,
   resourceTokens,
+  ROW3_FIT_WIDTH,
 } from "../src/herdr-projector.ts";
 
 const GiB = 1024 ** 3;
@@ -149,9 +150,25 @@ test("fit rule per token: whole parts only, never a cut mid-token, cpu and ram k
   }
 });
 
-test("width 28 default with all parts known: cpu 41% · ram 0.52G 1 wkr, shells dropped", () => {
+test("default width is the 31-column sidebar: all parts known fit, shells kept", () => {
+  expect(ROW3_FIT_WIDTH).toBe(31);
   const t = resourceTokens(1, 41, 0.52 * GiB, undefined, 2);
-  expect(`${t.cpu?.text} · ${t.resources}`).toBe("cpu 41% · ram 0.52G 1 wkr");
+  expect(`${t.cpu?.text} · ${t.resources}`).toBe(
+    "cpu 41% · ram 0.52G 1 wkr 2 sh",
+  );
+});
+
+test("live rows that fit 31 columns keep sh at the default width", () => {
+  expect(sidebarRow3(5, 0.93 * GiB, 0, 1, undefined, ROW3_FIT_WIDTH)).toBe(
+    "cpu 5% · ram 0.93G 0 wkr 1 sh",
+  );
+  expect(sidebarRow3(253, 7 * GiB, 0, 0, undefined, ROW3_FIT_WIDTH)).toBe(
+    "cpu 253% · ram 7.0G 0 wkr 0 sh",
+  );
+  const live = resourceTokens(0, 253, 7 * GiB, undefined, 0);
+  expect(`${live.cpu?.text} · ${live.resources}`).toBe(
+    "cpu 253% · ram 7.0G 0 wkr 0 sh",
+  );
 });
 
 test("memory uses two significant figures in the grey token", () => {

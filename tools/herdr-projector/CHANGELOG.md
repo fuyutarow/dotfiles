@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.8 — 2026-11-10
+
+- Row 3 fit width defaults to the measured 31-column sidebar (ROW3_FIT_WIDTH), so live rows keep their sh count.
+
 ## 0.5.7 — 2026-11-10
 
 - Move worker and shell counts onto row 3 as wkr/sh parts of the grey resources token, space-separated with vram last and dropped first; a zero vram reading is not reported; retire the separate counts token for the three-row sidebar.

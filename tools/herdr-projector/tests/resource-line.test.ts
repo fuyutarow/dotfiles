@@ -176,19 +176,23 @@ test("the bar never trails: dropping every count part drops the bar with it", ()
   }
 });
 
-test("default width is the 31-column sidebar: a 0.52G row reads 0.5G and keeps sh", () => {
-  expect(ROW3_FIT_WIDTH).toBe(31);
+test("default width is the 36 text columns of the 40-column sidebar: a 0.52G row reads 0.5G and keeps sh", () => {
+  // 40 sidebar columns - 1 divider - 3 row indent (herdr v0.9.5; see ROW3_FIT_WIDTH).
+  expect(ROW3_FIT_WIDTH).toBe(40 - 1 - 3);
   const t = resourceTokens(1, 41, 0.52 * GiB, undefined, 2);
   expect(`${t.cpu?.text} · ${t.resources}`).toBe(
     "cpu 41% · ram 0.5G │ 1 wkr 2 sh",
   );
 });
 
-test("the bar's three columns cost sh at 31 for cpu 253% and keep it for cpu 1%", () => {
-  expect(sidebarRow3(253, 7 * GiB, 0, 0, undefined, ROW3_FIT_WIDTH)).toBe(
+test("the bar's three columns cost sh at 31 for cpu 253% and keep it from 32; the default width keeps it", () => {
+  expect(sidebarRow3(253, 7 * GiB, 0, 0, undefined, 31)).toBe(
     "cpu 253% · ram 7.0G │ 0 wkr",
   );
   expect(sidebarRow3(253, 7 * GiB, 0, 0, undefined, 32)).toBe(
+    "cpu 253% · ram 7.0G │ 0 wkr 0 sh",
+  );
+  expect(sidebarRow3(253, 7 * GiB, 0, 0, undefined, ROW3_FIT_WIDTH)).toBe(
     "cpu 253% · ram 7.0G │ 0 wkr 0 sh",
   );
   expect(sidebarRow3(1, 20 * GiB, 1, 4, undefined, ROW3_FIT_WIDTH)).toBe(
@@ -196,7 +200,19 @@ test("the bar's three columns cost sh at 31 for cpu 253% and keep it for cpu 1%"
   );
   const live = resourceTokens(0, 253, 7 * GiB, undefined, 0);
   expect(`${live.cpu?.text} · ${live.resources}`).toBe(
-    "cpu 253% · ram 7.0G │ 0 wkr",
+    "cpu 253% · ram 7.0G │ 0 wkr 0 sh",
+  );
+});
+
+test("at the default width vram is the first part dropped: it needs 38 columns beside cpu 1% and 20G", () => {
+  const full = "cpu 1% · ram 20G vram 12G │ 1 wkr 4 sh";
+  expect(full.length).toBe(38);
+  expect(sidebarRow3(1, 20 * GiB, 1, 4, 12 * GiB, full.length)).toBe(full);
+  expect(sidebarRow3(1, 20 * GiB, 1, 4, 12 * GiB, full.length - 1)).toBe(
+    "cpu 1% · ram 20G │ 1 wkr 4 sh",
+  );
+  expect(sidebarRow3(1, 20 * GiB, 1, 4, 12 * GiB, ROW3_FIT_WIDTH)).toBe(
+    "cpu 1% · ram 20G │ 1 wkr 4 sh",
   );
 });
 

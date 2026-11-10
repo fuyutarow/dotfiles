@@ -295,11 +295,19 @@ function fitParts(
 const RESOURCE_DROP_ORDER = ["vram", "shells", "workers"] as const;
 
 /**
- * Default row width for row 3, in sidebar columns. Measured on the owner's screenshot: row 2
- * `opus-high · ctx 69%/600k · 🔗` renders whole and `· rc:?` is cut at about column 31, so the
- * sidebar is 31 columns wide.
+ * Default row width for row 3, in sidebar columns: the text width herdr gives an agent row at the
+ * 40-column sidebar (herdr/config.toml ui.sidebar_width = sidebar_max_width = 40), so 36 = 40 - 4.
+ * The 4 columns of non-text overhead come from herdr v0.9.5 source (github.com/herdrdev/herdr):
+ *   - 1 column: the sidebar's right-hand divider. `expanded_sidebar_sections` in src/ui/sidebar.rs
+ *     lays content out in `area.width.saturating_sub(1)` columns.
+ *   - 3 columns: row 3's indent. `render_agent_row` in src/client/shell/agent_sidebar.rs prefixes
+ *     every row after the first with 3 spaces (the first row gets 1) and passes
+ *     `rect.width - indent` as the token width.
+ * Not counted: the agent list's 1-column scrollbar, which only appears while the list overflows
+ * (`show_scrollbar` in `render_agent_list`); a scrolling sidebar has 35 text columns.
+ * Change this together with ui.sidebar_width.
  */
-export const ROW3_FIT_WIDTH = 31;
+export const ROW3_FIT_WIDTH = 36;
 
 /**
  * The sidebar has three rows for an agent: row 3 is `cpu NN%` (its own token, chosen by load

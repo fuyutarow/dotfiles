@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.12 — 2026-11-10
+
+- Row 3 fits the 40-column sidebar
+
 ## 0.5.11 — 2026-11-10
 
 - Row 3's ram and vram show one decimal below 10G and a whole number from 10G, and anything below 0.1G reads <0.1G.

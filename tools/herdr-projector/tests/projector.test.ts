@@ -113,10 +113,10 @@ test("u26 foreground PIDs attribute unresolved Codex and mismatched Claude sessi
     snapshot,
     pids,
   );
-  // Width 31 leaves 21 columns after "cpu 73% · ": "ram 1.8G 0 wkr ? sh" fits whole.
-  expect(calls[1]).toContain("resources=ram 1.8G 0 wkr ? sh");
+  // Width 31 leaves 21 columns after "cpu 73% · ": "ram 1.8G │ 0 wkr ? sh" fits whole.
+  expect(calls[1]).toContain("resources=ram 1.8G │ 0 wkr ? sh");
   expect(calls[1]).toContain("cpu_mid=cpu 73%");
-  expect(calls[3]).toContain("resources=ram 0.12G ? wkr ? sh");
+  expect(calls[3]).toContain("resources=ram 0.12G │ ? wkr ? sh");
   expect(calls[3]).toContain("cpu_lo=cpu 0%");
 });
 
@@ -160,7 +160,7 @@ test("foreground Claude ancestor wins over nested and other-pane Claude rows", a
     paneIds,
   );
   const reports = calls.filter((args) => args[1] === "report-metadata");
-  expect(reports[0]).toContain("resources=ram 1.8G 0 wkr ? sh");
+  expect(reports[0]).toContain("resources=ram 1.8G │ 0 wkr ? sh");
   expect(reports[0]).toContain("cpu_mid=cpu 73%");
   expect(reports[1]).toContain("cpu_mid=cpu 88%");
   expect(reports[1]?.some((arg) => arg.includes("ram 3.0G"))).toBe(true);
@@ -576,8 +576,8 @@ test("resource fixtures preserve CPU and project memory sums or clear absent tok
   const v2 = await report(resourceV2);
   expect(v2.snapshot?.schema).toBe(2);
   // vram 0.5G is reported here: at 21 columns after "cpu 32% · " the rule drops vram first, and
-  // "ram 1.2G 2 wkr ? sh" fits whole.
-  expect(v2.args).toContain("resources=ram 1.2G 2 wkr ? sh");
+  // "ram 1.2G │ 2 wkr ? sh" fits whole.
+  expect(v2.args).toContain("resources=ram 1.2G │ 2 wkr ? sh");
   expect(v2.args).toContain("cpu_lo=cpu 32%");
   expect(agentCpuCacheInput(v2.snapshot)).not.toBe(
     agentCpuCacheInput(v1.snapshot),
@@ -601,7 +601,7 @@ test("resource fixtures preserve CPU and project memory sums or clear absent tok
     sessions: [{ ...row, workers: null }],
   });
   // Same width rule as above: at 31 columns the unknown workers and shells both fit after vram drops.
-  expect(noWorkers.args).toContain("resources=ram 1.0G ? wkr ? sh");
+  expect(noWorkers.args).toContain("resources=ram 1.0G │ ? wkr ? sh");
   const zero = await report({
     ...resourceV2,
     sessions: [{ ...row, ram_bytes: 0, vram_bytes: 0, workers: null }],

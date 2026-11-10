@@ -212,8 +212,9 @@ export type ResourceTokens = {
   /** The cpu reading as its own token so herdr can style it; absent when cpu is unknown. */
   cpu?: { token: CpuToken; text: string };
   /**
-   * Row 3's grey token: `ram X[ vram Y] N wkr M sh`, parts separated by single spaces. A cpu
-   * reading that is unknown ("cpu ?") stays here. Unknown counts read `? wkr` / `? sh`.
+   * Row 3's grey token: `ram X[ vram Y] │ N wkr M sh`. Memory and counts are separated by the
+   * statusline's bar (U+2502), single spaces inside each part. A cpu reading that is unknown
+   * ("cpu ?") stays here. Unknown counts read `? wkr` / `? sh`.
    */
   resources: string;
 };
@@ -227,14 +228,43 @@ export function cpuTokenArgs(cpu: ResourceTokens["cpu"]): string[] {
   );
 }
 
-/** One grey-token part; `key` names it in that token's drop order. */
-type RowPart = { key: string; text: string };
+/**
+ * One grey-token part. `key` names it in the drop order; `side` says where it sits: `memory`
+ * parts (ram, vram) and `lead` parts (an unknown cpu) come before the bar, `counts` parts
+ * (wkr, sh) come after it.
+ */
+type RowPart = {
+  key: string;
+  text: string;
+  side: "lead" | "memory" | "counts";
+};
 /** Parts inside the grey token are separated by one space; herdr's separator sits only before it. */
 const PART_SEPARATOR = " ";
+/** Between the memory part and the counts part: the bar the statusline's worker and shell rows use. */
+const MEMORY_COUNTS_BAR = " │ ";
+
+/**
+ * Joins the kept parts. The bar appears only when a memory part and a counts part both remain,
+ * so it never trails the memory part or leads the counts part.
+ */
+function renderParts(parts: RowPart[]): string {
+  const head = parts
+    .filter((part) => part.side !== "counts")
+    .map((part) => part.text)
+    .join(PART_SEPARATOR);
+  const counts = parts
+    .filter((part) => part.side === "counts")
+    .map((part) => part.text)
+    .join(PART_SEPARATOR);
+  const hasMemory = parts.some((part) => part.side === "memory");
+  if (!hasMemory || counts === "")
+    return [head, counts].filter((side) => side !== "").join(PART_SEPARATOR);
+  return `${head}${MEMORY_COUNTS_BAR}${counts}`;
+}
 
 /**
  * Fit rule for one grey token: whole parts are removed, never cut inside a part. Parts are
- * removed in `dropOrder` (first key goes first) until the joined text fits `width`; if none
+ * removed in `dropOrder` (first key goes first) until the rendered text fits `width`; if none
  * fits, the token is empty and nothing is cut.
  */
 function fitParts(
@@ -245,7 +275,7 @@ function fitParts(
   let kept = parts;
   for (const key of [undefined, ...dropOrder]) {
     if (key !== undefined) kept = kept.filter((part) => part.key !== key);
-    const line = kept.map((part) => part.text).join(PART_SEPARATOR);
+    const line = renderParts(kept);
     if (line.length <= width) return line;
   }
   return "";
@@ -254,7 +284,8 @@ function fitParts(
 /**
  * Row 3's grey token drops whole parts from the right, so the priority is the reverse of the
  * on-screen order: vram first, then shells, then workers. ram and cpu are never in this list;
- * cpu's own token is never in the grey token at all.
+ * cpu's own token is never in the grey token at all. Dropping the last count part also drops
+ * the bar.
  */
 const RESOURCE_DROP_ORDER = ["vram", "shells", "workers"] as const;
 
@@ -268,10 +299,10 @@ export const ROW3_FIT_WIDTH = 31;
 /**
  * The sidebar has three rows for an agent: row 3 is `cpu NN%` (its own token, chosen by load
  * level, thresholds from tools/shared, so herdr/config.toml can color it) followed by the grey
- * `ram X N wkr M sh vram Y`, joined to the cpu token by herdr's separator. Unknown counts read
- * `? wkr` and `? sh`. vram appears only when reported as a non-zero value: a session that uses
- * no vram reports 0, which is treated as not reported. The grey token gets the width the cpu
- * token and herdr's separator leave over.
+ * `ram X[ vram Y] │ N wkr M sh`, joined to the cpu token by herdr's separator. The bar sits
+ * between memory and counts. Unknown counts read `? wkr` and `? sh`. vram appears only when
+ * reported as a non-zero value: a session that uses no vram reports 0, which is treated as not
+ * reported. The grey token gets the width the cpu token and herdr's separator leave over.
  */
 export function resourceTokens(
   workers: number | undefined,
@@ -282,15 +313,29 @@ export function resourceTokens(
   width = ROW3_FIT_WIDTH,
 ): ResourceTokens {
   const parts: RowPart[] = [
-    ...(cpu === undefined ? [{ key: "cpu", text: "cpu ?" }] : []),
+    ...(cpu === undefined
+      ? [{ key: "cpu", text: "cpu ?", side: "lead" as const }]
+      : []),
     ...(ram === undefined
       ? []
-      : [{ key: "ram", text: `ram ${formatMemory(ram)}` }]),
-    { key: "workers", text: `${workers ?? "?"} wkr` },
-    { key: "shells", text: `${shells ?? "?"} sh` },
+      : [
+          {
+            key: "ram",
+            text: `ram ${formatMemory(ram)}`,
+            side: "memory" as const,
+          },
+        ]),
     ...(vram === undefined || vram === 0
       ? []
-      : [{ key: "vram", text: `vram ${formatMemory(vram)}` }]),
+      : [
+          {
+            key: "vram",
+            text: `vram ${formatMemory(vram)}`,
+            side: "memory" as const,
+          },
+        ]),
+    { key: "workers", text: `${workers ?? "?"} wkr`, side: "counts" },
+    { key: "shells", text: `${shells ?? "?"} sh`, side: "counts" },
   ];
   if (cpu === undefined)
     return { resources: fitParts(parts, width, RESOURCE_DROP_ORDER) };

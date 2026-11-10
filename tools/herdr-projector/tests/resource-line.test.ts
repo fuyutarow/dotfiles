@@ -22,7 +22,7 @@ test("cpu is its own token chosen by the shared usage level; row 3's grey token 
   ] as const) {
     const tokens = resourceTokens(3, cpu, 8.5 * GiB, undefined, 2, 80);
     expect(tokens.cpu).toEqual({ token, text: `cpu ${cpu}%` });
-    expect(tokens.resources).toBe("ram 8.5G 3 wkr 2 sh");
+    expect(tokens.resources).toBe("ram 8.5G │ 3 wkr 2 sh");
   }
 });
 
@@ -93,39 +93,49 @@ const sidebarRow3 = (
   return `${t.cpu?.text} · ${t.resources}`;
 };
 
-test("width 28 shows the owner's line whole; unknown Codex counts drop shells first below 29", () => {
+test("width 29 and 30 decide whether the unknown-count shells fit beside the bar", () => {
   expect(sidebarRow3(1, 20 * GiB, 1, 4, undefined, 28)).toBe(
-    "cpu 1% · ram 20G 1 wkr 4 sh",
+    "cpu 1% · ram 20G │ 1 wkr",
   );
   expect(sidebarRow3(1, 20 * GiB, 1, 4, undefined, 30)).toBe(
-    "cpu 1% · ram 20G 1 wkr 4 sh",
+    "cpu 1% · ram 20G │ 1 wkr 4 sh",
   );
   expect(sidebarRow3(0, 0.18 * GiB, undefined, undefined, undefined, 28)).toBe(
-    "cpu 0% · ram 0.18G ? wkr",
+    "cpu 0% · ram 0.18G │ ? wkr",
   );
   expect(sidebarRow3(0, 0.18 * GiB, undefined, undefined, undefined, 29)).toBe(
-    "cpu 0% · ram 0.18G ? wkr ? sh",
+    "cpu 0% · ram 0.18G │ ? wkr",
+  );
+  expect(sidebarRow3(0, 0.18 * GiB, undefined, undefined, undefined, 30)).toBe(
+    "cpu 0% · ram 0.18G │ ? wkr",
+  );
+  expect(sidebarRow3(0, 0.18 * GiB, undefined, undefined, undefined, 31)).toBe(
+    "cpu 0% · ram 0.18G │ ? wkr ? sh",
   );
 });
 
 test("unknown workers and shells (Codex) read '? wkr' and '? sh'; vram optional", () => {
   expect(
     resourceTokens(undefined, 1, 20 * GiB, undefined, undefined, 80).resources,
-  ).toBe("ram 20G ? wkr ? sh");
+  ).toBe("ram 20G │ ? wkr ? sh");
   expect(resourceTokens(1, 1, 20 * GiB, 12 * GiB, 4, 80).resources).toBe(
-    "ram 20G 1 wkr 4 sh vram 12G",
+    "ram 20G vram 12G │ 1 wkr 4 sh",
   );
 });
 
-test("vram is last on screen and drops first; a zero vram reading is not reported", () => {
-  expect(resourceTokens(1, 1, 20 * GiB, 12 * GiB, 4, 30).resources).toBe(
-    "ram 20G 1 wkr 4 sh",
+test("vram sits with the memory part and drops first; a zero vram reading is not reported", () => {
+  // cpu is reported here, so the grey token gets the width less "cpu 1%" and herdr's separator.
+  expect(resourceTokens(1, 1, 20 * GiB, 12 * GiB, 4, 38).resources).toBe(
+    "ram 20G vram 12G │ 1 wkr 4 sh",
   );
-  expect(resourceTokens(1, 1, 20 * GiB, 12 * GiB, 4, 28).resources).toBe(
-    "ram 20G 1 wkr 4 sh",
+  expect(resourceTokens(1, 1, 20 * GiB, 12 * GiB, 4, 30).resources).toBe(
+    "ram 20G │ 1 wkr 4 sh",
+  );
+  expect(resourceTokens(1, 1, 20 * GiB, 12 * GiB, 4, 26).resources).toBe(
+    "ram 20G │ 1 wkr",
   );
   expect(resourceTokens(1, 1, 20 * GiB, 0, 4, 80).resources).toBe(
-    "ram 20G 1 wkr 4 sh",
+    "ram 20G │ 1 wkr 4 sh",
   );
 });
 
@@ -133,15 +143,15 @@ test("fit rule per token: whole parts only, never a cut mid-token, cpu and ram k
   // Grey width is the row width less "cpu 41%" and herdr's separator (10 columns).
   const row3 = (width: number) =>
     resourceTokens(3, 41, 8.5 * GiB, 12 * GiB, 2, width).resources;
-  expect(row3(50)).toBe("ram 8.5G 3 wkr 2 sh vram 12G");
-  expect(row3(37)).toBe("ram 8.5G 3 wkr 2 sh");
-  expect(row3(28)).toBe("ram 8.5G 3 wkr");
+  expect(row3(50)).toBe("ram 8.5G vram 12G │ 3 wkr 2 sh");
+  expect(row3(37)).toBe("ram 8.5G │ 3 wkr 2 sh");
+  expect(row3(28)).toBe("ram 8.5G │ 3 wkr");
   expect(row3(20)).toBe("ram 8.5G");
   expect(row3(17)).toBe("");
   const allowed = new Set([
-    "ram 8.5G 3 wkr 2 sh vram 12G",
-    "ram 8.5G 3 wkr 2 sh",
-    "ram 8.5G 3 wkr",
+    "ram 8.5G vram 12G │ 3 wkr 2 sh",
+    "ram 8.5G │ 3 wkr 2 sh",
+    "ram 8.5G │ 3 wkr",
     "ram 8.5G",
     "",
   ]);
@@ -150,24 +160,40 @@ test("fit rule per token: whole parts only, never a cut mid-token, cpu and ram k
   }
 });
 
-test("default width is the 31-column sidebar: all parts known fit, shells kept", () => {
-  expect(ROW3_FIT_WIDTH).toBe(31);
-  const t = resourceTokens(1, 41, 0.52 * GiB, undefined, 2);
-  expect(`${t.cpu?.text} · ${t.resources}`).toBe(
-    "cpu 41% · ram 0.52G 1 wkr 2 sh",
-  );
+test("the bar never trails: dropping every count part drops the bar with it", () => {
+  for (let width = 0; width <= 80; width++) {
+    const text = resourceTokens(
+      3,
+      41,
+      8.5 * GiB,
+      undefined,
+      2,
+      width + 10,
+    ).resources;
+    expect(text.endsWith("│")).toBe(false);
+    expect(text.startsWith("│")).toBe(false);
+  }
 });
 
-test("live rows that fit 31 columns keep sh at the default width", () => {
-  expect(sidebarRow3(5, 0.93 * GiB, 0, 1, undefined, ROW3_FIT_WIDTH)).toBe(
-    "cpu 5% · ram 0.93G 0 wkr 1 sh",
-  );
+test("default width is the 31-column sidebar: a 0.52G row loses sh to the bar", () => {
+  expect(ROW3_FIT_WIDTH).toBe(31);
+  const t = resourceTokens(1, 41, 0.52 * GiB, undefined, 2);
+  expect(`${t.cpu?.text} · ${t.resources}`).toBe("cpu 41% · ram 0.52G │ 1 wkr");
+});
+
+test("the bar's three columns cost sh at 31 for cpu 253% and keep it for cpu 1%", () => {
   expect(sidebarRow3(253, 7 * GiB, 0, 0, undefined, ROW3_FIT_WIDTH)).toBe(
-    "cpu 253% · ram 7.0G 0 wkr 0 sh",
+    "cpu 253% · ram 7.0G │ 0 wkr",
+  );
+  expect(sidebarRow3(253, 7 * GiB, 0, 0, undefined, 32)).toBe(
+    "cpu 253% · ram 7.0G │ 0 wkr 0 sh",
+  );
+  expect(sidebarRow3(1, 20 * GiB, 1, 4, undefined, ROW3_FIT_WIDTH)).toBe(
+    "cpu 1% · ram 20G │ 1 wkr 4 sh",
   );
   const live = resourceTokens(0, 253, 7 * GiB, undefined, 0);
   expect(`${live.cpu?.text} · ${live.resources}`).toBe(
-    "cpu 253% · ram 7.0G 0 wkr 0 sh",
+    "cpu 253% · ram 7.0G │ 0 wkr",
   );
 });
 
@@ -183,7 +209,7 @@ test("memory uses two significant figures in the grey token", () => {
     [1.04 * GiB, "1.0G"],
   ] as const) {
     const t = resourceTokens(1, 1, value, value, 0, 80);
-    expect(t.resources).toBe(`ram ${expected} 1 wkr 0 sh vram ${expected}`);
+    expect(t.resources).toBe(`ram ${expected} vram ${expected} │ 1 wkr 0 sh`);
   }
 });
 

@@ -273,9 +273,9 @@ test("drop order across the split tokens at every width: vram, then sh, then wkr
   }
 });
 
-test("default width is the 36 text columns of the 40-column sidebar: a 0.52G row reads 0.5G and keeps sh", () => {
-  // 40 sidebar columns - 1 divider - 3 row indent (herdr v0.9.5; see ROW3_FIT_WIDTH).
-  expect(ROW3_FIT_WIDTH).toBe(40 - 1 - 3);
+test("default width is the 44 text columns of the 48-column sidebar: a 0.52G row reads 0.5G and keeps sh", () => {
+  // 48 sidebar columns - 1 divider - 3 row indent (herdr v0.9.5; see ROW3_FIT_WIDTH).
+  expect(ROW3_FIT_WIDTH).toBe(48 - 1 - 3);
   const t = resourceTokens(1, 41, 0.52 * GiB, undefined, 2);
   expect(row3VisibleText(t)).toBe("cpu 41% · ram 0.5G · 1 wkr · 2 sh");
 });
@@ -296,15 +296,23 @@ test("herdr's separators cost columns: cpu 253% loses sh at 33 and keeps it from
   );
 });
 
-test("at the default width vram is the first part dropped: it needs 40 columns beside cpu 1% and 20G", () => {
+test("at the default width vram is shown beside cpu 1% and 20G, and is the first part dropped when a wider row no longer fits", () => {
+  // vram shows at the default width: the 40-column row fits within 44.
   const full = "cpu 1% · ram 20G vram 12G · 1 wkr · 4 sh";
   expect(full.length).toBe(40);
   expect(sidebarRow3(1, 20 * GiB, 1, 4, 12 * GiB, full.length)).toBe(full);
+  expect(sidebarRow3(1, 20 * GiB, 1, 4, 12 * GiB, ROW3_FIT_WIDTH)).toBe(full);
   expect(sidebarRow3(1, 20 * GiB, 1, 4, 12 * GiB, full.length - 1)).toBe(
     "cpu 1% · ram 20G · 1 wkr · 4 sh",
   );
-  expect(sidebarRow3(1, 20 * GiB, 1, 4, 12 * GiB, ROW3_FIT_WIDTH)).toBe(
-    "cpu 1% · ram 20G · 1 wkr · 4 sh",
+  // vram drops at the default width once the row is wider than 44 columns; sh and wkr stay.
+  const wide = "cpu 100% · ram 123G vram 123G · 12 wkr · 12 sh";
+  expect(wide.length).toBe(46);
+  expect(sidebarRow3(100, 123 * GiB, 12, 12, 123 * GiB, ROW3_FIT_WIDTH)).toBe(
+    "cpu 100% · ram 123G · 12 wkr · 12 sh",
+  );
+  expect(sidebarRow3(100, 123 * GiB, 12, 12, 123 * GiB, wide.length)).toBe(
+    wide,
   );
 });
 

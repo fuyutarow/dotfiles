@@ -71,10 +71,10 @@ type = "pane"
 command = "btop 2>/dev/null || top"
 
 [ui]
-# Sidebar is 40 columns wide, pinned: the default max is 36, so max is raised too (min 18 is below 40, so the
-# width clamps to exactly 40). tools/herdr-projector ROW3_FIT_WIDTH (= 40 - 1 divider - 3 row indent) follows it.
-sidebar_width = 40
-sidebar_max_width = 40
+# Sidebar is 48 columns wide, pinned: the default max is 36, so max is raised too (min 18 is below 48, so the
+# width clamps to exactly 48). tools/herdr-projector ROW3_FIT_WIDTH (= 48 - 1 divider - 3 row indent) follows it.
+sidebar_width = 48
+sidebar_max_width = 48
 # Server-side scheduler: immediate at startup, then every 5s, also headless.
 # https://herdr.dev/docs/configuration/#ui-and-sidebar documents command entries.
 # Explicit installed bin avoids login-shell PATH changes. Silent output hides the entry.
@@ -103,7 +103,7 @@ agent_panel_sort = "spaces"
 # don't repaint it). `tab` keeps bold weight for scanability but drops to a muted `#7f848e` fg
 # (tuned by eye against Claude Code's own native status line) so it doesn't overpower the row.
 # $agent_detail uses the statusline model label's ANSI-256 idx-30 color.
-# The projector fills three rows per agent, each width-bounded (the sidebar is 40 columns, 36 of them
+# The projector fills three rows per agent, each width-bounded (the sidebar is 48 columns, 44 of them
 # text on an agent row; the installed client renders three rows per agent, so counts live on row 3).
 # Row 3 is CPU, then RAM and VRAM, then WORKERS and SHELLS, as separate tokens (no bar between them).
 # SHELLS are the agent session's own background shells, read from the Claude Code footer (a "N shell" / "N shells"

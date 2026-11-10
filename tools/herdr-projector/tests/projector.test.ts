@@ -586,9 +586,9 @@ test("resource fixtures preserve CPU and project memory sums or clear absent tok
   expect(v1.args).toContain("vram");
   const v2 = await report(resourceV2);
   expect(v2.snapshot?.schema).toBe(2);
-  // vram 0.5G is reported here: the full row is 43 columns, so the rule drops vram first, and
-  // "cpu 32% · ram 1.2G · 2 wkr · ? sh" (33 columns) fits whole.
-  expect(v2.args).toContain("ram=ram 1.2G");
+  // vram 0.5G is reported here: the full row is 43 columns, which fits the 44-column default, so
+  // vram is kept. The row is "cpu 32% · ram 1.2G vram 0.5G · 2 wkr · ? sh".
+  expect(v2.args).toContain("ram=ram 1.2G vram 0.5G");
   expect(v2.args).toContain("workers_on=2 wkr");
   expect(v2.args).toContain("shells_off=? sh");
   expect(v2.args).toContain("cpu_lo=cpu 32%");
@@ -613,8 +613,8 @@ test("resource fixtures preserve CPU and project memory sums or clear absent tok
     ...resourceV2,
     sessions: [{ ...row, workers: null }],
   });
-  // Same width rule as above: the unknown workers and shells both fit once vram drops.
-  expect(noWorkers.args).toContain("ram=ram 1.0G");
+  // Same width rule as above: "cpu 32% · ram 1.0G vram 0.5G · ? wkr · ? sh" is 44 columns and fits.
+  expect(noWorkers.args).toContain("ram=ram 1.0G vram 0.5G");
   expect(noWorkers.args).toContain("workers_off=? wkr");
   expect(noWorkers.args).toContain("shells_off=? sh");
   const zero = await report({

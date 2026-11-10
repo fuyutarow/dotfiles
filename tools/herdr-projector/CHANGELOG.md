@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 — 2026-11-11
+
+- Row 3 fits the 48-column sidebar
+
 ## 0.6.0 — 2026-11-10
 
 - Row 3 reports ram, workers and shells as separate tokens; counts >= 1 are cyan

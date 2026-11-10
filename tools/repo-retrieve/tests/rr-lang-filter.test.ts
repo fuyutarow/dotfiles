@@ -68,8 +68,12 @@ if [ "$1" = daemon ] && [ "$2" = status ]; then
 fi
 mode="$1"
 langs=""
+json=0
+limit=8
 shift
 while [ $# -gt 0 ]; do
+  if [ "$1" = --json ]; then json=1; fi
+  if [ "$1" = --limit ]; then limit="$2"; fi
   if [ "$1" = --lang ]; then langs="$langs $2"; shift; fi
   shift
 done
@@ -81,6 +85,31 @@ hit() {
   return 1
 }
 n=0
+if [ "$mode" = search ] && [ "$json" = 1 ]; then
+  # The path-less KNN call of \`rr about --path\`: the language partition is ccc's, the path is rr's.
+  printf '{"success":true,"results":['
+  if [ "\${FAKE_LANG_FORCE_FALLBACK:-0}" = 1 ]; then
+    # --limit rows, all outside src/: the KNN rounds never finish and rr must fall back.
+    i=1
+    while [ "$i" -le "$limit" ]; do
+      [ "$i" = 1 ] || printf ','
+      printf '{"file_path":"decoy/%s.ts","language":"typescript","content":"x","start_line":1,"end_line":1,"score":0.5}' "$i"
+      i=$((i + 1))
+    done
+    printf '],"total_returned":%s,"offset":0}\\n' "$limit"
+    exit 0
+  fi
+  for pair in README.md:markdown src/a.ts:typescript src/b.py:python; do
+    file="\${pair%%:*}"; lang="\${pair##*:}"
+    if hit "$lang"; then
+      [ "$n" = 0 ] || printf ','
+      n=$((n + 1))
+      printf '{"file_path":"%s","language":"%s","content":"hit","start_line":1,"end_line":1,"score":0.9}' "$file" "$lang"
+    fi
+  done
+  printf '],"total_returned":%s,"offset":0}\\n' "$n"
+  exit 0
+fi
 if [ "$mode" = search ]; then
   for pair in README.md:markdown src/a.ts:typescript src/b.py:python; do
     file="\${pair%%:*}"; lang="\${pair##*:}"
@@ -242,7 +271,7 @@ describe("--lang reaches ccc search on about and absent", () => {
     expect(call).not.toContain("--lang markdown");
   });
 
-  test("the language filter composes with --path", () => {
+  test("the language filter composes with --path: ccc narrows by language, rr by path", () => {
     const result = route([
       "about",
       "retry policy",
@@ -252,9 +281,84 @@ describe("--lang reaches ccc search on about and absent", () => {
       "typescript",
     ]);
 
-    const [call] = queryCalls(result.calls, "search");
-    expect(call).toContain("--path src/**");
-    expect(call).toContain("--lang typescript");
+    expect(result.code).toBe(0);
+    const calls = queryCalls(result.calls, "search");
+    // The path-less KNN carries the language partition; no --path reaches ccc.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("--lang typescript");
+    expect(calls[0]).toContain("--json");
+    expect(calls[0]).not.toContain("--path");
+    expect(resultLanguages(result.stdout)).toEqual(["typescript"]);
+    expect(result.stdout).toContain("File: src/a.ts:1-1");
+  });
+
+  test("in a forced fallback the full-scan call carries both --lang and --path", () => {
+    const result = route(
+      ["about", "retry policy", "--path", "src/**", "--lang", "typescript"],
+      { FAKE_LANG_FORCE_FALLBACK: "1" },
+    );
+
+    const calls = queryCalls(result.calls, "search");
+    const knn = calls.filter((call) => call.includes("--json"));
+    const scans = calls.filter((call) => !call.includes("--json"));
+    // Rounds 256..4096 each carry the language and no path; then exactly one full scan.
+    expect(knn.length).toBeGreaterThan(1);
+    for (const call of knn) {
+      expect(call).toContain("--lang typescript");
+      expect(call).not.toContain("--path");
+    }
+    expect(scans).toHaveLength(1);
+    expect(scans[0]).toContain("--path src/**");
+    expect(scans[0]).toContain("--lang typescript");
+    expect(scans[0]).toContain("--limit 8");
+    expect(result.code).toBe(0);
+  });
+
+  test("absent still hands --path (and --lang) to ccc unchanged on every query: no KNN rounds", () => {
+    const result = route([
+      "absent",
+      "-q",
+      "retry policy",
+      "-q",
+      "backoff",
+      "-q",
+      "再試行",
+      "--path",
+      "src/**",
+      "--lang",
+      "typescript",
+    ]);
+
+    const calls = queryCalls(result.calls, "search");
+    expect(calls).toHaveLength(3);
+    for (const call of calls) {
+      expect(call).toContain("--path src/**");
+      expect(call).toContain("--lang typescript");
+      expect(call).not.toContain("--json");
+    }
+  });
+
+  test("--lang and --path both narrow: a hit in the language but outside the path is dropped", () => {
+    const result = route([
+      "about",
+      "retry policy",
+      "--path",
+      "src/**",
+      "--lang",
+      "markdown",
+    ]);
+
+    // README.md is markdown but not under src/: rr's path filter removes it.
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("RESULT: NO_MATCH route=concept");
+    expect(resultLanguages(result.stdout)).toEqual([]);
+  });
+
+  test("with --path and without --lang every language under the path is returned", () => {
+    const result = route(["about", "retry policy", "--path", "src/**"]);
+
+    expect(result.code).toBe(0);
+    expect(resultLanguages(result.stdout)).toEqual(["typescript", "python"]);
   });
 });
 

@@ -306,6 +306,33 @@ if [ "${name}" = ccc ] && [ "$1" = grep ]; then
   fi
   exit "\${FAKE_SEARCH_EXIT:-0}"
 fi
+# \`ccc search --json\` is the path-less KNN call of \`rr about --path\`: it answers with JSON rows.
+#   FAKE_CCC_KNN_PATHS=a,b,c  rows with exactly those file paths (fewer than --limit: the corpus is exhausted)
+#   FAKE_CCC_FORCE_FALLBACK=1 exactly --limit rows, all outside any path, so the KNN rounds never
+#                             finish and rr must fall back to the full-scan --path call
+#   FAKE_SEARCH_EMPTY=1       no rows
+#   otherwise                 one row
+if [ "${name}" = ccc ] && [ "$1" = search ]; then
+  case " $* " in *" --json "*)
+    limit=8; previous=""
+    for argument in "$@"; do
+      if [ "$previous" = --limit ]; then limit="$argument"; fi
+      previous="$argument"
+    done
+    if [ "\${FAKE_SEARCH_EMPTY:-0}" = 1 ]; then count=0
+    elif [ -n "\${FAKE_CCC_KNN_PATHS:-}" ]; then count=-1
+    elif [ "\${FAKE_CCC_FORCE_FALLBACK:-0}" = 1 ]; then count="$limit"
+    else count=1; fi
+    awk -v n="$count" -v list="\${FAKE_CCC_KNN_PATHS:-}" -v one="\${FAKE_CCC_RESULT_FILE:-fake.ts}" -v forced="\${FAKE_CCC_FORCE_FALLBACK:-0}" 'BEGIN {
+      if (n < 0) { n = split(list, paths, ",") } else { for (i = 1; i <= n; i++) paths[i] = (forced == 1 ? "decoy/" i ".ts" : one) }
+      printf "{\\"success\\":true,\\"results\\":["
+      for (i = 1; i <= n; i++) printf "%s{\\"file_path\\":\\"%s\\",\\"language\\":\\"text\\",\\"content\\":\\"chunk %d\\",\\"start_line\\":1,\\"end_line\\":1,\\"score\\":%.9f}", (i > 1 ? "," : ""), paths[i], i, 0.9 - i / 1000000
+      printf "],\\"total_returned\\":%d,\\"offset\\":0}\\n", n
+    }'
+    exit "\${FAKE_SEARCH_EXIT:-0}"
+    ;;
+  esac
+fi
 if [ "${name}" = ccc ] && [ "\${FAKE_CCC_REQUIRE_RECURSIVE_DIRECTORY_PATH:-0}" = 1 ] && [ "$1" = search ]; then
   case " $* " in
     *" --path knowledge "*) exit "\${FAKE_SEARCH_EXIT:-0}" ;;
@@ -394,6 +421,17 @@ function run(
     stderr: result.stderr ?? "",
     log,
   };
+}
+
+// `rr about --path` asks ccc for a path-less KNN first. A fake that keeps returning --limit rows
+// outside the path never lets the rounds finish, so rr reaches the full-scan fallback, where the
+// router's normalised glob is handed to ccc as `--path <glob>`.
+function runFallback(
+  cwd: string,
+  args: string[],
+  env: Record<string, string> = {},
+): ReturnType<typeof run> {
+  return run(cwd, args, { FAKE_CCC_FORCE_FALLBACK: "1", ...env }, 30_000);
 }
 
 test("catalog indexing follows root admission and retries a failed unchanged catalog", () => {
@@ -562,7 +600,7 @@ describe("repo-retrieve route contract", () => {
 
   test("concept routes to ccc search without an implicit refresh", () => {
     const { dir } = registerFreshGitProject();
-    const result = run(dir, [
+    const result = runFallback(dir, [
       "concept",
       "--query",
       "where authorization is enforced",
@@ -871,7 +909,7 @@ describe("repo-retrieve route contract", () => {
     const caller = registerFreshGitProject().dir;
     const corpus = registerFreshGitProject().dir;
     mkdirSync(join(corpus, "knowledge"));
-    const result = run(
+    const result = runFallback(
       caller,
       [
         "concept",
@@ -1054,7 +1092,7 @@ describe("repo-retrieve route contract", () => {
     const { dir } = registerFreshGitProject();
     mkdirSync(join(dir, "knowledge"));
 
-    const result = run(
+    const result = runFallback(
       dir,
       ["concept", "--query", "known content", "--path", "knowledge"],
       { FAKE_CCC_REQUIRE_RECURSIVE_DIRECTORY_PATH: "1" },
@@ -1073,7 +1111,7 @@ describe("repo-retrieve route contract", () => {
     const { dir } = registerFreshGitProject();
     mkdirSync(join(dir, "knowledge"));
 
-    const result = run(dir, [
+    const result = runFallback(dir, [
       "concept",
       "--query",
       "known content",
@@ -1090,14 +1128,14 @@ describe("repo-retrieve route contract", () => {
     const knowledge = join(dir, "knowledge");
     mkdirSync(knowledge);
 
-    const root = run(dir, [
-      "concept",
-      "--query",
-      "known content",
-      "--path",
-      ".",
-    ]);
-    const absolute = run(dir, [
+    // The project root is the glob `**`, which every indexed path matches: rr's own filter keeps
+    // them all, so the KNN round answers and no full scan is needed.
+    const root = run(
+      dir,
+      ["concept", "--query", "known content", "--path", "."],
+      { FAKE_CCC_KNN_PATHS: "a.md,knowledge/b.md" },
+    );
+    const absolute = runFallback(dir, [
       "concept",
       "--query",
       "known content",
@@ -1106,7 +1144,9 @@ describe("repo-retrieve route contract", () => {
     ]);
 
     expect(root.code).toBe(0);
-    expect(root.log).toContain("--path **");
+    expect(root.stdout).toContain("File: a.md:1-1");
+    expect(root.stdout).toContain("File: knowledge/b.md:1-1");
+    expect(root.log).not.toContain("--path");
     expect(absolute.code).toBe(0);
     expect(absolute.log).toContain("--path knowledge/**");
   });
@@ -1119,14 +1159,14 @@ describe("repo-retrieve route contract", () => {
     symlinkSync(knowledge, join(dir, "knowledge-link"), "dir");
     symlinkSync(outsideDir, join(dir, "outside-link"), "dir");
 
-    const inside = run(dir, [
+    const inside = runFallback(dir, [
       "concept",
       "--query",
       "known content",
       "--path",
       "knowledge-link",
     ]);
-    const outside = run(dir, [
+    const outside = runFallback(dir, [
       "concept",
       "--query",
       "known content",
@@ -1145,7 +1185,7 @@ describe("repo-retrieve route contract", () => {
     const { dir } = registerFreshGitProject();
     mkdirSync(join(dir, "knowledge space"));
 
-    const result = run(
+    const result = runFallback(
       dir,
       ["concept", "--query", "known content", "--path", "knowledge space"],
       { FAKE_CCC_REQUIRE_SINGLE_SPACE_PATH: "1" },
@@ -1160,14 +1200,14 @@ describe("repo-retrieve route contract", () => {
     mkdirSync(join(dir, "knowledge"));
     writeFileSync(join(dir, "knowledge", "entry.md"), "fixture\n");
 
-    const glob = run(dir, [
+    const glob = runFallback(dir, [
       "concept",
       "--query",
       "known content",
       "--path",
       "knowledge/*.md",
     ]);
-    const file = run(dir, [
+    const file = runFallback(dir, [
       "concept",
       "--query",
       "known content",
@@ -1187,14 +1227,14 @@ describe("repo-retrieve route contract", () => {
     writeFileSync(join(dir, "knowledge*.md"), "fixture\n");
 
     // An existing directory or file whose name has GLOB metacharacters is a literal name.
-    const directory = run(dir, [
+    const directory = runFallback(dir, [
       "concept",
       "--query",
       "known content",
       "--path",
       "knowledge[exact]",
     ]);
-    const file = run(dir, [
+    const file = runFallback(dir, [
       "concept",
       "--query",
       "known content",
@@ -1213,14 +1253,14 @@ describe("repo-retrieve route contract", () => {
     const outsideDir = tempDir("repo-retrieve-outside-");
     const outsidePath = relative(dir, outsideDir);
 
-    const missing = run(dir, [
+    const missing = runFallback(dir, [
       "concept",
       "--query",
       "known content",
       "--path",
       "missing",
     ]);
-    const outside = run(dir, [
+    const outside = runFallback(dir, [
       "concept",
       "--query",
       "known content",
@@ -1238,7 +1278,7 @@ describe("repo-retrieve route contract", () => {
 
   test("the parent-directory path is not broadened into a recursive glob", () => {
     const { dir } = registerFreshGitProject();
-    const result = run(dir, [
+    const result = runFallback(dir, [
       "concept",
       "--query",
       "known content",
@@ -1249,6 +1289,117 @@ describe("repo-retrieve route contract", () => {
     expect(result.code).toBe(0);
     expect(result.log).toContain("--path ..");
     expect(result.log).not.toContain("--path ../**");
+  });
+
+  // The same normalised glob that reaches ccc on the full-scan fallback (tests above) is the one
+  // rr's own filter applies to the path-less KNN rows. The fake returns this fixed corpus (fewer
+  // rows than --limit, so the rounds finish without a fallback); each case names exactly the rows
+  // SQLite GLOB selects for the glob cccSearchPath emits, and none of the decoys.
+  describe("rr's own filter applies the normalised glob to the KNN rows", () => {
+    const corpus = [
+      "knowledge/a.md",
+      "knowledge/b/c.md",
+      "knowledgebase/x.md",
+      "knowledge space/s.md",
+      "knowledge[exact]/e.md",
+      "knowledgee/decoy.md",
+      "knowledge*.md",
+      "knowledgeXY.md",
+      "knowledge/entry.md",
+      "src/a.ts",
+      "outside-link/o.md",
+      "missing/m.md",
+    ];
+    const cases: { name: string; path: string; expected: string[] }[] = [
+      {
+        name: "a directory",
+        path: "knowledge",
+        expected: ["knowledge/a.md", "knowledge/b/c.md", "knowledge/entry.md"],
+      },
+      {
+        name: "a trailing slash",
+        path: "knowledge/",
+        expected: ["knowledge/a.md", "knowledge/b/c.md", "knowledge/entry.md"],
+      },
+      {
+        name: "a directory with spaces",
+        path: "knowledge space",
+        expected: ["knowledge space/s.md"],
+      },
+      {
+        name: "a directory whose name has glob characters is literal",
+        path: "knowledge[exact]",
+        expected: ["knowledge[exact]/e.md"],
+      },
+      {
+        name: "a file whose name has glob characters is literal",
+        path: "knowledge*.md",
+        expected: ["knowledge*.md"],
+      },
+      {
+        name: "an explicit glob is the caller's own pattern",
+        path: "knowledge/*.md",
+        expected: ["knowledge/a.md", "knowledge/b/c.md", "knowledge/entry.md"],
+      },
+      {
+        name: "an existing file is exact",
+        path: "knowledge/entry.md",
+        expected: ["knowledge/entry.md"],
+      },
+      {
+        name: "an in-project directory symlink selects its target",
+        path: "knowledge-link",
+        expected: ["knowledge/a.md", "knowledge/b/c.md", "knowledge/entry.md"],
+      },
+      {
+        name: "an escaping symlink is not broadened",
+        path: "outside-link",
+        expected: [],
+      },
+      {
+        name: "a nonexistent path is not broadened",
+        path: "missing",
+        expected: [],
+      },
+      {
+        name: "the parent directory is not broadened",
+        path: "..",
+        expected: [],
+      },
+    ];
+    for (const c of cases) {
+      test(c.name, () => {
+        const { dir } = registerFreshGitProject();
+        mkdirSync(join(dir, "knowledge", "b"), { recursive: true });
+        mkdirSync(join(dir, "knowledge space"));
+        mkdirSync(join(dir, "knowledge[exact]"));
+        writeFileSync(join(dir, "knowledge", "entry.md"), "fixture\n");
+        writeFileSync(join(dir, "knowledge*.md"), "fixture\n");
+        symlinkSync(join(dir, "knowledge"), join(dir, "knowledge-link"), "dir");
+        symlinkSync(
+          tempDir("repo-retrieve-outside-"),
+          join(dir, "outside-link"),
+          "dir",
+        );
+
+        const result = run(
+          dir,
+          ["concept", "--query", "known content", "--path", c.path],
+          { FAKE_CCC_KNN_PATHS: corpus.join(",") },
+        );
+
+        const files = [...result.stdout.matchAll(/^File: (.+):1-1 \[/gmu)].map(
+          (m) => m[1],
+        );
+        expect(files).toEqual(c.expected);
+        // Every call was the path-less KNN; no --path reached ccc, nothing was broadened.
+        expect(result.log).not.toContain("--path");
+        expect(result.log).toContain("--json");
+        expect(result.code).toBe(c.expected.length === 0 ? 1 : 0);
+        if (c.expected.length === 0)
+          expect(result.stderr).toContain("RESULT: NO_MATCH route=concept");
+      });
+    }
   });
 
   test("battery applies the same recursive directory glob to every query", () => {

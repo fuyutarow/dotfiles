@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.0 — 2026-11-11
+
+- about with a path uses exact KNN with adaptive over-fetch and an rr-side path filter, falling back to the full scan
+
 ## 1.13.2 — 2026-11-11
 
 - `--path .` searches the whole project and glob metacharacters in names are escaped

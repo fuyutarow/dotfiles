@@ -51,6 +51,11 @@ import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
 import { cccSearchPath } from "./ccc-search-path.ts";
+import {
+  adaptivePathSearch,
+  parseKnnResponse,
+  renderKnnRows,
+} from "./knn-path-search.ts";
 import { parseDaemonStatus, type DaemonStatus } from "./ccc-daemon-status.ts";
 import { declaredDbEnv, MAPPING_ENV } from "./ccc-db-dir.ts";
 import {
@@ -767,6 +772,120 @@ function rgFlags(values: {
   return ok(flags);
 }
 
+type ConceptPathOutcome =
+  | { kind: "output"; text: string; count: number }
+  | { kind: "timeout" }
+  | { kind: "failed"; exitCode: number }
+  | { kind: "error"; message: string };
+
+// `rr about --path`: exact path-less KNN rounds filtered here (see knn-path-search.ts), with
+// ccc's full-scan path search as the fallback. ccc runs from the project root so it applies no
+// default path filter of its own (a subdirectory cwd would silently turn every round into a
+// full scan).
+async function adaptiveConceptPathSearch(args: {
+  ccc: string;
+  query: string;
+  pattern: string;
+  langs: string[];
+  limit: number;
+  offset: number;
+  project: string;
+  workspace: string | null;
+  deadlineAt: number;
+  timeoutMs: number;
+}): Promise<ConceptPathOutcome> {
+  const runCcc = (cccArgs: string[], remainingMs: number) =>
+    fromAsyncThrowable(
+      () =>
+        runChildCaptured(
+          cccArgs,
+          Math.min(args.timeoutMs, remainingMs),
+          false,
+          args.project,
+          false,
+        ),
+      asError,
+    )();
+  const langArgs = args.langs.flatMap((lang) => ["--lang", lang]);
+  const result = await adaptivePathSearch<string>({
+    pattern: args.pattern,
+    limit: args.limit,
+    offset: args.offset,
+    now: () => Temporal.Now.instant().epochMilliseconds,
+    deadlineAt: args.deadlineAt,
+    knn: async (k, remainingMs) => {
+      const ran = await runCcc(
+        [
+          args.ccc,
+          "search",
+          args.query,
+          "--limit",
+          String(k),
+          "--json",
+          ...langArgs,
+        ],
+        remainingMs,
+      );
+      if (ran.isErr()) return { kind: "error", message: ran.error.message };
+      if (ran.value.timedOut) return { kind: "timeout" };
+      if (ran.value.exitCode !== 0) {
+        if (ran.value.stdout !== "") process.stdout.write(ran.value.stdout);
+        return { kind: "failed", exitCode: ran.value.exitCode };
+      }
+      const parsed = parseKnnResponse(ran.value.stdout);
+      return parsed.isErr()
+        ? { kind: "error", message: parsed.error.message }
+        : { kind: "done", value: parsed.value };
+    },
+    fullScan: async (remainingMs) => {
+      const cccArgs = [
+        args.ccc,
+        "search",
+        args.query,
+        "--limit",
+        String(args.limit),
+        ...(args.offset > 0 ? ["--offset", String(args.offset)] : []),
+        "--path",
+        args.pattern,
+        ...langArgs,
+      ];
+      const ran = await runCcc(cccArgs, remainingMs);
+      if (ran.isErr()) return { kind: "error", message: ran.error.message };
+      if (ran.value.timedOut) return { kind: "timeout" };
+      if (ran.value.exitCode !== 0) {
+        const mapped = await mapBackingResultPaths(
+          ran.value.stdout,
+          args.project,
+          args.workspace,
+        );
+        if (mapped !== "") process.stdout.write(mapped);
+        return { kind: "failed", exitCode: ran.value.exitCode };
+      }
+      return { kind: "done", value: ran.value.stdout };
+    },
+  });
+  process.stderr.write(
+    `ROUTE: concept path filter: exact KNN rounds k=[${result.ks.join(",")}] outcome=${result.kind === "rows" ? "knn" : result.kind}\n`,
+  );
+  if (result.kind === "rows") {
+    const text = await mapBackingResultPaths(
+      renderKnnRows(result.rows),
+      args.project,
+      args.workspace,
+    );
+    return { kind: "output", text, count: result.rows.length };
+  }
+  if (result.kind === "full-scan") {
+    const text = await mapBackingResultPaths(
+      result.value,
+      args.project,
+      args.workspace,
+    );
+    return { kind: "output", text, count: cccResultCount(result.value) };
+  }
+  return result;
+}
+
 async function runCccSearch(
   route: "concept" | "battery",
   queries: string[],
@@ -891,6 +1010,63 @@ async function runCccSearch(
   const cccPath =
     path === undefined ? undefined : await cccSearchPath(project, path);
   let matchedQueries = 0;
+  const conclude = (): Result<number, Error> => {
+    if (matchedQueries === 0) {
+      process.stderr.write(
+        `RESULT: NO_MATCH route=${route} engine=ccc queries=${queries.length}; ` +
+          `exit 0 with no result blocks is not PASS and does not by itself prove absence; ` +
+          `${confidence}\n`,
+      );
+      return ok(1);
+    }
+    process.stdout.write(
+      `RESULT: PASS route=${route} engine=ccc queries=${queries.length} ` +
+        `queries_with_hits=${matchedQueries} ${confidence}\n`,
+    );
+    return ok(0);
+  };
+
+  const conceptQuery = queries[0];
+  if (
+    route === "concept" &&
+    cccPath !== undefined &&
+    conceptQuery !== undefined
+  ) {
+    process.stderr.write(
+      `ROUTE: ${route} -> ccc search (1/1) project=${project}\n`,
+    );
+    // One deadline from the first ccc call covers every KNN round and the fallback.
+    const outcome = await adaptiveConceptPathSearch({
+      ccc: ccc.value,
+      query: conceptQuery,
+      pattern: cccPath,
+      langs,
+      limit,
+      offset: 0,
+      project,
+      workspace: resolution.workspace,
+      deadlineAt:
+        searchDeadline ?? Temporal.Now.instant().epochMilliseconds + timeoutMs,
+      timeoutMs,
+    });
+    if (outcome.kind === "timeout") {
+      return classifyTimedOutSearch(
+        ccc.value,
+        route,
+        project,
+        timeoutMs,
+        reindexing,
+        status.stdout,
+        parsedStatus,
+        indexPid,
+      );
+    }
+    if (outcome.kind === "failed") return ok(outcome.exitCode);
+    if (outcome.kind === "error") return err(new Error(outcome.message));
+    if (outcome.text !== "") process.stdout.write(outcome.text);
+    if (outcome.count > 0) matchedQueries += 1;
+    return conclude();
+  }
 
   for (const [index, query] of queries.entries()) {
     const remainingMs =
@@ -945,19 +1121,7 @@ async function runCccSearch(
     if (cccResultCount(result.stdout) > 0) matchedQueries += 1;
   }
 
-  if (matchedQueries === 0) {
-    process.stderr.write(
-      `RESULT: NO_MATCH route=${route} engine=ccc queries=${queries.length}; ` +
-        `exit 0 with no result blocks is not PASS and does not by itself prove absence; ` +
-        `${confidence}\n`,
-    );
-    return ok(1);
-  }
-  process.stdout.write(
-    `RESULT: PASS route=${route} engine=ccc queries=${queries.length} ` +
-      `queries_with_hits=${matchedQueries} ${confidence}\n`,
-  );
-  return ok(0);
+  return conclude();
 }
 
 async function runRg(

@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { installCccEntry } from "../../../scripts/install-mcp.ts";
 import { cccBackend } from "../src/ccc-entry.ts";
+import { declaredDbEnv, MAPPING_ENV } from "../src/ccc-db-dir.ts";
 
 const router = join(import.meta.dir, "../src/repo-retrieve.ts");
 const fixture = join(import.meta.dir, "ccc-slow-daemon-fixture.py");
@@ -46,7 +47,6 @@ test("max_seconds stops only the client; rr says the daemon build continues, and
   const root = await mkdtemp(join(tmpdir(), "rr-budget-"));
   const home = join(root, "home");
   const runtime = join(root, "run");
-  const db = join(root, "db");
   const project = join(root, "project");
   const bin = join(home, ".local/bin");
   const embedLog = join(root, "embed.log");
@@ -77,6 +77,12 @@ test("max_seconds stops only the client; rr says the daemon build continues, and
   await symlink(backend, entry);
   await installCccEntry(home, entry);
   await chmod(entry, 0o755);
+  // rr refuses a mapping that differs from the declared db-root (cocoindex/db-root), so the
+  // fixture uses the declared one for its own HOME. The project sits outside HOME, so the
+  // mapping does not cover it and its DB stays in the disposable project directory.
+  const declared = await declaredDbEnv({ HOME: home });
+  expect(declared.isOk()).toBe(true);
+  const mapping = declared.isOk() ? (declared.value[MAPPING_ENV] ?? "") : "";
   const env = {
     ...process.env,
     HOME: home,
@@ -87,7 +93,7 @@ test("max_seconds stops only the client; rr says the daemon build continues, and
     XDG_RUNTIME_DIR: runtime,
     COCOINDEX_CODE_DIR: home,
     COCOINDEX_CODE_RUNTIME_DIR: "../run",
-    COCOINDEX_CODE_DB_PATH_MAPPING: `${root}=${db}`,
+    COCOINDEX_CODE_DB_PATH_MAPPING: mapping,
     COCOINDEX_CODE_HOST_CWD: "",
     COCOINDEX_CODE_HOST_PATH_MAPPING: "",
     COCOINDEX_CODE_DAEMON_SUPERVISED: "1",

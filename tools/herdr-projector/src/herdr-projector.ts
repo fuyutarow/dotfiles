@@ -195,13 +195,18 @@ export async function paneResourcePids(
   return new Map(entries);
 }
 
+/**
+ * Always GiB, never hundredths: below 0.1G folds to `<0.1G`; from 0.1G to below 10G one decimal
+ * place; 10G and above a whole number. The floor is tested on the raw value, before rounding, so
+ * 0.0995 folds instead of rounding up to 0.1G. A tenths value that rounds to 10.0 reads as the
+ * whole-number form (9.96 → 10G), never as 10.0G.
+ */
 function formatMemory(byteCount: number): string {
-  // Always GiB with two significant figures, so sessions compare at a glance.
   const gib = byteCount / 1024 ** 3;
-  const rounded = Number(gib.toPrecision(2));
-  const text =
-    rounded < 10 ? rounded.toPrecision(2) : String(Math.round(rounded));
-  return `${text}G`;
+  if (gib < 0.1) return "<0.1G";
+  const tenths = Math.round(gib * 10);
+  if (tenths < 100) return `${(tenths / 10).toFixed(1)}G`;
+  return `${Math.round(gib)}G`;
 }
 
 /** herdr joins adjacent sidebar tokens with this separator; it is not ours to shorten. */

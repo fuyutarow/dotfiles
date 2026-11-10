@@ -93,24 +93,25 @@ const sidebarRow3 = (
   return `${t.cpu?.text} · ${t.resources}`;
 };
 
-test("width 29 and 30 decide whether the unknown-count shells fit beside the bar", () => {
+test("the width decides whether unknown-count shells fit beside the bar", () => {
   expect(sidebarRow3(1, 20 * GiB, 1, 4, undefined, 28)).toBe(
     "cpu 1% · ram 20G │ 1 wkr",
   );
   expect(sidebarRow3(1, 20 * GiB, 1, 4, undefined, 30)).toBe(
     "cpu 1% · ram 20G │ 1 wkr 4 sh",
   );
+  // 0.18G reads 0.2G: "ram 0.2G │ ? wkr ? sh" is 21 columns, so it fits from width 30 up.
   expect(sidebarRow3(0, 0.18 * GiB, undefined, undefined, undefined, 28)).toBe(
-    "cpu 0% · ram 0.18G │ ? wkr",
+    "cpu 0% · ram 0.2G │ ? wkr",
   );
   expect(sidebarRow3(0, 0.18 * GiB, undefined, undefined, undefined, 29)).toBe(
-    "cpu 0% · ram 0.18G │ ? wkr",
+    "cpu 0% · ram 0.2G │ ? wkr",
   );
   expect(sidebarRow3(0, 0.18 * GiB, undefined, undefined, undefined, 30)).toBe(
-    "cpu 0% · ram 0.18G │ ? wkr",
+    "cpu 0% · ram 0.2G │ ? wkr ? sh",
   );
   expect(sidebarRow3(0, 0.18 * GiB, undefined, undefined, undefined, 31)).toBe(
-    "cpu 0% · ram 0.18G │ ? wkr ? sh",
+    "cpu 0% · ram 0.2G │ ? wkr ? sh",
   );
 });
 
@@ -175,10 +176,12 @@ test("the bar never trails: dropping every count part drops the bar with it", ()
   }
 });
 
-test("default width is the 31-column sidebar: a 0.52G row loses sh to the bar", () => {
+test("default width is the 31-column sidebar: a 0.52G row reads 0.5G and keeps sh", () => {
   expect(ROW3_FIT_WIDTH).toBe(31);
   const t = resourceTokens(1, 41, 0.52 * GiB, undefined, 2);
-  expect(`${t.cpu?.text} · ${t.resources}`).toBe("cpu 41% · ram 0.52G │ 1 wkr");
+  expect(`${t.cpu?.text} · ${t.resources}`).toBe(
+    "cpu 41% · ram 0.5G │ 1 wkr 2 sh",
+  );
 });
 
 test("the bar's three columns cost sh at 31 for cpu 253% and keep it for cpu 1%", () => {
@@ -197,12 +200,12 @@ test("the bar's three columns cost sh at 31 for cpu 253% and keep it for cpu 1%"
   );
 });
 
-test("memory uses two significant figures in the grey token", () => {
+test("memory is one decimal below 10G and a whole number from 10G, never hundredths", () => {
   for (const [value, expected] of [
-    [279.4 * 1024 ** 2, "0.27G"],
-    [115.8 * 1024 ** 2, "0.11G"],
-    [700 * 1024 ** 2, "0.68G"],
-    [512 * 1024 ** 2, "0.50G"],
+    [279.4 * 1024 ** 2, "0.3G"],
+    [115.8 * 1024 ** 2, "0.1G"],
+    [700 * 1024 ** 2, "0.7G"],
+    [512 * 1024 ** 2, "0.5G"],
     [1.7 * GiB, "1.7G"],
     [54.9 * GiB, "55G"],
     [1023.9 * 1024 ** 2, "1.0G"],
@@ -210,6 +213,32 @@ test("memory uses two significant figures in the grey token", () => {
   ] as const) {
     const t = resourceTokens(1, 1, value, value, 0, 80);
     expect(t.resources).toBe(`ram ${expected} vram ${expected} │ 1 wkr 0 sh`);
+  }
+});
+
+test("ram is <0.1G below the floor, one decimal below 10G, a whole number from 10G", () => {
+  for (const [bytes, expected] of [
+    [0, "<0.1G"],
+    [0.05 * GiB, "<0.1G"],
+    [0.073 * GiB, "<0.1G"],
+    [0.099 * GiB, "<0.1G"],
+    // Raw value below the floor, though one decimal would round it to 0.1.
+    [0.0995 * GiB, "<0.1G"],
+    [0.1 * GiB, "0.1G"],
+    [0.31 * GiB, "0.3G"],
+    // 0.95 is 0.9499… in binary; it still reads 1.0G.
+    [0.95 * GiB, "1.0G"],
+    [0.999 * GiB, "1.0G"],
+    [2.04 * GiB, "2.0G"],
+    [9.94 * GiB, "9.9G"],
+    // Rounds to 10.0 at one decimal, so it reads in the whole-number form, never 10.0G.
+    [9.96 * GiB, "10G"],
+    [10.4 * GiB, "10G"],
+    [12.4 * GiB, "12G"],
+    [123 * GiB, "123G"],
+  ] as const) {
+    const t = resourceTokens(1, 1, bytes, undefined, 0, 80);
+    expect(t.resources).toBe(`ram ${expected} │ 1 wkr 0 sh`);
   }
 });
 

@@ -116,7 +116,7 @@ test("u26 foreground PIDs attribute unresolved Codex and mismatched Claude sessi
   // Width 31 leaves 21 columns after "cpu 73% · ": "ram 1.8G │ 0 wkr ? sh" fits whole.
   expect(calls[1]).toContain("resources=ram 1.8G │ 0 wkr ? sh");
   expect(calls[1]).toContain("cpu_mid=cpu 73%");
-  expect(calls[3]).toContain("resources=ram 0.12G │ ? wkr ? sh");
+  expect(calls[3]).toContain("resources=ram 0.1G │ ? wkr ? sh");
   expect(calls[3]).toContain("cpu_lo=cpu 0%");
 });
 
@@ -607,7 +607,7 @@ test("resource fixtures preserve CPU and project memory sums or clear absent tok
     ...resourceV2,
     sessions: [{ ...row, ram_bytes: 0, vram_bytes: 0, workers: null }],
   });
-  expect(zero.args.some((arg) => arg.includes("ram 0.0G"))).toBe(true);
+  expect(zero.args.some((arg) => arg.includes("ram <0.1G"))).toBe(true);
   expect(zero.args).toContain("vram");
   expect(zero.args).toContain("--clear-token");
 });

@@ -272,6 +272,14 @@ fi
 if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_INDEX_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
 if [ "${name}" = ccc ] && [ "$1" = search ] && [ "\${FAKE_CCC_INDEXING_AFTER_SEARCH:-0}" = 1 ]; then touch "$FAKE_SEARCH_LOG.search-started"; fi
 if [ "${name}" = ccc ] && [ "$1" = search ] && [ -n "\${FAKE_CCC_SEARCH_SLEEP_SECONDS:-}" ]; then exec sleep "$FAKE_CCC_SEARCH_SLEEP_SECONDS"; fi
+# The real ccc is a wrapper that spawns a backend: the backend, not the wrapper, answers late and
+# owns stdout. SIGTERM to the wrapper alone leaves it running (see "search timeout reaches the backend").
+if [ "${name}" = ccc ] && [ "$1" = search ] && [ -n "\${FAKE_CCC_SEARCH_BACKEND_SECONDS:-}" ]; then
+  sh -c 'sleep "$1"; printf "%s\\n" "--- Result 1 (score: 0.9) ---"' backend "$FAKE_CCC_SEARCH_BACKEND_SECONDS" &
+  printf '%s\\n' "$!" > "$FAKE_CCC_BACKEND_PIDFILE"
+  wait
+  exit 0
+fi
 if [ "${name}" = ccc ] && [ "\${FAKE_CCC_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
 if [ "${name}" = rg ] && [ "\${FAKE_RG_THREE_LINES:-0}" = 1 ]; then
   printf '%s\\n' first second third
@@ -643,6 +651,31 @@ describe("repo-retrieve route contract", () => {
     expect(result.code).toBe(124);
     expect(result.stderr).toContain("search child timed out after 250ms");
     expect(result.stderr).not.toContain("RESULT: BUSY");
+  });
+
+  test("search timeout reaches the backend behind the ccc wrapper and returns at the deadline", () => {
+    const { dir } = registerFreshGitProject();
+    const pidfile = join(tempDir("rr-backend-pid-"), "pid");
+    const startedAt = performance.now();
+    const result = run(
+      dir,
+      ["about", "--query", "backend outlives wrapper", "--timeout-ms", "500"],
+      {
+        FAKE_CCC_SEARCH_BACKEND_SECONDS: "6",
+        FAKE_CCC_BACKEND_PIDFILE: pidfile,
+      },
+    );
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(result.code).toBe(124);
+    expect(result.stderr).toContain("search child timed out after 500ms");
+    // Before the fix rr sat on the backend's open stdout until it finished (~6 s) and then
+    // printed its complete hits next to the timeout.
+    expect(elapsedMs).toBeLessThan(4_000);
+    expect(result.stdout).not.toContain("--- Result 1");
+    const backend = Number(readFileSync(pidfile, "utf8").trim());
+    expect(Number.isInteger(backend)).toBe(true);
+    expect(() => process.kill(backend, 0)).toThrow();
   });
 
   test("an indexing status observed at timeout classifies the search as BUSY", () => {

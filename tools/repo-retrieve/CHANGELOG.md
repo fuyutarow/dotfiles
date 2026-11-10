@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.1 — 2026-11-11
+
+- bound a timed-out search child's whole process tree (ccc wrapper + backend) so rr returns at its deadline instead of waiting on the backend's stdout
+
 ## 1.13.0 — 2026-11-09
 
 - Refuse semantic searches when in-scope changes make the index stale.

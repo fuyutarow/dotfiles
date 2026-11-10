@@ -5,19 +5,22 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
 import { decodedJson } from "../../../agents/hooks/tests/decode.ts";
 import { waitForIndexChild } from "../src/ccc-index.ts";
+import { cccSearchPath, escapeGlobLiteral } from "../src/ccc-search-path.ts";
 
 // Isolation startup belongs to the fixture budget; behavior deadlines keep
 // their own explicit elapsed assertions.
@@ -1103,7 +1106,7 @@ describe("repo-retrieve route contract", () => {
     ]);
 
     expect(root.code).toBe(0);
-    expect(root.log).toContain("--path ./**");
+    expect(root.log).toContain("--path **");
     expect(absolute.code).toBe(0);
     expect(absolute.log).toContain("--path knowledge/**");
   });
@@ -1178,11 +1181,12 @@ describe("repo-retrieve route contract", () => {
     expect(file.log).toContain("--path knowledge/entry.md");
   });
 
-  test("existing paths containing ccc glob characters remain caller-exact", () => {
+  test("existing paths containing ccc glob characters are matched literally", () => {
     const { dir } = registerFreshGitProject();
     mkdirSync(join(dir, "knowledge[exact]"));
     writeFileSync(join(dir, "knowledge*.md"), "fixture\n");
 
+    // An existing directory or file whose name has GLOB metacharacters is a literal name.
     const directory = run(dir, [
       "concept",
       "--query",
@@ -1199,10 +1203,9 @@ describe("repo-retrieve route contract", () => {
     ]);
 
     expect(directory.code).toBe(0);
-    expect(directory.log).toContain("--path knowledge[exact]");
-    expect(directory.log).not.toContain("--path knowledge[exact]/**");
+    expect(directory.log).toContain("--path knowledge[[]exact]/**");
     expect(file.code).toBe(0);
-    expect(file.log).toContain("--path knowledge*.md");
+    expect(file.log).toContain("--path knowledge[*].md");
   });
 
   test("a nonexistent or project-escaping path is not broadened into a recursive glob", () => {
@@ -2995,5 +2998,130 @@ describe("repo-retrieve route contract", () => {
       `RESULT: NO_MATCH route=files engine=rg; glob に一致する path が無い(内容は見ていない)\n` +
         `SCOPE: searched root=${dir}; paths outside it were NOT searched.\n`,
     );
+  });
+});
+
+describe("cccSearchPath converts --path to the glob SQLite GLOB sees", () => {
+  // Every file under the fixture project; names carry GLOB metacharacters, spaces and
+  // non-ASCII. The `*decoy` files would be matched by an unescaped pattern.
+  const FILES = [
+    "AGENTS.md",
+    "a1.txt",
+    "a1/decoy.md",
+    "a[1].txt",
+    "a[1]/inside.md",
+    "a[/inside.md",
+    "knowledge/note.md",
+    "knowledge-missing-not-created.md",
+    "q?/inside.md",
+    "star*/inside.md",
+    "star*.md",
+    "starred/decoy.md",
+    "x]y/inside.md",
+    "x{y}/inside.md",
+    "[bracket]/inside.md",
+    "sp ace/inside.md",
+    "日本語/inside.md",
+    "soks-govern/src/commit.rs",
+    "soks-govern/src/lib.rs",
+  ];
+  const project = mkdtempSync(join(tmpdir(), "rr-ccc-search-path-"));
+  const outside = mkdtempSync(join(tmpdir(), "rr-ccc-search-path-outside-"));
+  for (const file of FILES) {
+    mkdirSync(join(project, dirname(file)), { recursive: true });
+    writeFileSync(join(project, file), "");
+  }
+  mkdirSync(join(project, "knowledge"), { recursive: true });
+  symlinkSync(outside, join(project, "escape"));
+  afterAll(() => {
+    rmSync(project, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  });
+
+  const under = (dir: string) => FILES.filter((f) => f.startsWith(`${dir}/`));
+  const only = (file: string) => FILES.filter((f) => f === file);
+  const sqlite = new Database(":memory:");
+  sqlite.run("CREATE TABLE f (p TEXT NOT NULL)");
+  for (const file of FILES) sqlite.run("INSERT INTO f (p) VALUES (?)", [file]);
+  const globRows = (pattern: string) => {
+    const rows = z
+      .array(z.object({ p: z.string() }))
+      .safeParse(
+        sqlite.query("SELECT p FROM f WHERE p GLOB ? ORDER BY p").all(pattern),
+      );
+    expect(rows.success).toBe(true);
+    return rows.success ? rows.data.map((row) => row.p) : [];
+  };
+
+  const cases: { input: string; emitted: string; matches: string[] }[] = [
+    // Project root: every path.
+    { input: ".", emitted: "**", matches: FILES.toSorted() },
+    { input: "./", emitted: "**", matches: FILES.toSorted() },
+    // Plain existing directories, with and without trailing slash or ./ prefix.
+    {
+      input: "knowledge",
+      emitted: "knowledge/**",
+      matches: under("knowledge"),
+    },
+    {
+      input: "knowledge/",
+      emitted: "knowledge/**",
+      matches: under("knowledge"),
+    },
+    {
+      input: "./knowledge",
+      emitted: "knowledge/**",
+      matches: under("knowledge"),
+    },
+    {
+      input: "soks-govern/src",
+      emitted: "soks-govern/src/**",
+      matches: under("soks-govern/src"),
+    },
+    // Directory names with GLOB metacharacters are literal.
+    { input: "a[1]", emitted: "a[[]1]/**", matches: under("a[1]") },
+    { input: "q?", emitted: "q[?]/**", matches: under("q?") },
+    { input: "star*", emitted: "star[*]/**", matches: under("star*") },
+    { input: "x]y", emitted: "x]y/**", matches: under("x]y") },
+    { input: "x{y}", emitted: "x{y}/**", matches: under("x{y}") },
+    {
+      input: "[bracket]",
+      emitted: "[[]bracket]/**",
+      matches: under("[bracket]"),
+    },
+    { input: "a[", emitted: "a[[]/**", matches: under("a[") },
+    { input: "sp ace", emitted: "sp ace/**", matches: under("sp ace") },
+    { input: "日本語", emitted: "日本語/**", matches: under("日本語") },
+    // Existing single files: plain names unchanged, literal metacharacters escaped.
+    { input: "AGENTS.md", emitted: "AGENTS.md", matches: only("AGENTS.md") },
+    {
+      input: "soks-govern/src/commit.rs",
+      emitted: "soks-govern/src/commit.rs",
+      matches: only("soks-govern/src/commit.rs"),
+    },
+    { input: "a[1].txt", emitted: "a[[]1].txt", matches: only("a[1].txt") },
+    { input: "star*.md", emitted: "star[*].md", matches: only("star*.md") },
+    // Not an existing directory or file inside the project: the caller's pattern is kept.
+    { input: "knowledge-missing/", emitted: "knowledge-missing/", matches: [] },
+    { input: "../outside", emitted: "../outside", matches: [] },
+    { input: "escape", emitted: "escape", matches: [] },
+    {
+      input: "soks-govern/src/*.rs",
+      emitted: "soks-govern/src/*.rs",
+      matches: ["soks-govern/src/commit.rs", "soks-govern/src/lib.rs"],
+    },
+  ];
+
+  for (const c of cases) {
+    test(`${JSON.stringify(c.input)} -> ${JSON.stringify(c.emitted)}`, async () => {
+      const emitted = await cccSearchPath(project, c.input);
+      expect(emitted).toBe(c.emitted);
+      expect(globRows(emitted)).toEqual(c.matches);
+    });
+  }
+
+  test("escapeGlobLiteral escapes only the GLOB operators [ * ? and leaves ] { } literal", () => {
+    expect(escapeGlobLiteral("a[*?]b]{}")).toBe("a[[][*][?]]b]{}");
+    expect(escapeGlobLiteral("plain name")).toBe("plain name");
   });
 });

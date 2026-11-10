@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.2 — 2026-11-11
+
+- `--path .` searches the whole project and glob metacharacters in names are escaped
+
 ## 1.13.1 — 2026-11-11
 
 - bound a timed-out search child's whole process tree (ccc wrapper + backend) so rr returns at its deadline instead of waiting on the backend's stdout

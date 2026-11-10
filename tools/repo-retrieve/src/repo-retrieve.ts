@@ -50,6 +50,7 @@ import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import { cccSearchPath } from "./ccc-search-path.ts";
 import { parseDaemonStatus, type DaemonStatus } from "./ccc-daemon-status.ts";
 import { declaredDbEnv, MAPPING_ENV } from "./ccc-db-dir.ts";
 import {
@@ -262,39 +263,6 @@ function rejectPrototypeFlag(
   if (type === "unknown-flag" && flag === "__proto__") {
     argumentError = new Error(`unknown option '--${flag}'`);
   }
-}
-
-const GLOB_MAGIC = /[*?[\]{}]/u;
-
-// ccc's --path consumes a file-path glob, not a directory name. Preserve a caller's explicit
-// glob and file path exactly, but turn an existing directory inside the selected project into
-// the recursive glob that actually selects its indexed files. realpath keeps an in-project
-// symlink to an outside directory from accidentally widening the search scope.
-// This is accidental-scope normalization, not a hostile TOCTOU security boundary: the filesystem
-// may change after these checks and before ccc consumes the resulting glob.
-async function cccSearchPath(project: string, path: string): Promise<string> {
-  if (GLOB_MAGIC.test(path)) return path;
-
-  // A nonexistent path is still a caller-supplied file/path glob. Do not invent a broader
-  // recursive scope for it.
-  const r = await fromAsyncThrowable(async () => {
-    const projectPath = await realpath(project);
-    const candidate = await realpath(resolve(projectPath, path));
-    const insideProject = relative(projectPath, candidate);
-    if (
-      insideProject === ".." ||
-      insideProject.startsWith(`..${sep}`) ||
-      isAbsolute(insideProject) ||
-      !(await stat(candidate)).isDirectory()
-    ) {
-      return path;
-    }
-    return `${insideProject !== "" ? insideProject : "."}/**`;
-  }, asError)();
-  return r.match(
-    (value) => value,
-    () => path,
-  );
 }
 
 function exactlyOneQuery(

@@ -4,7 +4,7 @@ exports[`statusline render golden fixed collector results keep the rendered rows
 "<prompt-head>
 fixture@example.test | Session: fixture-session
 fixture-agent | Opus | high | rc:off | Ctx: 1.00k 25%
-Rate: claude none (no API response yet) | codex n/a (unavailable) · claude api n/a (no balance source) | Jev n/a (fixture unavailable)
+Rate: claude none (no API response yet) | codex n/a (unavailable) | Jev n/a (fixture unavailable)
 Sys: CPU 12% · RAM 25% (2.0/8.0G) · tmp n/a (not sampled)"
 `;
 
@@ -12,7 +12,7 @@ exports[`statusline render golden fixed collector results keep the rendered rows
 "<prompt-head>
 fixture@example.test | Session: fixture-session
 fixture-agent | Opus | high | rc:off | Ctx: 1.00k 25%
-Rate: claude none (no API response yet) | codex n/a (unavailable) · claude api n/a (no balance source) | Jev n/a (fixture unavailable)
+Rate: claude none (no API response yet) | codex n/a (unavailable) | Jev n/a (fixture unavailable)
 Sys: CPU 12% · RAM 25% (2.0/8.0G) · tmp n/a (not sampled)
 terra-high 1m30s $0.03 STATUSLINE-WORKER-ROWS @x (agt_x) │ working · no event yet"
 `;

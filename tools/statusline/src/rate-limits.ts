@@ -9,11 +9,7 @@ import {
 } from "./prompt-stamp.ts";
 import { ESC, RST, paceColor, pctFmt, roles } from "./ansi.ts";
 import type { Dataframe } from "./dataframe.ts";
-import {
-  claudeApiCreditSegment,
-  codexCreditsSegment,
-  codexRateSegment,
-} from "./provider-display.ts";
+import { codexCreditsSegment, codexRateSegment } from "./provider-display.ts";
 import { jevUsageSegment } from "./provider-display.ts";
 import {
   fieldDisplay,
@@ -192,7 +188,6 @@ type RateFacts = Pick<
   | "codexWindowMinutes"
   | "jevUsage"
   | "jevUsageWhy"
-  | "claudeCredits"
 >;
 
 // A state that is allowed to be empty: plain `none` with a dim reason, never the amber `n/a`
@@ -354,15 +349,8 @@ export function rateRow(
         let credits: string | undefined;
         if (df.codexRate !== undefined && df.codexRate.windows.length > 0)
           credits = codexCreditsSegment(df.codexRate);
-        // The Anthropic API credit token follows the codex credits part, on the same separator. It is
-        // a Claude fact, so a codex-only row (format.ts passes ["codex"]) carries none of it.
-        const claudeApi = sources.includes("claude")
-          ? claudeApiCreditSegment(df.claudeCredits, now * 1000)
-          : undefined;
-        const tail = [credits, claudeApi].flatMap((part) =>
-          part === undefined ? [] : [part],
-        );
-        return [renderedWindows, ...tail].join(roles.separator());
+        if (credits === undefined) return renderedWindows;
+        return `${renderedWindows}${roles.separator()}${credits}`;
       }
       return field(
         "jev",

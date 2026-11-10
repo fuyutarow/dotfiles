@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.24.1 — 2026-11-10
+
+- Remove the Claude API credit token from the Rate row: no API returns the balance
+
 ## 0.24.0 — 2026-11-10
 
 - Rate row shows the Claude API credit state: n/a, or out→sub while agx's credits-unavailable marker is under 24 h old

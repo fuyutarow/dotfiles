@@ -48,44 +48,53 @@ description: >-
 ## cuTile.jl model (main commit c55543dc, 56 commits after v1.0.0; checked 2026-11-10)
 
 Facts below cite [`B`] = `https://github.com/JuliaGPU/cuTile.jl/blob/c55543dca19a4bf5f715a9ea5aef7a3cb032c5fe`.
-Re-check them when the commit changes.
+Re-check them when the commit changes. SoK position:
+`knowledge/sok-cutile_jl_kernel_authoring_boundaries_element_functions_tuples_integer_tiles_array_arguments_release_compat_and_choice_versus_thread_kernels.md`.
 
 - **Version `[dated:2026-11]`.** Registered v1.0.0 pins `CUDA_Compiler_jll = "0.5"` and
   `CompilerCaching = "0.3.1 - 0.4"`; main allows `"0.5, 0.6"` and `"0.5"`. Pairing main with CUDA.jl
   waits for a GPUCompiler release containing JuliaGPU/GPUCompiler.jl#922 (cuTile.jl PR #310).
+  [urn:uuid:01a1c32a-99c8-7700-b261-5a7c42efba27]
 - **Launch.** Importing CUDA.jl is required; it supplies `CuArray`, compiler artifacts and the stream
   (B/docs/src/man/execution.md#L37-L42). CUDA.jl is absent from deps, weakdeps and extensions
   (B/Project.toml#L11-L33). `CuArray{T,N}` converts to a mutable `ct.TileArray`
   (B/docs/src/man/execution.md#L104-L119); no read-only array, `Const` wrapper or read-only view was found.
+  [urn:uuid:01a1c32b-3ac1-7128-9de9-0bbc2197f245]
 - **Requirements.** Julia 1.11+, driver 580 (CUDA 13), CC 8.0+; features also depend on the Tile IR
   bytecode version (B/docs/src/man/compatibility.md#L1-L46).
+  [urn:uuid:01a1c35d-3ac9-730a-aa53-55c9f661922c]
 - **Element functions.** A scalar function broadcast or mapped over a tile runs once for the whole
   tile; per-element branches compute both arms, so arms must be side-effect free
   (B/docs/src/man/julia_differences.md#L19-L21). Functions with source are force-inlined
   (B/src/compiler/interpreter.jl#L270-L285); a call left without a Tile IR intrinsic fails with
   `Unsupported function call during Tile IR compilation: … has no Tile IR equivalent`
   (B/src/compiler/codegen/expressions.jl#L189-L203).
+  [urn:uuid:01a1c329-f1b6-7323-a9d3-8b932eaaa099]
 - **Types.** A value without a Tile IR type fails with `Unsupported Julia type for Tile IR`
   (B/test/codegen/operations.jl#L1363-L1367). The docs recommend no form for tile tuples carried
   through loops, multi-output element functions, `@generated`/`ntuple` helpers or dynamic tuple
-  indexing; treat them as unverified. Measured precedent `[dated:2026-11]` (RTX 3060 sm_86, main
+  indexing; treat them as unverified.
+  [urn:uuid:01a1c329-f1b6-7323-a9d3-8b932eaaa099] Measured precedent `[dated:2026-11]` (RTX 3060 sm_86, main
   c55543dc, tile 128): fully unrolled limb arithmetic compiled in 1–8 s for small cases, but a 16-step
   2-limb division ran past 600 s and a 16-table kernel past 25 min; the same division as a counted
   `for i in Int32(1):Int32(8N)` loop carrying one tile per limb compiled in 3–7 s and matched a host
-  oracle. Bitwise `.~` on an integer tile is rejected (`not_int … has no Tile IR equivalent`); use
-  `xor.(u, typemax(T))`.
+  oracle. Bitwise `.~` on an integer tile is
+  rejected (`not_int … has no Tile IR equivalent`); use `xor.(u, typemax(T))`.
+  [urn:uuid:01a1c32b-f5ce-7645-9773-889cda8461e6]
 - **Integers and scalars.** Listed integers are Int8/UInt8–Int64/UInt64 with no operation-by-type
   matrix (B/docs/src/man/element_types.md#L5-L8). A broadcast scalar converts to the first
   same-category tile element type, so a literal never widens a narrow tile
   (B/src/language/broadcast.jl#L69-L71); widen with `convert(Tile{T}, t)` first. FP8/FP4 have no
   general arithmetic; `ct.muladd_scaled` needs sm_100+ (B/docs/src/man/element_types.md#L25-L35).
+  [urn:uuid:01a1c32b-f5ce-7645-9773-889cda8461e6]
 - **Indexing and boundaries.** Partial-tile loads fill by `padding_mode` (default Undetermined),
   stores drop out-of-bounds elements, and a tile wholly outside is undefined
   (B/src/language/operations.jl#L635-L646, #L944-L951). Scalar load `arr[i]` exists (#L769-L777);
   scalar store is unconfirmed. `ct.arange` defaults to `Int32` (#L1141-L1153). Gather/scatter views
-  take rank 2+ with one 1-D integer tile index; scalar indices are rejected (#L43-L62). v1.0.0 adds
+  take rank 2+ with one 1-D integer tile index; scalar indices are rejected (#L43-L62).
+  [urn:uuid:01a1c32b-f5ce-7645-9773-889cda8461e6; urn:uuid:01a1c32b-3ac1-7128-9de9-0bbc2197f245] v1.0.0 adds
   view-based atomics and `ct.@atomic`, so scatter or a documented atomic reduction alone is not a
-  reason to drop to threads.
+  reason to drop to threads. [urn:uuid:01a1c35d-3ac9-730a-aa53-55c9f661922c]
 - **Specialization and AD.** Tile shapes are compile-time values; new constants or argument types
   compile a new kernel (B/docs/src/man/execution.md#L125-L176). No automatic-differentiation
   guarantee was found (urn:uuid:01a1bf08-e39f-74e6-97c5-9d030c426b63); pair a backward rule (GK3-AD).

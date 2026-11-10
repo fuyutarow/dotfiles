@@ -38,7 +38,7 @@ description: >-
 | 3a | Widen a narrow integer tile with a literal (`t .+ 0x0100`) | The literal converts to the tile's type; `convert(Tile{UInt16}, t)` first | cuTile.jl model |
 | 3b | Fuse a scalar-only subexpression into a tile broadcast (`Int32(2) * j .+ Int32(1) .- t`) | Compute the scalar first: `(Int32(2) * j + Int32(1)) .- t` | `cutile-practice.md` |
 | 3c | Scatter through clamped lane indices without a live-lane mask, or count a value-oracle pass as proof of one writer | `mask = live` lanes, first-lane mask for shared values; state when no writer-ownership check ran | `cutile-practice.md` |
-| 3d | Carry limb arithmetic where a proven bound fits a native integer | Write the bound; `Int32` below 2^31; limbs only beyond | `cutile-practice.md` |
+| 3d | Widen a value past the spec's width table because a bound proof says it is exact | Spec widths for every value, Int32 for addresses only; a bound picks the width only where no spec fixes it | `cutile-practice.md` |
 | 9 | Depend on an unreleased branch without a pinned commit | Pin the commit; record when a release can replace it | cuTile.jl model |
 | 1 | Hand-write what a library call or fused broadcast already does | The GK0 row | GK0 |
 | 2 | Write dense tile-shaped work thread by thread on CC 8.0+ | A cuTile.jl tile kernel | Principle 1 |

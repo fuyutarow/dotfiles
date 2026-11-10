@@ -436,3 +436,9 @@ errors for `trunc_int`, the 0-d scalar widening and the fused scalar broadcast; 
 cm_gln/2 at 9452734d and cm_dgn/1 with all wrong controls detected). `skill-check` passes with
 the pre-existing long-sentence warnings. Not checked: selection accuracy (description unchanged)
 and any measured benefit of the revision on a future kernel.
+
+## 2026-11-11 — row 3d corrected: spec value widths before a bound proof
+
+- Finding: row 3d (v2611.2.0) generalized one implementation choice (cm_dgn/1 Int32 sums under a bound proof) into a rule. The choice violated the design spec (fellow §106.3 sign + UInt8 limbs; firedancer concept F2); a value oracle (GK3) matched bit for bit, so nothing detected it before the design owner sent the module back after preregistration. The row existed after the implementation, so it was not the cause, but it would have carried the same violation into the next module.
+- Change: row 3d and cutile-practice.md "Value widths" now put a spec or project width table first (Int32 for addresses only) and allow a bound-based width only where no rule fixes it; the Int32 RNE example is marked for unconstrained widths.
+- Verification: desk edit only; skill-check run; no reader or selection test.

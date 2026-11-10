@@ -24,16 +24,25 @@ the SKILL.md cuTile model holds the source-cited facts.
 An unlisted conversion is unverified: probe it with a 20-line kernel against a host result before
 building on it.
 
-## Choose the integer width from a proven bound
+## Value widths: the spec first, then a proven bound
 
-Write the accumulator bound before the kernel (GKB). If every intermediate fits below 2^31, use
-`Int32` lanes: one multiply-add per term, ordinary `div`/`rem`. Use multi-limb arithmetic only for
-values past `Int32` (or past `Int64` where 64-bit lanes are unavailable or slow). cm_gln/2 carried
-UInt8 limbs everywhere, including sums that would have fit `Int32`; the §106 rule of cm_dgn/1
-bounds every sum below 2^31 (`bits F 127^2`) and is plain `Int32`, far shorter and quicker to
-compile. Record the bound in the module comment and capacity file.
+When the design spec or a project constraint fixes value widths (a width table such as "Int8
+values, UInt16 byte products, sign + 3/4 UInt8 limbs for sums"), implement exactly those widths
+for every value: gathered operands, products, accumulators, division inputs, table builders and
+persistent counters. Int32 lanes then carry addresses, lane indices and shapes only. A proof that
+an `Int32` accumulator is exact does not make a wider value lane conformant, and a value oracle
+(GK3) cannot detect the violation, so compare each value op's lane type with the width table
+before GK3. Field record (2026-11-11): cm_dgn/1 at 3d5a40eb used `Int32` sums and `rne32` under
+a spec that fixed UInt8 limbs; GK3 matched bit for bit, the preregistration was admitted and a
+registered run had started when the design owner sent it back; the run was stopped and the
+module rewritten to sign + limb sums (positive and negative magnitudes, then `s_diff`).
 
-A symmetric round-half-even division of an `Int32` lane by a positive divisor:
+Only where no spec or project rule fixes the width, choose it from a proven bound: write the
+accumulator bound before the kernel (GKB); below 2^31 `Int32` lanes are shorter and quicker to
+compile than limbs. Record the bound in the module comment and capacity file.
+
+A symmetric round-half-even division of an `Int32` lane by a positive divisor (unconstrained
+widths only):
 
 ```julia
 @inline b32(c) = reinterpret(Int32, UInt32.(UInt8.(c)))

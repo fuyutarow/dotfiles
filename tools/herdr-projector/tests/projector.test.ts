@@ -114,10 +114,14 @@ test("u26 foreground PIDs attribute unresolved Codex and mismatched Claude sessi
     snapshot,
     pids,
   );
-  // Width 31 leaves 21 columns after "cpu 73% · ": "ram 1.8G │ 0 wkr ? sh" fits whole.
-  expect(calls[1]).toContain("resources=ram 1.8G │ 0 wkr ? sh");
+  // Row 3 at the default width: "cpu 73% · ram 1.8G · 0 wkr · ? sh" (33 columns) fits whole.
+  expect(calls[1]).toContain("ram=ram 1.8G");
+  expect(calls[1]).toContain("workers_off=0 wkr");
+  expect(calls[1]).toContain("shells_off=? sh");
   expect(calls[1]).toContain("cpu_mid=cpu 73%");
-  expect(calls[3]).toContain("resources=ram 0.1G │ ? wkr ? sh");
+  expect(calls[3]).toContain("ram=ram 0.1G");
+  expect(calls[3]).toContain("workers_off=? wkr");
+  expect(calls[3]).toContain("shells_off=? sh");
   expect(calls[3]).toContain("cpu_lo=cpu 0%");
 });
 
@@ -161,7 +165,8 @@ test("foreground Claude ancestor wins over nested and other-pane Claude rows", a
     paneIds,
   );
   const reports = calls.filter((args) => args[1] === "report-metadata");
-  expect(reports[0]).toContain("resources=ram 1.8G │ 0 wkr ? sh");
+  expect(reports[0]).toContain("ram=ram 1.8G");
+  expect(reports[0]).toContain("workers_off=0 wkr");
   expect(reports[0]).toContain("cpu_mid=cpu 73%");
   expect(reports[1]).toContain("cpu_mid=cpu 88%");
   expect(reports[1]?.some((arg) => arg.includes("ram 3.0G"))).toBe(true);
@@ -478,9 +483,10 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
   await Bun.write(path, JSON.stringify(doc));
   const firstSnapshot = await readAgentCpu(env, now);
   const calls = await report();
-  expect(calls[0]).toContain("resources=2 wkr ? sh");
+  expect(calls[0]).toContain("workers_on=2 wkr");
+  expect(calls[0]).toContain("shells_off=? sh");
   expect(calls[0]).toContain("cpu_lo=cpu 32%");
-  expect(calls[1]).toContain("resources=0 wkr ? sh");
+  expect(calls[1]).toContain("workers_off=0 wkr");
   expect(calls[1]).toContain("cpu_lo=cpu 4%");
   await Bun.write(
     path,
@@ -491,8 +497,8 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
       ),
     }),
   );
-  expect((await report())[1]).toContain("resources=3 wkr ? sh");
-  expect(calls[2]).toContain("resources=? wkr ? sh");
+  expect((await report())[1]).toContain("workers_on=3 wkr");
+  expect(calls[2]).toContain("workers_off=? wkr");
   expect(calls[2]).toContain("cpu_lo=cpu 7%");
   expect(calls[3]).toContain("unowned=orphan:foo 8% · bar.service 5%");
   await Bun.write(path, JSON.stringify({ ...doc, unowned: [] }));
@@ -510,7 +516,9 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
   ]) {
     await Bun.write(path, bad);
     const result = await report();
-    expect(result[0]).toContain("resources=cpu ? ? wkr ? sh");
+    expect(result[0]).toContain("ram=cpu ?");
+    expect(result[0]).toContain("workers_off=? wkr");
+    expect(result[0]).toContain("shells_off=? sh");
     for (const name of ["cpu_lo", "cpu_mid", "cpu_hi"])
       expect(result[0]?.join(" ")).toContain(`--clear-token ${name}`);
     expect(result[0]?.some((arg) => /^cpu_\w+=/u.test(arg))).toBe(false);
@@ -570,16 +578,19 @@ test("resource fixtures preserve CPU and project memory sums or clear absent tok
   };
   const v1 = await report(resourceV1);
   expect(v1.snapshot?.schema).toBe(1);
-  expect(v1.args).toContain("resources=2 wkr ? sh");
+  expect(v1.args).toContain("workers_on=2 wkr");
+  expect(v1.args).toContain("shells_off=? sh");
   expect(v1.args).toContain("cpu_lo=cpu 32%");
   expect(v1.args).toContain("--clear-token");
   expect(v1.args).toContain("ram");
   expect(v1.args).toContain("vram");
   const v2 = await report(resourceV2);
   expect(v2.snapshot?.schema).toBe(2);
-  // vram 0.5G is reported here: at 21 columns after "cpu 32% · " the rule drops vram first, and
-  // "ram 1.2G │ 2 wkr ? sh" fits whole.
-  expect(v2.args).toContain("resources=ram 1.2G │ 2 wkr ? sh");
+  // vram 0.5G is reported here: the full row is 43 columns, so the rule drops vram first, and
+  // "cpu 32% · ram 1.2G · 2 wkr · ? sh" (33 columns) fits whole.
+  expect(v2.args).toContain("ram=ram 1.2G");
+  expect(v2.args).toContain("workers_on=2 wkr");
+  expect(v2.args).toContain("shells_off=? sh");
   expect(v2.args).toContain("cpu_lo=cpu 32%");
   expect(agentCpuCacheInput(v2.snapshot)).not.toBe(
     agentCpuCacheInput(v1.snapshot),
@@ -602,8 +613,10 @@ test("resource fixtures preserve CPU and project memory sums or clear absent tok
     ...resourceV2,
     sessions: [{ ...row, workers: null }],
   });
-  // Same width rule as above: at 31 columns the unknown workers and shells both fit after vram drops.
-  expect(noWorkers.args).toContain("resources=ram 1.0G │ ? wkr ? sh");
+  // Same width rule as above: the unknown workers and shells both fit once vram drops.
+  expect(noWorkers.args).toContain("ram=ram 1.0G");
+  expect(noWorkers.args).toContain("workers_off=? wkr");
+  expect(noWorkers.args).toContain("shells_off=? sh");
   const zero = await report({
     ...resourceV2,
     sessions: [{ ...row, ram_bytes: 0, vram_bytes: 0, workers: null }],
@@ -1944,7 +1957,7 @@ test("row 3 sh is each agent pane's own footer count, never the plain panes of i
   ];
   // The tab also holds plain shell panes; they have no footer and so never enter any count.
   const footers = new Map([
-    ["w9:p1", tail("⏵⏵ auto mode on · 1 shells")],
+    ["w9:p1", tail("⏵⏵ auto mode on · 1 shell · 1 feedback draft")],
     ["w9:p2", tail("⏵⏵ auto mode on")],
     ["w9:p3", "unreadable"],
   ]);
@@ -1971,9 +1984,12 @@ test("row 3 sh is each agent pane's own footer count, never the plain panes of i
     shellCounts,
   );
   const reports = calls.filter((args) => args[1] === "report-metadata");
-  // No cpu reading: the grey token starts with "cpu ?" and carries the counts, fitted at width 28.
-  expect(reports[0]).toContain("resources=cpu ? ? wkr 1 sh");
-  expect(reports[1]).toContain("resources=cpu ? ? wkr 0 sh");
-  expect(reports[2]).toContain("resources=cpu ? ? wkr ? sh");
-  expect(reports[3]).toContain("resources=cpu ? ? wkr ? sh");
+  // No cpu reading: the ram token reads "cpu ?" and the count tokens follow it. A count of 1 or
+  // more is the cyan `shells_on` token; 0 and `?` are the grey `shells_off`.
+  expect(reports[0]).toContain("ram=cpu ?");
+  expect(reports[0]).toContain("shells_on=1 sh");
+  expect(reports[0]).toContain("workers_off=? wkr");
+  expect(reports[1]).toContain("shells_off=0 sh");
+  expect(reports[2]).toContain("shells_off=? sh");
+  expect(reports[3]).toContain("shells_off=? sh");
 });

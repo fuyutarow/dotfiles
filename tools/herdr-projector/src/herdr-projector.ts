@@ -213,84 +213,137 @@ function formatMemory(byteCount: number): string {
 const HERDR_TOKEN_SEPARATOR = " · ";
 export const CPU_TOKENS = ["cpu_lo", "cpu_mid", "cpu_hi"] as const;
 export type CpuToken = (typeof CPU_TOKENS)[number];
+/** A count is painted by which of its two tokens is reported: `_on` for a count of 1 or more. */
+export const WORKER_TOKENS = ["workers_on", "workers_off"] as const;
+export const SHELL_TOKENS = ["shells_on", "shells_off"] as const;
+export type CountTokenName =
+  | (typeof WORKER_TOKENS)[number]
+  | (typeof SHELL_TOKENS)[number];
 export type ResourceTokens = {
   /** The cpu reading as its own token so herdr can style it; absent when cpu is unknown. */
   cpu?: { token: CpuToken; text: string };
   /**
-   * Row 3's grey token: `ram X[ vram Y] │ N wkr M sh`. Memory and counts are separated by the
-   * statusline's bar (U+2502), single spaces inside each part. A cpu reading that is unknown
-   * ("cpu ?") stays here. Unknown counts read `? wkr` / `? sh`.
+   * Row 3's grey `ram` token: `ram X[ vram Y]`, no bar after it (herdr's " · " already separates
+   * the tokens). A cpu reading that is unknown ("cpu ?") stays here, first. Absent when nothing of
+   * it is reported.
    */
-  resources: string;
+  ram?: string;
+  /** `N wkr`; `workers_on` (cyan in herdr/config.toml) when N >= 1, else `workers_off` (grey), `?` is off. */
+  workers?: { token: (typeof WORKER_TOKENS)[number]; text: string };
+  /** `M sh`; `shells_on` (cyan) when M >= 1, else `shells_off` (grey), `?` is off. */
+  shells?: { token: (typeof SHELL_TOKENS)[number]; text: string };
 };
 
-/** Exactly one cpu_* token is reported; the other two are cleared. */
-export function cpuTokenArgs(cpu: ResourceTokens["cpu"]): string[] {
-  return CPU_TOKENS.flatMap((name) =>
-    cpu?.token === name
-      ? ["--token", `${name}=${cpu.text}`]
+/** Exactly one name of a paired set is reported; the others are cleared so nothing lingers. */
+function oneOfTokenArgs(
+  names: readonly string[],
+  chosen: { token: string; text: string } | undefined,
+): string[] {
+  return names.flatMap((name) =>
+    chosen?.token === name
+      ? ["--token", `${name}=${chosen.text}`]
       : ["--clear-token", name],
   );
 }
 
+/** Exactly one cpu_* token is reported; the other two are cleared. */
+export function cpuTokenArgs(cpu: ResourceTokens["cpu"]): string[] {
+  return oneOfTokenArgs(CPU_TOKENS, cpu);
+}
+
+/** The `ram` token is reported or cleared; each count reports one of its pair and clears the other. */
+export function resourceTokenArgs(tokens: ResourceTokens): string[] {
+  return [
+    ...cpuTokenArgs(tokens.cpu),
+    ...(tokens.ram === undefined
+      ? ["--clear-token", "ram"]
+      : ["--token", `ram=${tokens.ram}`]),
+    ...oneOfTokenArgs(WORKER_TOKENS, tokens.workers),
+    ...oneOfTokenArgs(SHELL_TOKENS, tokens.shells),
+  ];
+}
+
 /**
- * One grey-token part. `key` names it in the drop order; `side` says where it sits: `memory`
- * parts (ram, vram) and `lead` parts (an unknown cpu) come before the bar, `counts` parts
- * (wkr, sh) come after it.
+ * The tokens joined as the sidebar draws them: herdr puts its own separator between every pair of
+ * visible tokens, and that separator cannot be changed.
+ */
+export function row3VisibleText(tokens: ResourceTokens): string {
+  return [
+    tokens.cpu?.text,
+    tokens.ram,
+    tokens.workers?.text,
+    tokens.shells?.text,
+  ]
+    .filter((text) => text !== undefined)
+    .join(HERDR_TOKEN_SEPARATOR);
+}
+
+/**
+ * One row part. `key` names it in the drop order; `side` says which token it belongs to: `ram`
+ * parts (an unknown cpu, ram, vram) form the `ram` token, `workers` and `shells` parts are the
+ * count tokens. `count` is the number a count part shows. There is no bar between memory and
+ * counts: herdr draws its own " · " between the tokens, so the row reads
+ * `cpu 21% · ram 0.3G · 1 wkr · 0 sh`.
  */
 type RowPart = {
   key: string;
   text: string;
-  side: "lead" | "memory" | "counts";
+  side: "ram" | "workers" | "shells";
+  count?: number;
 };
-/** Parts inside the grey token are separated by one space; herdr's separator sits only before it. */
+/** Parts inside the ram token are separated by one space. */
 const PART_SEPARATOR = " ";
-/** Between the memory part and the counts part: the bar the statusline's worker and shell rows use. */
-const MEMORY_COUNTS_BAR = " │ ";
 
-/**
- * Joins the kept parts. The bar appears only when a memory part and a counts part both remain,
- * so it never trails the memory part or leads the counts part.
- */
-function renderParts(parts: RowPart[]): string {
+/** The ram text and the count parts of the kept parts, before they become tokens. */
+function layoutParts(parts: RowPart[]): {
+  ram: string | undefined;
+  workers: RowPart | undefined;
+  shells: RowPart | undefined;
+} {
   const head = parts
-    .filter((part) => part.side !== "counts")
+    .filter((part) => part.side === "ram")
     .map((part) => part.text)
     .join(PART_SEPARATOR);
-  const counts = parts
-    .filter((part) => part.side === "counts")
-    .map((part) => part.text)
-    .join(PART_SEPARATOR);
-  const hasMemory = parts.some((part) => part.side === "memory");
-  if (!hasMemory || counts === "")
-    return [head, counts].filter((side) => side !== "").join(PART_SEPARATOR);
-  return `${head}${MEMORY_COUNTS_BAR}${counts}`;
+  return {
+    ram: head === "" ? undefined : head,
+    workers: parts.find((part) => part.side === "workers"),
+    shells: parts.find((part) => part.side === "shells"),
+  };
 }
 
 /**
- * Fit rule for one grey token: whole parts are removed, never cut inside a part. Parts are
- * removed in `dropOrder` (first key goes first) until the rendered text fits `width`; if none
- * fits, the token is empty and nothing is cut.
+ * Fit rule for row 3: whole parts are removed, never cut inside a part. Parts are removed in
+ * `dropOrder` (first key goes first) until the row fits `width` as the sidebar draws it, which is
+ * the cpu text (if any) and the ram and count tokens with herdr's separator between each pair of
+ * them. If none fits, no token but cpu is reported and nothing is cut.
  */
 function fitParts(
   parts: RowPart[],
   width: number,
   dropOrder: readonly string[],
-): string {
+  cpuText: string | undefined,
+): ReturnType<typeof layoutParts> {
   let kept = parts;
   for (const key of [undefined, ...dropOrder]) {
     if (key !== undefined) kept = kept.filter((part) => part.key !== key);
-    const line = renderParts(kept);
-    if (line.length <= width) return line;
+    const layout = layoutParts(kept);
+    const texts = [
+      cpuText,
+      layout.ram,
+      layout.workers?.text,
+      layout.shells?.text,
+    ].filter((text) => text !== undefined);
+    const drawn =
+      texts.reduce((sum, text) => sum + text.length, 0) +
+      HERDR_TOKEN_SEPARATOR.length * Math.max(0, texts.length - 1);
+    if (drawn <= width) return layout;
   }
-  return "";
+  return { ram: undefined, workers: undefined, shells: undefined };
 }
 
 /**
- * Row 3's grey token drops whole parts from the right, so the priority is the reverse of the
- * on-screen order: vram first, then shells, then workers. ram and cpu are never in this list;
- * cpu's own token is never in the grey token at all. Dropping the last count part also drops
- * the bar.
+ * Row 3 drops whole parts from the right, so the priority is the reverse of the on-screen order:
+ * vram first, then shells, then workers. ram and cpu are never in this list.
  */
 const RESOURCE_DROP_ORDER = ["vram", "shells", "workers"] as const;
 
@@ -310,12 +363,14 @@ const RESOURCE_DROP_ORDER = ["vram", "shells", "workers"] as const;
 export const ROW3_FIT_WIDTH = 36;
 
 /**
- * The sidebar has three rows for an agent: row 3 is `cpu NN%` (its own token, chosen by load
- * level, thresholds from tools/shared, so herdr/config.toml can color it) followed by the grey
- * `ram X[ vram Y] │ N wkr M sh`, joined to the cpu token by herdr's separator. The bar sits
- * between memory and counts. Unknown counts read `? wkr` and `? sh`. vram appears only when
- * reported as a non-zero value: a session that uses no vram reports 0, which is treated as not
- * reported. The grey token gets the width the cpu token and herdr's separator leave over.
+ * The sidebar has three rows for an agent: row 3 is four tokens. `cpu NN%` is chosen by load level
+ * (thresholds from tools/shared) so herdr/config.toml can color it; the grey `ram X[ vram Y]`;
+ * `N wkr` and `M sh` are each reported as an `_on` token (cyan) when the count is 1 or more and as
+ * an `_off` token (grey) otherwise, so herdr/config.toml colors them without rules. herdr draws
+ * its own " · " between the tokens and there is no bar, so the row reads
+ * `cpu 21% · ram 0.3G · 1 wkr · 0 sh`. Unknown counts read `? wkr` and `? sh` (grey). vram appears
+ * only when reported as a non-zero value: a session that uses no vram reports 0, which is treated
+ * as not reported. `width` bounds the row as drawn, including herdr's separators.
  */
 export function resourceTokens(
   workers: number | undefined,
@@ -327,7 +382,7 @@ export function resourceTokens(
 ): ResourceTokens {
   const parts: RowPart[] = [
     ...(cpu === undefined
-      ? [{ key: "cpu", text: "cpu ?", side: "lead" as const }]
+      ? [{ key: "cpu", text: "cpu ?", side: "ram" as const }]
       : []),
     ...(ram === undefined
       ? []
@@ -335,7 +390,7 @@ export function resourceTokens(
           {
             key: "ram",
             text: `ram ${formatMemory(ram)}`,
-            side: "memory" as const,
+            side: "ram" as const,
           },
         ]),
     ...(vram === undefined || vram === 0
@@ -344,24 +399,42 @@ export function resourceTokens(
           {
             key: "vram",
             text: `vram ${formatMemory(vram)}`,
-            side: "memory" as const,
+            side: "ram" as const,
           },
         ]),
-    { key: "workers", text: `${workers ?? "?"} wkr`, side: "counts" },
-    { key: "shells", text: `${shells ?? "?"} sh`, side: "counts" },
+    {
+      key: "workers",
+      text: `${workers ?? "?"} wkr`,
+      side: "workers",
+      ...(workers === undefined ? {} : { count: workers }),
+    },
+    {
+      key: "shells",
+      text: `${shells ?? "?"} sh`,
+      side: "shells",
+      ...(shells === undefined ? {} : { count: shells }),
+    },
   ];
-  if (cpu === undefined)
-    return { resources: fitParts(parts, width, RESOURCE_DROP_ORDER) };
-  const text = `cpu ${cpu}%`;
-  const level = usageLevel(Math.round(cpu));
-  return {
-    cpu: { token: `cpu_${level}`, text },
-    resources: fitParts(
-      parts,
-      width - text.length - HERDR_TOKEN_SEPARATOR.length,
-      RESOURCE_DROP_ORDER,
-    ),
-  };
+  const cpuText = cpu === undefined ? undefined : `cpu ${cpu}%`;
+  const layout = fitParts(parts, width, RESOURCE_DROP_ORDER, cpuText);
+  const tokens: ResourceTokens = {};
+  if (cpu !== undefined && cpuText !== undefined)
+    tokens.cpu = {
+      token: `cpu_${usageLevel(Math.round(cpu))}`,
+      text: cpuText,
+    };
+  if (layout.ram !== undefined) tokens.ram = layout.ram;
+  if (layout.workers !== undefined)
+    tokens.workers = {
+      token: (layout.workers.count ?? 0) >= 1 ? "workers_on" : "workers_off",
+      text: layout.workers.text,
+    };
+  if (layout.shells !== undefined)
+    tokens.shells = {
+      token: (layout.shells.count ?? 0) >= 1 ? "shells_on" : "shells_off",
+      text: layout.shells.text,
+    };
+  return tokens;
 }
 
 /** Native session_index is an append log: a rename adds a newer exact-ID row. */
@@ -772,12 +845,26 @@ function unavailableLabel(agent: Agent, why: string): string {
 }
 
 /**
- * The Claude Code mode row that ends the visible screen. The only form recognised is the one the
- * statusline reader already owns: `⏵⏵ auto mode on`, optionally followed by `(shift+tab to cycle)`
- * or by the session's background shell count `· N shells`. Capture 1 is that count.
+ * The Claude Code mode row that ends the visible screen: `⏵⏵ auto mode on`, optionally followed by
+ * `(shift+tab to cycle)`, then zero or more ` · <pill>` parts (Claude Code joins its pills with
+ * ` · `: `1 shell`, `2 shells`, `1 feedback draft`, monitors, agents, ...). Capture 1 is the pills.
+ * Only the auto-mode label is recognised: no footer sample of the other labels is on record.
  */
 const CLAUDE_MODE_ROW =
-  /^\s*⏵⏵ auto mode on(?: \(shift\+tab to cycle\)| · (\d+) shells)?\s*$/u;
+  /^\s*⏵⏵ auto mode on(?: \(shift\+tab to cycle\))?((?: · [^·]+)*)\s*$/u;
+const CLAUDE_SHELL_PILL = /^(\d+) shells?$/u;
+
+/** The background shell count a footer's pills carry: N from `N shell(s)`, 0 with no shell pill. */
+function footerPillShells(pills: string): number | undefined {
+  const counts = pills
+    .split(" · ")
+    .slice(1)
+    .flatMap((pill) => {
+      const shell = CLAUDE_SHELL_PILL.exec(pill.trim());
+      return shell === null ? [] : [Number(shell[1])];
+    });
+  return counts.length > 1 ? undefined : (counts[0] ?? 0);
+}
 
 function claudeModeFooter(
   text: string,
@@ -787,13 +874,15 @@ function claudeModeFooter(
   if (rows.length > 20) return undefined;
   const mode = CLAUDE_MODE_ROW.exec(rows.at(-1) ?? "");
   if (mode === null) return undefined;
-  return { rows, shells: Number(mode[1] ?? "0") };
+  const shells = footerPillShells(mode[1] ?? "");
+  return shells === undefined ? undefined : { rows, shells };
 }
 
 /**
- * Background shells of one Claude session, from its own footer: `· N shells` is N, a recognised
- * footer without it is 0, and a footer that is unreadable or not recognised is undefined so the
- * row says `? sh` instead of a guessed number.
+ * Background shells of one Claude session, from its own footer: a `N shell(s)` pill is N, a
+ * recognised footer without one is 0 (other pills are ignored), and a footer that is unreadable,
+ * not recognised or has two shell pills is undefined so the row says `? sh` instead of a guessed
+ * number.
  */
 export function claudeFooterShells(text: string): number | undefined {
   return claudeModeFooter(text)?.shells;
@@ -1257,19 +1346,17 @@ export async function projectAgents(
         shells,
       );
       cpuArgs.push(
-        ...(tokens.resources === ""
-          ? ["--clear-token", "resources"]
-          : ["--token", `resources=${tokens.resources}`]),
-        // Retired row-4 token: cleared so a value reported before this change does not linger.
+        ...resourceTokenArgs(tokens),
+        // Retired tokens (the row-4 counts, the single grey resources token and older per-field
+        // names): cleared so a value reported by an earlier version does not linger.
+        "--clear-token",
+        "resources",
         "--clear-token",
         "counts",
-        ...cpuTokenArgs(tokens.cpu),
         "--clear-token",
         "workers",
         "--clear-token",
         "cpu",
-        "--clear-token",
-        "ram",
         "--clear-token",
         "vram",
       );

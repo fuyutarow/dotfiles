@@ -105,30 +105,32 @@ agent_panel_sort = "spaces"
 # $agent_detail uses the statusline model label's ANSI-256 idx-30 color.
 # The projector fills three rows per agent, each width-bounded (the sidebar is 40 columns, 36 of them
 # text on an agent row; the installed client renders three rows per agent, so counts live on row 3).
-# Row 3 is CPU, then RAM and VRAM, a bar (│, the statusline's worker/shell-row bar), then WORKERS and SHELLS.
-# SHELLS are the agent session's own background shells, read from the Claude Code footer ("· N shells" is N,
-# a recognised footer without it is 0); plain herdr shell panes in the tab are not counted. Codex has no such
+# Row 3 is CPU, then RAM and VRAM, then WORKERS and SHELLS, as separate tokens (no bar between them).
+# SHELLS are the agent session's own background shells, read from the Claude Code footer (a "N shell" / "N shells"
+# pill is N, a recognised footer without one is 0; other pills are ignored); plain herdr shell panes in the tab are not counted. Codex has no such
 # source, so its row reads "? sh".
 # CPU is its own token so it can be colored alone
 # (herdr strips control characters from reported values and styles per token): the projector reports
 # exactly one of $cpu_lo / $cpu_mid / $cpu_hi (the others are cleared and unreported tokens disappear),
 # chosen with the statusline's thresholds (tools/shared/src/usage-level.ts: green <70, yellow 70-89,
 # red >=90), and each is styled with the statusline's colors (ANSI-256 idx 71 / 178 / 167 =
-# #5faf5f / #d7af00 / #d75f5f). The rest of row 3 is one grey $resources token, "ram 20G │ 1 wkr 4 sh"
-# or "ram 20G vram 12G │ 1 wkr 4 sh": parts inside each side of the bar are separated by single spaces,
-# the bar " │ " (U+2502) separates memory from counts, and herdr's " · " separator sits only between the
-# cpu token and that grey token. Unknown counts read "? wkr" / "? sh".
+# #5faf5f / #d7af00 / #d75f5f). The rest of row 3 is three more tokens: a grey $ram ("ram 20G" or
+# "ram 20G vram 12G"), $workers_* ("1 wkr") and $shells_* ("4 sh").
+# Each count is colored the same way as cpu, with no rules: the projector reports exactly one token of
+# the pair, $workers_on / $shells_on when the count is >= 1 (one-dark cyan #56b6c2) and $workers_off /
+# $shells_off when it is 0 or unknown (grey #7f848e, "? wkr" / "? sh"), and clears the other.
+# herdr draws its own non-removable " · " between every pair of visible tokens (v0.9.5,
+# src/ui/sidebar/tokens.rs `separator`), so the screen reads "cpu 1% · ram 20G · 1 wkr · 4 sh"; the old
+# single grey $resources token and its bar (│) are gone, and the projector clears $resources.
 # vram is reported only when non-zero (a 0 reading means no vram in use and is omitted).
-# The grey token is fitted to the width the cpu token leaves and drops whole parts from the right, never
-# cut mid-token: vram first, then shells, then workers. The bar goes with the last count part, so it never
-# trails. cpu and ram are never dropped while they fit. The bar costs 2 more columns than a plain space,
-# so at a 31-column width a row such as "cpu 253% · ram 7.0G │ 0 wkr" loses its shell count; at 36 it keeps it.
+# The projector fits the row as drawn, separators included, and drops whole parts from the right, never
+# cut mid-token: vram first, then shells, then workers. cpu and ram are never dropped while they fit.
 # Each override under rows_by_agent repeats row 3, since an override replaces rows.
 [ui.sidebar.agents]
 rows = [
   ["state_icon", { token = "tab", fg = "#7f848e", bold = true, dim = false }, { token = "$rc", fg = "#7f848e", bold = false, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }],
-  [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
+  [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#7f848e", bold = false, dim = false }, { token = "$workers_on", fg = "#56b6c2", bold = false, dim = false }, { token = "$workers_off", fg = "#7f848e", bold = false, dim = false }, { token = "$shells_on", fg = "#56b6c2", bold = false, dim = false }, { token = "$shells_off", fg = "#7f848e", bold = false, dim = false }],
   # Custom reported agents use these default rows, not rows_by_agent overrides.
   # Unreported tokens disappear. See https://herdr.dev/docs/configuration/#sidebar-row-layouts.
   ["$btm_summary"],
@@ -147,12 +149,12 @@ rows = [
 claude = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }, { token = "$rc", fg = "#7f848e", bold = false, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }],
-  [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
+  [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#7f848e", bold = false, dim = false }, { token = "$workers_on", fg = "#56b6c2", bold = false, dim = false }, { token = "$workers_off", fg = "#7f848e", bold = false, dim = false }, { token = "$shells_on", fg = "#56b6c2", bold = false, dim = false }, { token = "$shells_off", fg = "#7f848e", bold = false, dim = false }],
 ]
 codex = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }, { token = "$rc", fg = "#7f848e", bold = false, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }],
-  [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$resources", fg = "#7f848e", bold = false, dim = false }],
+  [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#7f848e", bold = false, dim = false }, { token = "$workers_on", fg = "#56b6c2", bold = false, dim = false }, { token = "$workers_off", fg = "#7f848e", bold = false, dim = false }, { token = "$shells_on", fg = "#56b6c2", bold = false, dim = false }, { token = "$shells_off", fg = "#7f848e", bold = false, dim = false }],
 ]
 [session]
 # resume_agents_on_restore = true (default)

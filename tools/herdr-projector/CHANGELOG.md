@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0 — 2026-11-10
+
+- Row 3 reports ram, workers and shells as separate tokens; counts >= 1 are cyan
+
 ## 0.5.13 — 2026-11-10
 
 - Row 3 sh counts the agent's background shells from its footer, not plain panes in the tab

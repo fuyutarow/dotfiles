@@ -550,7 +550,7 @@ exec "${process.execPath}" -e '${AGX_FIXTURE_RUNNER}'`,
     if (input.startsWith("{") && !input.includes('"bad"'))
       expect(actual.stdout).toContain("\nshells: unknown");
     if (actual.stdout.includes("\nshells: unknown"))
-      actual.stdout = actual.stdout.replace("\nshells: unknown", "");
+      actual.stdout = actual.stdout.replace(/\nshells: unknown[^\n]*/u, "");
     expect(decodedJson(z.json(), JSON.stringify(actual) ?? "")).toEqual(
       decodedJson(z.json(), expected),
     );

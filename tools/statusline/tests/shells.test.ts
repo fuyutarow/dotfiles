@@ -82,7 +82,52 @@ test("unreadable source remains unknown", async () => {
     ...options,
     proc: join(root, "missing"),
   });
-  expect(shellLines(scan)).toBe("shells: unknown");
+  expect(shellLines(scan)).toBe("shells: unknown (/proc unreadable: ENOENT)");
+});
+test("every unknown names its cause", async () => {
+  expect(await scanShells(undefined, sid, options)).toEqual({
+    kind: "unknown",
+    reason: "session cwd unknown",
+  });
+  expect(await scanShells(cwd, undefined, options)).toEqual({
+    kind: "unknown",
+    reason: "session id unknown",
+  });
+  expect(shellLines(await scanShells(cwd, "../x", options))).toBe(
+    "shells: unknown (session id has characters outside [a-zA-Z0-9-])",
+  );
+});
+// The task directory is never listed, so its size cannot hide a running shell.
+test("a tasks directory over the old 2048-entry cap still shows its running shell", async () => {
+  const bigRoot = join(root, "big");
+  const bigTasks = join(bigRoot, `claude-${uid}`, "-project", sid, "tasks");
+  mkdirSync(bigTasks, { recursive: true });
+  for (let i = 0; i < 3000; i += 1)
+    writeFileSync(join(bigTasks, `done-${i}.output`), "");
+  const held = join(bigTasks, "running.output");
+  writeFileSync(held, "");
+  const bigProc = join(bigRoot, "proc");
+  mkdirSync(join(bigProc, "50", "fd"), { recursive: true });
+  mkdirSync(join(bigProc, "50", "fdinfo"));
+  symlinkSync(held, join(bigProc, "50", "fd", "1"));
+  writeFileSync(join(bigProc, "50", "fdinfo", "1"), "flags:\t0100001\n");
+  const scan = await scanShells(cwd, sid, {
+    proc: bigProc,
+    temp: bigRoot,
+    uid,
+    now: statSync(held).birthtimeMs + 90_000,
+  });
+  expect(scan.kind).toBe("known");
+  expect(shellLines(scan)).toBe("sh_running 1m30s");
+});
+test("a /proc listing over the cap is unknown with its reason", async () => {
+  const hugeProc = join(root, "proc-huge");
+  mkdirSync(hugeProc, { recursive: true });
+  for (let pid = 1; pid <= 8193; pid += 1)
+    writeFileSync(join(hugeProc, String(pid)), "");
+  expect(
+    shellLines(await scanShells(cwd, sid, { ...options, proc: hugeProc })),
+  ).toBe("shells: unknown (/proc has more than 8192 entries)");
 });
 // Live cause: /proc/<pid>/fd of a non-dumpable same-UID process (sshd-session,
 // ssh-agent) is refused with EACCES; that used to turn the whole scan unknown.

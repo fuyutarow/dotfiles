@@ -32,10 +32,18 @@ and the command keeps whole tokens, ending in `…` when it must shorten to fit 
 row width after the prefix (never cut inside a token). When no wrapper command is
 readable or fits, the row contains only the task ID and elapsed time. The output file's creation time approximates its start time. A shell that redirects
 its own stdout and stderr away from its output file is not shown. An unreadable
-or incomplete scan, including on macOS, displays `shells: unknown`. The scan
-caps the task directory at 2048 entries and `/proc` at 8192 entries; exceeding
-either cap is unknown. Two kinds of process are skipped rather than making the
-scan unknown: a same-UID process whose descriptor listing or any descriptor
+or incomplete scan, including on macOS, displays `shells: unknown (<reason>)`,
+where the reason names the check that failed, for example `tasks dir unreadable:
+ENOENT`, `/proc has more than 8192 entries`, `pid 123 fd 4 fdinfo over 4096 bytes`,
+or `scan failed: <message>`. The scan runs in this order: the session's task
+directory must exist (it is stat-ed, never listed); `/proc` is listed with at most
+8192 entries; each same-UID process has at most 256 descriptors read; a descriptor
+counts only when its target is a `.output` file directly under that task directory
+and its fdinfo shows write access. Running shells therefore come from the bounded
+`/proc` scan, and a task directory with any number of entries, including over
+2048, still shows its running shells. Any read failure outside the skip rules
+below is unknown with its reason, never an empty result. Two kinds of process are
+skipped rather than making the scan unknown: a same-UID process whose descriptor listing or any descriptor
 `readlink` the kernel refuses with `EACCES`/`EPERM` (non-dumpable processes such
 as `sshd-session`, `ssh-agent`, and `sd-pam`), and a process with more than 256
 descriptors. Skipped descriptors are not counted as holders, so a shell seen only

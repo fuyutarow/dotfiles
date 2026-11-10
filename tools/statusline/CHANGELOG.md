@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.13 — 2026-11-10
+
+- shells: name the cause of each unknown; find running shells from the bounded /proc scan so a task directory over 2048 entries no longer hides them
+
 ## 0.23.12 — 2026-11-10
 
 - Show shell task IDs before elapsed time and compacted commands.

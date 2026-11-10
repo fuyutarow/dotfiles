@@ -364,36 +364,6 @@ export function resourceTokens(
   };
 }
 
-const PaneListSchema = z.object({
-  result: z.object({
-    panes: z.array(
-      z.object({
-        pane_id: z.string(),
-        tab_id: z.string(),
-        agent: z.string().nullish(),
-      }),
-    ),
-  }),
-});
-
-/**
- * Plain shell panes per tab, from herdr's live `pane list`. A pane that herdr reports with an
- * `agent` (the agent panes) is not a shell. Undefined when the list is unreadable, so the row
- * says `? shells` instead of a guessed count. A tab with no plain panes counts as 0.
- */
-export function plainShellCounts(
-  listing: string | undefined,
-): ReadonlyMap<string, number> | undefined {
-  const parsed = jsonOf(PaneListSchema).safeParse((listing ?? "").trim());
-  if (!parsed.success) return undefined;
-  const counts = new Map<string, number>();
-  for (const pane of parsed.data.result.panes) {
-    if (pane.agent !== undefined && pane.agent !== null) continue;
-    counts.set(pane.tab_id, (counts.get(pane.tab_id) ?? 0) + 1);
-  }
-  return counts;
-}
-
 /** Native session_index is an append log: a rename adds a newer exact-ID row. */
 export async function readProjectorTitle(
   id: string,
@@ -801,6 +771,34 @@ function unavailableLabel(agent: Agent, why: string): string {
   );
 }
 
+/**
+ * The Claude Code mode row that ends the visible screen. The only form recognised is the one the
+ * statusline reader already owns: `⏵⏵ auto mode on`, optionally followed by `(shift+tab to cycle)`
+ * or by the session's background shell count `· N shells`. Capture 1 is that count.
+ */
+const CLAUDE_MODE_ROW =
+  /^\s*⏵⏵ auto mode on(?: \(shift\+tab to cycle\)| · (\d+) shells)?\s*$/u;
+
+function claudeModeFooter(
+  text: string,
+): { rows: string[]; shells: number } | undefined {
+  if (text.length > 32 * 1024 || text.includes("\u001B")) return undefined;
+  const rows = text.trimEnd().split(/\r?\n/u);
+  if (rows.length > 20) return undefined;
+  const mode = CLAUDE_MODE_ROW.exec(rows.at(-1) ?? "");
+  if (mode === null) return undefined;
+  return { rows, shells: Number(mode[1] ?? "0") };
+}
+
+/**
+ * Background shells of one Claude session, from its own footer: `· N shells` is N, a recognised
+ * footer without it is 0, and a footer that is unreadable or not recognised is undefined so the
+ * row says `? sh` instead of a guessed number.
+ */
+export function claudeFooterShells(text: string): number | undefined {
+  return claudeModeFooter(text)?.shells;
+}
+
 /** Only the owned statusline in the visible native footer, never an agx row. */
 export function claudeFooterObservation(text: string):
   | {
@@ -812,15 +810,8 @@ export function claudeFooterObservation(text: string):
       context: string;
     }
   | undefined {
-  if (text.length > 32 * 1024 || text.includes("\u001B")) return undefined;
-  const rows = text.trimEnd().split(/\r?\n/u);
-  if (
-    rows.length > 20 ||
-    !/^\s*⏵⏵ auto mode on(?: \(shift\+tab to cycle\)| · \d+ shells)?\s*$/u.test(
-      rows.at(-1) ?? "",
-    )
-  )
-    return undefined;
+  const rows = claudeModeFooter(text)?.rows;
+  if (rows === undefined) return undefined;
   const matches = rows.flatMap((row, index) => {
     if (
       !/^\s*\S+@\S+:\d{2}-\d{2} \d{2}:\d{2}[+-]\d{2}\|/u.test(
@@ -1256,10 +1247,8 @@ export async function projectAgents(
         memorySession === undefined || memorySession.vram_bytes === null
           ? undefined
           : memorySession.vram_bytes;
-      const shells =
-        shellCounts === undefined
-          ? undefined
-          : (shellCounts.get(agent.tab_id) ?? 0);
+      // Background shells are the session's own (Claude footer), keyed by pane; no entry reads `? sh`.
+      const shells = shellCounts?.get(agent.pane_id);
       const tokens = resourceTokens(
         cpuSession?.workers?.count,
         resource?.cpu_pct,
@@ -1405,7 +1394,28 @@ async function project(dryRun = false): Promise<number> {
     );
   }
   const contexts = new Map<string, string>();
-  const shellCounts = plainShellCounts(await run("herdr", ["pane", "list"]));
+  // Background shells come from each Claude pane's own footer. Codex has no such source here,
+  // so a Codex pane has no entry and its row reads `? sh`.
+  const shellCounts = new Map<string, number>();
+  await Promise.all(
+    agents.map(async (agent) => {
+      if (agent.agent !== "claude" || agent.pane_id === undefined) return;
+      const shells = claudeFooterShells(
+        (await run("herdr", [
+          "pane",
+          "read",
+          agent.pane_id,
+          "--source",
+          "visible",
+          "--format",
+          "text",
+          "--lines",
+          "5",
+        ])) ?? "",
+      );
+      if (shells !== undefined) shellCounts.set(agent.pane_id, shells);
+    }),
+  );
   await bindClaudePanes(agents, remoteControl);
   const rosterResult = jsonOf(Roster).safeParse(
     (await run("agx", ["worker", "roster", "--json"])) ?? "",
@@ -1479,7 +1489,9 @@ async function project(dryRun = false): Promise<number> {
           panePids: [...panePids],
           contexts: [...contexts],
           roster,
-          shellCounts: shellCounts === undefined ? null : [...shellCounts],
+          shellCounts: [...shellCounts].toSorted(([a], [b]) =>
+            a.localeCompare(b),
+          ),
         }),
       )
       .digest("hex");

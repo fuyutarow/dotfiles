@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.13 — 2026-11-10
+
+- Row 3 sh counts the agent's background shells from its footer, not plain panes in the tab
+
 ## 0.5.12 — 2026-11-10
 
 - Row 3 fits the 40-column sidebar

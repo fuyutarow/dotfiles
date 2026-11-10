@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import {
+  claudeFooterShells,
   cpuTokenArgs,
-  plainShellCounts,
   resourceTokens,
   ROW3_FIT_WIDTH,
 } from "../src/herdr-projector.ts";
@@ -258,22 +258,33 @@ test("ram is <0.1G below the floor, one decimal below 10G, a whole number from 1
   }
 });
 
-test("plain shells are panes herdr reports without an agent, counted per tab", () => {
-  const listing = JSON.stringify({
-    id: "cli:pane:list",
-    result: {
-      panes: [
-        { pane_id: "w9:p1", tab_id: "w9:tE", agent: "claude" },
-        { pane_id: "w9:p2", tab_id: "w9:tE", agent: null },
-        { pane_id: "w9:p3", tab_id: "w9:tE" },
-        { pane_id: "w9:p4", tab_id: "w9:tK", agent: null },
-      ],
-    },
-  });
-  const counts = plainShellCounts(listing);
-  expect(counts?.get("w9:tE")).toBe(2);
-  expect(counts?.get("w9:tK")).toBe(1);
-  expect(counts?.get("w9:tZ")).toBeUndefined();
-  expect(plainShellCounts(undefined)).toBeUndefined();
-  expect(plainShellCounts("not json")).toBeUndefined();
+const FOOTER_RULE = "────────────────";
+/** A Claude pane's visible tail ending in the given mode row. */
+const claudeTail = (modeRow: string) =>
+  `${FOOTER_RULE}\n❯\n${FOOTER_RULE}\n  Job: idle\n  ${modeRow}\n`;
+
+test("a Claude footer's `· N shells` is the session's background shell count; no shells part is 0", () => {
+  expect(claudeFooterShells(claudeTail("⏵⏵ auto mode on · 1 shells"))).toBe(1);
+  expect(claudeFooterShells(claudeTail("⏵⏵ auto mode on · 12 shells"))).toBe(
+    12,
+  );
+  expect(claudeFooterShells(claudeTail("⏵⏵ auto mode on"))).toBe(0);
+  expect(
+    claudeFooterShells(claudeTail("⏵⏵ auto mode on (shift+tab to cycle)")),
+  ).toBe(0);
+});
+
+test("an unreadable or unrecognised Claude footer has no shell count", () => {
+  for (const text of [
+    "",
+    "plain shell prompt $ ",
+    claudeTail("⏵⏵ auto mode on · many shells"),
+    claudeTail("⏵⏵ auto mode on · 1 shells and more"),
+    claudeTail("? for shortcuts"),
+    // The mode row is not the last row, so it is not the footer.
+    `⏵⏵ auto mode on · 1 shells\n  Job: idle\n`,
+    // Terminal control sequences are never part of a clean visible read.
+    claudeTail("\u001B[1m⏵⏵ auto mode on · 1 shells"),
+  ])
+    expect(claudeFooterShells(text)).toBeUndefined();
 });

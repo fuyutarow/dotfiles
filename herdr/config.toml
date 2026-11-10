@@ -106,6 +106,9 @@ agent_panel_sort = "spaces"
 # The projector fills three rows per agent, each width-bounded (the sidebar is 40 columns, 36 of them
 # text on an agent row; the installed client renders three rows per agent, so counts live on row 3).
 # Row 3 is CPU, then RAM and VRAM, a bar (│, the statusline's worker/shell-row bar), then WORKERS and SHELLS.
+# SHELLS are the agent session's own background shells, read from the Claude Code footer ("· N shells" is N,
+# a recognised footer without it is 0); plain herdr shell panes in the tab are not counted. Codex has no such
+# source, so its row reads "? sh".
 # CPU is its own token so it can be colored alone
 # (herdr strips control characters from reported values and styles per token): the projector reports
 # exactly one of $cpu_lo / $cpu_mid / $cpu_hi (the others are cleared and unreported tokens disappear),

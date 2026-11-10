@@ -14,6 +14,7 @@ import { readCodexNativeTitle } from "@dotfiles/shared/src/codex-native-title.ts
 import {
   nativeTitleCacheInputs,
   agentCpuCacheInput,
+  claudeFooterShells,
   projectAgents,
   readAgentCpu,
   paneResourcePids,
@@ -1932,14 +1933,29 @@ test("untrusted provenance receives no provisional display ID", async () => {
   }
 });
 
-test("shell count reaches each agent's row from its own tab; a tab with no plain panes reads 0", async () => {
-  const agents = [
+const tail = (mode: string) => `❯\n  Job: idle\n  ${mode}\n`;
+
+test("row 3 sh is each agent pane's own footer count, never the plain panes of its tab", async () => {
+  const panes = [
     { agent: "claude", pane_id: "w9:p1", tab_id: "w9:tE" },
-    { agent: "codex", pane_id: "w9:p2", tab_id: "w9:tY" },
+    { agent: "claude", pane_id: "w9:p2", tab_id: "w9:tE" },
+    { agent: "claude", pane_id: "w9:p3", tab_id: "w9:tE" },
+    { agent: "codex", pane_id: "w9:p4", tab_id: "w9:tE" },
   ];
+  // The tab also holds plain shell panes; they have no footer and so never enter any count.
+  const footers = new Map([
+    ["w9:p1", tail("⏵⏵ auto mode on · 1 shells")],
+    ["w9:p2", tail("⏵⏵ auto mode on")],
+    ["w9:p3", "unreadable"],
+  ]);
+  const shellCounts = new Map<string, number>();
+  for (const [pane, text] of footers) {
+    const shells = claudeFooterShells(text);
+    if (shells !== undefined) shellCounts.set(pane, shells);
+  }
   const calls: string[][] = [];
   await projectAgents(
-    agents,
+    panes,
     new Map(),
     (args) => {
       calls.push(args);
@@ -1952,10 +1968,12 @@ test("shell count reaches each agent's row from its own tab; a tab with no plain
     new Map(),
     [],
     new Map(),
-    new Map([["w9:tE", 2]]),
+    shellCounts,
   );
   const reports = calls.filter((args) => args[1] === "report-metadata");
   // No cpu reading: the grey token starts with "cpu ?" and carries the counts, fitted at width 28.
-  expect(reports[0]).toContain("resources=cpu ? ? wkr 2 sh");
+  expect(reports[0]).toContain("resources=cpu ? ? wkr 1 sh");
   expect(reports[1]).toContain("resources=cpu ? ? wkr 0 sh");
+  expect(reports[2]).toContain("resources=cpu ? ? wkr ? sh");
+  expect(reports[3]).toContain("resources=cpu ? ? wkr ? sh");
 });

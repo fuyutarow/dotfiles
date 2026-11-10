@@ -622,6 +622,10 @@ depends = ["bun:check"]
 description = "jj push: show alpha@origin..alpha, refuse divergence or conflicts, and push alpha to origin. Use --dry-run to print the list only."
 run = "bun agents/skills/wiring-mise-tasks/scripts/jj-push.ts"
 
+[tasks.gc]
+description = "Clean up jj objects and operations by running only jj util gc; by default, remove items older than two weeks."
+run = "jj util gc"
+
 # ── reclaim ─────────────────────────────────────────────────────────────────
 # One preview surface and one explicit apply surface; the CLI owns candidate policy.
 [tasks.reclaim]

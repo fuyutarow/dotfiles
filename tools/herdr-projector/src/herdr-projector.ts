@@ -1162,6 +1162,11 @@ function rosterModelKey(value: string): string {
     .replaceAll(/[^a-z0-9]/gu, "");
 }
 
+/** The agent vendor an agx route runs: `claude-api` and `claude-session` both run claude. */
+export function routeVendor(route: string): string {
+  return route.startsWith("claude-") ? "claude" : route;
+}
+
 /** Match observed model and effort to an agx roster row; ambiguous matches are unknown. */
 export function rosterRow(
   rows: RosterRows,
@@ -1172,14 +1177,20 @@ export function rosterRow(
   if (model === "" || effort === "") return undefined;
   const workflow = effort.endsWith("+WF");
   const baseEffort = workflow ? effort.slice(0, -3) : effort;
-  const matches = rows.filter(
-    (row) =>
-      row.route === vendor &&
-      rosterModelKey(row.model) === rosterModelKey(model) &&
-      row.effort.toLowerCase() === baseEffort.toLowerCase(),
+  // agx 11 splits route `claude` into `claude-api` and `claude-session`, listing the same
+  // roster id under both; one id across those rows is still one match.
+  const ids = new Set(
+    rows
+      .filter(
+        (row) =>
+          routeVendor(row.route) === vendor &&
+          rosterModelKey(row.model) === rosterModelKey(model) &&
+          row.effort.toLowerCase() === baseEffort.toLowerCase(),
+      )
+      .map((row) => row.id),
   );
-  if (matches.length !== 1) return workflow ? "?+WF" : undefined;
-  return `${matches[0]?.id}${workflow ? "+WF" : ""}`;
+  if (ids.size !== 1) return workflow ? "?+WF" : undefined;
+  return `${[...ids][0]}${workflow ? "+WF" : ""}`;
 }
 
 /** Row 2's ctx part: the percentage is graded like cpu, an unknown reading is the neutral `ctx_off`. */

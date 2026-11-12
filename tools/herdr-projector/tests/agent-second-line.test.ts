@@ -85,6 +85,50 @@ test("hidden footer: session context forms the second line", async () => {
   expect(rosterRow(rows, "claude", "unknown", "medium")).toBeUndefined();
 });
 
+test("agx 11 roster: one id under claude-session and claude-api is one claude match", () => {
+  // Shape of `agx worker roster --json` from agx 11.0.0 (2026-11-13).
+  const agx11Rows = [
+    {
+      id: "haiku-low",
+      route: "claude-session",
+      model: "claude-haiku-5-5",
+      effort: "low",
+    },
+    {
+      id: "haiku-low",
+      route: "claude-api",
+      model: "claude-haiku-5-5",
+      effort: "low",
+    },
+    { id: "luna-low", route: "codex", model: "gpt-6-luna", effort: "low" },
+  ];
+  expect(rosterRow(agx11Rows, "claude", "Haiku 5.5", "low")).toBe("haiku-low");
+  expect(rosterRow(agx11Rows, "claude", "Haiku 5.5", "low+WF")).toBe(
+    "haiku-low+WF",
+  );
+  expect(
+    rosterRow(agx11Rows, "codex", "claude-haiku-5-5", "low"),
+  ).toBeUndefined();
+  expect(rosterRow(agx11Rows, "codex", "gpt-6-luna", "low")).toBe("luna-low");
+  // Two distinct ids for the same model/effort stay ambiguous.
+  expect(
+    rosterRow(
+      [
+        ...agx11Rows,
+        {
+          id: "haiku-cheap",
+          route: "claude-api",
+          model: "claude-haiku-5-5",
+          effort: "low",
+        },
+      ],
+      "claude",
+      "Haiku 5.5",
+      "low",
+    ),
+  ).toBeUndefined();
+});
+
 test("ctx level: 0, 69, 70, 89, 90 and unknown choose exactly one token, the rest are cleared", () => {
   for (const [pct, token] of [
     [0, "ctx_lo"],

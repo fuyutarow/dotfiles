@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { attempt } from "@dotfiles/shared/src/attempt.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { CTX_TOKENS } from "../src/herdr-projector.ts";
+import { CPU_TOKENS, CTX_TOKENS } from "../src/herdr-projector.ts";
 
 const Style = z.object({ token: z.string(), fg: z.string() });
 const Row = z.array(z.union([z.string(), Style]));
@@ -42,15 +42,27 @@ test("herdr/config.toml greys ctx below the red level and colors only ctx_hi, in
     expect(row2?.map((entry) => [entry.token, entry.fg])).toEqual([
       ...EXPECTED,
     ]);
-    // cpu on row 3: lo is Grey30 (quiet), mid / hi keep Gold3 / IndianRed 167.
+    // cpu on row 3: idle (below 10%) is Grey30 (quiet), lo is DarkSeaGreen4 (71), mid / hi are
+    // Gold3 / IndianRed 167, and idle sits before lo.
     const row3 = layout[2]?.flatMap((entry) =>
       typeof entry === "string" ? [] : [entry],
     );
     expect(
-      ["lo", "mid", "hi"].map(
-        (level) => row3?.find((entry) => entry.token === `$cpu_${level}`)?.fg,
+      row3
+        ?.filter((entry) => entry.token.startsWith("$cpu_"))
+        .map((entry) => [entry.token, entry.fg]),
+    ).toEqual([
+      ["$cpu_idle", "#4e4e4e"],
+      ["$cpu_lo", "#5faf5f"],
+      ["$cpu_mid", "#d7af00"],
+      ["$cpu_hi", "#d75f5f"],
+    ]);
+    // Every token the projector can report as cpu has a style in this layout.
+    expect(
+      CPU_TOKENS.every((name) =>
+        (row3 ?? []).some((entry) => entry.token === `$${name}`),
       ),
-    ).toEqual(["#4e4e4e", "#d7af00", "#d75f5f"]);
+    ).toBe(true);
   }
   // Every token the projector can report has a style.
   expect(CTX_TOKENS.map((name) => `$${name}`)).toEqual(

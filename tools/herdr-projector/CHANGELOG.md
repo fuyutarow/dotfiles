@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.4 — 2026-11-12
+
+- cpu below 10% is an idle grey band; 10-69% is green again
+
 ## 0.6.3 — 2026-11-12
 
 - row 2 colors the ctx percentage by the shared usage thresholds, like cpu

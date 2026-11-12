@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   claudeFooterShells,
   cpuTokenArgs,
+  HERDR_MAX_METADATA_TOKENS,
   resourceTokenArgs,
   resourceTokens,
   row3VisibleText,
@@ -10,7 +11,7 @@ import {
 } from "../src/herdr-projector.ts";
 
 const GiB = 1024 ** 3;
-const CPU_NAMES = ["cpu_lo", "cpu_mid", "cpu_hi"];
+const CPU_NAMES = ["cpu_idle", "cpu_lo", "cpu_mid", "cpu_hi"];
 
 /** The ram, workers and shells tokens as the sidebar draws them (herdr's " · " between each). */
 const ramAndCounts = (t: ResourceTokens) =>
@@ -18,9 +19,73 @@ const ramAndCounts = (t: ResourceTokens) =>
     .filter((text) => text !== undefined)
     .join(" · ");
 
-test("cpu is its own token chosen by the shared usage level; ram, workers and shells are their own tokens", () => {
+test("P1: cpu boundary table — exactly one of idle / lo / mid / hi is reported, the other three cleared", () => {
+  const table = [
+    [0, "cpu_idle"],
+    [9, "cpu_idle"],
+    // Judged on the rounded value: 9.4 rounds to 9, 9.5 to 10.
+    [9.4, "cpu_idle"],
+    [9.5, "cpu_lo"],
+    [10, "cpu_lo"],
+    [69, "cpu_lo"],
+    [70, "cpu_mid"],
+    [89, "cpu_mid"],
+    [90, "cpu_hi"],
+    [252, "cpu_hi"],
+  ] as const;
+  for (const [cpu, token] of table) {
+    const tokens = resourceTokens(0, cpu, GiB, undefined, 0, 80);
+    expect(tokens.cpu?.token).toBe(token);
+    const args = cpuTokenArgs(tokens.cpu);
+    const reported = args.flatMap((arg, i) =>
+      args[i - 1] === "--token" ? [arg.split("=")[0]] : [],
+    );
+    const cleared = args.flatMap((arg, i) =>
+      args[i - 1] === "--clear-token" ? [arg] : [],
+    );
+    expect(reported).toEqual([token]);
+    expect(new Set(cleared)).toEqual(
+      new Set(CPU_NAMES.filter((name) => name !== token)),
+    );
+    expect(cleared).toHaveLength(3);
+  }
+});
+
+test("a pane moving idle -> lo -> idle never leaves a stale cpu token", () => {
+  // Each report is applied to herdr as a state: reported tokens are set, cleared tokens removed.
+  const state = new Map<string, string>();
+  const apply = (cpu: number) => {
+    const args = cpuTokenArgs(resourceTokens(0, cpu, GiB, undefined, 0).cpu);
+    for (let i = 0; i < args.length; i += 2) {
+      const value = args[i + 1] ?? "";
+      if (args[i] === "--token") {
+        const [name, text] = value.split("=");
+        state.set(name ?? "", text ?? "");
+      } else state.delete(value);
+    }
+    return [...state.keys()];
+  };
+  expect(apply(3)).toEqual(["cpu_idle"]);
+  expect(apply(45)).toEqual(["cpu_lo"]);
+  expect(apply(3)).toEqual(["cpu_idle"]);
+  expect(apply(95)).toEqual(["cpu_hi"]);
+  expect(apply(0)).toEqual(["cpu_idle"]);
+});
+
+test("the cpu report never exceeds herdr's metadata token limit", () => {
+  for (const cpu of [0, 45, 75, 99]) {
+    const entries = resourceTokenArgs(
+      resourceTokens(3, cpu, 8.5 * GiB, 12 * GiB, 2),
+    ).filter((arg) => arg === "--token" || arg === "--clear-token").length;
+    // 4 cpu + ram + 2 workers + 2 shells entries, well within one chunk.
+    expect(entries).toBe(9);
+    expect(entries).toBeLessThanOrEqual(HERDR_MAX_METADATA_TOKENS);
+  }
+});
+
+test("cpu is its own token chosen by the idle band and the shared usage level; ram, workers and shells are their own tokens", () => {
   for (const [cpu, token] of [
-    [1, "cpu_lo"],
+    [1, "cpu_idle"],
     [50, "cpu_lo"],
     [75, "cpu_mid"],
     [99, "cpu_hi"],
@@ -68,6 +133,8 @@ test("P1: the five (wkr, sh) cases report separate tokens with no bar, cyan only
 test("the ram, workers and shells tokens and their clears are reported as plain text", () => {
   const t = resourceTokens(3, 41, 8.5 * GiB, undefined, 0, 80);
   expect(resourceTokenArgs(t)).toEqual([
+    "--clear-token",
+    "cpu_idle",
     "--token",
     "cpu_lo=cpu 41%",
     "--clear-token",
@@ -89,6 +156,8 @@ test("the ram, workers and shells tokens and their clears are reported as plain 
   expect(
     resourceTokenArgs(resourceTokens(3, 41, 8.5 * GiB, undefined, 0, 20)),
   ).toEqual([
+    "--clear-token",
+    "cpu_idle",
     "--token",
     "cpu_lo=cpu 41%",
     "--clear-token",
@@ -109,7 +178,7 @@ test("the ram, workers and shells tokens and their clears are reported as plain 
   expect(resourceTokenArgs(t).some((arg) => /\p{Cc}/u.test(arg))).toBe(false);
 });
 
-test("exactly one cpu token is reported, the other two cleared, all plain text", () => {
+test("exactly one cpu token is reported, the other three cleared, all plain text", () => {
   for (const cpu of [1, 50, 75, 99]) {
     const args = cpuTokenArgs(
       resourceTokens(3, cpu, 8.5 * GiB, undefined, 2).cpu,
@@ -121,8 +190,8 @@ test("exactly one cpu token is reported, the other two cleared, all plain text",
       args[i - 1] === "--clear-token" ? [arg] : [],
     );
     expect(reported).toHaveLength(1);
-    expect(cleared).toHaveLength(2);
-    expect(reported[0]).toMatch(/^cpu_(lo|mid|hi)=cpu \d+%$/u);
+    expect(cleared).toHaveLength(3);
+    expect(reported[0]).toMatch(/^cpu_(idle|lo|mid|hi)=cpu \d+%$/u);
     expect(new Set([...cleared, reported[0]?.split("=")[0]])).toEqual(
       new Set(CPU_NAMES),
     );
@@ -131,6 +200,8 @@ test("exactly one cpu token is reported, the other two cleared, all plain text",
   expect(
     cpuTokenArgs(resourceTokens(3, 99, undefined, undefined, 2).cpu),
   ).toEqual([
+    "--clear-token",
+    "cpu_idle",
     "--clear-token",
     "cpu_lo",
     "--clear-token",
@@ -159,6 +230,8 @@ test("unknown cpu reports no cpu token and keeps 'cpu ?' first in the ram token"
       resourceTokens(undefined, undefined, undefined, undefined, undefined).cpu,
     ),
   ).toEqual([
+    "--clear-token",
+    "cpu_idle",
     "--clear-token",
     "cpu_lo",
     "--clear-token",

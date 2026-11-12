@@ -1,6 +1,6 @@
 {
   "name": "@dotfiles/herdr-projector",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "private": true,
   "bin": {
     "herdr-projector": "src/herdr-projector.ts"

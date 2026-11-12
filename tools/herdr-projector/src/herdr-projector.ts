@@ -218,8 +218,23 @@ function drawnWidth(texts: readonly string[]): number {
     HERDR_TOKEN_SEPARATOR.length * Math.max(0, texts.length - 1)
   );
 }
-export const CPU_TOKENS = ["cpu_lo", "cpu_mid", "cpu_hi"] as const;
+export const CPU_TOKENS = ["cpu_idle", "cpu_lo", "cpu_mid", "cpu_hi"] as const;
 export type CpuToken = (typeof CPU_TOKENS)[number];
+/**
+ * A rounded cpu reading below this is idle (`cpu_idle`, grey); from here up to the shared yellow
+ * level it is `cpu_lo` (green). Owner decision 2026-11-12 JST: green returns from 10%, the level
+ * the live samples separate best — idle agents read 0-7%, working agents 17-252%. Mid and hi stay
+ * with the shared usageLevel thresholds.
+ */
+export const CPU_IDLE_BELOW_PCT = 10;
+
+/** The one cpu token for a cpu percentage, judged on the rounded value the sidebar shows. */
+export function cpuToken(cpu: number): CpuToken {
+  const rounded = Math.round(cpu);
+  return rounded < CPU_IDLE_BELOW_PCT
+    ? "cpu_idle"
+    : `cpu_${usageLevel(rounded)}`;
+}
 /** A count is painted by which of its two tokens is reported: `_on` for a count of 1 or more. */
 export const WORKER_TOKENS = ["workers_on", "workers_off"] as const;
 export const SHELL_TOKENS = ["shells_on", "shells_off"] as const;
@@ -253,7 +268,7 @@ function oneOfTokenArgs(
   );
 }
 
-/** Exactly one cpu_* token is reported; the other two are cleared. */
+/** Exactly one cpu_* token is reported; the other three are cleared. */
 export function cpuTokenArgs(cpu: ResourceTokens["cpu"]): string[] {
   return oneOfTokenArgs(CPU_TOKENS, cpu);
 }
@@ -368,7 +383,7 @@ export const ROW3_FIT_WIDTH = 44;
 
 /**
  * The sidebar has three rows for an agent: row 3 is four tokens. `cpu NN%` is chosen by load level
- * (thresholds from tools/shared) so herdr/config.toml can color it; the grey `ram X[ vram Y]`;
+ * (CPU_IDLE_BELOW_PCT, then the thresholds from tools/shared) so herdr/config.toml can color it; the grey `ram X[ vram Y]`;
  * `N wkr` and `M sh` are each reported as an `_on` token (cyan) when the count is 1 or more and as
  * an `_off` token (grey) otherwise, so herdr/config.toml colors them without rules. herdr draws
  * its own " · " between the tokens and there is no bar, so the row reads
@@ -423,10 +438,7 @@ export function resourceTokens(
   const layout = fitParts(parts, width, RESOURCE_DROP_ORDER, cpuText);
   const tokens: ResourceTokens = {};
   if (cpu !== undefined && cpuText !== undefined)
-    tokens.cpu = {
-      token: `cpu_${usageLevel(Math.round(cpu))}`,
-      text: cpuText,
-    };
+    tokens.cpu = { token: cpuToken(cpu), text: cpuText };
   if (layout.ram !== undefined) tokens.ram = layout.ram;
   if (layout.workers !== undefined)
     tokens.workers = {

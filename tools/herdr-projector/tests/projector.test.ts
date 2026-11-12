@@ -153,7 +153,7 @@ test("u26 foreground PIDs attribute unresolved Codex and mismatched Claude sessi
   expect(mergeReports(calls)[3]).toContain("ram=ram 0.1G");
   expect(mergeReports(calls)[3]).toContain("workers_off=? wkr");
   expect(mergeReports(calls)[3]).toContain("shells_off=? sh");
-  expect(mergeReports(calls)[3]).toContain("cpu_lo=cpu 0%");
+  expect(mergeReports(calls)[3]).toContain("cpu_idle=cpu 0%");
 });
 
 test("foreground Claude ancestor wins over nested and other-pane Claude rows", async () => {
@@ -527,7 +527,7 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
   expect(mergeReports(calls)[0]).toContain("shells_off=? sh");
   expect(mergeReports(calls)[0]).toContain("cpu_lo=cpu 32%");
   expect(mergeReports(calls)[1]).toContain("workers_off=0 wkr");
-  expect(mergeReports(calls)[1]).toContain("cpu_lo=cpu 4%");
+  expect(mergeReports(calls)[1]).toContain("cpu_idle=cpu 4%");
   await Bun.write(
     path,
     JSON.stringify({
@@ -539,7 +539,7 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
   );
   expect(mergeReports(await report())[1]).toContain("workers_on=3 wkr");
   expect(mergeReports(calls)[2]).toContain("workers_off=? wkr");
-  expect(mergeReports(calls)[2]).toContain("cpu_lo=cpu 7%");
+  expect(mergeReports(calls)[2]).toContain("cpu_idle=cpu 7%");
   expect(mergeReports(calls)[3]).toContain(
     "unowned=orphan:foo 8% · bar.service 5%",
   );
@@ -561,7 +561,7 @@ test("agent CPU snapshot projects contract tokens and invalid snapshots clear th
     expect(result[0]).toContain("ram=cpu ?");
     expect(result[0]).toContain("workers_off=? wkr");
     expect(result[0]).toContain("shells_off=? sh");
-    for (const name of ["cpu_lo", "cpu_mid", "cpu_hi"])
+    for (const name of ["cpu_idle", "cpu_lo", "cpu_mid", "cpu_hi"])
       expect(result[0]?.join(" ")).toContain(`--clear-token ${name}`);
     expect(result[0]?.some((arg) => /^cpu_\w+=/u.test(arg))).toBe(false);
     expect(result[3]).toContain("unowned");
@@ -2060,7 +2060,7 @@ test("widest agent pane splits its metadata into reports of at most 16 tokens", 
   const pane = "w9:p1N";
   const agents = [{ agent: "claude", pane_id: pane, tab_id: "t1" }];
   // Identity 3 + agent_detail + the four ctx tokens + rc + rc_reason + fleet_session_id, the cpu
-  // trio, ram, the workers and shells pairs, and the 5 retired clears: 24 token entries in all,
+  // quartet, ram, the workers and shells pairs, and the 5 retired clears: 25 token entries in all,
   // one per name below.
   const expectedNames = [
     "fullname",
@@ -2074,6 +2074,7 @@ test("widest agent pane splits its metadata into reports of at most 16 tokens", 
     "rc",
     "rc_reason",
     "fleet_session_id",
+    "cpu_idle",
     "cpu_lo",
     "cpu_mid",
     "cpu_hi",

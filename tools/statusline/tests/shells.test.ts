@@ -56,7 +56,7 @@ test("one row per writing task, not per holder; finished tasks absent", async ()
     kind: "known",
     rows: [{ id: "running", seconds: 90 }],
   });
-  expect(shellLines(scan)).toBe("sh_running 1m30s");
+  expect(shellLines(scan)).toBe(`sh_running 1m30s ${BAR} working`);
   const frame = {
     cwd,
     model: "?",
@@ -169,7 +169,7 @@ test("a tasks directory over the old 2048-entry cap still shows its running shel
     now: statSync(held).birthtimeMs + 90_000,
   });
   expect(scan.kind).toBe("known");
-  expect(shellLines(scan)).toBe("sh_running 1m30s");
+  expect(shellLines(scan)).toBe(`sh_running 1m30s ${BAR} working`);
 });
 test("a /proc listing over the cap is unknown with its reason", async () => {
   const hugeProc = join(root, "proc-huge");
@@ -219,6 +219,8 @@ test("over-cap descriptor list is skipped, other holders still render", async ()
 
 const wrapperArgv = (command: string) =>
   `/usr/bin/zsh -c source /home/fuyu/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && eval '${command}' < /dev/null && pwd -P >| /tmp/claude-1000/-home-fuyu-dotfiles/cwd-1.txt`;
+// The dim "│" a worker row also uses (DIM = Grey39, 241).
+const BAR = "\u001B[38;5;241m│\u001B[0m";
 const dispatch =
   "bun /tmp/claude-1000/-home-fuyu-dotfiles/2c05f20d-6268-446b-96dd-bb19296924e5/scratchpad/dispatch-when-calm.ts /home/fuyu/dotfiles/.agents/tickets/mise-gc-task-dotfiles-1110.md";
 
@@ -259,7 +261,7 @@ test("a readable wrapper labels its row; a plain holder keeps the task id", asyn
     ],
   });
   expect(shellLines(scan, 200)).toBe(
-    "sh_running 1m30s │ bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
+    `sh_running 1m30s ${BAR} working · $ bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md`,
   );
 });
 
@@ -304,18 +306,28 @@ test("task prefixes distinguish identical commands and command budgets include t
     ],
   };
   const wide = shellLines(scan, 200).split("\n");
+  // Same shape as a worker row: a dim "│", then "working · $ <command>".
   expect(wide).toEqual([
-    "sh_aaa 2m00s │ bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
-    "sh_bbb 0m05s │ bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md",
-    "sh_ccc 0m09s │ sleep 100",
-    "sh_ddd 0m09s",
+    `sh_aaa 2m00s ${BAR} working · $ bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md`,
+    `sh_bbb 0m05s ${BAR} working · $ bun dispatch-when-calm.ts mise-gc-task-dotfiles-1110.md`,
+    `sh_ccc 0m09s ${BAR} working · $ sleep 100`,
+    `sh_ddd 0m09s ${BAR} working`,
   ]);
   const narrow = shellLines(scan, 60).split("\n");
-  expect(narrow[0]).toBe("sh_aaa 2m00s │ bun dispatch-when-calm.ts …");
-  expect(narrow[2]).toBe("sh_ccc 0m09s │ sleep 100");
+  expect(narrow[0]).toBe(
+    `sh_aaa 2m00s ${BAR} working · $ bun dispatch-when-calm.ts …`,
+  );
+  expect(narrow[2]).toBe(`sh_ccc 0m09s ${BAR} working · $ sleep 100`);
   for (const line of narrow)
-    expect(Array.from(line).length).toBeLessThanOrEqual(60);
-  expect(shellLines(scan, 15).split("\n")[0]).toBe("sh_aaa 2m00s");
-  expect(shellLines(scan, 19).split("\n")[0]).toBe("sh_aaa 2m00s");
-  expect(shellLines(scan, 20).split("\n")[0]).toBe("sh_aaa 2m00s │ bun …");
+    expect(Array.from(Bun.stripANSI(line)).length).toBeLessThanOrEqual(60);
+  expect(shellLines(scan, 21).split("\n")[0]).toBe("sh_aaa 2m00s");
+  expect(shellLines(scan, 22).split("\n")[0]).toBe(
+    `sh_aaa 2m00s ${BAR} working`,
+  );
+  expect(shellLines(scan, 31).split("\n")[0]).toBe(
+    `sh_aaa 2m00s ${BAR} working`,
+  );
+  expect(shellLines(scan, 32).split("\n")[0]).toBe(
+    `sh_aaa 2m00s ${BAR} working · $ bun …`,
+  );
 });

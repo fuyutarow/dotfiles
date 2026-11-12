@@ -1,6 +1,7 @@
 import { opendir, open, readlink, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
+import { DIM, RST } from "./ansi.ts";
 import { dur } from "./jobs.ts";
 import { z } from "./zod.ts";
 
@@ -10,6 +11,10 @@ const FDINFO_LIMIT = 4096;
 const CMDLINE_LIMIT = 16384;
 /** Label budget when the render has no known terminal width. */
 const DEFAULT_COLUMNS = 80;
+/** Cells of " │ working" after a shell row's prefix; narrower rows show the prefix alone. */
+const SHELL_STATE_CELLS = 10;
+/** Cells of " │ working · $ " between a shell row's prefix and its command. */
+const SHELL_ACTIVITY_CELLS = 15;
 const EVAL_OPEN = "eval '";
 const WRAPPER_TAIL = "' < /dev/null && pwd -P >|";
 const TASK_FILE = /^[a-zA-Z0-9-]+\.output$/u;
@@ -309,11 +314,13 @@ export function shellLines(scan: ShellScan, columns?: number): string {
   return scan.rows
     .map((row) => {
       const prefix = `sh_${row.id} ${dur(row.seconds)}`;
-      const command =
-        row.command === undefined
-          ? undefined
-          : compactCommand(row.command, width - cells(prefix) - 3);
-      return command === undefined ? prefix : `${prefix} │ ${command}`;
+      // Same shape as a worker row ("│ working · <activity>"): a running shell's activity is its command.
+      const room = width - cells(prefix);
+      if (room < SHELL_STATE_CELLS) return prefix;
+      const lead = `${prefix} ${DIM}│${RST} working`;
+      if (row.command === undefined) return lead;
+      const command = compactCommand(row.command, room - SHELL_ACTIVITY_CELLS);
+      return command === undefined ? lead : `${lead} · $ ${command}`;
     })
     .join("\n");
 }

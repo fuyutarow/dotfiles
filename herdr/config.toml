@@ -105,9 +105,10 @@ agent_panel_sort = "spaces"
 # overpower the row.
 # Every color here is an xterm-256 named color (herdr takes hex only, so the name is in this comment):
 #   Grey53 (102) #878787: tab, $rc       Turquoise4 (30) #008787: $agent_detail (statusline model label)
-#   DarkSeaGreen4 (71) #5faf5f / Gold3 (178) #d7af00 / IndianRed (167) #d75f5f: cpu and ctx lo / mid / hi
+#   DarkSeaGreen4 (71) #5faf5f / Gold3 (178) #d7af00 / IndianRed (167) #d75f5f: cpu lo / mid / hi
+#   IndianRed (131) #af5f5f: $ctx_hi only (ctx is colored only when it is high, and calmer than cpu red)
 #   CadetBlue (73) #5fafaf: counts >= 1  Grey30 (239) #4e4e4e: $ram, counts 0 or unknown
-#   Grey39 (241) #626262: $ctx_off (the statusline's dim text)
+#   Grey39 (241) #626262: $ctx_lo, $ctx_mid, $ctx_off (the statusline's dim text)
 # The projector fills three rows per agent, each width-bounded (the sidebar is 48 columns, 44 of them
 # text on an agent row; the installed client renders three rows per agent, so counts live on row 3).
 # Row 3 is CPU, then RAM and VRAM, then WORKERS and SHELLS, as separate tokens (no bar between them).
@@ -140,7 +141,7 @@ agent_panel_sort = "spaces"
 [ui.sidebar.agents]
 rows = [
   ["state_icon", { token = "tab", fg = "#878787", bold = true, dim = false }, { token = "$rc", fg = "#878787", bold = false, dim = false }],
-  [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$ctx_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$ctx_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
+  [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#626262", bold = false, dim = false }, { token = "$ctx_mid", fg = "#626262", bold = false, dim = false }, { token = "$ctx_hi", fg = "#af5f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
   [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#5fafaf", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#5fafaf", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
   # Custom reported agents use these default rows, not rows_by_agent overrides.
   # Unreported tokens disappear. See https://herdr.dev/docs/configuration/#sidebar-row-layouts.
@@ -159,12 +160,12 @@ rows = [
 # same dropped-workspace layout as the default rows above — see that block's comment for why.
 claude = [
   ["state_icon", { token = "$fullname", fg = "#878787", bold = true, dim = false }, { token = "$rc", fg = "#878787", bold = false, dim = false }],
-  [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$ctx_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$ctx_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
+  [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#626262", bold = false, dim = false }, { token = "$ctx_mid", fg = "#626262", bold = false, dim = false }, { token = "$ctx_hi", fg = "#af5f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
   [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#5fafaf", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#5fafaf", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
 ]
 codex = [
   ["state_icon", { token = "$fullname", fg = "#878787", bold = true, dim = false }, { token = "$rc", fg = "#878787", bold = false, dim = false }],
-  [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$ctx_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$ctx_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
+  [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#626262", bold = false, dim = false }, { token = "$ctx_mid", fg = "#626262", bold = false, dim = false }, { token = "$ctx_hi", fg = "#af5f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
   [{ token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#5fafaf", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#5fafaf", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
 ]
 [session]

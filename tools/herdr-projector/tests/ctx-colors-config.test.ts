@@ -16,16 +16,16 @@ const Config = z.object({
   }),
 });
 
-// xterm-256 names: Turquoise4 (30), DarkSeaGreen4 (71), Gold3 (178), IndianRed (167), Grey39 (241).
+// xterm-256 names: Turquoise4 (30), IndianRed (131), Grey39 (241). ctx is colored only when high.
 const EXPECTED = new Map([
   ["$agent_detail", "#008787"],
-  ["$ctx_lo", "#5faf5f"],
-  ["$ctx_mid", "#d7af00"],
-  ["$ctx_hi", "#d75f5f"],
+  ["$ctx_lo", "#626262"],
+  ["$ctx_mid", "#626262"],
+  ["$ctx_hi", "#af5f5f"],
   ["$ctx_off", "#626262"],
 ]);
 
-test("herdr/config.toml styles row 2's ctx tokens like cpu in the default, claude and codex layouts", async () => {
+test("herdr/config.toml greys ctx below the red level and colors only ctx_hi, in the default, claude and codex layouts", async () => {
   const text = await Bun.file(
     new URL("../../../herdr/config.toml", import.meta.url),
   ).text();
@@ -42,16 +42,15 @@ test("herdr/config.toml styles row 2's ctx tokens like cpu in the default, claud
     expect(row2?.map((entry) => [entry.token, entry.fg])).toEqual([
       ...EXPECTED,
     ]);
-    // The cpu tokens on row 3 carry the same three level colors as the ctx tokens.
+    // cpu on row 3 keeps its three level colors; only ctx was quieted.
     const row3 = layout[2]?.flatMap((entry) =>
       typeof entry === "string" ? [] : [entry],
     );
-    const levels = ["lo", "mid", "hi"];
     expect(
-      levels.map(
+      ["lo", "mid", "hi"].map(
         (level) => row3?.find((entry) => entry.token === `$cpu_${level}`)?.fg,
       ),
-    ).toEqual(levels.map((level) => EXPECTED.get(`$ctx_${level}`)));
+    ).toEqual(["#5faf5f", "#d7af00", "#d75f5f"]);
   }
   // Every token the projector can report has a style.
   expect(CTX_TOKENS.map((name) => `$${name}`)).toEqual(

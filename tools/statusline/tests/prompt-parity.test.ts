@@ -105,10 +105,10 @@ const comparable = (ps: Part[]): Part[] =>
 // zsh/zshrc still uses the 16-color codes; this map keeps each part's color checked against its
 // zsh counterpart until the PS1 is migrated, then it can be removed.
 const ZSH_TO_NAMED: Record<string, string> = {
-  "35": "38;5;164", // magenta -> Magenta3 (user)
-  "33": "38;5;184", // yellow -> Yellow3 (host)
-  "36": "38;5;44", // cyan -> DarkTurquoise (time)
-  "32": "38;5;40", // green -> Green3 (cwd)
+  "35": "38;5;176", // magenta -> Plum3 (user)
+  "33": "38;5;180", // yellow -> Tan (host)
+  "36": "38;5;73", // cyan -> CadetBlue (time)
+  "32": "38;5;114", // green -> PaleGreen3 (cwd)
 };
 const asNamed = (ps: Part[]): Part[] =>
   ps.map((p) => ({ ...p, color: ZSH_TO_NAMED[p.color] ?? p.color }));

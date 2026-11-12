@@ -16,11 +16,11 @@ const Config = z.object({
   }),
 });
 
-// xterm-256 names: Turquoise4 (30), IndianRed (131), Grey39 (241). ctx is colored only when high.
+// xterm-256 names: Turquoise4 (30), DarkGoldenrod (136), IndianRed (131), Grey39 (241).
 const EXPECTED = new Map([
   ["$agent_detail", "#008787"],
   ["$ctx_lo", "#626262"],
-  ["$ctx_mid", "#626262"],
+  ["$ctx_mid", "#af8700"],
   ["$ctx_hi", "#af5f5f"],
   ["$ctx_off", "#626262"],
 ]);

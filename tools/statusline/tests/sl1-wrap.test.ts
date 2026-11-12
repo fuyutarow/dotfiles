@@ -7,8 +7,8 @@ import {
 
 const ESC = String.fromCodePoint(27);
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
-const separator = ` ${ESC}[38;5;243m·${ESC}[0m `;
-const pipe = ` ${ESC}[38;5;243m|${ESC}[0m `;
+const separator = ` ${ESC}[38;5;241m·${ESC}[0m `;
+const pipe = ` ${ESC}[38;5;241m|${ESC}[0m `;
 
 function visible(value: string): string {
   return value.replaceAll(ANSI, "");

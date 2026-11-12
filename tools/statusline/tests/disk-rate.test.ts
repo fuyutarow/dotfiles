@@ -69,7 +69,7 @@ describe("disk rate", () => {
       "Disk C: 11.5GiB/930GiB (1%) free ↓3.1GiB/min",
     );
     expect(diskSegment(reading)).toContain(
-      "\u001B[38;5;167m11.5GiB\u001B[0m\u001B[38;5;243m/930GiB (1%) free",
+      "\u001B[38;5;167m11.5GiB\u001B[0m\u001B[38;5;241m/930GiB (1%) free",
     );
   });
   test("under 30s has no rate; the exact 30s boundary does", () => {
@@ -249,7 +249,7 @@ test.each(["Disk /", "Disk WSL", "Disk C:", "Disk /Volumes/data"])(
     };
     const segment = diskSegment(reading);
     expect(segment).toBe(
-      `${label} ${ESC}[38;5;167m58.2GiB${RST}${ESC}[38;5;243m/931GiB (6%) free ↓0.089GiB/min${RST}`,
+      `${label} ${ESC}[38;5;167m58.2GiB${RST}${ESC}[38;5;241m/931GiB (6%) free ↓0.089GiB/min${RST}`,
     );
     const row = sysSegment(
       ok(0),
@@ -277,7 +277,7 @@ test("unknown capacity retains coloured free space and the unchanged rate", () =
       rateGibPerMin: 0.089,
     }),
   ).toBe(
-    `Disk C: ${ESC}[38;5;71m58.2GiB${RST}${ESC}[38;5;243m free ↓0.089GiB/min${RST}`,
+    `Disk C: ${ESC}[38;5;71m58.2GiB${RST}${ESC}[38;5;241m free ↓0.089GiB/min${RST}`,
   );
 });
 

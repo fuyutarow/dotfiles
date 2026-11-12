@@ -73,7 +73,7 @@ test("rate row prefixes Claude windows and appends Codex elapsed share and Jev t
   expect(stripAnsi(row)).toContain(" | Jev 7d spend $0.04");
   expect(row).toContain(`codex 7d ${ESC}[38;5;71m12%${RST}`);
   expect(row).toContain(
-    `Jev 7d ${ESC}[38;5;243mspend${RST} ${ESC}[38;5;71m$0.04${RST}`,
+    `Jev 7d ${ESC}[38;5;241mspend${RST} ${ESC}[38;5;71m$0.04${RST}`,
   );
   expect(stripAnsi(row)).not.toContain("cr ");
 });

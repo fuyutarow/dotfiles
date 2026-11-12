@@ -41,9 +41,9 @@ export const RST = `${ESC}[0m`;
 //  209  Salmon1          #ff875f  effort
 //  214  Orange1          #ffaf00  session name
 //  240  Grey35           #585858  prompt zone
-//  243  Grey46           #767676  DIM: secondary text and separators (was SGR 2, dim)
-export const GREY46 = "38;5;243";
-export const DIM = `${ESC}[${GREY46}m`;
+//  241  Grey39           #626262  DIM: secondary text and separators (was SGR 2, dim)
+export const GREY39 = "38;5;241";
+export const DIM = `${ESC}[${GREY39}m`;
 export const CYAN2 = "38;5;44";
 export const GREEN3 = "38;5;40";
 export const MAGENTA3 = "38;5;164";

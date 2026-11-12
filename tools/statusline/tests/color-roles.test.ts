@@ -7,7 +7,7 @@ import { diskSegment } from "../src/storage-display.ts";
 import { diskFreeColor, paceColor } from "../src/ansi.ts";
 
 const reset = "\u001B[0m";
-const dim = "\u001B[38;5;243m";
+const dim = "\u001B[38;5;241m";
 const green = "\u001B[38;5;71m";
 const amber = "\u001B[38;5;178m";
 const red = "\u001B[38;5;167m";

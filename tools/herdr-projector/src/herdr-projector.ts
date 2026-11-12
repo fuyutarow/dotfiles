@@ -211,6 +211,13 @@ function formatMemory(byteCount: number): string {
 
 /** herdr joins adjacent sidebar tokens with this separator; it is not ours to shorten. */
 const HERDR_TOKEN_SEPARATOR = " · ";
+/** Columns a row of visible token texts takes as the sidebar draws it, separators included. */
+function drawnWidth(texts: readonly string[]): number {
+  return (
+    texts.reduce((sum, text) => sum + text.length, 0) +
+    HERDR_TOKEN_SEPARATOR.length * Math.max(0, texts.length - 1)
+  );
+}
 export const CPU_TOKENS = ["cpu_lo", "cpu_mid", "cpu_hi"] as const;
 export type CpuToken = (typeof CPU_TOKENS)[number];
 /** A count is painted by which of its two tokens is reported: `_on` for a count of 1 or more. */
@@ -333,10 +340,7 @@ function fitParts(
       layout.workers?.text,
       layout.shells?.text,
     ].filter((text) => text !== undefined);
-    const drawn =
-      texts.reduce((sum, text) => sum + text.length, 0) +
-      HERDR_TOKEN_SEPARATOR.length * Math.max(0, texts.length - 1);
-    if (drawn <= width) return layout;
+    if (drawnWidth(texts) <= width) return layout;
   }
   return { ram: undefined, workers: undefined, shells: undefined };
 }
@@ -1166,17 +1170,52 @@ export function rosterRow(
   return `${matches[0]?.id}${workflow ? "+WF" : ""}`;
 }
 
-/** Consume the statusline's own rendered percentage and window without inferring either. */
-export function agentSecondLine(
+/** Row 2's ctx part: the percentage is graded like cpu, an unknown reading is the neutral `ctx_off`. */
+export const CTX_TOKENS = ["ctx_lo", "ctx_mid", "ctx_hi", "ctx_off"] as const;
+export type CtxToken = (typeof CTX_TOKENS)[number];
+export type AgentSecondRow = {
+  /** The model/effort part (`agent_detail`); absent when row 2 is too wide for it. */
+  detail?: string;
+  ctx: { token: CtxToken; text: string };
+};
+
+/**
+ * Consume the statusline's own rendered percentage and window without inferring either. Row 2 is
+ * two tokens, `agent_detail` (model/effort) and one ctx token that herdr draws after it with its
+ * own " · ": `opus-medium · ctx 38%/600k`. The ctx token is chosen by the same shared `usageLevel`
+ * as cpu (on the rounded percentage, as the statusline's pctFmt rounds it); an unknown reading is
+ * `ctx_off`. As for row 3, the row is fitted as drawn: when it does not fit `width`, the detail is
+ * dropped whole and the ctx token stays; nothing is cut mid-token.
+ */
+export function agentSecondRow(
   row: string | undefined,
   context: string | undefined,
-): string {
-  const match = /^(\d+(?:\.\d+)?%) \([^/()]+\/([\d.]+[kM]?)\)$/u.exec(
+  width = ROW3_FIT_WIDTH,
+): AgentSecondRow {
+  const match = /^(\d+(?:\.\d+)?)% \([^/()]+\/([\d.]+[kM]?)\)$/u.exec(
     context ?? "",
   );
-  const pct = match?.[1] ?? "?";
+  const pct = match?.[1];
   const limit = match?.[2] ?? "?";
-  return [row ?? "?", `ctx ${pct}/${limit}`].join(" · ");
+  const ctx: AgentSecondRow["ctx"] =
+    pct === undefined
+      ? { token: "ctx_off", text: `ctx ?/${limit}` }
+      : {
+          token: `ctx_${usageLevel(Math.round(Number(pct)))}`,
+          text: `ctx ${pct}%/${limit}`,
+        };
+  const detail = row ?? "?";
+  return drawnWidth([detail, ctx.text]) <= width ? { detail, ctx } : { ctx };
+}
+
+/** `agent_detail` and exactly one ctx token are reported; the rest are cleared so nothing lingers. */
+export function agentSecondRowArgs(second: AgentSecondRow): string[] {
+  return [
+    ...(second.detail === undefined
+      ? ["--clear-token", "agent_detail"]
+      : ["--token", `agent_detail=${second.detail}`]),
+    ...oneOfTokenArgs(CTX_TOKENS, second.ctx),
+  ];
 }
 
 /**
@@ -1421,10 +1460,12 @@ export async function projectAgents(
       "--token",
       `effort=${effort}`,
       ...(isAgent
-        ? [
-            "--token",
-            `agent_detail=${agentSecondLine(rosterRow(roster, vendor, model, effort), contextText)}`,
-          ]
+        ? agentSecondRowArgs(
+            agentSecondRow(
+              rosterRow(roster, vendor, model, effort),
+              contextText,
+            ),
+          )
         : []),
       ...(marker !== ""
         ? ["--token", `rc=${marker}`]

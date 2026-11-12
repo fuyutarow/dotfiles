@@ -2059,13 +2059,18 @@ test("row 3 sh is each agent pane's own footer count, never the plain panes of i
 test("widest agent pane splits its metadata into reports of at most 16 tokens", async () => {
   const pane = "w9:p1N";
   const agents = [{ agent: "claude", pane_id: pane, tab_id: "t1" }];
-  // Identity 3 + agent_detail + rc + rc_reason + fleet_session_id, the cpu trio, ram, the workers
-  // and shells pairs, and the 5 retired clears: 20 token entries in all, one per name below.
+  // Identity 3 + agent_detail + the four ctx tokens + rc + rc_reason + fleet_session_id, the cpu
+  // trio, ram, the workers and shells pairs, and the 5 retired clears: 24 token entries in all,
+  // one per name below.
   const expectedNames = [
     "fullname",
     "model",
     "effort",
     "agent_detail",
+    "ctx_lo",
+    "ctx_mid",
+    "ctx_hi",
+    "ctx_off",
     "rc",
     "rc_reason",
     "fleet_session_id",

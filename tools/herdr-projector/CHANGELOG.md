@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.3 — 2026-11-12
+
+- row 2 colors the ctx percentage by the shared usage thresholds, like cpu
+
 ## 0.6.2 — 2026-11-11
 
 - Split pane metadata reports at herdr's 16-token limit so row 3 renders again

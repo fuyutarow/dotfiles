@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.24.5 — 2026-11-12
+
+- dim text is Grey39 (241), one step darker than Grey46
+- prompt head uses mid-saturation xterm-256 colors (Orchid, Khaki3, MediumTurquoise, PaleGreen3 77)
+- prompt head uses muted xterm-256 colors (Plum3, Tan, CadetBlue, PaleGreen3) close to the zsh prompt
+
 ## 0.24.4 — 2026-11-12
 
 - statusline uses only xterm-256 named colors (dim text is Grey46)

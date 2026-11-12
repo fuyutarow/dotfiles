@@ -27,6 +27,18 @@ ensure copies the token to existing and newly observed workspaces. A closed btm
 tab or killed btm stays closed while a workspace carrying the token remains.
 Herdr discards the record when all token-bearing workspaces close or the server
 restarts; ensure can then create one btm again.
+
+**After a server restart** herdr restores every saved btm tab, but only the
+active tab's `btmp` resumes (typed into its shell, about 1.3 s after start);
+the other restored tabs stay idle shells, and none has registered an agent when
+the startup ensure runs. Ensure therefore counts a tab as btm when its label, a
+pane label or an agent says so, and classifies it with `herdr pane process-info`:
+live (btm/btmp runs), idle (a lone shell), other (user content) or unknown (pane
+not spawned yet; ensure waits for the next tick). It keeps one tab (registered,
+then running, then idle; an idle one is relaunched with the argv launch after a
+1.5 s recheck unless the record says btm was closed), and closes only the other
+tabs that hold a single pane that is live btm or an idle shell. Tabs with
+several panes or another program are never closed.
 It launches using the documented
 [layout.apply argv launch](https://herdr.dev/docs/socket-api/), which returns
 the actual tab ID to wait for.

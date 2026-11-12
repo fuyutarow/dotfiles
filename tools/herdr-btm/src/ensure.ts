@@ -1,5 +1,5 @@
 import { mkdir, rm, stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { createConnection } from "node:net";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
@@ -17,6 +17,43 @@ const Workspaces = z.object({
         tokens: z.record(z.string(), z.string()).optional(),
       }),
     ),
+  }),
+});
+const Tabs = z.object({
+  result: z.object({
+    tabs: z.array(
+      z.object({
+        tab_id: z.string(),
+        workspace_id: z.string(),
+        label: z.string(),
+        pane_count: z.number(),
+      }),
+    ),
+  }),
+});
+const Panes = z.object({
+  result: z.object({
+    panes: z.array(
+      z.object({
+        pane_id: z.string(),
+        tab_id: z.string(),
+        label: z.string().optional(),
+      }),
+    ),
+  }),
+});
+const ProcessInfo = z.object({
+  result: z.object({
+    process_info: z.object({
+      shell_pid: z.number().optional(),
+      foreground_processes: z.array(
+        z.object({
+          pid: z.number(),
+          name: z.string(),
+          argv: z.array(z.string()),
+        }),
+      ),
+    }),
   }),
 });
 const Created = z.object({
@@ -138,15 +175,30 @@ async function createBtm(
         ];
   const created = await request(args, Created);
   if (created.isErr()) return err(created.error);
-  const launched = await launch(socket, created.value.result.tab.tab_id);
+  const launched = await launchAndWait(
+    socket,
+    created.value.result.tab.tab_id,
+    created.value.result.tab.workspace_id,
+  );
   if (launched.isErr()) return err(launched.error);
-  const marked = await markWorkspace(created.value.result.tab.workspace_id);
+  return ok(created.value.result.tab.workspace_id);
+}
+
+// Starts btmp in an existing tab, records the workspace, waits for registration.
+async function launchAndWait(
+  socket: string,
+  tabId: string,
+  workspaceId: string,
+): Promise<Result<void, Error>> {
+  const launched = await launch(socket, tabId);
+  if (launched.isErr()) return err(launched.error);
+  const marked = await markWorkspace(workspaceId);
   if (marked.isErr()) return err(marked.error);
   const deadline = performance.now() + 8000;
   while (performance.now() < deadline) {
     const found = await hasBtm(launched.value);
     if (found.isErr()) return err(found.error);
-    if (found.value) return ok(created.value.result.tab.workspace_id);
+    if (found.value) return ok(undefined);
     await Bun.sleep(100);
   }
   return err(new Error("btm did not register within 8s"));
@@ -190,40 +242,153 @@ async function markUnrecorded(
   return ok(undefined);
 }
 
-async function ensureLocked(socket: string): Promise<Result<void, Error>> {
+// A btm tab as the server shows it. Herdr restores saved btm tabs at startup,
+// before their btmp has registered an agent, so a tab counts as btm when its
+// label, a pane label or an agent says so. `kind` tells what runs in it:
+// live = btmp/btm runs or is registered; idle = a lone shell (restored but not
+// resumed); other = user content (several panes, another program);
+// unknown = the pane is not spawned yet, so a resume may still be coming.
+type BtmTab = {
+  tabId: string;
+  workspaceId: string;
+  label: string;
+  agent: boolean;
+  kind: "live" | "idle" | "other" | "unknown";
+  // Only a single-pane tab that is live or idle is btm's own and may be closed.
+  closable: boolean;
+};
+
+const isBtmProcess = (process: { name: string; argv: string[] }): boolean =>
+  process.name === "btm" ||
+  process.argv.some((arg) => ["btmp", "btmp.ts"].includes(basename(arg)));
+
+async function kindOf(paneId: string): Promise<BtmTab["kind"]> {
+  const info = await request(
+    ["pane", "process-info", "--pane", paneId],
+    ProcessInfo,
+  );
+  if (info.isErr()) return "unknown";
+  const { shell_pid: shell, foreground_processes: running } =
+    info.value.result.process_info;
+  if (running.some((process) => isBtmProcess(process))) return "live";
+  return running.every((process) => process.pid === shell) ? "idle" : "other";
+}
+
+// An agent report means live even while process-info is unavailable.
+async function tabKind(
+  agent: boolean,
+  only: { pane_id: string } | undefined,
+): Promise<BtmTab["kind"]> {
+  if (only === undefined) return agent ? "live" : "other";
+  const kind = await kindOf(only.pane_id);
+  return agent && kind === "unknown" ? "live" : kind;
+}
+
+async function btmTabs(): Promise<Result<BtmTab[], Error>> {
   const agents = await request(["agent", "list"], Agents);
   if (agents.isErr()) return err(agents.error);
-  const existingTabs = new Set(
+  const tabs = await request(["tab", "list"], Tabs);
+  if (tabs.isErr()) return err(tabs.error);
+  const panes = await request(["pane", "list"], Panes);
+  if (panes.isErr()) return err(panes.error);
+  const agentTabs = new Set(
     agents.value.result.agents
       .filter((agent) => agent.agent === "btm")
       .map((agent) => agent.tab_id),
   );
-  for (const tabId of existingTabs) {
-    const current = await request(
-      ["tab", "get", tabId],
-      z.object({
-        result: z.object({
-          tab: z.object({ label: z.string(), workspace_id: z.string() }),
-        }),
-      }),
-    );
-    if (current.isErr()) return err(current.error);
-    if (current.value.result.tab.label === "btm") continue;
-    // Installed help: herdr tab rename <TAB_ID> <LABEL>...
-    const renamed = await request(
-      ["tab", "rename", tabId, "btm"],
-      z.object({ result: z.unknown() }),
-    );
-    if (renamed.isErr()) return err(renamed.error);
+  const labelled = new Set(
+    panes.value.result.panes
+      .filter((pane) => pane.label === "btm")
+      .map((pane) => pane.tab_id),
+  );
+  const found: BtmTab[] = [];
+  for (const tab of tabs.value.result.tabs) {
+    const agent = agentTabs.has(tab.tab_id);
+    if (!agent && tab.label !== "btm" && !labelled.has(tab.tab_id)) continue;
+    const only =
+      tab.pane_count === 1
+        ? panes.value.result.panes.find((pane) => pane.tab_id === tab.tab_id)
+        : undefined;
+    const kind = await tabKind(agent, only);
+    found.push({
+      tabId: tab.tab_id,
+      workspaceId: tab.workspace_id,
+      label: tab.label,
+      agent,
+      kind,
+      closable: only !== undefined && (kind === "live" || kind === "idle"),
+    });
   }
+  return ok(found);
+}
+
+async function markAll(): Promise<Result<void, Error>> {
+  const workspaces = await request(["workspace", "list"], Workspaces);
+  if (workspaces.isErr()) return err(workspaces.error);
+  return markUnrecorded(workspaces.value.result.workspaces);
+}
+
+type Plan = { keeper: BtmTab; tabs: BtmTab[] };
+
+// Picks the one btm tab of the server: the registered one, then a running one,
+// else a restored idle shell, which is launched into unless a record says btm
+// was closed on purpose. Undefined means: leave everything as it is for now.
+async function planBtm(
+  socket: string,
+  tabs: BtmTab[],
+  recorded: boolean,
+): Promise<Result<Plan | undefined, Error>> {
+  const live =
+    tabs.find((tab) => tab.agent) ?? tabs.find((tab) => tab.kind === "live");
+  if (live !== undefined) return ok({ keeper: live, tabs });
+  // Restored btm tabs whose pane is not spawned yet may still resume btmp.
+  if (tabs.some((tab) => tab.kind === "unknown")) return ok(undefined);
+  const idle = tabs.find((tab) => tab.kind === "idle");
+  // Only user content carries the btm label: nothing to start or close.
+  if (idle === undefined) return ok(undefined);
+  if (recorded) return ok({ keeper: idle, tabs });
+  // The resume types btmp into a restored shell a moment after it spawns;
+  // act only if the tabs are still idle after that window.
+  await Bun.sleep(1500);
+  const again = await btmTabs();
+  if (again.isErr()) return err(again.error);
+  if (again.value.some((tab) => tab.kind === "live" || tab.kind === "unknown"))
+    return ok(undefined);
+  const started = await launchAndWait(socket, idle.tabId, idle.workspaceId);
+  if (started.isErr()) return err(started.error);
+  return ok({ keeper: idle, tabs: again.value });
+}
+
+// Duplicates are closed only when btm's own: one pane, running btmp or idle.
+async function converge({ keeper, tabs }: Plan): Promise<Result<void, Error>> {
+  const done = z.object({ result: z.unknown() });
+  for (const tab of tabs) {
+    if (tab.tabId === keeper.tabId || !tab.closable) continue;
+    const closed = await request(["tab", "close", tab.tabId], done);
+    if (closed.isErr()) return err(closed.error);
+  }
+  if (keeper.label === "btm") return markAll();
+  // Installed help: herdr tab rename <TAB_ID> <LABEL>...
+  const renamed = await request(["tab", "rename", keeper.tabId, "btm"], done);
+  if (renamed.isErr()) return err(renamed.error);
+  return markAll();
+}
+
+async function ensureLocked(socket: string): Promise<Result<void, Error>> {
+  const found = await btmTabs();
+  if (found.isErr()) return err(found.error);
   const workspaces = await request(["workspace", "list"], Workspaces);
   if (workspaces.isErr()) return err(workspaces.error);
   const all = workspaces.value.result.workspaces;
   const recorded = all.some(
     (workspace) => workspace.tokens?.["btmp_ensured"] === "1",
   );
+  if (found.value.length > 0) {
+    const plan = await planBtm(socket, found.value, recorded);
+    if (plan.isErr()) return err(plan.error);
+    return plan.value === undefined ? ok(undefined) : converge(plan.value);
+  }
   if (recorded) return markUnrecorded(all);
-  if (existingTabs.size > 0) return ok(undefined);
   const created = await createBtm(socket, all[0]?.workspace_id);
   if (created.isErr()) return err(created.error);
   return markUnrecorded(all.slice(1));

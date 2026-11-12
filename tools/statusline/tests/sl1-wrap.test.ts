@@ -19,8 +19,8 @@ function contentWithoutSeparators(value: string): string {
 }
 
 const sample = [
-  `repo ${ESC}[38;5;114m/home/fuyu/日本語-project${ESC}[0m${pipe}branch ${ESC}[38;5;176mfeature/wrap${ESC}[0m${separator}worktree ${ESC}[38;5;180mws: sl1-test${ESC}[0m`,
-  `Claude${pipe}session ${ESC}[38;5;73magent-123456789${ESC}[0m${separator}model Opus${separator}ctx 328.9k 33%${separator}email fuyutarow@example.test`,
+  `repo ${ESC}[38;5;77m/home/fuyu/日本語-project${ESC}[0m${pipe}branch ${ESC}[38;5;170mfeature/wrap${ESC}[0m${separator}worktree ${ESC}[38;5;185mws: sl1-test${ESC}[0m`,
+  `Claude${pipe}session ${ESC}[38;5;80magent-123456789${ESC}[0m${separator}model Opus${separator}ctx 328.9k 33%${separator}email fuyutarow@example.test`,
   `Rate: claude 5h 7% reset 16:20${separator}7d 75% reset 10-29${separator}codex 7d 36%`,
   `Sys: CPU 100%${separator}RAM 35% (19.3/54.9G)${separator}VRAM 23% (2.7/12.0G)${separator}GPU  1%${separator}tmpfs 34G free`,
   "worker: unchanged after Sys",

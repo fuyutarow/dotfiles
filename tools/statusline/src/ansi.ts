@@ -26,30 +26,30 @@ export const RST = `${ESC}[0m`;
 //   30  Turquoise4       #008787  model
 //   66  PaleTurquoise4   #5f8787  Ctx label
 //   71  DarkSeaGreen4    #5faf5f  green threshold; disk free >= 20%
-//   73  CadetBlue        #5fafaf  prompt time, sampler time placeholder (was 36, cyan)
 //   74  SkyBlue3         #5fafd7  Sys label
+//   77  PaleGreen3       #5fd75f  prompt cwd (was 32, green)
+//   80  MediumTurquoise  #5fd7d7  prompt time, sampler time placeholder (was 36, cyan)
 //   96  Plum4            #875f87  branch
 //   99  SlateBlue1       #875fff  +WF workflow (was truecolor 139;92;246)
 //  103  LightSlateGrey   #8787af  account email, Session label
 //  108  DarkSeaGreen     #87af87  Rate label
-//  114  PaleGreen3       #87d787  prompt cwd (was 32, green)
 //  140  MediumPurple2    #af87d7  ws: workspace
 //  167  IndianRed        #d75f5f  red threshold
-//  176  Plum3            #d787d7  prompt user (was 35, magenta)
+//  170  Orchid           #d75fd7  prompt user (was 35, magenta)
 //  178  Gold3            #d7af00  amber threshold; diff (+add,-del)
-//  180  Tan              #d7af87  prompt host (was 33, yellow)
-// The prompt head (user/host/time/cwd) uses muted indexes nearest the One Dark ANSI colors the
-// zsh prompt renders with, so the statusline's first line matches the shell prompt's calm tone.
+//  185  Khaki3           #d7d75f  prompt host (was 33, yellow)
 //  209  Salmon1          #ff875f  effort
 //  214  Orange1          #ffaf00  session name
 //  240  Grey35           #585858  prompt zone
 //  241  Grey39           #626262  DIM: secondary text and separators (was SGR 2, dim)
+// The prompt head (user/host/time/cwd) uses mid-saturation indexes, one cube step down from the
+// full-saturation xterm defaults: between the vivid defaults and the muted One Dark tones.
 export const GREY39 = "38;5;241";
 export const DIM = `${ESC}[${GREY39}m`;
-export const CYAN2 = "38;5;73";
-export const GREEN3 = "38;5;114";
-export const MAGENTA3 = "38;5;176";
-export const YELLOW3 = "38;5;180";
+export const CYAN2 = "38;5;80";
+export const GREEN3 = "38;5;77";
+export const MAGENTA3 = "38;5;170";
+export const YELLOW3 = "38;5;185";
 export const SLATE_BLUE1 = "38;5;99";
 export const MID = "·"; //   meter middot
 // EXPLICIT-ABSENCE law (owner ruling 2026-10-03: 「implicit display は本当によくない」). A value

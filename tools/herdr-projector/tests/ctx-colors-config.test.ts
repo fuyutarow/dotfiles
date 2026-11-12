@@ -42,7 +42,7 @@ test("herdr/config.toml greys ctx below the red level and colors only ctx_hi, in
     expect(row2?.map((entry) => [entry.token, entry.fg])).toEqual([
       ...EXPECTED,
     ]);
-    // cpu on row 3 keeps its three level colors; only ctx was quieted.
+    // cpu on row 3: lo is Grey30 (quiet), mid / hi keep Gold3 / IndianRed 167.
     const row3 = layout[2]?.flatMap((entry) =>
       typeof entry === "string" ? [] : [entry],
     );
@@ -50,7 +50,7 @@ test("herdr/config.toml greys ctx below the red level and colors only ctx_hi, in
       ["lo", "mid", "hi"].map(
         (level) => row3?.find((entry) => entry.token === `$cpu_${level}`)?.fg,
       ),
-    ).toEqual(["#5faf5f", "#d7af00", "#d75f5f"]);
+    ).toEqual(["#4e4e4e", "#d7af00", "#d75f5f"]);
   }
   // Every token the projector can report has a style.
   expect(CTX_TOKENS.map((name) => `$${name}`)).toEqual(

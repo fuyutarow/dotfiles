@@ -1,29 +1,28 @@
 ---
 name: documenting-software
 description: >-
-  Designs/reviews software docs and specs for reader decisions. Before rearranging a mixed
-  paragraph, classify each claim: consumer guarantee, implementation/design choice, contributor
-  coding/lint rule, or editorial record. Choosing a converter is implementation design; banning
-  unsafe casts is coding policy; rejecting invalid input is a guarantee. Preserve binding rules
-  when relocating them. Begin with the technical answer; move audience/kind/review-baseline
-  bookkeeping out of its way. Report supported reader consequences, not missing checkboxes.
-  Respect an exact API reference's declared scope: no demand for client initialization or a full
-  tutorial unless its intended task needs them. Use for README, guides, API docs, specs and ADR/RFC.
+  Designs/reviews software docs so readers can explain the mechanism and decide for themselves.
+  Teach from a familiar problem through a worked input and result/refusal; vary the case to expose
+  assumptions. Derive reader questions, then page responsibilities, then directories. An example or
+  recommendation must not promise more than the source contract; mark inference and uncertainty.
+  An exact API reference serves lookup and need not teach the whole system. Use for README,
+  guides, API docs, specs and ADR/RFC.
   Adoption: growing-oss-adoption; structure: structuring-documents; prose: linting-prose.
 ---
 
 # Documenting software
 
-A reader should be able to make the intended decision using the document: whether the software
-fits, how to use it, what it guarantees, or why it is designed this way. Begin with that answer.
-Do not make the reader interpret your editorial process or reconstruct meaning from requirement IDs.
+Own what the reader can understand, explain and decide after reading. Bridge their starting
+knowledge to a usable model; derive its necessary questions without waiting for the user to ask.
+A reader should reason through a new case without reconstructing meaning from internal IDs.
 
 ## Three principles
 
-1. **Write for a decision, not a checklist.** Identify the reader's task and starting knowledge,
-   then give the necessary concepts, example and next step. A heading, audience label, diagram,
-   link or passing build is useful only insofar as it supports that task. Naming the reader is an
-   authoring decision; it need not become a ritual sentence at the top of every page.
+1. **Teach a model the reader can use.** Infer the task, starting knowledge and natural doubts.
+   Start with a familiar problem; work a concrete input through the mechanism to its result or
+   refusal, then change a condition to expose assumptions and limits. Adapt entry paths and depth
+   to different backgrounds. This responsibility prescribes no universal lecture, audience
+   preamble or diagram.
 2. **Separate statements by what they govern.** A guarantee, a reason for a design, a chosen
    implementation technique, a contributor rule and an audit observation have different owners
    and change for different reasons. Separate mixed claims before assigning their homes. Link
@@ -59,6 +58,10 @@ State how they connect without presenting an application's policy as a library-w
 
 ## Choose and connect the reader's path
 
+Choose each page's reader question, intended understanding/action, concepts it owns and detail it
+delegates before proposing files or directories. Broad readership needs connected paths with
+different starting knowledge, not every topic on every page.
+
 | Reader needs to | Build the path around |
 |---|---|
 | Decide whether to adopt | Audience/problem, reasons to choose or decline, dependencies/limits, evidence and a small trial; use `growing-oss-adoption` |
@@ -81,18 +84,20 @@ that changes the adoption or action decision.
 
 ## Review before rewriting
 
-Start with a concrete reader question, not a general score. Read the relevant path, including linked
-limits within the allowed scope. State what can be answered and where you must infer. Separate:
+In an explanatory or site review, include a short walkthrough of a concrete input and what follows
+when a condition changes. Show where the reader must guess how it works, why it works that way,
+or whether the changed case is supported. Derive these questions before giving a general score;
+do not stop at checking existing headings or the user's examples. Read linked definitions and
+limits within scope. Separate:
 
 - a contradiction between explicit statements;
 - a missing or hard-to-find explanation;
 - a choice the contract genuinely leaves unspecified;
 - an implementation observation not yet checked against its contract.
 
-Lead findings with the blocked decision, cited location, reader consequence and acceptance condition.
-A claim that the wording could mislead is a scoped reviewer judgment, not measured reader behavior.
-Read the linked definitions and limits before escalating a finding. Avoid demanding
-new behavior or every possible detail from a page with a narrower declared purpose.
+Lead findings with the blocked decision, cited location, consequence and acceptance condition.
+A wording risk is a scoped reviewer judgment, not observed reader behavior. Do not demand new
+behavior or every possible detail from a page with a narrower declared purpose.
 
 Keep one authoritative home for a contract while allowing derived summaries and examples where
 needed for understanding. Use meaningful link labels; internal IDs may remain in traceability fields
@@ -118,15 +123,13 @@ invent authority, rationale, measurements or requirements to fill a documentatio
 
 ## Conditional sources and owners
 
-The evidence and local derivations for this revision are recorded in `tests/20261112-revision.md`.
-The bounded derivation audit is sok_id `01a1ce2b-73bf-7019-8606-780aca6bc7b5`, a published draft
-with semantic review not performed; its ledger-based conclusions do not establish reader effects.
-The legacy XS classification is sok_id `01a1cb81-242a-711a-bbd1-bba3e95f2270`. It classifies source
-recurrence and scope, not measured documentation quality. Local responsibility and reader checks
-are operational guidance; do not attribute them to an unread standard or claim empirical benefit.
-In the conditional references, XS-S identifies a structural pattern, XS-D a doctrine, XS-P an
-inferred principle candidate and XS-C a scoped convention in that classification. These labels
-identify source judgments, not requirements automatically adopted by this skill.
+Revision evidence, corpus identifiers and their limits are in `tests/20261112-revision.md`.
+Description-only results cover the recorded tasks, not every body procedure; the shorter description
+has not revalidated the earlier mixed-claim classification behavior.
+The referenced source classification and audit do not establish reader effects or general
+documentation quality. Local reader checks are operational guidance, not empirical findings.
+In conditional references, XS-S means structural pattern, XS-D doctrine, XS-P inferred principle
+candidate and XS-C scoped convention. These source judgments are not automatically adopted rules.
 
 | Read | When |
 |---|---|

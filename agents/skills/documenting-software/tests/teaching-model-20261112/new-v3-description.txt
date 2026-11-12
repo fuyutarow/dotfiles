@@ -1,0 +1,11 @@
+Designs/reviews software docs so readers can explain behavior and decide what to do unaided.
+  In explanations and their reviews, work a concrete input through the mechanism to its result
+  or refusal, then change a condition and show what follows or remains unknown. Start from the
+  reader's familiar problem; derive unanswered why/how/what-if questions without waiting for
+  the user to name them. Assign page duties before directories.
+  Separate guarantees, design choices, coding rules and editorial records: input rejection is
+  a guarantee, converter choice is design, unsafe-cast bans are coding policy. Preserve binding
+  rules on relocation. Begin with the answer, not editorial bookkeeping. Check claimed gaps
+  against text and links. A narrow API reference serves exact lookup; it need not teach the
+  whole system. Use for README, guides, API docs, specs and ADR/RFC.
+  Adoption: growing-oss-adoption; structure: structuring-documents; prose: linting-prose.

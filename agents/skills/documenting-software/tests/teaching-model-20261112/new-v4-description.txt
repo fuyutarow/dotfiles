@@ -1,0 +1,7 @@
+Designs/reviews software docs so readers can explain the mechanism and decide for themselves.
+  Teach from a familiar problem through a worked input and result/refusal; vary the case to expose
+  assumptions. Derive reader questions, then page responsibilities, then directories. An example or
+  recommendation must not promise more than the source contract; mark inference and uncertainty.
+  An exact API reference serves lookup and need not teach the whole system. Use for README,
+  guides, API docs, specs and ADR/RFC.
+  Adoption: growing-oss-adoption; structure: structuring-documents; prose: linting-prose.

@@ -27,7 +27,7 @@ Formal Methods. `forging-skills` owns the admission test; activity counts alone 
 
 - [`linting-prose`](linting-prose/) — Catch word/sentence tics, jargon, and buried conclusions in reader-facing prose before shipping.
 - [`structuring-documents`](structuring-documents/) — Reorganize a document so every fact has one home and references point backward.
-- [`documenting-software`](documenting-software/) — Design and review docs for reader decisions; separate guarantees, design choices, coding rules and editorial records.
+- [`documenting-software`](documenting-software/) — Teach usable reader models through worked examples; design page duties and preserve exact contracts in docs and specs.
 - [`designing-presentations`](designing-presentations/) — Plan or critique talks and decks to change what the audience decides, not just inform.
 - [`issuing-technical-memoranda`](issuing-technical-memoranda/) — Issue a technical memo by fixing its wrapper — cover, authority line, addressee, release marking — while the body stays deliberately unregulated.
 - [`compiling-latex`](compiling-latex/) — Modern repo-native LaTeX/Beamer: mise, latexmk, tex-fmt, chktex for building and linting papers.

@@ -1,0 +1,145 @@
+[bun:check] $ bun scripts/bun-runtime.ts
+[lint:md] $ rumdl check
+[lint:tool-changesets] $ bun scripts/lint-tool-changesets.ts
+[bun:check] PASS  bun-runtime  /home/linuxbrew/.linuxbrew/Cellar/bun/1.4.4_1/bin/bun reports 1.4.4 (required >=1.4.3)
+[bun:check] RESULT: PASS · FAIL 0 · WARN 0 · PASS 1 · SKIP 0
+[bun:check] Finished in 79.5ms
+[lint:no-project-names] $ bun scripts/lint-no-project-names.ts
+[lint:changesets] $ bun scripts/lint-changesets.ts
+[fmt:ts:check] $ bunx --bun oxfmt --check '**/*.ts'
+[lint:sh] $ bun scripts/lint-sh.ts
+[lint:zsh] $ bun scripts/lint-zsh.ts
+[lint:bash] $ bun scripts/lint-no-new-bash.ts
+[lint:no-project-names] lint:no-project-names: unconfigured (private list absent)
+[lint:no-project-names] Finished in 102.5ms
+[lint:bun] $ bun scripts/lint-bun.ts
+[lint:changesets] OK: all tool changesets are valid
+[lint:changesets] Finished in 157.7ms
+[lint:knip] $ bun scripts/knip-gate.ts
+[lint:zsh] ✔ ✅ zsh/aliases.zsh
+[lint:zsh] ✔ ✅ zsh/mac.zsh
+[fmt:ts:check] Checking formatting...
+[fmt:ts:check] 
+[lint:md] 
+[lint:md] Success: No issues found in 142 files (304ms)
+[lint:md] Finished in 382.7ms
+[vendor:deps:check] $ bun scripts/vendor-deps.ts --check
+[lint:zsh] ✔ ✅ zsh/wsl.zsh
+[lint:zsh] ✔ ✅ zsh/zshrc
+[lint:zsh] ✔ ✅ zsh/zshenv
+[lint:zsh] ✔ ✅ zsh/zprofile.mac
+[vendor:deps:check] ✔ vendor-deps: up to date
+[lint:zsh] ✔ ✅ zsh/zprofile.wsl
+[vendor:deps:check] Finished in 296.9ms
+[lint:zsh] Finished in 599.9ms
+[lint:one-writer] $ bun scripts/one-writer-check.ts
+[lint:hook-slug] $ bun scripts/lint-hook-slug.ts
+[lint:one-writer] one writer: every checked file has exactly one
+[fmt:ts:check] All matched files use the correct format.
+[fmt:ts:check] Finished in 687ms on 903 files using 12 threads.
+[lint:one-writer] Finished in 319.5ms
+[lint:config-map] $ bun scripts/config-map.ts --check
+[fmt:ts:check] Finished in 960.1ms
+[lint:reason-network-home] $ bun scripts/lint-reason-network-home.ts
+[lint:hook-slug] OK hook-slug: all owned commands start with namespaced slugs; emitters preserve them
+[lint:hook-slug] Finished in 367.2ms
+[lint:ignore] $ bun scripts/lint-ignore.ts
+[lint:reason-network-home] reason-network home declarations: PASS
+[lint:reason-network-home] Finished in 77.9ms
+[lint:live-refs] $ bun scripts/live-refs.ts
+[lint:config-map] ✔ config-map: every config file is registered (120 surfaces)
+[lint:config-map] Finished in 388.3ms
+[typecheck] $ bun check
+[lint:live-refs] PASS live repo references resolve
+[lint:live-refs] Finished in 766.2ms
+[lint:sh] Finished in 1.88s
+[lint:skills-index] $ bun scripts/lint-skills-index.ts
+[lint:skills-tasks] $ bun scripts/lint-skills-tasks.ts
+[lint:ignore] PASS: declared ignore rules; no tracked file is ignored
+[lint:ignore] Finished in 973.4ms
+[lint:skill-script-paths] $ bun scripts/lint-skill-script-paths.ts
+[lint:skills-index] ✔ ✅ skills index complete
+[lint:skills-index] Finished in 258.1ms
+[lint:skills-wiring] $ bun scripts/skills-doctor.ts
+[lint:skill-script-paths] PASS: no skill-internal script paths in 151 checked files
+[lint:skill-script-paths] Finished in 227.7ms
+[lint:skills-floor] $ bun scripts/lint-skills-floor.ts
+[lint:skills-wiring] ✅ SKILLS-WIRING PASS: 51 in-house skill directories are valid; no plugin manifest or third-party skill is present
+[lint:skills-wiring] Finished in 305.3ms
+[lint:harness-scope] $ bun scripts/harness/scope-check.ts agents/claude && bun scripts/harness/scope-check.ts agents/codex
+[lint:skills-tasks] PASS: 61 task mentions in 220 skill documents resolve or have documented exceptions
+[lint:skills-tasks] Finished in 729.9ms
+[lint:gates] $ bun scripts/harness/gate-diagnostics-check.ts agents/claude/hooks && bun scripts/harness/gate-diagnostics-check.ts agents/hooks
+[lint:harness-scope] P3 PASS: 31 user-scope file(s), no out-of-scope absolute path
+[lint:gates] GATE-DIAGNOSTICS PASS: 6 gate(s), every deny site declared
+[lint:harness-scope] P3 PASS: 14 user-scope file(s), no out-of-scope absolute path
+[lint:gates] GATE-DIAGNOSTICS PASS: 6 gate(s), every deny site declared
+[lint:harness-scope] Finished in 479.8ms
+[lint:gates] Finished in 323.3ms
+[lint:ts-no-disable] $ bun scripts/lint-ts-no-disable.ts
+[lint:no-sync] $ bun scripts/lint-no-sync.ts
+[typecheck] ✓ No type errors in 895 files [2.08s]
+[lint:ts-no-disable] Finished in 495.0ms
+[typecheck] Finished in 2.15s
+[fmt:sh:check] $ bun scripts/fmt-sh-check.ts
+[fmt:sh:check] Finished in 151.1ms
+[lint:skills-floor] LISTING 51 skills, 45178 name+description chars (static proxy)
+[lint:skills-floor] WARN 76 prose-debt warning(s) across 41 skill(s), not listed (--quiet); run skill-check.ts on one skill to see its list
+[lint:tool-changesets] tool changesets: PASS
+[lint:tool-changesets] Finished in 3.99s
+[lint:skills-floor] Finished in 1.65s
+[lint:no-sync] lint:no-sync: 199 site(s), baseline 825, 11 exempt — ok
+[lint:no-sync] Finished in 939.0ms
+[lint:ts] $ bun scripts/lint-oxlint.ts --type-aware
+[lint:bun] WARN agents/claude/hooks/assign-lib.ts: dynamic import with a computed specifier — floor cannot classify it; BG3 by hand
+[lint:bun] WARN agents/claude/hooks/quote-command.ts: 1 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN agents/claude/hooks/quote-command.ts: hand-rolled setTimeout+kill — native Bun.spawn timeout:/killSignal: exists (facts §3, REFACTOR)
+[lint:bun] WARN agents/claude/hooks/resolve-agent-name.ts: 1 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN agents/claude/hooks/resolve-agent-name.ts: hand-rolled setTimeout+kill — native Bun.spawn timeout:/killSignal: exists (facts §3, REFACTOR)
+[lint:bun] WARN agents/skills/compiling-latex/scripts/tex-oracle.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/continuing-long-running-tasks/scripts/continuation-check.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/continuing-long-running-tasks/scripts/continuation-checkpoint.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/designing-cli-contracts/scripts/diagnostic-card-check.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/forging-skills/scripts/skill-check.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/governing-research-documentation/scripts/research-docs-check.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/wiring-mise-tasks/scripts/jj-commit.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/wiring-mise-tasks/scripts/jj-commit.ts: 1 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/wiring-mise-tasks/scripts/jj-push.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/wiring-mise-tasks/scripts/lint-ts-candidate.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/wiring-mise-tasks/scripts/mise-contract.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/wiring-repositories/scripts/wiring-check.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN agents/skills/writing-bun-scripts/scripts/script-check.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN scripts/agx-host.ts: 1 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN scripts/install-mcp.ts: 3 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN scripts/install-mcp.ts: bunx call with no visible @x.y.z pin — bunx staleness is real (facts §5)
+[lint:bun] WARN scripts/knip-gate.ts: 1 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN scripts/land.ts: dynamic import with a computed specifier — floor cannot classify it; BG3 by hand
+[lint:bun] WARN scripts/lint-ignore.ts: 1 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN scripts/lint-tmp-leaks.ts: 1 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN scripts/test-vs-alpha.ts: 1 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN tools/agent-resource-run/src/agent-resource-run.ts: 1 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN tools/disk-reclaim/src/disk-clean.ts: 1 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN tools/disk-reclaim/src/disk-clean.ts: hand-rolled setTimeout+kill — native Bun.spawn timeout:/killSignal: exists (facts §3, REFACTOR)
+[lint:bun] WARN tools/disk-reclaim/src/disk-workspaces.ts: 1 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN tools/disk-reclaim/src/disk-workspaces.ts: hand-rolled setTimeout+kill — native Bun.spawn timeout:/killSignal: exists (facts §3, REFACTOR)
+[lint:bun] WARN tools/disk-reclaim/src/disk.ts: shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)
+[lint:bun] WARN tools/repo-retrieve/src/child.ts: 3 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] WARN tools/repo-retrieve/src/child.ts: hand-rolled setTimeout+kill — native Bun.spawn timeout:/killSignal: exists (facts §3, REFACTOR)
+[lint:bun] WARN tools/repo-retrieve/src/index-plan.ts: 2 spawn call(s) without timeout:/signal: or a `// bounded: <reason>` beside the call — hangable? (BG2)
+[lint:bun] floor: FAIL=0 WARN=37 (files=349) — structure only; BG1-BG4 judgment is not covered
+[lint:bun] Finished in 6.13s
+[lint:knip] PASS knip gate: 0 findings match exceptions; 198 declared roots
+[lint:knip] Finished in 6.96s
+[lint:ts] { "diagnostics": [],
+[lint:ts]               "number_of_files": 902,
+[lint:ts]               "number_of_rules": null,
+[lint:ts]               "threads_count": 12,
+[lint:ts]               "start_time": 15.743800899
+[lint:ts]             }
+[lint:ts] lint-oxlint: checked 902 file(s)
+[lint:ts] Finished in 16.25s
+[lint:bash] lint:no-new-bash: 0 finding(s)
+[lint:bash] Finished in 23.86s
+Finished in 23.98s

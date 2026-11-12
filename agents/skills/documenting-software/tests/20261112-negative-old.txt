@@ -1,0 +1,31 @@
+# 文書レビュー: LedgerLeaf 三ページ
+
+## 検査範囲
+- 対象は `negative-input/` の overview.md、operations.md、verification.md の三ページのみ。
+- 読者は、導入可否を判断し、save と verification をどう扱うかを決める外部の開発者。
+- コード、テスト、ネットワーク、評価基準、他ページは参照していない。以下は文書の記述についての観察であり、実装の挙動は判断していない。
+
+## 支持できる点
+- overview.md は目的（添付ファイルと記録を一緒に動かす）と save の例を短く示し、導入判断の入口として読みやすい。
+- operations.md の `saveAttachment` 節は「二つのサービスは transaction を共有しない」「commit 失敗で blob が残りうる」と部分失敗を明記している。
+- operations.md の `commitRecord` 節は結果が `unknown` になりうること、タイムアウトを失敗と断定しないことを述べている。
+- verification.md は `invalid` と `unavailable` を区別し、「現実世界の所有は証明しない」と限界を書いている。
+
+## 指摘（観察）
+1. **保証範囲の矛盾**: overview.md の「atomic attachment-and-record saves」と、operations.md の「transaction を共有しない」が両立しない。atomic が何の範囲で成り立つのか読者には分からない。
+2. **例の不備**: overview.md の例は `saveAttachment` の直後に `showSuccess(saved.url)` を呼び、`commitRecord` を呼ばない。operations.md では成功は「bytes が利用可能」を意味するので、例をそのまま写した読者は未記録の blob を成功として表示する。
+3. **回復手順の矛盾**: operations.md の `commitRecord` 節は、unknown の後は digest を保持し、新しい transaction の前に reconcile せよと書く。一方「UI recovery」節の Retry は「fresh transaction で `commitRecord` を呼ぶ」とし、reconcile を経由しない。文書どおりに従うと二重記録の危険がある。
+4. **未規定の契約**: reconcile の手順、digest の照合方法、失敗で残った blob の後始末が書かれていない。説明不足なのか契約が未規定なのかは、三ページからは判別できない。
+5. **未検証の開示**: UI recovery 節は end-to-end の回復テスト結果が無いと明記している。これは正直な開示で、読者は回復経路が未検証だと分かる。
+6. **verification の説明不足**: 冒頭は「complete explanation below」と案内するが、説明節は三文で、署名手順も `payload` の形式も示さない。また有効期限の長さと「network」の意味が未規定。署名側を実装する読者は、このページだけでは組めない。
+7. **所属の不明**: verification.md は LedgerLeaf や `saveAttachment` に触れない。同じライブラリの一部か判断できず、読者はページの位置づけを推測するしかない（不確実）。
+8. **導入判断の材料不足**: 対象外の用途、代替手段、制限、導入手順が無い。導入可否の判断に必要な情報は overview.md の一段落だけである。
+
+## 読者への影響
+- 例をそのまま使うと、記録されない blob が成功扱いになる（指摘 2）。
+- Retry の記述に従うと、unknown の結果に対して二重 commit が起こりうる（指摘 3）。
+- verification を導入する開発者は、署名側の実装もペイロードの仕様も得られない（指摘 6）。
+
+## 不確実な点
+- atomic の意味は三ページの外で補われている可能性がある（指摘 1）。
+- verification.md が同一ライブラリの一部かどうかは、三ページからは確定できない（指摘 7）。

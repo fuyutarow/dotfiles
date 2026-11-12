@@ -1,0 +1,28 @@
+# doc-responsibility-new: 責務分界と読み手適合の検討
+
+## 検討範囲
+
+`responsibility-input/` の3文書のみ: `schema.md`（データスキーマ）、`architecture.md`（ストレージ構成）、`api.md`（`getRecord`）。skill本文・他のvariant・リポジトリ・ネットワークは参照していない。
+
+## 支持される強み
+
+- **api.md の結果経路が読み手の行動を決める。** 「network failure returns Unavailable; a denied body returns AccessDenied. Neither is an empty successful result.」により、SDK利用者は失敗種別ごとに分岐でき、空の成功と誤認しない。コード例（`if (result.ok) ... else showReadError(result.error)`）もこの分岐に対応する。
+- **api.md は範囲を限定している。** 「does not promise a complete application tutorial」「No particular internal library is required」と書くため、読み手は単一APIの参照として使える。
+- **schema.md は三つの責務を明示的に分ける。** 「The adapter checks value structure. The domain separately checks authorization. The service does not parse the schema.」の直後に「must not be conflated」とあり、どの層が何を検査するかが一文で分かる。
+- **architecture.md は二重送信を防ぐ手順を示す。** 「A confirmed blob is not a confirmed record; a lost transaction response is unknown. Retain the operation digest and reconcile it before any new submission.」は、応答が失われた場合の読み手の次の行動を具体的に指定している。
+
+## 指摘
+
+1. **schema.md の冒頭が読み手の最初の行動を遅らせる。** 1–5行目は「Reader」「Document kind」「Baseline: 2026-11-12, before-reorganization commit 04f88fce」という文書管理情報で始まる。SDK開発者が最初に知りたい検証の要点は7行目以降にある。
+2. **schema.md の規範と編集上の理由が一段落に混在する。** 9–10行目の「`as` を使わない」規則に「This matches our linter's restricted syntax rule.」が続く。外部契約なのか、貢献者向けlint規則なのかを読み手は区別できない。
+3. **schema.md の `SchemaMismatch` の担当が未定。** 「return SchemaMismatch and perform no writes」は、adapter・domain・serviceのどれが返すのかを示さない。上の責務分界の文と並べると、読み手は担当層を推測することになる。
+4. **architecture.md の L-ラベルが本文で定義されていない。** 3行目の「L-STORE, L-QUERY, L-SCOPE, L-ATTEST, L-IMAGE」は、この抜粋だけでは何を指すか分からない。読み手は各ラベルと後続の文章の対応を組み立てられない。
+5. **architecture.md が参照する表が抜粋に含まれていない。** 8行目は「The table in this supplied extract」と述べるが、ファイルに表の行はない。どの操作が存在するかを読み手は確認できない。不明な点: 抜粋の欠落か、表が別文書にあるのか。
+6. **api.md は読み取りセッションの渡し方を示さない。** 「A protected body requires a read session supplied separately」とあるが、例は `client.getRecord({ id })` のみで、セッションの型・渡し口・失敗時の扱いがない。保護された本文を読みたいSDK利用者は、この文書だけでは実装できない。
+7. **api.md の `result.error` の型が示されない。** `showReadError(result.error)` は全エラー型の列挙を前提とするが、列挙は本文にない。`Unavailable` と `AccessDenied` が全てなのかは不明。
+8. **architecture.md のinline/blobの選択基準が書かれていない。** 15–18行目は「A payload may also be inline in a record」と述べるが、どの大きさ・条件で使い分けるかは書かれていない。
+
+## 不確実性
+
+- `LibraryZ.convertSchema` と `TypesFromSchema` が公開SDKのAPIか、内部実装名かは抜粋から判断できない。
+- 指摘6・7は、抜粋の外に別の参照文書がある場合に解消されうる。この検討は抜粋だけを対象としたため、その可能性は未確認である。

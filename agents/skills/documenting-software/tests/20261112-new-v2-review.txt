@@ -1,0 +1,38 @@
+# 文書構造レビュー（new-v2）
+
+## 根拠の範囲
+- 説明文のみ: `new-v2-description.txt`（skill 本体・他の variant・評価基準は読んでいない）
+- 対象: `spec/architecture.md`、`spec/product.toml`（全 1213 行）、`spec/db.md`、`spec/acceptance.md`
+- リンク先、テスト、コード、ネットワーク情報は見ていない。
+
+## 代表操作の追跡: UC2「一つの資料を読む」
+1. 入力は資料 ID と本人の証・資料別許可（product.toml L597）。
+2. 読取は Query（db.md L83–84, Q4/Q5）。封印本文は呼出し側の SealSession で復号し、その session は S9 の個人署名で作る（db.md L125）。
+3. 読める範囲は access の A01–A24 と A-COLLAB 行から組み立てる（L599）。行列の形はない。
+4. 完了は T1・T3（L5, L20）。失敗は鍵印と理由の表示（L598）。
+
+推測が必要な点:
+- actor_roles の 14 表記（L595）と [[roles]] ROLE-01〜07（L81–107）の対応。
+- Query は署名しないと書かれる一方（db.md L17）、読取 session は署名で作られる。署名を誰が要求するかは文書の組合せから推測するしかない。
+- 鍵付き読取の失敗が「鍵印」なのか「エラー」なのか（L598 と db.md L125 の「署名の失敗」が対応しない）。
+- 閲覧記録（UC11）は UC2 の結果に現れない（L598）。関係は I-VIEWLOG（L1112）と UC11（L792）にしかない。
+
+## 主要な発見（重要度順）
+1. **完了条件が一致しない。** I-ACCEPTANCE（product.toml L1172）は T1–T4 を完了とし、T の usecase_ids（L5, L13, L20, L28）に UC11・UC12–UC19 は入らない。一方 acceptance.md L47・L68 は UC1–UC11 と §4 の UC12–UC18 を必須とする。さらに T1–T10 の tests はすべて空（L6–L76）。読者は完了を判定できない。
+2. **11/09 追加操作が story につながらない。** UC11–UC19 の stories_covered はすべて空（L790, L818, L839, L860, L881, L902, L923, L944, L989）。acceptance.md L49–56 の C1/C2/C3/C6 は product.toml に現れず、L47 の説明だけでは対応を検証できない。
+3. **送信失敗の意味が未定義。** S5 は「確定しない（PortFailure）」とだけ書き（db.md L121）、不成立か結果不明かを分けない。S4 の出力は Effects のみ（L120）。I-IMPORT-FINALITY（product.toml L967）は送信前に最終 bytes の digest を checkpoint せよと求めるが、db.md の S2（L109）は bytes しか返さない。再送の安全性は db.md だけでは判断できない（N-IMPORT-UNKNOWN-RESUBMIT, L960）。digest の取得が db 外にある可能性は推論。
+4. **同一文字列の反復。** `write_issue_derivation` が 24 件同文で並ぶ（product.toml L117–L370）。A-COLLAB 4 行の text も同文（L375, L388, L401, L414）。修正時の食い違いを生み、セル間の差が見えない。
+5. **件数の不一致。** I-FOUR は 16+35+2+7 = 60 項目（L1025）、I-TRIPLE のテスト名は「all 64 manual field values」（L1079）。どちらが現行か文書からは決まらない。
+6. **ID の接頭辞が意味を持たない。** db.md L76 は S11 を Query 節（L93）で使い、§7（L118）の保存・署名・送信の S 系と並ぶ。
+7. **参照先の所在が示されない。** 受入れ台帳（acceptance.md L13, L73）、対象資料一覧（L9）、layers.toml（architecture.md L13）、core.toml（db.md L7）は、この文書群では所在も内容も検証できない。
+
+## 強み
+- architecture.md L31–39: 段階ごとに「まだ成立していないこと」を書く。チェーン確定と Walrus・R2 の確定を別境界とする（L41）。
+- architecture.md L23・L25・L47、db.md §1（L3）と §10（L173–180）: 層名、UC 数、ハッシュ一致が証明しないことを明記し、未確認を分けている。
+- product.toml: stories → usecase → invariant → tests が機械的に辿れる（例: S-DONEE L459 → UC2 L596 → I-CRED L1038–1039）。
+- acceptance.md L43・L68: Query と Mutation の効果を分け、モックや localnet の成功を testnet の成功と読まないと明記している。
+
+## 限界
+- 検査は 4 文書の通読と表記の照合に限られる。文書間の参照先やテストが実在するかは未確認なので、そう主張しない。
+- 「署名の扱い」「digest の取得可否」は文書の組合せからの推論であり、実装では確かめていない。
+- 本レビューは文書を変更せず、文書の完成度も評価しない。

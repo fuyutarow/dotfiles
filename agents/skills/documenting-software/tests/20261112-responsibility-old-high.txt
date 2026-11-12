@@ -1,0 +1,37 @@
+# 責務分界と読み手適合性のレビュー
+
+**範囲**: `responsibility-input/` の schema.md (15行)、architecture.md (18行)、api.md (14行)。基準は skill description のみ。skill 本体、他の variant や結果、リポジトリのコード、テスト、ネットワークは参照していない。入力は編集していない。
+
+## 1. 代表操作の再構成 (getRecord 読取)
+
+- 行為者: 呼出し側。`client` の生成は未記載 (api.md:8)。
+- 入力: `id`。形式は未記載 (api.md:3)。
+- 依存: record chain が protected read を認可し、暗号サービスが鍵を解放する (architecture.md:15-16)。本文は「別に供給される read session」を要求する (api.md:4)。
+- 読み/書き/署名: 読みのみ、書込みなし、署名なし (api.md:3)。
+- 完了/失敗: `ok` なら `value`。失敗は `Unavailable` と `AccessDenied` の例示のみ (api.md:3-5, 9-10)。
+- 推測が必要な点: read session の出所、"verified" 失敗時の扱い、`Unavailable` の再試行可否、`AccessDenied` を返す層。
+
+書込み (import) では blob 準備から record 送信への順序が書かれている (architecture.md:9-11) が、schema 検証 (schema.md:7, 12) との順序は書かれていない。
+
+## 2. 強み
+
+- **S1 役割の分担が明示**: schema.md:14-15 は adapter=構造検証、domain=認可、service=schema 非解析と分け、混同を禁じる。architecture.md:17-18 は SDK=要求の組立と検証、host=endpoint と署名能力、application=内容と access policy。SDK 実装者は自分の作る部分と host に頼る部分を切り分けられる。
+- **S2 失敗の意味**: api.md:5 "Neither is an empty successful result" により、拒否や接続失敗を空の成功と読み違えない。
+- **S3 非原子性と再送条件**: architecture.md:10-11 は blob 成功が record 成功ではないこと、応答喪失は unknown であることを示し、digest で照合してから再送するよう指示する。重複投入を避ける判断材料になる。
+- **S4 範囲の宣言**: schema.md:3-5 (normative、新規要件なし)、architecture.md:8, 11 (抽出であり SDK API を列挙しない)、api.md:13-14 (tutorial ではない)。
+
+## 3. 指摘 (重大度順)
+
+- **F1 高 / 説明の欠落**: architecture.md:3 の L-STORE, L-QUERY, L-SCOPE, L-ATTEST, L-IMAGE と "host adapter portion" は定義がなく、schema.md:14 の adapter / domain / service とも対応づけられていない。読み手は責務を担う構成要素を特定できない。
+- **F2 高 / 契約の未規定**: 読取の認可は architecture.md:15 (record chain)、architecture.md:16 (暗号サービス)、architecture.md:17-18 (application の access policy) に分かれる。api.md:5 の `AccessDenied` を返す層は未記載。schema.md:14 の domain 認可が読取にも及ぶかは書かれていない。読み手は、どの層に認可を求め、どの層の拒否を扱うか判断できない。
+- **F3 中 / 未規定の契約要素**: "read session" (api.md:4) の型と出所。"schema identity" (schema.md:8) と "schema hash" (schema.md:12) が同じものか。`SchemaMismatch` の戻り形式 (schema.md:12)。"typed read failure" の全種類 (api.md:3)。
+- **F4 中 / 順序が不明**: schema.md:7, 12 の "before writing" と "perform no writes" の範囲に blob 準備が含まれるか不明。検証前に blob を作る実装なら孤立 blob が生じうるが、読み手はこれを推測するしかない。
+- **F5 中 / 適用範囲が曖昧**: schema.md:8-9 は `LibraryZ.convertSchema` と `TypesFromSchema` を指示し、api.md:14 は "No particular internal library is required" と述べる。対象が schema 解析と getRecord で異なると読めるが、明記はない。schema.md:10 の根拠 "our linter's restricted syntax rule" は外部読者が検証できない。
+- **F6 中 / 参照切れ**: architecture.md:6-8 は "the table in this supplied extract" を参照するが、入力ファイルに表はない。import と material-view の一覧を読み手は得られない。抽出時の欠落の可能性がある。
+- **F7 低 / 例の不完全性**: api.md:7-11 は client の生成、import、型を欠く。`Unavailable` と `AccessDenied` の分岐を示さず、再試行判断は読み手の推測になる。
+- **F8 低 / 読み手の前提**: api.md:13 は "already familiar with a record" を前提とするが、3文書とも record を定義しない。独立 SDK 開発者の入口がない。読み手と文書種別の宣言は schema.md:3 のみにある。
+
+## 4. 不確実性
+
+- 指摘は入力文書の文言だけに基づく。認可の実際の順序、blob 先行の有無、エラー型は確認していない。「推測」は読み手側の推測を指す。
+- F6 は抽出の都合かもしれない。F5 は両立する解釈があり、矛盾とは断定しない。

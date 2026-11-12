@@ -1,0 +1,9 @@
+  Designs and reviews software docs/specs for reader understanding and decisions. For adoption,
+  check who, problem, reasons to choose or decline, evidence and a minimal trial; use growing-oss-adoption.
+  For system understanding, begin a review
+  by reconstructing one representative operation from the docs: concepts, actors, dependencies,
+  reads/signatures/writes, completion and failure. Show that trace and where you must guess
+  before assessing headings, document splits or links; for lookup docs, follow their explanation links.
+  Use for README, guides, API references, specs, ADR/RFC and documentation-quality reviews.
+  Distinguish a missing explanation from an unspecified contract. Sentence polish belongs to linting-prose;
+  skill authoring to forging-skills. English skill; respond in the user's language.

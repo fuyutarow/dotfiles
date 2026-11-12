@@ -11,8 +11,7 @@ it; none is a universal rule.
 - Category headings: Added, Changed, Deprecated, Removed, Fixed, Security. [XS-C11]
 - An Unreleased section comes first; versions run newest first. [XS-C11]
 - Deprecated and Removed are separate categories, so a notice of a coming removal is recorded apart
-  from the removal itself (principle 8 of SKILL.md; the timing advice is SemVer's, and it is advice,
-  not MUST). [XS-P08, XS-C11]
+  from the removal itself. The timing advice is SemVer's advice, not MUST. [XS-P08, XS-C11]
 - The source does not state the heading format beyond these names; do not invent one.
 
 ## Commit subjects (Conventional Commits 1.0.0)

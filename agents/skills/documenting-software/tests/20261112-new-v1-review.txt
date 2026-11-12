@@ -1,0 +1,30 @@
+# 文書構造レビュー（doc-model-new）
+
+## 許可された入力と方法
+
+- 許可された原資料4点のみ: `spec/architecture.md`、`spec/product.toml`（1213行、2回に分けて全文）、`spec/db.md`、`spec/acceptance.md`。
+- 指針は `new-description.txt` の記述だけに従った。読者（外部の開発者・PO）が全体を説明でき、代表的な操作を追跡でき、正確な契約を見つけられるかを基準にした。
+- 所見の「読者への影響」は文書の表記から推論したもので、実装やコードとの一致は確認していない。
+
+## 主な所見（重要度順）
+
+1. **ID の名前空間が衝突する**（architecture.md:9, 41, 49, 55 / db.md:84 ほか）。architecture は設計上の問いを `Q01`〜`Q09` と呼ぶ。db.md では `Q1`〜`Q14` が Query の ID で、`Q5` は `readRecordContentQuery`。外部の読者は「Q5」を取り違える。区別には design-questions.md が必要だが、それは入力に無い。
+2. **検収結果の記録先と検収対象の版の値が書かれていない**（acceptance.md:9, 13, 68, 73）。「固定する」「受入れ台帳へ記録する」と述べるが、台帳の所在、版識別子の値の書式、記録の単位が本書群のどこにも無い。検収者はどこに何を書けばよいか決められない。
+3. **要求から試験への追跡が途切れる**（product.toml:6, 815, 966）。T1、UC12、I-IMPORT-FINALITY などで `tests = []`。UC11 は `stories_covered = []`（product.toml:790）だが、acceptance.md:28 は S-VIEWLOG を「UC11で記録、UC5で照会」と対応づける。story と UC の対応の正本が product.toml と acceptance.md のどちらか、読者には判断できない。
+4. **同じ決定文が反復する**（product.toml:15, 30, 383, 535, 544, 602, 687, 709, 780, 1167, 1177）。"owner direction 2026-10-23: collaborator reads and writes…" が十数箇所に複写されている。決定を変更すると一部だけ残るおそれがある。決定の所在は decisions.md にあるとされるが（acceptance.md:5）、そこへの参照は無い。
+5. **長い不変条件を条項単位で取り出せない**（product.toml:973 I-IMPORT-RECONCILIATION、:1132 I-IMAGE-RECOVERY）。一つの `text` に条件が十個前後連なり、番号が無い。試験や検収行と一対一に対応させにくい。
+6. **数字の定義が閉じていない**（product.toml:1025 と :1079）。I-FOUR は基本情報16、資料の記録35、寄付の記録2、秘匿7 で合計60。一方 I-TRIPLE の試験名は "all 64 manual field values"。「手入力」の範囲が本文に無いため、この二つが矛盾するのか別の数なのかは未確認。読者は照合できない。
+
+## 強み（入力で確認できたもの）
+
+- architecture.md:3 は、読者（PO・事業担当・開発者）、文書種別（解説）、確認基準日、基準版を冒頭で宣言している。読者は文書の位置づけを最初に判断できる。
+- architecture.md:31–39 の段階表は、各段階で「得られるもの」と「まだ成立していないこと」を対で示す。architecture.md:41 は Sui 取引と Walrus・R2・ファイルの確定境界が別であることを明記している。外部の読者が「保存成功」の意味を誤らないための記述として有効。
+- architecture.md:59–65 は「確認したいこと」から確認段階と参照先への対応表で、経路案内として機能している。
+- db.md:5、:112、:156、:173–180 は、契約として固定していない点を「未読」「未確認」と分けて書いている。説明不足と未規定の区別を、読者が文書内で確認できる。
+- product.toml の I-* 識別子は acceptance.md から参照され、抽出した範囲（例: I-IMPORT-FINALITY、I-VIEWLOG、I-MULTI-GRANT）では解決できた。
+
+## 限界
+
+- 本文中で参照される layers.toml、core.toml、usecase-naming.md、data-schema.md、query-design.md、design-questions.md、decisions.md、overview.md、web-routes.toml、受入れ台帳、README は許可された入力に無い。リンク先の存否と内容は確認していない。Q 番号や `tests` の空欄が、それらで埋まる可能性は残る。
+- 試験コードやテスト名の実在、`mise run spec:check` の結果は確認していない（指示により実行しない）。
+- 所見 1〜6 はいずれも文書の表記に基づく。「実装が誤っている」という判断はしていない。

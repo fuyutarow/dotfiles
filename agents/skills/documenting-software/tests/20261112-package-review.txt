@@ -1,0 +1,50 @@
+# documenting-software 改訂レビュー（2026-11-12）
+
+結論: **blocker あり（2 件）。** どちらも文書・参照の整合の修正で解消でき、設計の作り直しは要らない。実質的な改訂の方向（責務分離、消費者保証の維持、参照文書の正当な範囲）は妥当。
+
+## 検査範囲
+
+- `agents/skills/documenting-software/SKILL.md` の作業コピー全文、`agents/skills/README.md` の該当行、`references/*.md`、`tests/` の全記録、`tests/responsibility-input/`。
+- `jj diff` は sandbox の lock で失敗した。`jj --ignore-working-copy diff` は直前 snapshot のものであり、現行 SKILL.md と description が異なる。本文は作業コピーを直接読んだ。
+- `.agents/doc-model-eval/` の評価入力、description 版、`inputs.sha256`（7 件すべて OK）を照合した。
+- source-owner メモ（`derivations.md`、`inventory.md`）は別リポジトリにあり、読めない。ハッシュも検証していない。作業メモ強度の主張として扱った。
+- lint 類（skill-check、gate:land）は再実行していない。
+
+## Blockers
+
+**B1. パッケージ内の壊れた参照。** 本文の「宣言された選択」の表と十原則が消えたのに、参照側が残っている。
+- `references/changelog-and-commit-grammars.md:14`「principle 8 of SKILL.md」。現在の原則は 3 つで、8 番はない。
+- `references/api-doc-comments.md:28` と `references/house-style-guides.md:42`「declared choice(s) in SKILL.md」。該当表は削除済み。
+- `references/decision-record-layouts.md:4`「decision-record row」。現在は「Understand a decision」行（SKILL.md:69）で、名前が変わった。`../issuing-technical-memoranda/SKILL.md:193` も同じ旧称を引く。
+- 参照文書は `XS-S06`、`XS-P09` などの行 ID を多用する。SKILL.md は接頭辞の定義を失い、sok_id しか残していない。
+- 対応: 参照を現行構造に合わせるか、記録の限定的な定義を戻す。
+
+**B2. 記録・索引と導入済みテキストの不一致。** 記録の誠実さに関わる。
+1. `README.md:30` は「trace concepts, boundaries, operation effects and failures」と書く。これは v2 description の文言である。導入済み description は責務分類と「技術的答えを先頭に」が主題で、操作トレースは description にない。
+2. `20261112-revision.md` は v2 の「先に代表操作を再構成して示す」変更を観測済みとして記す。後段で description を差し替えた際、この要求が description から消えたことは書かれていない。導入済み description を元の失敗入力（`spec/*`）で走らせた記録もない。
+3. 記録は「negative-space 案は差なしで撤回」と書く。一方、SKILL.md の原則 3 とレビュー節（33–37、94）に近い内容が戻っている。「支持された欠陥の文言を特定」「境界が既に防ぐ点を評価」「反例が文面で排除されていないか確認」である。再導入の根拠は new3 の 1 回だけで、記録はそれに触れていない。
+- 対応: 事実どおりに記録するか、文言を削る。
+
+## 証拠主張と保持結果の対応
+
+- 記録の限定（1 つの合成事例、既知事例への調整、人の学習や採用の証拠なし、description のみの試験）は誠実で、一般的有効性の主張はない。
+- **new3 の「受理」は強めの言い方。**
+  - 同じ入力に対し description は 3 回調整された。各条件は haiku で 1 回だけの試行である。
+  - 凍結基準の一つ「supporting services の説明を評価する」を new3 は満たしていない。`architecture.md:15–18` への評価がない。記録の列挙にもない。
+  - new3 指摘 3「SchemaMismatch はどこにも定義がない」は過大である。`schema.md:12` が返す条件と「書き込みなし」を述べている。型の欠落とは区別すべき。記録は他の 2 指摘は限定したが、この点は触れていない。
+- `responsibility-input/old-description.txt` は親版の公開 description ではなく、中間候補（v2＋adoption）である。この比較は候補どうしで、親版との比較ではない。記録に明記がない。
+- `responsibility-input/new-description.txt` は new3 と同一（sha256 一致）で、導入済み description とも一致する。ただし名前が低 effort の「new」実行 dc43b86e の版と紛らわしい。
+- 凍結の時点は証明できない。`responsibility-input/` の mtime はコピー時点（14:15）で、new3 結果（14:14）より後である。
+- `.agents/` 側の入力（consumer repo の spec、旧 description）は追跡されない。パッケージ単体では v1/v2 の比較を再現できない。
+
+## 要点の評価
+
+- **消費者保証の拘束力:** 維持される。SKILL.md:31–32、53–54 と description の「Preserve binding rules when relocating」が明示する。実装規則の移設が契約の不変条件を弱めない書き方である。
+- **不要な雛形・参照の分割:** 強制しない。表は「ディレクトリ木や 1 行 1 ファイルを規定しない」とあり、狭い参照が例を持って外部へリンクすることも正当と明記する。原則 2 の「mixed claims を分離」は、ファイル分割の指示と誤読されうる程度の弱い懸念にとどまる。
+- **出典の帰属:** XS は再出現の分類にすぎず、測定効果を主張しないと本文が明記する。局所導出を未読の標準に帰さない。適切。
+- **未解消の出典問題:** source-audit が根拠不十分とした `XS-P03`（`house-style-guides.md:17`）と `XS-C33`（`decision-record-layouts.md:46`）は参照文書にそのまま残る。「根拠として使わない」とする記録と矛盾する。注記するか削除すること。
+- **commit 時の注意:** 未追跡の `20261112-responsibility-{new,old}-high.txt`、`-new3.txt`、`source-audit.md`、`responsibility-input/` は、`20261112-revision.md` と SKILL.md:121 が参照する。commit 対象に含めること。
+
+## 限界
+
+人間の読み手、他の事例、導入済み skill の実行、source-owner の最終統合結果は検査していない。この評価は材料の整合を判定したにすぎず、skill の有効性や読み手の理解の改善は何も推定していない。

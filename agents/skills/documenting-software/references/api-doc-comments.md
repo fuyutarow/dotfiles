@@ -25,7 +25,7 @@ format to another, and do not treat these as the house's rules outside those lan
 - A function docstring describes arguments, return value, side effects and exceptions. These are
   should-level items in PEP 257. [XS-C15]
 - PEP 257 prohibits repeating the signature in a docstring; the summary-line forms differ across
-  sources (see the declared choices in SKILL.md). [XS-S06]
+  sources; use the convention for the language being documented. [XS-S06]
 - The captured text does not cover private-object handling or extraction tooling. [XS-C17 limit]
 
 ## Go (Go Doc Comments)

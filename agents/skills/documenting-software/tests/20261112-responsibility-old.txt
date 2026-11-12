@@ -1,0 +1,29 @@
+# 責務分離と読み手適合性のレビュー（responsibility-old）
+
+## 対象範囲
+- `responsibility-input/` の `schema.md`、`architecture.md`、`api.md` の3文書のみ。コード、テスト、他資料、ネットワークは参照していない。
+
+## 代表操作の追跡
+`api.md` の `getRecord` を追った。文書から分かること: ID を渡す（L3）、書込みも署名も不要（L3–4）、`ok`/`error` の結果型（L8–10）、ネットワーク失敗は `Unavailable`、拒否は `AccessDenied`（L4–5）。
+
+推測が必要な点: `client` の生成方法、「別に供給される」read session の形式（L4）、「verified」の検証主体（L3）、`result.error` の全バリアント。`architecture.md` は record chain が protected read を認可すると書く（L15）が、`api.md` とどう接続するかは示されない。
+
+## 強み
+- `api.md` L3–5 は失敗を型で区別し、「空の成功結果ではない」と明記する。SDK 利用者が誤りやすい点を先に示しており、効果が大きい。
+- `api.md` L13–14 は「完全なチュートリアルではない」と文書の種類を宣言し、読み手の期待を正している。
+- `schema.md` L14–15 は adapter（構造）、domain（認可）、service（schema 非解析）の責務を分けて明示している。
+
+## 指摘
+1. **責務名が未定義**（`architecture.md` L3）: L-STORE、L-QUERY、L-SCOPE、L-ATTEST、L-IMAGE は本文で定義されず、API との対応もない。読み手は担当を推測するしかない。
+2. **adapter の所在が曖昧**: `schema.md` L14 は adapter が構造検査を担うとする。一方 `architecture.md` L3 は「host adapter portion」を core 責務に含め、L17 は host が endpoint と署名能力を供給するとする。SDK 開発者は adapter を自作するのか、ホストから受け取るのかを判断できない。
+3. **契約が未規定**: `schema.md` L7–8 の「current approved schema」「schema identity」について、承認者、identity の形式、取得方法が書かれていない。L12 の `SchemaMismatch` は返却型も名前空間も示されず、「書込みを行わない」（L12）だけが確定できる。説明の欠落なのか未規定なのか、文書内では区別できない。
+4. **規範文書に開発規約が混入**: `schema.md` L8–10 の LibraryZ、TypesFromSchema、`as` 禁止の lint 規則は、利用者の契約ではなく社内の実装規約である。「normative reference」の読み手（SDK 利用者）には関係の薄い情報が、契約と同じ重みで並ぶ。
+5. **操作の入口が不足**: `architecture.md` L9–11 の「blob 確定は record 確定ではない」「応答喪失は unknown」「digest を保持して reconcile する」は重要な不確かさの明示として優れる。しかし digest の計算方法と reconcile の API がなく、L11 も core SDK API を列挙しないと述べるため、SDK 開発者は入口を見つけられない。
+6. **inline と blob の境界が未定義**（`architecture.md` L16–18）: 「large payloads」の基準がなく、どちらを使うかを読み手が決められない。
+
+## 不確かさ
+- 3文書は抜粋であり、目次や explanation link の有無は確認できない。指摘 1–2 は他文書で解消される可能性がある。
+- LibraryZ や lint 規則の実際の挙動は検証していない。
+
+## 読み手への結果
+SDK 開発者は `getRecord` の呼出しと失敗の扱いを文書から組み立てられる。一方、client の生成、read session の渡し方、adapter の責任範囲は推測になるため、初回統合で実装判断が分かれる恐れがある。`SchemaMismatch` は挙動（書込みなし）が分かるが、返却型がないためエラー処理の実装は文書だけでは確定しない。

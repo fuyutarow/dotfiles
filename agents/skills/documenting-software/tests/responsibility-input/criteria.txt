@@ -1,0 +1,7 @@
+Frozen before evaluation: identical three docs, fresh independent description-only reviewers.
+Task: review responsibility separation and reader suitability for an independent SDK consumer.
+Criteria: distinguish external data/type guarantees, implementation/technology choice, general coding/lint rules;
+identify admin preamble/ID explanation burden; preserve useful local context/examples in a scoped API reference;
+credit actual supporting-services explanation rather than demand a missing description already present;
+do not claim whole SDK capability absent from a clearly scoped app operation table. Findings grounded with reader impact.
+No expected findings supplied to workers. This is a new synthetic case and will not establish general effectiveness.

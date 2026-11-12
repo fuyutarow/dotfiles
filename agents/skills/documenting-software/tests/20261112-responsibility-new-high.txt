@@ -1,0 +1,35 @@
+# responsibility-new-high 評価結果
+
+**対象**: `responsibility-input/` の schema.md、architecture.md、api.md の3ファイルのみ。リンク先、他文書、リポジトリ、skill 本体、他の variant は参照していない。
+**観点**: 各記述の所有者（外部保証、設計判断、コントリビュータのコード・ツール規則、編集記録）の分離と、SDK 開発者の判断への影響。
+
+## 強み
+
+- **schema.md L14–15**「adapter は値の構造を検査し、domain は認可を検査し、service は schema を解析しない。混同してはならない」。検査の所在が文で分かれており、実装者は各検査をどの層に置くかを判断できる。
+- **architecture.md L15–18**は、record chain、blob service、encryption service、SDK、host、application の責務を一文ずつ割り当てている。
+- **architecture.md L9–11**「確認済み blob は確認済み record ではない。応答喪失は unknown。digest を保持して照合してから再送する」。失敗状態と回復手順が明示され、二重送信を防ぐ判断材料になる。
+- **api.md L3–5**は Unavailable と AccessDenied を「空の成功結果ではない」と区別している。**api.md L13–14**は tutorial ではないと範囲を宣言している。
+- **schema.md L3–5**は文書種別、新規要件を加えないこと、基準日を契約本文と分けて置いている。編集記録が契約の前に分離されている。
+
+## 指摘（テキストで裏付けられるもの）
+
+1. **schema.md L8–12 が規則の所有者を混在させている。** 外部保証（L12 の不一致時 SchemaMismatch と書き込みなし）、設計判断（L11 の業務制約を重複させない）、コントリビュータのツール規則（L8–10 の LibraryZ.convertSchema、TypesFromSchema、`as` 禁止、「our linter の制限構文規則に一致」）が一段落にある。SDK 利用者は、linter 由来の制約を契約として守るべきか判断できない。api.md L13–14 の「特定の内部ライブラリは不要」と並ぶと、要求の強さも食い違って見える。外部保証の文とツール規則の文を分けて書き直すべきで、ラベルを足すだけでは足りない。
+2. **architecture.md L4 と L8 が、存在しない表を参照している。** L8 は「この抜粋内の table」と言うが、供給された本文に表はない。import と material-view の順序は、この3ファイルからは確認できない。
+3. **architecture.md L3 の L-STORE、L-QUERY、L-SCOPE、L-ATTEST、L-IMAGE に定義がない。** 名前の列挙だけで、各責務が何を所有し、どの API に現れるかが読めない。
+4. **「verified」の対象が文書間で揃っていない。** api.md L3 の「verified record」、architecture.md L17 の「SDK が検証する」、schema.md L14 の「構造を検査する」が、どの検証の何を保証するのか示していない。利用者は結果をどこまで信頼してよいか読み取れない。
+5. **api.md の protected 読取で、read session の渡し方がない。** L4 は「別途供給」と言うが、L8 の呼び出しは `{ id }` だけである。protected record の読取が利用者の作業に含まれるなら欠落になる。含まれないなら欠陥ではない。
+6. **エラー型の形が示されていない。** L9–10 の `showReadError(result.error)` では、Unavailable と AccessDenied を分岐できない。分岐が要る作業では不足になる。
+
+## 不確かな点（抜粋の外に定義がある可能性）
+
+- LibraryZ.convertSchema、TypesFromSchema、「schema identity」「schema hash」の定義と取得方法は、3文書のどこにもない。
+- SchemaMismatch が例外か result の error かは不明。api.md の `result` 形式から推測すると、読み手が迷う。
+- schema.md の adapter、domain、service と、architecture.md の L-* や host adapter との対応は示されていない。
+- architecture.md の読み手は明示されていない。schema.md は「Reader: developers」と明示している。
+- architecture.md L18 の inline payload と blob の選択基準が、application 側に委ねられているのか未定義なのか、読み取れない。
+
+## 読み手への帰結
+
+- 影響が最も大きいのは指摘1と指摘2である。指摘1では、SDK 利用者が contributor 規則を契約と取り違える。指摘2では、import 手順をこの抜粋だけで実装すると誤る。
+- 指摘4では、「verified」の意味を読み手が広く取り違え、信頼範囲を過大に見積もるおそれがある。
+- 強みとして挙げた失敗状態の明示と、エラー種別の区別は、読み手が書き込みと読取の失敗処理を設計する根拠になる。

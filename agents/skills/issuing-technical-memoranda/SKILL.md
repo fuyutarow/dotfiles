@@ -190,7 +190,7 @@ MUST NOT fire — each row names the owner that fires instead:
 | `arguing-research-papers` | PURPOSE cut — audience and gate. Internal, individually-authored, self-released → HERE. External venue with reviewers, editors and a submission gate → THERE. The record's own memo-to-journal promotion path crosses this seam in that direction only |
 | `systematizing-knowledge` | Co-fire, sequential. A memo REPORTING a corpus position is issued here; the position itself is signed there, first |
 | `codifying-doctrine` | CARDINALITY cut: one document for one occasion → here. The trade-off ordering that governs actors across occasions → there |
-| `documenting-software` | BODY-LAYOUT cut for one memo kind. A memo that is a decision record takes its cover, authority, addressee and release HERE, and its body layout (context, decision, rationale and alternatives, status, open questions) from `documenting-software`'s decision-record row, which cites a cross-source pattern, not this genre's archive. A memo that is not a decision record keeps an unregulated body |
+| `documenting-software` | BODY-LAYOUT cut for one memo kind. A memo that is a decision record takes its cover, authority, addressee and release HERE, and its body guidance (context, decision, rationale and alternatives, status, open questions) from `documenting-software`'s "Understand a decision" reader path. A memo that is not a decision record keeps an unregulated body |
 
 ## Execution model
 

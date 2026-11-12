@@ -1,7 +1,7 @@
 # Decision record layouts by lineage
 
 **Read when:** writing an ADR, RFC, PEP-style or design-proposal record in a named lineage. The body
-layout for a decision record in general is the decision-record row of SKILL.md; this file gives the
+layout for a decision record in general is the "Understand a decision" row of SKILL.md; this file gives the
 lineage details. Do not treat any lineage's template as a standard.
 
 **Source labels:** each lineage is single-source unless marked. Nygard-style records combine an
@@ -43,7 +43,9 @@ article and a summary site; the summary is not the article's wording.
 
 Nygard lists four values with no rejected; PEP 1 lists nine including Rejected; TC39 uses Stage 0 to 4;
 Rust uses merge, close and postpone. The correspondence between sets is not stated by the sources.
-Declare the set your document uses and do not map it onto another lineage's set. [XS-C33]
+Declare the set your document uses rather than assuming a shared state machine. This is a local
+precaution: XS-C33's DPR-085 locator does not support the claimed correspondence judgment; the
+source audit records that defect. The captured enumerations do not establish current process rules.
 
 ## Keeping rejected and withdrawn records
 

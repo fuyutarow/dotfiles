@@ -1,0 +1,27 @@
+# responsibility-new3 レビュー結果
+
+判定: 責務分離と読み手適合について、本文に裏づけられた強みと指摘がある。不確実な点は個別に明記した。
+
+## 検査範囲
+
+`responsibility-input/` の3文書のみ: `schema.md`、`architecture.md`、`api.md`。skill の description を基準とした。コード、テスト、他の資料は参照していない。
+
+## 支持される強み
+
+- `schema.md:14–15`「The adapter checks value structure. The domain separately checks authorization. The service does not parse the schema.」は、構造検査、認可、スキーマ解析を三つの担当に分けている。実装者は検査の所在を取り違えにくい。
+- `api.md:3–5`は「performs no writes」「Unavailable」「AccessDenied」「Neither is an empty successful result」と述べ、失敗の種類を成功の空結果から区別している。呼び出し側は障害と権限不足を別々に処理できる。
+- `api.md:13–14`は「does not promise a complete application tutorial」と宣言範囲を示し、正確な参照文書に不要なチュートリアル要求を課していない。
+- `architecture.md:9–11`「A confirmed blob is not a confirmed record; a lost transaction response is unknown.」と、operation digest による再照合の指示は、読み手が二重投入を避ける行動に直結する。
+
+## 指摘
+
+1. `schema.md:7–10`は、保証（不一致なら書き込まない）、実装選択（`LibraryZ.convertSchema`、`TypesFromSchema`）、コーディング規則（`as` 禁止、linter 規則）を一段落に混在させている。読み手は、`LibraryZ` が必須の公開契約なのか、内部の規則なのかを判別できない。`api.md:13–14`は「No particular internal library is required」と述べるため、二つの文書の読みが食い違って見える。影響: 外部 SDK 開発者が不要な依存を採用するか、必要な保証を見落とす。
+2. `schema.md:3–5`は読者、文書種別、基準日、commit hash といった管理情報を冒頭に置く。規範の答えは7行目から始まる。影響: 読み手が最初に受け取るのは、守るべき内容ではなく文書の管理情報になる。
+3. `schema.md:12`の`SchemaMismatch`は、3文書のいずれにも定義がない。`api.md`の結果語彙は`Unavailable`と`AccessDenied`だけである。どの API がこれを返すかは特定できない。
+4. `architecture.md:3`の`L-STORE`、`L-QUERY`、`L-SCOPE`、`L-ATTEST`、`L-IMAGE`は、この抜粋では定義されていない。`architecture.md:11`は「does not enumerate core SDK APIs」と述べるため、SDK 側でどの層がどの責務を持つかは抜粋からは確定できない。
+5. `api.md:3`の「A protected body requires a read session supplied separately」は、その取得元を示していない。保護された本文を読みたい開発者は、次の行動を決められない。
+
+## 不確実性
+
+- 3文書は抜粋である。`SchemaMismatch`、`L-*` ラベル、read session の定義は他の場所にある可能性があり、本レビューでは排除できない。指摘 3、4、5 はこの前提に依存する。
+- 指摘 1 と 2 は、本文の文言と description の分類基準（保証、実装選択、コーディング規則、編集記録）に基づく判定である。実装の挙動は検証していない。

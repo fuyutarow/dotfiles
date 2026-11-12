@@ -14,7 +14,8 @@ stated in its section; a guide that calls itself guidelines is not a rule of thi
 - Placeholders use angle brackets; inline code uses single backticks; API kind names are not
   backticked; API object names use UpperCamelCase. [XS-C20]
 - Third-party content may be listed only under the project's stated conditions, and where content
-  already exists inside the project, link to it rather than copy it. [XS-C41] (Principle XS-P03.)
+  already exists inside the project, link to it rather than copy it. [XS-C41] This source-specific
+  guidance does not prohibit local examples or explanatory summaries.
 - The style guide does not state whether lint or CI enforces these forms. [XS-C20 limit]
 
 ## MDN Web Docs (Mozilla)
@@ -39,8 +40,8 @@ stated in its section; a guide that calls itself guidelines is not a rule of thi
 - Reference order: project-specific guidance first, then this guide, then third-party references, and
   deviations from the guide are applied consistently across the document. [XS-C24]
 - Self-declared: guidelines, not rules. [XS-P01]
-- Passive voice and other sentence rules: see XS-P09 and the declared choice in SKILL.md; sentence
-  checks are `linting-prose`.
+- Passive voice and other sentence rules differ across guides (XS-P09); apply the adopted guide
+  within its scope. Sentence checks belong to `linting-prose`.
 
 ## GitLab documentation
 

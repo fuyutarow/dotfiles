@@ -1,0 +1,30 @@
+# doc-negative-new: 文書レビュー結果
+
+## 検査範囲
+対象は `negative-input/` の overview.md、operations.md、verification.md の3ファイルのみ。読み手は、LedgerLeaf を採否判断し、save と検証操作を扱う外部開発者とみなした。コード、テスト、ネットワーク、実装は確認していない。
+
+## 強み
+- overview.md は「an application never has to manage a file that exists without its record」と保証を先に述べ、用途を明示している。
+- operations.md は「Network timeout does not prove failure」「retain its digest and reconcile」と、結果不明の状態を隠さず書いている。
+- verification.md は「It requests no signature and sends no transaction」「Neither outcome proves real-world ownership」と、副作用と限界を明示している。
+
+## 指摘（観察）
+1. **例と約束の不一致（overview.md 冒頭）**: 「atomic」と述べるが、例は `saveAttachment` の直後に `showSuccess` を呼ぶ。operations.md は「The two services do not share a transaction. A failed commit can leave a stored blob.」と書く。例をそのままコピーすると、記録未確定で成功が表示される。
+2. **例に commitRecord がない**: 例は2段階のうち1段階だけを示す。概要には `commitRecord` への言及もない。
+3. **UI recovery と commitRecord 節の矛盾（operations.md）**: timeout に「Save failed」と表示し、Retry は「commitRecord with a fresh transaction」を呼ぶ。しかし commitRecord 節は、結果不明なら「reconcile before attempting a new transaction」と指示する。Retry は二重記録を招くおそれがある。
+4. **reconcile が未定義（operations.md）**: digest を保持して照合せよと指示するが、照合の操作や手順が文書にない。
+5. **未 commit の blob の扱いが未記載（operations.md）**: 残った blob の清掃や再試行の規則がない。
+6. **「complete explanation below」の過剰な表現（verification.md 4行目）**: 続く Explanation は3文で、signing step の説明を含まない。
+7. **成功時の戻り値が未記載（verification.md）**: 非成功の `invalid` と `unavailable` だけが書かれ、成功を示す値がない。
+
+## 不確実な点
+- 別ページや実装に reconcile、清掃、成功値の定義があるかもしれない。本レビューは3ファイルだけに基づく。
+- 「fresh transaction」が冪等キーを伴うかは不明。
+
+## 読者への影響
+- 外部開発者は概要の例を基に成功表示を実装し、commit 失敗時に記録のない blob を残すおそれがある。
+- 指示どおりに Retry を実装すると二重記録が起き、timeout 時の「failed」表示は誤解を招く。
+- 検証の成功判定が書かれていないため、統合者は非成功以外を有効と扱う誤りを犯すおそれがある。
+
+## 未確認
+operations.md が述べるとおり、end-to-end の recovery テストの結果は文書にない。本レビューは動作を確認していない。

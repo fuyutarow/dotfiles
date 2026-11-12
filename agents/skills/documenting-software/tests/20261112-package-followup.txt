@@ -1,0 +1,49 @@
+# documenting-software フォローアップ受入レビュー（意味的確認の記録）
+
+本記録は、前回レビュー（`tests/20261112-package-review.txt`）の 2 件の blocker について、作業コピーを直接読んだ範囲での状態を記す。行動評価、gate 再実行、一次資料の検証は含まない。
+
+## 検査範囲
+
+- 本文: `agents/skills/documenting-software/SKILL.md`（description、三原則、責務表、参照表、XS 接頭辞の定義）
+- 変更参照 4 件: `references/changelog-and-commit-grammars.md`、`api-doc-comments.md`、`house-style-guides.md`、`decision-record-layouts.md`
+- 記録: `tests/20261112-revision.md` 末尾節、索引 `agents/skills/README.md:30`、相互参照 `agents/skills/issuing-technical-memoranda/SKILL.md:193`
+- 出典監査: `tests/20261112-source-audit.md`
+- 残存語検索: `rr regex` で `principle [0-9]`、`declared choice`、`decision-record row`、`XS-P03`、`XS-C33`、`trace concepts`、`operation effects` を検索（exit 0、route exhaustive/rg）。検索結果は参照文書の該当行の有無のみを示す。
+
+## Blocker の状態
+
+**B1（壊れた参照）**
+- 対象: 参照文書内の `principle 8`、`declared choice`、`decision-record row`
+- 根拠: `rr regex` で上記語の参照は検出されず、`changelog…:14` は SemVer の助言へ書き換えられ、`decision-record-layouts.md:4` は SKILL.md:69 の「Understand a decision」行を指す
+- 置換: 現行の行名・節名への参照
+- 未確認の危険: `rr regex` は語の一致のみで、参照先の意味的な正しさは読取りでしか確認していない
+
+**B2（記録と導入文の不一致）**
+- 対象: `README.md:30` の説明文、`tests/20261112-revision.md` の節
+- 根拠: README は現行 description の主題（責務分離、判断の枠組み）に合わせて書き直されている。revision.md 末尾節は、最終 description が v2 の操作先行の要求を置き換えたこと、v2 の観測が最終版を検証しないことを明記している。
+- 置換: 現行記述
+- 未確認の危険: 最終 description の行動効果は未検証（記録自身がそう述べる）
+
+## 出典導出
+
+- 対象: `XS-P03`、`XS-C33`、`XS-P02`、`XS-P05`
+- 根拠: `XS-P03` は参照文書の残存語検索で見つからなかった。`XS-C33` は `decision-record-layouts.md:46–48` に、主張を支持しないと注記された形でのみ残る。`XS-P02` と `XS-P05` は参照に現れない。
+- 置換（任意）: revision.md の「未解消の出典」一覧に XS-P02、XS-P05 を加える
+- 未確認の危険: 出典 ledger の一次資料は未検証。出典監査は公開草案の判断を引用するのみ
+
+## 証拠主張
+
+- 対象: revision.md:171 の見出し「scoped action change accepted」
+- 根拠: 同節本文が、同一の合成入力、1 回試行、人の学習や有効性の証拠なしと限定している
+- 置換（任意）: 見出しを「scoped action change observed」へ
+- 未確認の危険: 限定を満たさない読みが他箇所に残るかは、全文の意味的走査をしていない
+
+## 判定の範囲
+
+上記 B1、B2 は、列挙した検索と読取りの範囲で、前回の指摘の文言が残っていないことを確認した。文書全体の正しさ、skill の有効性、読み手の理解改善については判定していない。
+
+## 限界
+
+- 行動評価、導入済み skill の実行、人の読み手による検証は行っていない。
+- gate:land と skill-check は再実行していない。
+- 残存する非 blocker: revision.md:206 の出典一覧（2 件のみ）、TM 行 193 が「consequences」を挙げない点。修正は任意。

@@ -194,7 +194,13 @@ async function rowOf(
 export async function scanShells(
   cwd: string | undefined,
   session: string | undefined,
-  options: { proc?: string; temp?: string; uid?: number; now?: number } = {},
+  options: {
+    proc?: string;
+    temp?: string;
+    uid?: number;
+    now?: number;
+    projectDir?: string | undefined;
+  } = {},
 ): Promise<ShellScan> {
   const uid = options.uid ?? process.getuid?.();
   if (uid === undefined) return unknown("no process uid");
@@ -203,7 +209,12 @@ export async function scanShells(
   if (!/^[a-zA-Z0-9-]+$/u.test(session))
     return unknown("session id has characters outside [a-zA-Z0-9-]");
   const proc = options.proc ?? "/proc";
-  const slug = cwd.replaceAll(/[^a-zA-Z0-9]/gu, "-");
+  // Claude Code names the task directory after the project root, not the shell's directory.
+  const root =
+    options.projectDir !== undefined && options.projectDir !== ""
+      ? options.projectDir
+      : cwd;
+  const slug = root.replaceAll(/[^a-zA-Z0-9]/gu, "-");
   const taskDir = join(
     options.temp ?? tmpdir(),
     `claude-${uid}`,

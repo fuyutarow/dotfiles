@@ -18,6 +18,7 @@ import {
   shellLines,
 } from "../src/shells.ts";
 import { render } from "../src/format.ts";
+import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
 import { ok } from "neverthrow";
 
 const root = mkdtempSync(join(tmpdir(), "shells-fixture-"));
@@ -69,6 +70,56 @@ test("one row per writing task, not per holder; finished tasks absent", async ()
     shells: scan,
   };
   expect(render(frame, { layout: "block" })).toContain("sh_running 1m30s");
+});
+// Live cause: Claude Code names the task directory after the project root, so a shell
+// whose cwd is a subdirectory must be looked up under the project_dir slug.
+test("cwd in a subdirectory finds the shells under the project_dir slug", async () => {
+  const subCwd = "/project/sub/dir";
+  const without = await scanShells(subCwd, sid, options);
+  expect(without).toEqual({
+    kind: "unknown",
+    reason: "tasks dir unreadable: ENOENT",
+  });
+  const scan = await scanShells(subCwd, sid, {
+    ...options,
+    projectDir: "/project",
+  });
+  expect(scan).toEqual({
+    kind: "known",
+    rows: [{ id: "running", seconds: 90 }],
+  });
+});
+test("absent or empty project_dir falls back to cwd; cwd equal to project_dir is unchanged", async () => {
+  const expected = {
+    kind: "known" as const,
+    rows: [{ id: "running", seconds: 90 }],
+  };
+  expect(
+    await scanShells(cwd, sid, { ...options, projectDir: undefined }),
+  ).toEqual(expected);
+  expect(await scanShells(cwd, sid, { ...options, projectDir: "" })).toEqual(
+    expected,
+  );
+  expect(await scanShells(cwd, sid, { ...options, projectDir: cwd })).toEqual(
+    expected,
+  );
+});
+test("the Claude status JSON's workspace.project_dir reaches the session as projectDir", async () => {
+  const parse = (workspace: unknown) =>
+    ClaudeStatuslineInputSchema.safeParseAsync({
+      cwd: "/p/root/sub/dir",
+      session_id: sid,
+      workspace,
+    });
+  const set = await parse({
+    current_dir: "/p/root/sub/dir",
+    project_dir: "/p/root",
+  });
+  expect(set.success && set.data.projectDir).toBe("/p/root");
+  const absent = await parse({ current_dir: "/p/root/sub/dir" });
+  expect(absent.success && absent.data.projectDir).toBeUndefined();
+  const empty = await parse({ project_dir: "" });
+  expect(empty.success && empty.data.projectDir).toBeUndefined();
 });
 test("read-only holders do not create running rows", async () => {
   writeFileSync(join(proc, "10", "fdinfo", "1"), "flags:\t0100000\n");

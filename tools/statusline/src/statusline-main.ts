@@ -529,7 +529,9 @@ if (liveMode) {
   const current = session ?? {};
   const df = await buildDataframe(current, { codex: codexMode });
   if (!codexMode && session !== undefined)
-    df.shells = await scanShells(session.cwd, session.sessionId);
+    df.shells = await scanShells(session.cwd, session.sessionId, {
+      projectDir: session.projectDir,
+    });
   if (!codexMode && session !== undefined)
     await writeUsageSnapshotAsync(
       {

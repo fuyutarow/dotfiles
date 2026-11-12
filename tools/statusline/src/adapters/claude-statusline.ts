@@ -112,7 +112,13 @@ export const ClaudeStatuslineInputSchema = z
     transcript_path: maybe(z.string()),
     // This is a change signal for Claude's addressable agent name cache, not necessarily its name.
     session_name: maybe(z.string()),
-    workspace: maybe(z.object({ current_dir: maybe(z.string()) })),
+    workspace: maybe(
+      z.object({
+        current_dir: maybe(z.string()),
+        // The project root Claude Code names its per-session task directory after.
+        project_dir: maybe(z.string()),
+      }),
+    ),
     model: maybe(
       z.object({ display_name: maybe(z.string()), id: maybe(z.string()) }),
     ),
@@ -146,6 +152,11 @@ export const ClaudeStatuslineInputSchema = z
       input.cwd !== undefined && input.cwd !== ""
         ? input.cwd
         : input.workspace?.current_dir,
+    projectDir:
+      input.workspace?.project_dir !== undefined &&
+      input.workspace.project_dir !== ""
+        ? input.workspace.project_dir
+        : undefined,
     sessionId: input.session_id,
     sessionName: input.session_name,
     model:

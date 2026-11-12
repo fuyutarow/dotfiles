@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.24.3 — 2026-11-12
+
+- shells: find the task directory from the project root when the shell is in a subdirectory
+
 ## 0.24.2 — 2026-11-10
 
 - Jev shows agx's known-token spend as a ≥ lower bound when the estimate is null, keeps the specific failure reason on the row, and samples with a 15 s budget

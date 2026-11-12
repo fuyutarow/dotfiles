@@ -2,6 +2,7 @@ import { z } from "./zod.ts";
 
 export const SessionStatusSchema = z.object({
   cwd: z.string().optional(),
+  projectDir: z.string().optional(),
   sessionId: z.string().optional(),
   vendor: z.enum(["claude", "codex"]).optional(),
   transcriptPath: z.string().optional(),
@@ -23,6 +24,7 @@ export const SessionStatusSchema = z.object({
 // translated at their adapter boundary; this module contains no provider field names.
 export interface SessionStatus {
   cwd?: string | undefined;
+  projectDir?: string | undefined;
   sessionId?: string | undefined;
   vendor?: "claude" | "codex" | undefined;
   transcriptPath?: string | undefined;

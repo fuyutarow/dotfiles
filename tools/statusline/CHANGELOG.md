@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.24.4 — 2026-11-12
+
+- statusline uses only xterm-256 named colors (dim text is Grey46)
+
 ## 0.24.3 — 2026-11-12
 
 - shells: find the task directory from the project root when the shell is in a subdirectory

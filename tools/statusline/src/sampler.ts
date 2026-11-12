@@ -23,7 +23,7 @@ import { writeCacheAsync } from "./bounded.ts";
 import { jsonText, z } from "./zod.ts";
 import type { Dataframe } from "./dataframe.ts";
 import type { SessionStatus } from "./session-status.ts";
-import { ESC, RST } from "./ansi.ts";
+import { CYAN2, ESC, RST } from "./ansi.ts";
 import { readAgentNamesAsync } from "./identity.ts";
 import { ok, err, Ok, Err } from "neverthrow";
 import { writeUsageSnapshotAsync } from "./usage-snapshot.ts";
@@ -359,7 +359,7 @@ export async function sample(
           layout: "location",
           collect: (key, label, state) => {
             if (key === "prompt-time")
-              return `${ESC}[36m@@STATUSLINE_TIME@@${RST}`;
+              return `${ESC}[${CYAN2}m@@STATUSLINE_TIME@@${RST}`;
             if (key === "prompt-zone")
               return `${ESC}[38;5;240m@@STATUSLINE_ZONE@@${RST}`;
             return renderField(label, state);

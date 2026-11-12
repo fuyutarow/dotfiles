@@ -7,8 +7,8 @@ import {
 
 const ESC = String.fromCodePoint(27);
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
-const separator = ` ${ESC}[2m·${ESC}[0m `;
-const pipe = ` ${ESC}[2m|${ESC}[0m `;
+const separator = ` ${ESC}[38;5;243m·${ESC}[0m `;
+const pipe = ` ${ESC}[38;5;243m|${ESC}[0m `;
 
 function visible(value: string): string {
   return value.replaceAll(ANSI, "");
@@ -19,8 +19,8 @@ function contentWithoutSeparators(value: string): string {
 }
 
 const sample = [
-  `repo ${ESC}[32m/home/fuyu/日本語-project${ESC}[0m${pipe}branch ${ESC}[35mfeature/wrap${ESC}[0m${separator}worktree ${ESC}[33mws: sl1-test${ESC}[0m`,
-  `Claude${pipe}session ${ESC}[36magent-123456789${ESC}[0m${separator}model Opus${separator}ctx 328.9k 33%${separator}email fuyutarow@example.test`,
+  `repo ${ESC}[38;5;40m/home/fuyu/日本語-project${ESC}[0m${pipe}branch ${ESC}[38;5;164mfeature/wrap${ESC}[0m${separator}worktree ${ESC}[38;5;184mws: sl1-test${ESC}[0m`,
+  `Claude${pipe}session ${ESC}[38;5;44magent-123456789${ESC}[0m${separator}model Opus${separator}ctx 328.9k 33%${separator}email fuyutarow@example.test`,
   `Rate: claude 5h 7% reset 16:20${separator}7d 75% reset 10-29${separator}codex 7d 36%`,
   `Sys: CPU 100%${separator}RAM 35% (19.3/54.9G)${separator}VRAM 23% (2.7/12.0G)${separator}GPU  1%${separator}tmpfs 34G free`,
   "worker: unchanged after Sys",
@@ -50,7 +50,9 @@ describe("SL1 wrap through Sys", () => {
   });
 
   test("counts ANSI as zero and East Asian and emoji graphemes as two columns", () => {
-    expect(displayWidth(`${ESC}[31mA日本🙂é${ESC}[0m`)).toBe(1 + 4 + 2 + 1);
+    expect(displayWidth(`${ESC}[38;5;167mA日本🙂é${ESC}[0m`)).toBe(
+      1 + 4 + 2 + 1,
+    );
   });
 
   test("uses only a positive integer COLUMNS value", () => {

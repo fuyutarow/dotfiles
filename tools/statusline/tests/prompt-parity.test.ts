@@ -101,13 +101,25 @@ function statuslineHead(home: string): Part[] {
 const comparable = (ps: Part[]): Part[] =>
   ps.map((p, i) => (i === 4 ? { color: p.color, text: "<time>" } : p));
 
+// The statusline draws the named xterm-256 color (ansi.ts table) for each zsh 16-color it copies.
+// zsh/zshrc still uses the 16-color codes; this map keeps each part's color checked against its
+// zsh counterpart until the PS1 is migrated, then it can be removed.
+const ZSH_TO_NAMED: Record<string, string> = {
+  "35": "38;5;164", // magenta -> Magenta3 (user)
+  "33": "38;5;184", // yellow -> Yellow3 (host)
+  "36": "38;5;44", // cyan -> DarkTurquoise (time)
+  "32": "38;5;40", // green -> Green3 (cwd)
+};
+const asNamed = (ps: Part[]): Part[] =>
+  ps.map((p) => ({ ...p, color: ZSH_TO_NAMED[p.color] ?? p.color }));
+
 test("the statusline head and the zsh prompt draw each part in the same color", () => {
   const home = tempHome();
   const zsh = zshHead(home);
   const line = statuslineHead(home);
   expect(zsh).toHaveLength(HEAD_PARTS);
   expect(line).toHaveLength(HEAD_PARTS);
-  expect(comparable(line)).toEqual(comparable(zsh));
+  expect(comparable(line)).toEqual(comparable(asNamed(zsh)));
 }, 60_000);
 
 afterAll(cleanupTempDirs);

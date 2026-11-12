@@ -1,4 +1,13 @@
-import { DIM, ESC, RST } from "./ansi.ts";
+import {
+  CYAN2,
+  DIM,
+  ESC,
+  GREEN3,
+  MAGENTA3,
+  RST,
+  SLATE_BLUE1,
+  YELLOW3,
+} from "./ansi.ts";
 import { promptParts, type PromptParts } from "./prompt-stamp.ts";
 import type { Dataframe } from "./dataframe.ts";
 import { fleetLine } from "./fleet-line.ts";
@@ -58,8 +67,8 @@ export function coloredHead(
   field: FieldDisplay = fieldDisplay(),
 ): string {
   return (
-    `${field("prompt-user", "user", observed(p === undefined ? undefined : `${ESC}[35m${p.user}${RST}`, "prompt unavailable"))}@${field("prompt-host", "host", observed(p === undefined ? undefined : `${ESC}[33m${p.host}${RST}`, "prompt unavailable"))}:` +
-    `${field("prompt-time", "time", observed(p === undefined ? undefined : `${ESC}[36m${p.when}${RST}`, "prompt unavailable"))}${field("prompt-zone", "zone", observed(p === undefined ? undefined : `${ESC}[38;5;240m${p.zone}${RST}`, "prompt unavailable"))}|${field("prompt-cwd", "cwd", observed(p === undefined ? undefined : `${ESC}[32m${p.cwd}${RST}`, "prompt unavailable"))}`
+    `${field("prompt-user", "user", observed(p === undefined ? undefined : `${ESC}[${MAGENTA3}m${p.user}${RST}`, "prompt unavailable"))}@${field("prompt-host", "host", observed(p === undefined ? undefined : `${ESC}[${YELLOW3}m${p.host}${RST}`, "prompt unavailable"))}:` +
+    `${field("prompt-time", "time", observed(p === undefined ? undefined : `${ESC}[${CYAN2}m${p.when}${RST}`, "prompt unavailable"))}${field("prompt-zone", "zone", observed(p === undefined ? undefined : `${ESC}[38;5;240m${p.zone}${RST}`, "prompt unavailable"))}|${field("prompt-cwd", "cwd", observed(p === undefined ? undefined : `${ESC}[${GREEN3}m${p.cwd}${RST}`, "prompt unavailable"))}`
   );
 }
 function liveRouteRuns(
@@ -187,14 +196,15 @@ export function render(
         ? undefined
         : `${ESC}[38;5;209m${df.effort}${RST}`;
     // Tailwind violet-500 (#8b5cf6), matched 2026-09-11 against Claude Code's own /effort
-    // slider "ultracode" label. truecolor (38;2;r;g;b), not the 256-palette used elsewhere in
-    // this file: the palette's nearest steps (ANSI 93/129/135/141) were all visibly off.
+    // slider "ultracode" label. Now xterm-256 index 99 (SlateBlue1, #875fff) instead of the
+    // truecolor 139;92;246: the statusline palette is named-only (ansi.ts table), and 99 is the
+    // nearest named step to #8b5cf6 (RGB distance 13).
     agentLine = joinText(
       agentLine,
       field("effort", "effort", observed(effort, "payload has no effort")),
     );
     let workflow: string | undefined = df.wfOn
-      ? `${ESC}[38;2;139;92;246m+WF${RST}`
+      ? `${ESC}[${SLATE_BLUE1}m+WF${RST}`
       : "";
     const workflowWhy =
       df.effort === undefined ? "payload has no effort" : df.workflowWhy;

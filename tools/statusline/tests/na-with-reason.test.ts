@@ -64,7 +64,7 @@ test("unavailable values have one mandatory reason-bearing renderer", () => {
   for (const text of [
     "n/a",
     "name n/a · x",
-    "\u001B[33mn/a\u001B[0m",
+    "\u001B[38;5;178mn/a\u001B[0m",
     "n/a ()",
   ])
     expect(hasBareUnavailable(text)).toBe(true);

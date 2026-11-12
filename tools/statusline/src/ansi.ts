@@ -15,7 +15,40 @@ export const TMP_INODE_DENY_PCT = 95;
 
 export const ESC = "\u001B";
 export const RST = `${ESC}[0m`;
-export const DIM = `${ESC}[2m`;
+
+// The statusline's color vocabulary is one xterm-256 palette: every color is an SGR `38;5;N`
+// (named below) and the only other SGR code is reset (0). Nothing uses SGR 2 (dim), 16-color
+// codes (30-37, 90-97, 39) or truecolor. herdr's sidebar uses the same named palette
+// (herdr/config.toml). The index is normative; the hex is the xterm 6x6x6 cube (levels
+// 0,95,135,175,215,255) or grey ramp (8+10k) for that index; the name is the common xterm-256
+// list name.
+//    N  name             hex      role
+//   30  Turquoise4       #008787  model
+//   40  Green3           #00d700  prompt cwd (was 32, green)
+//   44  DarkTurquoise    #00d7d7  prompt time, sampler time placeholder (was 36, cyan)
+//   66  PaleTurquoise4   #5f8787  Ctx label
+//   71  DarkSeaGreen4    #5faf5f  green threshold; disk free >= 20%
+//   74  SkyBlue3         #5fafd7  Sys label
+//   96  Plum4            #875f87  branch
+//   99  SlateBlue1       #875fff  +WF workflow (was truecolor 139;92;246)
+//  103  LightSlateGrey   #8787af  account email, Session label
+//  108  DarkSeaGreen     #87af87  Rate label
+//  140  MediumPurple2    #af87d7  ws: workspace
+//  164  Magenta3         #d700d7  prompt user (was 35, magenta)
+//  167  IndianRed        #d75f5f  red threshold
+//  178  Gold3            #d7af00  amber threshold; diff (+add,-del)
+//  184  Yellow3          #d7d700  prompt host (was 33, yellow)
+//  209  Salmon1          #ff875f  effort
+//  214  Orange1          #ffaf00  session name
+//  240  Grey35           #585858  prompt zone
+//  243  Grey46           #767676  DIM: secondary text and separators (was SGR 2, dim)
+export const GREY46 = "38;5;243";
+export const DIM = `${ESC}[${GREY46}m`;
+export const CYAN2 = "38;5;44";
+export const GREEN3 = "38;5;40";
+export const MAGENTA3 = "38;5;164";
+export const YELLOW3 = "38;5;184";
+export const SLATE_BLUE1 = "38;5;99";
 export const MID = "·"; //   meter middot
 // EXPLICIT-ABSENCE law (owner ruling 2026-10-03: 「implicit display は本当によくない」). A value
 // the bar could not take is printed as `<label> n/a (<why>)`, never left off the row: a missing

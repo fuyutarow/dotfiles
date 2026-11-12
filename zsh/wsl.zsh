@@ -91,6 +91,21 @@ link-win-exes() {
 }
 link-win-exes
 
+# ── Clipboard read shims (xclip / wl-paste) ───────────────────────────────────
+# wsl/bin/wsl-clipboard answers clipboard READS from the Windows clipboard via powershell.exe,
+# because a read through WSLg's clipboard bridge stalls while Windows holds an image (Claude Code
+# Alt+V hung on "Pasting…", 2026-11-13). Copies and PRIMARY go to the real /usr/bin tools.
+# Symlinked into ~/.local/bin (ahead of /usr/bin) for the same reason as the farm above: live
+# panes with a frozen PATH pick it up immediately.
+link-clipboard-shims() {
+  local shim=${DOTFILES:-$HOME/dotfiles}/wsl/bin/wsl-clipboard name
+  [[ -x $shim ]] || return 0
+  for name in xclip wl-paste; do
+    [[ $(readlink -- "$HOME/.local/bin/$name") == $shim ]] || ln -sf -- "$shim" "$HOME/.local/bin/$name"
+  done
+}
+link-clipboard-shims
+
 # `open` = smart-open (tools/smart-open/src/smart-open.ts): attached over ssh/herdr, a URL goes to the machine you
 # sit at and a path to its VS Code (Remote-SSH, back to here); otherwise explorer.exe with a Windows path. `o` / `oo` live in
 # zsh/aliases.zsh.

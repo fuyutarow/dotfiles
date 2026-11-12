@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016  # PowerShell code is single-quoted on purpose
+# wsl-clipboard — read-side shim for `xclip` and `wl-paste` inside WSL.
+#
+# Linked as ~/.local/bin/xclip and ~/.local/bin/wl-paste by zsh/wsl.zsh (link-clipboard-shims).
+#
+# WHY: with WSLg on, a clipboard READ through WSLg's RDP clipboard bridge stalls for 15-20 s or
+# forever whenever the Windows clipboard holds an image (reproduced 2026-11-13: `xclip -t TARGETS -o`,
+# `wl-paste -l`, `wl-paste --type image/png` all hit a 15 s timeout; Claude Code's image check hit
+# its 20 s one 2 of 3 times). Claude Code pastes an image by running exactly those commands first
+# and only then its own powershell.exe fallback, so Alt+V sat on "Pasting…" and left an orphaned
+# `wl-paste -l` behind. Weston also reports no wl_seat, so wl-clipboard cannot work there anyway.
+#
+# WHAT: every clipboard READ is answered from the Windows clipboard via powershell.exe, which is
+# the source of truth on this machine anyway. Everything else (copying, -selection primary, any
+# flag this shim does not model) is handed to the real binary unchanged.
+set -u
+
+self=$(readlink -f "${BASH_SOURCE[0]}")
+name=${0##*/}
+
+real_bin() {
+  local p
+  while IFS= read -r p; do
+    [[ $(readlink -f "$p") == "$self" ]] && continue
+    printf '%s\n' "$p"
+    return 0
+  done < <(type -aP "$name")
+  return 1
+}
+
+passthrough() {
+  local r
+  r=$(real_bin) || { echo "$name: real binary not found" >&2; exit 127; }
+  exec "$r" "$@"
+}
+
+# Not WSL → behave exactly like the real tool.
+[[ -n ${WSL_DISTRO_NAME:-} ]] || passthrough "$@"
+
+PS=$(command -v powershell.exe 2>/dev/null || echo /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe)
+
+ps_run() {
+  timeout 15 "$PS" -NoProfile -NonInteractive -Sta -Command \
+    "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; $1" 2>/dev/null
+}
+
+win_types() {
+  ps_run 'if ([System.Windows.Forms.Clipboard]::ContainsImage()) { "image/png" }; if ([System.Windows.Forms.Clipboard]::ContainsText()) { "text/plain;charset=utf-8"; "text/plain"; "UTF8_STRING"; "STRING" }' | tr -d '\r'
+}
+
+win_png() {
+  local tmp
+  tmp=$(mktemp) || return 1
+  ps_run '$i = [System.Windows.Forms.Clipboard]::GetImage(); if ($null -eq $i) { exit 1 }; $ms = New-Object System.IO.MemoryStream; $i.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [Convert]::ToBase64String($ms.ToArray())' \
+    | tr -d '\r\n' | base64 -d >"$tmp" 2>/dev/null
+  if [[ -s $tmp ]]; then cat "$tmp"; rm -f "$tmp"; return 0; fi
+  rm -f "$tmp"; return 1
+}
+
+win_text() {
+  local out
+  out=$(ps_run '$t = [System.Windows.Forms.Clipboard]::GetText(); if ([string]::IsNullOrEmpty($t)) { exit 1 }; [Console]::Out.Write($t)'; echo x) || true
+  out=${out%x}
+  [[ -n $out ]] || return 1
+  printf '%s' "${out//$'\r'/}"
+}
+
+# serve TYPE → write that clipboard content to stdout, exit 1 if unavailable.
+serve() {
+  case $1 in
+    TARGETS|list) win_types | grep . || return 1 ;;
+    image/png|image/bmp) win_png ;;  # bmp request also gets PNG bytes; callers re-detect the format
+    image/*) return 1 ;;
+    ''|text|text/plain*|UTF8_STRING|STRING|TEXT) win_text ;;
+    *) return 1 ;;
+  esac
+}
+
+case $name in
+  wl-paste)
+    orig=("$@"); type=; list=0
+    while (($#)); do
+      case $1 in
+        -l|--list-types) list=1 ;;
+        -t|--type) type=${2:-}; shift ;;
+        --type=*) type=${1#*=} ;;
+        -n|--no-newline) ;;
+        *) passthrough "${orig[@]}" ;;  # --primary, --watch, --seat, --help …
+      esac
+      shift
+    done
+    if ((list)); then serve list; exit; fi
+    serve "$type" || { echo "No suitable type of content copied" >&2; exit 1; }
+    ;;
+  xclip)
+    orig=("$@"); out=0; sel=primary; type=
+    while (($#)); do
+      case $1 in
+        -o|-out) out=1 ;;
+        -selection|-sel) sel=${2:-}; shift ;;
+        -t|-target) type=${2:-}; shift ;;
+        -quiet|-silent|-verbose|-noutf8) ;;
+        *) passthrough "${orig[@]}" ;;
+      esac
+      shift
+    done
+    # Only clipboard reads are intercepted; copies and PRIMARY stay with the real xclip.
+    if ((out)) && [[ $sel == c* ]]; then
+      serve "$type" || { echo "Error: target ${type:-STRING} not available" >&2; exit 1; }
+      exit 0
+    fi
+    passthrough "${orig[@]}"
+    ;;
+  *)
+    passthrough "$@"
+    ;;
+esac

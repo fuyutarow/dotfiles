@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.24.6 — 2026-11-12
+
+- shell rows read like worker rows: a dim │, then working · $ <command>
+
 ## 0.24.5 — 2026-11-12
 
 - dim text is Grey39 (241), one step darker than Grey46

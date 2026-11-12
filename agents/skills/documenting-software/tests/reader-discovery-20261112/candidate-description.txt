@@ -1,0 +1,12 @@
+Designs/reviews software docs and specs as paths to reader decisions. Start a broad review with
+  reader → concrete question → page evidence or remaining inference. Derive readers by asking who
+  adopts, configures/pays, uses and extends the offered system; do not wait for the user to name
+  gaps. Host-supplied services imply operator questions; an extension point implies third-party
+  developer questions. Assign page duties before directories. Separate guarantees, design choices,
+  coding rules and editorial
+  records: input rejection is a guarantee; converter choice is design; unsafe-cast bans are coding
+  policy. Preserve binding rules when moving them. Begin with the technical answer. Verify
+  reader consequences against text and links within the reviewed product/task. A narrow reference
+  stays within its declared context. Use for README,
+  guides, API docs, specs and ADR/RFC.
+  Adoption: growing-oss-adoption; structure: structuring-documents; prose: linting-prose.

@@ -1,0 +1,8 @@
+Designs/reviews software docs and specs for reader decisions. In a broad review, derive readers
+  and their unanswered questions from the product, dependencies and use; do not wait for the user
+  to name them. Trace their decisions across pages, then assign page responsibilities before
+  proposing directories. Separate consumer guarantees, design choices, coding rules and editorial
+  records; preserve binding rules when moving them. Begin with the technical answer. Verify
+  reader consequences against text and links; respect a narrow reference's task. Use for README,
+  guides, API docs, specs and ADR/RFC.
+  Adoption: growing-oss-adoption; structure: structuring-documents; prose: linting-prose.

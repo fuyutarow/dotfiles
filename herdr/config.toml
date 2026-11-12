@@ -107,7 +107,7 @@ agent_panel_sort = "spaces"
 #   Grey53 (102) #878787: tab, $rc       Turquoise4 (30) #008787: $agent_detail (statusline model label)
 #   Gold3 (178) #d7af00 / IndianRed (167) #d75f5f: cpu mid / hi (cpu lo is Grey30, like ram)
 #   DarkGoldenrod (136) #af8700 / IndianRed (131) #af5f5f: $ctx_mid / $ctx_hi (one step darker than cpu's)
-#   CadetBlue (73) #5fafaf: counts >= 1  Grey30 (239) #4e4e4e: $cpu_lo, $ram, counts 0 or unknown
+#   DarkTurquoise (44) #00d7d7: counts >= 1  Grey30 (239) #4e4e4e: $cpu_lo, $ram, counts 0 or unknown
 #   Grey39 (241) #626262: $ctx_lo, $ctx_off (the statusline's dim text)
 # The projector fills three rows per agent, each width-bounded (the sidebar is 48 columns, 44 of them
 # text on an agent row; the installed client renders three rows per agent, so counts live on row 3).
@@ -129,7 +129,7 @@ agent_panel_sort = "spaces"
 # $ctx_off (Grey39, "ctx ?/?") when the reading is unknown, and clears the other three. $agent_detail
 # keeps Turquoise4. If row 2 would not fit, the projector drops $agent_detail whole and keeps ctx.
 # Each count is colored the same way as cpu, with no rules: the projector reports exactly one token of
-# the pair, $workers_on / $shells_on when the count is >= 1 (CadetBlue) and $workers_off /
+# the pair, $workers_on / $shells_on when the count is >= 1 (DarkTurquoise) and $workers_off /
 # $shells_off when it is 0 or unknown (Grey30, "? wkr" / "? sh"), and clears the other.
 # herdr draws its own non-removable " · " between every pair of visible tokens (v0.9.5,
 # src/ui/sidebar/tokens.rs `separator`), so the screen reads "cpu 1% · ram 20G · 1 wkr · 4 sh"; the old
@@ -142,7 +142,7 @@ agent_panel_sort = "spaces"
 rows = [
   ["state_icon", { token = "tab", fg = "#878787", bold = true, dim = false }, { token = "$rc", fg = "#878787", bold = false, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#626262", bold = false, dim = false }, { token = "$ctx_mid", fg = "#af8700", bold = false, dim = false }, { token = "$ctx_hi", fg = "#af5f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
-  [{ token = "$cpu_lo", fg = "#4e4e4e", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#5fafaf", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#5fafaf", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
+  [{ token = "$cpu_lo", fg = "#4e4e4e", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
   # Custom reported agents use these default rows, not rows_by_agent overrides.
   # Unreported tokens disappear. See https://herdr.dev/docs/configuration/#sidebar-row-layouts.
   ["$btm_summary"],
@@ -161,12 +161,12 @@ rows = [
 claude = [
   ["state_icon", { token = "$fullname", fg = "#878787", bold = true, dim = false }, { token = "$rc", fg = "#878787", bold = false, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#626262", bold = false, dim = false }, { token = "$ctx_mid", fg = "#af8700", bold = false, dim = false }, { token = "$ctx_hi", fg = "#af5f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
-  [{ token = "$cpu_lo", fg = "#4e4e4e", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#5fafaf", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#5fafaf", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
+  [{ token = "$cpu_lo", fg = "#4e4e4e", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
 ]
 codex = [
   ["state_icon", { token = "$fullname", fg = "#878787", bold = true, dim = false }, { token = "$rc", fg = "#878787", bold = false, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#626262", bold = false, dim = false }, { token = "$ctx_mid", fg = "#af8700", bold = false, dim = false }, { token = "$ctx_hi", fg = "#af5f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
-  [{ token = "$cpu_lo", fg = "#4e4e4e", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#5fafaf", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#5fafaf", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
+  [{ token = "$cpu_lo", fg = "#4e4e4e", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
 ]
 [session]
 # resume_agents_on_restore = true (default)

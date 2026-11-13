@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.24.7 — 2026-11-14
+
+- a stray empty .git directory is not a repository root
+- shell rows align as columns: ids padded, ages right-aligned
+
 ## 0.24.6 — 2026-11-12
 
 - shell rows read like worker rows: a dim │, then working · $ <command>

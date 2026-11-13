@@ -9,11 +9,13 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { err, fromThrowable, ok } from "neverthrow";
 import { gpuSamplingSupported } from "../src/host-load.ts";
 import { sysSegment } from "../src/host-display.ts";
@@ -25,6 +27,7 @@ import {
   tempHome,
 } from "./helpers.ts";
 import { decodedJson } from "./decode.ts";
+import { repositoryRoot } from "../src/owner-state.ts";
 
 const STATUSLINE = join(import.meta.dir, "..", "src", "statusline.ts");
 const ESC = String.fromCodePoint(27); // not a literal \u001b: the pattern then has no control character
@@ -37,6 +40,61 @@ const SLOW = { timeout: 30_000 };
 const HAS_PROC = existsSync("/proc/stat");
 const IS_MAC = process.platform === "darwin";
 const HAS_CPU = HAS_PROC || IS_MAC;
+const HANG = "exec /bin/sleep 8";
+
+describe("repository root markers", () => {
+  test("an empty .git directory is not a root", () => {
+    const root = mkdtempSync(join(tmpdir(), "statusline-empty-git-"));
+    mkdirSync(join(root, ".git"));
+    expect(repositoryRoot(root)).resolves.toBeUndefined();
+  });
+
+  test("a .git directory with HEAD is a root", () => {
+    const root = mkdtempSync(join(tmpdir(), "statusline-valid-git-"));
+    mkdirSync(join(root, ".git"));
+    writeFileSync(join(root, ".git", "HEAD"), "ref: refs/heads/main\n");
+    expect(repositoryRoot(root)).resolves.toBe(root);
+  });
+
+  test("a .git file and a colocated jj workspace resolve as roots", () => {
+    const gitFileRoot = mkdtempSync(join(tmpdir(), "statusline-gitfile-"));
+    writeFileSync(
+      join(gitFileRoot, ".git"),
+      "gitdir: ../repo/.git/worktrees/x\n",
+    );
+    expect(repositoryRoot(gitFileRoot)).resolves.toBe(gitFileRoot);
+
+    const jjRoot = mkdtempSync(join(tmpdir(), "statusline-jj-"));
+    mkdirSync(join(jjRoot, ".jj"));
+    writeFileSync(join(jjRoot, ".git"), "gitdir: ../repo/.git/worktrees/x\n");
+    expect(repositoryRoot(jjRoot)).resolves.toBe(jjRoot);
+  });
+
+  test(
+    "O1 ignores an empty .git above cwd even when TMPDIR is inside it",
+    () => {
+      const parent = mkdtempSync(join(tmpdir(), "statusline-empty-ancestor-"));
+      mkdirSync(join(parent, ".git"));
+      const temp = join(parent, "tmp");
+      mkdirSync(temp);
+      const text = render(
+        {
+          bin: binWith({
+            ps: HANG,
+            git: HANG,
+            "nvidia-smi": HANG,
+            claude: HANG,
+          }),
+          env: { ...FAST_BOUND, TMPDIR: temp },
+          payload: { session_id: "empty-git-ancestor" },
+        },
+        temp,
+      ).text;
+      expect(text).not.toContain("branch n/a");
+    },
+    SLOW,
+  );
+});
 
 // A bin dir holding only the fakes named here: anything else (ps, git, nvidia-smi) is absent,
 // which is exactly the "tool not installed" failure.
@@ -50,20 +108,28 @@ function binWith(fakes: Record<string, string>): string {
   return bin;
 }
 
-function render(opts: {
-  bin: string;
-  home?: string;
-  payload?: unknown;
-  env?: Record<string, string>;
-  repository?: boolean;
-}): {
+function render(
+  opts: {
+    bin: string;
+    home?: string;
+    payload?: unknown;
+    env?: Record<string, string>;
+    repository?: boolean;
+  },
+  tempRoot?: string,
+): {
   text: string;
   home: string;
   renderMs: number;
 } {
   const home = opts.home ?? tempHome();
-  const cwd = tempDir("slcwd-");
-  if (opts.repository === true) mkdirSync(join(cwd, ".git"));
+  const cwd =
+    tempRoot === undefined ? tempDir("slcwd-") : join(tempRoot, "cwd");
+  mkdirSync(cwd, { recursive: true });
+  if (opts.repository === true) {
+    mkdirSync(join(cwd, ".git"));
+    writeFileSync(join(cwd, ".git", "HEAD"), "ref: refs/heads/main\n");
+  }
   const sample = spawnSync(
     process.execPath,
     [
@@ -435,8 +501,6 @@ describe("statusline identity and model caps", () => {
 // TIGER STYLE (practicing-tiger-style, 2026-10-03): the bar runs every 5 s in every session, so its
 // worst case — not its typical case — is what the host pays for.
 describe("statusline resource bounds", () => {
-  const HANG = "exec /bin/sleep 8";
-
   test(
     "O1: every child hanging still ends inside the render budget, each segment an explicit n/a",
     () => {

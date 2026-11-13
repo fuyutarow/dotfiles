@@ -214,11 +214,14 @@ export async function readRenderSessions(
 export async function repositoryRoot(cwd: string): Promise<string | undefined> {
   let path = await realpath(cwd).catch(() => resolve(cwd));
   for (;;) {
-    const entries = await Promise.all([
-      stat(join(path, ".jj")).catch(() => null),
-      stat(join(path, ".git")).catch(() => null),
-    ]);
-    if (entries.some((entry) => entry !== null)) return path;
+    const jj = await stat(join(path, ".jj")).catch(() => null);
+    const git = await stat(join(path, ".git")).catch(() => null);
+    const validGit =
+      git?.isFile() === true ||
+      (git?.isDirectory() === true &&
+        (await stat(join(path, ".git", "HEAD")).catch(() => null))?.isFile() ===
+          true);
+    if (jj !== null || validGit) return path;
     const parent = dirname(path);
     if (parent === path) return undefined;
     path = parent;

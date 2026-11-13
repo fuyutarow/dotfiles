@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.5 — 2026-11-14
+
+- roster ids match agx 11 claude-session/claude-api rows as one claude id
+
 ## 0.6.4 — 2026-11-12
 
 - cpu below 10% is an idle grey band; 10-69% is green again

@@ -311,9 +311,14 @@ export function compactCommand(
 export function shellLines(scan: ShellScan, columns?: number): string {
   if (scan.kind === "unknown") return `shells: unknown (${scan.reason})`;
   const width = columns ?? DEFAULT_COLUMNS;
+  // Align the rows as columns: ids left-aligned, ages right-aligned, so every "│" lines up
+  // (12m59s over 2m15s). Ids and ages are ASCII, so string length is cell width.
+  const ages = scan.rows.map((row) => dur(row.seconds));
+  const idWidth = Math.max(0, ...scan.rows.map((row) => row.id.length));
+  const ageWidth = Math.max(0, ...ages.map((age) => age.length));
   return scan.rows
-    .map((row) => {
-      const prefix = `sh_${row.id} ${dur(row.seconds)}`;
+    .map((row, index) => {
+      const prefix = `sh_${row.id.padEnd(idWidth)} ${(ages[index] ?? "").padStart(ageWidth)}`;
       // Same shape as a worker row ("│ working · <activity>"): a running shell's activity is its command.
       const room = width - cells(prefix);
       if (room < SHELL_STATE_CELLS) return prefix;

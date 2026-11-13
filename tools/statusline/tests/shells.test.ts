@@ -331,3 +331,24 @@ test("task prefixes distinguish identical commands and command budgets include t
     `sh_aaa 2m00s ${BAR} working · $ bun …`,
   );
 });
+
+test("shell rows align as columns: ages right-aligned so every bar lines up", () => {
+  const scan = {
+    kind: "known" as const,
+    rows: [
+      { id: "b9dkpyhnd", seconds: 779, command: "sleep 100" },
+      { id: "b24m8qj5g", seconds: 135, command: "sleep 100" },
+      { id: "short", seconds: 60 },
+    ],
+  };
+  const lines = shellLines(scan, 200)
+    .split("\n")
+    .map((line) => Bun.stripANSI(line));
+  expect(lines).toEqual([
+    "sh_b9dkpyhnd 12m59s │ working · $ sleep 100",
+    "sh_b24m8qj5g  2m15s │ working · $ sleep 100",
+    "sh_short      1m00s │ working",
+  ]);
+  const bars = lines.map((line) => line.indexOf("│"));
+  expect(new Set(bars).size).toBe(1);
+});

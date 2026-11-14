@@ -322,10 +322,12 @@ export function shellLines(scan: ShellScan, columns?: number): string {
       // Same shape as a worker row ("│ working · <activity>"): a running shell's activity is its command.
       const room = width - cells(prefix);
       if (room < SHELL_STATE_CELLS) return prefix;
-      const lead = `${prefix} ${DIM}│${RST} working`;
+      const lead = `${prefix} ${DIM}│${RST} ${DIM}working${RST}`;
       if (row.command === undefined) return lead;
       const command = compactCommand(row.command, room - SHELL_ACTIVITY_CELLS);
-      return command === undefined ? lead : `${lead} · $ ${command}`;
+      return command === undefined
+        ? lead
+        : `${prefix} ${DIM}│${RST} ${DIM}working ·${RST} $ ${command}`;
     })
     .join("\n");
 }

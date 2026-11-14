@@ -41,7 +41,7 @@ export const RST = `${ESC}[0m`;
 //  209  Salmon1          #ff875f  effort
 //  214  Orange1          #ffaf00  session name
 //  240  Grey35           #585858  prompt zone
-//  241  Grey39           #626262  DIM: secondary text and separators (was SGR 2, dim)
+//  241  Grey39           #626262  DIM: secondary text, separators, and a running row's "working ·"
 // The prompt head (user/host/time/cwd) uses mid-saturation indexes, one cube step down from the
 // full-saturation xterm defaults: between the vivid defaults and the muted One Dark tones.
 export const GREY39 = "38;5;241";

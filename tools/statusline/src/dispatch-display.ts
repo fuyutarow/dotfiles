@@ -36,13 +36,13 @@ function doingText(
   }
   if (phase !== "working") return `${DIM}│${RST} ${phase}`;
   if (d === undefined || d.last === "starting")
-    return `${DIM}│${RST} working · no event yet`;
+    return `${DIM}│${RST} ${DIM}working ·${RST} no event yet`;
   const age =
     d.ageSecs !== undefined && d.ageSecs >= 60
       ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}`
       : "";
   const activity = `${displayAction(d.last)}${age} ${DIM}· ${d.commands ?? "n/a"} cmd · ${d.files ?? "n/a"} files${RST}`;
-  return `${DIM}│${RST} working · ${activity}`;
+  return `${DIM}│${RST} ${DIM}working ·${RST} ${activity}`;
 }
 
 function costText(label: string, width: number): string {

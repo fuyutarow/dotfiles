@@ -120,6 +120,7 @@ const SummarySchema = z.object({
     corpus: z.object({ est_chunks: z.number() }),
   }),
   total: z.object({ files: z.number(), est_chunks: z.number() }),
+  data_share: z.number(),
   violations: z.array(z.string()),
 });
 
@@ -147,6 +148,7 @@ async function plan(f: Fixture) {
         charge: { mode: "", reason: "", corpus: { est_chunks: -1 } },
         total: { files: -1, est_chunks: -1 },
         violations: [],
+        data_share: -1,
       };
   const charge = stderr.split("\n").find((l) => l.startsWith("CHARGE: ")) ?? "";
   return { code, stderr, summary, charge };
@@ -170,6 +172,24 @@ function expectFullRebuild(
 describe.skipIf(ccc === null)(
   "rr index --plan charges what ccc re-embeds",
   () => {
+    test("corpus share counts memo hits using extension and stat estimates", async () => {
+      const f = fixture();
+      writeFileSync(
+        join(f.root, ".cocoindex_code", "settings.yml"),
+        "include_patterns:\n- '**/*.txt'\n- '**/*.json'\nexclude_patterns:\n- '**/.*'\n",
+      );
+      writeFileSync(
+        join(f.root, "docs", "memo.json"),
+        "1234567890,".repeat(300),
+      );
+      commitAll(f.root);
+      await certify(f);
+      appendFileSync(join(f.root, "docs", "f1.txt"), "changed\n");
+      const result = await plan(f);
+      expect(result.code).toBe(0);
+      expect(result.summary.charge.mode).toBe("incremental");
+      expect(result.summary.data_share).toBe(5 / 46);
+    });
     test("a valid watermark charges only the changed files of a root larger than the budget", async () => {
       const f = fixture();
       await certify(f);

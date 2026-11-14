@@ -753,6 +753,94 @@ test("exclude validation failures name timeout, subprocess and output causes eve
   }
 });
 
+test("incremental share uses the corpus while cost and byte limits use the delta", () => {
+  const budget = {
+    max_est_chunks: 50_000,
+    max_data_share: 0.2,
+    max_seconds: 600,
+    est_chunks_per_second: 50,
+  };
+  const basis = {
+    mode: "incremental" as const,
+    since: "abc",
+    recordedCcc: "1",
+    changed: [],
+  };
+  const changedData = {
+    path: "data.json",
+    bytes: 100,
+    est_chunks: 116,
+    kind: "data" as const,
+  };
+  const changed = [
+    changedData,
+    ...Array.from({ length: 24 }, (_, i) => ({
+      path: `changed${i}.ts`,
+      bytes: 100,
+      est_chunks: i === 0 ? 11 : 10,
+      kind: "text" as const,
+    })),
+  ];
+  const unchanged = [
+    {
+      path: "memo.json",
+      bytes: 100,
+      est_chunks: 737,
+      kind: "data" as const,
+      billed: false,
+    },
+    {
+      path: "memo.ts",
+      bytes: 100,
+      est_chunks: 27_338,
+      kind: "text" as const,
+      billed: false,
+    },
+    ...Array.from({ length: 3771 }, (_, i) => ({
+      path: `memo${i}.ts`,
+      bytes: 0,
+      est_chunks: 0,
+      kind: "text" as const,
+      billed: false,
+    })),
+  ];
+  const plan = summarize([...changed, ...unchanged], budget, null, basis, "1");
+  expect(plan.total.files).toBe(25);
+  expect(plan.total.est_chunks).toBe(357);
+  expect(plan.charge.corpus.files).toBe(3798);
+  expect(plan.charge.corpus.est_chunks).toBe(28_432);
+  expect(plan.data_share).toBe(853 / 28_432);
+  expect(plan.violations).toEqual([]);
+  expect(planReport(plan)).toContain("corpus data 3.0%");
+  const over = [
+    ...changed,
+    ...unchanged.map((file) => ({ ...file, kind: "data" as const })),
+  ];
+  expect(
+    summarize(over, budget, null, basis, "1").violations.join("\n"),
+  ).toContain("data share");
+  expect(summarize(over, budget).violations.join("\n")).toContain("data share");
+  expect(
+    summarize(
+      [{ ...changedData, bytes: 65_537 }, ...unchanged],
+      budget,
+      null,
+      basis,
+      "1",
+    ).violations.join("\n"),
+  ).toContain("data-file limit 65536");
+  const smallByteBudget = { ...budget, max_total_bytes: 1_000 };
+  expect(
+    summarize(
+      [{ ...changedData, bytes: 201 }, ...unchanged],
+      smallByteBudget,
+      null,
+      basis,
+      "1",
+    ).violations.join("\n"),
+  ).toContain("aggregate data bytes 201 > 200");
+});
+
 test("content byte boundaries include equality and enforce aggregate bytes independently of chunk estimates", () => {
   const budget = {
     max_est_chunks: 50_000,

@@ -227,7 +227,10 @@ exceeds today's ceiling and must be replaced by exclusions before the next admis
 These are also the defaults when omitted. Chunks are estimates, `ceil(Unicode characters / 800)`
 per nonblank UTF-8 file; undecodable files remain in the matched file count with zero chunks,
 as ccc skips their content. Directory totals use non-overlapping buckets capped at three levels.
-Data share is the fraction of estimated chunks classified as data. Classification uses machine
+Data share is the fraction of estimated chunks classified as data across the post-change corpus,
+including memo hits. Memo-hit classifications use extensions and byte-based chunk estimates;
+only charged files are content-classified. File, byte, chunk and time limits continue to charge incremental work only.
+Classification uses machine
 format extensions, notebook outputs, long lines, digit/punctuation density, and minification.
 For valid UTF-8, `MAX_CONTROL_BYTE_DENSITY = 0.001` permits stray control bytes
 at or below 0.1% of raw file bytes. Count C0 bytes (`0x00`–`0x1f`) except tab,

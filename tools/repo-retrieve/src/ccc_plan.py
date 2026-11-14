@@ -117,7 +117,8 @@ def main() -> None:
         installed = "unknown"  # never equals a recorded version: bill everything
     # Incremental charge: ccc re-embeds only files whose memo entry misses, so only
     # the caller's changed paths are billed (read, classified, counted against the
-    # aggregate caps). A different installed ccc may change process_file's logic
+    # aggregate caps). Memo hits use extension and stat estimates for corpus share.
+    # A different installed ccc may change process_file's logic
     # fingerprint, which misses every memo entry: then every file is billed.
     changed = limits.get("changed")
     incremental = changed is not None and limits.get("recorded_ccc") == installed

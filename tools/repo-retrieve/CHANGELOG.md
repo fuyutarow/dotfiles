@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.1 — 2026-11-14
+
+- data share is judged on the corpus, not the incremental delta
+
 ## 1.14.0 — 2026-11-11
 
 - about with a path uses exact KNN with adaptive over-fetch and an rr-side path filter, falling back to the full scan

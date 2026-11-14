@@ -264,11 +264,12 @@ export function summarize(
     };
   });
   const data_share =
-    chunks === 0
+    charge.corpus.est_chunks === 0
       ? 0
-      : files
+      : allFiles
           .filter((file) => file.kind === "data")
-          .reduce((sum, file) => sum + file.est_chunks, 0) / chunks;
+          .reduce((sum, file) => sum + file.est_chunks, 0) /
+        charge.corpus.est_chunks;
   const rate_source = measuredRate === null ? "fallback" : "measured";
   const chunks_per_second = measuredRate ?? budget.est_chunks_per_second;
   const est_seconds = chunks / chunks_per_second;
@@ -565,7 +566,7 @@ export function planReport(plan: IndexPlan): string {
           .join("\n") +
         "\n";
   return (
-    `PLAN: ${plan.total.files} files, ${plan.total.bytes} bytes, ${plan.total.est_chunks} est_chunks (ceil(chars / 800)); data ${(plan.data_share * 100).toFixed(1)}%; estimated GPU ${plan.est_seconds.toFixed(1)}s at ${plan.chunks_per_second.toFixed(2)} chunks/s (${plan.rate_source})\n` +
+    `PLAN: ${plan.total.files} files, ${plan.total.bytes} bytes, ${plan.total.est_chunks} est_chunks (ceil(chars / 800)); corpus data ${(plan.data_share * 100).toFixed(1)}%; estimated GPU ${plan.est_seconds.toFixed(1)}s at ${plan.chunks_per_second.toFixed(2)} chunks/s (${plan.rate_source})\n` +
     `CHARGE: ${plan.charge.mode === "incremental" ? "incremental" : "full rebuild"} (${plan.charge.reason}); charged ${plan.total.est_chunks} of ${plan.charge.corpus.est_chunks} est_chunks in ${plan.charge.corpus.files} included files\n` +
     `${plan.rate_history ?? "RATE HISTORY: no history supplied"}\n` +
     `BUDGET: ${JSON.stringify(plan.budget)}\n` +

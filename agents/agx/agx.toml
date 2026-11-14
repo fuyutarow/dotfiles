@@ -1,8 +1,8 @@
 schema = 1
 
 [route]
-allow = ["codex", "claude-session"]
-on_window_exhausted = { codex = "continue", claude-session = "stop" }
+allow = ["claude-session"]
+on_window_exhausted = { claude-session = "stop" }
 exclude = []
 max_task_chars = 6000
 timeout_ms = 20000

@@ -62,6 +62,10 @@ const POWERSHELL =
   "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
 const WSL_DISTRO = "Ubuntu-24.04";
 const MEMORY_AVAILABLE_EMERGENCY_MB = 2048;
+// Early drop band: the 2026-11-14 run kept hitting HOLD+memory_emergency at ~900-1100 MB. The 19:06
+// drop came only after availability fell below 2048 MB, and the 10-minute cooldown then let it
+// fall again to ~1000 MB before the next drop. Dropping from 4096 MB leaves headroom for that gap.
+export const MEMORY_EARLY_DROP_MB = 4096;
 const CACHE_DROP_COOLDOWN_MS = 10 * 60 * 1000;
 // Persisted across timer invocations; one extra cache drop per continuous emergency.
 export const EMERGENCY_CACHE_DROP_OVERRIDE_LIMIT = 1;
@@ -543,9 +547,22 @@ export function memoryEmergency(memory: HostMemory | null): boolean {
   );
 }
 
+export type MemoryDropPlan = "emergency" | "low" | "early" | "none";
+
+/** One classification for the memory lever; "emergency" is exactly memoryEmergency(). */
+export function memoryDropPlan(memory: HostMemory | null): MemoryDropPlan {
+  if (memory === null) return "none";
+  if (memoryEmergency(memory)) return "emergency";
+  if (memory.availableMb < MEMORY_AVAILABLE_EMERGENCY_MB) return "low";
+  if (memory.availableMb < MEMORY_EARLY_DROP_MB) return "early";
+  return "none";
+}
+
 type MemoryEmergencyOptions = {
   before: HostMemory;
   beforeBuffCacheMb?: number | null;
+  /** Set only by the early band; absent keeps the emergency and low-memory log lines unchanged. */
+  reason?: "early";
   thresholdMb: number;
   isLeverAvailable: () => boolean | Promise<boolean>;
   startLever: () => boolean | Promise<boolean>;
@@ -683,7 +700,8 @@ export async function recoverMemoryEmergency(
   if (restored && dropAttempted) outcome = "restored";
   else if (outcome === "started") outcome = "no-effect";
   consola.info(
-    `MEM_RECLAIM lever=${leverAttempted ? DROP_CACHE_UNIT : "unavailable"} ` +
+    `MEM_RECLAIM ${options.reason === undefined ? "" : `reason=${options.reason} `}` +
+      `lever=${leverAttempted ? DROP_CACHE_UNIT : "unavailable"} ` +
       `attempted=${dropAttempted} ` +
       `emergency_override=${emergencyOverride} override_limit=${EMERGENCY_CACHE_DROP_OVERRIDE_LIMIT} ` +
       `before_mb=${options.before.availableMb} after_mb=${after?.availableMb ?? "unknown"} ` +
@@ -1245,6 +1263,29 @@ async function emergencyBuildReclaim(
   return ok(after);
 }
 
+/** Cooldown-bound cache drop above the emergency floor; it never stops compute. */
+async function earlyCacheDrop(memory: HostMemory): Promise<MemoryRecovery> {
+  return recoverMemoryEmergency({
+    before: memory,
+    beforeBuffCacheMb: await guestBuffCacheMb(),
+    reason: "early",
+    thresholdMb: MEMORY_EARLY_DROP_MB,
+    isLeverAvailable: dropCacheLeverAvailable,
+    startLever: startDropCacheLever,
+    fallbackDrop: dropPageCache,
+    fallbackWhenUnavailable: false,
+    wait: () => Bun.sleep(2_000),
+    measure: probeHostMemory,
+    measureBuffCache: guestBuffCacheMb,
+    canAttemptDrop: cacheDropAllowed,
+    markDropAttempt: markCacheDropAttempt,
+    isRestored: (after) =>
+      after !== null && after.availableMb >= MEMORY_EARLY_DROP_MB,
+    stopOnFailure: false,
+    stopCompute: () => Promise.resolve(),
+  });
+}
+
 async function main(): Promise<void> {
   const parsed = cli(
     {
@@ -1340,17 +1381,20 @@ async function main(): Promise<void> {
       `MEMORY windows_available_mb=${memoryBefore.availableMb} page_reads_s=${memoryBefore.pageReadsPerSecond}\n`,
     );
   }
-  const memoryLow = memoryEmergency(memoryBefore);
+  const memoryPlan = memoryDropPlan(memoryBefore);
+  const memoryLow = memoryPlan === "emergency";
   if (
     memoryBefore !== null &&
     memoryBefore.availableMb >= MEMORY_AVAILABLE_EMERGENCY_MB
   ) {
     await resetEmergencyCacheDrop();
   }
-  const memoryAvailableLow =
-    memoryBefore !== null &&
-    memoryBefore.availableMb < MEMORY_AVAILABLE_EMERGENCY_MB;
+  const memoryAvailableLow = memoryPlan === "emergency" || memoryPlan === "low";
+  const earlyMemory =
+    memoryBefore !== null && memoryPlan === "early" ? memoryBefore : null;
   if (free >= policy.denyBytes && !memoryAvailableLow) {
+    // Early drop runs without a HOLD verdict: a clear disk with a drop in progress stays OK.
+    if (earlyMemory !== null) await earlyCacheDrop(earlyMemory);
     await writeRecoveryVerdict(
       recoveryVerdictRecord(
         "OK",
@@ -1423,7 +1467,7 @@ async function main(): Promise<void> {
       memoryResult.afterMb === null ||
       memoryResult.afterMb < MEMORY_AVAILABLE_EMERGENCY_MB;
     memoryLatest = memoryResult.memoryAfter;
-  } else if (memoryAvailableLow) {
+  } else if (memoryBefore !== null && memoryAvailableLow) {
     const holdMemoryResult = await recoverMemoryEmergency({
       before: memoryBefore,
       beforeBuffCacheMb: await guestBuffCacheMb(),
@@ -1447,6 +1491,11 @@ async function main(): Promise<void> {
       holdMemoryResult.afterMb < MEMORY_AVAILABLE_EMERGENCY_MB;
     memoryLatest = holdMemoryResult.memoryAfter;
     recovery = holdMemoryResult;
+  } else if (earlyMemory !== null) {
+    // Early band never sets memoryStillLow: the verdict stays as the disk and emergency rules decide.
+    const earlyResult = await earlyCacheDrop(earlyMemory);
+    memoryLatest = earlyResult.memoryAfter;
+    recovery = earlyResult;
   }
   if (
     memoryLatest !== null &&

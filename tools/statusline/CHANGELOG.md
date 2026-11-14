@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.24.8 — 2026-11-14
+
+- a running row's "working ·" takes the bar's dim grey
+
 ## 0.24.7 — 2026-11-14
 
 - a stray empty .git directory is not a repository root

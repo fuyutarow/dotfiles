@@ -58,3 +58,26 @@ and states the condition that satisfies it.
 | A7 | How it is deployed, run and supported | A page states who runs it and what to do when it fails; or states that it is not deployed by this set |
 | A8 | Which environments and features are available now | A status table per feature and environment |
 | A9 | What the business terms mean | A glossary entry per term used on more than one page |
+| A10 | Where each business rule is enforced, by which component, and who can bypass it | A table maps each business rule to the component that enforces it, the check it performs, and each actor or path that can bypass it, or states that none can; a rule with no enforcing component is named as such |
+
+## Reference pages
+
+A page of reference kind (see the page-kind limits in SKILL.md) meets all of the following. These are not reader topics,
+so they are not rows of the coverage table; each is checked on the page itself.
+
+| Id | Condition | Satisfied when |
+|---|---|---|
+| R1 | Source of truth is code | Each entry names the declaration it describes (file and symbol), and a check reads that declaration; prose that disagrees with the declaration is a defect |
+| R2 | Every entry has the same shape | A validator confirms each entry has the same fields in the same order; a missing or extra field fails the check |
+| R3 | It does not teach | The page has no tutorial sequence, worked narrative or rationale; each such explanation is linked from a conceptual page |
+| R4 | Examples are executed | Each example is run by a check against the declared contract and its recorded result matches the example; an example not run is marked unverified |
+| R5 | One language per page | All prose on the page is in one natural language; code identifiers and quoted declarations keep their original form |
+| R6 | One-to-one with the public surface | A check lists the public declarations and the page's entries; each declaration has exactly one entry, and each entry names a declaration |
+
+## Check inputs are not reader pages
+
+A file that a check consumes as its input, such as a contract-to-test ledger, is not a reader page. It is not
+published in the reader set and no reader page links to it as an explanation; the check that reads it is the
+only consumer. Its satisfying condition: the file is outside the published set's entry routes and every link to
+it from a reader page is absent, and the check that reads it names the file as its input. A reader needing the
+result of that check reads the check's status on the reader page, not the input file.

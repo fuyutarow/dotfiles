@@ -7,7 +7,7 @@
 // into research_record/, so nothing stood between a scratch script and a reported number.
 //
 // An example-research working copy is any directory whose root holds launcher/launch.ts AND
-// packages/ModelRegistry.jl — the main checkout, a jj workspace, a git worktree
+// packages/ModelRegistry.jl or packages-2611/ModelRegistry.jl — the main checkout, a jj workspace, a git worktree
 // (example-research-simplify). A command that executes julia is allowed only when its program file is a
 // TRACKED file of such a working copy: present in the parent commit (@-) of a jj working copy, in
 // HEAD of a git one. A MODIFIED tracked file passes (developers edit tests); an UNTRACKED new file
@@ -70,7 +70,10 @@ async function exists(path: string): Promise<boolean> {
 async function isWorkingCopyRoot(dir: string): Promise<boolean> {
   return (
     (await exists(join(dir, "launcher", "launch.ts"))) &&
-    (await exists(join(dir, "packages", "ModelRegistry.jl")))
+    ((await exists(join(dir, "packages", "ModelRegistry.jl"))) ||
+      // firedancer since generation 2611 keeps its packages under packages-2611/ (2026-11-17: notes/ and scratchpad
+      // julia scripts ran unchecked there because only packages/ was recognized).
+      (await exists(join(dir, "packages-2611", "ModelRegistry.jl"))))
   );
 }
 

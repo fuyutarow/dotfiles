@@ -551,3 +551,22 @@ describe("enforce-official-execution", () => {
     expect(d.ok && d.value.permissionDecision).toBe("deny");
   });
 });
+
+// firedancer generation 2611 keeps its packages under packages-2611/ (2026-11-17: scratchpad and notes/ julia scripts
+// ran unchecked there). A working copy with that layout is recognized like the packages/ one.
+test("a packages-2611 working copy is recognized: scratch julia into it is denied, a plain dir is not", async () => {
+  const fd2611 = join(base, "fd-2611");
+  const plain = join(base, "plain");
+  for (const f of ["launcher/launch.ts", "packages-2611/ModelRegistry.jl"]) {
+    mkdirSync(join(fd2611, f, ".."), { recursive: true });
+    writeFileSync(join(fd2611, f), "# seed\n");
+  }
+  mkdirSync(plain, { recursive: true });
+  const denied = await verdict(
+    `julia --project=${fd2611}/envs/pkg-2611 ${scratch}/s.jl`,
+    fd2611,
+  );
+  expect(denied.denied).toBe(true);
+  const allowed = await verdict(`julia ${scratch}/s.jl`, plain);
+  expect(allowed.denied).toBe(false);
+});

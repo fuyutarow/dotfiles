@@ -4,14 +4,13 @@ description: >-
   Writes, reorganizes and reviews software doc sets so readers can explain the mechanism and decide
   for themselves. Each reader question is answered on exactly one page; the coverage table has no
   unanswered question and no orphan page. Each page has one primary question, paragraphs of at most four
-  sentences, tables of at most six columns and twelve rows, at most two sentences per cell, and a state
-  list or figure for stateful mechanisms. Verification history (run IDs, hashes, commits, review
-  narration) stays on records pages; reader pages state limits as system properties. The entry page
+  sentences, prose tables of at most six columns and twelve rows (reference pages: own limits), and a state
+  list or figure for stateful mechanisms. Provenance (run IDs, hashes, who checked what) stays on
+  records pages; decision-relevant status (unverified, undecided, unimplemented) stays on reader pages. The entry page
   states guarantees, version and scope affirmatively and routes each reader to a first page. Derive
   reader questions, then coverage, then page responsibilities, then directories. Teach from a familiar
   problem through a worked input and result/refusal; examples stay within the source contract; mark
-  inference and uncertainty. An exact API reference serves lookup and need not teach the whole system.
-  Use for README, guides, API docs, specs and ADR/RFC.
+  inference and uncertainty. API reference serves lookup; it need not teach the whole system. Use for README, guides, API docs, specs and ADR/RFC.
 ---
 
 # Documenting software
@@ -49,7 +48,7 @@ Use this distinction when material is mixed; it does not prescribe a directory t
 | How does the system work, and why this design? | Architecture/design explanation and decisions: responsibilities, runtime flow, alternatives, consequences |
 | How is this particular mechanism implemented? | Implementation design or a focused decision: chosen library, algorithm, adapter, constraints and replacement conditions |
 | How must contributors write and check code? | Contributor/coding/tool guidance: rule rationale, applicability, exceptions and the configuration/test that enforces it |
-| What changed, was observed, or remains unresolved? | Change, audit or issue record: dated evidence and status, linked from the relevant claim when necessary |
+| What changed, or who observed what and when? | Change, audit or issue record: dated evidence, linked from the relevant claim when necessary; a status the reader must know (unverified, undecided, unimplemented) is also stated on the reader page |
 
 For example, “reject data that does not match the approved schema” is a consumer guarantee;
 “use this converter and type generator” is an implementation choice; “do not cast unvalidated
@@ -89,23 +88,35 @@ that changes the adoption or action decision.
 ## Bound each page's load and keep the reader path clean
 
 Before a set is published, measure the final draft of every page and include the measurements in the
-output as a density table: page, primary question, largest table (columns x rows), most sentences in one
-cell, most sentences in one paragraph. Any value over a limit below is split, merged or rewritten, then
-measured again. Report the final values, not the first draft. An owner may exceed a limit only with a
-reason stated on that page.
+output as a density table: page, page kind (prose or reference), primary question, largest table
+(columns x rows), most sentences in one cell, most sentences in one paragraph. Any value over the limit of
+its page kind is split, merged or rewritten, then measured again. Report the final values, not the first
+draft. A page has exactly one kind, declared in the density table; a limit is changed by changing the
+kind's rule here, not by a reason written on one page.
+
+Every number below is provisional: a working default of this skill, not a measured threshold. Treat one as
+firm only where a basis is cited beside it; change it by evidence, not per page.
 
 - **Question**: one primary reader question per page. Answer a second question by linking, not on the page.
-- **Paragraph**: at most four sentences and one claim. Split a paragraph that mixes a mechanism step with a condition or exception.
-- **Table**: at most six columns and twelve rows. Split a wider or longer table by reader question. Do not put a whole data model in one table.
-- **Table cell**: at most two sentences. Move a longer explanation below the table or to a linked page.
+- **Paragraph** (both kinds): at most four sentences and one claim. Split a paragraph that mixes a mechanism step with a condition or exception.
 - **Figure**: where a mechanism has states, ordering or branching, give a state list, sequence or diagram. A chain of arrows in prose does not replace it.
 
-Verification history stays on records pages: audit and review history, run IDs, hashes, commit references,
-open-question logs, design comparisons, negotiation points, and first-person narration of who checked what.
-Link the record from the claim that needs provenance (see the table above); do not copy its entries into the
-page. A reader page states a limit as a property of the system ("X is not guaranteed when Y"), not as the
-result of a check, so it does not say "確認した範囲" or "確認していない点". Write reader pages as impersonal
-statements about the system.
+| Page kind | Table | Cell |
+|---|---|---|
+| Prose (guide, concept, architecture) | At most six columns and twelve rows; split by reader question | At most two sentences; move a longer explanation below the table or to a linked page |
+| Reference (API, Query/field, option, error and status-code lookup) | Rows unbounded, at most six columns; one table per object or reader question, never a whole data model | One sentence |
+
+Provenance stays on records pages: audit and review history, run IDs, hashes, commit references,
+open-question logs, design comparisons, negotiation points, and first-person narration of who checked what
+and when. Link the record from the claim that needs provenance (see the table above); do not copy its entries
+into the page.
+
+Status that changes what a reader will decide or do stays on the reader page, stated as a property of the
+thing it qualifies: unverified, undecided, unimplemented, planned ("X is undecided"; "Y is not implemented").
+Put it beside the claim or in a status column or row, without who, when or how. Moving a record page out of the
+published set must not hide such a status; keep it on the reader page and link the record for provenance.
+Test: would the reader choose differently if they knew? Then it is status; otherwise it is provenance.
+Write reader pages as impersonal statements about the system.
 
 An entry page passes when it affirmatively states what the set guarantees and its version and scope; gives
 one concrete worked example or the adoption route; names each reader it serves with a first page for that
@@ -183,9 +194,13 @@ candidate and XS-C scoped convention. These source judgments are not automatical
 | `references/house-style-guides.md` | The project adopts a named ecosystem guide |
 | `references/standards-scope.md` | A claim about ISO/IEC/IEEE standards; normative bodies are not covered |
 
-Japanese notation and wording (conjunctions, 「とき」, okurigana, katakana or Latin terms) belong to
-`linting-prose`, whose machine floor gates them; this skill does not restate those rules. This skill decides only
-whether a term or gloss serves the reader.
+Japanese notation has two owners. The engine is `linting-prose`'s machine floor (textlint
+ja-technical-writing and prh). The policy (又は/または, とき/時, 書込/書き込み, katakana or Latin terms) is per
+repository. When reorganizing a doc set, decide each notation once, record it as an entry in that repository's
+own prh dictionary (replacing the floor's bundled prh-house.yml examples), and wire the floor as the gate over
+the set. Follow its order ADOPT > CONFIGURE > AUTHOR: adopt a published preset or dictionary, configure rule
+options, and author an entry only for a decision neither covers. This skill does not restate the rules; it
+decides only whether a term or gloss serves the reader.
 
 Source conventions apply only in their stated ecosystem; do not turn a template into a standard.
 Version-number semantics belong to `designing-version-schemes`; memo cover/authority to

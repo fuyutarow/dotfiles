@@ -54,4 +54,15 @@ describe("enforce-gated-commit", () => {
       bash(`cd ${gated} && jj commit -m x`, repo(false))?.permissionDecision,
     ).toBe("deny");
   });
+  test("a cd out of a gated repo into one without the gate is judged where the commit runs", () => {
+    const plain = repo(false);
+    expect(
+      bash(`cd ${plain} && jj commit records/a.md -m x`, repo(true)),
+    ).toBeNull();
+  });
+  test("a heredoc body or a quoted word that mentions jj commit is data, not a commit", () => {
+    const root = repo(true);
+    expect(bash("cat > t.ts <<'EOF'\njj commit -m x\nEOF", root)).toBeNull();
+    expect(bash("echo 'jj commit -m x'", root)).toBeNull();
+  });
 });

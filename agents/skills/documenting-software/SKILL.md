@@ -170,6 +170,12 @@ page that answers each. Pass only when no question lacks a primary page and ever
 question. A question with no page is an uncovered finding; a page that answers none is an orphan to merge or
 remove. Every page must also be reachable from an entry route.
 
+Coverage has a second route, because reader questions cannot surface a topic no reader thought to ask about. Load
+`references/topic-checklists.md` at this step only. Pick the set's document kind (platform/SDK or application/product),
+then add each item of that kind's checklist to the same table: its row names the page that satisfies the item, or
+`not needed: <reason>` where the reason is a property of this set. An unmapped item is an uncovered finding, like an
+unanswered question. Pass only when both routes hold.
+
 Run both set-level checks before a multi-page set is called complete. Record each check's table in the output.
 A check passes only when its pass condition holds for every row.
 
@@ -255,6 +261,7 @@ candidate and XS-C scoped convention. These source judgments are not automatical
 | `references/changelog-and-commit-grammars.md` | A declared change/commit grammar |
 | `references/house-style-guides.md` | The project adopts a named ecosystem guide |
 | `references/standards-scope.md` | A claim about ISO/IEC/IEEE standards; normative bodies are not covered |
+| `references/topic-checklists.md` | Coverage check of a multi-page set: the platform/SDK or application/product checklist items |
 
 Japanese notation has two owners. The engine is `linting-prose`'s machine floor (textlint
 ja-technical-writing and prh). The policy (又は/または, とき/時, 書込/書き込み, katakana or Latin terms) is per

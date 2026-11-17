@@ -145,7 +145,8 @@ A wording risk is a scoped reviewer judgment, not observed reader behavior. Do n
 behavior or every possible detail from a page with a narrower declared purpose.
 
 Keep one authoritative home for a contract while allowing derived summaries and examples where
-needed for understanding. Use meaningful link labels; internal IDs may remain in traceability fields
+needed for understanding; set-level checks F and E under "Preserve precision and verify" test each
+restatement and example against it. Use meaningful link labels; internal IDs may remain in traceability fields
 but must not substitute for definitions. Repetition and forward links serve the reader's path when they
 are placed by the load limits above; judge length and density by those checks, not by taste. Prefer
 repairing the explanation or reading order to accumulating disclaimers.
@@ -168,6 +169,28 @@ it in the output. List the reader questions of each named reader, one per row, a
 page that answers each. Pass only when no question lacks a primary page and every page answers at least one
 question. A question with no page is an uncovered finding; a page that answers none is an orphan to merge or
 remove. Every page must also be reachable from an entry route.
+
+Run both set-level checks before a multi-page set is called complete. Record each check's table in the output.
+A check passes only when its pass condition holds for every row.
+
+**F — fact consistency.** A fact is any claim a reader can take from more than one place: a value, guarantee,
+effect, status, signature, definition, version or scope. Summaries, status tables, glossary entries and examples count.
+1. List every fact that appears on two or more pages. Start from the glossary terms, status rows and example calls,
+   then search the set for each one's other occurrences. Columns: fact, owning page, and the statement at each location.
+2. Name one owning page per fact. Every other location links to it or quotes its statement word for word, with its
+   status and qualifier.
+3. Pass: each fact has one owner, and every other location is a link or an identical quote. A statement that differs
+   from its owner in value, predicate, status or term is a defect, even when it is not yet clear which statement is
+   right. Decide the owner, then correct the others.
+
+**E — example contract.** Every operation, field and argument an example calls must exist in the contract it cites.
+1. For each example, list each call, field and argument, and the contract it cites.
+2. Resolve each name against the declaration source of that contract (its schema, interface or signature file), not
+   against prose describing it. Use a lookup that prints the declaration, and record the declaration found.
+3. Pass: each call resolves to one declaration whose arguments match in count, order and required context (such as a
+   session or handle). An undefined name, a missing required argument or an extra argument is a defect. Correct the
+   example or the contract, and record which one changed.
+4. An example whose contract is outside the set's sources is marked unverified, not passed.
 
 Use `structuring-documents` for relocation and coherent section order, and `linting-prose` for direct,
 plain, inclusive sentences. Preserve the user's requested scope and technical guarantees. Do not

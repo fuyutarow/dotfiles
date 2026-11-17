@@ -109,3 +109,47 @@ test("a directory with no Markdown or TOML files is an input error", async () =>
   const empty = await run([join(FIXTURE, "..", "..", "scripts")]);
   expect(empty.exitCode).toBe(2);
 });
+
+const terms = (stdout: string) =>
+  stdout
+    .split("\n")
+    .filter(
+      (l) =>
+        l.startsWith("| ") &&
+        !l.startsWith("| Term |") &&
+        !l.startsWith("| ---"),
+    )
+    .map((l) => l.split(" | ")[0]?.slice(2));
+
+test("--shard k/n splits the rows into contiguous groups and covers each row once", async () => {
+  const docs = join(FIXTURE, "docs");
+  const glossary = ["--glossary", join(FIXTURE, "glossary.md")];
+  const whole = await run([docs, ...glossary]);
+  expect(whole.stderr).toContain("fact-scan: 5 rows");
+
+  const shards = await Promise.all(
+    [1, 2, 3].map((k) => run([docs, ...glossary, "--shard", `${k}/3`])),
+  );
+  expect(shards.map((s) => s.exitCode)).toEqual([0, 0, 0]);
+  expect(shards.map((s) => terms(s.stdout).length)).toEqual([1, 2, 2]);
+  expect(shards.flatMap((s) => terms(s.stdout))).toEqual(terms(whole.stdout));
+  expect(shards[1]?.stderr).toContain("shard 2/3: 2 of 5 rows (rows 2-3)");
+  expect(shards[0]?.stdout).toContain("| Term | Kinds |");
+});
+
+test("--shard with more groups than rows prints the empty result for an empty group", async () => {
+  const docs = join(FIXTURE, "disjoint");
+  const { stdout, stderr, exitCode } = await run([docs, "--shard", "2/4"]);
+  expect(exitCode).toBe(0);
+  expect(stdout).toBe("No term appears in two or more files.\n");
+  expect(stderr).toContain("0 of 0 rows");
+});
+
+test("--shard rejects a malformed or out-of-range group with exit 2", async () => {
+  const docs = join(FIXTURE, "docs");
+  for (const bad of ["0/3", "4/3", "1/0", "a/b", "2", "1/2/3"]) {
+    const { exitCode, stderr } = await run([docs, "--shard", bad]);
+    expect(exitCode).toBe(2);
+    expect(stderr).toContain("--shard expects k/n");
+  }
+});

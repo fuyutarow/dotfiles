@@ -8,7 +8,11 @@
 // Starting kinds: glossary headwords (first column of a table, or a heading) from --glossary,
 // status words, backticked code identifiers, and numbers with units.
 //
-// Usage:  bun scripts/fact-scan.ts <doc-dir> [--glossary <file>]
+// --shard <k>/<n> splits the rows, in their stable sorted order, into n contiguous groups of
+// near-equal size and prints group k, so large tables can go to parallel judges. The total row
+// count (and, for a shard, its row range) is printed to stderr; stdout stays the table alone.
+//
+// Usage:  bun scripts/fact-scan.ts <doc-dir> [--glossary <file>] [--shard <k>/<n>]
 // Exit:   0 = scan ran (an empty table is a valid result)
 //         2 = usage error, or input unreadable / no Markdown or TOML files
 //         1 = unknown flag (Cleye's strictFlags exit)
@@ -226,6 +230,36 @@ export function scanSources(
     .toSorted((a, b) => (a.term < b.term ? -1 : 1));
 }
 
+export interface Shard {
+  readonly k: number;
+  readonly n: number;
+}
+
+// "k/n" with 1 <= k <= n; anything else is undefined.
+export function parseShard(spec: string): Shard | undefined {
+  const m = /^(\d+)\/(\d+)$/u.exec(spec);
+  if (m?.[1] === undefined || m[2] === undefined) return undefined;
+  const k = Number(m[1]);
+  const n = Number(m[2]);
+  return k >= 1 && n >= 1 && k <= n ? { k, n } : undefined;
+}
+
+// Rows [floor((k-1)*N/n), floor(k*N/n)) of the N rows: contiguous, in order, sizes differ by at most one.
+export function shardRange(
+  total: number,
+  { k, n }: Shard,
+): { start: number; end: number } {
+  return {
+    start: Math.floor(((k - 1) * total) / n),
+    end: Math.floor((k * total) / n),
+  };
+}
+
+export function shardRows<T>(rows: readonly T[], shard: Shard): T[] {
+  const { start, end } = shardRange(rows.length, shard);
+  return rows.slice(start, end);
+}
+
 function escapeCell(text: string): string {
   return text.replaceAll("|", "\\|");
 }
@@ -303,6 +337,11 @@ async function main(): Promise<number> {
         type: String,
         description: "Glossary file (table headwords and headings)",
       },
+      shard: {
+        type: String,
+        description:
+          "Print group k of n contiguous row groups, as k/n (1 <= k <= n)",
+      },
     },
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
@@ -312,6 +351,13 @@ async function main(): Promise<number> {
   if (docdir === undefined) return usage("doc directory is required");
   if (parsed._.length > 1)
     return usage("exactly one doc directory is expected");
+
+  const shard =
+    parsed.flags.shard === undefined
+      ? undefined
+      : parseShard(parsed.flags.shard);
+  if (parsed.flags.shard !== undefined && shard === undefined)
+    return usage("--shard expects k/n with 1 <= k <= n");
 
   const root = resolve(docdir);
   const isDirectory = await fromAsyncThrowable(() => stat(root))();
@@ -332,15 +378,24 @@ async function main(): Promise<number> {
   if (loaded.isErr())
     return fail(`cannot read input: ${messageOf(loaded.error)}`);
 
-  process.stdout.write(
-    renderTable(scanSources(loaded.value.sources, loaded.value.glossary)),
+  const rows = scanSources(loaded.value.sources, loaded.value.glossary);
+  if (shard === undefined) {
+    process.stderr.write(`fact-scan: ${rows.length} rows\n`);
+    process.stdout.write(renderTable(rows));
+    return 0;
+  }
+  const { start, end } = shardRange(rows.length, shard);
+  process.stderr.write(
+    `fact-scan: shard ${shard.k}/${shard.n}: ${end - start} of ${rows.length} rows` +
+      (end > start ? ` (rows ${start + 1}-${end})\n` : "\n"),
   );
+  process.stdout.write(renderTable(shardRows(rows, shard)));
   return 0;
 }
 
 function usage(message: string): number {
   process.stderr.write(
-    `fact-scan: ${message}\nusage: bun fact-scan.ts <doc-dir> [--glossary <file>]\n`,
+    `fact-scan: ${message}\nusage: bun fact-scan.ts <doc-dir> [--glossary <file>] [--shard <k>/<n>]\n`,
   );
   return 2;
 }

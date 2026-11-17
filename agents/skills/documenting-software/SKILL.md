@@ -176,17 +176,32 @@ A check passes only when its pass condition holds for every row.
 **F — fact consistency.** A fact is any claim a reader can take from more than one place: a value, guarantee,
 effect, status, signature, definition, version or scope. Summaries, status tables, glossary entries and examples count.
 1. Run the occurrence scan over the published set (materialize its Markdown and TOML pages in one directory):
-   `bun scripts/fact-scan.ts <doc-dir> --glossary <glossary-file>` (path relative to this skill's directory)
+   `bun scripts/fact-scan.ts <doc-dir> --glossary <glossary-file> > scan.md` (paths relative to this skill's directory)
    It prints one row per starting term (glossary headword, status word, backticked identifier, number with a unit)
-   that occurs in two or more files, with every file:line and its line text. Keep the table as the record of this step.
-   An empty table is a valid result. The scan does not judge; a fact that uses none of these starting terms is found
-   by a hand pass over the owner pages' statements.
-2. Judge each row. Name one owning page for the fact. A location is a defect when its statement differs from the
+   that occurs in two or more files, with every file:line and its line text, and the total row count N on stderr.
+   Keep the table as the record of this step. An empty table is a valid result. The scan does not judge.
+   For N over 35, split it with `--shard <k>/<n>` (n = ceil(N/35); contiguous groups, stable order) and save each group.
+2. Judge each row in a judgment table (Markdown, one row per judged location, seven columns):
+   `row term | fact | owner (file:line) | location (file:line) | verdict | quote of owner | quote of location`.
+   Name one owning page for the fact. The verdict is `mismatch` when the location's statement differs from the
    owner's in value, predicate (guarantee or effect), status or definition, even when it is not yet clear which
-   statement is right. A location that links to the owner and only omits a qualifier is not a defect. A location that
-   states the fact without linking must match the owner in those four respects.
-3. Pass: each row has one owner, and every other location either links to it or matches it in value, predicate,
-   status and definition. Decide the owner, then correct the others.
+   statement is right, and also when it states the fact without linking and differs in any of those respects;
+   `qualifier-omitted` when it links to the owner and only omits a qualifier (not a defect); otherwise `match`.
+   A judged row has every one of its locations judged (each is the judged location or the owner), each with a
+   verdict, file:line on both sides and a quote of the statement on both sides. A row without a quote is
+   unjudged: a verdict alone is not a judgment. Decide the owner per fact, not per shard or per term.
+   - Sharded tables: one judge per shard, in parallel, each within 600 s. A judge validates its own shard
+     (`bun scripts/fact-judgments.ts --scan shard-<k>.md --docs <doc-dir> [--glossary <glossary-file>] judgments-<k>.md`)
+     and reports only when it exits 0; a record that does not validate is not a judgment.
+   - Hand pass (a fact with no starting term is not in the scan): read every sentence that states a guarantee, a
+     refusal, or who can read or write something. Compare each with the other pages that state the same thing, and
+     record the comparison in the same table with row term `(hand)`. This pass covers those three kinds only.
+3. Pass: run `bun scripts/fact-judgments.ts --scan scan.md --docs <doc-dir> [--glossary <glossary-file>] judgments-*.md`.
+   It must exit 0: judged = total, every judgment row complete with its quotes found on the cited lines, and no
+   location given two owners for the same fact. For each owner conflict, decide the one owner per fact and correct the
+   rows. Then correct every `mismatch` in the pages, re-run step 1, delete the judgment rows whose quotes no longer
+   occur, judge the rows the validator lists as unjudged, and run it with `--closed` until it exits 0 (no mismatch
+   left). Report F as done only with that final output (its judged/total line and exit status).
 
 **E — example contract.** Every operation, field and argument an example calls must exist in the contract it cites.
 1. For each example, list each call, field and argument, and the contract it cites.

@@ -88,23 +88,23 @@ that changes the adoption or action decision.
 ## Bound each page's load and keep the reader path clean
 
 Before a set is published, measure the final draft of every page and include the measurements in the
-output as a density table: page, page kind (prose or reference), primary question, largest table
-(columns x rows), most sentences in one cell, most sentences in one paragraph. Any value over the limit of
-its page kind is split, merged or rewritten, then measured again. Report the final values, not the first
+output as a density table: page, page kind (prose or reference), primary question, body characters, total table rows, headings, figures, largest table
+(columns x rows), most sentences in one cell, most sentences in one paragraph. Body characters count the
+page's text outside front matter and code blocks, tables included. Any value over the limit of its page kind is split, merged or rewritten, then measured again. Report the final values, not the first
 draft. A page has exactly one kind, declared in the density table; a limit is changed by changing the
 kind's rule here, not by a reason written on one page.
 
-Every number below is provisional: a working default of this skill, not a measured threshold. Treat one as
+Every number below, including the page totals, is provisional: a working default of this skill, not a measured threshold. The reviewer's 9,000-character page (body and tables together) is the observed failure that motivated the totals, not a measured basis for their values. Treat one as
 firm only where a basis is cited beside it; change it by evidence, not per page.
 
 - **Question**: one primary reader question per page. Answer a second question by linking, not on the page.
 - **Paragraph** (both kinds): at most four sentences and one claim. Split a paragraph that mixes a mechanism step with a condition or exception.
-- **Figure**: where a mechanism has states, ordering or branching, give a state list, sequence or diagram. A chain of arrows in prose does not replace it.
+- **Figure**: where a mechanism has states, ordering, branching, concept relations or an enforcement boundary, give a state list, sequence or figure. A chain of arrows in prose does not replace it. Each figure passes four tests in `references/figure-tests.md`, loaded only when the set has figures: (a) the figure-only reader test: a reader of the title, the two-sentence conclusion and one figure can state the page's claim; (b) headings name parts of the figure; (c) no figure is drawn twice in the set, and the owning page draws it while others link to it; (d) box and edge labels use the reader's words, not internal IDs.
 
-| Page kind | Table | Cell |
-|---|---|---|
-| Prose (guide, concept, architecture) | At most six columns and twelve rows; split by reader question | At most two sentences; move a longer explanation below the table or to a linked page |
-| Reference (API, Query/field, option, error and status-code lookup) | Rows unbounded, at most six columns; one table per object or reader question, never a whole data model | One sentence |
+| Page kind | Body characters | Total table rows | Headings | Largest table | Cell |
+|---|---|---|---|---|---|
+| Prose (guide, concept, architecture) | At most 4,000 | At most 24 (two 12-row tables); split by reader question | At most 8 | At most six columns and twelve rows | At most two sentences; move a longer explanation below the table or to a linked page |
+| Reference (API, Query/field, option, error and status-code lookup) | At most 12,000 | Unbounded | At most 20 | At most six columns; one table per object or reader question, never a whole data model | One sentence |
 
 Provenance stays on records pages: audit and review history, run IDs, hashes, commit references,
 open-question logs, design comparisons, negotiation points, and first-person narration of who checked what
@@ -291,6 +291,7 @@ candidate and XS-C scoped convention. These source judgments are not automatical
 | `references/house-style-guides.md` | The project adopts a named ecosystem guide |
 | `references/standards-scope.md` | A claim about ISO/IEC/IEEE standards; normative bodies are not covered |
 | `references/topic-checklists.md` | Coverage check of a multi-page set: the platform/SDK or application/product checklist items |
+| `references/figure-tests.md` | The set has figures (diagram, state list drawn as a figure, concept map or enforcement boundary): the four figure tests with procedures and examples |
 
 Japanese notation has two owners. The engine is `linting-prose`'s machine floor (textlint
 ja-technical-writing and prh). The policy (又は/または, とき/時, 書込/書き込み, katakana or Latin terms) is per

@@ -175,13 +175,18 @@ A check passes only when its pass condition holds for every row.
 
 **F — fact consistency.** A fact is any claim a reader can take from more than one place: a value, guarantee,
 effect, status, signature, definition, version or scope. Summaries, status tables, glossary entries and examples count.
-1. List every fact that appears on two or more pages. Start from the glossary terms, status rows and example calls,
-   then search the set for each one's other occurrences. Columns: fact, owning page, and the statement at each location.
-2. Name one owning page per fact. Every other location links to it or quotes its statement word for word, with its
-   status and qualifier.
-3. Pass: each fact has one owner, and every other location is a link or an identical quote. A statement that differs
-   from its owner in value, predicate, status or term is a defect, even when it is not yet clear which statement is
-   right. Decide the owner, then correct the others.
+1. Run the occurrence scan over the published set (materialize its Markdown and TOML pages in one directory):
+   `bun scripts/fact-scan.ts <doc-dir> --glossary <glossary-file>` (path relative to this skill's directory)
+   It prints one row per starting term (glossary headword, status word, backticked identifier, number with a unit)
+   that occurs in two or more files, with every file:line and its line text. Keep the table as the record of this step.
+   An empty table is a valid result. The scan does not judge; a fact that uses none of these starting terms is found
+   by a hand pass over the owner pages' statements.
+2. Judge each row. Name one owning page for the fact. A location is a defect when its statement differs from the
+   owner's in value, predicate (guarantee or effect), status or definition, even when it is not yet clear which
+   statement is right. A location that links to the owner and only omits a qualifier is not a defect. A location that
+   states the fact without linking must match the owner in those four respects.
+3. Pass: each row has one owner, and every other location either links to it or matches it in value, predicate,
+   status and definition. Decide the owner, then correct the others.
 
 **E — example contract.** Every operation, field and argument an example calls must exist in the contract it cites.
 1. For each example, list each call, field and argument, and the contract it cites.

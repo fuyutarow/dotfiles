@@ -48,3 +48,8 @@ position = 0
 script = "enforce-coord-idle-turn.ts"
 event = "Stop"
 position = 0
+
+[[slot]]
+script = "enforce-gated-commit.ts"
+event = "PreToolUse"
+position = 5

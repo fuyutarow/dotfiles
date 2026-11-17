@@ -266,3 +266,13 @@ reason = "Marks the Codex session idle and blocks the stop when mail is waiting;
 command = "{reason-network} hook codex session-end"
 owner = "reason-network"
 reason = "Removes the Codex session from the Reason Network registry at SessionEnd."
+
+# Claude and Codex: in a repo whose mise.toml defines the gated `commit` task, deny bare jj commit/squash/split.
+[[hook]]
+slug = "gated-commit"
+script = "enforce-gated-commit.ts"
+event = "PreToolUse"
+position = 5
+matcher = "Bash"
+fail_closed = true
+vendors = ["claude", "codex"]

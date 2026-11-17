@@ -237,6 +237,35 @@ effect, status, signature, definition, version or scope. Summaries, status table
 5. Also report the names the contract omits (contract-side gaps): each operation, field or argument that the
    set's examples or pages use as part of the contract but its declaration source does not declare, with the cited line.
 
+**T — term mapping.** One term keeps one sense and one name across the set: body text, navigation labels,
+page titles, headings and the repository's own conventions agree, or the page qualifies the other sense at each use.
+1. Run the listing over the published set, with the glossary, the navigation config and each convention file or directory
+   (paths relative to this skill's directory):
+   `bun scripts/term-scan.ts <doc-dir> --glossary <glossary-file> [--labels <nav-config>] [--convention <file-or-dir>]... [--max-units <m> --shard <k>] > terms.md`
+   The listing has three kinds of unit. (a) A glossary headword's body uses, one unit per (term, file), with the count and up
+   to two representative lines. (b) Each label, title, heading or convention line, as its own unit. A label's name also
+   gets its body group, so the label is judged against the page that holds it. (c) A variant cluster: names that normalize
+   to one key (case folded, separators removed, a loanword table such as サーバー/server) or share a head word with a bare
+   name (CoralbaseCore, move/core and 鍵 server join core and server). A name differing from another only by case is not a
+   cluster. Non-glossary names get no body groups otherwise. stderr gives the unit total, its breakdown (glossary body groups,
+   label-linked body groups, label/title/heading rows, convention rows, variant clusters) and the cluster count. The listing
+   does not judge. Kanji-only terms without a glossary entry are not listed; read the labels and headings for them.
+2. Judge each unit into a table with the columns `term | sense | page:line | quote | defect kind`. A body group is judged once
+   per file and its `sense` covers every use in that file; `page:line` is its first line. A label, title, heading or convention
+   unit is judged on its own line. A variant cluster is one unit: its candidate defect kind is `two names for one referent`,
+   and the judge confirms it or splits it, with the files and counts listed in the row. The defect kind is one of: `two senses
+   unqualified` (one name carries two senses and the use does not qualify which); `two names for one referent` (one referent
+   has two or more names in the set); `clash with upstream or convention` (the use's sense differs from the upstream
+   specification or a named convention file for the same name); `label contradicts content or facts` (a navigation label,
+   title or heading names a kind, audience, license or availability that the page's content or stated facts contradict); or
+   `—` when the use has none of these. A label passes only if it matches the content's kind and the stated facts.
+   Shard the units by `--max-units <m>`: one judge per shard, each within 600 s, validated against its own shard. Start at
+   m = 150 when nothing is measured; after the first shard, measure units judged per minute and set m so that a judge
+   finishes within 600 s.
+3. Pass: every unit's defect kind is `—`, or it is corrected in the page, the label or the convention reference. Correct,
+   re-run step 1, and re-judge the changed units. Report T as done with the total unit count, the breakdown on stderr and
+   the judged table's defect count. T is a set-level check; run it with F and E before a multi-page set is called complete.
+
 Use `structuring-documents` for relocation and coherent section order, and `linting-prose` for direct,
 plain, inclusive sentences. Preserve the user's requested scope and technical guarantees. Do not
 invent authority, rationale, measurements or requirements to fill a documentation gap.

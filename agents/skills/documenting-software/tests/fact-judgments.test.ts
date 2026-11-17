@@ -58,7 +58,7 @@ const fixture = (name: string) => join(JUDGMENTS, `${name}.md`);
 test("complete: every scan row judged with verified quotes, exit 0", async () => {
   const { stdout, exitCode } = await judge([fixture("complete")]);
   expect(exitCode).toBe(0);
-  expect(stdout).toContain("judged 5/5 scan rows; 7 judgment rows (1 hand)");
+  expect(stdout).toContain("judged 6/6 scan rows; 11 judgment rows (1 hand)");
   expect(stdout).toContain("mismatch rows (6):");
   expect(stdout.trimEnd().endsWith("PASS")).toBe(true);
 });
@@ -66,7 +66,7 @@ test("complete: every scan row judged with verified quotes, exit 0", async () =>
 test("missing-quote: an empty quote leaves the row unjudged, exit 1", async () => {
   const { stdout, exitCode } = await judge([fixture("missing-quote")]);
   expect(exitCode).toBe(1);
-  expect(stdout).toContain("judged 4/5 scan rows");
+  expect(stdout).toContain("judged 5/6 scan rows");
   expect(stdout).toContain("location quote missing");
   expect(stdout).toContain(
     "retry_timeout: no complete judgment for guide.md:4",
@@ -76,7 +76,7 @@ test("missing-quote: an empty quote leaves the row unjudged, exit 1", async () =
 test("unjudged: rows with no judgment are listed by term and location, exit 1", async () => {
   const { stdout, exitCode } = await judge([fixture("unjudged")]);
   expect(exitCode).toBe(1);
-  expect(stdout).toContain("judged 3/5 scan rows");
+  expect(stdout).toContain("judged 3/6 scan rows");
   expect(stdout).toContain(
     "export_csv: no complete judgment for guide.md:5, overview.md:5",
   );
@@ -89,7 +89,7 @@ test("owner-conflict: one location and fact with two owners across files, exit 1
     fixture("owner-conflict-b"),
   ]);
   expect(exitCode).toBe(1);
-  expect(stdout).toContain("judged 5/5 scan rows");
+  expect(stdout).toContain("judged 6/6 scan rows");
   expect(stdout).toContain(
     'guide.md:4 fact "retry_timeout default": owners overview.md:4 vs guide.md:4',
   );
@@ -123,7 +123,7 @@ test("a quote that does not occur at the cited line is invalid", async () => {
   const { stdout, exitCode } = await judge([file]);
   expect(exitCode).toBe(1);
   expect(stdout).toContain("location quote does not occur at guide.md:4");
-  expect(stdout).toContain("judged 4/5 scan rows");
+  expect(stdout).toContain("judged 5/6 scan rows");
 });
 
 test("an unknown verdict, a bad file:line, a short row and an unknown term are invalid", async () => {
@@ -191,8 +191,10 @@ test("a sharded scan is validated against its own judgments", async () => {
     DOCS,
     "--glossary",
     GLOSSARY,
+    "--max-locations",
+    "5",
     "--shard",
-    "3/3",
+    "4",
   ]);
   const file = join(work, "shard3.md");
   await writeFile(file, shard.stdout);
@@ -208,6 +210,6 @@ test("a sharded scan is validated against its own judgments", async () => {
   ]);
   // complete.md judges terms outside this shard: they are not rows of the shard's scan table
   expect(ok.exitCode).toBe(1);
-  expect(ok.stdout).toContain("judged 2/2 scan rows");
+  expect(ok.stdout).toContain("judged 1/1 scan rows");
   expect(ok.stdout).toContain("is not a row of the scan table");
 });

@@ -1,0 +1,7 @@
+[[rules]]
+name = "request-proof"
+text = "that expiry is at most 300000 ms ahead of server time"
+
+[[usecases]]
+name = "upgradeMigration"
+status = "unimplemented"

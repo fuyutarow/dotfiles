@@ -175,12 +175,25 @@ A check passes only when its pass condition holds for every row.
 
 **F — fact consistency.** A fact is any claim a reader can take from more than one place: a value, guarantee,
 effect, status, signature, definition, version or scope. Summaries, status tables, glossary entries and examples count.
-1. Run the occurrence scan over the published set (materialize its Markdown and TOML pages in one directory):
+1. Run the statement scan over the published set (materialize its Markdown and TOML pages in one directory):
    `bun scripts/fact-scan.ts <doc-dir> --glossary <glossary-file> > scan.md` (paths relative to this skill's directory)
-   It prints one row per starting term (glossary headword, status word, backticked identifier, number with a unit)
-   that occurs in two or more files, with every file:line and its line text, and the total row count N on stderr.
-   Keep the table as the record of this step. An empty table is a valid result. The scan does not judge.
-   For N over 35, split it with `--shard <k>/<n>` (n = ceil(N/35); contiguous groups, stable order) and save each group.
+   The unit is a statement: one sentence or table row that states (a) a number with a unit, (b) a status word
+   (未確認 未決 未実装 実装済み 予定 unverified undecided unimplemented implemented planned deprecated) with the subject
+   it qualifies, or (c) a definition ("X は … です", "X とは", "X: …", "X is a …", a glossary row). Statements are
+   grouped by subject: for a number, the noun phrase before it, its unit family (time, size, or the unit itself;
+   no conversion) and each glossary term in the sentence; for a status, the row label or sentence subject, the names
+   around it (glossary terms, Latin identifiers, the previous sentence) and a TOML table's name; for a definition,
+   the defined term, a glossary term or alias that is the sentence topic or row label. Subjects drop particles and
+   case. A group found in two or more files is one row: subject, kinds, location count and each statement with its file:line.
+   A word occurrence is not a statement: a glossary headword alone makes no row. stderr gives the group count and the
+   total location count. Keep the table as the record of this step. An empty table is a valid result. The scan does
+   not judge, and a fact whose sentence the subject rules miss is the hand pass's.
+   Bound each judge by locations, not rows: `--max-locations <m>` packs contiguous groups (stable order) so a shard
+   has at most m locations, reports every shard's location count on stderr and puts a group larger than m in a shard
+   of its own, reported there. Save each shard with `--shard <k>`. Measure the first shard's locations judged per
+   minute and set m so that a judge finishes within 600 s; start at m = 150 when nothing is measured.
+   Term check (separate; F does not judge it): `--terms --glossary <glossary-file>` prints, per glossary headword,
+   every file:line where it occurs, as input for a check of each use against the glossary entry.
 2. Judge each row in a judgment table (Markdown, one row per judged location, seven columns):
    `row term | fact | owner (file:line) | location (file:line) | verdict | quote of owner | quote of location`.
    Name one owning page for the fact. The verdict is `mismatch` when the location's statement differs from the
@@ -193,9 +206,10 @@ effect, status, signature, definition, version or scope. Summaries, status table
    - Sharded tables: one judge per shard, in parallel, each within 600 s. A judge validates its own shard
      (`bun scripts/fact-judgments.ts --scan shard-<k>.md --docs <doc-dir> [--glossary <glossary-file>] judgments-<k>.md`)
      and reports only when it exits 0; a record that does not validate is not a judgment.
-   - Hand pass (a fact with no starting term is not in the scan): read every sentence that states a guarantee, a
-     refusal, or who can read or write something. Compare each with the other pages that state the same thing, and
-     record the comparison in the same table with row term `(hand)`. This pass covers those three kinds only.
+   - Hand pass (a fact outside the scan's statement shapes is not in it): read every sentence that states a
+     guarantee, a refusal, who can read or write something, or a status. Compare each with the other pages that
+     state the same thing, and record the comparison in the same table with row term `(hand)`. This pass covers those
+     four kinds only.
 3. Pass: run `bun scripts/fact-judgments.ts --scan scan.md --docs <doc-dir> [--glossary <glossary-file>] judgments-*.md`.
    It must exit 0: judged = total, every judgment row complete with its quotes found on the cited lines, and no
    location given two owners for the same fact. For each owner conflict, decide the one owner per fact and correct the
@@ -210,7 +224,12 @@ effect, status, signature, definition, version or scope. Summaries, status table
 3. Pass: each call resolves to one declaration whose arguments match in count, order and required context (such as a
    session or handle). An undefined name, a missing required argument or an extra argument is a defect. Correct the
    example or the contract, and record which one changed.
-4. An example whose contract is outside the set's sources is marked unverified, not passed.
+4. An example whose contract is outside the set's sources is marked unverified, not passed. A name the example
+   uses that the contract does not declare may be marked disclosed only with a verdict row that quotes the
+   disclosure line (file:line and the quoted text); the undeclared name must appear in that quoted line. A
+   disclosure that does not name it leaves the example unverified.
+5. Also report the names the contract omits (contract-side gaps): each operation, field or argument that the
+   set's examples or pages use as part of the contract but its declaration source does not declare, with the cited line.
 
 Use `structuring-documents` for relocation and coherent section order, and `linting-prose` for direct,
 plain, inclusive sentences. Preserve the user's requested scope and technical guarantees. Do not

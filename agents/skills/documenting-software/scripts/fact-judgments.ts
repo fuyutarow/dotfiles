@@ -9,7 +9,7 @@
 //   row term | fact | owner (file:line) | location (file:line) | verdict | quote of owner | quote of location
 // verdict is match, mismatch or qualifier-omitted. The row term is a term of the scan table, or
 // "(hand)" for a fact found by the hand pass (hand rows are validated but are not scan rows).
-// A scan row is judged when every one of its locations is, in a complete judgment row for that
+// A scan row (one statement group) is judged when every one of its locations is, in a complete judgment row for that
 // term, the judged location or the owner. A complete row has a verdict, file:line on both sides and
 // a non-empty quote on both sides that occurs (whitespace-normalised; "…" or "..." elide) on that line.
 //
@@ -74,16 +74,18 @@ function isSeparator(line: string): boolean {
   return /^\s*\|[\s:|-]+\|\s*$/u.test(line) && line.includes("-");
 }
 
-// The scan table printed by fact-scan.ts: | Term | Kinds | file:line — text<br>file:line — text |
+// The scan table printed by fact-scan.ts, one statement group per row:
+//   | Subject | Kinds | Locations (count) | file:line — statement<br>file:line — statement |
+// (the --terms table has three columns and is not a scan table).
 export function parseScan(markdown: string): ScanRow[] {
   const rows: ScanRow[] = [];
   for (const line of markdown.split(/\r?\n/u)) {
     if (!isTableRow(line) || isSeparator(line)) continue;
     const cells = splitRow(line);
-    const [term, kinds, locations] = cells;
-    if (cells.length !== 3 || term === undefined || locations === undefined)
+    const [term, kinds, , locations] = cells;
+    if (cells.length !== 4 || term === undefined || locations === undefined)
       continue;
-    if (term === "Term" && kinds === "Kinds") continue;
+    if (term === "Subject" && kinds === "Kinds") continue;
     const parsed = locations.split("<br>").flatMap((entry) => {
       const m = /^(.+?:\d+) — (.*)$/u.exec(entry);
       return m?.[1] === undefined ? [] : [{ ref: m[1], text: m[2] ?? "" }];
@@ -405,7 +407,7 @@ async function main(): Promise<number> {
       scan: {
         type: String,
         description:
-          "Scan table printed by fact-scan.ts (whole set or one shard)",
+          "Scan table printed by fact-scan.ts (whole set or one --max-locations shard)",
       },
       docs: {
         type: String,

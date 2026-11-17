@@ -65,6 +65,43 @@ herdr_remote_attached() {
   return 1
 }
 
+# Windows clipboards are per Windows session. A pane that kept the WSL_INTEROP it inherited (zshenv
+# picks the newest socket once) may point at a dead socket or at session 0, and clip.exe then fills
+# a clipboard nobody reads. scripts/wsl-interop-session.ts prints the live socket whose Windows
+# processes run in explorer.exe's session. Only clip.exe gets it (clip_exe), never this shell's
+# environment. When none qualifies the inherited WSL_INTEROP stays — today's behavior — and one
+# stderr line says so. The helper's stdout is the socket and nothing else; its stderr is the reason.
+desktop_socket=
+desktop_interop_socket() {
+  self=$(readlink -f "$0" 2> /dev/null) || self=$0
+  case $self in
+    */*) helper=${self%/*}/../scripts/wsl-interop-session.ts ;;
+    *) helper=../scripts/wsl-interop-session.ts ;;
+  esac
+  if command -v bun > /dev/null 2>&1; then
+    desktop_out=$(bun "$helper" 2>&1) && desktop_rc=0 || desktop_rc=$?
+  else
+    desktop_out='bun is not installed'
+    desktop_rc=127
+  fi
+  desktop_last=$(printf '%s\n' "$desktop_out" | tail -n 1)
+  if [ "$desktop_rc" -eq 0 ] && [ -S "$desktop_last" ]; then
+    desktop_socket=$desktop_last
+    return 0
+  fi
+  [ "$desktop_rc" -ne 0 ] || desktop_last="the helper printed no socket ($desktop_last)"
+  printf 'copy-to-clipboard: no desktop-session WSL interop socket (%s); using the inherited WSL_INTEROP\n' \
+    "${desktop_last#wsl-interop-session: }" >&2
+}
+
+clip_exe() {
+  if [ -n "$desktop_socket" ]; then
+    WSL_INTEROP=$desktop_socket clip.exe
+  else
+    clip.exe
+  fi
+}
+
 # Over SSH or in a remote-attached herdr pane: native tools target the SERVER, never the CLIENT —
 # route via OSC 52 so the copy lands where the human's terminal actually is. Needs an OSC
 # 52-capable terminal and, inside tmux, `set -g set-clipboard on` (tmux/clipboard.conf).
@@ -80,7 +117,8 @@ case "$(uname -s)" in
   Linux)
     if [ -n "${WSL_DISTRO_NAME:-}" ] || command -v clip.exe > /dev/null 2>&1; then
       echo_back
-      printf '%s' "$data" | iconv -f UTF-8 -t UTF-16LE | clip.exe
+      desktop_interop_socket
+      printf '%s' "$data" | iconv -f UTF-8 -t UTF-16LE | clip_exe
     elif command -v xclip > /dev/null 2>&1; then
       echo_back
       printf '%s' "$data" | xclip -selection clipboard

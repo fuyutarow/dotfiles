@@ -106,6 +106,35 @@ link-clipboard-shims() {
 }
 link-clipboard-shims
 
+# ── Windows desktop calls run in the owner's desktop session ──────────────────
+# Windows desktops and clipboards are per Windows session. A long-lived pane keeps the WSL_INTEROP it
+# inherited (zsh/zshenv picks the newest socket once); after that socket dies, or if it served session
+# 0, a Windows program started through it never reaches the owner's desktop — silently.
+# scripts/wsl-interop-session.ts names the live socket whose powershell.exe runs in explorer.exe's
+# session (cached under $XDG_RUNTIME_DIR). `_wsl_desktop_run CMD ARGS…` runs ONE external command with
+# WSL_INTEROP set to it, for that command only: this shell's WSL_INTEROP is never changed. When no
+# socket qualifies, CMD still runs with the inherited value and one stderr line says so.
+# Users: `start` and the VS Code launchers below (`code`/`ide`, hence `e`/`ee`). `o`/`oo`/`open` are
+# smart-open (tools/smart-open/src/desktop-interop.ts), `c`/`pp`/`pwdc` zsh/copy-to-clipboard.sh.
+_wsl_desktop_run() {
+  emulate -L zsh
+  local helper=${DOTFILES:-$HOME/dotfiles}/scripts/wsl-interop-session.ts out last
+  local -i rc
+  if (( $+commands[bun] )); then
+    out=$(bun "$helper" 2>&1); rc=$?
+  else
+    out='bun is not installed'; rc=127
+  fi
+  last=${out##*$'\n'}
+  if (( rc == 0 )) && [[ -S $last ]]; then
+    WSL_INTEROP=$last command "$@"
+    return
+  fi
+  (( rc == 0 )) && last="the helper printed no socket ($last)"
+  print -u2 -r -- "${1:t}: no desktop-session WSL interop socket (${last#wsl-interop-session: }); using the inherited WSL_INTEROP"
+  command "$@"
+}
+
 # `open` = smart-open (tools/smart-open/src/smart-open.ts): attached over ssh/herdr, a URL goes to the machine you
 # sit at and a path to its VS Code (Remote-SSH, back to here); otherwise explorer.exe with a Windows path. `o` / `oo` live in
 # zsh/aliases.zsh.
@@ -153,10 +182,10 @@ _remote_uri_open() {
   # A flag anywhere (--wait, -d, --version, --install-extension …) → hand the launcher the call
   # untouched. Only plain path arguments get URI treatment; `git` using `code --wait` still works.
   for t in "$@"; do
-    [[ $t == -* ]] && { command "$launcher" "$@"; return }
+    [[ $t == -* ]] && { _wsl_desktop_run "$launcher" "$@"; return }
   done
   # No distro name (should be impossible — derived above) → do not forge a broken URI.
-  [[ -n $WSL_DISTRO_NAME ]] || { command "$launcher" "$@"; return }
+  [[ -n $WSL_DISTRO_NAME ]] || { _wsl_desktop_run "$launcher" "$@"; return }
 
   (( $# )) || set -- "${$(git rev-parse --show-toplevel 2> /dev/null):-$PWD}"
 
@@ -168,11 +197,12 @@ _remote_uri_open() {
       args+=(--file-uri "vscode-remote://wsl+${WSL_DISTRO_NAME}${t}")
     fi
   done
-  command "$launcher" "${args[@]}"
+  _wsl_desktop_run "$launcher" "${args[@]}"
 }
 code() { _remote_uri_open code "$@" }             # `e` / `ee` (zsh/aliases.zsh) land here
 ide() { _remote_uri_open antigravity-ide "$@" }   # Antigravity IDE; its CLI is `agy`
-alias start='/mnt/c/Windows/System32/cmd.exe /c start'  # abs path, NOT a bare `cmd.exe` PATH shim.
+unalias start 2> /dev/null  # it was an alias; a function can carry the desktop-session socket
+start() { _wsl_desktop_run /mnt/c/Windows/System32/cmd.exe /c start "$@" }  # abs path, NOT a bare `cmd.exe` PATH shim.
 # WHY abs path: a bare `cmd.exe` on PATH makes Zed's remote-SSH probe (`cmd.exe /c ver`) exec the
 # real Windows cmd via WSL interop -> Zed misdetects this Linux box as Windows. See zprofile.wsl.
 alias mnt-d='sudo mount -t drvfs D: /mnt/d' # mount Windows D: drive

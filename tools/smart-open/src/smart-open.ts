@@ -10,6 +10,10 @@
 //      old WSL `o` (explorer.exe, always).
 //   2. this machine: macOS `open`; WSL → explorer.exe (a path converted by `wslpath -w` first,
 //      because explorer.exe reads only Windows paths); other Linux → xdg-open.
+// On WSL the explorer.exe child is started through the interop socket of the owner's DESKTOP session
+// (scripts/wsl-interop-session.ts via src/desktop-interop.ts), not the inherited WSL_INTEROP, which
+// in a long-lived pane may be dead or serve session 0; if none qualifies the inherited one stays
+// and one stderr line says so.
 // A PATH lives here, so the client's Finder cannot show it. Over a live forward it goes to the client
 // as {path, kind, host}, and the receiver opens it as a VS Code Remote-SSH window on THIS box (`host`
 // is the client's own ssh alias for us, read from the forward's socket name). When the
@@ -62,6 +66,7 @@ import {
 } from "@dotfiles/shared/src/sockets.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
+import { desktopInterop, helperCommand } from "./desktop-interop.ts";
 import { OBSIDIAN_ACK_MS } from "./protocol.ts";
 
 const consola = createConsola({ level: 4 });
@@ -451,6 +456,23 @@ function refusalHint(reply: string): string {
   return "";
 }
 
+// The environment for the one opener spawn. On WSL, explorer.exe must start in the owner's desktop
+// session: the inherited WSL_INTEROP of a long-lived pane may be dead or serve session 0, so the
+// spawn gets the socket scripts/wsl-interop-session.ts chose (src/desktop-interop.ts). Only this
+// child's env changes. When no socket qualifies the inherited value stays and one stderr line says so.
+async function windowsEnv(): Promise<Record<string, string | undefined>> {
+  if (!(await isWsl())) return process.env;
+  const { value: chosen } = await waitSaying(
+    "choosing the desktop session's WSL interop socket",
+    desktopInterop(helperCommand(process.env)),
+  );
+  if (chosen.ok) return { ...process.env, WSL_INTEROP: chosen.socket };
+  progress.warn(
+    `smart-open: no desktop-session WSL interop socket (${chosen.reason}); using the inherited WSL_INTEROP`,
+  );
+  return process.env;
+}
+
 // This machine, bounded: an opener still running after LOCAL_WAIT_MS is stopped and reported.
 // Returns false on failure.
 async function openHere(target: string): Promise<boolean> {
@@ -459,9 +481,11 @@ async function openHere(target: string): Promise<boolean> {
     process.stdout.write(`${target} -> ${cmd.join(" ")}\n`);
     return true;
   }
+  const env = await windowsEnv();
   const deadline = AbortSignal.timeout(LOCAL_WAIT_MS);
   const spawned = await attempt(() =>
     Bun.spawn(cmd, {
+      env,
       stdout: "ignore",
       stderr: "pipe",
       signal: deadline,

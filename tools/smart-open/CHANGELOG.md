@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.4 — 2026-11-18
+
+- On WSL the explorer.exe opener starts through the interactive desktop session's interop socket (scripts/wsl-interop-session.ts), not the pane's inherited WSL_INTEROP; with no qualifying socket it keeps the inherited one and says so on stderr
+
 ## 1.2.3 — 2026-11-10
 
 - A loopback ssh session (the terminal on this same machine) opens locally when no forward answers

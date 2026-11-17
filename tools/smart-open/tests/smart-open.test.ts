@@ -210,6 +210,10 @@ async function client(
       // Progress lines only where a test asks for them (it sets 400): a loaded host would
       // otherwise print them for a trivial spawn and break the quiet-path assertions.
       SMART_OPEN_SAY_AFTER_MS: "60000",
+      // On a WSL host the opener spawn asks scripts/wsl-interop-session.ts for a socket (probing the
+      // real Windows side); a stand-in keeps every other test off it. tests/desktop-interop.test.ts
+      // owns that behaviour.
+      SMART_OPEN_INTEROP_HELPER: "echo /nonexistent/test_interop",
       ...env,
     }).flatMap(([k, v]): [string, string][] =>
       v === undefined ? [] : [[k, v]],

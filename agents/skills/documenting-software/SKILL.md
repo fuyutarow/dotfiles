@@ -1,13 +1,17 @@
 ---
 name: documenting-software
 description: >-
-  Designs/reviews software docs so readers can explain the mechanism and decide for themselves.
-  Teach from a familiar problem through a worked input and result/refusal; vary the case to expose
-  assumptions. Derive reader questions, then page responsibilities, then directories. An example or
-  recommendation must not promise more than the source contract; mark inference and uncertainty.
-  An exact API reference serves lookup and need not teach the whole system. Use for README,
-  guides, API docs, specs and ADR/RFC.
-  Adoption: growing-oss-adoption; structure: structuring-documents; prose: linting-prose.
+  Writes, reorganizes and reviews software doc sets so readers can explain the mechanism and decide
+  for themselves. Each reader question is answered on exactly one page; the coverage table has no
+  unanswered question and no orphan page. Each page has one primary question, paragraphs of at most four
+  sentences, tables of at most six columns and twelve rows, at most two sentences per cell, and a state
+  list or figure for stateful mechanisms. Verification history (run IDs, hashes, commits, review
+  narration) stays on records pages; reader pages state limits as system properties. The entry page
+  states guarantees, version and scope affirmatively and routes each reader to a first page. Derive
+  reader questions, then coverage, then page responsibilities, then directories. Teach from a familiar
+  problem through a worked input and result/refusal; examples stay within the source contract; mark
+  inference and uncertainty. An exact API reference serves lookup and need not teach the whole system.
+  Use for README, guides, API docs, specs and ADR/RFC.
 ---
 
 # Documenting software
@@ -82,6 +86,36 @@ coherent answer even when the exact contract is elsewhere. An analogy must mark 
 Show enough local context for someone arriving from search; defer detail without hiding a constraint
 that changes the adoption or action decision.
 
+## Bound each page's load and keep the reader path clean
+
+Before a set is published, measure the final draft of every page and include the measurements in the
+output as a density table: page, primary question, largest table (columns x rows), most sentences in one
+cell, most sentences in one paragraph. Any value over a limit below is split, merged or rewritten, then
+measured again. Report the final values, not the first draft. An owner may exceed a limit only with a
+reason stated on that page.
+
+- **Question**: one primary reader question per page. Answer a second question by linking, not on the page.
+- **Paragraph**: at most four sentences and one claim. Split a paragraph that mixes a mechanism step with a condition or exception.
+- **Table**: at most six columns and twelve rows. Split a wider or longer table by reader question. Do not put a whole data model in one table.
+- **Table cell**: at most two sentences. Move a longer explanation below the table or to a linked page.
+- **Figure**: where a mechanism has states, ordering or branching, give a state list, sequence or diagram. A chain of arrows in prose does not replace it.
+
+Verification history stays on records pages: audit and review history, run IDs, hashes, commit references,
+open-question logs, design comparisons, negotiation points, and first-person narration of who checked what.
+Link the record from the claim that needs provenance (see the table above); do not copy its entries into the
+page. A reader page states a limit as a property of the system ("X is not guaranteed when Y"), not as the
+result of a check, so it does not say "確認した範囲" or "確認していない点". Write reader pages as impersonal
+statements about the system.
+
+An entry page passes when it affirmatively states what the set guarantees and its version and scope; gives
+one concrete worked example or the adoption route; names each reader it serves with a first page for that
+reader; lists every page with its question; and contains no process record. Negative limits belong beside the
+statement they qualify, not as the page's opening.
+
+A glossary serves the reader who meets an unfamiliar term: each entry gives the term, its meaning in this set
+and the page that defines it. A writer's banned-synonym or wording list is an authoring tool and does not
+belong on a reader page.
+
 ## Review before rewriting
 
 In an explanatory or site review, include a short walkthrough of a concrete input and what follows
@@ -101,8 +135,9 @@ behavior or every possible detail from a page with a narrower declared purpose.
 
 Keep one authoritative home for a contract while allowing derived summaries and examples where
 needed for understanding. Use meaningful link labels; internal IDs may remain in traceability fields
-but must not substitute for definitions. Length, tables, repetition and forward links are not defects
-on their own. Prefer repairing the explanation or reading order to accumulating disclaimers.
+but must not substitute for definitions. Repetition and forward links serve the reader's path when they
+are placed by the load limits above; judge length and density by those checks, not by taste. Prefer
+repairing the explanation or reading order to accumulating disclaimers.
 
 ## Preserve precision and verify
 
@@ -116,6 +151,12 @@ how specification claims are checked against executable behavior. A link check, 
 test name proves neither reader understanding nor implementation correctness. Re-run the reader's
 question after a change, plus a relevant boundary case. Keep rejected/withdrawn decisions when the
 project's record policy requires them; disclose breaking changes before removal.
+
+For a multi-page set, build a question x page coverage table before the set is called complete, and include
+it in the output. List the reader questions of each named reader, one per row, and mark the single primary
+page that answers each. Pass only when no question lacks a primary page and every page answers at least one
+question. A question with no page is an uncovered finding; a page that answers none is an orphan to merge or
+remove. Every page must also be reachable from an entry route.
 
 Use `structuring-documents` for relocation and coherent section order, and `linting-prose` for direct,
 plain, inclusive sentences. Preserve the user's requested scope and technical guarantees. Do not
@@ -141,6 +182,10 @@ candidate and XS-C scoped convention. These source judgments are not automatical
 | `references/changelog-and-commit-grammars.md` | A declared change/commit grammar |
 | `references/house-style-guides.md` | The project adopts a named ecosystem guide |
 | `references/standards-scope.md` | A claim about ISO/IEC/IEEE standards; normative bodies are not covered |
+
+Japanese notation and wording (conjunctions, 「とき」, okurigana, katakana or Latin terms) belong to
+`linting-prose`, whose machine floor gates them; this skill does not restate those rules. This skill decides only
+whether a term or gloss serves the reader.
 
 Source conventions apply only in their stated ecosystem; do not turn a template into a standard.
 Version-number semantics belong to `designing-version-schemes`; memo cover/authority to

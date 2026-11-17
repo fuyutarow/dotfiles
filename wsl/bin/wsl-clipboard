@@ -4,13 +4,10 @@
 #
 # Linked as ~/.local/bin/xclip and ~/.local/bin/wl-paste by zsh/wsl.zsh (link-clipboard-shims).
 #
-# WHY: with WSLg on, a clipboard READ through WSLg's RDP clipboard bridge stalls for 15-20 s or
-# forever whenever the Windows clipboard holds an image (reproduced 2026-11-13: `xclip -t TARGETS -o`,
-# `wl-paste -l`, `wl-paste --type image/png` all hit a 15 s timeout; Claude Code's image check hit
-# its 20 s one 2 of 3 times). Claude Code pastes an image by running exactly those commands first
-# and only then its own powershell.exe fallback, so Alt+V sat on "Pasting…" and left an orphaned
-# `wl-paste -l` behind. Weston also reports no wl_seat, so wl-clipboard cannot work there anyway.
-#
+# WHY: with WSLg on, a clipboard READ through WSLg's RDP clipboard bridge stalls for 15-20 s or forever
+# whenever the Windows clipboard holds an image (reproduced 2026-11-13: `xclip -t TARGETS -o`, `wl-paste -l`,
+# `wl-paste --type image/png`). Claude Code runs exactly those first, so Alt+V sat on "Pasting…" past its 20 s
+# image check. Weston also reports no wl_seat, so wl-clipboard cannot work there anyway.
 # WHAT: every clipboard READ is answered from the Windows clipboard via powershell.exe, which is
 # the source of truth on this machine anyway. Everything else (copying, -selection primary, any
 # flag this shim does not model) is handed to the real binary unchanged.
@@ -40,7 +37,10 @@ passthrough() {
 
 PS=$(command -v powershell.exe 2>/dev/null || echo /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe)
 
+# The clipboard is per Windows session: a stale or session-0 WSL_INTEROP lands in session 0 and misses a Win+Shift+S capture.
+# The helper names the socket of the desktop session; if it fails the inherited WSL_INTEROP stays.
 ps_run() {
+  local s; s=$(bun "${self%/wsl/bin/*}/scripts/wsl-interop-session.ts" 2>/dev/null) && local -x WSL_INTEROP=$s
   timeout 15 "$PS" -NoProfile -NonInteractive -Sta -Command \
     "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; $1" 2>/dev/null
 }

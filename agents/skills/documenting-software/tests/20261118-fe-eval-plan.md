@@ -27,3 +27,18 @@ classifier. Set B reported separately (target >= 2 of 3); it does not relax acce
 Before sharding, the coordinator records the statement count, the location count per shard and the first shard's
 locations judged per minute; the shard bound is set from that measurement.
 E precision on the second run's 14 non-injected E items is classified and reported before the third run.
+
+## Addendum 3 (registered 2026-11-18 after the third held-out run failed, before measuring the next revision)
+Third held-out run (revision f48e32e9, coralbase 186407ce copy): set A 8 of 12, set B 2 of 3. FAIL by one.
+924 scan locations in 7 shards of at most 150; all 7 judges validated; first shard about 75 locations per minute.
+The next revision combines: table-cell subjects and count-vs-enumeration rows in the F scan, check T (terms,
+navigation labels, titles, headings, and the repository's own conventions), and the topic checklist.
+Fourth run, measured once: a new copy of the coralbase spec, including the repository convention files that the
+spec's readers rely on, with 16 set-A contradictions injected by a separate worker (value 2, status 2,
+term/definition 2, guarantee/predicate 2, example-vs-contract 1, count-vs-enumeration 1, label-vs-content 2,
+convention-vs-spec 2, one word with two senses 1, fixed count inside a definition 1) and 3 set-B; key hidden.
+Acceptance: set A >= 12 of 16, and false positives <= 1/3 of all flagged items as classified by a separate
+classifier. Set B reported separately (target >= 2 of 3); it does not relax acceptance.
+Topic checklist, measured separately on at least 2 public OSS platform doc sets not used to write it:
+(a) of the gaps it flags, >= 70% judged needed by an independent reader; (b) of the gaps an independent reader
+lists without seeing it, >= 70% covered by it. Both are required.

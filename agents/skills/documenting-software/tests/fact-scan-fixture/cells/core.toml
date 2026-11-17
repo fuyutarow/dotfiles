@@ -1,0 +1,1 @@
+preconditions = ["Policy 下の SharedRecord は、作成者だけが改訂できる。"]

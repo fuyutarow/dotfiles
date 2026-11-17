@@ -185,7 +185,7 @@ effect, status, signature, definition, version or scope. Summaries, status table
    `bun scripts/fact-scan.ts <doc-dir> --glossary <glossary-file> > scan.md` (paths relative to this skill's directory)
    The unit is a statement: one sentence or table row that states (a) a number with a unit, (b) a status word
    (未確認 未決 未実装 実装済み 予定 unverified undecided unimplemented implemented planned deprecated) with the subject
-   it qualifies, or (c) a definition ("X は … です", "X とは", "X: …", "X is a …", a glossary row). Statements are
+   it qualifies, or (c) a definition ("X は … です", "X とは", "X: …", "X is a …", a glossary row). A table cell is grouped under its row label (and its column header when the label alone is ambiguous); a cell in a status column counts as a status; a reference-table row names its term, so each line that mentions a CamelCase term joins its row. A sentence that states N items (N つ/個/件/項目/items/steps) yields a count-vs-enumeration row when the list or table right after it has a different number of entries. Statements are
    grouped by subject: for a number, the noun phrase before it, its unit family (time, size, or the unit itself;
    no conversion) and each glossary term in the sentence; for a status, the row label or sentence subject, the names
    around it (glossary terms, Latin identifiers, the previous sentence) and a TOML table's name; for a definition,

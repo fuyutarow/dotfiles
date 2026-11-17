@@ -1,0 +1,2 @@
+name = "retry"
+timeout = "30 s"

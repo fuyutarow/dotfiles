@@ -8,10 +8,19 @@
 //
 // Subject heuristics (a fact stated with none of these shapes needs F's hand pass):
 //   number      the noun phrase before the number (last two content words; a table cell with no
-//               noun phrase takes the row label)
+//               noun phrase takes the cell's row label)
 //   status word the last backticked identifier before it, else the last two content words before
 //               it, else the first words after it; in a table row, the row label
 //   definition  the term before は/とは/is/means/":"; a glossary row's headword
+//   row         a reference-table row names its term by the label (and the outer name of a
+//               parenthesis, and each segment split at 、，・/ or a parenthesis); each line that
+//               mentions a CamelCase label (SharedRecord) is a row statement of that term
+//   count       a sentence whose last count "N つ/個/件/項目/items/steps" differs from the number
+//               of entries of the list or table right after it (a blank line may separate)
+// A table cell is named by its row label, and by its column header when the label alone is
+// ambiguous (no content word, or one short word). A cell in a status column (状態, status, state)
+// is a status statement when it says something, even without a status word. A TOML value with a
+// number or status is also a statement of its table's name.
 // A sentence may wrap across lines; its location is the line of the trigger (number, status word
 // or definition head), so a quote taken from that line verifies.
 //
@@ -33,7 +42,14 @@ import { basename, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
 import { fromAsyncThrowable } from "neverthrow";
 
-export type StatementKind = "number" | "status" | "definition";
+// "row" is a reference-table row named by its label; "count" is a sentence stating N items whose
+// immediately following list or table has a different number of entries (a mismatch only).
+export type StatementKind =
+  | "number"
+  | "status"
+  | "definition"
+  | "row"
+  | "count";
 
 export interface Statement {
   readonly file: string;
@@ -46,6 +62,7 @@ export interface Group {
   readonly kinds: readonly StatementKind[];
   readonly statements: readonly Statement[];
   readonly locations: number;
+  readonly notes: readonly string[];
 }
 
 export interface Occurrence {
@@ -401,28 +418,75 @@ function proseEntries(text: string, ctx: Ctx, opts: UnitOptions): Entry[] {
   return out;
 }
 
-// Entries of a table body row; `glossaryRow` makes the first cell a defined term.
-function rowEntries(row: string, glossaryRow: boolean, ctx: Ctx): Entry[] {
+// The subjects a row label names: the label itself, its outer name when a parenthesis qualifies
+// it ("閲覧記録（D1）" names "閲覧記録" too), and each segment split at 、，・/ or a parenthesis
+// ("写真と添付の保存（Walrus、R2）" names "walrus" and "r2"). Each name keeps the last two words
+// and the last three, as a prose statement's subject does.
+function labelSubjects(label: string): string[] {
+  const outer = aliasOf(label)?.[1] ?? label;
+  const segments = [label, outer, ...label.split(/[、，・/()（）]+/u)];
+  const names = segments.flatMap((seg) => [
+    lastWords(seg, 2),
+    lastWords(seg, 3),
+  ]);
+  return [...new Set(names.flatMap((s) => (s === undefined ? [] : [s])))];
+}
+
+const STATUS_COLUMN = /状態|status|state|ステータス/iu;
+
+// A row label is ambiguous when it has no content word or only one short one; then the column
+// header names the cell's subject with it.
+function cellSubjects(label: string, header: string | undefined): string[] {
+  const words = tokens(label);
+  const ambiguous =
+    words.length === 0 || (words.length === 1 && (words[0]?.length ?? 0) <= 2);
+  if (header !== undefined && header !== "" && ambiguous) {
+    const named = lastWords(`${header} ${label}`, 3);
+    return named === undefined ? [] : [named];
+  }
+  return labelSubjects(label);
+}
+
+// Entries of a table body row; `glossaryRow` makes the first cell a defined term. `header` holds
+// the cleaned column headers of the table, so a cell is named by its row label and column.
+function rowEntries(
+  row: string,
+  glossaryRow: boolean,
+  ctx: Ctx,
+  header: readonly string[],
+): Entry[] {
   const parts = row.trim().replace(/^\|/u, "").replace(/\|$/u, "").split("|");
   const label = cleanTerm(parts[0] ?? "");
   const out: Entry[] = [];
   const push = (subject: string | undefined, kind: StatementKind): void => {
     if (subject !== undefined) out.push({ subject, kind, offset: 0 });
   };
-  const labelSubject = lastWords(label, 3);
   if (glossaryRow) push(normalize(aliasOf(label)?.[1] ?? label), "definition");
-  else for (const term of termsIn(label, ctx)) push(term, "definition");
+  else {
+    for (const term of termsIn(label, ctx)) push(term, "definition");
+    // a reference row names its term, so prose about that term meets the row
+    for (const s of labelSubjects(label)) push(s, "row");
+  }
   const mentioned = termsIn(row, ctx);
-  parts.slice(1).forEach((cell) => {
+  parts.slice(1).forEach((cell, col) => {
+    const subjects = cellSubjects(label, header[col + 1]);
     let from = 0;
     for (const m of cell.matchAll(NUMBER_WITH_UNIT)) {
-      push(lastWords(cell.slice(from, m.index), 2) ?? labelSubject, "number");
+      const local = lastWords(cell.slice(from, m.index), 2);
+      for (const s of local === undefined ? subjects : [local])
+        push(s, "number");
       push(familyKey(m[2]), "number");
       for (const term of mentioned) push(term, "number");
       from = m.index + m[0].length;
     }
-    if (!STATUS_RES.some(({ re }) => re.test(cell))) return;
-    push(labelSubject, "status");
+    // a cell is a status when it has a status word, or when its column is a status column and
+    // the cell says something
+    const named =
+      STATUS_COLUMN.test(header[col + 1] ?? "") &&
+      /\S/u.test(cell) &&
+      !/^[-—–]+$/u.test(cell.trim());
+    if (!named && !STATUS_RES.some(({ re }) => re.test(cell))) return;
+    for (const s of subjects) push(s, "status");
     for (const a of [...mentioned, ...latinAnchors(row)]) push(a, "status");
   });
   return out;
@@ -445,6 +509,7 @@ export type Add = (
   subject: string,
   kind: StatementKind,
   statement: Statement,
+  note?: string,
 ) => void;
 
 function flushParagraph(
@@ -509,10 +574,18 @@ export function statementsOf(
       add(tomlName, "status", statement);
       return;
     }
+    // a TOML value with a number or status is also a statement of the table's name
+    if (tomlName !== undefined && toml && !/^name\s*=/u.test(piece)) {
+      if ([...piece.matchAll(NUMBER_WITH_UNIT)].length > 0)
+        add(tomlName, "number", statement);
+      if (STATUS_RES.some(({ re }) => re.test(piece)))
+        add(tomlName, "status", statement);
+    }
     const opts = { definition: false, anchors: false, context: "" };
     for (const e of proseEntries(piece, ctx, opts))
       add(e.subject, e.kind, statement);
   };
+  let header: string[] = [];
 
   for (const [i, raw] of source.lines.entries()) {
     const line = i + 1;
@@ -531,9 +604,10 @@ export function statementsOf(
       lineStatements(heading[1], line);
     } else if (/^\s*\|/u.test(raw)) {
       flush();
-      const skip =
-        isSeparator(raw) || (next !== undefined && isSeparator(next));
-      rowStatements(skip ? [] : rowEntries(raw, isGlossary, ctx), {
+      const isHeader = next !== undefined && isSeparator(next);
+      header = isHeader ? cells(raw) : header;
+      const skip = isSeparator(raw) || isHeader;
+      rowStatements(skip ? [] : rowEntries(raw, isGlossary, ctx, header), {
         file: source.label,
         line,
         text: clip(raw),
@@ -546,6 +620,212 @@ export function statementsOf(
     }
   }
   flush();
+  countChecks(source, add);
+}
+
+// ---------------------------------------------------------------------------------------
+// Counts
+
+const COUNT_STATED =
+  /(?<![\w.])(\d+)\s?(つ|個|件|項目|items?|steps?)(?![A-Za-z])/giu;
+const COUNT_ONE_LINE = new RegExp(COUNT_STATED.source, "iu");
+const LIST_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+/u;
+const HEADING = /^#{1,6}\s/u;
+const FENCE = /^\s*(?:```|~~~)/u;
+
+const isBlank = (line: string | undefined): boolean =>
+  line === undefined || line.trim() === "";
+const isProse = (line: string | undefined): boolean =>
+  !isBlank(line) &&
+  !HEADING.test(line ?? "") &&
+  !LIST_ITEM.test(line ?? "") &&
+  !/^\s*\|/u.test(line ?? "") &&
+  !FENCE.test(line ?? "");
+
+// The sentence before a list or table states "N つ/items"; the block after it lists M entries.
+// A mismatch (N != M) yields a count row: the sentence's line and the block's first entry.
+// A count row needs no second file. Blank lines may separate the sentence from the block; the
+// list counts its top-level items (nested items and lazy continuations do not add entries).
+function countChecks(source: Source, add: Add): void {
+  const lines = source.lines;
+  let fenced = false;
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i] ?? "";
+    if (FENCE.test(raw)) fenced = !fenced;
+    if (fenced || FENCE.test(raw)) continue;
+    const block = blockAt(lines, i);
+    if (block === undefined) continue;
+    const sentence = countedSentence(lines, i);
+    if (sentence !== undefined && block.listed !== sentence.stated)
+      emitCount(source, sentence, block, add);
+    i = block.end;
+  }
+}
+
+interface Block {
+  readonly end: number; // index of the block's last line
+  readonly listed: number; // entries the block lists
+  readonly first: number; // index of its first entry
+}
+
+const leadingWidth = (line: string | undefined): number =>
+  (/^\s*/u.exec(line ?? "")?.[0] ?? "").length;
+
+// The list or table that starts at line i, if one does (a list item after another item does not).
+function blockAt(lines: readonly string[], i: number): Block | undefined {
+  const raw = lines[i] ?? "";
+  if (LIST_ITEM.test(raw))
+    return LIST_ITEM.test(lines[i - 1] ?? "") ? undefined : listBlock(lines, i);
+  if (/^\s*\|/u.test(raw) && isSeparator(lines[i + 1] ?? ""))
+    return tableBlock(lines, i);
+  return undefined;
+}
+
+function nextNonBlank(lines: readonly string[], k: number): string | undefined {
+  for (let n = k + 1; n < lines.length; n++) {
+    if (!isBlank(lines[n])) return lines[n];
+  }
+  return undefined;
+}
+
+// One line of a list: an item, a span of the block (indented text, or a blank line that a later
+// item continues), or the end of the block.
+function listStep(
+  lines: readonly string[],
+  k: number,
+): "item" | "span" | "stop" {
+  const line = lines[k] ?? "";
+  if (isBlank(line))
+    return LIST_ITEM.test(nextNonBlank(lines, k) ?? "") ? "span" : "stop";
+  if (LIST_ITEM.test(line)) return "item";
+  return /^\s{2,}\S/u.test(line) ? "span" : "stop";
+}
+
+// A list lists its top-level items; nested items and continuation lines add no entry.
+function listBlock(lines: readonly string[], i: number): Block {
+  const indent = leadingWidth(lines[i]);
+  let block: Block = { end: i, listed: 0, first: i };
+  for (let k = i; k < lines.length; k++) {
+    const step = listStep(lines, k);
+    if (step === "stop") break;
+    const top = step === "item" && leadingWidth(lines[k]) <= indent;
+    block = { end: k, listed: block.listed + (top ? 1 : 0), first: i };
+  }
+  return block;
+}
+
+// A table lists its body rows: the header is at i and the separator at i + 1.
+function tableBlock(lines: readonly string[], i: number): Block {
+  let block: Block = { end: i, listed: 0, first: i + 2 };
+  for (let k = i + 2; /^\s*\|/u.test(lines[k] ?? ""); k++)
+    block = { end: k, listed: block.listed + 1, first: block.first };
+  return block;
+}
+
+function emitCount(
+  source: Source,
+  sentence: CountedSentence,
+  block: Block,
+  add: Add,
+): void {
+  const note = `stated ${sentence.stated}, listed ${block.listed}`;
+  const statements: Statement[] = [
+    {
+      file: source.label,
+      line: sentence.line,
+      text: clip(source.lines[sentence.line - 1] ?? ""),
+    },
+  ];
+  if (block.listed > 0)
+    statements.push({
+      file: source.label,
+      line: block.first + 1,
+      text: clip(source.lines[block.first] ?? ""),
+    });
+  for (const statement of statements)
+    add(sentence.subject, "count", statement, note);
+}
+
+interface CountedSentence {
+  readonly subject: string;
+  readonly stated: number;
+  readonly line: number; // 1-based line of the count inside the paragraph
+}
+
+// The paragraph above a block (at most one blank line between): its last sentence, if that
+// sentence states a count. The subject is the noun before the count.
+function countedSentence(
+  lines: readonly string[],
+  i: number,
+): CountedSentence | undefined {
+  let j = i - 1;
+  if (isBlank(lines[j])) j--;
+  if (!isProse(lines[j])) return undefined;
+  let s = j;
+  while (s > 0 && isProse(lines[s - 1])) s--;
+  const paragraph = lines.slice(s, j + 1).join(" ");
+  const sentences = [...paragraph.matchAll(SENTENCE)]
+    .map((m) => m[0])
+    .filter((x) => x.trim() !== "");
+  const last = sentences.at(-1);
+  if (last === undefined) return undefined;
+  const match = [...last.matchAll(COUNT_STATED)].at(-1);
+  if (match?.index === undefined) return undefined;
+  const subject = lastWords(last.slice(0, match.index), 2);
+  if (subject === undefined) return undefined;
+  let line = j;
+  while (line > s && !COUNT_ONE_LINE.test(lines[line] ?? "")) line--;
+  return { subject, stated: Number(match[1]), line: line + 1 };
+}
+
+// The term a reference-table row names (its label in a non-glossary table body row). A term that a
+// row names is a subject, so each line of the set that mentions it is a "row" statement of it:
+// the row and any sentence, TOML value or cell that speaks of the same term meet in one group.
+function rowTerms(
+  sources: readonly Source[],
+  glossaryLabel?: string,
+): string[] {
+  const terms = new Set<string>();
+  for (const source of sources) {
+    if (source.label === glossaryLabel) continue;
+    source.lines.forEach((raw, i) => {
+      if (!/^\s*\|/u.test(raw) || isSeparator(raw)) return;
+      if (isSeparator(source.lines[i + 1] ?? "")) return; // header row
+      const label = cleanTerm(
+        raw.trim().replace(/^\|/u, "").split("|")[0] ?? "",
+      );
+      // a CamelCase identifier (one Latin token with lower case and an inner capital, as in
+      // SharedRecord or OwnerCap) names a term distinctly; a common word or an acronym (UC1)
+      // would match almost every line
+      if (/^[A-Z]?[a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*$/u.test(label))
+        terms.add(label);
+    });
+  }
+  return [...terms];
+}
+
+function mentionsOfRowTerms(
+  sources: readonly Source[],
+  glossaryLabel: string | undefined,
+  add: Add,
+): void {
+  const counted = sources.filter((s) => s.label !== glossaryLabel);
+  for (const term of rowTerms(sources, glossaryLabel)) {
+    const matches = literalMatcher(term);
+    for (const source of counted) mentionsIn(source, term, matches, add);
+  }
+}
+
+function mentionsIn(
+  source: Source,
+  term: string,
+  matches: (line: string) => boolean,
+  add: Add,
+): void {
+  source.lines.forEach((raw, i) => {
+    if (matches(raw))
+      add(term, "row", { file: source.label, line: i + 1, text: clip(raw) });
+  });
 }
 
 function byLocation(a: Statement, c: Statement): number {
@@ -557,6 +837,7 @@ interface Building {
   subject: string;
   readonly kinds: Set<StatementKind>;
   readonly statements: Map<string, Statement>;
+  readonly notes: Set<string>;
 }
 
 export function scanSources(
@@ -564,15 +845,17 @@ export function scanSources(
   glossary?: Source,
 ): Group[] {
   const building = new Map<string, Building>();
-  const addTo: Add = (subjectRaw, kind, statement) => {
+  const addTo: Add = (subjectRaw, kind, statement, note) => {
     const key = normalize(subjectRaw);
     if (key.length < 2) return;
     const entry = building.get(key) ?? {
       subject: key,
       kinds: new Set<StatementKind>(),
       statements: new Map<string, Statement>(),
+      notes: new Set<string>(),
     };
     entry.kinds.add(kind);
+    if (note !== undefined) entry.notes.add(note);
     entry.statements.set(
       `${statement.file}:${statement.line}\u0000${statement.text}`,
       statement,
@@ -582,11 +865,15 @@ export function scanSources(
   const ctx = buildCtx(glossary);
   for (const source of sources)
     statementsOf(source, source.label === glossary?.label, addTo, ctx);
+  mentionsOfRowTerms(sources, glossary?.label, addTo);
 
   return [...building.values()]
     .flatMap((b) => {
       const statements = [...b.statements.values()].toSorted(byLocation);
-      if (new Set(statements.map((s) => s.file)).size < 2) return [];
+      // a count mismatch is a finding by itself; other groups need two files
+      const counted = b.kinds.has("count");
+      if (!counted && new Set(statements.map((s) => s.file)).size < 2)
+        return [];
       const locations = new Set(statements.map((s) => `${s.file}:${s.line}`));
       return [
         {
@@ -594,6 +881,7 @@ export function scanSources(
           kinds: [...b.kinds],
           statements,
           locations: locations.size,
+          notes: [...b.notes],
         },
       ];
     })
@@ -671,8 +959,12 @@ export function renderTable(groups: readonly Group[]): string {
     const statements = g.statements
       .map((s) => `${s.file}:${s.line} — ${escapeCell(s.text)}`)
       .join("<br>");
+    const kinds =
+      g.notes.length === 0
+        ? g.kinds.join(", ")
+        : `${g.kinds.join(", ")} (${g.notes.map(escapeCell).join("; ")})`;
     lines.push(
-      `| ${escapeCell(g.subject)} | ${g.kinds.join(", ")} | ${g.locations} | ${statements} |`,
+      `| ${escapeCell(g.subject)} | ${kinds} | ${g.locations} | ${statements} |`,
     );
   }
   return lines.join("\n") + "\n";

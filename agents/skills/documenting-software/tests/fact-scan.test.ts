@@ -14,6 +14,7 @@ const DOCS = join(FIXTURE, "docs");
 const GLOSSARY = ["--glossary", join(FIXTURE, "glossary.md")];
 const STATEMENTS = join(FIXTURE, "statements");
 const STATEMENTS_GLOSSARY = ["--glossary", join(STATEMENTS, "glossary.md")];
+const CELLS = join(FIXTURE, "cells");
 
 async function run(args: string[]) {
   const proc = Bun.spawn(["bun", SCRIPT, ...args], {
@@ -100,7 +101,8 @@ test("status table cells, table numbers, wrapped sentences, ja definitions and T
   expect(exitCode).toBe(0);
 
   // status table cell 未実装 vs 未確認, and 実装済み vs 未実装, under the row label
-  expect(rowFor(stdout, "export_csv")).toContain("| status, number | 2 |");
+  // the reference-table row also names its term ("row"); the cells are still status and number
+  expect(rowFor(stdout, "export_csv")).toContain("| row, status, number | 2 |");
   expect(rowFor(stdout, "export_csv")).toContain("spec.md:8");
   expect(rowFor(stdout, "export_csv")).toContain("guide.md:7");
   expect(rowFor(stdout, "audit_log")).toContain("spec.md:9");
@@ -123,6 +125,52 @@ test("status table cells, table numbers, wrapped sentences, ja definitions and T
   expect(rowFor(stdout, "retry_timeout")).toContain(
     'guide.md:14 — retry_timeout = "60s"',
   );
+});
+
+test("table cells are grouped under their row label, the outer name of a parenthesis, and segments of the label", async () => {
+  const { stdout, stderr, exitCode } = await run([CELLS]);
+  expect(exitCode).toBe(0);
+  expect(stderr).toContain("fact-scan:");
+
+  // a status cell of a status column counts even without a status word; its row label names
+  // "walrus" and "r2" as segments, and the prose sentence about Walrus meets it
+  const walrus = rowFor(stdout, "walrus");
+  expect(walrus).toContain("capability.md:5");
+  expect(walrus).toContain("status.md:4");
+  expect(walrus).toContain("| row");
+
+  // the outer name of "閲覧記録（D1）" groups the cell with the prose sentence about it
+  const record = rowFor(stdout, "閲覧記録");
+  expect(record).toContain("capability.md:6");
+  expect(record).toContain("status.md:3");
+});
+
+test("a reference-table row groups with a mention of its CamelCase term in any file", async () => {
+  const { stdout, exitCode } = await run([CELLS]);
+  expect(exitCode).toBe(0);
+  const shared = rowFor(stdout, "sharedrecord");
+  expect(shared).toContain("reference.md:3");
+  expect(shared).toContain("core.toml:1");
+});
+
+test("a TOML value with a number belongs to its table's name", async () => {
+  const { stdout, exitCode } = await run([CELLS]);
+  expect(exitCode).toBe(0);
+  const retry = rowFor(stdout, "retry");
+  expect(retry).toContain("limits.toml:2");
+  expect(retry).toContain("guide.md:3");
+});
+
+test("a sentence stating N items with a list of a different length is a count row, even in one file", async () => {
+  const { stdout, exitCode } = await run([CELLS]);
+  expect(exitCode).toBe(0);
+  // "task は次の 3 つ" is followed by two items: the row names both lines and the mismatch
+  const task = rowFor(stdout, "task");
+  expect(task).toContain("count (stated 3, listed 2)");
+  expect(task).toContain("count.md:3 —");
+  expect(task).toContain("count.md:5 — - one");
+  // a sentence whose count matches its list is no row
+  expect(rowFor(stdout, "operation")).toBeUndefined();
 });
 
 test("a glossary headword that only occurs as a word makes no row, and --terms lists it", async () => {

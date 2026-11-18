@@ -184,7 +184,7 @@ effect, status, signature, definition, version or scope. Summaries, status table
 1. Run the statement scan over the published set (materialize its Markdown and TOML pages in one directory):
    `bun scripts/fact-scan.ts <doc-dir> --glossary <glossary-file> > scan.md` (paths relative to this skill's directory)
    The unit is a statement: one sentence or table row that states (a) a number with a unit, (b) a status word
-   (未確認 未決 未実装 実装済み 予定 unverified undecided unimplemented implemented planned deprecated) with the subject
+   (未確認 未決 未実装 実装済み 予定 解消済み 欠落 決まっていない していません していない unverified undecided unimplemented implemented planned deprecated resolved missing "not yet" "not decided") with the subject
    it qualifies, or (c) a definition ("X は … です", "X とは", "X: …", "X is a …", a glossary row). A table cell is grouped under its row label (and its column header when the label alone is ambiguous); a cell in a status column counts as a status; a reference-table row names its term, so each line that mentions a CamelCase term joins its row. A sentence that states N items (N つ/個/件/項目/items/steps) yields a count-vs-enumeration row when the list or table right after it has a different number of entries. Statements are
    grouped by subject: for a number, the noun phrase before it, its unit family (time, size, or the unit itself;
    no conversion) and each glossary term in the sentence; for a status, the row label or sentence subject, the names
@@ -215,7 +215,7 @@ effect, status, signature, definition, version or scope. Summaries, status table
    `qualifier-omitted` when it links to the owner and only omits a qualifier (not a defect); otherwise `match`.
    A judged row has every one of its locations judged (each is the judged location or the owner), each with a
    verdict, file:line on both sides and a quote of the statement on both sides. A row without a quote is
-   unjudged: a verdict alone is not a judgment. Decide the owner per fact, not per shard or per term.
+   unjudged: a verdict alone is not a judgment. Decide the owner per fact, not per shard or per term. When a location is a table row, compare every cell of that row with the owner, not only the subject cell.
    - Sharded tables: one judge per shard, in parallel, each within 600 s. A judge validates its own shard
      (`bun scripts/fact-judgments.ts --scan shard-<k>.md --docs <doc-dir> [--glossary <glossary-file>] judgments-<k>.md`)
      and reports only when it exits 0; a record that does not validate is not a judgment.

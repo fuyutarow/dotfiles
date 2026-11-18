@@ -21,6 +21,10 @@
 // ambiguous (no content word, or one short word). A cell in a status column (状態, status, state)
 // is a status statement when it says something, even without a status word. A TOML value with a
 // number or status is also a statement of its table's name.
+// Status shapes added with the pair fixtures: an item (or table row) under a status heading is a
+// status statement about its own nouns; a status in a TOML line is also a statement of the key
+// (path, name, key or id) of its table, and a status sentence or cell shares a group with any
+// statement that names one of its nouns (katakana runs count as nouns of their own).
 // A sentence may wrap across lines; its location is the line of the trigger (number, status word
 // or definition head), so a quote taken from that line verifies.
 //
@@ -93,6 +97,15 @@ const STATUS_WORDS = [
   "implemented",
   "planned",
   "deprecated",
+  "解消済み",
+  "欠落",
+  "決まっていない",
+  "していません",
+  "していない",
+  "resolved",
+  "missing",
+  "not yet",
+  "not decided",
 ];
 const UNITS = [
   "ms",
@@ -377,6 +390,31 @@ function latinAnchors(text: string): string[] {
   ];
 }
 
+// Nouns a status statement shares with other statements about the same subject. Function words,
+// status words and bare demonstratives name no subject and are dropped.
+const NOT_NOUN = new Set(
+  "ある ない こと もの ため よう これ それ ここ まだ ところ 場合 必要 できる できない している 本物 する される なる".split(
+    " ",
+  ),
+);
+// Katakana runs are nouns of their own even inside a longer token ("旧定義のデータと" names データ).
+function statusNouns(text: string): string[] {
+  const katakana = [...text.matchAll(/[\p{sc=Katakana}ー]{2,}/gu)].map((m) =>
+    m[0].toLowerCase(),
+  );
+  return [
+    ...new Set(
+      [...tokens(text), ...katakana].filter(
+        (t) =>
+          t.length >= 2 &&
+          !STATUS_LOWER.has(t) &&
+          !NOT_NOUN.has(t) &&
+          !GENERIC.has(t),
+      ),
+    ),
+  ];
+}
+
 interface UnitOptions {
   readonly definition: boolean; // prose: look for definition shapes and topic terms
   readonly anchors: boolean; // tie a status to the names around it
@@ -411,6 +449,7 @@ function proseEntries(text: string, ctx: Ctx, opts: UnitOptions): Entry[] {
     const m = re.exec(text);
     if (m === null) continue;
     push(statusSubject(text, m.index, word.length), "status", m.index);
+    for (const n of statusNouns(text)) push(n, "status", m.index);
     if (!opts.anchors) continue;
     for (const a of [...termsIn(around, ctx), ...latinAnchors(around)])
       push(a, "status", m.index);
@@ -454,6 +493,7 @@ function rowEntries(
   glossaryRow: boolean,
   ctx: Ctx,
   header: readonly string[],
+  inStatusSection = false,
 ): Entry[] {
   const parts = row.trim().replace(/^\|/u, "").replace(/\|$/u, "").split("|");
   const label = cleanTerm(parts[0] ?? "");
@@ -481,12 +521,14 @@ function rowEntries(
     }
     // a cell is a status when it has a status word, or when its column is a status column and
     // the cell says something
+    // a row under a status heading says a status in every cell
     const named =
-      STATUS_COLUMN.test(header[col + 1] ?? "") &&
+      (inStatusSection || STATUS_COLUMN.test(header[col + 1] ?? "")) &&
       /\S/u.test(cell) &&
       !/^[-—–]+$/u.test(cell.trim());
     if (!named && !STATUS_RES.some(({ re }) => re.test(cell))) return;
     for (const s of subjects) push(s, "status");
+    for (const n of statusNouns(cell)) push(n, "status");
     for (const a of [...mentioned, ...latinAnchors(row)]) push(a, "status");
   });
   return out;
@@ -536,6 +578,40 @@ function flushParagraph(
   }
 }
 
+// The key a TOML line belongs to: the name, path or key value of its table. The comment lines right
+// above a table header belong to that table, so a comment that describes the next table is read
+// with its key. Lines before the first header and without a key get no key.
+function tomlKeys(lines: readonly string[]): (string | undefined)[] {
+  const keys: (string | undefined)[] = [];
+  const headers = lines.flatMap((line, i) => (/^\s*\[/u.test(line) ? [i] : []));
+  headers.forEach((h, n) => {
+    const end = headers[n + 1] ?? lines.length;
+    let key: string | undefined;
+    for (let k = h; k < end && key === undefined; k++)
+      key = /^\s*(?:name|path|key|id)\s*=\s*"([^"]+)"/u.exec(
+        lines[k] ?? "",
+      )?.[1];
+    let start = h;
+    while (start > 0 && /^\s*#/u.test(lines[start - 1] ?? "")) start--;
+    for (let k = start; k < end; k++) keys[k] = key;
+  });
+  return keys;
+}
+
+// A list item under a status heading: a status about each of its nouns.
+function statusItem(
+  add: Add,
+  file: string,
+  line: number,
+  raw: string,
+  text: string,
+  underStatusHeading: boolean,
+): void {
+  if (!underStatusHeading) return;
+  for (const n of statusNouns(text))
+    add(n, "status", { file, line, text: clip(raw) });
+}
+
 // Walks one source and reports every statement entry.
 export function statementsOf(
   source: Source,
@@ -544,6 +620,8 @@ export function statementsOf(
   ctx: Ctx,
 ): void {
   const toml = /\.toml$/iu.test(source.label);
+  const tomlKey = toml ? tomlKeys(source.lines) : [];
+  let statusSection = false; // the nearest heading is a status phrase
   let fenced = false;
   let text = "";
   let segments: Segment[] = [];
@@ -569,6 +647,14 @@ export function statementsOf(
     tomlName = toml
       ? (/^name\s*=\s*"([^"]+)"/u.exec(piece)?.[1] ?? tomlName)
       : undefined;
+    // a status in a TOML string value or comment is a statement of its table's key
+    const key = tomlKey[line - 1];
+    if (
+      toml &&
+      key !== undefined &&
+      STATUS_RES.some(({ re }) => re.test(piece))
+    )
+      add(key, "status", statement);
     // a TOML status belongs to the table's name, not to the word "status"
     if (tomlName !== undefined && /^status\s*=/u.test(piece)) {
       add(tomlName, "status", statement);
@@ -601,19 +687,25 @@ export function statementsOf(
       flush();
     } else if (heading?.[1] !== undefined) {
       flush();
+      statusSection = STATUS_RES.some(({ re }) => re.test(heading[1] ?? ""));
       lineStatements(heading[1], line);
     } else if (/^\s*\|/u.test(raw)) {
       flush();
       const isHeader = next !== undefined && isSeparator(next);
       header = isHeader ? cells(raw) : header;
       const skip = isSeparator(raw) || isHeader;
-      rowStatements(skip ? [] : rowEntries(raw, isGlossary, ctx, header), {
-        file: source.label,
-        line,
-        text: clip(raw),
-      });
+      rowStatements(
+        skip ? [] : rowEntries(raw, isGlossary, ctx, header, statusSection),
+        {
+          file: source.label,
+          line,
+          text: clip(raw),
+        },
+      );
     } else if (item?.[1] !== undefined) {
       flush();
+      // an item under a status heading is a status statement about its own nouns
+      statusItem(add, source.label, line, raw, item[1], statusSection);
       append(item[1], line);
     } else {
       append(raw.replace(/^\s*>\s?/u, ""), line);

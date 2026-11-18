@@ -200,8 +200,16 @@ effect, status, signature, definition, version or scope. Summaries, status table
    minute and set m so that a judge finishes within 600 s; start at m = 150 when nothing is measured.
    Term check (separate; F does not judge it): `--terms --glossary <glossary-file>` prints, per glossary headword,
    every file:line where it occurs, as input for a check of each use against the glossary entry.
-2. Judge each row in a judgment table (Markdown, one row per judged location, eight columns):
-   `row term | fact | scope | owner (file:line) | location (file:line) | verdict | quote of owner | quote of location`.
+2. Before judging a location, open its context in the file: the same section (the block from its heading to the next
+   heading, or the list or paragraph group around it); for a table, every row of that table; for TOML, the enclosing
+   table. Read that range, not the scan line alone. Compare every statement in it about the same subject with the
+   row's fact, including a neighbouring line that contradicts the located line (a TOML comment's contradiction is often
+   the next line). Record the range you opened in the `context` column as `file:start-end`.
+   Stages divide the work. The scan groups values, status words, definitions, counts and table cells by subject. The
+   judge's context reading catches statements the scan does not group: a column that is neither a value nor a status,
+   and adjacent lines. The hand pass catches guarantee, refusal, who-can-read/write, status and enforcement sentences.
+   Judge each row in a judgment table (Markdown, one row per judged location, nine columns):
+   `row term | fact | scope | owner (file:line) | location (file:line) | verdict | quote of owner | quote of location | context`.
    Name one owning page for the fact. `scope` gives the subject, scope and time both statements are about:
    `same` when they agree, otherwise `differs: <owner's scope> / <location's scope>`.
    The verdict is `mismatch` only when both statements are about the same subject, scope and time and their values
@@ -214,8 +222,10 @@ effect, status, signature, definition, version or scope. Summaries, status table
    - A difference of sense for one word (the same word used in two senses) is verdict `to-T`. It is carried to check T's table, not dropped.
    `qualifier-omitted` when it links to the owner and only omits a qualifier (not a defect); otherwise `match`.
    A judged row has every one of its locations judged (each is the judged location or the owner), each with a
-   verdict, file:line on both sides and a quote of the statement on both sides. A row without a quote is
-   unjudged: a verdict alone is not a judgment. Decide the owner per fact, not per shard or per term. When a location is a table row, compare every cell of that row with the owner, not only the subject cell.
+   verdict, file:line on both sides and a quote of the statement on both sides, and a `context` range in the
+   location's file that contains the location line. A row without a quote or without a context range is
+   unjudged: a verdict alone is not a judgment. Decide the owner per fact, not per shard or per term. When a
+   location is a table row, compare every cell of that row with the owner, not only the subject cell.
    - Sharded tables: one judge per shard, in parallel, each within 600 s. A judge validates its own shard
      (`bun scripts/fact-judgments.ts --scan shard-<k>.md --docs <doc-dir> [--glossary <glossary-file>] judgments-<k>.md`)
      and reports only when it exits 0; a record that does not validate is not a judgment.
@@ -229,8 +239,9 @@ effect, status, signature, definition, version or scope. Summaries, status table
      and location are that same line, with verdict `mismatch` and fact `enforcement claim without component, actor or bypass`.
      Remove the row once the sentence names all three.
 3. Pass: run `bun scripts/fact-judgments.ts --scan scan.md --docs <doc-dir> [--glossary <glossary-file>] judgments-*.md`.
-   It must exit 0: judged = total, every judgment row complete with its quotes found on the cited lines, and no
-   location given two owners for the same fact. The validator also rejects a `mismatch` whose `scope` says `differs`.
+   It must exit 0: judged = total, every judgment row complete with its quotes found on the cited lines, a context
+   range that names the location's file and contains the location line, and no location given two owners for the
+   same fact. The validator also rejects a `mismatch` whose `scope` says `differs`.
    For each owner conflict, decide the one owner per fact and correct the rows. Then correct every `mismatch` in the
    pages, re-run step 1, delete the judgment rows whose quotes no longer occur, judge the rows the validator lists as
    unjudged, and run it with `--closed` until it exits 0 (no mismatch left). `to-T` rows are complete judgments and do

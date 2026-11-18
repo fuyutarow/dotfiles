@@ -5,8 +5,8 @@
 // carries a complete, quoted judgment, that each quote really occurs at the cited file:line, and
 // that no location was given two different owners for the same fact.
 //
-// Judgment table (Markdown, one row per judged location), eight columns:
-//   row term | fact | scope | owner (file:line) | location (file:line) | verdict | quote of owner | quote of location
+// Judgment table (Markdown, one row per judged location), nine columns:
+//   row term | fact | scope | owner (file:line) | location (file:line) | verdict | quote of owner | quote of location | context
 // verdict is match, mismatch, qualifier-omitted or to-T (a difference of sense for one word, routed to
 // check T; counted and listed, never a failure). scope is "same" or "differs: ..."; a mismatch whose scope
 // differs is invalid. The row term is a term of the scan table, or
@@ -14,6 +14,10 @@
 // A scan row (one statement group) is judged when every one of its locations is, in a complete judgment row for that
 // term, the judged location or the owner. A complete row has a verdict, file:line on both sides and
 // a non-empty quote on both sides that occurs (whitespace-normalised; "…" or "..." elide) on that line.
+// context is file:start-end (or file:line): the range of the location's file the judge opened before judging
+// (its section, every row of its table, or the enclosing TOML table). It must name the location's file, contain
+// the location line, and both its end lines must be readable. The validator checks that the range was given and
+// is real; it cannot check that the range is the whole section.
 //
 // Usage:  bun scripts/fact-judgments.ts --scan <scan-output> --docs <doc-dir>
 //             [--glossary <file>] [--closed] <judgment-file>...
@@ -36,9 +40,10 @@ export const VERDICTS = [
 export type Verdict = (typeof VERDICTS)[number];
 
 export const HAND_TERM = "(hand)";
-const COLUMNS = 8;
+const COLUMNS = 9;
 const MIN_QUOTE = 3;
 const LOCATION = /^\S+:\d+$/u;
+const CONTEXT = /^(\S+):(\d+)(?:-(\d+))?$/u;
 
 export interface ScanRow {
   readonly term: string;
@@ -59,6 +64,7 @@ export interface Judgment {
   readonly verdict: string;
   readonly ownerQuote: string;
   readonly locationQuote: string;
+  readonly context: string;
 }
 
 function messageOf(error: unknown): string {
@@ -133,6 +139,7 @@ export function parseJudgments(label: string, markdown: string): ParsedFile {
       verdict = "",
       ownerQuote = "",
       locationQuote = "",
+      context = "",
     ] = cells;
     judgments.push({
       file: label,
@@ -145,6 +152,7 @@ export function parseJudgments(label: string, markdown: string): ParsedFile {
       verdict,
       ownerQuote,
       locationQuote,
+      context,
     });
   });
   return { judgments, malformed };
@@ -226,6 +234,34 @@ export function problemsOf(j: Judgment, lookup: LineLookup): string[] {
     else if (!quoteOccurs(quote, text))
       out.push(`${name} quote does not occur at ${ref}`);
   }
+  out.push(...contextProblems(j, lookup));
+  return out;
+}
+
+// The location's context range: given, in the location's file, containing the location line, and readable at
+// both ends. A row that opened no context, or opened a range that does not contain its own location, is incomplete.
+function contextProblems(j: Judgment, lookup: LineLookup): string[] {
+  if (j.context.trim() === "") return ["context missing"];
+  const m = CONTEXT.exec(squash(j.context));
+  if (m === null) return [`context "${j.context}" is not file:start-end`];
+  const [, file = "", startRaw = "", endRaw = startRaw] = m;
+  const start = Number(startRaw);
+  const end = Number(endRaw);
+  const loc = /^(\S+):(\d+)$/u.exec(j.location);
+  if (loc === null) return []; // reported by the location check above
+  const [, locFile = "", locLine = ""] = loc;
+  const out: string[] = [];
+  if (file !== locFile)
+    out.push(`context file ${file} is not the location file ${locFile}`);
+  if (start < 1 || end < start)
+    out.push(`context ${j.context} is an empty or inverted range`);
+  else if (Number(locLine) < start || Number(locLine) > end)
+    out.push(`context ${j.context} does not contain location line ${locLine}`);
+  else if (
+    lookup(`${file}:${start}`) === undefined ||
+    lookup(`${file}:${end}`) === undefined
+  )
+    out.push(`context ${j.context} cannot be read`);
   return out;
 }
 
@@ -407,9 +443,9 @@ async function preloadCited(
   const labels = new Set(
     files
       .flatMap((f) => f.judgments)
-      .flatMap((j) => [j.owner, j.location])
+      .flatMap((j) => [j.owner, j.location, j.context])
       .flatMap((ref) => {
-        const label = /^(.+):\d+$/u.exec(ref)?.[1];
+        const label = /^(.+):\d+(?:-\d+)?$/u.exec(ref)?.[1];
         return label === undefined ? [] : [label];
       }),
   );

@@ -200,11 +200,18 @@ effect, status, signature, definition, version or scope. Summaries, status table
    minute and set m so that a judge finishes within 600 s; start at m = 150 when nothing is measured.
    Term check (separate; F does not judge it): `--terms --glossary <glossary-file>` prints, per glossary headword,
    every file:line where it occurs, as input for a check of each use against the glossary entry.
-2. Judge each row in a judgment table (Markdown, one row per judged location, seven columns):
-   `row term | fact | owner (file:line) | location (file:line) | verdict | quote of owner | quote of location`.
-   Name one owning page for the fact. The verdict is `mismatch` when the location's statement differs from the
-   owner's in value, predicate (guarantee or effect), status or definition, even when it is not yet clear which
-   statement is right, and also when it states the fact without linking and differs in any of those respects;
+2. Judge each row in a judgment table (Markdown, one row per judged location, eight columns):
+   `row term | fact | scope | owner (file:line) | location (file:line) | verdict | quote of owner | quote of location`.
+   Name one owning page for the fact. `scope` gives the subject, scope and time both statements are about:
+   `same` when they agree, otherwise `differs: <owner's scope> / <location's scope>`.
+   The verdict is `mismatch` only when both statements are about the same subject, scope and time and their values
+   (value, predicate: guarantee or effect, status, or definition) cannot both hold, even when it is not yet clear which
+   is right. It is also `mismatch` when the location states the same fact without linking and the values cannot both hold.
+   - A summary that only omits detail is `match`. A summary that drops a limiting condition and so widens a guarantee is `mismatch`.
+     Positive example (mismatch): owner "Retries happen only on 503 responses, up to 3 attempts." / location "Requests are retried on failure." Both limits are dropped.
+     Negative example (match): owner "The retry policy is set in `retry.toml`: up to 3 attempts, on 503 responses only." / location "Retries follow `retry.toml`." The location omits detail and conflicts with nothing.
+   - When `scope` says `differs`, the verdict is not `mismatch`: use `match`, or `qualifier-omitted` when the location links to the owner and omits a qualifier.
+   - A difference of sense for one word (the same word used in two senses) is verdict `to-T`. It is carried to check T's table, not dropped.
    `qualifier-omitted` when it links to the owner and only omits a qualifier (not a defect); otherwise `match`.
    A judged row has every one of its locations judged (each is the judged location or the owner), each with a
    verdict, file:line on both sides and a quote of the statement on both sides. A row without a quote is
@@ -215,13 +222,20 @@ effect, status, signature, definition, version or scope. Summaries, status table
    - Hand pass (a fact outside the scan's statement shapes is not in it): read every sentence that states a
      guarantee, a refusal, who can read or write something, or a status. Compare each with the other pages that
      state the same thing, and record the comparison in the same table with row term `(hand)`. This pass covers those
-     four kinds only.
+     four kinds and enforcement sentences (below).
+     An enforcement sentence says that something is enforced, checked, guaranteed or judged (強制・検査・保証・判定;
+     enforce, check, guarantee, judge). It is a defect unless it names the component where that happens, the actor who
+     performs it, and who can bypass it (or says that nobody can). Record each such sentence as a `(hand)` row whose owner
+     and location are that same line, with verdict `mismatch` and fact `enforcement claim without component, actor or bypass`.
+     Remove the row once the sentence names all three.
 3. Pass: run `bun scripts/fact-judgments.ts --scan scan.md --docs <doc-dir> [--glossary <glossary-file>] judgments-*.md`.
    It must exit 0: judged = total, every judgment row complete with its quotes found on the cited lines, and no
-   location given two owners for the same fact. For each owner conflict, decide the one owner per fact and correct the
-   rows. Then correct every `mismatch` in the pages, re-run step 1, delete the judgment rows whose quotes no longer
-   occur, judge the rows the validator lists as unjudged, and run it with `--closed` until it exits 0 (no mismatch
-   left). Report F as done only with that final output (its judged/total line and exit status).
+   location given two owners for the same fact. The validator also rejects a `mismatch` whose `scope` says `differs`.
+   For each owner conflict, decide the one owner per fact and correct the rows. Then correct every `mismatch` in the
+   pages, re-run step 1, delete the judgment rows whose quotes no longer occur, judge the rows the validator lists as
+   unjudged, and run it with `--closed` until it exits 0 (no mismatch left). `to-T` rows are complete judgments and do
+   not fail the gate; the validator prints their count and lists them for check T. `--closed` fails on `mismatch` only.
+   Report F as done only with that final output (its judged/total line, the to-T count and exit status).
 
 **E — example contract.** Every operation, field and argument an example calls must exist in the contract it cites.
 1. For each example, list each call, field and argument, and the contract it cites.

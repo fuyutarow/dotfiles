@@ -5,9 +5,11 @@
 // carries a complete, quoted judgment, that each quote really occurs at the cited file:line, and
 // that no location was given two different owners for the same fact.
 //
-// Judgment table (Markdown, one row per judged location), seven columns:
-//   row term | fact | owner (file:line) | location (file:line) | verdict | quote of owner | quote of location
-// verdict is match, mismatch or qualifier-omitted. The row term is a term of the scan table, or
+// Judgment table (Markdown, one row per judged location), eight columns:
+//   row term | fact | scope | owner (file:line) | location (file:line) | verdict | quote of owner | quote of location
+// verdict is match, mismatch, qualifier-omitted or to-T (a difference of sense for one word, routed to
+// check T; counted and listed, never a failure). scope is "same" or "differs: ..."; a mismatch whose scope
+// differs is invalid. The row term is a term of the scan table, or
 // "(hand)" for a fact found by the hand pass (hand rows are validated but are not scan rows).
 // A scan row (one statement group) is judged when every one of its locations is, in a complete judgment row for that
 // term, the judged location or the owner. A complete row has a verdict, file:line on both sides and
@@ -25,11 +27,16 @@ import { basename, isAbsolute, relative, resolve } from "node:path";
 import { cli } from "cleye";
 import { fromAsyncThrowable } from "neverthrow";
 
-export const VERDICTS = ["match", "mismatch", "qualifier-omitted"] as const;
+export const VERDICTS = [
+  "match",
+  "mismatch",
+  "qualifier-omitted",
+  "to-T",
+] as const;
 export type Verdict = (typeof VERDICTS)[number];
 
 export const HAND_TERM = "(hand)";
-const COLUMNS = 7;
+const COLUMNS = 8;
 const MIN_QUOTE = 3;
 const LOCATION = /^\S+:\d+$/u;
 
@@ -46,6 +53,7 @@ export interface Judgment {
   readonly line: number;
   readonly term: string;
   readonly fact: string;
+  readonly scope: string;
   readonly owner: string;
   readonly location: string;
   readonly verdict: string;
@@ -116,21 +124,35 @@ export function parseJudgments(label: string, markdown: string): ParsedFile {
       });
       return;
     }
-    const [term = "", fact = "", owner = "", location = ""] = cells;
-    const [, , , , verdict = "", ownerQuote = "", locationQuote = ""] = cells;
+    const [
+      term = "",
+      fact = "",
+      scope = "",
+      owner = "",
+      location = "",
+      verdict = "",
+      ownerQuote = "",
+      locationQuote = "",
+    ] = cells;
     judgments.push({
       file: label,
       line: i + 1,
       term,
       fact,
+      scope,
       owner,
       location,
-      verdict: verdict.toLowerCase(),
+      verdict,
       ownerQuote,
       locationQuote,
     });
   });
   return { judgments, malformed };
+}
+
+// The canonical spelling of a verdict cell (case-insensitive), or undefined when it is not one.
+export function verdictOf(raw: string): Verdict | undefined {
+  return VERDICTS.find((v) => v.toLowerCase() === raw.trim().toLowerCase());
 }
 
 // Quote forms to try: as written, without wrapping quote marks, without wrapping backticks.
@@ -177,9 +199,15 @@ export type LineLookup = (ref: string) => string | undefined;
 // Reasons a judgment row is incomplete; empty when it is complete and its quotes verify.
 export function problemsOf(j: Judgment, lookup: LineLookup): string[] {
   const out: string[] = [];
-  if (!VERDICTS.some((v) => v === j.verdict))
+  const verdict = verdictOf(j.verdict);
+  if (verdict === undefined)
     out.push(`verdict "${j.verdict}" is not ${VERDICTS.join(" / ")}`);
   if (j.fact === "") out.push("fact is empty");
+  if (j.scope === "") out.push("scope is empty");
+  else if (verdict === "mismatch" && /^differs\b/iu.test(j.scope))
+    out.push(
+      `verdict mismatch with scope "${j.scope}": scopes that differ are not a mismatch`,
+    );
   const sides = [
     ["owner", j.owner, j.ownerQuote],
     ["location", j.location, j.locationQuote],
@@ -208,6 +236,7 @@ export interface Report {
   readonly invalid: { where: string; problems: string[] }[];
   readonly conflicts: { location: string; fact: string; owners: string[] }[];
   readonly mismatches: Judgment[];
+  readonly toT: Judgment[];
   readonly handRows: number;
   readonly judgmentRows: number;
   readonly unknownTerms: string[];
@@ -286,7 +315,8 @@ export function validate(
     unjudged,
     invalid,
     conflicts,
-    mismatches: complete.filter((j) => j.verdict === "mismatch"),
+    mismatches: complete.filter((j) => verdictOf(j.verdict) === "mismatch"),
+    toT: complete.filter((j) => verdictOf(j.verdict) === "to-T"),
     handRows: complete.filter((j) => j.term === HAND_TERM).length,
     judgmentRows: all.length,
     unknownTerms,
@@ -305,6 +335,7 @@ export function passes(report: Report, closed: boolean): boolean {
 export function renderReport(report: Report, closed: boolean): string {
   const out: string[] = [
     `judged ${report.judged}/${report.total} scan rows; ${report.judgmentRows} judgment rows (${report.handRows} hand)`,
+    `to-T rows routed to T: ${report.toT.length}`,
   ];
   const section = (title: string, items: readonly string[]): void => {
     if (items.length === 0) return;
@@ -332,6 +363,12 @@ export function renderReport(report: Report, closed: boolean): string {
     "mismatch rows",
     report.mismatches.map(
       (m) => `${m.term} @ ${m.location} vs owner ${m.owner}: ${m.fact}`,
+    ),
+  );
+  section(
+    "to-T rows (sense differences, for check T)",
+    report.toT.map(
+      (t) => `${t.term} @ ${t.location} vs owner ${t.owner}: ${t.fact}`,
     ),
   );
   out.push(passes(report, closed) ? "PASS" : "FAIL");

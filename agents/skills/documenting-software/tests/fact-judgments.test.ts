@@ -132,21 +132,90 @@ test("an unknown verdict, a bad file:line, a short row and an unknown term are i
     .slice(0, 2)
     .join("\n");
   const rows = [
-    "| lease | f | glossary:glossary.md:6 | overview.md:7 | looks-fine | A time-bounded right | a lock that never expires |",
-    "| lease | f | glossary.md | overview.md:7 | match | A time-bounded right | a lock that never expires |",
-    "| lease | f | glossary:glossary.md:6 | overview.md:7 | match |",
-    "| nonesuch | f | overview.md:4 | guide.md:4 | match | 30 s by default | 60 s by default |",
+    "| lease | f | same | glossary:glossary.md:6 | overview.md:7 | looks-fine | A time-bounded right | a lock that never expires |",
+    "| lease | f | same | glossary.md | overview.md:7 | match | A time-bounded right | a lock that never expires |",
+    "| lease | f | same | glossary:glossary.md:6 | overview.md:7 | match |",
+    "| nonesuch | f | same | overview.md:4 | guide.md:4 | match | 30 s by default | 60 s by default |",
   ];
   const file = join(work, "bad.md");
   await writeFile(file, `${head}\n${rows.join("\n")}\n`);
   const { stdout, exitCode } = await judge([file]);
   expect(exitCode).toBe(1);
   expect(stdout).toContain(
-    'verdict "looks-fine" is not match / mismatch / qualifier-omitted',
+    'verdict "looks-fine" is not match / mismatch / qualifier-omitted / to-T',
   );
   expect(stdout).toContain('owner "glossary.md" is not file:line');
-  expect(stdout).toContain("expected 7 columns, found 5");
+  expect(stdout).toContain("expected 8 columns, found 6");
   expect(stdout).toContain('term "nonesuch": is not a row of the scan table');
+});
+
+test("the pre-scope seven-column shape is rejected, not read as a judgment", async () => {
+  const head = (await readFile(fixture("complete"), "utf8"))
+    .split("\n")
+    .slice(0, 2)
+    .join("\n");
+  const row =
+    "| lease | f | glossary:glossary.md:6 | overview.md:7 | mismatch | A time-bounded right | a lock that never expires |";
+  const file = join(work, "seven.md");
+  await writeFile(file, `${head}\n${row}\n`);
+  const { stdout, exitCode } = await judge([file]);
+  expect(exitCode).toBe(1);
+  expect(stdout).toContain("expected 8 columns, found 7");
+  expect(stdout).toContain("judged 0/6 scan rows");
+});
+
+test("scope: an empty scope is invalid, and a mismatch whose scope differs is invalid", async () => {
+  const head = (await readFile(fixture("complete"), "utf8"))
+    .split("\n")
+    .slice(0, 2)
+    .join("\n");
+  const empty =
+    "| lease | f |  | glossary:glossary.md:6 | overview.md:7 | match | A time-bounded right | a lock that never expires |";
+  const differs =
+    "| lease | f | differs: v1 / v2 | glossary:glossary.md:6 | overview.md:7 | mismatch | A time-bounded right | a lock that never expires |";
+  const file = join(work, "scope.md");
+  await writeFile(file, `${head}\n${empty}\n${differs}\n`);
+  const { stdout, exitCode } = await judge([file]);
+  expect(exitCode).toBe(1);
+  expect(stdout).toContain("scope is empty");
+  expect(stdout).toContain(
+    'verdict mismatch with scope "differs: v1 / v2": scopes that differ are not a mismatch',
+  );
+  // the same statements with verdict match are not rejected for their scope (the file is partial,
+  // so only the scope check is asserted here)
+  const ok = join(work, "scope-ok.md");
+  await writeFile(
+    ok,
+    `${head}\n${differs.replace("| mismatch |", "| match |")}\n`,
+  );
+  const accepted = await judge([ok]);
+  expect(accepted.stdout).not.toContain("invalid judgment rows");
+  expect(accepted.stdout).not.toContain("scopes that differ");
+});
+
+test("to-T: a sense difference is a complete judgment, counted and listed, and does not fail --closed", async () => {
+  const text = await readFile(fixture("complete"), "utf8");
+  const lease =
+    "| lease | lease definition | same | glossary:glossary.md:6 | overview.md:7 | mismatch |";
+  expect(text).toContain(lease);
+  const file = join(work, "to-t.md");
+  await writeFile(
+    file,
+    text
+      .replace(lease, lease.replace("| mismatch |", "| to-T |"))
+      .replaceAll("| mismatch |", "| match |"),
+  );
+  const closed = await judge([file], ["--closed"]);
+  expect(closed.exitCode).toBe(0);
+  expect(closed.stdout).toContain("judged 6/6 scan rows");
+  expect(closed.stdout).toContain("to-T rows routed to T: 1");
+  expect(closed.stdout).toContain(
+    "to-T rows (sense differences, for check T) (1):",
+  );
+  expect(closed.stdout).toContain(
+    "- lease @ overview.md:7 vs owner glossary:glossary.md:6",
+  );
+  expect(closed.stdout.trimEnd().endsWith("PASS")).toBe(true);
 });
 
 test("a cited file outside the doc set cannot be read, so its quote cannot verify", async () => {
@@ -155,7 +224,7 @@ test("a cited file outside the doc set cannot be read, so its quote cannot verif
     .slice(0, 2)
     .join("\n");
   const row =
-    "| (hand) | f | ../fact-scan.test.ts:1 | overview.md:7 | mismatch | Proves fact-scan.ts finds | a lock that never expires |";
+    "| (hand) | f | same | ../fact-scan.test.ts:1 | overview.md:7 | mismatch | Proves fact-scan.ts finds | a lock that never expires |";
   const file = join(work, "escape.md");
   await writeFile(file, `${head}\n${row}\n`);
   const { stdout, exitCode } = await judge([file]);

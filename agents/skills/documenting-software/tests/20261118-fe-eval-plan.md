@@ -42,3 +42,14 @@ classifier. Set B reported separately (target >= 2 of 3); it does not relax acce
 Topic checklist, measured separately on at least 2 public OSS platform doc sets not used to write it:
 (a) of the gaps it flags, >= 70% judged needed by an independent reader; (b) of the gaps an independent reader
 lists without seeing it, >= 70% covered by it. Both are required.
+
+## Addendum 4 (registered 2026-11-18 before measuring the fourth run)
+Before the fourth run, F judging was narrowed (same subject, scope and time; summaries that only omit detail
+are not mismatches; sense differences go to T) after 7 of 14 non-injected F flags on the third copy were
+false positives. The narrowed rules are first re-applied to the spent third copy as development: the 7 false
+positives should disappear while the 6 defects and the injected hits remain; this is reported, not acceptance.
+The fourth copy also gets set C: 2 enforcement sentences whose component, actor or bypass is removed. Set C is
+reported separately (target >= 1 of 2) and does not change set A's acceptance (>= 12 of 16).
+Reports count confirmed and borderline classifications separately.
+Figure-led page tests and the reference/ledger distinction are not injected into the fourth copy: they are
+judged by readers and by the topic checklist, which are measured separately.

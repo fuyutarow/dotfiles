@@ -660,6 +660,7 @@ const OTHER: readonly Surface[] = [
       "obsidian/package.json",
       "tools/shared/package.json",
       "tools/smart-open/package.json",
+      "tools/smart-copy/package.json",
       "tools/repo-retrieve/package.json",
       "tools/agent-resource-run/package.json",
       "tools/disk-reclaim/package.json",

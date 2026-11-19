@@ -123,6 +123,14 @@ test("a manually changed tool version fails with the generator command", () => {
   expect(problems.join("\n")).toContain('"Describe the user-visible change"');
 });
 
+test("a new tool's first package.json is not a version change", () => {
+  expect(
+    lint([{ path: packagePath, status: "A" }], {
+      [packagePath]: packageAt("0.0.0"),
+    }),
+  ).toEqual([]);
+});
+
 test("a hand-edited changelog fails and points to a changeset", () => {
   const problems = lint([{ path: changelogPath, status: "M" }], {
     [changelogPath]: "# Changelog\n",

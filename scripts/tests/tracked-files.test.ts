@@ -118,6 +118,7 @@ describe("tracked-files.ts", () => {
       ":(glob)tools/agent-resource-run/src/*.ts",
       ":(glob)tools/serena-foreground/src/*.ts",
       ":(glob)tools/smart-open/src/*.ts",
+      ":(glob)tools/smart-copy/src/*.ts",
       ":(exclude)agents/claude/hooks/repo-retrieve.ts",
     ];
     const selected = await list(secondary, lintBunPathspecs);

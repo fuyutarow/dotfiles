@@ -29,6 +29,7 @@ const PATTERNS = [
   "tools/agent-resource-run/src/*.ts",
   "tools/serena-foreground/src/*.ts",
   "tools/smart-open/src/*.ts",
+  "tools/smart-copy/src/*.ts",
 ];
 const EXCLUDE = "agents/claude/hooks/repo-retrieve.ts";
 const checker = join(

@@ -150,6 +150,10 @@ const CORPUS: CorpusEntry[] = [
   { path: "scripts/wsl-winget.ts" },
   { path: "tools/smart-open/src/receive.ts" },
   { path: "tools/smart-open/src/smart-open.ts" },
+  {
+    path: "tools/smart-copy/src/smart-copy.ts",
+    unknownFlag: { exit: 2, message: "unknown option" },
+  },
   { path: "tools/statusline/src/sampler.ts" },
   { path: "tools/prompt-archive/src/prompt-archive.ts" },
   { path: "tools/sui-keystore-merge/src/sui-keystore-merge.ts" },

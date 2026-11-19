@@ -112,6 +112,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── git/         # gitconfig + local.mac / local.wsl (per-OS include)
 ├── tools/       # repo CLIs and libraries, one directory each (release notes in .changes/, generated package.json semver + CHANGELOG.md, src/, tests/); parts import their own dir and tools/shared/
 │   ├── rr/          # rr (= repo-retrieve): declared query-shape router over ccc / rg / Serena; src/ (CLI, ccc adapters, python helpers), retrieval.toml, tests/
+│   ├── smart-copy/  # smart-copy: stdin → the clipboard of the screen you are at, by doing both routes every time (OSC 52 to the terminal + this machine's clipboard tool); decides nothing from SSH_*/HERDR_*
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
 │   ├── storage-headroom/ # storage decisions (decide) and read-only headroom CLI; hooks adapt the verdict
 │   ├── agent-cpu/   # agent and worker CPU samples for the Herdr display
@@ -135,7 +136,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
 │                #   and shared agent assets (commands/, skills/); other repos call task helpers
 │                #   through package.json bins instead of skill installation paths
-├── tools/       # repo CLIs (rr, agent-resource-run, serena-foreground, smart-open, secrets-push, sui-keystore-merge) + shared TS modules
+├── tools/       # repo CLIs (rr, agent-resource-run, serena-foreground, smart-open, smart-copy, secrets-push, sui-keystore-merge) + shared TS modules
 ├── scripts/     # plumbing — config-registry.ts, link-dots.ts, check-tools.sh, shared tool lookup
 ├── Brewfile.core      # tools needed on every box
 ├── Brewfile.ondemand  # tools installed when first needed (OS guards stay here)
@@ -182,6 +183,7 @@ bin name has a classification.
 | `rr` | A | People and agents use the repository query router from any cwd. |
 | `repo-retrieve` | A | Alias for the machine-wide `rr` operator. |
 | `smart-open` | A | Shell and operators open paths or URLs across repositories. |
+| `smart-copy` | A | Shell, hooks and agents copy stdin to the clipboard across repositories. |
 | `disk-reclaim` | A | Operators reclaim machine storage. |
 | `storage-headroom` | A | Operators inspect machine storage headroom. |
 | `prompt-archive` | A | Operators search and manage the machine prompt archive. |

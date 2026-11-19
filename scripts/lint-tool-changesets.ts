@@ -53,9 +53,12 @@ export function toolChangesetProblems(
       const after = packageVersion(afterText);
       add(
         tool,
-        before !== after ||
-          ((before === undefined || after === undefined) &&
-            beforeText !== afterText)
+        // A package that did not exist before has no version to change: a new tool starts at
+        // the version its first package.json declares, and land applies later release intent.
+        status !== "A" &&
+          (before !== after ||
+            ((before === undefined || after === undefined) &&
+              beforeText !== afterText))
           ? `${path}: package version changed in the workspace diff`
           : undefined,
       );

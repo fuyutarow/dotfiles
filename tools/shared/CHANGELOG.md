@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.0 — 2026-11-20
+
+- Add desktop-interop, the WSL desktop-session interop runner shared by smart-open and smart-copy
+
 ## 0.20.2 — 2026-11-08
 
 - Preserve known fleet session names across unavailable observations.

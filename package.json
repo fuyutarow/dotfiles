@@ -14,6 +14,7 @@
     "rr": "tools/repo-retrieve/src/repo-retrieve.ts",
     "repo-retrieve": "tools/repo-retrieve/src/repo-retrieve.ts",
     "smart-open": "tools/smart-open/src/smart-open.ts",
+    "smart-copy": "tools/smart-copy/src/smart-copy.ts",
     "disk-reclaim": "tools/disk-reclaim/src/reclaim.ts",
     "storage-headroom": "tools/storage-headroom/src/storage-headroom.ts",
     "prompt-archive": "tools/prompt-archive/src/prompt-archive.ts",

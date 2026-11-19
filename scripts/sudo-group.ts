@@ -18,3 +18,10 @@ export async function sudoIsOurs(): Promise<boolean> {
   const groups = (await $`id -nG`.text()).trim().split(/\s+/u);
   return groups.some((g) => SUDO_GROUPS.has(g));
 }
+
+/** Run one command as root without ever waiting for a password. False: the caller reports it. */
+export async function sudoNow(argv: readonly string[]): Promise<boolean> {
+  if (!(await sudoIsOurs())) return false;
+  const run = userInfo().uid === 0 ? $`${argv}` : $`sudo -n ${argv}`;
+  return (await run.quiet().nothrow()).exitCode === 0;
+}

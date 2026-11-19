@@ -506,9 +506,10 @@ function linkEtc(ctx: Ctx, rel: string, dst: string, apply: string): void {
     drift(ctx, `${dst} (want -> ${src})`);
     return;
   }
-  // bounded: sudo may wait for a password typed at this terminal; a timeout would cut the human off.
-  const r = Bun.spawnSync(["sudo", "ln", "-sfn", src, dst], {
-    stdin: "inherit",
+  // -n: never wait for a password. A non-interactive run would hang on it once per link; the
+  // skip line below names the command instead.
+  const r = Bun.spawnSync(["sudo", "-n", "ln", "-sfn", src, dst], {
+    stdin: "ignore",
     stdout: "ignore",
     stderr: "ignore",
   });

@@ -14,7 +14,7 @@ import { cli } from "cleye";
 import { $ } from "bun";
 import { buildLinuxInitEnv } from "./linux-init-env.ts";
 import { declareRentedCodexHost, hostDeclarationProbes } from "./agx-host.ts";
-import { sudoIsOurs } from "./sudo-group.ts";
+import { sudoIsOurs, sudoNow } from "./sudo-group.ts";
 import { brewPrefix } from "./core-tools.ts";
 import { installLinuxbrew, bundleCore } from "./linux-brew.ts";
 import { migrateLinuxbrew } from "./linux-migrate-brew.ts";
@@ -93,6 +93,12 @@ if (codexHostDeclaration === "invalid") process.exit(1);
 
 const started = performance.now();
 await installLinuxbrew(PREFIX, say);
+// Homebrew refuses formulae from a tap it has not been told to trust; a fresh machine trusts none.
+const brewfile = await Bun.file(join(DOTFILES, "Brewfile.core")).text();
+for (const [, tap] of brewfile.matchAll(/^tap "([^"]+)"/gmu)) {
+  await $`${join(PREFIX, "bin/brew")} tap ${tap}`;
+  await $`${join(PREFIX, "bin/brew")} trust --tap ${tap}`;
+}
 say(`brew bundle Brewfile.core at ${PREFIX}`);
 if ((await bundleCore(PREFIX, DOTFILES, CHILD_ENV, say)) !== 0) process.exit(1);
 say(
@@ -150,13 +156,22 @@ if (await sudoIsOurs()) {
       () => true,
       () => false,
     )) && (await realpath(SSHD_DROPIN)) === (await realpath(source));
-  if (!alreadyLinked) await $`sudo -n install -m 644 ${source} ${SSHD_DROPIN}`;
+  if (
+    !alreadyLinked &&
+    !(await sudoNow(["install", "-m", "644", source, SSHD_DROPIN]))
+  )
+    say(
+      `sshd: sudo needs a password here — run: sudo install -m 644 ${source} ${SSHD_DROPIN}`,
+    );
   const listener = (await $`pgrep -f "^sshd: .*\[listener\]"`.nothrow().text())
     .trim()
     .split("\n")[0];
   if (listener !== undefined && listener !== "") {
-    await $`sudo -n kill -HUP ${listener}`;
-    say(`sshd: ${SSHD_DROPIN} in place, listener ${listener} reloaded`);
+    say(
+      (await sudoNow(["kill", "-HUP", listener]))
+        ? `sshd: ${SSHD_DROPIN} in place, listener ${listener} reloaded`
+        : `sshd: listener not reloaded — run: sudo kill -HUP ${listener}`,
+    );
   } else {
     say(
       `sshd: ${SSHD_DROPIN} in place; no sshd listener found to reload — it applies at sshd's next start`,

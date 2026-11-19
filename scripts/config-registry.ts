@@ -48,7 +48,7 @@ export const LAND_HOSTS: readonly {
     deploy: true,
     role: "workstation",
     brewPrefix: "/home/linuxbrew/.linuxbrew",
-    hostnames: ["R99"],
+    hostnames: ["R99", "R99-U27"],
   },
   {
     alias: "r99-u24",
@@ -376,8 +376,9 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
 // pull must not re-prompt). Symlinks, not copies: each reader follows links fine.
 // .wslconfig is NOT here on purpose: the Windows-side WSL service cannot follow a WSL symlink, so
 // it is COPIED by `mise run wsl:wslconfig` (scripts/wsl-wslconfig.ts).
+// /etc/wsl.conf is NOT here either: it holds the distro's hostname and default user, which belong
+// to the machine (scripts/wsl-distro.ts writes it at creation), never to a shared file.
 export const ETC_LINKS: readonly (readonly [string, string, string])[] = [
-  ["wsl/wsl.conf", "/etc/wsl.conf", "restart the distro"],
   // 50- so it applies after the distro's own 10-* drop-ins and before 99-sysctl.conf.
   ["wsl/sysctl.conf", "/etc/sysctl.d/50-dotfiles.conf", "sudo sysctl --system"],
   // Lets the newest ssh connection re-bind smart-open's forwarded socket.

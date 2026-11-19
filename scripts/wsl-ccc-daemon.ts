@@ -10,10 +10,8 @@ const unitLinked = (await $`test -e ${unit}`.nothrow()).exitCode === 0;
 if (!unitLinked) {
   consola.error("unit not linked — run: mise run link:dots");
   process.exitCode = 1;
-} else if (Bun.which("ccc") === undefined) {
-  consola.error(
-    "ccc not on PATH — install it first (uv tool install cocoindex-code)",
-  );
+} else if (Bun.which("ccc") === null) {
+  consola.error("ccc not on PATH — install it first (mise run cc:install-mcp)");
   process.exitCode = 1;
 } else {
   const active =

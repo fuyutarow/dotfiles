@@ -65,7 +65,7 @@ typeset -A COMMAND_RECOMMENDATIONS=(
   ["ping"]="gping:brew install gping:cargo install gping"
   ["sed"]="sd:brew install sd:cargo install sd"
   ["cut"]="choose:brew install choose-rust:cargo install choose"
-  ["man"]="tldr:brew install tldr:cargo install tealdeer"
+  ["man"]="tldr:brew install tealdeer:cargo install tealdeer"
   ["cd"]="zoxide:brew install zoxide:cargo install zoxide"
   ["tree"]="broot:brew install broot:cargo install broot"
 )

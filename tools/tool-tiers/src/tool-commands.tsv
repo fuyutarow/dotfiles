@@ -7,6 +7,7 @@ neovim	nvim
 ripgrep	rg
 rm-improved	rip
 choose-rust	choose
+tealdeer	tldr
 bottom	btm
 rustup	rustup cargo
 bun	bun bunx

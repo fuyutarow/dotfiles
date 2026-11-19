@@ -921,7 +921,7 @@ run = 'bun ~/dotfiles/scripts/box-init.ts'
 
 [tasks."wsl:init"]
 depends = ["bun:check"]
-description = "Initialize WSL environment (after: install linuxbrew, brew install mise)"
+description = "Initialize WSL: linux:init (Brewfile.core, links, agent CLIs) plus WSL user services; root steps run via sudo -n or are listed. After: install linuxbrew, brew install mise."
 run = 'bun ~/dotfiles/scripts/wsl-init.ts'
 
 # The ONE Windows-side file this repo owns, and the only one it cannot symlink: %USERPROFILE%\

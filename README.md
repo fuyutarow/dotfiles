@@ -132,7 +132,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── macos/       # declarative `defaults write` system settings (macOS only, defaults.ts)
 ├── iterm2/      # terminal prefs, synced via iTerm2's own custom-folder mechanism (macOS only)
 ├── edge/        # Microsoft Edge managed policy (macOS only): blocklist + pinned default search; COPIED with sudo by `mise run edge:policy`, checked by doctor
-├── wsl/         # /etc/wsl.conf system config (WSL only)
+├── wsl/         # WSL system config: sysctl, sshd drop-in, .wslconfig (WSL only)
 ├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/,
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
 │                #   and shared agent assets (commands/, skills/); other repos call task helpers
@@ -345,6 +345,12 @@ cd ~/dotfiles && brew install mise && mise run wsl:init
 exec zsh
 ```
 
+`wsl:init` is `linux:init` plus the WSL user services: it installs `Brewfile.core` only (on-demand
+formulas come later through `tool:get` / `install:tools`), links the dotfiles, and installs
+Claude Code and Codex. It never waits for a sudo password: a root-only step (zsh from apt, the
+login shell, the `/etc` links) either runs through `sudo -n` or is printed as a command for you
+to run (run `sudo -v` first to have them run). Re-running is safe; updating is `mise run up`.
+
 On WSL, `Brewfile.core` declares the Homebrew `codex` cask. Install the Windows Codex Desktop
 app too, then run `mise run install:ai-clis` from the WSL checkout to deploy explicit `codex.exe`.
 The task keeps Claude native to WSL, retains the two distinct config homes, and retires only its
@@ -353,8 +359,8 @@ old managed plain-Codex facade. macOS and ordinary Linux retain the standalone C
 
 The WSL capacity controller runs every minute and reclaims stale `/tmp` directories at 80% inode use, before storage-headroom warns at 85%.
 
-When Google Drive for Windows is available as `G:`, `wsl/wsl.conf` enables WSL automount at
-`/mnt`. Google Drive's virtual `G:` is not found by WSL automount. Run `mise run wsl:drive-mount`
+`/etc/wsl.conf` belongs to each distro (hostname, default user) and is not managed here. WSL
+automounts Windows drives at `/mnt` by default. Google Drive's virtual `G:` is not found by WSL automount. Run `mise run wsl:drive-mount`
 once to install the declared drvfs entry from `wsl/gdrive.fstab` into `/etc/fstab`; WSL will mount
 it at `/mnt/g` on later distro starts. `mise run doctor` reports when
 that mount is absent. If `G:` goes away on the Windows side, the drvfs mount stays behind and
@@ -365,8 +371,7 @@ discovers the `Personal-Drive` directory under `My Drive` for `~/Personal-Drive`
 target is cached in an untracked host-specific file under `~/.local/state/dotfiles/`; an existing
 valid link seeds the cache on already-deployed hosts. A fresh discovery walks at most six levels
 and 15 seconds, printing its bounds before it starts. The Drive account's folder name is never
-stored in this repository. After changing `wsl/wsl.conf`, restart the distro for automount settings
-to take effect.
+stored in this repository.
 
 ### Throwaway Linux box (rented GPU, fresh VM, container)
 

@@ -74,7 +74,9 @@ export async function renderRefusal(
   const committed = await hasJj(root);
   if (committed instanceof Error) return committed;
   if (fromWorkingCopy || !committed) return undefined;
-  const snapped = await jj(root, ["status"]);
+  // jj's first run in a copied checkout creates its per-repo config and exits 1; the second works.
+  const first = await jj(root, ["status"]);
+  const snapped = first instanceof Error ? await jj(root, ["status"]) : first;
   if (snapped instanceof Error) return snapped;
   const dirty = await jj(root, [
     "--ignore-working-copy",

@@ -3,7 +3,7 @@ import {
   checkClipboardRoundTrip,
   type Deps,
   type Reader,
-} from "../doctor-clipboard.ts";
+} from "../src/doctor-clipboard.ts";
 
 const TOKEN = "dotfiles-doctor-clipboard-test";
 

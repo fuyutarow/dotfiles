@@ -65,6 +65,17 @@
         "!**/fixtures/**!",
       ],
     },
+    "tools/smart-copy": {
+      // The declared probe (tool.toml `probes`) is launched by scripts/tool-probe.ts from the path
+      // the declaration names, which no import statement shows.
+      "entry": ["src/doctor-clipboard.ts!"],
+      "project": [
+        "**/*.{ts,tsx,js,jsx}!",
+        "!**/tests/**!",
+        "!**/*.{test,spec}.{ts,tsx,js,jsx}!",
+        "!**/fixtures/**!",
+      ],
+    },
     "tools/smart-open": {
       // The receiver is launched by the macOS launchd agent.
       "entry": ["src/receive.ts!"],

@@ -687,6 +687,16 @@ const OTHER: readonly Surface[] = [
     verify: "mise run lint:ts · typecheck",
   },
   {
+    kind: "in-place",
+    when: "all",
+    sources: ["tools/smart-copy/tool.toml"],
+    deployed: "the checkout",
+    consumer:
+      "scripts/lint-tool-declarations.ts (bins, README row, registry, zsh fragment list, probe task, consumers), scripts/lint-zsh.ts, scripts/tool-probe.ts and the doctor smart-copy check; contract in tools/README.md",
+    writer: "human, in the repo",
+    verify: "mise run lint:tool-declarations",
+  },
+  {
     kind: "applied",
     when: "mac",
     sources: ["macos/defaults.ts"],

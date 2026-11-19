@@ -162,6 +162,7 @@ depends = [
   "lint:one-writer",
   "lint:hook-slug",
   "lint:config-map",
+  "lint:tool-declarations",
   "lint:reason-network-home",
   "lint:ignore",
   "lint:live-refs",
@@ -303,6 +304,12 @@ depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail when a tracked config-shaped file is registered in no scripts/config-registry.ts row, or a row names a missing source"
 run = "bun scripts/config-map.ts --check"
+
+[tasks."lint:tool-declarations"]
+depends = ["bun:check"]
+dir = "{{config_root}}"
+description = "Fail when a tools/<name>/tool.toml disagrees with root package.json bin, the README tool table, the config registry, the zsh fragment list, mise probe tasks or consumers; ratchet: tools without a declaration may only shrink"
+run = "bun scripts/lint-tool-declarations.ts"
 
 [tasks."lint:ignore"]
 depends = ["bun:check"]
@@ -816,7 +823,7 @@ run = "bun scripts/auth-push.ts"
 [tasks."doctor:clipboard"]
 description = "OVERWRITES the clipboard: copy a unique token with `smart-copy --status` and read it back (WSL: powershell.exe Get-Clipboard through the desktop-session socket; macOS: pbpaste). PASS/FAIL, or SKIP where no reader exists (the clipboard is then untouched). Not part of `mise run doctor`, which only checks that smart-copy resolves on PATH."
 dir = "{{config_root}}"
-run = 'bun scripts/doctor-clipboard.ts'
+run = 'bun scripts/tool-probe.ts smart-copy clipboard'
 
 [tasks."doctor:remote"]
 depends = ["bun:check"]

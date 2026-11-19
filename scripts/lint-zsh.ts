@@ -1,6 +1,8 @@
 import { $ } from "bun";
 import { access } from "node:fs/promises";
+import { join } from "node:path";
 import { consola } from "consola";
+import { loadToolDeclarations } from "@dotfiles/shared/src/tool-declaration.ts";
 
 // zsh syntax gate: `zsh -n` parse-only on boot-critical zsh config (MUST use the zsh binary,
 // never bash -n).
@@ -13,6 +15,12 @@ const files = [
   "zsh/zprofile.mac",
   "zsh/zprofile.wsl",
 ];
+
+// Shell fragments come from the tool declarations (tools/<name>/tool.toml `shell`), not a list here.
+const { declared } = await loadToolDeclarations(join(import.meta.dir, ".."));
+for (const { dir, declaration } of declared)
+  if (declaration.shell !== undefined)
+    files.push(`tools/${dir}/${declaration.shell}`);
 
 let rc = 0;
 for (const f of files) {

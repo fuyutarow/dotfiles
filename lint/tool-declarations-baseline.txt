@@ -1,0 +1,22 @@
+# Tools without tools/<name>/tool.toml. scripts/lint-tool-declarations.ts: this list may only shrink.
+# Declaring a tool deletes its line; a new tool ships its declaration instead of a line here.
+agent-cpu
+agent-resource-run
+baseline
+codex-thread-copy
+coredev
+detect-japanese
+disk-reclaim
+herdr-btm
+herdr-projector
+preset
+prompt-archive
+repo-retrieve
+secrets-push
+serena-foreground
+smart-open
+spec
+statusline
+storage-headroom
+sui-keystore-merge
+tool-tiers

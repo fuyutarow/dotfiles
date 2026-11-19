@@ -249,21 +249,17 @@ alias hs='atuin search'                 # CLI history search
 alias hst='atuin stats'                 # History statistics
 alias hi='atuin import auto'            # Import existing history
 
-# Clipboard function: stdin to the `smart-copy` command (tools/smart-copy), which feeds the terminal
-# (OSC 52) and this machine's native clipboard and decides nothing. `--echo` also writes the text to
-# the terminal, like tee, so `c`, `pp` and `q` still show what they copied. smart-copy is a
-# root package.json bin, linked by `bun link` (mise run deps); no route logic lives in this shell.
-copytoclipboard() {
-  if ! command -v smart-copy > /dev/null 2>&1; then
-    echo "smart-copy is not on PATH; run mise run deps in the dotfiles checkout" >&2
-    return 127
-  fi
-  smart-copy --echo
-}
-
-# Clipboard aliases
-alias c='copytoclipboard'
-alias pwdc='pwd | copytoclipboard'
+# Tool shell fragments: `copytoclipboard`, `c` and `pwdc` live in tools/smart-copy/shell.zsh. The list
+# is explicit, never a glob; scripts/lint-tool-declarations.ts fails when it disagrees with the
+# `shell` field of tools/*/tool.toml. `pp`, `q` and the bat helper below call `copytoclipboard`.
+TOOL_SHELL_FRAGMENTS=(
+  tools/smart-copy/shell.zsh
+)
+_dotfiles_root=${${(%):-%x}:A:h:h}
+for _fragment in $TOOL_SHELL_FRAGMENTS; do
+  [[ -f $_dotfiles_root/$_fragment ]] && source $_dotfiles_root/$_fragment
+done
+unset _fragment _dotfiles_root
 
 # Quote a herdr pane's raw terminal stdio to the clipboard (not Claude's response — that's
 # /quote inside a Claude session; this is the plain-shell equivalent for any pane).

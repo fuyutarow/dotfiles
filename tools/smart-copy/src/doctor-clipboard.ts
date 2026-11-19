@@ -1,4 +1,4 @@
-// `mise run doctor:clipboard` — does a copy through `smart-copy` come back out of this machine's
+// The `clipboard` probe of tools/smart-copy/tool.toml (`mise run doctor:clipboard`) — does a copy through `smart-copy` come back out of this machine's
 // clipboard? It OVERWRITES the clipboard with a unique token, so it is a task of its own and never a
 // part of plain `mise run doctor` (which only checks that `smart-copy` resolves on PATH).
 //
@@ -15,9 +15,9 @@ import { release } from "node:os";
 import {
   desktopInterop,
   repoHelperCommand,
-} from "../tools/shared/src/desktop-interop.ts";
-import { attempt, errorMessage } from "../tools/shared/src/attempt.ts";
-import { render, type Finding } from "./doctor.ts";
+} from "@dotfiles/shared/src/desktop-interop.ts";
+import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { render, type Finding } from "@dotfiles/shared/src/finding.ts";
 
 const NAME = "clipboard round-trip";
 const READ_MS = 15_000;

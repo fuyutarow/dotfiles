@@ -1,4 +1,6 @@
 import { DoctorStatus } from "@dotfiles/shared/src/doctor-record.ts";
+import { render, type Finding } from "@dotfiles/shared/src/finding.ts";
+import { loadToolDeclarations } from "@dotfiles/shared/src/tool-declaration.ts";
 // `mise run doctor` — does THIS machine realize what the dotfiles declare? READ-ONLY: every check
 // compares a declared source of truth against the live machine and changes nothing. Consumer: a
 // human or agent reading verdict lines; each FAIL carries the command that repairs it.
@@ -132,14 +134,8 @@ import {
   recoverJournalFailure,
 } from "../tools/statusline/src/recover-health.ts";
 
-type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP" | "INFO";
-export type Finding = {
-  name: string;
-  verdict: Verdict;
-  detail: string;
-  lines?: string[];
-  fix?: string;
-};
+export { render, type Finding };
+
 export type Ctx = {
   home: string;
   dotfiles: string;
@@ -801,19 +797,36 @@ export async function missingSkillHelpers(
 }
 
 // `smart-copy` is the one clipboard route of every caller (zsh c/pp/pwdc/q, the /quote hooks,
-// codex-thread-copy). Plain doctor only proves it resolves; the round trip overwrites the clipboard,
-// so it lives in `mise run doctor:clipboard` (scripts/doctor-clipboard.ts).
-export function checkSmartCopy(): Finding {
-  const found = Bun.which("smart-copy");
-  return found === null
+// codex-thread-copy). Plain doctor only proves its declared bins resolve; the round trip overwrites
+// the clipboard, so it is the declared probe (tools/smart-copy/tool.toml `probes`), a mise task of
+// its own. Both the bins and the probe tasks named here come from that declaration.
+export async function checkSmartCopy(
+  root: string = join(import.meta.dir, ".."),
+): Promise<Finding> {
+  const { declared } = await loadToolDeclarations(root);
+  const tool = declared.find(({ dir }) => dir === "smart-copy");
+  if (tool === undefined)
+    return fail(
+      "smart-copy",
+      "tools/smart-copy/tool.toml is missing or invalid",
+      "mise run lint:tool-declarations",
+    );
+  const probes = Object.values(tool.declaration.probes)
+    .map((probe) => `\`mise run ${probe.task}\``)
+    .join(", ");
+  const found = Object.keys(tool.declaration.bins).map(
+    (bin): [string, string | null] => [bin, Bun.which(bin)],
+  );
+  const missing = found.filter(([, path]) => path === null).map(([bin]) => bin);
+  return missing.length > 0
     ? fail(
         "smart-copy",
-        "smart-copy is not on PATH",
-        "mise run deps  (bun link; then `mise run doctor:clipboard` proves a copy round-trips)",
+        `${missing.join(", ")} is not on PATH`,
+        `mise run deps  (bun link; then ${probes} proves a copy round-trips)`,
       )
     : pass(
         "smart-copy",
-        `resolves to ${found}; \`mise run doctor:clipboard\` proves a round trip`,
+        `${found.map(([bin, path]) => `${bin} resolves to ${path}`).join("; ")}; ${probes} proves a round trip`,
       );
 }
 
@@ -2419,7 +2432,7 @@ export const CHECKS: Check[] = [
   { name: "bins", run: checkBins, applies: always },
   {
     name: "smart-copy",
-    run: () => Promise.resolve(checkSmartCopy()),
+    run: () => checkSmartCopy(),
     applies: always,
   },
   { name: "skill-helper-paths", run: checkSkillHelperPaths, applies: always },
@@ -2516,22 +2529,6 @@ export const CHECKS: Check[] = [
     applies: (c) => (c.isMac ? null : "macOS only"),
   },
 ];
-
-export function render(findings: Finding[]): string {
-  const width = Math.max(...findings.map((f) => f.name.length));
-  const out: string[] = [];
-  for (const f of findings) {
-    out.push(`${f.verdict.padEnd(4)}  ${f.name.padEnd(width)}  ${f.detail}`);
-    for (const l of f.lines ?? []) out.push(`${" ".repeat(width + 8)}- ${l}`);
-    if (f.fix !== undefined && f.fix !== "")
-      out.push(`${" ".repeat(width + 8)}fix: ${f.fix}`);
-  }
-  const count = (v: Verdict) => findings.filter((f) => f.verdict === v).length;
-  out.push(
-    `RESULT: ${count("FAIL") > 0 ? "FAIL" : "PASS"} · FAIL ${count("FAIL")} · WARN ${count("WARN")} · PASS ${count("PASS")} · SKIP ${count("SKIP")}`,
-  );
-  return `${out.join("\n")}\n`;
-}
 
 async function main(): Promise<void> {
   const home = process.env["HOME"] ?? homedir();

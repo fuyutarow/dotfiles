@@ -491,14 +491,18 @@ function followMainCheckout(
   });
 }
 
-function parseWorkspaceList(
+// jj 0.47+ marks the current workspace as `name (current): path ...`; the marker is not part of the name.
+export function parseWorkspaceList(
   output: string,
   root: string,
 ): { name: string; path: string }[] {
   return output
     .split("\n")
     .flatMap((line) => {
-      const match = /^([^:]+): (.+?) [a-z0-9]{8,} [0-9a-f]{8,} /u.exec(line);
+      const match =
+        /^([^:]+?)(?: \(current\))?: (.+?) [a-z0-9]{8,} [0-9a-f]{8,} /u.exec(
+          line,
+        );
       if (match?.[1] === undefined || match[2] === undefined) return [];
       return [{ name: match[1].trim(), path: resolve(root, match[2]) }];
     })

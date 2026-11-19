@@ -27,6 +27,7 @@ import { pathToFileURL } from "node:url";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import {
   packageBinProblems,
+  parseWorkspaceList,
   removedCommandCallers,
   runLandConsumerGates,
   workspacePreflightVerdicts,
@@ -62,6 +63,36 @@ function test(
 ): void {
   bunTest(name, body, timeout);
 }
+describe("parseWorkspaceList marker output", () => {
+  // jj 0.47.1 prints `name (current): path change-id commit-id ...` for the current workspace.
+  const root = "/repo";
+  test("workspace list: the current marker is not part of the name", () => {
+    const output = [
+      "default (current): /repo abcdefgh 0123abcd default",
+      "ws_other: /repo/ws_other ijklmnop 4567cdef (no description set)",
+    ].join("\n");
+    expect(parseWorkspaceList(output, root)).toEqual([
+      { name: "default", path: "/repo" },
+      { name: "ws_other", path: "/repo/ws_other" },
+    ]);
+  });
+  test("workspace list: unmarked output parses as before", () => {
+    expect(
+      parseWorkspaceList(
+        "dotfiles-arm-worker: /repo/w abcdefgh 0123abcd x",
+        root,
+      ),
+    ).toEqual([{ name: "dotfiles-arm-worker", path: "/repo/w" }]);
+  });
+  test("workspace list: a marked current workspace is found by its bare name", () => {
+    const [entry] = parseWorkspaceList(
+      "ws_fix-land-workspace-marker-1120 (current): . abcdefgh 0123abcd tip",
+      root,
+    );
+    expect(entry?.name).toBe("ws_fix-land-workspace-marker-1120");
+  });
+});
+
 const eventsSchema = jsonOf(z.array(z.string()));
 async function drain(reader: {
   read(): Promise<{ done: boolean; value?: Uint8Array | undefined }>;
@@ -425,6 +456,12 @@ test("restored candidate reloads its inline registry schema after the same path 
   temporary.push(root);
   await mkdir(join(root, "scripts"));
   await mkdir(join(root, "standard-presets"));
+  await mkdir(join(root, "tools"));
+  await symlink(join(REPO, "tools/shared"), join(root, "tools/shared"));
+  await symlink(
+    join(REPO, "standard-presets/src"),
+    join(root, "standard-presets/src"),
+  );
   await symlink(join(REPO, "agents"), join(root, "agents"));
   await symlink(join(REPO, "node_modules"), join(root, "node_modules"));
   const gate = join(root, "scripts/consumer-gate.ts");

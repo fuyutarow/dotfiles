@@ -1,4 +1,4 @@
-import { afterAll, expect, spyOn, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import {
   chmod,
   mkdtemp,
@@ -22,25 +22,21 @@ import {
   effectiveMemoryLimitsMatch,
   kernelPageSizeBytes,
 } from "../src/lib/cgroup-memory-limits.ts";
+import { captureStderrMessages } from "./captured-stderr.ts";
 
 // Holder identity only contributes an advisory diagnostic, never a refusal.
 async function advisoryAdmission(
   ...args: Parameters<typeof gpuAdmissionRefusal>
 ) {
-  const chunks: string[] = [];
-  const warning = spyOn(process.stderr, "write").mockImplementation((chunk) => {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk));
-    return true;
-  });
-  using _restoreWarning = {
-    [Symbol.dispose]: () => {
-      warning.mockRestore();
-    },
-  };
-  expect(await gpuAdmissionRefusal(...args)).toBeUndefined();
-  const lines = chunks.join("");
-  expect(lines).toContain("WARN GPU holder check is advisory, not refusing: ");
-  return lines;
+  const { result, messages } = await captureStderrMessages(() =>
+    gpuAdmissionRefusal(...args),
+  );
+  expect(result).toBeUndefined();
+  for (const line of messages)
+    expect(line).toStartWith(
+      "WARN GPU holder check is advisory, not refusing: ",
+    );
+  return messages.join("\n");
 }
 
 const runtimeBase = process.env["AGX_TEST_RUNTIME_DIR"] ?? "/tmp";

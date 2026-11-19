@@ -9,24 +9,21 @@ import {
 } from "@dotfiles/shared/src/gpu-samples.ts";
 import { DecisionRecord, withDecision } from "../src/lib/decision-record.ts";
 import { runGpuSampler } from "@dotfiles/shared/src/gpu-sampler.ts";
+import { captureStderrMessages } from "./captured-stderr.ts";
 
 // Holder identity only contributes an advisory diagnostic, never a refusal.
 async function advisoryAdmission(
   ...args: Parameters<typeof gpuAdmissionRefusal>
 ) {
-  const warning = spyOn(console, "error").mockImplementation(() => {});
-  using _restoreWarning = {
-    [Symbol.dispose]: () => {
-      warning.mockRestore();
-    },
-  };
-  expect(await gpuAdmissionRefusal(...args)).toBeUndefined();
-  const lines = warning.mock.calls.map(([line]) => String(line));
-  for (const line of lines)
+  const { result, messages } = await captureStderrMessages(() =>
+    gpuAdmissionRefusal(...args),
+  );
+  expect(result).toBeUndefined();
+  for (const line of messages)
     expect(line).toStartWith(
       "WARN GPU holder check is advisory, not refusing: ",
     );
-  return lines.join("\n");
+  return messages.join("\n");
 }
 
 const request = { gpu_id: 0, vram_peak_bytes: 128 * 1024 ** 2 };
@@ -1120,19 +1117,13 @@ test("malformed metadata is rejected by the production reader and never grants a
 // Return the diagnostic only after proving the production gate admitted it.
 async function dxgAdvisory(...args: Parameters<typeof gpuAdmissionRefusal>) {
   const record = new DecisionRecord();
-  const warning = spyOn(console, "error").mockImplementation(() => {});
-  using _restore = {
-    [Symbol.dispose]: () => {
-      warning.mockRestore();
-    },
-  };
-  const refusal = await withDecision(record, () =>
-    gpuAdmissionRefusal(...args),
+  const { result: refusal, messages } = await captureStderrMessages(() =>
+    withDecision(record, () => gpuAdmissionRefusal(...args)),
   );
   expect(refusal).toBeUndefined();
-  const lines = warning.mock.calls
-    .map(([line]) => String(line))
-    .filter((line) => line.startsWith("WARN dxg-suspected:"));
+  const lines = messages.filter((line) =>
+    line.startsWith("WARN dxg-suspected:"),
+  );
   let observation: string | undefined;
   if (record.reason !== "dxg-suspected") expect(lines).toHaveLength(0);
   else {

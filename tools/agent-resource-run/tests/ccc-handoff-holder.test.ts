@@ -1,27 +1,24 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gpuAdmissionRefusal } from "../src/agent-resource-run.ts";
 import type { GpuState } from "@dotfiles/shared/src/gpu-samples.ts";
+import { captureStderrMessages, consolaMessages } from "./captured-stderr.ts";
 
 // Holder identity only contributes an advisory diagnostic, never a refusal.
 async function advisoryAdmission(
   ...args: Parameters<typeof gpuAdmissionRefusal>
 ) {
-  const warning = spyOn(console, "error").mockImplementation(() => {});
-  using _restoreWarning = {
-    [Symbol.dispose]: () => {
-      warning.mockRestore();
-    },
-  };
-  expect(await gpuAdmissionRefusal(...args)).toBeUndefined();
-  const lines = warning.mock.calls.map(([line]) => String(line));
-  for (const line of lines)
+  const { result, messages } = await captureStderrMessages(() =>
+    gpuAdmissionRefusal(...args),
+  );
+  expect(result).toBeUndefined();
+  for (const line of messages)
     expect(line).toStartWith(
       "WARN GPU holder check is advisory, not refusing: ",
     );
-  return lines.join("\n");
+  return messages.join("\n");
 }
 
 const request = { gpu_id: 0, vram_peak_bytes: 128 * 1024 ** 2 };
@@ -201,7 +198,8 @@ process.stdout.write(await gpuAdmissionRefusal(${JSON.stringify(request)}, 512, 
       reply,
       `MainPID=456\nExecMainStartTimestamp=${timestamp}\n`,
     );
-    const warning = await inspect();
+    const [warning, ...rest] = consolaMessages(await inspect());
+    expect(rest).toHaveLength(0);
     expect(warning).toStartWith(
       "WARN GPU holder check is advisory, not refusing: ",
     );

@@ -17,11 +17,27 @@
 // the unit; a unit's output is kept to its last 64 KiB; output still open after the unit's exit is
 // abandoned after 2 s so a grandchild holding a pipe cannot hang the runner.
 //
-// EXIT: 0 every selected unit passed · 1 a unit failed or timed out · 2 usage error (bad flag or
-// value, a selector that matches no unit, no unit found).
+// CHANGED: `--changed [--base <revset>]` (default base `alpha`) runs only the units that own a
+// file that differs from the base, working copy included. The paths come from `jj diff --from
+// <base>`; `ownedUnits` maps them to units:
+//   tools/shared/…               every unit (it is imported everywhere)
+//   tools/<name>/…               tools/<name>/tests
+//   scripts/tests/<x>.test.ts    itself (scripts/tests/<dir>/… its directory unit)
+//   scripts/<x>.ts               every scripts/tests unit whose name starts with <x>
+//   anything else                no unit
+// No owning unit prints "no test unit owns the changed files" and exits 0.
+//
+// KNOWN-RED: lint/test-known-red.toml lists units that are red today, each with a date and reason.
+// A listed unit that fails prints `KNOWN-RED <s>s <unit>` and does not fail the run; a listed unit
+// that passes fails the run until its line is removed. `--strict` ignores the list.
+//
+// EXIT: 0 every selected unit passed or is known-red · 1 a unit failed or timed out, or a
+// known-red unit passed · 2 usage error (bad flag or value, a selector that matches no unit, no
+// unit found, an unreadable or wrong known-red list, a failed `jj diff`).
 import { availableParallelism } from "node:os";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { cli } from "cleye";
+import { fromThrowable, z } from "../tools/shared/src/zod.ts";
 
 export const TEST_GLOBS = [
   "scripts/tests/**/*.test.ts",
@@ -98,6 +114,153 @@ export function selectUnits(
 export function defaultJobs(cores = availableParallelism()): number {
   return Math.max(2, Math.floor(cores / 2));
 }
+
+const SHARED_PREFIX = "tools/shared/";
+
+// The units a single changed path belongs to. `units` is the discovered list, so a path whose
+// would-be unit does not exist selects nothing.
+function ownersOf(file: string, units: string[]): string[] {
+  if (file.startsWith(SHARED_PREFIX)) return units;
+  const parts = file.split("/");
+  const [top, second] = parts;
+  if (top === "tools" && parts.length >= 3)
+    return units.filter((unit) => unit === `tools/${second}/tests`);
+  if (top === "scripts" && second === "tests" && parts.length >= 3)
+    return units.filter((unit) => unit === parts.slice(0, 3).join("/"));
+  if (top === "scripts" && parts.length === 2 && file.endsWith(".ts")) {
+    const stem = basename(file, ".ts");
+    return units.filter(
+      (unit) =>
+        unit.startsWith("scripts/tests/") && basename(unit).startsWith(stem),
+    );
+  }
+  return [];
+}
+
+/** The units that own `changed` (repo-relative paths), in the order of `units`, each once. */
+export function ownedUnits(changed: string[], units: string[]): string[] {
+  const owned = new Set(changed.flatMap((file) => ownersOf(file, units)));
+  return units.filter((unit) => owned.has(unit));
+}
+
+export const DEFAULT_BASE = "alpha";
+const JJ_TIMEOUT_MS = 60_000;
+// Both ends of every entry: a rename's source is a changed path as much as its destination.
+const JJ_PATHS_TEMPLATE = 'source.path() ++ "\\0" ++ target.path() ++ "\\0"';
+
+type Paths = { ok: true; paths: string[] } | { ok: false; message: string };
+
+/** Paths that differ between `base` and the working copy of the jj repository at `root`. */
+export async function changedPaths(root: string, base: string): Promise<Paths> {
+  if (base === "" || base.startsWith("-"))
+    return { ok: false, message: `--base needs a revset, got '${base}'` };
+  const jj = Bun.which("jj");
+  if (jj === null) return { ok: false, message: "--changed needs jj on PATH" };
+  const child = Bun.spawn(
+    [
+      jj,
+      "diff",
+      "--no-pager",
+      "--color",
+      "never",
+      "--from",
+      base,
+      "-T",
+      JJ_PATHS_TEMPLATE,
+    ],
+    {
+      cwd: root,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: JJ_TIMEOUT_MS,
+      killSignal: "SIGKILL",
+    },
+  );
+  const [stdout, stderr, exit] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (exit !== 0)
+    return {
+      ok: false,
+      message: `jj diff --from ${base} failed (exit ${exit}): ${stderr.trim()}`,
+    };
+  const paths = new Set(stdout.split("\0").filter((path) => path !== ""));
+  return { ok: true, paths: [...paths].toSorted() };
+}
+
+export const KNOWN_RED_FILE = "lint/test-known-red.toml";
+
+const KnownRedFile = z.strictObject({
+  unit: z
+    .array(
+      z.strictObject({
+        path: z.string().min(1),
+        since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, "YYYY-MM-DD"),
+        reason: z.string().min(1),
+      }),
+    )
+    .default([]),
+});
+
+export type KnownRed = { path: string; since: string; reason: string };
+type Listed = { ok: true; known: KnownRed[] } | { ok: false; message: string };
+
+const parseToml = fromThrowable(
+  (text: string): unknown => Bun.TOML.parse(text),
+  String,
+);
+
+/** The `[[unit]]` entries of `text`; every path must be one of `units`, each at most once. */
+export function parseKnownRed(text: string, units: string[]): Listed {
+  const parsed = parseToml(text);
+  if (parsed.isErr())
+    return { ok: false, message: `${KNOWN_RED_FILE}: ${parsed.error}` };
+  const table = KnownRedFile.safeParse(parsed.value);
+  if (!table.success)
+    return {
+      ok: false,
+      message: `${KNOWN_RED_FILE}: each [[unit]] needs path, since (YYYY-MM-DD) and reason: ${table.error.message}`,
+    };
+  const known = table.data.unit;
+  const unknown = known.filter((entry) => !units.includes(entry.path));
+  if (unknown.length > 0)
+    return {
+      ok: false,
+      message: `${KNOWN_RED_FILE}: not a unit: ${unknown.map((entry) => `'${entry.path}'`).join(", ")} (see --list)`,
+    };
+  const paths = known.map((entry) => entry.path);
+  const twice = paths.filter((path, index) => paths.indexOf(path) !== index);
+  if (twice.length > 0)
+    return {
+      ok: false,
+      message: `${KNOWN_RED_FILE}: listed twice: ${twice.map((path) => `'${path}'`).join(", ")}`,
+    };
+  return { ok: true, known };
+}
+
+async function readKnownRed(root: string, units: string[]): Promise<Listed> {
+  const file = Bun.file(resolve(root, KNOWN_RED_FILE));
+  if (!(await file.exists())) return { ok: true, known: [] };
+  return parseKnownRed(await file.text(), units);
+}
+
+export type Verdict = "pass" | "fail" | "known-red" | "stale-red";
+
+/** A listed unit that fails is reported, not failing; a listed unit that passes must be unlisted. */
+export function verdictOf(
+  outcome: Outcome,
+  known: ReadonlySet<string>,
+): Verdict {
+  const listed = known.has(outcome.unit);
+  if (outcome.status === "pass") return listed ? "stale-red" : "pass";
+  return listed ? "known-red" : "fail";
+}
+
+const isFailing = (verdict: Verdict): boolean =>
+  verdict === "fail" || verdict === "stale-red";
 
 type Tail = { done: Promise<void>; text: () => string; stop: () => void };
 
@@ -198,14 +361,32 @@ export async function runAll(
   return outcomes;
 }
 
-const label = (outcome: Outcome): string =>
-  outcome.status === "pass" ? "PASS" : "FAIL";
+const NONE: ReadonlySet<string> = new Set();
 
-export function unitLine(outcome: Outcome): string {
-  return `${label(outcome)} ${outcome.seconds.toFixed(1)}s ${outcome.unit}`;
+const LABELS: Record<Verdict, string> = {
+  pass: "PASS",
+  fail: "FAIL",
+  "known-red": "KNOWN-RED",
+  "stale-red": "FAIL",
+};
+
+export function unitLine(
+  outcome: Outcome,
+  known: ReadonlySet<string> = NONE,
+): string {
+  const label = LABELS[verdictOf(outcome, known)];
+  return `${label} ${outcome.seconds.toFixed(1)}s ${outcome.unit}`;
 }
 
-export function failureText(outcome: Outcome, timeoutMs: number): string {
+export function failureText(
+  outcome: Outcome,
+  timeoutMs: number,
+  known: ReadonlySet<string> = NONE,
+): string {
+  const verdict = verdictOf(outcome, known);
+  if (verdict === "stale-red")
+    return `  ${outcome.unit}: passes: remove it from ${KNOWN_RED_FILE}\n`;
+  if (verdict === "known-red" || verdict === "pass") return "";
   const lines = outcome.output.trimEnd().split("\n").slice(-OUTPUT_TAIL_LINES);
   const reason =
     outcome.status === "timeout"
@@ -219,8 +400,14 @@ export function failureText(outcome: Outcome, timeoutMs: number): string {
 export function summary(
   outcomes: Outcome[],
   wallSeconds: number,
+  known: ReadonlySet<string> = NONE,
 ): { lines: string[]; failed: number } {
-  const failed = outcomes.filter((outcome) => outcome.status !== "pass");
+  const verdicts = outcomes.map((outcome) => verdictOf(outcome, known));
+  const failed = outcomes.filter((_, index) =>
+    isFailing(verdicts[index] ?? "fail"),
+  );
+  const red = verdicts.filter((verdict) => verdict === "known-red").length;
+  const redNote = red > 0 ? `, ${red} known-red` : "";
   const summed = outcomes.reduce((sum, outcome) => sum + outcome.seconds, 0);
   const slowest = outcomes
     .toSorted((a, b) => b.seconds - a.seconds)
@@ -240,7 +427,7 @@ export function summary(
               .map((unit) => `  ${unit}`),
           ]
         : []),
-      `${outcomes.length} units: ${outcomes.length - failed.length} passed, ${failed.length} failed; ${wallSeconds.toFixed(1)}s wall, ${summed.toFixed(1)}s summed`,
+      `${outcomes.length} units: ${outcomes.length - failed.length - red} passed, ${failed.length} failed${redNote}; ${wallSeconds.toFixed(1)}s wall, ${summed.toFixed(1)}s summed`,
     ],
   };
 }
@@ -257,6 +444,20 @@ function rejectPrototypeFlag(type: string, flag: string): void {
     process.stderr.write(`test-units: unknown option '${flag}'\n`);
     process.exit(2);
   }
+}
+
+type Chosen = { ok: true; units: string[] } | { ok: false; message: string };
+
+// `base` set means --changed: the units that own the paths differing from it; else the selectors.
+async function choose(
+  units: string[],
+  selectors: string[],
+  { root, base }: { root: string; base: string | undefined },
+): Promise<Chosen> {
+  if (base === undefined) return selectUnits(units, selectors);
+  const paths = await changedPaths(root, base);
+  if (!paths.ok) return paths;
+  return { ok: true, units: ownedUnits(paths.paths, units) };
 }
 
 function killRunning(): void {
@@ -292,10 +493,25 @@ async function main(): Promise<number> {
           default: false,
           description: "print the selected units and exit",
         },
+        changed: {
+          type: Boolean,
+          default: false,
+          description:
+            "run only the units that own a file differing from --base (working copy included)",
+        },
+        base: {
+          type: String,
+          description: `revset --changed compares against (default: ${DEFAULT_BASE})`,
+        },
+        strict: {
+          type: Boolean,
+          default: false,
+          description: `ignore ${KNOWN_RED_FILE}: a known-red unit that fails is a failure`,
+        },
       },
       help: {
         description:
-          "Run the repo's script and tool tests as parallel units. A unit is one scripts/tests/*.test.ts file, one scripts/tests sub-directory or one tools/<name>/tests directory. Positional arguments select units by path prefix, e.g. tools/smart-copy or scripts/tests/land.",
+          "Run the repo's script and tool tests as parallel units. A unit is one scripts/tests/*.test.ts file, one scripts/tests sub-directory or one tools/<name>/tests directory. Positional arguments select units by path prefix, e.g. tools/smart-copy or scripts/tests/land. --changed selects the units that own the changed files instead. A unit listed in lint/test-known-red.toml that fails is printed KNOWN-RED and does not fail the run; one that passes fails it.",
       },
     },
     undefined,
@@ -311,12 +527,32 @@ async function main(): Promise<number> {
   const units = await discover(root);
   if (units.length === 0)
     return usage(`no unit found under ${TEST_GLOBS.join(", ")}`);
-  const selected = selectUnits(units, parsed._.units);
+  const { changed, base, strict } = parsed.flags;
+  if (base !== undefined && !changed) return usage("--base needs --changed");
+  if (changed && parsed._.units.length > 0)
+    return usage("--changed and unit selectors cannot be combined");
+  const listed = strict
+    ? ({ ok: true, known: [] } satisfies Listed)
+    : await readKnownRed(root, units);
+  if (!listed.ok) return usage(listed.message);
+  const known = new Set(listed.known.map((entry) => entry.path));
+  const selected = await choose(units, parsed._.units, {
+    root,
+    base: changed ? (base ?? DEFAULT_BASE) : undefined,
+  });
   if (!selected.ok) return usage(selected.message);
   if (parsed.flags.list) {
     process.stdout.write(selected.units.map((unit) => `${unit}\n`).join(""));
     return 0;
   }
+  if (selected.units.length === 0) {
+    process.stdout.write("test-units: no test unit owns the changed files\n");
+    return 0;
+  }
+  if (changed)
+    process.stdout.write(
+      `test-units: --changed vs ${base ?? DEFAULT_BASE} selects:\n${selected.units.map((unit) => `  ${unit}\n`).join("")}`,
+    );
   const timeoutMs = timeout * 1000;
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.on(signal, () => {
@@ -332,12 +568,11 @@ async function main(): Promise<number> {
     jobs,
     { root, timeoutMs },
     (outcome) => {
-      process.stdout.write(`${unitLine(outcome)}\n`);
-      if (outcome.status !== "pass")
-        process.stdout.write(failureText(outcome, timeoutMs));
+      process.stdout.write(`${unitLine(outcome, known)}\n`);
+      process.stdout.write(failureText(outcome, timeoutMs, known));
     },
   );
-  const result = summary(outcomes, (performance.now() - started) / 1000);
+  const result = summary(outcomes, (performance.now() - started) / 1000, known);
   process.stdout.write(`${result.lines.join("\n")}\n`);
   return result.failed > 0 ? 1 : 0;
 }

@@ -3,15 +3,19 @@ import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  changedPaths,
   defaultJobs,
   discover,
   failureText,
+  ownedUnits,
+  parseKnownRed,
   runAll,
   runUnit,
   selectUnits,
   summary,
   unitLine,
   unitsOf,
+  verdictOf,
   type Outcome,
 } from "../test-units.ts";
 
@@ -215,8 +219,8 @@ test("summary names the slowest five, the failures and the totals", () => {
   ]);
 });
 
-async function cli(...args: string[]) {
-  const child = Bun.spawn([process.execPath, RUNNER, "--root", root, ...args], {
+async function cliIn(dir: string, ...args: string[]) {
+  const child = Bun.spawn([process.execPath, RUNNER, "--root", dir, ...args], {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -230,6 +234,8 @@ async function cli(...args: string[]) {
   ]);
   return { stdout, stderr, exit };
 }
+
+const cli = (...args: string[]) => cliIn(root, ...args);
 
 test("the command exits 0 when the selected units pass and prints one line per unit", async () => {
   const run = await cli("--jobs", "2", "scripts/tests/pass", "tools/demo");
@@ -289,4 +295,263 @@ test("a root without any unit is a usage error, not a pass", async () => {
   });
   const exit = await child.exited;
   expect(exit).toBe(2);
+});
+
+const UNITS = [
+  "scripts/tests/land-verdict.test.ts",
+  "scripts/tests/land.test.ts",
+  "scripts/tests/landing.test.ts",
+  "scripts/tests/lint-x.test.ts",
+  "scripts/tests/group",
+  "tools/demo/tests",
+  "tools/other/tests",
+  "tools/shared/tests",
+];
+
+test("ownedUnits: each kind of changed path selects the units that own it", () => {
+  const owned = (...changed: string[]) => ownedUnits(changed, UNITS);
+  expect(owned("tools/demo/src/a.ts")).toEqual(["tools/demo/tests"]);
+  expect(owned("tools/demo/tests/x.test.ts")).toEqual(["tools/demo/tests"]);
+  expect(owned("tools/demo/package.json")).toEqual(["tools/demo/tests"]);
+  expect(owned("scripts/tests/land.test.ts")).toEqual([
+    "scripts/tests/land.test.ts",
+  ]);
+  expect(owned("scripts/tests/group/deep/z.test.ts")).toEqual([
+    "scripts/tests/group",
+  ]);
+  expect(owned("scripts/land.ts")).toEqual([
+    "scripts/tests/land-verdict.test.ts",
+    "scripts/tests/land.test.ts",
+    "scripts/tests/landing.test.ts",
+  ]);
+  expect(owned("scripts/lint.ts")).toEqual(["scripts/tests/lint-x.test.ts"]);
+  expect(owned("tools/shared/src/zod.ts")).toEqual(UNITS);
+  expect(owned("tools/a.txt", "tools/shared")).toEqual([]);
+  expect(owned("tools/demo/src/a.ts", "tools/other/src/b.ts")).toEqual([
+    "tools/demo/tests",
+    "tools/other/tests",
+  ]);
+});
+
+test("ownedUnits: files owned by no unit select nothing", () => {
+  for (const file of [
+    "README.md",
+    "lint/test-known-red.toml",
+    "scripts/unrelated.ts",
+    "scripts/notes.md",
+    "scripts/sub/land.ts",
+    "scripts/tests/helper.ts",
+    "tools/nothing/src/a.ts",
+    "zsh/aliases.zsh",
+  ])
+    expect({ file, units: ownedUnits([file], UNITS) }).toEqual({
+      file,
+      units: [],
+    });
+  expect(ownedUnits([], UNITS)).toEqual([]);
+});
+
+const entry = (path: string) =>
+  `[[unit]]\npath = "${path}"\nsince = "2026-11-20"\nreason = "under diagnosis"\n`;
+
+test("parseKnownRed reads entries and refuses a list that is not about units", () => {
+  const units = ["scripts/tests/fail.test.ts", "tools/demo/tests"];
+  expect(parseKnownRed("", units)).toEqual({ ok: true, known: [] });
+  expect(parseKnownRed(entry("tools/demo/tests"), units)).toEqual({
+    ok: true,
+    known: [
+      {
+        path: "tools/demo/tests",
+        since: "2026-11-20",
+        reason: "under diagnosis",
+      },
+    ],
+  });
+  const refused = [
+    entry("tools/nothing/tests"),
+    entry("tools/demo/tests") + entry("tools/demo/tests"),
+    entry("tools/demo/tests").replace("2026-11-20", "yesterday"),
+    entry("tools/demo/tests").replace("under diagnosis", ""),
+    `${entry("tools/demo/tests")}colour = "red"\n`,
+    "[[unit]\n",
+  ];
+  for (const text of refused)
+    expect({ text, ok: parseKnownRed(text, units).ok }).toEqual({
+      text,
+      ok: false,
+    });
+  const missing = parseKnownRed(entry("tools/nothing/tests"), units);
+  expect(!missing.ok && missing.message).toContain("'tools/nothing/tests'");
+});
+
+test("a listed unit that fails is KNOWN-RED and passes the run; one that passes fails it", () => {
+  const red = new Set(["u-red", "u-fixed"]);
+  const fail = { ...outcome("u-red", 1.5, false), output: "boom\n" };
+  const fixed = outcome("u-fixed", 2);
+  const plain = outcome("u-plain", 3, false);
+  expect(verdictOf(fail, red)).toBe("known-red");
+  expect(verdictOf(fixed, red)).toBe("stale-red");
+  expect(verdictOf(plain, red)).toBe("fail");
+  expect(verdictOf(outcome("u-ok", 1), red)).toBe("pass");
+  expect(verdictOf({ ...fail, status: "timeout", exit: null }, red)).toBe(
+    "known-red",
+  );
+  expect(unitLine(fail, red)).toBe("KNOWN-RED 1.5s u-red");
+  expect(failureText(fail, 1000, red)).toBe("");
+  expect(unitLine(fixed, red)).toBe("FAIL 2.0s u-fixed");
+  expect(failureText(fixed, 1000, red)).toBe(
+    "  u-fixed: passes: remove it from lint/test-known-red.toml\n",
+  );
+  expect(summary([fail], 1, red)).toEqual({
+    failed: 0,
+    lines: [
+      "slowest 1:",
+      "  1.5s u-red",
+      "1 units: 0 passed, 0 failed, 1 known-red; 1.0s wall, 1.5s summed",
+    ],
+  });
+  expect(summary([fail, fixed, plain], 1, red).failed).toBe(2);
+});
+
+async function withKnownRed(toml: string, ...args: string[]) {
+  const file = join(root, "lint", "test-known-red.toml");
+  await mkdir(join(root, "lint"), { recursive: true });
+  await Bun.write(file, toml);
+  const run = await cli(...args);
+  await rm(file);
+  return run;
+}
+
+test("the command reports a known-red unit and exits 0, and --strict ignores the list", async () => {
+  const list = entry("scripts/tests/fail.test.ts");
+  const run = await withKnownRed(list, "scripts/tests/fail", "tools/demo");
+  expect(run.exit).toBe(0);
+  expect(run.stdout).toMatch(
+    /KNOWN-RED \d+\.\ds scripts\/tests\/fail\.test\.ts/u,
+  );
+  expect(run.stdout).not.toContain("MARKER-from-failing-unit");
+  expect(run.stdout).toContain("2 units: 1 passed, 0 failed, 1 known-red;");
+
+  const strict = await withKnownRed(
+    list,
+    "--strict",
+    "scripts/tests/fail",
+    "tools/demo",
+  );
+  expect(strict.exit).toBe(1);
+  expect(strict.stdout).toMatch(
+    /FAIL \d+\.\ds scripts\/tests\/fail\.test\.ts/u,
+  );
+});
+
+test("the command fails a known-red unit that passes, naming the line to remove", async () => {
+  const run = await withKnownRed(
+    entry("scripts/tests/pass.test.ts"),
+    "scripts/tests/pass.test.ts",
+  );
+  expect(run.exit).toBe(1);
+  expect(run.stdout).toMatch(/FAIL \d+\.\ds scripts\/tests\/pass\.test\.ts/u);
+  expect(run.stdout).toContain(
+    "passes: remove it from lint/test-known-red.toml",
+  );
+  expect(run.stdout).toContain("failed:\n  scripts/tests/pass.test.ts");
+});
+
+test("a known-red path that is not a unit is a usage error even when it is not selected", async () => {
+  const run = await withKnownRed(
+    entry("tools/nothing/tests"),
+    "scripts/tests/pass.test.ts",
+  );
+  expect(run.exit).toBe(2);
+  expect(run.stdout).not.toContain("PASS");
+  expect(run.stderr).toContain("'tools/nothing/tests'");
+});
+
+test("--changed misuse is a usage error: --base alone, with selectors", async () => {
+  for (const args of [
+    ["--base", "alpha", "--list"],
+    ["--changed", "scripts/tests/pass"],
+  ]) {
+    const run = await cli(...args);
+    expect({ args, exit: run.exit }).toEqual({ args, exit: 2 });
+    expect(run.stderr).toContain("test-units:");
+  }
+});
+
+async function jj(dir: string, ...args: string[]) {
+  const child = Bun.spawn(["jj", "--no-pager", ...args], {
+    cwd: dir,
+    env: { ...process.env, JJ_USER: "tester", JJ_EMAIL: "tester@example.com" },
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 60_000,
+    killSignal: "SIGKILL",
+  });
+  const [stderr, exit] = await Promise.all([
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  expect({ args, exit, stderr: exit === 0 ? "" : stderr }).toEqual({
+    args,
+    exit: 0,
+    stderr: "",
+  });
+}
+
+test("--changed reads `jj diff` against the base, working copy and rename sources included", async () => {
+  const repo = await mkdtemp(join(tmpdir(), "test-units-jj-"));
+  const files = {
+    "scripts/tests/pass.test.ts": fixtures["scripts/tests/pass.test.ts"] ?? "",
+    "scripts/tests/pass-two.test.ts":
+      fixtures["scripts/tests/pass-two.test.ts"] ?? "",
+    "tools/demo/tests/tz.test.ts": `${HEADER}test("ok", () => expect(1).toBe(1));\n`,
+    "tools/demo/src/old.ts": "export const moved = 1;\n",
+  };
+  for (const [path, body] of Object.entries(files)) {
+    await mkdir(join(repo, path, ".."), { recursive: true });
+    await Bun.write(join(repo, path), body);
+  }
+  await jj(repo, "git", "init");
+  await jj(repo, "bookmark", "create", "alpha", "-r", "@");
+  await jj(repo, "new");
+  await mkdir(join(repo, "docs"), { recursive: true });
+  await Bun.write(
+    join(repo, "docs/old.ts"),
+    files["tools/demo/src/old.ts"] ?? "",
+  );
+  await rm(join(repo, "tools/demo/src/old.ts"));
+  await Bun.write(join(repo, "scripts/pass.ts"), "export const x = 1;\n");
+  await Bun.write(join(repo, "NOTES.md"), "unowned\n");
+
+  expect(await changedPaths(repo, "alpha")).toEqual({
+    ok: true,
+    paths: [
+      "NOTES.md",
+      "docs/old.ts",
+      "scripts/pass.ts",
+      "tools/demo/src/old.ts",
+    ],
+  });
+  const bad = await changedPaths(repo, "no-such-revision");
+  expect(!bad.ok && bad.message).toContain("no-such-revision");
+  const dashed = await changedPaths(repo, "--from");
+  expect(dashed.ok).toBe(false);
+
+  const listed = await cliIn(repo, "--changed", "--list");
+  expect(listed.exit).toBe(0);
+  expect(listed.stdout).toBe(
+    "scripts/tests/pass-two.test.ts\nscripts/tests/pass.test.ts\ntools/demo/tests\n",
+  );
+  const ran = await cliIn(repo, "--changed", "--jobs", "2");
+  expect(ran.exit).toBe(0);
+  expect(ran.stdout).toContain(
+    "--changed vs alpha selects:\n  scripts/tests/pass-two.test.ts\n",
+  );
+  expect(ran.stdout).toContain("3 units: 3 passed, 0 failed;");
+  const none = await cliIn(repo, "--changed", "--base", "@");
+  expect(none.exit).toBe(0);
+  expect(none.stdout).toContain("no test unit owns the changed files");
+  expect(none.stdout).not.toContain("PASS");
+  await rm(repo, { recursive: true, force: true });
 });

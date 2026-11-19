@@ -1,0 +1,90 @@
+# Units that are red on alpha today, with the day they were first seen and why. scripts/test-units.ts
+# prints a listed unit that fails as `KNOWN-RED <s>s <unit>` and does not count it as a failure; a
+# listed unit that PASSES fails the run ("passes: remove it from lint/test-known-red.toml"), so a
+# fixed unit leaves this list in the commit that fixes it. `--strict` ignores the list. A path that
+# is not a unit (see `bun scripts/test-units.ts --list`) is a usage error, exit 2.
+#
+# [[unit]]
+# path = "<unit path>"
+# since = "YYYY-MM-DD"
+# reason = "<why it is red>"
+
+[[unit]]
+path = "scripts/tests/bun-min-version.test.ts"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "scripts/tests/ccc-daemon.test.ts"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "scripts/tests/ccc-gpu-handoff.test.ts"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "scripts/tests/core-tools.test.ts"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "scripts/tests/ccc-db-location.test.ts"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "scripts/tests/import-boundary.test.ts"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "scripts/tests/wsl-capacity-recover-graveyard.test.ts"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "scripts/tests/lint-tool-changesets.test.ts"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "scripts/tests/render-home.test.ts"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "scripts/tests/land.test.ts"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "scripts/tests/consumer-gate.test.ts"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "tools/preset/tests"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "tools/shared/tests"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "tools/storage-headroom/tests"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "tools/disk-reclaim/tests"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"
+
+[[unit]]
+path = "tools/repo-retrieve/tests"
+since = "2026-11-20"
+reason = "red before any gate ran tests; under diagnosis"

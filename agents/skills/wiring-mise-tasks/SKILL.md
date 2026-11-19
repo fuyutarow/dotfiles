@@ -88,7 +88,8 @@ Defaults live in `scripts/config-registry.ts` (`LAND_HOSTS`); deployment runs pu
   as a dependency, but `mise tasks` omits it. Anything a README or skill tells a person to type stays
   visible. A reader of the graph passes `--hidden` (`mise tasks ls --json --hidden`), or hidden tokens
   look unresolved. A test file is reached by `test` or named in `lint/test-reach-exceptions.toml`
-  (`lint:test-reach`).
+  (`lint:test-reach`). A test task whose body launches `scripts/test-units.ts` (the parallel unit
+  runner behind `test:scripts`) reaches exactly the files that runner discovers.
 - **Always invoke via `mise run`** (user alias `m`). NEVER bare `mise <token>`: `fmt`, `i`, `t`,
   `r` shadow mise BUILT-INS — observed: bare `mise fmt` runs mise's own mise.toml formatter, not
   the repo task.

@@ -130,6 +130,11 @@ const CORPUS: CorpusEntry[] = [
   { path: "scripts/agx-host.ts" },
   { path: "scripts/config-map.ts" },
   { path: "scripts/tracked-files.ts" },
+  {
+    path: "scripts/test-units.ts",
+    // Exit 1 means "a unit failed" here, so every unknown option is a usage error, exit 2.
+    unknownFlag: { exit: 2, message: "unknown option" },
+  },
   { path: "scripts/live-refs.ts" },
   { path: "scripts/link-dots.ts" },
   { path: "tools/secrets-push/src/secrets-push.ts" },

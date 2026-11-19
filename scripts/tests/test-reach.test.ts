@@ -23,7 +23,7 @@ const read = (path: string): Promise<string | undefined> =>
 
 const tasks: Task[] = [
   task("test", ["test:a", "test:zsh", "test:topics"]),
-  task("test:a", ["bun:check"], "bun test scripts/tests tools/*/tests"),
+  task("test:a", ["bun:check"], "bun scripts/test-units.ts"),
   task("test:topics", [], "bun test ./topic/*.test.ts standard-presets"),
   task("test:zsh", [], "bun scripts/test-zsh.ts"),
   task("bun:check", [], "bun scripts/bun-runtime.ts"),
@@ -32,7 +32,9 @@ const tasks: Task[] = [
 
 const files = [
   "scripts/tests/a.test.ts",
+  "scripts/tests/sub/deep.test.ts",
   "tools/x/tests/b.test.ts",
+  "tools/x/tests/nested/b2.test.ts",
   "topic/c.test.ts",
   "standard-presets/d.test.ts",
   "zsh/tests/hygiene.test.zsh",
@@ -58,6 +60,39 @@ test("a test file no reachable task covers is reported", async () => {
     "obsidian/e.test.ts",
     "scripts/doctor-only.test.ts",
   ]);
+});
+
+test("the unit runner reaches exactly what its discovery covers, and no source is read", async () => {
+  const outside = ["scripts/other/x.test.ts", "tools/x/src/inside.test.ts"];
+  const verdict = await judge(
+    {
+      tasks,
+      files: [...files, ...outside],
+      // A runner source that merely mentions an outside file must not reach it.
+      read: (path) =>
+        path === "scripts/test-units.ts"
+          ? Promise.resolve("// scripts/other/x.test.ts is not a unit")
+          : read(path),
+    },
+    {},
+  );
+  expect(verdict.unreached.toSorted()).toEqual(outside.toSorted());
+});
+
+test("a runner no task reachable from test launches reaches nothing", async () => {
+  const verdict = await judge(
+    {
+      tasks: [
+        task("test", ["test:zsh"]),
+        task("test:zsh", [], "bun scripts/test-zsh.ts"),
+        task("test:doctor", [], "bun scripts/test-units.ts"),
+      ],
+      files: ["scripts/tests/a.test.ts"],
+      read,
+    },
+    {},
+  );
+  expect(verdict.unreached).toEqual(["scripts/tests/a.test.ts"]);
 });
 
 test("a path merely mentioned in a reached zsh test does not reach it", async () => {

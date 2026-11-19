@@ -544,8 +544,8 @@ run = "bun test agents/skills"
 hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
-description = "This repo's own script tests (scripts/tests) and their proof-of-fire fixtures, plus every tools/*/tests suite"
-run = "bun test scripts/tests tools/*/tests"
+description = "This repo's own script tests (scripts/tests) and every tools/*/tests suite, one bun test process per unit, run in parallel by scripts/test-units.ts. Select units with `mise run test:scripts -- tools/smart-copy scripts/tests/land`; --jobs N and --timeout S bound it."
+run = "bun scripts/test-units.ts"
 
 [tasks."test:presets"]
 hide = true

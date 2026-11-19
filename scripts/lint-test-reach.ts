@@ -5,13 +5,16 @@
 // Reach is read from the mise task graph (`mise tasks ls --json --hidden`), never from a
 // second list: a file is reached when a path or glob in the `run` body of a task reachable
 // from `test` covers it, when a launcher script such as scripts/test-zsh.ts names it, or when
-// a reached zsh test sources it (zsh/tests/terminal-hygiene.test.zsh sources its siblings).
+// a reached zsh test sources it (zsh/tests/terminal-hygiene.test.zsh sources its siblings), or
+// when the task launches scripts/test-units.ts and the runner's discovery (`unitsOf`) covers it.
 import { resolve } from "node:path";
 import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../tools/shared/src/zod.ts";
+import { unitsOf } from "./test-units.ts";
 import { trackedFiles } from "./tracked-files.ts";
 
 const ROOT_TASK = "test";
+const UNIT_RUNNER = "scripts/test-units.ts";
 const TEST_FILE = /\.test\.(?:ts|zsh)$/u;
 const PATH_TOKEN = /[\w.@${}*-]+(?:\/[\w.@${}*-]+)+/gu;
 const GLOB_CHARS = /[*?{]/u;
@@ -126,12 +129,19 @@ async function launcherReferences(
   return references;
 }
 
+// The unit runner discovers its tests from the tree; a task that launches it reaches exactly the
+// files `unitsOf` covers, which is a narrower claim than the roots its source mentions.
 async function taskReferences(
   task: Task,
+  files: string[],
   read: Read,
   scanned: Set<string>,
 ): Promise<string[]> {
   const references = task.run.flatMap((run) => runReferences(run));
+  if (references.includes(UNIT_RUNNER)) {
+    scanned.add(UNIT_RUNNER);
+    references.push(...unitsOf(files));
+  }
   for (const run of task.run) {
     references.push(...(await launcherReferences(run, read, scanned)));
   }
@@ -167,7 +177,7 @@ export async function reachedFiles({
   const scanned = new Set<string>();
   const references: string[] = [];
   for (const task of reachableTasks(tasks)) {
-    const found = await taskReferences(task, read, scanned);
+    const found = await taskReferences(task, files, read, scanned);
     references.push(...withSuffixes(found));
   }
   const reached = new Set<string>();

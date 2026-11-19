@@ -64,6 +64,14 @@ clipboard_routing_tests() {
   [[ ! -s $fixture/capture ]] && ok "remote copy never invokes clip.exe" || bad "remote copy invoked clip.exe"
   want "OSC 52 carries UTF-8 payload" "$(printf '%s' "$payload" | base64 | tr -d '\n')" "$out"
 
+  # A hook or tool call an agent spawned has no controlling terminal (setsid stands in for that);
+  # the script must reach the terminal of the nearest ancestor that has one, with no pane or shell.
+  if command -v setsid > /dev/null 2>&1; then
+    clipboard_case Linux 1 "$fixture/sockets" unset 0 'printf "%s" "$1" | setsid --wait /bin/sh "$2"'
+    want "a caller without a terminal reaches its ancestor's terminal" "$osc" "$out"
+    want "a caller without a terminal reports delivery" 'CLIP_STATUS=0' "$out"
+  fi
+
   clipboard_case Linux '' "$fixture/sockets" unset
   wantnot "plain WSL with a forward still uses native clipboard" "$osc" "$out"
   [[ $(iconv -f UTF-16LE -t UTF-8 < "$fixture/capture") == "$payload" ]] \

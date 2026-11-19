@@ -54,7 +54,6 @@ test("production roots follow the repository's entry declarations", async () => 
     "tools/agent-resource-run/src/scope-controller.ts", // dynamically spawned
     "tools/smart-open/src/receive.ts", // launchd
     "tools/repo-retrieve/views/research-record-v1.ts", // documented operator command
-    "agents/claude/hooks/copy-via-herdr-pane.ts", // quote subprocess
     "agents/claude/hooks/resolve-agent-name.ts", // quote subprocess
   ])
     expect(entries).toContain(entry);

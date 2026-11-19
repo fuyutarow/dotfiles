@@ -266,7 +266,7 @@ describe("Codex quote adapter", () => {
     );
   });
 
-  test("missing clipboard route reports its cause and removes the temporary payload", () => {
+  test("missing clipboard route reports its cause and leaves no temporary file", () => {
     const f = fixture();
     const result = Bun.spawnSync(
       [

@@ -8,10 +8,9 @@ import {
   readFile,
   readdir,
   realpath,
-  rm,
   writeFile,
 } from "node:fs/promises";
-import { hostname, homedir, tmpdir, userInfo } from "node:os";
+import { hostname, homedir, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
@@ -245,68 +244,27 @@ async function runCommand(
   };
 }
 
+// ONE route: zsh/copy-to-clipboard.sh owns where the human is and how the text gets there.
 async function copyText(
   text: string,
   dotfiles: string,
 ): Promise<string | null> {
-  const directory = await attempt(() =>
-    mkdtemp(join(tmpdir(), "codex-quote-")),
+  const clipboardScript = join(dotfiles, "zsh", "copy-to-clipboard.sh");
+  const clipboardExists = await attempt(() => access(clipboardScript));
+  if (!clipboardExists.ok)
+    return `clipboard route is missing: ${clipboardScript}`;
+  const copied = await attempt(() =>
+    runCommand("sh", [clipboardScript], {
+      env: { COPY_TO_CLIPBOARD_QUIET: "1" },
+      input: text,
+      timeout: 10000,
+    }),
   );
-  if (!directory.ok)
-    return `cannot create temporary quote payload: ${errorMessage(directory.error)}`;
-  const temporaryDirectory = directory.value;
-  const route = await attempt(async () => {
-    const payloadFile = join(temporaryDirectory, "payload.txt");
-    await writeFile(payloadFile, text, { mode: 0o600 });
-    const herdrHelper = join(
-      HOME,
-      ".claude",
-      "hooks",
-      "copy-via-herdr-pane.ts",
-    );
-    let herdrFailure: string | null = null;
-    const helperExists = await attempt(() => access(herdrHelper));
-    if (process.env["HERDR_ENV"] === "1" && helperExists.ok) {
-      const herdr = await attempt(() =>
-        runCommand("bun", [herdrHelper], {
-          env: { COPY_PAYLOAD_FILE: payloadFile },
-          timeout: 15000,
-        }),
-      );
-      if (herdr.ok && herdr.value.exitCode === 0) return null;
-      if (herdr.ok) herdrFailure = `Herdr route failed: ${herdr.value.stderr}`;
-      else herdrFailure = `Herdr route failed: ${errorMessage(herdr.error)}`;
-    }
-    const clipboardScript = join(dotfiles, "zsh", "copy-to-clipboard.sh");
-    const clipboardExists = await attempt(() => access(clipboardScript));
-    if (!clipboardExists.ok) {
-      const previousFailure =
-        herdrFailure !== null && herdrFailure !== "" ? `${herdrFailure}; ` : "";
-      return `${previousFailure}clipboard route is missing: ${clipboardScript}`;
-    }
-    const copied = await attempt(() =>
-      runCommand("sh", [clipboardScript], {
-        input: text,
-        timeout: 10000,
-      }),
-    );
-    if (!copied.ok || copied.value.exitCode !== 0) {
-      const reason = copied.ok
-        ? copied.value.stderr
-        : errorMessage(copied.error);
-      const previousFailure =
-        herdrFailure !== null && herdrFailure !== "" ? `${herdrFailure}; ` : "";
-      return `${previousFailure}clipboard route failed: ${reason}`;
-    }
-    return null;
-  });
-  const cleanup = await attempt(() =>
-    rm(temporaryDirectory, { recursive: true, force: true }),
-  );
-  if (!cleanup.ok)
-    return `temporary payload cleanup failed: ${errorMessage(cleanup.error)}`;
-  if (!route.ok) return `clipboard route failed: ${errorMessage(route.error)}`;
-  return route.value;
+  if (!copied.ok)
+    return `clipboard route failed: ${errorMessage(copied.error)}`;
+  if (copied.value.exitCode !== 0)
+    return `clipboard route failed: ${copied.value.stderr}`;
+  return null;
 }
 
 async function main(): Promise<void> {

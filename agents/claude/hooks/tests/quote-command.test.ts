@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -24,13 +23,14 @@ function runQuote(
 ) {
   const home = tempHome();
   prepareHome?.(home);
-  const hooks = join(home, ".claude", "hooks");
-  mkdirSync(hooks, { recursive: true });
-  const herdrHelper = join(hooks, "copy-via-herdr-pane.ts");
-  if (!existsSync(herdrHelper)) {
+  // The hook's only clipboard route is $DOTFILES/zsh/copy-to-clipboard.sh. The default stand-in
+  // fails the way the real script does when no terminal is reachable.
+  const clipScript = join(home, "dotfiles", "zsh", "copy-to-clipboard.sh");
+  if (!existsSync(clipScript)) {
+    mkdirSync(join(home, "dotfiles", "zsh"), { recursive: true });
     writeFileSync(
-      herdrHelper,
-      `console.error("HERDR_ENV is not 1; this hook is not running in a Herdr pane");\nprocess.exit(3);\n`,
+      clipScript,
+      `cat > /dev/null\necho "copy-to-clipboard: no terminal reachable for OSC 52 (tried /dev/tty)" >&2\nexit 1\n`,
     );
   }
   const session = "quote-test-session";
@@ -49,7 +49,7 @@ function runQuote(
     { session_id: session, cwd: home, command_args: String(count) },
     {
       HOME: home,
-      HERDR_ENV: "",
+      DOTFILES: join(home, "dotfiles"),
       SSH_CONNECTION: "100.81.222.57 50000 100.110.117.86 2222",
       ...env,
     },
@@ -62,14 +62,22 @@ function runQuote(
   };
 }
 
+// A stand-in clipboard script that records what it was given and whether it was told to be quiet.
+function capturingClipboard(home: string): void {
+  mkdirSync(join(home, "dotfiles", "zsh"), { recursive: true });
+  writeFileSync(
+    join(home, "dotfiles", "zsh", "copy-to-clipboard.sh"),
+    `cat > "${home}/clipboard.txt"\nprintf "%s" "$COPY_TO_CLIPBOARD_QUIET" > "${home}/clipboard.quiet"\n`,
+  );
+}
+
 describe("quote-command: output mode follows the requested count", () => {
   test("50 requests the clipboard path", () => {
     const { home, result, output } = runQuote(50, 51);
     expect(result.code).toBe(0);
     expect(output.decision).toBe("block");
     expect(output.reason).toContain("Could not copy this quote");
-    expect(output.reason).toContain("Herdr pane:");
-    expect(output.reason).toContain("SSH OSC 52:");
+    expect(output.reason).toContain("no terminal reachable for OSC 52");
     expect(output.reason).toContain("response 2");
     expect(output.reason).not.toContain("response 1\n");
     expect(readdirSync(join(home, ".cache", "claude"))).not.toContain(
@@ -111,23 +119,13 @@ describe("quote-command: output mode follows the requested count", () => {
     expect(output.reason).toContain("scp 'workbox:");
   });
 
-  test("the download command uses the existing Herdr clipboard helper", () => {
-    const { home, output } = runQuote(51, 1, {}, (testHome) => {
-      const hooks = join(testHome, ".claude", "hooks");
-      mkdirSync(hooks, { recursive: true });
-      writeFileSync(
-        join(hooks, "copy-via-herdr-pane.ts"),
-        `import { readFileSync, writeFileSync } from "node:fs";\n` +
-          `writeFileSync(${JSON.stringify(join(testHome, "clipboard.txt"))}, readFileSync(process.env.COPY_PAYLOAD_FILE!, "utf8"));\n` +
-          `console.log("pane-test");\n`,
-      );
-    });
+  test("the download command goes through the one clipboard script", () => {
+    const { home, output } = runQuote(51, 1, {}, capturingClipboard);
     expect(output.reason).toContain("Download command copied");
     // The block message carries the same header the quote starts with.
     expect(output.reason).toMatch(
       /for from \S+ \| \d{2}-\d{2} \d{2}:\d{2}[+-]\d{2}(?:\d{2})? \| turns: \d+ \| \d+B \| [^\s@|]+@[^\s@|.]+/u,
     );
-    expect(output.reason).toContain("[pane-test]");
     const copied = readFileSync(join(home, "clipboard.txt"), "utf8");
     expect(copied).toMatch(/^scp -P 2222 /u);
     expect(copied).toContain("@100.110.117.86:");
@@ -140,51 +138,23 @@ describe("quote-command: output mode follows the requested count", () => {
     expect(output.reason).not.toContain("Download command copied");
   });
 
-  test("SSH_TTY receives OSC 52 when the Herdr route is unavailable", () => {
-    const { output } = runQuote(1, 1, { SSH_TTY: "/dev/null" });
-    expect(output.reason).toContain("Copied to clipboard via SSH OSC 52");
+  test("a quote of 1-50 turns is piped to the clipboard script, quietly", () => {
+    const { home, output } = runQuote(1, 1, {}, capturingClipboard);
+    expect(output.reason).toContain(
+      "Copied to clipboard — from quote-test-session",
+    );
+    const copied = readFileSync(join(home, "clipboard.txt"), "utf8");
+    expect(copied).toMatch(/^from quote-test-session \| /u);
+    expect(copied).toContain("response 1");
+    expect(readFileSync(join(home, "clipboard.quiet"), "utf8")).toBe("1");
   });
 
-  test("the hand-copy message states why each available route failed", () => {
-    const { output } = runQuote(1, 1, { SSH_TTY: "" });
-    expect(output.reason).toContain("Herdr pane:");
-    expect(output.reason).toContain("HERDR_ENV is not 1");
-    expect(output.reason).toContain("SSH OSC 52:");
-    expect(output.reason).toContain("SSH_TTY is not set");
+  test("a failed copy says why and prints the quote for hand-copying", () => {
+    const { output } = runQuote(1, 1);
+    expect(output.reason).toContain(
+      "Could not copy this quote: copy-to-clipboard: no terminal reachable",
+    );
     expect(output.reason).toContain("Select this to copy it by hand");
-  });
-
-  test("a local macOS hook child falls back to pbcopy", () => {
-    if (process.platform !== "darwin") return;
-    const home = tempHome();
-    const bin = join(home, "bin");
-    const captured = join(home, "pbcopy-input.txt");
-    mkdirSync(bin);
-    const pbcopy = join(bin, "pbcopy");
-    writeFileSync(pbcopy, `#!/bin/sh\ncat > "$QUOTE_TEST_PBCOPY_CAPTURE"\n`);
-    chmodSync(pbcopy, 0o755);
-    const session = "quote-test-session";
-    const historyDir = join(home, ".cache", "claude", "last-response");
-    mkdirSync(historyDir, { recursive: true });
-    writeFileSync(
-      join(historyDir, `${session}.jsonl`),
-      `${JSON.stringify({ text: "macOS clipboard quote" })}\n`,
-    );
-    const result = runHook(
-      "quote-command.ts",
-      { session_id: session, cwd: home, command_args: "1" },
-      {
-        HOME: home,
-        HERDR_ENV: "",
-        SSH_CONNECTION: "",
-        SSH_TTY: "",
-        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
-        QUOTE_TEST_PBCOPY_CAPTURE: captured,
-      },
-    );
-    const output = decoded(Output, parseJson(result.stdout));
-    expect(result.code).toBe(0);
-    expect(output.reason).toContain("Copied to clipboard via pbcopy");
-    expect(readFileSync(captured, "utf8")).toContain("macOS clipboard quote");
+    expect(output.reason).toContain("response 1");
   });
 });

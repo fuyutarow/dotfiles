@@ -1,7 +1,6 @@
 1	agents/claude/hooks/assign-lib.ts
 7	agents/claude/hooks/bash-durations.ts
 4	agents/claude/hooks/capture-last-response.ts
-4	agents/claude/hooks/copy-via-herdr-pane.ts
 4	agents/claude/hooks/detect-leaked-toolcall.ts
 2	agents/claude/hooks/enforce-background-waits.ts
 10	agents/claude/hooks/enforce-official-execution.ts

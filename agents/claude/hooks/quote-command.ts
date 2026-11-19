@@ -24,12 +24,12 @@ import { hookJson } from "./lib.ts";
 // command, not a prompt for Claude — silently falling through to an inference turn would be
 // the worst outcome) and say what went wrong in `reason`.
 
-import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
-import { tmpdir, userInfo } from "node:os";
+import { userInfo } from "node:os";
 import { basename, join } from "node:path";
 import { readStdinJson } from "./lib.ts";
-import { attempt, errorMessage } from "../../hooks/attempt.ts";
+import { attempt } from "../../hooks/attempt.ts";
 import { at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import { promptParts, stampMDHMZ } from "./prompt-stamp.ts";
 import {
@@ -39,6 +39,8 @@ import {
 
 const HOME = process.env["HOME"] ?? "";
 const HOOKS = `${HOME}/.claude/hooks`;
+const DOTFILES_ENV = process.env["DOTFILES"]?.trim();
+const CLIP_SCRIPT = `${DOTFILES_ENV === undefined || DOTFILES_ENV === "" ? `${HOME}/dotfiles` : DOTFILES_ENV}/zsh/copy-to-clipboard.sh`;
 const TURN_SEPARATOR = "\n\n---\n\n";
 // MAX_TURNS comes from quote.config.ts, shared with capture-last-response.ts's KEEP — that
 // file only ever HAS this many turns to give, so validating against a different number here
@@ -103,75 +105,22 @@ async function runChild(
   };
 }
 
-async function copyViaHerdr(
-  text: string,
-): Promise<
-  | { readonly ok: true; readonly pane: string }
-  | { readonly ok: false; readonly reason: string }
-> {
-  const file = join(await mkdtemp(join(tmpdir(), "quote-")), "payload.txt");
-  await writeFile(file, text);
-  const result = await runChild("bun", [`${HOOKS}/copy-via-herdr-pane.ts`], {
-    env: { ...process.env, COPY_PAYLOAD_FILE: file },
-    timeoutMs: 15_000,
-  });
-  return result.ok
-    ? { ok: true, pane: result.stdout.trim() }
-    : { ok: false, reason: result.reason };
-}
-
-function failureReason(error: unknown): string {
-  const stderr = str(at(error, "stderr"));
-  if (stderr !== undefined && stderr.trim() !== "") return stderr.trim();
-  return errorMessage(error);
-}
-
 type CopyResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: string };
 
-async function copyViaSshOsc52(text: string): Promise<CopyResult> {
-  const tty = process.env["SSH_TTY"]?.trim();
-  if (tty === undefined || tty === "") {
-    return {
-      ok: false,
-      reason:
-        "SSH_TTY is not set, so there is no client terminal to receive OSC 52",
-    };
-  }
-  if (!tty.startsWith("/dev/")) {
-    return { ok: false, reason: `SSH_TTY is not a /dev terminal path: ${tty}` };
-  }
-  const device = await attempt(async () =>
-    (await stat(tty)).isCharacterDevice(),
-  );
-  if (!device.ok) return { ok: false, reason: failureReason(device.error) };
-  if (!device.value) {
-    return {
-      ok: false,
-      reason: `SSH_TTY does not name a terminal device: ${tty}`,
-    };
-  }
-  const write = await attempt(async () => {
-    await writeFile(
-      tty,
-      `\u001B]52;c;${Buffer.from(text, "utf8").toString("base64")}\u0007`,
-      { flag: "a" },
-    );
-  });
-  return write.ok
-    ? { ok: true }
-    : { ok: false, reason: failureReason(write.error) };
-}
-
-async function copyViaPbcopy(text: string): Promise<CopyResult> {
-  const result = await runChild("pbcopy", [], {
+// ONE route. zsh/copy-to-clipboard.sh decides where the human is (the native clipboard of this
+// machine, or OSC 52 when attached remotely) and finds a terminal for OSC 52 by itself, so this
+// hook holds no environment logic and opens no pane. Until 2026-11-19 it split a disposable Herdr
+// pane and waited 2 s for a shell prompt; under load the shell took 3 s and every /quote failed,
+// and the fallbacks here had drifted from the script's own routing.
+async function copyToClipboard(text: string): Promise<CopyResult> {
+  const result = await runChild("sh", [CLIP_SCRIPT], {
+    env: { ...process.env, COPY_TO_CLIPBOARD_QUIET: "1" },
     stdin: text,
-    timeoutMs: 5_000,
+    timeoutMs: 10_000,
   });
-  return result.ok
-    ? { ok: true }
-    : { ok: false, reason: `pbcopy: ${result.reason}` };
+  return result.ok ? { ok: true } : { ok: false, reason: result.reason };
 }
 
 function shellQuote(value: string): string {
@@ -305,7 +254,7 @@ if (selected.length < count) {
 }
 
 // A request over 50 turns can be much larger than a useful clipboard payload. Save the
-// contents on this host and copy a small scp command through the SAME Herdr/OSC 52 route
+// contents on this host and copy a small scp command through the same clipboard route
 // used below. The human runs it on their current local machine, so a stale SSH_CONNECTION
 // inherited by a persistent Herdr server cannot cause an unsolicited push to an old client.
 if (count > CLIPBOARD_TURN_LIMIT) {
@@ -328,11 +277,11 @@ if (count > CLIPBOARD_TURN_LIMIT) {
         "If this is a remote Herdr session, set QUOTE_DOWNLOAD_SSH_TARGET to its SSH host alias and retry.",
     );
   }
-  const copied = await copyViaHerdr(command);
+  const copied = await copyToClipboard(command);
   if (copied.ok) {
     block(
       `Download command copied to your local clipboard for ${header}${short}. ` +
-        `Run it in a local terminal to save the file in that terminal's current directory:\n${command}\n[${copied.pane}]`,
+        `Run it in a local terminal to save the file in that terminal's current directory:\n${command}`,
     );
   } else {
     block(
@@ -341,43 +290,12 @@ if (count > CLIPBOARD_TURN_LIMIT) {
   }
 }
 
-// The Herdr path needs a live pane with a real pty; see copy-via-herdr-pane.ts. If it is
-// unavailable, native pbcopy works on a local macOS host, while a remote SSH session can emit
-// OSC 52 to its inherited SSH_TTY device. The payload passed to Herdr travels as a FILE PATH,
-// handed over in the child's environment: it is arbitrary assistant prose, and shell-quoting it
-// into a command line would be a needless injection surface. The helper takes its input from the
-// environment rather than argv — hooks are zero-dep, and BG1 rules out hand-parsing process.argv
-// in a file that cannot import Cleye.
-const paneCopy = await copyViaHerdr(payloadText);
-if (paneCopy.ok) {
-  block(
-    // The header itself, not a paraphrase of it: what the human sees here is exactly the first line
-    // of what they will paste (owner, 2026-10-06).
-    `Copied to clipboard — ${header}${short} [${paneCopy.pane}]`,
-  );
+const copied = await copyToClipboard(payloadText);
+if (copied.ok) {
+  // The header itself, not a paraphrase of it: what the human sees here is exactly the first line
+  // of what they will paste (owner, 2026-10-06).
+  block(`Copied to clipboard — ${header}${short}`);
 }
-
-const failures = [`Herdr pane: ${paneCopy.reason}`];
-const remote =
-  (process.env["SSH_CONNECTION"]?.trim() ?? "") !== "" ||
-  (process.env["SSH_TTY"]?.trim() ?? "") !== "";
-if (remote) {
-  const osc52 = await copyViaSshOsc52(payloadText);
-  if (osc52.ok) {
-    block(`Copied to clipboard via SSH OSC 52 — ${header}${short}`);
-  }
-  failures.push(`SSH OSC 52: ${osc52.reason}`);
-} else if (process.platform === "darwin") {
-  const pbcopy = await copyViaPbcopy(payloadText);
-  if (pbcopy.ok) {
-    block(`Copied to clipboard via pbcopy — ${header}${short}`);
-  } else failures.push(`macOS pbcopy: ${pbcopy.reason}`);
-} else {
-  failures.push(
-    `Direct clipboard fallback: unavailable on ${process.platform} outside SSH`,
-  );
-}
-
 block(
-  `Could not copy this quote. Tried:\n- ${failures.join("\n- ")}\n\nSelect this to copy it by hand:\n\n${payloadText}`,
+  `Could not copy this quote: ${copied.reason}\n\nSelect this to copy it by hand:\n\n${payloadText}`,
 );

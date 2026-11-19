@@ -25,12 +25,36 @@ set -eu
 data=$(cat)
 tty_ok=1 # 1 = not yet proven reachable; osc52_copy flips this to 0 on a real write
 
+# Where OSC 52 goes. A human-typed command has /dev/tty. A process an agent spawned (a hook, a
+# tool call) has no controlling terminal, but the agent it descends from still holds the pane's
+# pty, and an escape written to that device reaches the same terminal (measured 2026-11-19 from a
+# Claude hook in a herdr pane on WSL). So callers without a terminal need no pane, shell or prompt
+# of their own: the nearest ancestor that has a terminal names the device.
+osc52_tty=/dev/tty
+if ! (: > /dev/tty) 2> /dev/null; then
+  walk_pid=$$
+  while [ "${walk_pid:-0}" -gt 1 ]; do
+    walk_tty=$(ps -o tty= -p "$walk_pid" 2> /dev/null | tr -d " ") || break
+    if [ -n "$walk_tty" ] && [ -c "/dev/$walk_tty" ] && [ -w "/dev/$walk_tty" ]; then
+      osc52_tty=/dev/$walk_tty
+      break
+    fi
+    walk_pid=$(ps -o ppid= -p "$walk_pid" 2> /dev/null | tr -d " ") || break
+  done
+fi
+
+# The OSC 52 branches end here: status 1 names the reason, so a caller never reports a bare code.
+osc52_exit() {
+  [ "$tty_ok" -eq 0 ] || echo "copy-to-clipboard: no terminal reachable for OSC 52 (tried $osc52_tty)" >&2
+  exit "$tty_ok"
+}
+
 osc52_copy() {
   # /dev/tty writes are wrapped in a subshell so a failed OPEN (not just a failed write) can't
   # leak its "cannot create /dev/tty" message past the 2>/dev/null — a bare `cmd > /dev/tty
   # 2> /dev/null` can still print that message to the REAL stderr, because the shell reports a
   # redirection-setup failure before the command's own fd2 redirect takes effect.
-  if (printf '\033]52;c;%s\a' "$(printf '%s' "$data" | base64 | tr -d '\n')" > /dev/tty) 2> /dev/null; then
+  if (printf '\033]52;c;%s\a' "$(printf '%s' "$data" | base64 | tr -d '\n')" > "$osc52_tty") 2> /dev/null; then
     tty_ok=0
   fi
 }
@@ -110,7 +134,7 @@ clip_exe() {
 if [ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ] || herdr_remote_attached; then
   echo_back
   osc52_copy
-  exit "$tty_ok"
+  osc52_exit
 fi
 
 case "$(uname -s)" in
@@ -128,7 +152,7 @@ case "$(uname -s)" in
     else
       echo_back
       osc52_copy
-      exit "$tty_ok"
+      osc52_exit
     fi
     ;;
   Darwin)
@@ -138,6 +162,6 @@ case "$(uname -s)" in
   *)
     echo_back
     osc52_copy
-    exit "$tty_ok"
+    osc52_exit
     ;;
 esac

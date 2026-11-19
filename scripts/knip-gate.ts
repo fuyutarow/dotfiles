@@ -257,7 +257,7 @@ export async function roots(root: string): Promise<string[]> {
   const quoteHook = await Bun.file(
     join(root, "agents/claude/hooks/quote-command.ts"),
   ).text();
-  for (const name of ["copy-via-herdr-pane.ts", "resolve-agent-name.ts"]) {
+  for (const name of ["resolve-agent-name.ts"]) {
     if (quoteHook.includes(name)) await add(`agents/claude/hooks/${name}`);
   }
   // Codex invokes these through a deployed prompt and a registered shell shim.

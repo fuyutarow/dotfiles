@@ -190,10 +190,14 @@ function cachedConfig(
   fixtureSpace.set(home, { free, total });
   cachedSpace(home, "/mnt/c", free, total, now);
   cachedSpace(home, "/", free, total, now);
+  // TMPDIR points at the fixture home so the hook's /tmp measurement reads the injected value,
+  // not the live tmpfs of this machine.
+  cachedSpace(home, home, free, total, now);
   return {
     env: {
       ...config(edit),
       HOME: home,
+      TMPDIR: home,
       STORAGE_HEADROOM_NOW_MS: String(now),
     },
     home,

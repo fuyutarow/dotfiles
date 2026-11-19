@@ -30,6 +30,8 @@ async function run(
     ...extraEnv,
     TERM: "xterm-256color",
   };
+  // The machine's ccc database mapping must not reach the CLI under test.
+  delete env["COCOINDEX_CODE_DB_PATH_MAPPING"];
   delete env["NO_COLOR"];
   delete env["FORCE_COLOR"];
   if (color) env["FORCE_COLOR"] = "1";
@@ -137,7 +139,9 @@ for await (const packagePath of new Bun.Glob("tools/*/package.json").scan({
         }
         const error = await run(entry, ["-Z"], false, false, extraEnv);
         expect(error.exit).toBeGreaterThan(0);
-        expect(error.stderr).toMatch(/(?:-Z|unknown option: Z)/u);
+        expect(error.stderr).toMatch(
+          /(?:-Z|unknown option: Z|unknown option 'Z')/u,
+        );
         expect(error.stderr).not.toContain("--Z");
       }
     });

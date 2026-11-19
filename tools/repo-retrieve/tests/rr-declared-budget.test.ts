@@ -20,6 +20,12 @@ afterAll(() => {
   for (const root of roots) rmSync(root, { recursive: true, force: true });
 });
 
+// The machine's ccc database mapping must not reach the planner under test.
+function withoutMapping(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const { COCOINDEX_CODE_DB_PATH_MAPPING: _mapping, ...rest } = env;
+  return rest;
+}
+
 function fixture(rrToml: string) {
   const root = mkdtempSync(join(tmpdir(), "rr-declared-budget-"));
   roots.push(root);
@@ -40,7 +46,10 @@ async function plan(root: string, timeout = 60_000) {
   const child = Bun.spawn({
     cmd: [process.execPath, router, "index", "--plan"],
     cwd: root,
-    env: { ...process.env, REPO_RETRIEVE_AUTO_INDEX: "0" },
+    env: {
+      ...withoutMapping(process.env),
+      REPO_RETRIEVE_AUTO_INDEX: "0",
+    },
     stdout: "pipe",
     stderr: "pipe",
     timeout,

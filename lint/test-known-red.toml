@@ -60,11 +60,6 @@ since = "2026-11-20"
 reason = "red before any gate ran tests; under diagnosis"
 
 [[unit]]
-path = "tools/storage-headroom/tests"
-since = "2026-11-20"
-reason = "red before any gate ran tests; under diagnosis"
-
-[[unit]]
 path = "tools/disk-reclaim/tests"
 since = "2026-11-20"
 reason = "red before any gate ran tests; under diagnosis"

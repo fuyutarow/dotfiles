@@ -1,0 +1,10 @@
+# Tracked *.test.ts / *.test.zsh that no task reachable from `test` runs, each with its reason.
+# scripts/lint-test-reach.ts fails on a test file reached by nothing and not named here, and on
+# an entry here that is now reached or no longer tracked.
+# scripts/tests/doctor-live.ts is not listed on purpose: it is not a *.test file, and `test:doctor`
+# runs it deliberately outside `test` (live machine state).
+#
+# "<repository-relative path>" = "<reason>"
+[exceptions]
+"archives/**" = "Retired skills kept as reference material (archives/skills/README.md); their tests are history, not a gate."
+"agents/models/tests/check-releases.test.ts" = "2026-11-20: 2 of its tests fail on the current SSOT (output is only warnings, no '0 FAIL' or 'checked N models' line); unrelated to test reach. Fix the test or the SSOT, then remove this entry."

@@ -26,7 +26,7 @@ const exceptions: Record<string, Record<string, string>> = {
   },
 };
 
-const child = Bun.spawn(["mise", "tasks", "--json"], {
+const child = Bun.spawn(["mise", "tasks", "ls", "--json", "--hidden"], {
   cwd: root,
   stdout: "pipe",
   stderr: "pipe",

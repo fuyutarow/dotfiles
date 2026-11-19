@@ -947,11 +947,13 @@ const OTHER: readonly Surface[] = [
       "mise.toml",
       "knip.jsonc",
       "lint/knip-exceptions.toml",
+      "lint/test-reach-exceptions.toml",
     ],
     deployed: "the checkout",
-    consumer: "oxfmt, rumdl, bun check, mise, knip",
+    consumer: "oxfmt, rumdl, bun check, mise, knip, lint:test-reach",
     writer: "human, in the repo",
-    verify: "mise run fmt:check · lint:md · typecheck · mise tasks · lint:knip",
+    verify:
+      "mise run fmt:check · lint:md · typecheck · mise tasks · lint:knip · lint:test-reach",
   },
   {
     kind: "in-place",

@@ -54,7 +54,7 @@ async function miseTasks(
   root: string,
 ): Promise<{ tasks: Task[]; error?: string }> {
   // bounded: mise tasks ls exits promptly; env failures surface via captured stderr
-  const child = Bun.spawn(["mise", "tasks", "ls", "--json"], {
+  const child = Bun.spawn(["mise", "tasks", "ls", "--json", "--hidden"], {
     cwd: root,
     stdin: "ignore",
     stdout: "pipe",

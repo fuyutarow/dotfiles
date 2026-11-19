@@ -83,6 +83,12 @@ Defaults live in `scripts/config-registry.ts` (`LAND_HOSTS`); deployment runs pu
 - **Resolution** = the token is a LOCAL task name or alias (`mise tasks ls --json`, source under
   the repo root — global `~/.config/mise` tasks do not count). Contract helpers are source owned
   by that repository under `tools/` and run through a runtime pinned there.
+- **`mise tasks` lists entry points.** A task that exists only as a dependency of another (a
+  `fmt:*`, `lint:*` or `test:*` part of an aggregate) carries `hide = true`: it still runs by name and
+  as a dependency, but `mise tasks` omits it. Anything a README or skill tells a person to type stays
+  visible. A reader of the graph passes `--hidden` (`mise tasks ls --json --hidden`), or hidden tokens
+  look unresolved. A test file is reached by `test` or named in `lint/test-reach-exceptions.toml`
+  (`lint:test-reach`).
 - **Always invoke via `mise run`** (user alias `m`). NEVER bare `mise <token>`: `fmt`, `i`, `t`,
   `r` shadow mise BUILT-INS — observed: bare `mise fmt` runs mise's own mise.toml formatter, not
   the repo task.

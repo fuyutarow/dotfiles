@@ -107,29 +107,34 @@ description = "Format the repo in place: Markdown (rumdl) + bash (shfmt) + TypeS
 depends = ["fmt:md", "fmt:sh", "fmt:ts"]
 
 [tasks."fmt:md"]
+hide = true
 dir = "{{config_root}}"
 description = "Format Markdown with rumdl (config = .rumdl.toml: structural gate, authored docs only, agents/skills/** excluded)"
 run = "rumdl fmt"
 
 [tasks."fmt:sh"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Format bash scripts in place with shfmt (2-space, -ci -sr -bn -s; bash dialect)"
 run = "bun scripts/fmt-sh.ts"
 
 [tasks."fmt:sh:check"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Check bash formatting without writing (CI gate; prints diff + non-zero on drift)"
 run = "bun scripts/fmt-sh-check.ts"
 
 [tasks."fmt:ts"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Format TypeScript in place with oxfmt (.oxfmtrc.json)"
 run = "bunx --bun oxfmt '**/*.ts'"
 
 [tasks."fmt:ts:check"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Check TS formatting without writing (CI gate; lists drifted files + non-zero on drift)"
@@ -138,6 +143,7 @@ run = "bunx --bun oxfmt --check '**/*.ts'"
 # Umbrella format-check for the auto-formatted languages (Markdown check = lint:md via
 # rumdl, kept there since rumdl check is a structural lint not a format-verify).
 [tasks."fmt:staged"]
+hide = true
 depends = ["bun:check"]
 description = "Verify selected jj snapshot formatting; Git migration fallback formats staged files and refuses partial hunks (wiring-mise-tasks fmt:staged)"
 run = "bun agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts --tool 'ts=bunx --bun oxfmt' --tool 'sh=shfmt -w -ln bash -i 2 -ci -sr -bn -s' --tool 'md=rumdl fmt' --exclude 'agents/skills/**/*.ts' --exclude 'archives/**'"
@@ -175,43 +181,58 @@ depends = [
   "lint:harness-scope",
   "lint:gates",
   "lint:no-project-names",
+  "lint:test-reach",
 ]
 
 [tasks."lint:no-project-names"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Reject private deny-listed words in tracked file contents and paths; absent private list is unconfigured"
 run = "bun scripts/lint-no-project-names.ts"
 
+[tasks."lint:test-reach"]
+hide = true
+depends = ["bun:check"]
+dir = "{{config_root}}"
+description = "Fail when a tracked *.test.ts or *.test.zsh is run by no task reachable from test (exceptions: lint/test-reach-exceptions.toml)"
+run = "bun scripts/lint-test-reach.ts"
+
 [tasks."lint:tool-changesets"]
+hide = true
 dir = "{{config_root}}"
 description = "Reject worker-edited tool versions/changelogs and invalid workspace changesets"
 run = "bun scripts/lint-tool-changesets.ts"
 
 [tasks."lint:hook-slug"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Require unique hook slugs, prefixed messages and explicit external ownership"
 run = "bun scripts/lint-hook-slug.ts"
 
 [tasks."lint:md"]
+hide = true
 dir = "{{config_root}}"
 description = "Markdown structural gate: rumdl check (render-breaking defects only; cosmetic disabled → green at adoption, catches future/AI-generated defects)"
 run = "rumdl check"
 
 [tasks."lint:sh"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "ShellCheck static analysis on bash scripts (-x follow sources; file list reused from shfmt -f)"
 run = "bun scripts/lint-sh.ts"
 
 [tasks."lint:zsh"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "zsh syntax gate: `zsh -n` parse-only on boot-critical zsh config (MUST use the zsh binary, never bash -n)"
 run = "bun scripts/lint-zsh.ts"
 
 [tasks."lint:skills-index"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 env = { SKILLS_LINT_WORKTREE = "1" }
@@ -219,18 +240,21 @@ description = "Require every in-house skill in the catalog and reject third-part
 run = "bun scripts/lint-skills-index.ts"
 
 [tasks."lint:skills-tasks"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Check mise task mentions in in-house skill manuals"
 run = "bun scripts/lint-skills-tasks.ts"
 
 [tasks."lint:skills-wiring"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Check in-house skill directories and names, retired plugin manifests, and third-party provenance in the repository"
 run = "bun scripts/skills-doctor.ts"
 
 [tasks."lint:skill-script-paths"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail when templates or dotfiles scripts call a skill helper by its internal file path instead of PATH bin"
@@ -243,6 +267,7 @@ run = "bun scripts/lint-skill-script-paths.ts"
 # (compiling-latex found it). --budget adds the F4 STANDING check the per-skill pass cannot make:
 # what the collection charges every turn, against a declared ratchet.
 [tasks."lint:skills-floor"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 env = { SKILLS_LINT_WORKTREE = "1" }
@@ -257,12 +282,14 @@ run = "bun scripts/lint-skills-floor.ts"
 # the machine-specific autoMode overlay (see scripts/render-home.ts), and P3 is about
 # what this repo SHARES, not what one machine ends up holding.
 [tasks."lint:harness-scope"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail when a user-scope config or hook in this repo hardcodes one repo's absolute path"
 run = "bun scripts/harness/scope-check.ts agents/claude && bun scripts/harness/scope-check.ts agents/codex"
 
 [tasks."lint:gates"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Batched-diagnostics floor: every deny site in a PreToolUse gate declares FATAL / SINGLE-AXIS / BATCHED, and a BATCHED gate carries a test proving two violations return in one decision"
@@ -294,6 +321,7 @@ description = "Print every configuration surface (source → deployed, consumer,
 run = "bun scripts/config-map.ts"
 
 [tasks."lint:reason-network-home"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Reject reason-network state directory overrides in declarations"
@@ -312,12 +340,14 @@ description = "Fail when a tools/<name>/tool.toml disagrees with root package.js
 run = "bun scripts/lint-tool-declarations.ts"
 
 [tasks."lint:ignore"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail when a tracked file is ignored or the global excludes source is undeclared"
 run = "bun scripts/lint-ignore.ts"
 
 [tasks."lint:live-refs"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail when a deployed or declared agent command, repo link, or package bin points at a missing checkout file"
@@ -330,12 +360,14 @@ description = "Regenerate agents/hooks/vendor/deps.{js,d.ts}: the one zod (+ nev
 run = "bun scripts/vendor-deps.ts"
 
 [tasks."vendor:deps:check"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail when the committed zod bundle is not what the pinned packages build to (run vendor:deps and commit)"
 run = "bun scripts/vendor-deps.ts --check"
 
 [tasks."lint:bun"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Enforce the writing-bun-scripts floor over every tracked production Bun CLI"
@@ -385,6 +417,7 @@ run = "bun scripts/lint-bun.ts"
 # link path and reports false errors; the real file is linted at its own path — same reason as
 # tsconfig.json's exclude).
 [tasks."lint:knip"]
+hide = true
 dir = "{{config_root}}"
 depends = ["bun:check"]
 description = "Gate production Knip findings against the exception ledger"
@@ -402,6 +435,7 @@ run = "bun scripts/lint-oxlint.ts --type-aware"
 # the exemption moves with the code. The rest are the per-file counts in lint/no-sync-baseline.tsv:
 # a new sync call fails, and the baseline only shrinks.
 [tasks."lint:no-sync"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail on a sync fs/child_process call in non-test TS beyond lint/no-sync-baseline.tsv (exempt: // sync-ok: <reason>)"
@@ -419,6 +453,7 @@ run = "bun scripts/lint-no-sync.ts --write"
 # or eslint-disable in tracked TS fails (audit targets get no exception rules — enforced, not
 # promised). A hit prints its file:line.
 [tasks."lint:ts-no-disable"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail on any oxlint-disable / eslint-disable comment in tracked TS (no lint exceptions)"
@@ -449,15 +484,27 @@ depends = [
   "test:android",
   "test:zsh",
   "test:mise-scope",
+  "test:topics",
 ]
 
+# Tests that live beside their topic rather than under scripts/tests or tools/*/tests. None ran
+# under any task before 2026-11-20; lint:test-reach now fails a test file no task reaches.
+[tasks."test:topics"]
+hide = true
+depends = ["bun:check"]
+dir = "{{config_root}}"
+description = "Tests beside their topic: obsidian, reason-network and agents/research-control"
+run = "bun test ./obsidian/*.test.ts ./reason-network/*.test.ts agents/research-control/tests"
+
 [tasks."test:codex"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Narrow Codex integration regression suite: runtime/config tests, provider installer selection, coredev selector, and Codex doctor checks. Pass Bun filters with `mise run test:codex -- --filter <text>`."
 run = "bun test agents/codex/tests scripts/tests/install-ai-clis.test.ts scripts/tests/doctor.test.ts tools/coredev/tests"
 
 [tasks."test:android"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Offline safety checks for the Pixel LINE-only vibration policy parser"
@@ -474,6 +521,7 @@ run = "bun test tools/detect-japanese/tests agents/hooks agents/claude/hooks age
 # wiring-mise-tasks contract keeps out of TOML bodies. The why and the measurement live in the
 # script's header.
 [tasks."test:resource-control"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Bounded resource admission and explicit Serena lifecycle tests (wrapped in the runner's own envelope where a user systemd can admit it)"
@@ -486,18 +534,21 @@ description = "repo-retrieve route and CLI contract tests (fake ccc/rg executabl
 run = "bun test tools/repo-retrieve/tests"
 
 [tasks."test:skills"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Run the tests shipped with all agent skills"
 run = "bun test agents/skills"
 
 [tasks."test:scripts"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "This repo's own script tests (scripts/tests) and their proof-of-fire fixtures, plus every tools/*/tests suite"
 run = "bun test scripts/tests tools/*/tests"
 
 [tasks."test:presets"]
+hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Prove shared preset fixture acceptance/rejection and strictness parity"
@@ -553,6 +604,7 @@ raw_args = true
 run = "bun scripts/changeset.ts"
 
 [tasks."lint:changesets"]
+hide = true
 depends = ["bun:check"]
 description = "Validate every pending tool changeset with the shared schema"
 run = "bun scripts/lint-changesets.ts"
@@ -768,6 +820,7 @@ description = "Deploy edge/policy.plist.mac as Microsoft Edge's managed policy (
 run = 'bun ~/dotfiles/scripts/edge-policy.ts'
 
 [tasks."mac:rosetta"]
+hide = true
 depends = ["bun:check"]
 description = "Install Rosetta 2 on Apple Silicon (idempotent no-op on Intel or if already installed)"
 run = 'bun ~/dotfiles/scripts/mac-rosetta.ts'
@@ -792,6 +845,7 @@ dir = "{{config_root}}"
 run = 'bun scripts/link-dots.ts --force'
 
 [tasks."tmux:plugins"]
+hide = true
 depends = ["bun:check"]
 description = "Install tmux plugins via TPM (non-interactive; run after link-dots)"
 run = 'bun ~/dotfiles/scripts/tmux-plugins.ts'
@@ -917,6 +971,8 @@ description = "Install or check S4U startup and logon keepalive tasks plus the h
 dir = "{{config_root}}"
 run = "bun scripts/wsl-keepalive.ts"
 
+# Kept: knip derives scripts/wsl-host-pressure.ts as an entry file from this task body; without it the
+# script's exports read as unused (found while removing unreferenced tasks, 2026-11-20).
 [tasks."wsl:pressure:log"]
 depends = ["bun:check"]
 description = "Read the tail of the Windows-host WSL pressure recorder log over bounded SSH. --tail selects JSONL samples."
@@ -985,21 +1041,6 @@ run = 'bun ~/dotfiles/scripts/wsl-ccc-daemon.ts'
 description = "Enable the session-independent WSL C: recovery timer (link:dots must have run first)"
 run = 'systemctl --user daemon-reload && systemctl --user enable --now wsl-capacity-recover.timer guest-capacity-recover.timer'
 
-[tasks."wsl:fix-gitexe"]
-description = "Allow Windows git.exe to trust the WSL repo path"
-# Derive the UNC path (wslpath knows the distro AND the user); the old literal baked in a stale
-# distro (Ubuntu-22.04) and the WINDOWS username as if it were the Linux one — wrong on both axes.
-run = '''
-command -v git.exe >/dev/null 2>&1 || { echo "git.exe not on PATH (Windows git not installed?)"; exit 1; }
-unc=$(wslpath -w "$PWD" | tr '\\' '/')   # \\wsl.localhost\<distro>\home\<user>\dotfiles → //…
-git.exe config --global --add safe.directory "%(prefix)/$unc"
-echo "trusted: %(prefix)/$unc"
-'''
-
-[tasks."install:rust"]
-description = "Install Rust toolchain"
-run = 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh'
-
 [tasks."cc:install-mcp"]
 depends = ["bun:check"]
 description = "Apply .mcp.json (single declarative source) to Claude Code (user scope) AND Codex. Idempotent. mac & WSL."
@@ -1051,6 +1092,7 @@ dir = "{{config_root}}"
 run = "bun agents/codex/codex-runtime.ts deploy"
 
 [tasks."codex:runtime:check"]
+hide = true
 depends = ["bun:check"]
 description = "Verify the actual WSL Homebrew codex and explicit Windows codex.exe mapping without writing."
 dir = "{{config_root}}"
@@ -1063,16 +1105,14 @@ dir = "{{config_root}}"
 run = "bun scripts/deployment-selection.ts"
 
 [tasks."lint:bash"]
+hide = true
 depends = ["bun:check"]
 description = "Reject added or grown shell scripts over 12 physical lines"
 run = "bun scripts/lint-no-new-bash.ts"
 
 # Validate the executing binary before Bun build/check task bodies run.
 [tasks."bun:check"]
+hide = true
 dir = "{{config_root}}"
 description = "Enforce package.json engines.bun for the task runtime"
 run = "bun scripts/bun-runtime.ts"
-
-[tasks."test:vs-alpha"]
-description = "Compare failing Bun test names with alpha@origin"
-run = "bun scripts/test-vs-alpha.ts"

@@ -421,7 +421,8 @@ All repo tasks are defined in `mise.toml` (single task runner — no justfile he
 verify should include `mise run gate:land` for a change that will land in dotfiles.
 
 ```bash
-mise tasks            # list
+mise tasks            # list the tasks a person types; parts (fmt:ts, lint:*, test:*) are hidden but still run by name and as dependencies
+mise tasks --hidden   # list every task, parts included
 mise run up           # update everything (topgrade)
 mise run link:dots    # (re)create symlinks   — scripts/link-dots.ts
 mise run tools:audit  # audit CLI toolbox     — scripts/check-tools.sh

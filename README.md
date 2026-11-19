@@ -72,8 +72,9 @@ cheat sheet.
 | `man`    | tldr      | `h <cmd>`     | example-first help                                     |
 
 Plus: **lazygit** (`lg`, with `Ctrl+A` AI commit messages) · **tmux** (`t2`–`t6` spin up an N-pane
-session in one keystroke) · **cross-OS clipboard** (`c`, `pp` = view+copy, `pwdc`; OSC-52 so a copy
-over SSH reaches your _local_ terminal) · **bun** · **direnv** · **mise** · a linted LaTeX build
+session in one keystroke) · **cross-OS clipboard** (`c`, `pp` = view+copy, `pwdc`, `q`, `/quote`; all run
+`smart-copy`, which feeds the terminal by OSC-52 _and_ this machine's clipboard every time; `mise run
+doctor:clipboard` proves a copy round-trips) · **bun** · **direnv** · **mise** · a linted LaTeX build
 (`x` / `xx`).
 
 Install tier follows when a tool is needed; OS guards remain in the Brewfiles:
@@ -183,7 +184,7 @@ bin name has a classification.
 | `rr` | A | People and agents use the repository query router from any cwd. |
 | `repo-retrieve` | A | Alias for the machine-wide `rr` operator. |
 | `smart-open` | A | Shell and operators open paths or URLs across repositories. |
-| `smart-copy` | A | Shell, hooks and agents copy stdin to the clipboard across repositories. |
+| `smart-copy` | A | The one clipboard route: zsh `c`/`pp`/`pwdc`/`q`, the Claude and Codex `/quote` hooks and `codex-thread-copy` copy stdin through it (`mise run doctor:clipboard` reads a copy back). |
 | `disk-reclaim` | A | Operators reclaim machine storage. |
 | `storage-headroom` | A | Operators inspect machine storage headroom. |
 | `prompt-archive` | A | Operators search and manage the machine prompt archive. |

@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { userInfo } from "node:os";
@@ -23,14 +25,15 @@ function runQuote(
 ) {
   const home = tempHome();
   prepareHome?.(home);
-  // The hook's only clipboard route is $DOTFILES/zsh/copy-to-clipboard.sh. The default stand-in
-  // fails the way the real script does when no terminal is reachable.
-  const clipScript = join(home, "dotfiles", "zsh", "copy-to-clipboard.sh");
-  if (!existsSync(clipScript)) {
-    mkdirSync(join(home, "dotfiles", "zsh"), { recursive: true });
-    writeFileSync(
-      clipScript,
-      `cat > /dev/null\necho "copy-to-clipboard: no terminal reachable for OSC 52 (tried /dev/tty)" >&2\nexit 1\n`,
+  // The hook's only clipboard route is the `smart-copy` command on PATH. The default stand-in fails
+  // the way the real command does when no route works. `stubDir` is put first on PATH.
+  const stubDir = join(home, "stub-bin");
+  mkdirSync(stubDir, { recursive: true });
+  const stub = join(stubDir, "smart-copy");
+  if (!existsSync(stub)) {
+    writeStub(
+      stub,
+      `cat > /dev/null\necho "smart-copy: terminal: no terminal reachable (tried /dev/tty)" >&2\nexit 1\n`,
     );
   }
   const session = "quote-test-session";
@@ -49,7 +52,7 @@ function runQuote(
     { session_id: session, cwd: home, command_args: String(count) },
     {
       HOME: home,
-      DOTFILES: join(home, "dotfiles"),
+      PATH: `${stubDir}:${process.env["PATH"] ?? ""}`,
       SSH_CONNECTION: "100.81.222.57 50000 100.110.117.86 2222",
       ...env,
     },
@@ -62,12 +65,17 @@ function runQuote(
   };
 }
 
-// A stand-in clipboard script that records what it was given and whether it was told to be quiet.
+function writeStub(path: string, body: string): void {
+  writeFileSync(path, `#!/bin/sh\n${body}`);
+  chmodSync(path, 0o755);
+}
+
+// A stand-in `smart-copy` that records what it was given and with which arguments.
 function capturingClipboard(home: string): void {
-  mkdirSync(join(home, "dotfiles", "zsh"), { recursive: true });
-  writeFileSync(
-    join(home, "dotfiles", "zsh", "copy-to-clipboard.sh"),
-    `cat > "${home}/clipboard.txt"\nprintf "%s" "$COPY_TO_CLIPBOARD_QUIET" > "${home}/clipboard.quiet"\n`,
+  mkdirSync(join(home, "stub-bin"), { recursive: true });
+  writeStub(
+    join(home, "stub-bin", "smart-copy"),
+    `cat > "${home}/clipboard.txt"\nprintf "%s" "$#" > "${home}/clipboard.argc"\n`,
   );
 }
 
@@ -77,7 +85,7 @@ describe("quote-command: output mode follows the requested count", () => {
     expect(result.code).toBe(0);
     expect(output.decision).toBe("block");
     expect(output.reason).toContain("Could not copy this quote");
-    expect(output.reason).toContain("no terminal reachable for OSC 52");
+    expect(output.reason).toContain("no terminal reachable");
     expect(output.reason).toContain("response 2");
     expect(output.reason).not.toContain("response 1\n");
     expect(readdirSync(join(home, ".cache", "claude"))).not.toContain(
@@ -119,7 +127,7 @@ describe("quote-command: output mode follows the requested count", () => {
     expect(output.reason).toContain("scp 'workbox:");
   });
 
-  test("the download command goes through the one clipboard script", () => {
+  test("the download command goes through smart-copy", () => {
     const { home, output } = runQuote(51, 1, {}, capturingClipboard);
     expect(output.reason).toContain("Download command copied");
     // The block message carries the same header the quote starts with.
@@ -138,7 +146,7 @@ describe("quote-command: output mode follows the requested count", () => {
     expect(output.reason).not.toContain("Download command copied");
   });
 
-  test("a quote of 1-50 turns is piped to the clipboard script, quietly", () => {
+  test("a quote of 1-50 turns is piped to smart-copy with no arguments", () => {
     const { home, output } = runQuote(1, 1, {}, capturingClipboard);
     expect(output.reason).toContain(
       "Copied to clipboard — from quote-test-session",
@@ -146,15 +154,27 @@ describe("quote-command: output mode follows the requested count", () => {
     const copied = readFileSync(join(home, "clipboard.txt"), "utf8");
     expect(copied).toMatch(/^from quote-test-session \| /u);
     expect(copied).toContain("response 1");
-    expect(readFileSync(join(home, "clipboard.quiet"), "utf8")).toBe("1");
+    expect(readFileSync(join(home, "clipboard.argc"), "utf8")).toBe("0");
   });
 
   test("a failed copy says why and prints the quote for hand-copying", () => {
     const { output } = runQuote(1, 1);
     expect(output.reason).toContain(
-      "Could not copy this quote: copy-to-clipboard: no terminal reachable",
+      "Could not copy this quote: smart-copy: terminal: no terminal reachable",
     );
     expect(output.reason).toContain("Select this to copy it by hand");
+    expect(output.reason).toContain("response 1");
+  });
+
+  test("a missing smart-copy says how to install it and still prints the quote", () => {
+    const empty = join(tempHome(), "empty-path");
+    mkdirSync(empty, { recursive: true });
+    // The hook resolves the agent name through `bun` on PATH; smart-copy alone is absent.
+    symlinkSync(process.execPath, join(empty, "bun"));
+    const { output } = runQuote(1, 1, { PATH: empty });
+    expect(output.reason).toContain(
+      "smart-copy is not on PATH; run mise run deps in the dotfiles checkout",
+    );
     expect(output.reason).toContain("response 1");
   });
 });

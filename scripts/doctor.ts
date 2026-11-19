@@ -14,6 +14,7 @@ import { DoctorStatus } from "@dotfiles/shared/src/doctor-record.ts";
 //   brew        Brewfile.core                    core tools installed on every OS
 //   brew-ondemand Brewfile.ondemand              on-demand formulas and casks installed (INFO only)
 //   deps        package.json + node_modules      every pinned dependency installed at its pin
+//   smart-copy  PATH                     the one clipboard route resolves (round trip: doctor:clipboard)
 //   bins        package.json `bin`               each PATH command in ~/.bun/bin resolves here;
 //                                                no dangling link left by a renamed bin
 //   git-hooks   .githooks                        core.hooksPath points at it
@@ -797,6 +798,23 @@ export async function missingSkillHelpers(
       }),
     )
   ).flat();
+}
+
+// `smart-copy` is the one clipboard route of every caller (zsh c/pp/pwdc/q, the /quote hooks,
+// codex-thread-copy). Plain doctor only proves it resolves; the round trip overwrites the clipboard,
+// so it lives in `mise run doctor:clipboard` (scripts/doctor-clipboard.ts).
+export function checkSmartCopy(): Finding {
+  const found = Bun.which("smart-copy");
+  return found === null
+    ? fail(
+        "smart-copy",
+        "smart-copy is not on PATH",
+        "mise run deps  (bun link; then `mise run doctor:clipboard` proves a copy round-trips)",
+      )
+    : pass(
+        "smart-copy",
+        `resolves to ${found}; \`mise run doctor:clipboard\` proves a round trip`,
+      );
 }
 
 export async function checkSkillHelperPaths(ctx: Ctx): Promise<Finding> {
@@ -2399,6 +2417,11 @@ export const CHECKS: Check[] = [
   { name: "brew-shadows", run: checkBrewShadows, applies: always },
   { name: "deps", run: checkDeps, applies: always },
   { name: "bins", run: checkBins, applies: always },
+  {
+    name: "smart-copy",
+    run: () => Promise.resolve(checkSmartCopy()),
+    applies: always,
+  },
   { name: "skill-helper-paths", run: checkSkillHelperPaths, applies: always },
   { name: "git-hooks", run: checkGitHooks, applies: always },
   { name: "login-shell", run: checkLoginShell, applies: always },

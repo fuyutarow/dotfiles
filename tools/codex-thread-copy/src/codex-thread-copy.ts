@@ -8,7 +8,8 @@ import pkg from "../package.json" with { type: "json" };
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);
 
-export type Copy = (id: string) => Promise<number>;
+// A failure reason, or null when the id reached a clipboard route.
+export type Copy = (id: string) => Promise<string | null>;
 
 export async function copyThread(
   args: {
@@ -33,27 +34,34 @@ export async function copyThread(
     );
     return 1;
   }
-  const copied = await copy(thread.id);
-  if (copied !== 0) {
-    error(`could not copy thread id (clipboard helper exited ${copied})`);
+  const failure = await copy(thread.id);
+  if (failure !== null) {
+    error(`could not copy thread id (${failure})`);
     return 1;
   }
   write(thread.id);
   return 0;
 }
 
-async function copyToClipboard(id: string): Promise<number> {
-  const dotfiles = resolve(import.meta.dir, "../../..");
-  const script = resolve(dotfiles, "zsh/copy-to-clipboard.sh");
-  const child = Bun.spawn(["sh", script], {
-    env: { ...process.env, COPY_TO_CLIPBOARD_QUIET: "1" },
+// The `smart-copy` command (tools/smart-copy) is the one clipboard route; it is spawned from PATH.
+export async function copyToClipboard(id: string): Promise<string | null> {
+  const command = Bun.which("smart-copy", { PATH: process.env["PATH"] ?? "" });
+  if (command === null)
+    return "smart-copy is not on PATH; run mise run deps in the dotfiles checkout";
+  const child = Bun.spawn([command], {
     stdin: "pipe",
     stdout: "ignore",
     stderr: "pipe",
   });
   await child.stdin.write(id);
   await child.stdin.end();
-  return child.exited;
+  const [stderr, exitCode] = await Promise.all([
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (exitCode === 0) return null;
+  const detail = stderr.trim();
+  return detail === "" ? `smart-copy exited ${exitCode}` : detail;
 }
 
 if (import.meta.main) {

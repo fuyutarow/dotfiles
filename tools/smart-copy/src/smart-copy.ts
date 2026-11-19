@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // smart-copy — put stdin on the clipboard of the screen the human is at, without inferring where that is.
-// Consumer: callers that today use zsh/copy-to-clipboard.sh (a later change switches them; none is
-// switched yet). Contract and reasons: tools/smart-copy/src/terminal.ts and native.ts.
+// Consumers: zsh copytoclipboard() (`c`, `pp`, `pwdc`, `q`), the Claude /quote hook, the Codex quote
+// adapter and codex-thread-copy. Contract and reasons: tools/smart-copy/src/terminal.ts and native.ts.
 //
 // IT DOES BOTH, EVERY TIME. Opening a URL on the wrong screen is harmful, so smart-open must decide.
 // Copying the same text to two clipboards is harmless, so smart-copy must NOT decide:

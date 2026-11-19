@@ -813,6 +813,11 @@ dir = "{{config_root}}"
 description = "Transfer this machine's Codex, Claude Code, and GitHub CLI logins over SSH stdin to an owner's disposable box. Usage: mise run auth:push -- <host> [--only codex,claude,gh] [--force]"
 run = "bun scripts/auth-push.ts"
 
+[tasks."doctor:clipboard"]
+description = "OVERWRITES the clipboard: copy a unique token with `smart-copy --status` and read it back (WSL: powershell.exe Get-Clipboard through the desktop-session socket; macOS: pbpaste). PASS/FAIL, or SKIP where no reader exists (the clipboard is then untouched). Not part of `mise run doctor`, which only checks that smart-copy resolves on PATH."
+dir = "{{config_root}}"
+run = 'bun scripts/doctor-clipboard.ts'
+
 [tasks."doctor:remote"]
 depends = ["bun:check"]
 description = "From the machine you sit at: is an ssh host usable as dotfiles promises? Key reach, the core CLIs on `ssh host cmd` (herdr --remote's bridge), an interactive login AND a herdr pane landing in zsh with the aliases, and the smart-open forward binding on attach — PASS/FAIL/WARN/SKIP with the fix. Usage: mise run doctor:remote -- <host>"

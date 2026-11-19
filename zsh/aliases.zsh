@@ -249,11 +249,17 @@ alias hs='atuin search'                 # CLI history search
 alias hst='atuin stats'                 # History statistics
 alias hi='atuin import auto'            # Import existing history
 
-# Cross-platform clipboard function. Logic lives in zsh/copy-to-clipboard.sh (single source of
-# truth, POSIX sh) so a non-interactive caller with no zsh functions loaded — a Claude Code
-# slash command's shell step (/quote) — can reuse the exact same
-# SSH/WSL/mac/OSC-52 handling instead of a second, drifting copy. This is a thin exec wrapper.
-copytoclipboard() { "${DOTFILES:-$HOME/dotfiles}/zsh/copy-to-clipboard.sh"; }
+# Clipboard function: stdin to the `smart-copy` command (tools/smart-copy), which feeds the terminal
+# (OSC 52) and this machine's native clipboard and decides nothing. `--echo` also writes the text to
+# the terminal, like tee, so `c`, `pp` and `q` still show what they copied. smart-copy is a
+# root package.json bin, linked by `bun link` (mise run deps); no route logic lives in this shell.
+copytoclipboard() {
+  if ! command -v smart-copy > /dev/null 2>&1; then
+    echo "smart-copy is not on PATH; run mise run deps in the dotfiles checkout" >&2
+    return 127
+  fi
+  smart-copy --echo
+}
 
 # Clipboard aliases
 alias c='copytoclipboard'
@@ -532,7 +538,6 @@ pp() {
     return 1
   fi
 
-  # The shared helper owns remote routing and native WSL encoding.
   bat "$1" | copytoclipboard
 }
 

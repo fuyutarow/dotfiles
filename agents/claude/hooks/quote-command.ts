@@ -29,7 +29,7 @@ import { isIP } from "node:net";
 import { userInfo } from "node:os";
 import { basename, join } from "node:path";
 import { readStdinJson } from "./lib.ts";
-import { attempt } from "../../hooks/attempt.ts";
+import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import { promptParts, stampMDHMZ } from "./prompt-stamp.ts";
 import {
@@ -39,8 +39,6 @@ import {
 
 const HOME = process.env["HOME"] ?? "";
 const HOOKS = `${HOME}/.claude/hooks`;
-const DOTFILES_ENV = process.env["DOTFILES"]?.trim();
-const CLIP_SCRIPT = `${DOTFILES_ENV === undefined || DOTFILES_ENV === "" ? `${HOME}/dotfiles` : DOTFILES_ENV}/zsh/copy-to-clipboard.sh`;
 const TURN_SEPARATOR = "\n\n---\n\n";
 // MAX_TURNS comes from quote.config.ts, shared with capture-last-response.ts's KEEP — that
 // file only ever HAS this many turns to give, so validating against a different number here
@@ -109,18 +107,26 @@ type CopyResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: string };
 
-// ONE route. zsh/copy-to-clipboard.sh decides where the human is (the native clipboard of this
-// machine, or OSC 52 when attached remotely) and finds a terminal for OSC 52 by itself, so this
-// hook holds no environment logic and opens no pane. Until 2026-11-19 it split a disposable Herdr
-// pane and waited 2 s for a shell prompt; under load the shell took 3 s and every /quote failed,
-// and the fallbacks here had drifted from the script's own routing.
+// ONE route: the `smart-copy` command (tools/smart-copy) feeds the terminal (OSC 52) and this machine's
+// native clipboard tool, deciding nothing, so this hook holds no environment logic and opens no pane.
+// It is spawned from PATH, not imported: hooks stay zero-dep. A missing command is a block reason
+// that says how to install it, never a silent fall-through.
+const SMART_COPY_MISSING =
+  "smart-copy is not on PATH; run mise run deps in the dotfiles checkout";
 async function copyToClipboard(text: string): Promise<CopyResult> {
-  const result = await runChild("sh", [CLIP_SCRIPT], {
-    env: { ...process.env, COPY_TO_CLIPBOARD_QUIET: "1" },
-    stdin: text,
-    timeoutMs: 10_000,
-  });
-  return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+  if (Bun.which("smart-copy") === null)
+    return { ok: false, reason: SMART_COPY_MISSING };
+  const result = await attempt(() =>
+    runChild("smart-copy", [], { stdin: text, timeoutMs: 10_000 }),
+  );
+  if (!result.ok)
+    return {
+      ok: false,
+      reason: `smart-copy could not start: ${errorMessage(result.error)}`,
+    };
+  return result.value.ok
+    ? { ok: true }
+    : { ok: false, reason: result.value.reason };
 }
 
 function shellQuote(value: string): string {

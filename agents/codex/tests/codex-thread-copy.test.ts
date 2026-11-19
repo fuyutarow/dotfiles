@@ -1,8 +1,19 @@
+import { attempt } from "../../../tools/shared/src/attempt.ts";
 import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { copyThread } from "../../../tools/codex-thread-copy/src/codex-thread-copy.ts";
+import {
+  copyThread,
+  copyToClipboard,
+} from "../../../tools/codex-thread-copy/src/codex-thread-copy.ts";
 import { newestThread } from "../../../tools/codex-thread-copy/src/threads.ts";
 
 const roots: string[] = [];
@@ -100,7 +111,7 @@ test("copies and prints the same id, and exits 1 with a reason when none matches
   const errors: string[] = [];
   const copy = (id: string) => {
     copied.push(id);
-    return Promise.resolve(0);
+    return Promise.resolve(null);
   };
   const write = (id: string) => {
     printed.push(id);
@@ -130,4 +141,45 @@ test("copies and prints the same id, and exits 1 with a reason when none matches
   expect(noMatch).toBe(1);
   expect(errors).toEqual(["no Codex thread found for /work/missing"]);
   expect(copied).toEqual([currentId]);
+});
+
+// The outcome of `run` with PATH narrowed to `dir`; a throw is returned, not rethrown.
+async function withPath<T>(
+  dir: string,
+  run: () => Promise<T>,
+): Promise<unknown> {
+  const saved = process.env["PATH"];
+  process.env["PATH"] = dir;
+  const result = await attempt(run);
+  if (saved === undefined) delete process.env["PATH"];
+  else process.env["PATH"] = saved;
+  return result.ok ? result.value : result.error;
+}
+
+test("copyToClipboard pipes the id to the smart-copy command on PATH", async () => {
+  const root = await sessions();
+  const capture = join(root, "stdin.txt");
+  await writeFile(join(root, "smart-copy"), `#!/bin/sh\ncat > "${capture}"\n`);
+  await chmod(join(root, "smart-copy"), 0o755);
+  expect(await withPath(root, () => copyToClipboard(currentId))).toBeNull();
+  expect(await readFile(capture, "utf8")).toBe(currentId);
+});
+
+test("copyToClipboard reports smart-copy's own stderr when it fails", async () => {
+  const root = await sessions();
+  await writeFile(
+    join(root, "smart-copy"),
+    "#!/bin/sh\ncat > /dev/null\necho 'smart-copy: native: no clipboard tool' >&2\nexit 1\n",
+  );
+  await chmod(join(root, "smart-copy"), 0o755);
+  expect(await withPath(root, () => copyToClipboard(currentId))).toBe(
+    "smart-copy: native: no clipboard tool",
+  );
+});
+
+test("copyToClipboard names the install step when smart-copy is not on PATH", async () => {
+  const root = await sessions();
+  expect(await withPath(root, () => copyToClipboard(currentId))).toBe(
+    "smart-copy is not on PATH; run mise run deps in the dotfiles checkout",
+  );
 });

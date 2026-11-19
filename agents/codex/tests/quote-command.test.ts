@@ -14,7 +14,6 @@ import { join } from "node:path";
 import { parse } from "yaml";
 import { z } from "../../hooks/zod.ts";
 
-const dotfiles = join(import.meta.dir, "..", "..", "..");
 const temporaryHomes: string[] = [];
 const thread = "11111111-2222-4333-8444-555555555555";
 const turnOne = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
@@ -62,13 +61,12 @@ function fixture(): {
   mkdirSync(temporary, { recursive: true });
   const rollout = join(sessions, `rollout-2026-10-11T10-00-00-${thread}.jsonl`);
   const capture = join(home, "clipboard.txt");
-  writeFileSync(join(bin, "uname"), "#!/bin/sh\nprintf 'Darwin\\n'\n");
+  // A stand-in `smart-copy`: the hook's only clipboard route is that command on PATH.
   writeFileSync(
-    join(bin, "pbcopy"),
+    join(bin, "smart-copy"),
     '#!/bin/sh\ncat > "$QUOTE_TEST_CAPTURE"\n',
   );
-  chmodSync(join(bin, "uname"), 0o755);
-  chmodSync(join(bin, "pbcopy"), 0o755);
+  chmodSync(join(bin, "smart-copy"), 0o755);
   const rows = [
     record("session_meta", { session_id: thread, id: thread }),
     message("msg-1", turnOne, "final_answer", "completed reply one"),
@@ -114,7 +112,6 @@ function run(args: string[], extraEnv: Record<string, string> = {}) {
         ...process.env,
         HOME: f.home,
         CODEX_HOME: join(f.home, "codex"),
-        DOTFILES: dotfiles,
         PATH: `${f.bin}:${process.env["PATH"] ?? ""}`,
         QUOTE_TEST_CAPTURE: f.capture,
         TMPDIR: f.temporary,
@@ -159,7 +156,7 @@ describe("Codex quote adapter", () => {
     }
   });
 
-  test("deployed symlink resolves the repository clipboard route without DOTFILES", () => {
+  test("a deployed symlink to the hooks directory still copies through smart-copy", () => {
     const f = fixture();
     const codex = join(f.home, ".codex");
     mkdirSync(codex, { recursive: true });
@@ -175,7 +172,6 @@ describe("Codex quote adapter", () => {
           ...process.env,
           HOME: f.home,
           CODEX_HOME: join(f.home, "codex"),
-          DOTFILES: "",
           PATH: `${f.bin}:${process.env["PATH"] ?? ""}`,
           QUOTE_TEST_CAPTURE: f.capture,
           TMPDIR: f.temporary,
@@ -256,7 +252,6 @@ describe("Codex quote adapter", () => {
           ...process.env,
           HOME: f.home,
           CODEX_HOME: join(f.home, "codex"),
-          DOTFILES: dotfiles,
         },
       },
     );
@@ -266,11 +261,14 @@ describe("Codex quote adapter", () => {
     );
   });
 
-  test("missing clipboard route reports its cause and leaves no temporary file", () => {
+  test("a missing smart-copy reports its cause and leaves no temporary file", () => {
     const f = fixture();
+    // smart-copy is absent: PATH holds one empty directory.
+    const empty = join(f.home, "empty-path");
+    mkdirSync(empty, { recursive: true });
     const result = Bun.spawnSync(
       [
-        "bun",
+        process.execPath,
         join(import.meta.dir, "..", "hooks", "quote-command.ts"),
         "--thread",
         thread,
@@ -280,7 +278,7 @@ describe("Codex quote adapter", () => {
           ...process.env,
           HOME: f.home,
           CODEX_HOME: join(f.home, "codex"),
-          DOTFILES: join(f.home, "missing-dotfiles"),
+          PATH: empty,
           TMPDIR: f.temporary,
           SSH_CONNECTION: "",
           SSH_TTY: "",
@@ -289,11 +287,13 @@ describe("Codex quote adapter", () => {
       },
     );
     expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("clipboard route is missing");
+    expect(result.stderr.toString()).toContain(
+      "smart-copy is not on PATH; run mise run deps in the dotfiles checkout",
+    );
     expect(readdirSync(f.temporary)).toEqual([]);
   });
 
-  test("51 replies save an export and copy only the scp command through fake pbcopy", () => {
+  test("51 replies save an export and copy only the scp command through a fake smart-copy", () => {
     const f = fixture();
     const rows: string[] = [];
     for (let index = 0; index < 51; index++) {
@@ -325,7 +325,6 @@ describe("Codex quote adapter", () => {
           ...process.env,
           HOME: f.home,
           CODEX_HOME: join(f.home, "codex"),
-          DOTFILES: dotfiles,
           PATH: `${f.bin}:${process.env["PATH"] ?? ""}`,
           QUOTE_TEST_CAPTURE: f.capture,
           SSH_CONNECTION: "",

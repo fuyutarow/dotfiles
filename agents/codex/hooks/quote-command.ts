@@ -7,11 +7,10 @@ import {
   mkdtemp,
   readFile,
   readdir,
-  realpath,
   writeFile,
 } from "node:fs/promises";
 import { hostname, homedir, userInfo } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { jsonOf, z } from "../../hooks/zod.ts";
@@ -204,12 +203,6 @@ function downloadCommand(file: string): string | null {
   return `scp ${portFlag}${shellQuote(`${target}:${file}`)} .`;
 }
 
-async function dotfilesRoot(): Promise<string> {
-  return dirname(
-    dirname(dirname(dirname(await realpath(import.meta.filename)))),
-  );
-}
-
 async function runCommand(
   command: string,
   args: string[],
@@ -244,21 +237,13 @@ async function runCommand(
   };
 }
 
-// ONE route: zsh/copy-to-clipboard.sh owns where the human is and how the text gets there.
-async function copyText(
-  text: string,
-  dotfiles: string,
-): Promise<string | null> {
-  const clipboardScript = join(dotfiles, "zsh", "copy-to-clipboard.sh");
-  const clipboardExists = await attempt(() => access(clipboardScript));
-  if (!clipboardExists.ok)
-    return `clipboard route is missing: ${clipboardScript}`;
+// ONE route: the `smart-copy` command (tools/smart-copy) feeds the terminal and this machine's native
+// clipboard and decides nothing. It is spawned from PATH, not imported: hooks stay zero-dep.
+async function copyText(text: string): Promise<string | null> {
+  if (Bun.which("smart-copy") === null)
+    return "smart-copy is not on PATH; run mise run deps in the dotfiles checkout";
   const copied = await attempt(() =>
-    runCommand("sh", [clipboardScript], {
-      env: { COPY_TO_CLIPBOARD_QUIET: "1" },
-      input: text,
-      timeout: 10000,
-    }),
+    runCommand("smart-copy", [], { input: text, timeout: 10000 }),
   );
   if (!copied.ok)
     return `clipboard route failed: ${errorMessage(copied.error)}`;
@@ -293,12 +278,8 @@ async function main(): Promise<void> {
   const where = `${userInfo().username}@${hostname()}`;
   const header = `from codex:${thread} | ${quoteTimestamp()} | turns: ${selected.length} | ${bodyBytes}B | ${where}`;
   const payload = `${header}\n${body}`;
-  const configuredDotfiles = process.env["DOTFILES"]?.trim();
-  let dotfiles = configuredDotfiles;
-  if (dotfiles === undefined || dotfiles === "")
-    dotfiles = await dotfilesRoot();
   if (count <= CLIPBOARD_TURN_LIMIT) {
-    const failure = await copyText(payload, dotfiles);
+    const failure = await copyText(payload);
     if (failure !== null) fail(failure);
     process.stdout.write(
       `Copied to clipboard — ${header}${selected.length < count ? ` — only ${selected.length} completed replies captured` : ""}\n`,
@@ -313,7 +294,7 @@ async function main(): Promise<void> {
   const command = downloadCommand(savedFile);
   if (command === null)
     fail(`quote saved at ${savedFile}; no SSH download target is available`);
-  const failure = await copyText(command, dotfiles);
+  const failure = await copyText(command);
   if (failure !== null) fail(failure);
   process.stdout.write(
     `Download command copied to clipboard for ${header}: ${command}\n`,

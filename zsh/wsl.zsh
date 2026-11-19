@@ -115,7 +115,7 @@ link-clipboard-shims
 # WSL_INTEROP set to it, for that command only: this shell's WSL_INTEROP is never changed. When no
 # socket qualifies, CMD still runs with the inherited value and one stderr line says so.
 # Users: `start` and the VS Code launchers below (`code`/`ide`, hence `e`/`ee`). `o`/`oo`/`open` are
-# smart-open (tools/smart-open/src/desktop-interop.ts), `c`/`pp`/`pwdc` zsh/copy-to-clipboard.sh.
+# smart-open (tools/smart-open/src/desktop-interop.ts), `c`/`pp`/`pwdc` the `smart-copy` command (tools/smart-copy).
 _wsl_desktop_run() {
   emulate -L zsh
   local helper=${DOTFILES:-$HOME/dotfiles}/scripts/wsl-interop-session.ts out last

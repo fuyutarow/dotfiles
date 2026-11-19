@@ -48,7 +48,7 @@ process.exit(await child.exited);
   const policy = join(root, "policy.toml");
   await Bun.write(
     policy,
-    "schema=1\ngpu_max_concurrent_jobs=1\nmemory_high_fraction=0.9\n",
+    "schema=1\ngpu_max_concurrent_jobs=1\ngpu_partition_ccc_mib=2048\nmemory_high_fraction=0.9\n",
   );
   const manifest = join(root, "manifest.json");
   await Bun.write(

@@ -200,6 +200,7 @@ run = "bun scripts/lint-test-reach.ts"
 
 [tasks."lint:tool-changesets"]
 hide = true
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Reject worker-edited tool versions/changelogs and invalid workspace changesets"
 run = "bun scripts/lint-tool-changesets.ts"
@@ -594,6 +595,7 @@ depends = ["fmt:check", "lint", "lint:changesets", "lint:no-project-names"]
 
 [tasks."gate:changed"]
 description = "Check changed files against trunk: TS format, type-aware lint, no-sync, and project types (about 10 s; an empty change set passes)"
+depends = ["bun:check"]
 dir = "{{config_root}}"
 run = "bun scripts/gate-changed.ts"
 
@@ -701,11 +703,13 @@ run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" --yes'
 
 [tasks."disk:free"]
 description = "Free SIZE of rip graveyard payloads now, oldest first, preserving the undo window; reports one JSON result."
+depends = ["bun:check"]
 raw = true
 run = 'mise run bun:check >&2 && bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" free'
 
 [tasks."disk:recover"]
 description = "Restore a mount's measured available bytes to --min-available from eligible graveyard payloads; use --yes to delete."
+depends = ["bun:check"]
 raw = true
 run = 'mise run bun:check >&2 && bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" recover'
 
@@ -876,6 +880,7 @@ run = "bun scripts/auth-push.ts"
 
 [tasks."doctor:clipboard"]
 description = "OVERWRITES the clipboard: copy a unique token with `smart-copy --status` and read it back (WSL: powershell.exe Get-Clipboard through the desktop-session socket; macOS: pbpaste). PASS/FAIL, or SKIP where no reader exists (the clipboard is then untouched). Not part of `mise run doctor`, which only checks that smart-copy resolves on PATH."
+depends = ["bun:check"]
 dir = "{{config_root}}"
 run = 'bun scripts/tool-probe.ts smart-copy clipboard'
 

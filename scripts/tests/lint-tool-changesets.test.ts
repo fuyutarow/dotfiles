@@ -270,7 +270,9 @@ test("repo guidance delegates tool release outputs to land", async () => {
   );
   expect(readme).toContain("Tickets do not edit");
   expect(readme).toContain("At land,");
-  expect(skill).toContain("`land` writes those release outputs.");
+  expect(skill).toContain(
+    "Repo tool release intent belongs to the changeset task in the repository instructions.",
+  );
 });
 
 async function releaseFixture(workerChangelog = false) {

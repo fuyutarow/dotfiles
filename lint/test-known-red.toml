@@ -10,11 +10,6 @@
 # reason = "<why it is red>"
 
 [[unit]]
-path = "scripts/tests/bun-min-version.test.ts"
-since = "2026-11-20"
-reason = "red before any gate ran tests; under diagnosis"
-
-[[unit]]
 path = "scripts/tests/ccc-daemon.test.ts"
 since = "2026-11-20"
 reason = "red before any gate ran tests; under diagnosis"
@@ -41,16 +36,6 @@ reason = "red before any gate ran tests; under diagnosis"
 
 [[unit]]
 path = "scripts/tests/wsl-capacity-recover-graveyard.test.ts"
-since = "2026-11-20"
-reason = "red before any gate ran tests; under diagnosis"
-
-[[unit]]
-path = "scripts/tests/lint-tool-changesets.test.ts"
-since = "2026-11-20"
-reason = "red before any gate ran tests; under diagnosis"
-
-[[unit]]
-path = "scripts/tests/render-home.test.ts"
 since = "2026-11-20"
 reason = "red before any gate ran tests; under diagnosis"
 

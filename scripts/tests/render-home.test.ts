@@ -1268,13 +1268,32 @@ describe("render-home: Codex PreToolUse indices are declared, not listed", () =>
     const registryScripts = groups
       .slice(2)
       .map((group) => String(group.hooks[0]?.["command"]).split(" ").at(-1));
-    expect(groups).toHaveLength(7);
-    expect(registryScripts).toEqual([
-      "enforce-storage-headroom.ts",
-      "enforce-model-floor.ts",
-      "enforce-search-route.ts",
-      "enforce-graveyard-scope.ts",
-      "enforce-repo-bash-deny.ts",
-    ]);
+    // Derived from the declaration: every Codex PreToolUse hook, in declared position order.
+    const declared = z
+      .object({
+        hook: z.array(
+          z.object({
+            event: z.string(),
+            script: z.string(),
+            position: z.number(),
+            vendors: z.array(z.string()),
+          }),
+        ),
+      })
+      .safeParse(
+        Bun.TOML.parse(
+          readFileSync(join(root, "agents", "hooks", "hooks.toml"), "utf8"),
+        ),
+      );
+    expect(declared.success).toBe(true);
+    if (!declared.success) return;
+    const codexPreToolUse = declared.data.hook
+      .filter(
+        (hook) => hook.event === "PreToolUse" && hook.vendors.includes("codex"),
+      )
+      .toSorted((a, b) => a.position - b.position)
+      .map((hook) => hook.script);
+    expect(groups).toHaveLength(2 + codexPreToolUse.length);
+    expect(registryScripts).toEqual(codexPreToolUse);
   });
 });

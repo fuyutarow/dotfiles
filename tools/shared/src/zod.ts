@@ -6,6 +6,7 @@
 // .oxlintrc.json enforces it: `from "zod"` is a restricted import, and JSON.parse is banned
 // outside a zod codec — the one below is the codec everything else uses.
 import { fromThrowable, z } from "../../../agents/hooks/vendor/deps.js";
+import { errorMessage, Result } from "./result.ts";
 
 export { z };
 // Throw → Result, synchronously (neverthrow's, from the same bundle): for the zero-dep files that
@@ -18,10 +19,10 @@ export { fromThrowable };
  */
 export const jsonText = z.codec(z.string(), z.unknown(), {
   decode: (text, ctx) => {
-    const parsed = fromThrowable(
-      (): unknown => JSON.parse(text),
-      (e) => (e instanceof Error ? e.message : String(e)),
-    )();
+    const parsed = Result.try({
+      try: (): unknown => JSON.parse(text),
+      catch: errorMessage,
+    });
     if (parsed.isOk()) return parsed.value;
     ctx.issues.push({
       code: "invalid_format",

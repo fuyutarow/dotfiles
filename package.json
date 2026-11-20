@@ -47,6 +47,7 @@
     "wsl-interop-session": "scripts/wsl-interop-session.ts"
   },
   "dependencies": {
+    "better-result": "3.0.1",
     "cleye": "2.6.0",
     "consola": "3.4.2",
     "neverthrow": "8.2.0",

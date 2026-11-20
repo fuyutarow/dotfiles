@@ -1,3 +1,4 @@
 tools/preset/src/preset.ts	agents/hooks/zod.ts
 tools/serena-foreground/src/serena-foreground.ts	tools/agent-resource-run/src/index.ts
+tools/shared/src/result.ts	agents/hooks/vendor/deps.js
 tools/shared/src/zod.ts	agents/hooks/vendor/deps.js

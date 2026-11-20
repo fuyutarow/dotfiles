@@ -48,7 +48,7 @@
       "export function f(x: number): number {\n  if (x < 0) throw new Error(\"negative\");\n  return x;\n}\n"
     ],
     "good": [
-      "import { err, ok, type Result } from \"neverthrow\";\nexport function f(x: number): Result<number, string> {\n  return x < 0 ? err(\"negative\") : ok(x);\n}\n"
+      "import { Result } from \"better-result\";\nexport function f(x: number): Result<number, string> {\n  return x < 0 ? Result.err(\"negative\") : Result.ok(x);\n}\n"
     ]
   },
   {
@@ -59,7 +59,7 @@
       "export const f = (): Promise<never> => Promise.reject(new Error(\"no\"));\n"
     ],
     "good": [
-      "import { errAsync, type ResultAsync } from \"neverthrow\";\nexport const f = (): ResultAsync<never, string> => errAsync(\"no\");\n"
+      "import { Result } from \"better-result\";\nexport const f = async (): Promise<Result<never, string>> => Result.err(\"no\");\n"
     ]
   },
   {

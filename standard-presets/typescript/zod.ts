@@ -4,7 +4,7 @@
 // file decodes JSON with `jsonOf(Schema).safeParse(text)`: the typed value, or a zod error covering
 // both bad JSON (code invalid_format) and the wrong shape — no throw, no `unknown` round trip.
 // The consumer zod codec shipped with the shared TypeScript preset.
-import { fromThrowable } from "neverthrow";
+import { Result } from "better-result";
 import { z } from "zod";
 
 export { z };
@@ -15,10 +15,10 @@ export { z };
  */
 export const jsonText = z.codec(z.string(), z.unknown(), {
   decode: (text, ctx) => {
-    const parsed = fromThrowable(
-      (): unknown => JSON.parse(text),
-      (e) => (e instanceof Error ? e.message : String(e)),
-    )();
+    const parsed = Result.try({
+      try: (): unknown => JSON.parse(text),
+      catch: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+    });
     if (parsed.isOk()) return parsed.value;
     ctx.issues.push({
       code: "invalid_format",

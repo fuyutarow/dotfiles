@@ -106,15 +106,15 @@
       },
       {
         "selector": "TryStatement",
-        "message": "try is banned (catch AND finally): errors as values — attempt() from tools/shared/src/attempt.ts (zero-dep, importable from every file); neverthrow's fromThrowable/fromAsyncThrowable is equally fine in a file that already imports an npm package; a self-contained skill script inlines Promise.try(fn).then(ok, err); cleanup via using / await using / DisposableStack, or promise.finally()."
+        "message": "try is banned (catch AND finally): errors as values — better-result's Result.try({ try, catch }) / Result.tryPromise({ try, catch }), always with catch so the error keeps its meaning (in dotfiles import Result from tools/shared/src/result.ts, which works before bun install; elsewhere and in a self-contained skill script, import it from \"better-result\"); cleanup via using / await using / DisposableStack, or promise.finally()."
       },
       {
         "selector": "ThrowStatement",
-        "message": "throw is banned: no-try left nothing to catch it, so a throw is a crash path no type shows. Return the failure as a value the caller cannot mistake for success — the Attempt tagged union from tools/shared/src/attempt.ts (zero-dep, importable from every file); neverthrow's err()/errAsync() and Result are equally fine in a file that already imports an npm package. Never return a default or the input itself in place of the failure. A lookup that finds nothing is absence, not failure: return undefined. The entry point matches the result, prints the message and calls process.exit(code). Code that throws (a library, JSON.parse) is wrapped once with fromThrowable/attempt."
+        "message": "throw is banned: no-try left nothing to catch it, so a throw is a crash path no type shows. Return the failure as a value the caller cannot mistake for success — better-result's Result.err(...) (Result.ok(...) for success), with a TaggedError class when callers must tell failures apart; an async function returns Promise<Result<T, E>>. Never return a default or the input itself in place of the failure. A lookup that finds nothing is absence, not failure: return undefined. The entry point matches the result, prints the message and calls process.exit(code). Code that throws (a library, JSON.parse) is wrapped once with Result.try/Result.tryPromise."
       },
       {
         "selector": "CallExpression[callee.object.name='Promise'][callee.property.name='reject']",
-        "message": "Promise.reject is a throw by another name (no-throw): return errAsync()/a ResultAsync, or an Attempt-style tagged union."
+        "message": "Promise.reject is a throw by another name (no-throw): return Promise<Result<T, E>> holding better-result's Result.err(...)."
       },
       {
         "selector": "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdin'][callee.property.name=/^(on|once|addListener|prependListener|prependOnceListener)$/]",

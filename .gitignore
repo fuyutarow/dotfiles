@@ -54,3 +54,15 @@
 /.env
 /.env.local
 
+# Owner: the agent sandbox. It leaves empty placeholders at the checkout root when it masks
+# these paths; nine were committed by accident on 2026-10-23 and none is a declaration.
+/.bash_profile
+/.bashrc
+/.gitconfig
+/.gitmodules
+/.idea
+/.profile
+/.ripgreprc
+/.zprofile
+/.zshrc
+

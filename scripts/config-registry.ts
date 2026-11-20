@@ -103,7 +103,13 @@ export const COREDEV_SELECTION: Readonly<
     doctor: [{ task: "codex:runtime:check", timeoutSeconds: 60 }],
   },
   wsl: {
-    deploy: [{ task: "codex:runtime", timeoutSeconds: 120 }],
+    deploy: [
+      { task: "codex:runtime", timeoutSeconds: 120 },
+      { task: "tmux:plugins", timeoutSeconds: 300 },
+      // After link:dots and cc:install-mcp: the unit is placed and ccc exists.
+      { task: "wsl:ccc-daemon", timeoutSeconds: 120 },
+      { task: "wsl:capacity:enable", timeoutSeconds: 60 },
+    ],
     doctor: [{ task: "codex:runtime:check", timeoutSeconds: 60 }],
   },
   mac: {

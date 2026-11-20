@@ -25,6 +25,12 @@ brew "sccache"      # workstation compiler cache; shared-light hosts omit it via
 brew "fnox"         # secrets: Keychain (mac), age files elsewhere — tools/secrets-push fills a box
 # fnox uses age-encrypted files on WSL; keep its provider available on every host.
 brew "age"
+# The Linux sandbox that agx's Claude workers start in refuses to run without both; a missing
+# one ends every dispatch at spawn ("sandbox required but unavailable", 2026-11-20).
+if OS.linux?
+  brew "bubblewrap"   # bwrap; grok --sandbox needs it too
+  brew "socat"
+end
 # Owner decision (2026-10-25): every host gets agx and semlint from the shared public tap.
 tap "fuyutarow/tap"
 brew "fuyutarow/tap/agx"

@@ -24,7 +24,7 @@
         "oxlint-tsgolint",
         "oxfmt",
       ],
-      "ignoreBinaries": ["mise"],
+      "ignoreBinaries": ["mise", "coredev"],
     },
     "obsidian": {
       // Shell and remote launchers invoke these scripts; Obsidian loads the plugin.

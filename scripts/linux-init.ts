@@ -105,12 +105,13 @@ say(
   `Homebrew install/build elapsed: ${((performance.now() - started) / 1000).toFixed(1)} seconds`,
 );
 
-// deps first: scripts/link-dots.ts imports Cleye from node_modules.
+// One declared pipeline: COREDEV_SELECTION (scripts/config-registry.ts) lists every deploy task
+// for this host kind, and coredev runs it. This script adds only what must precede it (Homebrew)
+// and the steps that are not mise tasks. deps first: it links the coredev bin.
 say("repo dependencies");
 await $`${MISE} run deps`.cwd(DOTFILES);
-
-say("linking dotfiles");
-await $`${MISE} run link:dots`.cwd(DOTFILES);
+say("declared deployment (coredev deploy local)");
+await $`coredev deploy local`.cwd(DOTFILES);
 // The post-merge hook relinks on every pull; without this a pull leaves new links unmade.
 await $`git -C ${DOTFILES} config core.hooksPath .githooks`;
 // Agents record and sync this repo through jj (`mise run commit` / `mise run pull`), but the
@@ -129,18 +130,10 @@ if (
   );
 }
 
-// The agent CLIs are core too, but not Brewfile entries: each comes from its vendor's self-updating
-// installer into ~/.local/bin (mise.toml install:ai-clis says why not brew/npm).
-say("agent CLIs (Claude Code, Codex)");
-await $`${MISE} run install:ai-clis`.cwd(DOTFILES);
 // Antigravity's native installer, outside Brewfile.core like Claude Code/Codex.
 const agyInstaller =
   await $`curl -fsSL https://antigravity.google/cli/install.sh`.text();
 await $`bash -c ${agyInstaller}`;
-// Their MCP servers (.mcp.json), registered in Claude Code AND Codex. Codex starts an OAuth login
-// a headless box cannot finish; install-mcp bounds that and says so (scripts/install-mcp.ts).
-await $`${MISE} run cc:install-mcp`.cwd(DOTFILES);
-
 // sshd: let the newest attach re-bind smart-open's forwarded socket (wsl/sshd-dotfiles.conf says
 // why). Without it a dropped session leaves a dead /tmp/smart-open-*.sock and the next attach loses
 // its forward (doctor:remote FAILed exactly that on a rented box, 2026-10-06). Needs root, so only
@@ -183,15 +176,8 @@ if (await sudoIsOurs()) {
   );
 }
 
-// WSL is Linux plus three user services and a login shell; there is no separate wsl:init.
-async function wslExtras(): Promise<void> {
-  await $`${MISE} run tmux:plugins`.cwd(DOTFILES);
-  // After link:dots: zsh/zshenv arms the no-self-spawn guard as soon as the unit is placed, so
-  // leaving the unit un-enabled would make every ccc call wait 30s and fail.
-  if (Bun.which("ccc") === null)
-    say("ccc is not installed (uv missing) — skipped its daemon");
-  else await $`${MISE} run wsl:ccc-daemon`.cwd(DOTFILES);
-  await $`${MISE} run wsl:capacity:enable`.cwd(DOTFILES);
+// WSL's user services are rows of COREDEV_SELECTION.wsl; only the root steps remain here.
+async function wslRootSteps(): Promise<void> {
   // Root steps never wait for a password: each runs through `sudo -n` or is listed.
   const pending: string[] = [];
   if (
@@ -212,7 +198,7 @@ async function wslExtras(): Promise<void> {
     say("then re-run: mise run link:dots   # /etc links it listed as skipped");
   }
 }
-if (/microsoft/iu.test(release())) await wslExtras();
+if (/microsoft/iu.test(release())) await wslRootSteps();
 
 say("sheldon plugins");
 await $`${join(PREFIX, "bin/sheldon")} lock`;

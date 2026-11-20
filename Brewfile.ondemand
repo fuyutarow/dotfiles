@@ -15,7 +15,6 @@ brew "tmux"
 if OS.linux?
   brew "xclip"        # X11 clipboard
   brew "wl-clipboard" # Wayland clipboard (wl-copy/wl-paste)
-  brew "bubblewrap"   # bwrap: grok --sandbox needs it on Linux (refuses to start without it)
 end
 brew "yq"
 brew "hunk"         # review-first terminal diff viewer for agent-authored changesets (alias: d)

@@ -2,8 +2,9 @@ import { opendir, open, readlink, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { DIM, RST } from "./ansi.ts";
+import { padDisplay, truncateDisplay } from "./dispatch-display.ts";
 import { dur } from "./jobs.ts";
-import { z } from "./zod.ts";
+import { jsonOf, z } from "./zod.ts";
 
 const PID_LIMIT = 8192;
 const FD_LIMIT = 256;
@@ -18,7 +19,22 @@ const SHELL_ACTIVITY_CELLS = 15;
 const EVAL_OPEN = "eval '";
 const WRAPPER_TAIL = "' < /dev/null && pwd -P >|";
 const TASK_FILE = /^[a-zA-Z0-9-]+\.output$/u;
-export type ShellRow = { id: string; seconds: number; command?: string };
+/** Bytes read from the end of the session transcript to find shell descriptions. */
+const TRANSCRIPT_TAIL = 8 * 1024 * 1024;
+/** Widest description a shell row shows; longer ones end in "…". */
+const DESCRIPTION_CELLS = 48;
+/** A narrower description budget than this shows no description at all. */
+const DESCRIPTION_MIN_CELLS = 8;
+/**
+ * `description` is the human summary the agent gave the Bash call that started the shell
+ * (the tool_use `input.description` in the session transcript).
+ */
+export type ShellRow = {
+  id: string;
+  seconds: number;
+  command?: string;
+  description?: string;
+};
 /** `reason` names the check that failed; it is printed after `shells: unknown`. */
 export type ShellScan =
   | { kind: "known"; rows: ShellRow[] }
@@ -191,6 +207,88 @@ async function rowOf(
   return { ok: true, row };
 }
 
+/** A transcript line recording that a Bash tool_use started background task `backgroundTaskId`. */
+const BackgroundResultLine = z.object({
+  toolUseResult: z.object({ backgroundTaskId: z.string() }),
+  message: z.object({
+    content: z.array(
+      z.object({ type: z.string(), tool_use_id: z.string().optional() }),
+    ),
+  }),
+});
+/** A transcript line holding tool_use blocks and their descriptions. */
+const ToolUseLine = z.object({
+  message: z.object({
+    content: z.array(
+      z.object({
+        type: z.string(),
+        id: z.string().optional(),
+        input: z.object({ description: z.string().optional() }).optional(),
+      }),
+    ),
+  }),
+});
+
+/**
+ * The description of each listed background task, from the last TRANSCRIPT_TAIL bytes of the
+ * session transcript: the tool_result that names the task (`toolUseResult.backgroundTaskId`)
+ * points at its tool_use, whose `input.description` is the label. A task whose start is outside
+ * the tail, or an unreadable transcript, simply has no description.
+ */
+export async function shellDescriptions(
+  transcriptPath: string,
+  ids: readonly string[],
+): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  if (ids.length === 0) return found;
+  const file = Bun.file(transcriptPath);
+  const text = await settle(
+    file.slice(Math.max(0, file.size - TRANSCRIPT_TAIL)).text(),
+  );
+  if (!text.ok) return found;
+  const lines = text.value.split("\n");
+  const taskOfToolUse = new Map<string, string>();
+  for (const line of lines) {
+    if (!line.includes('"backgroundTaskId"')) continue;
+    const parsed = jsonOf(BackgroundResultLine).safeParse(line);
+    if (!parsed.success) continue;
+    const task = parsed.data.toolUseResult.backgroundTaskId;
+    if (!ids.includes(task)) continue;
+    const use = parsed.data.message.content.find(
+      (block) => block.type === "tool_result",
+    )?.tool_use_id;
+    if (use !== undefined) taskOfToolUse.set(use, task);
+  }
+  if (taskOfToolUse.size === 0) return found;
+  for (const line of lines) {
+    if (!line.includes('"tool_use"')) continue;
+    if (![...taskOfToolUse.keys()].some((use) => line.includes(use))) continue;
+    const parsed = jsonOf(ToolUseLine).safeParse(line);
+    if (parsed.success)
+      collectDescriptions(parsed.data.message.content, taskOfToolUse, found);
+  }
+  return found;
+}
+
+/** Records the one-line description of every tool_use block that started a wanted task. */
+function collectDescriptions(
+  blocks: z.output<typeof ToolUseLine>["message"]["content"],
+  taskOfToolUse: ReadonlyMap<string, string>,
+  found: Map<string, string>,
+): void {
+  for (const block of blocks) {
+    const task =
+      block.type === "tool_use" && block.id !== undefined
+        ? taskOfToolUse.get(block.id)
+        : undefined;
+    const description = block.input?.description
+      ?.replaceAll(/\s+/gu, " ")
+      .trim();
+    if (task !== undefined && description !== undefined && description !== "")
+      found.set(task, description);
+  }
+}
+
 /**
  * Running shells: the same-UID processes holding a session task output file open
  * for writing, found from the bounded /proc scan. The task directory is not listed,
@@ -205,6 +303,7 @@ export async function scanShells(
     uid?: number;
     now?: number;
     projectDir?: string | undefined;
+    transcriptPath?: string | undefined;
   } = {},
 ): Promise<ShellScan> {
   const uid = options.uid ?? process.getuid?.();
@@ -253,9 +352,24 @@ export async function scanShells(
       if (!next.ok) return unknown(next.reason);
       if (next.row !== undefined) rows.push(next.row);
     }
+    // Descriptions are a label only: a missing one never turns the scan unknown.
+    const descriptions =
+      rows.length > 0 && options.transcriptPath !== undefined
+        ? await shellDescriptions(
+            options.transcriptPath,
+            rows.map((row) => row.id),
+          )
+        : new Map<string, string>();
     return {
       kind: "known",
-      rows: rows.toSorted((a, b) => b.seconds - a.seconds),
+      rows: rows
+        .map((row) => {
+          const description = descriptions.get(row.id);
+          return description === undefined
+            ? row
+            : Object.assign(row, { description });
+        })
+        .toSorted((a, b) => b.seconds - a.seconds),
     };
   };
   return work().catch((error: unknown) =>
@@ -304,23 +418,48 @@ export function compactCommand(
   return `${tokens.slice(0, kept).join(" ")} …`;
 }
 
+/** `value` in at most `width` cells, ending in "…" when cut. */
+function fitDisplay(value: string, width: number): string {
+  if (Bun.stringWidth(value) <= width) return value;
+  return `${truncateDisplay(value, width - 1)}…`;
+}
+
 /**
- * One line per running shell, identified by task id and elapsed time.
- * `columns` bounds the command to the remaining row width.
+ * One line per running shell, identified by task id, elapsed time and the description the
+ * agent gave it. `columns` bounds the description and the command to the row width.
  */
 export function shellLines(scan: ShellScan, columns?: number): string {
   if (scan.kind === "unknown") return `shells: unknown (${scan.reason})`;
   const width = columns ?? DEFAULT_COLUMNS;
-  // Align the rows as columns: ids left-aligned, ages right-aligned, so every "│" lines up
-  // (12m59s over 2m15s). Ids and ages are ASCII, so string length is cell width.
+  // Align the rows as columns: ids left-aligned, ages right-aligned, descriptions padded, so every
+  // "│" lines up (12m59s over 2m15s). Ids and ages are ASCII, so string length is cell width.
   const ages = scan.rows.map((row) => dur(row.seconds));
   const idWidth = Math.max(0, ...scan.rows.map((row) => row.id.length));
   const ageWidth = Math.max(0, ...ages.map((age) => age.length));
+  // "sh_" + id + " " + age, then " " + description, leaving room for " │ working".
+  const baseWidth = 3 + idWidth + 1 + ageWidth;
+  const budget = Math.min(
+    DESCRIPTION_CELLS,
+    width - baseWidth - 1 - SHELL_STATE_CELLS,
+  );
+  const labels = scan.rows.map((row) =>
+    row.description === undefined || budget < DESCRIPTION_MIN_CELLS
+      ? ""
+      : fitDisplay(row.description, budget),
+  );
+  const labelWidth = Math.max(
+    0,
+    ...labels.map((label) => Bun.stringWidth(label)),
+  );
   return scan.rows
     .map((row, index) => {
-      const prefix = `sh_${row.id.padEnd(idWidth)} ${(ages[index] ?? "").padStart(ageWidth)}`;
+      const base = `sh_${row.id.padEnd(idWidth)} ${(ages[index] ?? "").padStart(ageWidth)}`;
+      const prefix =
+        labelWidth === 0
+          ? base
+          : `${base} ${padDisplay(labels[index] ?? "", labelWidth)}`;
       // Same shape as a worker row ("│ working · <activity>"): a running shell's activity is its command.
-      const room = width - cells(prefix);
+      const room = width - Bun.stringWidth(prefix);
       if (room < SHELL_STATE_CELLS) return prefix;
       const lead = `${prefix} ${DIM}│${RST} ${DIM}working${RST}`;
       if (row.command === undefined) return lead;

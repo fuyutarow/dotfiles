@@ -351,3 +351,133 @@ test("shell rows align as columns: ages right-aligned so every bar lines up", ()
   const bars = lines.map((line) => line.indexOf("│"));
   expect(new Set(bars).size).toBe(1);
 });
+
+/** One transcript pair: the Bash tool_use with `description`, and the result naming `task`. */
+function transcriptPair(use: string, task: string, description: string) {
+  return [
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: use,
+            name: "Bash",
+            input: {
+              command: "sleep 100",
+              description,
+              run_in_background: true,
+            },
+          },
+        ],
+      },
+    }),
+    JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            tool_use_id: use,
+            type: "tool_result",
+            content: `Command running in background with ID: ${task}.`,
+          },
+        ],
+      },
+      toolUseResult: { stdout: "", backgroundTaskId: task },
+    }),
+  ];
+}
+
+test("a running shell's description comes from the Bash call that started it", async () => {
+  // Its own task file and holder: earlier tests rewrite the shared proc fixture.
+  const described = join(tasks, "described.output");
+  writeFileSync(described, "");
+  const descProc = join(root, "proc-described");
+  mkdirSync(join(descProc, "30", "fd"), { recursive: true });
+  mkdirSync(join(descProc, "30", "fdinfo"));
+  symlinkSync(described, join(descProc, "30", "fd", "1"));
+  writeFileSync(join(descProc, "30", "fdinfo", "1"), "flags:\t0100001\n");
+  const descOptions = {
+    proc: descProc,
+    temp: root,
+    uid,
+    now: statSync(described).birthtimeMs + 90_000,
+  };
+  const transcript = join(root, "transcript.jsonl");
+  writeFileSync(
+    transcript,
+    [
+      "not json",
+      JSON.stringify({
+        type: "user",
+        message: { role: "user", content: "hi" },
+      }),
+      ...transcriptPair("toolu_other", "finished", "Earlier unrelated job"),
+      ...transcriptPair(
+        "toolu_run",
+        "described",
+        "Run   the\nstatusline tests",
+      ),
+    ].join("\n") + "\n",
+  );
+  const scan = await scanShells(cwd, sid, {
+    ...descOptions,
+    transcriptPath: transcript,
+  });
+  expect(scan).toEqual({
+    kind: "known",
+    rows: [
+      { id: "described", seconds: 90, description: "Run the statusline tests" },
+    ],
+  });
+  expect(shellLines(scan, 200)).toBe(
+    `sh_described 1m30s Run the statusline tests ${WORKING}`,
+  );
+  // A missing or unreadable transcript drops the label, never the row.
+  expect(
+    await scanShells(cwd, sid, {
+      ...descOptions,
+      transcriptPath: join(root, "absent.jsonl"),
+    }),
+  ).toEqual({ kind: "known", rows: [{ id: "described", seconds: 90 }] });
+});
+
+test("descriptions pad to one column, cut with an ellipsis, and count wide characters", () => {
+  const scan = {
+    kind: "known" as const,
+    rows: [
+      {
+        id: "aaa",
+        seconds: 120,
+        command: "sleep 100",
+        description: "Run tests",
+      },
+      { id: "bbb", seconds: 5, description: "移行の検証を流す" },
+      { id: "ccc", seconds: 9, command: "sleep 100" },
+      {
+        id: "ddd",
+        seconds: 9,
+        description:
+          "A very long description that certainly does not fit the description column",
+      },
+    ],
+  };
+  const lines = shellLines(scan, 200)
+    .split("\n")
+    .map((line) => Bun.stripANSI(line));
+  expect(lines[0]).toStartWith("sh_aaa 2m00s Run tests ");
+  expect(lines[0]).toEndWith("│ working · $ sleep 100");
+  expect(lines[1]).toStartWith("sh_bbb 0m05s 移行の検証を流す ");
+  expect(lines[3]).toContain("…");
+  // Every bar sits in the same terminal cell, wide characters included.
+  const barCells = lines.map((line) =>
+    Bun.stringWidth(line.slice(0, line.indexOf("│"))),
+  );
+  expect(new Set(barCells).size).toBe(1);
+  // Too narrow for any description: the rows fall back to the undescribed form.
+  expect(Bun.stripANSI(shellLines(scan, 30).split("\n")[0] ?? "")).toBe(
+    "sh_aaa 2m00s │ working",
+  );
+});

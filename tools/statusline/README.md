@@ -23,8 +23,15 @@ bun test tools/statusline/tests
 
 ## Unavailable values and Stop snapshots
 
-Claude stdin renders a `sh_<task id> <elapsed> │ <command>` row per session task
-whose output file is held open for writing by a same-UID Linux process. The command is what the shell
+Claude stdin renders a `sh_<task id> <elapsed> <description> │ working · $ <command>` row per session task
+whose output file is held open for writing by a same-UID Linux process. The description is the
+summary the agent gave the Bash call that started the shell (its tool_use `input.description`),
+found through the transcript's tool_result whose `toolUseResult.backgroundTaskId` is the task ID;
+only the last 8 MiB of the transcript are read, and only while a shell is running. Descriptions
+are padded to one column in terminal cells (wide characters count twice), cut with `…` at 48 cells
+or at the row width, and dropped when fewer than 8 cells remain. A shell whose start is outside
+that tail, or an unreadable transcript, shows no description; it never makes the scan unknown.
+The command is what the shell
 runs: the wrapper process holding the output file has the argv
 `/usr/bin/zsh -c source …/shell-snapshots/… && … && eval '<command>' < /dev/null && pwd -P >| …`,
 and only `<command>` is shown. Absolute path tokens are reduced to their basename,

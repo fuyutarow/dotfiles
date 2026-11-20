@@ -533,6 +533,7 @@ if (liveMode) {
   if (!codexMode && session !== undefined)
     df.shells = await scanShells(session.cwd, session.sessionId, {
       projectDir: session.projectDir,
+      transcriptPath: session.transcriptPath,
     });
   if (!codexMode && session !== undefined)
     await writeUsageSnapshotAsync(

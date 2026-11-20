@@ -105,7 +105,8 @@ function runName(run: RouteRun): string {
     parts.push(`(agt_${worker})`);
   return parts.join(" ");
 }
-function truncateDisplay(value: string, width: number): string {
+/** The longest prefix of `value` that fits `width` terminal cells. */
+export function truncateDisplay(value: string, width: number): string {
   let result = "";
   for (const char of value) {
     if (Bun.stringWidth(result + char) > width) break;
@@ -113,7 +114,8 @@ function truncateDisplay(value: string, width: number): string {
   }
   return result;
 }
-function padDisplay(value: string, width: number, left = false): string {
+/** `value` padded with spaces to `width` terminal cells (on the left when `left`). */
+export function padDisplay(value: string, width: number, left = false): string {
   const padding = " ".repeat(Math.max(0, width - Bun.stringWidth(value)));
   return left ? padding + value : value + padding;
 }

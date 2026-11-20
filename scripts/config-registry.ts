@@ -94,6 +94,8 @@ export const COREDEV_SELECTION: Readonly<
       { task: "install:ai-clis", timeoutSeconds: 900 },
       { task: "agents:link", timeoutSeconds: 120 },
       { task: "skills:sync", timeoutSeconds: 600 },
+      // Before cc:install-mcp, which skips an MCP server whose command is absent.
+      { task: "reason-network:install", timeoutSeconds: 120 },
       { task: "cc:install-mcp", timeoutSeconds: 120 },
     ],
     doctor: [{ task: "core:doctor", timeoutSeconds: 180 }],

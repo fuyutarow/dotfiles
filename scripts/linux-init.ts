@@ -154,27 +154,28 @@ if (await sudoIsOurs()) {
       () => true,
       () => false,
     )) && (await realpath(SSHD_DROPIN)) === (await realpath(source));
-  if (
-    !alreadyLinked &&
-    !(await sudoNow(["install", "-m", "644", source, SSHD_DROPIN]))
-  )
-    say(
-      `sshd: sudo needs a password here — run: sudo install -m 644 ${source} ${SSHD_DROPIN}`,
-    );
+  const placed =
+    alreadyLinked ||
+    (await sudoNow(["install", "-m", "644", source, SSHD_DROPIN]));
   const listener = (await $`pgrep -f "^sshd: .*\[listener\]"`.nothrow().text())
     .trim()
     .split("\n")[0];
-  if (listener !== undefined && listener !== "") {
+  const reload =
+    listener !== undefined && listener !== "" ? listener : undefined;
+  if (!placed)
     say(
-      (await sudoNow(["kill", "-HUP", listener]))
-        ? `sshd: ${SSHD_DROPIN} in place, listener ${listener} reloaded`
-        : `sshd: listener not reloaded — run: sudo kill -HUP ${listener}`,
+      `sshd: sudo needs a password here — run: sudo install -m 644 ${source} ${SSHD_DROPIN}${reload === undefined ? "" : ` && sudo kill -HUP ${reload}`}`,
     );
-  } else {
+  else if (reload === undefined)
     say(
       `sshd: ${SSHD_DROPIN} in place; no sshd listener found to reload — it applies at sshd's next start`,
     );
-  }
+  else
+    say(
+      (await sudoNow(["kill", "-HUP", reload]))
+        ? `sshd: ${SSHD_DROPIN} in place, listener ${reload} reloaded`
+        : `sshd: listener not reloaded — run: sudo kill -HUP ${reload}`,
+    );
 } else {
   say(
     `sshd: skipped — sudo is not ours here (scripts/sudo-group.ts); a dropped session can leave a dead smart-open socket (doctor:remote names it)`,

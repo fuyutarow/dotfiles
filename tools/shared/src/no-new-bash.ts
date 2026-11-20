@@ -58,6 +58,24 @@ export function shellGrowth(
 }
 
 type Write = { path: string; append: boolean; content: string | undefined };
+type Env = Readonly<Record<string, string | undefined>>;
+
+const PARAMETER = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/gu;
+
+/**
+ * A redirect target with its plain `$NAME` / `${NAME}` references replaced from `env`, the
+ * environment the Bash tool's shell inherits (for example a worker's `$AGX_RUN_DIR`). A reference
+ * to an unset or empty variable is left as written, so the caller still refuses it.
+ */
+function expandTarget(target: string, env: Env): string {
+  return target.replaceAll(
+    PARAMETER,
+    (whole, braced: string | undefined, bare: string | undefined) => {
+      const value = env[braced ?? bare ?? ""];
+      return value === undefined || value === "" ? whole : value;
+    },
+  );
+}
 
 // Only a literal cat/tee heredoc has known output. Never execute a producer to measure it.
 function literalInput(c: ShellCommand): string | undefined {
@@ -86,6 +104,7 @@ function teeWrites(
   args: string[],
   cwd: string,
   content: string | undefined,
+  env: Env,
 ): Write[] {
   const result: Write[] = [];
   let operands = false;
@@ -96,7 +115,7 @@ function teeWrites(
     }
     if (!operands && arg.startsWith("-")) continue;
     result.push({
-      path: resolve(cwd, arg),
+      path: resolve(cwd, expandTarget(arg, env)),
       append: args.includes("-a") || args.includes("--append"),
       content,
     });
@@ -104,27 +123,33 @@ function teeWrites(
   return result;
 }
 
-function writes(c: ShellCommand): Write[] {
+function writes(c: ShellCommand, env: Env): Write[] {
   const content = literalInput(c);
   const result = c.redirects
     .filter((r) => r.op.includes(">") || r.op === "<>")
     .filter((r) => !(r.op.endsWith("&") && /^(?:\d+|-)$/u.test(r.target)))
     .map((r) => ({
-      path: resolve(c.cwd, r.target),
+      path: resolve(c.cwd, expandTarget(r.target, env)),
       append: r.op.includes(">>"),
       content,
     }));
   const eff = effective(c);
-  if (eff?.name === "tee") result.push(...teeWrites(eff.args, c.cwd, content));
+  if (eff?.name === "tee")
+    result.push(...teeWrites(eff.args, c.cwd, content, env));
   return result;
 }
 
-/** Returns the first unsafe write. Unknown output or control flow fails closed. */
+/**
+ * Returns the first unsafe write. Unknown output or control flow fails closed. A write target
+ * may name variables that are set in `env` (the environment the Bash tool inherits); any other
+ * expansion, glob or substitution in a target is unknown and refused.
+ */
 export async function bashShellViolation(
   command: string,
   cwd: string,
   read: (path: string) => Promise<string | null>,
   limit = SHELL_LIMIT,
+  env: Env = process.env,
 ): Promise<string | undefined> {
   const deny = (reason: string) => `${reason}. ${shellRemedy(limit)}`;
   const parsed = parseShell(command, cwd);
@@ -139,7 +164,7 @@ export async function bashShellViolation(
   const controlled = parsed.commands.some(
     (c) => c.leading.length > 0 || c.header,
   );
-  for (const w of parsed.commands.flatMap((c) => writes(c))) {
+  for (const w of parsed.commands.flatMap((c) => writes(c, env))) {
     if (/[$`*?{}~]|\(…\)/u.test(w.path))
       return deny(`cannot determine write target ${w.path}`);
     const before = state.get(w.path) ?? (await read(w.path));

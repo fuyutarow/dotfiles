@@ -53,12 +53,6 @@ const CORPUS: CorpusEntry[] = [
     path: "tools/disk-reclaim/src/reclaim.ts",
     unknownFlag: { exit: 2, message: "Unknown flag" },
   },
-  {
-    path: "tools/disk-reclaim/src/disk.ts",
-    prefix: ["plan", "targets"],
-    helpText: "--help",
-    unknownFlag: { exit: 2, message: "unknown option" },
-  },
   { path: "tools/repo-retrieve/views/research-record-v1.ts" },
   { path: "tools/repo-retrieve/src/bench-definitions.ts" },
   {

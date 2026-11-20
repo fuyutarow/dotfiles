@@ -1,36 +1,5 @@
 # disk-reclaim
 
-`disk plan targets TARGET` previews a single landed target (mise-configs, clean, rust,
-toolchains, builds, tmpfs, scratch, or ccc-index-db). It reports per-item verdicts and
-reasons after the same read-only preflight used by `disk free targets`. It does not run
-the action or write a receipt. A safe verdict is a point-in-time observation: free
-rechecks before acting. The `selected` count is the number of returned items.
-`mise-configs` has no per-item act-time KEEP check; its bulk config-prune preflight
-checks availability, fingerprint and the plan again.
-
-The `disk plan paths ABS...` entry previews the legacy delete checks without deleting.
-It returns `disk.result/1` rows and bounds the read-only probe with `--within` (default
-120 seconds). A timeout or incomplete safety information returns unknown; a completed
-plan does not authorize a later deletion. The `disk free paths`, `disk free graveyard`,
-and `disk free capacity` adapters remain unavailable.
-
-`disk free targets tmpfs [--only ABS]` takes the shared reclaim lock and rechecks
-each legacy tmpfs candidate before removal. Recent, open or unknown-use, foreign,
-protected, graveyard and incompletely scanned trees remain untouched. Each action
-reports its own statfs measurements; no increase in available bytes is a partial
-result. The scan and worker are bounded by `--within`. Planning does not authorize
-or perform an action.
-
-`disk free targets scratch` keeps live or uncertain sessions and scratchpads
-containing nested Git or jj workspaces. It rechecks each candidate and its
-identity under the shared lock, and reports per-item statfs observations. An
-action without a measured increase in available space is partial.
-
-`disk free targets judgment --approve ITEM` requires approval for each eligible
-rust-docs path. Protected or uncertain paths remain refused even with approval.
-Each action rechecks the plan and fingerprint under the lock and reports statfs
-observations; no measured increase is partial.
-
 Part of the [tools/ architecture](../spec/architecture.md) (the mechanism the capacity recover part composes: invariants I-R1 to I-R5).
 
 Plan configured reclamation as one JSONL record per candidate. `apply` reads those records from
@@ -157,8 +126,6 @@ artifact-level walk leaves nested workspace DBs independent of their registered 
 registered roots, recently touched artifacts, and artifacts with live readers; other artifacts
 are eligible after `collection_policy.class_rules.deregistered_index_db.ttl_days`, loaded through
 the shared policy loader.
-`disk free targets ccc-index-db` reports each artifact separately, rechecks the plan and
-fingerprint under its target lock, and measures available space before and after removal.
 Unknown reader status and scan errors refuse removal; approval does not override a retained item.
 
 The `tmpfs` target reports inode and byte use for each detected tmpfs mount, then considers every
@@ -342,22 +309,3 @@ deleted), with a stderr diagnostic. System calls must
 return before a cooperative budget can stop work. Budget exhaustion and per-payload skips are
 reported, and no background continuation is launched. The worker mutation guard also applies
 to `free`; fixtures use temporary roots and state.
-
-## Disk command family
-
-`disk plan`, `disk move`, `disk free`, and `disk inspect` expose the new effect-oriented
-command grammar; run `disk --help` or `disk <command> --help` for modes and examples.
-`inspect receipts` and `inspect capacity` provide bounded read-only results; capacity planning
-reports its measurement and an unknown candidate plan. `free targets vhdx` and `audit` refuse
-these plan-only targets without taking action. `move paths` checks the configured graveyard,
-revalidates the existing delete protections under the reclaim lock, and invokes rip per item.
-It requires a verifiable burial record; uncertain or partial effects remain unknown. A move on
-the same filesystem does not free capacity. `move workspace-gc` remains unavailable. Unsupported action adapters return a `disk.result/1`
-unknown result and exit 4 without mutation. Invalid requests exit 2. The existing
-`disk-reclaim` commands and their formats remain available unchanged. For `disk free records`,
-stdin must contain legacy `disk-reclaim plan` JSONL records.
-
-Per-target details: [mise-configs](docs/disk-free-mise-configs.md),
-[clean](docs/disk-free-clean.md), [rust](docs/disk-free-rust.md),
-[toolchains](docs/disk-free-toolchains.md), and [builds](docs/disk-free-builds.md).
-Other unimplemented acting targets remain unavailable.

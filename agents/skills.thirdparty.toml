@@ -47,3 +47,7 @@ skill = "sui-build"
 [[skills]]
 source = "fuyutarow/agx"
 skill = "driving-agx"
+
+[[skills]]
+source = "anthropics/skills"
+skill = "frontend-design"

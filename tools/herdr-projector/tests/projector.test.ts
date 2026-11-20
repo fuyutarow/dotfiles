@@ -79,9 +79,7 @@ const mergeReports = (calls: string[][]): string[][] => {
 };
 
 const unit = (name: string) =>
-  Bun.file(
-    join(import.meta.dir, `../../../systemd/herdr-projector.${name}`),
-  ).text();
+  Bun.file(join(import.meta.dir, `../herdr-projector.${name}`)).text();
 
 test("never renames tabs of non-vendor agents", async () => {
   const calls: string[][] = [];

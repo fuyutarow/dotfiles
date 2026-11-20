@@ -351,7 +351,7 @@ test("macOS deploy bootstraps the declared agent-cpu plist", async () => {
   await mkdir(dir, { recursive: true });
   const root = join(import.meta.dir, "../../..");
   const plist = join(dir, "agent-cpu.plist");
-  await symlink(join(root, "launchd/agent-cpu.plist"), plist);
+  await symlink(join(root, "tools/agent-cpu/agent-cpu.plist"), plist);
   const calls: string[][] = [];
   const result = await deployMacStatusline(
     {

@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdtemp, mkdir, readlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LINKS } from "../config-registry.ts";
+import { LINKS, unitSource } from "../config-registry.ts";
 import { deployGpuSampler, link, type Ctx } from "../link-dots.ts";
 
 const REPO = join(import.meta.dir, "../..");
@@ -90,10 +90,10 @@ if (verb === "enable") {
 test("GPU-SAMPLER-TIMER: registry links both units and service invokes only the shared owner", async () => {
   const f = await fixture();
   for (const unit of ["gpu-sampler.service", "gpu-sampler.timer"]) {
-    const row = LINKS.find(([, source]) => source === `systemd/${unit}`);
+    const row = LINKS.find(([, source]) => source === unitSource(unit));
     expect(row).toEqual([
       "not-mac",
-      `systemd/${unit}`,
+      unitSource(unit) ?? unit,
       `.config/systemd/user/${unit}`,
     ]);
     if (row === undefined) return;
@@ -101,7 +101,7 @@ test("GPU-SAMPLER-TIMER: registry links both units and service invokes only the 
     expect(await readlink(join(f.home, row[2]))).toBe(join(REPO, row[1]));
   }
   const service = await Bun.file(
-    join(REPO, "systemd/gpu-sampler.service"),
+    join(REPO, "tools/shared/gpu-sampler.service"),
   ).text();
   expect(service.split("\n").filter((line) => line.startsWith("Exec"))).toEqual(
     ["ExecStart=/usr/bin/env bun %h/dotfiles/tools/shared/src/gpu-sampler.ts"],
@@ -109,7 +109,9 @@ test("GPU-SAMPLER-TIMER: registry links both units and service invokes only the 
   expect(service).toContain("StandardOutput=journal");
   expect(service).toContain("TimeoutStartSec=30s");
   expect(service).not.toContain("nvidia-smi");
-  const timer = await Bun.file(join(REPO, "systemd/gpu-sampler.timer")).text();
+  const timer = await Bun.file(
+    join(REPO, "tools/shared/gpu-sampler.timer"),
+  ).text();
   expect(timer).toContain("OnBootSec=15s");
   expect(timer).toContain("OnUnitInactiveSec=60s");
   expect(timer).toContain("Unit=gpu-sampler.service");
@@ -164,7 +166,11 @@ test("GPU-SAMPLER-TIMER: deployment refuses undeclared units and reports enable 
   expect(await deployGpuSampler(f.ctx, f.probe, true)).toBeInstanceOf(Error);
   expect(await Bun.file(f.calls).exists()).toBe(false);
   for (const unit of ["gpu-sampler.service", "gpu-sampler.timer"])
-    link(f.ctx, `systemd/${unit}`, join(f.home, ".config/systemd/user", unit));
+    link(
+      f.ctx,
+      unitSource(unit) ?? unit,
+      join(f.home, ".config/systemd/user", unit),
+    );
   await f.writeState("inactive", "success", 0, "enable");
   expect((await deployGpuSampler(f.ctx, f.probe, true))?.message).toContain(
     "enable gpu-sampler.timer failed",

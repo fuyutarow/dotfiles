@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LINKS } from "../config-registry.ts";
+import { LINKS, unitSource } from "../config-registry.ts";
 import { deployStatuslineOwners, link, type Ctx } from "../link-dots.ts";
 import { checkStatuslineOwners, type Ctx as DoctorCtx } from "../doctor.ts";
 
@@ -47,10 +47,10 @@ test("registry links all owner units; owner deployment enables triggers without 
   };
   await mkdir(join(home, ".config/systemd/user"), { recursive: true });
   for (const unit of units) {
-    const row = LINKS.find(([, source]) => source === `systemd/${unit}`);
+    const row = LINKS.find(([, source]) => source === unitSource(unit));
     expect(row).toEqual([
       "not-mac",
-      `systemd/${unit}`,
+      unitSource(unit) ?? unit,
       `.config/systemd/user/${unit}`,
     ]);
     if (row !== undefined) link(ctx, row[1], join(home, row[2]));
@@ -79,7 +79,7 @@ test("registry links all owner units; owner deployment enables triggers without 
   ).toBeUndefined();
   expect(calls).toEqual([]);
   const timer = await readFile(
-    join(ctx.dotfiles, "systemd/agx-doctor.timer"),
+    join(ctx.dotfiles, "agx/agx-doctor.timer"),
     "utf8",
   );
   expect(timer).toContain("OnBootSec=60s");
@@ -87,11 +87,11 @@ test("registry links all owner units; owner deployment enables triggers without 
   expect(timer).toContain("Unit=agx-doctor.service");
   expect(timer).toContain("WantedBy=timers.target");
   expect(timer).not.toContain("PathChanged=");
-  expect(LINKS.some(([, source]) => source === "systemd/agx-doctor.path")).toBe(
+  expect(LINKS.some(([, source]) => source === "agx/agx-doctor.path")).toBe(
     false,
   );
   const service = await readFile(
-    join(ctx.dotfiles, "systemd/agx-doctor.service"),
+    join(ctx.dotfiles, "agx/agx-doctor.service"),
     "utf8",
   );
   expect(service).toContain("Type=oneshot");

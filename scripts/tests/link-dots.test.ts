@@ -18,7 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { mkdir, symlink } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { LINKS, surfaces } from "../config-registry.ts";
+import { LINKS, surfaces, unitSource } from "../config-registry.ts";
 import {
   applies,
   assertRoots,
@@ -71,7 +71,7 @@ async function ownerFixture(): Promise<Ctx> {
     "agx-doctor.service",
     "agx-doctor.timer",
   ])
-    await symlink(join(REPO, "systemd", unit), join(directory, unit));
+    await symlink(join(REPO, unitSource(unit) ?? unit), join(directory, unit));
   return ctx;
 }
 
@@ -80,7 +80,7 @@ test("mac sampler agent is linked, bootstrapped idempotently, and check is read-
   const dir = join(ctx.home, "Library/LaunchAgents");
   mkdirSync(dir, { recursive: true });
   const plist = join(dir, "statusline-sampler.plist");
-  symlinkSync(join(REPO, "launchd/statusline-sampler.plist"), plist);
+  symlinkSync(join(REPO, "tools/statusline/statusline-sampler.plist"), plist);
   const calls: string[][] = [];
   const launch = (args: string[]) => {
     calls.push(args);
@@ -111,7 +111,7 @@ test("mac sampler agent is linked, bootstrapped idempotently, and check is read-
   ).toBeUndefined();
   expect(calls).toEqual([]);
   const declaration = readFileSync(
-    join(REPO, "launchd/statusline-sampler.plist"),
+    join(REPO, "tools/statusline/statusline-sampler.plist"),
     "utf8",
   );
   expect(declaration).toContain("<integer>5</integer>");
@@ -123,7 +123,7 @@ test("mac sampler agent is linked, bootstrapped idempotently, and check is read-
 
 test("mac sampler reloads changed definitions and bootstraps unloaded agents", async () => {
   const ctx = { ...fixture("safe"), os: "mac" as const };
-  const sourceDir = join(ctx.dotfiles, "launchd");
+  const sourceDir = join(ctx.dotfiles, "tools/statusline");
   const dir = join(ctx.home, "Library/LaunchAgents");
   mkdirSync(sourceDir, { recursive: true });
   mkdirSync(dir, { recursive: true });
@@ -167,7 +167,7 @@ test("mac sampler reports bootstrap failure", async () => {
   const dir = join(ctx.home, "Library/LaunchAgents");
   mkdirSync(dir, { recursive: true });
   symlinkSync(
-    join(REPO, "launchd/statusline-sampler.plist"),
+    join(REPO, "tools/statusline/statusline-sampler.plist"),
     join(dir, "statusline-sampler.plist"),
   );
   const error = await deployStatuslineOwners(
@@ -188,7 +188,7 @@ test("mac sampler retries bootstrap error 5 after booting out a loaded agent", a
   const dir = join(ctx.home, "Library/LaunchAgents");
   mkdirSync(dir, { recursive: true });
   symlinkSync(
-    join(REPO, "launchd/statusline-sampler.plist"),
+    join(REPO, "tools/statusline/statusline-sampler.plist"),
     join(dir, "statusline-sampler.plist"),
   );
   const calls: string[][] = [];
@@ -235,7 +235,7 @@ test("doctor refresh deployment enables its timer without starting a collector",
   expect(calls).toContainEqual(["stop", "agx-doctor.path"]);
   expect(calls).toContainEqual(["enable", "agx-doctor.timer"]);
   expect(calls.some((args) => args[0] === "start")).toBe(false);
-  const unit = await Bun.file(join(REPO, "systemd/agx-doctor.service")).text();
+  const unit = await Bun.file(join(REPO, "agx/agx-doctor.service")).text();
   expect(unit).toMatch(/^SuccessExitStatus=1$/mu);
   expect(unit).not.toContain("ExecStartPre=");
   expect(unit).toContain("agx doctor --json --refresh");
@@ -304,7 +304,7 @@ test("retired path links are pruned without removing foreign links", async () =>
   const directory = join(ctx.home, ".config/systemd/user");
   mkdirSync(join(directory, "default.target.wants"));
   for (const rel of ["agx-doctor.path", "default.target.wants/agx-doctor.path"])
-    symlinkSync(join(REPO, "systemd/agx-doctor.path"), join(directory, rel));
+    symlinkSync(join(REPO, "agx/agx-doctor.path"), join(directory, rel));
   prune(ctx);
   expect(isLink(join(directory, "agx-doctor.path"))).toBe(false);
   expect(isLink(join(directory, "default.target.wants/agx-doctor.path"))).toBe(

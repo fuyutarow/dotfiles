@@ -173,9 +173,16 @@ export async function roots(root: string): Promise<string[]> {
     );
     for (const match of matches) await add(match[1] ?? "");
   }
-  for await (const unit of new Bun.Glob("systemd/*.service").scan({
-    cwd: root,
-  })) {
+  // A unit lives beside the tool it runs: tools/<name>/ or agx/.
+  const units = [
+    ...(await Array.fromAsync(
+      new Bun.Glob("agx/*.service").scan({ cwd: root }),
+    )),
+    ...(await Array.fromAsync(
+      new Bun.Glob("tools/*/*.service").scan({ cwd: root }),
+    )),
+  ];
+  for (const unit of units) {
     const text = await Bun.file(join(root, unit)).text();
     for (const match of text.matchAll(
       /^ExecStart=\/usr\/bin\/env\s+bun\s+%h\/dotfiles\/([\w./-]+\.(?:ts|js))\b/gmu,

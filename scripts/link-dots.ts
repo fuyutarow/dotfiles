@@ -60,6 +60,7 @@ import {
   LINKS,
   RETIRED,
   TOOL_OWNED,
+  unitSource,
   type When,
 } from "./config-registry.ts";
 
@@ -499,6 +500,14 @@ function ensureSshDir(ctx: Ctx): void {
   chmodSync(dir, 0o700);
 }
 
+/** Real path of a unit the table declares; null when it declares none by that name or the file
+ * is missing. Callers already report null as "not the declared link". */
+async function declaredUnit(ctx: Ctx, name: string): Promise<string | null> {
+  const rel = unitSource(name);
+  if (rel === undefined) return null;
+  return realpath(join(ctx.dotfiles, rel)).catch(() => null);
+}
+
 function linkEtc(ctx: Ctx, rel: string, dst: string, apply: string): void {
   const src = join(ctx.dotfiles, rel);
   if (readLink(dst) === src) return;
@@ -930,9 +939,7 @@ export async function deployWsGc(
     const target = await realpath(
       join(ctx.home, ".config/systemd/user", unit),
     ).catch(() => null);
-    const source = await realpath(join(ctx.dotfiles, "systemd", unit)).catch(
-      () => null,
-    );
+    const source = await declaredUnit(ctx, unit);
     if (source === null || target !== source)
       return new Error(
         `${unit} is not the declared link; repair: mise run link:dots`,
@@ -983,9 +990,7 @@ export async function deployGpuSampler(
     const target = await realpath(
       join(ctx.home, ".config/systemd/user", unit),
     ).catch(() => null);
-    const source = await realpath(join(ctx.dotfiles, "systemd", unit)).catch(
-      () => null,
-    );
+    const source = await declaredUnit(ctx, unit);
     if (source === null || target !== source)
       return new Error(
         `${unit} is not the declared link; repair: mise run link:dots`,
@@ -1009,9 +1014,7 @@ export async function deployMacStatusline(
 ): Promise<Error | undefined> {
   const plist = join(ctx.home, `Library/LaunchAgents/${name}.plist`);
   const target = await realpath(plist).catch(() => null);
-  const source = await realpath(
-    join(ctx.dotfiles, `launchd/${name}.plist`),
-  ).catch(() => null);
+  const source = await declaredUnit(ctx, `${name}.plist`);
   if (source === null || target !== source)
     return new Error(
       `${name}.plist is not the declared link; repair: mise run link:dots`,
@@ -1112,9 +1115,7 @@ export async function deployStatuslineOwners(
     const target = await realpath(
       join(ctx.home, ".config/systemd/user", unit),
     ).catch(() => null);
-    const source = await realpath(join(ctx.dotfiles, "systemd", unit)).catch(
-      () => null,
-    );
+    const source = await declaredUnit(ctx, unit);
     if (source === null || target !== source)
       return new Error(
         `${unit} is not the declared link; repair: mise run link:dots`,

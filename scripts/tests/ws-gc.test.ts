@@ -3,7 +3,7 @@ import { chmod, mkdtemp, mkdir, readlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkWsGc } from "../doctor.ts";
-import { LINKS } from "../config-registry.ts";
+import { LINKS, unitSource } from "../config-registry.ts";
 import { deployWsGc, link, type Ctx } from "../link-dots.ts";
 
 const REPO = join(import.meta.dir, "../..");
@@ -105,24 +105,24 @@ if (verb === "enable") {
 test("WS-GC-TIMER: registry links both units and the only service command uses safe unattended flags", async () => {
   const f = await fixture();
   for (const unit of ["ws-gc.service", "ws-gc.timer"]) {
-    const row = LINKS.find(([, source]) => source === `systemd/${unit}`);
+    const row = LINKS.find(([, source]) => source === unitSource(unit));
     expect(row).toEqual([
       "not-mac",
-      `systemd/${unit}`,
+      unitSource(unit) ?? unit,
       `.config/systemd/user/${unit}`,
     ]);
     if (row === undefined) return;
     link(f.ctx, row[1], join(f.home, row[2]));
     expect(await readlink(join(f.home, row[2]))).toBe(join(REPO, row[1]));
   }
-  const service = await Bun.file(join(REPO, "systemd/ws-gc.service")).text();
+  const service = await Bun.file(join(REPO, "agx/ws-gc.service")).text();
   expect(service.split("\n").filter((line) => line.startsWith("Exec"))).toEqual(
     ["ExecStart=/usr/bin/env bun %h/dotfiles/scripts/ws-gc-log.ts"],
   );
   expect(service).toContain("StandardOutput=journal");
   expect(service).toContain("StandardError=journal");
   expect(service).not.toContain("--abandoned");
-  const timer = await Bun.file(join(REPO, "systemd/ws-gc.timer")).text();
+  const timer = await Bun.file(join(REPO, "agx/ws-gc.timer")).text();
   expect(timer).toContain("OnBootSec=5min");
   expect(timer).toContain("OnUnitActiveSec=1h");
   expect(timer).toContain("Unit=ws-gc.service");
@@ -172,7 +172,11 @@ test("WS-GC-TIMER: deployment refuses undeclared units and reports enable failur
   expect(await deployWsGc(f.ctx, f.probe, true)).toBeInstanceOf(Error);
   expect(await Bun.file(f.calls).exists()).toBe(false);
   for (const unit of ["ws-gc.service", "ws-gc.timer"])
-    link(f.ctx, `systemd/${unit}`, join(f.home, ".config/systemd/user", unit));
+    link(
+      f.ctx,
+      unitSource(unit) ?? unit,
+      join(f.home, ".config/systemd/user", unit),
+    );
   await f.writeState("inactive", "success", 0, "enable");
   expect((await deployWsGc(f.ctx, f.probe, true))?.message).toContain(
     "enable ws-gc.timer failed",

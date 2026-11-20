@@ -220,100 +220,100 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   //
   [
     "mac",
-    "launchd/statusline-sampler.plist",
+    "tools/statusline/statusline-sampler.plist",
     "Library/LaunchAgents/statusline-sampler.plist",
   ],
-  ["mac", "launchd/agent-cpu.plist", "Library/LaunchAgents/agent-cpu.plist"],
-  ["not-mac", "systemd/ws-gc.service", ".config/systemd/user/ws-gc.service"],
-  ["not-mac", "systemd/ws-gc.timer", ".config/systemd/user/ws-gc.timer"],
+  [
+    "mac",
+    "tools/agent-cpu/agent-cpu.plist",
+    "Library/LaunchAgents/agent-cpu.plist",
+  ],
+  ["not-mac", "agx/ws-gc.service", ".config/systemd/user/ws-gc.service"],
+  ["not-mac", "agx/ws-gc.timer", ".config/systemd/user/ws-gc.timer"],
   [
     "not-mac",
-    "systemd/statusline-sampler.service",
+    "tools/statusline/statusline-sampler.service",
     ".config/systemd/user/statusline-sampler.service",
   ],
   [
     "not-mac",
-    "systemd/statusline-sampler.timer",
+    "tools/statusline/statusline-sampler.timer",
     ".config/systemd/user/statusline-sampler.timer",
   ],
   [
     "not-mac",
-    "systemd/agx-doctor.service",
+    "agx/agx-doctor.service",
     ".config/systemd/user/agx-doctor.service",
   ],
+  ["not-mac", "agx/agx-doctor.timer", ".config/systemd/user/agx-doctor.timer"],
   [
     "not-mac",
-    "systemd/agx-doctor.timer",
-    ".config/systemd/user/agx-doctor.timer",
-  ],
-  [
-    "not-mac",
-    "systemd/gpu-sampler.service",
+    "tools/shared/gpu-sampler.service",
     ".config/systemd/user/gpu-sampler.service",
   ],
   [
     "not-mac",
-    "systemd/gpu-sampler.timer",
+    "tools/shared/gpu-sampler.timer",
     ".config/systemd/user/gpu-sampler.timer",
   ],
   [
     "not-mac",
-    "systemd/gpu-stall-notify.service",
+    "tools/shared/gpu-stall-notify.service",
     ".config/systemd/user/gpu-stall-notify.service",
   ],
   [
     "not-mac",
-    "systemd/gpu-stall-notify.path",
+    "tools/shared/gpu-stall-notify.path",
     ".config/systemd/user/gpu-stall-notify.path",
   ],
   [
     "not-mac",
-    "systemd/prompt-archive.service",
+    "tools/prompt-archive/prompt-archive.service",
     ".config/systemd/user/prompt-archive.service",
   ],
   [
     "not-mac",
-    "systemd/prompt-archive.timer",
+    "tools/prompt-archive/prompt-archive.timer",
     ".config/systemd/user/prompt-archive.timer",
   ],
   [
     "not-mac",
-    "systemd/herdr-projector.service",
+    "tools/herdr-projector/herdr-projector.service",
     ".config/systemd/user/herdr-projector.service",
   ],
   [
     "not-mac",
-    "systemd/herdr-projector.path",
+    "tools/herdr-projector/herdr-projector.path",
     ".config/systemd/user/herdr-projector.path",
   ],
   [
     "not-mac",
-    "systemd/herdr-projector.path",
+    "tools/herdr-projector/herdr-projector.path",
     ".config/systemd/user/default.target.wants/herdr-projector.path",
   ],
   [
     "not-mac",
-    "systemd/herdr-projector.timer",
+    "tools/herdr-projector/herdr-projector.timer",
     ".config/systemd/user/herdr-projector.timer",
   ],
   [
     "not-mac",
-    "systemd/herdr-projector.timer",
+    "tools/herdr-projector/herdr-projector.timer",
     ".config/systemd/user/timers.target.wants/herdr-projector.timer",
   ],
   [
     "not-mac",
-    "systemd/agent-cpu.service",
+    "tools/agent-cpu/agent-cpu.service",
     ".config/systemd/user/agent-cpu.service",
   ],
   [
     "not-mac",
-    "systemd/agent-cpu.timer",
+    "tools/agent-cpu/agent-cpu.timer",
     ".config/systemd/user/agent-cpu.timer",
   ],
   [
     "not-mac",
-    "systemd/agent-cpu.timer",
+    "tools/agent-cpu/agent-cpu.timer",
     ".config/systemd/user/timers.target.wants/agent-cpu.timer",
   ],
 
@@ -1049,7 +1049,7 @@ export function surfaces(): Surface[] {
       src === "mise/dotfiles.toml"
         ? { verify: "mise run test:mise-scope" }
         : {},
-      src === "launchd/statusline-sampler.plist"
+      src === "tools/statusline/statusline-sampler.plist"
         ? {
             consumer: "launchd user agent",
             verify: `${DOCTOR} (links, statusline-owners)`,
@@ -1099,4 +1099,12 @@ export function surfaces(): Surface[] {
     verify: "mise run link:dots -- --check",
   }));
   return [...links, attach, ...etc, ...rendered, ...tool, ...OTHER];
+}
+
+/** Repo-relative source of a declared unit or plist, by file name. A unit lives beside the
+ * tool it runs (tools/<name>/, agx/), so callers ask the table instead of assuming a directory. */
+export function unitSource(name: string): string | undefined {
+  // undefined = the table declares no such unit. This file is import-free data (a render input),
+  // so absence is a value here; link-dots.ts turns it into its own reported error.
+  return LINKS.find(([, source]) => source.endsWith(`/${name}`))?.[1];
 }

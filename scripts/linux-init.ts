@@ -113,7 +113,12 @@ await $`${MISE} run deps`.cwd(DOTFILES);
 say("declared deployment (coredev deploy local)");
 await $`coredev deploy local`.cwd(DOTFILES);
 // The post-merge hook relinks on every pull; without this a pull leaves new links unmade.
-await $`git -C ${DOTFILES} config core.hooksPath .githooks`;
+// Read first: a second run must change nothing, and must not need git's config lock.
+const hooksPath = (
+  await $`git -C ${DOTFILES} config --get core.hooksPath`.nothrow().text()
+).trim();
+if (hooksPath !== ".githooks")
+  await $`git -C ${DOTFILES} config core.hooksPath .githooks`;
 // Agents record and sync this repo through jj (`mise run commit` / `mise run pull`), but the
 // bootstrap clones with git: sol's checkout had no .jj and `mise run pull` failed with "There is no
 // jj repo" (2026-10-06). Colocate once; jj is a Brewfile.core tool, linked above.

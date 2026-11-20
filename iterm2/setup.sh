@@ -4,7 +4,7 @@
 # theme edits made in the iTerm2 GUI land as a diffable plist in this repo instead of
 # being trapped in ~/Library/Preferences/com.googlecode.iterm2.plist, which cfprefsd
 # caches and rewrites in ways a plain `link-dots.ts` symlink cannot survive.
-# Run via `mise run mac:iterm2` (wired into `mise run mac:init`). macOS-only topic dir
+# Run via `mise run mac:iterm2` (a row of COREDEV_SELECTION.mac). macOS-only topic dir
 # (like karabiner/); do not source this on WSL.
 set -euo pipefail
 

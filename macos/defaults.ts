@@ -3,7 +3,7 @@ import { cli } from "cleye";
 import { access, mkdir } from "node:fs/promises";
 
 // macOS system defaults — declarative, idempotent (single source of truth).
-// Run via `mise run mac:defaults` (wired into `mise run mac:init`). Consumer: human, verdict lines.
+// Run via `mise run mac:defaults` (a row of COREDEV_SELECTION.mac). Consumer: human, verdict lines.
 // macOS-only topic dir (like karabiner/); a no-op elsewhere. Migrated from defaults.sh 2026-09-29
 // (NO-NEW-BASH: the .sh could not grow).
 

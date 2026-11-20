@@ -21,7 +21,7 @@ import { jsonOf, z } from "../agents/hooks/zod.ts";
 //                  .obsidian/community-plugins.json, pinned by release tag AND sha256 per file;
 //                  declared settings merged into each plugin's data.json. Local plugins are
 //                  pinned by this repository commit.
-// Run via `mise run mac:obsidian` (wired into `mise run mac:init`). Consumer: human, verdict lines.
+// Run via `mise run mac:obsidian` (a row of COREDEV_SELECTION.mac). Consumer: human, verdict lines.
 // `--vault <dir>` applies only to that directory and initializes .obsidian/ when writing.
 //
 // WHY MERGE, NOT SYMLINK. Obsidian rewrites .obsidian/*.json whenever a setting is touched in its

@@ -113,7 +113,14 @@ export const COREDEV_SELECTION: Readonly<
     doctor: [{ task: "codex:runtime:check", timeoutSeconds: 60 }],
   },
   mac: {
-    deploy: [{ task: "codex:runtime", timeoutSeconds: 120 }],
+    deploy: [
+      { task: "codex:runtime", timeoutSeconds: 120 },
+      { task: "mac:rosetta", timeoutSeconds: 600 },
+      { task: "tmux:plugins", timeoutSeconds: 300 },
+      { task: "mac:defaults", timeoutSeconds: 120 },
+      { task: "mac:obsidian", timeoutSeconds: 300 },
+      { task: "mac:iterm2", timeoutSeconds: 120 },
+    ],
     doctor: [{ task: "codex:runtime:check", timeoutSeconds: 60 }],
   },
 };

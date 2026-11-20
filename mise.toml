@@ -780,22 +780,14 @@ description = "Install Claude Code and the standalone Codex CLI on macOS/Linux; 
 run = "bun scripts/install-ai-clis.ts"
 
 [tasks."mac:init"]
-description = "Initialize Mac environment (all-in-one setup)"
-# An ordered list, not a script: each step is one command or one task, run in sequence. No
-# logic lives here, so the body rule (<= 10 lines, no branching) holds by construction.
+description = "Initialize a Mac: Brewfile.core, then the declared deployment (coredev deploy local). On-demand formulas and casks come later through tool:get / install:tools."
+# No task list lives here. COREDEV_SELECTION (scripts/config-registry.ts) is the one list of
+# deploy steps; a copy kept here went stale once already (linux-init.ts, 2026-11-20). These
+# two steps only make `coredev` runnable: brew supplies bun, deps links the bin.
 run = [
-  "brew install sheldon coreutils",
-  "brew bundle --file=~/dotfiles/Brewfile",
-  { task = "mac:rosetta" },
-  { task = "deps" }, # before link:dots — scripts/link-dots.ts imports Cleye from node_modules
-  { task = "link:dots" },
-  { task = "agents:link" },
-  { task = "install:ai-clis" },
-  { task = "skills:sync" },
-  { task = "tmux:plugins" },
-  { task = "mac:defaults" },
-  { task = "mac:obsidian" },
-  { task = "mac:iterm2" },
+  { task = "core:install" },
+  { task = "deps" },
+  "coredev deploy local",
   "echo '---'; echo 'Setup complete. Run: exec zsh'",
 ]
 

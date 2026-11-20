@@ -92,9 +92,14 @@ import {
   errorMessage,
   type Attempt,
 } from "../agents/hooks/attempt.ts";
-import { renderedForPlatform, resolveRole } from "./config-registry.ts";
+import { renderedForPlatform } from "./config-registry.ts";
 import { googleDriveTargets } from "./link-dots.ts";
-import { brewPrefix, coreCommands, corePathProblems } from "./core-tools.ts";
+import {
+  brewPrefix,
+  coreCommands,
+  corePathProblems,
+  machineRole,
+} from "./core-tools.ts";
 import {
   checkCoreFloor,
   coreFloorIO,
@@ -2394,14 +2399,13 @@ export async function checkToolFloor(
     ? pass("core-floor", result.detail)
     : fail("core-floor", result.detail, result.fix ?? "mise run up");
 }
-export function checkRole(_ctx?: Ctx, host = hostname()): Promise<Finding> {
-  const { role, bound } = resolveRole(host);
-  return Promise.resolve(
-    info(
-      "role",
-      `${role} (${bound ? `host ${host}` : `unbound host ${host}; default`})`,
-    ),
-  );
+export function checkRole(
+  ctx?: Ctx,
+  host = hostname(),
+  home = ctx?.home,
+): Promise<Finding> {
+  const { role, source } = machineRole(home, host);
+  return Promise.resolve(info("role", `${role} (${source})`));
 }
 export const CHECKS: Check[] = [
   { name: "core-floor", run: checkToolFloor, applies: always },

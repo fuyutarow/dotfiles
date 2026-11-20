@@ -64,7 +64,7 @@ import {
   rm,
   unlink,
 } from "node:fs/promises";
-import { homedir, hostname } from "node:os";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { obj } from "../agents/hooks/narrow.ts";
@@ -73,10 +73,9 @@ import { loadSlugs } from "../agents/hooks/slugs.ts";
 import {
   LAND_HOSTS,
   renderedForPlatform,
-  resolveRole,
   roleSystemdEnvironment,
 } from "./config-registry.ts";
-import { brewPrefix } from "./core-tools.ts";
+import { brewPrefix, machineRole } from "./core-tools.ts";
 import { prepareRenderSource } from "./render-source.ts";
 import {
   type HookSpec,
@@ -465,7 +464,7 @@ for (const host of LAND_HOSTS) {
   if (!Object.hasOwn(roles.data, host.role))
     fatal(`FATAL: unknown role for ${host.alias}: ${host.role}`);
 }
-const role = resolveRole(hostname()).role;
+const role = machineRole(home).role;
 const defaults = roles.data[role];
 const outputs: Output[] = [
   {

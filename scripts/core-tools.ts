@@ -1,8 +1,9 @@
 // Brewfile.core owns the package list; tool-tiers owns its command map; this checks prefixes.
+import { existsSync, readFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
-import { LAND_HOSTS } from "./config-registry.ts";
+import { LAND_HOSTS, resolveRole } from "./config-registry.ts";
 import {
   commandsForFormula,
   readToolCommandMap,
@@ -40,6 +41,25 @@ export async function coreCommands(
     )
   ).flat();
   return [...new Set(names)];
+}
+
+/** Which profile this machine is. The machine says so itself, in one word, in
+ * ~/.config/dotfiles/profile; the repo defines what a profile means (roles/roles.toml) and must
+ * not need a machine's name to answer. LAND_HOSTS' hostname match is the fallback for machines
+ * that have not written the file yet, and goes away once they have. */
+export function machineRole(
+  home = homedir(),
+  host = hostname(),
+): { role: "workstation" | "shared-light"; source: string } {
+  const path = join(home, ".config/dotfiles/profile");
+  const declared = existsSync(path) ? readFileSync(path, "utf8").trim() : "";
+  if (declared === "workstation" || declared === "shared-light")
+    return { role: declared, source: path };
+  const { role, bound } = resolveRole(host);
+  return {
+    role,
+    source: bound ? `host ${host}` : `unbound host ${host}; default`,
+  };
 }
 
 export function brewPrefix(

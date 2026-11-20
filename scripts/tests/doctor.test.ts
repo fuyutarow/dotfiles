@@ -195,13 +195,29 @@ test("doctor fails on unexpected semlint output", async () => {
 });
 
 test("role doctor reports bound and unbound host resolution", async () => {
-  expect(await checkRole(undefined, "sol.cc.uec.ac.jp")).toMatchObject({
+  const bare = join(tmpdir(), `role-bare-${process.pid}`);
+  expect(await checkRole(undefined, "sol.cc.uec.ac.jp", bare)).toMatchObject({
     verdict: "INFO",
     detail: "shared-light (host sol.cc.uec.ac.jp)",
   });
-  expect(await checkRole(undefined, "unknown.example")).toMatchObject({
+  expect(await checkRole(undefined, "unknown.example", bare)).toMatchObject({
     verdict: "INFO",
     detail: "workstation (unbound host unknown.example; default)",
+  });
+});
+
+test("the machine's own profile file decides its role, whatever its hostname", async () => {
+  const home = join(tmpdir(), `role-own-${process.pid}`);
+  const path = join(home, ".config/dotfiles/profile");
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, "shared-light\n");
+  expect(await checkRole(undefined, "renamed-box", home)).toMatchObject({
+    detail: `shared-light (${path})`,
+  });
+  // An unknown word is not a profile: fall back instead of inventing one.
+  await writeFile(path, "gpu-farm\n");
+  expect(await checkRole(undefined, "renamed-box", home)).toMatchObject({
+    detail: "workstation (unbound host renamed-box; default)",
   });
 });
 import {

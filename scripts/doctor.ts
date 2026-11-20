@@ -2260,6 +2260,16 @@ async function checkEditorAlias(
   );
 }
 
+/** The owner's PATH in HOME, not the PATH of a doctor launched via mise. */
+async function loginShellPath(ctx: Ctx): Promise<string | undefined> {
+  const shell = await run(["zsh", "-lc", "cd ~; print -r -- $PATH"], {
+    ms: 30_000,
+    env: { HOME: ctx.home, PATH: "/usr/bin:/bin" },
+  });
+  if (shell.missing || shell.timedOut || shell.code !== 0) return undefined;
+  return shell.out.trim().split("\n").at(-1) ?? "";
+}
+
 // Installed is insufficient: every declared command must resolve from this host's Homebrew.
 // Probe a login shell in HOME so a doctor launched via mise does not mistake its repo toolchain
 // PATH for the owner's core environment. SSH command reach is additionally tested by migration.
@@ -2272,13 +2282,9 @@ export async function checkCoreTools(ctx: Ctx): Promise<Finding> {
     );
   const names = await coreCommands(ctx.dotfiles, { isWsl: ctx.isWsl });
   const prefix = brewPrefix(ctx.home);
-  const shell = await run(["zsh", "-lc", "cd ~; print -r -- $PATH"], {
-    ms: 30_000,
-    env: { HOME: ctx.home, PATH: "/usr/bin:/bin" },
-  });
-  if (shell.missing || shell.timedOut || shell.code !== 0)
+  const path = await loginShellPath(ctx);
+  if (path === undefined)
     return warn("core-tools", "cannot inspect login shell PATH");
-  const path = shell.out.trim().split("\n").at(-1) ?? "";
   const missing = await corePathProblems(names, prefix, path);
   const repair = "mise run install:tools";
   return missing.length === 0
@@ -2296,7 +2302,13 @@ export async function checkCoreTools(ctx: Ctx): Promise<Finding> {
 
 /** Flag earlier PATH copies and duplicates in user bin directories. */
 export async function checkBrewShadows(ctx: Ctx): Promise<Finding> {
-  const path = process.env["PATH"] ?? "";
+  // mise prepends this checkout's pinned toolchain (bun 1.4.3, an owner decision in mise.toml)
+  // to a doctor it launches. That is a declaration, not a shadow, and "rip" would delete the pin.
+  const miseInstalls = join(ctx.home, ".local/share/mise/installs") + "/";
+  const path = (process.env["PATH"] ?? "")
+    .split(":")
+    .filter((entry) => !entry.startsWith(miseInstalls))
+    .join(":");
   const brew = Bun.which("brew", { PATH: path });
   if (brew === null)
     return warn(

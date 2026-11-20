@@ -54,10 +54,10 @@ export function ownerPidOf(name: string): number | undefined {
 
 /** Restore owner access on directories without following symlinks. */
 function restoreDirectoryAccess(path: string): void {
-  // sync-ok: process exit handler runs synchronously
+  // process exit handler runs synchronously
   const stat = lstatSync(path);
   if (!stat.isDirectory()) return;
-  // sync-ok: process exit handler runs synchronously
+  // process exit handler runs synchronously
   chmodSync(path, stat.mode | 0o700);
   for (const name of readdirSync(path)) {
     // One inaccessible entry must not prevent repairing its siblings.

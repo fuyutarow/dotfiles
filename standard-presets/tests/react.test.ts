@@ -21,13 +21,16 @@ afterAll(() => rm(scratch, { recursive: true, force: true }));
 
 const Config = z.looseObject({
   plugins: z.array(z.string()),
-  overrides: z.array(
-    z.looseObject({
-      files: z.array(z.string()),
-      plugins: z.array(z.string()).optional(),
-      rules: z.record(z.string(), z.unknown()),
-    }),
-  ),
+  // The house preset ships no overrides of its own; a consumer adds them.
+  overrides: z
+    .array(
+      z.looseObject({
+        files: z.array(z.string()),
+        plugins: z.array(z.string()).optional(),
+        rules: z.record(z.string(), z.unknown()),
+      }),
+    )
+    .default([]),
 });
 const Report = z.looseObject({
   diagnostics: z.array(

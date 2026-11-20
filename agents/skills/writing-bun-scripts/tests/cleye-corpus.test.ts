@@ -24,7 +24,6 @@ const CORPUS: CorpusEntry[] = [
   { path: "scripts/deployment-selection.ts" },
   { path: "scripts/consumer-gate.ts" },
   { path: "scripts/guest-capacity-recover.ts" },
-  { path: "scripts/lint-no-sync.ts" },
   { path: "scripts/lint-oxlint.ts" },
   {
     path: "scripts/lint-no-new-bash.ts",

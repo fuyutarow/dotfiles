@@ -27,9 +27,9 @@ const ctx: Context = {
   reportPlanError: (message) => fail(message),
   recordRecovery: (candidate, recovery) => {
     const dir = join(stateDir(), "disk-receipts");
-    // sync-ok: the legacy callback must persist recovery before forget begins.
+    // the legacy callback must persist recovery before forget begins.
     mkdirSync(dir, { recursive: true, mode: 0o700 });
-    // sync-ok: the legacy callback must persist recovery before forget begins.
+    // the legacy callback must persist recovery before forget begins.
     writeFileSync(
       join(dir, `${crypto.randomUUID()}.json`),
       JSON.stringify({

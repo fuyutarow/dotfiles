@@ -1,7 +1,7 @@
 // Consumer: workers (verdict lines). Read-only checks; no commit, formatting, or deployment.
-import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { cli } from "cleye";
 import {
   attempt,
@@ -213,26 +213,6 @@ async function existingFiles(
   return { ok: true, value: files };
 }
 
-/** The existing no-sync CLI scans cwd, so give it only the selected sources and policy. */
-async function syncPolicy(root: string, files: readonly string[]) {
-  const candidate = await mkdtemp(join(tmpdir(), "gate-changed-"));
-  const result = await attempt(async () => {
-    for (const path of [
-      ".oxlintrc.json",
-      "lint/no-sync-baseline.tsv",
-      ...files,
-    ]) {
-      const target = join(candidate, path);
-      await mkdir(dirname(target), { recursive: true });
-      await Bun.write(target, Bun.file(join(root, path)));
-    }
-    return command(["bun", join(ROOT, "scripts/lint-no-sync.ts")], candidate);
-  });
-  // Only our disposable candidate is removed; source files are never rewritten.
-  await rm(candidate, { recursive: true, force: true });
-  return result.ok ? result.value : result;
-}
-
 /** Files may be injected by fixture callers; the CLI always discovers them with jj. */
 export async function gateChanged(
   root = ROOT,
@@ -270,7 +250,6 @@ export async function gateChanged(
             root,
           ),
       },
-      { name: "lint:no-sync", run: () => syncPolicy(root, ts) },
     );
   }
   // TypeScript needs the whole program; this is the deliberate scope exception.

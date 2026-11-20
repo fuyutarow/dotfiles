@@ -85,15 +85,15 @@ async function scan(
   path: string,
   statePath: string,
 ): Promise<number | undefined> {
-  // sync-ok: Open the transcript at the synchronous stdin boundary.
+  // Open the transcript at the synchronous stdin boundary.
   const fd = openSync(path, "r");
   using _file = {
     [Symbol.dispose]: () => {
-      // sync-ok: Close the transcript descriptor.
+      // Close the transcript descriptor.
       closeSync(fd);
     },
   };
-  // sync-ok: Identity and size determine whether scanning can resume.
+  // Identity and size determine whether scanning can resume.
   const info = fstatSync(fd);
   const previous = await readState(statePath);
   const state: State =
@@ -114,7 +114,7 @@ async function scan(
           pending: false,
         };
   const bytes = Buffer.alloc(Math.min(SCAN_BYTES, info.size - state.offset));
-  // sync-ok: Each render reads at most SCAN_BYTES from the transcript.
+  // Each render reads at most SCAN_BYTES from the transcript.
   const count = readSync(fd, bytes, 0, bytes.length, state.offset);
   scanBytes(state, bytes.subarray(0, count));
   state.offset += count;
@@ -139,7 +139,7 @@ export async function claudeTranscriptWindow(
       process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"),
       "statusline",
     );
-    // sync-ok: Ensure the private per-session state directory exists before the bounded scan.
+    // Ensure the private per-session state directory exists before the bounded scan.
     mkdirSync(root, { recursive: true, mode: 0o700 });
     const key = createHash("sha256").update(sessionId).digest("hex");
     return scan(path, join(root, `claude-compact-${key}.json`));

@@ -22,8 +22,6 @@ async function fixture() {
   await symlink(join(ROOT, "standard-presets"), join(root, "standard-presets"));
   for (const path of [".oxlintrc.json", ".oxfmtrc.json"])
     await Bun.write(join(root, path), Bun.file(join(ROOT, path)));
-  await mkdir(join(root, "lint"));
-  await Bun.write(join(root, "lint/no-sync-baseline.tsv"), "");
   await Bun.write(
     join(root, "tsconfig.json"),
     JSON.stringify({
@@ -81,7 +79,7 @@ export function read() {return JSON.parse(readFileSync("input", "utf8"))}
         "clean file.ts",
       ]);
       expect(result.exit, result.stdout + result.stderr).toBe(0);
-      for (const name of ["format", "lint:ts", "lint:no-sync", "typecheck"])
+      for (const name of ["format", "lint:ts", "typecheck"])
         expect(result.stdout).toContain(`${name} ok`);
       expect(result.stdout).toContain("1 existing changed file(s), 1 TS");
     }),
@@ -93,15 +91,6 @@ test.each([
   ["cast", "export const value = 1 as number;\n", "lint:ts FAIL"],
   ["type error", 'export const value: number = "wrong";\n', "typecheck FAIL"],
   ["format", "export const value=1\n", "format FAIL"],
-  [
-    "sync",
-    `import { readFileSync } from "node:fs";
-export function read() {
-  return readFileSync("input", "utf8");
-}
-`,
-    "lint:no-sync FAIL",
-  ],
 ])(
   "changed %s is refused and later checks still run",
   (_name, source, failure) =>

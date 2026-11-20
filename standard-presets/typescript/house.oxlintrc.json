@@ -65,7 +65,7 @@
         "ts-check": false
       }
     ],
-    // Dotfiles enables node/no-sync separately with root scanner options for its call-site exemption and baseline ratchet; ordinary lint must not reject the existing backlog. Tests deliberately exercise sync APIs.
+    // Sync I/O is not a house rule (owner decision 2026-10-12: follow plain oxlint).
     "node/no-sync": "off",
     // An explicit `undefined` ARGUMENT is not useless under TypeScript: a required `T | undefined` parameter needs it (the autofix dropped such arguments and broke 60+ calls, observed 2026-10-05). `return undefined` and `= undefined` stay errors.
     "unicorn/no-useless-undefined": [
@@ -149,14 +149,5 @@
         "message": "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` (the repo's zod module: dotfiles agents/hooks/zod.ts, elsewhere standard-presets/typescript/zod.ts), so the body is validated where it enters."
       }
     ]
-  },
-  "overrides": [
-    {
-      "files": ["**/tests/**", "**/*.test.ts"],
-      "rules": {
-        // Tests deliberately exercise synchronous APIs.
-        "node/no-sync": "off"
-      }
-    }
-  ]
+  }
 }

@@ -66,9 +66,9 @@ export async function acquirePlanLock(
       return {
         ok: true,
         release: () => {
-          // sync-ok: clear the holder PID before synchronously releasing the flock on teardown.
+          // clear the holder PID before synchronously releasing the flock on teardown.
           ftruncateSync(fd, 0);
-          // sync-ok: release must close the flock descriptor synchronously on teardown.
+          // release must close the flock descriptor synchronously on teardown.
           closeSync(fd);
           libc.close();
         },

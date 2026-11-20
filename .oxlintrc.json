@@ -25,12 +25,6 @@
     ".obsidian"
   ],
   "rules": {
-    "node/no-sync": [
-      "off",
-      {
-        "allowAtRootLevel": true
-      }
-    ],
     "dotfiles-js/no-restricted-syntax": [
       "error",
       {
@@ -42,13 +36,5 @@
         "message": "Import `z` from agents/hooks/zod.ts (relative path), the repo's one zod."
       }
     ]
-  },
-  "overrides": [
-    {
-      "files": ["**/tests/**", "**/*.test.ts"],
-      "rules": {
-        "node/no-sync": "off"
-      }
-    }
-  ]
+  }
 }

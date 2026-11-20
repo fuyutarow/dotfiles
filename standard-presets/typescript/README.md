@@ -73,9 +73,8 @@ Add local ignores to the wrapper's `ignorePatterns` with a reason comment.
 Dotfiles' root config extends the preset locally and adds its vendored-zod import
 restrictions. `dotfiles-plugin.js` gives those selectors a separate plugin identity
 so they do not replace the inherited house selectors. Consumers receive neither
-this plugin nor the root config. The root also retains the no-sync scanner's
-options and dotfiles ignores; ordinary lint leaves no-sync off and the separate
-baseline scanner enables it. Every custom entry has bad/good proof in
+this plugin nor the root config. The root also retains the dotfiles ignores.
+Sync I/O is not a house rule (owner decision 2026-10-12). Every custom entry has bad/good proof in
 `fixtures.json`, run by `../tests/oxlint-custom.test.ts`; snippets are executed
 in temporary repositories outside the checkout.
 

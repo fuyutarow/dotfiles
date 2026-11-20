@@ -59,7 +59,7 @@ import {
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { cli } from "cleye";
-import { attempt } from "../agents/hooks/attempt.ts";
+import { Result } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { cccBackend } from "../tools/repo-retrieve/src/ccc-entry.ts";
 
@@ -230,8 +230,11 @@ export function commOnlyInSecond(a: string[], b: string[]): string[] {
 export async function loadMcpServers(
   mcpJsonPath: string,
 ): Promise<Record<string, ServerEntry>> {
-  const text = await attempt(() => readFile(mcpJsonPath, "utf8"));
-  const parsed = text.ok
+  const text = await Result.tryPromise({
+    try: () => readFile(mcpJsonPath, "utf8"),
+    catch: (e: unknown) => e,
+  });
+  const parsed = text.isOk()
     ? jsonOf(McpJsonSchema).safeParse(text.value)
     : undefined;
   return parsed?.success === true ? (parsed.data.mcpServers ?? {}) : {};
@@ -297,7 +300,13 @@ export function buildPlan(name: string, entry: ServerEntry): Plan {
 /** `command -v bin`: a fixture path (contains "/") is checked for existence; a bare name is
  * resolved on PATH via Bun.which. */
 async function which(bin: string): Promise<boolean> {
-  if (bin.includes("/")) return (await attempt(() => access(bin))).ok;
+  if (bin.includes("/"))
+    return (
+      await Result.tryPromise({
+        try: () => access(bin),
+        catch: (e: unknown) => e,
+      })
+    ).isOk();
   return Bun.which(bin) !== null;
 }
 
@@ -305,13 +314,16 @@ async function which(bin: string): Promise<boolean> {
  * (stdout inherited, stderr discarded, exit code and thrown ENOENT both ignored). */
 async function runIgnoringFailure(bin: string, args: string[]): Promise<void> {
   // command-not-found or any other spawn failure: swallowed, matching `|| true`.
-  await attempt(async () => {
-    const proc = Bun.spawn([bin, ...args], {
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "ignore",
-    });
-    await proc.exited;
+  await Result.tryPromise({
+    try: async () => {
+      const proc = Bun.spawn([bin, ...args], {
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "ignore",
+      });
+      await proc.exited;
+    },
+    catch: (e: unknown) => e,
   });
 }
 
@@ -338,16 +350,19 @@ async function runOrAbort(
   bin: string,
   args: string[],
 ): Promise<AbortError | undefined> {
-  const result = await attempt(async () => {
-    const proc = Bun.spawn([bin, ...args], {
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    return proc.exited;
+  const result = await Result.tryPromise({
+    try: async () => {
+      const proc = Bun.spawn([bin, ...args], {
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+      return proc.exited;
+    },
+    catch: (e: unknown) => e,
   });
   let exitCode: number;
-  if (result.ok) exitCode = result.value;
+  if (result.isOk()) exitCode = result.value;
   else {
     // Disclosed divergence (accepted): real bash prints "bash: line N: <bin>: command not
     // found" on this path. This message is a port-invented approximation of that diagnostic,
@@ -582,19 +597,22 @@ async function main(): Promise<AbortError | UsageError | undefined> {
   const declared = names; // already alphabetically sorted, matching jq's `keys[] | sort`
   // matches the shell: a failed `claude mcp list` still ends in `| sort`, whose own exit status
   // is what `set -e` sees — never an abort.
-  const live = await attempt(async () => {
-    const proc = Bun.spawn([claudeBin, "mcp", "list"], {
-      stdin: "inherit",
-      stdout: "pipe",
-      stderr: "ignore",
-    });
-    const [text] = await Promise.all([
-      new Response(proc.stdout).text(),
-      proc.exited,
-    ]);
-    return text;
+  const live = await Result.tryPromise({
+    try: async () => {
+      const proc = Bun.spawn([claudeBin, "mcp", "list"], {
+        stdin: "inherit",
+        stdout: "pipe",
+        stderr: "ignore",
+      });
+      const [text] = await Promise.all([
+        new Response(proc.stdout).text(),
+        proc.exited,
+      ]);
+      return text;
+    },
+    catch: (e: unknown) => e,
   });
-  const liveText = live.ok ? live.value : "";
+  const liveText = live.isOk() ? live.value : "";
   const liveNames = liveText
     .split("\n")
     .map((line) => /^([a-zA-Z0-9_-]*): /u.exec(line)?.[1])

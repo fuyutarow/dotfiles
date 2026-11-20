@@ -1,15 +1,15 @@
 // Bounded child-process helpers shared by the router (repo-retrieve.ts) and its ccc index
 // adapter (ccc-index.ts). Moved verbatim out of repo-retrieve.ts on 2026-09-22; the timeout
 // contract (exit 124 on abort) is part of repo-retrieve's documented exit codes.
-import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { basename } from "node:path";
 import { readonlyCommand } from "@dotfiles/shared/src/readonly-command.ts";
+import { Result } from "../../shared/src/result.ts";
 
 export function requireExecutable(name: string): Result<string, Error> {
   const executable = Bun.which(name);
   if (executable === null || executable === "")
-    return err(new Error(`${name} is not available on PATH`));
-  return ok(executable);
+    return Result.err(new Error(`${name} is not available on PATH`));
+  return Result.ok(executable);
 }
 
 // A child's deadline covers its whole process tree. ccc is a Bun policy wrapper that spawns the
@@ -50,11 +50,17 @@ async function descendants(root: number): Promise<number[]> {
 
 function signalPid(pid: number, signal: NodeJS.Signals): void {
   // A pid that is already gone is the goal of the signal; the failure carries no information.
-  fromThrowable(() => process.kill(pid, signal))();
+  Result.try({
+    try: () => process.kill(pid, signal),
+    catch: (error: unknown) => error,
+  });
 }
 
 function pidAlive(pid: number): boolean {
-  return fromThrowable(() => process.kill(pid, 0))().isOk();
+  return Result.try({
+    try: () => process.kill(pid, 0),
+    catch: (error: unknown) => error,
+  }).isOk();
 }
 
 async function terminateTree(root: number): Promise<void> {

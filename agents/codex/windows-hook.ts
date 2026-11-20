@@ -1,5 +1,5 @@
 // Windows Codex invokes this through wsl.exe; hook implementations remain in WSL.
-import { attempt } from "../../tools/shared/src/attempt.ts";
+import { Result } from "../../tools/shared/src/result.ts";
 import { obj } from "../hooks/narrow.ts";
 import { jsonText } from "../hooks/zod.ts";
 
@@ -8,19 +8,22 @@ if (command === undefined) process.exit(2);
 
 async function linuxPath(value: string): Promise<string> {
   const signal = AbortSignal.timeout(5_000);
-  const translated = await attempt(async () => {
-    const proc = Bun.spawn(["wslpath", "-u", value], {
-      stdout: "pipe",
-      stderr: "ignore",
-      signal,
-    });
-    const [stdout, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      proc.exited,
-    ]);
-    return { code, stdout, timedOut: signal.aborted };
+  const translated = await Result.tryPromise({
+    try: async () => {
+      const proc = Bun.spawn(["wslpath", "-u", value], {
+        stdout: "pipe",
+        stderr: "ignore",
+        signal,
+      });
+      const [stdout, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        proc.exited,
+      ]);
+      return { code, stdout, timedOut: signal.aborted };
+    },
+    catch: (e: unknown) => e,
   });
-  if (!translated.ok || translated.value.timedOut) return value;
+  if (translated.isErr() || translated.value.timedOut) return value;
   return translated.value.code === 0 ? translated.value.stdout.trim() : value;
 }
 
@@ -35,8 +38,11 @@ async function convertNativePaths(
   }
 }
 
-const received = await attempt(() => Bun.stdin.text());
-if (!received.ok) process.exit(2);
+const received = await Result.tryPromise({
+  try: () => Bun.stdin.text(),
+  catch: (e: unknown) => e,
+});
+if (received.isErr()) process.exit(2);
 const input = received.value;
 const decoded = jsonText.safeParse(input);
 const payload = decoded.success ? { ...obj(decoded.data) } : undefined;
@@ -50,9 +56,12 @@ const child = Bun.spawn(["zsh", "-lc", command], {
   timeout: 60_000,
 });
 const forwarded = payload === undefined ? input : JSON.stringify(payload);
-const forwardedChild = await attempt(async () => {
-  await child.stdin.write(new TextEncoder().encode(forwarded));
-  await child.stdin.end();
-  return child.exited;
+const forwardedChild = await Result.tryPromise({
+  try: async () => {
+    await child.stdin.write(new TextEncoder().encode(forwarded));
+    await child.stdin.end();
+    return child.exited;
+  },
+  catch: (e: unknown) => e,
 });
-process.exit(forwardedChild.ok ? forwardedChild.value : 2);
+process.exit(forwardedChild.isOk() ? forwardedChild.value : 2);

@@ -1,30 +1,36 @@
 /** codex protocol adapter; semantics remain in agents/goal-kernel. */
+import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
 import { jsonText } from "../../hooks/zod.ts";
 import { processHookEvent } from "../../goal-kernel/kernel.ts";
-import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { hookJson, hookStderr } from "./lib.ts";
 import { parseJson } from "../../hooks/narrow.ts";
 
 async function main(): Promise<void> {
-  const input = await attempt(async () => {
-    const chunks: Buffer[] = [];
-    const source: AsyncIterable<Buffer | string> = process.stdin;
-    for await (const chunk of source) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    }
-    return Buffer.concat(chunks).toString("utf8");
+  const input = await Result.tryPromise({
+    try: async () => {
+      const chunks: Buffer[] = [];
+      const source: AsyncIterable<Buffer | string> = process.stdin;
+      for await (const chunk of source) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks).toString("utf8");
+    },
+    catch: (e: unknown) => e,
   });
-  const parsed = input.ok ? jsonText.safeParse(input.value) : undefined;
-  if (!input.ok || parsed?.success !== true) {
-    const reason = input.ok
+  const parsed = input.isOk() ? jsonText.safeParse(input.value) : undefined;
+  if (input.isErr() || parsed?.success !== true) {
+    const reason = input.isOk()
       ? (parsed?.error?.issues.map((issue) => issue.message).join("; ") ?? "")
       : errorMessage(input.error);
     hookStderr(`goal-kernel: malformed hook JSON: ${reason}`);
     process.exitCode = 1;
     return;
   }
-  const processed = await attempt(() => processHookEvent("codex", parsed.data));
-  if (!processed.ok) {
+  const processed = await Result.tryPromise({
+    try: () => processHookEvent("codex", parsed.data),
+    catch: (e: unknown) => e,
+  });
+  if (processed.isErr()) {
     hookStderr(`goal-kernel: ${errorMessage(processed.error)}`);
     process.exitCode = 1;
     return;

@@ -1,3 +1,4 @@
+import { Result } from "../../../tools/shared/src/result.ts";
 import { hookMessage } from "./lib.ts";
 // Stop hook — "leaked tool-call" early-warning.
 //
@@ -18,7 +19,6 @@ import { hookMessage } from "./lib.ts";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { appendFile, writeFile } from "node:fs/promises";
-import { attempt } from "../../hooks/attempt.ts";
 import { strAt } from "../../hooks/narrow.ts";
 import { readStdinJson, stripCode, turnTextTail } from "./lib.ts";
 
@@ -34,11 +34,14 @@ async function main(): Promise<void> {
   if (!/<(antml:)?invoke name=|<(antml:)?function_calls/u.test(stripped))
     return;
 
-  await attempt(async () => {
-    await appendFile(
-      `${process.env["HOME"] ?? ""}/.claude/leaked-toolcall.log`,
-      `${Temporal.Now.instant().toString({ fractionalSecondDigits: 3 })}  leaked-toolcall  ${transcript}\n`,
-    );
+  await Result.tryPromise({
+    try: async () => {
+      await appendFile(
+        `${process.env["HOME"] ?? ""}/.claude/leaked-toolcall.log`,
+        `${Temporal.Now.instant().toString({ fractionalSecondDigits: 3 })}  leaked-toolcall  ${transcript}\n`,
+      );
+    },
+    catch: (e: unknown) => e,
   }); // best-effort
 
   if (
@@ -46,31 +49,37 @@ async function main(): Promise<void> {
     process.env["CLAUDE_HOOK_QUIET"] !== ""
   )
     return; // tests: skip bell + desktop notification
-  await attempt(async () => {
-    await writeFile("/dev/tty", "\u0007");
+  await Result.tryPromise({
+    try: async () => {
+      await writeFile("/dev/tty", "\u0007");
+    },
+    catch: (e: unknown) => e,
   }); // terminal bell (best-effort; no tty)
   const msg = hookMessage("tool-call が漏れました — Esc Esc で /rewind を");
-  await attempt(async () => {
-    if (process.platform === "darwin") {
-      await once(
-        spawn(
-          "osascript",
-          ["-e", `display notification "${msg}" with title "Claude Code"`],
-          {
-            stdio: "ignore",
-          },
-        ),
-        "close",
-      );
-    } else {
-      // Linux / WSL2
-      await once(
-        spawn("notify-send", ["Claude Code", msg], { stdio: "ignore" }),
-        "close",
-      );
-    }
+  await Result.tryPromise({
+    try: async () => {
+      if (process.platform === "darwin") {
+        await once(
+          spawn(
+            "osascript",
+            ["-e", `display notification "${msg}" with title "Claude Code"`],
+            {
+              stdio: "ignore",
+            },
+          ),
+          "close",
+        );
+      } else {
+        // Linux / WSL2
+        await once(
+          spawn("notify-send", ["Claude Code", msg], { stdio: "ignore" }),
+          "close",
+        );
+      }
+    },
+    catch: (e: unknown) => e,
   }); // best-effort
 }
 
-await attempt(main); // FAIL OPEN
+await Result.tryPromise({ try: main, catch: (e: unknown) => e }); // FAIL OPEN
 process.exit(0);

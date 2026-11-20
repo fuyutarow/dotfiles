@@ -2,7 +2,7 @@ import { lstat, readlink } from "node:fs/promises";
 // Commit-gate backstop: compare tracked shell content with the parent, never a mutable baseline.
 import { join } from "node:path";
 import { cli } from "cleye";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import {
   selected,
   validPath,
@@ -168,8 +168,11 @@ if (import.meta.main) {
     ignoreArgv: rejectPrototypeFlag,
   });
   if (argv._.length > 0) process.exit(2);
-  const result = await attempt(() => lintShell());
-  if (result.ok) process.exitCode = result.value;
+  const result = await Result.tryPromise({
+    try: () => lintShell(),
+    catch: (e: unknown) => e,
+  });
+  if (result.isOk()) process.exitCode = result.value;
   else {
     process.stderr.write(`FATAL: ${errorMessage(result.error)}\n`);
     process.exitCode = 2;

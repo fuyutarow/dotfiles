@@ -9,13 +9,7 @@ import { constants } from "node:fs";
 import { lstat, open, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { cli } from "cleye";
-import {
-  err,
-  fromAsyncThrowable,
-  fromThrowable,
-  ok,
-  type Result,
-} from "neverthrow";
+import { Result } from "better-result";
 import {
   continuationProjectRoot,
   continuationWorkspaceRootFromSlot,
@@ -50,30 +44,28 @@ const failure = (
   message: string,
   exitCode = 1,
 ): TransactionResult<never> =>
-  err(new TransactionError(code, message, exitCode));
+  Result.err(new TransactionError(code, message, exitCode));
 
 const unexpectedFailure = (): TransactionError =>
   new TransactionError("TCR51", "checkpoint transaction failed", 2);
 
-const capture = <T>(operation: () => T): TransactionResult<T> =>
-  fromThrowable(operation)().mapErr(() => unexpectedFailure());
-
 const captureAsync = async <T>(
   operation: () => Promise<T> | T,
 ): Promise<TransactionResult<T>> =>
-  fromAsyncThrowable(async () => operation())().mapErr(() =>
-    unexpectedFailure(),
-  );
+  Result.tryPromise({
+    try: async () => operation(),
+    catch: () => unexpectedFailure(),
+  });
 
 function nonEmpty(value: string): TransactionResult<string> {
-  return value === "" ? failure("TCR39", "empty option", 2) : ok(value);
+  return value === "" ? failure("TCR39", "empty option", 2) : Result.ok(value);
 }
 
 function positiveInteger(value: string): TransactionResult<number> {
   if (!/^[1-9]\d*$/u.test(value)) {
     return failure("TCR39", "--base-revision requires a positive integer", 2);
   }
-  return ok(Number(value));
+  return Result.ok(Number(value));
 }
 
 function sha256Value(value: string): TransactionResult<string> {
@@ -84,7 +76,7 @@ function sha256Value(value: string): TransactionResult<string> {
       2,
     );
   }
-  return ok(value);
+  return Result.ok(value);
 }
 
 function metadata(text: string, key: string): TransactionResult<string> {
@@ -95,11 +87,14 @@ function metadata(text: string, key: string): TransactionResult<string> {
   if (values.length !== 1 || only === undefined || only === "") {
     return failure("TCR49", `${key} metadata is not singular`);
   }
-  return ok(only);
+  return Result.ok(only);
 }
 
 function digest(text: string): TransactionResult<string> {
-  return capture(() => createHash("sha256").update(text).digest("hex"));
+  return Result.try({
+    try: () => createHash("sha256").update(text).digest("hex"),
+    catch: () => unexpectedFailure(),
+  });
 }
 
 async function readRegularText(
@@ -107,26 +102,27 @@ async function readRegularText(
   code: string,
 ): Promise<TransactionResult<string>> {
   type ReadOutcome = { safe: true; text: string } | { safe: false };
-  const read = await fromAsyncThrowable(async (): Promise<ReadOutcome> => {
-    const handle = await open(
-      path,
-      constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
-    );
-    await using _closeHandle = {
-      [Symbol.asyncDispose]: async () => {
-        await handle.close();
-      },
-    };
-    const stat = await handle.stat();
-    return stat.isFile() && stat.size <= MAX_RECORD_BYTES
-      ? { safe: true, text: await handle.readFile("utf8") }
-      : { safe: false };
-  })().mapErr(
-    () => new TransactionError(code, "file could not be read safely"),
-  );
-  if (read.isErr()) return err(read.error);
+  const read = await Result.tryPromise({
+    try: async (): Promise<ReadOutcome> => {
+      const handle = await open(
+        path,
+        constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+      );
+      await using _closeHandle = {
+        [Symbol.asyncDispose]: async () => {
+          await handle.close();
+        },
+      };
+      const stat = await handle.stat();
+      return stat.isFile() && stat.size <= MAX_RECORD_BYTES
+        ? { safe: true, text: await handle.readFile("utf8") }
+        : { safe: false };
+    },
+    catch: () => new TransactionError(code, "file could not be read safely"),
+  });
+  if (read.isErr()) return Result.err(read.error);
   return read.value.safe
-    ? ok(read.value.text)
+    ? Result.ok(read.value.text)
     : failure(
         code,
         `file must be regular and at most ${MAX_RECORD_BYTES} bytes`,
@@ -146,10 +142,10 @@ async function workspaceRoot(
       fromSlot ?? (await continuationProjectRoot(dirname(resolve(recordPath))))
     );
   });
-  if (found.isErr()) return err(found.error);
+  if (found.isErr()) return Result.err(found.error);
   return found.value === undefined
     ? failure("TCR23", "workspace root is not trustworthy")
-    : ok(found.value);
+    : Result.ok(found.value);
 }
 
 async function snapshot(
@@ -160,7 +156,7 @@ async function snapshot(
   const inspected = await captureAsync(() =>
     inspectContinuationRecord(path, root),
   );
-  if (inspected.isErr()) return err(inspected.error);
+  if (inspected.isErr()) return Result.err(inspected.error);
   const inspection = inspected.value;
   if (inspection.status === "absent") {
     return failure("TCR00", "record does not exist");
@@ -172,12 +168,12 @@ async function snapshot(
     );
   }
   const read = await readRegularText(path, "TCR49");
-  if (read.isErr()) return err(read.error);
+  if (read.isErr()) return Result.err(read.error);
   const text = read.value;
   const validated = await captureAsync(() =>
     validateContinuationRecord(text, path, root),
   );
-  if (validated.isErr()) return err(validated.error);
+  if (validated.isErr()) return Result.err(validated.error);
   const findings = validated.value;
   if (findings.length > 0) {
     return failure(
@@ -205,10 +201,10 @@ async function writerForBoundSlot(
   const read = await captureAsync(() =>
     readContinuationBindingAtSlot(resolve(slotPath)),
   );
-  if (read.isErr()) return err(read.error);
+  if (read.isErr()) return Result.err(read.error);
   const binding = read.value;
   if (binding?.status === "bound" && binding.record === resolve(recordPath)) {
-    return ok(`session:${basename(dirname(binding.slot))}`);
+    return Result.ok(`session:${basename(dirname(binding.slot))}`);
   }
   return failure("TCR52", "writer slot is not validly bound to this record");
 }
@@ -227,7 +223,10 @@ async function proposalText(
       "proposal must be a distinct regular file beside the canonical record",
     );
   }
-  const statResult = await fromAsyncThrowable(() => lstat(proposal))();
+  const statResult = await Result.tryPromise({
+    try: () => lstat(proposal),
+    catch: (e: unknown) => e,
+  });
   if (statResult.isErr()) return failure("TCR49", "proposal does not exist");
   const stat = statResult.value;
   return stat.isSymbolicLink() || !stat.isFile()
@@ -243,7 +242,7 @@ function requireSameMetadata(
   return metadata(current.text, key).andThen((currentValue) =>
     metadata(proposal, key).andThen((proposalValue) =>
       currentValue === proposalValue
-        ? ok(undefined)
+        ? Result.ok(undefined)
         : failure("TCR46", `${key} is immutable`),
     ),
   );
@@ -258,7 +257,7 @@ async function validateProposal(
   const validated = await captureAsync(() =>
     validateContinuationRecord(proposal, current.path, root),
   );
-  if (validated.isErr()) return err(validated.error);
+  if (validated.isErr()) return Result.err(validated.error);
   const findings = validated.value;
   if (findings.length > 0) {
     return failure(
@@ -276,7 +275,7 @@ async function validateProposalFields(
 ): Promise<TransactionResult<Readonly<{ revision: number; writer: string }>>> {
   for (const key of ["SCHEMA", "TASK_ID", "PATH"]) {
     const same = requireSameMetadata(current, proposal, key);
-    if (same.isErr()) return err(same.error);
+    if (same.isErr()) return Result.err(same.error);
   }
   return validateProposalRevision(current, proposal, handoffSlot);
 }
@@ -287,7 +286,7 @@ async function validateProposalRevision(
   handoffSlot?: string,
 ): Promise<TransactionResult<Readonly<{ revision: number; writer: string }>>> {
   const revisionResult = metadata(proposal, "REVISION");
-  if (revisionResult.isErr()) return err(revisionResult.error);
+  if (revisionResult.isErr()) return Result.err(revisionResult.error);
   const revision = Number(revisionResult.value);
   if (revision !== current.revision + 1) {
     return failure(
@@ -296,9 +295,9 @@ async function validateProposalRevision(
     );
   }
   const updated = metadata(proposal, "UPDATED");
-  if (updated.isErr()) return err(updated.error);
+  if (updated.isErr()) return Result.err(updated.error);
   const currentUpdated = metadata(current.text, "UPDATED");
-  if (currentUpdated.isErr()) return err(currentUpdated.error);
+  if (currentUpdated.isErr()) return Result.err(currentUpdated.error);
   if (updated.value === currentUpdated.value) {
     return failure("TCR45", "proposal UPDATED must name this checkpoint");
   }
@@ -312,14 +311,14 @@ async function validateProposalWriter(
   handoffSlot?: string,
 ): Promise<TransactionResult<Readonly<{ revision: number; writer: string }>>> {
   const writerResult = metadata(proposal, "WRITER");
-  if (writerResult.isErr()) return err(writerResult.error);
+  if (writerResult.isErr()) return Result.err(writerResult.error);
   const writer = writerResult.value;
-  if (writer === current.writer) return ok({ revision, writer });
+  if (writer === current.writer) return Result.ok({ revision, writer });
   const stateResult = metadata(proposal, "STATE");
-  if (stateResult.isErr()) return err(stateResult.error);
+  if (stateResult.isErr()) return Result.err(stateResult.error);
   const state = stateResult.value;
   if (writer === "none" && state === "closed") {
-    return ok({ revision, writer });
+    return Result.ok({ revision, writer });
   }
   const handoffDenied = () =>
     failure(
@@ -328,8 +327,10 @@ async function validateProposalWriter(
     );
   if (handoffSlot === undefined || state === "closed") return handoffDenied();
   const target = await writerForBoundSlot(handoffSlot, current.path);
-  if (target.isErr()) return err(target.error);
-  return writer === target.value ? ok({ revision, writer }) : handoffDenied();
+  if (target.isErr()) return Result.err(target.error);
+  return writer === target.value
+    ? Result.ok({ revision, writer })
+    : handoffDenied();
 }
 
 async function createProposal(
@@ -347,12 +348,13 @@ async function createProposal(
       "proposal must be a distinct file beside the canonical record",
     );
   }
-  const written = await fromAsyncThrowable(() =>
-    writeFile(proposal, text, { flag: "wx", mode: 0o600 }),
-  )();
+  const written = await Result.tryPromise({
+    try: () => writeFile(proposal, text, { flag: "wx", mode: 0o600 }),
+    catch: (e: unknown) => e,
+  });
   return written.isErr()
     ? failure("TCR49", "proposal already exists or could not be created")
-    : ok(proposal);
+    : Result.ok(proposal);
 }
 
 type CheckpointArgs = {
@@ -367,11 +369,12 @@ type CheckpointArgs = {
 async function applyCheckpoint(
   args: CheckpointArgs,
 ): Promise<TransactionResult<void>> {
-  const outcome = await fromAsyncThrowable(() =>
-    applyCheckpointTransaction(args),
-  )();
+  const outcome = await Result.tryPromise({
+    try: () => applyCheckpointTransaction(args),
+    catch: (e: unknown) => e,
+  });
   if (outcome.isErr()) {
-    return err(
+    return Result.err(
       outcome.error instanceof TransactionError
         ? outcome.error
         : unexpectedFailure(),
@@ -385,10 +388,10 @@ async function applyCheckpointTransaction(
 ): Promise<TransactionResult<void>> {
   const path = resolve(args.path);
   const rootResult = await workspaceRoot(path, args.writerSlot);
-  if (rootResult.isErr()) return err(rootResult.error);
+  if (rootResult.isErr()) return Result.err(rootResult.error);
   const root = rootResult.value;
   const callerResult = await writerForBoundSlot(args.writerSlot, path);
-  if (callerResult.isErr()) return err(callerResult.error);
+  if (callerResult.isErr()) return Result.err(callerResult.error);
   const caller = callerResult.value;
   const lock = join(dirname(path), ".TASK-CONTINUATION.lock");
   let lockHeld = false;
@@ -402,24 +405,32 @@ async function applyCheckpointTransaction(
   _cleanup.defer(async () => {
     if (lockHeld) {
       // Fail closed on the next update; stale locks require human inspection.
-      await fromAsyncThrowable(() => unlink(lock))();
+      await Result.tryPromise({
+        try: () => unlink(lock),
+        catch: (e: unknown) => e,
+      });
     }
   });
   _cleanup.defer(async () => {
     const leftover = temporary;
     if (leftover !== undefined) {
       // The randomized incomplete file is never a canonical record.
-      await fromAsyncThrowable(() => unlink(leftover))();
+      await Result.tryPromise({
+        try: () => unlink(leftover),
+        catch: (e: unknown) => e,
+      });
     }
   });
 
-  const lockWritten = await fromAsyncThrowable(() =>
-    writeFile(
-      lock,
-      `${JSON.stringify({ pid: process.pid, started_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }), transaction: randomUUID() })}\n`,
-      { flag: "wx", mode: 0o600 },
-    ),
-  )();
+  const lockWritten = await Result.tryPromise({
+    try: () =>
+      writeFile(
+        lock,
+        `${JSON.stringify({ pid: process.pid, started_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }), transaction: randomUUID() })}\n`,
+        { flag: "wx", mode: 0o600 },
+      ),
+    catch: (e: unknown) => e,
+  });
   if (lockWritten.isErr()) {
     return failure(
       "TCR40",
@@ -429,7 +440,7 @@ async function applyCheckpointTransaction(
   lockHeld = true;
 
   const currentResult = await snapshot(path, root);
-  if (currentResult.isErr()) return err(currentResult.error);
+  if (currentResult.isErr()) return Result.err(currentResult.error);
   const current = currentResult.value;
   if (current.revision !== args.baseRevision) {
     return failure(
@@ -448,7 +459,7 @@ async function applyCheckpointTransaction(
   }
 
   const candidateTextResult = await proposalText(args.proposal, path);
-  if (candidateTextResult.isErr()) return err(candidateTextResult.error);
+  if (candidateTextResult.isErr()) return Result.err(candidateTextResult.error);
   const candidateText = candidateTextResult.value;
   const candidateResult = await validateProposal(
     current,
@@ -456,11 +467,11 @@ async function applyCheckpointTransaction(
     root,
     args.handoffSlot,
   );
-  if (candidateResult.isErr()) return err(candidateResult.error);
+  if (candidateResult.isErr()) return Result.err(candidateResult.error);
   const candidate = candidateResult.value;
 
   const recheckedResult = await snapshot(path, root);
-  if (recheckedResult.isErr()) return err(recheckedResult.error);
+  if (recheckedResult.isErr()) return Result.err(recheckedResult.error);
   const rechecked = recheckedResult.value;
   if (
     rechecked.revision !== current.revision ||
@@ -487,7 +498,7 @@ async function applyCheckpointTransaction(
     () => false,
   );
   const sha256Result = digest(candidateText);
-  if (sha256Result.isErr()) return err(sha256Result.error);
+  if (sha256Result.isErr()) return Result.err(sha256Result.error);
   process.stdout.write(
     `${JSON.stringify({
       path,
@@ -498,25 +509,25 @@ async function applyCheckpointTransaction(
       writer: candidate.writer,
     })}\n`,
   );
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 function optionalNonEmpty(
   value: string | undefined,
 ): TransactionResult<string | undefined> {
-  return value === undefined ? ok(undefined) : nonEmpty(value);
+  return value === undefined ? Result.ok(undefined) : nonEmpty(value);
 }
 
 function optionalPositiveInteger(
   value: string | undefined,
 ): TransactionResult<number | undefined> {
-  return value === undefined ? ok(undefined) : positiveInteger(value);
+  return value === undefined ? Result.ok(undefined) : positiveInteger(value);
 }
 
 function optionalSha256(
   value: string | undefined,
 ): TransactionResult<string | undefined> {
-  return value === undefined ? ok(undefined) : sha256Value(value);
+  return value === undefined ? Result.ok(undefined) : sha256Value(value);
 }
 
 function rejectPrototypeFlag(type: string, flag: string): void {
@@ -565,7 +576,7 @@ async function main(): Promise<TransactionResult<void>> {
         ),
       ),
   );
-  if (options.isErr()) return err(options.error);
+  if (options.isErr()) return Result.err(options.error);
   return dispatchCheckpoint(options.value);
 }
 
@@ -594,14 +605,14 @@ async function dispatchCheckpoint(args: {
 
   if (action === "snapshot") {
     const rootResult = await workspaceRoot(path, args.writerSlot);
-    if (rootResult.isErr()) return err(rootResult.error);
+    if (rootResult.isErr()) return Result.err(rootResult.error);
     const current = await snapshot(path, rootResult.value);
-    if (current.isErr()) return err(current.error);
+    if (current.isErr()) return Result.err(current.error);
     const created: TransactionResult<string | undefined> =
       args.proposal === undefined
-        ? ok(undefined)
+        ? Result.ok(undefined)
         : await createProposal(path, args.proposal, current.value.text);
-    if (created.isErr()) return err(created.error);
+    if (created.isErr()) return Result.err(created.error);
     const proposal = created.value;
     process.stdout.write(
       `${JSON.stringify({
@@ -613,7 +624,7 @@ async function dispatchCheckpoint(args: {
         writer: current.value.writer,
       })}\n`,
     );
-    return ok(undefined);
+    return Result.ok(undefined);
   }
 
   if (action !== "apply") {
@@ -642,15 +653,16 @@ async function dispatchCheckpoint(args: {
   });
 }
 
-const mainResult = await main().catch((error: unknown) =>
-  err(error instanceof TransactionError ? error : unexpectedFailure()),
+const mainResult: TransactionResult<void> = await main().catch(
+  (error: unknown) =>
+    Result.err(error instanceof TransactionError ? error : unexpectedFailure()),
 );
-mainResult.match(
-  () => process.exit(0),
-  (error) => {
+mainResult.match({
+  ok: () => process.exit(0),
+  err: (error) => {
     process.stderr.write(
       `${JSON.stringify({ code: error.code, message: error.message, status: "error" })}\n`,
     );
     process.exit(error.exitCode);
   },
-);
+});

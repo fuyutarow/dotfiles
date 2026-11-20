@@ -48,7 +48,7 @@ beforeAll(async () => {
     join(ROOT, "standard-presets/template-hashes.json"),
     join(fixtureRoot, "standard-presets/template-hashes.json"),
   );
-  for (const directory of ["agents", "scripts", "node_modules"])
+  for (const directory of ["agents", "scripts", "tools", "node_modules"])
     await symlink(join(ROOT, directory), join(fixtureRoot, directory));
   await mkdir(join(fixtureRoot, "standard-presets/demo"));
   await writeFile(

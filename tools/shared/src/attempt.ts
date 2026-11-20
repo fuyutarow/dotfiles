@@ -21,15 +21,6 @@ export function attempt<T>(fn: () => T | PromiseLike<T>): Promise<Attempt<T>> {
   );
 }
 
-/** The value, or `fallback` when `fn` throws — for a catch that only substituted a default. */
-export async function attemptOr<T, F>(
-  fn: () => T | PromiseLike<T>,
-  fallback: F,
-): Promise<T | F> {
-  const r = await attempt(fn);
-  return r.ok ? r.value : fallback;
-}
-
 /** Message text of a caught value, for diagnostics. */
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

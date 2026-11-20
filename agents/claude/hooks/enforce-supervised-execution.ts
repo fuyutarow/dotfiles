@@ -44,7 +44,7 @@
 //
 // FAIL CLOSED on hook errors (registered with run.sh --fail-closed).
 
-import { attempt, errorMessage } from "../../hooks/attempt.ts";
+import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
 import { strAt } from "../../hooks/narrow.ts";
 import { effective, parseShell } from "../../hooks/shell-syntax.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
@@ -263,8 +263,11 @@ function main(): void {
   );
 }
 
-const r = await attempt(main);
-if (!r.ok) {
+const r = Result.try({
+  try: main,
+  catch: (e: unknown) => e,
+});
+if (r.isErr()) {
   // FATAL: the hook itself failed, so no axis could be evaluated; fail closed with the one fix
   // (report the error) rather than guessing which checks would have fired.
   decidePre(

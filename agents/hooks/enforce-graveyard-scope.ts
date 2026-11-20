@@ -3,7 +3,7 @@
 //
 // FAIL CLOSED (run.sh --fail-closed): an unreadable payload or a runtime error denies.
 
-import { attempt, errorMessage } from "./attempt.ts";
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 import { strAt } from "./narrow.ts";
 import { declaredGraveyard, graveyardViolations } from "./graveyard-scope.ts";
@@ -38,17 +38,20 @@ function main(): MainOutcome {
   };
 }
 
-const r = await attempt(main);
-if (r.ok && r.value !== null && r.value.kind === "deny") {
+const r = Result.try({
+  try: main,
+  catch: (e: unknown) => e,
+});
+if (r.isOk() && r.value !== null && r.value.kind === "deny") {
   // SINGLE-AXIS: one question (does the command name a graveyard other than the declared one?)
   decidePre("deny", r.value.message);
-} else if (r.ok && r.value !== null && r.value.kind === "error") {
+} else if (r.isOk() && r.value !== null && r.value.kind === "error") {
   // FATAL: the payload could not be read, so the command cannot be judged; fail closed with the cause.
   decidePre(
     "deny",
     `graveyard-scope: could not evaluate the command (${r.value.message}); failing closed.`,
   );
-} else if (!r.ok) {
+} else if (r.isErr()) {
   // FATAL: the policy itself failed, so no graveyard could be checked; fail closed with the error.
   decidePre(
     "deny",

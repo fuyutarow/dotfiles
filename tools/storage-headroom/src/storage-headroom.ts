@@ -2,7 +2,7 @@
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 import { headroom } from "./headroom.ts";
 import type { StorageMeasurement } from "@dotfiles/shared/src/storage-headroom.ts";
 
@@ -69,8 +69,11 @@ export async function main(
 }
 
 if (import.meta.main) {
-  const result = await attempt(() => main());
-  if (!result.ok) {
+  const result = await Result.tryPromise({
+    try: () => main(),
+    catch: (error: unknown) => error,
+  });
+  if (result.isErr()) {
     process.stderr.write(
       `storage-headroom: ${result.error instanceof Error ? result.error.message : String(result.error)}\n`,
     );

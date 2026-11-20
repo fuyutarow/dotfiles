@@ -8,7 +8,7 @@
 // a reached zsh test sources it (zsh/tests/terminal-hygiene.test.zsh sources its siblings), or
 // when the task launches scripts/test-units.ts and the runner's discovery (`unitsOf`) covers it.
 import { resolve } from "node:path";
-import { fromThrowable } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../tools/shared/src/zod.ts";
 import { unitsOf } from "./test-units.ts";
 import { trackedFiles } from "./tracked-files.ts";
@@ -249,10 +249,8 @@ async function miseTasks(root: string): Promise<Loaded<Task[]>> {
   };
 }
 
-const parseToml = fromThrowable(
-  (text: string): unknown => Bun.TOML.parse(text),
-  String,
-);
+const parseToml = (text: string): Result<unknown, string> =>
+  Result.try({ try: (): unknown => Bun.TOML.parse(text), catch: String });
 
 const ExceptionsFile = z.object({
   exceptions: z.record(z.string(), z.string().min(1)),

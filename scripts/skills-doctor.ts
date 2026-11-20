@@ -1,5 +1,5 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
@@ -29,9 +29,10 @@ async function repoFindings(
     const skillPath = resolve(skillRoot, entry.name, "SKILL.md");
     if (!SkillName.test(entry.name))
       findings.push(`${entry.name}: directory name is invalid`);
-    const contents = await fromAsyncThrowable(() =>
-      readFile(skillPath, "utf8"),
-    )();
+    const contents = await Result.tryPromise({
+      try: () => readFile(skillPath, "utf8"),
+      catch: (e: unknown) => e,
+    });
     if (contents.isErr()) {
       findings.push(`${entry.name}: SKILL.md is missing`);
       continue;
@@ -74,7 +75,10 @@ async function copyFinding(
   expected: string,
 ): Promise<string | undefined> {
   const target = resolve(home, root, name);
-  const result = await fromAsyncThrowable(() => lstat(target))();
+  const result = await Result.tryPromise({
+    try: () => lstat(target),
+    catch: (e: unknown) => e,
+  });
   if (result.isErr()) return `${root}/${name} is missing`;
   const state = result.value;
   if (state.isSymbolicLink()) return `${root}/${name} is a symlink`;
@@ -82,9 +86,10 @@ async function copyFinding(
   const installedSkill = resolve(target, "SKILL.md");
   const invalid = await skillLayoutRefusal(target);
   if (invalid !== undefined) return invalid;
-  const contents = await fromAsyncThrowable(() =>
-    readFile(installedSkill, "utf8"),
-  )();
+  const contents = await Result.tryPromise({
+    try: () => readFile(installedSkill, "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (contents.isErr()) {
     return `${root}/${name}/SKILL.md is missing or stale`;
   }
@@ -106,7 +111,10 @@ async function pluginSettingsFindings(
   ];
   const findings: string[] = [];
   for (const path of paths) {
-    const contents = await fromAsyncThrowable(() => readFile(path, "utf8"))();
+    const contents = await Result.tryPromise({
+      try: () => readFile(path, "utf8"),
+      catch: (e: unknown) => e,
+    });
     if (contents.isErr()) continue;
     const text = contents.value;
     const settings = jsonOf(SettingsSchema).safeParse(text);
@@ -153,9 +161,10 @@ async function machineFindings(
   findings.push(...(await pluginSettingsFindings(dotfiles, home)));
 
   const installedPath = resolve(home, ".claude/plugins/installed_plugins.json");
-  const installedText = await fromAsyncThrowable(() =>
-    readFile(installedPath, "utf8"),
-  )();
+  const installedText = await Result.tryPromise({
+    try: () => readFile(installedPath, "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (installedText.isOk()) {
     const installed = jsonOf(InstalledPluginsSchema).safeParse(
       installedText.value,

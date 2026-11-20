@@ -84,13 +84,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { cli, command } from "cleye";
-import {
-  err,
-  fromAsyncThrowable,
-  fromThrowable,
-  ok,
-  type Result,
-} from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { match } from "ts-pattern";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
@@ -158,10 +152,15 @@ export async function resolveHome(
   // FATAL-SAFETY check caught it (ccc-swap tests in macOS tmpdirs, 2026-10-06). Every project root
   // and the shadow dir derive from this, so canonicalizing here covers them all.
   const abs = resolve(home);
-  return (await fromAsyncThrowable(() => realpath(abs))()).match(
-    (path) => path,
-    () => abs,
-  );
+  return (
+    await Result.tryPromise({
+      try: () => realpath(abs),
+      catch: (e: unknown) => e,
+    })
+  ).match({
+    ok: (path) => path,
+    err: () => abs,
+  });
 }
 
 export function resolveShadowDir(
@@ -205,16 +204,18 @@ export async function discoverProjects(
     dir: string,
     full: string,
   ): Promise<void> => {
-    const result = await fromAsyncThrowable(() =>
-      access(join(full, PROJECT_SETTINGS_FILE)),
-    )();
+    const result = await Result.tryPromise({
+      try: () => access(join(full, PROJECT_SETTINGS_FILE)),
+      catch: (e: unknown) => e,
+    });
     if (result.isOk()) found.push(dir);
   };
 
   const walk = async (dir: string): Promise<void> => {
-    const entriesResult = await fromAsyncThrowable(() =>
-      readdir(dir, { withFileTypes: true }),
-    )();
+    const entriesResult = await Result.tryPromise({
+      try: () => readdir(dir, { withFileTypes: true }),
+      catch: (e: unknown) => e,
+    });
     if (entriesResult.isErr()) return; // permission denied / vanished mid-walk — skip, never crash discover
     for (const entry of entriesResult.value) {
       if (entry.isSymbolicLink() || !entry.isDirectory()) continue;
@@ -247,9 +248,10 @@ async function accumulateDirEntry(
   }
   if (!entry.isFile()) return 0;
   // vanished mid-walk
-  const sizeResult = await fromAsyncThrowable(
-    async () => (await stat(full)).size,
-  )();
+  const sizeResult = await Result.tryPromise({
+    try: async () => (await stat(full)).size,
+    catch: (e: unknown) => e,
+  });
   return sizeResult.isOk() ? sizeResult.value : 0;
 }
 
@@ -259,9 +261,10 @@ export async function dirSizeBytes(dir: string): Promise<number> {
   while (stack.length > 0) {
     const current = stack.pop();
     if (current === undefined) continue;
-    const entriesResult = await fromAsyncThrowable(() =>
-      readdir(current, { withFileTypes: true }),
-    )();
+    const entriesResult = await Result.tryPromise({
+      try: () => readdir(current, { withFileTypes: true }),
+      catch: (e: unknown) => e,
+    });
     if (entriesResult.isErr()) continue;
     for (const entry of entriesResult.value) {
       total += await accumulateDirEntry(current, entry, stack);
@@ -272,7 +275,10 @@ export async function dirSizeBytes(dir: string): Promise<number> {
 
 /** Size of a file, or the recursive size of a directory (e.g. `cocoindex.db`). Missing -> 0. */
 export async function pathSizeBytes(path: string): Promise<number> {
-  const statResult = await fromAsyncThrowable(() => stat(path))();
+  const statResult = await Result.tryPromise({
+    try: () => stat(path),
+    catch: (e: unknown) => e,
+  });
   if (statResult.isErr()) return 0;
   if (statResult.value.isDirectory()) return dirSizeBytes(path);
   return statResult.value.size;
@@ -285,7 +291,14 @@ async function presentArtifacts(
 ): Promise<string[]> {
   const present: string[] = [];
   for (const name of names) {
-    if ((await fromAsyncThrowable(() => access(join(dir, name)))()).isOk()) {
+    if (
+      (
+        await Result.tryPromise({
+          try: () => access(join(dir, name)),
+          catch: (e: unknown) => e,
+        })
+      ).isOk()
+    ) {
       present.push(name);
     }
   }
@@ -331,11 +344,19 @@ const ErrnoSchema = z.object({ code: z.unknown() });
 export async function computeIndexDimension(
   targetSqliteDbPath: string,
 ): Promise<number | null> {
-  if ((await fromAsyncThrowable(() => access(targetSqliteDbPath))()).isErr())
+  if (
+    (
+      await Result.tryPromise({
+        try: () => access(targetSqliteDbPath),
+        catch: (e: unknown) => e,
+      })
+    ).isErr()
+  )
     return null;
-  const dbResult = fromThrowable(
-    () => new Database(targetSqliteDbPath, { readonly: true }),
-  )();
+  const dbResult = Result.try({
+    try: () => new Database(targetSqliteDbPath, { readonly: true }),
+    catch: (e: unknown) => e,
+  });
   if (dbResult.isErr()) return null;
   const db = dbResult.value;
   // Cleanup runs on return AND on throw, same as the prior try/finally: the sqlite handle closes
@@ -345,37 +366,48 @@ export async function computeIndexDimension(
       db.close();
     },
   };
-  return fromThrowable(() => {
-    const row = SqliteMasterRowSchema.safeParse(
-      db
-        .query(
-          "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'code_chunks_vec'",
-        )
-        .get(),
-    );
-    const dimensionMatch = row.success
-      ? row.data.sql?.match(/embedding\s+float\[(\d+)\]/u)
-      : null;
-    if (
-      dimensionMatch === null ||
-      dimensionMatch?.[1] === undefined ||
-      dimensionMatch[1] === ""
-    )
-      return null;
-    const dim = Number(dimensionMatch[1]);
-    return Number.isFinite(dim) ? dim : null;
-  })().unwrapOr(null);
+  return Result.try({
+    try: () => {
+      const row = SqliteMasterRowSchema.safeParse(
+        db
+          .query(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'code_chunks_vec'",
+          )
+          .get(),
+      );
+      const dimensionMatch = row.success
+        ? row.data.sql?.match(/embedding\s+float\[(\d+)\]/u)
+        : null;
+      if (
+        dimensionMatch === null ||
+        dimensionMatch?.[1] === undefined ||
+        dimensionMatch[1] === ""
+      )
+        return null;
+      const dim = Number(dimensionMatch[1]);
+      return Number.isFinite(dim) ? dim : null;
+    },
+    catch: (e: unknown) => e,
+  }).unwrapOr(null);
 }
 
 /** Row count of `code_chunks_vec_rowids` — a plain table, queryable without the vec0 extension. */
 export async function countIndexedRows(
   targetSqliteDbPath: string,
 ): Promise<number | null> {
-  if ((await fromAsyncThrowable(() => access(targetSqliteDbPath))()).isErr())
+  if (
+    (
+      await Result.tryPromise({
+        try: () => access(targetSqliteDbPath),
+        catch: (e: unknown) => e,
+      })
+    ).isErr()
+  )
     return null;
-  const dbResult = fromThrowable(
-    () => new Database(targetSqliteDbPath, { readonly: true }),
-  )();
+  const dbResult = Result.try({
+    try: () => new Database(targetSqliteDbPath, { readonly: true }),
+    catch: (e: unknown) => e,
+  });
   if (dbResult.isErr()) return null;
   const db = dbResult.value;
   // Cleanup runs on return AND on throw, same as the prior try/finally: the sqlite handle closes
@@ -385,12 +417,15 @@ export async function countIndexedRows(
       db.close();
     },
   };
-  return fromThrowable(() => {
-    const row = CountRowSchema.safeParse(
-      db.query("SELECT COUNT(*) as n FROM code_chunks_vec_rowids").get(),
-    );
-    return row.success ? row.data.n : null;
-  })().unwrapOr(null);
+  return Result.try({
+    try: () => {
+      const row = CountRowSchema.safeParse(
+        db.query("SELECT COUNT(*) as n FROM code_chunks_vec_rowids").get(),
+      );
+      return row.success ? row.data.n : null;
+    },
+    catch: (e: unknown) => e,
+  }).unwrapOr(null);
 }
 
 /** Majority-vote "expected" dimension across already-indexed projects; null-dim entries excluded. */
@@ -463,11 +498,11 @@ export function replaceEmbeddingModel(
     return line;
   });
   if (!replaced) {
-    return err(
+    return Result.err(
       "no 'embedding: / model:' block found in global_settings.yml — refusing to guess its shape",
     );
   }
-  return ok(out.join("\n"));
+  return Result.ok(out.join("\n"));
 }
 
 export function parseChunksAndFiles(stdout: string): {
@@ -512,7 +547,10 @@ async function snapshotFile(
   dir: string,
   full: string,
 ): Promise<void> {
-  const statResult = await fromAsyncThrowable(() => stat(full))();
+  const statResult = await Result.tryPromise({
+    try: () => stat(full),
+    catch: (e: unknown) => e,
+  });
   if (statResult.isOk()) {
     const st = statResult.value;
     snap.set(relative(dir, full), { size: st.size, mtimeMs: st.mtimeMs });
@@ -524,11 +562,20 @@ export async function snapshotDir(
   dir: string,
 ): Promise<Map<string, FileSnapshot>> {
   const snap = new Map<string, FileSnapshot>();
-  if ((await fromAsyncThrowable(() => access(dir))()).isErr()) return snap;
+  if (
+    (
+      await Result.tryPromise({
+        try: () => access(dir),
+        catch: (e: unknown) => e,
+      })
+    ).isErr()
+  )
+    return snap;
   const walk = async (current: string): Promise<void> => {
-    const entriesResult = await fromAsyncThrowable(() =>
-      readdir(current, { withFileTypes: true }),
-    )();
+    const entriesResult = await Result.tryPromise({
+      try: () => readdir(current, { withFileTypes: true }),
+      catch: (e: unknown) => e,
+    });
     if (entriesResult.isErr()) return;
     for (const entry of entriesResult.value) {
       if (entry.isSymbolicLink()) continue;
@@ -586,7 +633,10 @@ async function snapshotDbArtifact(
   name: string,
 ): Promise<void> {
   const full = join(dbDir, name);
-  const statResult = await fromAsyncThrowable(() => stat(full))();
+  const statResult = await Result.tryPromise({
+    try: () => stat(full),
+    catch: (e: unknown) => e,
+  });
   if (statResult.isErr()) return;
   if (statResult.value.isDirectory()) {
     for (const [rel, snapshot] of await snapshotDir(full)) {
@@ -625,9 +675,10 @@ export async function listPrevGenerations(
     `^${escapeRegExp(basename(dbDir))}\\.prev-(\\d+)$`,
     "u",
   );
-  const entriesResult = await fromAsyncThrowable(() =>
-    readdir(parent, { withFileTypes: true }),
-  )();
+  const entriesResult = await Result.tryPromise({
+    try: () => readdir(parent, { withFileTypes: true }),
+    catch: (e: unknown) => e,
+  });
   if (entriesResult.isErr()) return [];
   const gens: PrevGeneration[] = [];
   for (const entry of entriesResult.value) {
@@ -669,9 +720,10 @@ export async function isLiveDaemonRunning(
   env: Record<string, string | undefined> = process.env,
 ): Promise<boolean> {
   return (
-    await fromAsyncThrowable(() =>
-      access(daemonSocketPath(liveSettingsDir, env)),
-    )()
+    await Result.tryPromise({
+      try: () => access(daemonSocketPath(liveSettingsDir, env)),
+      catch: (e: unknown) => e,
+    })
   ).isOk();
 }
 
@@ -737,13 +789,14 @@ export async function removeDir(
   const graveyard = process.env["RIP_GRAVEYARD"];
   if (Bun.which("rip") !== null && graveyard !== undefined) {
     // bounded: a single fast filesystem rename into rip's own graveyard, never hangs
-    const result = await fromAsyncThrowable(
-      async () =>
+    const result = await Result.tryPromise({
+      try: async () =>
         spawn(["rip", "--graveyard", graveyard, path], {
           stdout: "ignore",
           stderr: "ignore",
         }).exited,
-    )();
+      catch: (e: unknown) => e,
+    });
     ripOk = result.map((code) => code === 0).unwrapOr(false);
   }
   if (!ripOk) {
@@ -767,7 +820,10 @@ export async function moveDbArtifact(
   src: string,
   dst: string,
 ): Promise<MoveResult> {
-  const renameResult = await fromAsyncThrowable(() => rename(src, dst))();
+  const renameResult = await Result.tryPromise({
+    try: () => rename(src, dst),
+    catch: (e: unknown) => e,
+  });
   if (renameResult.isOk()) return { ok: true };
   const error = renameResult.error;
   const errno = ErrnoSchema.safeParse(error);
@@ -779,17 +835,20 @@ export async function moveDbArtifact(
     };
   }
   const srcBytes = await pathSizeBytes(src);
-  const copyResult = await fromAsyncThrowable(async () => {
-    await cp(src, dst, { recursive: true, errorOnExist: true });
-    const dstBytes = await pathSizeBytes(dst);
-    if (dstBytes !== srcBytes) {
-      return err(
-        `byte mismatch after cross-device copy: src=${srcBytes} dst=${dstBytes}`,
-      );
-    }
-    await removeDir(src);
-    return ok(undefined);
-  })();
+  const copyResult = await Result.tryPromise({
+    try: async () => {
+      await cp(src, dst, { recursive: true, errorOnExist: true });
+      const dstBytes = await pathSizeBytes(dst);
+      if (dstBytes !== srcBytes) {
+        return Result.err(
+          `byte mismatch after cross-device copy: src=${srcBytes} dst=${dstBytes}`,
+        );
+      }
+      await removeDir(src);
+      return Result.ok(undefined);
+    },
+    catch: (e: unknown) => e,
+  });
   if (copyResult.isErr()) {
     const copyError = copyResult.error;
     return {
@@ -807,7 +866,15 @@ async function moveDbArtifactIfPresent(
   dst: string,
   onFailure: (error: string | undefined) => void,
 ): Promise<void> {
-  if ((await fromAsyncThrowable(() => access(src))()).isErr()) return;
+  if (
+    (
+      await Result.tryPromise({
+        try: () => access(src),
+        catch: (e: unknown) => e,
+      })
+    ).isErr()
+  )
+    return;
   const moved = await moveDbArtifact(src, dst);
   if (!moved.ok) onFailure(moved.error);
 }
@@ -839,13 +906,13 @@ async function dbDirForCommand(
   project: string,
   ctx: Ctx,
 ): Promise<string | null> {
-  return (await resolveDbDir(project, ctx.env)).match(
-    (directory) => directory,
-    (error) => {
+  return (await resolveDbDir(project, ctx.env)).match({
+    ok: (directory) => directory,
+    err: (error) => {
       ctx.dbDirError = error;
       return null;
     },
-  );
+  });
 }
 
 async function cmdDiscover(ctx: Ctx): Promise<number> {
@@ -929,7 +996,12 @@ async function cmdBuild(
     GLOBAL_SETTINGS_FILE,
   );
   if (
-    (await fromAsyncThrowable(() => access(liveGlobalSettingsPath))()).isErr()
+    (
+      await Result.tryPromise({
+        try: () => access(liveGlobalSettingsPath),
+        catch: (e: unknown) => e,
+      })
+    ).isErr()
   ) {
     process.stderr.write(
       `FATAL: live global settings not found: ${liveGlobalSettingsPath}\n`,
@@ -1098,7 +1170,14 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
   }
 
   const shadowYamlPath = join(ctx.shadowDir, GLOBAL_SETTINGS_FILE);
-  if ((await fromAsyncThrowable(() => access(shadowYamlPath))()).isErr()) {
+  if (
+    (
+      await Result.tryPromise({
+        try: () => access(shadowYamlPath),
+        catch: (e: unknown) => e,
+      })
+    ).isErr()
+  ) {
     process.stderr.write(
       `FATAL: no shadow global settings at ${shadowYamlPath} — run build first\n`,
     );
@@ -1118,7 +1197,12 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     GLOBAL_SETTINGS_FILE,
   );
   if (
-    (await fromAsyncThrowable(() => access(liveGlobalSettingsPath))()).isErr()
+    (
+      await Result.tryPromise({
+        try: () => access(liveGlobalSettingsPath),
+        catch: (e: unknown) => e,
+      })
+    ).isErr()
   ) {
     process.stderr.write(
       `FATAL: live global settings not found: ${liveGlobalSettingsPath}\n`,
@@ -1143,7 +1227,12 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     const shadowDb = join(shadowDbDir, TARGET_SQLITE_DB);
     const dim = await computeIndexDimension(shadowDb);
     const rowCount = await countIndexedRows(shadowDb);
-    const exists = (await fromAsyncThrowable(() => access(shadowDb))()).isOk();
+    const exists = (
+      await Result.tryPromise({
+        try: () => access(shadowDb),
+        catch: (e: unknown) => e,
+      })
+    ).isOk();
     const liveDbDir = await dbDirForCommand(root, ctx);
     if (liveDbDir === null) return 2;
     const ready = exists && dim !== null && (rowCount ?? 0) > 0;
@@ -1373,13 +1462,23 @@ async function cmdRollback(
   );
   const markerPath = join(ctx.shadowDir, `cutover-${targetTs}.json`);
   let previousModel: string | null = null;
-  if ((await fromAsyncThrowable(() => access(markerPath))()).isOk()) {
+  if (
+    (
+      await Result.tryPromise({
+        try: () => access(markerPath),
+        catch: (e: unknown) => e,
+      })
+    ).isOk()
+  ) {
     // best effort
-    const markerResult = await fromAsyncThrowable(async () => {
-      const text = await readFile(markerPath, "utf8");
-      const marker = jsonOf(CutoverMarkerSchema).safeParse(text);
-      return marker.success ? (marker.data.previousModel ?? null) : null;
-    })();
+    const markerResult = await Result.tryPromise({
+      try: async () => {
+        const text = await readFile(markerPath, "utf8");
+        const marker = jsonOf(CutoverMarkerSchema).safeParse(text);
+        return marker.success ? (marker.data.previousModel ?? null) : null;
+      },
+      catch: (e: unknown) => e,
+    });
     if (markerResult.isOk()) previousModel = markerResult.value;
   }
   process.stdout.write(
@@ -1427,7 +1526,10 @@ async function cmdRollback(
     // `.prev-*` count stays flat (park one, consume one) the way the old whole-dir rename did.
     // An OLD-FORMAT generation that still holds a leftover settings.yml is left as-is — its
     // settings.yml is never touched, so the dir is never actually empty in that case.
-    const remaining = await fromAsyncThrowable(() => readdir(u.gen.path))();
+    const remaining = await Result.tryPromise({
+      try: () => readdir(u.gen.path),
+      catch: (e: unknown) => e,
+    });
     if (remaining.isOk() && remaining.value.length === 0) {
       await removeDir(u.gen.path);
     }
@@ -1445,7 +1547,12 @@ async function cmdRollback(
   if (
     previousModel !== null &&
     previousModel !== "" &&
-    (await fromAsyncThrowable(() => access(liveGlobalSettingsPath))()).isOk()
+    (
+      await Result.tryPromise({
+        try: () => access(liveGlobalSettingsPath),
+        catch: (e: unknown) => e,
+      })
+    ).isOk()
   ) {
     const liveYaml = await readFile(liveGlobalSettingsPath, "utf8");
     const updatedYaml = replaceEmbeddingModel(liveYaml, previousModel);
@@ -1527,16 +1634,21 @@ async function cmdGc(
       }),
   );
   // best effort — shadowDir may not exist yet
-  await fromAsyncThrowable(async () => {
-    for (const entry of await readdir(ctx.shadowDir, { withFileTypes: true })) {
-      if (!entry.isFile()) continue;
-      const markerMatch = entry.name.match(/^cutover-(\d+)\.json$/u);
-      if (markerMatch?.[1] === undefined || markerMatch[1] === "") continue;
-      if (!survivingTs.has(Number(markerMatch[1]))) {
-        await rm(join(ctx.shadowDir, entry.name), { force: true });
+  await Result.tryPromise({
+    try: async () => {
+      for (const entry of await readdir(ctx.shadowDir, {
+        withFileTypes: true,
+      })) {
+        if (!entry.isFile()) continue;
+        const markerMatch = entry.name.match(/^cutover-(\d+)\.json$/u);
+        if (markerMatch?.[1] === undefined || markerMatch[1] === "") continue;
+        if (!survivingTs.has(Number(markerMatch[1]))) {
+          await rm(join(ctx.shadowDir, entry.name), { force: true });
+        }
       }
-    }
-  })();
+    },
+    catch: (e: unknown) => e,
+  });
 
   process.stdout.write(
     `RESULT: gc deleted ${toDelete.length} generation(s), kept ${flags.keep} newest per project\n`,
@@ -1736,18 +1848,18 @@ async function runVerb(
   const keep = flags.keep;
   if (keep === null || !Number.isFinite(keep) || keep < 0) {
     process.stderr.write("FATAL: --keep must be a non-negative number\n");
-    return ok(2);
+    return Result.ok(2);
   }
   const timeoutMs = flags.timeoutMs;
   if (timeoutMs === null || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     process.stderr.write("FATAL: --timeout-ms must be a positive number\n");
-    return ok(2);
+    return Result.ok(2);
   }
 
   const home = await resolveHome(flags.home);
   if (home === null) {
     process.stderr.write("FATAL: cannot resolve $HOME (pass --home)\n");
-    return ok(2);
+    return Result.ok(2);
   }
   const shadowDir = resolveShadowDir(home, flags.shadowDir);
   const liveSettingsDir = resolveLiveSettingsDir(
@@ -1793,7 +1905,9 @@ async function runVerb(
     .with("gc", () => cmdGc(ctx, { yes: flags.yes, keep }))
     .with("relocate", () => cmdRelocate(ctx, { yes: flags.yes }))
     .exhaustive();
-  return ctx.dbDirError === undefined ? ok(code) : err(ctx.dbDirError);
+  return ctx.dbDirError === undefined
+    ? Result.ok(code)
+    : Result.err(ctx.dbDirError);
 }
 
 async function main(): Promise<number> {
@@ -1828,13 +1942,13 @@ async function main(): Promise<number> {
               return;
             }
             const result = await runVerb(verb, parsed.flags);
-            exitCode = result.match(
-              (code) => code,
-              (error) => {
+            exitCode = result.match({
+              ok: (code) => code,
+              err: (error) => {
                 process.stderr.write(`FATAL: ${error.message}\n`);
                 return 2;
               },
-            );
+            });
           },
         ),
       ),

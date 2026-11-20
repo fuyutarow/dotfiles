@@ -49,8 +49,8 @@
       "name": "@dotfiles/skill-continuing-long-running-tasks",
       "version": "0.0.0",
       "dependencies": {
+        "better-result": "3.0.1",
         "cleye": "2.6.0",
-        "neverthrow": "8.2.0",
       },
     },
     "agents/skills/designing-cli-contracts": {
@@ -180,7 +180,6 @@
       "name": "@dotfiles/obsidian",
       "dependencies": {
         "cleye": "2.6.0",
-        "neverthrow": "8.2.0",
         "obsidian": "1.5.7",
       },
     },
@@ -188,9 +187,9 @@
       "name": "@dotfiles/scripts",
       "dependencies": {
         "@dotfiles/shared": "workspace:*",
+        "better-result": "3.0.1",
         "cleye": "2.6.0",
         "consola": "3.4.2",
-        "neverthrow": "8.2.0",
         "ts-pattern": "5.9.0",
       },
     },
@@ -215,7 +214,6 @@
         "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
         "consola": "3.4.2",
-        "neverthrow": "8.2.0",
       },
     },
     "tools/baseline": {
@@ -228,7 +226,6 @@
         "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
         "consola": "3.4.2",
-        "neverthrow": "8.2.0",
       },
     },
     "tools/codex-thread-copy": {
@@ -251,7 +248,6 @@
       "dependencies": {
         "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
-        "neverthrow": "8.2.0",
       },
     },
     "tools/detect-japanese": {
@@ -288,7 +284,6 @@
       "dependencies": {
         "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
-        "neverthrow": "8.2.0",
         "type-flag": "4.5.0",
       },
     },
@@ -336,7 +331,6 @@
         "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
         "consola": "3.4.2",
-        "neverthrow": "8.2.0",
       },
     },
     "tools/secrets-push": {
@@ -356,7 +350,6 @@
       "dependencies": {
         "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
-        "neverthrow": "8.2.0",
       },
     },
     "tools/shared": {
@@ -368,7 +361,6 @@
       "dependencies": {
         "@clack/prompts": "1.8.1",
         "cleye": "2.6.0",
-        "neverthrow": "8.2.0",
         "type-flag": "4.5.0",
       },
     },

@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir, homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import {
   parseSkillLock,
   pathExists,
@@ -23,7 +23,10 @@ export async function targetSkillNames(home: string): Promise<Set<string>> {
     resolve(home, ".agents/skills"),
     resolve(home, ".claude/skills"),
   ]) {
-    const listing = await fromAsyncThrowable(() => readdir(root))();
+    const listing = await Result.tryPromise({
+      try: () => readdir(root),
+      catch: (e: unknown) => e,
+    });
     if (listing.isErr()) continue;
     const entries = listing.value;
     for (const name of entries.filter((entry) => !entry.startsWith(".")))
@@ -129,7 +132,7 @@ export async function removeNewStowaways(
   namesBefore: ReadonlySet<string>,
 ): Promise<Result<string[], string>> {
   const stowaways = newlyInstalledStowaways(before, after, requested);
-  if (stowaways.length === 0) return ok([]);
+  if (stowaways.length === 0) return Result.ok([]);
 
   for (const stowaway of stowaways.filter(
     (candidate) => !namesBefore.has(candidate),
@@ -141,23 +144,23 @@ export async function removeNewStowaways(
     Object.entries(after.skills).filter(([name]) => !removed.has(name)),
   );
   const lockPath = toolLockPath(home);
-  const lockText = await fromAsyncThrowable(
-    () => readFile(lockPath, "utf8"),
-    errorText,
-  )();
-  if (lockText.isErr()) return err(errorText(lockText.error));
+  const lockText = await Result.tryPromise({
+    try: () => readFile(lockPath, "utf8"),
+    catch: errorText,
+  });
+  if (lockText.isErr()) return Result.err(errorText(lockText.error));
   const parsed = parseSkillLock(lockText.value);
-  if (parsed.isErr()) return err(parsed.error);
-  const written = await fromAsyncThrowable(
-    () =>
+  if (parsed.isErr()) return Result.err(parsed.error);
+  const written = await Result.tryPromise({
+    try: () =>
       writeFile(
         lockPath,
         `${JSON.stringify({ ...parsed.value, skills }, null, 2)}\n`,
       ),
-    errorText,
-  )();
-  if (written.isErr()) return err(errorText(written.error));
-  return ok(stowaways);
+    catch: errorText,
+  });
+  if (written.isErr()) return Result.err(errorText(written.error));
+  return Result.ok(stowaways);
 }
 
 async function removeStowawayTargets(

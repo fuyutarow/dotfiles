@@ -1,11 +1,9 @@
-import { ResultAsync as AsyncResult } from "neverthrow";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { access as accessPath } from "node:fs/promises";
 
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
-import { err, ok, type Result } from "neverthrow";
-import { errorMessage } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
 
 const pathExists = (path: Parameters<typeof accessPath>[0]) =>
@@ -40,13 +38,13 @@ export function parseChangeset(text: string): Result<Changeset, Error> {
 
   const bumpLine = lines.shift();
   if (bumpLine === undefined || !bumpLine.startsWith("bump: "))
-    return err(new Error("expected bump: patch|minor|major"));
+    return Result.err(new Error("expected bump: patch|minor|major"));
   const bump = BumpSchema.safeParse(bumpLine.slice("bump: ".length));
   if (!bump.success)
-    return err(new Error("bump must be patch, minor, or major"));
+    return Result.err(new Error("bump must be patch, minor, or major"));
 
   if (hasOpeningDelimiter && lines.shift() !== "---")
-    return err(new Error("expected closing --- delimiter after bump"));
+    return Result.err(new Error("expected closing --- delimiter after bump"));
   if (lines[0] === "") lines.shift();
 
   const checked = ChangesetSchema.safeParse({
@@ -55,9 +53,9 @@ export function parseChangeset(text: string): Result<Changeset, Error> {
   });
   if (!checked.success) {
     const issue = checked.error.issues[0];
-    return err(new Error(issue?.message ?? "invalid changeset"));
+    return Result.err(new Error(issue?.message ?? "invalid changeset"));
   }
-  return ok(checked.data);
+  return Result.ok(checked.data);
 }
 
 /** The canonical Markdown form retained by the repository formatter. */
@@ -105,38 +103,38 @@ export async function writeChangeset(
   entry: string,
 ): Promise<Result<string, Error>> {
   if (!/^[a-z0-9][a-z0-9-]*$/u.test(tool))
-    return err(new Error(`invalid tool name: ${tool}`));
+    return Result.err(new Error(`invalid tool name: ${tool}`));
   const checked = ChangesetSchema.safeParse({ bump, entry });
   if (!checked.success) {
     const issue = checked.error.issues[0];
-    return err(new Error(issue?.message ?? "invalid changeset"));
+    return Result.err(new Error(issue?.message ?? "invalid changeset"));
   }
 
   const toolsRoot = join(root, "tools");
   const toolPath = join(toolsRoot, tool);
   if (!(await pathExists(toolPath)))
-    return err(new Error(`unknown tool directory: tools/${tool}`));
-  const toolInfo = await fromAsyncThrowable(
-    async () => stat(toolPath),
-    (error) => new Error(errorMessage(error)),
-  )();
-  if (toolInfo.isErr()) return err(toolInfo.error);
+    return Result.err(new Error(`unknown tool directory: tools/${tool}`));
+  const toolInfo = await Result.tryPromise({
+    try: async () => stat(toolPath),
+    catch: (error) => new Error(errorMessage(error)),
+  });
+  if (toolInfo.isErr()) return Result.err(toolInfo.error);
   if (!toolInfo.value.isDirectory())
-    return err(new Error(`unknown tool directory: tools/${tool}`));
+    return Result.err(new Error(`unknown tool directory: tools/${tool}`));
 
   const changesDir = join(toolPath, ".changes");
-  const written = await fromAsyncThrowable(
-    async () => {
+  const written = await Result.tryPromise({
+    try: async () => {
       await mkdir(changesDir, { recursive: true });
       const slug = await uniqueSlug(changesDir, slugOf(checked.data.entry));
       const path = join(changesDir, `${slug}.md`);
       await writeFile(path, formatChangeset(checked.data), { flag: "wx" });
       return `tools/${tool}/.changes/${slug}.md`;
     },
-    (error) => new Error(errorMessage(error)),
-  )();
-  if (written.isErr()) return err(written.error);
-  return ok(written.value);
+    catch: (error) => new Error(errorMessage(error)),
+  });
+  if (written.isErr()) return Result.err(written.error);
+  return Result.ok(written.value);
 }
 
 if (import.meta.main) {
@@ -167,15 +165,4 @@ function writeResult(result: Result<string, Error>): void {
     process.stderr.write(`FATAL: ${result.error.message}\n`);
     process.exitCode = 2;
   } else process.stdout.write(`WROTE ${result.value}\n`);
-}
-
-function fromAsyncThrowable<A extends unknown[], T, E = unknown>(
-  fn: (...args: A) => Promise<T>,
-  mapError: (error: unknown) => E,
-) {
-  return (...args: A) =>
-    AsyncResult.fromPromise(
-      Promise.resolve().then(() => fn(...args)),
-      (error: unknown) => mapError(error),
-    );
 }

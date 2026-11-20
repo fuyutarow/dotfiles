@@ -18,11 +18,11 @@
 // Usage:  bun agents/models/check-releases.ts [--today YYYY-MM-DD] [--quiet]
 // Exit:   0 = clean, 1 = at least one FAIL.
 
+import { Result } from "../../tools/shared/src/result.ts";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { consola } from "consola";
-import { fromAsyncThrowable, fromThrowable } from "neverthrow";
 import { z } from "../hooks/zod.ts";
 import releases from "./releases.toml";
 
@@ -95,9 +95,11 @@ function warn(msg: string): void {
 function parseDay(s: string): number | null {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(s)) return null;
   // UTC midnight of that day; an impossible date (02-30) is rejected, not rolled over.
-  return fromThrowable(
-    () => Temporal.PlainDate.from(s).toZonedDateTime("UTC").epochMilliseconds,
-  )().unwrapOr(null);
+  return Result.try({
+    try: () =>
+      Temporal.PlainDate.from(s).toZonedDateTime("UTC").epochMilliseconds,
+    catch: (e: unknown) => e,
+  }).unwrapOr(null);
 }
 
 function todayStamp(): string {
@@ -111,7 +113,10 @@ function daysBetween(fromMs: number, toMs: number): number {
 // Read one guidance file's body; unreadable is not a finding.
 async function readGuidanceFile(p: string): Promise<string | undefined> {
   /* unreadable file is not a finding */
-  const read = await fromAsyncThrowable(() => readFile(p, "utf8"))();
+  const read = await Result.tryPromise({
+    try: () => readFile(p, "utf8"),
+    catch: (e: unknown) => e,
+  });
   return read.unwrapOr(undefined);
 }
 
@@ -120,12 +125,18 @@ async function readGuidanceFile(p: string): Promise<string | undefined> {
 async function guidanceFiles(): Promise<Array<[string, string]>> {
   const out: Array<[string, string]> = [];
   const walk = async (dir: string): Promise<void> => {
-    const listed = await fromAsyncThrowable(() => readdir(dir))();
+    const listed = await Result.tryPromise({
+      try: () => readdir(dir),
+      catch: (e: unknown) => e,
+    });
     if (listed.isErr()) return;
     const entries = listed.value;
     for (const name of entries) {
       const p = join(dir, name);
-      const statted = await fromAsyncThrowable(() => stat(p))();
+      const statted = await Result.tryPromise({
+        try: () => stat(p),
+        catch: (e: unknown) => e,
+      });
       if (statted.isErr()) continue;
       const st = statted.value;
       if (st.isDirectory() && (name === "tests" || name === "node_modules"))
@@ -289,7 +300,7 @@ async function main(): Promise<void> {
   }
 }
 
-const run = await fromAsyncThrowable(main)();
+const run = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
 if (run.isErr()) {
   const e = run.error;
   fail(`check-releases crashed: ${e instanceof Error ? e.message : String(e)}`);

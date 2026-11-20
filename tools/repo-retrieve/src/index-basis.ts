@@ -12,7 +12,7 @@ import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { resolveDbDir } from "./ccc-db-dir.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
 import type { IncrementalBasis } from "./index-plan.ts";
@@ -68,15 +68,15 @@ async function gitZ(
   args: string[],
 ): Promise<Result<string[], Error>> {
   const git = requireExecutable("git");
-  if (git.isErr()) return err(git.error);
+  if (git.isErr()) return Result.err(git.error);
   const child = await runChildCaptured(
     [git.value, "--no-optional-locks", "-C", project, ...args, "-z"],
     30_000,
     false,
   );
   return child.exitCode === 0
-    ? ok(child.stdout.split("\0").filter(Boolean))
-    : err(new Error(`git ${args[0]} failed: ${child.stderr.trim()}`));
+    ? Result.ok(child.stdout.split("\0").filter(Boolean))
+    : Result.err(new Error(`git ${args[0]} failed: ${child.stderr.trim()}`));
 }
 
 // Tracked paths whose worktree content differs from `from`, plus untracked unignored paths.
@@ -93,14 +93,14 @@ async function changesSince(
     "--relative",
     from,
   ]);
-  if (tracked.isErr()) return err(tracked.error);
+  if (tracked.isErr()) return Result.err(tracked.error);
   const untracked = await gitZ(project, [
     "ls-files",
     "--others",
     "--exclude-standard",
   ]);
-  if (untracked.isErr()) return err(untracked.error);
-  return ok([...new Set([...tracked.value, ...untracked.value])]);
+  if (untracked.isErr()) return Result.err(untracked.error);
+  return Result.ok([...new Set([...tracked.value, ...untracked.value])]);
 }
 
 export async function captureBasisRecord(
@@ -108,10 +108,10 @@ export async function captureBasisRecord(
   cccVersion: string,
 ): Promise<Result<BasisRecord, Error>> {
   if (cccVersion === "" || cccVersion === "unknown")
-    return err(new Error("ccc version unknown"));
+    return Result.err(new Error("ccc version unknown"));
   const dirty = await changesSince(project, "HEAD");
-  if (dirty.isErr()) return err(dirty.error);
-  return ok({
+  if (dirty.isErr()) return Result.err(dirty.error);
+  return Result.ok({
     ccc: cccVersion,
     settings: await settingsDigest(project),
     dirty: dirty.value,
@@ -142,14 +142,14 @@ export function mergeBasisRecords(
 async function memoStorePresent(project: string): Promise<boolean> {
   const dir = await resolveDbDir(project);
   if (dir.isErr()) return false;
-  const memo = await fromAsyncThrowable(
-    () => readdir(join(dir.value, "cocoindex.db")),
-    asError,
-  )();
-  const chunks = await fromAsyncThrowable(
-    () => stat(join(dir.value, "target_sqlite.db")),
-    asError,
-  )();
+  const memo = await Result.tryPromise({
+    try: () => readdir(join(dir.value, "cocoindex.db")),
+    catch: asError,
+  });
+  const chunks = await Result.tryPromise({
+    try: () => stat(join(dir.value, "target_sqlite.db")),
+    catch: asError,
+  });
   return memo.isOk() && memo.value.length > 0 && chunks.isOk();
 }
 

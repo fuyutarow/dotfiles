@@ -10,12 +10,15 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, parse, relative, resolve, sep } from "node:path";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 async function info(path: string, follow = false) {
-  const result = await attempt(() => (follow ? stat(path) : lstat(path)));
-  if (result.ok) return result.value;
+  const result = await Result.tryPromise({
+    try: () => (follow ? stat(path) : lstat(path)),
+    catch: (e: unknown) => e,
+  });
+  if (result.isOk()) return result.value;
   const parsed = z.looseObject({ code: z.string() }).safeParse(result.error);
   if (parsed.success && ["ENOENT", "ENOTDIR"].includes(parsed.data.code))
     return null;
@@ -90,10 +93,11 @@ export async function danglingRepoBins(
 }
 
 async function readDeclaredBins(root: string): Promise<Set<string> | Error> {
-  const result = await attempt(() =>
-    Bun.file(join(root, "package.json")).text(),
-  );
-  if (!result.ok) return new Error(errorMessage(result.error));
+  const result = await Result.tryPromise({
+    try: () => Bun.file(join(root, "package.json")).text(),
+    catch: (e: unknown) => e,
+  });
+  if (!result.isOk()) return new Error(errorMessage(result.error));
   const parsed = jsonOf(
     z.looseObject({
       bin: z.record(z.string(), z.string()),
@@ -126,17 +130,19 @@ export async function pruneRepoBins(
 }
 
 if (import.meta.main) {
-  const result = await attempt(() =>
-    pruneRepoBins(
-      join(import.meta.dir, ".."),
-      join(
-        process.env["BUN_INSTALL"] ??
-          join(process.env["HOME"] ?? homedir(), ".bun"),
-        "bin",
+  const result = await Result.tryPromise({
+    try: () =>
+      pruneRepoBins(
+        join(import.meta.dir, ".."),
+        join(
+          process.env["BUN_INSTALL"] ??
+            join(process.env["HOME"] ?? homedir(), ".bun"),
+          "bin",
+        ),
       ),
-    ),
-  );
-  const failure = result.ok
+    catch: (e: unknown) => e,
+  });
+  const failure = result.isOk()
     ? result.value
     : new Error(errorMessage(result.error));
   if (failure instanceof Error) {

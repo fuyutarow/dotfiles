@@ -16,7 +16,7 @@ import {
   desktopInterop,
   repoHelperCommand,
 } from "@dotfiles/shared/src/desktop-interop.ts";
-import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { errorMessage, Result } from "../../shared/src/result.ts";
 import { render, type Finding } from "@dotfiles/shared/src/finding.ts";
 
 const NAME = "clipboard round-trip";
@@ -44,17 +44,19 @@ async function runText(
   cmd: string[],
   options: { stdin?: string; env?: Record<string, string | undefined> },
 ): Promise<{ code: number; out: string; err: string }> {
-  const spawned = await attempt(() =>
-    Bun.spawn(cmd, {
-      stdin: options.stdin === undefined ? "ignore" : "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: READ_MS,
-      killSignal: "SIGKILL",
-      ...(options.env === undefined ? {} : { env: options.env }),
-    }),
-  );
-  if (!spawned.ok)
+  const spawned = Result.try({
+    try: () =>
+      Bun.spawn(cmd, {
+        stdin: options.stdin === undefined ? "ignore" : "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: READ_MS,
+        killSignal: "SIGKILL",
+        ...(options.env === undefined ? {} : { env: options.env }),
+      }),
+    catch: (error: unknown) => error,
+  });
+  if (spawned.isErr())
     return { code: 127, out: "", err: errorMessage(spawned.error) };
   const proc = spawned.value;
   const sink = proc.stdin;
@@ -187,15 +189,17 @@ export async function checkClipboardRoundTrip(deps: Deps): Promise<Finding> {
 
 if (import.meta.main) {
   const isWsl = /microsoft/iu.test(release());
-  const result = await attempt(() =>
-    checkClipboardRoundTrip({
-      copy: (text) => runText(["smart-copy", "--status"], { stdin: text }),
-      reader: () => machineReader(process.platform === "darwin", isWsl),
-      token: () => `dotfiles-doctor-clipboard-${randomUUID()}`,
-      settleMs: SETTLE_MS,
-    }),
-  );
-  if (!result.ok) {
+  const result = await Result.tryPromise({
+    try: () =>
+      checkClipboardRoundTrip({
+        copy: (text) => runText(["smart-copy", "--status"], { stdin: text }),
+        reader: () => machineReader(process.platform === "darwin", isWsl),
+        token: () => `dotfiles-doctor-clipboard-${randomUUID()}`,
+        settleMs: SETTLE_MS,
+      }),
+    catch: (error: unknown) => error,
+  });
+  if (result.isErr()) {
     process.stderr.write(`doctor:clipboard: ${errorMessage(result.error)}\n`);
     process.exitCode = 2;
   } else {

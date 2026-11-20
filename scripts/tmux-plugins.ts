@@ -1,12 +1,15 @@
 import { $ } from "bun";
 import { access, stat } from "node:fs/promises";
-import { attempt } from "../agents/hooks/attempt.ts";
+import { Result } from "../tools/shared/src/result.ts";
 
 // Install tmux plugins via TPM (non-interactive; run after link-dots).
 const tpmDir = `${process.env["HOME"]}/.tmux/plugins/tpm`;
 const gitDir = `${tpmDir}/.git`;
-const git = await attempt(() => access(gitDir));
-if (!(git.ok && (await stat(gitDir)).isDirectory())) {
+const git = await Result.tryPromise({
+  try: () => access(gitDir),
+  catch: (e: unknown) => e,
+});
+if (!(git.isOk() && (await stat(gitDir)).isDirectory())) {
   await $`git clone --depth 1 https://github.com/tmux-plugins/tpm ${tpmDir}`;
 }
 await $`${tpmDir}/bin/install_plugins`;

@@ -23,7 +23,7 @@
 // is ordering by distance ascending.
 
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 
 // vec0 rejects `k > 4096` ("k value in knn query too large").
 export const KNN_K_CAP = 4096;
@@ -58,12 +58,14 @@ export interface KnnRow {
 export function parseKnnResponse(stdout: string): Result<KnnRow[], Error> {
   const parsed = jsonOf(responseSchema).safeParse(stdout);
   if (!parsed.success)
-    return err(new Error("ccc search --json did not print a search response"));
+    return Result.err(
+      new Error("ccc search --json did not print a search response"),
+    );
   if (!parsed.data.success)
-    return err(
+    return Result.err(
       new Error(`ccc search failed: ${parsed.data.message ?? "no message"}`),
     );
-  return ok(
+  return Result.ok(
     parsed.data.results.map((row) => ({
       filePath: row.file_path,
       language: row.language,

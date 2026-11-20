@@ -1,5 +1,5 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../tools/shared/src/result.ts";
 import { resolve } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 
@@ -15,9 +15,10 @@ const installedPath = resolve(home, ".claude/plugins/installed_plugins.json");
 async function readInstalledPlugins(): Promise<
   z.infer<typeof InstalledPluginsSchema> | Error
 > {
-  const contents = await fromAsyncThrowable(() =>
-    readFile(installedPath, "utf8"),
-  )();
+  const contents = await Result.tryPromise({
+    try: () => readFile(installedPath, "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (contents.isErr()) {
     const code = z.object({ code: z.string() }).safeParse(contents.error);
     if (code.success && code.data.code === "ENOENT") return { plugins: {} };

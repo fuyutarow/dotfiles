@@ -35,11 +35,11 @@
 // from `$VAR` cannot be checked; inside an example-research context it is denied, outside it passes.
 // FAIL CLOSED on hook errors (registered with run.sh --fail-closed).
 
+import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
 import { readonlyCommand } from "../../../tools/shared/src/readonly-command.ts";
 import { access, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { strAt } from "../../hooks/narrow.ts";
 import {
   effective,
@@ -64,7 +64,12 @@ const JULIA_WORD = /(?:^|[\s;&|(`'"])(?:\S*\/)?julia(?:-[\d.]+)?(?=[\s'")]|$)/u;
 const rootOf = new Map<string, string | null>();
 
 async function exists(path: string): Promise<boolean> {
-  return (await attempt(() => access(path))).ok;
+  return (
+    await Result.tryPromise({
+      try: () => access(path),
+      catch: (e: unknown) => e,
+    })
+  ).isOk();
 }
 
 async function isWorkingCopyRoot(dir: string): Promise<boolean> {
@@ -186,40 +191,43 @@ export async function runVcs(
   env: NodeJS.ProcessEnv,
 ): Promise<{ status: number; stdout: string } | undefined> {
   const signal = AbortSignal.timeout(5000);
-  const result = await attempt(async () => {
-    const proc = Bun.spawn(cmd, {
-      cwd,
-      env,
-      stdout: "pipe",
-      stderr: "pipe",
-      signal,
-    });
-    const readBounded = async (stream: ReadableStream<Uint8Array>) => {
-      const reader = stream.getReader();
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > 1024 * 1024) {
-          proc.kill();
-          return null;
+  const result = await Result.tryPromise({
+    try: async () => {
+      const proc = Bun.spawn(cmd, {
+        cwd,
+        env,
+        stdout: "pipe",
+        stderr: "pipe",
+        signal,
+      });
+      const readBounded = async (stream: ReadableStream<Uint8Array>) => {
+        const reader = stream.getReader();
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > 1024 * 1024) {
+            proc.kill();
+            return null;
+          }
+          chunks.push(value);
         }
-        chunks.push(value);
-      }
-      return Buffer.concat(chunks).toString("utf8");
-    };
-    const [stdout, stderr, status] = await Promise.all([
-      readBounded(proc.stdout),
-      readBounded(proc.stderr),
-      proc.exited,
-    ]);
-    return signal.aborted || stdout === null || stderr === null
-      ? undefined
-      : { status, stdout };
+        return Buffer.concat(chunks).toString("utf8");
+      };
+      const [stdout, stderr, status] = await Promise.all([
+        readBounded(proc.stdout),
+        readBounded(proc.stderr),
+        proc.exited,
+      ]);
+      return signal.aborted || stdout === null || stderr === null
+        ? undefined
+        : { status, stdout };
+    },
+    catch: (e: unknown) => e,
   });
-  return result.ok ? result.value : undefined;
+  return result.isOk() ? result.value : undefined;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -542,8 +550,8 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  const r = await attempt(main);
-  if (!r.ok) {
+  const r = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
+  if (r.isErr()) {
     // FATAL: the hook itself failed, so the command could not be classified; fail closed
     decidePre(
       "deny",

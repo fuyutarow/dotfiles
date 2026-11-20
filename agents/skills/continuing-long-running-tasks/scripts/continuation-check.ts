@@ -7,7 +7,7 @@
 import { stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
-import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import { Result } from "better-result";
 import {
   bindContinuationSlot,
   continuationProjectRoot,
@@ -71,22 +71,22 @@ async function main(): Promise<CheckResult<number>> {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0) {
-    return err(
+    return Result.err(
       new UsageError(`unexpected positional argument: ${parsed._[0]}`),
     );
   }
   const path = parsed.flags.path;
   if (path === undefined) {
-    return err(
+    return Result.err(
       new UsageError("required option: --path <TASK-CONTINUATION.md>"),
     );
   }
   if (path === "") {
-    return err(new UsageError("--path requires a non-empty value"));
+    return Result.err(new UsageError("--path requires a non-empty value"));
   }
   const bindSlot = parsed.flags.bindSlot;
   if (bindSlot === "") {
-    return err(new UsageError("--path requires a non-empty value"));
+    return Result.err(new UsageError("--path requires a non-empty value"));
   }
 
   const absolutePath = resolve(path);
@@ -119,7 +119,7 @@ async function main(): Promise<CheckResult<number>> {
       bindSlot !== undefined &&
       (await bindSlotHasFindings(bindSlot, absolutePath))
     ) {
-      return ok(1);
+      return Result.ok(1);
     }
     if (bindSlot !== undefined) {
       process.stdout.write(`BOUND ${resolve(bindSlot)} -> ${absolutePath}\n`);
@@ -127,13 +127,13 @@ async function main(): Promise<CheckResult<number>> {
     process.stdout.write(
       `PASS ${absolutePath}: TASK-CONTINUATION schema valid\nFAIL=0\n`,
     );
-    return ok(0);
+    return Result.ok(0);
   }
   if (inspection.status === "absent") {
     process.stdout.write(
       `FAIL ${absolutePath}: TCR00 record does not exist\nFAIL=1\n`,
     );
-    return ok(1);
+    return Result.ok(1);
   }
   for (const finding of inspection.findings) {
     process.stdout.write(
@@ -141,22 +141,23 @@ async function main(): Promise<CheckResult<number>> {
     );
   }
   process.stdout.write(`FAIL=${inspection.findings.length}\n`);
-  return ok(1);
+  return Result.ok(1);
 }
 
-const mainResult = await fromAsyncThrowable(main)()
-  .andThen((result) => result)
-  .mapErr(
-    (error) =>
+const mainResult = (
+  await Result.tryPromise({
+    try: main,
+    catch: (error: unknown) =>
       new UsageError(error instanceof Error ? error.message : String(error)),
-  );
-mainResult.match(
-  (code) => process.exit(code),
-  (error) => {
+  })
+).andThen((result) => result);
+mainResult.match({
+  ok: (code) => process.exit(code),
+  err: (error) => {
     process.stderr.write(
       `FATAL: ${error.message}\n` +
         "usage: bun continuation-check.ts --path <TASK-CONTINUATION.md> [--bind-slot <ACTIVE>]\n",
     );
     process.exit(2);
   },
-);
+});

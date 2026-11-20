@@ -43,15 +43,9 @@ function fixture(base = tmpdir()): string {
 
 describe("WSL dual Codex runtime", () => {
   test("declares the standalone provider for every host", async () => {
-    expect((await declaredProvider(repo, "wsl"))._unsafeUnwrap()).toBe(
-      "standalone",
-    );
-    expect((await declaredProvider(repo, "linux"))._unsafeUnwrap()).toBe(
-      "standalone",
-    );
-    expect((await declaredProvider(repo, "mac"))._unsafeUnwrap()).toBe(
-      "standalone",
-    );
+    expect((await declaredProvider(repo, "wsl")).unwrap()).toBe("standalone");
+    expect((await declaredProvider(repo, "linux")).unwrap()).toBe("standalone");
+    expect((await declaredProvider(repo, "mac")).unwrap()).toBe("standalone");
   });
 
   test("detects the three supported host kinds", () => {
@@ -290,8 +284,8 @@ describe("WSL dual Codex runtime", () => {
       linuxHome,
       "r99-u26",
     );
-    if (!deployed.ok) return;
-    expect(deployed.ok).toBe(true);
+    if (deployed.isErr()) return;
+    expect(deployed.isOk()).toBe(true);
 
     const backups = join(home, ".codex/dotfiles-backups");
     const [stamp] = readdirSync(backups);

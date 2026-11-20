@@ -2,7 +2,7 @@
 import { cp, readdir, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { skillLayoutRefusal } from "./skills-declaration.ts";
 import { bundleEntry } from "../tools/shared/src/bundle-entry.ts";
 
@@ -31,25 +31,28 @@ export function sourceDigester() {
     source: string,
     inputs: readonly string[],
   ): Promise<string | undefined> => {
-    const result = await fromAsyncThrowable(async () => {
-      const hash = createHash("sha256").update(
-        `skill-copy-v2\0${Bun.version}\0`,
-      );
-      const visit = async (path: string, name: string): Promise<void> => {
-        const info = await stat(path); // Follow resource links just as prepareSkillCopy does.
-        hash.update(`${name}\0${info.mode}\0`);
-        if (info.isDirectory()) {
-          for (const entry of (await readdir(path)).toSorted())
-            await visit(join(path, entry), `${name}/${entry}`);
-        } else hash.update(await fileDigest(path));
-      };
-      await visit(source, ".");
-      for (const path of [...new Set(inputs)].toSorted()) {
-        hash.update(`${path}\0`);
-        hash.update(await fileDigest(path));
-      }
-      return hash.digest("hex");
-    }, errorText)();
+    const result = await Result.tryPromise({
+      try: async () => {
+        const hash = createHash("sha256").update(
+          `skill-copy-v2\0${Bun.version}\0`,
+        );
+        const visit = async (path: string, name: string): Promise<void> => {
+          const info = await stat(path); // Follow resource links just as prepareSkillCopy does.
+          hash.update(`${name}\0${info.mode}\0`);
+          if (info.isDirectory()) {
+            for (const entry of (await readdir(path)).toSorted())
+              await visit(join(path, entry), `${name}/${entry}`);
+          } else hash.update(await fileDigest(path));
+        };
+        await visit(source, ".");
+        for (const path of [...new Set(inputs)].toSorted()) {
+          hash.update(`${path}\0`);
+          hash.update(await fileDigest(path));
+        }
+        return hash.digest("hex");
+      },
+      catch: errorText,
+    });
     return result.unwrapOr(undefined);
   };
 }
@@ -65,23 +68,26 @@ export async function prepareSkillCopy(
   source: string,
   target: string,
 ): Promise<Result<{ inputs: string[] }, string>> {
-  const prepared = await fromAsyncThrowable(async () => {
-    const sourceRefusal = await skillLayoutRefusal(source);
-    if (sourceRefusal !== undefined) return err(sourceRefusal);
-    const inputs = new Set<string>();
-    await cp(source, target, { recursive: true, dereference: true });
-    const stagedRefusal = await skillLayoutRefusal(target);
-    if (stagedRefusal !== undefined) return err(stagedRefusal);
-    for (const entry of await skillEntries(source)) {
-      const path = join(source, entry);
-      const build = await bundleEntry(path);
-      if (!build.ok) return err(build.error);
-      for (const input of build.inputs) inputs.add(input);
-      await writeFile(join(target, entry), build.text);
-    }
-    return ok({ inputs: [...inputs].toSorted() });
-  }, errorText)();
-  return prepared.isErr() ? err(prepared.error) : prepared.value;
+  const prepared = await Result.tryPromise({
+    try: async () => {
+      const sourceRefusal = await skillLayoutRefusal(source);
+      if (sourceRefusal !== undefined) return Result.err(sourceRefusal);
+      const inputs = new Set<string>();
+      await cp(source, target, { recursive: true, dereference: true });
+      const stagedRefusal = await skillLayoutRefusal(target);
+      if (stagedRefusal !== undefined) return Result.err(stagedRefusal);
+      for (const entry of await skillEntries(source)) {
+        const path = join(source, entry);
+        const build = await bundleEntry(path);
+        if (!build.ok) return Result.err(build.error);
+        for (const input of build.inputs) inputs.add(input);
+        await writeFile(join(target, entry), build.text);
+      }
+      return Result.ok({ inputs: [...inputs].toSorted() });
+    },
+    catch: errorText,
+  });
+  return prepared.isErr() ? Result.err(prepared.error) : prepared.value;
 }
 
 /** Pure module-load check: resolve the staged entry's graph without running CLI or hook effects. */

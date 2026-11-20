@@ -3,7 +3,7 @@
 import { appendFile, mkdir, readdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
   acquire,
@@ -76,8 +76,11 @@ export async function landStateReady(): Promise<Error | undefined> {
       : process.env["AGX_STATE_DIR"]) ?? join(stateHome(), "agx"),
     "land",
   );
-  const entries = await attempt(() => readdir(old));
-  if (!entries.ok) {
+  const entries = await Result.tryPromise({
+    try: () => readdir(old),
+    catch: (e: unknown) => e,
+  });
+  if (!entries.isOk()) {
     const missing = z
       .object({ code: z.literal("ENOENT") })
       .safeParse(entries.error);
@@ -156,8 +159,11 @@ async function journal<T>(
       await Promise.try(release);
     },
   };
-  const result = await attempt(action);
-  return result.ok ? result.value : new Error(errorMessage(result.error));
+  const result = await Result.tryPromise({
+    try: action,
+    catch: (e: unknown) => e,
+  });
+  return result.isOk() ? result.value : new Error(errorMessage(result.error));
 }
 
 async function append(state: string, event: QueueEvent): Promise<void> {
@@ -262,65 +268,71 @@ export async function runQueue(
     }
     const release = await landLock(mainRoot);
     if (release instanceof Error) return release;
-    const result = await attempt(async () => {
-      await using _land = {
-        [Symbol.asyncDispose]: async () => {
-          await Promise.try(release);
-        },
-      };
-      // An interrupted item is never blindly replayed: it may already have committed/pushed.
-      if (item.start !== undefined) {
-        const saved = await journal(state, async () => {
+    const result = await Result.tryPromise({
+      try: async () => {
+        await using _land = {
+          [Symbol.asyncDispose]: async () => {
+            await Promise.try(release);
+          },
+        };
+        // An interrupted item is never blindly replayed: it may already have committed/pushed.
+        if (item.start !== undefined) {
+          const saved = await journal(state, async () => {
+            await append(state, {
+              schema: 1,
+              kind: "result",
+              id: item.id,
+              at: now(),
+              status: "FAIL",
+              exit: 1,
+              detail:
+                "interrupted runner; inspect the landed commit before re-enqueueing",
+            });
+          });
+          if (saved instanceof Error) return saved;
+          emit(`FAIL ${item.ws}: interrupted runner`);
+          return 1;
+        }
+        const started = await journal(state, async () => {
+          await append(state, {
+            schema: 1,
+            kind: "start",
+            id: item.id,
+            at: now(),
+            pid: process.pid,
+            host: hostname(),
+          });
+        });
+        if (started instanceof Error) return started;
+        emit(`landing ${item.ws} id=${item.id}`);
+        const landed = await Result.tryPromise({
+          try: () => land(item),
+          catch: (e: unknown) => e,
+        });
+        const report = landed.isOk() ? landed.value.report : undefined;
+        let code = landed.isOk() ? landed.value.exit : 2;
+        if (report !== undefined) code = landExit(report);
+        const recorded = await journal(state, async () => {
           await append(state, {
             schema: 1,
             kind: "result",
             id: item.id,
             at: now(),
-            status: "FAIL",
-            exit: 1,
-            detail:
-              "interrupted runner; inspect the landed commit before re-enqueueing",
+            status: code === 0 ? "OK" : "FAIL",
+            exit: code,
+            ...(report === undefined ? {} : { report }),
+            detail: landed.isOk()
+              ? `land exited ${code}`
+              : errorMessage(landed.error),
           });
         });
-        if (saved instanceof Error) return saved;
-        emit(`FAIL ${item.ws}: interrupted runner`);
-        return 1;
-      }
-      const started = await journal(state, async () => {
-        await append(state, {
-          schema: 1,
-          kind: "start",
-          id: item.id,
-          at: now(),
-          pid: process.pid,
-          host: hostname(),
-        });
-      });
-      if (started instanceof Error) return started;
-      emit(`landing ${item.ws} id=${item.id}`);
-      const landed = await attempt(() => land(item));
-      const report = landed.ok ? landed.value.report : undefined;
-      let code = landed.ok ? landed.value.exit : 2;
-      if (report !== undefined) code = landExit(report);
-      const recorded = await journal(state, async () => {
-        await append(state, {
-          schema: 1,
-          kind: "result",
-          id: item.id,
-          at: now(),
-          status: code === 0 ? "OK" : "FAIL",
-          exit: code,
-          ...(report === undefined ? {} : { report }),
-          detail: landed.ok
-            ? `land exited ${code}`
-            : errorMessage(landed.error),
-        });
-      });
-      if (recorded instanceof Error) return recorded;
-      emit(`${code === 0 ? "OK" : "FAIL"} ${item.ws} id=${item.id}`);
-      return code;
+        if (recorded instanceof Error) return recorded;
+        emit(`${code === 0 ? "OK" : "FAIL"} ${item.ws} id=${item.id}`);
+        return code;
+      },
+      catch: (e: unknown) => e,
     });
-    if (!result.ok) return new Error(errorMessage(result.error));
+    if (!result.isOk()) return new Error(errorMessage(result.error));
     if (result.value instanceof Error) return result.value;
     if (result.value !== 0) failed++;
   }

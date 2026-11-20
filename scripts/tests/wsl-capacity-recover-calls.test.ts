@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { err, ok } from "neverthrow";
+import { Result } from "../../tools/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import type { StageRun } from "../wsl-capacity-recover.ts";
 import { registry } from "../../tools/disk-reclaim/src/targets/index.ts";
@@ -145,12 +145,12 @@ describe("WSL capacity recovery names only commands that exist", () => {
         executed.push(stage.argv.join(" "));
         return Promise.resolve({ code: 0, timedOut: false, output: "ok" });
       },
-      measure: () => ok(10 * GiB),
+      measure: () => Result.ok(10 * GiB),
       log: () => {},
       warn: () => {},
     });
     expect(result.isOk()).toBe(true);
-    expect(result._unsafeUnwrap().failures).toEqual([]);
+    expect(result.unwrap().failures).toEqual([]);
     expect(executed).toHaveLength(3);
     expect(executed[0]).toContain("reclaim.ts run host --yes");
     expect(executed[1]).toContain("reclaim.ts run builds --yes");
@@ -169,12 +169,12 @@ describe("WSL capacity recovery names only commands that exist", () => {
         free = 70 * GiB;
         return Promise.resolve({ code: 0, timedOut: false, output: "ok" });
       },
-      measure: () => ok(free),
+      measure: () => Result.ok(free),
       log: () => {},
       warn: () => {},
     });
     expect(executed).toEqual(["host"]);
-    expect(result._unsafeUnwrap().free).toBe(70 * GiB);
+    expect(result.unwrap().free).toBe(70 * GiB);
   });
 
   test("a stage that errors, exits non-zero, or times out is reported as a failure", async () => {
@@ -192,13 +192,13 @@ describe("WSL capacity recovery names only commands that exist", () => {
         }
         return Promise.resolve({ code: 0, timedOut: true, output: "" });
       },
-      measure: () => ok(10 * GiB),
+      measure: () => Result.ok(10 * GiB),
       log: () => {},
       warn: (message) => {
         warnings.push(message);
       },
     });
-    const failures = result._unsafeUnwrap().failures;
+    const failures = result.unwrap().failures;
     expect(failures).toHaveLength(3);
     expect(failures[0]).toContain("host");
     expect(failures[1]).toContain("builds: exit=1");
@@ -212,7 +212,7 @@ describe("WSL capacity recovery names only commands that exist", () => {
       free: 10 * GiB,
       denyBytes: 60 * GiB,
       run: () => Promise.resolve({ code: 0, timedOut: false, output: "" }),
-      measure: () => err(new Error("statfs failed")),
+      measure: () => Result.err(new Error("statfs failed")),
       log: () => {},
       warn: () => {},
     });

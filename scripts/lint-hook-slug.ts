@@ -2,7 +2,7 @@
 // Fail closed: malformed registry, missing/duplicate identities or raw visible emission fail.
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { loadSlugs } from "../agents/hooks/slugs.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
@@ -182,10 +182,12 @@ export async function lintHookSlugs(root: string): Promise<string[]> {
 }
 
 async function main(): Promise<void> {
-  const result = await attempt(() =>
-    lintHookSlugs(process.env["DOTFILES"] ?? join(import.meta.dir, "..")),
-  );
-  if (!result.ok) {
+  const result = await Result.tryPromise({
+    try: () =>
+      lintHookSlugs(process.env["DOTFILES"] ?? join(import.meta.dir, "..")),
+    catch: (e: unknown) => e,
+  });
+  if (!result.isOk()) {
     process.stderr.write(`FATAL: hook-slug: ${errorMessage(result.error)}\n`);
     process.exitCode = 2;
   } else {

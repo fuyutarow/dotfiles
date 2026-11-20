@@ -2,7 +2,7 @@
 // task accounting before executing anything; unavailable cgroup enforcement fails closed.
 import { readFile } from "node:fs/promises";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { err, fromAsyncThrowable, ok } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { gpuAdmissionRefusal } from "./agent-resource-run.ts";
 import {
   effectiveMemoryLimitsMatch,
@@ -57,11 +57,11 @@ async function main() {
   await saveDecision(record.snapshot());
   if (!command.success || !receipt.success) {
     record.reason = "scope-enforcement-unavailable";
-    return err(new Error("invalid scope payload"));
+    return Result.err(new Error("invalid scope payload"));
   }
   if (!invocationId.success) {
     record.reason = "invocation-id-unavailable";
-    return err(new Error("systemd invocation ID unavailable"));
+    return Result.err(new Error("systemd invocation ID unavailable"));
   }
   const cgroup = (await readFile("/proc/self/cgroup", "utf8"))
     .split("\n")
@@ -71,7 +71,7 @@ async function main() {
     cgroup === undefined ||
     !cgroup.split("/").includes(receipt.data.scope_unit)
   )
-    return err(new Error("outside admitted scope"));
+    return Result.err(new Error("outside admitted scope"));
   if (receipt.data.device.kind === "gpu") {
     const { gpu_id, vram_peak_bytes } = receipt.data.device;
     const safetyMiB = receipt.data.gpu_safety_mib;
@@ -80,7 +80,7 @@ async function main() {
       vram_peak_bytes === undefined ||
       safetyMiB === undefined
     )
-      return err(new Error("incomplete GPU admission receipt"));
+      return Result.err(new Error("incomplete GPU admission receipt"));
     // Proc suspicion is advisory; recheck the owner incident before launch.
     const refusal = await gpuAdmissionRefusal(
       { gpu_id, vram_peak_bytes },
@@ -95,7 +95,7 @@ async function main() {
     if (refusal !== undefined) {
       process.stdout.write(`DENY ${refusal}\n`);
       record.reason = "gpu-health-refused";
-      return err(new HealthRefusal(refusal));
+      return Result.err(new HealthRefusal(refusal));
     }
   }
   const root = `/sys/fs/cgroup${cgroup}`;
@@ -119,7 +119,7 @@ async function main() {
       pageSizeBytes,
     )
   )
-    return err(
+    return Result.err(
       new Error("scope RAM/swap ceiling or pids accounting unavailable"),
     );
   process.stdout.write(
@@ -145,21 +145,23 @@ async function main() {
   record.reason = `command-exit-${code}`;
   record.final_status = code;
   await saveDecision(record.snapshot());
-  return ok(code);
+  return Result.ok(code);
 }
-const result = await withDecision(record, () =>
-  fromAsyncThrowable(main)().andThen((value) => value),
+const result = await withDecision(record, async () =>
+  (
+    await Result.tryPromise({ try: main, catch: (error: unknown) => error })
+  ).andThen((value) => value),
 );
 if (result.isErr() && record.reason === "scope-entry")
   record.reason = "scope-enforcement-unavailable";
 record.final_status = result.isOk() ? result.value : 69;
 await saveDecision(record.snapshot());
-result.match(
-  (code) => process.exit(code),
-  (error) => {
+result.match({
+  ok: (code) => process.exit(code),
+  err: (error) => {
     process.stderr.write(
       `DENY ${error instanceof HealthRefusal ? "scope health refusal" : "scope enforcement unavailable"}: ${String(error)}\n`,
     );
     process.exit(69);
   },
-);
+});

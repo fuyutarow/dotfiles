@@ -30,7 +30,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pidAlive } from "./dir-lock.ts";
-import { fromThrowable } from "./zod.ts";
+import { Result } from "./result.ts";
 
 // Signal 0 can only establish liveness inside this PID namespace. Codex sandboxes share /tmp
 // but can each have PID 3: a sweeper must never treat another namespace's live owner as dead.
@@ -61,20 +61,29 @@ function restoreDirectoryAccess(path: string): void {
   chmodSync(path, stat.mode | 0o700);
   for (const name of readdirSync(path)) {
     // One inaccessible entry must not prevent repairing its siblings.
-    fromThrowable(() => {
-      restoreDirectoryAccess(join(path, name));
-    })();
+    Result.try({
+      try: () => {
+        restoreDirectoryAccess(join(path, name));
+      },
+      catch: (e: unknown) => e,
+    });
   }
 }
 
 /** Remove a tree even when a fixture left it read-only; false when it still exists. */
 export function removeTree(path: string): boolean {
-  fromThrowable(() => {
-    restoreDirectoryAccess(path);
-  })();
-  const removed = fromThrowable(() => {
-    rmSync(path, { recursive: true, force: true });
-  })();
+  Result.try({
+    try: () => {
+      restoreDirectoryAccess(path);
+    },
+    catch: (e: unknown) => e,
+  });
+  const removed = Result.try({
+    try: () => {
+      rmSync(path, { recursive: true, force: true });
+    },
+    catch: (e: unknown) => e,
+  });
   if (removed.isOk()) return true;
   process.stderr.write(`WARNING: could not remove test temp path ${path}\n`);
   return false;
@@ -82,7 +91,10 @@ export function removeTree(path: string): boolean {
 
 /** Remove run parents of `root` whose owner process is gone; returns the names removed. */
 export function sweepStaleRuns(root: string): string[] {
-  const listed = fromThrowable(() => readdirSync(root))();
+  const listed = Result.try({
+    try: () => readdirSync(root),
+    catch: (e: unknown) => e,
+  });
   if (listed.isErr()) return [];
   const uid = process.getuid?.();
   const removed: string[] = [];
@@ -90,7 +102,10 @@ export function sweepStaleRuns(root: string): string[] {
     const pid = ownerPidOf(name);
     if (pid === undefined && !ANY_RUN.test(name)) continue;
     const path = join(root, name);
-    const stat = fromThrowable(() => statSync(path))();
+    const stat = Result.try({
+      try: () => statSync(path),
+      catch: (e: unknown) => e,
+    });
     if (stat.isErr() || (uid !== undefined && stat.value.uid !== uid)) continue;
     const old = Temporal.Now.instant().epochMilliseconds - stat.value.mtimeMs;
     // Foreign namespaces and legacy names have no locally meaningful PID. Only age can
@@ -150,9 +165,12 @@ export function installTestTmp(
   const tmp = createTestTmp(env, root);
   process.on("exit", tmp.cleanup);
   // afterAll throws outside `bun test` (a plain script importing this module); exit covers that.
-  fromThrowable(() => {
-    afterAll(tmp.cleanup);
-  })();
+  Result.try({
+    try: () => {
+      afterAll(tmp.cleanup);
+    },
+    catch: (e: unknown) => e,
+  });
   for (const [signal, number] of Object.entries(SIGNALS)) {
     process.once(signal, () => {
       tmp.cleanup();
@@ -172,9 +190,12 @@ process.env["MISE_DATA_DIR"] ??= join(
 // Subprocess integration tests have 30 s child guards. Bun's 5 s default otherwise kills an
 // awaited child under load before its own guard can report a result. This is a hang guard;
 // deadline behavior is asserted separately with injected clocks.
-fromThrowable(() => {
-  setDefaultTimeout(30_000);
-})();
+Result.try({
+  try: () => {
+    setDefaultTimeout(30_000);
+  },
+  catch: (e: unknown) => e,
+});
 
 const originalEnv = new Map<string, string | undefined>();
 let testRoot: string | undefined;
@@ -206,26 +227,32 @@ async function isolatedPaths(root: string) {
 Object.assign(process.env, await isolatedPaths(processTmp.dir));
 
 /** Give each test and every process it starts an isolated home and temp tree. */
-fromThrowable(() => {
-  beforeEach(async () => {
-    const root = await mkdtemp(join(processTmp.dir, "dotfiles-test-"));
-    testRoot = root;
-    const paths = await isolatedPaths(root);
-    for (const key of Object.keys(paths))
-      originalEnv.set(key, process.env[key]);
-    Object.assign(process.env, paths);
-  });
-})();
+Result.try({
+  try: () => {
+    beforeEach(async () => {
+      const root = await mkdtemp(join(processTmp.dir, "dotfiles-test-"));
+      testRoot = root;
+      const paths = await isolatedPaths(root);
+      for (const key of Object.keys(paths))
+        originalEnv.set(key, process.env[key]);
+      Object.assign(process.env, paths);
+    });
+  },
+  catch: (e: unknown) => e,
+});
 
-fromThrowable(() => {
-  afterEach(() => {
-    for (const [key, value] of originalEnv) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-    originalEnv.clear();
-    const root = testRoot;
-    testRoot = undefined;
-    if (root !== undefined) removeTree(root);
-  });
-})();
+Result.try({
+  try: () => {
+    afterEach(() => {
+      for (const [key, value] of originalEnv) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      originalEnv.clear();
+      const root = testRoot;
+      testRoot = undefined;
+      if (root !== undefined) removeTree(root);
+    });
+  },
+  catch: (e: unknown) => e,
+});

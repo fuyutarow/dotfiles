@@ -8,8 +8,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fromAsyncThrowable, ok } from "neverthrow";
-import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "../../tools/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   hasLiveBuildProcess,
   claimEmergencyCacheDrop,
@@ -99,9 +99,12 @@ function decisionRecords(path: string) {
 
 afterEach(() => {
   for (const root of recoveryVerdictRoots.splice(0)) {
-    const removed = fromThrowable(() => {
-      rmSync(root, { recursive: true, force: true });
-    })();
+    const removed = Result.try({
+      try: () => {
+        rmSync(root, { recursive: true, force: true });
+      },
+      catch: (e: unknown) => e,
+    });
     expect(removed.isOk()).toBe(true);
   }
 });
@@ -550,7 +553,7 @@ describe("WSL capacity recovery decisions", () => {
     await recoverTmpfsCapacity({
       thresholdPercent: 80,
       measure: () =>
-        ok({
+        Result.ok({
           inodes: { used: 85, total: 100, percent: 85 },
           bytes: { used: 50, total: 100, percent: 50 },
         }),
@@ -692,19 +695,21 @@ describe("WSL capacity recovery decisions", () => {
       expect(proc.exitCode).toBeNull();
       expect(existsSync(context.recordPath ?? "")).toBe(false);
       // A recording fault must leave the selected process alive.
-      const recordingFailure = await fromAsyncThrowable(() =>
-        stopCompute(
-          [
-            {
-              kind: "pid",
-              pid: proc.pid,
-              startTicks: ticks ?? "",
-              comm: "julia",
-            },
-          ],
-          { ...context, recordPath: join(executable, "impossible.jsonl") },
-        ),
-      )();
+      const recordingFailure = await Result.tryPromise({
+        try: () =>
+          stopCompute(
+            [
+              {
+                kind: "pid",
+                pid: proc.pid,
+                startTicks: ticks ?? "",
+                comm: "julia",
+              },
+            ],
+            { ...context, recordPath: join(executable, "impossible.jsonl") },
+          ),
+        catch: (e: unknown) => e,
+      });
       expect(recordingFailure.isErr()).toBe(true);
       expect(proc.exitCode).toBeNull();
       await recoverMemoryEmergency({

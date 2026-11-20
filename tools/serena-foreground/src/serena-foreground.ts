@@ -8,7 +8,7 @@ import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import { fromPromise } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import {
   executeJob,
   validateManifest,
@@ -121,24 +121,24 @@ function integerFlag(
 }
 
 async function existingProject(path: string): Promise<string | UsageError> {
-  const resolved = await fromPromise(
-    realpath(resolve(path)),
-    (error) =>
+  const resolved = await Result.tryPromise({
+    try: () => realpath(resolve(path)),
+    catch: (error) =>
       new UsageError(
         `cannot resolve project '${path}': ${
           error instanceof Error ? error.message : String(error)
         }`,
       ),
-  );
+  });
   if (resolved.isErr()) {
     return resolved.error;
   }
   const project = resolved.value;
-  const directory = await fromPromise(
-    stat(project),
-    (error) =>
+  const directory = await Result.tryPromise({
+    try: () => stat(project),
+    catch: (error) =>
       new UsageError(error instanceof Error ? error.message : String(error)),
-  );
+  });
   if (directory.isErr()) return directory.error;
   if (!directory.value.isDirectory())
     return new UsageError(`project is not a directory: ${project}`);

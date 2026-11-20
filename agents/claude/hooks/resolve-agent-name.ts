@@ -13,8 +13,8 @@
 // against the way SessionStart has). Shares the SAME cache file, so whichever of the three
 // warms it first still helps the others.
 
+import { Result } from "../../../tools/shared/src/result.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { attempt, attemptOr } from "../../hooks/attempt.ts";
 import { arr, at, parseJson, strAt } from "../../hooks/narrow.ts";
 
 const HOME = process.env["HOME"] ?? "";
@@ -70,11 +70,13 @@ function buildEntries(
 
 async function agentName(sid: string): Promise<string | undefined> {
   // missing / corrupt cache file -> treat as empty and refetch below
-  const cache = await attemptOr(
-    async (): Promise<unknown> =>
-      parseJson(await readFile(AGENT_NAME_CACHE, "utf8")),
-    {},
-  );
+  const cache = await (
+    await Result.tryPromise({
+      try: async (): Promise<unknown> =>
+        parseJson(await readFile(AGENT_NAME_CACHE, "utf8")),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr({});
   const hit = at(cache, sid);
   const hitAt = at(hit, "at");
   if (
@@ -83,34 +85,42 @@ async function agentName(sid: string): Promise<string | undefined> {
   )
     return strAt(hit, "name");
 
-  const fetched = await attempt(async () => {
-    const child = Bun.spawn([CLAUDE_BIN, "agents", "--json"], {
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "ignore",
-    });
-    const timeout = AbortSignal.timeout(3000);
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-    }, 3000);
-    const [out, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      child.exited,
-    ]);
-    clearTimeout(timer);
-    if (timeout.aborted || exitCode !== 0) return null;
-    const listed = agentsOf(parseJson(out));
-    if (!listed.ok) return null;
-    const now = Temporal.Now.instant().epochMilliseconds;
-    return buildEntries(listed.value, sid, now);
+  const fetched = await Result.tryPromise({
+    try: async () => {
+      const child = Bun.spawn([CLAUDE_BIN, "agents", "--json"], {
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "ignore",
+      });
+      const timeout = AbortSignal.timeout(3000);
+      const timer = setTimeout(() => {
+        child.kill("SIGTERM");
+      }, 3000);
+      const [out, exitCode] = await Promise.all([
+        new Response(child.stdout).text(),
+        child.exited,
+      ]);
+      clearTimeout(timer);
+      if (timeout.aborted || exitCode !== 0) return null;
+      const listed = agentsOf(parseJson(out));
+      if (!listed.ok) return null;
+      const now = Temporal.Now.instant().epochMilliseconds;
+      return buildEntries(listed.value, sid, now);
+    },
+    catch: (e: unknown) => e,
   });
-  if (!fetched.ok || fetched.value === null) return undefined; // `claude` missing/slow/errored -> caller falls back
+  if (fetched.isErr() || fetched.value === null) return undefined; // `claude` missing/slow/errored -> caller falls back
   const next = fetched.value;
   // cache write failed (e.g. read-only fs) -> value below still returned, just not persisted
-  await attemptOr(async () => {
-    await mkdir(`${HOME}/.cache/claude`, { recursive: true });
-    await writeFile(AGENT_NAME_CACHE, JSON.stringify(next));
-  }, undefined);
+  (
+    await Result.tryPromise({
+      try: async () => {
+        await mkdir(`${HOME}/.cache/claude`, { recursive: true });
+        await writeFile(AGENT_NAME_CACHE, JSON.stringify(next));
+      },
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(undefined);
   return next[sid]?.name;
 }
 

@@ -13,7 +13,7 @@
 
 import { join } from "node:path";
 import { cli } from "cleye";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 
@@ -550,8 +550,8 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  const r = await attempt(main);
-  if (!r.ok) {
+  const r = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
+  if (!r.isOk()) {
     process.stderr.write(`FATAL: ${errorMessage(r.error)}\n`);
     process.exitCode = 2;
   }

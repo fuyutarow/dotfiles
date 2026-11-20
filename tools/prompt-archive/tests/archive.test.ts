@@ -33,8 +33,8 @@ afterEach(async () => {
 
 async function runArchive(options: Parameters<typeof archiveHistories>[0]) {
   const result = await archiveHistories(options);
-  expect(result.ok).toBe(true);
-  return result.ok ? result.value : { archived: -1, skipped: -1 };
+  expect(result.isOk()).toBe(true);
+  return result.isOk() ? result.value : { archived: -1, skipped: -1 };
 }
 
 describe("prompt archive", () => {

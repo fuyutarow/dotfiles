@@ -13,10 +13,10 @@
 // a commit. When the command cannot be parsed, the text is split at shell operators and judged at bashCwd (fail closed).
 // `jj`, `command jj` and `env jj` are matched. The gated commit spawns jj from bun, not through this tool.
 // FAIL CLOSED (run.sh --fail-closed): a hook error denies.
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { parseShell } from "../../tools/shared/src/shell-syntax.ts";
-import { attempt, errorMessage } from "./attempt.ts";
 import { bashCwd, decidePre, readStdinJson } from "./lib.ts";
 import { strAt } from "./narrow.ts";
 
@@ -67,8 +67,11 @@ export function commitSites(
 }
 
 async function isFile(path: string): Promise<boolean> {
-  const result = await attempt(() => stat(path));
-  return result.ok && result.value.isFile();
+  const result = await Result.tryPromise({
+    try: () => stat(path),
+    catch: (e: unknown) => e,
+  });
+  return result.isOk() && result.value.isFile();
 }
 
 async function gatedRoot(start: string): Promise<string | null> {
@@ -111,20 +114,20 @@ async function main(): Promise<Outcome> {
 }
 
 if (import.meta.main) {
-  const r = await attempt(main);
-  if (r.ok && r.value !== null && r.value.kind === "deny") {
+  const r = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
+  if (r.isOk() && r.value !== null && r.value.kind === "deny") {
     // SINGLE-AXIS: one question (does this command commit around the repo's gate?)
     decidePre(
       "deny",
       `gated-commit: ${r.value.message}. Commit through the gate: mise run commit -- -m '<message>' [--push] -- <path>...`,
     );
-  } else if (r.ok && r.value !== null && r.value.kind === "error") {
+  } else if (r.isOk() && r.value !== null && r.value.kind === "error") {
     // FATAL: the command could not be judged; fail closed with the cause
     decidePre(
       "deny",
       `gated-commit: could not evaluate (${r.value.message}) — failing closed.`,
     );
-  } else if (!r.ok) {
+  } else if (r.isErr()) {
     // FATAL: the command could not be judged; fail closed with the cause
     decidePre(
       "deny",

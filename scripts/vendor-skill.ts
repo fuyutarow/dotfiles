@@ -11,7 +11,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { cli } from "cleye";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { z } from "../agents/hooks/zod.ts";
 import {
   formatDeclaration,
@@ -159,10 +159,10 @@ async function main(): Promise<void> {
     process.env["DOTFILES"] ??
     resolve(import.meta.dir, "..");
   const declarationPath = resolve(dotfiles, "agents/skills.thirdparty.toml");
-  const declarationText = await fromAsyncThrowable(
-    () => readFile(declarationPath, "utf8"),
-    errorText,
-  )();
+  const declarationText = await Result.tryPromise({
+    try: () => readFile(declarationPath, "utf8"),
+    catch: errorText,
+  });
   if (declarationText.isErr()) {
     fail(`FATAL: ${declarationPath}: ${errorText(declarationText.error)}`);
     process.exitCode = 1;

@@ -24,7 +24,7 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { fromAsyncThrowable, fromThrowable } from "neverthrow";
+import { Result } from "better-result";
 
 export const MAX_RECORD_BYTES = 65_536;
 
@@ -36,9 +36,11 @@ function errorCode(error: unknown): string | undefined {
   return String(code);
 }
 
-const parseInstant = fromThrowable((value: string) =>
-  Temporal.Instant.from(value),
-);
+const parseInstant = (value: string) =>
+  Result.try({
+    try: () => Temporal.Instant.from(value),
+    catch: (e: unknown) => e,
+  });
 
 const exists = (path: string): Promise<boolean> =>
   access(path).then(
@@ -46,15 +48,17 @@ const exists = (path: string): Promise<boolean> =>
     () => false,
   );
 
-const statPath = fromAsyncThrowable(
-  (path: string) => lstat(path),
-  (error) => errorCode(error),
-);
+const statPath = (path: string) =>
+  Result.tryPromise({
+    try: () => lstat(path),
+    catch: (error) => errorCode(error),
+  });
 
-const readPath = fromAsyncThrowable(
-  (path: string) => readFile(path, "utf8"),
-  (error) => errorCode(error),
-);
+const readPath = (path: string) =>
+  Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (error) => errorCode(error),
+  });
 
 export type Platform = "claude" | "codex";
 
@@ -255,13 +259,18 @@ export function validateContinuationRecord(
 
   const recordPath = oneMetadata(findings, text, "PATH");
   if (recordPath !== undefined && expectedPath !== undefined) {
-    const mismatch = fromThrowable((): boolean => {
-      const claimedPath = resolve(
-        workspaceRoot ?? dirname(expectedPath),
-        recordPath,
-      );
-      return recordPath.includes("\0") || claimedPath !== resolve(expectedPath);
-    })();
+    const mismatch = Result.try({
+      try: (): boolean => {
+        const claimedPath = resolve(
+          workspaceRoot ?? dirname(expectedPath),
+          recordPath,
+        );
+        return (
+          recordPath.includes("\0") || claimedPath !== resolve(expectedPath)
+        );
+      },
+      catch: (e: unknown) => e,
+    });
     if (mismatch.isErr()) {
       findings.push({
         code: "TCR29",
@@ -620,37 +629,45 @@ export async function bindContinuationSlot(
   // The write closure records its temporary path here; a plain `let` would be narrowed to
   // `undefined` at the cleanup site because the compiler does not track closure assignments.
   const temporary: { path: string | undefined } = { path: undefined };
-  const write = fromAsyncThrowable(async (): Promise<readonly Finding[]> => {
-    if ((await exists(slot)) && (await lstat(slot)).isSymbolicLink()) {
-      return [
-        {
-          code: "TCR21",
-          message: "continuation slot must be a regular file, never a symlink",
-        },
-      ];
-    }
-    await mkdir(dirname(slot), { recursive: true });
-    const createdAncestorFinding = await unsafeAncestor(root, slot, true);
-    if (createdAncestorFinding !== undefined) {
-      return [createdAncestorFinding];
-    }
-    const portablePath = relative(root, record).split(sep).join("/");
-    const temporaryPath = `${slot}.tmp-${process.pid}-${randomUUID()}`;
-    temporary.path = temporaryPath;
-    await writeFile(temporaryPath, `TCR_PATH: ${portablePath}\n`, {
-      flag: "wx",
-      mode: 0o600,
+  const write = () =>
+    Result.tryPromise({
+      try: async (): Promise<readonly Finding[]> => {
+        if ((await exists(slot)) && (await lstat(slot)).isSymbolicLink()) {
+          return [
+            {
+              code: "TCR21",
+              message:
+                "continuation slot must be a regular file, never a symlink",
+            },
+          ];
+        }
+        await mkdir(dirname(slot), { recursive: true });
+        const createdAncestorFinding = await unsafeAncestor(root, slot, true);
+        if (createdAncestorFinding !== undefined) {
+          return [createdAncestorFinding];
+        }
+        const portablePath = relative(root, record).split(sep).join("/");
+        const temporaryPath = `${slot}.tmp-${process.pid}-${randomUUID()}`;
+        temporary.path = temporaryPath;
+        await writeFile(temporaryPath, `TCR_PATH: ${portablePath}\n`, {
+          flag: "wx",
+          mode: 0o600,
+        });
+        await rename(temporaryPath, slot);
+        temporary.path = undefined;
+        return [];
+      },
+      catch: (e: unknown) => e,
     });
-    await rename(temporaryPath, slot);
-    temporary.path = undefined;
-    return [];
-  });
   const result = await write();
   if (result.isOk()) return result.value;
   // Best effort: the exact randomized temporary path is never a binding.
   const leftover = temporary.path;
   if (leftover !== undefined) {
-    await fromAsyncThrowable(() => unlink(leftover))();
+    await Result.tryPromise({
+      try: () => unlink(leftover),
+      catch: (e: unknown) => e,
+    });
   }
   return [
     {

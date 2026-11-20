@@ -1,6 +1,6 @@
 // Consumer: flock's foreground child. Retain inherited lock descriptors until systemd
 // has stopped every descendant, including processes that outlive the direct command.
-import { err, fromAsyncThrowable, ok } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { readFile } from "node:fs/promises";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
@@ -8,7 +8,8 @@ async function main() {
   const payload = jsonOf(
     z.object({ argv: z.array(z.string()).min(1), scope: z.string() }),
   ).safeParse(process.env["AGENT_RESOURCE_SCOPE_LAUNCH"]);
-  if (!payload.success) return err(new Error("invalid scope launch payload"));
+  if (!payload.success)
+    return Result.err(new Error("invalid scope launch payload"));
   const { scope, argv } = payload.data;
   let cgroup: string | undefined;
   const stop = async () => {
@@ -31,10 +32,10 @@ async function main() {
       inspect.exited,
     ]);
     if (inspected !== 0 && !/not loaded|not found/iu.test(inspectionError))
-      return err(new Error(inspectionError));
+      return Result.err(new Error(inspectionError));
     if (group.trim() !== "") {
       if (!group.trim().startsWith("/") || group.includes(".."))
-        return err(new Error("invalid scope ControlGroup"));
+        return Result.err(new Error("invalid scope ControlGroup"));
       cgroup = `/sys/fs/cgroup${group.trim()}/cgroup.events`;
     }
     const child = Bun.spawn(["systemctl", "--user", "stop", scope], {
@@ -48,28 +49,32 @@ async function main() {
       child.exited,
     ]);
     if (code !== 0 && !/not loaded|not found/iu.test(stderr))
-      return err(new Error(stderr));
-    if (cgroup === undefined) return ok(undefined);
+      return Result.err(new Error(stderr));
+    if (cgroup === undefined) return Result.ok(undefined);
     const eventsPath = cgroup;
-    const events = await fromAsyncThrowable(() =>
-      readFile(eventsPath, "utf8"),
-    )();
+    const events = await Result.tryPromise({
+      try: () => readFile(eventsPath, "utf8"),
+      catch: (error: unknown) => error,
+    });
     if (events.isErr())
       return z.object({ code: z.literal("ENOENT") }).safeParse(events.error)
         .success
-        ? ok(undefined)
-        : err(events.error);
+        ? Result.ok(undefined)
+        : Result.err(events.error);
     if (!/^populated 0$/mu.test(events.value))
-      return err(new Error(`scope cgroup still populated: ${cgroup}`));
-    return ok(undefined);
+      return Result.err(new Error(`scope cgroup still populated: ${cgroup}`));
+    return Result.ok(undefined);
   };
   const stopUntilEnded = async () => {
     // A timed-out/failed stop does not prove that descendants have exited (for
     // example a task in D state). Keep flock's descriptors and retry fail closed.
     for (;;) {
-      const stopped = await fromAsyncThrowable(stop)().andThen(
-        (value) => value,
-      );
+      const stopped = (
+        await Result.tryPromise({
+          try: stop,
+          catch: (error: unknown) => error,
+        })
+      ).andThen((value) => value);
       if (stopped.isOk()) return;
       process.stderr.write(
         `HOLD scope=${scope} cleanup unconfirmed; retaining slots: ${String(stopped.error)}\n`,
@@ -83,15 +88,18 @@ async function main() {
   };
   process.on("SIGINT", interrupt);
   process.on("SIGTERM", interrupt);
-  const result = await fromAsyncThrowable(async () => {
-    // bounded: systemd owns the command's RuntimeMaxSec and cleanup timeout.
-    const child = Bun.spawn(argv, {
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    return child.exited;
-  })();
+  const result = await Result.tryPromise({
+    try: async () => {
+      // bounded: systemd owns the command's RuntimeMaxSec and cleanup timeout.
+      const child = Bun.spawn(argv, {
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+      return child.exited;
+    },
+    catch: (error: unknown) => error,
+  });
   await stopping;
   // Recheck after launch exits even if an earlier interrupt found no scope yet.
   await stopUntilEnded();
@@ -99,11 +107,16 @@ async function main() {
   process.off("SIGTERM", interrupt);
   return result;
 }
-const result = await fromAsyncThrowable(main)().andThen((value) => value);
-result.match(
-  (code) => process.exit(code),
-  (error) => {
+const result = (
+  await Result.tryPromise({
+    try: main,
+    catch: (error: unknown) => error,
+  })
+).andThen((value) => value);
+result.match({
+  ok: (code) => process.exit(code),
+  err: (error) => {
     process.stderr.write(`ERROR scope cleanup: ${String(error)}\n`);
     process.exit(70);
   },
-);
+});

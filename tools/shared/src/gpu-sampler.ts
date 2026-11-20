@@ -2,7 +2,7 @@
 // Sole nvidia-smi owner. Run this foreground entrypoint under the host's supervisor.
 // Recover a crashed owner only after /proc proves both owner and driver absent.
 // Retired owner directories prevent delayed reclaimers from moving a successor lock.
-import { attempt, attemptOr } from "./attempt.ts";
+import { Result } from "./result.ts";
 import { z, jsonOf } from "./zod.ts";
 import { cli } from "cleye";
 import { randomUUID } from "node:crypto";
@@ -106,18 +106,21 @@ export async function hostHasNvidiaSmi(procRoot = "/proc"): Promise<boolean> {
     names
       .filter((n) => /^\d+$/u.test(n))
       .map(async (pid) => {
-        const observed = await attempt(async () => {
-          const [comm, cmdline] = await Promise.all([
-            readFile(join(procRoot, pid, "comm"), "utf8"),
-            readFile(join(procRoot, pid, "cmdline"), "utf8").catch(() => ""),
-          ]);
-          const argv = cmdline.split("\0");
-          return (
-            comm.trim() === "nvidia-smi" ||
-            argv.slice(0, 2).some((arg) => basename(arg) === "nvidia-smi")
-          );
+        const observed = await Result.tryPromise({
+          try: async () => {
+            const [comm, cmdline] = await Promise.all([
+              readFile(join(procRoot, pid, "comm"), "utf8"),
+              readFile(join(procRoot, pid, "cmdline"), "utf8").catch(() => ""),
+            ]);
+            const argv = cmdline.split("\0");
+            return (
+              comm.trim() === "nvidia-smi" ||
+              argv.slice(0, 2).some((arg) => basename(arg) === "nvidia-smi")
+            );
+          },
+          catch: (e: unknown) => e,
         });
-        if (observed.ok) return observed.value;
+        if (observed.isOk()) return observed.value;
         const error = z.object({ code: z.string() }).safeParse(observed.error);
         return !error.success || error.data.code !== "ENOENT";
       }),
@@ -194,8 +197,11 @@ const OwnerSchema = z.object({
 });
 async function ownerPidGone(pid: number): Promise<boolean> {
   if (process.platform !== "linux") return false;
-  const result = await attempt(() => access(`/proc/${pid}`));
-  if (result.ok) return false;
+  const result = await Result.tryPromise({
+    try: () => access(`/proc/${pid}`),
+    catch: (e: unknown) => e,
+  });
+  if (result.isOk()) return false;
   const error = z.object({ code: z.string() }).safeParse(result.error);
   return error.success && error.data.code === "ENOENT";
 }
@@ -313,8 +319,11 @@ export async function gpuSlotHeld(
     return {
       error: "XDG_RUNTIME_DIR must name an absolute user runtime directory",
     };
-  const names = await attempt(() => readdir(directory));
-  if (!names.ok) {
+  const names = await Result.tryPromise({
+    try: () => readdir(directory),
+    catch: (e: unknown) => e,
+  });
+  if (names.isErr()) {
     const missing = z
       .object({ code: z.literal("ENOENT") })
       .safeParse(names.error);
@@ -329,16 +338,18 @@ export async function gpuSlotHeld(
   );
   if (slots.size === 0) return false;
   const binary = options.lslocksPath ?? "lslocks";
-  const childResult = await attempt(() =>
-    Promise.resolve(
-      Bun.spawn([binary, "--json", "--notruncate", "--output", "PID,PATH"], {
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: 5000,
-      }),
-    ),
-  );
-  if (!childResult.ok)
+  const childResult = await Result.tryPromise({
+    try: () =>
+      Promise.resolve(
+        Bun.spawn([binary, "--json", "--notruncate", "--output", "PID,PATH"], {
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 5000,
+        }),
+      ),
+    catch: (e: unknown) => e,
+  });
+  if (childResult.isErr())
     return { error: `cannot start ${binary}: ${String(childResult.error)}` };
   const child = childResult.value;
   const [stdout, stderr, exit] = await Promise.all([
@@ -398,8 +409,11 @@ async function inspectProcesses(procRoot: string): Promise<ProcFinding> {
     finding.errors.push("process inventory is available only on Linux");
     return finding;
   }
-  const inventory = await attempt(() => readdir(procRoot));
-  if (!inventory.ok) {
+  const inventory = await Result.tryPromise({
+    try: () => readdir(procRoot),
+    catch: (e: unknown) => e,
+  });
+  if (inventory.isErr()) {
     finding.errors.push(`cannot read ${procRoot}: ${String(inventory.error)}`);
     return finding;
   }
@@ -408,10 +422,11 @@ async function inspectProcesses(procRoot: string): Promise<ProcFinding> {
       .filter((name) => /^\d+$/u.test(name))
       .map(async (pidText) => {
         const pid = Number(pidText);
-        const stat = await attempt(() =>
-          readFile(join(procRoot, pidText, "stat"), "utf8"),
-        );
-        if (!stat.ok) {
+        const stat = await Result.tryPromise({
+          try: () => readFile(join(procRoot, pidText, "stat"), "utf8"),
+          catch: (e: unknown) => e,
+        });
+        if (stat.isErr()) {
           const code = z.object({ code: z.string() }).safeParse(stat.error);
           if (code.success && code.data.code === "ENOENT") return;
           finding.errors.push(
@@ -426,10 +441,11 @@ async function inspectProcesses(procRoot: string): Promise<ProcFinding> {
         }
         if (state === "Z") finding.zombies.add(pid);
         if (state !== "D") return;
-        const waitChannel = await attempt(() =>
-          readFile(join(procRoot, pidText, "wchan"), "utf8"),
-        );
-        if (!waitChannel.ok) {
+        const waitChannel = await Result.tryPromise({
+          try: () => readFile(join(procRoot, pidText, "wchan"), "utf8"),
+          catch: (e: unknown) => e,
+        });
+        if (waitChannel.isErr()) {
           const code = z
             .object({ code: z.string() })
             .safeParse(waitChannel.error);
@@ -525,184 +541,194 @@ export async function runGpuSampler(
   const release = await acquireOwner(lock, options.procRoot);
   if (release === undefined) return "refused: sampler lock exists";
   await using _lock = { [Symbol.asyncDispose]: release };
-  return await attemptOr(async () => {
-    const previous = await readGpuState(path);
-    if (previous === undefined && (await Bun.file(path).exists()))
-      return "refused: corrupt sampler state";
-    const now = clock();
-    const base: GpuState = previous ?? {
-      schema: 1,
-      attemptAt: 0,
-      devices: [],
-      processes: [],
-      samples: [],
-    };
-    if (await hostHasNvidiaSmi(options.procRoot)) {
-      const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
-      const stalled = consecutiveProbeMisses >= (options.stallMisses ?? 2);
-      await writeState(path, {
-        ...base,
-        attemptAt: now,
-        consecutiveProbeMisses,
-        ...(stalled
-          ? {
-              unresponsiveSince: base.unresponsiveSince ?? now,
-              stallEvidence: `${consecutiveProbeMisses} consecutive sampler starts found nvidia-smi still running`,
-            }
-          : { unresponsiveSince: undefined, stallEvidence: undefined }),
-      });
-      return stalled
-        ? "unresponsive: nvidia-smi persists"
-        : "slow sample: nvidia-smi exists";
-    }
-    const slotHeld = await gpuSlotHeld(options);
-    if (slotHeld !== false) {
-      const unavailable = slotHeld.error !== undefined;
-      const why = unavailable
-        ? `probe paused: GPU slot state unavailable: ${slotHeld.error}`
-        : pausedReason;
-      await writeState(path, {
-        ...base,
-        attemptAt: now,
-        sampledAt: now,
-        lastProbeAt: base.lastProbeAt ?? base.sampledAt,
-        paused: true,
-        na: true,
-        ...(unavailable
-          ? { holder: undefined, why }
-          : {
-              sampledAt: now,
-              lastProbeAt: base.lastProbeAt ?? base.sampledAt,
-              paused: true,
-              holder: slotHeld,
-              why: undefined,
-            }),
-      });
-      return why;
-    }
-    // A future timestamp also refuses: clock rollback must not bypass the minimum interval.
-    if (
-      previous !== undefined &&
-      previous.na !== true &&
-      now - Math.max(previous.attemptAt, previous.sampledAt ?? 0) <
-        GPU_INTERVAL_MS
-    )
-      return "refused: 60s interval";
-    const binary = await executable(options.path, options.fallbacks);
-    if (binary === undefined) {
-      await writeState(path, { ...base, attemptAt: now, why: "no nvidia-smi" });
-      return "no nvidia-smi";
-    }
-    // Persist BEFORE spawn. A crash cannot erase the cooldown or make the old sample look live.
-    const pending = {
-      ...base,
-      attemptAt: now,
-      na: undefined,
-      paused: undefined,
-      holder: undefined,
-      why: undefined,
-    };
-    await writeState(path, pending);
-    const signal = AbortSignal.timeout(options.timeoutMs ?? 20_000);
-    const child = Bun.spawn([binary, "-q", "-x"], {
-      stdout: "pipe",
-      stderr: "ignore",
-      signal,
-      timeout: options.timeoutMs ?? 20_000,
-      killSignal: "SIGKILL",
-    });
-    child.unref();
-    const timedOut = new Promise<undefined>((resolve) => {
-      signal.addEventListener(
-        "abort",
-        () => {
-          resolve(undefined);
-        },
-        { once: true },
-      );
-    });
-    const completed = Promise.all([boundedOutput(child.stdout), child.exited])
-      .then(([output, exit]) =>
-        exit === 0 && output !== undefined ? parseGpuXml(output) : undefined,
+  const sampled = await Result.tryPromise({
+    try: async () => {
+      const previous = await readGpuState(path);
+      if (previous === undefined && (await Bun.file(path).exists()))
+        return "refused: corrupt sampler state";
+      const now = clock();
+      const base: GpuState = previous ?? {
+        schema: 1,
+        attemptAt: 0,
+        devices: [],
+        processes: [],
+        samples: [],
+      };
+      if (await hostHasNvidiaSmi(options.procRoot)) {
+        const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
+        const stalled = consecutiveProbeMisses >= (options.stallMisses ?? 2);
+        await writeState(path, {
+          ...base,
+          attemptAt: now,
+          consecutiveProbeMisses,
+          ...(stalled
+            ? {
+                unresponsiveSince: base.unresponsiveSince ?? now,
+                stallEvidence: `${consecutiveProbeMisses} consecutive sampler starts found nvidia-smi still running`,
+              }
+            : { unresponsiveSince: undefined, stallEvidence: undefined }),
+        });
+        return stalled
+          ? "unresponsive: nvidia-smi persists"
+          : "slow sample: nvidia-smi exists";
+      }
+      const slotHeld = await gpuSlotHeld(options);
+      if (slotHeld !== false) {
+        const unavailable = slotHeld.error !== undefined;
+        const why = unavailable
+          ? `probe paused: GPU slot state unavailable: ${slotHeld.error}`
+          : pausedReason;
+        await writeState(path, {
+          ...base,
+          attemptAt: now,
+          sampledAt: now,
+          lastProbeAt: base.lastProbeAt ?? base.sampledAt,
+          paused: true,
+          na: true,
+          ...(unavailable
+            ? { holder: undefined, why }
+            : {
+                sampledAt: now,
+                lastProbeAt: base.lastProbeAt ?? base.sampledAt,
+                paused: true,
+                holder: slotHeld,
+                why: undefined,
+              }),
+        });
+        return why;
+      }
+      // A future timestamp also refuses: clock rollback must not bypass the minimum interval.
+      if (
+        previous !== undefined &&
+        previous.na !== true &&
+        now - Math.max(previous.attemptAt, previous.sampledAt ?? 0) <
+          GPU_INTERVAL_MS
       )
-      .catch(() => {});
-    // Do not await exited after the deadline: an unkillable D-state process may never exit.
-    const snapshot = await Promise.race([completed, timedOut]);
-    if (snapshot === undefined || signal.aborted) {
-      const failedAt = clock();
-      await recordDxgEpisodes(dxgOptions(options, path), failedAt, false).catch(
+        return "refused: 60s interval";
+      const binary = await executable(options.path, options.fallbacks);
+      if (binary === undefined) {
+        await writeState(path, {
+          ...base,
+          attemptAt: now,
+          why: "no nvidia-smi",
+        });
+        return "no nvidia-smi";
+      }
+      // Persist BEFORE spawn. A crash cannot erase the cooldown or make the old sample look live.
+      const pending = {
+        ...base,
+        attemptAt: now,
+        na: undefined,
+        paused: undefined,
+        holder: undefined,
+        why: undefined,
+      };
+      await writeState(path, pending);
+      const signal = AbortSignal.timeout(options.timeoutMs ?? 20_000);
+      const child = Bun.spawn([binary, "-q", "-x"], {
+        stdout: "pipe",
+        stderr: "ignore",
+        signal,
+        timeout: options.timeoutMs ?? 20_000,
+        killSignal: "SIGKILL",
+      });
+      child.unref();
+      const timedOut = new Promise<undefined>((resolve) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            resolve(undefined);
+          },
+          { once: true },
+        );
+      });
+      const completed = Promise.all([boundedOutput(child.stdout), child.exited])
+        .then(([output, exit]) =>
+          exit === 0 && output !== undefined ? parseGpuXml(output) : undefined,
+        )
+        .catch(() => {});
+      // Do not await exited after the deadline: an unkillable D-state process may never exit.
+      const snapshot = await Promise.race([completed, timedOut]);
+      if (snapshot === undefined || signal.aborted) {
+        const failedAt = clock();
+        await recordDxgEpisodes(
+          dxgOptions(options, path),
+          failedAt,
+          false,
+        ).catch(() => {});
+        const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
+        const stallMisses = options.stallMisses ?? 2;
+        const stalled = consecutiveProbeMisses >= stallMisses;
+        await writeState(path, {
+          ...pending,
+          attemptAt: failedAt,
+          consecutiveProbeMisses,
+          ...(stalled
+            ? {
+                unresponsiveSince: base.unresponsiveSince ?? clock(),
+                stallEvidence: `${consecutiveProbeMisses} consecutive probe deadlines missed (deadline ${options.timeoutMs ?? 20_000} ms)`,
+              }
+            : { unresponsiveSince: undefined, stallEvidence: undefined }),
+        });
+        return stalled ? "unresponsive" : "slow sample";
+      }
+      const at = clock();
+      const first = snapshot.devices[0];
+      if (first === undefined) {
+        await recordDxgEpisodes(dxgOptions(options, path), at, false).catch(
+          () => {},
+        );
+        const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
+        const stalled = consecutiveProbeMisses >= (options.stallMisses ?? 2);
+        await writeState(path, {
+          ...pending,
+          attemptAt: at,
+          consecutiveProbeMisses,
+          ...(stalled
+            ? {
+                unresponsiveSince: base.unresponsiveSince ?? at,
+                stallEvidence: `${consecutiveProbeMisses} consecutive invalid probe results`,
+              }
+            : { unresponsiveSince: undefined, stallEvidence: undefined }),
+        });
+        return stalled ? "unresponsive" : "slow sample";
+      }
+      const sample = {
+        ts: at,
+        nextTs: at + GPU_INTERVAL_MS,
+        utilPct: first.utilPct,
+        memUsedGiB: first.usedMiB / 1024,
+        memTotalGiB: first.totalMiB / 1024,
+      };
+      await recordDxgEpisodes(dxgOptions(options, path), at, true).catch(
         () => {},
       );
-      const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
-      const stallMisses = options.stallMisses ?? 2;
-      const stalled = consecutiveProbeMisses >= stallMisses;
-      await writeState(path, {
-        ...pending,
-        attemptAt: failedAt,
-        consecutiveProbeMisses,
-        ...(stalled
-          ? {
-              unresponsiveSince: base.unresponsiveSince ?? clock(),
-              stallEvidence: `${consecutiveProbeMisses} consecutive probe deadlines missed (deadline ${options.timeoutMs ?? 20_000} ms)`,
-            }
-          : { unresponsiveSince: undefined, stallEvidence: undefined }),
-      });
-      return stalled ? "unresponsive" : "slow sample";
-    }
-    const at = clock();
-    const first = snapshot.devices[0];
-    if (first === undefined) {
-      await recordDxgEpisodes(dxgOptions(options, path), at, false).catch(
-        () => {},
+      const processIdentity = await collectGpuProcessIdentity(
+        snapshot.processes,
+        at,
+        options,
       );
-      const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
-      const stalled = consecutiveProbeMisses >= (options.stallMisses ?? 2);
       await writeState(path, {
-        ...pending,
-        attemptAt: at,
-        consecutiveProbeMisses,
-        ...(stalled
-          ? {
-              unresponsiveSince: base.unresponsiveSince ?? at,
-              stallEvidence: `${consecutiveProbeMisses} consecutive invalid probe results`,
-            }
-          : { unresponsiveSince: undefined, stallEvidence: undefined }),
+        schema: 1,
+        attemptAt: now,
+        na: undefined,
+        lastProbeAt: at,
+        paused: undefined,
+        holder: undefined,
+        sampledAt: at,
+        consecutiveProbeMisses: 0,
+        ...snapshot,
+        processIdentity,
+        samples: [
+          ...base.samples.filter((s) => at - s.ts <= RETAIN_MS),
+          sample,
+        ].slice(-721),
       });
-      return stalled ? "unresponsive" : "slow sample";
-    }
-    const sample = {
-      ts: at,
-      nextTs: at + GPU_INTERVAL_MS,
-      utilPct: first.utilPct,
-      memUsedGiB: first.usedMiB / 1024,
-      memTotalGiB: first.totalMiB / 1024,
-    };
-    await recordDxgEpisodes(dxgOptions(options, path), at, true).catch(
-      () => {},
-    );
-    const processIdentity = await collectGpuProcessIdentity(
-      snapshot.processes,
-      at,
-      options,
-    );
-    await writeState(path, {
-      schema: 1,
-      attemptAt: now,
-      na: undefined,
-      lastProbeAt: at,
-      paused: undefined,
-      holder: undefined,
-      sampledAt: at,
-      consecutiveProbeMisses: 0,
-      ...snapshot,
-      processIdentity,
-      samples: [
-        ...base.samples.filter((s) => at - s.ts <= RETAIN_MS),
-        sample,
-      ].slice(-721),
-    });
-    return "sampled";
-  }, "unresponsive");
+      return "sampled";
+    },
+    catch: (e: unknown) => e,
+  });
+  return sampled.unwrapOr("unresponsive");
 }
 async function main(): Promise<void> {
   const argv = cliArgv();
@@ -743,8 +769,11 @@ async function main(): Promise<void> {
     await reportCheck();
     return;
   }
-  const result = await attempt(() => runGpuSampler());
-  if (result.ok) process.stdout.write(`${result.value}\n`);
+  const result = await Result.tryPromise({
+    try: () => runGpuSampler(),
+    catch: (e: unknown) => e,
+  });
+  if (result.isOk()) process.stdout.write(`${result.value}\n`);
   else {
     process.stderr.write(`GPU sampler: ${String(result.error)}\n`);
     process.exitCode = 1;

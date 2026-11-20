@@ -1,5 +1,6 @@
 // `bun agents/codex/codex-runtime.ts [deploy] [--check]` — reconcile WSL's
 // explicit `codex.exe` Windows Desktop launcher while plain `codex` stays native.
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import { cli } from "cleye";
 import {
   access,
@@ -13,7 +14,6 @@ import {
 import { constants } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative } from "node:path";
-import { attempt, errorMessage } from "../hooks/attempt.ts";
 import { z } from "../hooks/zod.ts";
 import { deployWindowsAssets, windowsAssetsDrift } from "./windows-assets.ts";
 import {
@@ -44,8 +44,11 @@ function quoteShellArgument(value: string): string {
 }
 
 async function archive(home: string, target: string): Promise<void> {
-  const metadata = await attempt(() => lstat(target));
-  if (!metadata.ok) {
+  const metadata = await Result.tryPromise({
+    try: () => lstat(target),
+    catch: (e: unknown) => e,
+  });
+  if (metadata.isErr()) {
     if (MissingPathError.safeParse(metadata.error).success) return;
     process.stderr.write(
       `codex-runtime: cannot inspect managed launcher ${target}: ${errorMessage(metadata.error)}\n`,
@@ -72,15 +75,21 @@ export async function desktopLauncherProblem(
   dotfiles: string,
 ): Promise<string | undefined> {
   const launcher = join(home, ".local/bin/codex.exe");
-  const contents = await attempt(() => Bun.file(launcher).text());
+  const contents = await Result.tryPromise({
+    try: () => Bun.file(launcher).text(),
+    catch: (e: unknown) => e,
+  });
   const owner =
     "declared by agents/codex/codex-runtime.ts launcherContents; deploy with mise run codex:runtime";
-  if (!contents.ok)
+  if (contents.isErr())
     return `FAIL launcher ${launcher}: cannot read: ${errorMessage(contents.error)}; ${owner}`;
   if (contents.value !== launcherContents(bun, dotfiles))
     return `FAIL launcher ${launcher}: contents differ from declaration (expected Bun ${bun}, entry ${join(dotfiles, "agents/codex/codex-wsl.ts")}); ${owner}`;
-  const executable = await attempt(() => access(launcher, constants.X_OK));
-  if (!executable.ok)
+  const executable = await Result.tryPromise({
+    try: () => access(launcher, constants.X_OK),
+    catch: (e: unknown) => e,
+  });
+  if (executable.isErr())
     return `FAIL launcher ${launcher}: not executable: ${errorMessage(executable.error)}; ${owner}`;
   return undefined;
 }
@@ -115,12 +124,18 @@ export async function installDesktopFacade(
 ): Promise<void> {
   const target = join(home, ".local/bin", "codex.exe");
   if (await Bun.file(target).exists()) {
-    const stat = await attempt(() => lstat(target));
-    const existing = await attempt(() => readFile(target, "utf8"));
+    const stat = await Result.tryPromise({
+      try: () => lstat(target),
+      catch: (e: unknown) => e,
+    });
+    const existing = await Result.tryPromise({
+      try: () => readFile(target, "utf8"),
+      catch: (e: unknown) => e,
+    });
     if (
-      stat.ok &&
+      stat.isOk() &&
       stat.value.isFile() &&
-      existing.ok &&
+      existing.isOk() &&
       existing.value === contents
     ) {
       await chmod(target, 0o755);
@@ -135,12 +150,18 @@ export async function installDesktopFacade(
 
 export async function hasManagedDefaultFacade(home: string): Promise<boolean> {
   const target = join(home, ".local/bin/codex");
-  const stat = await attempt(() => lstat(target));
-  const existing = await attempt(() => readFile(target, "utf8"));
+  const stat = await Result.tryPromise({
+    try: () => lstat(target),
+    catch: (e: unknown) => e,
+  });
+  const existing = await Result.tryPromise({
+    try: () => readFile(target, "utf8"),
+    catch: (e: unknown) => e,
+  });
   return (
-    stat.ok &&
+    stat.isOk() &&
     stat.value.isFile() &&
-    existing.ok &&
+    existing.isOk() &&
     existing.value.includes(MANAGED_LAUNCHER) &&
     existing.value.includes("agents/codex/codex-wsl.ts")
   );
@@ -257,7 +278,7 @@ async function converge(
       home,
       distro,
     );
-    if (!assets.ok)
+    if (assets.isErr())
       return {
         code: 2,
         lines: [`FAIL native assets ${errorMessage(assets.error)}`],
@@ -335,8 +356,11 @@ async function main(): Promise<number> {
 }
 
 if (import.meta.main) {
-  const result = await attempt(main);
-  if (!result.ok) {
+  const result = await Result.tryPromise({
+    try: main,
+    catch: (e: unknown) => e,
+  });
+  if (result.isErr()) {
     process.stderr.write(`codex-runtime: ${errorMessage(result.error)}\n`);
     process.exit(2);
   }

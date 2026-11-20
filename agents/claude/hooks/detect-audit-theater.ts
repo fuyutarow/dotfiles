@@ -1,3 +1,4 @@
+import { Result } from "../../../tools/shared/src/result.ts";
 import { hookStderr } from "./lib.ts";
 // Stop hook — audit-theater guard.
 //
@@ -17,7 +18,6 @@ import { hookStderr } from "./lib.ts";
 // Detection: specific phrases fire directly; PASS/GREEN fire only when the text carries
 // NO "what was checked / what is unchecked" clause (the skill's bounded-PASS rule).
 
-import { attempt } from "../../hooks/attempt.ts";
 import { at, strAt } from "../../hooks/narrow.ts";
 import {
   lastUserTextTail,
@@ -67,5 +67,5 @@ async function main(): Promise<number> {
   return 2;
 }
 
-const r = await attempt(main);
-process.exit(r.ok ? r.value : 0); // FAIL OPEN
+const r = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
+process.exit(r.isOk() ? r.value : 0); // FAIL OPEN

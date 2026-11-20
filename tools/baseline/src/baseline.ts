@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { errorMessage, Result } from "../../shared/src/result.ts";
 import packageJson from "../package.json" with { type: "json" };
 import { newFailures, render } from "./data.ts";
 import { record } from "./record.ts";
@@ -75,13 +75,15 @@ async function main(): Promise<void> {
               fatal("usage: baseline diff <base.txt> <head.txt>");
               return;
             }
-            const read = await attempt(() =>
-              Promise.all([
-                Bun.file(argv._.base).text(),
-                Bun.file(argv._.head).text(),
-              ]),
-            );
-            if (!read.ok) {
+            const read = await Result.tryPromise({
+              try: () =>
+                Promise.all([
+                  Bun.file(argv._.base).text(),
+                  Bun.file(argv._.head).text(),
+                ]),
+              catch: (error: unknown) => error,
+            });
+            if (read.isErr()) {
               fatal(errorMessage(read.error));
               return;
             }

@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 import {
   assess,
   loadStorageHeadroom,
@@ -696,12 +696,13 @@ describe("enforce-storage-headroom", () => {
     expect(d?.permissionDecisionReason).toContain("5.0 GiB");
   });
 
-  test("the first deny advice line points to disk-reclaim", async () => {
-    const parsed = await attempt(() =>
-      Bun.TOML.parse(readFileSync(REAL, "utf8")),
-    );
-    expect(parsed.ok).toBe(true);
-    if (parsed.ok) {
+  test("the first deny advice line points to disk-reclaim", () => {
+    const parsed = Result.try({
+      try: () => Bun.TOML.parse(readFileSync(REAL, "utf8")),
+      catch: (error: unknown) => error,
+    });
+    expect(parsed.isOk()).toBe(true);
+    if (parsed.isOk()) {
       const parsedConfig = decoded(
         z.object({ deny: z.object({ advice: z.string() }) }),
         parsed.value,

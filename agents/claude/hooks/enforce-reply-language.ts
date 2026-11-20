@@ -1,3 +1,4 @@
+import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
 import { hookJson, hookStderr } from "./lib.ts";
 // Stop hook: enforce the user's Japanese reply preference against the final assistant message.
 // Safety: FAIL OPEN on every hook error (including unreadable/malformed transcripts), with one
@@ -6,7 +7,6 @@ import { hookJson, hookStderr } from "./lib.ts";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import {
   classifyJapanesePrimary,
@@ -41,25 +41,28 @@ async function recordDecision(
   reason: string,
   error?: string,
 ): Promise<number> {
-  const result = await attempt(async () => {
-    const dir = join(audit.home, ".local", "state", "claude-hooks");
-    await mkdir(dir, { recursive: true, mode: 0o700 });
-    await appendFile(
-      join(dir, "reply-language.jsonl"),
-      `${JSON.stringify({
-        at: Temporal.Now.instant().toString(),
-        ...audit,
-        hook_path: import.meta.path,
-        bun_version: Bun.version,
-        cwd: process.cwd(),
-        decision,
-        reason,
-        error,
-      })}\n`,
-      { mode: 0o600 },
-    );
+  const result = await Result.tryPromise({
+    try: async () => {
+      const dir = join(audit.home, ".local", "state", "claude-hooks");
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      await appendFile(
+        join(dir, "reply-language.jsonl"),
+        `${JSON.stringify({
+          at: Temporal.Now.instant().toString(),
+          ...audit,
+          hook_path: import.meta.path,
+          bun_version: Bun.version,
+          cwd: process.cwd(),
+          decision,
+          reason,
+          error,
+        })}\n`,
+        { mode: 0o600 },
+      );
+    },
+    catch: (e: unknown) => e,
   });
-  if (!result.ok)
+  if (result.isErr())
     stderrLine(`decision log failed: ${errorMessage(result.error)}`);
   return 0;
 }
@@ -159,8 +162,11 @@ async function main(audit: DecisionAudit): Promise<number> {
     stderrLine("check failed open: malformed ~/.claude/settings.json");
     return recordDecision(audit, "allow", "malformed_settings");
   }
-  const policy = await attempt(() => requiredReplyLanguage("claude"));
-  if (!policy.ok) {
+  const policy = await Result.tryPromise({
+    try: () => requiredReplyLanguage("claude"),
+    catch: (e: unknown) => e,
+  });
+  if (policy.isErr()) {
     const error = errorMessage(policy.error);
     stderrLine(`check failed open: ${error}`);
     return recordDecision(audit, "allow", "policy_error", error);
@@ -192,13 +198,20 @@ async function main(audit: DecisionAudit): Promise<number> {
     response === undefined ? "transcript" : "last_assistant_message";
   let selection: TranscriptSelection | undefined;
   if (transcript !== undefined && transcript !== "" && response !== "") {
-    const result = await attempt(() => finalAssistantText(transcript));
-    if (!result.ok && response === undefined) {
+    const result = await Result.tryPromise({
+      try: () => finalAssistantText(transcript),
+      catch: (e: unknown) => e,
+    });
+    if (result.isErr() && response === undefined) {
       const error = errorMessage(result.error);
       stderrLine(`check failed open: ${error}`);
       return recordDecision(audit, "allow", "check_error", error);
     }
-    if (result.ok && result.value instanceof Error && response === undefined) {
+    if (
+      result.isOk() &&
+      result.value instanceof Error &&
+      response === undefined
+    ) {
       stderrLine(`check failed open: ${result.value.message}`);
       return recordDecision(
         audit,
@@ -207,7 +220,7 @@ async function main(audit: DecisionAudit): Promise<number> {
         result.value.message,
       );
     }
-    if (result.ok && !(result.value instanceof Error)) {
+    if (result.isOk() && !(result.value instanceof Error)) {
       selection = result.value;
     }
   }
@@ -247,8 +260,11 @@ if (import.meta.main) {
     home,
     settings_path: join(home, ".claude", "settings.json"),
   };
-  const result = await attempt(() => main(audit));
-  if (!result.ok) {
+  const result = await Result.tryPromise({
+    try: () => main(audit),
+    catch: (e: unknown) => e,
+  });
+  if (result.isErr()) {
     stderrLine(`check failed open: ${errorMessage(result.error)}`);
     await recordDecision(
       audit,

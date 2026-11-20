@@ -1,6 +1,7 @@
 // Codex legacy prompt executor for /prompts:quote. Codex has no UserPromptExpansion event, so
 // the prompt uses a normal inference turn to run this script. It emits status only; it never
 // sends quoted answer text back into the model context.
+import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
 import {
   access,
   mkdir,
@@ -12,7 +13,6 @@ import {
 import { hostname, homedir, userInfo } from "node:os";
 import { basename, join } from "node:path";
 import { cli } from "cleye";
-import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { jsonOf, z } from "../../hooks/zod.ts";
 
 const MAX_TURNS = 1024;
@@ -114,8 +114,11 @@ async function findRollouts(root: string, id: string): Promise<string[]> {
         found.push(path);
     }
   }
-  const accessible = await attempt(() => access(root));
-  if (accessible.ok) await visit(root);
+  const accessible = await Result.tryPromise({
+    try: () => access(root),
+    catch: (e: unknown) => e,
+  });
+  if (accessible.isOk()) await visit(root);
   return found;
 }
 
@@ -242,10 +245,11 @@ async function runCommand(
 async function copyText(text: string): Promise<string | null> {
   if (Bun.which("smart-copy") === null)
     return "smart-copy is not on PATH; run mise run deps in the dotfiles checkout";
-  const copied = await attempt(() =>
-    runCommand("smart-copy", [], { input: text, timeout: 10000 }),
-  );
-  if (!copied.ok)
+  const copied = await Result.tryPromise({
+    try: () => runCommand("smart-copy", [], { input: text, timeout: 10000 }),
+    catch: (e: unknown) => e,
+  });
+  if (copied.isErr())
     return `clipboard route failed: ${errorMessage(copied.error)}`;
   if (copied.value.exitCode !== 0)
     return `clipboard route failed: ${copied.value.stderr}`;
@@ -301,8 +305,8 @@ async function main(): Promise<void> {
   );
 }
 
-const result = await attempt(main);
-if (!result.ok) {
+const result = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
+if (result.isErr()) {
   process.stderr.write(`quote: ${errorMessage(result.error)}\n`);
   process.exitCode = 2;
 }

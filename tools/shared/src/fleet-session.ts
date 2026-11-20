@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type as osType } from "node:os";
-import { attempt, errorMessage, type Attempt } from "./attempt.ts";
+import { errorMessage, Result } from "./result.ts";
 import { jsonOf, z } from "./zod.ts";
 
 export const FleetSessionUnavailableSchema = z.strictObject({
@@ -61,16 +61,13 @@ export type FleetSessionRead = FleetSession | FleetSessionUnavailable;
 function sessionPath(
   sessionId: string,
   env: NodeJS.ProcessEnv,
-): Attempt<string> {
+): Result<string, Error> {
   const runtimeDir = env["XDG_RUNTIME_DIR"];
   if (runtimeDir === undefined || runtimeDir === "")
-    return { ok: false, error: new Error("XDG_RUNTIME_DIR is not set") };
+    return Result.err(new Error("XDG_RUNTIME_DIR is not set"));
   if (!SessionIdSchema.safeParse(sessionId).success)
-    return { ok: false, error: new Error("invalid session_id") };
-  return {
-    ok: true,
-    value: join(runtimeDir, "fleet", "sessions", `${sessionId}.json`),
-  };
+    return Result.err(new Error("invalid session_id"));
+  return Result.ok(join(runtimeDir, "fleet", "sessions", `${sessionId}.json`));
 }
 
 function unavailable(why: string): FleetSessionUnavailable {
@@ -84,10 +81,15 @@ export async function fleetCwdMatches(
 ): Promise<boolean> {
   if (left === right) return true;
   const paths = await Promise.all(
-    [left, right].map((path) => attempt(() => realpath(path))),
+    [left, right].map((path) =>
+      Result.tryPromise({
+        try: () => realpath(path),
+        catch: (e: unknown) => e,
+      }),
+    ),
   );
   const [a, b] = paths;
-  return a?.ok === true && b?.ok === true && a.value === b.value;
+  return a?.isOk() === true && b?.isOk() === true && a.value === b.value;
 }
 
 /** Parse and validate one serialized fleet-session record. */
@@ -106,9 +108,9 @@ export async function readFleetSession(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<FleetSessionRead> {
   const path = sessionPath(sessionId, env);
-  if (!path.ok) return unavailable(errorMessage(path.error));
-  const text = await attempt(
-    async (): Promise<string | FleetSessionUnavailable> => {
+  if (path.isErr()) return unavailable(errorMessage(path.error));
+  const text = await Result.tryPromise({
+    try: async (): Promise<string | FleetSessionUnavailable> => {
       await using handle = await open(path.value, "r");
       const info = await handle.stat();
       if (!info.isFile())
@@ -121,8 +123,9 @@ export async function readFleetSession(
       const read = await handle.read(buffer, 0, buffer.length, 0);
       return buffer.subarray(0, read.bytesRead).toString("utf8");
     },
-  );
-  if (!text.ok) {
+    catch: (e: unknown) => e,
+  });
+  if (text.isErr()) {
     const missing = z
       .object({ code: z.literal("ENOENT") })
       .safeParse(text.error);
@@ -151,78 +154,100 @@ async function writeTransition(
   session: unknown,
   env: NodeJS.ProcessEnv,
   ifChanged: boolean,
-): Promise<Attempt<FleetSession>> {
+): Promise<Result<FleetSession, unknown>> {
   const parsed = FleetSessionSchema.safeParse(session);
-  if (!parsed.success) return { ok: false, error: parsed.error };
+  if (!parsed.success) return Result.err(parsed.error);
   const path = sessionPath(parsed.data.session_id, env);
-  if (!path.ok) return path;
-  const transition = await attempt(async (): Promise<Attempt<FleetSession>> => {
-    await mkdir(dirname(path.value), { recursive: true, mode: 0o700 });
-    const lockDir = join(dirname(dirname(path.value)), "locks");
-    await mkdir(lockDir, { recursive: true, mode: 0o700 });
-    // Never unlink the lock file: all writers must lock the same inode.
-    await using lock = await open(
-      join(lockDir, `${parsed.data.session_id}.lock`),
-      "a",
-      0o600,
-    );
-    const deadline = Temporal.Now.instant().epochMilliseconds + 3000;
-    while (libc.symbols.flock(lock.fd, 2 | 4) !== 0) {
-      if (Temporal.Now.instant().epochMilliseconds >= deadline)
-        return { ok: false, error: new Error("fleet session lock timed out") };
-      await Bun.sleep(10);
-    }
-    const prior = await readFleetSession(parsed.data.session_id, env);
-    const existing = FleetSessionSchema.safeParse(prior);
-    const priorUnavailable = FleetSessionUnavailableSchema.safeParse(prior);
-    if (
-      !existing.success &&
-      typeof parsed.data.name !== "string" &&
-      priorUnavailable.success &&
-      priorUnavailable.data.why !==
-        `fleet session ${parsed.data.session_id} is missing`
-    )
-      return { ok: false, error: new Error(priorUnavailable.data.why) };
-    const next = {
-      ...parsed.data,
-      name:
+  if (path.isErr()) return Result.err(path.error);
+  const transition = await Result.tryPromise({
+    try: async (): Promise<Result<FleetSession, unknown>> => {
+      await mkdir(dirname(path.value), { recursive: true, mode: 0o700 });
+      const lockDir = join(dirname(dirname(path.value)), "locks");
+      await mkdir(lockDir, { recursive: true, mode: 0o700 });
+      // Never unlink the lock file: all writers must lock the same inode.
+      await using lock = await open(
+        join(lockDir, `${parsed.data.session_id}.lock`),
+        "a",
+        0o600,
+      );
+      const deadline = Temporal.Now.instant().epochMilliseconds + 3000;
+      while (libc.symbols.flock(lock.fd, 2 | 4) !== 0) {
+        if (Temporal.Now.instant().epochMilliseconds >= deadline)
+          return Result.err(new Error("fleet session lock timed out"));
+        await Bun.sleep(10);
+      }
+      const prior = await readFleetSession(parsed.data.session_id, env);
+      const existing = FleetSessionSchema.safeParse(prior);
+      const priorUnavailable = FleetSessionUnavailableSchema.safeParse(prior);
+      if (
+        !existing.success &&
         typeof parsed.data.name !== "string" &&
+        priorUnavailable.success &&
+        priorUnavailable.data.why !==
+          `fleet session ${parsed.data.session_id} is missing`
+      )
+        return Result.err(new Error(priorUnavailable.data.why));
+      const next = {
+        ...parsed.data,
+        name:
+          typeof parsed.data.name !== "string" &&
+          existing.success &&
+          typeof existing.data.name === "string"
+            ? existing.data.name
+            : parsed.data.name,
+      };
+      if (
+        ifChanged &&
         existing.success &&
-        typeof existing.data.name === "string"
-          ? existing.data.name
-          : parsed.data.name,
-    };
-    if (
-      ifChanged &&
-      existing.success &&
-      fleetSessionContent(existing.data) === fleetSessionContent(next)
-    )
-      return { ok: true, value: existing.data };
-    if (ifChanged) next.updated_at = Temporal.Now.instant().toString();
-    const temp = `${path.value}.${process.pid}.${crypto.randomUUID()}.tmp`;
-    const written = await attempt(async () => {
-      await writeFile(temp, `${JSON.stringify(next)}\n`, {
-        mode: 0o600,
-        flag: "wx",
+        fleetSessionContent(existing.data) === fleetSessionContent(next)
+      )
+        return Result.ok(existing.data);
+      if (ifChanged) next.updated_at = Temporal.Now.instant().toString();
+      const temp = `${path.value}.${process.pid}.${crypto.randomUUID()}.tmp`;
+      const written = await Result.tryPromise({
+        try: async () => {
+          await writeFile(temp, `${JSON.stringify(next)}\n`, {
+            mode: 0o600,
+            flag: "wx",
+          });
+          await rename(temp, path.value);
+        },
+        catch: (e: unknown) => e,
       });
-      await rename(temp, path.value);
-    });
-    if (!written.ok) {
-      await attempt(() => unlink(temp));
-      return written;
-    }
-    return { ok: true, value: next };
+      if (written.isErr()) {
+        await Result.tryPromise({
+          try: () => unlink(temp),
+          catch: (e: unknown) => e,
+        });
+        return Result.err(written.error);
+      }
+      return Result.ok(next);
+    },
+    catch: (e: unknown) => e,
   });
-  return transition.ok ? transition.value : transition;
+  return transition.isOk() ? transition.value : Result.err(transition.error);
+}
+
+/** The `{ ok, value | error }` shape that writeFleetSession callers in other tools read. */
+type Outcome<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: unknown };
+
+function outcome<T>(result: Result<T, unknown>): Outcome<T> {
+  return result.isOk()
+    ? { ok: true, value: result.value }
+    : { ok: false, error: result.error };
 }
 
 /** Write a complete record by atomically replacing its destination. */
 export async function writeFleetSession(
   session: unknown,
   env: NodeJS.ProcessEnv = process.env,
-): Promise<Attempt<void>> {
+): Promise<Outcome<void>> {
   const written = await writeTransition(session, env, false);
-  return written.ok ? { ok: true, value: undefined } : written;
+  return written.isOk()
+    ? { ok: true, value: undefined }
+    : { ok: false, error: written.error };
 }
 
 function fleetSessionContent(value: FleetSession): string {
@@ -235,8 +260,8 @@ function fleetSessionContent(value: FleetSession): string {
 export async function writeFleetSessionIfChanged(
   session: unknown,
   env: NodeJS.ProcessEnv = process.env,
-): Promise<Attempt<FleetSession>> {
-  return writeTransition(session, env, true);
+): Promise<Outcome<FleetSession>> {
+  return outcome(await writeTransition(session, env, true));
 }
 
 const CodexMeta = z.object({
@@ -307,8 +332,11 @@ function tokenCountFromLines(
 async function rolloutDirectory(
   directory: string,
 ): Promise<{ path: string; directory: boolean }[] | undefined> {
-  const opened = await attempt(() => opendir(directory));
-  if (!opened.ok) return undefined;
+  const opened = await Result.tryPromise({
+    try: () => opendir(directory),
+    catch: (e: unknown) => e,
+  });
+  if (opened.isErr()) return undefined;
   const entries: { path: string; directory: boolean }[] = [];
   let visited = 0;
   for await (const entry of opened.value) {
@@ -376,81 +404,87 @@ export async function readCodexNativeSession(
   const path = nativePath ?? (await codexRolloutPath(session.session_id, env));
   if (path === undefined)
     return unavailable("missing or ambiguous exact Codex rollout");
-  const scanned = await attempt(async () => {
-    await using handle = await open(path, "r");
-    const info = await handle.stat();
-    if (!info.isFile()) return unavailable("rollout is not a file");
-    const head = Buffer.alloc(Math.min(info.size, 128 * 1024));
-    const headRead = await handle.read(head, 0, head.length, 0);
-    const firstEnd = head.indexOf(10, 0);
-    if (firstEnd < 0 || firstEnd >= headRead.bytesRead)
-      return unavailable("missing or truncated session_meta");
-    const meta = jsonOf(CodexMeta).safeParse(
-      head.subarray(0, firstEnd).toString("utf8"),
-    );
-    if (
-      !meta.success ||
-      meta.data.payload.id !== session.session_id ||
-      (meta.data.payload.session_id !== undefined &&
-        meta.data.payload.session_id !== session.session_id)
-    )
-      return unavailable("rollout ID/vendor mismatch");
-    if (
-      cwdAuthority === "session-meta" &&
-      !(await fleetCwdMatches(meta.data.payload.cwd, session.cwd))
-    )
-      return unavailable("rollout creation cwd differs from requested cwd");
-    const start = Math.max(0, info.size - 256 * 1024);
-    const tail = Buffer.alloc(info.size - start);
-    const read = await handle.read(tail, 0, tail.length, start);
-    const lines = tail.subarray(0, read.bytesRead).toString("utf8").split("\n");
-    if (start > 0) lines.shift();
-    lines.pop(); // Only complete records; an appending writer may leave a partial last line.
-    let model: string | undefined;
-    let effort: string | undefined;
-    for (const line of lines) {
-      const turn = jsonOf(CodexTurn).safeParse(line);
-      const applied = jsonOf(CodexApplied).safeParse(line);
-      const settings = turn.success
-        ? turn.data.payload
-        : applied.data?.payload.thread_settings;
-      if (settings === undefined) continue;
-      model = settings.model ?? model;
-      effort = settings.effort ?? settings.reasoning_effort ?? effort;
-    }
-    // Search backwards from the end: a large later tool response can push the
-    // latest token count outside the settings tail. Ignore incomplete writes.
-    let position = info.size;
-    let suffix = "";
-    let completeEnd = false;
-    let ctx: FleetSession["ctx"] = unavailable("no native token count");
-    let found = false;
-    while (position > 0 && !found) {
-      const length = Math.min(position, 256 * 1024);
-      position -= length;
-      const chunk = Buffer.alloc(length);
-      const chunkRead = await handle.read(chunk, 0, length, position);
-      const records = (
-        chunk.subarray(0, chunkRead.bytesRead).toString("utf8") + suffix
-      ).split("\n");
-      if (!completeEnd) {
-        records.pop();
-        completeEnd = true;
+  const scanned = await Result.tryPromise({
+    try: async () => {
+      await using handle = await open(path, "r");
+      const info = await handle.stat();
+      if (!info.isFile()) return unavailable("rollout is not a file");
+      const head = Buffer.alloc(Math.min(info.size, 128 * 1024));
+      const headRead = await handle.read(head, 0, head.length, 0);
+      const firstEnd = head.indexOf(10, 0);
+      if (firstEnd < 0 || firstEnd >= headRead.bytesRead)
+        return unavailable("missing or truncated session_meta");
+      const meta = jsonOf(CodexMeta).safeParse(
+        head.subarray(0, firstEnd).toString("utf8"),
+      );
+      if (
+        !meta.success ||
+        meta.data.payload.id !== session.session_id ||
+        (meta.data.payload.session_id !== undefined &&
+          meta.data.payload.session_id !== session.session_id)
+      )
+        return unavailable("rollout ID/vendor mismatch");
+      if (
+        cwdAuthority === "session-meta" &&
+        !(await fleetCwdMatches(meta.data.payload.cwd, session.cwd))
+      )
+        return unavailable("rollout creation cwd differs from requested cwd");
+      const start = Math.max(0, info.size - 256 * 1024);
+      const tail = Buffer.alloc(info.size - start);
+      const read = await handle.read(tail, 0, tail.length, start);
+      const lines = tail
+        .subarray(0, read.bytesRead)
+        .toString("utf8")
+        .split("\n");
+      if (start > 0) lines.shift();
+      lines.pop(); // Only complete records; an appending writer may leave a partial last line.
+      let model: string | undefined;
+      let effort: string | undefined;
+      for (const line of lines) {
+        const turn = jsonOf(CodexTurn).safeParse(line);
+        const applied = jsonOf(CodexApplied).safeParse(line);
+        const settings = turn.success
+          ? turn.data.payload
+          : applied.data?.payload.thread_settings;
+        if (settings === undefined) continue;
+        model = settings.model ?? model;
+        effort = settings.effort ?? settings.reasoning_effort ?? effort;
       }
-      suffix = records.shift() ?? "";
-      if (position === 0) records.unshift(suffix);
-      const observation = tokenCountFromLines(records);
-      found = observation !== undefined;
-      ctx = observation?.ctx ?? ctx;
-    }
-    return {
-      ...session,
-      model: model ?? unavailable("no bounded native model observation"),
-      effort: effort ?? unavailable("no bounded native effort observation"),
-      ctx,
-      updated_at: Temporal.Now.instant().toString(),
-    };
+      // Search backwards from the end: a large later tool response can push the
+      // latest token count outside the settings tail. Ignore incomplete writes.
+      let position = info.size;
+      let suffix = "";
+      let completeEnd = false;
+      let ctx: FleetSession["ctx"] = unavailable("no native token count");
+      let found = false;
+      while (position > 0 && !found) {
+        const length = Math.min(position, 256 * 1024);
+        position -= length;
+        const chunk = Buffer.alloc(length);
+        const chunkRead = await handle.read(chunk, 0, length, position);
+        const records = (
+          chunk.subarray(0, chunkRead.bytesRead).toString("utf8") + suffix
+        ).split("\n");
+        if (!completeEnd) {
+          records.pop();
+          completeEnd = true;
+        }
+        suffix = records.shift() ?? "";
+        if (position === 0) records.unshift(suffix);
+        const observation = tokenCountFromLines(records);
+        found = observation !== undefined;
+        ctx = observation?.ctx ?? ctx;
+      }
+      return {
+        ...session,
+        model: model ?? unavailable("no bounded native model observation"),
+        effort: effort ?? unavailable("no bounded native effort observation"),
+        ctx,
+        updated_at: Temporal.Now.instant().toString(),
+      };
+    },
+    catch: (e: unknown) => e,
   });
-  if (!scanned.ok) return unavailable(errorMessage(scanned.error));
+  if (scanned.isErr()) return unavailable(errorMessage(scanned.error));
   return scanned.value;
 }

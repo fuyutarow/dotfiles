@@ -1,3 +1,4 @@
+import { Result } from "../../../tools/shared/src/result.ts";
 import { hookJson } from "./lib.ts";
 // UserPromptSubmit hook (no matcher — this event supports none) implementing `/assign <role>`:
 // typed at the start of a prompt, it renames THIS session to "<project-slug>-<role>_<suffix>" (the
@@ -41,7 +42,6 @@ import {
   rolePrompt,
   sessionName,
 } from "./assign-lib.ts";
-import { attempt } from "../../hooks/attempt.ts";
 import { strAt } from "../../hooks/narrow.ts";
 
 function block(reason: string): never {
@@ -61,27 +61,30 @@ function allow(sessionTitle: string, additionalContext: string | null): never {
 }
 
 // FAIL OPEN — see the header: a bug here must never block an ordinary prompt.
-const r = await attempt(async () => {
-  const payload = readStdinJson();
-  const prompt = strAt(payload, "prompt") ?? "";
-  const cwd = strAt(payload, "cwd") ?? process.cwd();
+const r = await Result.tryPromise({
+  try: async () => {
+    const payload = readStdinJson();
+    const prompt = strAt(payload, "prompt") ?? "";
+    const cwd = strAt(payload, "cwd") ?? process.cwd();
 
-  const m = prompt.trim().match(/^\/assign(?:\s+(\S+))?/u);
-  if (m === null) process.exit(0); // not an /assign invocation -> silent pass, zero cost
+    const m = prompt.trim().match(/^\/assign(?:\s+(\S+))?/u);
+    if (m === null) process.exit(0); // not an /assign invocation -> silent pass, zero cost
 
-  const role = m[1];
-  if (role === undefined || role === "") {
-    block('usage: /assign <role>  (e.g. "/assign obs")');
-  }
-  if (!isValidRole(role)) {
-    block(
-      `/assign: role must be 1-12 lowercase letters/digits starting with a letter, got "${role}"`,
-    );
-  }
+    const role = m[1];
+    if (role === undefined || role === "") {
+      block('usage: /assign <role>  (e.g. "/assign obs")');
+    }
+    if (!isValidRole(role)) {
+      block(
+        `/assign: role must be 1-12 lowercase letters/digits starting with a letter, got "${role}"`,
+      );
+    }
 
-  const name = sessionName(cwd, role, randomSuffix());
-  const policy = await loadFleetPolicy(cwd);
-  const context = rolePrompt(role, policy);
-  allow(name, context);
+    const name = sessionName(cwd, role, randomSuffix());
+    const policy = await loadFleetPolicy(cwd);
+    const context = rolePrompt(role, policy);
+    allow(name, context);
+  },
+  catch: (e: unknown) => e,
 });
-if (!r.ok) process.exit(0);
+if (r.isErr()) process.exit(0);

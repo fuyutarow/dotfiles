@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
-import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { errorMessage, Result } from "../../shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const cliArgv = () => process.argv.slice(2);
@@ -364,8 +364,11 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  const result = await attempt(main);
-  if (!result.ok) {
+  const result = await Result.tryPromise({
+    try: main,
+    catch: (error: unknown) => error,
+  });
+  if (result.isErr()) {
     process.stderr.write(`FATAL: ${errorMessage(result.error)}\n`);
     process.exitCode = 2;
   }

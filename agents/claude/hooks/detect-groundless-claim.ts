@@ -1,3 +1,4 @@
+import { Result } from "../../../tools/shared/src/result.ts";
 import { hookJson } from "./lib.ts";
 // Stop hook — groundless-claim guard.
 //
@@ -20,7 +21,6 @@ import { hookJson } from "./lib.ts";
 // `{"systemMessage": "..."}` to stdout and exits 0 — a nudge the harness surfaces to the
 // user, not a block that feeds back into the transcript.
 
-import { attempt } from "../../hooks/attempt.ts";
 import { at, strAt } from "../../hooks/narrow.ts";
 import { readStdinJson, stripCode, turnTextTail } from "./lib.ts";
 
@@ -95,5 +95,5 @@ async function main(): Promise<number> {
   return 0;
 }
 
-const r = await attempt(main);
-process.exit(r.ok ? r.value : 0); // FAIL OPEN
+const r = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
+process.exit(r.isOk() ? r.value : 0); // FAIL OPEN

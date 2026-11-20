@@ -169,15 +169,15 @@ test("remote shadow is applied and prepared before trust and opening, including 
     `
 import { openVault } from ${JSON.stringify(join(import.meta.dir, "open-vault.ts"))};
 import { prepareShadow } from ${JSON.stringify(join(import.meta.dir, "open-remote.ts"))};
-import { ok, err } from 'neverthrow';
+import { Result } from ${JSON.stringify(join(import.meta.dir, "../tools/shared/src/result.ts"))};
 const target = ${JSON.stringify(f.target)};
 const result = await openVault(target, () => prepareShadow(target, {
  alias:'probe-host',path:'/remote/absolute/work',hostname:'box.invalid',port:22,user:'fixture-user'
 }), async () => {
  const text = await Bun.file(target+'/.obsidian/plugins/remote-ssh/data.json').text();
- if(!text.includes('autoConnectProfileId') || !text.includes('/remote/absolute/work')) return err('not prepared before trust');
+ if(!text.includes('autoConnectProfileId') || !text.includes('/remote/absolute/work')) return Result.err('not prepared before trust');
  await Bun.write(process.env.HOME+'/trusted', '1');
- return ok(undefined);
+ return Result.ok(undefined);
 });
 if(result.isErr()) console.error(result.error);
 process.exitCode=result.isOk()?0:2;

@@ -16,7 +16,7 @@
 import { lstat, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { RENDERED } from "./config-registry.ts";
 import { HooksConfigSchema, owned } from "./hook-registry.ts";
@@ -50,11 +50,16 @@ const VendorFile = z.looseObject({
 });
 
 for (const rel of ["agents/claude/settings.json", "agents/codex/hooks.json"]) {
-  const read = await attempt(() => readFile(join(root, rel), "utf8"));
-  const config = read.ok ? jsonOf(VendorFile).safeParse(read.value) : undefined;
+  const read = await Result.tryPromise({
+    try: () => readFile(join(root, rel), "utf8"),
+    catch: (e: unknown) => e,
+  });
+  const config = read.isOk()
+    ? jsonOf(VendorFile).safeParse(read.value)
+    : undefined;
   if (config?.success !== true) {
     process.stderr.write(
-      `FATAL: ${rel}: ${read.ok ? (config?.error.message ?? "") : errorMessage(read.error)}\n`,
+      `FATAL: ${rel}: ${read.isOk() ? (config?.error.message ?? "") : errorMessage(read.error)}\n`,
     );
     process.exit(2);
   }

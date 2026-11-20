@@ -1,7 +1,7 @@
 import { copyFile, stat } from "node:fs/promises";
 import { cli } from "cleye";
 import { createConsola } from "consola";
-import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 const consola = createConsola({ level: 4 });
@@ -50,7 +50,9 @@ function rejectPrototypeFlag(
 }
 
 async function exists(path: string): Promise<boolean> {
-  return (await fromAsyncThrowable(() => stat(path))()).isOk();
+  return (
+    await Result.tryPromise({ try: () => stat(path), catch: (e: unknown) => e })
+  ).isOk();
 }
 
 async function run(
@@ -256,7 +258,10 @@ async function restore(dryRun: boolean): Promise<void> {
     process.exit(1);
   }
   const { win, wsl } = await scratch();
-  const staged = await fromAsyncThrowable(() => copyFile(repoFile, wsl))();
+  const staged = await Result.tryPromise({
+    try: () => copyFile(repoFile, wsl),
+    catch: (e: unknown) => e,
+  });
   if (staged.isErr()) {
     consola.error(
       `could not stage manifest at ${wsl}: ${String(staged.error)}`,
@@ -310,21 +315,26 @@ async function main(): Promise<Result<void, Error>> {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 1) {
-    return err(new UsageError(`Unexpected argument '${parsed._[1]}'`));
+    return Result.err(new UsageError(`Unexpected argument '${parsed._[1]}'`));
   }
   // Validate the boundary BEFORE the environment check, so a typo'd verb is exit 2 everywhere
   // and never masked by "not running inside WSL" on a Mac.
   const verb = parsed._.verb;
   if (verb !== "dump" && verb !== "restore") {
-    return err(new UsageError(`verb must be dump or restore, got '${verb}'`));
+    return Result.err(
+      new UsageError(`verb must be dump or restore, got '${verb}'`),
+    );
   }
   await requireWsl();
   if (verb === "dump") await dump();
   else await restore(parsed.flags.dryRun);
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
-const attempted = await fromAsyncThrowable(main)();
+const attempted = await Result.tryPromise({
+  try: main,
+  catch: (e: unknown) => e,
+});
 if (attempted.isErr()) {
   const error = attempted.error;
   consola.error(

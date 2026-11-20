@@ -9,7 +9,7 @@
 import { lstatSync, readdirSync, unlinkSync } from "node:fs";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
-import { attempt } from "./attempt.ts";
+import { Result } from "./result.ts";
 
 // Bun supports the same missing-entry option on async lstat as on lstatSync.
 const missingEntryOptions = { bigint: false as const, throwIfNoEntry: false };
@@ -104,16 +104,15 @@ export async function fileKeyAsync(path: string): Promise<FileKey | undefined> {
  * recovery, this is the fallback. A failing unlink (the file vanished in that window, or the path is
  * not ours to remove) is "did not remove", never an exception: the caller's job is still to open the URL.
  */
-export async function unlinkIfSame(
-  path: string,
-  seen: FileKey,
-): Promise<boolean> {
+export function unlinkIfSame(path: string, seen: FileKey): Promise<boolean> {
   const now = fileKey(path);
   if (now === undefined || now.dev !== seen.dev || now.ino !== seen.ino)
-    return false;
-  return (
-    await attempt(() => {
+    return Promise.resolve(false);
+  const removed = Result.try({
+    try: () => {
       unlinkSync(path);
-    })
-  ).ok;
+    },
+    catch: (e: unknown) => e,
+  });
+  return Promise.resolve(removed.isOk());
 }

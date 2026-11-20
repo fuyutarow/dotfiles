@@ -1,8 +1,8 @@
+import { Result } from "../tools/shared/src/result.ts";
 import { $ } from "bun";
 import { cli } from "cleye";
 import { access, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { err, ok as success, type Result } from "neverthrow";
 import { jsonOf, jsonText, z } from "../agents/hooks/zod.ts";
 
 // Turn Obsidian's "Restricted mode" OFF for every registered vault, so the plugins apply.ts
@@ -96,27 +96,27 @@ async function waitFor<T>(
   const deadline = performance.now() + WAIT_MS;
   while (performance.now() < deadline) {
     const v = await ok();
-    if (v !== null) return success(v);
+    if (v !== null) return Result.ok(v);
     await Bun.sleep(250);
   }
-  return err(`timed out after ${WAIT_MS} ms waiting for ${what}`);
+  return Result.err(`timed out after ${WAIT_MS} ms waiting for ${what}`);
 }
 
 async function quit(): Promise<Result<void, string>> {
-  if (!(await running())) return success(undefined);
+  if (!(await running())) return Result.ok(undefined);
   const command = await Promise.try(() =>
     $`osascript -e 'quit app "Obsidian"'`.quiet(),
   ).then(
-    () => success(undefined),
-    (error: unknown) =>
-      err(error instanceof Error ? error.message : String(error)),
+    () => Result.ok(undefined),
+    (error: unknown): Result<void, string> =>
+      Result.err(error instanceof Error ? error.message : String(error)),
   );
-  if (command.isErr()) return err(command.error);
+  if (command.isErr()) return Result.err(command.error);
   const stopped = await waitFor("Obsidian to quit", async () =>
     (await running()) ? null : true,
   );
-  if (stopped.isErr()) return err(stopped.error);
-  return success();
+  if (stopped.isErr()) return Result.err(stopped.error);
+  return Result.ok();
 }
 
 async function pageSocket(): Promise<Result<string, string>> {
@@ -125,7 +125,7 @@ async function pageSocket(): Promise<Result<string, string>> {
     const first = (await Bun.file(PORT_FILE).text()).split("\n")[0];
     return first === undefined || first === "" ? null : first;
   });
-  if (port.isErr()) return err(port.error);
+  if (port.isErr()) return Result.err(port.error);
   return waitFor("an Obsidian window", async () => {
     const res = await fetch(`http://127.0.0.1:${port.value}/json/list`, {
       signal: AbortSignal.timeout(2_000),
@@ -152,14 +152,14 @@ async function evaluate(
     sock.addEventListener(
       "open",
       () => {
-        resolve(success());
+        resolve(Result.ok());
       },
       { once: true },
     );
     sock.addEventListener(
       "error",
       () => {
-        resolve(err("DevTools websocket connection failed"));
+        resolve(Result.err("DevTools websocket connection failed"));
       },
       { once: true },
     );
@@ -186,9 +186,9 @@ async function evaluate(
   sock.close();
   const parsed = EvaluateReplySchema.safeParse(msg);
   if (!parsed.success) {
-    return err(`DevTools gave no result: ${JSON.stringify(msg)}`);
+    return Result.err(`DevTools gave no result: ${JSON.stringify(msg)}`);
   }
-  return success(parsed.data.result.result.value);
+  return Result.ok(parsed.data.result.result.value);
 }
 
 async function main(): Promise<Result<void, string>> {
@@ -209,22 +209,22 @@ async function main(): Promise<Result<void, string>> {
     undefined,
     Bun.argv.slice(2),
   );
-  if (prototypeFlag) return err("Unknown option '--__proto__'");
+  if (prototypeFlag) return Result.err("Unknown option '--__proto__'");
   if (parsed._.length > 0)
-    return err(`unexpected argument: ${parsed._.join(" ")}`);
+    return Result.err(`unexpected argument: ${parsed._.join(" ")}`);
 
   const ids = await vaultIds();
   if (ids.length === 0) {
     process.stdout.write(`skip: no Obsidian vault registry at ${REGISTRY}\n`);
-    return success(undefined);
+    return Result.ok(undefined);
   }
 
   const quitBefore = await quit();
-  if (quitBefore.isErr()) return err(quitBefore.error);
+  if (quitBefore.isErr()) return Result.err(quitBefore.error);
   await rm(PORT_FILE, { force: true });
   await $`open -a Obsidian --args --remote-debugging-port=0`.quiet();
   const ws = await pageSocket();
-  if (ws.isErr()) return err(ws.error);
+  if (ws.isErr()) return Result.err(ws.error);
 
   const keys = JSON.stringify(ids.map((id) => `enable-plugin-${id}`));
   const result = await evaluate(
@@ -234,23 +234,23 @@ async function main(): Promise<Result<void, string>> {
       ks.forEach(k => localStorage.setItem(k, "true"));
       return { fresh, back: Object.fromEntries(ks.map(k => [k, localStorage.getItem(k)])) }; })()`,
   );
-  if (result.isErr()) return err(result.error);
+  if (result.isErr()) return Result.err(result.error);
   const evaluated = EvaluateValueSchema.safeParse(result.value);
   if (!evaluated.success)
-    return err(`unexpected read-back: ${JSON.stringify(result.value)}`);
+    return Result.err(`unexpected read-back: ${JSON.stringify(result.value)}`);
 
   // Chromium commits localStorage to leveldb on a delay; quitting at once lost the last key
   // (measured 2026-10-01). Wait out the commit, then prove each key reached disk.
   await Bun.sleep(COMMIT_MS);
   const quitAfter = await quit();
-  if (quitAfter.isErr()) return err(quitAfter.error);
+  if (quitAfter.isErr()) return Result.err(quitAfter.error);
   await rm(PORT_FILE, { force: true });
   // Only keys this run changed are checked on disk: a key already "true" causes no new journal
   // write, and its older record may sit Snappy-compressed in an *.ldb where a byte search misses it.
   const unsaved = await notOnDisk(evaluated.data.fresh);
   await $`open -a Obsidian`.quiet();
   if (unsaved.length > 0)
-    return err(`not persisted to leveldb: ${unsaved.join(", ")}`);
+    return Result.err(`not persisted to leveldb: ${unsaved.join(", ")}`);
 
   const entries = Object.entries(evaluated.data.back);
   for (const [k, v] of entries) {
@@ -259,22 +259,22 @@ async function main(): Promise<Result<void, string>> {
     );
   }
   const bad = entries.filter(([, v]) => v !== "true").length;
-  if (bad > 0) return err(`${bad} key(s) did not read back as "true"`);
+  if (bad > 0) return Result.err(`${bad} key(s) did not read back as "true"`);
   process.stdout.write(
     "✅ Restricted mode is off for every registered vault; Obsidian relaunched normally.\n",
   );
-  return success(undefined);
+  return Result.ok(undefined);
 }
 
 const outcome = await Promise.try(main).then(
   (result) => result,
-  (error: unknown) =>
-    err(error instanceof Error ? error.message : String(error)),
+  (error: unknown): Result<void, string> =>
+    Result.err(error instanceof Error ? error.message : String(error)),
 );
-outcome.match(
-  () => process.exit(0),
-  (message) => {
+outcome.match({
+  ok: () => process.exit(0),
+  err: (message) => {
     process.stderr.write(`FATAL: ${message}\n`);
     process.exit(2);
   },
-);
+});

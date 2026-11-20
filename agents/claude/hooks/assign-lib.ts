@@ -12,9 +12,9 @@
 // skill-shipped default at agents/skills/commanding-research-fleets/fleet_policy.toml applies.
 // There is no third fallback — assign-roles.toml is gone, not layered underneath.
 
+import { Result } from "../../../tools/shared/src/result.ts";
 import { dirname, join } from "node:path";
 import { realpath } from "node:fs/promises";
-import { attempt } from "../../hooks/attempt.ts";
 import { at, obj, str } from "../../hooks/narrow.ts";
 import {
   agentNameFor,
@@ -76,8 +76,11 @@ async function defaultPolicyPath(): Promise<string> {
 async function readPolicyFile(
   path: string,
 ): Promise<Record<string, RoleConfig> | null> {
-  const r = await attempt(() => import(path));
-  if (!r.ok) return null;
+  const r = await Result.tryPromise({
+    try: () => import(path),
+    catch: (e: unknown) => e,
+  });
+  if (r.isErr()) return null;
   const mod: unknown = r.value;
   const table = obj(at(mod, "default") ?? mod) ?? {};
   return Object.fromEntries(

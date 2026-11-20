@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 import { osc52 } from "../src/terminal.ts";
 
 const SMART_COPY = join(import.meta.dir, "..", "src", "smart-copy.ts");
@@ -106,7 +106,9 @@ async function run(
 
 /** True when the stub recorded a run (its stdin file exists). */
 const ran = async (read: () => Promise<Buffer>): Promise<boolean> =>
-  (await attempt(read)).ok;
+  (
+    await Result.tryPromise({ try: read, catch: (error: unknown) => error })
+  ).isOk();
 
 const TEXT = "日本語 és — line 1\nline 2";
 const BYTES = Buffer.from(TEXT, "utf8");

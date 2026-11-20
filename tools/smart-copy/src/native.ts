@@ -23,7 +23,7 @@ import {
   desktopInterop,
   repoHelperCommand,
 } from "@dotfiles/shared/src/desktop-interop.ts";
-import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { errorMessage, Result } from "../../shared/src/result.ts";
 
 export const NATIVE_MS = 5_000;
 const STDERR_GRACE_MS = 200;
@@ -57,15 +57,21 @@ async function readUpTo(
 ): Promise<string> {
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
-  const done = attempt(async () => {
-    for (;;) {
-      const next = await reader.read();
-      if (next.done) return;
-      chunks.push(next.value);
-    }
+  const done = Result.tryPromise({
+    try: async () => {
+      for (;;) {
+        const next = await reader.read();
+        if (next.done) return;
+        chunks.push(next.value);
+      }
+    },
+    catch: (error: unknown) => error,
   });
   await Promise.race([done, Bun.sleep(graceMs)]);
-  await attempt(() => reader.cancel());
+  await Result.tryPromise({
+    try: () => reader.cancel(),
+    catch: (error: unknown) => error,
+  });
   return Buffer.concat(chunks).toString("utf8");
 }
 
@@ -78,26 +84,31 @@ async function feed(
   ms: number,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   const signal = AbortSignal.timeout(ms);
-  const spawned = await attempt(() =>
-    Bun.spawn([path, ...tool.args], {
-      stdin: "pipe",
-      stdout: "ignore",
-      stderr: "pipe",
-      env,
-      signal,
-      killSignal: "SIGKILL",
-    }),
-  );
-  if (!spawned.ok)
+  const spawned = Result.try({
+    try: () =>
+      Bun.spawn([path, ...tool.args], {
+        stdin: "pipe",
+        stdout: "ignore",
+        stderr: "pipe",
+        env,
+        signal,
+        killSignal: "SIGKILL",
+      }),
+    catch: (error: unknown) => error,
+  });
+  if (spawned.isErr())
     return {
       ok: false,
       reason: `cannot run ${tool.name}: ${errorMessage(spawned.error)}`,
     };
   const proc = spawned.value;
   // A tool that exits without reading everything closes the pipe under us; its exit is the verdict.
-  void attempt(async () => {
-    await proc.stdin.write(payload);
-    await proc.stdin.end();
+  void Result.tryPromise({
+    try: async () => {
+      await proc.stdin.write(payload);
+      await proc.stdin.end();
+    },
+    catch: (error: unknown) => error,
   });
   const code = await proc.exited;
   if (signal.aborted)

@@ -53,7 +53,7 @@ import { join, resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
 import { createConsola } from "consola";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { errorMessage, Result } from "../../shared/src/result.ts";
 import {
   ACK_MS,
   editorHost,
@@ -130,7 +130,12 @@ if (argv.flags.forget && argv.flags.app !== "obsidian")
   die("--forget requires --app obsidian");
 
 const pathExists = async (path: string): Promise<boolean> =>
-  (await attempt(() => stat(path))).ok;
+  (
+    await Result.tryPromise({
+      try: () => stat(path),
+      catch: (error: unknown) => error,
+    })
+  ).isOk();
 // The forward to use, and the client alias its socket name carries (sockets.ts, remoteSocket):
 // SMART_OPEN_SOCKET pins one (tests, a hand-bound forward); otherwise the newest bound in
 // SMART_OPEN_SOCKET_DIR (default /tmp). With none bound, SOCKET names the pattern, for messages.
@@ -483,16 +488,18 @@ async function openHere(target: string): Promise<boolean> {
   }
   const env = await windowsEnv();
   const deadline = AbortSignal.timeout(LOCAL_WAIT_MS);
-  const spawned = await attempt(() =>
-    Bun.spawn(cmd, {
-      env,
-      stdout: "ignore",
-      stderr: "pipe",
-      signal: deadline,
-      killSignal: "SIGKILL",
-    }),
-  );
-  if (!spawned.ok) {
+  const spawned = Result.try({
+    try: () =>
+      Bun.spawn(cmd, {
+        env,
+        stdout: "ignore",
+        stderr: "pipe",
+        signal: deadline,
+        killSignal: "SIGKILL",
+      }),
+    catch: (error: unknown) => error,
+  });
+  if (spawned.isErr()) {
     consola.error(
       `smart-open: cannot run ${cmd[0]}: ${errorMessage(spawned.error)}`,
     );
@@ -525,10 +532,11 @@ async function openHere(target: string): Promise<boolean> {
 
 async function openOne(raw: string): Promise<boolean> {
   if (argv.flags.app === "obsidian") {
-    const directory = await attempt(async () =>
-      (await stat(resolve(raw))).isDirectory(),
-    );
-    if (isUrl(raw) || !directory.ok || !directory.value) {
+    const directory = await Result.tryPromise({
+      try: async () => (await stat(resolve(raw))).isDirectory(),
+      catch: (error: unknown) => error,
+    });
+    if (isUrl(raw) || directory.isErr() || !directory.value) {
       consola.error(`smart-open: --app obsidian requires a directory: ${raw}`);
       return false;
     }

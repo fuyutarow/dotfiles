@@ -34,7 +34,7 @@ test("land liveness follows checkout links and package bin map changes", () => {
     live: false,
     deployPaths: ["tools/repo-retrieve/package.json"],
   });
-  expect(landLiveness(["agents/hooks/attempt.ts"])).toEqual({
+  expect(landLiveness(["agents/hooks/zod.ts"])).toEqual({
     live: true,
     deployPaths: [],
   });

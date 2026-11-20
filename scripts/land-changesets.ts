@@ -2,7 +2,7 @@ import { access as accessPath } from "node:fs/promises";
 
 import { readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { changesetDiagnostic, parseChangeset } from "./changeset.ts";
 
@@ -27,8 +27,10 @@ const parseChange = async (path: string): Promise<Result<Change, Error>> => {
   const text = await readFile(path, "utf8");
   const parsed = parseChangeset(text);
   if (parsed.isErr())
-    return err(new Error(changesetDiagnostic(path, parsed.error.message)));
-  return ok({ path, ...parsed.value });
+    return Result.err(
+      new Error(changesetDiagnostic(path, parsed.error.message)),
+    );
+  return Result.ok({ path, ...parsed.value });
 };
 
 async function readToolChanges(
@@ -36,34 +38,34 @@ async function readToolChanges(
   tool: string,
 ): Promise<Result<Change[], Error>> {
   const changesDir = join(toolsRoot, tool, ".changes");
-  if (!(await pathExists(changesDir))) return ok([]);
+  if (!(await pathExists(changesDir))) return Result.ok([]);
   const changeFiles = (
     await readdir(changesDir, { withFileTypes: true })
   ).filter((entry) => entry.isFile() && entry.name.endsWith(".md"));
   const changes: Change[] = [];
   for (const changeFile of changeFiles) {
     const parsed = await parseChange(join(changesDir, changeFile.name));
-    if (parsed.isErr()) return err(parsed.error);
+    if (parsed.isErr()) return Result.err(parsed.error);
     changes.push(parsed.value);
   }
-  return ok(changes);
+  return Result.ok(changes);
 }
 
 function bumpedVersion(current: string, bump: Bump): Result<string, Error> {
   const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(current);
   if (match === null)
-    return err(new Error(`invalid SemVer package version: ${current}`));
+    return Result.err(new Error(`invalid SemVer package version: ${current}`));
   const version = match.slice(1).map(Number);
   if (version.some((part) => !Number.isSafeInteger(part)))
-    return err(
+    return Result.err(
       new Error(
         `SemVer package version is outside safe integer range: ${current}`,
       ),
     );
   const [major = 0, minor = 0, patch = 0] = version;
-  if (bump === "major") return ok(`${major + 1}.0.0`);
-  if (bump === "minor") return ok(`${major}.${minor + 1}.0`);
-  return ok(`${major}.${minor}.${patch + 1}`);
+  if (bump === "major") return Result.ok(`${major + 1}.0.0`);
+  if (bump === "minor") return Result.ok(`${major}.${minor + 1}.0`);
+  return Result.ok(`${major}.${minor}.${patch + 1}`);
 }
 
 export async function applyToolChangesets(
@@ -71,10 +73,10 @@ export async function applyToolChangesets(
   date = Temporal.Now.plainDateISO().toString(),
 ): Promise<Result<LandChangesetsResult, Error>> {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(date))
-    return err(new Error(`invalid release date: ${date}`));
+    return Result.err(new Error(`invalid release date: ${date}`));
   const toolsRoot = join(root, "tools");
   if (!(await pathExists(toolsRoot)))
-    return ok({
+    return Result.ok({
       paths: [],
       consumedChangesets: [],
       releaseFiles: [],
@@ -85,7 +87,7 @@ export async function applyToolChangesets(
     await readdir(toolsRoot, { withFileTypes: true })
   ).filter((entry) => entry.isDirectory())) {
     const changes = await readToolChanges(toolsRoot, toolDir.name);
-    if (changes.isErr()) return err(changes.error);
+    if (changes.isErr()) return Result.err(changes.error);
     pending.push(
       ...changes.value.map((change) => ({ tool: toolDir.name, change })),
     );
@@ -121,18 +123,20 @@ export async function applyToolChangesets(
       z.looseObject({ version: z.string() }),
     ).safeParse(packageText);
     if (!packageJson.success)
-      return err(
+      return Result.err(
         new Error(
           `${packagePath}: invalid package JSON or missing version: ${packageJson.error.message}`,
         ),
       );
     const next = bumpedVersion(packageJson.data.version, bump);
-    if (next.isErr()) return err(next.error);
+    if (next.isErr()) return Result.err(next.error);
     const changelogText = (await pathExists(changelogPath))
       ? await readFile(changelogPath, "utf8")
       : "# Changelog\n";
     if (!changelogText.startsWith("# Changelog\n"))
-      return err(new Error(`${changelogPath}: expected # Changelog preamble`));
+      return Result.err(
+        new Error(`${changelogPath}: expected # Changelog preamble`),
+      );
     prepared.push({
       tool,
       packagePath,
@@ -152,7 +156,7 @@ export async function applyToolChangesets(
       item.packageText,
     );
     if (!packageJson.success)
-      return err(new Error(`${item.packagePath}: invalid package JSON`));
+      return Result.err(new Error(`${item.packagePath}: invalid package JSON`));
     const packageData = { ...packageJson.data, version: item.version };
     const newSection = `## ${item.version} — ${date}\n\n${item.changes.map(({ entry }) => `- ${entry}`).join("\n")}`;
     const previousSections = item.changelogText
@@ -186,7 +190,7 @@ export async function applyToolChangesets(
       entries: item.changes.length,
     });
   }
-  return ok({
+  return Result.ok({
     paths: [...paths].toSorted(),
     consumedChangesets: [...consumedChangesets].toSorted(),
     releaseFiles: [...releaseFiles].toSorted(),

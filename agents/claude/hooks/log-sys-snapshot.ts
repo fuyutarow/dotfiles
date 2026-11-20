@@ -1,3 +1,4 @@
+import { Result } from "../../../tools/shared/src/result.ts";
 import { hookJson } from "./lib.ts";
 import { hasBareUnavailable } from "../../../tools/statusline/src/ansi.ts";
 import {
@@ -28,7 +29,6 @@ import {
 // Fail-open: this is a log, never a gate. Any problem -> exit 0 with no output.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { attempt } from "../../hooks/attempt.ts";
 import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import { readStdinJson } from "./lib.ts";
 import { promptParts } from "./prompt-stamp.ts";
@@ -101,11 +101,13 @@ async function main(): Promise<void> {
   // It is session-owned state, not a sampler observation: updated_at is not a TTL.
   const fleet = FleetSessionSchema.safeParse(await readFleetSession(sid));
   // Legacy rows remain a fallback while the writer migrates to the shared handoff.
-  const read = await attempt(async () =>
-    parseJson(await readFile(`${SESSION_DIR}/${key}.json`, "utf8")),
-  );
-  if (!fleet.success && read.ok && read.value === null) return;
-  const sess: unknown = read.ok ? read.value : {};
+  const read = await Result.tryPromise({
+    try: async () =>
+      parseJson(await readFile(`${SESSION_DIR}/${key}.json`, "utf8")),
+    catch: (e: unknown) => e,
+  });
+  if (!fleet.success && read.isOk() && read.value === null) return;
+  const sess: unknown = read.isOk() ? read.value : {};
   const sessAt = at(sess, "at");
   const fresh = typeof sessAt === "number" && now - sessAt <= STALE_MS;
   const publishedRows = fresh ? publishedSessionRows(sess) : [];
@@ -124,10 +126,11 @@ async function main(): Promise<void> {
   );
 
   const statePath = `${STATE_DIR}/${key}.last`;
-  const last = await attempt(async () =>
-    Number(await readFile(statePath, "utf8")),
-  );
-  const lastAt = last.ok && Number.isFinite(last.value) ? last.value : 0;
+  const last = await Result.tryPromise({
+    try: async () => Number(await readFile(statePath, "utf8")),
+    catch: (e: unknown) => e,
+  });
+  const lastAt = last.isOk() && Number.isFinite(last.value) ? last.value : 0;
   if (event === "PostToolUse" && now - lastAt < MIN_GAP_MS) return;
 
   await mkdir(STATE_DIR, { recursive: true });
@@ -135,5 +138,5 @@ async function main(): Promise<void> {
   process.stdout.write(`${hookJson({ systemMessage: shown })}\n`);
 }
 
-await attempt(main); // FAIL OPEN — a missing cache or state file just means no line this time
+await Result.tryPromise({ try: main, catch: (e: unknown) => e }); // FAIL OPEN — a missing cache or state file just means no line this time
 process.exit(0);

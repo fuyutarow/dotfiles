@@ -1,4 +1,4 @@
-import { fromThrowable } from "neverthrow";
+import { Result } from "../../tools/shared/src/result.ts";
 import { z } from "../hooks/zod.ts";
 
 export const SCHEMA = "research-section-trace/v2";
@@ -113,9 +113,11 @@ function lookup<V>(map: Map<string, V>, key: unknown): V | undefined {
 function nonNegativeInteger(value: unknown): boolean {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
-const instantMs = fromThrowable(
-  (value: string) => Temporal.Instant.from(value).epochMilliseconds,
-);
+const instantMs = (value: string): Result<number, unknown> =>
+  Result.try({
+    try: () => Temporal.Instant.from(value).epochMilliseconds,
+    catch: (e: unknown) => e,
+  });
 function time(value: unknown): number | undefined {
   const text = str(value);
   if (text === undefined || !RFC3339.test(text)) return undefined;

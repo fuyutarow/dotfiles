@@ -1,3 +1,4 @@
+import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
 import { hookJson } from "./lib.ts";
 // UserPromptExpansion hook (matcher: quote) — runs /quote to completion HERE and returns
 // decision:"block", so the turn ends without an inference call.
@@ -29,7 +30,6 @@ import { isIP } from "node:net";
 import { userInfo } from "node:os";
 import { basename, join } from "node:path";
 import { readStdinJson } from "./lib.ts";
-import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import { promptParts, stampMDHMZ } from "./prompt-stamp.ts";
 import {
@@ -116,10 +116,11 @@ const SMART_COPY_MISSING =
 async function copyToClipboard(text: string): Promise<CopyResult> {
   if (Bun.which("smart-copy") === null)
     return { ok: false, reason: SMART_COPY_MISSING };
-  const result = await attempt(() =>
-    runChild("smart-copy", [], { stdin: text, timeoutMs: 10_000 }),
-  );
-  if (!result.ok)
+  const result = await Result.tryPromise({
+    try: () => runChild("smart-copy", [], { stdin: text, timeoutMs: 10_000 }),
+    catch: (e: unknown) => e,
+  });
+  if (result.isErr())
     return {
       ok: false,
       reason: `smart-copy could not start: ${errorMessage(result.error)}`,
@@ -169,8 +170,11 @@ function downloadCommand(file: string): string | undefined {
 let sid = "";
 let count = 1;
 let rawArgs = "";
-const stdinRead = await attempt(() => readStdinJson());
-if (!stdinRead.ok || stdinRead.value === undefined) {
+const stdinRead = Result.try({
+  try: readStdinJson,
+  catch: (e: unknown) => e,
+});
+if (stdinRead.isErr() || stdinRead.value === undefined) {
   block("/quote could not read its hook input.");
 } else {
   const payload = stdinRead.value;
@@ -205,22 +209,25 @@ if (rawArgs !== "") {
 
 // Written every turn by capture-last-response.ts (Stop hook); newest last.
 // no history file -> handled as "nothing captured" below
-const turnsRead = await attempt(async () => {
-  const turns: string[] = [];
-  for (const line of (
-    await readFile(`${HOME}/.cache/claude/last-response/${sid}.jsonl`, "utf8")
-  )
-    .split("\n")
-    .filter((value) => value.trim() !== "")) {
-    const parsed = parseJson(line);
-    if (parsed === undefined) return null;
-    const text = strAt(parsed, "text");
-    if (text !== undefined) turns.push(text);
-  }
-  return turns;
+const turnsRead = await Result.tryPromise({
+  try: async () => {
+    const turns: string[] = [];
+    for (const line of (
+      await readFile(`${HOME}/.cache/claude/last-response/${sid}.jsonl`, "utf8")
+    )
+      .split("\n")
+      .filter((value) => value.trim() !== "")) {
+      const parsed = parseJson(line);
+      if (parsed === undefined) return null;
+      const text = strAt(parsed, "text");
+      if (text !== undefined) turns.push(text);
+    }
+    return turns;
+  },
+  catch: (e: unknown) => e,
 });
 const turns: string[] =
-  turnsRead.ok && turnsRead.value !== null ? turnsRead.value : [];
+  turnsRead.isOk() && turnsRead.value !== null ? turnsRead.value : [];
 
 if (turns.length === 0) {
   block(
@@ -264,15 +271,18 @@ if (selected.length < count) {
 // used below. The human runs it on their current local machine, so a stale SSH_CONNECTION
 // inherited by a persistent Herdr server cannot cause an unsolicited push to an old client.
 if (count > CLIPBOARD_TURN_LIMIT) {
-  const saved = await attempt(async () => {
-    const exportDir = join(HOME, ".cache", "claude", "quote-exports");
-    await mkdir(exportDir, { recursive: true, mode: 0o700 });
-    const privateDir = await mkdtemp(join(exportDir, "quote-"));
-    const savedFile = join(privateDir, `${basename(privateDir)}.txt`);
-    await writeFile(savedFile, payloadText, { mode: 0o600 });
-    return savedFile;
+  const saved = await Result.tryPromise({
+    try: async () => {
+      const exportDir = join(HOME, ".cache", "claude", "quote-exports");
+      await mkdir(exportDir, { recursive: true, mode: 0o700 });
+      const privateDir = await mkdtemp(join(exportDir, "quote-"));
+      const savedFile = join(privateDir, `${basename(privateDir)}.txt`);
+      await writeFile(savedFile, payloadText, { mode: 0o600 });
+      return savedFile;
+    },
+    catch: (e: unknown) => e,
   });
-  if (!saved.ok) {
+  if (saved.isErr()) {
     block("Could not save the quote to a text file.");
   }
   const file = saved.value;

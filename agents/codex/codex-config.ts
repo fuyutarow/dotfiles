@@ -1,10 +1,10 @@
 // `mise run codex:config` — converge declared Codex settings into the Codex-owned config.
 // Exit: 0 converged/no-op · 1 drift in check mode or still drifting · 2 bad declaration/config.
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { drift, edit, readDeclared, readLive } from "./sandbox-network.ts";
-import { attempt, errorMessage } from "../hooks/attempt.ts";
 import { configHome } from "./runtime.ts";
 
 const dotfiles =
@@ -19,8 +19,11 @@ if (declared instanceof Error) {
   process.stderr.write(`codex:config: ${declared.message}\n`);
   process.exit(2);
 }
-const resolvedHome = await attempt(() => configHome(dotfiles));
-if (!resolvedHome.ok) {
+const resolvedHome = await Result.tryPromise({
+  try: () => configHome(dotfiles),
+  catch: (e: unknown) => e,
+});
+if (resolvedHome.isErr()) {
   process.stderr.write(`codex:config: ${errorMessage(resolvedHome.error)}\n`);
   process.exit(2);
 }
@@ -41,11 +44,14 @@ if (checkOnly) {
   process.stderr.write(`codex:config: drift — ${differences.join("; ")}\n`);
   process.exit(1);
 }
-const write = await attempt(async () => {
-  await mkdir(join(home, ".codex"), { recursive: true });
-  await Bun.write(path, edit(before.contents, declared));
+const write = await Result.tryPromise({
+  try: async () => {
+    await mkdir(join(home, ".codex"), { recursive: true });
+    await Bun.write(path, edit(before.contents, declared));
+  },
+  catch: (e: unknown) => e,
 });
-if (!write.ok) {
+if (write.isErr()) {
   process.stderr.write(
     `codex:config: cannot write ${path}: ${errorMessage(write.error)}\n`,
   );

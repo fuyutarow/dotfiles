@@ -20,11 +20,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Ctx, Finding } from "../doctor.ts";
-import {
-  attempt,
-  attemptOr,
-  errorMessage,
-} from "../../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../../tools/shared/src/result.ts";
 import { obj } from "../../agents/hooks/narrow.ts";
 import { jsonText, z } from "../../agents/hooks/zod.ts";
 
@@ -231,13 +227,15 @@ async function askCodex(
   loadedHooksPath: string,
   timeoutMs: number,
 ): Promise<HookStatusRead> {
-  const outcome = await attempt(() =>
-    within<HookStatusRead>(exchange(proc, work, loadedHooksPath), timeoutMs, {
-      ok: false,
-      reason: `Codex did not answer hooks/list within ${timeoutMs} ms`,
-    }),
-  );
-  return outcome.ok
+  const outcome = await Result.tryPromise({
+    try: () =>
+      within<HookStatusRead>(exchange(proc, work, loadedHooksPath), timeoutMs, {
+        ok: false,
+        reason: `Codex did not answer hooks/list within ${timeoutMs} ms`,
+      }),
+    catch: (e: unknown) => e,
+  });
+  return outcome.isOk()
     ? outcome.value
     : {
         ok: false,
@@ -270,12 +268,18 @@ async function readInCopy(
   await mkdir(work, { recursive: true });
 
   const copy = join(codexHome, "hooks.json");
-  const copied = await attempt(() => copyFile(hooksPath, copy));
-  if (!copied.ok)
+  const copied = await Result.tryPromise({
+    try: () => copyFile(hooksPath, copy),
+    catch: (e: unknown) => e,
+  });
+  if (!copied.isOk())
     return { ok: false, reason: `cannot read ${hooksPath} to copy it` };
 
-  const config = await attempt(() => readFile(configPath, "utf8"));
-  if (config.ok) {
+  const config = await Result.tryPromise({
+    try: () => readFile(configPath, "utf8"),
+    catch: (e: unknown) => e,
+  });
+  if (config.isOk()) {
     await writeFile(
       join(codexHome, "config.toml"),
       rewriteTrustKeys(config.value, hooksPath, copy),
@@ -328,11 +332,12 @@ export async function readCodexHookStatus(
     return { ok: false, reason: `${binary} is not on PATH` };
 
   const root = await mkdtemp(join(tmpdir(), "doctor-codex-trust-"));
-  const outcome = await attempt(() =>
-    readInCopy(root, hooksPath, configPath, opts, program),
-  );
+  const outcome = await Result.tryPromise({
+    try: () => readInCopy(root, hooksPath, configPath, opts, program),
+    catch: (e: unknown) => e,
+  });
   await rm(root, { recursive: true, force: true });
-  return outcome.ok
+  return outcome.isOk()
     ? outcome.value
     : {
         ok: false,
@@ -368,7 +373,12 @@ export async function checkCodexHookTrust(
 ): Promise<Finding> {
   const hooksPath = join(ctx.home, ".codex", "hooks.json");
   const configPath = join(ctx.home, ".codex", "config.toml");
-  const declaredText = await attemptOr(() => readFile(hooksPath, "utf8"), null);
+  const declaredText = (
+    await Result.tryPromise({
+      try: () => readFile(hooksPath, "utf8"),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(null);
   if (declaredText === null)
     return {
       name: NAME,

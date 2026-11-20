@@ -1,9 +1,9 @@
 // The declaration is repo-owned; ~/.codex/config.toml remains Codex-owned. Read with Bun's real
 // TOML parser, then edit only the declared top-level assignments to preserve every other byte.
+import { Result } from "../../tools/shared/src/result.ts";
 import { access, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { attempt } from "../hooks/attempt.ts";
 import { jsonOf, z } from "../hooks/zod.ts";
 
 const RecordSchema = z.record(z.string(), z.unknown());
@@ -149,10 +149,12 @@ async function declaredMcpServers(
   dotfiles: string,
 ): Promise<Record<string, McpServer> | Error> {
   const path = join(dotfiles, ".mcp.json");
-  const parsed = await attempt(async () =>
-    jsonOf(McpDeclarationSchema).safeParse(await readFile(path, "utf8")),
-  );
-  if (!parsed.ok || !parsed.value.success)
+  const parsed = await Result.tryPromise({
+    try: async () =>
+      jsonOf(McpDeclarationSchema).safeParse(await readFile(path, "utf8")),
+    catch: (e: unknown) => e,
+  });
+  if (parsed.isErr() || !parsed.value.success)
     return new Error(`${path}: unreadable or invalid MCP declaration`);
   const servers: Record<string, McpServer> = {};
   for (const [name, entry] of Object.entries(parsed.value.data.mcpServers)) {
@@ -240,10 +242,11 @@ export async function readDeclared(
   home: string = process.env["HOME"] ?? homedir(),
 ): Promise<Declared | Error> {
   const path = join(dotfiles, "agents/codex/config.declared.toml");
-  const parsed = await attempt(async () =>
-    Bun.TOML.parse(await readFile(path, "utf8")),
-  );
-  if (!parsed.ok) return new Error(`${path}: unreadable or not TOML`);
+  const parsed = await Result.tryPromise({
+    try: async () => Bun.TOML.parse(await readFile(path, "utf8")),
+    catch: (e: unknown) => e,
+  });
+  if (parsed.isErr()) return new Error(`${path}: unreadable or not TOML`);
   const result = values(parsed.value);
   if (result instanceof Error) return new Error(`${path}: ${result.message}`);
   const declaredServers = await declaredMcpServers(dotfiles);
@@ -302,7 +305,14 @@ function managedMcpNames(contents: string | null): string[] {
 
 export async function readLive(home: string): Promise<Live | Error> {
   const path = join(home, ".codex/config.toml");
-  if (!(await attempt(() => access(path))).ok) {
+  if (
+    !(
+      await Result.tryPromise({
+        try: () => access(path),
+        catch: (e: unknown) => e,
+      })
+    ).isOk()
+  ) {
     return {
       contents: null,
       networkAccess: null,
@@ -316,10 +326,16 @@ export async function readLive(home: string): Promise<Live | Error> {
       managedMcpNames: [],
     };
   }
-  const read = await attempt(() => readFile(path, "utf8"));
-  if (!read.ok) return new Error(`${path}: unreadable or not TOML`);
-  const parsed = await attempt(() => Bun.TOML.parse(read.value));
-  if (!parsed.ok) return new Error(`${path}: unreadable or not TOML`);
+  const read = await Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (e: unknown) => e,
+  });
+  if (read.isErr()) return new Error(`${path}: unreadable or not TOML`);
+  const parsed = Result.try({
+    try: () => Bun.TOML.parse(read.value),
+    catch: (e: unknown) => e,
+  });
+  if (parsed.isErr()) return new Error(`${path}: unreadable or not TOML`);
   const root = RecordSchema.safeParse(parsed.value);
   if (!root.success) return new Error(`${path}: unreadable or not TOML`);
   const table = RecordSchema.safeParse(root.data["sandbox_workspace_write"]);

@@ -811,7 +811,6 @@ describe("render-home: committed jj inputs", () => {
       "scripts/config-registry.ts",
       "scripts/core-tools.ts",
       "scripts/hook-registry.ts",
-      "agents/hooks/attempt.ts",
       "agents/hooks/agx-roster.ts",
       "agents/hooks/narrow.ts",
       "agents/hooks/slugs.ts",

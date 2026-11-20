@@ -11,21 +11,22 @@
 import { readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { readonlyCommand } from "@dotfiles/shared/src/readonly-command.ts";
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { cccBackend } from "./ccc-entry.ts";
 
 // The owned public entry may be a Bun wrapper; its preserved backend is the uv-tool script whose
 // shebang names the interpreter that can import cocoindex_code.
 export async function cccPython(ccc: string): Promise<string | null> {
-  const read = await attempt(
-    async () =>
+  const read = await Result.tryPromise({
+    try: async () =>
       (await readFile(await realpath(await cccBackend(ccc)), "utf8")).split(
         "\n",
         1,
       )[0] ?? "",
-  );
-  if (!read.ok) return null;
+    catch: (error: unknown) => error,
+  });
+  if (read.isErr()) return null;
   const interpreter = read.value.startsWith("#!/")
     ? read.value.slice(2).trim()
     : "";

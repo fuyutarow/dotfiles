@@ -1,6 +1,6 @@
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import { readdir } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { attempt, errorMessage } from "../../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 
 /** Dot-separated object keys; own properties only, never inherited values. */
@@ -83,10 +83,11 @@ export async function discoverPresets(root: string) {
     const directory = join(root, entry.name);
     const path = join(directory, "preset.toml");
     if (!(await Bun.file(path).exists())) continue;
-    const raw = await attempt(async () =>
-      Bun.TOML.parse(await Bun.file(path).text()),
-    );
-    if (!raw.ok)
+    const raw = await Result.tryPromise({
+      try: async () => Bun.TOML.parse(await Bun.file(path).text()),
+      catch: (e: unknown) => e,
+    });
+    if (raw.isErr())
       return {
         ok: false,
         error: `${path}: ${errorMessage(raw.error)}`,

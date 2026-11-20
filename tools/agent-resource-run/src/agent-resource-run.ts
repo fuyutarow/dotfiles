@@ -5,13 +5,7 @@ import { mkdir, opendir, readFile, readdir, readlink } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
 import { createConsola } from "consola";
-import {
-  err,
-  fromAsyncThrowable,
-  fromThrowable,
-  ok,
-  type Result,
-} from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
@@ -107,8 +101,8 @@ export function validateManifest(
 ): Result<ResourceManifest, Error> {
   const parsed = manifestSchema.safeParse(input);
   return parsed.success
-    ? ok(parsed.data)
-    : err(new UsageError(parsed.error.message));
+    ? Result.ok(parsed.data)
+    : Result.err(new UsageError(parsed.error.message));
 }
 export type ManifestSource = { path: string; sha256: string };
 const digest = (bytes: Uint8Array | string) =>
@@ -157,10 +151,13 @@ const missing = (error: unknown) =>
 async function optionalText(
   path: string,
 ): Promise<Result<string | undefined, Error>> {
-  const read = await fromAsyncThrowable(() => readFile(path, "utf8"))();
-  if (read.isOk()) return ok(read.value);
-  if (missing(read.error)) return ok(undefined);
-  return err(asError(read.error));
+  const read = await Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (error: unknown) => error,
+  });
+  if (read.isOk()) return Result.ok(read.value);
+  if (missing(read.error)) return Result.ok(undefined);
+  return Result.err(asError(read.error));
 }
 const procState = (stat: string) => /^\d+ \(.*\) ([A-Za-z]) /u.exec(stat)?.[1];
 // /proc/<id>/stat field 22 (starttime) is stable for one task incarnation.
@@ -246,10 +243,16 @@ async function hasGpuTie(
       return true;
   }
   const fdRoot = join(procRoot, pid, "fd");
-  const descriptors = await fromAsyncThrowable(() => readdir(fdRoot))();
+  const descriptors = await Result.tryPromise({
+    try: () => readdir(fdRoot),
+    catch: (error: unknown) => error,
+  });
   if (descriptors.isErr()) return false;
   for (const fd of descriptors.value) {
-    const target = await fromAsyncThrowable(() => readlink(join(fdRoot, fd)))();
+    const target = await Result.tryPromise({
+      try: () => readlink(join(fdRoot, fd)),
+      catch: (error: unknown) => error,
+    });
     if (target.isOk() && target.value === "/dev/dxg") return true;
   }
   return false;
@@ -416,14 +419,17 @@ async function taskGroupDxgRefusal(
   gpuTied: () => Promise<boolean>,
 ): Promise<DStateObservation> {
   const taskRoot = join(procRoot, leader.tgid, "task");
-  const taskDirectory = await fromAsyncThrowable(() => opendir(taskRoot))();
+  const taskDirectory = await Result.tryPromise({
+    try: () => opendir(taskRoot),
+    catch: (error: unknown) => error,
+  });
   if (taskDirectory.isErr()) {
     const refusal = await taskInventoryRefusal(taskRoot, leader);
     return refusal === undefined ? {} : { refusal };
   }
   const candidates: DStateCandidate[] = [];
-  const scanned = await fromAsyncThrowable(
-    async (): Promise<string | undefined> => {
+  const scanned = await Result.tryPromise({
+    try: async (): Promise<string | undefined> => {
       for await (const task of taskDirectory.value) {
         const tid = task.name;
         if (!/^\d+$/u.test(tid) || tid === leader.tgid) continue;
@@ -440,7 +446,8 @@ async function taskGroupDxgRefusal(
       }
       return undefined;
     },
-  )();
+    catch: (error: unknown) => error,
+  });
   if (scanned.isErr()) {
     const refusal = await taskInventoryRefusal(taskRoot, leader);
     return refusal === undefined ? {} : { refusal };
@@ -589,12 +596,19 @@ async function policy() {
     process.env["AGENT_RESOURCE_POLICY"] ??
     join(import.meta.dir, "../resource-policy.toml");
   if (!isAbsolute(path))
-    return err(new UsageError("AGENT_RESOURCE_POLICY must be absolute"));
-  const contents = await fromAsyncThrowable(() => readFile(path, "utf8"))();
+    return Result.err(new UsageError("AGENT_RESOURCE_POLICY must be absolute"));
+  const contents = await Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (error: unknown) => error,
+  });
   if (contents.isErr())
-    return err(new UsageError(`cannot read policy ${path}`));
-  const toml = fromThrowable(() => Bun.TOML.parse(contents.value))();
-  if (toml.isErr()) return err(new UsageError(`invalid policy TOML ${path}`));
+    return Result.err(new UsageError(`cannot read policy ${path}`));
+  const toml = Result.try({
+    try: () => Bun.TOML.parse(contents.value),
+    catch: (error: unknown) => error,
+  });
+  if (toml.isErr())
+    return Result.err(new UsageError(`invalid policy TOML ${path}`));
   const parsed = z
     .object({
       schema: z.literal(1),
@@ -619,18 +633,18 @@ async function policy() {
     })
     .safeParse(toml.value);
   if (!parsed.success)
-    return err(
+    return Result.err(
       new UsageError(`invalid policy ${path}: ${parsed.error.message}`),
     );
-  return ok(parsed.data);
+  return Result.ok(parsed.data);
 }
 function runtimeDirectory() {
   const root = process.env["XDG_RUNTIME_DIR"];
   if (root === undefined || !isAbsolute(root))
-    return err(
+    return Result.err(
       new Error("XDG_RUNTIME_DIR must name the user runtime directory"),
     );
-  return ok(join(root, "agent-resource"));
+  return Result.ok(join(root, "agent-resource"));
 }
 // Diagnostic only: local proc observations cannot establish the driver's namespace.
 function samplerProvenance(state: GpuState, pid: number): string {
@@ -686,9 +700,10 @@ async function cccSupervisor(): Promise<{
       result.stdout,
     );
   if (timestamp === null || !Number.isSafeInteger(pid) || pid <= 0) return null;
-  const started = fromThrowable(() =>
-    Temporal.Instant.from(`${timestamp[1]}T${timestamp[2]}Z`),
-  )();
+  const started = Result.try({
+    try: () => Temporal.Instant.from(`${timestamp[1]}T${timestamp[2]}Z`),
+    catch: (error: unknown) => error,
+  });
   if (started.isErr()) return null;
   return { pid, startedAt: started.value.epochMilliseconds };
 }
@@ -740,9 +755,10 @@ async function residentCccWorker(
     Number(/^PPid:\s+(\d+)$/mu.exec(row.processStatus.value)?.[1]) !== parentPid
   )
     return false;
-  const supervisor = await fromAsyncThrowable(
-    options.cccSupervisor ?? cccSupervisor,
-  )();
+  const supervisor = await Result.tryPromise({
+    try: options.cccSupervisor ?? cccSupervisor,
+    catch: (error: unknown) => error,
+  });
   if (
     supervisor.isErr() ||
     supervisor.value === null ||
@@ -811,7 +827,10 @@ export async function gpuAdmissionRefusal(
       ? readGpuState
       : () => Promise.resolve(options.state));
   const initialState = options.state ?? (await readState());
-  const procEntries = await fromAsyncThrowable(() => readdir(procRoot))();
+  const procEntries = await Result.tryPromise({
+    try: () => readdir(procRoot),
+    catch: (error: unknown) => error,
+  });
   async function dxgSuspicion(): Promise<string | undefined> {
     const candidates: DStateCandidate[] = [];
     // Inspect live process state independently of the sampler's paused/cache state.
@@ -1169,8 +1188,8 @@ export function buildLockHolderLaunch(unit: string, command: string[]) {
 async function stopScope(scope: string) {
   const stopped = await output(["systemctl", "--user", "stop", scope], 45000);
   if (stopped.code === 0 || /not loaded|not found/iu.test(stopped.stderr))
-    return ok(undefined);
-  return err(
+    return Result.ok(undefined);
+  return Result.err(
     new Error(`scope cleanup failed for ${scope}: ${stopped.stderr.trim()}`),
   );
 }
@@ -1182,14 +1201,16 @@ async function runDecision(
 ): Promise<Result<ExecutionResult, Error>> {
   const report = options.report ?? reportLine;
   if (!checkOnly && command.length === 0)
-    return err(new UsageError("a command is required after --"));
+    return Result.err(new UsageError("a command is required after --"));
   if (
     process.platform !== "linux" ||
     ["flock", "systemd-run", "systemctl"].some((bin) => Bun.which(bin) === null)
   )
-    return ok(failure(69, "Linux flock and user systemd are required", report));
+    return Result.ok(
+      failure(69, "Linux flock and user systemd are required", report),
+    );
   if (process.env["AGENT_RESOURCE_ADMISSION_RECEIPT"] !== undefined)
-    return ok(
+    return Result.ok(
       failure(
         69,
         "nested reservation refused: AGENT_RESOURCE_ADMISSION_RECEIPT is inherited",
@@ -1201,17 +1222,17 @@ async function runDecision(
   );
   if (recovery.kind === "cancelled") {
     report(recovery.message);
-    return ok({
+    return Result.ok({
       ok: false,
       exitCode: recovery.signal === "SIGTERM" ? 143 : 130,
       reason: "cancelled",
     });
   }
   if (recovery.kind === "refuse")
-    return ok(failure(70, recovery.message, report));
+    return Result.ok(failure(70, recovery.message, report));
   report(recovery.message);
   const config = await policy();
-  if (config.isErr()) return err(config.error);
+  if (config.isErr()) return Result.err(config.error);
   // Scope-entry rechecks immediately before launch; check-only has no scope entry.
   if (manifest.device.kind === "gpu" && checkOnly) {
     const refusal = await gpuAdmissionRefusal(
@@ -1219,7 +1240,7 @@ async function runDecision(
       config.value.gpu_safety_mib,
       { admissionWaitS: manifest.admission_wait_s ?? 0 },
     );
-    if (refusal !== undefined) return ok(failure(69, refusal, report));
+    if (refusal !== undefined) return Result.ok(failure(69, refusal, report));
   }
   const manager = await output([
     "systemctl",
@@ -1229,14 +1250,16 @@ async function runDecision(
     "--value",
   ]);
   if (manager.code !== 0)
-    return ok(
+    return Result.ok(
       failure(69, `user systemd unavailable: ${manager.stderr.trim()}`, report),
     );
   const ids = await cpuIds(manifest.cpu_threads);
   if (ids.length !== manifest.cpu_threads)
-    return ok(failure(69, "requested CPU count exceeds allowed CPUs", report));
+    return Result.ok(
+      failure(69, "requested CPU count exceeds allowed CPUs", report),
+    );
   const runtime = runtimeDirectory();
-  if (runtime.isErr()) return err(runtime.error);
+  if (runtime.isErr()) return Result.err(runtime.error);
   const root = runtime.value;
   const slots = join(root, "slots");
   await mkdir(slots, { recursive: true, mode: 0o700 });
@@ -1247,7 +1270,7 @@ async function runDecision(
     outputLock = join(outputLocks, manifest.output_lock);
     const available = await output(lock(outputLock, 0, 69, ["true"]));
     if (available.code !== 0)
-      return ok(
+      return Result.ok(
         failure(69, `output_lock=${manifest.output_lock} already held`, report),
       );
   }
@@ -1255,7 +1278,7 @@ async function runDecision(
     report(`ADMIT job=${manifest.job_id} check-only`);
     const record = currentDecision();
     if (record !== undefined) record.reason = "check-only";
-    return ok({ ok: true, exitCode: 0 });
+    return Result.ok({ ok: true, exitCode: 0 });
   }
   const reservationId = randomUUID();
   const scope = `agent-resource-${reservationId}.scope`;
@@ -1361,7 +1384,10 @@ async function runDecision(
   };
   process.on("SIGINT", interrupt);
   process.on("SIGTERM", interrupt);
-  const completed = await fromAsyncThrowable(() => child.exited, asError)();
+  const completed = await Result.tryPromise({
+    try: () => child.exited,
+    catch: asError,
+  });
   process.off("SIGINT", interrupt);
   process.off("SIGTERM", interrupt);
   const interruptedResult = await interrupted;
@@ -1377,9 +1403,10 @@ async function runDecision(
     record.reason = evidence.reason;
     record.final_status = evidence.final_status;
   }
-  if (interruptedResult?.isErr() === true) return err(interruptedResult.error);
-  if (stopped.isErr()) return err(stopped.error);
-  if (completed.isErr()) return err(completed.error);
+  if (interruptedResult?.isErr() === true)
+    return Result.err(interruptedResult.error);
+  if (stopped.isErr()) return Result.err(stopped.error);
+  if (completed.isErr()) return Result.err(completed.error);
   const code = completed.value;
   if (code === 75 && record?.launched !== true)
     report(`HOLD job=${manifest.job_id} admission lock wait expired code=75`);
@@ -1400,7 +1427,7 @@ async function runDecision(
   if (record !== undefined) record.final_status = code;
   report(`RELEASE job=${manifest.job_id} code=${code}`);
   if (code === 0) report(`PASS job=${manifest.job_id} code=0`);
-  return ok({
+  return Result.ok({
     ok: code === 0,
     exitCode: code,
     ...(code === 0 ? {} : { reason: "command-exit" }),
@@ -1414,10 +1441,12 @@ async function run(
 ): Promise<Result<ExecutionResult, Error>> {
   const record = new DecisionRecord();
   return withDecision(record, async () => {
-    const result = await fromAsyncThrowable(
-      () => runDecision(manifest, command, options, checkOnly),
-      asError,
-    )().andThen((value) => value);
+    const result = (
+      await Result.tryPromise({
+        try: () => runDecision(manifest, command, options, checkOnly),
+        catch: asError,
+      })
+    ).andThen((value) => value);
     let finalStatus = 70;
     if (result.isOk()) finalStatus = result.value.exitCode;
     else if (result.error instanceof UsageError) finalStatus = 2;
@@ -1430,25 +1459,31 @@ async function run(
     return result;
   });
 }
-export function executeJob(
+export async function executeJob(
   manifest: ResourceManifest,
   command: string[],
   options: ExecuteOptions = {},
 ) {
-  return fromAsyncThrowable(
-    () => run(manifest, command, options, false),
-    asError,
-  )().andThen((result) => result);
+  return (
+    await Result.tryPromise({
+      try: () => run(manifest, command, options, false),
+      catch: asError,
+    })
+  ).andThen((result) => result);
 }
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
-async function status() {
+async function status(): Promise<Result<undefined, Error>> {
   const runtime = runtimeDirectory();
-  if (runtime.isErr()) return err(runtime.error);
+  if (runtime.isErr()) return Result.err(runtime.error);
   const slots = join(runtime.value, "slots");
-  const names = await fromAsyncThrowable(() => readdir(slots))();
-  if (names.isErr() && !missing(names.error)) return err(asError(names.error));
+  const names = await Result.tryPromise({
+    try: () => readdir(slots),
+    catch: (error: unknown) => error,
+  });
+  if (names.isErr() && !missing(names.error))
+    return Result.err(asError(names.error));
   const locks = await output([
     "lslocks",
     "--json",
@@ -1456,7 +1491,7 @@ async function status() {
     "--output",
     "PID,COMMAND,PATH",
   ]);
-  if (locks.code !== 0) return err(new Error(locks.stderr));
+  if (locks.code !== 0) return Result.err(new Error(locks.stderr));
   reportLine(`SLOTS directory=${slots} files=${names.unwrapOr([]).join(",")}`);
   const parsed = jsonOf(
     z.object({
@@ -1469,7 +1504,7 @@ async function status() {
       ),
     }),
   ).safeParse(locks.stdout.trim() === "" ? '{"locks":[]}' : locks.stdout);
-  if (!parsed.success) return err(new Error("invalid lslocks output"));
+  if (!parsed.success) return Result.err(new Error("invalid lslocks output"));
   reportLine(
     JSON.stringify(
       parsed.data.locks.filter(
@@ -1480,7 +1515,7 @@ async function status() {
   reportLine(
     `GPU_OWNER evidence=${gpuStatePath()} state=${JSON.stringify((await readGpuState()) ?? null)}`,
   );
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 async function main() {
   const parsed = cli(
@@ -1508,15 +1543,15 @@ async function main() {
   );
   if (parsed.command === "status") {
     if (statusHasOperands(parsed))
-      return err(
+      return Result.err(
         new UsageError("status does not accept arguments or admission flags"),
       );
     return (await status()).map(() => 0);
   }
   if (parsed.flags.manifest === undefined || parsed.flags.manifest === "")
-    return err(new UsageError("--manifest is required"));
+    return Result.err(new UsageError("--manifest is required"));
   if (parsed.flags.slot !== undefined && parsed.flags.slot !== "julia-compile")
-    return err(new UsageError('--slot must be "julia-compile"'));
+    return Result.err(new UsageError('--slot must be "julia-compile"'));
   const wait = z
     .number()
     .int()
@@ -1525,30 +1560,33 @@ async function main() {
     .optional()
     .safeParse(parsed.flags.recoveryWaitSeconds);
   if (!wait.success)
-    return err(
+    return Result.err(
       new UsageError(
         "--recovery-wait-seconds must be an integer from 0 to 86400",
       ),
     );
   const path = resolve(parsed.flags.manifest);
-  const read = await fromAsyncThrowable(() => readFile(path))();
+  const read = await Result.tryPromise({
+    try: () => readFile(path),
+    catch: (error: unknown) => error,
+  });
   if (read.isErr())
-    return err(new UsageError(`cannot read manifest '${path}'`));
+    return Result.err(new UsageError(`cannot read manifest '${path}'`));
   const bytes = read.value;
   const decoded = jsonOf(manifestSchema).safeParse(bytes.toString());
   if (!decoded.success)
-    return err(
+    return Result.err(
       new UsageError(`invalid manifest ${path}: ${decoded.error.message}`),
     );
   const override = jobId.safeParse(parsed.flags.jobId ?? decoded.data.job_id);
   if (!override.success)
-    return err(
+    return Result.err(
       new UsageError(
         "--job-id must be a filesystem-safe id of at most 80 characters",
       ),
     );
   if (parsed.flags.checkOnly && parsed._.length > 0)
-    return err(new UsageError("--check-only does not accept a command"));
+    return Result.err(new UsageError("--check-only does not accept a command"));
   const manifest = { ...decoded.data, job_id: override.data };
   return (
     await run(
@@ -1563,16 +1601,16 @@ async function main() {
   ).map((result) => result.exitCode);
 }
 if (import.meta.main) {
-  const result = await fromAsyncThrowable(main, asError)().andThen(
-    (value) => value,
-  );
-  result.match(
-    (code) => process.exit(code),
-    (error) => {
+  const result = (
+    await Result.tryPromise({ try: main, catch: asError })
+  ).andThen((value) => value);
+  result.match({
+    ok: (code) => process.exit(code),
+    err: (error) => {
       consola.error(
         `${error instanceof UsageError ? "USAGE" : "ERROR"}: ${error.message}\n`,
       );
       process.exit(error instanceof UsageError ? 2 : 70);
     },
-  );
+  });
 }

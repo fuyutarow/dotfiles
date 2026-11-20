@@ -2,10 +2,10 @@
 // into each prompt as additional context. Errors fail open so a broken settings file cannot stop
 // prompt submission. Zero external dependencies; preserve the former onPrompt wire behavior.
 
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { attempt, errorMessage } from "./attempt.ts";
 import { hookJson, hookStderr } from "./lib.ts";
 import { parseJson, strAt } from "./narrow.ts";
 import { jsonOf, z } from "./zod.ts";
@@ -27,26 +27,29 @@ const timer = setTimeout(() => {
   process.exit(0);
 }, BUDGET_MS);
 
-const result = await attempt(async () => {
-  const parsed = jsonOf(Payload).safeParse(await Bun.stdin.text());
-  if (!parsed.success) return new Error("invalid hook payload; fail open");
-  if (
-    parsed.data.hook_event_name !== undefined &&
-    parsed.data.hook_event_name !== "UserPromptSubmit"
-  )
-    return new Error("wrong hook event; fail open");
-  const home = process.env["HOME"] ?? homedir();
-  const settings = parseJson(
-    await readFile(join(home, ".claude", "settings.json"), "utf8"),
-  );
-  if (settings === undefined) {
-    hookStderr("remind-reply-language: malformed ~/.claude/settings.json\n");
-    return false;
-  }
-  return strAt(settings, "language") === "japanese" ? CONTEXT : false;
+const result = await Result.tryPromise({
+  try: async () => {
+    const parsed = jsonOf(Payload).safeParse(await Bun.stdin.text());
+    if (!parsed.success) return new Error("invalid hook payload; fail open");
+    if (
+      parsed.data.hook_event_name !== undefined &&
+      parsed.data.hook_event_name !== "UserPromptSubmit"
+    )
+      return new Error("wrong hook event; fail open");
+    const home = process.env["HOME"] ?? homedir();
+    const settings = parseJson(
+      await readFile(join(home, ".claude", "settings.json"), "utf8"),
+    );
+    if (settings === undefined) {
+      hookStderr("remind-reply-language: malformed ~/.claude/settings.json\n");
+      return false;
+    }
+    return strAt(settings, "language") === "japanese" ? CONTEXT : false;
+  },
+  catch: (e: unknown) => e,
 });
 clearTimeout(timer);
-if (!result.ok) {
+if (result.isErr()) {
   hookStderr(errorMessage(result.error).replaceAll(/\s+/gu, " "));
 } else if (result.value instanceof Error) {
   hookStderr(result.value.message);

@@ -1,7 +1,7 @@
 // Read-only GPU state API. Only gpu-sampler.ts may execute the driver tool.
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { attemptOr } from "./attempt.ts";
+import { Result } from "./result.ts";
 import { jsonOf, z } from "./zod.ts";
 export const RETAIN_MS = 2 * 60 * 60_000;
 const MAX_SAMPLES = 721;
@@ -132,12 +132,16 @@ export type GpuState = z.output<typeof GpuStateSchema>;
 export async function readGpuState(
   path = gpuStatePath(),
 ): Promise<GpuState | undefined> {
-  return attemptOr(async () => {
-    const file = Bun.file(path);
-    const text = file.size > MAX_BYTES ? "" : await file.text();
-    const parsed = jsonOf(GpuStateSchema).safeParse(text);
-    return parsed.success ? parsed.data : undefined;
-  }, undefined);
+  const state = await Result.tryPromise({
+    try: async () => {
+      const file = Bun.file(path);
+      const text = file.size > MAX_BYTES ? "" : await file.text();
+      const parsed = jsonOf(GpuStateSchema).safeParse(text);
+      return parsed.success ? parsed.data : undefined;
+    },
+    catch: (e: unknown) => e,
+  });
+  return state.unwrapOr(undefined);
 }
 export function gpuStateFailure(
   state: GpuState | undefined,

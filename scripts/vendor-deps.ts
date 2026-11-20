@@ -13,7 +13,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { fromAsyncThrowable } from "neverthrow";
+// The generator of agents/hooks/vendor/deps.js must not read that bundle (through
+// tools/shared/src/result.ts), or a missing bundle could never be rebuilt. It runs after
+// `bun install`, so it takes better-result from node_modules directly.
+import { Result } from "better-result";
 import { consola } from "consola";
 
 const ROOT = join(import.meta.dir, "..");
@@ -63,9 +66,11 @@ if (argv._.length > 0) {
 async function version(
   pkg: string,
 ): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
-  const result = await fromAsyncThrowable(() =>
-    readFile(join(ROOT, "node_modules", pkg, "package.json"), "utf8"),
-  )();
+  const result = await Result.tryPromise({
+    try: () =>
+      readFile(join(ROOT, "node_modules", pkg, "package.json"), "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (result.isErr())
     return {
       ok: false,

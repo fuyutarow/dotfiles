@@ -101,7 +101,7 @@ test("real auto-reindex launch is nonblocking, records failure, and remains rate
     COCOINDEX_CODE_DB_PATH_MAPPING: "",
     PATH: "/nonexistent",
   };
-  const script = `import { requestAutoReindex } from ${JSON.stringify(modulePath)}; const a = await requestAutoReindex(${JSON.stringify(root)}); const b = await requestAutoReindex(${JSON.stringify(root)}); process.stdout.write(JSON.stringify([a._unsafeUnwrap(), b._unsafeUnwrap()]));`;
+  const script = `import { requestAutoReindex } from ${JSON.stringify(modulePath)}; const a = await requestAutoReindex(${JSON.stringify(root)}); const b = await requestAutoReindex(${JSON.stringify(root)}); process.stdout.write(JSON.stringify([a.unwrap(), b.unwrap()]));`;
   const launcher = Bun.spawn([process.execPath, "-e", script], {
     cwd: root,
     env,

@@ -1,9 +1,8 @@
 import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { err, ok, type Result } from "neverthrow";
 import { createConsola } from "consola";
-import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { errorMessage, Result } from "../../shared/src/result.ts";
 import { parseFailures } from "./data.ts";
 
 const JJ_TIMEOUT = 60_000;
@@ -56,21 +55,27 @@ async function cleanup(
   name: string,
   root: string,
 ): Promise<Result<void, string>> {
-  const forgotten = await attempt(() =>
-    jj(["workspace", "forget", name], repo),
-  );
-  const removed = await attempt(() => rmOwned(root));
-  if (!removed.ok) return err(errorMessage(removed.error));
-  if (!forgotten.ok) return err(errorMessage(forgotten.error));
+  const forgotten = await Result.tryPromise({
+    try: () => jj(["workspace", "forget", name], repo),
+    catch: (error: unknown) => error,
+  });
+  const removed = await Result.tryPromise({
+    try: () => rmOwned(root),
+    catch: (error: unknown) => error,
+  });
+  if (removed.isErr()) return Result.err(errorMessage(removed.error));
+  if (forgotten.isErr()) return Result.err(errorMessage(forgotten.error));
   if (forgotten.value.exit !== 0)
-    return err(`could not forget ${name}: ${forgotten.value.stderr.trim()}`);
+    return Result.err(
+      `could not forget ${name}: ${forgotten.value.stderr.trim()}`,
+    );
   return removed.value;
 }
 
 async function rmOwned(root: string): Promise<Result<void, string>> {
   // The caller wraps filesystem exceptions with attempt; no deletion outside this mkdtemp tree.
   await rm(root, { recursive: true, force: true });
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 export async function record(
@@ -78,13 +83,17 @@ export async function record(
   cmd: string[],
   repo = process.cwd(),
 ): Promise<Result<string[], string>> {
-  if (Bun.which("jj") === null) return err("jj is required on PATH");
+  if (Bun.which("jj") === null) return Result.err("jj is required on PATH");
   const executable = cmd[0];
-  if (executable === undefined) return err("record requires -- <test command>");
+  if (executable === undefined)
+    return Result.err("record requires -- <test command>");
   if (!executable.includes("/") && Bun.which(executable) === null)
-    return err(`test command not found: ${executable}`);
-  const made = await attempt(() => mkdtemp(join(tmpdir(), "baseline-record-")));
-  if (!made.ok) return err(errorMessage(made.error));
+    return Result.err(`test command not found: ${executable}`);
+  const made = await Result.tryPromise({
+    try: () => mkdtemp(join(tmpdir(), "baseline-record-")),
+    catch: (error: unknown) => error,
+  });
+  if (made.isErr()) return Result.err(errorMessage(made.error));
   const root = made.value;
   const workspace = join(root, "checkout");
   const temp = join(root, "tmp");
@@ -96,62 +105,78 @@ export async function record(
   };
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
     process.on(signal, interrupt);
-  const result = await attempt(async (): Promise<Result<string[], string>> => {
-    logger.info(`baseline: checking out ${rev}`);
-    // --ignore-working-copy also suppresses materializing the NEW checkout in jj.
-    const added = await jj(
-      [
-        "workspace",
-        "add",
-        "--no-colocate",
-        "--sparse-patterns=full",
-        "--name",
-        name,
-        "--revision",
-        rev,
-        workspace,
-      ],
-      repo,
-      true,
-    );
-    if (added.exit !== 0) return err(added.stderr.trim());
-    registered = true;
-    if (controller.signal.aborted) return err("record interrupted");
-    await mkdir(temp);
-    logger.info(`baseline: running ${cmd.join(" ")}`);
-    const child = await run(cmd, workspace, controller.signal, {
-      ...process.env,
-      TMPDIR: temp,
-      TMP: temp,
-      TEMP: temp,
-      NO_COLOR: "1",
-      FORCE_COLOR: "0",
-      // A nested test preload must own its scratch under this run, not an inherited test parent.
-      DOTFILES_TEST_RUN_DIR: undefined,
-    });
-    if (controller.signal.aborted || child.signal !== null)
-      return err("test command was interrupted or exceeded 30 minutes");
-    const parsed = parseFailures(`${child.stdout}\n${child.stderr}`, workspace);
-    if (parsed.isErr())
-      return err(`${parsed.error}\n${child.stderr.slice(-4000)}`);
-    if (
-      (child.exit !== 0 && child.exit !== 1) ||
-      (child.exit === 1 && parsed.value.length === 0)
-    )
-      return err(
-        `test command exited ${child.exit} without a usable failure set`,
+  const result = await Result.tryPromise({
+    try: async (): Promise<Result<string[], string>> => {
+      logger.info(`baseline: checking out ${rev}`);
+      // --ignore-working-copy also suppresses materializing the NEW checkout in jj.
+      const added = await jj(
+        [
+          "workspace",
+          "add",
+          "--no-colocate",
+          "--sparse-patterns=full",
+          "--name",
+          name,
+          "--revision",
+          rev,
+          workspace,
+        ],
+        repo,
+        true,
       );
-    return parsed;
+      if (added.exit !== 0) return Result.err(added.stderr.trim());
+      registered = true;
+      if (controller.signal.aborted) return Result.err("record interrupted");
+      await mkdir(temp);
+      logger.info(`baseline: running ${cmd.join(" ")}`);
+      const child = await run(cmd, workspace, controller.signal, {
+        ...process.env,
+        TMPDIR: temp,
+        TMP: temp,
+        TEMP: temp,
+        NO_COLOR: "1",
+        FORCE_COLOR: "0",
+        // A nested test preload must own its scratch under this run, not an inherited test parent.
+        DOTFILES_TEST_RUN_DIR: undefined,
+      });
+      if (controller.signal.aborted || child.signal !== null)
+        return Result.err(
+          "test command was interrupted or exceeded 30 minutes",
+        );
+      const parsed = parseFailures(
+        `${child.stdout}\n${child.stderr}`,
+        workspace,
+      );
+      if (parsed.isErr())
+        return Result.err(`${parsed.error}\n${child.stderr.slice(-4000)}`);
+      if (
+        (child.exit !== 0 && child.exit !== 1) ||
+        (child.exit === 1 && parsed.value.length === 0)
+      )
+        return Result.err(
+          `test command exited ${child.exit} without a usable failure set`,
+        );
+      return parsed;
+    },
+    catch: (error: unknown) => error,
   });
   const workspaceExists =
-    registered || (await attempt(() => stat(join(workspace, ".jj")))).ok;
-  const cleaned = await attempt(() =>
-    workspaceExists ? cleanup(repo, name, root) : rmOwned(root),
-  );
+    registered ||
+    (
+      await Result.tryPromise({
+        try: () => stat(join(workspace, ".jj")),
+        catch: (error: unknown) => error,
+      })
+    ).isOk();
+  const cleaned = await Result.tryPromise({
+    try: () => (workspaceExists ? cleanup(repo, name, root) : rmOwned(root)),
+    catch: (error: unknown) => error,
+  });
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
     process.off(signal, interrupt);
-  if (!cleaned.ok) return err(`cleanup failed: ${errorMessage(cleaned.error)}`);
+  if (cleaned.isErr())
+    return Result.err(`cleanup failed: ${errorMessage(cleaned.error)}`);
   if (cleaned.value.isErr())
-    return err(`cleanup failed: ${cleaned.value.error}`);
-  return result.ok ? result.value : err(errorMessage(result.error));
+    return Result.err(`cleanup failed: ${cleaned.value.error}`);
+  return result.isOk() ? result.value : Result.err(errorMessage(result.error));
 }

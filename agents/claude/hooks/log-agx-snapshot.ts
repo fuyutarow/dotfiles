@@ -3,10 +3,10 @@
 // Fail-open: unavailable state is a diagnostic, never a gate. Stop always emits;
 // PostToolUse retains its one-minute cadence. Cadence write failures cannot hide a line.
 
+import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { parseJson, strAt } from "../../hooks/narrow.ts";
 import { jsonOf, z } from "../../hooks/zod.ts";
 import { hookJson } from "./lib.ts";
@@ -148,18 +148,25 @@ async function main(): Promise<void> {
   );
   const cadence = join(cadenceDir, `${key}.last`);
   if (event === "PostToolUse") {
-    const last = await attempt(async () =>
-      Number(await readFile(cadence, "utf8")),
-    );
-    if (last.ok && Number.isFinite(last.value) && now - last.value < MIN_GAP_MS)
+    const last = await Result.tryPromise({
+      try: async () => Number(await readFile(cadence, "utf8")),
+      catch: (e: unknown) => e,
+    });
+    if (
+      last.isOk() &&
+      Number.isFinite(last.value) &&
+      now - last.value < MIN_GAP_MS
+    )
       return;
   }
-  const result = await attempt(() =>
-    sid === undefined
-      ? Promise.resolve("n/a (session id not supplied)")
-      : describe(sid, nonEmpty(strAt(payload, "cwd")) ?? process.cwd()),
-  );
-  const body = result.ok
+  const result = await Result.tryPromise({
+    try: () =>
+      sid === undefined
+        ? Promise.resolve("n/a (session id not supplied)")
+        : describe(sid, nonEmpty(strAt(payload, "cwd")) ?? process.cwd()),
+    catch: (e: unknown) => e,
+  });
+  const body = result.isOk()
     ? result.value
     : `n/a (${oneLine(errorMessage(result.error))})`;
   const session = FleetSessionSchema.safeParse(
@@ -169,9 +176,12 @@ async function main(): Promise<void> {
   process.stdout.write(
     `${hookJson({ systemMessage: [`Agx: session=${oneLine(sid ?? "n/a (not supplied)")}`, ...rows, body].join(" | ") })}\n`,
   );
-  await attempt(async () => {
-    await mkdir(cadenceDir, { recursive: true });
-    await writeFile(cadence, `${now}\n`);
+  await Result.tryPromise({
+    try: async () => {
+      await mkdir(cadenceDir, { recursive: true });
+      await writeFile(cadence, `${now}\n`);
+    },
+    catch: (e: unknown) => e,
   });
 }
 

@@ -26,7 +26,7 @@ import {
   sep,
 } from "node:path";
 import { cli } from "cleye";
-import { fromPromise, fromThrowable } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { LINKS, type When } from "./config-registry.ts";
 import {
@@ -78,7 +78,10 @@ async function under(path: string, root: string): Promise<boolean> {
 }
 
 async function attempt<T>(operation: () => Promise<T>) {
-  return fromPromise(Promise.resolve().then(operation), (error) => error);
+  return Result.tryPromise({
+    try: () => Promise.resolve().then(operation),
+    catch: (error: unknown) => error,
+  });
 }
 
 async function lstatMaybe(path: string) {
@@ -306,7 +309,10 @@ async function checkHookRegistry(roots: Roots, out: string[]): Promise<void> {
     join(roots.repo, "agents/hooks/hooks.toml"),
     "utf8",
   );
-  const decoded = fromThrowable(() => Bun.TOML.parse(raw))();
+  const decoded = Result.try({
+    try: () => Bun.TOML.parse(raw),
+    catch: (e: unknown) => e,
+  });
   if (decoded.isErr()) {
     process.stderr.write(
       `FATAL: agents/hooks/hooks.toml: cannot parse registry: ${decoded.error instanceof Error ? decoded.error.message : String(decoded.error)}\n`,
@@ -721,13 +727,13 @@ async function main(): Promise<void> {
 
 if (import.meta.main) {
   const result = await attempt(main);
-  result.match(
-    () => {},
-    (error) => {
+  result.match({
+    ok: () => {},
+    err: (error) => {
       process.stderr.write(
         `FATAL: live-refs check could not run: ${error instanceof Error ? error.message : String(error)}\n`,
       );
       process.exitCode = 2;
     },
-  );
+  });
 }

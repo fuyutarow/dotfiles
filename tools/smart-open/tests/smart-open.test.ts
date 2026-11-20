@@ -19,7 +19,7 @@ import {
 } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 import {
   ACK_MS,
   fileKey,
@@ -32,7 +32,12 @@ const TOOL = join(import.meta.dir, "..");
 const RECEIVE = join(TOOL, "src", "receive.ts");
 const SMART_OPEN = join(TOOL, "src", "smart-open.ts");
 const exists = async (path: string): Promise<boolean> =>
-  (await attempt(() => lstat(path))).ok;
+  (
+    await Result.tryPromise({
+      try: () => lstat(path),
+      catch: (error: unknown) => error,
+    })
+  ).isOk();
 // The sockets.ts helpers are sync until their own unit makes them async; awaiting through this keeps
 // each call correct either way.
 const settled = <T>(value: T | PromiseLike<T>): Promise<T> =>
@@ -1614,8 +1619,13 @@ async function pidOf(dir: string, name: string): Promise<number> {
   for (let i = 0; i < 200 && !(await exists(file)); i++) await Bun.sleep(25);
   return Number((await readFile(file, "utf8")).trim());
 }
-const alive = async (pid: number): Promise<boolean> =>
-  (await attempt(() => process.kill(pid, 0))).ok;
+const alive = (pid: number): Promise<boolean> =>
+  Promise.resolve(
+    Result.try({
+      try: () => process.kill(pid, 0),
+      catch: (error: unknown) => error,
+    }).isOk(),
+  );
 
 describe("peers that never hang up (the receiver's own end() must release the slot)", () => {
   test("an idle peer that keeps its side open does not hold a slot past --idle-ms", async () => {

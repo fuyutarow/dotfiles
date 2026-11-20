@@ -1,7 +1,7 @@
 import { mkdir, rm, stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { createConnection } from "node:net";
-import { err, ok, ResultAsync, type Result } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const Agents = z.object({
@@ -69,55 +69,56 @@ async function launch(
   socketPath: string,
   tabId: string,
 ): Promise<Result<string, Error>> {
-  return ResultAsync.fromPromise(
-    new Promise<string>((resolveLaunch, reject) => {
-      const socket = createConnection(socketPath);
-      let pending = "";
-      socket.setTimeout(1500, () => {
-        socket.destroy(new Error("layout.apply timed out"));
-      });
-      socket.on("error", reject);
-      socket.on("connect", () => {
-        socket.write(
-          `${JSON.stringify({
-            id: "btm-layout",
-            method: "layout.apply",
-            params: {
-              tab_id: tabId,
-              tab_label: "btm",
-              focus: false,
-              root: {
-                type: "pane",
-                label: "btm",
-                command: [
-                  process.execPath,
-                  resolve(import.meta.dir, "btmp.ts"),
-                ],
+  return Result.tryPromise({
+    try: () =>
+      new Promise<string>((resolveLaunch, reject) => {
+        const socket = createConnection(socketPath);
+        let pending = "";
+        socket.setTimeout(1500, () => {
+          socket.destroy(new Error("layout.apply timed out"));
+        });
+        socket.on("error", reject);
+        socket.on("connect", () => {
+          socket.write(
+            `${JSON.stringify({
+              id: "btm-layout",
+              method: "layout.apply",
+              params: {
+                tab_id: tabId,
+                tab_label: "btm",
+                focus: false,
+                root: {
+                  type: "pane",
+                  label: "btm",
+                  command: [
+                    process.execPath,
+                    resolve(import.meta.dir, "btmp.ts"),
+                  ],
+                },
               },
-            },
-          })}\n`,
-        );
-      });
-      socket.on("data", (data) => {
-        pending += data.toString();
-        if (!pending.includes("\n")) return;
-        const response = jsonOf(
-          z.object({
-            result: z.object({ layout: z.object({ tab_id: z.string() }) }),
-            error: z.unknown().optional(),
-          }),
-        ).safeParse(pending.split("\n")[0]);
-        socket.destroy();
-        if (!response.success || response.data.error !== undefined)
-          reject(new Error(`layout.apply: ${pending.slice(0, 1000)}`));
-        else resolveLaunch(response.data.result.layout.tab_id);
-      });
-      socket.on("end", () => {
-        reject(new Error("layout.apply disconnected"));
-      });
-    }),
-    errorOf,
-  );
+            })}\n`,
+          );
+        });
+        socket.on("data", (data) => {
+          pending += data.toString();
+          if (!pending.includes("\n")) return;
+          const response = jsonOf(
+            z.object({
+              result: z.object({ layout: z.object({ tab_id: z.string() }) }),
+              error: z.unknown().optional(),
+            }),
+          ).safeParse(pending.split("\n")[0]);
+          socket.destroy();
+          if (!response.success || response.data.error !== undefined)
+            reject(new Error(`layout.apply: ${pending.slice(0, 1000)}`));
+          else resolveLaunch(response.data.result.layout.tab_id);
+        });
+        socket.on("end", () => {
+          reject(new Error("layout.apply disconnected"));
+        });
+      }),
+    catch: errorOf,
+  });
 }
 
 async function request<S extends z.ZodType>(
@@ -125,7 +126,7 @@ async function request<S extends z.ZodType>(
   schema: S,
 ): Promise<Result<z.output<S>, Error>> {
   const bin = Bun.which("herdr");
-  if (bin === null) return err(new Error("herdr is not on PATH"));
+  if (bin === null) return Result.err(new Error("herdr is not on PATH"));
   const child = Bun.spawn([bin, ...args], {
     env: process.env,
     stdin: "ignore",
@@ -140,13 +141,13 @@ async function request<S extends z.ZodType>(
     child.exited,
   ]);
   if (code !== 0)
-    return err(
+    return Result.err(
       new Error(`herdr ${args.join(" ")}: ${error.trim().slice(0, 1000)}`),
     );
   const parsed = jsonOf(schema).safeParse(out);
   return parsed.success
-    ? ok(parsed.data)
-    : err(new Error(`invalid herdr ${args.join(" ")} response`));
+    ? Result.ok(parsed.data)
+    : Result.err(new Error(`invalid herdr ${args.join(" ")} response`));
 }
 
 async function hasBtm(tabId: string): Promise<Result<boolean, Error>> {
@@ -174,14 +175,14 @@ async function createBtm(
           "--no-focus",
         ];
   const created = await request(args, Created);
-  if (created.isErr()) return err(created.error);
+  if (created.isErr()) return Result.err(created.error);
   const launched = await launchAndWait(
     socket,
     created.value.result.tab.tab_id,
     created.value.result.tab.workspace_id,
   );
-  if (launched.isErr()) return err(launched.error);
-  return ok(created.value.result.tab.workspace_id);
+  if (launched.isErr()) return Result.err(launched.error);
+  return Result.ok(created.value.result.tab.workspace_id);
 }
 
 // Starts btmp in an existing tab, records the workspace, waits for registration.
@@ -191,24 +192,24 @@ async function launchAndWait(
   workspaceId: string,
 ): Promise<Result<void, Error>> {
   const launched = await launch(socket, tabId);
-  if (launched.isErr()) return err(launched.error);
+  if (launched.isErr()) return Result.err(launched.error);
   const marked = await markWorkspace(workspaceId);
-  if (marked.isErr()) return err(marked.error);
+  if (marked.isErr()) return Result.err(marked.error);
   const deadline = performance.now() + 8000;
   while (performance.now() < deadline) {
     const found = await hasBtm(launched.value);
-    if (found.isErr()) return err(found.error);
-    if (found.value) return ok(undefined);
+    if (found.isErr()) return Result.err(found.error);
+    if (found.value) return Result.ok(undefined);
     await Bun.sleep(100);
   }
-  return err(new Error("btm did not register within 8s"));
+  return Result.err(new Error("btm did not register within 8s"));
 }
 
 async function markWorkspace(
   workspaceId: string,
 ): Promise<Result<void, Error>> {
   const bin = Bun.which("herdr");
-  if (bin === null) return err(new Error("herdr is not on PATH"));
+  if (bin === null) return Result.err(new Error("herdr is not on PATH"));
   const child = Bun.spawn(
     [
       bin,
@@ -227,8 +228,10 @@ async function markWorkspace(
     new Response(child.stderr).text(),
   ]);
   if (code !== 0)
-    return err(new Error(`herdr workspace report-metadata: ${stderr.trim()}`));
-  return ok(undefined);
+    return Result.err(
+      new Error(`herdr workspace report-metadata: ${stderr.trim()}`),
+    );
+  return Result.ok(undefined);
 }
 
 async function markUnrecorded(
@@ -237,9 +240,9 @@ async function markUnrecorded(
   for (const workspace of workspaces) {
     if (workspace.tokens?.["btmp_ensured"] === "1") continue;
     const marked = await markWorkspace(workspace.workspace_id);
-    if (marked.isErr()) return err(marked.error);
+    if (marked.isErr()) return Result.err(marked.error);
   }
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 // A btm tab as the server shows it. Herdr restores saved btm tabs at startup,
@@ -286,11 +289,11 @@ async function tabKind(
 
 async function btmTabs(): Promise<Result<BtmTab[], Error>> {
   const agents = await request(["agent", "list"], Agents);
-  if (agents.isErr()) return err(agents.error);
+  if (agents.isErr()) return Result.err(agents.error);
   const tabs = await request(["tab", "list"], Tabs);
-  if (tabs.isErr()) return err(tabs.error);
+  if (tabs.isErr()) return Result.err(tabs.error);
   const panes = await request(["pane", "list"], Panes);
-  if (panes.isErr()) return err(panes.error);
+  if (panes.isErr()) return Result.err(panes.error);
   const agentTabs = new Set(
     agents.value.result.agents
       .filter((agent) => agent.agent === "btm")
@@ -319,12 +322,12 @@ async function btmTabs(): Promise<Result<BtmTab[], Error>> {
       closable: only !== undefined && (kind === "live" || kind === "idle"),
     });
   }
-  return ok(found);
+  return Result.ok(found);
 }
 
 async function markAll(): Promise<Result<void, Error>> {
   const workspaces = await request(["workspace", "list"], Workspaces);
-  if (workspaces.isErr()) return err(workspaces.error);
+  if (workspaces.isErr()) return Result.err(workspaces.error);
   return markUnrecorded(workspaces.value.result.workspaces);
 }
 
@@ -340,23 +343,23 @@ async function planBtm(
 ): Promise<Result<Plan | undefined, Error>> {
   const live =
     tabs.find((tab) => tab.agent) ?? tabs.find((tab) => tab.kind === "live");
-  if (live !== undefined) return ok({ keeper: live, tabs });
+  if (live !== undefined) return Result.ok({ keeper: live, tabs });
   // Restored btm tabs whose pane is not spawned yet may still resume btmp.
-  if (tabs.some((tab) => tab.kind === "unknown")) return ok(undefined);
+  if (tabs.some((tab) => tab.kind === "unknown")) return Result.ok(undefined);
   const idle = tabs.find((tab) => tab.kind === "idle");
   // Only user content carries the btm label: nothing to start or close.
-  if (idle === undefined) return ok(undefined);
-  if (recorded) return ok({ keeper: idle, tabs });
+  if (idle === undefined) return Result.ok(undefined);
+  if (recorded) return Result.ok({ keeper: idle, tabs });
   // The resume types btmp into a restored shell a moment after it spawns;
   // act only if the tabs are still idle after that window.
   await Bun.sleep(1500);
   const again = await btmTabs();
-  if (again.isErr()) return err(again.error);
+  if (again.isErr()) return Result.err(again.error);
   if (again.value.some((tab) => tab.kind === "live" || tab.kind === "unknown"))
-    return ok(undefined);
+    return Result.ok(undefined);
   const started = await launchAndWait(socket, idle.tabId, idle.workspaceId);
-  if (started.isErr()) return err(started.error);
-  return ok({ keeper: idle, tabs: again.value });
+  if (started.isErr()) return Result.err(started.error);
+  return Result.ok({ keeper: idle, tabs: again.value });
 }
 
 // Duplicates are closed only when btm's own: one pane, running btmp or idle.
@@ -365,32 +368,34 @@ async function converge({ keeper, tabs }: Plan): Promise<Result<void, Error>> {
   for (const tab of tabs) {
     if (tab.tabId === keeper.tabId || !tab.closable) continue;
     const closed = await request(["tab", "close", tab.tabId], done);
-    if (closed.isErr()) return err(closed.error);
+    if (closed.isErr()) return Result.err(closed.error);
   }
   if (keeper.label === "btm") return markAll();
   // Installed help: herdr tab rename <TAB_ID> <LABEL>...
   const renamed = await request(["tab", "rename", keeper.tabId, "btm"], done);
-  if (renamed.isErr()) return err(renamed.error);
+  if (renamed.isErr()) return Result.err(renamed.error);
   return markAll();
 }
 
 async function ensureLocked(socket: string): Promise<Result<void, Error>> {
   const found = await btmTabs();
-  if (found.isErr()) return err(found.error);
+  if (found.isErr()) return Result.err(found.error);
   const workspaces = await request(["workspace", "list"], Workspaces);
-  if (workspaces.isErr()) return err(workspaces.error);
+  if (workspaces.isErr()) return Result.err(workspaces.error);
   const all = workspaces.value.result.workspaces;
   const recorded = all.some(
     (workspace) => workspace.tokens?.["btmp_ensured"] === "1",
   );
   if (found.value.length > 0) {
     const plan = await planBtm(socket, found.value, recorded);
-    if (plan.isErr()) return err(plan.error);
-    return plan.value === undefined ? ok(undefined) : converge(plan.value);
+    if (plan.isErr()) return Result.err(plan.error);
+    return plan.value === undefined
+      ? Result.ok(undefined)
+      : converge(plan.value);
   }
   if (recorded) return markUnrecorded(all);
   const created = await createBtm(socket, all[0]?.workspace_id);
-  if (created.isErr()) return err(created.error);
+  if (created.isErr()) return Result.err(created.error);
   return markUnrecorded(all.slice(1));
 }
 
@@ -399,23 +404,23 @@ async function ensureLocked(socket: string): Promise<Result<void, Error>> {
 export async function ensureBtm(): Promise<Result<void, Error>> {
   const socket = process.env["HERDR_SOCKET_PATH"];
   if (socket === undefined || socket === "")
-    return err(new Error("ensure requires HERDR_SOCKET_PATH"));
+    return Result.err(new Error("ensure requires HERDR_SOCKET_PATH"));
   const lock = `${resolve(socket)}.btm-ensure.lock`;
-  const acquired = await ResultAsync.fromPromise(
-    mkdir(lock),
-    (error: unknown) => error,
-  );
+  const acquired = await Result.tryPromise({
+    try: () => mkdir(lock),
+    catch: (error: unknown) => error,
+  });
   if (acquired.isErr()) {
     if (
       !z.object({ code: z.literal("EEXIST") }).safeParse(acquired.error).success
     )
-      return err(errorOf(acquired.error));
+      return Result.err(errorOf(acquired.error));
     const age = await stat(lock).then(
       (info) => Temporal.Now.instant().epochMilliseconds - info.mtimeMs,
       () => 0,
     );
     if (age > 30000) await rm(lock, { recursive: true, force: true });
-    return ok(undefined);
+    return Result.ok(undefined);
   }
   await using _release = {
     [Symbol.asyncDispose]: async () => {

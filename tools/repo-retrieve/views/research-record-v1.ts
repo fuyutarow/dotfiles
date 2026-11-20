@@ -10,8 +10,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
-import { err, ok, ResultAsync, type Result } from "neverthrow";
-import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { errorMessage, Result } from "../../shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import { plainHelp } from "@dotfiles/shared/src/cli.ts";
 
@@ -47,10 +46,13 @@ function contains(parent: string, child: string): boolean {
 async function resolvedDestination(
   path: string,
 ): Promise<Result<string, string>> {
-  const found = await attempt(() => realpath(path));
-  if (found.ok) return ok(found.value);
+  const found = await Result.tryPromise({
+    try: () => realpath(path),
+    catch: (error: unknown) => error,
+  });
+  if (found.isOk()) return Result.ok(found.value);
   const code = z.object({ code: z.literal("ENOENT") }).safeParse(found.error);
-  if (!code.success) return err(errorMessage(found.error));
+  if (!code.success) return Result.err(errorMessage(found.error));
   const parent = await resolvedDestination(dirname(path));
   return parent.map((value) =>
     join(value, path.slice(dirname(path).length + 1)),
@@ -61,14 +63,16 @@ async function readToml<T>(
   path: string,
   schema: z.ZodType<T>,
 ): Promise<Result<T, string>> {
-  const parsed = await attempt(async () =>
-    Bun.TOML.parse(await Bun.file(path).text()),
-  );
-  if (!parsed.ok) return err(path + ": " + errorMessage(parsed.error));
+  const parsed = await Result.tryPromise({
+    try: async () => Bun.TOML.parse(await Bun.file(path).text()),
+    catch: (error: unknown) => error,
+  });
+  if (parsed.isErr())
+    return Result.err(path + ": " + errorMessage(parsed.error));
   const checked = schema.safeParse(parsed.value);
   return checked.success
-    ? ok(checked.data)
-    : err(path + ": " + checked.error.message);
+    ? Result.ok(checked.data)
+    : Result.err(path + ": " + checked.error.message);
 }
 
 function render(record: z.infer<typeof objectSchema>, source: string): string {
@@ -89,21 +93,21 @@ async function exportInner(options: {
 }) {
   const store = await realpath(resolve(options.store));
   const destination = await resolvedDestination(resolve(options.out));
-  if (destination.isErr()) return err(destination.error);
+  if (destination.isErr()) return Result.err(destination.error);
   const out = destination.value;
   if (contains(store, out) || contains(out, store))
-    return err("--out must be outside and disjoint from --store");
+    return Result.err("--out must be outside and disjoint from --store");
   const format = await readToml(join(store, "FORMAT"), formatSchema);
-  if (format.isErr()) return err(format.error);
+  if (format.isErr()) return Result.err(format.error);
   const kinds = new Set(options.kinds ?? ["statement"]);
   const shards = options.shards ?? 1;
   if (!Number.isInteger(shards) || shards < 1 || shards > 16)
-    return err("--shards must be an integer from 1 to 16");
+    return Result.err("--shards must be an integer from 1 to 16");
   if (
     kinds.size === 0 ||
     [...kinds].some((kind) => !/^[a-z][a-z0-9_-]*$/u.test(kind))
   )
-    return err("--kinds must be comma-separated object kinds");
+    return Result.err("--kinds must be comma-separated object kinds");
   await mkdir(out, { recursive: true });
   const directories = Array.from({ length: shards }, (_, index) =>
     shardDirectory(out, index, shards),
@@ -111,7 +115,7 @@ async function exportInner(options: {
   for (const directory of directories) {
     await mkdir(directory, { recursive: true });
     if ((await realpath(directory)) !== directory)
-      return err(`Symlink output directory: ${directory}`);
+      return Result.err(`Symlink output directory: ${directory}`);
   }
   const counts: Record<string, number> = {};
   let fragments = 0;
@@ -124,26 +128,26 @@ async function exportInner(options: {
   const fragmentNames = (await readdir(join(store, "fragments"))).toSorted();
   for (const fragment of fragmentNames) {
     if (!hashSchema.safeParse(fragment).success)
-      return err(`Invalid fragment: ${fragment}`);
+      return Result.err(`Invalid fragment: ${fragment}`);
     const fragmentPath = join(store, "fragments", fragment);
     if ((await realpath(fragmentPath)) !== fragmentPath)
-      return err(`Symlink fragment: ${fragmentPath}`);
+      return Result.err(`Symlink fragment: ${fragmentPath}`);
     const checked = await readToml(
       join(fragmentPath, "MANIFEST"),
       manifestSchema,
     );
-    if (checked.isErr()) return err(checked.error);
+    if (checked.isErr()) return Result.err(checked.error);
     const manifest = checked.value;
     if (manifest.fragment_id !== fragment)
-      return err(`MANIFEST fragment mismatch: ${fragmentPath}`);
+      return Result.err(`MANIFEST fragment mismatch: ${fragmentPath}`);
     const declared = new Set(manifest.objects);
     const introduced = new Set(manifest.introduced);
     if ([...introduced].some((hash) => !declared.has(hash)))
-      return err(`Undeclared introduced object in ${fragmentPath}`);
+      return Result.err(`Undeclared introduced object in ${fragmentPath}`);
     fragments++;
     const objectDir = join(fragmentPath, "objects");
     if ((await realpath(objectDir)) !== objectDir)
-      return err(`Symlink objects directory: ${objectDir}`);
+      return Result.err(`Symlink objects directory: ${objectDir}`);
     const processed = await processObjects(
       objectDir,
       declared,
@@ -151,7 +155,7 @@ async function exportInner(options: {
       kinds,
       shards,
     );
-    if (processed.isErr()) return err(processed.error);
+    if (processed.isErr()) return Result.err(processed.error);
     const batch = processed.value;
     objects += batch.objects;
     selected += batch.selected;
@@ -167,7 +171,7 @@ async function exportInner(options: {
   );
   const files = inventory.reduce((sum, item) => sum + item.files, 0);
   const bytes = inventory.reduce((sum, item) => sum + item.bytes, 0);
-  return ok({
+  return Result.ok({
     store,
     out,
     kinds: [...kinds].toSorted(),
@@ -235,7 +239,7 @@ async function processObjects(
   };
   for (const hash of (await readdir(objectDir)).toSorted()) {
     const loaded = await readObject(join(objectDir, hash), hash, declared);
-    if (loaded.isErr()) return err(loaded.error);
+    if (loaded.isErr()) return Result.err(loaded.error);
     if (loaded.value.type === "payload") {
       batch.objects++;
       batch.counts["payload"] = (batch.counts["payload"] ?? 0) + 1;
@@ -252,34 +256,39 @@ async function processObjects(
       shardDirectory(out, shardIndex(record.id, shards), shards),
       kinds,
     );
-    if (written.isErr()) return err(written.error);
+    if (written.isErr()) return Result.err(written.error);
     batch.selected += written.value.selected;
     batch.outputBytes += written.value.bytes;
     batch.unchanged += written.value.unchanged;
   }
-  return ok(batch);
+  return Result.ok(batch);
 }
 
 async function readObject(path: string, hash: string, declared: Set<string>) {
   if (!hashSchema.safeParse(hash).success || !declared.has(hash))
-    return err(`Invalid or undeclared object: ${path}`);
-  if ((await realpath(path)) !== path) return err(`Symlink object: ${path}`);
+    return Result.err(`Invalid or undeclared object: ${path}`);
+  if ((await realpath(path)) !== path)
+    return Result.err(`Symlink object: ${path}`);
   const digest = new Bun.CryptoHasher("sha256");
   const input = Bun.file(path);
   for await (const chunk of input.stream()) digest.update(chunk);
   if (digest.digest("hex") === hash)
-    return ok({ type: "payload" as const, bytes: input.size });
+    return Result.ok({ type: "payload" as const, bytes: input.size });
   const raw = await Bun.file(path).text();
-  const parsed = await attempt(() => Bun.TOML.parse(raw));
-  if (!parsed.ok) return err(path + ": " + errorMessage(parsed.error));
+  const parsed = Result.try({
+    try: () => Bun.TOML.parse(raw),
+    catch: (error: unknown) => error,
+  });
+  if (parsed.isErr())
+    return Result.err(path + ": " + errorMessage(parsed.error));
   const checked = objectSchema.safeParse(parsed.value);
-  if (!checked.success) return err(path + ": " + checked.error.message);
+  if (!checked.success) return Result.err(path + ": " + checked.error.message);
   const record = checked.data;
-  if (record.id !== hash) return err(`Object id mismatch: ${path}`);
+  if (record.id !== hash) return Result.err(`Object id mismatch: ${path}`);
   const canonical = raw.replace(/^id = "[a-f0-9]{64}"\n/mu, "");
   if (new Bun.CryptoHasher("sha256").update(canonical).digest("hex") !== hash)
-    return err(`Canonical hash mismatch: ${path}`);
-  return ok({ type: "record" as const, raw, record, path });
+    return Result.err(`Canonical hash mismatch: ${path}`);
+  return Result.ok({ type: "record" as const, raw, record, path });
 }
 
 async function writeObject(
@@ -289,9 +298,9 @@ async function writeObject(
   kinds: Set<string>,
 ) {
   if (!kinds.has(record.kind))
-    return ok({ selected: 0, bytes: 0, unchanged: 0 });
+    return Result.ok({ selected: 0, bytes: 0, unchanged: 0 });
   if (record.kind === "statement" && record.text === undefined)
-    return err(`Statement missing text: ${path}`);
+    return Result.err(`Statement missing text: ${path}`);
   const markdown = render(record, path);
   const target = join(out, `${record.id}-${record.kind}.md`);
   const file = await open(
@@ -299,30 +308,35 @@ async function writeObject(
     constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW,
     0o644,
   );
-  const written = await attempt(async () => {
-    const info = await file.stat();
-    if (!info.isFile() || info.nlink !== 1) return null;
-    const previous = await file.readFile("utf8");
-    if (previous === markdown) return 1;
-    await file.truncate(0);
-    await file.write(markdown, 0, "utf8");
-    return 0;
+  const written = await Result.tryPromise({
+    try: async () => {
+      const info = await file.stat();
+      if (!info.isFile() || info.nlink !== 1) return null;
+      const previous = await file.readFile("utf8");
+      if (previous === markdown) return 1;
+      await file.truncate(0);
+      await file.write(markdown, 0, "utf8");
+      return 0;
+    },
+    catch: (error: unknown) => error,
   });
   await file.close();
-  if (!written.ok) return err(errorMessage(written.error));
+  if (written.isErr()) return Result.err(errorMessage(written.error));
   if (written.value === null)
-    return err(`Output must be a regular file with one link: ${target}`);
-  return ok({
+    return Result.err(`Output must be a regular file with one link: ${target}`);
+  return Result.ok({
     selected: 1,
     bytes: Buffer.byteLength(markdown),
     unchanged: written.value,
   });
 }
 
-export function exportView(options: Parameters<typeof exportInner>[0]) {
-  return ResultAsync.fromPromise(
-    Promise.resolve().then(() => exportInner(options)),
-    errorMessage,
+export async function exportView(options: Parameters<typeof exportInner>[0]) {
+  return (
+    await Result.tryPromise({
+      try: () => Promise.resolve().then(() => exportInner(options)),
+      catch: errorMessage,
+    })
   ).andThen((result) => result);
 }
 
@@ -362,7 +376,7 @@ async function main() {
     args.flags.store === undefined ||
     args.flags.out === undefined
   )
-    return err(
+    return Result.err(
       "Required: --store <root> --out <directory> [--kinds statement,...]",
     );
   const result = await exportView({
@@ -373,12 +387,17 @@ async function main() {
   });
   if (result.isErr()) return result;
   process.stdout.write(`${JSON.stringify(result.value)}\n`);
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 if (import.meta.main) {
-  const called = await attempt(main);
-  const result = called.ok ? called.value : err(errorMessage(called.error));
+  const called = await Result.tryPromise({
+    try: main,
+    catch: (error: unknown) => error,
+  });
+  const result = called.isOk()
+    ? called.value
+    : Result.err(errorMessage(called.error));
   if (result.isErr()) {
     process.stderr.write(`FATAL: ${result.error}\n`);
     process.exitCode = 2;

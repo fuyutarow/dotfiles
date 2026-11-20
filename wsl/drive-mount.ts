@@ -3,7 +3,7 @@
 import { chmod, mkdir, rename, stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { obj } from "../agents/hooks/narrow.ts";
 
 const FSTAB = "/etc/fstab";
@@ -29,8 +29,11 @@ export function mountDirOutcome(
 }
 
 async function prepareMountDir(dir: string): Promise<Error | undefined> {
-  const made = await attempt(() => mkdir(dir, { recursive: true }));
-  return made.ok ? undefined : mountDirOutcome(dir, made.error);
+  const made = await Result.tryPromise({
+    try: () => mkdir(dir, { recursive: true }),
+    catch: (e: unknown) => e,
+  });
+  return made.isOk() ? undefined : mountDirOutcome(dir, made.error);
 }
 
 export function ensureFstabEntry(
@@ -65,10 +68,11 @@ export function ensureFstabEntry(
 }
 
 async function installFstabEntry(): Promise<Error | undefined> {
-  const declaration = await attempt(() =>
-    Bun.file(join(import.meta.dir, "gdrive.fstab")).text(),
-  );
-  if (!declaration.ok)
+  const declaration = await Result.tryPromise({
+    try: () => Bun.file(join(import.meta.dir, "gdrive.fstab")).text(),
+    catch: (e: unknown) => e,
+  });
+  if (!declaration.isOk())
     return new Error(
       `cannot read wsl/gdrive.fstab: ${errorMessage(declaration.error)}`,
     );
@@ -78,8 +82,11 @@ async function installFstabEntry(): Promise<Error | undefined> {
     .find((line) => line !== "" && !line.startsWith("#"));
   if (declared === undefined)
     return new Error("wsl/gdrive.fstab has no active entry");
-  const current = await attempt(() => Bun.file(FSTAB).text());
-  if (!current.ok)
+  const current = await Result.tryPromise({
+    try: () => Bun.file(FSTAB).text(),
+    catch: (e: unknown) => e,
+  });
+  if (!current.isOk())
     return new Error(`cannot read ${FSTAB}: ${errorMessage(current.error)}`);
   const update = ensureFstabEntry(current.value, declared);
   if (update.conflict !== undefined) return new Error(update.conflict);
@@ -88,19 +95,25 @@ async function installFstabEntry(): Promise<Error | undefined> {
     return undefined;
   }
 
-  const fstabStat = await attempt(() => stat(FSTAB));
-  if (!fstabStat.ok)
+  const fstabStat = await Result.tryPromise({
+    try: () => stat(FSTAB),
+    catch: (e: unknown) => e,
+  });
+  if (!fstabStat.isOk())
     return new Error(
       `cannot inspect ${FSTAB}: ${errorMessage(fstabStat.error)}`,
     );
   const mode = fstabStat.value.mode & 0o777;
   const temp = join(dirname(FSTAB), `.fstab.dotfiles-${randomUUID()}`);
-  const written = await attempt(async () => {
-    await Bun.write(temp, update.content);
-    await chmod(temp, mode);
-    await rename(temp, FSTAB);
+  const written = await Result.tryPromise({
+    try: async () => {
+      await Bun.write(temp, update.content);
+      await chmod(temp, mode);
+      await rename(temp, FSTAB);
+    },
+    catch: (e: unknown) => e,
   });
-  if (!written.ok)
+  if (!written.isOk())
     return new Error(`cannot update ${FSTAB}: ${errorMessage(written.error)}`);
   process.stdout.write(`updated: ${FSTAB} with ${declared}\n`);
   return undefined;

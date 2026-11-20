@@ -29,7 +29,7 @@
 import { readFile } from "node:fs/promises";
 import { basename, isAbsolute, relative, resolve } from "node:path";
 import { cli } from "cleye";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "better-result";
 
 export const VERDICTS = [
   "match",
@@ -457,7 +457,10 @@ async function preloadCited(
     const read =
       path === undefined
         ? undefined
-        : await fromAsyncThrowable(() => readFile(path, "utf8"))();
+        : await Result.tryPromise({
+            try: () => readFile(path, "utf8"),
+            catch: (e: unknown) => e,
+          });
     if (read?.isOk() === true) lines.set(label, read.value.split(/\r?\n/u));
   }
   return (ref) => {
@@ -506,12 +509,18 @@ async function main(): Promise<number> {
   if (parsed._.length === 0)
     return usage("at least one judgment file is required");
 
-  const scanText = await fromAsyncThrowable(() => readFile(scan, "utf8"))();
+  const scanText = await Result.tryPromise({
+    try: () => readFile(scan, "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (scanText.isErr())
     return fail(`cannot read ${scan}: ${messageOf(scanText.error)}`);
   const files: ParsedFile[] = [];
   for (const path of parsed._) {
-    const text = await fromAsyncThrowable(() => readFile(path, "utf8"))();
+    const text = await Result.tryPromise({
+      try: () => readFile(path, "utf8"),
+      catch: (e: unknown) => e,
+    });
     if (text.isErr())
       return fail(`cannot read ${path}: ${messageOf(text.error)}`);
     files.push(parseJudgments(path, text.value));

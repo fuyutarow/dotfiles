@@ -15,7 +15,7 @@ import {
 } from "./deployment.ts";
 import { readApprovedHost } from "./hosts.ts";
 import pkg from "../package.json" with { type: "json" };
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);
@@ -65,8 +65,11 @@ async function targetKind(target: string): Promise<HostKind | Error> {
   if (target === "local") return currentHostKind();
   if (!isApprovedRemoteAlias(target))
     return new Error(`invalid approved host alias: ${target}`);
-  const loaded = await attempt(() => readApprovedHost(target));
-  if (!loaded.ok) return new Error(errorMessage(loaded.error));
+  const loaded = await Result.tryPromise({
+    try: () => readApprovedHost(target),
+    catch: (error: unknown) => error,
+  });
+  if (loaded.isErr()) return new Error(errorMessage(loaded.error));
   const approved = loaded.value;
   return approved.isErr() ? approved.error : approved.value.kind;
 }
@@ -137,5 +140,8 @@ async function main(): Promise<void> {
   if (executed.isErr()) fail(executed.error.message);
 }
 
-const result = await attempt(main);
-if (!result.ok) fail(errorMessage(result.error));
+const result = await Result.tryPromise({
+  try: main,
+  catch: (error: unknown) => error,
+});
+if (result.isErr()) fail(errorMessage(result.error));

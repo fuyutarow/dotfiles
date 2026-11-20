@@ -33,13 +33,7 @@ import { access, lstat, readFile, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import {
-  err,
-  fromAsyncThrowable,
-  fromThrowable,
-  ok,
-  type Result,
-} from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { resolveDbDir } from "./ccc-db-dir.ts";
 import { latestAutoReindexReceipt } from "./auto-reindex-receipt.ts";
 import { parseDaemonStatus } from "./ccc-daemon-status.ts";
@@ -64,7 +58,7 @@ import {
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
 const pathAccessible = (path: string) =>
-  fromAsyncThrowable(() => access(path), asError)();
+  Result.tryPromise({ try: () => access(path), catch: asError });
 
 export type RegisteredProject = {
   project: string;
@@ -75,15 +69,18 @@ async function jjBackingRepo(
   current: string,
 ): Promise<string | null | undefined> {
   const marker = join(current, ".jj", "repo");
-  const info = await fromAsyncThrowable(() => lstat(marker), asError)();
+  const info = await Result.tryPromise({
+    try: () => lstat(marker),
+    catch: asError,
+  });
   if (info.isErr() || !info.value.isFile()) return undefined;
-  const target = await fromAsyncThrowable(
-    async () =>
+  const target = await Result.tryPromise({
+    try: async () =>
       realpath(
         resolve(join(current, ".jj"), (await readFile(marker, "utf8")).trim()),
       ),
-    asError,
-  )();
+    catch: asError,
+  });
   return target.isErr() ? null : dirname(dirname(target.value));
 }
 
@@ -207,73 +204,80 @@ function errnoCode(error: unknown): string | null {
 async function acquireAutoReindexLock(
   path: string,
 ): Promise<Result<Awaited<ReturnType<typeof open>> | null, Error>> {
-  const create = () => fromAsyncThrowable(() => open(path, "wx"), asError)();
+  const create = () =>
+    Result.tryPromise({ try: () => open(path, "wx"), catch: asError });
   const first = await create();
-  if (first.isOk()) return ok(first.value);
-  if (errnoCode(first.error) !== "EEXIST") return err(first.error);
+  if (first.isOk()) return Result.ok(first.value);
+  if (errnoCode(first.error) !== "EEXIST") return Result.err(first.error);
 
-  const info = await fromAsyncThrowable(() => statFile(path), asError)();
+  const info = await Result.tryPromise({
+    try: () => statFile(path),
+    catch: asError,
+  });
   if (info.isErr() && errnoCode(info.error) !== "ENOENT")
-    return err(info.error);
+    return Result.err(info.error);
   if (
     info.isOk() &&
     Temporal.Now.instant().epochMilliseconds - info.value.mtimeMs <
       AUTO_REINDEX_WINDOW_MS
   )
-    return ok(null);
+    return Result.ok(null);
 
-  const removed = await fromAsyncThrowable(() => unlink(path), asError)();
+  const removed = await Result.tryPromise({
+    try: () => unlink(path),
+    catch: asError,
+  });
   if (removed.isErr() && errnoCode(removed.error) !== "ENOENT")
-    return err(removed.error);
+    return Result.err(removed.error);
   const retry = await create();
-  return retry.match(
-    (file) => ok(file),
-    (error) => (errnoCode(error) === "EEXIST" ? ok(null) : err(error)),
-  );
+  if (retry.isOk()) return Result.ok(retry.value);
+  return errnoCode(retry.error) === "EEXIST"
+    ? Result.ok(null)
+    : Result.err(retry.error);
 }
 
 export async function requestAutoReindex(
   project: string,
 ): Promise<Result<{ started: boolean; pid?: number }, Error>> {
   const directory = await resolveDbDir(project);
-  if (directory.isErr()) return err(directory.error);
-  const created = await fromAsyncThrowable(
-    () => mkdir(directory.value, { recursive: true }),
-    asError,
-  )();
-  if (created.isErr()) return err(created.error);
+  if (directory.isErr()) return Result.err(directory.error);
+  const created = await Result.tryPromise({
+    try: () => mkdir(directory.value, { recursive: true }),
+    catch: asError,
+  });
+  if (created.isErr()) return Result.err(created.error);
   const lockPath = join(directory.value, AUTO_REINDEX_LOCK_BASENAME);
   const stampPath = join(directory.value, AUTO_REINDEX_STAMP_BASENAME);
   const acquired = await acquireAutoReindexLock(lockPath);
-  if (acquired.isErr()) return err(acquired.error);
-  if (acquired.value === null) return ok({ started: false });
+  if (acquired.isErr()) return Result.err(acquired.error);
+  if (acquired.value === null) return Result.ok({ started: false });
   const lockFile = acquired.value;
 
   const run = async (): Promise<
     Result<{ started: boolean; pid?: number }, Error>
   > => {
-    const previous = await fromAsyncThrowable(
-      async () => Number((await Bun.file(stampPath).text()).trim()),
-      asError,
-    )();
+    const previous = await Result.tryPromise({
+      try: async () => Number((await Bun.file(stampPath).text()).trim()),
+      catch: asError,
+    });
     if (
       previous.isOk() &&
       Number.isFinite(previous.value) &&
       Temporal.Now.instant().epochMilliseconds - previous.value <
         AUTO_REINDEX_WINDOW_MS
     )
-      return ok({ started: false });
+      return Result.ok({ started: false });
     if (previous.isErr() && errnoCode(previous.error) !== "ENOENT")
-      return err(previous.error);
+      return Result.err(previous.error);
 
     const now = Temporal.Now.instant().epochMilliseconds;
-    const stamped = await fromAsyncThrowable(
-      () => writeFile(stampPath, `${now}\n`),
-      asError,
-    )();
-    if (stamped.isErr()) return err(stamped.error);
-    const child = fromThrowable(
-      () =>
+    const stamped = await Result.tryPromise({
+      try: () => writeFile(stampPath, `${now}\n`),
+      catch: asError,
+    });
+    if (stamped.isErr()) return Result.err(stamped.error);
+    const child = Result.try({
+      try: () =>
         // bounded: the detached worker's index command uses INDEX_STALL_MS.
         Bun.spawn(
           [
@@ -294,18 +298,18 @@ export async function requestAutoReindex(
             detached: true,
           },
         ),
-      asError,
-    )();
+      catch: asError,
+    });
     if (child.isErr()) {
-      await fromAsyncThrowable(() => unlink(stampPath), asError)();
-      return err(child.error);
+      await Result.tryPromise({ try: () => unlink(stampPath), catch: asError });
+      return Result.err(child.error);
     }
     child.value.unref();
-    return ok({ started: true, pid: child.value.pid });
+    return Result.ok({ started: true, pid: child.value.pid });
   };
   const result = await run();
-  await fromAsyncThrowable(() => lockFile.close(), asError)();
-  await fromAsyncThrowable(() => unlink(lockPath), asError)();
+  await Result.tryPromise({ try: () => lockFile.close(), catch: asError });
+  await Result.tryPromise({ try: () => unlink(lockPath), catch: asError });
   return result;
 }
 
@@ -529,31 +533,37 @@ async function writeIndexRequest(
   expected?: IndexRequest,
 ): Promise<Result<void, Error>> {
   const path = await indexRequestPath(project);
-  if (path.isErr()) return err(path.error);
+  if (path.isErr()) return Result.err(path.error);
   const lockPath = path.value + ".lock";
   const acquired = await acquireRequestLock(lockPath);
-  if (acquired.isErr()) return err(acquired.error);
-  const updated = await fromAsyncThrowable(async () => {
-    if (expected !== undefined) {
-      const current = await readIndexRequest(project);
-      if (
-        current === null ||
-        current.id !== expected.id ||
-        current.head !== expected.head ||
-        current.requestedAt !== expected.requestedAt ||
-        current.state !== expected.state
-      )
-        return;
-    }
-    const tmp = `${path.value}.tmp-${process.pid}`;
-    await Bun.write(tmp, `${JSON.stringify(request, null, 2)}\n`);
-    await rename(tmp, path.value);
-  }, asError)();
-  const closed = await fromAsyncThrowable(
-    () => acquired.value.close(),
-    asError,
-  )();
-  const released = await fromAsyncThrowable(() => unlink(lockPath), asError)();
+  if (acquired.isErr()) return Result.err(acquired.error);
+  const updated = await Result.tryPromise({
+    try: async () => {
+      if (expected !== undefined) {
+        const current = await readIndexRequest(project);
+        if (
+          current === null ||
+          current.id !== expected.id ||
+          current.head !== expected.head ||
+          current.requestedAt !== expected.requestedAt ||
+          current.state !== expected.state
+        )
+          return;
+      }
+      const tmp = `${path.value}.tmp-${process.pid}`;
+      await Bun.write(tmp, `${JSON.stringify(request, null, 2)}\n`);
+      await rename(tmp, path.value);
+    },
+    catch: asError,
+  });
+  const closed = await Result.tryPromise({
+    try: () => acquired.value.close(),
+    catch: asError,
+  });
+  const released = await Result.tryPromise({
+    try: () => unlink(lockPath),
+    catch: asError,
+  });
   return updated.andThen(() => closed).andThen(() => released);
 }
 
@@ -561,11 +571,14 @@ async function acquireRequestLock(
   path: string,
 ): Promise<Result<Awaited<ReturnType<typeof open>>, Error>> {
   for (let attempt = 0; attempt < 100; attempt++) {
-    const opened = await fromAsyncThrowable(() => open(path, "wx"), asError)();
+    const opened = await Result.tryPromise({
+      try: () => open(path, "wx"),
+      catch: asError,
+    });
     if (opened.isOk() || errnoCode(opened.error) !== "EEXIST") return opened;
     await Bun.sleep(10);
   }
-  return err(
+  return Result.err(
     new Error(
       `index request update locked at ${path}; inspect the writer before recovering an interrupted lock`,
     ),
@@ -651,13 +664,16 @@ async function readWatermark(
   project: string,
 ): Promise<Result<WatermarkRead, Error>> {
   const path = await watermarkPath(project);
-  if (path.isErr()) return err(path.error);
+  if (path.isErr()) return Result.err(path.error);
   const file = Bun.file(path.value);
-  if (!(await file.exists())) return ok({ kind: "missing" });
-  const text = await fromAsyncThrowable(() => file.text(), asError)();
-  if (text.isErr()) return ok({ kind: "invalid" });
+  if (!(await file.exists())) return Result.ok({ kind: "missing" });
+  const text = await Result.tryPromise({
+    try: () => file.text(),
+    catch: asError,
+  });
+  if (text.isErr()) return Result.ok({ kind: "invalid" });
   const value = jsonOf(WatermarkSchema).safeParse(text.value);
-  return ok(
+  return Result.ok(
     value.success ? { kind: "ok", value: value.data } : { kind: "invalid" },
   );
 }
@@ -679,12 +695,15 @@ async function writeWatermark(
     ...(basis === undefined ? {} : { basis }),
   };
   const path = await watermarkPath(project);
-  if (path.isErr()) return err(path.error);
+  if (path.isErr()) return Result.err(path.error);
   const tmp = `${path.value}.tmp-${process.pid}`;
-  return fromAsyncThrowable(async () => {
-    await Bun.write(tmp, `${JSON.stringify(value, null, 2)}\n`);
-    await rename(tmp, path.value); // same directory -> atomic on a POSIX filesystem
-  }, asError)();
+  return Result.tryPromise({
+    try: async () => {
+      await Bun.write(tmp, `${JSON.stringify(value, null, 2)}\n`);
+      await rename(tmp, path.value); // same directory -> atomic on a POSIX filesystem
+    },
+    catch: asError,
+  });
 }
 
 const SETTINGS_BASENAME = "settings.yml";
@@ -703,7 +722,7 @@ async function hasIndexArtifacts(
   project: string,
 ): Promise<Result<boolean, Error>> {
   const resolved = await resolveDbDir(project);
-  if (resolved.isErr()) return err(resolved.error);
+  if (resolved.isErr()) return Result.err(resolved.error);
   const dir = resolved.value;
   // Wrapped in a plain (non-overloaded) local function so `ReturnType<typeof list>` resolves to
   // the type these exact arguments (default utf8 encoding, withFileTypes: true) actually select
@@ -711,8 +730,8 @@ async function hasIndexArtifacts(
   // overload signature returns Dirent<Buffer>[], and ReturnType on an overloaded function always
   // picks that last signature, never the one these arguments select.
   const list = () => readdir(dir, { recursive: true, withFileTypes: true });
-  const listed = await fromAsyncThrowable(list, asError)();
-  if (listed.isErr()) return ok(false);
+  const listed = await Result.tryPromise({ try: list, catch: asError });
+  if (listed.isErr()) return Result.ok(false);
   const entries = listed.value;
   const cccStore = join(dir, "cocoindex.db");
   for (const entry of entries) {
@@ -736,9 +755,9 @@ async function hasIndexArtifacts(
     ) {
       continue; // our own watermark, not a ccc-owned artifact
     }
-    return ok(true);
+    return Result.ok(true);
   }
-  return ok(false);
+  return Result.ok(false);
 }
 
 // null means "no usable HEAD" (not a git repo, or an unborn branch with zero commits) -- a real,
@@ -770,16 +789,16 @@ export async function gitHead(
   project: string,
 ): Promise<Result<string | null, Error>> {
   const git = requireExecutable("git");
-  if (git.isErr()) return err(git.error);
-  const child = await fromAsyncThrowable(
-    () =>
+  if (git.isErr()) return Result.err(git.error);
+  const child = await Result.tryPromise({
+    try: () =>
       runChildCaptured(
         [git.value, "--no-optional-locks", "-C", project, "rev-parse", "HEAD"],
         10_000,
         false,
       ),
-    asError,
-  )();
+    catch: asError,
+  });
   return child.map((result) =>
     result.exitCode === 0 ? result.stdout.trim() : null,
   );
@@ -789,9 +808,9 @@ async function isWorkingTreeDirty(
   project: string,
 ): Promise<Result<boolean, Error>> {
   const git = requireExecutable("git");
-  if (git.isErr()) return err(git.error);
-  const child = await fromAsyncThrowable(
-    () =>
+  if (git.isErr()) return Result.err(git.error);
+  const child = await Result.tryPromise({
+    try: () =>
       runChildCaptured(
         [
           git.value,
@@ -804,8 +823,8 @@ async function isWorkingTreeDirty(
         10_000,
         false,
       ),
-    asError,
-  )();
+    catch: asError,
+  });
   return child.map(
     (result) => result.exitCode === 0 && result.stdout.trim() !== "",
   );
@@ -847,16 +866,16 @@ export async function checkIndexFreshness(
   route: string,
 ): Promise<Result<Freshness, Error>> {
   const watermarkFile = await watermarkPath(project);
-  if (watermarkFile.isErr()) return err(watermarkFile.error);
+  if (watermarkFile.isErr()) return Result.err(watermarkFile.error);
   const headResult = await gitHead(project);
-  if (headResult.isErr()) return err(headResult.error);
+  if (headResult.isErr()) return Result.err(headResult.error);
   const currentHead = headResult.value;
   const watermarkResult = await readWatermark(project);
-  if (watermarkResult.isErr()) return err(watermarkResult.error);
+  if (watermarkResult.isErr()) return Result.err(watermarkResult.error);
   const watermark = watermarkResult.value;
 
   if (watermark.kind === "missing") {
-    return ok({
+    return Result.ok({
       status: "stale",
       message:
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
@@ -865,7 +884,7 @@ export async function checkIndexFreshness(
     });
   }
   if (watermark.kind === "invalid") {
-    return ok({
+    return Result.ok({
       status: "stale",
       message:
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
@@ -879,7 +898,7 @@ export async function checkIndexFreshness(
   // because its shape now parses the same way. See the Watermark.source comment for why this
   // legacy value is still accepted as syntactically valid instead of falling into "invalid" above.
   if (watermark.value.source === "stamp") {
-    return ok({
+    return Result.ok({
       status: "stale",
       message:
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
@@ -904,7 +923,7 @@ export async function checkIndexFreshness(
     currentHead !== null
   ) {
     const ccc = requireExecutable("ccc");
-    if (ccc.isErr()) return err(ccc.error);
+    if (ccc.isErr()) return Result.err(ccc.error);
     drift = await inScopeChanges(
       project,
       ccc.value,
@@ -912,7 +931,7 @@ export async function checkIndexFreshness(
       currentHead,
     );
     const git = requireExecutable("git");
-    if (git.isErr()) return err(git.error);
+    if (git.isErr()) return Result.err(git.error);
     const count = await runChildCaptured(
       [
         git.value,
@@ -955,7 +974,7 @@ export async function checkIndexFreshness(
   } else if (watermark.value.head !== currentHead) {
     // Refuse this semantic request immediately. The caller starts one rate-limited detached
     // `index --detach` request while keeping NO_INDEX as the observable result.
-    return ok({
+    return Result.ok({
       status: "stale",
       // indexedAt is surfaced here (2026-09-04) because this is the ONE NO_INDEX case where a
       // real index exists and was genuinely fresh at some point -- the launch checklist's row 7
@@ -981,9 +1000,9 @@ export async function checkIndexFreshness(
   // a watermark that describes an index that was never built at all, e.g. hand-planted in a
   // directory `ccc index` never touched. See hasIndexArtifacts().
   const artifacts = await hasIndexArtifacts(project);
-  if (artifacts.isErr()) return err(artifacts.error);
+  if (artifacts.isErr()) return Result.err(artifacts.error);
   if (!artifacts.value) {
-    return ok({
+    return Result.ok({
       status: "stale",
       message:
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
@@ -992,7 +1011,7 @@ export async function checkIndexFreshness(
         `an index that was never built is refused. Remedy: ${remedy(project)}\n`,
     });
   }
-  return ok({ status: "fresh", watermark: watermark.value });
+  return Result.ok({ status: "fresh", watermark: watermark.value });
 }
 
 // The index run itself: `ccc index`, HEAD stability (retrying through in-scope drift), the
@@ -1029,31 +1048,31 @@ async function reindexCertified(
     indexAttempt++
   ) {
     const headBeforeResult = await gitHead(project);
-    if (headBeforeResult.isErr()) return err(headBeforeResult.error);
+    if (headBeforeResult.isErr()) return Result.err(headBeforeResult.error);
     const headBefore = headBeforeResult.value;
     if (expectedHead !== undefined && headBefore !== expectedHead) {
       process.stderr.write(
         `FATAL: HEAD changed since detached index request (${headLabel(expectedHead)} -> ${headLabel(headBefore)}); index is stale\n`,
       );
-      return ok({ code: 2, head: null });
+      return Result.ok({ code: 2, head: null });
     }
 
     process.stderr.write(`ROUTE: index -> ccc index project=${project}\n`);
-    const child = await fromAsyncThrowable(
-      () => runChildToStderr([ccc, "index"], timeoutMs, project, plan),
-      asError,
-    )();
-    if (child.isErr()) return err(child.error);
+    const child = await Result.tryPromise({
+      try: () => runChildToStderr([ccc, "index"], timeoutMs, project, plan),
+      catch: asError,
+    });
+    if (child.isErr()) return Result.err(child.error);
     const { exitCode, cause } = child.value;
     if (exitCode !== 0) {
       process.stderr.write(
         `FATAL: ccc index failed (exit ${exitCode}); ${cause}; watermark left unchanged\n`,
       );
-      return ok({ code: exitCode, head: null });
+      return Result.ok({ code: exitCode, head: null });
     }
 
     const headAfterResult = await gitHead(project);
-    if (headAfterResult.isErr()) return err(headAfterResult.error);
+    if (headAfterResult.isErr()) return Result.err(headAfterResult.error);
     const headAfter = headAfterResult.value;
     head = headBefore;
     if (headBefore !== headAfter) {
@@ -1071,7 +1090,7 @@ async function reindexCertified(
         "Watermark left unwritten -- re-run 'repo-retrieve index' once commits to indexed paths " +
         "pause\n",
     );
-    return ok({ code: 2, head: null });
+    return Result.ok({ code: 2, head: null });
   }
 
   const idle = await waitForProjectIdle(
@@ -1084,7 +1103,7 @@ async function reindexCertified(
       process.stderr.write(
         `FATAL: ccc daemon kept indexing ${project} without progress for ${timeoutMs}ms (exit 124); watermark left unwritten\n`,
       );
-    return ok({ code: idle, head: null });
+    return Result.ok({ code: idle, head: null });
   }
 
   // The daemon wrote the index wherever ITS COCOINDEX_CODE_DB_PATH_MAPPING points; this process
@@ -1092,17 +1111,17 @@ async function reindexCertified(
   // was set, a shell that never read zsh/zshenv), the index exists and this process cannot see
   // it — certifying it here would put the watermark beside no DB. Refuse, and name the fix.
   const artifacts = await hasIndexArtifacts(project);
-  if (artifacts.isErr()) return err(artifacts.error);
+  if (artifacts.isErr()) return Result.err(artifacts.error);
   if (!artifacts.value) {
     const dbDir = await resolveDbDir(project);
-    if (dbDir.isErr()) return err(dbDir.error);
+    if (dbDir.isErr()) return Result.err(dbDir.error);
     process.stderr.write(
       `FATAL: 'ccc index' succeeded but no index artifacts exist under ${dbDir.value}; ` +
         "the daemon and this process resolve different DB dirs. Compare the 'DB path mappings' " +
         `line of 'ccc doctor' with this process's COCOINDEX_CODE_DB_PATH_MAPPING ` +
         `(${process.env["COCOINDEX_CODE_DB_PATH_MAPPING"] ?? "unset"}). Watermark left unwritten\n`,
     );
-    return ok({ code: 2, head: null });
+    return Result.ok({ code: 2, head: null });
   }
 
   const basis = mergeBasisRecords(
@@ -1110,7 +1129,7 @@ async function reindexCertified(
     await captureBasisRecord(project, cccVersion),
   );
   const watermarkWrite = await writeWatermark(project, head, "index", basis);
-  if (watermarkWrite.isErr()) return err(watermarkWrite.error);
+  if (watermarkWrite.isErr()) return Result.err(watermarkWrite.error);
   const completed = await indexProgressSample(project);
   const completedChunks = completed.chunks;
   const elapsedSeconds =
@@ -1120,22 +1139,22 @@ async function reindexCertified(
     completedChunks > 0 &&
     elapsedSeconds > 0
   ) {
-    const recorded = await fromAsyncThrowable(
-      () =>
+    const recorded = await Result.tryPromise({
+      try: () =>
         recordIndexRate({
           ...processedWork(initialChunks, completedChunks),
           elapsedSeconds,
           ...startLoad,
           cccVersion,
         }),
-      asError,
-    )();
+      catch: asError,
+    });
     if (recorded.isErr())
       process.stderr.write(
         `NOTE: completed index rate was not recorded: ${recorded.error.message}\n`,
       );
   }
-  return ok({ code: 0, head });
+  return Result.ok({ code: 0, head });
 }
 
 async function runChildToStderr(
@@ -1245,7 +1264,7 @@ export async function runIndexWrapper(
 ): Promise<Result<IndexOutcome, Error>> {
   const resolution = await resolveRegisteredProject(process.cwd());
   if (resolution?.workspace !== null && resolution?.workspace !== undefined) {
-    return err(
+    return Result.err(
       new Error(
         `index refused in jj workspace ${resolution.workspace}; run 'repo-retrieve index' in backing repo ${resolution.project}`,
       ),
@@ -1253,16 +1272,16 @@ export async function runIndexWrapper(
   }
   const project = resolution?.project;
   if (project === undefined || project === null || project === "") {
-    return err(
+    return Result.err(
       new Error(`index requested, but ${process.cwd()} is not ccc-registered`),
     );
   }
   const ccc = requireExecutable("ccc");
-  if (ccc.isErr()) return err(ccc.error);
+  if (ccc.isErr()) return Result.err(ccc.error);
 
   const backend = await cccBackend(ccc.value);
   const watermark = await readWatermark(project);
-  if (watermark.isErr()) return err(watermark.error);
+  if (watermark.isErr()) return Result.err(watermark.error);
   const basis = await incrementalBasis(
     project,
     watermark.value.kind === "ok"
@@ -1275,24 +1294,28 @@ export async function runIndexWrapper(
       : { kind: watermark.value.kind },
   );
   const planned = await computeIndexPlan(project, backend, { basis });
-  if (planned.isErr()) return err(planned.error);
+  if (planned.isErr()) return Result.err(planned.error);
   const plan = planned.value;
   process.stderr.write(planReport(plan));
   if (options.plan === true) {
     writePlanJsonl(plan);
-    return ok({ kind: "plan", exitCode: plan.violations.length === 0 ? 0 : 4 });
+    return Result.ok({
+      kind: "plan",
+      exitCode: plan.violations.length === 0 ? 0 : 4,
+    });
   }
-  if (plan.violations.length > 0) return ok({ kind: "refused", exitCode: 4 });
+  if (plan.violations.length > 0)
+    return Result.ok({ kind: "refused", exitCode: 4 });
   if (options.acceptPlan === true) {
-    const accepted = await fromAsyncThrowable(
-      () =>
+    const accepted = await Result.tryPromise({
+      try: () =>
         Bun.write(
           join(project, ".cocoindex_code", "RR_ACCEPTED_PLAN.json"),
           `${JSON.stringify({ acceptedAt: Temporal.Now.instant().toString(), budget: plan.budget, total: plan.total, violations: plan.violations })}\n`,
         ),
-      asError,
-    )();
-    if (accepted.isErr()) return err(accepted.error);
+      catch: asError,
+    });
+    if (accepted.isErr()) return Result.err(accepted.error);
     process.stderr.write(
       "PLAN: --accept-plan recorded in .cocoindex_code/RR_ACCEPTED_PLAN.json; no violations permitted; measured time budget still applies\n",
     );
@@ -1306,7 +1329,7 @@ export async function runIndexWrapper(
   }
   if (mode === "detach") {
     const head = await gitHead(project);
-    if (head.isErr()) return err(head.error);
+    if (head.isErr()) return Result.err(head.error);
     const request: IndexRequest = {
       id: crypto.randomUUID(),
       head: head.value,
@@ -1316,9 +1339,9 @@ export async function runIndexWrapper(
       state: "pending",
     };
     const saved = await writeIndexRequest(project, request);
-    if (saved.isErr()) return err(saved.error);
-    const child = fromThrowable(
-      () =>
+    if (saved.isErr()) return Result.err(saved.error);
+    const child = Result.try({
+      try: () =>
         // bounded: this detached worker applies the same progress-based stall timeout internally.
         Bun.spawn(
           [
@@ -1343,15 +1366,15 @@ export async function runIndexWrapper(
             detached: true,
           },
         ),
-      asError,
-    )();
+      catch: asError,
+    });
     if (child.isErr()) {
       await writeIndexRequest(
         project,
         { ...request, state: "failed" },
         request,
       );
-      return err(child.error);
+      return Result.err(child.error);
     }
     child.value.unref();
     const recorded = await writeIndexRequest(
@@ -1369,7 +1392,7 @@ export async function runIndexWrapper(
     process.stdout.write(
       `RESULT: INDEX_REQUESTED project=${project} head=${headLabel(head.value)} state=pending\n`,
     );
-    return ok({ kind: "detached", exitCode: 0 });
+    return Result.ok({ kind: "detached", exitCode: 0 });
   }
 
   // Read HEAD both before and after the (potentially long-running) `ccc index` child. If they
@@ -1407,7 +1430,7 @@ export async function runIndexWrapper(
   );
   if (certifiedResult.isErr()) {
     if (worker) await markWorkerRequest(project, capturedRequest, "failed");
-    return err(certifiedResult.error);
+    return Result.err(certifiedResult.error);
   }
   const certifiedRun = certifiedResult.value;
   if (certifiedRun.code !== 0) {
@@ -1417,11 +1440,11 @@ export async function runIndexWrapper(
         capturedRequest,
         expectedHead === undefined ? "failed" : "stale",
       );
-    return ok({ kind: "failed", exitCode: certifiedRun.code });
+    return Result.ok({ kind: "failed", exitCode: certifiedRun.code });
   }
   const head = certifiedRun.head;
   const dirty = await isWorkingTreeDirty(project);
-  if (dirty.isErr()) return err(dirty.error);
+  if (dirty.isErr()) return Result.err(dirty.error);
   if (head !== null && dirty.value) {
     process.stderr.write(
       "NOTE: working tree has uncommitted changes; the index reflects those edits, but only " +
@@ -1440,30 +1463,30 @@ export async function runIndexWrapper(
       "confidence=verified(index)\n",
   );
   const currentHead = await gitHead(project);
-  if (currentHead.isErr()) return err(currentHead.error);
+  if (currentHead.isErr()) return Result.err(currentHead.error);
   if (currentHead.value === head)
     await markWorkerRequest(project, capturedRequest, "complete", head);
   else if (worker) await markWorkerRequest(project, capturedRequest, "stale");
-  return ok({ kind: "indexed", exitCode: 0, project, backend });
+  return Result.ok({ kind: "indexed", exitCode: 0, project, backend });
 }
 
 export async function runIndexStatus(): Promise<Result<number, Error>> {
   const resolution = await resolveRegisteredProject(process.cwd());
   const project = resolution?.project;
   if (project === undefined || project === null || project === "")
-    return err(
+    return Result.err(
       new Error(
         `index status requested, but ${process.cwd()} is not ccc-registered`,
       ),
     );
   const request = await readIndexRequest(project);
   const receiptDir = await resolveDbDir(project);
-  if (receiptDir.isErr()) return err(receiptDir.error);
+  if (receiptDir.isErr()) return Result.err(receiptDir.error);
   const receipt = await latestAutoReindexReceipt(receiptDir.value);
   const head = await gitHead(project);
-  if (head.isErr()) return err(head.error);
+  if (head.isErr()) return Result.err(head.error);
   const watermark = await readWatermark(project);
-  if (watermark.isErr()) return err(watermark.error);
+  if (watermark.isErr()) return Result.err(watermark.error);
   const builtHead =
     watermark.value.kind === "ok" ? watermark.value.value.head : null;
   let gap = "unknown";
@@ -1473,7 +1496,7 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
     head.value !== null
   ) {
     const git = requireExecutable("git");
-    if (git.isErr()) return err(git.error);
+    if (git.isErr()) return Result.err(git.error);
     const count = await runChildCaptured(
       [
         git.value,
@@ -1505,14 +1528,17 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
   let pidAlive = false;
   if (request?.state === "pending" && request.pid !== undefined) {
     const pid = request.pid;
-    const alive = fromThrowable(() => process.kill(pid, 0), asError)();
+    const alive = Result.try({
+      try: () => process.kill(pid, 0),
+      catch: asError,
+    });
     pidAlive = alive.isOk() || errnoCode(alive.error) === "EPERM";
   }
   const running = daemon === "indexing" || pidAlive;
   let reindex = daemon === "unknown" ? "unknown" : "not-running";
   if (running && daemon !== "unknown") reindex = "running";
   const artifacts = await hasIndexArtifacts(project);
-  if (artifacts.isErr()) return err(artifacts.error);
+  if (artifacts.isErr()) return Result.err(artifacts.error);
   const fresh =
     watermark.value.kind === "ok" &&
     watermark.value.value.source === "index" &&
@@ -1522,7 +1548,7 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
   let remoteRelation = "unknown";
   if (head.value !== null) {
     const git = requireExecutable("git");
-    if (git.isErr()) return err(git.error);
+    if (git.isErr()) return Result.err(git.error);
     const relation = await runChildCaptured(
       [
         git.value,
@@ -1551,7 +1577,7 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
   if (request === null && fresh && head.value === null) state = "complete";
   if (request === null) {
     const requestPath = await indexRequestPath(project);
-    if (requestPath.isErr()) return err(requestPath.error);
+    if (requestPath.isErr()) return Result.err(requestPath.error);
     if (await Bun.file(requestPath.value).exists()) state = "invalid";
     else if (watermark.value.kind === "missing") state = "none";
   } else if (request.state === "complete") {
@@ -1584,7 +1610,7 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
       ` remote-relation=${remoteRelation}` +
       "\n",
   );
-  return ok(0);
+  return Result.ok(0);
 }
 
 function classifyRemoteRelation(ahead: number, behind: number): string {

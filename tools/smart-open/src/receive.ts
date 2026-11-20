@@ -65,7 +65,7 @@ import { cli as cleyeCli } from "cleye";
 import { createConsola } from "consola";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 import {
   ACK_MS,
   editorHost,
@@ -181,7 +181,15 @@ const MAX_LINE = 4096;
 const REPORT_MS = 10_000;
 const sock = argv.flags.socket;
 await mkdir(dirname(sock), { recursive: true, mode: 0o700 });
-if ((await attempt(() => lstat(sock))).ok) await unlink(sock); // our own path; a previous run's bind
+if (
+  (
+    await Result.tryPromise({
+      try: () => lstat(sock),
+      catch: (error: unknown) => error,
+    })
+  ).isOk()
+)
+  await unlink(sock); // our own path; a previous run's bind
 
 // Token bucket on the monotonic clock. Time spent FULL earns nothing, so a long quiet spell
 // cannot be cashed in as more than `burst` opens.
@@ -226,15 +234,17 @@ function note(kind: string): void {
 // ignores SIGTERM would otherwise live on, holding whatever it holds, forever.
 async function runOpener(url: string, settle = settleMs): Promise<string> {
   const timeout = AbortSignal.timeout(openTimeoutMs);
-  const spawned = await attempt(() =>
-    Bun.spawn([...OPENER, url], {
-      stdout: "ignore",
-      stderr: "ignore",
-      signal: timeout,
-      killSignal: "SIGKILL",
-    }),
-  );
-  if (!spawned.ok) {
+  const spawned = Result.try({
+    try: () =>
+      Bun.spawn([...OPENER, url], {
+        stdout: "ignore",
+        stderr: "ignore",
+        signal: timeout,
+        killSignal: "SIGKILL",
+      }),
+    catch: (error: unknown) => error,
+  });
+  if (spawned.isErr()) {
     note("opener unavailable");
     return "refused: opener unavailable";
   }
@@ -282,15 +292,17 @@ async function sshResolve(
       : []),
     host,
   ];
-  const spawned = await attempt(() =>
-    Bun.spawn(cmd, {
-      stdout: "pipe",
-      stderr: "ignore",
-      signal: AbortSignal.timeout(ms),
-      killSignal: "SIGKILL",
-    }),
-  );
-  if (!spawned.ok) return undefined;
+  const spawned = Result.try({
+    try: () =>
+      Bun.spawn(cmd, {
+        stdout: "pipe",
+        stderr: "ignore",
+        signal: AbortSignal.timeout(ms),
+        killSignal: "SIGKILL",
+      }),
+    catch: (error: unknown) => error,
+  });
+  if (spawned.isErr()) return undefined;
   const [out, code] = await Promise.all([
     new Response(spawned.value.stdout).text(),
     spawned.value.exited,
@@ -408,38 +420,43 @@ async function openObsidian(
 ): Promise<string> {
   if (obsidianBusy) return "busy: Obsidian setup in progress";
   obsidianBusy = true;
-  const outcome = await attempt(async () => {
-    // The helper receives only Mac-resolved SSH fields, never remote-supplied connection data.
-    const helper =
-      process.env["SMART_OPEN_OBSIDIAN_OPENER"] ??
-      join(import.meta.dir, "../../../obsidian/open-remote.ts");
-    const proc = Bun.spawn([process.execPath, helper], {
-      stdin: new Blob([
-        JSON.stringify({
-          alias,
-          path,
-          action,
-          hostname: ssh.hostname,
-          port: ssh.port,
-          user: ssh.user,
-          proxyjump: ssh.proxyjump,
-        }),
-      ]),
-      stdout: "ignore",
-      stderr: "pipe",
-      timeout: OBSIDIAN_OPEN_MS,
-      killSignal: "SIGKILL",
-    });
-    const [code, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stderr).text(),
-    ]);
-    if (code === 0) return "ok";
-    note("Obsidian setup failed");
-    return `refused: Obsidian setup failed: ${stderr.slice(0, 2000).replaceAll(/\s+/gu, " ")}`;
+  const outcome = await Result.tryPromise({
+    try: async () => {
+      // The helper receives only Mac-resolved SSH fields, never remote-supplied connection data.
+      const helper =
+        process.env["SMART_OPEN_OBSIDIAN_OPENER"] ??
+        join(import.meta.dir, "../../../obsidian/open-remote.ts");
+      const proc = Bun.spawn([process.execPath, helper], {
+        stdin: new Blob([
+          JSON.stringify({
+            alias,
+            path,
+            action,
+            hostname: ssh.hostname,
+            port: ssh.port,
+            user: ssh.user,
+            proxyjump: ssh.proxyjump,
+          }),
+        ]),
+        stdout: "ignore",
+        stderr: "pipe",
+        timeout: OBSIDIAN_OPEN_MS,
+        killSignal: "SIGKILL",
+      });
+      const [code, stderr] = await Promise.all([
+        proc.exited,
+        new Response(proc.stderr).text(),
+      ]);
+      if (code === 0) return "ok";
+      note("Obsidian setup failed");
+      return `refused: Obsidian setup failed: ${stderr.slice(0, 2000).replaceAll(/\s+/gu, " ")}`;
+    },
+    catch: (error: unknown) => error,
   });
   obsidianBusy = false;
-  return outcome.ok ? outcome.value : "refused: Obsidian helper unavailable";
+  return outcome.isOk()
+    ? outcome.value
+    : "refused: Obsidian helper unavailable";
 }
 
 // A request line is a JSON object; which keys it has says what it asks for. Anything else (not

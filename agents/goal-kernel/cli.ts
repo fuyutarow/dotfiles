@@ -3,11 +3,10 @@
  * Consumer: agent/human. JSON mode emits one line. Exit 0 clean, 1 findings, 2 fatal.
  */
 
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import { resolve } from "node:path";
 import { cli, command } from "cleye";
-import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
 import { jsonText, z } from "../hooks/zod.ts";
-import { errorMessage } from "../hooks/attempt.ts";
 import {
   activateGoal,
   type GoalContract,
@@ -40,14 +39,14 @@ async function workspaceRoot(
   explicit: string | undefined,
 ): Promise<Result<string, Error>> {
   if (explicit !== undefined && explicit.trim() === "") {
-    return err(new UsageError("flag value must not be empty"));
+    return Result.err(new UsageError("flag value must not be empty"));
   }
-  if (explicit !== undefined) return ok(resolve(explicit));
-  const result = await fromAsyncThrowable(
-    () => resolveWorkspaceRoot(process.cwd()),
-    (error) => (error instanceof Error ? error : new Error(String(error))),
-  )();
-  return result;
+  if (explicit !== undefined) return Result.ok(resolve(explicit));
+  return Result.tryPromise({
+    try: () => resolveWorkspaceRoot(process.cwd()),
+    catch: (error: unknown) =>
+      error instanceof Error ? error : new Error(String(error)),
+  });
 }
 
 async function requiredWorkspaceRoot(
@@ -65,9 +64,12 @@ async function readJsonFile(
   path: string,
   locus: string,
 ): Promise<Result<unknown, Error>> {
-  const text = await fromAsyncThrowable(() => Bun.file(resolve(path)).text())();
+  const text = await Result.tryPromise({
+    try: () => Bun.file(resolve(path)).text(),
+    catch: (e: unknown) => e,
+  });
   if (text.isErr()) {
-    return err(
+    return Result.err(
       new UsageError(
         `${locus} is unreadable JSON: ${errorMessage(text.error)}`,
       ),
@@ -75,13 +77,13 @@ async function readJsonFile(
   }
   const parsed = jsonText.safeParse(text.value);
   if (!parsed.success) {
-    return err(
+    return Result.err(
       new UsageError(
         `${locus} is unreadable JSON: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
       ),
     );
   }
-  return ok(parsed.data);
+  return Result.ok(parsed.data);
 }
 
 function jsonLine(value: unknown): void {
@@ -135,8 +137,8 @@ function printPostmortem(
 
 async function main(): Promise<Result<void, Error>> {
   commandError = undefined;
-  const cliResult = await fromAsyncThrowable(
-    () =>
+  const cliResult = await Result.tryPromise({
+    try: async () =>
       cli(
         {
           name: "goal-kernel",
@@ -343,19 +345,22 @@ async function main(): Promise<Result<void, Error>> {
         },
         Bun.argv.slice(2),
       ),
-    (error) => (error instanceof Error ? error : new Error(String(error))),
-  )();
-  if (cliResult.isErr()) return err(cliResult.error);
-  return commandError === undefined ? ok(undefined) : err(commandError);
+    catch: (error: unknown) =>
+      error instanceof Error ? error : new Error(String(error)),
+  });
+  if (cliResult.isErr()) return Result.err(cliResult.error);
+  return commandError === undefined
+    ? Result.ok(undefined)
+    : Result.err(commandError);
 }
 
 if (import.meta.main) {
   const result = await main();
-  result.match(
-    () => {},
-    (error) => {
+  result.match({
+    ok: () => {},
+    err: (error) => {
       process.stderr.write(`FATAL: ${errorMessage(error)}\n`);
       process.exit(2);
     },
-  );
+  });
 }

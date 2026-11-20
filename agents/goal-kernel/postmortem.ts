@@ -1,9 +1,8 @@
 /** Read-only postmortem reconstruction from one Goal Kernel run id. */
 
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import { access, readFile, realpath } from "node:fs/promises";
-import { errorMessage } from "../hooks/attempt.ts";
 import { jsonText } from "../hooks/zod.ts";
-import { err, fromAsyncThrowable, ok, Result } from "neverthrow";
 import {
   asRecord,
   assertReadableRegularFile,
@@ -318,12 +317,13 @@ function transcriptFormat(
 async function parseTranscript(
   path: string,
 ): Promise<Result<TranscriptReadout, Error>> {
-  const exists = await fromAsyncThrowable(
-    () => access(path),
-    (error) => (error instanceof Error ? error : new Error(String(error))),
-  )();
+  const exists = await Result.tryPromise({
+    try: () => access(path),
+    catch: (error: unknown) =>
+      error instanceof Error ? error : new Error(String(error)),
+  });
   if (exists.isErr()) {
-    return ok({
+    return Result.ok({
       available: false,
       path,
       messages: [],
@@ -334,12 +334,13 @@ async function parseTranscript(
       finding: "GK_TRANSCRIPT_MISSING",
     });
   }
-  const opened = await fromAsyncThrowable(
-    () => realpath(path),
-    (error) => (error instanceof Error ? error : new Error(String(error))),
-  )();
+  const opened = await Result.tryPromise({
+    try: () => realpath(path),
+    catch: (error: unknown) =>
+      error instanceof Error ? error : new Error(String(error)),
+  });
   if (opened.isErr()) {
-    return ok({
+    return Result.ok({
       available: false,
       path,
       messages: [],
@@ -356,7 +357,7 @@ async function parseTranscript(
     MAX_TRANSCRIPT_BYTES,
   );
   if (readable.isErr()) {
-    return ok({
+    return Result.ok({
       available: false,
       path,
       messages: [],
@@ -368,11 +369,12 @@ async function parseTranscript(
     });
   }
 
-  const source = await fromAsyncThrowable(
-    () => readFile(realPath, "utf8"),
-    (error) => (error instanceof Error ? error : new Error(String(error))),
-  )();
-  if (source.isErr()) return err(source.error);
+  const source = await Result.tryPromise({
+    try: () => readFile(realPath, "utf8"),
+    catch: (error: unknown) =>
+      error instanceof Error ? error : new Error(String(error)),
+  });
+  if (source.isErr()) return Result.err(source.error);
 
   const messages: TranscriptMessage[] = [];
   const toolCalls: TranscriptToolCall[] = [];
@@ -419,7 +421,7 @@ async function parseTranscript(
   }
 
   const format = transcriptFormat(claudeMessages, codexMessages);
-  return ok({
+  return Result.ok({
     available: true,
     path: realPath,
     format,
@@ -439,7 +441,7 @@ async function readTranscript(
   locator: string | undefined,
 ): Promise<Result<TranscriptReadout, Error>> {
   if (locator !== undefined) return parseTranscript(locator);
-  return ok({
+  return Result.ok({
     available: false,
     messages: [],
     tool_calls: [],
@@ -546,15 +548,15 @@ export async function buildPostmortem(
   options: Readonly<{ include_transcript?: boolean }> = {},
 ): Promise<Result<PostmortemReport, Error>> {
   const bindingResult = await readRunBinding(workspaceRoot, runId);
-  if (bindingResult.isErr()) return err(bindingResult.error);
+  if (bindingResult.isErr()) return Result.err(bindingResult.error);
   const binding = bindingResult.value;
 
   const goalResult = await readBoundGoal(workspaceRoot, binding);
-  if (goalResult.isErr()) return err(goalResult.error);
+  if (goalResult.isErr()) return Result.err(goalResult.error);
   const goal = goalResult.value;
 
   const eventsResult = await listRunEvents(workspaceRoot, runId);
-  if (eventsResult.isErr()) return err(eventsResult.error);
+  if (eventsResult.isErr()) return Result.err(eventsResult.error);
   const events = eventsResult.value;
   const findings: string[] = [];
 
@@ -569,7 +571,7 @@ export async function buildPostmortem(
     }
   }
 
-  const runDecisions = Result.combine(
+  const runDecisions = Result.all(
     await Promise.all(
       events
         .filter((event) => event.event_type === "decision.recorded")
@@ -581,7 +583,7 @@ export async function buildPostmortem(
         ),
     ),
   );
-  if (runDecisions.isErr()) return err(runDecisions.error);
+  if (runDecisions.isErr()) return Result.err(runDecisions.error);
   const decisions: PostmortemDecision[] = [
     ...goal.decisions.map((decision) => ({
       ...decision,
@@ -628,7 +630,7 @@ export async function buildPostmortem(
   let transcript: TranscriptReadout | undefined;
   if (options.include_transcript === true) {
     const transcriptResult = await readTranscript(transcriptLocator(events));
-    if (transcriptResult.isErr()) return err(transcriptResult.error);
+    if (transcriptResult.isErr()) return Result.err(transcriptResult.error);
     transcript = transcriptResult.value;
     if (transcript.finding !== undefined) findings.push(transcript.finding);
     if (transcript.parse_errors > 0) {
@@ -637,7 +639,7 @@ export async function buildPostmortem(
     if (transcript.truncated) findings.push("GK_TRANSCRIPT_TRUNCATED");
   }
 
-  return ok({
+  return Result.ok({
     schema_version: 1,
     run_id: binding.run_id,
     provider: binding.provider,

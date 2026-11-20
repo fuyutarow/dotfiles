@@ -1,3 +1,4 @@
+import { Result } from "../../../tools/shared/src/result.ts";
 import { hookJson } from "./lib.ts";
 // PostToolUse (Write|Edit|MultiEdit) — the moment a NEW function or type is written, check whether
 // the repository already has one that does the same thing, and say so to the model.
@@ -24,7 +25,6 @@ import {
   type Definition,
 } from "../../../tools/repo-retrieve/src/definitions.ts";
 import { findRegisteredProject } from "../../../tools/repo-retrieve/src/ccc-index.ts";
-import { attempt } from "../../hooks/attempt.ts";
 import { arr, at, strAt } from "../../hooks/narrow.ts";
 import { readStdinJson } from "./lib.ts";
 
@@ -158,6 +158,9 @@ async function main(): Promise<void> {
 // The whole hook is bounded: a cold reranker or a busy daemon must not hold an edit hostage.
 // Guarded so the tests can import definitionsIn without reading stdin.
 if (import.meta.main) {
-  await Promise.race([attempt(main), Bun.sleep(BUDGET_MS + 4_000)]);
+  await Promise.race([
+    Result.tryPromise({ try: main, catch: (e: unknown) => e }),
+    Bun.sleep(BUDGET_MS + 4_000),
+  ]);
   process.exit(0);
 }

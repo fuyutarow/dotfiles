@@ -1,6 +1,7 @@
 import { open, opendir, stat, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
-import { fromThrowable, jsonOf, z } from "./zod.ts";
+import { jsonOf, z } from "./zod.ts";
+import { Result } from "./result.ts";
 import type { SubscriptionUsageWindow } from "./subscription-usage.ts";
 
 const Window = z.object({
@@ -90,9 +91,10 @@ function fromLine(
   const eventTime =
     timestamp === undefined
       ? Math.floor(mtimeMs)
-      : fromThrowable(
-          () => Temporal.Instant.from(timestamp).epochMilliseconds,
-        )().unwrapOr(undefined);
+      : Result.try({
+          try: () => Temporal.Instant.from(timestamp).epochMilliseconds,
+          catch: (e: unknown) => e,
+        }).unwrapOr(undefined);
   if (eventTime === undefined || eventTime > nowMs) return undefined;
   const measuredAt = Math.min(Math.floor(mtimeMs), eventTime);
   if (nowMs - measuredAt > maxAgeMs) return undefined;
@@ -343,12 +345,13 @@ async function creditRolloutsForDay(
       const startedAtMs =
         stamp === null
           ? dayStartMs
-          : fromThrowable(
-              () =>
+          : Result.try({
+              try: () =>
                 Temporal.Instant.from(
                   `${stamp[1]}T${stamp[2]}:${stamp[3]}:${stamp[4]}Z`,
                 ).epochMilliseconds,
-            )().unwrapOr(dayStartMs);
+              catch: (e: unknown) => e,
+            }).unwrapOr(dayStartMs);
       return info !== null && info.isFile()
         ? {
             path,
@@ -378,9 +381,10 @@ function creditSampleFromLine(
     Number.isFinite(rawBalance)
       ? rawBalance
       : undefined;
-  const at = fromThrowable(
-    () => Temporal.Instant.from(parsed.data.timestamp).epochMilliseconds,
-  )().unwrapOr(undefined);
+  const at = Result.try({
+    try: () => Temporal.Instant.from(parsed.data.timestamp).epochMilliseconds,
+    catch: (e: unknown) => e,
+  }).unwrapOr(undefined);
   if (
     at === undefined ||
     at > nowMs ||

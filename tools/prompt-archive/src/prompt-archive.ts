@@ -35,7 +35,7 @@ export async function main(argv = cliArgv()): Promise<number> {
     return 2;
   }
   const result = await archiveHistories();
-  if (!result.ok) {
+  if (result.isErr()) {
     process.stderr.write("prompt-archive: unable to archive history files\n");
     return 2;
   }

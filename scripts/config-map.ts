@@ -16,8 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { consola } from "consola";
-import { err, ok, type Result } from "neverthrow";
-import { errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { type Kind, type Surface, surfaces } from "./config-registry.ts";
 import {
@@ -74,7 +73,9 @@ export async function workingTreeConfigFiles(
     listing.exited,
   ]);
   if (exitCode !== 0 && exitCode !== 1)
-    return err(new Error(`working-tree inventory failed: ${stderr.trim()}`));
+    return Result.err(
+      new Error(`working-tree inventory failed: ${stderr.trim()}`),
+    );
   const files = (
     await Promise.all(
       stdout
@@ -87,7 +88,7 @@ export async function workingTreeConfigFiles(
         ),
     )
   ).flatMap((path) => (path === undefined ? [] : [path]));
-  return ok(files.toSorted());
+  return Result.ok(files.toSorted());
 }
 
 function isWorkingConfig(path: string, fileExists: boolean): boolean {
@@ -237,7 +238,7 @@ async function snapshotRows(
   const path = "scripts/config-registry.ts";
   const rev = candidate.get(path);
   if (rev === undefined)
-    return err(new Error(`missing candidate registry: ${path}`));
+    return Result.err(new Error(`missing candidate registry: ${path}`));
   // The registry is a zero-dependency TS declaration. Evaluate its candidate copy, not an
   // unrelated worktree edit, and validate the subprocess result at this boundary.
   const tmp = await mkdtemp(join(tmpdir(), "config-map-jj-"));
@@ -258,7 +259,7 @@ async function snapshotRows(
   ]);
   await rm(tmp, { recursive: true, force: true });
   if (exitCode !== 0)
-    return err(new Error(`candidate registry failed: ${stderr.trim()}`));
+    return Result.err(new Error(`candidate registry failed: ${stderr.trim()}`));
   const parsed = jsonOf(
     z.array(
       z.object({
@@ -273,8 +274,10 @@ async function snapshotRows(
     ),
   ).safeParse(stdout);
   return parsed.success
-    ? ok(parsed.data)
-    : err(new Error(`invalid candidate registry: ${parsed.error.message}`));
+    ? Result.ok(parsed.data)
+    : Result.err(
+        new Error(`invalid candidate registry: ${parsed.error.message}`),
+      );
 }
 
 async function main(): Promise<Result<number, Error>> {
@@ -305,7 +308,7 @@ async function main(): Promise<Result<number, Error>> {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0)
-    return err(new UsageError(`unexpected argument: ${parsed._[0]}`));
+    return Result.err(new UsageError(`unexpected argument: ${parsed._[0]}`));
   if (parsed.flags.check) {
     const context = await jjContext();
     const candidate =
@@ -313,15 +316,15 @@ async function main(): Promise<Result<number, Error>> {
     const rowsResult =
       context !== undefined && candidate !== undefined
         ? await snapshotRows(context, candidate)
-        : ok(surfaces());
-    if (rowsResult.isErr()) return err(rowsResult.error);
+        : Result.ok(surfaces());
+    if (rowsResult.isErr()) return Result.err(rowsResult.error);
     const rows = rowsResult.value;
     // A precommit candidate remains immutable; ordinary checks judge current working-tree files.
     const pathsResult =
       candidate === undefined
         ? await workingTreeConfigFiles()
-        : ok([...candidate.keys()]);
-    if (pathsResult.isErr()) return err(pathsResult.error);
+        : Result.ok([...candidate.keys()]);
+    if (pathsResult.isErr()) return Result.err(pathsResult.error);
     const paths = pathsResult.value;
     const files = paths.filter((f) => CONFIG_PATH.test(f));
     const found = await findings(rows, files, async (source) =>
@@ -338,25 +341,25 @@ async function main(): Promise<Result<number, Error>> {
         ? `config-map: every config file is registered (${rows.length} surfaces)`
         : `config-map: ${found.length} finding(s)`,
     );
-    return ok(found.length === 0 ? 0 : 1);
+    return Result.ok(found.length === 0 ? 0 : 1);
   }
   const rows = surfaces();
   if (parsed.flags.json)
     process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`);
   else consola.info(render(rows).trimEnd());
-  return ok(0);
+  return Result.ok(0);
 }
 
 if (import.meta.main) {
   const r = await main();
-  const code = r.match(
-    (value) => value,
-    (error) => {
+  const code = r.match({
+    ok: (value) => value,
+    err: (error) => {
       consola.error(
         `${error instanceof UsageError ? "usage" : "FATAL"}: ${errorMessage(error)}`,
       );
       return error instanceof UsageError ? 2 : 2;
     },
-  );
+  });
   process.exitCode = code;
 }

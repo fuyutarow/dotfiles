@@ -31,7 +31,7 @@ test("working-tree inventory follows moves and new files without any VCS metadat
   writeFileSync(join(root, "node_modules/dependency/package.json"), "{}");
   const listing = await workingTreeConfigFiles(root);
   expect(listing.isOk()).toBe(true);
-  const files = listing.unwrapOr<string[]>([]);
+  const files = listing.unwrapOr([]);
   expect(files).toEqual(["new.toml", "tools/new/package.json"]);
   expect(
     await findings(
@@ -61,13 +61,13 @@ test("ignored cache files and deleted configuration files are not reported in a 
   writeFileSync(join(root, "nested/ignored.json"), "{}");
   writeFileSync(join(root, "nested/keep.json"), "{}");
   writeFileSync(join(root, "deleted-tracked.toml"), "");
-  expect((await workingTreeConfigFiles(root)).unwrapOr<string[]>([])).toContain(
+  expect((await workingTreeConfigFiles(root)).unwrapOr([])).toContain(
     "deleted-tracked.toml",
   );
   rmSync(join(root, "deleted-tracked.toml"));
   const listing = await workingTreeConfigFiles(root);
   expect(listing.isOk()).toBe(true);
-  const files = listing.unwrapOr<string[]>([]);
+  const files: string[] = listing.unwrapOr([]);
   expect(files).toEqual(["cache/keep.json", "nested/keep.json"]);
   expect(
     await findings([row(files)], files, (source) => files.includes(source)),

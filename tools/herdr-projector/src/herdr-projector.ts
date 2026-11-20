@@ -3,7 +3,7 @@ import { cli as cleyeCli } from "cleye";
 import { mkdir, rename } from "node:fs/promises";
 import { release } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
 import {
@@ -543,27 +543,30 @@ async function run(
 async function boundedOutput(
   stream: ReadableStream<Uint8Array>,
 ): Promise<string | undefined> {
-  const result = await attempt(async (): Promise<string | undefined> => {
-    const reader = stream.getReader();
-    using _release = {
-      [Symbol.dispose]: () => {
-        reader.releaseLock();
-      },
-    };
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    while (true) {
-      const next = await reader.read();
-      if (next.done) return Buffer.concat(chunks).toString("utf8");
-      size += next.value.length;
-      if (size > 1024 * 1024) {
-        await reader.cancel();
-        return undefined;
+  const result = await Result.tryPromise({
+    try: async (): Promise<string | undefined> => {
+      const reader = stream.getReader();
+      using _release = {
+        [Symbol.dispose]: () => {
+          reader.releaseLock();
+        },
+      };
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      while (true) {
+        const next = await reader.read();
+        if (next.done) return Buffer.concat(chunks).toString("utf8");
+        size += next.value.length;
+        if (size > 1024 * 1024) {
+          await reader.cancel();
+          return undefined;
+        }
+        chunks.push(next.value);
       }
-      chunks.push(next.value);
-    }
+    },
+    catch: (error: unknown) => error,
   });
-  return result.ok ? result.value : undefined;
+  return result.isOk() ? result.value : undefined;
 }
 
 export async function readAgentCpu(
@@ -1044,12 +1047,14 @@ export async function bindClaudePanes(
       agent.cwd.replaceAll(/[^a-zA-Z0-9]/gu, "-"),
       `${id}.jsonl`,
     );
-    const read = await attempt(() =>
-      Bun.file(path)
-        .slice(0, 128 * 1024)
-        .text(),
-    );
-    if (!read.ok) {
+    const read = await Result.tryPromise({
+      try: () =>
+        Bun.file(path)
+          .slice(0, 128 * 1024)
+          .text(),
+      catch: (error: unknown) => error,
+    });
+    if (read.isErr()) {
       process.stderr.write(
         `herdr-projector: ${agent.pane_id}: read ${path}: ${String(read.error)}\n`,
       );

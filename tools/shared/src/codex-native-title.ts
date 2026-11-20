@@ -2,7 +2,7 @@ import { open, stat } from "node:fs/promises";
 import type { BigIntStats } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { attempt } from "./attempt.ts";
+import { Result } from "./result.ts";
 import { jsonOf, z } from "./zod.ts";
 
 const MAX_INDEX_BYTES = 2 * 1024 * 1024;
@@ -92,74 +92,80 @@ export async function readCodexNativeTitle(
   const codexHome =
     env["CODEX_HOME"] ?? join(env["HOME"] ?? homedir(), ".codex");
   const path = join(codexHome, "session_index.jsonl");
-  const readResult = await attempt(async (): Promise<CodexNativeTitleRead> => {
-    const pathBefore = await stat(path, { bigint: true });
-    if (!pathBefore.isFile())
-      return unavailable(sessionId, "index is not a regular file");
-    if (pathBefore.size > BigInt(MAX_INDEX_BYTES))
-      return unavailable(sessionId, "index exceeds 2 MiB limit");
+  const readResult = await Result.tryPromise({
+    try: async (): Promise<CodexNativeTitleRead> => {
+      const pathBefore = await stat(path, { bigint: true });
+      if (!pathBefore.isFile())
+        return unavailable(sessionId, "index is not a regular file");
+      if (pathBefore.size > BigInt(MAX_INDEX_BYTES))
+        return unavailable(sessionId, "index exceeds 2 MiB limit");
 
-    await using handle = await open(path, "r");
-    const descriptorBefore = await handle.stat({ bigint: true });
-    if (!descriptorBefore.isFile())
-      return unavailable(sessionId, "index is not a regular file");
-    if (
-      !sameFileState(pathBefore, descriptorBefore) ||
-      descriptorBefore.size > BigInt(MAX_INDEX_BYTES)
-    )
-      return unavailable(sessionId, "index changed while opening");
+      await using handle = await open(path, "r");
+      const descriptorBefore = await handle.stat({ bigint: true });
+      if (!descriptorBefore.isFile())
+        return unavailable(sessionId, "index is not a regular file");
+      if (
+        !sameFileState(pathBefore, descriptorBefore) ||
+        descriptorBefore.size > BigInt(MAX_INDEX_BYTES)
+      )
+        return unavailable(sessionId, "index changed while opening");
 
-    const initialSize = Number(descriptorBefore.size);
-    const buffer = Buffer.alloc(initialSize + 1);
-    const read = await handle.read(buffer, 0, buffer.length, 0);
-    if (read.bytesRead > initialSize)
-      return unavailable(sessionId, "index grew while reading");
-    if (read.bytesRead !== initialSize)
-      return unavailable(sessionId, "index changed while reading");
+      const initialSize = Number(descriptorBefore.size);
+      const buffer = Buffer.alloc(initialSize + 1);
+      const read = await handle.read(buffer, 0, buffer.length, 0);
+      if (read.bytesRead > initialSize)
+        return unavailable(sessionId, "index grew while reading");
+      if (read.bytesRead !== initialSize)
+        return unavailable(sessionId, "index changed while reading");
 
-    const [descriptorAfter, pathAfter] = await Promise.all([
-      handle.stat({ bigint: true }),
-      stat(path, { bigint: true }),
-    ]);
-    if (
-      !sameFileState(descriptorBefore, descriptorAfter) ||
-      !sameFileState(descriptorBefore, pathAfter)
-    )
-      return unavailable(sessionId, "index changed while reading");
+      const [descriptorAfter, pathAfter] = await Promise.all([
+        handle.stat({ bigint: true }),
+        stat(path, { bigint: true }),
+      ]);
+      if (
+        !sameFileState(descriptorBefore, descriptorAfter) ||
+        !sameFileState(descriptorBefore, pathAfter)
+      )
+        return unavailable(sessionId, "index changed while reading");
 
-    const decoded = await attempt(() =>
-      new TextDecoder("utf-8", { fatal: true }).decode(
-        buffer.subarray(0, initialSize),
-      ),
-    );
-    if (!decoded.ok) return unavailable(sessionId, "index is not valid UTF-8");
+      const decoded = Result.try({
+        try: () =>
+          new TextDecoder("utf-8", { fatal: true }).decode(
+            buffer.subarray(0, initialSize),
+          ),
+        catch: (e: unknown) => e,
+      });
+      if (decoded.isErr())
+        return unavailable(sessionId, "index is not valid UTF-8");
 
-    const parsed = parseRows(decoded.value);
-    if (!parsed.ok)
-      return unavailable(sessionId, "index contains a malformed row");
-    const matches = parsed.rows.filter((row) => row.id === sessionId);
-    if (matches.length === 0)
-      return unavailable(sessionId, "session ID is absent from index");
-    if (matches.length !== 1)
-      return unavailable(sessionId, "session ID is duplicated in index");
+      const parsed = parseRows(decoded.value);
+      if (!parsed.ok)
+        return unavailable(sessionId, "index contains a malformed row");
+      const matches = parsed.rows.filter((row) => row.id === sessionId);
+      if (matches.length === 0)
+        return unavailable(sessionId, "session ID is absent from index");
+      if (matches.length !== 1)
+        return unavailable(sessionId, "session ID is duplicated in index");
 
-    const row = matches[0];
-    const title = z.string().safeParse(row?.thread_name);
-    if (row === undefined || !title.success || !validTitle(title.data))
-      return unavailable(sessionId, "session title is invalid");
-    const timestamp = z.iso.datetime().safeParse(row.updated_at);
-    if (!timestamp.success)
-      return unavailable(sessionId, "session timestamp is invalid");
+      const row = matches[0];
+      const title = z.string().safeParse(row?.thread_name);
+      if (row === undefined || !title.success || !validTitle(title.data))
+        return unavailable(sessionId, "session title is invalid");
+      const timestamp = z.iso.datetime().safeParse(row.updated_at);
+      if (!timestamp.success)
+        return unavailable(sessionId, "session timestamp is invalid");
 
-    return {
-      kind: "known",
-      sessionId,
-      displayTitle: title.data,
-      observedAt: Temporal.Now.instant().toString(),
-      sourceUpdatedAt: timestamp.data,
-    };
+      return {
+        kind: "known",
+        sessionId,
+        displayTitle: title.data,
+        observedAt: Temporal.Now.instant().toString(),
+        sourceUpdatedAt: timestamp.data,
+      };
+    },
+    catch: (e: unknown) => e,
   });
-  if (!readResult.ok)
+  if (readResult.isErr())
     return unavailable(sessionId, "native index is missing or unreadable");
   return readResult.value;
 }

@@ -1,8 +1,8 @@
 // Consumer: obs wrapper / vouched receiver. Remove one exact shadow, recoverably.
+import { Result } from "../tools/shared/src/result.ts";
 import { cli } from "cleye";
 import { access, realpath, rmdir, stat } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
   acquireLock,
@@ -29,11 +29,12 @@ export async function forgetShadow(
       () => false,
     ))
   )
-    return err("unknown shadow vault: no registry");
+    return Result.err("unknown shadow vault: no registry");
   const base = await realpath(join(home, ".obsidian-remote/vaults")).catch(
     () => null,
   );
-  if (base === null) return err("unknown shadow vault: no shadow directory");
+  if (base === null)
+    return Result.err("unknown shadow vault: no shadow directory");
   const lock = `${registry}.obs-lock`;
   const locked = await acquireLock(lock);
   if (locked.isErr()) return locked;
@@ -44,7 +45,7 @@ export async function forgetShadow(
   };
   const locate = async () => {
     const state = await readRegistry();
-    if (state.isErr()) return err(state.error);
+    if (state.isErr()) return Result.err(state.error);
     const matches: { id: string; path: string }[] = [];
     for (const [id, value] of Object.entries(state.value.vaults)) {
       const entry = z.object({ path: z.string() }).safeParse(value);
@@ -68,11 +69,11 @@ export async function forgetShadow(
         matches.push({ id, path });
     }
     if (matches.length !== 1)
-      return err(
+      return Result.err(
         `unknown or ambiguous shadow vault (${matches.length} exact matches)`,
       );
     const match = matches[0];
-    if (match === undefined) return err("unknown shadow vault");
+    if (match === undefined) return Result.err("unknown shadow vault");
     // A second registry entry for the same directory makes directory removal non-exclusive.
     for (const [id, value] of Object.entries(state.value.vaults)) {
       const entry = z.object({ path: z.string() }).safeParse(value);
@@ -84,16 +85,16 @@ export async function forgetShadow(
         other !== null &&
         (other === match.path || other.startsWith(match.path + sep))
       )
-        return err(
+        return Result.err(
           "shadow directory contains another registry entry; refusing removal",
         );
     }
-    return ok({ ...state.value, match });
+    return Result.ok({ ...state.value, match });
   };
   const initial = await locate();
   if (initial.isErr()) return initial;
   if (Bun.which("rip") === null)
-    return err("rip is required for recoverable shadow removal");
+    return Result.err("rip is required for recoverable shadow removal");
   const graveyard = resolve(
     process.env["GRAVEYARD"] ??
       process.env["RIP_GRAVEYARD"] ??
@@ -106,9 +107,9 @@ export async function forgetShadow(
     graveyard === initial.value.match.path ||
     graveyard.startsWith(initial.value.match.path + sep)
   )
-    return err("graveyard must be outside the shadow vault");
+    return Result.err("graveyard must be outside the shadow vault");
   const active = await running();
-  if (active.isErr()) return err(active.error);
+  if (active.isErr()) return Result.err(active.error);
   if (active.value) {
     const stopped = await quit();
     if (stopped.isErr()) return stopped;
@@ -130,12 +131,12 @@ export async function forgetShadow(
   ]);
   if (moved.exit !== 0) {
     await atomicWrite(data);
-    return err(`rip failed; registry restored: ${moved.stderr}`);
+    return Result.err(`rip failed; registry restored: ${moved.stderr}`);
   }
   process.stdout.write(
     `FORGET ${match.path}; recover with rip from ${graveyard}\n`,
   );
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 if (import.meta.main) {
@@ -154,22 +155,22 @@ if (import.meta.main) {
       parameters: ["[dir]"],
     });
     if (prototype || args._.length > 1)
-      return err("usage: forget-shadow.ts [dir]");
+      return Result.err("usage: forget-shadow.ts [dir]");
     const target = await realpath(args._.dir ?? process.cwd());
     if (!(await stat(target)).isDirectory())
-      return err("not a shadow directory");
+      return Result.err("not a shadow directory");
     return forgetShadow({ kind: "path", value: target });
   }).then(
     (value) => value,
-    (error: unknown) => err(String(error)),
+    (error: unknown): Result<void, string> => Result.err(String(error)),
   );
-  outcome.match(
-    () => {
+  outcome.match({
+    ok: () => {
       process.exitCode = 0;
     },
-    (message) => {
+    err: (message) => {
       process.stderr.write(`FATAL: ${message}\n`);
       process.exitCode = 2;
     },
-  );
+  });
 }

@@ -3,11 +3,7 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { cli } from "cleye";
-import {
-  attempt,
-  errorMessage,
-  type Attempt,
-} from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { z } from "../agents/hooks/zod.ts";
 import { JJ_READ_ARGS } from "@dotfiles/shared/src/jj-read.ts";
 import { readonlyCommand } from "@dotfiles/shared/src/readonly-command.ts";
@@ -21,27 +17,29 @@ async function command(
   cmd: string[],
   cwd: string,
   env = process.env,
-): Promise<Attempt<Output>> {
+): Promise<Result<Output, unknown>> {
   if (Bun.which(cmd[0] ?? "") === null)
-    return { ok: false, error: `command unavailable: ${cmd[0]}` };
+    return Result.err(`command unavailable: ${cmd[0]}`);
   const signal = AbortSignal.timeout(180_000);
-  const result = await attempt(async () => {
-    const child = Bun.spawn(cmd, {
-      cwd,
-      env,
-      stdout: "pipe",
-      stderr: "pipe",
-      signal,
-    });
-    const [stdout, stderr, exit] = await Promise.all([
-      child.stdout.text(),
-      child.stderr.text(),
-      child.exited,
-    ]);
-    return { stdout, stderr, exit };
+  const result = await Result.tryPromise({
+    try: async () => {
+      const child = Bun.spawn(cmd, {
+        cwd,
+        env,
+        stdout: "pipe",
+        stderr: "pipe",
+        signal,
+      });
+      const [stdout, stderr, exit] = await Promise.all([
+        child.stdout.text(),
+        child.stderr.text(),
+        child.exited,
+      ]);
+      return { stdout, stderr, exit };
+    },
+    catch: (e: unknown) => e,
   });
-  if (signal.aborted)
-    return { ok: false, error: `timed out: ${cmd.join(" ")}` };
+  if (signal.aborted) return Result.err(`timed out: ${cmd.join(" ")}`);
   return result;
 }
 
@@ -49,15 +47,14 @@ async function commandOutput(
   cmd: string[],
   root: string,
   env = process.env,
-): Promise<Attempt<string>> {
+): Promise<Result<string, unknown>> {
   const result = await command(cmd, root, env);
-  if (!result.ok) return result;
+  if (!result.isOk()) return Result.err(result.error);
   if (result.value.exit !== 0)
-    return {
-      ok: false,
-      error: `read failed (${result.value.exit}): ${result.value.stderr}`,
-    };
-  return { ok: true, value: result.value.stdout };
+    return Result.err(
+      `read failed (${result.value.exit}): ${result.value.stderr}`,
+    );
+  return Result.ok(result.value.stdout);
 }
 
 async function liveChanges(
@@ -66,7 +63,7 @@ async function liveChanges(
   fork: string,
   snapshot: string,
   temporary: string,
-): Promise<Attempt<string[]>> {
+): Promise<Result<string[], unknown>> {
   // The private index supplies tracked paths from @. Git compares live contents
   // and applies nested/global ignore rules and info/exclude for new files.
   const env = {
@@ -98,12 +95,12 @@ async function liveChanges(
   // hash without writing an object (also works with SHA-256 Git repositories).
   const base = /^0+$/u.test(fork)
     ? await git(["hash-object", "-t", "tree", "--stdin"])
-    : ({ ok: true, value: fork } satisfies Attempt<string>);
-  if (!base.ok) return base;
+    : Result.ok(fork);
+  if (!base.isOk()) return Result.err(base.error);
   const indexed = await git(
     /^0+$/u.test(snapshot) ? ["read-tree", "--empty"] : ["read-tree", snapshot],
   );
-  if (!indexed.ok) return indexed;
+  if (!indexed.isOk()) return Result.err(indexed.error);
   const diff = [
     "diff",
     "--no-ext-diff",
@@ -120,30 +117,29 @@ async function liveChanges(
     git([...diff, recorded, "--"]),
     git(["ls-files", "--others", "--exclude-standard", "-z"]),
   ]);
-  if (!committed.ok) return committed;
-  if (!changed.ok) return changed;
-  if (!added.ok) return added;
-  return {
-    ok: true,
-    value: [
-      ...new Set(
-        (committed.value + changed.value + added.value)
-          .split("\0")
-          .filter(
-            (path) =>
-              path !== "" &&
-              path !== ".jj" &&
-              !path.startsWith(".jj/") &&
-              path !== ".git" &&
-              !path.startsWith(".git/"),
-          ),
-      ),
-    ],
-  };
+  if (!committed.isOk()) return Result.err(committed.error);
+  if (!changed.isOk()) return Result.err(changed.error);
+  if (!added.isOk()) return Result.err(added.error);
+  return Result.ok([
+    ...new Set(
+      (committed.value + changed.value + added.value)
+        .split("\0")
+        .filter(
+          (path) =>
+            path !== "" &&
+            path !== ".jj" &&
+            !path.startsWith(".jj/") &&
+            path !== ".git" &&
+            !path.startsWith(".git/"),
+        ),
+    ),
+  ]);
 }
 
 /** Compare the fork point with live files without updating the shared store. */
-export async function changedFiles(root: string): Promise<Attempt<string[]>> {
+export async function changedFiles(
+  root: string,
+): Promise<Result<string[], unknown>> {
   const read = (args: string[]) => {
     const invocation = readonlyCommand(["jj", ...JJ_READ_ARGS, ...args], root);
     return commandOutput(invocation.cmd, root, invocation.env);
@@ -160,57 +156,61 @@ export async function changedFiles(root: string): Promise<Attempt<string[]>> {
     ]),
     read(["log", "--no-graph", "-r", "@", "-T", "commit_id"]),
   ]);
-  if (!gitDir.ok) return gitDir;
-  if (!fork.ok) return fork;
-  if (!snapshot.ok) return snapshot;
+  if (!gitDir.isOk()) return Result.err(gitDir.error);
+  if (!fork.isOk()) return Result.err(fork.error);
+  if (!snapshot.isOk()) return Result.err(snapshot.error);
   // Multiple merge bases have no unique fork point. Never silently select one.
   if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(fork.value.trim()))
-    return {
-      ok: false,
-      error: "expected exactly one fork point between trunk() and @",
-    };
-  const temporary = await attempt(() =>
-    mkdtemp(join(tmpdir(), "gate-changed-index-")),
-  );
-  if (!temporary.ok) return temporary;
-  const result = await attempt(() =>
-    liveChanges(
-      root,
-      gitDir.value.trimEnd(),
-      fork.value.trim(),
-      snapshot.value.trim(),
-      temporary.value,
-    ),
-  );
-  const cleanup = await attempt(() =>
-    rm(temporary.value, { recursive: true, force: true }),
-  );
-  if (!cleanup.ok) return cleanup;
-  return result.ok ? result.value : result;
+    return Result.err("expected exactly one fork point between trunk() and @");
+  const temporary = await Result.tryPromise({
+    try: () => mkdtemp(join(tmpdir(), "gate-changed-index-")),
+    catch: (e: unknown) => e,
+  });
+  if (!temporary.isOk()) return Result.err(temporary.error);
+  const result = await Result.tryPromise({
+    try: () =>
+      liveChanges(
+        root,
+        gitDir.value.trimEnd(),
+        fork.value.trim(),
+        snapshot.value.trim(),
+        temporary.value,
+      ),
+    catch: (e: unknown) => e,
+  });
+  const cleanup = await Result.tryPromise({
+    try: () => rm(temporary.value, { recursive: true, force: true }),
+    catch: (e: unknown) => e,
+  });
+  if (!cleanup.isOk()) return Result.err(cleanup.error);
+  return result.isOk() ? result.value : Result.err(result.error);
 }
 
-async function existingFile(path: string): Promise<Attempt<boolean>> {
-  const entry = await attempt(() => stat(path));
-  if (entry.ok) return { ok: true, value: entry.value.isFile() };
+async function existingFile(path: string): Promise<Result<boolean, unknown>> {
+  const entry = await Result.tryPromise({
+    try: () => stat(path),
+    catch: (e: unknown) => e,
+  });
+  if (entry.isOk()) return Result.ok(entry.value.isFile());
   const missing = z
     .object({ code: z.literal("ENOENT") })
     .safeParse(entry.error);
-  return missing.success ? { ok: true, value: false } : entry;
+  return missing.success ? Result.ok(false) : Result.err(entry.error);
 }
 
 async function existingFiles(
   root: string,
   paths: readonly string[],
-): Promise<Attempt<string[]>> {
+): Promise<Result<string[], unknown>> {
   const files: string[] = [];
   for (const path of new Set(paths)) {
     if (isAbsolute(path) || path.split("/").includes(".."))
-      return { ok: false, error: `invalid repo-relative path: ${path}` };
+      return Result.err(`invalid repo-relative path: ${path}`);
     const entry = await existingFile(join(root, path));
-    if (!entry.ok) return entry;
+    if (!entry.isOk()) return Result.err(entry.error);
     if (entry.value) files.push(path);
   }
-  return { ok: true, value: files };
+  return Result.ok(files);
 }
 
 /** Files may be injected by fixture callers; the CLI always discovers them with jj. */
@@ -220,12 +220,10 @@ export async function gateChanged(
 ): Promise<number> {
   const started = performance.now();
   const selected =
-    paths === undefined
-      ? await changedFiles(root)
-      : ({ ok: true, value: paths } satisfies Attempt<readonly string[]>);
-  if (!selected.ok) return fatal(selected.error);
+    paths === undefined ? await changedFiles(root) : Result.ok(paths);
+  if (!selected.isOk()) return fatal(selected.error);
   const existing = await existingFiles(root, selected.value);
-  if (!existing.ok) return fatal(existing.error);
+  if (!existing.isOk()) return fatal(existing.error);
   const files = existing.value;
   if (files.length === 0) {
     process.stdout.write("gate:changed: no existing changed files; ok\n");
@@ -260,9 +258,14 @@ export async function gateChanged(
   let failed = false;
   for (const check of checks) {
     const start = performance.now();
-    const attempted = await attempt(check.run);
-    const result = attempted.ok ? attempted.value : attempted;
-    if (!result.ok) {
+    const attempted = await Result.tryPromise({
+      try: check.run,
+      catch: (e: unknown) => e,
+    });
+    const result = attempted.isOk()
+      ? attempted.value
+      : Result.err(attempted.error);
+    if (!result.isOk()) {
       process.stderr.write(`${check.name}: ${errorMessage(result.error)}\n`);
       failed = true;
       continue;
@@ -304,8 +307,11 @@ async function main(): Promise<number> {
 }
 
 if (import.meta.main) {
-  const result = await attempt(main);
-  if (result.ok) process.exitCode = result.value;
+  const result = await Result.tryPromise({
+    try: main,
+    catch: (e: unknown) => e,
+  });
+  if (result.isOk()) process.exitCode = result.value;
   else {
     process.stderr.write(`FATAL: ${errorMessage(result.error)}\n`);
     process.exitCode = 2;

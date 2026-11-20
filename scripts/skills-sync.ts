@@ -29,7 +29,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
 import { consola } from "consola";
-import { err, fromAsyncThrowable, fromThrowable, ok } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
   homePathRefusals,
@@ -177,15 +177,17 @@ async function runClaude(
   home: string,
   cwd: string,
 ): Promise<CommandResult> {
-  const result = fromThrowable(() =>
-    Bun.spawn(["claude", ...args], {
-      cwd,
-      env: { ...process.env, HOME: home },
-      stdout: "pipe",
-      stderr: "pipe",
-      signal: AbortSignal.timeout(30_000),
-    }),
-  )();
+  const result = Result.try({
+    try: () =>
+      Bun.spawn(["claude", ...args], {
+        cwd,
+        env: { ...process.env, HOME: home },
+        stdout: "pipe",
+        stderr: "pipe",
+        signal: AbortSignal.timeout(30_000),
+      }),
+    catch: (e: unknown) => e,
+  });
   if (result.isErr())
     return {
       code: 127,
@@ -207,34 +209,36 @@ function jsonLastLine<T>(
 ) {
   if (result.code !== 0) {
     const detail = result.err.trim();
-    return err(
+    return Result.err(
       `${label} exited ${result.code}: ${detail.length > 0 ? detail : result.out.trim()}`,
     );
   }
   const line = result.out.trim().split(/\r?\n/u).at(-1) ?? "";
   const checked = jsonOf(schema).safeParse(line);
   if (!checked.success)
-    return err(`${label} returned invalid JSON: ${checked.error.message}`);
-  return ok(checked.data);
+    return Result.err(
+      `${label} returned invalid JSON: ${checked.error.message}`,
+    );
+  return Result.ok(checked.data);
 }
 
 async function loadInHouseState(home: string) {
   const path = resolve(home, ".agents/.dotfiles-skills.json");
   const raw = await readFile(path, "utf8").then(
-    (value) => ok(value),
-    (error: unknown) => err(error),
+    (value) => Result.ok(value),
+    (error: unknown) => Result.err(error),
   );
   if (raw.isErr()) {
     const code = z.object({ code: z.literal("ENOENT") }).safeParse(raw.error);
     if (!code.success)
-      return err(`cannot read ${path}: ${errorText(raw.error)}`);
+      return Result.err(`cannot read ${path}: ${errorText(raw.error)}`);
     const empty: InHouseState = { version: 1, skills: {} };
-    return ok(empty);
+    return Result.ok(empty);
   }
   const checked = jsonOf(InHouseStateSchema).safeParse(raw.value);
   return checked.success
-    ? ok(checked.data)
-    : err(`invalid ${path}: ${checked.error.message}`);
+    ? Result.ok(checked.data)
+    : Result.err(`invalid ${path}: ${checked.error.message}`);
 }
 
 async function writeInHouseState(
@@ -244,13 +248,16 @@ async function writeInHouseState(
   const directory = resolve(home, ".agents");
   const path = resolve(directory, ".dotfiles-skills.json");
   const temporary = `${path}.${randomUUID()}.tmp`;
-  const written = await fromAsyncThrowable(async () => {
-    await mkdir(directory, { recursive: true });
-    await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, {
-      flag: "wx",
-    });
-    await rename(temporary, path);
-  })();
+  const written = await Result.tryPromise({
+    try: async () => {
+      await mkdir(directory, { recursive: true });
+      await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, {
+        flag: "wx",
+      });
+      await rename(temporary, path);
+    },
+    catch: (e: unknown) => e,
+  });
   if (written.isOk()) return undefined;
   await rm(temporary, { force: true });
   return errorText(written.error);
@@ -391,7 +398,10 @@ async function syncInHouseClaude(
 
   const invalid = install.filter((name) => {
     const target = resolve(stageHome, ".claude/skills", name);
-    const info = fromThrowable((path: string) => lstatSync(path))(target);
+    const info = Result.try({
+      try: () => ((path: string) => lstatSync(path))(target),
+      catch: (e: unknown) => e,
+    });
     return (
       info.isErr() ||
       info.value.isSymbolicLink() ||
@@ -420,7 +430,10 @@ async function syncInHouseClaude(
 
   const mismatched = install.filter((name) => {
     const target = resolve(skillsRoot, name);
-    const info = fromThrowable((path: string) => lstatSync(path))(target);
+    const info = Result.try({
+      try: () => ((path: string) => lstatSync(path))(target),
+      catch: (e: unknown) => e,
+    });
     return (
       info.isErr() ||
       info.value.isSymbolicLink() ||
@@ -458,7 +471,10 @@ async function syncInHouseCodex(
   const install: string[] = [];
   for (const name of names) {
     const target = resolve(home, ".agents/skills", name);
-    const state = fromThrowable((path: string) => lstatSync(path))(target);
+    const state = Result.try({
+      try: () => ((path: string) => lstatSync(path))(target),
+      catch: (e: unknown) => e,
+    });
     if (
       loaded.value.skills[name] !== digests.get(name) ||
       (await treeDigest(target)) !== digests.get(name) ||
@@ -521,7 +537,10 @@ async function syncInHouseCodex(
       return `skills add for Codex ${installed.timedOut ? "timed out" : `exited ${installed.exitCode}`}`;
     const missing = install.filter((name) => {
       const target = resolve(stageHome, ".agents/skills", name);
-      const state = fromThrowable((path: string) => lstatSync(path))(target);
+      const state = Result.try({
+        try: () => ((path: string) => lstatSync(path))(target),
+        catch: (e: unknown) => e,
+      });
       return (
         state.isErr() ||
         state.value.isSymbolicLink() ||
@@ -717,33 +736,43 @@ function rejectPrototypeFlag(
 }
 
 async function treeDigest(root: string): Promise<string | undefined> {
-  const exists = await fromAsyncThrowable(lstat)(root);
+  const exists = await Result.tryPromise({
+    try: () => lstat(root),
+    catch: (e: unknown) => e,
+  });
   if (exists.isErr() || !exists.value.isDirectory()) return undefined;
-  const result = await fromAsyncThrowable(async () => {
-    const hash = createHash("sha256");
-    const visit = async (directory: string, prefix: string): Promise<void> => {
-      const entries = (
-        await readdir(directory, { withFileTypes: true })
-      ).toSorted((left, right) => left.name.localeCompare(right.name));
-      for (const entry of entries) {
-        const fullPath = join(directory, entry.name);
-        const relPath = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
-        const info = await lstat(fullPath);
-        if (info.isSymbolicLink()) {
-          hash.update(`link\0${relPath}\0${await readlink(fullPath)}\0`);
-        } else if (info.isDirectory()) {
-          hash.update(`dir\0${relPath}\0`);
-          await visit(fullPath, relPath);
-        } else {
-          hash.update(`file\0${relPath}\0`);
-          hash.update(await readFile(fullPath));
-          hash.update("\0");
+  const result = await Result.tryPromise({
+    try: async () => {
+      const hash = createHash("sha256");
+      const visit = async (
+        directory: string,
+        prefix: string,
+      ): Promise<void> => {
+        const entries = (
+          await readdir(directory, { withFileTypes: true })
+        ).toSorted((left, right) => left.name.localeCompare(right.name));
+        for (const entry of entries) {
+          const fullPath = join(directory, entry.name);
+          const relPath =
+            prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+          const info = await lstat(fullPath);
+          if (info.isSymbolicLink()) {
+            hash.update(`link\0${relPath}\0${await readlink(fullPath)}\0`);
+          } else if (info.isDirectory()) {
+            hash.update(`dir\0${relPath}\0`);
+            await visit(fullPath, relPath);
+          } else {
+            hash.update(`file\0${relPath}\0`);
+            hash.update(await readFile(fullPath));
+            hash.update("\0");
+          }
         }
-      }
-    };
-    await visit(root, "");
-    return hash.digest("hex");
-  })();
+      };
+      await visit(root, "");
+      return hash.digest("hex");
+    },
+    catch: (e: unknown) => e,
+  });
   return result.unwrapOr(undefined);
 }
 
@@ -780,9 +809,10 @@ async function main(): Promise<void> {
     process.env["DOTFILES"] ??
     resolve(import.meta.dir, "..");
   const declarationPath = resolve(dotfiles, "agents/skills.thirdparty.toml");
-  const text = fromThrowable((path: string) => readFileSync(path, "utf8"))(
-    declarationPath,
-  );
+  const text = Result.try({
+    try: () => ((path: string) => readFileSync(path, "utf8"))(declarationPath),
+    catch: (e: unknown) => e,
+  });
   if (text.isErr()) {
     fail(`FATAL: ${declarationPath}: ${errorText(text.error)}`);
     process.exitCode = 1;
@@ -1168,14 +1198,18 @@ async function main(): Promise<void> {
           ...(finalLock === undefined ||
           !Object.hasOwn(finalLock.skills, name) ||
           (
-            await fromAsyncThrowable(access)(
-              resolve(home, ".agents/skills", name, "SKILL.md"),
-            )
+            await Result.tryPromise({
+              try: () =>
+                access(resolve(home, ".agents/skills", name, "SKILL.md")),
+              catch: (e: unknown) => e,
+            })
           ).isErr() ||
           (
-            await fromAsyncThrowable(access)(
-              resolve(home, ".claude/skills", name, "SKILL.md"),
-            )
+            await Result.tryPromise({
+              try: () =>
+                access(resolve(home, ".claude/skills", name, "SKILL.md")),
+              catch: (e: unknown) => e,
+            })
           ).isErr()
             ? [name]
             : []),

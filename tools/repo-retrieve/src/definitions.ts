@@ -38,13 +38,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  err,
-  fromAsyncThrowable,
-  fromThrowable,
-  ok,
-  type Result,
-} from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { typesafeKey } from "@dotfiles/shared/src/typesafe-key.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
@@ -95,9 +89,9 @@ function configuredString(
   value: unknown,
   key: string,
 ): Result<string | undefined, Error> {
-  if (value === undefined) return ok(undefined);
-  if (typeof value === "string") return ok(value);
-  return err(new Error(`${key} must be a string when present`));
+  if (value === undefined) return Result.ok(undefined);
+  if (typeof value === "string") return Result.ok(value);
+  return Result.err(new Error(`${key} must be a string when present`));
 }
 
 const CONFIG = join(import.meta.dir, "..", "retrieval.toml");
@@ -121,21 +115,21 @@ function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 const pathExists = async (path: string): Promise<boolean> =>
-  (await fromAsyncThrowable(() => access(path), asError)()).isOk();
+  (await Result.tryPromise({ try: () => access(path), catch: asError })).isOk();
 
 export async function loadRetrievalConfig(
   path = CONFIG,
 ): Promise<Result<RetrievalConfig, Error>> {
-  const text = await fromAsyncThrowable(
-    () => readFile(path, "utf8"),
-    asError,
-  )();
-  if (text.isErr()) return err(text.error);
-  const parsed = fromThrowable(
-    (): unknown => Bun.TOML.parse(text.value),
-    asError,
-  )();
-  if (parsed.isErr()) return err(parsed.error);
+  const text = await Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: asError,
+  });
+  if (text.isErr()) return Result.err(text.error);
+  const parsed = Result.try({
+    try: (): unknown => Bun.TOML.parse(text.value),
+    catch: asError,
+  });
+  if (parsed.isErr()) return Result.err(parsed.error);
   const parsedToml = parsed.value;
   const raw = asTable(parsedToml) ?? {};
   const d = asTable(raw["definition"]) ?? {};
@@ -144,37 +138,39 @@ export async function loadRetrievalConfig(
   const num = (t: Table, key: string, at: string): Result<number, Error> => {
     const v = t[key];
     return typeof v === "number" && Number.isFinite(v)
-      ? ok(v)
-      : err(fail(`${at}${key}`, "a finite number"));
+      ? Result.ok(v)
+      : Result.err(fail(`${at}${key}`, "a finite number"));
   };
   const count = (key: string): Result<number, Error> => {
     const v = d[key];
     return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 200
-      ? ok(v)
-      : err(fail(key, "an integer in 1..200"));
+      ? Result.ok(v)
+      : Result.err(fail(key, "an integer in 1..200"));
   };
   const table = (t: unknown, key: string): Result<Table, Error> => {
     const value = asTable(t);
-    return value === undefined ? err(fail(key, "a table")) : ok(value);
+    return value === undefined
+      ? Result.err(fail(key, "a table"))
+      : Result.ok(value);
   };
 
   const recallCount = count("recall");
-  if (recallCount.isErr()) return err(recallCount.error);
+  if (recallCount.isErr()) return Result.err(recallCount.error);
   const pool = count("pool");
-  if (pool.isErr()) return err(pool.error);
+  if (pool.isErr()) return Result.err(pool.error);
   if (pool.value > recallCount.value)
-    return err(fail("pool", `at most recall (${recallCount.value})`));
+    return Result.err(fail("pool", `at most recall (${recallCount.value})`));
 
   const p = table(d["priors"], "priors");
-  if (p.isErr()) return err(p.error);
+  if (p.isErr()) return Result.err(p.error);
   const publicPrior = num(p.value, "public", "priors.");
-  if (publicPrior.isErr()) return err(publicPrior.error);
+  if (publicPrior.isErr()) return Result.err(publicPrior.error);
   const documentedPrior = num(p.value, "documented", "priors.");
-  if (documentedPrior.isErr()) return err(documentedPrior.error);
+  if (documentedPrior.isErr()) return Result.err(documentedPrior.error);
   const privatePrior = num(p.value, "private", "priors.");
-  if (privatePrior.isErr()) return err(privatePrior.error);
+  if (privatePrior.isErr()) return Result.err(privatePrior.error);
   const testPrior = num(p.value, "test", "priors.");
-  if (testPrior.isErr()) return err(testPrior.error);
+  if (testPrior.isErr()) return Result.err(testPrior.error);
   const priors = {
     public: publicPrior.value,
     documented: documentedPrior.value,
@@ -184,18 +180,18 @@ export async function loadRetrievalConfig(
 
   const judgeValue = d["judge"];
   if (judgeValue !== "jev" && judgeValue !== "local")
-    return err(fail("judge", '"jev" or "local"'));
+    return Result.err(fail("judge", '"jev" or "local"'));
   const judge: Judge = judgeValue === "jev" ? "jev" : "local";
   const endpoints = table(d["jev_endpoints"], "jev_endpoints");
-  if (endpoints.isErr()) return err(endpoints.error);
+  if (endpoints.isErr()) return Result.err(endpoints.error);
   const providerValue = d["jev_provider"];
   const provider =
     typeof providerValue === "string" ? providerValue : undefined;
   if (provider === undefined)
-    return err(fail("jev_provider", "a configured provider"));
+    return Result.err(fail("jev_provider", "a configured provider"));
   const e = asTable(endpoints.value[provider]);
   if (e === undefined)
-    return err(
+    return Result.err(
       fail(
         "jev_provider",
         `one of [definition.jev_endpoints.*] (${Object.keys(endpoints.value).join(", ")})`,
@@ -204,16 +200,16 @@ export async function loadRetrievalConfig(
   const urlValue = e["url"];
   const url = typeof urlValue === "string" ? urlValue : undefined;
   if (url === undefined)
-    return err(fail(`jev_endpoints.${provider}.url`, "an https:// URL"));
+    return Result.err(fail(`jev_endpoints.${provider}.url`, "an https:// URL"));
   if (!url.startsWith("https://"))
-    return err(fail(`jev_endpoints.${provider}.url`, "an https:// URL"));
+    return Result.err(fail(`jev_endpoints.${provider}.url`, "an https:// URL"));
   const model = configuredString(e["model"], `jev_endpoints.${provider}.model`);
-  if (model.isErr()) return err(model.error);
+  if (model.isErr()) return Result.err(model.error);
   const whenExhausted = configuredString(
     e["when_exhausted"],
     `jev_endpoints.${provider}.when_exhausted`,
   );
-  if (whenExhausted.isErr()) return err(whenExhausted.error);
+  if (whenExhausted.isErr()) return Result.err(whenExhausted.error);
   const jevEndpoint: JevEndpoint = { url };
   if (model.value !== undefined) jevEndpoint.model = model.value;
   if (whenExhausted.value !== undefined)
@@ -222,38 +218,38 @@ export async function loadRetrievalConfig(
   const noEgress = NoEgressSchema.safeParse(d["no_egress"]);
   const noEgressPaths = noEgress.success ? noEgress.data : undefined;
   if (noEgressPaths === undefined)
-    return err(fail("no_egress", "a list of paths"));
+    return Result.err(fail("no_egress", "a list of paths"));
 
   const ths = table(d["thresholds"], "thresholds");
-  if (ths.isErr()) return err(ths.error);
+  if (ths.isErr()) return Result.err(ths.error);
   const thresholdsOf = (j: Judge): Result<Thresholds, Error> => {
     const t = table(ths.value[j], `thresholds.${j}`);
-    if (t.isErr()) return err(t.error);
+    if (t.isErr()) return Result.err(t.error);
     const at = `thresholds.${j}.`;
     const strong = num(t.value, "strong", at);
-    if (strong.isErr()) return err(strong.error);
+    if (strong.isErr()) return Result.err(strong.error);
     const likely = num(t.value, "likely", at);
-    if (likely.isErr()) return err(likely.error);
+    if (likely.isErr()) return Result.err(likely.error);
     const hook = num(t.value, "hook", at);
-    if (hook.isErr()) return err(hook.error);
+    if (hook.isErr()) return Result.err(hook.error);
     const th = { strong: strong.value, likely: likely.value, hook: hook.value };
     // Ordered bands: below likely = absent, likely..strong = read first, strong.. = this one.
     if (!(th.likely < th.strong))
-      return err(fail(`${at}likely`, "below strong"));
+      return Result.err(fail(`${at}likely`, "below strong"));
     if (!(th.hook >= th.strong))
-      return err(fail(`${at}hook`, "at least strong"));
-    return ok(th);
+      return Result.err(fail(`${at}hook`, "at least strong"));
+    return Result.ok(th);
   };
   const jevThresholds = thresholdsOf("jev");
-  if (jevThresholds.isErr()) return err(jevThresholds.error);
+  if (jevThresholds.isErr()) return Result.err(jevThresholds.error);
   const localThresholds = thresholdsOf("local");
-  if (localThresholds.isErr()) return err(localThresholds.error);
+  if (localThresholds.isErr()) return Result.err(localThresholds.error);
   const thresholds: Record<Judge, Thresholds> = {
     jev: jevThresholds.value,
     local: localThresholds.value,
   };
 
-  return ok({
+  return Result.ok({
     recall: recallCount.value,
     pool: pool.value,
     priors,
@@ -298,25 +294,28 @@ const SCAN_EVERY_MS = 60_000;
 // The interpreter that can import cocoindex: the uv-owned backend's shebang, even when the
 // installed public entry is a Bun wrapper.
 export async function cccPython(entry: string): Promise<Result<string, Error>> {
-  const backend = await fromAsyncThrowable(() => cccBackend(entry), asError)();
-  if (backend.isErr()) return err(backend.error);
-  const resolved = await fromAsyncThrowable(
-    () => realpath(backend.value),
-    asError,
-  )();
-  if (resolved.isErr()) return err(resolved.error);
-  const shebangLine = await fromAsyncThrowable(
-    async () =>
+  const backend = await Result.tryPromise({
+    try: () => cccBackend(entry),
+    catch: asError,
+  });
+  if (backend.isErr()) return Result.err(backend.error);
+  const resolved = await Result.tryPromise({
+    try: () => realpath(backend.value),
+    catch: asError,
+  });
+  if (resolved.isErr()) return Result.err(resolved.error);
+  const shebangLine = await Result.tryPromise({
+    try: async () =>
       (await readFile(resolved.value, "utf8")).split("\n", 1)[0] ?? "",
-    asError,
-  )();
-  if (shebangLine.isErr()) return err(shebangLine.error);
+    catch: asError,
+  });
+  if (shebangLine.isErr()) return Result.err(shebangLine.error);
   const py = shebangLine.value.startsWith("#!/")
     ? shebangLine.value.slice(2).trim()
     : "";
   return /\/python[0-9.]*$/u.test(py)
-    ? ok(py)
-    : err(
+    ? Result.ok(py)
+    : Result.err(
         new Error(
           `cannot find ccc's Python interpreter (shebang of ${resolved.value})`,
         ),
@@ -324,19 +323,19 @@ export async function cccPython(entry: string): Promise<Result<string, Error>> {
 }
 
 async function git(project: string, args: string[]): Promise<string | null> {
-  const result = await fromAsyncThrowable(
-    () =>
+  const result = await Result.tryPromise({
+    try: () =>
       runChildCaptured(
         ["git", "--no-optional-locks", "-C", project, ...args],
         15_000,
         false,
       ),
-    asError,
-  )();
-  return result.match(
-    (r) => (r.exitCode === 0 ? r.stdout : null),
-    () => null,
-  );
+    catch: asError,
+  });
+  return result.match({
+    ok: (r) => (r.exitCode === 0 ? r.stdout : null),
+    err: () => null,
+  });
 }
 
 // Paths that may differ from what the catalog was built from: commits since its HEAD plus the
@@ -381,15 +380,15 @@ async function readJsonOf<S extends z.ZodType>(
   schema: S,
   path: string,
 ): Promise<Result<z.output<S>, Error>> {
-  const text = await fromAsyncThrowable(
-    () => readFile(path, "utf8"),
-    asError,
-  )();
-  if (text.isErr()) return err(text.error);
+  const text = await Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: asError,
+  });
+  if (text.isErr()) return Result.err(text.error);
   const parsed = jsonOf(schema).safeParse(text.value);
   return parsed.success
-    ? ok(parsed.data)
-    : err(new Error(`${path}: ${parsed.error.message}`));
+    ? Result.ok(parsed.data)
+    : Result.err(new Error(`${path}: ${parsed.error.message}`));
 }
 
 const DefsCacheSchema = z.object({
@@ -413,21 +412,21 @@ async function loadDefinitions(cachePath: string): Promise<
   >
 > {
   const cache = await readJsonOf(DefsCacheSchema, cachePath);
-  if (cache.isErr()) return err(cache.error);
+  if (cache.isErr()) return Result.err(cache.error);
   const publics = new Set(
     Object.values(cache.value.files).flatMap((f) => f.publics),
   );
   const defs = Object.values(cache.value.files).flatMap((f) =>
     f.records.map((r) => ({ ...r, public: r.public || publics.has(r.name) })),
   );
-  return ok({ defs, files: Object.keys(cache.value.files) });
+  return Result.ok({ defs, files: Object.keys(cache.value.files) });
 }
 
 const statKey = async (project: string, rel: string): Promise<string> => {
-  const result = await fromAsyncThrowable(
-    () => stat(join(project, rel)),
-    asError,
-  )();
+  const result = await Result.tryPromise({
+    try: () => stat(join(project, rel)),
+    catch: asError,
+  });
   return result.isOk()
     ? `${result.value.size} ${result.value.mtimeMs}`
     : "gone";
@@ -458,10 +457,10 @@ export async function refreshCatalog(
   const recordsPath = join(dir, "records.json");
   const pendingPath = join(dir, "index-pending");
   const pending = await pathExists(pendingPath);
-  const meta = (await readJsonOf(MetaSchema, metaPath)).match(
-    (value) => value,
-    () => null,
-  );
+  const meta = (await readJsonOf(MetaSchema, metaPath)).match({
+    ok: (value) => value,
+    err: () => null,
+  });
   const head = (await git(project, ["rev-parse", "HEAD"]))?.trim() ?? null;
   const now = Temporal.Now.instant().epochMilliseconds;
   const recent =
@@ -485,13 +484,13 @@ export async function refreshCatalog(
   }
   if (only?.length === 0 && !pending) return readCatalog(dir);
   if (admittedBackend === undefined)
-    return err(
+    return Result.err(
       new Error(
         "definition catalog needs refresh; retry the root's admitted indexing operation",
       ),
     );
   const rebuiltResult = await rebuild(dir, project, only, admittedBackend);
-  if (rebuiltResult.isErr()) return err(rebuiltResult.error);
+  if (rebuiltResult.isErr()) return Result.err(rebuiltResult.error);
   const rebuilt = rebuiltResult.value;
   const fileKeys = await Promise.all(
     rebuilt.files.map(
@@ -510,7 +509,7 @@ export async function refreshCatalog(
       count: rebuilt.count,
     } satisfies Meta),
   );
-  if (written.isErr()) return err(written.error);
+  if (written.isErr()) return Result.err(written.error);
   notes.push(
     `catalog ${meta !== null ? "refreshed" : "built"}: ${rebuilt.count} definitions` +
       (only === null ? " (full scan)" : ` (${only.length} changed path(s))`),
@@ -520,9 +519,9 @@ export async function refreshCatalog(
 
 async function readCatalog(dir: string): Promise<Result<Catalog, Error>> {
   const records = await readJsonOf(RecordsSchema, join(dir, "records.json"));
-  if (records.isErr()) return err(records.error);
+  if (records.isErr()) return Result.err(records.error);
   const byFile = new Map(Object.entries(records.value));
-  return ok({ dir, defs: [...byFile.values()].flat(), byFile });
+  return Result.ok({ dir, defs: [...byFile.values()].flat(), byFile });
 }
 
 // Re-extract (changed files only — ccc_defs.py keeps a per-file cache), rewrite the catalog's
@@ -535,47 +534,53 @@ async function rebuild(
 ): Promise<Result<{ count: number; files: string[] }, Error>> {
   const cachePath = join(dir, "defs-cache.json");
   const onlyPath = join(dir, `only.${process.pid}.json`);
-  const setup = await fromAsyncThrowable(async () => {
-    if (only !== null) await writeFile(onlyPath, JSON.stringify(only));
-    await mkdir(join(dir, "defs"), { recursive: true });
-    await mkdir(join(dir, ".cocoindex_code"), { recursive: true });
-    const settings = join(dir, ".cocoindex_code/settings.yml");
-    if (!(await pathExists(settings))) {
-      await writeFile(
-        settings,
-        "include_patterns:\n- 'defs/**/*.md'\nexclude_patterns:\n- '**/.cocoindex_code'\n",
-      );
-    }
-  }, asError)();
-  if (setup.isErr()) return err(setup.error);
+  const setup = await Result.tryPromise({
+    try: async () => {
+      if (only !== null) await writeFile(onlyPath, JSON.stringify(only));
+      await mkdir(join(dir, "defs"), { recursive: true });
+      await mkdir(join(dir, ".cocoindex_code"), { recursive: true });
+      const settings = join(dir, ".cocoindex_code/settings.yml");
+      if (!(await pathExists(settings))) {
+        await writeFile(
+          settings,
+          "include_patterns:\n- 'defs/**/*.md'\nexclude_patterns:\n- '**/.cocoindex_code'\n",
+        );
+      }
+    },
+    catch: asError,
+  });
+  if (setup.isErr()) return Result.err(setup.error);
   const onlyArgs =
     only !== null && (await pathExists(cachePath)) ? ["--only", onlyPath] : [];
   const executable = requireExecutable("ccc");
-  if (executable.isErr()) return err(executable.error);
+  if (executable.isErr()) return Result.err(executable.error);
   const python = await cccPython(executable.value);
-  if (python.isErr()) return err(python.error);
-  const extract = await fromAsyncThrowable(
-    () =>
+  if (python.isErr()) return Result.err(python.error);
+  const extract = await Result.tryPromise({
+    try: () =>
       runChildCaptured(
         [python.value, SCRIPT, project, cachePath, cachePath, ...onlyArgs],
         600_000,
         false,
       ),
-    asError,
-  )();
-  if (extract.isErr()) return err(extract.error);
-  const cleanup = await fromAsyncThrowable(async () => {
-    if (only !== null && (await pathExists(onlyPath))) await unlink(onlyPath);
-  }, asError)();
-  if (cleanup.isErr()) return err(cleanup.error);
+    catch: asError,
+  });
+  if (extract.isErr()) return Result.err(extract.error);
+  const cleanup = await Result.tryPromise({
+    try: async () => {
+      if (only !== null && (await pathExists(onlyPath))) await unlink(onlyPath);
+    },
+    catch: asError,
+  });
+  if (cleanup.isErr()) return Result.err(cleanup.error);
   if (extract.value.exitCode !== 0)
-    return err(
+    return Result.err(
       new Error(
         `ccc_defs.py failed: ${extract.value.stderr.trim().slice(-400)}`,
       ),
     );
   const definitions = await loadDefinitions(cachePath);
-  if (definitions.isErr()) return err(definitions.error);
+  if (definitions.isErr()) return Result.err(definitions.error);
   const { defs, files } = definitions.value;
   const wanted = new Map<string, Definition[]>();
   let written = 0;
@@ -583,51 +588,54 @@ async function rebuild(
   const pendingPath = join(dir, "index-pending");
   const wasPending = await pathExists(pendingPath);
   const marked = await writeAtomic(pendingPath, "pending\n");
-  if (marked.isErr()) return err(marked.error);
-  const generated = await fromAsyncThrowable(async () => {
-    for (const d of defs) {
-      const text = mdText(d);
-      const name = mdName(text);
-      wanted.set(name, [...(wanted.get(name) ?? []), d]);
-      const path = join(dir, "defs", name);
-      if (await pathExists(path)) continue;
-      await writeFile(path, text);
-      written += 1;
-    }
-    const stale = (await readdir(join(dir, "defs"))).filter(
-      (f) => !wanted.has(f),
-    );
-    for (const f of stale) await unlink(join(dir, "defs", f));
-    return stale;
-  }, asError)();
-  if (generated.isErr()) return err(generated.error);
+  if (marked.isErr()) return Result.err(marked.error);
+  const generated = await Result.tryPromise({
+    try: async () => {
+      for (const d of defs) {
+        const text = mdText(d);
+        const name = mdName(text);
+        wanted.set(name, [...(wanted.get(name) ?? []), d]);
+        const path = join(dir, "defs", name);
+        if (await pathExists(path)) continue;
+        await writeFile(path, text);
+        written += 1;
+      }
+      const stale = (await readdir(join(dir, "defs"))).filter(
+        (f) => !wanted.has(f),
+      );
+      for (const f of stale) await unlink(join(dir, "defs", f));
+      return stale;
+    },
+    catch: asError,
+  });
+  if (generated.isErr()) return Result.err(generated.error);
   const stale = generated.value;
   const recordsWrite = await writeAtomic(
     join(dir, "records.json"),
     JSON.stringify(Object.fromEntries(wanted)),
   );
-  if (recordsWrite.isErr()) return err(recordsWrite.error);
+  if (recordsWrite.isErr()) return Result.err(recordsWrite.error);
   // An edit that only moved definitions (line numbers live in records.json, not in the indexed
   // text) changes no catalog file: nothing to embed, no daemon round trip.
   if (written + stale.length > 0 || wasPending) {
-    const index = await fromAsyncThrowable(
-      () => runChildCaptured([backend, "index"], 900_000, false, dir),
-      asError,
-    )();
-    if (index.isErr()) return err(index.error);
+    const index = await Result.tryPromise({
+      try: () => runChildCaptured([backend, "index"], 900_000, false, dir),
+      catch: asError,
+    });
+    if (index.isErr()) return Result.err(index.error);
     if (index.value.exitCode !== 0)
-      return err(
+      return Result.err(
         new Error(
           `catalog index failed: ${index.value.stderr.trim().slice(-400)}`,
         ),
       );
   }
-  const cleared = await fromAsyncThrowable(
-    () => unlink(pendingPath),
-    asError,
-  )();
-  if (cleared.isErr()) return err(cleared.error);
-  return ok({ count: defs.length, files });
+  const cleared = await Result.tryPromise({
+    try: () => unlink(pendingPath),
+    catch: asError,
+  });
+  if (cleared.isErr()) return Result.err(cleared.error);
+  return Result.ok({ count: defs.length, files });
 }
 
 // A reader in another session must never see half a file.
@@ -636,10 +644,13 @@ async function writeAtomic(
   text: string,
 ): Promise<Result<void, Error>> {
   const tmp = `${path}.${process.pid}.tmp`;
-  return fromAsyncThrowable(async () => {
-    await writeFile(tmp, text);
-    await rename(tmp, path);
-  }, asError)();
+  return Result.tryPromise({
+    try: async () => {
+      await writeFile(tmp, text);
+      await rename(tmp, path);
+    },
+    catch: asError,
+  });
 }
 
 // ccc search --json: only the path is read; the rest of each result is ignored.
@@ -654,27 +665,27 @@ async function recall(
   limit: number,
 ): Promise<Result<Hit[], Error>> {
   const ccc = requireExecutable("ccc");
-  if (ccc.isErr()) return err(ccc.error);
-  const result = await fromAsyncThrowable(
-    () =>
+  if (ccc.isErr()) return Result.err(ccc.error);
+  const result = await Result.tryPromise({
+    try: () =>
       runChildCaptured(
         [ccc.value, "search", "--json", "--limit", String(limit), query],
         120_000,
         false,
         dir,
       ),
-    asError,
-  )();
-  if (result.isErr()) return err(result.error);
+    catch: asError,
+  });
+  if (result.isErr()) return Result.err(result.error);
   const r = result.value;
   if (r.exitCode !== 0)
-    return err(
+    return Result.err(
       new Error(`catalog search failed: ${r.stderr.trim().slice(-400)}`),
     );
   const found = jsonOf(SearchSchema).safeParse(r.stdout);
   return found.success
-    ? ok(found.data.results)
-    : err(
+    ? Result.ok(found.data.results)
+    : Result.err(
         new Error(
           `catalog search printed no result list: ${found.error.message}`,
         ),
@@ -744,8 +755,8 @@ export async function rerank(
     const n = s.write(pending);
     pending = pending.subarray(n);
   };
-  const connected = await fromAsyncThrowable(
-    () =>
+  const connected = await Result.tryPromise({
+    try: () =>
       Bun.connect({
         unix: rerankSocket(),
         socket: {
@@ -767,8 +778,8 @@ export async function rerank(
           },
         },
       }),
-    asError,
-  )();
+    catch: asError,
+  });
   if (connected.isErr())
     done({
       reason: `cannot connect to the reranker: ${String(connected.error)}`,
@@ -797,7 +808,7 @@ export async function findDefinitions(
   const notes: string[] = [];
   const catalogPath = await catalogDir(project);
   if (!refresh && !(await pathExists(join(catalogPath, "records.json")))) {
-    return ok({
+    return Result.ok({
       cards: [],
       strength: "none",
       best: -99,
@@ -810,20 +821,20 @@ export async function findDefinitions(
   const catalog = refresh
     ? await refreshCatalog(project, notes)
     : await readCatalog(catalogPath);
-  if (catalog.isErr()) return err(catalog.error);
+  if (catalog.isErr()) return Result.err(catalog.error);
   const { dir, defs, byFile } = catalog.value;
   const cfg = await loadRetrievalConfig();
-  if (cfg.isErr()) return err(cfg.error);
+  if (cfg.isErr()) return Result.err(cfg.error);
   const hits = await recall(dir, query, cfg.value.recall);
-  if (hits.isErr()) return err(hits.error);
+  if (hits.isErr()) return Result.err(hits.error);
 
   const owners = ownersOf(defs);
   const order = candidates(hits.value, byFile, owners, exclude).slice(
     0,
     cfg.value.pool,
   );
-  const judged = await fromAsyncThrowable(
-    async () =>
+  const judged = await Result.tryPromise({
+    try: async () =>
       judgeCandidates(
         query,
         order.map((definition) => rerankText(definition)),
@@ -831,9 +842,9 @@ export async function findDefinitions(
         cfg.value.jevEndpoint,
         notes,
       ),
-    asError,
-  )();
-  if (judged.isErr()) return err(judged.error);
+    catch: asError,
+  });
+  if (judged.isErr()) return Result.err(judged.error);
   const { judge, result } = judged.value;
   const scores = result.scores ?? null;
   const reranked = scores !== null;
@@ -846,7 +857,7 @@ export async function findDefinitions(
     finalScores(order, raw, owners, cfg.value.priors),
   ).slice(0, limit);
   const best = ranked[0]?.score ?? -99;
-  return ok({
+  return Result.ok({
     cards: ranked,
     strength: strengthOf(best, reranked, cfg.value.thresholds[judge]),
     best,
@@ -909,8 +920,8 @@ export async function judgeJev(
     ),
   });
   for (let attempt_ = 0; attempt_ <= JEV_RETRIES; attempt_ += 1) {
-    const response = await fromAsyncThrowable(
-      () =>
+    const response = await Result.tryPromise({
+      try: () =>
         fetch(endpoint.url, {
           method: "POST",
           headers: {
@@ -920,8 +931,8 @@ export async function judgeJev(
           body,
           signal: AbortSignal.timeout(JEV_TIMEOUT_MS),
         }),
-      asError,
-    )();
+      catch: asError,
+    });
     if (response.isErr())
       return { reason: `request failed: ${String(response.error)}` };
     const res = response.value;
@@ -940,11 +951,11 @@ export async function judgeJev(
         reason: `HTTP 402 at ${provider}: no credit left — ${endpoint.whenExhausted ?? "top up"}`,
       };
     if (status !== 200) return { reason: `HTTP ${status} at ${provider}` };
-    const answerText = await fromAsyncThrowable(() => res.text(), asError)();
-    const answered = answerText.match(
-      (text) => text,
-      () => "",
-    );
+    const answerText = await Result.tryPromise({
+      try: () => res.text(),
+      catch: asError,
+    });
+    const answered = answerText.match({ ok: (text) => text, err: () => "" });
     const json = jsonOf(JevAnswerSchema).safeParse(answered).data;
     const ps = docs.map((_, i) => json?.answers?.[definitionId(i)]?.noul);
     const numbers = ps.flatMap((p) => (typeof p === "number" ? [p] : []));

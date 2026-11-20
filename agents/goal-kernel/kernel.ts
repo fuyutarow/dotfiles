@@ -6,6 +6,7 @@
  * event ledger blocks PreToolUse/UserPromptSubmit; post-effect events can only warn.
  */
 
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import { createHash, randomUUID } from "node:crypto";
 import {
   access,
@@ -20,15 +21,6 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import {
-  err,
-  fromAsyncThrowable,
-  fromThrowable,
-  ok,
-  Result,
-  type Result as NeverthrowResult,
-} from "neverthrow";
-import { errorMessage } from "../hooks/attempt.ts";
 import { jsonText } from "../hooks/zod.ts";
 
 export type Provider = "claude" | "codex";
@@ -142,21 +134,24 @@ class GoalKernelError extends Error {
   }
 }
 
-type KernelResult<T> = NeverthrowResult<T, Error>;
+type KernelResult<T> = Result<T, Error>;
 
-function caught<T>(operation: () => T): KernelResult<T> {
-  return fromThrowable(operation, (error) =>
-    error instanceof Error ? error : new Error(String(error)),
-  )();
+function caught<T>(operation: () => Awaited<T>): KernelResult<T> {
+  return Result.try<T, Error>({
+    try: operation,
+    catch: (error: unknown) =>
+      error instanceof Error ? error : new Error(String(error)),
+  });
 }
 
 async function caughtAsync<T>(
   operation: () => Promise<T>,
 ): Promise<KernelResult<T>> {
-  const result = await fromAsyncThrowable(operation, (error) =>
-    error instanceof Error ? error : new Error(String(error)),
-  )();
-  return result;
+  return Result.tryPromise({
+    try: operation,
+    catch: (error: unknown) =>
+      error instanceof Error ? error : new Error(String(error)),
+  });
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -182,19 +177,19 @@ function exactKeys(
   const allowed = new Set([...required, ...optional]);
   for (const key of Object.keys(value)) {
     if (!allowed.has(key)) {
-      return err(
+      return Result.err(
         new GoalKernelError("GK_SCHEMA", `${locus} has unknown key '${key}'`),
       );
     }
   }
   for (const key of required) {
     if (!Object.hasOwn(value, key)) {
-      return err(
+      return Result.err(
         new GoalKernelError("GK_SCHEMA", `${locus} is missing '${key}'`),
       );
     }
   }
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 function boundedString(
@@ -203,20 +198,20 @@ function boundedString(
   maxLength = 4_000,
 ): KernelResult<string> {
   if (typeof value !== "string" || value.trim() === "") {
-    return err(
+    return Result.err(
       new GoalKernelError("GK_SCHEMA", `${locus} must be a non-empty string`),
     );
   }
   const normalized = value.trim();
   if (normalized.length > maxLength) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_SCHEMA",
         `${locus} exceeds ${maxLength} characters`,
       ),
     );
   }
-  return ok(normalized);
+  return Result.ok(normalized);
 }
 
 function stringArray(
@@ -228,14 +223,14 @@ function stringArray(
   const max = options.max ?? 50;
   const itemMax = options.itemMax ?? 1_000;
   if (!Array.isArray(value) || value.length < min || value.length > max) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_SCHEMA",
         `${locus} must contain ${min}..${max} strings`,
       ),
     );
   }
-  return Result.combine(
+  return Result.all(
     value.map((item, index) =>
       boundedString(item, `${locus}[${index}]`, itemMax),
     ),
@@ -265,19 +260,21 @@ async function parseAuthority(
 ): Promise<KernelResult<GoalAuthority>> {
   const value = asRecord(input);
   if (value === undefined) {
-    return err(new GoalKernelError("GK_SCHEMA", `${locus} must be an object`));
+    return Result.err(
+      new GoalKernelError("GK_SCHEMA", `${locus} must be an object`),
+    );
   }
   const keys = exactKeys(value, ["actor", "approved_at"], ["source"], locus);
-  if (keys.isErr()) return err(keys.error);
+  if (keys.isErr()) return Result.err(keys.error);
   const approvedAtResult = boundedString(
     value["approved_at"],
     `${locus}.approved_at`,
     64,
   );
-  if (approvedAtResult.isErr()) return err(approvedAtResult.error);
+  if (approvedAtResult.isErr()) return Result.err(approvedAtResult.error);
   const approvedAt = approvedAtResult.value;
   if (!(await isIsoTimestamp(approvedAt))) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_SCHEMA",
         `${locus}.approved_at must be an ISO-compatible timestamp`,
@@ -289,11 +286,11 @@ async function parseAuthority(
       ? undefined
       : boundedString(value["source"], `${locus}.source`, 500);
   if (sourceResult !== undefined && sourceResult.isErr()) {
-    return err(sourceResult.error);
+    return Result.err(sourceResult.error);
   }
   const actorResult = boundedString(value["actor"], `${locus}.actor`, 200);
-  if (actorResult.isErr()) return err(actorResult.error);
-  return ok({
+  if (actorResult.isErr()) return Result.err(actorResult.error);
+  return Result.ok({
     actor: actorResult.value,
     approved_at: approvedAt,
     ...(sourceResult === undefined ? {} : { source: sourceResult.value }),
@@ -306,7 +303,9 @@ function parseDecision(
 ): KernelResult<GoalDecision> {
   const value = asRecord(input);
   if (value === undefined) {
-    return err(new GoalKernelError("GK_SCHEMA", `${locus} must be an object`));
+    return Result.err(
+      new GoalKernelError("GK_SCHEMA", `${locus} must be an object`),
+    );
   }
   const keys = exactKeys(
     value,
@@ -314,16 +313,16 @@ function parseDecision(
     [],
     locus,
   );
-  if (keys.isErr()) return err(keys.error);
+  if (keys.isErr()) return Result.err(keys.error);
   const decisionIdResult = boundedString(
     value["decision_id"],
     `${locus}.decision_id`,
     96,
   );
-  if (decisionIdResult.isErr()) return err(decisionIdResult.error);
+  if (decisionIdResult.isErr()) return Result.err(decisionIdResult.error);
   const decisionId = decisionIdResult.value;
   if (!DECISION_ID_RE.test(decisionId)) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_SCHEMA",
         `${locus}.decision_id has an invalid shape`,
@@ -332,7 +331,7 @@ function parseDecision(
   }
   const parent = value["parent_decision_id"];
   if (parent !== null && typeof parent !== "string") {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_SCHEMA",
         `${locus}.parent_decision_id must be a string or null`,
@@ -341,12 +340,13 @@ function parseDecision(
   }
   const normalizedParentResult =
     parent === null
-      ? ok<null, Error>(null)
+      ? Result.ok<null, Error>(null)
       : boundedString(parent, `${locus}.parent_decision_id`, 96);
-  if (normalizedParentResult.isErr()) return err(normalizedParentResult.error);
+  if (normalizedParentResult.isErr())
+    return Result.err(normalizedParentResult.error);
   const normalizedParent = normalizedParentResult.value;
   if (normalizedParent !== null && !DECISION_ID_RE.test(normalizedParent)) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_SCHEMA",
         `${locus}.parent_decision_id has an invalid shape`,
@@ -354,7 +354,7 @@ function parseDecision(
     );
   }
   const summary = boundedString(value["summary"], `${locus}.summary`, 2_000);
-  if (summary.isErr()) return err(summary.error);
+  if (summary.isErr()) return Result.err(summary.error);
   const evidence = stringArray(
     value["evidence_refs"],
     `${locus}.evidence_refs`,
@@ -363,8 +363,8 @@ function parseDecision(
       itemMax: 1_000,
     },
   );
-  if (evidence.isErr()) return err(evidence.error);
-  return ok({
+  if (evidence.isErr()) return Result.err(evidence.error);
+  return Result.ok({
     decision_id: decisionId,
     summary: summary.value,
     parent_decision_id: normalizedParent,
@@ -379,7 +379,7 @@ function validateDecisionOrder(
   const seen = new Set(initialIds);
   for (const decision of decisions) {
     if (seen.has(decision.decision_id)) {
-      return err(
+      return Result.err(
         new GoalKernelError(
           "GK_DECISION_DUPLICATE",
           `decision '${decision.decision_id}' already exists`,
@@ -390,7 +390,7 @@ function validateDecisionOrder(
       decision.parent_decision_id !== null &&
       !seen.has(decision.parent_decision_id)
     ) {
-      return err(
+      return Result.err(
         new GoalKernelError(
           "GK_DECISION_PARENT",
           `decision '${decision.decision_id}' names unknown or later parent '${decision.parent_decision_id}'`,
@@ -399,7 +399,7 @@ function validateDecisionOrder(
     }
     seen.add(decision.decision_id);
   }
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 export async function parseGoalContract(
@@ -407,7 +407,7 @@ export async function parseGoalContract(
 ): Promise<KernelResult<GoalContract>> {
   const value = asRecord(input);
   if (value === undefined) {
-    return err(
+    return Result.err(
       new GoalKernelError("GK_SCHEMA", "Goal contract must be an object"),
     );
   }
@@ -427,15 +427,17 @@ export async function parseGoalContract(
     [],
     "Goal contract",
   );
-  if (keys.isErr()) return err(keys.error);
+  if (keys.isErr()) return Result.err(keys.error);
   if (value["schema_version"] !== STATE_SCHEMA) {
-    return err(new GoalKernelError("GK_SCHEMA", "schema_version must be 1"));
+    return Result.err(
+      new GoalKernelError("GK_SCHEMA", "schema_version must be 1"),
+    );
   }
   const goalIdResult = boundedString(value["goal_id"], "goal_id", 64);
-  if (goalIdResult.isErr()) return err(goalIdResult.error);
+  if (goalIdResult.isErr()) return Result.err(goalIdResult.error);
   const goalId = goalIdResult.value;
   if (!GOAL_ID_RE.test(goalId)) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_SCHEMA",
         "goal_id must match [a-z0-9][a-z0-9._-]{0,63}",
@@ -447,7 +449,7 @@ export async function parseGoalContract(
     !Number.isSafeInteger(value["goal_version"]) ||
     value["goal_version"] < 1
   ) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_SCHEMA",
         "goal_version must be a positive integer",
@@ -459,7 +461,7 @@ export async function parseGoalContract(
     supersedes !== null &&
     (typeof supersedes !== "string" || !SHA256_RE.test(supersedes))
   ) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_SCHEMA",
         "supersedes_goal_digest must be a SHA-256 digest or null",
@@ -467,7 +469,7 @@ export async function parseGoalContract(
     );
   }
   if (value["goal_version"] === 1 && supersedes !== null) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_GOAL_LINEAGE",
         "goal_version 1 cannot supersede another digest",
@@ -475,7 +477,7 @@ export async function parseGoalContract(
     );
   }
   if (value["goal_version"] > 1 && supersedes === null) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_GOAL_LINEAGE",
         "goal_version > 1 requires supersedes_goal_digest",
@@ -483,32 +485,34 @@ export async function parseGoalContract(
     );
   }
   if (!Array.isArray(value["decisions"])) {
-    return err(new GoalKernelError("GK_SCHEMA", "decisions must be an array"));
+    return Result.err(
+      new GoalKernelError("GK_SCHEMA", "decisions must be an array"),
+    );
   }
-  const decisionsResult = Result.combine(
+  const decisionsResult = Result.all(
     value["decisions"].map((decision, index) =>
       parseDecision(decision, `decisions[${index}]`),
     ),
   );
-  if (decisionsResult.isErr()) return err(decisionsResult.error);
+  if (decisionsResult.isErr()) return Result.err(decisionsResult.error);
   const order = validateDecisionOrder(decisionsResult.value);
-  if (order.isErr()) return err(order.error);
+  if (order.isErr()) return Result.err(order.error);
   const northStar = boundedString(value["north_star"], "north_star", 4_000);
-  if (northStar.isErr()) return err(northStar.error);
+  if (northStar.isErr()) return Result.err(northStar.error);
   const acceptance = stringArray(value["acceptance"], "acceptance", {
     min: 1,
     max: 50,
     itemMax: 1_000,
   });
-  if (acceptance.isErr()) return err(acceptance.error);
+  if (acceptance.isErr()) return Result.err(acceptance.error);
   const nonGoals = stringArray(value["non_goals"], "non_goals", {
     max: 50,
     itemMax: 1_000,
   });
-  if (nonGoals.isErr()) return err(nonGoals.error);
+  if (nonGoals.isErr()) return Result.err(nonGoals.error);
   const authority = await parseAuthority(value["authority"], "authority");
-  if (authority.isErr()) return err(authority.error);
-  return ok({
+  if (authority.isErr()) return Result.err(authority.error);
+  return Result.ok({
     schema_version: STATE_SCHEMA,
     goal_id: goalId,
     goal_version: value["goal_version"],
@@ -526,7 +530,7 @@ export async function parseRunDecision(
 ): Promise<KernelResult<RunDecision>> {
   const value = asRecord(input);
   if (value === undefined) {
-    return err(
+    return Result.err(
       new GoalKernelError("GK_SCHEMA", "Run decision must be an object"),
     );
   }
@@ -543,9 +547,11 @@ export async function parseRunDecision(
     [],
     "Run decision",
   );
-  if (keys.isErr()) return err(keys.error);
+  if (keys.isErr()) return Result.err(keys.error);
   if (value["schema_version"] !== STATE_SCHEMA) {
-    return err(new GoalKernelError("GK_SCHEMA", "schema_version must be 1"));
+    return Result.err(
+      new GoalKernelError("GK_SCHEMA", "schema_version must be 1"),
+    );
   }
   const decision = parseDecision(
     {
@@ -556,13 +562,13 @@ export async function parseRunDecision(
     },
     "Run decision",
   );
-  if (decision.isErr()) return err(decision.error);
+  if (decision.isErr()) return Result.err(decision.error);
   const authority = await parseAuthority(
     value["authority"],
     "Run decision.authority",
   );
-  if (authority.isErr()) return err(authority.error);
-  return ok({
+  if (authority.isErr()) return Result.err(authority.error);
+  return Result.ok({
     schema_version: STATE_SCHEMA,
     ...decision.value,
     authority: authority.value,
@@ -643,20 +649,20 @@ async function ensurePrivateDirectory(
     await mkdir(path, { recursive: true, mode: 0o700 });
     return lstat(path);
   });
-  if (stats.isErr()) return err(stats.error);
+  if (stats.isErr()) return Result.err(stats.error);
   if (
     stats.value.isSymbolicLink() ||
     !stats.value.isDirectory() ||
     (stats.value.mode & 0o077) !== 0
   ) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_STATE_PERMISSIONS",
         `${path} must be a private, non-symlink directory`,
       ),
     );
   }
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 async function isTrustedConfig(
@@ -688,7 +694,7 @@ async function writeJsonExclusive(
   value: unknown,
 ): Promise<KernelResult<void>> {
   const directory = await ensurePrivateDirectory(dirname(path));
-  if (directory.isErr()) return err(directory.error);
+  if (directory.isErr()) return Result.err(directory.error);
   const written = await caughtAsync(async () => {
     await writeFile(path, `${canonicalJson(value)}\n`, {
       encoding: "utf8",
@@ -696,7 +702,7 @@ async function writeJsonExclusive(
       mode: 0o600,
     });
   });
-  return written.isErr() ? err(written.error) : ok(undefined);
+  return written.isErr() ? Result.err(written.error) : Result.ok(undefined);
 }
 
 async function writeJsonAtomic(
@@ -704,7 +710,7 @@ async function writeJsonAtomic(
   value: unknown,
 ): Promise<KernelResult<void>> {
   const directory = await ensurePrivateDirectory(dirname(path));
-  if (directory.isErr()) return err(directory.error);
+  if (directory.isErr()) return Result.err(directory.error);
   const temporary = join(dirname(path), `.${process.pid}-${randomUUID()}.tmp`);
   const written = await caughtAsync(async () => {
     await writeFile(temporary, `${canonicalJson(value)}\n`, {
@@ -714,7 +720,7 @@ async function writeJsonAtomic(
     });
     await rename(temporary, path);
   });
-  return written.isErr() ? err(written.error) : ok(undefined);
+  return written.isErr() ? Result.err(written.error) : Result.ok(undefined);
 }
 
 async function withExclusiveStateLock<T>(
@@ -732,8 +738,8 @@ async function withExclusiveStateLock<T>(
   });
   if (written.isErr()) {
     const exists = await caughtAsync(() => access(path));
-    if (exists.isErr()) return err(written.error);
-    return err(
+    if (exists.isErr()) return Result.err(written.error);
+    return Result.err(
       new GoalKernelError(
         "GK_BUSY",
         `${purpose} is already in progress; inspect ${path} before recovering a stale lock`,
@@ -744,8 +750,8 @@ async function withExclusiveStateLock<T>(
   // is unchanged.
   const operationResult = await caughtAsync(operation);
   const removed = await caughtAsync(() => unlink(path));
-  if (removed.isErr()) return err(removed.error);
-  if (operationResult.isErr()) return err(operationResult.error);
+  if (removed.isErr()) return Result.err(removed.error);
+  if (operationResult.isErr()) return Result.err(operationResult.error);
   return operationResult.value;
 }
 
@@ -753,24 +759,24 @@ async function readJson(
   path: string,
   locus: string,
 ): Promise<KernelResult<unknown>> {
-  const text = (await caughtAsync(() => readFile(path, "utf8"))).mapErr(
+  const text = (await caughtAsync(() => readFile(path, "utf8"))).mapError(
     (error) =>
       new GoalKernelError(
         "GK_STATE",
         `${locus} is unreadable: ${errorMessage(error)}`,
       ),
   );
-  if (text.isErr()) return err(text.error);
+  if (text.isErr()) return Result.err(text.error);
   const parsed = jsonText.safeParse(text.value);
   if (!parsed.success) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_STATE",
         `${locus} is unreadable: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
       ),
     );
   }
-  return ok(parsed.data);
+  return Result.ok(parsed.data);
 }
 
 function inside(root: string, candidate: string): boolean {
@@ -789,11 +795,11 @@ function resolveStateRelative(
 ): KernelResult<string> {
   const candidate = resolve(stateRoot, path);
   if (!inside(stateRoot, candidate)) {
-    return err(
+    return Result.err(
       new GoalKernelError("GK_STATE", "state path escapes its workspace"),
     );
   }
-  return ok(candidate);
+  return Result.ok(candidate);
 }
 
 function contractDigest(contract: GoalContract): string {
@@ -827,30 +833,30 @@ async function readGoalSnapshot(
   expectedDigest?: string,
 ): Promise<KernelResult<GoalContract>> {
   const stored = await readJson(path, "Goal snapshot");
-  if (stored.isErr()) return err(stored.error);
+  if (stored.isErr()) return Result.err(stored.error);
   const parsed = await parseGoalContract(stored.value);
-  if (parsed.isErr()) return err(parsed.error);
+  if (parsed.isErr()) return Result.err(parsed.error);
   const contract = parsed.value;
   const actualDigest = contractDigest(contract);
   if (expectedDigest !== undefined && actualDigest !== expectedDigest) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_INTEGRITY",
         `Goal snapshot digest mismatch: expected ${expectedDigest}, got ${actualDigest}`,
       ),
     );
   }
-  return ok(contract);
+  return Result.ok(contract);
 }
 
 async function readActivePointer(
   paths: ReturnType<typeof goalKernelPaths>,
 ): Promise<KernelResult<ActiveGoal>> {
   const active = await readJson(paths.active, "ACTIVE.json");
-  if (active.isErr()) return err(active.error);
+  if (active.isErr()) return Result.err(active.error);
   const value = asRecord(active.value);
   if (value === undefined) {
-    return err(
+    return Result.err(
       new GoalKernelError("GK_STATE", "ACTIVE.json must be an object"),
     );
   }
@@ -867,7 +873,7 @@ async function readActivePointer(
     [],
     "ACTIVE.json",
   );
-  if (keys.isErr()) return err(keys.error);
+  if (keys.isErr()) return Result.err(keys.error);
   if (
     value["schema_version"] !== STATE_SCHEMA ||
     typeof value["goal_id"] !== "string" ||
@@ -877,11 +883,11 @@ async function readActivePointer(
     typeof value["snapshot_rel"] !== "string" ||
     typeof value["activated_at"] !== "string"
   ) {
-    return err(
+    return Result.err(
       new GoalKernelError("GK_STATE", "ACTIVE.json has invalid fields"),
     );
   }
-  return ok({
+  return Result.ok({
     schema_version: STATE_SCHEMA,
     goal_id: value["goal_id"],
     goal_version: value["goal_version"],
@@ -899,29 +905,29 @@ async function loadActiveGoal(
   >
 > {
   const active = await readActivePointer(paths);
-  if (active.isErr()) return err(active.error);
+  if (active.isErr()) return Result.err(active.error);
   const snapshotPath = resolveStateRelative(
     paths.state,
     active.value.snapshot_rel,
   );
-  if (snapshotPath.isErr()) return err(snapshotPath.error);
+  if (snapshotPath.isErr()) return Result.err(snapshotPath.error);
   const goal = await readGoalSnapshot(
     snapshotPath.value,
     active.value.goal_digest,
   );
-  if (goal.isErr()) return err(goal.error);
+  if (goal.isErr()) return Result.err(goal.error);
   if (
     goal.value.goal_id !== active.value.goal_id ||
     goal.value.goal_version !== active.value.goal_version
   ) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_INTEGRITY",
         "ACTIVE.json identity does not match its Goal snapshot",
       ),
     );
   }
-  return ok({
+  return Result.ok({
     active: active.value,
     goal: goal.value,
     snapshotPath: snapshotPath.value,
@@ -932,7 +938,7 @@ async function ensureConfig(
   paths: ReturnType<typeof goalKernelPaths>,
 ): Promise<KernelResult<void>> {
   const directory = await ensurePrivateDirectory(paths.state);
-  if (directory.isErr()) return err(directory.error);
+  if (directory.isErr()) return Result.err(directory.error);
   const expected = {
     schema_version: STATE_SCHEMA,
     enabled: true,
@@ -943,7 +949,7 @@ async function ensureConfig(
     return writeJsonExclusive(paths.config, expected);
   }
   if (!(await isTrustedConfig(paths))) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_STATE_PERMISSIONS",
         "config.json or its state directory is not private and trusted",
@@ -951,16 +957,16 @@ async function ensureConfig(
     );
   }
   const actual = await readJson(paths.config, "config.json");
-  if (actual.isErr()) return err(actual.error);
+  if (actual.isErr()) return Result.err(actual.error);
   if (canonicalJson(actual.value) !== canonicalJson(expected)) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_CONFIG",
         "config.json does not match the installed Goal Kernel policy",
       ),
     );
   }
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 export async function activateGoal(
@@ -980,10 +986,10 @@ export async function activateGoal(
 > {
   const paths = goalKernelPaths(workspaceRoot);
   const parsedContract = await parseGoalContract(input);
-  if (parsedContract.isErr()) return err(parsedContract.error);
+  if (parsedContract.isErr()) return Result.err(parsedContract.error);
   const contract = parsedContract.value;
   const directory = await ensurePrivateDirectory(paths.state);
-  if (directory.isErr()) return err(directory.error);
+  if (directory.isErr()) return Result.err(directory.error);
   return withExclusiveStateLock(
     join(paths.state, ".activation.lock"),
     "Goal activation",
@@ -999,11 +1005,11 @@ export async function activateGoal(
       const sameVersionResult = await caughtAsync(() =>
         findVersionSnapshots(paths, contract.goal_id, contract.goal_version),
       );
-      if (sameVersionResult.isErr()) return err(sameVersionResult.error);
+      if (sameVersionResult.isErr()) return Result.err(sameVersionResult.error);
       const sameVersion = sameVersionResult.value;
       const conflicting = sameVersion.find((path) => path !== snapshotPath);
       if (conflicting !== undefined) {
-        return err(
+        return Result.err(
           new GoalKernelError(
             "GK_GOAL_VERSION_CONFLICT",
             `Goal '${contract.goal_id}' version ${contract.goal_version} already has a different digest`,
@@ -1014,7 +1020,7 @@ export async function activateGoal(
       if (contract.goal_version > 1) {
         const priorDigest = contract.supersedes_goal_digest;
         if (priorDigest === null) {
-          return err(
+          return Result.err(
             new GoalKernelError(
               "GK_GOAL_LINEAGE",
               "goal_version > 1 requires supersedes_goal_digest",
@@ -1028,7 +1034,7 @@ export async function activateGoal(
           priorDigest,
         );
         if (!(await pathExists(priorPath))) {
-          return err(
+          return Result.err(
             new GoalKernelError(
               "GK_GOAL_LINEAGE",
               `superseded Goal snapshot is missing: ${contract.supersedes_goal_digest}`,
@@ -1036,18 +1042,18 @@ export async function activateGoal(
           );
         }
         const prior = await readGoalSnapshot(priorPath, priorDigest);
-        if (prior.isErr()) return err(prior.error);
+        if (prior.isErr()) return Result.err(prior.error);
       }
 
       if (await pathExists(snapshotPath)) {
         const snapshot = await readGoalSnapshot(snapshotPath, digest);
-        if (snapshot.isErr()) return err(snapshot.error);
+        if (snapshot.isErr()) return Result.err(snapshot.error);
       } else {
         const written = await writeJsonExclusive(snapshotPath, contract);
-        if (written.isErr()) return err(written.error);
+        if (written.isErr()) return Result.err(written.error);
       }
       const config = await ensureConfig(paths);
-      if (config.isErr()) return err(config.error);
+      if (config.isErr()) return Result.err(config.error);
       const activatedAt = Temporal.Now.instant().toString({
         fractionalSecondDigits: 3,
       });
@@ -1060,8 +1066,8 @@ export async function activateGoal(
         activated_at: activatedAt,
       };
       const activeWrite = await writeJsonAtomic(paths.active, active);
-      if (activeWrite.isErr()) return err(activeWrite.error);
-      return ok({
+      if (activeWrite.isErr()) return Result.err(activeWrite.error);
+      return Result.ok({
         workspace_root: paths.root,
         goal_id: contract.goal_id,
         goal_version: contract.goal_version,
@@ -1080,9 +1086,11 @@ function runId(provider: Provider, sessionId: string): string {
 
 function validateRunId(value: string): KernelResult<void> {
   if (!RUN_ID_RE.test(value)) {
-    return err(new GoalKernelError("GK_RUN_ID", `invalid run id '${value}'`));
+    return Result.err(
+      new GoalKernelError("GK_RUN_ID", `invalid run id '${value}'`),
+    );
   }
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 function runDirectory(
@@ -1090,14 +1098,14 @@ function runDirectory(
   id: string,
 ): KernelResult<string> {
   const valid = validateRunId(id);
-  if (valid.isErr()) return err(valid.error);
-  return ok(join(paths.runs, id));
+  if (valid.isErr()) return Result.err(valid.error);
+  return Result.ok(join(paths.runs, id));
 }
 
 function parseBinding(input: unknown): KernelResult<RunBinding> {
   const value = asRecord(input);
   if (value === undefined) {
-    return err(
+    return Result.err(
       new GoalKernelError("GK_STATE", "run binding must be an object"),
     );
   }
@@ -1117,7 +1125,7 @@ function parseBinding(input: unknown): KernelResult<RunBinding> {
     "binding_sha256",
   ];
   const keys = exactKeys(value, required, [], "run binding");
-  if (keys.isErr()) return err(keys.error);
+  if (keys.isErr()) return Result.err(keys.error);
   if (
     value["schema_version"] !== STATE_SCHEMA ||
     typeof value["run_id"] !== "string" ||
@@ -1137,7 +1145,7 @@ function parseBinding(input: unknown): KernelResult<RunBinding> {
     typeof value["binding_sha256"] !== "string" ||
     !SHA256_RE.test(value["binding_sha256"])
   ) {
-    return err(
+    return Result.err(
       new GoalKernelError("GK_STATE", "run binding has invalid fields"),
     );
   }
@@ -1159,14 +1167,14 @@ function parseBinding(input: unknown): KernelResult<RunBinding> {
   const { binding_sha256: expectedDigest, ...body } = binding;
   const actualDigest = sha256Value(body);
   if (actualDigest !== expectedDigest) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_INTEGRITY",
         `run binding digest mismatch: expected ${expectedDigest}, got ${actualDigest}`,
       ),
     );
   }
-  return ok(binding);
+  return Result.ok(binding);
 }
 
 export async function readRunBinding(
@@ -1175,10 +1183,10 @@ export async function readRunBinding(
 ): Promise<KernelResult<RunBinding>> {
   const paths = goalKernelPaths(workspaceRoot);
   const directory = runDirectory(paths, id);
-  if (directory.isErr()) return err(directory.error);
+  if (directory.isErr()) return Result.err(directory.error);
   const bindingPath = join(directory.value, "binding.json");
   const stored = await readJson(bindingPath, `binding for ${id}`);
-  if (stored.isErr()) return err(stored.error);
+  if (stored.isErr()) return Result.err(stored.error);
   const result = parseBinding(stored.value);
   return result;
 }
@@ -1189,21 +1197,21 @@ export async function readBoundGoal(
 ): Promise<KernelResult<GoalContract>> {
   const paths = goalKernelPaths(workspaceRoot);
   const snapshot = resolveStateRelative(paths.state, binding.goal_snapshot_rel);
-  if (snapshot.isErr()) return err(snapshot.error);
+  if (snapshot.isErr()) return Result.err(snapshot.error);
   const goal = await readGoalSnapshot(snapshot.value, binding.goal_digest);
-  if (goal.isErr()) return err(goal.error);
+  if (goal.isErr()) return Result.err(goal.error);
   if (
     goal.value.goal_id !== binding.goal_id ||
     goal.value.goal_version !== binding.goal_version
   ) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_INTEGRITY",
         `binding ${binding.run_id} does not match its Goal snapshot`,
       ),
     );
   }
-  return ok(goal.value);
+  return Result.ok(goal.value);
 }
 
 async function ensureRunBinding(
@@ -1214,25 +1222,25 @@ async function ensureRunBinding(
   KernelResult<Readonly<{ binding: RunBinding; goal: GoalContract }>>
 > {
   const config = await ensureConfig(paths);
-  if (config.isErr()) return err(config.error);
+  if (config.isErr()) return Result.err(config.error);
   const id = runId(provider, sessionId);
   const directory = runDirectory(paths, id);
-  if (directory.isErr()) return err(directory.error);
+  if (directory.isErr()) return Result.err(directory.error);
   const bindingPath = join(directory.value, "binding.json");
   const expectedSessionHash = sha256Text(sessionId);
   const bindingExists = await pathExists(bindingPath);
   if (bindingExists) {
     const stored = await readJson(bindingPath, `binding for ${id}`);
-    if (stored.isErr()) return err(stored.error);
+    if (stored.isErr()) return Result.err(stored.error);
     const parsed = parseBinding(stored.value);
-    if (parsed.isErr()) return err(parsed.error);
+    if (parsed.isErr()) return Result.err(parsed.error);
     const binding = parsed.value;
     if (
       binding.provider !== provider ||
       binding.session_id_sha256 !== expectedSessionHash ||
       binding.workspace_root !== paths.root
     ) {
-      return err(
+      return Result.err(
         new GoalKernelError(
           "GK_INTEGRITY",
           `run id collision or binding mismatch for ${id}`,
@@ -1240,12 +1248,12 @@ async function ensureRunBinding(
       );
     }
     const boundGoal = await readBoundGoal(paths.root, binding);
-    if (boundGoal.isErr()) return err(boundGoal.error);
-    return ok({ binding, goal: boundGoal.value });
+    if (boundGoal.isErr()) return Result.err(boundGoal.error);
+    return Result.ok({ binding, goal: boundGoal.value });
   }
 
   const loaded = await loadActiveGoal(paths);
-  if (loaded.isErr()) return err(loaded.error);
+  if (loaded.isErr()) return Result.err(loaded.error);
   const { active, goal, snapshotPath } = loaded.value;
   const bindingBody: Omit<RunBinding, "binding_sha256"> = {
     schema_version: STATE_SCHEMA,
@@ -1267,16 +1275,16 @@ async function ensureRunBinding(
   };
   const written = await writeJsonExclusive(bindingPath, binding);
   if (written.isErr()) {
-    if (!(await pathExists(bindingPath))) return err(written.error);
+    if (!(await pathExists(bindingPath))) return Result.err(written.error);
     const stored = await readJson(bindingPath, `binding for ${id}`);
-    if (stored.isErr()) return err(stored.error);
+    if (stored.isErr()) return Result.err(stored.error);
     const raced = parseBinding(stored.value);
-    if (raced.isErr()) return err(raced.error);
+    if (raced.isErr()) return Result.err(raced.error);
     const racedGoal = await readBoundGoal(paths.root, raced.value);
-    if (racedGoal.isErr()) return err(racedGoal.error);
-    return ok({ binding: raced.value, goal: racedGoal.value });
+    if (racedGoal.isErr()) return Result.err(racedGoal.error);
+    return Result.ok({ binding: raced.value, goal: racedGoal.value });
   }
-  return ok({ binding, goal });
+  return Result.ok({ binding, goal });
 }
 
 function eventIdentity(): Readonly<{ id: string; at: string }> {
@@ -1318,7 +1326,7 @@ async function appendRunEvent(
   };
   const name = `${ids.id}-${value.event_sha256}.json`;
   const directory = runDirectory(paths, binding.run_id);
-  if (directory.isErr()) return err(directory.error);
+  if (directory.isErr()) return Result.err(directory.error);
   const path = join(directory.value, "events", name);
   return (await writeJsonExclusive(path, value)).map(() => value);
 }
@@ -1329,23 +1337,23 @@ export async function listRunEvents(
 ): Promise<KernelResult<RunEvent[]>> {
   const paths = goalKernelPaths(workspaceRoot);
   const run = runDirectory(paths, id);
-  if (run.isErr()) return err(run.error);
+  if (run.isErr()) return Result.err(run.error);
   const directory = join(run.value, "events");
-  if (!(await pathExists(directory))) return ok([]);
+  if (!(await pathExists(directory))) return Result.ok([]);
   const namesResult = await caughtAsync(async () =>
     (await readdir(directory))
       .filter((entry) => entry.endsWith(".json"))
       .toSorted(),
   );
-  if (namesResult.isErr()) return err(namesResult.error);
+  if (namesResult.isErr()) return Result.err(namesResult.error);
   const events: RunEvent[] = [];
   for (const name of namesResult.value) {
     // Read in filename order (sorted above) so event identity is deterministic.
     const stored = await readJson(join(directory, name), `event ${name}`);
-    if (stored.isErr()) return err(stored.error);
+    if (stored.isErr()) return Result.err(stored.error);
     const value = asRecord(stored.value);
     if (value === undefined) {
-      return err(
+      return Result.err(
         new GoalKernelError("GK_STATE", `event ${name} must be an object`),
       );
     }
@@ -1356,7 +1364,7 @@ export async function listRunEvents(
       typeof eventDigest !== "string" ||
       !SHA256_RE.test(eventDigest)
     ) {
-      return err(
+      return Result.err(
         new GoalKernelError(
           "GK_INTEGRITY",
           `event ${name} has no valid content digest`,
@@ -1366,7 +1374,7 @@ export async function listRunEvents(
     const { event_sha256: _storedDigest, ...body } = value;
     const actualDigest = sha256Value(body);
     if (eventDigest !== filenameDigest || eventDigest !== actualDigest) {
-      return err(
+      return Result.err(
         new GoalKernelError("GK_INTEGRITY", `event ${name} digest mismatch`),
       );
     }
@@ -1383,7 +1391,7 @@ export async function listRunEvents(
       typeof value["goal_digest"] !== "string" ||
       typeof value["policy_digest"] !== "string"
     ) {
-      return err(
+      return Result.err(
         new GoalKernelError(
           "GK_STATE",
           `event ${name} has invalid required fields`,
@@ -1406,7 +1414,7 @@ export async function listRunEvents(
       event_sha256: eventDigest,
     });
   }
-  return ok(events);
+  return Result.ok(events);
 }
 
 function transcriptPath(value: unknown): string | undefined {
@@ -1527,7 +1535,7 @@ function hookEvent(
   if (path !== undefined) event["transcript_path"] = path;
   if (providerEvent === "UserPromptSubmit") {
     if (typeof input["prompt"] !== "string") {
-      return err(
+      return Result.err(
         new GoalKernelError(
           "GK_HOOK_PAYLOAD",
           "UserPromptSubmit is missing prompt",
@@ -1565,7 +1573,7 @@ function hookEvent(
       event["tool_error_sha256"] = sha256Value(input["error"] ?? null);
     }
   }
-  return ok(event);
+  return Result.ok(event);
 }
 
 function goalContext(
@@ -1714,11 +1722,11 @@ export async function processHookEvent(
 
   const appendedAttempt = await caughtAsync(async () => {
     const event = hookEvent(value, providerEvent, root);
-    if (event.isErr()) return err(event.error);
+    if (event.isErr()) return Result.err(event.error);
     return appendRunEvent(root, binding, event.value);
   });
   const appended = appendedAttempt.isErr()
-    ? err(appendedAttempt.error)
+    ? Result.err(appendedAttempt.error)
     : appendedAttempt.value;
   if (appended.isErr()) {
     const reason = `GK_EVENT_LEDGER_UNAVAILABLE: ${errorMessage(appended.error)}`;
@@ -1762,27 +1770,27 @@ export async function recordRunDecision(
   input: unknown,
 ): Promise<KernelResult<RunEvent>> {
   const decision = await parseRunDecision(input);
-  if (decision.isErr()) return err(decision.error);
+  if (decision.isErr()) return Result.err(decision.error);
   const binding = await readRunBinding(workspaceRoot, id);
-  if (binding.isErr()) return err(binding.error);
+  if (binding.isErr()) return Result.err(binding.error);
   const goal = await readBoundGoal(workspaceRoot, binding.value);
-  if (goal.isErr()) return err(goal.error);
+  if (goal.isErr()) return Result.err(goal.error);
   const paths = goalKernelPaths(workspaceRoot);
   const directory = runDirectory(paths, id);
-  if (directory.isErr()) return err(directory.error);
+  if (directory.isErr()) return Result.err(directory.error);
   return withExclusiveStateLock(
     join(directory.value, ".decision.lock"),
     `decision recording for ${id}`,
     async () => {
       const existingEvents = await listRunEvents(workspaceRoot, id);
-      if (existingEvents.isErr()) return err(existingEvents.error);
+      if (existingEvents.isErr()) return Result.err(existingEvents.error);
       const recordedResults = await Promise.all(
         existingEvents.value
           .filter((event) => event.event_type === "decision.recorded")
           .map((event) => parseRunDecision(event["decision"])),
       );
-      const recorded = Result.combine(recordedResults);
-      if (recorded.isErr()) return err(recorded.error);
+      const recorded = Result.all(recordedResults);
+      if (recorded.isErr()) return Result.err(recorded.error);
       const order = validateDecisionOrder(
         [decision.value],
         [
@@ -1790,7 +1798,7 @@ export async function recordRunDecision(
           ...recorded.value.map((item) => item.decision_id),
         ],
       );
-      if (order.isErr()) return err(order.error);
+      if (order.isErr()) return Result.err(order.error);
       return appendRunEvent(workspaceRoot, binding.value, {
         event_type: "decision.recorded",
         provider_event: "GoalKernelDecision",
@@ -1825,7 +1833,7 @@ export async function readGoalStatus(
 ): Promise<KernelResult<GoalStatus>> {
   const paths = goalKernelPaths(workspaceRoot);
   if (!(await pathExists(paths.config))) {
-    return ok({
+    return Result.ok({
       workspace_root: paths.root,
       configured: false,
       policy_version: POLICY_VERSION,
@@ -1834,7 +1842,7 @@ export async function readGoalStatus(
     });
   }
   if (!(await isTrustedConfig(paths))) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_STATE_PERMISSIONS",
         "config.json or its state directory is not private and trusted",
@@ -1842,9 +1850,9 @@ export async function readGoalStatus(
     );
   }
   const config = await ensureConfig(paths);
-  if (config.isErr()) return err(config.error);
+  if (config.isErr()) return Result.err(config.error);
   const active = await loadActiveGoal(paths);
-  if (active.isErr()) return err(active.error);
+  if (active.isErr()) return Result.err(active.error);
   const runsExist = await pathExists(paths.runs);
   let runs: readonly Readonly<{
     run_id: string;
@@ -1858,12 +1866,12 @@ export async function readGoalStatus(
     const names = await caughtAsync(async () =>
       (await readdir(paths.runs)).filter((name) => RUN_ID_RE.test(name)),
     );
-    if (names.isErr()) return err(names.error);
+    if (names.isErr()) return Result.err(names.error);
     const bindingResults = await Promise.all(
       names.value.map((name) => readRunBinding(paths.root, name)),
     );
-    const bindings = Result.combine(bindingResults);
-    if (bindings.isErr()) return err(bindings.error);
+    const bindings = Result.all(bindingResults);
+    if (bindings.isErr()) return Result.err(bindings.error);
     runs = bindings.value
       .toSorted((left, right) => right.bound_at.localeCompare(left.bound_at))
       .map((binding) => ({
@@ -1875,7 +1883,7 @@ export async function readGoalStatus(
         bound_at: binding.bound_at,
       }));
   }
-  return ok({
+  return Result.ok({
     workspace_root: paths.root,
     configured: true,
     policy_version: POLICY_VERSION,
@@ -1906,19 +1914,19 @@ export async function assertReadableRegularFile(
   maxBytes: number,
 ): Promise<KernelResult<void>> {
   const stats = await caughtAsync(() => stat(path));
-  if (stats.isErr()) return err(stats.error);
+  if (stats.isErr()) return Result.err(stats.error);
   if (!stats.value.isFile()) {
-    return err(
+    return Result.err(
       new GoalKernelError("GK_TRANSCRIPT", "transcript is not a regular file"),
     );
   }
   if (stats.value.size > maxBytes) {
-    return err(
+    return Result.err(
       new GoalKernelError(
         "GK_TRANSCRIPT",
         `transcript exceeds ${maxBytes} bytes`,
       ),
     );
   }
-  return ok(undefined);
+  return Result.ok(undefined);
 }

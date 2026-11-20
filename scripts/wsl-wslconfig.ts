@@ -1,6 +1,6 @@
 import { copyFile, stat } from "node:fs/promises";
 import { createConsola } from "consola";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 
 const consola = createConsola({ level: 4 });
 
@@ -18,7 +18,9 @@ const consola = createConsola({ level: 4 });
 const INTEROP_MS = 20_000;
 
 async function exists(path: string): Promise<boolean> {
-  return (await fromAsyncThrowable(() => stat(path))()).isOk();
+  return (
+    await Result.tryPromise({ try: () => stat(path), catch: (e: unknown) => e })
+  ).isOk();
 }
 
 // Same rule as scripts/reclaim-system.ts: no subprocess runs unbounded. Bun.$ has no timeout, so
@@ -154,7 +156,10 @@ if (await exists(dest)) {
   const backup = `${dest}.bak`;
   // Back up BEFORE overwriting, and stop if that fails: the point of the .bak is to survive a
   // failed replace, so a run that could not write it must not go on to replace anything.
-  const saved = await fromAsyncThrowable(() => copyFile(dest, backup))();
+  const saved = await Result.tryPromise({
+    try: () => copyFile(dest, backup),
+    catch: (e: unknown) => e,
+  });
   if (saved.isErr()) {
     consola.error(
       `could not back up ${dest} to ${backup}: ${String(saved.error)}\nhost copy left untouched — nothing was written.`,
@@ -167,7 +172,10 @@ if (await exists(dest)) {
 // ENOSPC here is an OPERATIONAL error on a drive this repo has watched hit 1,134,592 bytes free,
 // not a programmer error: report it as itself and leave the .bak in place, rather than exiting
 // through a stack trace that says nothing about what to do next.
-const wroteRes = await fromAsyncThrowable(() => copyFile(src, dest))();
+const wroteRes = await Result.tryPromise({
+  try: () => copyFile(src, dest),
+  catch: (e: unknown) => e,
+});
 if (wroteRes.isErr()) {
   consola.error(
     `could not write ${dest}: ${String(wroteRes.error)}\nIf this is ENOSPC, free space on C: first — the .bak (if any) still holds the\nprevious contents, so the host is in its pre-run state.`,

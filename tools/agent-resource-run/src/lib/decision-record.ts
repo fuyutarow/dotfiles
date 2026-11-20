@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const context = new AsyncLocalStorage<DecisionRecord>();
@@ -57,14 +57,19 @@ export const decisionPath = (id: string) =>
 export async function saveDecision(
   record: ReturnType<DecisionRecord["snapshot"]>,
 ) {
-  const saved = await fromAsyncThrowable(async () => {
-    const root = decisionDirectory();
-    await mkdir(root, { recursive: true, mode: 0o700 });
-    const path = decisionPath(record.decision_id);
-    const temporary = `${path}.${process.pid}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(record)}\n`, { mode: 0o600 });
-    await rename(temporary, path);
-  })();
+  const saved = await Result.tryPromise({
+    try: async () => {
+      const root = decisionDirectory();
+      await mkdir(root, { recursive: true, mode: 0o700 });
+      const path = decisionPath(record.decision_id);
+      const temporary = `${path}.${process.pid}.tmp`;
+      await writeFile(temporary, `${JSON.stringify(record)}\n`, {
+        mode: 0o600,
+      });
+      await rename(temporary, path);
+    },
+    catch: (error: unknown) => error,
+  });
   if (saved.isErr())
     process.stderr.write(
       `ERROR decision record unavailable: ${String(saved.error)}\n`,
@@ -88,9 +93,10 @@ export const DecisionRecordSchema = z.strictObject({
 export async function readDecision(
   id: string,
 ): Promise<z.output<typeof DecisionRecordSchema> | undefined> {
-  const read = await fromAsyncThrowable(() =>
-    readFile(decisionPath(id), "utf8"),
-  )();
+  const read = await Result.tryPromise({
+    try: () => readFile(decisionPath(id), "utf8"),
+    catch: (error: unknown) => error,
+  });
   if (read.isErr()) return undefined;
   const parsed = jsonOf(DecisionRecordSchema).safeParse(read.value);
   return parsed.success && parsed.data.decision_id === id

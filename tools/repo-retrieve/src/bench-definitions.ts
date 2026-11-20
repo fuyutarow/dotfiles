@@ -12,7 +12,7 @@ import { consola } from "consola";
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { findDefinitions } from "./definitions.ts";
 
@@ -83,7 +83,7 @@ async function runCase(
 ): Promise<Result<void, Error>> {
   const t0 = performance.now();
   const a = await findDefinitions(project, q, 10);
-  if (a.isErr()) return err(a.error);
+  if (a.isErr()) return Result.err(a.error);
   const answer = a.value;
   ms.push(performance.now() - t0);
   for (const n of answer.notes) consola.warn(`NOTE ${n}`);
@@ -94,7 +94,7 @@ async function runCase(
     consola.info(
       `${c.need} ${lang} absent  ${verdict} best=${answer.best.toFixed(2)} top=${answer.cards[0]?.name ?? "-"}`,
     );
-    return ok(undefined);
+    return Result.ok(undefined);
   }
   const rank = answer.cards.findIndex((d) => c.truth.includes(d.name)) + 1;
   const t = (tally[lang] ??= { n: 0, top1: 0, top3: 0, top10: 0 });
@@ -109,7 +109,7 @@ async function runCase(
   consola.info(
     `${c.need} ${lang} rank=${rank !== 0 ? rank : "×"} ${answer.strength} best=${answer.best.toFixed(2)} top=${top}`,
   );
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 const runs = spec.cases.flatMap((c) =>

@@ -14,7 +14,7 @@
 // 2 — usage error, or stdin empty / not UTF-8 / a terminal. Default prints nothing on success;
 // --status prints one stdout line naming each route's result.
 import { cli as cleyeCli } from "cleye";
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import pkg from "../package.json" with { type: "json" };
 import { copyNative, type NativeResult } from "./native.ts";
@@ -119,11 +119,12 @@ if (import.meta.main) {
     die("stdin is a terminal; pipe the text in, e.g. `printf x | smart-copy`");
   const bytes = await Bun.stdin.bytes();
   if (bytes.length === 0) die("stdin is empty; nothing to copy");
-  const decoded = await attempt(() =>
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-  );
-  if (!decoded.ok) die("stdin is not valid UTF-8");
-  const text = decoded.ok ? decoded.value : "";
+  const decoded = Result.try({
+    try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+    catch: (error: unknown) => error,
+  });
+  if (decoded.isErr()) die("stdin is not valid UTF-8");
+  const text = decoded.isOk() ? decoded.value : "";
 
   const env = process.env;
   const line = text.endsWith("\n") ? text : `${text}\n`;

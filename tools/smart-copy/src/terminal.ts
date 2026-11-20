@@ -20,11 +20,7 @@
 // and is not a route switch for callers: with it unset the behaviour is the one above.
 import { constants } from "node:fs";
 import { access, open, stat } from "node:fs/promises";
-import {
-  attempt,
-  errorMessage,
-  type Attempt,
-} from "@dotfiles/shared/src/attempt.ts";
+import { errorMessage, Result } from "../../shared/src/result.ts";
 
 export const TTY_SEAM = "SMART_COPY_TTY";
 /** One write (open + write) to a terminal device is cut here; a flow-controlled tty can block forever. */
@@ -47,19 +43,27 @@ export async function writeDevice(
   text: string,
   ms = TTY_MS,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
-  const work = (async (): Promise<Attempt<void>> => {
+  const work = (async (): Promise<Result<void, unknown>> => {
     // O_NOCTTY: opening an ancestor's terminal must not make it ours. O_APPEND keeps a pinned regular
     // file (a test) from being overwritten by a second write; on a tty it is a no-op.
-    const opened = await attempt(() =>
-      open(
-        device,
-        constants.O_WRONLY | constants.O_NOCTTY | constants.O_APPEND,
-      ),
-    );
-    if (!opened.ok) return opened;
-    const written = await attempt(() => opened.value.write(text));
-    await attempt(() => opened.value.close());
-    return written.ok ? { ok: true, value: undefined } : written;
+    const opened = await Result.tryPromise({
+      try: () =>
+        open(
+          device,
+          constants.O_WRONLY | constants.O_NOCTTY | constants.O_APPEND,
+        ),
+      catch: (error: unknown) => error,
+    });
+    if (opened.isErr()) return Result.err(opened.error);
+    const written = await Result.tryPromise({
+      try: () => opened.value.write(text),
+      catch: (error: unknown) => error,
+    });
+    await Result.tryPromise({
+      try: () => opened.value.close(),
+      catch: (error: unknown) => error,
+    });
+    return written.isOk() ? Result.ok(undefined) : Result.err(written.error);
   })();
   const timer = Promise.withResolvers<"timeout">();
   const handle = setTimeout(() => {
@@ -69,7 +73,7 @@ export async function writeDevice(
   clearTimeout(handle);
   if (first === "timeout")
     return { ok: false, reason: `${device}: no answer within ${ms} ms` };
-  return first.ok
+  return first.isOk()
     ? { ok: true }
     : { ok: false, reason: `${device}: ${errorMessage(first.error)}` };
 }
@@ -78,15 +82,17 @@ export async function writeDevice(
 async function psRow(
   pid: number,
 ): Promise<{ ppid: number; tty: string | undefined } | undefined> {
-  const spawned = await attempt(() =>
-    Bun.spawn(["ps", "-o", "ppid=,tty=", "-p", String(pid)], {
-      stdout: "pipe",
-      stderr: "ignore",
-      timeout: PS_MS,
-      killSignal: "SIGKILL",
-    }),
-  );
-  if (!spawned.ok) return undefined;
+  const spawned = Result.try({
+    try: () =>
+      Bun.spawn(["ps", "-o", "ppid=,tty=", "-p", String(pid)], {
+        stdout: "pipe",
+        stderr: "ignore",
+        timeout: PS_MS,
+        killSignal: "SIGKILL",
+      }),
+    catch: (error: unknown) => error,
+  });
+  if (spawned.isErr()) return undefined;
   const [out, code] = await Promise.all([
     new Response(spawned.value.stdout).text(),
     spawned.value.exited,
@@ -105,9 +111,17 @@ async function psRow(
 
 /** True for a character device this user may write: the only thing an ancestor's tty can be. */
 async function writableCharDevice(path: string): Promise<boolean> {
-  const info = await attempt(() => stat(path));
-  if (!info.ok || !info.value.isCharacterDevice()) return false;
-  return (await attempt(() => access(path, constants.W_OK))).ok;
+  const info = await Result.tryPromise({
+    try: () => stat(path),
+    catch: (error: unknown) => error,
+  });
+  if (info.isErr() || !info.value.isCharacterDevice()) return false;
+  return (
+    await Result.tryPromise({
+      try: () => access(path, constants.W_OK),
+      catch: (error: unknown) => error,
+    })
+  ).isOk();
 }
 
 const deviceOf = (tty: string): string =>

@@ -16,7 +16,7 @@ import consola from "consola";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { cli } from "cleye";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import {
   readDeclaration,
   resolvesIntoRepository,
@@ -61,19 +61,28 @@ async function migrateLink(
   dotfiles: string,
   dryRun: boolean,
 ): Promise<boolean> {
-  const state = await fromAsyncThrowable(() => lstat(path))();
+  const state = await Result.tryPromise({
+    try: () => lstat(path),
+    catch: (e: unknown) => e,
+  });
   if (state.isErr() || !state.value.isSymbolicLink()) return false;
   if (!(await resolvesIntoRepository(path, dotfiles))) {
     print(`left unrelated link: ${path}`);
     return false;
   }
-  const source = await fromAsyncThrowable(() => realpath(path), errorText)();
+  const source = await Result.tryPromise({
+    try: () => realpath(path),
+    catch: errorText,
+  });
   if (source.isErr()) {
     fail(`cannot migrate ${path}: ${errorText(source.error)}`);
     process.exitCode = 1;
     return false;
   }
-  const info = await fromAsyncThrowable(() => stat(source.value))();
+  const info = await Result.tryPromise({
+    try: () => stat(source.value),
+    catch: (e: unknown) => e,
+  });
   if (info.isErr()) {
     fail(
       `cannot migrate ${path}: link target is not a regular file or directory`,
@@ -93,10 +102,10 @@ async function migrateLink(
     return true;
   }
 
-  const temp = await fromAsyncThrowable(
-    () => mkdtemp(join(dirname(path), ".skills-migrate-")),
-    errorText,
-  )();
+  const temp = await Result.tryPromise({
+    try: () => mkdtemp(join(dirname(path), ".skills-migrate-")),
+    catch: errorText,
+  });
   if (temp.isErr()) {
     fail(`cannot migrate ${path}: ${errorText(temp.error)}`);
     process.exitCode = 1;
@@ -104,16 +113,16 @@ async function migrateLink(
   }
   const copy = join(temp.value, "copy");
   const backup = join(temp.value, "link");
-  const copied = await fromAsyncThrowable(
-    () =>
+  const copied = await Result.tryPromise({
+    try: () =>
       cp(source.value, copy, {
         recursive: info.value.isDirectory(),
         dereference: true,
         force: false,
         errorOnExist: true,
       }),
-    errorText,
-  )();
+    catch: errorText,
+  });
   if (copied.isErr()) {
     await rm(temp.value, { recursive: true, force: true });
     fail(`cannot migrate ${path}: copy failed: ${errorText(copied.error)}`);
@@ -121,10 +130,10 @@ async function migrateLink(
     return false;
   }
 
-  const moved = await fromAsyncThrowable(
-    () => rename(path, backup),
-    errorText,
-  )();
+  const moved = await Result.tryPromise({
+    try: () => rename(path, backup),
+    catch: errorText,
+  });
   if (moved.isErr()) {
     await rm(temp.value, { recursive: true, force: true });
     fail(
@@ -133,15 +142,15 @@ async function migrateLink(
     process.exitCode = 1;
     return false;
   }
-  const installed = await fromAsyncThrowable(
-    () => rename(copy, path),
-    errorText,
-  )();
+  const installed = await Result.tryPromise({
+    try: () => rename(copy, path),
+    catch: errorText,
+  });
   if (installed.isErr()) {
-    const restored = await fromAsyncThrowable(
-      () => rename(backup, path),
-      errorText,
-    )();
+    const restored = await Result.tryPromise({
+      try: () => rename(backup, path),
+      catch: errorText,
+    });
     await rm(temp.value, { recursive: true, force: true });
     fail(
       `cannot migrate ${path}: could not install copy: ${errorText(installed.error)}` +
@@ -168,7 +177,10 @@ async function migrateThirdPartyLinks(
   for (const name of names.toSorted())
     if (await migrateLink(join(root, name), dotfiles, dryRun)) changed += 1;
 
-  const entries = await fromAsyncThrowable(() => readdir(root))();
+  const entries = await Result.tryPromise({
+    try: () => readdir(root),
+    catch: (e: unknown) => e,
+  });
   if (entries.isErr()) return changed;
   const thirdParty = new Set(names);
   for (const name of entries.value.toSorted()) {

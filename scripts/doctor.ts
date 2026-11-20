@@ -86,12 +86,7 @@ import {
   MAPPING_ENV,
   parseMapping,
 } from "../tools/repo-retrieve/src/ccc-db-dir.ts";
-import {
-  attempt,
-  attemptOr,
-  errorMessage,
-  type Attempt,
-} from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { renderedForPlatform } from "./config-registry.ts";
 import { googleDriveTargets } from "./link-dots.ts";
 import {
@@ -243,7 +238,12 @@ const fail = (
 
 // The parsed JSON as `unknown` (null = missing or not JSON); each caller reads it through obj().
 async function readJson(path: string): Promise<unknown> {
-  const text = await attemptOr(() => readFile(path, "utf8"), null);
+  const text = (
+    await Result.tryPromise({
+      try: () => readFile(path, "utf8"),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(null);
   if (text === null) return null;
   const decoded = jsonText.safeParse(text);
   return decoded.success ? decoded.data : null;
@@ -283,8 +283,11 @@ export async function checkLinks(ctx: Ctx): Promise<Finding> {
 const STALE_CODES = new Set(["ENODEV", "ENOTCONN", "EIO", "ESTALE"]);
 
 async function statErrorCode(path: string): Promise<string | undefined> {
-  const probe = await attempt(() => statPath(path));
-  if (probe.ok) return undefined;
+  const probe = await Result.tryPromise({
+    try: () => statPath(path),
+    catch: (e: unknown) => e,
+  });
+  if (probe.isOk()) return undefined;
   const code = obj(probe.error)?.["code"];
   return typeof code === "string" ? code : undefined;
 }
@@ -331,7 +334,7 @@ export async function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
   ] as const) {
     const path = join(ctx.home, name);
     const statResult = await lstatOrUndefined(path);
-    if (!statResult.ok)
+    if (!statResult.isOk())
       return warn(
         "google-drive",
         `check crashed: ${errorMessage(statResult.error)}`,
@@ -360,14 +363,24 @@ export async function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
 }
 
 async function fileExists(path: string): Promise<boolean> {
-  return (await attempt(() => access(path, constants.F_OK))).ok;
+  return (
+    await Result.tryPromise({
+      try: () => access(path, constants.F_OK),
+      catch: (e: unknown) => e,
+    })
+  ).isOk();
 }
-async function lstatOrUndefined(path: string): Promise<Attempt<Stats | null>> {
-  const result = await attempt(() => lstat(path));
-  if (result.ok) return { ok: true, value: result.value };
+async function lstatOrUndefined(
+  path: string,
+): Promise<Result<Stats | null, unknown>> {
+  const result = await Result.tryPromise({
+    try: () => lstat(path),
+    catch: (e: unknown) => e,
+  });
+  if (result.isOk()) return Result.ok(result.value);
   return obj(result.error)?.["code"] === "ENOENT"
-    ? { ok: true, value: null }
-    : { ok: false, error: result.error };
+    ? Result.ok(null)
+    : Result.err(result.error);
 }
 
 export async function checkRipGraveyard(
@@ -400,8 +413,11 @@ export async function checkRipGraveyard(
     );
   if (!isAbsolute(effective))
     problems.push(`effective location is not absolute: ${effective}`);
-  const measured = await attempt(() => inspect(effective));
-  if (!measured.ok) {
+  const measured = await Result.tryPromise({
+    try: () => inspect(effective),
+    catch: (e: unknown) => e,
+  });
+  if (!measured.isOk()) {
     problems.push(
       `cannot inspect ${effective}: ${errorMessage(measured.error)}`,
     );
@@ -417,7 +433,7 @@ export async function checkRipGraveyard(
   }
 
   let scanWarning: string | undefined;
-  if (measured.ok && !measured.value.complete) {
+  if (measured.isOk() && !measured.value.complete) {
     const reason = measured.value.timedOut ? "time limit" : "scan limit";
     scanWarning = `${effective} measured at least ${measured.value.bytes} bytes across ${measured.value.visited} entries; ${reason} reached after ${measured.value.elapsedMs} ms, so the 10 GiB limit could not be confirmed`;
   }
@@ -443,26 +459,31 @@ export async function checkRipGraveyardTmp(
     (await statfs(path)).type,
 ): Promise<Finding> {
   const root = process.env["DOCTOR_TEST_TMP_ROOT"] ?? "/tmp";
-  const entries = await attempt(async () =>
-    (await readdir(root))
-      .filter((name) => name.startsWith("graveyard-"))
-      .map((name) => join(root, name)),
-  );
-  if (!entries.ok)
+  const entries = await Result.tryPromise({
+    try: async () =>
+      (await readdir(root))
+        .filter((name) => name.startsWith("graveyard-"))
+        .map((name) => join(root, name)),
+    catch: (e: unknown) => e,
+  });
+  if (!entries.isOk())
     return fail(
       "rip-graveyard-tmp",
       `cannot inspect ${root}: ${errorMessage(entries.error)}`,
       "disk-reclaim plan",
     );
-  const measured = await attempt(async () => {
-    const ramPaths: string[] = [];
-    for (const path of entries.value) {
-      const type = await filesystemType(path);
-      if (type === 0x01021994 || type === 0x858458f6) ramPaths.push(path);
-    }
-    return ramPaths;
+  const measured = await Result.tryPromise({
+    try: async () => {
+      const ramPaths: string[] = [];
+      for (const path of entries.value) {
+        const type = await filesystemType(path);
+        if (type === 0x01021994 || type === 0x858458f6) ramPaths.push(path);
+      }
+      return ramPaths;
+    },
+    catch: (e: unknown) => e,
   });
-  if (!measured.ok)
+  if (!measured.isOk())
     return warn(
       "rip-graveyard-tmp",
       `cannot inspect filesystem: ${errorMessage(measured.error)}`,
@@ -519,14 +540,17 @@ export async function checkRendered(ctx: Ctx): Promise<Finding> {
   // Copy bytes, never a symlink; renderedDiff still reports a deployed symlink as drift.
   const deployedSettings = join(ctx.home, ".claude/settings.json");
   if (await fileExists(deployedSettings)) {
-    const seeded = await attempt(async () => {
-      await mkdir(join(scratch, ".claude"), { recursive: true });
-      await writeFile(
-        join(scratch, ".claude/settings.json"),
-        await readFile(deployedSettings),
-      );
+    const seeded = await Result.tryPromise({
+      try: async () => {
+        await mkdir(join(scratch, ".claude"), { recursive: true });
+        await writeFile(
+          join(scratch, ".claude/settings.json"),
+          await readFile(deployedSettings),
+        );
+      },
+      catch: (e: unknown) => e,
     });
-    if (!seeded.ok)
+    if (!seeded.isOk())
       return warn(
         "rendered",
         `cannot read deployed settings: ${errorMessage(seeded.error)}`,
@@ -912,25 +936,30 @@ export async function checkLoginShell(ctx: Ctx): Promise<Finding> {
     [
       [".bash_profile", "zsh/bash_profile"],
       [".bashrc", "zsh/bashrc"],
-    ].map(async ([dst = "", src = ""]): Promise<Attempt<boolean>> => {
+    ].map(async ([dst = "", src = ""]): Promise<Result<boolean, unknown>> => {
       const link = join(ctx.home, dst);
       const stat = await lstatOrUndefined(link);
-      if (!stat.ok) return stat;
+      if (!stat.isOk()) return Result.err(stat.error);
       if (stat.value === null || !stat.value.isSymbolicLink())
-        return { ok: true, value: false };
-      const target = await attempt(() => readlink(link));
-      return target.ok
-        ? { ok: true, value: target.value === join(ctx.dotfiles, src) }
-        : target;
+        return Result.ok(false);
+      const target = await Result.tryPromise({
+        try: () => readlink(link),
+        catch: (e: unknown) => e,
+      });
+      return target.isOk()
+        ? Result.ok(target.value === join(ctx.dotfiles, src))
+        : Result.err(target.error);
     }),
   );
-  const handoffFailure = handoffChecks.find((result) => !result.ok);
+  const handoffFailure = handoffChecks.find((result) => !result.isOk());
   if (handoffFailure !== undefined)
     return warn(
       "login-shell",
       `check crashed: ${errorMessage(handoffFailure.error)}`,
     );
-  const handoff = handoffChecks.every((result) => result.ok && result.value);
+  const handoff = handoffChecks.every(
+    (result) => result.isOk() && result.value,
+  );
   return basename(shell) === "bash" && handoff
     ? pass(
         "login-shell",
@@ -1126,7 +1155,12 @@ async function reasonNetworkProcessDir(
     join(env["HOME"] ?? home, ".reason/network");
   const cwd = isAbsolute(raw) ? "/" : await readlink(join(base, "cwd"));
   const path = resolve(cwd, raw);
-  return attemptOr(() => realpath(path), path);
+  return (
+    await Result.tryPromise({
+      try: () => realpath(path),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(path);
 }
 
 // A process disappearing during the scan is harmless; unreadable live processes are unknown.
@@ -1142,21 +1176,30 @@ export async function checkReasonNetworkOneHome(
   ];
   const present: string[] = [];
   for (const key of keys) {
-    const result = await attempt(() => statPath(key));
-    if (result.ok) present.push(key);
+    const result = await Result.tryPromise({
+      try: () => statPath(key),
+      catch: (e: unknown) => e,
+    });
+    if (result.isOk()) present.push(key);
     else if (obj(result.error)?.["code"] !== "ENOENT")
       return warn(name, `cannot inspect key ${key}: ${String(result.error)}`);
   }
-  const listing = await attempt(() => readdir(procRoot));
-  if (!listing.ok)
+  const listing = await Result.tryPromise({
+    try: () => readdir(procRoot),
+    catch: (e: unknown) => e,
+  });
+  if (!listing.isOk())
     return warn(name, `cannot inspect ${procRoot}: ${String(listing.error)}`);
   const pids = listing.value.filter((p) => /^\d+$/u.test(p));
   const dirs = new Map<string, string[]>();
   for (const pid of pids) {
     const base = join(procRoot, pid);
-    const result = await attempt(() => reasonNetworkProcessDir(base, ctx.home));
-    if (!result.ok && obj(result.error)?.["code"] === "ENOENT") continue;
-    if (!result.ok)
+    const result = await Result.tryPromise({
+      try: () => reasonNetworkProcessDir(base, ctx.home),
+      catch: (e: unknown) => e,
+    });
+    if (!result.isOk() && obj(result.error)?.["code"] === "ENOENT") continue;
+    if (!result.isOk())
       return warn(name, `cannot inspect pid ${pid}: ${String(result.error)}`);
     if (result.value === undefined) continue;
     const members = dirs.get(result.value) ?? [];
@@ -1245,7 +1288,7 @@ export async function checkCccDaemon(
     ".config/systemd/user/default.target.wants/ccc-daemon.service",
   );
   const unitStat = await lstatOrUndefined(unit);
-  if (!unitStat.ok)
+  if (!unitStat.isOk())
     return warn("ccc-daemon", `check crashed: ${errorMessage(unitStat.error)}`);
   const installed = unitStat.value?.isFile() ?? false;
   const [wantsExists, unitExists] = await Promise.all([
@@ -1260,9 +1303,19 @@ export async function checkCccDaemon(
   const enablementLabel =
     enabled.out.trim() === "" ? "unknown enablement" : enabled.out.trim();
   const declaration = join(ctx.dotfiles, "cocoindex/ccc-daemon.service.wsl");
-  const declared = await attemptOr(() => readFile(declaration, "utf8"), "");
+  const declared = (
+    await Result.tryPromise({
+      try: () => readFile(declaration, "utf8"),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr("");
   const actual = installed
-    ? await attemptOr(() => readFile(unit, "utf8"), "")
+    ? (
+        await Result.tryPromise({
+          try: () => readFile(unit, "utf8"),
+          catch: (e: unknown) => e,
+        })
+      ).unwrapOr("")
     : "";
   const policyLines = declared
     .split("\n")
@@ -1572,8 +1625,11 @@ export async function checkTmpfsCapacity(
       > = () => statfs("/tmp", { bigint: true }),
 ): Promise<Finding> {
   if (!ctx.isWsl) return skip("tmpfs-capacity", "WSL only");
-  const measured = await attempt(async () => tmpfsUsage(await measure()));
-  if (!measured.ok)
+  const measured = await Result.tryPromise({
+    try: async () => tmpfsUsage(await measure()),
+    catch: (e: unknown) => e,
+  });
+  if (!measured.isOk())
     return warn(
       "tmpfs-capacity",
       `could not measure /tmp: ${errorMessage(measured.error)}`,
@@ -1834,8 +1890,11 @@ async function discoverRegisteredRepos(searchRoot: string): Promise<{
         await walk(nested);
       return;
     }
-    const listing = await attempt(() => readdir(dir, { withFileTypes: true }));
-    if (!listing.ok) {
+    const listing = await Result.tryPromise({
+      try: () => readdir(dir, { withFileTypes: true }),
+      catch: (e: unknown) => e,
+    });
+    if (!listing.isOk()) {
       complete = false;
       return;
     }
@@ -1909,20 +1968,23 @@ async function trackedOldPin(
   link: string,
   required: string,
 ): Promise<string | undefined> {
-  const read = await attempt(async () => {
-    const file = await realpath(link);
-    if (!file.endsWith(".toml")) return null;
-    const config = Bun.TOML.parse(await Bun.file(file).text());
-    const pin = obj(obj(config)?.["tools"])?.["bun"];
-    if (typeof pin !== "string" || !/^\d+\.\d+(?:\.\d+)?$/u.test(pin))
-      return null;
-    // A minor-line pin resolves to its newest patch; only a line below the minimum is stale.
-    const version = pin.split(".").length === 2 ? `${pin}.999999` : pin;
-    return Bun.semver.satisfies(version, required)
-      ? null
-      : `pinned: ${file} (bun = "${pin}")`;
+  const read = await Result.tryPromise({
+    try: async () => {
+      const file = await realpath(link);
+      if (!file.endsWith(".toml")) return null;
+      const config = Bun.TOML.parse(await Bun.file(file).text());
+      const pin = obj(obj(config)?.["tools"])?.["bun"];
+      if (typeof pin !== "string" || !/^\d+\.\d+(?:\.\d+)?$/u.test(pin))
+        return null;
+      // A minor-line pin resolves to its newest patch; only a line below the minimum is stale.
+      const version = pin.split(".").length === 2 ? `${pin}.999999` : pin;
+      return Bun.semver.satisfies(version, required)
+        ? null
+        : `pinned: ${file} (bun = "${pin}")`;
+    },
+    catch: (e: unknown) => e,
   });
-  return read.ok ? (read.value ?? undefined) : undefined;
+  return read.isOk() ? (read.value ?? undefined) : undefined;
 }
 
 export async function checkBunFloor(
@@ -1939,7 +2001,12 @@ export async function checkBunFloor(
     );
   const installs = join(ctx.home, ".local/share/mise/installs/bun");
   const tracked = join(ctx.home, ".local/state/mise/tracked-configs");
-  const installed = await attemptOr(() => readdir(installs), []);
+  const installed = (
+    await Result.tryPromise({
+      try: () => readdir(installs),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr([]);
   const candidates = new Set([
     process.execPath,
     ...installed.map((v) => join(installs, v, "bin/bun")),
@@ -1962,7 +2029,12 @@ export async function checkBunFloor(
       old.push(`${binary} reports ${version}; required ${required}`);
     } else checked.push(`${binary}=${version}`);
   }
-  for (const link of await attemptOr(() => readdir(tracked), [])) {
+  for (const link of (
+    await Result.tryPromise({
+      try: () => readdir(tracked),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr([])) {
     const hit = await trackedOldPin(join(tracked, link), required);
     if (hit !== undefined) old.push(hit);
   }
@@ -2080,10 +2152,11 @@ export async function checkCodexRuntime(ctx: Ctx): Promise<Finding> {
 }
 
 export async function checkCodexSandboxNetwork(ctx: Ctx): Promise<Finding> {
-  const configuredHome = await attempt(() =>
-    configHome(ctx.dotfiles, ctx.home),
-  );
-  if (!configuredHome.ok)
+  const configuredHome = await Result.tryPromise({
+    try: () => configHome(ctx.dotfiles, ctx.home),
+    catch: (e: unknown) => e,
+  });
+  if (!configuredHome.isOk())
     return fail(
       "codex-config",
       `cannot resolve the declared Codex configuration home: ${errorMessage(configuredHome.error)}`,
@@ -2574,8 +2647,11 @@ async function main(): Promise<void> {
     selected.map(async (c) => {
       const why = c.applies(ctx);
       if (why !== null) return skip(c.name, why);
-      const finding = await attempt(() => c.run(ctx));
-      return finding.ok
+      const finding = await Result.tryPromise({
+        try: () => c.run(ctx),
+        catch: (e: unknown) => e,
+      });
+      return finding.isOk()
         ? finding.value
         : warn(c.name, `check crashed: ${errorMessage(finding.error)}`);
     }),
@@ -2585,8 +2661,11 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  const result = await attempt(main);
-  if (!result.ok) {
+  const result = await Result.tryPromise({
+    try: main,
+    catch: (e: unknown) => e,
+  });
+  if (!result.isOk()) {
     consola.error(`FATAL: ${errorMessage(result.error)}`);
     process.exitCode = 2;
   }

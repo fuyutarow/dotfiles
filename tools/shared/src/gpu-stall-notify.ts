@@ -3,8 +3,7 @@
 import { mkdir, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { release } from "node:os";
-import { err, ok, type Result } from "neverthrow";
-import { attempt, errorMessage } from "./attempt.ts";
+import { errorMessage, Result } from "./result.ts";
 import { GpuStateSchema, gpuStatePath, MAX_BYTES } from "./gpu-samples.ts";
 import { jsonOf, z } from "./zod.ts";
 
@@ -37,16 +36,16 @@ export function gpuStallNotificationCommand(
   if (!isWsl) {
     const binary = which("notify-send");
     if (binary === null)
-      return err(
+      return Result.err(
         new Error("notify-send is required for GPU stall notifications"),
       );
-    return ok([binary, "--urgency=critical", title, body]);
+    return Result.ok([binary, "--urgency=critical", title, body]);
   }
   const binary =
     which("powershell.exe") ??
     which("/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe");
   if (binary === null)
-    return err(
+    return Result.err(
       new Error("Windows powershell.exe is required for WSL GPU stall toasts"),
     );
   // Fixed title and validated timestamp keep XML and PowerShell interpolation inert.
@@ -57,7 +56,7 @@ $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
 $xml.LoadXml('<toast><visual><binding template="ToastGeneric"><text>${title}</text><text>${body}</text></binding></visual></toast>')
 $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Microsoft.WindowsPowerShell').Show($toast)`;
-  return ok([
+  return Result.ok([
     binary,
     "-NoProfile",
     "-NonInteractive",
@@ -69,16 +68,21 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
 async function readOptional(
   path: string,
 ): Promise<Result<string | undefined, Error>> {
-  const read = await attempt(async () => {
-    const file = Bun.file(path);
-    if (file.size > MAX_BYTES)
-      return err(new Error(`${path}: state exceeds ${MAX_BYTES} bytes`));
-    return ok(await file.text());
+  const read = await Result.tryPromise({
+    try: async () => {
+      const file = Bun.file(path);
+      if (file.size > MAX_BYTES)
+        return Result.err(
+          new Error(`${path}: state exceeds ${MAX_BYTES} bytes`),
+        );
+      return Result.ok(await file.text());
+    },
+    catch: (e: unknown) => e,
   });
-  if (read.ok) return read.value;
+  if (read.isOk()) return read.value;
   if (z.object({ code: z.literal("ENOENT") }).safeParse(read.error).success)
-    return ok(undefined);
-  return err(new Error(errorMessage(read.error)));
+    return Result.ok(undefined);
+  return Result.err(new Error(errorMessage(read.error)));
 }
 
 type NotifyOptions = {
@@ -90,8 +94,13 @@ type NotifyOptions = {
 export async function notifyGpuStall(
   options: NotifyOptions = {},
 ): Promise<Result<boolean, Error>> {
-  const result = await attempt(() => notify(options));
-  return result.ok ? result.value : err(new Error(errorMessage(result.error)));
+  const result = await Result.tryPromise({
+    try: () => notify(options),
+    catch: (e: unknown) => e,
+  });
+  return result.isOk()
+    ? result.value
+    : Result.err(new Error(errorMessage(result.error)));
 }
 
 async function notify(options: NotifyOptions): Promise<Result<boolean, Error>> {
@@ -102,28 +111,30 @@ async function notify(options: NotifyOptions): Promise<Result<boolean, Error>> {
     readOptional(statePath),
     readOptional(receiptPath),
   ]);
-  if (text.isErr()) return err(text.error);
-  if (receiptText.isErr()) return err(receiptText.error);
-  if (text.value === undefined) return ok(false);
+  if (text.isErr()) return Result.err(text.error);
+  if (receiptText.isErr()) return Result.err(receiptText.error);
+  if (text.value === undefined) return Result.ok(false);
   const state = jsonOf(StallState).safeParse(text.value);
   if (!state.success)
-    return err(new Error(`${statePath}: invalid GPU owner state`));
+    return Result.err(new Error(`${statePath}: invalid GPU owner state`));
   const receipt =
     receiptText.value === undefined
       ? { success: true, data: undefined }
       : jsonOf(Receipt).safeParse(receiptText.value);
   if (!receipt.success)
-    return err(new Error(`${receiptPath}: invalid notification receipt`));
+    return Result.err(
+      new Error(`${receiptPath}: invalid notification receipt`),
+    );
   const since = pendingGpuStall(state.data, receipt.data);
-  if (since === undefined) return ok(false);
+  if (since === undefined) return Result.ok(false);
   // Prepare the receipt directory before sending to avoid delivery on a known write failure.
   await mkdir(dirname(receiptPath), { recursive: true });
   const sent = await (options.send ?? sendDesktopNotification)(since);
-  if (sent.isErr()) return err(sent.error);
+  if (sent.isErr()) return Result.err(sent.error);
   const temp = `${receiptPath}.${process.pid}.tmp`;
   await Bun.write(temp, `${JSON.stringify({ unresponsiveSince: since })}\n`);
   await rename(temp, receiptPath);
-  return ok(true);
+  return Result.ok(true);
 }
 
 async function sendDesktopNotification(
@@ -133,7 +144,7 @@ async function sendDesktopNotification(
     since,
     /microsoft/iu.test(release()),
   );
-  if (command.isErr()) return err(command.error);
+  if (command.isErr()) return Result.err(command.error);
   const child = Bun.spawn({
     cmd: command.value,
     stdin: "ignore",
@@ -143,12 +154,12 @@ async function sendDesktopNotification(
   });
   const exit = await child.exited;
   if (exit !== 0)
-    return err(
+    return Result.err(
       new Error(
         `GPU desktop notification failed (exit ${exit}); receipt not recorded`,
       ),
     );
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 if (import.meta.main) {

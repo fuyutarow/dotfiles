@@ -40,7 +40,7 @@ import {
 import { connect } from "node:net";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 export const WSL_DIR = "/run/WSL";
@@ -319,17 +319,19 @@ async function main(): Promise<number> {
     process.stderr.write("wsl-interop-session: takes no arguments\n");
     return 2;
   }
-  const result = await attempt(() =>
-    selectSocket({
-      sockets: () => listSockets(),
-      alive,
-      probe,
-      consoleSession,
-      ...fileCache(process.env["XDG_RUNTIME_DIR"]),
-      now: () => performance.now(),
-    }),
-  );
-  const outcome: Selection = result.ok
+  const result = await Result.tryPromise({
+    try: () =>
+      selectSocket({
+        sockets: () => listSockets(),
+        alive,
+        probe,
+        consoleSession,
+        ...fileCache(process.env["XDG_RUNTIME_DIR"]),
+        now: () => performance.now(),
+      }),
+    catch: (e: unknown) => e,
+  });
+  const outcome: Selection = result.isOk()
     ? result.value
     : { ok: false, reason: errorMessage(result.error) };
   if (!outcome.ok) {

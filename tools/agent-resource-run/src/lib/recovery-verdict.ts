@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { fromAsyncThrowable, fromThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 export const RECOVERY_VERDICT_MAX_AGE_MS = 5 * 60 * 1000;
@@ -50,9 +50,10 @@ export function assessRecoveryVerdict(
   }
 
   const verdict = parsed.data;
-  const recordedAt = fromThrowable(() =>
-    Temporal.Instant.from(verdict.recorded_at),
-  )();
+  const recordedAt = Result.try({
+    try: () => Temporal.Instant.from(verdict.recorded_at),
+    catch: (error: unknown) => error,
+  });
   const recordedAtMs = recordedAt.isOk()
     ? recordedAt.value.epochMilliseconds
     : Number.NaN;
@@ -89,9 +90,12 @@ export function assessRecoveryVerdict(
 export async function readRecoveryVerdict(
   path = VERDICT_PATH,
 ): Promise<string | undefined> {
-  return (await fromAsyncThrowable(() => readFile(path, "utf8"))()).unwrapOr(
-    undefined,
-  );
+  return (
+    await Result.tryPromise({
+      try: () => readFile(path, "utf8"),
+      catch: (error: unknown) => error,
+    })
+  ).unwrapOr(undefined);
 }
 
 /** Once a HOLD is observed, only a fresh OK can release it. */

@@ -394,7 +394,8 @@ run = "bun scripts/lint-bun.ts"
 # one place the graduation project, package.json, made neverthrow importable) and let
 # render-claude-settings.ts opt out IN-FILE via `/* oxlint-disable ... */`, since oxlint 1.82's
 # overrides.files has no working exclusion glob (a `!path` entry matches every OTHER file
-# instead, verified 2026-09-12). agents/hooks/attempt.ts closed that gap — every audited file now
+# instead, verified 2026-09-12). agents/hooks/attempt.ts closed that gap (tools/shared/src/result.ts
+# replaced it on 2026-11-20) — every audited file now
 # has a dependency-free route to the ban's replacement — so both the scoping and the opt-out are
 # retired: audit targets get no exception rules, and there is no escape hatch
 # (`oxlint-disable`/`oxlint-disable-next-line`, in any form) anywhere in this repo's TS.

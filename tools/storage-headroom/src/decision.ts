@@ -48,11 +48,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import {
-  attempt,
-  attemptOr,
-  errorMessage,
-} from "@dotfiles/shared/src/attempt.ts";
+import { errorMessage, Result } from "../../shared/src/result.ts";
 import {
   type ShellCommand,
   effective as effectiveCommand,
@@ -381,15 +377,21 @@ async function loadConfig(): Promise<{
   config: Config | null;
   errors: string[];
 }> {
-  const read = await attempt(() => readFile(CONFIG_PATH, "utf8"));
-  if (!read.ok) {
+  const read = await Result.tryPromise({
+    try: () => readFile(CONFIG_PATH, "utf8"),
+    catch: (error: unknown) => error,
+  });
+  if (read.isErr()) {
     return {
       config: null,
       errors: [`cannot read ${CONFIG_PATH}: ${errorMessage(read.error)}`],
     };
   }
-  const parsed = await attempt(() => Bun.TOML.parse(read.value));
-  if (!parsed.ok) {
+  const parsed = Result.try({
+    try: () => Bun.TOML.parse(read.value),
+    catch: (error: unknown) => error,
+  });
+  if (parsed.isErr()) {
     return {
       config: null,
       errors: [
@@ -660,48 +662,61 @@ async function space(path: string): Promise<Space | null> {
     cacheDir,
     `${createHash("sha1").update(path).digest("hex")}.statfs.json`,
   );
-  const cached = await attemptOr(async () => {
-    const value = parseJson(await readFile(cacheFile, "utf8"));
-    const free = num(at(value, "free"));
-    const total = num(at(value, "total"));
-    const atMs = num(at(value, "at"));
-    const age = nowMs() - (atMs ?? 0);
-    return free !== undefined &&
-      total !== undefined &&
-      atMs !== undefined &&
-      age >= 0 &&
-      age <= 2_000
-      ? {
-          free,
-          total,
-          type: num(at(value, "type")),
-          files: num(at(value, "files")),
-          ffree: num(at(value, "ffree")),
-        }
-      : null;
-  }, null);
+  const cached = (
+    await Result.tryPromise({
+      try: async () => {
+        const value = parseJson(await readFile(cacheFile, "utf8"));
+        const free = num(at(value, "free"));
+        const total = num(at(value, "total"));
+        const atMs = num(at(value, "at"));
+        const age = nowMs() - (atMs ?? 0);
+        return free !== undefined &&
+          total !== undefined &&
+          atMs !== undefined &&
+          age >= 0 &&
+          age <= 2_000
+          ? {
+              free,
+              total,
+              type: num(at(value, "type")),
+              files: num(at(value, "files")),
+              ffree: num(at(value, "ffree")),
+            }
+          : null;
+      },
+      catch: (error: unknown) => error,
+    })
+  ).unwrapOr(null);
   if (cached !== null) return cached;
 
-  const measuredSpace = await attemptOr(async () => {
-    const s = await statfs(path);
-    return {
-      free: s.bavail * s.bsize,
-      total: s.blocks * s.bsize,
-      type: s.type,
-      files: s.files,
-      ffree: s.ffree,
-    };
-  }, null);
+  const measuredSpace = (
+    await Result.tryPromise({
+      try: async () => {
+        const s = await statfs(path);
+        return {
+          free: s.bavail * s.bsize,
+          total: s.blocks * s.bsize,
+          type: s.type,
+          files: s.files,
+          ffree: s.ffree,
+        };
+      },
+      catch: (error: unknown) => error,
+    })
+  ).unwrapOr(null);
   if (measuredSpace === null) return null;
-  await attempt(async () => {
-    await mkdir(cacheDir, { recursive: true });
-    await writeFile(
-      cacheFile,
-      JSON.stringify({
-        ...measuredSpace,
-        at: Temporal.Now.instant().epochMilliseconds,
-      }),
-    );
+  await Result.tryPromise({
+    try: async () => {
+      await mkdir(cacheDir, { recursive: true });
+      await writeFile(
+        cacheFile,
+        JSON.stringify({
+          ...measuredSpace,
+          at: Temporal.Now.instant().epochMilliseconds,
+        }),
+      );
+    },
+    catch: (error: unknown) => error,
   });
   return measuredSpace;
 }
@@ -716,19 +731,24 @@ async function requestRecovery(): Promise<string> {
     ".local/state/wsl-capacity-recover/last-request",
   );
   // First request, or an unavailable stamp: still attempt to queue recovery.
-  const mtimeMs = await attemptOr(
-    async () => (await stat(stamp)).mtimeMs,
-    null,
-  );
+  const mtimeMs = (
+    await Result.tryPromise({
+      try: async () => (await stat(stamp)).mtimeMs,
+      catch: (error: unknown) => error,
+    })
+  ).unwrapOr(null);
   if (
     mtimeMs !== null &&
     Temporal.Now.instant().epochMilliseconds - mtimeMs < 60_000
   )
     return " Automatic recovery was recently queued.";
   // The drive may already be critically low. systemd still gets a chance below.
-  await attempt(async () => {
-    await mkdir(dirname(stamp), { recursive: true });
-    await writeFile(stamp, `${Temporal.Now.instant().epochMilliseconds}\n`);
+  await Result.tryPromise({
+    try: async () => {
+      await mkdir(dirname(stamp), { recursive: true });
+      await writeFile(stamp, `${Temporal.Now.instant().epochMilliseconds}\n`);
+    },
+    catch: (error: unknown) => error,
   });
   // bounded: GNU timeout caps this non-blocking systemd recovery request at three seconds.
   const result = Bun.spawn(
@@ -782,10 +802,12 @@ async function measured(
     `${createHash("sha1").update(path).digest("hex")}.json`,
   );
   // no or unreadable cache: measure
-  const cached = await attemptOr(
-    async () => parseSize(parseJson(await readFile(cacheFile, "utf8"))),
-    null,
-  );
+  const cached = (
+    await Result.tryPromise({
+      try: async () => parseSize(parseJson(await readFile(cacheFile, "utf8"))),
+      catch: (error: unknown) => error,
+    })
+  ).unwrapOr(null);
   if (
     cached !== null &&
     Temporal.Now.instant().epochMilliseconds - cached.at <
@@ -807,9 +829,12 @@ async function measured(
     at: Temporal.Now.instant().epochMilliseconds,
   };
   // an unwritable cache only costs a re-measure next time
-  await attempt(async () => {
-    await mkdir(cacheDir, { recursive: true });
-    await writeFile(cacheFile, JSON.stringify(size));
+  await Result.tryPromise({
+    try: async () => {
+      await mkdir(cacheDir, { recursive: true });
+      await writeFile(cacheFile, JSON.stringify(size));
+    },
+    catch: (error: unknown) => error,
   });
   return size;
 }

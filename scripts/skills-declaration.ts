@@ -1,12 +1,6 @@
 import { lstat, readFile, readlink, readdir, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import {
-  err,
-  fromAsyncThrowable,
-  fromThrowable,
-  ok,
-  type Result,
-} from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 const SkillName = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u);
@@ -36,31 +30,34 @@ function errorText(error: unknown): string {
 export function parseDeclaration(
   text: string,
 ): Result<ThirdPartySkill, string> {
-  const toml = fromThrowable((source: string) => Bun.TOML.parse(source))(text);
-  if (toml.isErr()) return err(`invalid TOML: ${errorText(toml.error)}`);
+  const toml = Result.try({
+    try: () => ((source: string) => Bun.TOML.parse(source))(text),
+    catch: (e: unknown) => e,
+  });
+  if (toml.isErr()) return Result.err(`invalid TOML: ${errorText(toml.error)}`);
 
   const parsed = DeclarationSchema.safeParse(toml.value);
   if (!parsed.success)
-    return err(
+    return Result.err(
       `invalid declaration: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
     );
 
   const names = parsed.data.skills.map((entry) => entry.skill);
   if (new Set(names).size !== names.length)
-    return err("invalid declaration: skill names must be unique");
+    return Result.err("invalid declaration: skill names must be unique");
 
-  return ok(parsed.data);
+  return Result.ok(parsed.data);
 }
 
 export async function readDeclaration(
   root: string,
 ): Promise<Result<ThirdPartySkill, string>> {
-  const file = await fromAsyncThrowable(
-    () => readFile(resolve(root, DECLARATION_PATH), "utf8"),
-    errorText,
-  )();
+  const file = await Result.tryPromise({
+    try: () => readFile(resolve(root, DECLARATION_PATH), "utf8"),
+    catch: errorText,
+  });
   return file.isErr()
-    ? err(`${DECLARATION_PATH}: ${errorText(file.error)}`)
+    ? Result.err(`${DECLARATION_PATH}: ${errorText(file.error)}`)
     : parseDeclaration(file.value);
 }
 
@@ -77,25 +74,27 @@ export function formatDeclaration(declaration: ThirdPartySkill): string {
 export function parseSkillLock(text: string): Result<SkillLock, string> {
   const parsed = jsonOf(SkillLockSchema).safeParse(text);
   if (!parsed.success)
-    return err(
+    return Result.err(
       `invalid skills lock: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
     );
-  return ok(parsed.data);
+  return Result.ok(parsed.data);
 }
 
 export async function skillFiles(skillsDir: string): Promise<SkillFile[]> {
-  const listing = await fromAsyncThrowable(() =>
-    readdir(skillsDir, { withFileTypes: true }),
-  )();
+  const listing = await Result.tryPromise({
+    try: () => readdir(skillsDir, { withFileTypes: true }),
+    catch: (e: unknown) => e,
+  });
   if (listing.isErr()) return [];
   const files = await Promise.all(
     listing.value
       .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
       .map(async (entry) => {
         const path = resolve(skillsDir, entry.name, "SKILL.md");
-        const content = await fromAsyncThrowable(() =>
-          readFile(path, "utf8"),
-        )();
+        const content = await Result.tryPromise({
+          try: () => readFile(path, "utf8"),
+          catch: (e: unknown) => e,
+        });
         return content.isOk() ? { path, content: content.value } : null;
       }),
   );
@@ -115,9 +114,10 @@ export async function skillLayoutRefusal(
 export async function inHouseLayoutRefusals(
   skillsDir: string,
 ): Promise<string[]> {
-  const listing = await fromAsyncThrowable(() =>
-    readdir(skillsDir, { withFileTypes: true }),
-  )();
+  const listing = await Result.tryPromise({
+    try: () => readdir(skillsDir, { withFileTypes: true }),
+    catch: (e: unknown) => e,
+  });
   if (listing.isErr()) return [];
   const refusals = await Promise.all(
     listing.value
@@ -152,20 +152,36 @@ export function thirdPartySkillFiles(
 }
 
 export async function pathExists(path: string): Promise<boolean> {
-  return (await fromAsyncThrowable(() => lstat(path))()).isOk();
+  return (
+    await Result.tryPromise({
+      try: () => lstat(path),
+      catch: (e: unknown) => e,
+    })
+  ).isOk();
 }
 
 export async function isSymlink(path: string): Promise<boolean> {
-  return (await fromAsyncThrowable(() => lstat(path))())
+  return (
+    await Result.tryPromise({
+      try: () => lstat(path),
+      catch: (e: unknown) => e,
+    })
+  )
     .map((info) => info.isSymbolicLink())
     .unwrapOr(false);
 }
 
 async function canonicalPath(path: string): Promise<string | undefined> {
   const absolute = resolve(path);
-  const direct = await fromAsyncThrowable(() => realpath(absolute))();
+  const direct = await Result.tryPromise({
+    try: () => realpath(absolute),
+    catch: (e: unknown) => e,
+  });
   if (direct.isOk()) return direct.value;
-  const link = await fromAsyncThrowable(() => readlink(absolute))();
+  const link = await Result.tryPromise({
+    try: () => readlink(absolute),
+    catch: (e: unknown) => e,
+  });
   if (link.isOk()) {
     const target = isAbsolute(link.value)
       ? link.value
@@ -220,7 +236,10 @@ export async function isOwnInHouseLink(
 ): Promise<boolean> {
   if (!(await isSymlink(path))) return false;
   const checkout = await canonicalPath(root);
-  const target = await fromAsyncThrowable(() => realpath(path))();
+  const target = await Result.tryPromise({
+    try: () => realpath(path),
+    catch: (e: unknown) => e,
+  });
   if (target.isErr()) return false;
   if (checkout === undefined) return false;
   return target.value === resolve(checkout, "agents/skills", name);
@@ -307,10 +326,13 @@ export async function readToolLock(
   const path = toolLockPath(home);
   // Keep the raw error: mapping it to text first erased `code`, so a fresh machine's missing
   // lock was reported as unreadable instead of empty.
-  const contents = await fromAsyncThrowable(() => readFile(path, "utf8"))();
+  const contents = await Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (contents.isOk()) return parseSkillLock(contents.value);
   const code = z.object({ code: z.string() }).safeParse(contents.error);
   return code.success && code.data.code === "ENOENT"
-    ? ok({ skills: {} })
-    : err(`${path}: ${errorText(contents.error)}`);
+    ? Result.ok({ skills: {} })
+    : Result.err(`${path}: ${errorText(contents.error)}`);
 }

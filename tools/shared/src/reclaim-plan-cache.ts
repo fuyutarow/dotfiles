@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "./result.ts";
 import { jsonOf, z } from "./zod.ts";
 
 const MAX_CACHE_BYTES = 32 * 1024;
@@ -57,14 +57,17 @@ export async function writeReclaimPlanCache(
     .toSorted((left, right) => right.bytes - left.bytes)
     .slice(0, MAX_CANDIDATES);
   const path = cachePath(home);
-  const result = await fromAsyncThrowable(async () => {
-    await mkdir(dirname(path), { recursive: true });
-    const tmp = `${path}.${process.pid}.tmp`;
-    await writeFile(tmp, JSON.stringify({ generated_at: now, candidates }), {
-      mode: 0o600,
-    });
-    await rename(tmp, path);
-  })();
+  const result = await Result.tryPromise({
+    try: async () => {
+      await mkdir(dirname(path), { recursive: true });
+      const tmp = `${path}.${process.pid}.tmp`;
+      await writeFile(tmp, JSON.stringify({ generated_at: now, candidates }), {
+        mode: 0o600,
+      });
+      await rename(tmp, path);
+    },
+    catch: (e: unknown) => e,
+  });
   if (result.isErr())
     process.stderr.write(
       `disk-reclaim: could not update hook plan cache: ${String(result.error)}\n`,
@@ -76,11 +79,14 @@ export async function readReclaimPlanCache(
   now = Temporal.Now.instant().epochMilliseconds,
 ): Promise<CachedReclaimCandidate[]> {
   const path = cachePath(home);
-  const result = await fromAsyncThrowable(async () => {
-    const file = await stat(path);
-    if (file.size > MAX_CACHE_BYTES) return null;
-    return jsonOf(Cache).safeParse(await readFile(path, "utf8"));
-  })();
+  const result = await Result.tryPromise({
+    try: async () => {
+      const file = await stat(path);
+      if (file.size > MAX_CACHE_BYTES) return null;
+      return jsonOf(Cache).safeParse(await readFile(path, "utf8"));
+    },
+    catch: (e: unknown) => e,
+  });
   if (result.isErr() || result.value === null || !result.value.success)
     return [];
   const cached = result.value.data;

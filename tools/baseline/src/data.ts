@@ -1,5 +1,5 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 
 /** Line sets preserve names exactly; CRLF and blank lines are framing, not names. */
 export function lines(text: string): Set<string> {
@@ -28,9 +28,11 @@ export function parseFailures(
   const text = Bun.stripANSI(output).replaceAll("\r\n", "\n");
   const summary = /^\s*(\d+) fail$/mu.exec(text);
   if (!/^Ran \d+ tests? across \d+ files?\./mu.test(text) || summary === null)
-    return err("expected a completed Bun test run with the default reporter");
+    return Result.err(
+      "expected a completed Bun test run with the default reporter",
+    );
   if (/^\s*[1-9]\d* errors?\b/mu.test(text))
-    return err("Bun reported errors outside named test failures");
+    return Result.err("Bun reported errors outside named test failures");
   let file: string | undefined;
   const failures: string[] = [];
   for (const line of text.split("\n")) {
@@ -39,15 +41,17 @@ export function parseFailures(
     const failed = /^\(fail\) (.+?)(?: \[\d+(?:\.\d+)?m?s\])?$/u.exec(line);
     if (failed === null) continue;
     if (file === undefined || failed[1] === undefined)
-      return err("failure without a test file or name");
+      return Result.err("failure without a test file or name");
     const path = relative(cwd, resolve(cwd, file));
     if (isAbsolute(path) || path === ".." || path.startsWith(`..${sep}`))
-      return err(`test file is outside the checkout: ${file}`);
+      return Result.err(`test file is outside the checkout: ${file}`);
     if (/[\t\r\n]/u.test(path + failed[1]))
-      return err("test file and name must fit on one tab-separated line");
+      return Result.err(
+        "test file and name must fit on one tab-separated line",
+      );
     failures.push(`${path.split(sep).join("/")}\t${failed[1]}`);
   }
   if (failures.length !== Number(summary[1]))
-    return err("named failures do not match Bun's failure count");
-  return ok([...new Set(failures)].toSorted());
+    return Result.err("named failures do not match Bun's failure count");
+  return Result.ok([...new Set(failures)].toSorted());
 }

@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const sessionMetaSchema = z.object({
@@ -37,24 +37,29 @@ async function firstLine(path: string): Promise<string | undefined> {
 }
 
 async function readThread(path: string): Promise<CodexThread | undefined> {
-  const first = await attempt(() => firstLine(path));
-  if (!first.ok || first.value === undefined) return undefined;
+  const first = await Result.tryPromise({
+    try: () => firstLine(path),
+    catch: (error: unknown) => error,
+  });
+  if (first.isErr() || first.value === undefined) return undefined;
   const parsed = jsonOf(sessionMetaSchema).safeParse(first.value);
   if (!parsed.success) return undefined;
   const { session_id, id, cwd, timestamp } = parsed.data.payload;
   if (session_id !== id || !threadIdPattern.test(session_id)) return undefined;
-  const instant = await attempt(
-    () => Temporal.Instant.from(timestamp).epochMilliseconds,
-  );
-  if (!instant.ok) return undefined;
+  const instant = Result.try({
+    try: () => Temporal.Instant.from(timestamp).epochMilliseconds,
+    catch: (error: unknown) => error,
+  });
+  if (instant.isErr()) return undefined;
   return { id: session_id, cwd, timestamp: instant.value };
 }
 
 async function rolloutFiles(directory: string): Promise<string[]> {
-  const result = await attempt(() =>
-    readdir(directory, { withFileTypes: true }),
-  );
-  if (!result.ok) return [];
+  const result = await Result.tryPromise({
+    try: () => readdir(directory, { withFileTypes: true }),
+    catch: (error: unknown) => error,
+  });
+  if (result.isErr()) return [];
   const paths = await Promise.all(
     result.value.map(async (entry) => {
       const path = join(directory, entry.name);

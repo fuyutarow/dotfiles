@@ -5,6 +5,6 @@
   "type": "module",
   "dependencies": {
     "cleye": "2.6.0",
-    "neverthrow": "8.2.0"
+    "better-result": "3.0.1"
   }
 }

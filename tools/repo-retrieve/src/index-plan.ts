@@ -1,8 +1,7 @@
 // A read-only admission gate. The Python bridge owns enumeration; all policy is here.
 import { join, posix } from "node:path";
-import { err, ok, type Result } from "neverthrow";
+import { errorMessage, Result } from "../../shared/src/result.ts";
 import { z, jsonOf } from "@dotfiles/shared/src/zod.ts";
-import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
 import { cccPython } from "./ccc-scope.ts";
 import { readIndexRate } from "./index-rate.ts";
 
@@ -358,193 +357,209 @@ export async function computeIndexPlan(
   ccc: string,
   options: { validationTimeoutMs?: number; basis?: IncrementalBasis } = {},
 ): Promise<Result<IndexPlan, Error>> {
-  const result = await attempt(async () => {
-    const configFile = Bun.file(join(project, ".cocoindex_code", "rr.toml"));
-    const raw = (await configFile.exists())
-      ? Bun.TOML.parse(await configFile.text())
-      : {};
-    const configSchema = z.object({ index: BudgetSchema.optional() }).strict();
-    const config = configSchema.safeParse(raw);
-    if (!config.success)
-      return err(new Error(`invalid rr.toml: ${config.error.message}`));
-    const defaults = BudgetSchema.safeParse({});
-    if (!defaults.success) return err(new Error(defaults.error.message));
-    const budget = config.data.index ?? defaults.data;
-    const effective = {
-      max_est_chunks: budget.max_est_chunks,
-      max_data_share: budget.max_data_share,
-      max_seconds: budget.max_seconds,
-      est_chunks_per_second: budget.est_chunks_per_second,
-      max_total_bytes: aggregateByteLimits(budget).max_total_bytes,
-    };
-    const hasReason = budget.over_ceiling_reason !== undefined;
-    for (const key of [
-      "max_est_chunks",
-      "max_data_share",
-      "max_seconds",
-      "est_chunks_per_second",
-      "max_total_bytes",
-    ] as const) {
-      if (effective[key] > SHARED_CEILING[key] && !hasReason)
-        return err(
+  const result = await Result.tryPromise({
+    try: async () => {
+      const configFile = Bun.file(join(project, ".cocoindex_code", "rr.toml"));
+      const raw = (await configFile.exists())
+        ? Bun.TOML.parse(await configFile.text())
+        : {};
+      const configSchema = z
+        .object({ index: BudgetSchema.optional() })
+        .strict();
+      const config = configSchema.safeParse(raw);
+      if (!config.success)
+        return Result.err(
+          new Error(`invalid rr.toml: ${config.error.message}`),
+        );
+      const defaults = BudgetSchema.safeParse({});
+      if (!defaults.success)
+        return Result.err(new Error(defaults.error.message));
+      const budget = config.data.index ?? defaults.data;
+      const effective = {
+        max_est_chunks: budget.max_est_chunks,
+        max_data_share: budget.max_data_share,
+        max_seconds: budget.max_seconds,
+        est_chunks_per_second: budget.est_chunks_per_second,
+        max_total_bytes: aggregateByteLimits(budget).max_total_bytes,
+      };
+      const hasReason = budget.over_ceiling_reason !== undefined;
+      for (const key of [
+        "max_est_chunks",
+        "max_data_share",
+        "max_seconds",
+        "est_chunks_per_second",
+        "max_total_bytes",
+      ] as const) {
+        if (effective[key] > SHARED_CEILING[key] && !hasReason)
+          return Result.err(
+            new Error(
+              `${configFile.name}: ${key} root value ${effective[key]} exceeds the default ${SHARED_CEILING[key]} with no [index] over_ceiling_reason; state why this root needs more, or add excludes to .cocoindex_code/settings.yml and re-plan`,
+            ),
+          );
+      }
+      const basis: IncrementalBasis = options.basis ?? {
+        mode: "full",
+        reason: "no incremental basis supplied",
+      };
+      const python = await cccPython(ccc);
+      if (python === null)
+        return Result.err(
           new Error(
-            `${configFile.name}: ${key} root value ${effective[key]} exceeds the default ${SHARED_CEILING[key]} with no [index] over_ceiling_reason; state why this root needs more, or add excludes to .cocoindex_code/settings.yml and re-plan`,
+            "index plan refused: cannot locate ccc's Python interpreter",
           ),
         );
-    }
-    const basis: IncrementalBasis = options.basis ?? {
-      mode: "full",
-      reason: "no incremental basis supplied",
-    };
-    const python = await cccPython(ccc);
-    if (python === null)
-      return err(
-        new Error("index plan refused: cannot locate ccc's Python interpreter"),
-      );
-    // The limits document carries the changed-path list, which grows with the watermark gap.
-    // Linux caps each argv string at MAX_ARG_STRLEN (128 KiB), so it travels on stdin.
-    const limits = JSON.stringify({
-      ...CONTENT_LIMITS,
-      ...aggregateByteLimits(budget),
-      file_byte_allowances: budget.file_byte_allowances ?? {},
-      ...(basis.mode === "incremental"
-        ? { changed: basis.changed, recorded_ccc: basis.recordedCcc }
-        : {}),
-    });
-    const child = Bun.spawn({
-      cmd: [
-        python,
-        join(import.meta.dir, "ccc_plan.py"),
-        project,
-        "--limits",
-        "-",
-      ],
-      cwd: project,
-      env: {
-        ...process.env,
-        PYTHONDONTWRITEBYTECODE: "1",
-        RUST_LOG: "error",
-        OTEL_SDK_DISABLED: "true",
-      },
-      stdin: new Response(limits),
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: 120_000,
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0)
-      return err(
-        new Error(`index plan failed (exit ${code}): ${stderr.trim()}`),
-      );
-    const enumerated: PlanFile[] = [];
-    let installedCcc: string | null = null;
-    for (const line of stdout.split("\n").filter(Boolean)) {
-      const trailer = jsonOf(EnumerationSchema).safeParse(line);
-      if (trailer.success) {
-        installedCcc = trailer.data.ccc;
-        continue;
+      // The limits document carries the changed-path list, which grows with the watermark gap.
+      // Linux caps each argv string at MAX_ARG_STRLEN (128 KiB), so it travels on stdin.
+      const limits = JSON.stringify({
+        ...CONTENT_LIMITS,
+        ...aggregateByteLimits(budget),
+        file_byte_allowances: budget.file_byte_allowances ?? {},
+        ...(basis.mode === "incremental"
+          ? { changed: basis.changed, recorded_ccc: basis.recordedCcc }
+          : {}),
+      });
+      const child = Bun.spawn({
+        cmd: [
+          python,
+          join(import.meta.dir, "ccc_plan.py"),
+          project,
+          "--limits",
+          "-",
+        ],
+        cwd: project,
+        env: {
+          ...process.env,
+          PYTHONDONTWRITEBYTECODE: "1",
+          RUST_LOG: "error",
+          OTEL_SDK_DISABLED: "true",
+        },
+        stdin: new Response(limits),
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 120_000,
+      });
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      if (code !== 0)
+        return Result.err(
+          new Error(`index plan failed (exit ${code}): ${stderr.trim()}`),
+        );
+      const enumerated: PlanFile[] = [];
+      let installedCcc: string | null = null;
+      for (const line of stdout.split("\n").filter(Boolean)) {
+        const trailer = jsonOf(EnumerationSchema).safeParse(line);
+        if (trailer.success) {
+          installedCcc = trailer.data.ccc;
+          continue;
+        }
+        const file = jsonOf(FileSchema).safeParse(line);
+        if (!file.success)
+          return Result.err(
+            new Error(`invalid planner output: ${file.error.message}`),
+          );
+        enumerated.push(file.data);
       }
-      const file = jsonOf(FileSchema).safeParse(line);
-      if (!file.success)
-        return err(new Error(`invalid planner output: ${file.error.message}`));
-      enumerated.push(file.data);
-    }
-    const measuredRate = await readIndexRate();
-    const plan = summarize(
-      enumerated,
-      budget,
-      measuredRate.rate,
-      basis,
-      installedCcc,
-    );
-    const files = plan.files;
-    plan.rate_history = measuredRate.report;
-    // A directory can itself end in '.json'. Ask ccc whether a proposed glob would
-    // prune any ancestor of an included file; extension-scoping alone is insufficient.
-    const dataItems = plan.contributors.filter((item) => item.kind === "data");
-    const groupedData = Map.groupBy(
-      files.filter((file) => file.kind === "data"),
-      contributorKey,
-    );
-    const dataPatterns = dataItems.flatMap((item) =>
-      (groupedData.get(`${item.directory}\0${item.extension}\0data`) ?? []).map(
-        (file) => escapeGlob(file.path),
-      ),
-    );
-    const validationTimeoutMs = options.validationTimeoutMs ?? 120_000;
-    const validationSignal = AbortSignal.timeout(validationTimeoutMs);
-    const validation = Bun.spawn({
-      cmd: [
-        python,
-        join(import.meta.dir, "ccc_plan.py"),
-        project,
-        "--validate-excludes",
-      ],
-      cwd: project,
-      env: {
-        ...process.env,
-        PYTHONDONTWRITEBYTECODE: "1",
-        RUST_LOG: "error",
-        OTEL_SDK_DISABLED: "true",
-      },
-      stdin: new Response(
-        JSON.stringify({
-          patterns: dataPatterns,
-          paths: files.map((file) => file.path),
-        }),
-      ),
-      stdout: "pipe",
-      stderr: "pipe",
-      signal: validationSignal,
-    });
-    const [validationOut, validationErr, validationCode] = await Promise.all([
-      new Response(validation.stdout).text(),
-      new Response(validation.stderr).text(),
-      validation.exited,
-    ]);
-    const safe = jsonOf(z.array(z.boolean())).safeParse(validationOut);
-    if (
-      validationSignal.aborted ||
-      validationCode !== 0 ||
-      !safe.success ||
-      safe.data.length !== dataPatterns.length
-    ) {
-      let reason = `subprocess failed`;
-      if (validationSignal.aborted)
-        reason = `timed out after ${validationTimeoutMs}ms`;
-      else if (validationCode === 0 && !safe.success)
-        reason = `invalid validator output: ${safe.error.message.slice(0, 2000)}`;
-      else if (validationCode === 0 && safe.success)
-        reason = `validator result count mismatch: expected ${dataPatterns.length}, received ${safe.data.length}`;
-      return err(
-        new Error(
-          `cannot validate exclude suggestions: ${reason}; exit ${validationCode}; signal ${validation.signalCode ?? "none"}; stderr=${JSON.stringify(validationErr.slice(0, 2000))}; stdout=${JSON.stringify(validationOut.slice(0, 2000))}`,
-        ),
+      const measuredRate = await readIndexRate();
+      const plan = summarize(
+        enumerated,
+        budget,
+        measuredRate.rate,
+        basis,
+        installedCcc,
       );
-    }
-    const safeByPath = new Map(
-      dataPatterns.map((pattern, index) => [
-        pattern,
-        safe.data[index] === true,
-      ]),
-    );
-    for (const item of dataItems) {
-      const excludes = (
-        groupedData.get(`${item.directory}\0${item.extension}\0data`) ?? []
-      )
-        .filter((file) => safeByPath.get(escapeGlob(file.path)) === true)
-        .map((file) => `- '${escapeGlob(file.path).replaceAll("'", "''")}'`);
-      item.exclude = excludes.length === 0 ? null : excludes.join("\n");
-    }
-    return ok(plan);
+      const files = plan.files;
+      plan.rate_history = measuredRate.report;
+      // A directory can itself end in '.json'. Ask ccc whether a proposed glob would
+      // prune any ancestor of an included file; extension-scoping alone is insufficient.
+      const dataItems = plan.contributors.filter(
+        (item) => item.kind === "data",
+      );
+      const groupedData = Map.groupBy(
+        files.filter((file) => file.kind === "data"),
+        contributorKey,
+      );
+      const dataPatterns = dataItems.flatMap((item) =>
+        (
+          groupedData.get(`${item.directory}\0${item.extension}\0data`) ?? []
+        ).map((file) => escapeGlob(file.path)),
+      );
+      const validationTimeoutMs = options.validationTimeoutMs ?? 120_000;
+      const validationSignal = AbortSignal.timeout(validationTimeoutMs);
+      const validation = Bun.spawn({
+        cmd: [
+          python,
+          join(import.meta.dir, "ccc_plan.py"),
+          project,
+          "--validate-excludes",
+        ],
+        cwd: project,
+        env: {
+          ...process.env,
+          PYTHONDONTWRITEBYTECODE: "1",
+          RUST_LOG: "error",
+          OTEL_SDK_DISABLED: "true",
+        },
+        stdin: new Response(
+          JSON.stringify({
+            patterns: dataPatterns,
+            paths: files.map((file) => file.path),
+          }),
+        ),
+        stdout: "pipe",
+        stderr: "pipe",
+        signal: validationSignal,
+      });
+      const [validationOut, validationErr, validationCode] = await Promise.all([
+        new Response(validation.stdout).text(),
+        new Response(validation.stderr).text(),
+        validation.exited,
+      ]);
+      const safe = jsonOf(z.array(z.boolean())).safeParse(validationOut);
+      if (
+        validationSignal.aborted ||
+        validationCode !== 0 ||
+        !safe.success ||
+        safe.data.length !== dataPatterns.length
+      ) {
+        let reason = `subprocess failed`;
+        if (validationSignal.aborted)
+          reason = `timed out after ${validationTimeoutMs}ms`;
+        else if (validationCode === 0 && !safe.success)
+          reason = `invalid validator output: ${safe.error.message.slice(0, 2000)}`;
+        else if (validationCode === 0 && safe.success)
+          reason = `validator result count mismatch: expected ${dataPatterns.length}, received ${safe.data.length}`;
+        return Result.err(
+          new Error(
+            `cannot validate exclude suggestions: ${reason}; exit ${validationCode}; signal ${validation.signalCode ?? "none"}; stderr=${JSON.stringify(validationErr.slice(0, 2000))}; stdout=${JSON.stringify(validationOut.slice(0, 2000))}`,
+          ),
+        );
+      }
+      const safeByPath = new Map(
+        dataPatterns.map((pattern, index) => [
+          pattern,
+          safe.data[index] === true,
+        ]),
+      );
+      for (const item of dataItems) {
+        const excludes = (
+          groupedData.get(`${item.directory}\0${item.extension}\0data`) ?? []
+        )
+          .filter((file) => safeByPath.get(escapeGlob(file.path)) === true)
+          .map((file) => `- '${escapeGlob(file.path).replaceAll("'", "''")}'`);
+        item.exclude = excludes.length === 0 ? null : excludes.join("\n");
+      }
+      return Result.ok(plan);
+    },
+    catch: (error: unknown) => error,
   });
-  return result.ok
+  return result.isOk()
     ? result.value
-    : err(new Error(`index plan refused: ${errorMessage(result.error)}`));
+    : Result.err(
+        new Error(`index plan refused: ${errorMessage(result.error)}`),
+      );
 }
 
 export function planReport(plan: IndexPlan): string {

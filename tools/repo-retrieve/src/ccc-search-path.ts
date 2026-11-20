@@ -13,7 +13,7 @@
 
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 
 // Characters that a name may contain but that SQLite GLOB would read as a pattern.
 const GLOB_MAGIC = /[*?[\]{}]/u;
@@ -33,27 +33,30 @@ export async function cccSearchPath(
   project: string,
   path: string,
 ): Promise<string> {
-  const r = await fromAsyncThrowable(async () => {
-    const projectPath = await realpath(project);
-    const candidate = await realpath(resolve(projectPath, path));
-    const insideProject = relative(projectPath, candidate);
-    if (
-      insideProject === ".." ||
-      insideProject.startsWith(`..${sep}`) ||
-      isAbsolute(insideProject)
-    ) {
+  const r = await Result.tryPromise({
+    try: async () => {
+      const projectPath = await realpath(project);
+      const candidate = await realpath(resolve(projectPath, path));
+      const insideProject = relative(projectPath, candidate);
+      if (
+        insideProject === ".." ||
+        insideProject.startsWith(`..${sep}`) ||
+        isAbsolute(insideProject)
+      ) {
+        return path;
+      }
+      const rel = insideProject.split(sep).join("/");
+      const info = await stat(candidate);
+      if (info.isDirectory()) {
+        return rel === "" ? "**" : `${escapeGlobLiteral(rel)}/**`;
+      }
+      if (info.isFile() && GLOB_MAGIC.test(rel)) return escapeGlobLiteral(rel);
       return path;
-    }
-    const rel = insideProject.split(sep).join("/");
-    const info = await stat(candidate);
-    if (info.isDirectory()) {
-      return rel === "" ? "**" : `${escapeGlobLiteral(rel)}/**`;
-    }
-    if (info.isFile() && GLOB_MAGIC.test(rel)) return escapeGlobLiteral(rel);
-    return path;
-  }, asError)();
-  return r.match(
-    (value) => value,
-    () => path,
-  );
+    },
+    catch: asError,
+  });
+  return r.match({
+    ok: (value) => value,
+    err: () => path,
+  });
 }

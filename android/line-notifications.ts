@@ -4,14 +4,8 @@
 // Consumer: a human running `mise run android:line` or `android:line:check`.
 // Verdicts: PASS/FAIL lines; exit 0 = policy holds, 1 = policy drift, 2 = tool failure.
 
+import { Result } from "../tools/shared/src/result.ts";
 import { cli } from "cleye";
-import {
-  err,
-  fromAsyncThrowable,
-  ok as resultOk,
-  Result,
-  type Result as ResultType,
-} from "neverthrow";
 
 const LINE_PACKAGE = "jp.naver.line.android";
 const MESSAGE_CHANNEL = `${LINE_PACKAGE}.notification.NewMessages`;
@@ -41,61 +35,65 @@ type Probe = {
 async function run(
   command: string[],
   timeoutMs = 15_000,
-): Promise<ResultType<Probe, Error>> {
-  return fromAsyncThrowable(async () => {
-    const signal = AbortSignal.timeout(timeoutMs);
-    const proc = Bun.spawn(command, {
-      stdout: "pipe",
-      stderr: "pipe",
-      stdin: "ignore",
-      signal,
-      env: { ...process.env },
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]);
-    if (stdout.length > 16_000_000) {
-      return err(
-        new Error(`${command[0]} output exceeded the safe inspection limit`),
-      );
-    }
-    return resultOk({
-      code,
-      stdout,
-      stderr: stderr.slice(0, 2_000),
-      timedOut: signal.aborted,
-    });
-  })()
-    .mapErr((error: unknown) => new Error(String(error)))
-    .andThen((value) => value);
+): Promise<Result<Probe, Error>> {
+  const spawned = await Result.tryPromise({
+    try: async () => {
+      const signal = AbortSignal.timeout(timeoutMs);
+      const proc = Bun.spawn(command, {
+        stdout: "pipe",
+        stderr: "pipe",
+        stdin: "ignore",
+        signal,
+        env: { ...process.env },
+      });
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      if (stdout.length > 16_000_000) {
+        return Result.err(
+          new Error(`${command[0]} output exceeded the safe inspection limit`),
+        );
+      }
+      return Result.ok({
+        code,
+        stdout,
+        stderr: stderr.slice(0, 2_000),
+        timedOut: signal.aborted,
+      });
+    },
+    catch: (error: unknown) => new Error(String(error)),
+  });
+  return spawned.andThen((value) => value);
 }
 
 async function adb(
   args: string[],
   serial?: string,
-): Promise<ResultType<string, Error>> {
+): Promise<Result<string, Error>> {
   const command = [
     "adb",
     ...(serial !== undefined && serial !== "" ? ["-s", serial] : []),
     ...args,
   ];
   const outcome = await run(command);
-  if (outcome.isErr()) return err(outcome.error);
+  if (outcome.isErr()) return Result.err(outcome.error);
   const result = outcome.value;
-  if (result.timedOut) return err(new Error(`adb ${args[0]} timed out`));
+  if (result.timedOut) return Result.err(new Error(`adb ${args[0]} timed out`));
   if (result.code !== 0) {
-    return err(new Error(`adb ${args[0]} failed: ${result.stderr.trim()}`));
+    return Result.err(
+      new Error(`adb ${args[0]} failed: ${result.stderr.trim()}`),
+    );
   }
-  return resultOk(result.stdout);
+  return Result.ok(result.stdout);
 }
 
 async function connectedDevice(
   requestedSerial?: string,
-): Promise<ResultType<string, Error>> {
+): Promise<Result<string, Error>> {
   const result = await adb(["devices"]);
-  if (result.isErr()) return err(result.error);
+  if (result.isErr()) return Result.err(result.error);
   const output = result.value;
   const devices = output
     .split("\n")
@@ -106,14 +104,14 @@ async function connectedDevice(
     .flatMap((serial) => (serial === undefined ? [] : [serial]));
   if (requestedSerial !== undefined && requestedSerial !== "") {
     if (!devices.includes(requestedSerial)) {
-      return err(
+      return Result.err(
         new Error("requested Android device is not connected and authorized"),
       );
     }
-    return resultOk(requestedSerial);
+    return Result.ok(requestedSerial);
   }
   if (devices.length !== 1) {
-    return err(
+    return Result.err(
       new Error(
         `expected exactly one authorized Android device; found ${devices.length}`,
       ),
@@ -121,8 +119,8 @@ async function connectedDevice(
   }
   const serial = devices[0];
   if (serial === undefined)
-    return err(new Error("Android device serial is missing"));
-  return resultOk(serial);
+    return Result.err(new Error("Android device serial is missing"));
+  return Result.ok(serial);
 }
 
 export type PolicyFinding = { name: string; ok: boolean; detail: string };
@@ -281,7 +279,7 @@ async function inspect(
       adb(["shell", "dumpsys", "notification"], serial),
       adb(["shell", "dumpsys", "audio"], serial),
     ]);
-  const combined = Result.combine([
+  const combined = Result.all([
     model,
     android,
     user,
@@ -290,7 +288,7 @@ async function inspect(
     notifications,
     audio,
   ]);
-  if (combined.isErr()) return err(combined.error);
+  if (combined.isErr()) return Result.err(combined.error);
   const [
     modelText,
     androidText,
@@ -302,11 +300,11 @@ async function inspect(
   ] = combined.value;
   const currentUser = Number(userText.trim());
   if (!Number.isSafeInteger(currentUser) || currentUser < 0) {
-    return err(
+    return Result.err(
       new Error(`unexpected Android current user: ${userText.trim()}`),
     );
   }
-  return resultOk([
+  return Result.ok([
     finding(
       "device",
       modelText.trim() === EXPECTED_MODEL &&
@@ -327,24 +325,24 @@ async function inspect(
   ]);
 }
 
-async function assertTarget(serial: string): Promise<ResultType<void, Error>> {
+async function assertTarget(serial: string): Promise<Result<void, Error>> {
   const [model, android] = await Promise.all([
     adb(["shell", "getprop", "ro.product.model"], serial),
     adb(["shell", "getprop", "ro.build.version.release"], serial),
   ]);
-  if (model.isErr()) return err(model.error);
-  if (android.isErr()) return err(android.error);
+  if (model.isErr()) return Result.err(model.error);
+  if (android.isErr()) return Result.err(android.error);
   if (
     model.value.trim() !== EXPECTED_MODEL ||
     android.value.trim() !== EXPECTED_ANDROID
   ) {
-    return err(
+    return Result.err(
       new Error(
         `refusing to change ${model.value.trim()} with Android ${android.value.trim()}; expected ${EXPECTED_MODEL} with Android ${EXPECTED_ANDROID}`,
       ),
     );
   }
-  return resultOk(undefined);
+  return Result.ok(undefined);
 }
 
 function report(findings: PolicyFinding[]): number {
@@ -356,9 +354,9 @@ function report(findings: PolicyFinding[]): number {
   return findings.every((item) => item.ok) ? 0 : 1;
 }
 
-async function applyPolicy(serial: string): Promise<ResultType<void, Error>> {
+async function applyPolicy(serial: string): Promise<Result<void, Error>> {
   const target = await assertTarget(serial);
-  if (target.isErr()) return err(target.error);
+  if (target.isErr()) return Result.err(target.error);
   const hidden = await adb(
     [
       "shell",
@@ -370,9 +368,9 @@ async function applyPolicy(serial: string): Promise<ResultType<void, Error>> {
     ],
     serial,
   );
-  if (hidden.isErr()) return err(hidden.error);
+  if (hidden.isErr()) return Result.err(hidden.error);
   const beforeResult = await inspect(serial);
-  if (beforeResult.isErr()) return err(beforeResult.error);
+  if (beforeResult.isErr()) return Result.err(beforeResult.error);
   const before = beforeResult.value;
   const guardFailed =
     report(before.filter((item) => item.name !== "ringer")) !== 0;
@@ -382,7 +380,7 @@ async function applyPolicy(serial: string): Promise<ResultType<void, Error>> {
       ["shell", "cmd", "audio", "set-ringer-mode", "SILENT"],
       serial,
     );
-    if (restored.isErr()) return err(restored.error);
+    if (restored.isErr()) return Result.err(restored.error);
     process.stdout.write(
       "SAFE: restored SILENT ringer mode after failed guards.\n",
     );
@@ -392,32 +390,32 @@ async function applyPolicy(serial: string): Promise<ResultType<void, Error>> {
       "NEXT: configure and activate the dedicated Mode as documented in android/README.md; VIBRATE was not enabled.\n",
     );
     process.exitCode = 1;
-    return resultOk(undefined);
+    return Result.ok(undefined);
   }
   const vibrated = await adb(
     ["shell", "cmd", "audio", "set-ringer-mode", "VIBRATE"],
     serial,
   );
-  if (vibrated.isErr()) return err(vibrated.error);
+  if (vibrated.isErr()) return Result.err(vibrated.error);
   const afterResult = await inspect(serial);
-  if (afterResult.isErr()) return err(afterResult.error);
+  if (afterResult.isErr()) return Result.err(afterResult.error);
   if (report(afterResult.value) !== 0) {
     const restored = await adb(
       ["shell", "cmd", "audio", "set-ringer-mode", "SILENT"],
       serial,
     );
-    if (restored.isErr()) return err(restored.error);
+    if (restored.isErr()) return Result.err(restored.error);
     process.stdout.write(
       "SAFE: restored SILENT ringer mode after failed verification.\n",
     );
     process.exitCode = 1;
-    return resultOk(undefined);
+    return Result.ok(undefined);
   }
   process.exitCode = 0;
-  return resultOk(undefined);
+  return Result.ok(undefined);
 }
 
-async function main(): Promise<ResultType<void, Error>> {
+async function main(): Promise<Result<void, Error>> {
   const parsed = cli(
     {
       name: "line-notifications.ts",
@@ -436,23 +434,28 @@ async function main(): Promise<ResultType<void, Error>> {
     undefined,
     process.argv.slice(2),
   );
-  if (cliError !== undefined) return err(new Error(cliError));
+  if (cliError !== undefined) return Result.err(new Error(cliError));
   if (parsed._.length > 0)
-    return err(new Error("unexpected positional argument"));
+    return Result.err(new Error("unexpected positional argument"));
   if (Bun.which("adb") === null)
-    return err(new Error("adb is missing; install Android Platform Tools"));
+    return Result.err(
+      new Error("adb is missing; install Android Platform Tools"),
+    );
   const connected = await connectedDevice(parsed.flags.serial);
-  if (connected.isErr()) return err(connected.error);
+  if (connected.isErr()) return Result.err(connected.error);
   const serial = connected.value;
   if (parsed.flags.apply) return applyPolicy(serial);
   const inspected = await inspect(serial);
-  if (inspected.isErr()) return err(inspected.error);
+  if (inspected.isErr()) return Result.err(inspected.error);
   process.exitCode = report(inspected.value);
-  return resultOk(undefined);
+  return Result.ok(undefined);
 }
 
 if (import.meta.main) {
-  const result = await fromAsyncThrowable(main)();
+  const result = await Result.tryPromise({
+    try: main,
+    catch: (e: unknown) => e,
+  });
   if (result.isErr()) {
     process.stderr.write(`FATAL: ${String(result.error)}\n`);
     process.exitCode = 2;

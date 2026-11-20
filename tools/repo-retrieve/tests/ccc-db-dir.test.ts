@@ -3,15 +3,15 @@ import { mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { realpathSync } from "node:fs";
-import type { Result } from "neverthrow";
+import type { Result } from "../../shared/src/result.ts";
 import { MAPPING_ENV, parseMapping, resolveDbDir } from "../src/ccc-db-dir.ts";
 
 const env = (value: string | undefined) => ({ [MAPPING_ENV]: value });
 const valueOrError = (result: Result<string, Error>) =>
-  result.match(
-    (value) => value,
-    (error) => `ERROR: ${error.message}`,
-  );
+  result.match({
+    ok: (value) => value,
+    err: (error) => `ERROR: ${error.message}`,
+  });
 
 describe("resolveDbDir mirrors ccc's settings.resolve_db_dir", () => {
   test("unset or blank mapping keeps the DB in <root>/.cocoindex_code", async () => {
@@ -73,18 +73,18 @@ describe("resolveDbDir mirrors ccc's settings.resolve_db_dir", () => {
   });
 
   test("malformed entries return an error, as ccc does", async () => {
-    const first = (await parseMapping("/a")).match(
-      () => "unexpected success",
-      (error) => error.message,
-    );
-    const second = (await parseMapping("rel=/db")).match(
-      () => "unexpected success",
-      (error) => error.message,
-    );
-    const third = (await parseMapping("/a=rel")).match(
-      () => "unexpected success",
-      (error) => error.message,
-    );
+    const first = (await parseMapping("/a")).match({
+      ok: () => "unexpected success",
+      err: (error) => error.message,
+    });
+    const second = (await parseMapping("rel=/db")).match({
+      ok: () => "unexpected success",
+      err: (error) => error.message,
+    });
+    const third = (await parseMapping("/a=rel")).match({
+      ok: () => "unexpected success",
+      err: (error) => error.message,
+    });
     expect(first).toContain("expected 'source=target'");
     expect(second).toContain("must be absolute");
     expect(third).toContain("must be absolute");

@@ -4,7 +4,7 @@
 import { mock } from "bun:test";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 
 const readDirectory = fs.readdir;
 const readFile = fs.readFile;
@@ -32,9 +32,10 @@ await mock.module("node:fs/promises", () => ({
     const selected = await Promise.all(
       entries.map(async (entry) => {
         if (!/^\d+$/u.test(entry)) return null;
-        const env = await fromAsyncThrowable(() =>
-          readFile(`/proc/${entry}/environ`, "utf8"),
-        )();
+        const env = await Result.tryPromise({
+          try: () => readFile(`/proc/${entry}/environ`, "utf8"),
+          catch: (error: unknown) => error,
+        });
         return env.isOk() &&
           env.value.split("\0").includes(`XDG_RUNTIME_DIR=${runtime}`)
           ? entry

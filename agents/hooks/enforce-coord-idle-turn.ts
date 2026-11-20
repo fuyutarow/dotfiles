@@ -1,6 +1,6 @@
 // Claude Stop hook. Fail open on missing input, unavailable agx, or malformed output.
+import { Result } from "../../tools/shared/src/result.ts";
 import { execFile } from "node:child_process";
-import { attempt } from "./attempt.ts";
 import { arr, at, parseJson, strAt } from "./narrow.ts";
 import {
   hookStderr,
@@ -117,5 +117,5 @@ async function main(): Promise<number> {
   return 2;
 }
 
-const result = await attempt(main);
-process.exit(result.ok ? result.value : 0);
+const result = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
+process.exit(result.isOk() ? result.value : 0);

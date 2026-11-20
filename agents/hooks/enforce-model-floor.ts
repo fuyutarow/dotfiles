@@ -19,9 +19,9 @@
 // that one environment variable lifts is not a floor. MODEL_FLOOR_CONFIG points the hook at another
 // config (the test suite's fixtures).
 
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { attempt, errorMessage } from "./attempt.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 import { strAt } from "./narrow.ts";
 import {
@@ -60,8 +60,11 @@ async function main(): Promise<void> {
   const orders = ordersIn(command);
   if (orders.length === 0) return;
 
-  const loaded = await attempt(loadConfig);
-  if (!loaded.ok) {
+  const loaded = await Result.tryPromise({
+    try: loadConfig,
+    catch: (e: unknown) => e,
+  });
+  if (loaded.isErr()) {
     // FATAL: without the floors nothing can be judged; the one fix is to repair the file.
     decidePre(
       "deny",
@@ -98,8 +101,8 @@ async function main(): Promise<void> {
   );
 }
 
-const r = await attempt(main);
-if (!r.ok) {
+const r = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
+if (r.isErr()) {
   // FATAL: the hook itself failed, so no order could be judged; fail closed with the one fix
   // (report the error) rather than guessing which orders would have been denied.
   decidePre(

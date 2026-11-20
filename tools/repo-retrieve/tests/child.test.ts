@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { fromThrowable } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { runChild, runChildCaptured } from "../src/child.ts";
 
 function pidFile(): string {
@@ -10,7 +10,10 @@ function pidFile(): string {
 }
 
 function alive(pid: number): boolean {
-  return fromThrowable(() => process.kill(pid, 0))().isOk();
+  return Result.try({
+    try: () => process.kill(pid, 0),
+    catch: (error: unknown) => error,
+  }).isOk();
 }
 
 function recordedPid(file: string): number {

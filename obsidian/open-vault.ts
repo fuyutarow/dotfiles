@@ -1,3 +1,4 @@
+import { Result } from "../tools/shared/src/result.ts";
 import { cli } from "cleye";
 import {
   access,
@@ -9,7 +10,6 @@ import {
   unlink,
 } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
-import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 // Consumer: human, verdict lines. Register an unregistered directory, then open it on macOS.
@@ -45,11 +45,13 @@ export async function readRegistry(): Promise<
     : "{}";
   const parsed = jsonOf(Registry).safeParse(text);
   if (!parsed.success)
-    return err(`${REGISTRY}: invalid JSON object; refusing to replace it`);
+    return Result.err(
+      `${REGISTRY}: invalid JSON object; refusing to replace it`,
+    );
   const vaults = Vaults.safeParse(parsed.data["vaults"] ?? {});
   if (!vaults.success)
-    return err(`${REGISTRY}: invalid vaults; refusing to replace it`);
-  return ok({ data: parsed.data, vaults: vaults.data });
+    return Result.err(`${REGISTRY}: invalid vaults; refusing to replace it`);
+  return Result.ok({ data: parsed.data, vaults: vaults.data });
 }
 
 async function containing(
@@ -97,22 +99,22 @@ export async function command(
 
 export async function running(): Promise<Result<boolean, string>> {
   const result = await command(["pgrep", "-x", "Obsidian"]);
-  if (result.exit > 1) return err(`pgrep failed: ${result.stderr}`);
-  return ok(result.exit === 0);
+  if (result.exit > 1) return Result.err(`pgrep failed: ${result.stderr}`);
+  return Result.ok(result.exit === 0);
 }
 
 export async function quit(): Promise<Result<void, string>> {
   const result = await command(["osascript", "-e", 'quit app "Obsidian"']);
   if (result.exit !== 0)
-    return err(`Obsidian refused graceful quit: ${result.stderr}`);
+    return Result.err(`Obsidian refused graceful quit: ${result.stderr}`);
   const deadline = performance.now() + WAIT_MS;
   while (performance.now() < deadline) {
     const active = await running();
-    if (active.isErr()) return err(active.error);
-    if (!active.value) return ok(undefined);
+    if (active.isErr()) return Result.err(active.error);
+    if (!active.value) return Result.ok(undefined);
     await Bun.sleep(250);
   }
-  return err(
+  return Result.err(
     "Obsidian did not quit within 20 seconds; registry unchanged (no forced termination)",
   );
 }
@@ -144,9 +146,10 @@ async function openUri(
       : `path=${encodeURIComponent(target)}`;
   const uri = `obsidian://open?${query}`;
   const result = await command(["open", uri]);
-  if (result.exit !== 0) return err(`could not open ${uri}: ${result.stderr}`);
+  if (result.exit !== 0)
+    return Result.err(`could not open ${uri}: ${result.stderr}`);
   process.stdout.write(`OPEN  ${uri}\n`);
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 export async function acquireLock(lock: string): Promise<Result<void, string>> {
@@ -156,12 +159,12 @@ export async function acquireLock(lock: string): Promise<Result<void, string>> {
       () => true,
       () => false,
     );
-    if (locked) return ok(undefined);
+    if (locked) return Result.ok(undefined);
     if (!(await exists(lock)))
-      return err(`cannot create registration lock ${lock}`);
+      return Result.err(`cannot create registration lock ${lock}`);
     await Bun.sleep(250);
   }
-  return err(`timed out waiting for another obs registration: ${lock}`);
+  return Result.err(`timed out waiting for another obs registration: ${lock}`);
 }
 
 async function register(
@@ -170,7 +173,7 @@ async function register(
   beforeOpen?: () => Promise<Result<void, string>>,
 ): Promise<Result<void, string>> {
   const active = await running();
-  if (active.isErr()) return err(active.error);
+  if (active.isErr()) return Result.err(active.error);
   if (active.value) {
     const stopped = await quit();
     if (stopped.isErr()) return stopped;
@@ -180,7 +183,7 @@ async function register(
   let launched = false;
   const outcome = await Promise.try(async (): Promise<Result<void, string>> => {
     const latest = await readRegistry();
-    if (latest.isErr()) return err(latest.error);
+    if (latest.isErr()) return Result.err(latest.error);
     let match = await containing(latest.value.vaults, target);
     // A shadow needs its own plugin state even when an ancestor is a registered local vault.
     if (prepare !== undefined && match?.root !== target) match = undefined;
@@ -210,7 +213,7 @@ async function register(
         120_000,
       );
       if (applied.exit !== 0 && prepare !== undefined)
-        return err(`house settings incomplete: ${applied.stderr}`);
+        return Result.err(`house settings incomplete: ${applied.stderr}`);
       if (applied.exit !== 0)
         process.stderr.write(
           `WARN: house settings incomplete: ${applied.stderr}\nRun: bun ${JSON.stringify(join(import.meta.dir, "apply.ts"))} --vault ${JSON.stringify(target)}\n`,
@@ -222,7 +225,7 @@ async function register(
     }
     const launch = await command(["open", "-a", "Obsidian"]);
     if (launch.exit !== 0)
-      return err(`could not relaunch Obsidian: ${launch.stderr}`);
+      return Result.err(`could not relaunch Obsidian: ${launch.stderr}`);
     launched = true;
     if (beforeOpen !== undefined) {
       const ready = await beforeOpen();
@@ -231,8 +234,8 @@ async function register(
     return openUri(match.id, match.root, target);
   }).then(
     (value) => value,
-    (error: unknown) =>
-      err(error instanceof Error ? error.message : String(error)),
+    (error: unknown): Result<void, string> =>
+      Result.err(error instanceof Error ? error.message : String(error)),
   );
   if (active.value && !launched) await command(["open", "-a", "Obsidian"]);
   return outcome;
@@ -244,14 +247,14 @@ export async function openVault(
   beforeOpen?: () => Promise<Result<void, string>>,
 ): Promise<Result<void, string>> {
   const registry = await readRegistry();
-  if (registry.isErr()) return err(registry.error);
+  if (registry.isErr()) return Result.err(registry.error);
   const match = await containing(registry.value.vaults, target);
   if (match !== undefined && prepare === undefined)
     return openUri(match.id, match.root, target);
   await mkdir(dirname(REGISTRY), { recursive: true });
   const lock = `${REGISTRY}.obs-lock`;
   const locked = await acquireLock(lock);
-  if (locked.isErr()) return err(locked.error);
+  if (locked.isErr()) return Result.err(locked.error);
   await using _unlock = {
     async [Symbol.asyncDispose]() {
       await rmdir(lock);
@@ -278,18 +281,18 @@ async function main(): Promise<Result<void, string>> {
         "Register a directory as an Obsidian vault and open it; OBS_DRY_RUN=1 writes nothing.",
     },
   });
-  if (prototypeFlag) return err("Unknown option '--__proto__'");
-  if (parsed._.length > 1) return err("usage: open-vault.ts [dir]");
+  if (prototypeFlag) return Result.err("Unknown option '--__proto__'");
+  if (parsed._.length > 1) return Result.err("usage: open-vault.ts [dir]");
   if (
     (process.env["SSH_CONNECTION"] ?? "") !== "" ||
     (process.env["SSH_TTY"] ?? "") !== ""
   )
-    return err("run obs in a local macOS shell");
+    return Result.err("run obs in a local macOS shell");
   const target = await realpath(parsed._.dir ?? process.cwd());
   if (!(await stat(target)).isDirectory())
-    return err(`${target}: not a directory`);
+    return Result.err(`${target}: not a directory`);
   const registry = await readRegistry();
-  if (registry.isErr()) return err(registry.error);
+  if (registry.isErr()) return Result.err(registry.error);
   const match = await containing(registry.value.vaults, target);
   if (process.env["OBS_DRY_RUN"] === "1") {
     if (match === undefined)
@@ -300,7 +303,7 @@ async function main(): Promise<Result<void, string>> {
       process.stdout.write(
         `obsidian://open?${target === match.root ? `vault=${encodeURIComponent(match.id)}` : `path=${encodeURIComponent(target)}`}\n`,
       );
-    return ok(undefined);
+    return Result.ok(undefined);
   }
   return openVault(target);
 }
@@ -308,16 +311,16 @@ async function main(): Promise<Result<void, string>> {
 if (import.meta.main) {
   const outcome = await Promise.try(main).then(
     (result) => result,
-    (error: unknown) =>
-      err(error instanceof Error ? error.message : String(error)),
+    (error: unknown): Result<void, string> =>
+      Result.err(error instanceof Error ? error.message : String(error)),
   );
-  outcome.match(
-    () => {
+  outcome.match({
+    ok: () => {
       process.exitCode = 0;
     },
-    (message) => {
+    err: (message) => {
       process.stderr.write(`FATAL: ${message}\n`);
       process.exitCode = 2;
     },
-  );
+  });
 }

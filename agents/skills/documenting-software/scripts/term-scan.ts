@@ -26,7 +26,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
-import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import { Result } from "better-result";
 
 export type OccurrenceKind =
   | "body"
@@ -479,16 +479,25 @@ async function collect(
   conventions: readonly string[],
 ): Promise<Result<Inputs, string>> {
   const root = resolve(docdir);
-  const info = await fromAsyncThrowable(() => stat(root))();
-  if (info.isErr()) return err(`${docdir}: ${messageOf(info.error)}`);
-  if (!info.value.isDirectory()) return err(`${docdir} is not a directory`);
+  const info = await Result.tryPromise({
+    try: () => stat(root),
+    catch: (e: unknown) => e,
+  });
+  if (info.isErr()) return Result.err(`${docdir}: ${messageOf(info.error)}`);
+  if (!info.value.isDirectory())
+    return Result.err(`${docdir} is not a directory`);
 
-  const listed = await fromAsyncThrowable(() => listFiles(root, PAGE))();
-  if (listed.isErr()) return err(messageOf(listed.error));
-  const conventionFiles = await fromAsyncThrowable(() =>
-    conventionFilesOf(conventions),
-  )();
-  if (conventionFiles.isErr()) return err(messageOf(conventionFiles.error));
+  const listed = await Result.tryPromise({
+    try: () => listFiles(root, PAGE),
+    catch: (e: unknown) => e,
+  });
+  if (listed.isErr()) return Result.err(messageOf(listed.error));
+  const conventionFiles = await Result.tryPromise({
+    try: () => conventionFilesOf(conventions),
+    catch: (e: unknown) => e,
+  });
+  if (conventionFiles.isErr())
+    return Result.err(messageOf(conventionFiles.error));
 
   const glossaryAbs = glossary === undefined ? undefined : resolve(glossary);
   const labelsAbs = labels === undefined ? undefined : resolve(labels);
@@ -501,13 +510,15 @@ async function collect(
   );
   const pages = listed.value.filter((p) => !excluded.has(resolve(p)));
   if (pages.length === 0)
-    return err(`no Markdown or TOML pages under ${docdir}`);
+    return Result.err(`no Markdown or TOML pages under ${docdir}`);
 
-  const read = await fromAsyncThrowable(() =>
-    readInputs(root, pages, glossaryAbs, labelsAbs, conventionFiles.value),
-  )();
-  if (read.isErr()) return err(messageOf(read.error));
-  return ok(read.value);
+  const read = await Result.tryPromise({
+    try: () =>
+      readInputs(root, pages, glossaryAbs, labelsAbs, conventionFiles.value),
+    catch: (e: unknown) => e,
+  });
+  if (read.isErr()) return Result.err(messageOf(read.error));
+  return Result.ok(read.value);
 }
 
 async function readInputs(

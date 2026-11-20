@@ -13,7 +13,7 @@ import {
   hostKind,
   type HostKind,
 } from "../agents/codex/runtime.ts";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 
 type Installer = { label: string; command: string; args: string[] };
 
@@ -121,8 +121,11 @@ async function main(): Promise<number | Error> {
 }
 
 if (import.meta.main) {
-  const result = await attempt(main);
-  if (!result.ok) {
+  const result = await Result.tryPromise({
+    try: main,
+    catch: (e: unknown) => e,
+  });
+  if (!result.isOk()) {
     process.stderr.write(`FATAL: ${errorMessage(result.error)}\n`);
     process.exitCode = 2;
   } else if (result.value instanceof Error) {

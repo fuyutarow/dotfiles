@@ -1,4 +1,4 @@
-import { attempt } from "../../../tools/shared/src/attempt.ts";
+import { Result } from "../../../tools/shared/src/result.ts";
 import { afterEach, expect, test } from "bun:test";
 import {
   chmod,
@@ -150,10 +150,13 @@ async function withPath<T>(
 ): Promise<unknown> {
   const saved = process.env["PATH"];
   process.env["PATH"] = dir;
-  const result = await attempt(run);
+  const result = await Result.tryPromise({
+    try: run,
+    catch: (e: unknown) => e,
+  });
   if (saved === undefined) delete process.env["PATH"];
   else process.env["PATH"] = saved;
-  return result.ok ? result.value : result.error;
+  return result.isOk() ? result.value : result.error;
 }
 
 test("copyToClipboard pipes the id to the smart-copy command on PATH", async () => {

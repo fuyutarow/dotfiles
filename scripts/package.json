@@ -4,9 +4,9 @@
   "type": "module",
   "dependencies": {
     "@dotfiles/shared": "workspace:*",
+    "better-result": "3.0.1",
     "cleye": "2.6.0",
     "consola": "3.4.2",
-    "neverthrow": "8.2.0",
     "ts-pattern": "5.9.0"
   }
 }

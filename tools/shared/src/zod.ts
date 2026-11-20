@@ -5,8 +5,10 @@
 //
 // .oxlintrc.json enforces it: `from "zod"` is a restricted import, and JSON.parse is banned
 // outside a zod codec — the one below is the codec everything else uses.
-import { fromThrowable, z } from "../../../agents/hooks/vendor/deps.js";
-import { errorMessage, Result } from "./result.ts";
+// This file stays a single-import module: tools/preset copies it alone into consumer repositories
+// (as support/zod.ts beside support/deps.js), so it takes Result from the bundle directly rather
+// than through ./result.ts.
+import { fromThrowable, Result, z } from "../../../agents/hooks/vendor/deps.js";
 
 export { z };
 // Throw → Result, synchronously (neverthrow's, from the same bundle): for the zero-dep files that
@@ -21,7 +23,7 @@ export const jsonText = z.codec(z.string(), z.unknown(), {
   decode: (text, ctx) => {
     const parsed = Result.try({
       try: (): unknown => JSON.parse(text),
-      catch: errorMessage,
+      catch: (e: unknown) => (e instanceof Error ? e.message : String(e)),
     });
     if (parsed.isOk()) return parsed.value;
     ctx.issues.push({

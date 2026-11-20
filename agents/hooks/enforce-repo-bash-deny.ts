@@ -20,9 +20,9 @@
 // FAIL CLOSED (run.sh --fail-closed): a hook error denies. An unreadable or malformed
 // settings file is that repo's own fault and denies with its path.
 
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { attempt, errorMessage } from "./attempt.ts";
 import { bashCwd, decidePre, readStdinJson } from "./lib.ts";
 import { arr, at, str, strAt } from "./narrow.ts";
 import { jsonOf, z } from "./zod.ts";
@@ -39,19 +39,22 @@ async function exists(path: string): Promise<boolean> {
 }
 
 async function settingsRoot(start: string): Promise<string | null | Error> {
-  const result = await attempt(() => stat(start));
-  const code = result.ok
+  const result = await Result.tryPromise({
+    try: () => stat(start),
+    catch: (e: unknown) => e,
+  });
+  const code = result.isOk()
     ? undefined
     : z.looseObject({ code: z.string() }).safeParse(result.error);
   if (
-    !result.ok &&
+    result.isErr() &&
     !(
       code?.success === true &&
       (code.data.code === "ENOENT" || code.data.code === "ENOTDIR")
     )
   )
     return new Error(errorMessage(result.error));
-  const st = result.ok ? result.value : null;
+  const st = result.isOk() ? result.value : null;
   let current = resolve(
     st !== null && !st.isDirectory() ? dirname(start) : start,
   );
@@ -164,18 +167,18 @@ async function main(): Promise<MainOutcome> {
   };
 }
 
-const r = await attempt(main);
-if (r.ok && r.value !== null && r.value.kind === "deny") {
+const r = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
+if (r.isOk() && r.value !== null && r.value.kind === "deny") {
   // SINGLE-AXIS: one question (does a repo deny rule match?); every match is already joined above
   decidePre("deny", r.value.message);
-} else if (r.ok && r.value !== null && r.value.kind === "error") {
+} else if (r.isOk() && r.value !== null && r.value.kind === "error") {
   // FATAL: the rules could not be read, so nothing could be evaluated; fail closed with the cause
   decidePre(
     "deny",
     `repo-deny: could not evaluate the repo's Bash deny rules (${r.value.message}) — ` +
       `failing closed. Fix that .claude/settings.json, or agents/hooks/enforce-repo-bash-deny.ts.`,
   );
-} else if (!r.ok) {
+} else if (r.isErr()) {
   // FATAL: the rules could not be read, so no command can be judged; fail closed with the error.
   decidePre(
     "deny",

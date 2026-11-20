@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { RUN_DIR_ENV } from "@dotfiles/shared/src/test-tmp.ts";
 
 export const SYSTEM_TMP = "/tmp";
@@ -23,9 +23,12 @@ const LEAK = new RegExp(
 );
 
 export async function topLevel(dir: string): Promise<string[]> {
-  return (await fromAsyncThrowable(() => readdir(dir))())
-    .unwrapOr<string[]>([])
-    .toSorted();
+  const listing = await Result.tryPromise({
+    try: () => readdir(dir),
+    catch: (e: unknown) => e,
+  });
+  const names: string[] = listing.unwrapOr([]);
+  return names.toSorted();
 }
 
 export function newEntries(before: string[], after: string[]): string[] {
@@ -34,7 +37,10 @@ export function newEntries(before: string[], after: string[]): string[] {
 }
 
 async function ownedByMe(path: string): Promise<boolean> {
-  const statResult = await fromAsyncThrowable(() => stat(path))();
+  const statResult = await Result.tryPromise({
+    try: () => stat(path),
+    catch: (e: unknown) => e,
+  });
   const uid = process.getuid?.();
   return (
     statResult.isOk() && (uid === undefined || statResult.value.uid === uid)
@@ -74,9 +80,10 @@ export async function lintStatic(root: string): Promise<string[]> {
   );
   const findings = await Promise.all(
     [...paths].toSorted().map(async (path) => {
-      const text = await fromAsyncThrowable(() =>
-        readFile(join(root, path), "utf8"),
-      )();
+      const text = await Result.tryPromise({
+        try: () => readFile(join(root, path), "utf8"),
+        catch: (e: unknown) => e,
+      });
       return staticFindings(path, text.unwrapOr(""));
     }),
   );

@@ -1,4 +1,4 @@
-import { ResultAsync as AsyncResult } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { access as accessPath } from "node:fs/promises";
 
 import { cli } from "cleye";
@@ -56,10 +56,11 @@ const RunSchema = z.object({
   report_path: z.string().nullable(),
   verify: z.array(VerifySchema),
 });
-const safeRead = fromAsyncThrowable(
-  async (path: string) => readFile(path, "utf8"),
-  (error) => error,
-);
+const safeRead = (path: string): Promise<Result<string, unknown>> =>
+  Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (error: unknown) => error,
+  });
 
 type Run = z.output<typeof RunSchema>;
 const pad2 = (value: number): string =>
@@ -237,15 +238,4 @@ async function runProcess(
     child.exited,
   ]);
   return { stdout: Buffer.from(stdout), stderr: Buffer.from(stderr), exitCode };
-}
-
-function fromAsyncThrowable<A extends unknown[], T, E = unknown>(
-  fn: (...args: A) => Promise<T>,
-  mapError: (error: unknown) => E,
-) {
-  return (...args: A) =>
-    AsyncResult.fromPromise(
-      Promise.resolve().then(() => fn(...args)),
-      (error: unknown) => mapError(error),
-    );
 }

@@ -12,7 +12,7 @@ import { access, copyFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { consola } from "consola";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 
 const die = (msg: string, code = 2): never => {
   consola.error(`edge-policy: ${msg}`);
@@ -79,8 +79,11 @@ async function run(
 }
 
 async function matches(): Promise<boolean> {
-  const live = await attempt(() => readFile(DST));
-  if (!live.ok) return false;
+  const live = await Result.tryPromise({
+    try: () => readFile(DST),
+    catch: (e: unknown) => e,
+  });
+  if (!live.isOk()) return false;
   return Buffer.compare(await readFile(SRC), live.value) === 0;
 }
 
@@ -94,8 +97,13 @@ const verdict = (v: "PASS" | "FAIL", detail: string, fix?: string): void => {
 // test override the copy is plain; otherwise it is two sudo steps and a preferences-daemon nudge.
 async function deploy(): Promise<string | undefined> {
   if (OVERRIDE !== undefined) {
-    const copied = await attempt(() => copyFile(SRC, DST));
-    return copied.ok ? undefined : `copy failed: ${errorMessage(copied.error)}`;
+    const copied = await Result.tryPromise({
+      try: () => copyFile(SRC, DST),
+      catch: (e: unknown) => e,
+    });
+    return copied.isOk()
+      ? undefined
+      : `copy failed: ${errorMessage(copied.error)}`;
   }
   const dir = [
     "sudo",
@@ -140,8 +148,11 @@ async function main(): Promise<number> {
     verdict("PASS", `${DST} matches edge/policy.plist.mac`);
     return 0;
   }
-  const destination = await attempt(() => access(DST));
-  const why = destination.ok ? "differs from" : "is missing, unlike";
+  const destination = await Result.tryPromise({
+    try: () => access(DST),
+    catch: (e: unknown) => e,
+  });
+  const why = destination.isOk() ? "differs from" : "is missing, unlike";
   if (argv.flags.check) {
     verdict(
       "FAIL",
@@ -166,6 +177,6 @@ async function main(): Promise<number> {
   return 0;
 }
 
-const result = await attempt(main);
-if (result.ok) process.exit(result.value);
+const result = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
+if (result.isOk()) process.exit(result.value);
 die(`FATAL: ${errorMessage(result.error)}`, 2);

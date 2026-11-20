@@ -8,7 +8,7 @@ import {
   statSync,
 } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { fromThrowable } from "neverthrow";
+import { Result } from "./result.ts";
 
 export const REF_LOCK_STALE_MS = 60_000;
 
@@ -55,7 +55,10 @@ function refLockPaths(gitDir: string): string[] {
 }
 
 function fdPointsTo(fdPath: string, target: string): boolean {
-  const link = fromThrowable(() => readlinkSync(fdPath))();
+  const link = Result.try({
+    try: () => readlinkSync(fdPath),
+    catch: (e: unknown) => e,
+  });
   if (link.isErr()) return false;
   const held = link.value.replace(/ \(deleted\)$/u, "");
   return resolve(held) === target;
@@ -63,7 +66,10 @@ function fdPointsTo(fdPath: string, target: string): boolean {
 
 function processHoldsPath(pidDir: string, target: string): boolean {
   const fds = join(pidDir, "fd");
-  const entries = fromThrowable(() => readdirSync(fds))();
+  const entries = Result.try({
+    try: () => readdirSync(fds),
+    catch: (e: unknown) => e,
+  });
   if (entries.isErr()) return false;
   return entries.value.some((fd) => fdPointsTo(join(fds, fd), target));
 }

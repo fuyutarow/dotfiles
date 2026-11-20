@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { attempt, errorMessage } from "../../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../../tools/shared/src/result.ts";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
@@ -56,10 +56,13 @@ async function run(root: string, files?: string[], env = process.env) {
 
 async function withFixture(check: (root: string) => Promise<void>) {
   const root = await fixture();
-  const result = await attempt(() => check(root));
+  const result = await Result.tryPromise({
+    try: () => check(root),
+    catch: (e: unknown) => e,
+  });
   await rm(root, { recursive: true, force: true });
-  if (!result.ok) process.stderr.write(`${String(result.error)}\n`);
-  expect(result.ok).toBe(true);
+  if (!result.isOk()) process.stderr.write(`${String(result.error)}\n`);
+  expect(result.isOk()).toBe(true);
 }
 
 test(
@@ -192,7 +195,7 @@ test("jj discovers uncommitted workspace changes against trunk with NUL paths", 
   await Bun.write(join(root, "line\nbreak.ts"), "export const value = 2;\n");
   const expression = `import { changedFiles } from ${JSON.stringify(SCRIPT)};
 const result = await changedFiles(${JSON.stringify(root)});
-if (result.ok) process.stdout.write(result.value.join("\\0"));
+if (result.isOk()) process.stdout.write(result.value.join("\\0"));
 else { process.stderr.write(String(result.error)); process.exitCode = 2; }`;
   const listing = Bun.spawn(["bun", "--eval", expression], {
     cwd: root,
@@ -271,7 +274,7 @@ async function discover(root: string, env: NodeJS.ProcessEnv) {
       `
 import { changedFiles } from ${JSON.stringify(SCRIPT)};
 const result = await changedFiles(${JSON.stringify(root)});
-if (!result.ok) throw new Error(String(result.error));
+if (!result.isOk()) throw new Error(String(result.error));
 console.log(JSON.stringify(result.value.toSorted()));
 `,
     ],
@@ -438,38 +441,47 @@ test(
           };
         }),
       );
-      const checked = await attempt(async () => {
-        for (const entry of original)
-          await chmod(entry.path, entry.directory ? 0o555 : 0o444);
-        const start = performance.now();
-        const empty = await run(root, undefined, env);
-        expect(empty.exit, empty.stdout + empty.stderr).toBe(0);
-        expect(empty.stdout).toContain("no existing changed files");
-        expect(performance.now() - start).toBeLessThan(2000);
-        await Bun.write(join(root, "tracked.ts"), "export const value = 2;\n");
-        const clean = await run(root, undefined, env);
-        expect(clean.exit, clean.stdout + clean.stderr).toBe(0);
-        expect(clean.stdout).toContain("1 existing changed file(s), 1 TS");
-        await Bun.write(
-          join(root, "tracked.ts"),
-          "export const value = 2 as number;\n",
-        );
-        const bad = await run(root, undefined, env);
-        expect(bad.exit, bad.stdout + bad.stderr).toBe(1);
-        expect(bad.stdout).toContain("lint:ts FAIL");
-        expect(bad.stdout + bad.stderr).toContain("tracked.ts");
-        expect((await storeFiles(join(root, ".jj/repo"))).toSorted()).toEqual(
-          paths.toSorted(),
-        );
-        for (const entry of original) {
-          if (entry.contents !== undefined)
-            expect(await Bun.file(entry.path).bytes()).toEqual(entry.contents);
-        }
+      const checked = await Result.tryPromise({
+        try: async () => {
+          for (const entry of original)
+            await chmod(entry.path, entry.directory ? 0o555 : 0o444);
+          const start = performance.now();
+          const empty = await run(root, undefined, env);
+          expect(empty.exit, empty.stdout + empty.stderr).toBe(0);
+          expect(empty.stdout).toContain("no existing changed files");
+          expect(performance.now() - start).toBeLessThan(2000);
+          await Bun.write(
+            join(root, "tracked.ts"),
+            "export const value = 2;\n",
+          );
+          const clean = await run(root, undefined, env);
+          expect(clean.exit, clean.stdout + clean.stderr).toBe(0);
+          expect(clean.stdout).toContain("1 existing changed file(s), 1 TS");
+          await Bun.write(
+            join(root, "tracked.ts"),
+            "export const value = 2 as number;\n",
+          );
+          const bad = await run(root, undefined, env);
+          expect(bad.exit, bad.stdout + bad.stderr).toBe(1);
+          expect(bad.stdout).toContain("lint:ts FAIL");
+          expect(bad.stdout + bad.stderr).toContain("tracked.ts");
+          expect((await storeFiles(join(root, ".jj/repo"))).toSorted()).toEqual(
+            paths.toSorted(),
+          );
+          for (const entry of original) {
+            if (entry.contents !== undefined)
+              expect(await Bun.file(entry.path).bytes()).toEqual(
+                entry.contents,
+              );
+          }
+        },
+        catch: (e: unknown) => e,
       });
       for (const entry of original) await chmod(entry.path, entry.mode);
-      expect(checked.ok, checked.ok ? "" : errorMessage(checked.error)).toBe(
-        true,
-      );
+      expect(
+        checked.isOk(),
+        checked.isOk() ? "" : errorMessage(checked.error),
+      ).toBe(true);
     }),
   30_000,
 );

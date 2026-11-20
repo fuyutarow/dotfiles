@@ -1,8 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { err, ok, type Result } from "neverthrow";
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import type { HostKind } from "./profiles.ts";
 
@@ -18,9 +17,12 @@ export async function readApprovedHost(
   alias: string,
   file = join(homedir(), ".config/coredev/hosts.toml"),
 ): Promise<Result<ApprovedHost, Error>> {
-  const read = await attempt(() => readFile(file, "utf8"));
-  if (!read.ok)
-    return err(
+  const read = await Result.tryPromise({
+    try: () => readFile(file, "utf8"),
+    catch: (error: unknown) => error,
+  });
+  if (read.isErr())
+    return Result.err(
       new Error(
         `approved host '${alias}' unavailable: host registry is missing or unreadable`,
       ),
@@ -29,7 +31,7 @@ export async function readApprovedHost(
   const section = `[hosts.${alias}]`;
   const lines = source.split(/\r?\n/u);
   const start = lines.indexOf(section);
-  if (start < 0) return err(new Error(`host is not approved: ${alias}`));
+  if (start < 0) return Result.err(new Error(`host is not approved: ${alias}`));
   const body: string[] = [];
   for (const line of lines.slice(start + 1)) {
     if (/^\s*\[[^\]]+\]\s*$/u.test(line)) break;
@@ -40,13 +42,13 @@ export async function readApprovedHost(
     if (line.length === 0) continue;
     const match = /^(kind|transfers)\s*=\s*(.+)$/u.exec(line);
     if (match === null)
-      return err(new Error(`invalid host registry entry: ${alias}`));
+      return Result.err(new Error(`invalid host registry entry: ${alias}`));
     const key = match[1];
     const value = match[2];
     if (key === undefined || value === undefined)
-      return err(new Error(`invalid host registry entry: ${alias}`));
+      return Result.err(new Error(`invalid host registry entry: ${alias}`));
     if (values.has(key))
-      return err(
+      return Result.err(
         new Error(`duplicate host registry field '${key}' for ${alias}`),
       );
     values.set(key, value);
@@ -54,10 +56,14 @@ export async function readApprovedHost(
   const kindInput = values.get("kind")?.replaceAll(/^"|"$/gu, "");
   const kindValue = hostKindSchema.safeParse(kindInput);
   if (!kindValue.success)
-    return err(new Error(`invalid target kind for approved host '${alias}'`));
+    return Result.err(
+      new Error(`invalid target kind for approved host '${alias}'`),
+    );
   const transfersText = values.get("transfers");
   if (transfersText === undefined || !/^\[.*\]$/u.test(transfersText))
-    return err(new Error(`invalid transfers for approved host '${alias}'`));
+    return Result.err(
+      new Error(`invalid transfers for approved host '${alias}'`),
+    );
   const transferTokens = [...transfersText.matchAll(/"([a-z-]+)"/gu)].map(
     (match) => match[1],
   );
@@ -67,7 +73,7 @@ export async function readApprovedHost(
     .replaceAll(/[,[\]\s]/gu, "");
   const oldTransfer = transferTokens.includes("codex-auth");
   if (oldTransfer)
-    return err(
+    return Result.err(
       new Error(
         "invalid transfer 'codex-auth'; replace it with 'codex', 'claude' and/or 'gh'",
       ),
@@ -77,6 +83,12 @@ export async function readApprovedHost(
     ? transferSchema.safeParse(stringTokens.data)
     : stringTokens;
   if (residue.length > 0 || !parsedTransfers.success)
-    return err(new Error(`invalid transfers for approved host '${alias}'`));
-  return ok({ alias, kind: kindValue.data, transfers: parsedTransfers.data });
+    return Result.err(
+      new Error(`invalid transfers for approved host '${alias}'`),
+    );
+  return Result.ok({
+    alias,
+    kind: kindValue.data,
+    transfers: parsedTransfers.data,
+  });
 }

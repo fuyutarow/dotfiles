@@ -1,10 +1,10 @@
 // Consumer: smart-open receiver. stdin is receiver-built, vouched SSH configuration.
 // Reference: obsidian-remote-ssh 1.1.11 plugin/src/shadow/ShadowVaultBootstrap.ts
 // and vaultNaming.ts. Identity lives in autoConnectProfileId, not the directory name.
+import { Result } from "../tools/shared/src/result.ts";
 import { createHash } from "node:crypto";
 import { access, mkdir, readdir, rename } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import plugins from "./plugins.json";
 import { openVault } from "./open-vault.ts";
@@ -40,10 +40,12 @@ const segment = (raw: string): string => {
 async function object(
   file: string,
 ): Promise<Result<Record<string, unknown>, string>> {
-  if (!(await Bun.file(file).exists())) return ok({});
+  if (!(await Bun.file(file).exists())) return Result.ok({});
   // An unreadable/corrupt existing state must never silently lose secrets or host keys.
   const parsed = ObjectJson.safeParse(await Bun.file(file).text());
-  return parsed.success ? ok(parsed.data) : err(`invalid JSON object: ${file}`);
+  return parsed.success
+    ? Result.ok(parsed.data)
+    : Result.err(`invalid JSON object: ${file}`);
 }
 export async function shadowPath(request: Request): Promise<string> {
   const base = join(home(), ".obsidian-remote/vaults");
@@ -80,13 +82,13 @@ export async function prepareShadow(
   await mkdir(pluginDir, { recursive: true, mode: 0o700 });
   for (const file of ["main.js", "manifest.json"])
     if (!(await Bun.file(join(pluginDir, file)).exists()))
-      return err(
+      return Result.err(
         `Remote SSH is not installed: ${pluginDir}; run obsidian/apply.ts --vault ${target}`,
       );
   const id = profileId(request.alias, request.path);
   const dataFile = join(pluginDir, "data.json");
   const state = await object(dataFile);
-  if (state.isErr()) return err(state.error);
+  if (state.isErr()) return Result.err(state.error);
   const data = state.value;
   const profile = {
     id,
@@ -166,7 +168,7 @@ export async function prepareShadow(
         "file-recovery",
       ]),
     );
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 async function trust(): Promise<Result<void, string>> {
@@ -184,13 +186,13 @@ async function trust(): Promise<Result<void, string>> {
     new Response(child.stderr).text(),
   ]);
   return code === 0
-    ? ok(undefined)
-    : err(`could not trust shadow vault: ${stderr.slice(0, 2000)}`);
+    ? Result.ok(undefined)
+    : Result.err(`could not trust shadow vault: ${stderr.slice(0, 2000)}`);
 }
 if (import.meta.main) {
   const result = await Promise.try(async () => {
     const parsed = jsonOf(RemoteRequest).safeParse(await Bun.stdin.text());
-    if (!parsed.success) return err("invalid receiver request");
+    if (!parsed.success) return Result.err("invalid receiver request");
     const request = parsed.data;
     if (request.action === "forget") {
       const { forgetShadow } = await import("./forget-shadow.ts");
@@ -204,15 +206,15 @@ if (import.meta.main) {
     return openVault(target, () => prepareShadow(target, request), trust);
   }).then(
     (v) => v,
-    (e: unknown) => err(String(e)),
+    (e: unknown): Result<void, string> => Result.err(String(e)),
   );
-  result.match(
-    () => {
+  result.match({
+    ok: () => {
       process.exitCode = 0;
     },
-    (message) => {
+    err: (message) => {
       process.stderr.write(`FATAL: ${message}\n`);
       process.exitCode = 2;
     },
-  );
+  });
 }

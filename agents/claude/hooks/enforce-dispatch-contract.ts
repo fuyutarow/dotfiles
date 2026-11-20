@@ -15,9 +15,9 @@
 // FAIL CLOSED: an unreadable roster or any hook error denies; run.sh also denies when bun is
 // missing.
 
+import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
 import { resolve } from "node:path";
 import { AgxRosterChoiceSchema } from "../../hooks/agx-roster.ts";
-import { attempt, errorMessage, type Attempt } from "../../hooks/attempt.ts";
 import { strAt } from "../../hooks/narrow.ts";
 import { jsonOf, z } from "../../hooks/zod.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
@@ -65,39 +65,36 @@ async function main(): Promise<void> {
   // The dotfiles pin owns the CLI version regardless of the caller's working directory.
   const command = ROSTER_CLI;
   const timeout = AbortSignal.timeout(ROSTER_TIMEOUT_MS);
-  const loaded = await (async (): Promise<Attempt<string>> => {
-    const spawned = await attempt(async () => {
-      const child = Bun.spawn(command, {
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-        signal: timeout,
-        killSignal: "SIGKILL",
-      });
-      const [stdout, stderr, code] = await Promise.all([
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-        child.exited,
-      ]);
-      return { stdout, stderr, code, signal: child.signalCode };
+  const loaded = await (async (): Promise<Result<string, unknown>> => {
+    const spawned = await Result.tryPromise({
+      try: async () => {
+        const child = Bun.spawn(command, {
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+          signal: timeout,
+          killSignal: "SIGKILL",
+        });
+        const [stdout, stderr, code] = await Promise.all([
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+          child.exited,
+        ]);
+        return { stdout, stderr, code, signal: child.signalCode };
+      },
+      catch: (e: unknown) => e,
     });
-    if (!spawned.ok) return { ok: false, error: spawned.error };
+    if (spawned.isErr()) return Result.err(spawned.error);
     const child = spawned.value;
     if (timeout.aborted)
-      return { ok: false, error: `ETIMEDOUT after ${ROSTER_TIMEOUT_MS} ms` };
+      return Result.err(`ETIMEDOUT after ${ROSTER_TIMEOUT_MS} ms`);
     if (child.signal !== null)
-      return { ok: false, error: `terminated by ${child.signal}` };
+      return Result.err(`terminated by ${child.signal}`);
     if (child.code !== 0)
-      return {
-        ok: false,
-        error: `exit ${child.code}: ${child.stderr.trim()}`,
-      };
+      return Result.err(`exit ${child.code}: ${child.stderr.trim()}`);
     const parsed = RosterJson.safeParse(child.stdout);
     if (!parsed.success)
-      return {
-        ok: false,
-        error: `invalid roster JSON: ${parsed.error.message}`,
-      };
+      return Result.err(`invalid roster JSON: ${parsed.error.message}`);
     const roster = parsed.data;
     const rows = roster.choice;
     const prices = rows.flatMap((row) => blended(row) ?? []);
@@ -110,16 +107,15 @@ async function main(): Promise<void> {
           : `${Math.round((own / cheapest) * 10) / 10}x`;
       return `| \`${row.id}\` | ${row.route} | ${num(row.aa_index)} | ${num(row.tb4)}${row.tb4_source === undefined ? "" : ` ([AA](${row.tb4_source}))`} | ${num(row.scicode)}${row.scicode_source === undefined ? "" : ` ([AA](${row.scicode_source}))`} | ${price(row.price_in)}/${price(row.price_cached_in)}/${price(row.price_out)} | ${cost} | ${row.use_for ?? "–"} |`;
     });
-    return {
-      ok: true,
-      value: [
+    return Result.ok(
+      [
         "| id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |",
         "| --- | --- | --: | --: | --: | --- | --: | --- |",
         ...table,
       ].join("\n"),
-    };
+    );
   })();
-  if (!loaded.ok && !timeout.aborted) {
+  if (loaded.isErr() && !timeout.aborted) {
     // FATAL: the roster could not be read, so dispatch guidance cannot be verified; fail closed.
     decidePre(
       "deny",
@@ -134,14 +130,14 @@ async function main(): Promise<void> {
       "Dispatch with `agx worker dispatch <ticket>` or `agx-worker dispatch <ticket>`. " +
       "For durable runs use `systemd-run --user --unit=agt_<slug> --collect -- agx worker dispatch …`; " +
       "continue with `agx worker run <ticket> --continue <run>` or `agx-worker run <ticket> --continue <run>`.\n" +
-      (loaded.ok
+      (loaded.isOk()
         ? `Roster (agx worker roster --json):\n${loaded.value}`
         : "Roster unavailable (agx worker roster --json timed out)."),
   );
 }
 
-const r = await attempt(main);
-if (!r.ok) {
+const r = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
+if (r.isErr()) {
   // FATAL: the hook itself failed, so no axis could be evaluated; fail closed.
   decidePre(
     "deny",

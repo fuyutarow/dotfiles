@@ -49,7 +49,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { cccSearchPath } from "./ccc-search-path.ts";
 import {
   adaptivePathSearch,
@@ -250,7 +250,7 @@ function missingFlagValue(argv: string[]): Error | undefined {
 }
 
 let argumentError: Error | undefined;
-let commandResult: Result<number, Error> = ok(0);
+let commandResult: Result<number, Error> = Result.ok(0);
 
 async function recordResult(
   result: Promise<Result<number, Error>>,
@@ -276,16 +276,18 @@ function exactlyOneQuery(
 ): Result<string, Error> {
   const query = queries[0];
   if (queries.length !== 1 || query === undefined || query.trim() === "") {
-    return err(new Error(`${route} requires exactly one non-empty --query`));
+    return Result.err(
+      new Error(`${route} requires exactly one non-empty --query`),
+    );
   }
-  return ok(query);
+  return Result.ok(query);
 }
 
 function atMostOnePath(route: string, paths: string[]): Result<void, Error> {
   if (paths.length > 1) {
-    return err(new Error(`${route} accepts at most one --path glob`));
+    return Result.err(new Error(`${route} accepts at most one --path glob`));
   }
-  return ok();
+  return Result.ok();
 }
 
 // --project selects the working directory for the backend. --path remains a filter INSIDE it.
@@ -294,9 +296,9 @@ async function registeredRoots(): Promise<
   Result<{ existing: string[]; missing: string[] }, Error>
 > {
   const ccc = requireExecutable("ccc");
-  if (ccc.isErr()) return err(ccc.error);
-  const status = await fromAsyncThrowable(
-    () =>
+  if (ccc.isErr()) return Result.err(ccc.error);
+  const status = await Result.tryPromise({
+    try: () =>
       runChildCaptured(
         [ccc.value, "daemon", "status"],
         2_000,
@@ -304,23 +306,28 @@ async function registeredRoots(): Promise<
         process.cwd(),
         false,
       ),
-    asError,
-  )();
-  if (status.isErr()) return err(status.error);
+    catch: asError,
+  });
+  if (status.isErr()) return Result.err(status.error);
   if (status.value.exitCode !== 0 || status.value.timedOut)
-    return err(new Error("could not read ccc daemon registrations"));
+    return Result.err(new Error("could not read ccc daemon registrations"));
   const parsed = parseDaemonStatus(status.value.stdout);
   if (parsed.kind === "unrecognized")
-    return err(new Error("ccc daemon status unknown: unrecognized output"));
+    return Result.err(
+      new Error("ccc daemon status unknown: unrecognized output"),
+    );
   const paths =
     parsed.kind === "projects" ? parsed.projects.map((item) => item.path) : [];
   const checked = await Promise.all(
     paths.map(async (path) => {
-      const info = await fromAsyncThrowable(() => stat(path), asError)();
+      const info = await Result.tryPromise({
+        try: () => stat(path),
+        catch: asError,
+      });
       return { path, exists: info.isOk() && info.value.isDirectory() };
     }),
   );
-  return ok({
+  return Result.ok({
     existing: checked.filter((item) => item.exists).map((item) => item.path),
     missing: checked.filter((item) => !item.exists).map((item) => item.path),
   });
@@ -330,59 +337,59 @@ async function targetProject(
   path: string | undefined,
   lexical: boolean,
 ): Promise<Result<string, Error>> {
-  if (path === undefined) return ok(process.cwd());
+  if (path === undefined) return Result.ok(process.cwd());
   if (lexical) {
-    const target = await fromAsyncThrowable(
-      () => realpath(resolve(path)),
-      asError,
-    )();
+    const target = await Result.tryPromise({
+      try: () => realpath(resolve(path)),
+      catch: asError,
+    });
     if (target.isOk() && (await hasRootSettings(target.value)))
-      return ok(target.value);
+      return Result.ok(target.value);
     const roots = await registeredRoots();
     if (roots.isErr())
-      return err(
+      return Result.err(
         new Error(
           `unknown root ${path}; registered roots unknown: ${roots.error.message}`,
         ),
       );
     const existing = roots.value.existing;
-    return err(
+    return Result.err(
       new Error(
         `unknown root ${path}; registered roots that exist: ${existing.length === 0 ? "(none)" : existing.join(", ")}`,
       ),
     );
   }
   const roots = await registeredRoots();
-  if (roots.isErr()) return err(roots.error);
+  if (roots.isErr()) return Result.err(roots.error);
   if (roots.value.existing.length === 0 && roots.value.missing.length === 0)
-    return err(new Error("ccc daemon has no projects loaded"));
-  const target = await fromAsyncThrowable(
-    () => realpath(resolve(path)),
-    asError,
-  )();
+    return Result.err(new Error("ccc daemon has no projects loaded"));
+  const target = await Result.tryPromise({
+    try: () => realpath(resolve(path)),
+    catch: asError,
+  });
   const canonicalRoots = await Promise.all(
     roots.value.existing.map(async (root) => {
-      const canonical = await fromAsyncThrowable(
-        () => realpath(root),
-        asError,
-      )();
+      const canonical = await Result.tryPromise({
+        try: () => realpath(root),
+        catch: asError,
+      });
       return canonical.isOk() ? canonical.value : root;
     }),
   );
   if (target.isErr() || !canonicalRoots.includes(target.value))
-    return err(
+    return Result.err(
       new Error(
         `unknown root ${path}; registered roots that exist: ${roots.value.existing.length === 0 ? "(none)" : roots.value.existing.join(", ")}`,
       ),
     );
-  return ok(target.value);
+  return Result.ok(target.value);
 }
 
 async function hasRootSettings(path: string): Promise<boolean> {
-  const settings = await fromAsyncThrowable(
-    () => stat(resolve(path, ".cocoindex_code/settings.yml")),
-    asError,
-  )();
+  const settings = await Result.tryPromise({
+    try: () => stat(resolve(path, ".cocoindex_code/settings.yml")),
+    catch: asError,
+  });
   return settings.isOk() && settings.value.isFile();
 }
 
@@ -422,12 +429,12 @@ function rootsCommand() {
     },
     async (parsed) => {
       if (parsed._.length > 0) {
-        commandResult = err(new Error("roots takes no arguments"));
+        commandResult = Result.err(new Error("roots takes no arguments"));
         return;
       }
       const roots = await registeredRoots();
       if (roots.isErr()) {
-        commandResult = err(roots.error);
+        commandResult = Result.err(roots.error);
         return;
       }
       if (roots.value.existing.length === 0 && roots.value.missing.length === 0)
@@ -461,7 +468,7 @@ function rootsCommand() {
             `stale worktree registrations: ${staleWorktrees}\n`,
           );
       }
-      commandResult = ok(0);
+      commandResult = Result.ok(0);
     },
   );
 }
@@ -493,8 +500,8 @@ async function reportBusySearch(
 ): Promise<void> {
   let progress = indexingProgress(statusOutput);
   if (progress.filesListed === "unknown" || progress.filesAdded === "unknown") {
-    const projectStatus = await fromAsyncThrowable(
-      () =>
+    const projectStatus = await Result.tryPromise({
+      try: () =>
         runChildCaptured(
           [ccc, "status"],
           Math.min(500, timeoutMs),
@@ -502,8 +509,8 @@ async function reportBusySearch(
           project,
           false,
         ),
-      asError,
-    )();
+      catch: asError,
+    });
     if (
       projectStatus.isOk() &&
       projectStatus.value.exitCode === 0 &&
@@ -573,13 +580,13 @@ async function classifyTimedOutSearch(
       indexPid,
       timeoutMs,
     );
-    return ok(75);
+    return Result.ok(75);
   }
 
   // Indexing may have started after the pre-search status check. Recheck at the timeout boundary
   // before calling the search child broken; keep this probe bounded and quiet.
-  const timeoutStatus = await fromAsyncThrowable(
-    () =>
+  const timeoutStatus = await Result.tryPromise({
+    try: () =>
       runChildCaptured(
         [ccc, "daemon", "status"],
         Math.min(500, timeoutMs),
@@ -587,8 +594,8 @@ async function classifyTimedOutSearch(
         project,
         false,
       ),
-    asError,
-  )();
+    catch: asError,
+  });
   const statusAvailable =
     timeoutStatus.isOk() &&
     timeoutStatus.value.exitCode === 0 &&
@@ -600,13 +607,13 @@ async function classifyTimedOutSearch(
       `DAEMON: indexing observed at timeout: ${daemonIndexingActivity(parsedTimeout)}\n`,
     );
     await reportBusySearch(ccc, route, project, observed, null, timeoutMs);
-    return ok(75);
+    return Result.ok(75);
   }
 
   process.stderr.write(
     `FATAL: search child timed out after ${timeoutMs}ms: ${ccc}; daemon-wide indexing observed before search: ${daemonIndexingActivity(parsedStatus)}; at timeout: ${parsedTimeout === null ? "status unavailable" : daemonIndexingActivity(parsedTimeout)}\n`,
   );
-  return ok(124);
+  return Result.ok(124);
 }
 
 function backingIndexNote(project: string): void {
@@ -631,10 +638,10 @@ async function mapBackingResultPaths(
       if (suffix === undefined) return match[0];
       const relativePath = suffix.replaceAll("\\", "/").replace(/^[/\\]+/u, "");
       const workspacePath = resolve(workspace, relativePath);
-      const exists = await fromAsyncThrowable(
-        () => access(workspacePath),
-        asError,
-      )();
+      const exists = await Result.tryPromise({
+        try: () => access(workspacePath),
+        catch: asError,
+      });
       return exists.isOk() ? workspacePath : match[0];
     }),
   );
@@ -652,11 +659,11 @@ async function mapBackingResultPaths(
 async function daemonAvailability(project: string): Promise<string> {
   const ccc = requireExecutable("ccc");
   if (ccc.isErr()) return "ccc is not available on PATH";
-  const status = await fromAsyncThrowable(
-    () =>
+  const status = await Result.tryPromise({
+    try: () =>
       runChildCaptured([ccc.value, "daemon", "status"], 2_000, false, project),
-    asError,
-  )();
+    catch: asError,
+  });
   if (status.isErr())
     return `ccc daemon status could not be read: ${status.error.message}`;
   if (status.value.exitCode !== 0)
@@ -733,7 +740,7 @@ function rgFlags(values: {
   multilineDotall?: boolean | undefined;
 }): Result<string[], Error> {
   if (values.filesWithMatches === true && values.count === true) {
-    return err(
+    return Result.err(
       new Error("--files-with-matches and --count are mutually exclusive"),
     );
   }
@@ -769,7 +776,7 @@ function rgFlags(values: {
   if (values.limit !== undefined)
     flags.push("--max-count", String(values.limit));
   for (const glob of values.glob ?? []) flags.push("--glob", glob);
-  return ok(flags);
+  return Result.ok(flags);
 }
 
 type ConceptPathOutcome =
@@ -795,8 +802,8 @@ async function adaptiveConceptPathSearch(args: {
   timeoutMs: number;
 }): Promise<ConceptPathOutcome> {
   const runCcc = (cccArgs: string[], remainingMs: number) =>
-    fromAsyncThrowable(
-      () =>
+    Result.tryPromise({
+      try: () =>
         runChildCaptured(
           cccArgs,
           Math.min(args.timeoutMs, remainingMs),
@@ -804,8 +811,8 @@ async function adaptiveConceptPathSearch(args: {
           args.project,
           false,
         ),
-      asError,
-    )();
+      catch: asError,
+    });
   const langArgs = args.langs.flatMap((lang) => ["--lang", lang]);
   const result = await adaptivePathSearch<string>({
     pattern: args.pattern,
@@ -904,7 +911,7 @@ async function runCccSearch(
     project === undefined ||
     (explicitProject && project !== cwd && resolution.workspace !== cwd)
   ) {
-    return err(
+    return Result.err(
       new Error(
         `${route} requested, but ${cwd} is not ccc-registered at that project root; ` +
           "run ccc init/index or use an explicitly lexical route",
@@ -915,11 +922,11 @@ async function runCccSearch(
   if (resolution.workspace !== null) backingIndexNote(project);
 
   const freshnessResult = await checkIndexFreshness(project, route);
-  if (freshnessResult.isErr()) return err(freshnessResult.error);
+  if (freshnessResult.isErr()) return Result.err(freshnessResult.error);
   const freshness = freshnessResult.value;
   if (freshness.status === "stale") {
     await writeNoIndexDiagnostic(route, project, freshness.message, json);
-    return ok(3);
+    return Result.ok(3);
   }
   // The fresh state carries a watermark; the refusal branch above returns unconditionally. A watermark
   // can only reach this point if checkIndexFreshness confirmed source === "index" (a legacy
@@ -952,7 +959,7 @@ async function runCccSearch(
     `head=${headLabel(freshness.watermark.head)} cite=${citationToken(freshness.watermark)}`;
 
   const ccc = requireExecutable("ccc");
-  if (ccc.isErr()) return err(ccc.error);
+  if (ccc.isErr()) return Result.err(ccc.error);
   const requestedIndexPid =
     freshness.reindexPid ?? (await runningIndexPid(project));
   const statusTimeoutMs = Math.min(
@@ -960,8 +967,8 @@ async function runCccSearch(
     5_000,
     Math.max(1, Math.floor(9_000 - process.uptime() * 1_000)),
   );
-  const statusResult = await fromAsyncThrowable(
-    () =>
+  const statusResult = await Result.tryPromise({
+    try: () =>
       runChildCaptured(
         [ccc.value, "daemon", "status"],
         statusTimeoutMs,
@@ -969,9 +976,9 @@ async function runCccSearch(
         project,
         requestedIndexPid === null,
       ),
-    asError,
-  )();
-  if (statusResult.isErr()) return err(statusResult.error);
+    catch: asError,
+  });
+  if (statusResult.isErr()) return Result.err(statusResult.error);
   const status = statusResult.value;
   if (status.timedOut && requestedIndexPid !== null) {
     await reportBusySearch(
@@ -982,13 +989,13 @@ async function runCccSearch(
       requestedIndexPid,
       timeoutMs,
     );
-    return ok(75);
+    return Result.ok(75);
   }
   if (status.exitCode !== 0) {
     process.stderr.write(
       `FATAL: could not read ccc daemon status before ${route} search\n`,
     );
-    return ok(status.exitCode);
+    return Result.ok(status.exitCode);
   }
   const parsedStatus = parseDaemonStatus(status.stdout);
   if (parsedStatus.kind === "unrecognized")
@@ -1017,13 +1024,13 @@ async function runCccSearch(
           `exit 0 with no result blocks is not PASS and does not by itself prove absence; ` +
           `${confidence}\n`,
       );
-      return ok(1);
+      return Result.ok(1);
     }
     process.stdout.write(
       `RESULT: PASS route=${route} engine=ccc queries=${queries.length} ` +
         `queries_with_hits=${matchedQueries} ${confidence}\n`,
     );
-    return ok(0);
+    return Result.ok(0);
   };
 
   const conceptQuery = queries[0];
@@ -1061,8 +1068,8 @@ async function runCccSearch(
         indexPid,
       );
     }
-    if (outcome.kind === "failed") return ok(outcome.exitCode);
-    if (outcome.kind === "error") return err(new Error(outcome.message));
+    if (outcome.kind === "failed") return Result.ok(outcome.exitCode);
+    if (outcome.kind === "error") return Result.err(new Error(outcome.message));
     if (outcome.text !== "") process.stdout.write(outcome.text);
     if (outcome.count > 0) matchedQueries += 1;
     return conclude();
@@ -1077,7 +1084,7 @@ async function runCccSearch(
       process.stderr.write(
         `RESULT: BUSY route=${route}; reindex running for project=${project} (pid ${indexPid ?? "unknown"}); lexical routes work now: rr text|regex|files\n`,
       );
-      return ok(75);
+      return Result.ok(75);
     }
     const searchArgs = [ccc.value, "search", query, "--limit", String(limit)];
     if (cccPath !== undefined) searchArgs.push("--path", cccPath);
@@ -1086,8 +1093,8 @@ async function runCccSearch(
     process.stderr.write(
       `ROUTE: ${route} -> ccc search (${index + 1}/${queries.length}) project=${project}\n`,
     );
-    const searchResult = await fromAsyncThrowable(
-      () =>
+    const searchResult = await Result.tryPromise({
+      try: () =>
         runChildCaptured(
           searchArgs,
           Math.min(timeoutMs, remainingMs),
@@ -1095,9 +1102,9 @@ async function runCccSearch(
           project,
           false,
         ),
-      asError,
-    )();
-    if (searchResult.isErr()) return err(searchResult.error);
+      catch: asError,
+    });
+    if (searchResult.isErr()) return Result.err(searchResult.error);
     const result = searchResult.value;
     const mappedOutput = await mapBackingResultPaths(
       result.stdout,
@@ -1117,7 +1124,7 @@ async function runCccSearch(
         indexPid,
       );
     }
-    if (result.exitCode !== 0) return ok(result.exitCode);
+    if (result.exitCode !== 0) return Result.ok(result.exitCode);
     if (cccResultCount(result.stdout) > 0) matchedQueries += 1;
   }
 
@@ -1136,16 +1143,16 @@ async function runRg(
     route !== "files" &&
     paths.some((path) => isOutsideProjectPath(cwd, path))
   ) {
-    return err(
+    return Result.err(
       new Error(
         `${route} --path must stay inside selected project root ${cwd}`,
       ),
     );
   }
   const rg = requireExecutable("rg");
-  if (rg.isErr()) return err(rg.error);
+  if (rg.isErr()) return Result.err(rg.error);
   const flags = rgFlags(values);
-  if (flags.isErr()) return err(flags.error);
+  if (flags.isErr()) return Result.err(flags.error);
   let rgArgs: string[];
   if (route === "files") {
     rgArgs = [rg.value, "--files", ...flags.value, ...paths];
@@ -1163,11 +1170,11 @@ async function runRg(
   }
 
   process.stderr.write(`ROUTE: ${route} -> rg project=${cwd}\n`);
-  const child = await fromAsyncThrowable(
-    () => runChild(rgArgs, timeoutMs, cwd),
-    asError,
-  )();
-  if (child.isErr()) return err(child.error);
+  const child = await Result.tryPromise({
+    try: () => runChild(rgArgs, timeoutMs, cwd),
+    catch: asError,
+  });
+  if (child.isErr()) return Result.err(child.error);
   const exitCode = child.value;
   if (exitCode === 0) {
     process.stdout.write(`RESULT: PASS route=${route} engine=rg\n`);
@@ -1176,7 +1183,7 @@ async function runRg(
       lexicalMissLine(route, query, paths, values.glob ?? [], cwd),
     );
   }
-  return ok(exitCode);
+  return Result.ok(exitCode);
 }
 
 function isOutsideProjectPath(project: string, path: string): boolean {
@@ -1197,12 +1204,12 @@ async function runCccGrep(
 ): Promise<Result<number, Error>> {
   const resolution = await resolveRegisteredProject(cwd);
   if (resolution === null)
-    return err(
+    return Result.err(
       new Error(`structural requested, but ${cwd} is not ccc-registered`),
     );
   const project = resolution.project;
   const freshness = await checkIndexFreshness(project, "structural");
-  if (freshness.isErr()) return err(freshness.error);
+  if (freshness.isErr()) return Result.err(freshness.error);
   if (freshness.value.status === "stale") {
     await writeNoIndexDiagnostic(
       "structural",
@@ -1210,21 +1217,21 @@ async function runCccGrep(
       freshness.value.message,
       false,
     );
-    return ok(3);
+    return Result.ok(3);
   }
   const ccc = requireExecutable("ccc");
-  if (ccc.isErr()) return err(ccc.error);
+  if (ccc.isErr()) return Result.err(ccc.error);
   const grepArgs = [ccc.value, "grep", query];
   if (path !== undefined) grepArgs.push("--path", path);
   for (const lang of langs) grepArgs.push("--lang", lang);
   process.stderr.write(`ROUTE: structural -> ccc grep project=${cwd}\n`);
-  const child = await fromAsyncThrowable(
-    () => runChildCaptured(grepArgs, timeoutMs, true, cwd),
-    asError,
-  )();
-  if (child.isErr()) return err(child.error);
+  const child = await Result.tryPromise({
+    try: () => runChildCaptured(grepArgs, timeoutMs, true, cwd),
+    catch: asError,
+  });
+  if (child.isErr()) return Result.err(child.error);
   const result = child.value;
-  if (result.exitCode !== 0) return ok(result.exitCode);
+  if (result.exitCode !== 0) return Result.ok(result.exitCode);
   // `ccc grep` (checked: v0.2.41, `ccc grep --help`) prints exactly the sentence
   // "No matches found." and nothing else on a genuine no-match, exit 0 -- there is no --json,
   // --count, or other machine-readable signal for this subcommand (search has --json; grep
@@ -1244,7 +1251,7 @@ async function runCccGrep(
     process.stderr.write(
       "RESULT: NO_MATCH route=structural engine=ccc-grep; ccc reported no matches\n",
     );
-    return ok(1);
+    return Result.ok(1);
   }
   if (result.stdout.trim() === "") {
     // Not observed on the checked ccc version, but cheap defensive coverage in case a
@@ -1253,12 +1260,12 @@ async function runCccGrep(
     process.stderr.write(
       "RESULT: NO_MATCH route=structural engine=ccc-grep; empty output is not PASS\n",
     );
-    return ok(1);
+    return Result.ok(1);
   }
   process.stdout.write(
     "RESULT: PASS route=structural engine=ccc-grep status=fresh\n",
   );
-  return ok(0);
+  return Result.ok(0);
 }
 
 /**
@@ -1372,11 +1379,11 @@ function positiveInteger(
   value: string | undefined,
   name: string,
 ): Result<number | undefined, Error> {
-  if (value === undefined) return ok(undefined);
+  if (value === undefined) return Result.ok(undefined);
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0
-    ? ok(parsed)
-    : err(new Error(`--${name} must be a positive integer`));
+    ? Result.ok(parsed)
+    : Result.err(new Error(`--${name} must be a positive integer`));
 }
 
 function validateNonEmpty(
@@ -1394,15 +1401,16 @@ function validateSearchFlags(raw: RawSearchFlags): Result<SearchFlags, Error> {
     validateNonEmpty(raw.path, "path") ??
     validateNonEmpty(raw.lang, "lang") ??
     validateNonEmpty(raw.glob, "glob");
-  if (empty !== undefined) return err(empty);
-  if (raw.project === "") return err(new Error("--project requires a value"));
+  if (empty !== undefined) return Result.err(empty);
+  if (raw.project === "")
+    return Result.err(new Error("--project requires a value"));
   const limit = positiveInteger(raw.limit, "limit");
-  if (limit.isErr()) return err(limit.error);
+  if (limit.isErr()) return Result.err(limit.error);
   const timeoutMs = positiveInteger(raw.timeoutMs, "timeout-ms");
-  if (timeoutMs.isErr()) return err(timeoutMs.error);
+  if (timeoutMs.isErr()) return Result.err(timeoutMs.error);
   const context = positiveInteger(raw.context, "context");
-  if (context.isErr()) return err(context.error);
-  return ok({
+  if (context.isErr()) return Result.err(context.error);
+  return Result.ok({
     ...raw,
     limit: limit.value,
     timeoutMs: timeoutMs.value,
@@ -1485,7 +1493,7 @@ async function runRoute(
   const paths = values.path ?? [];
   const timeoutMs = values.timeoutMs ?? 120_000;
   if (values.refresh === true)
-    return err(
+    return Result.err(
       new Error(
         "--refresh cannot bypass admission; run rr index --plan, then rr index",
       ),
@@ -1494,22 +1502,22 @@ async function runRoute(
     values.project,
     rawRoute === "literal" || rawRoute === "exhaustive" || rawRoute === "files",
   );
-  if (project.isErr()) return err(project.error);
+  if (project.isErr()) return Result.err(project.error);
   const cwd = project.value;
   if (rawRoute === "symbol") {
     const symbol = exactlyOneQuery(rawRoute, queries);
-    if (symbol.isErr()) return err(symbol.error);
+    if (symbol.isErr()) return Result.err(symbol.error);
     process.stderr.write(
       `FATAL: route=symbol belongs to Serena, not shell search; ` +
         `use Serena definitions/references for '${symbol.value}'\n`,
     );
-    return ok(2);
+    return Result.ok(2);
   }
   if (rawRoute === "concept") {
     const query = exactlyOneQuery(rawRoute, queries);
-    if (query.isErr()) return err(query.error);
+    if (query.isErr()) return Result.err(query.error);
     const pathCount = atMostOnePath(rawRoute, paths);
-    if (pathCount.isErr()) return err(pathCount.error);
+    if (pathCount.isErr()) return Result.err(pathCount.error);
     return runCccSearch(
       rawRoute,
       queries,
@@ -1524,12 +1532,12 @@ async function runRoute(
   }
   if (rawRoute === "battery") {
     if (queries.length < 3 || queries.some((query) => query.trim() === "")) {
-      return err(
+      return Result.err(
         new Error("battery requires at least 3 non-empty --query values"),
       );
     }
     const pathCount = atMostOnePath(rawRoute, paths);
-    if (pathCount.isErr()) return err(pathCount.error);
+    if (pathCount.isErr()) return Result.err(pathCount.error);
     return runCccSearch(
       rawRoute,
       queries,
@@ -1544,9 +1552,9 @@ async function runRoute(
   }
   if (rawRoute === "structural") {
     const query = exactlyOneQuery(rawRoute, queries);
-    if (query.isErr()) return err(query.error);
+    if (query.isErr()) return Result.err(query.error);
     const pathCount = atMostOnePath(rawRoute, paths);
-    if (pathCount.isErr()) return err(pathCount.error);
+    if (pathCount.isErr()) return Result.err(pathCount.error);
     return runCccGrep(query.value, paths[0], values.lang ?? [], timeoutMs, cwd);
   }
   if (rawRoute === "files") {
@@ -1561,7 +1569,7 @@ async function runRoute(
   }
   // rawRoute is now narrowed to "literal" | "exhaustive" — the two remaining Route members.
   const query = exactlyOneQuery(rawRoute, queries);
-  if (query.isErr()) return err(query.error);
+  if (query.isErr()) return Result.err(query.error);
   return runRg(
     rawRoute,
     query.value,
@@ -1577,11 +1585,11 @@ async function runRouteCommand(
   positionals: readonly string[],
   flags: RawSearchFlags,
 ): Promise<Result<number, Error>> {
-  if (argumentError !== undefined) return err(argumentError);
+  if (argumentError !== undefined) return Result.err(argumentError);
   const validated = validateSearchFlags(
     withPositionals(route, positionals, flags),
   );
-  if (validated.isErr()) return err(validated.error);
+  if (validated.isErr()) return Result.err(validated.error);
   return runRoute(route, validated.value);
 }
 
@@ -1726,7 +1734,7 @@ async function runDefinition(
   const resolution = await resolveRegisteredProject(cwd);
   const project = resolution?.project;
   if (resolution === null || project === undefined || project === "") {
-    return err(
+    return Result.err(
       new Error(
         `definition requested, but ${cwd} is not inside a ccc-registered project`,
       ),
@@ -1734,7 +1742,7 @@ async function runDefinition(
   }
   if (resolution.workspace !== null) backingIndexNote(project);
   const freshness = await checkIndexFreshness(project, "exists");
-  if (freshness.isErr()) return err(freshness.error);
+  if (freshness.isErr()) return Result.err(freshness.error);
   if (freshness.value.status === "stale") {
     await writeNoIndexDiagnostic(
       "exists",
@@ -1742,10 +1750,10 @@ async function runDefinition(
       freshness.value.message,
       json,
     );
-    return ok(3);
+    return Result.ok(3);
   }
   const answer = await findDefinitions(project, query, limit);
-  if (answer.isErr()) return err(answer.error);
+  if (answer.isErr()) return Result.err(answer.error);
   const a = answer.value;
   const cards = await Promise.all(
     a.cards.map(async (card) => ({
@@ -1762,7 +1770,7 @@ async function runDefinition(
     process.stdout.write(
       `${JSON.stringify({ ...a, cards: cards.map(({ body: _b, ...c }) => c) })}\n`,
     );
-    return ok(a.strength === "none" ? 1 : 0);
+    return Result.ok(a.strength === "none" ? 1 : 0);
   }
   process.stderr.write(
     `ROUTE: definition -> catalog (${a.catalogSize} definitions)${a.reranked ? ` + judge=${a.judge}` : ""} project=${project}\n`,
@@ -1774,7 +1782,7 @@ async function runDefinition(
       "RESULT: UNRANKED route=definition; the reranker was unavailable (see NOTE), so the cards are in " +
         "embedding order and NOTHING is judged a match or an absence. Read the cards yourself, or retry.\n",
     );
-    return ok(0);
+    return Result.ok(0);
   }
   if (a.strength === "none") {
     process.stdout.write(
@@ -1782,13 +1790,13 @@ async function runDefinition(
         "NOT matches. Searched definitions (functions, types) only: an inline snippet or a script body " +
         "is not covered — `concept` searches everything.\n",
     );
-    return ok(1);
+    return Result.ok(1);
   }
   process.stdout.write(
     `RESULT: PASS route=definition status=fresh strength=${a.strength} best=${a.best.toFixed(2)} ` +
       `judge=${a.judge} (strong: the same function; likely: read it before writing a new one)\n`,
   );
-  return ok(0);
+  return Result.ok(0);
 }
 
 function definitionCommand() {
@@ -1814,7 +1822,7 @@ function definitionCommand() {
     },
     async (parsed) => {
       if (argumentError !== undefined) {
-        commandResult = err(argumentError);
+        commandResult = Result.err(argumentError);
         return;
       }
       // `rr exists '<what it does>'` = `rr exists --query '<what it does>'`.
@@ -1823,17 +1831,17 @@ function definitionCommand() {
         ...parsed._,
       ]);
       if (query.isErr()) {
-        commandResult = err(query.error);
+        commandResult = Result.err(query.error);
         return;
       }
       const limit = positiveInteger(parsed.flags.limit, "limit");
       if (limit.isErr()) {
-        commandResult = err(limit.error);
+        commandResult = Result.err(limit.error);
         return;
       }
       const project = await targetProject(parsed.flags.project, false);
       if (project.isErr()) {
-        commandResult = err(project.error);
+        commandResult = Result.err(project.error);
         return;
       }
       commandResult = await runDefinition(
@@ -1867,17 +1875,17 @@ function indexCommand() {
     },
     async (parsed) => {
       if (argumentError !== undefined) {
-        commandResult = err(argumentError);
+        commandResult = Result.err(argumentError);
         return;
       }
       if (parsed._.length > 0) {
-        commandResult = err(
+        commandResult = Result.err(
           new Error(`unexpected positional arguments: ${parsed._.join(" ")}`),
         );
         return;
       }
       if (parsed.flags.detach === true && parsed.flags.status === true) {
-        commandResult = err(
+        commandResult = Result.err(
           new Error("--detach and --status are mutually exclusive"),
         );
         return;
@@ -1889,7 +1897,7 @@ function indexCommand() {
             parsed.flags.acceptPlan === true)) ||
         (parsed.flags.status === true && parsed.flags.acceptPlan === true)
       ) {
-        commandResult = err(
+        commandResult = Result.err(
           new Error(
             "--plan requires a read-only foreground invocation; --accept-plan cannot be combined with --plan or --status",
           ),
@@ -1902,7 +1910,7 @@ function indexCommand() {
       }
       const timeout = positiveInteger(parsed.flags.timeoutMs, "timeout-ms");
       if (timeout.isErr()) {
-        commandResult = err(timeout.error);
+        commandResult = Result.err(timeout.error);
         return;
       }
       const indexResult = await runIndexWrapper(
@@ -1914,7 +1922,7 @@ function indexCommand() {
         },
       );
       if (indexResult.isErr()) {
-        commandResult = err(indexResult.error);
+        commandResult = Result.err(indexResult.error);
         return;
       }
       commandResult = indexResult.map((outcome) => outcome.exitCode);
@@ -1926,23 +1934,24 @@ function indexCommand() {
       // pay the build. Its failure is reported, never turned into an index failure.
       {
         const notes: string[] = [];
-        const warmed = await fromAsyncThrowable(
-          () => refreshCatalog(admitted.project, notes, admitted.backend),
-          asError,
-        )();
+        const warmed = await Result.tryPromise({
+          try: () => refreshCatalog(admitted.project, notes, admitted.backend),
+          catch: asError,
+        });
         for (const n of notes) process.stderr.write(`NOTE: ${n}\n`);
-        warmed.match(
-          (result) => {
+        warmed.match({
+          ok: (result) => {
             if (result.isErr())
               process.stderr.write(
                 `NOTE: definition catalog not refreshed: ${String(result.error)}; retry the root's admitted indexing operation to refresh the catalog\n`,
               );
           },
-          (error) =>
+          err: (error) => {
             process.stderr.write(
               `NOTE: definition catalog not refreshed: ${String(error)}; retry the root's admitted indexing operation to refresh the catalog\n`,
-            ),
-        );
+            );
+          },
+        });
       }
     },
   );
@@ -1950,14 +1959,15 @@ function indexCommand() {
 
 async function main(): Promise<Result<number, Error>> {
   const dbEnv = await declaredDbEnv();
-  if (dbEnv.isErr()) return err(dbEnv.error);
+  if (dbEnv.isErr()) return Result.err(dbEnv.error);
   process.env[MAPPING_ENV] = dbEnv.value[MAPPING_ENV];
   argumentError = undefined;
-  commandResult = ok(0);
+  commandResult = Result.ok(0);
   const argv = normalizeNegativeNumericValues(cliArgv());
-  if (rejectUnknownIndexFlags(argv) || rejectNestedVersion(argv)) return ok(1);
+  if (rejectUnknownIndexFlags(argv) || rejectNestedVersion(argv))
+    return Result.ok(1);
   const missing = missingFlagValue(argv);
-  if (missing !== undefined) return err(missing);
+  if (missing !== undefined) return Result.err(missing);
   await cli(
     {
       name: "repo-retrieve",
@@ -1978,19 +1988,21 @@ async function main(): Promise<Result<number, Error>> {
     },
     (parsed) => {
       if (argumentError !== undefined) {
-        commandResult = err(argumentError);
+        commandResult = Result.err(argumentError);
       } else if (parsed._.route === undefined) {
-        commandResult = err(new Error("missing route"));
+        commandResult = Result.err(new Error("missing route"));
       } else {
-        commandResult = err(new Error(`unknown route '${parsed._.route}'`));
+        commandResult = Result.err(
+          new Error(`unknown route '${parsed._.route}'`),
+        );
       }
     },
     argv,
   );
-  if (argumentError !== undefined) return err(argumentError);
+  if (argumentError !== undefined) return Result.err(argumentError);
   if (commandResult.isErr()) return commandResult;
-  if (typeof process.exitCode === "number") return ok(process.exitCode);
-  return ok(commandResult.value);
+  if (typeof process.exitCode === "number") return Result.ok(process.exitCode);
+  return Result.ok(commandResult.value);
 }
 
 const ErrnoSchema = z.object({ code: z.string() });
@@ -2006,24 +2018,24 @@ if (import.meta.main) {
     process.stderr.write(`${message}\n`);
     process.exit(1);
   });
-  const execution = await fromAsyncThrowable(main, asError)();
-  execution.match(
-    (result) =>
-      result.match(
-        (code) => process.exit(code),
-        (error) => {
+  const execution = await Result.tryPromise({ try: main, catch: asError });
+  execution.match({
+    ok: (result) =>
+      result.match({
+        ok: (code) => process.exit(code),
+        err: (error) => {
           process.stderr.write(
             `FATAL: ${error.message}\n` +
               "Run 'repo-retrieve --help' for usage.\n",
           );
           process.exit(2);
         },
-      ),
-    (error) => {
+      }),
+    err: (error) => {
       process.stderr.write(
         `FATAL: ${error.message}\nRun 'repo-retrieve --help' for usage.\n`,
       );
       process.exit(2);
     },
-  );
+  });
 }

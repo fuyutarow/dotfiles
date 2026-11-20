@@ -10,7 +10,8 @@ import {
   type Redirect,
   type ShellCommand,
 } from "./shell-syntax.ts";
-import { fromThrowable, jsonOf, z } from "./zod.ts";
+import { jsonOf, z } from "./zod.ts";
+import { Result } from "./result.ts";
 
 const GiB = 1024 ** 3;
 
@@ -205,10 +206,10 @@ export function loadStorageHeadroom(path: string): {
   errors: string[];
 } {
   const errors: string[] = [];
-  const parsedToml = fromThrowable(
-    (): unknown => Bun.TOML.parse(readFileSync(path, "utf8")),
-    (error) => (error instanceof Error ? error.message : String(error)),
-  )();
+  const parsedToml = Result.try({
+    try: (): unknown => Bun.TOML.parse(readFileSync(path, "utf8")),
+    catch: (error) => (error instanceof Error ? error.message : String(error)),
+  });
   if (parsedToml.isErr())
     return {
       drives: [],
@@ -264,7 +265,10 @@ export function assess(
 export function measureStorageUncached(
   path: string,
 ): StorageMeasurement | null {
-  const result = fromThrowable(() => statfsSync(path))();
+  const result = Result.try({
+    try: () => statfsSync(path),
+    catch: (e: unknown) => e,
+  });
   if (result.isErr()) return null;
   return {
     free: result.value.bavail * result.value.bsize,
@@ -285,27 +289,33 @@ export function measureStorage(path: string): StorageMeasurement | null {
     `${new Bun.CryptoHasher("sha1").update(path).digest("hex")}.statfs.json`,
   );
   const now = Temporal.Now.instant().epochMilliseconds;
-  const cached = fromThrowable(() => {
-    const parsed = jsonOf(
-      z.object({
-        free: z.number().nonnegative(),
-        total: z.number().nonnegative(),
-        at: z.number(),
-      }),
-    ).safeParse(readFileSync(cacheFile, "utf8"));
-    return parsed.success &&
-      now >= parsed.data.at &&
-      now - parsed.data.at <= 2_000
-      ? { free: parsed.data.free, total: parsed.data.total }
-      : null;
-  })();
+  const cached = Result.try({
+    try: () => {
+      const parsed = jsonOf(
+        z.object({
+          free: z.number().nonnegative(),
+          total: z.number().nonnegative(),
+          at: z.number(),
+        }),
+      ).safeParse(readFileSync(cacheFile, "utf8"));
+      return parsed.success &&
+        now >= parsed.data.at &&
+        now - parsed.data.at <= 2_000
+        ? { free: parsed.data.free, total: parsed.data.total }
+        : null;
+    },
+    catch: (e: unknown) => e,
+  });
   if (cached.isOk() && cached.value !== null) return cached.value;
   const measured = measureStorageUncached(path);
   if (measured === null) return null;
-  fromThrowable(() => {
-    mkdirSync(cacheDir, { recursive: true });
-    writeFileSync(cacheFile, JSON.stringify({ ...measured, at: now }));
-  })();
+  Result.try({
+    try: () => {
+      mkdirSync(cacheDir, { recursive: true });
+      writeFileSync(cacheFile, JSON.stringify({ ...measured, at: now }));
+    },
+    catch: (e: unknown) => e,
+  });
   return measured;
 }
 

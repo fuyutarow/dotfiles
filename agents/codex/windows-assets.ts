@@ -1,7 +1,7 @@
+import { Result } from "../../tools/shared/src/result.ts";
 import { lstat, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { dirname, join, relative } from "node:path";
-import { attempt, type Attempt } from "../../tools/shared/src/attempt.ts";
 import { obj } from "../hooks/narrow.ts";
 import { jsonText } from "../hooks/zod.ts";
 import { windowsPath } from "./runtime.ts";
@@ -19,7 +19,12 @@ const digest = (value: string | Uint8Array) =>
   new Bun.CryptoHasher("sha256").update(value).digest("hex");
 
 const exists = async (path: string): Promise<boolean> =>
-  (await attempt(() => lstat(path))).ok;
+  (
+    await Result.tryPromise({
+      try: () => lstat(path),
+      catch: (e: unknown) => e,
+    })
+  ).isOk();
 
 async function copyContents(source: string, target: string): Promise<void> {
   const sourceStats = await stat(source);
@@ -52,8 +57,11 @@ async function writeAsset(
   contents: string,
   home: string,
 ): Promise<string> {
-  const current = await attempt(() => Bun.file(target).text());
-  if (!current.ok || current.value !== contents) {
+  const current = await Result.tryPromise({
+    try: () => Bun.file(target).text(),
+    catch: (e: unknown) => e,
+  });
+  if (current.isErr() || current.value !== contents) {
     await backup(target, home);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, contents, "utf8");
@@ -105,9 +113,12 @@ async function conptyBridge(
   const cache = join(nativeHome, "runtime/conpty");
   const executable = join(cache, CONPTY_EXE);
   const sourceHashPath = join(cache, CONPTY_HASH);
-  const currentHash = await attempt(() => Bun.file(sourceHashPath).text());
+  const currentHash = await Result.tryPromise({
+    try: () => Bun.file(sourceHashPath).text(),
+    catch: (e: unknown) => e,
+  });
   if (
-    currentHash.ok &&
+    currentHash.isOk() &&
     currentHash.value.trim() === sourceHash &&
     (await exists(executable))
   )
@@ -199,16 +210,22 @@ export async function windowsAssetsDrift(home: string): Promise<string[]> {
   const conpty = join(nativeHome, "runtime/conpty", CONPTY_EXE);
   const drift: string[] = [];
   if (!(await exists(manifest))) drift.push(`${manifest} is missing`);
-  const currentGuidance = await attempt(() => Bun.file(guidance).text());
-  if (!currentGuidance.ok) drift.push(`${guidance} is missing`);
-  if (currentGuidance.ok) {
+  const currentGuidance = await Result.tryPromise({
+    try: () => Bun.file(guidance).text(),
+    catch: (e: unknown) => e,
+  });
+  if (currentGuidance.isErr()) drift.push(`${guidance} is missing`);
+  if (currentGuidance.isOk()) {
     const content = currentGuidance.value;
     if (!content.includes(BEGIN) || !content.includes(END))
       drift.push(`${guidance} lacks the managed WSL guidance block`);
   }
-  const currentHooks = await attempt(() => Bun.file(hooks).text());
-  if (!currentHooks.ok) drift.push(`${hooks} is missing`);
-  if (currentHooks.ok && !jsonText.safeParse(currentHooks.value).success)
+  const currentHooks = await Result.tryPromise({
+    try: () => Bun.file(hooks).text(),
+    catch: (e: unknown) => e,
+  });
+  if (currentHooks.isErr()) drift.push(`${hooks} is missing`);
+  if (currentHooks.isOk() && !jsonText.safeParse(currentHooks.value).success)
     drift.push(`${hooks} is invalid JSON`);
   if (!(await exists(conpty))) drift.push(`${conpty} is missing`);
   return drift;
@@ -255,73 +272,79 @@ export async function deployWindowsAssets(
   home: string,
   linuxHome: string,
   distro: string,
-): Promise<Attempt<void>> {
-  const guidance = await attempt(() =>
-    Bun.file(join(dotfiles, "agents/codex/AGENTS.md")).text(),
-  );
-  if (!guidance.ok) return guidance;
-  const sourceHooks = await attempt(() =>
-    Bun.file(join(linuxHome, ".codex/hooks.json")).text(),
-  );
-  if (!sourceHooks.ok) return sourceHooks;
+): Promise<Result<void, unknown>> {
+  const guidance = await Result.tryPromise({
+    try: () => Bun.file(join(dotfiles, "agents/codex/AGENTS.md")).text(),
+    catch: (e: unknown) => e,
+  });
+  if (guidance.isErr()) return Result.err(guidance.error);
+  const sourceHooks = await Result.tryPromise({
+    try: () => Bun.file(join(linuxHome, ".codex/hooks.json")).text(),
+    catch: (e: unknown) => e,
+  });
+  if (sourceHooks.isErr()) return Result.err(sourceHooks.error);
   const decoded = jsonText.safeParse(sourceHooks.value);
   if (!decoded.success)
-    return { ok: false, error: "Linux Codex hooks.json is invalid JSON" };
-  return attempt(async () => {
-    const user = userInfo().username;
-    const nativeHome = join(home, ".codex");
-    await mkdir(nativeHome, { recursive: true });
-    const existingGuidance = await attempt(() =>
-      Bun.file(join(nativeHome, "AGENTS.md")).text(),
-    );
-    const assets: Record<string, string> = {
-      "AGENTS.md": await writeAsset(
-        join(nativeHome, "AGENTS.md"),
-        mergeGuidance(
-          existingGuidance.ok ? existingGuidance.value : "",
-          nativeGuidance(guidance.value, distro, dotfiles, user),
+    return Result.err("Linux Codex hooks.json is invalid JSON");
+  return Result.tryPromise({
+    try: async () => {
+      const user = userInfo().username;
+      const nativeHome = join(home, ".codex");
+      await mkdir(nativeHome, { recursive: true });
+      const existingGuidance = await Result.tryPromise({
+        try: () => Bun.file(join(nativeHome, "AGENTS.md")).text(),
+        catch: (e: unknown) => e,
+      });
+      const assets: Record<string, string> = {
+        "AGENTS.md": await writeAsset(
+          join(nativeHome, "AGENTS.md"),
+          mergeGuidance(
+            existingGuidance.isOk() ? existingGuidance.value : "",
+            nativeGuidance(guidance.value, distro, dotfiles, user),
+          ),
+          home,
         ),
-        home,
-      ),
-    };
-    const adapted = bridgeHooks(
-      decoded.data,
-      distro,
-      process.execPath,
-      join(dotfiles, "agents/codex/windows-hook.ts"),
-      user,
-    );
-    assets["hooks.json"] = await writeAsset(
-      join(nativeHome, "hooks.json"),
-      `${JSON.stringify(adapted, null, 2)}\n`,
-      home,
-    );
-    assets["runtime/conpty"] = await conptyBridge(dotfiles, nativeHome);
-    // Mirror only repo-owned skill names. Plugin and user skill names remain alongside them.
-    const source = join(dotfiles, "agents/skills");
-    const target = join(home, ".agents/skills");
-    await mkdir(target, { recursive: true });
-    for (const name of await readdir(source)) {
-      if (!(await exists(join(source, name, "SKILL.md")))) continue;
-      assets[`skills/${name}`] = await copyEntry(
-        join(source, name),
-        join(target, name),
+      };
+      const adapted = bridgeHooks(
+        decoded.data,
+        distro,
+        process.execPath,
+        join(dotfiles, "agents/codex/windows-hook.ts"),
+        user,
+      );
+      assets["hooks.json"] = await writeAsset(
+        join(nativeHome, "hooks.json"),
+        `${JSON.stringify(adapted, null, 2)}\n`,
         home,
       );
-    }
-    const commands = join(dotfiles, "agents/commands");
-    const prompts = join(nativeHome, "prompts");
-    await mkdir(prompts, { recursive: true });
-    for (const name of await readdir(commands))
-      assets[`prompts/${name}`] = await copyEntry(
-        join(commands, name),
-        join(prompts, name),
+      assets["runtime/conpty"] = await conptyBridge(dotfiles, nativeHome);
+      // Mirror only repo-owned skill names. Plugin and user skill names remain alongside them.
+      const source = join(dotfiles, "agents/skills");
+      const target = join(home, ".agents/skills");
+      await mkdir(target, { recursive: true });
+      for (const name of await readdir(source)) {
+        if (!(await exists(join(source, name, "SKILL.md")))) continue;
+        assets[`skills/${name}`] = await copyEntry(
+          join(source, name),
+          join(target, name),
+          home,
+        );
+      }
+      const commands = join(dotfiles, "agents/commands");
+      const prompts = join(nativeHome, "prompts");
+      await mkdir(prompts, { recursive: true });
+      for (const name of await readdir(commands))
+        assets[`prompts/${name}`] = await copyEntry(
+          join(commands, name),
+          join(prompts, name),
+          home,
+        );
+      await writeAsset(
+        join(nativeHome, MANIFEST),
+        `${JSON.stringify({ schema: 1, assets }, null, 2)}\n`,
         home,
       );
-    await writeAsset(
-      join(nativeHome, MANIFEST),
-      `${JSON.stringify({ schema: 1, assets }, null, 2)}\n`,
-      home,
-    );
+    },
+    catch: (e: unknown) => e,
   });
 }

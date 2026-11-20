@@ -49,8 +49,7 @@ import {
 import { hostname, homedir, release } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { deployCccDaemon } from "../cocoindex/deploy-daemon.ts";
 import { STALE_DRIVE_MOUNT_REPAIR } from "../wsl/drive-mount.ts";
@@ -91,7 +90,7 @@ function withReachablePath(ctx: Ctx, path: string, apply: () => void): void {
     )
   )
     return;
-  const result = fromThrowable(apply)();
+  const result = Result.try({ try: apply, catch: (e: unknown) => e });
   if (result.isOk()) return;
   recordPathError(ctx, path, result.error);
 }
@@ -221,8 +220,11 @@ function driveCachePath(home: string): string {
 }
 
 async function readDriveCache(path: string): Promise<DriveCache | undefined> {
-  const text = await attempt(() => readFile(path, "utf8"));
-  if (!text.ok) return undefined;
+  const text = await Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (e: unknown) => e,
+  });
+  if (!text.isOk()) return undefined;
   const parsed = driveCacheSchema.safeParse(text.value);
   return parsed.success && parsed.data.host === hostname()
     ? parsed.data
@@ -234,17 +236,20 @@ async function writeDriveCache(
   root: string,
   personal: string | undefined,
 ): Promise<void> {
-  await attempt(async () => {
-    await mkdir(dirname(path), { recursive: true });
-    const value: DriveCache = {
-      version: 1,
-      host: hostname(),
-      root,
-      personal: personal ?? null,
-    };
-    const temp = `${path}.${randomUUID()}.tmp`;
-    await writeFile(temp, `${JSON.stringify(value)}\n`, { mode: 0o600 });
-    await rename(temp, path);
+  await Result.tryPromise({
+    try: async () => {
+      await mkdir(dirname(path), { recursive: true });
+      const value: DriveCache = {
+        version: 1,
+        host: hostname(),
+        root,
+        personal: personal ?? null,
+      };
+      const temp = `${path}.${randomUUID()}.tmp`;
+      await writeFile(temp, `${JSON.stringify(value)}\n`, { mode: 0o600 });
+      await rename(temp, path);
+    },
+    catch: (e: unknown) => e,
   });
 }
 
@@ -309,9 +314,10 @@ async function cachedWslDriveTargets(
     const current = pending[next];
     next += 1;
     if (current === undefined || current.depth > DRIVE_MAX_DEPTH) continue;
-    const listed = fromThrowable(() =>
-      readdirSync(current.dir, { withFileTypes: true }),
-    )();
+    const listed = Result.try({
+      try: () => readdirSync(current.dir, { withFileTypes: true }),
+      catch: (e: unknown) => e,
+    });
     if (listed.isErr()) continue;
     const directories = listed.value.filter((entry) => entry.isDirectory());
     const target = directories.find((entry) => entry.name === "Personal-Drive");
@@ -371,8 +377,11 @@ export async function googleDriveTargets(
   const found: string[] = [];
   const visit = async (dir: string, depth: number): Promise<void> => {
     if (depth > 6 || found.length > 1) return;
-    const listed = await attempt(() => readdir(dir, { withFileTypes: true }));
-    if (!listed.ok) return;
+    const listed = await Result.tryPromise({
+      try: () => readdir(dir, { withFileTypes: true }),
+      catch: (e: unknown) => e,
+    });
+    if (!listed.isOk()) return;
     for (const entry of listed.value) {
       if (!entry.isDirectory()) continue;
       const child = join(dir, entry.name);
@@ -397,26 +406,29 @@ export async function linkGoogleDrive(ctx: Ctx): Promise<void> {
     )
   )
     return;
-  const result = await attempt(async () => {
-    const targets = await googleDriveTargets(ctx.home, ctx.os, {
-      persistCache: ctx.mode !== "check",
-    });
-    for (const [, source, name] of LINKS) {
-      if (!source.startsWith("@google-drive/")) continue;
-      const isRoot = source === "@google-drive/root";
-      const token = isRoot ? "root" : "personal";
-      const target = isRoot ? targets.root : targets.personal;
-      const dst = join(ctx.home, name);
-      if (target === undefined) {
-        reportDriveUnavailable(ctx, dst, token);
-        continue;
-      }
-      withReachablePath(ctx, dst, () => {
-        linkTarget(ctx, target, dst);
+  const result = await Result.tryPromise({
+    try: async () => {
+      const targets = await googleDriveTargets(ctx.home, ctx.os, {
+        persistCache: ctx.mode !== "check",
       });
-    }
+      for (const [, source, name] of LINKS) {
+        if (!source.startsWith("@google-drive/")) continue;
+        const isRoot = source === "@google-drive/root";
+        const token = isRoot ? "root" : "personal";
+        const target = isRoot ? targets.root : targets.personal;
+        const dst = join(ctx.home, name);
+        if (target === undefined) {
+          reportDriveUnavailable(ctx, dst, token);
+          continue;
+        }
+        withReachablePath(ctx, dst, () => {
+          linkTarget(ctx, target, dst);
+        });
+      }
+    },
+    catch: (e: unknown) => e,
   });
-  if (!result.ok) recordPathError(ctx, path, result.error);
+  if (!result.isOk()) recordPathError(ctx, path, result.error);
 }
 
 function reportDriveUnavailable(ctx: Ctx, dst: string, token: string): void {
@@ -825,9 +837,12 @@ export async function deployDeclaredTriggers(
     ctx.stateHome ?? join(ctx.home, ".local/state"),
     "dotfiles/deploy-started-triggers.json",
   );
-  const record = await attempt(() => Bun.file(recordPath).text());
+  const record = await Result.tryPromise({
+    try: () => Bun.file(recordPath).text(),
+    catch: (e: unknown) => e,
+  });
   const started = new Set<string>();
-  if (record.ok) {
+  if (record.isOk()) {
     const parsed = jsonOf(z.array(z.string())).safeParse(record.value);
     if (!parsed.success)
       return new Error(`invalid deploy start record: ${recordPath}`);
@@ -840,15 +855,18 @@ export async function deployDeclaredTriggers(
     );
   }
   const save = async (): Promise<Error | undefined> => {
-    const result = await attempt(async () => {
-      await mkdir(dirname(recordPath), { recursive: true });
-      const temp = `${recordPath}.${randomUUID()}.tmp`;
-      await Bun.write(temp, `${JSON.stringify([...started].toSorted())}\n`, {
-        mode: 0o600,
-      });
-      await rename(temp, recordPath);
+    const result = await Result.tryPromise({
+      try: async () => {
+        await mkdir(dirname(recordPath), { recursive: true });
+        const temp = `${recordPath}.${randomUUID()}.tmp`;
+        await Bun.write(temp, `${JSON.stringify([...started].toSorted())}\n`, {
+          mode: 0o600,
+        });
+        await rename(temp, recordPath);
+      },
+      catch: (e: unknown) => e,
     });
-    return result.ok
+    return result.isOk()
       ? undefined
       : new Error(`cannot save ${recordPath}: ${errorMessage(result.error)}`);
   };
@@ -1281,8 +1299,8 @@ async function main(): Promise<Error | void> {
 }
 
 if (import.meta.main) {
-  const r = await attempt(main);
-  if (!r.ok) {
+  const r = await Result.tryPromise({ try: main, catch: (e: unknown) => e });
+  if (!r.isOk()) {
     const msg = errorMessage(r.error);
     process.stderr.write(`FATAL: ${msg}\n`);
     process.exitCode = 2;

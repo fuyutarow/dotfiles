@@ -12,8 +12,8 @@
 // Fires on every Stop (see settings.json's matcher). Best-effort only: never worth failing a
 // turn over a clipboard convenience feature.
 
+import { Result } from "../../../tools/shared/src/result.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { attempt, attemptOr } from "../../hooks/attempt.ts";
 import { at, parseJson, strAt } from "../../hooks/narrow.ts";
 import { MAX_QUOTE_TURNS } from "./quote.config.ts";
 
@@ -32,11 +32,15 @@ async function recordResponse(
 
   // no (readable) history yet -> start one
   const noHistory: string[] = [];
-  const lines = await attemptOr(
-    async () =>
-      (await readFile(file, "utf8")).split("\n").filter((l) => l.trim() !== ""),
-    noHistory,
-  );
+  const lines = (
+    await Result.tryPromise({
+      try: async () =>
+        (await readFile(file, "utf8"))
+          .split("\n")
+          .filter((l) => l.trim() !== ""),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(noHistory);
   const response = JSON.stringify({
     at: Temporal.Now.instant().epochMilliseconds,
     text,
@@ -51,12 +55,15 @@ async function recordResponse(
 }
 
 // best-effort snapshot -> never fail Stop over this (a bad payload OR a failed write)
-await attempt(async () => {
-  const payload = parseJson(await Bun.stdin.text());
-  await recordResponse(
-    strAt(payload, "session_id"),
-    strAt(payload, "last_assistant_message"),
-    at(payload, "stop_hook_active") === true,
-  );
+await Result.tryPromise({
+  try: async () => {
+    const payload = parseJson(await Bun.stdin.text());
+    await recordResponse(
+      strAt(payload, "session_id"),
+      strAt(payload, "last_assistant_message"),
+      at(payload, "stop_hook_active") === true,
+    );
+  },
+  catch: (e: unknown) => e,
 });
 process.exit(0);

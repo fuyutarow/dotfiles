@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import {
   jjChanged,
   jjContent,
@@ -88,7 +88,10 @@ async function scan(cwd: string): Promise<number> {
   return found ? 1 : 0;
 }
 
-const attempted = await fromAsyncThrowable(() => scan(process.cwd()))();
+const attempted = await Result.tryPromise({
+  try: () => scan(process.cwd()),
+  catch: (e: unknown) => e,
+});
 if (attempted.isErr()) {
   const error = attempted.error;
   process.stderr.write(

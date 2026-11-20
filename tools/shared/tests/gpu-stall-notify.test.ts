@@ -1,5 +1,4 @@
 import { afterEach, expect, test } from "bun:test";
-import { err, ok } from "neverthrow";
 import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +7,7 @@ import {
   notifyGpuStall,
   pendingGpuStall,
 } from "../src/gpu-stall-notify.ts";
+import { Result } from "../src/result.ts";
 import { ownerState } from "./gpu-owner-fixture.ts";
 
 const at = 1_792_368_000_000;
@@ -65,7 +65,7 @@ test("persists one successful notification per stall across recovery and restart
     ...f,
     send: (since: number) => {
       sent.push(since);
-      return Promise.resolve(ok(undefined));
+      return Promise.resolve(Result.ok(undefined));
     },
   };
   expect((await notifyGpuStall(options)).unwrapOr(undefined)).toBe(false);
@@ -93,13 +93,16 @@ test("a failed notification leaves the stall pending for the next state change",
   await Bun.write(f.statePath, JSON.stringify(stalled));
   const failed = await notifyGpuStall({
     ...f,
-    send: () => Promise.resolve(err(new Error("desktop unavailable"))),
+    send: () => Promise.resolve(Result.err(new Error("desktop unavailable"))),
   });
   expect(failed.isErr()).toBe(true);
   expect(await Bun.file(f.receiptPath).exists()).toBe(false);
   expect(
     (
-      await notifyGpuStall({ ...f, send: () => Promise.resolve(ok(undefined)) })
+      await notifyGpuStall({
+        ...f,
+        send: () => Promise.resolve(Result.ok(undefined)),
+      })
     ).unwrapOr(undefined),
   ).toBe(true);
 });
@@ -111,7 +114,7 @@ test("malformed owner state or receipt cannot send or overwrite a receipt", asyn
     ...f,
     send: () => {
       sent++;
-      return Promise.resolve(ok(undefined));
+      return Promise.resolve(Result.ok(undefined));
     },
   };
   await Bun.write(f.statePath, "{");

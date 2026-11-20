@@ -11,7 +11,7 @@
 // variable and passes its value to repoHelperCommand.
 // Tests: tools/smart-open/tests/desktop-interop.test.ts.
 import { fileURLToPath } from "node:url";
-import { attempt, errorMessage } from "./attempt.ts";
+import { errorMessage, Result } from "./result.ts";
 
 /** The helper's own budget is 12 s (scripts/wsl-interop-session.ts BUDGET_MS); this is the outer cut. */
 export const HELPER_MS = 15_000;
@@ -38,15 +38,17 @@ export async function desktopInterop(
   command: string[],
   ms = HELPER_MS,
 ): Promise<Interop> {
-  const spawned = await attempt(() =>
-    Bun.spawn(command, {
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: ms,
-      killSignal: "SIGKILL",
-    }),
-  );
-  if (!spawned.ok) {
+  const spawned = Result.try({
+    try: () =>
+      Bun.spawn(command, {
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: ms,
+        killSignal: "SIGKILL",
+      }),
+    catch: (e: unknown) => e,
+  });
+  if (spawned.isErr()) {
     return {
       ok: false,
       reason: `cannot run ${command[0] ?? "the helper"}: ${errorMessage(spawned.error)}`,

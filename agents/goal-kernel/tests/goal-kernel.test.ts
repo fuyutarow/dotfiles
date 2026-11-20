@@ -1,3 +1,4 @@
+import { Result } from "../../../tools/shared/src/result.ts";
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawn } from "node:child_process";
 import {
@@ -11,7 +12,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Result } from "neverthrow";
 import { z } from "../../hooks/zod.ts";
 import {
   activateGoal as activateGoalResult,
@@ -102,7 +102,7 @@ function requiredRunId(result: Readonly<{ run_id?: string }>): string {
 
 function unwrap<T, E>(result: Result<T, E>): T {
   expect(result.isOk()).toBe(true);
-  return result._unsafeUnwrap();
+  return result.unwrap();
 }
 
 async function activateGoal(root: string, contract: unknown) {
@@ -182,9 +182,9 @@ describe("immutable Goal authority", () => {
       goal({ north_star: "conflict" }),
     );
     expect(conflicting.isErr()).toBe(true);
-    expect(conflicting._unsafeUnwrapErr().message).toContain(
-      "already has a different digest",
-    );
+    expect(
+      conflicting.isErr() ? conflicting.error.message : undefined,
+    ).toContain("already has a different digest");
   });
 
   test("a run keeps its bound version when the active pointer changes", async () => {
@@ -231,7 +231,7 @@ describe("immutable Goal authority", () => {
     await writeFile(lock, "{}\n", { mode: 0o600 });
     const busy = await activateGoalResult(root, goal());
     expect(busy.isErr()).toBe(true);
-    expect(busy._unsafeUnwrapErr().message).toContain("GK_BUSY");
+    expect(busy.isErr() ? busy.error.message : undefined).toContain("GK_BUSY");
     await unlink(lock);
     expect((await activateGoal(root, goal())).goal_version).toBe(1);
   });
@@ -421,7 +421,9 @@ describe("hook enforcement and privacy", () => {
     await writeFile(eventPath, `${JSON.stringify(event)}\n`);
     const tampered = await listRunEventsResult(root, requiredRunId(start));
     expect(tampered.isErr()).toBe(true);
-    expect(tampered._unsafeUnwrapErr().message).toContain("digest mismatch");
+    expect(tampered.isErr() ? tampered.error.message : undefined).toContain(
+      "digest mismatch",
+    );
   });
 });
 
@@ -553,13 +555,15 @@ describe("decision lineage and postmortem reconstruction", () => {
     await writeFile(lock, "{}\n", { mode: 0o600 });
     const busy = await recordRunDecisionResult(root, runId, decision);
     expect(busy.isErr()).toBe(true);
-    expect(busy._unsafeUnwrapErr().message).toContain("GK_BUSY");
+    expect(busy.isErr() ? busy.error.message : undefined).toContain("GK_BUSY");
     await unlink(lock);
 
     await recordRunDecision(root, runId, decision);
     const duplicate = await recordRunDecisionResult(root, runId, decision);
     expect(duplicate.isErr()).toBe(true);
-    expect(duplicate._unsafeUnwrapErr().message).toContain("already exists");
+    expect(duplicate.isErr() ? duplicate.error.message : undefined).toContain(
+      "already exists",
+    );
     expect(
       (await listRunEvents(root, runId)).filter(
         (event) => event.event_type === "decision.recorded",

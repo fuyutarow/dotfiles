@@ -1,6 +1,6 @@
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import { resolve } from "node:path";
 import { cli } from "cleye";
-import { attempt, errorMessage } from "../hooks/attempt.ts";
 import { jsonText } from "../hooks/zod.ts";
 import { checkTrace } from "./trace.ts";
 
@@ -36,10 +36,11 @@ async function main(): Promise<void> {
     process.exitCode = 2;
     return;
   }
-  const traceText = await attempt(() =>
-    Bun.file(resolve(parsed._.trace)).text(),
-  );
-  if (!traceText.ok) {
+  const traceText = await Result.tryPromise({
+    try: () => Bun.file(resolve(parsed._.trace)).text(),
+    catch: (e: unknown) => e,
+  });
+  if (traceText.isErr()) {
     process.stderr.write(
       `FATAL: trace is unreadable JSON: ${errorMessage(traceText.error)}\n`,
     );

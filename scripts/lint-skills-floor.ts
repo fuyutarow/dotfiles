@@ -7,7 +7,7 @@
 // copy of agents/skills/ and the budget file are exported to a temp dir and checked there.
 // J1 jj mode exports BASE with only selected REV paths overlaid; unrelated WIP is excluded.
 import { cp, copyFile, mkdtemp, mkdir, rm, stat } from "node:fs/promises";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -56,7 +56,15 @@ async function copyWorktreeInputs(
   }
   for (const path of [BUDGET, "agents/skills.thirdparty.toml"]) {
     const source = join(root, path);
-    if ((await fromAsyncThrowable(() => stat(source))()).isErr()) return path;
+    if (
+      (
+        await Result.tryPromise({
+          try: () => stat(source),
+          catch: (e: unknown) => e,
+        })
+      ).isErr()
+    )
+      return path;
     const target = join(destination, path);
     await mkdir(join(target, ".."), { recursive: true });
     await copyFile(source, target);

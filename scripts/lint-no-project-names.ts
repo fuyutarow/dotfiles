@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../tools/shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 
 function fatal(error: unknown): number {
@@ -15,7 +15,10 @@ async function main(): Promise<number> {
   const configHome =
     process.env["XDG_CONFIG_HOME"] ?? join(homedir(), ".config");
   const listPath = join(configHome, "dotfiles", "private-names.txt");
-  const loaded = await fromAsyncThrowable(() => Bun.file(listPath).text())();
+  const loaded = await Result.tryPromise({
+    try: () => Bun.file(listPath).text(),
+    catch: (e: unknown) => e,
+  });
   if (loaded.isErr()) {
     if (
       z.object({ code: z.literal("ENOENT") }).safeParse(loaded.error).success
@@ -77,5 +80,8 @@ async function main(): Promise<number> {
   return findings === 0 ? 0 : 1;
 }
 
-const attempted = await fromAsyncThrowable(main)();
+const attempted = await Result.tryPromise({
+  try: main,
+  catch: (e: unknown) => e,
+});
 process.exitCode = attempted.isErr() ? fatal(attempted.error) : attempted.value;

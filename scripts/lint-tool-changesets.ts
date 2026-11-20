@@ -5,7 +5,7 @@ import { applyToolChangesets } from "./land-changesets.ts";
 import { join } from "node:path";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { changesetDiagnostic, parseChangeset } from "./changeset.ts";
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../tools/shared/src/result.ts";
 
 export type ToolDiffEntry = { path: string; status: "A" | "M" | "D" };
 
@@ -128,22 +128,25 @@ async function jjText(
   root: string,
   args: string[],
 ): Promise<string | undefined> {
-  const result = await attempt(async () => {
-    const child = Bun.spawn(["jj", ...args], {
-      cwd: root,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: 15_000,
-    });
-    const [stdout, , exit] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    return exit === 0 ? stdout : undefined;
+  const result = await Result.tryPromise({
+    try: async () => {
+      const child = Bun.spawn(["jj", ...args], {
+        cwd: root,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 15_000,
+      });
+      const [stdout, , exit] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return exit === 0 ? stdout : undefined;
+    },
+    catch: (e: unknown) => e,
   });
-  return result.ok ? result.value : undefined;
+  return result.isOk() ? result.value : undefined;
 }
 
 export async function lintToolChangesets(
@@ -290,31 +293,38 @@ async function releaseProblems(
   const workerProblems = problemsForMaps(base, candidate);
   if (workerProblems.length > 0) return workerProblems;
   const replay = await mkdtemp(join(tmpdir(), "versionguard-release-"));
-  const checked = await attempt(async () => {
-    for (const [path, content] of candidate) {
-      await mkdir(dirname(join(replay, path)), { recursive: true });
-      await writeFile(join(replay, path), content);
-    }
-    const applied = await applyToolChangesets(replay, context.date);
-    if (applied.isErr()) return [applied.error.message];
-    const expected = new Map(candidate);
-    for (const path of applied.value.consumedChangesets) expected.delete(path);
-    for (const path of applied.value.releaseFiles)
-      expected.set(path, await readFile(join(replay, path), "utf8"));
-    return toolDiffEntries(expected, current).map(
-      ({ path }) =>
-        path +
-        ": differs from the release reproduced from land's pre-release candidate",
-    );
+  const checked = await Result.tryPromise({
+    try: async () => {
+      for (const [path, content] of candidate) {
+        await mkdir(dirname(join(replay, path)), { recursive: true });
+        await writeFile(join(replay, path), content);
+      }
+      const applied = await applyToolChangesets(replay, context.date);
+      if (applied.isErr()) return [applied.error.message];
+      const expected = new Map(candidate);
+      for (const path of applied.value.consumedChangesets)
+        expected.delete(path);
+      for (const path of applied.value.releaseFiles)
+        expected.set(path, await readFile(join(replay, path), "utf8"));
+      return toolDiffEntries(expected, current).map(
+        ({ path }) =>
+          path +
+          ": differs from the release reproduced from land's pre-release candidate",
+      );
+    },
+    catch: (e: unknown) => e,
   });
   await rm(replay, { recursive: true, force: true });
-  return checked.ok ? checked.value : undefined;
+  return checked.isOk() ? checked.value : undefined;
 }
 
 const root = import.meta.dir.replace(/\/scripts$/u, "");
 if (import.meta.main) {
-  const result = await attempt(() => lintToolChangesets(root));
-  const problems = result.ok ? result.value : undefined;
+  const result = await Result.tryPromise({
+    try: () => lintToolChangesets(root),
+    catch: (e: unknown) => e,
+  });
+  const problems = result.isOk() ? result.value : undefined;
   if (problems === undefined) {
     process.stderr.write(
       "tool changesets: FATAL: could not compare workspace tool files with the unique fork point of @ and alpha\n",

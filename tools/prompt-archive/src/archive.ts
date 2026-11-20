@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { attempt, type Attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 import { jsonText, z } from "@dotfiles/shared/src/zod.ts";
 
 type JsonRecord = Record<string, unknown>;
@@ -101,27 +101,27 @@ function parseArchived(value: unknown): InputRecord | undefined {
 
 async function readJsonLines(
   path: string,
-): Promise<Attempt<{ records: unknown[]; skipped: number }>> {
-  return Promise.try(() => readFile(path, "utf8")).then(
-    (content) => {
-      const records: unknown[] = [];
-      let skipped = 0;
-      for (const line of content.split(/\r?\n/u)) {
-        if (line.length === 0) continue;
-        const parsed = jsonText.safeParse(line);
-        if (parsed.success) records.push(parsed.data);
-        else skipped += 1;
-      }
-      return { ok: true, value: { records, skipped } };
-    },
-    (error: unknown) => {
-      const code = errorCodeSchema.safeParse(error);
-      if (code.success && code.data.code === "ENOENT") {
-        return { ok: true, value: { records: [], skipped: 0 } };
-      }
-      return { ok: false, error };
-    },
-  );
+): Promise<Result<{ records: unknown[]; skipped: number }, unknown>> {
+  const read = await Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (error: unknown) => error,
+  });
+  if (read.isErr()) {
+    const code = errorCodeSchema.safeParse(read.error);
+    if (code.success && code.data.code === "ENOENT") {
+      return Result.ok({ records: [], skipped: 0 });
+    }
+    return Result.err(read.error);
+  }
+  const records: unknown[] = [];
+  let skipped = 0;
+  for (const line of read.value.split(/\r?\n/u)) {
+    if (line.length === 0) continue;
+    const parsed = jsonText.safeParse(line);
+    if (parsed.success) records.push(parsed.data);
+    else skipped += 1;
+  }
+  return Result.ok({ records, skipped });
 }
 
 function getDataHome(options: ArchiveOptions): string {
@@ -134,28 +134,30 @@ function getDataHome(options: ArchiveOptions): string {
   );
 }
 
-async function readArchives(dir: string): Promise<Attempt<unknown[]>> {
-  const names = await attempt(() => readdir(dir));
-  if (!names.ok) {
+async function readArchives(dir: string): Promise<Result<unknown[], unknown>> {
+  const names = await Result.tryPromise({
+    try: () => readdir(dir),
+    catch: (error: unknown) => error,
+  });
+  if (names.isErr()) {
     const code = errorCodeSchema.safeParse(names.error);
-    if (code.success && code.data.code === "ENOENT")
-      return { ok: true, value: [] };
-    return names;
+    if (code.success && code.data.code === "ENOENT") return Result.ok([]);
+    return Result.err(names.error);
   }
   const records: unknown[] = [];
   for (const name of names.value.filter((candidate) =>
     /^\d{4}-\d{2}\.jsonl$/u.test(candidate),
   )) {
     const loaded = await readJsonLines(join(dir, name));
-    if (!loaded.ok) return loaded;
+    if (loaded.isErr()) return Result.err(loaded.error);
     records.push(...loaded.value.records);
   }
-  return { ok: true, value: records };
+  return Result.ok(records);
 }
 
 export async function archiveHistories(
   options: ArchiveOptions = {},
-): Promise<Attempt<ArchiveResult>> {
+): Promise<Result<ArchiveResult, unknown>> {
   const home = homedir();
   const sources: Array<{ vendor: Vendor; path: string }> = [
     {
@@ -172,7 +174,7 @@ export async function archiveHistories(
   await mkdir(archiveDir, { recursive: true });
   const existing = new Set<string>();
   const archiveRecords = await readArchives(archiveDir);
-  if (!archiveRecords.ok) return archiveRecords;
+  if (archiveRecords.isErr()) return Result.err(archiveRecords.error);
   addArchivedKeys(existing, archiveRecords.value);
 
   const pending = new Map<string, string[]>();
@@ -181,7 +183,7 @@ export async function archiveHistories(
   // Preserve entries that have since disappeared from the source histories.
   // Leave the old archive intact; keys make this migration safe to repeat.
   const legacy = await readArchives(join(dataHome, "prompts"));
-  if (!legacy.ok) return legacy;
+  if (legacy.isErr()) return Result.err(legacy.error);
   for (const value of legacy.value) {
     const parsed = parseArchived(value);
     if (parsed === undefined) {
@@ -199,7 +201,7 @@ export async function archiveHistories(
   }
   for (const source of sources) {
     const loaded = await readJsonLines(source.path);
-    if (!loaded.ok) return loaded;
+    if (loaded.isErr()) return Result.err(loaded.error);
     skipped += loaded.value.skipped;
     const result = addPendingRecords(
       source.vendor,
@@ -217,7 +219,7 @@ export async function archiveHistories(
       encoding: "utf8",
       flag: "a",
     });
-  return { ok: true, value: { archived, skipped } };
+  return Result.ok({ archived, skipped });
 }
 
 function addArchivedKeys(existing: Set<string>, records: unknown[]): void {

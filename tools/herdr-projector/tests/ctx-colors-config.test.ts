@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import { CPU_TOKENS, CTX_TOKENS } from "../src/herdr-projector.ts";
 
@@ -29,9 +29,12 @@ test("herdr/config.toml greys ctx below the red level and colors only ctx_hi, in
   const text = await Bun.file(
     new URL("../../../herdr/config.toml", import.meta.url),
   ).text();
-  const toml = await attempt(() => Bun.TOML.parse(text));
-  expect(toml.ok).toBe(true);
-  const config = Config.safeParse(toml.ok ? toml.value : undefined);
+  const toml = Result.try({
+    try: () => Bun.TOML.parse(text),
+    catch: (error: unknown) => error,
+  });
+  expect(toml.isOk()).toBe(true);
+  const config = Config.safeParse(toml.isOk() ? toml.value : undefined);
   expect(config.success).toBe(true);
   if (!config.success) return;
   const { rows, rows_by_agent } = config.data.ui.sidebar.agents;

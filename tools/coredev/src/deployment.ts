@@ -1,6 +1,6 @@
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { shellQuote } from "@dotfiles/shared/src/read-path.ts";
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 
 export type HostKind = "linux" | "wsl" | "mac";
 export type SelectionPhase = "deploy" | "doctor";
@@ -76,17 +76,17 @@ export async function readSelection(
     { cwd: dotfiles, timeoutMs: 5_000 },
   );
   if (result.status !== 0)
-    return err(commandFailure("coredev selection", result));
+    return Result.err(commandFailure("coredev selection", result));
   const selected = jsonOf(selectionSchema).safeParse(result.output);
   if (!selected.success)
-    return err(new Error("coredev selection: invalid JSON selection"));
+    return Result.err(new Error("coredev selection: invalid JSON selection"));
   if (selected.data.kind !== kind || selected.data.phase !== phase)
-    return err(
+    return Result.err(
       new Error(
         "coredev selection: declaration did not match requested target",
       ),
     );
-  return ok(selected.data);
+  return Result.ok(selected.data);
 }
 
 export function renderSelection(target: string, selection: Selection): string {
@@ -112,12 +112,12 @@ export async function executeSelection(
       { cwd: dotfiles, timeoutMs: step.timeoutSeconds * 1_000 },
     );
     if (result.status !== 0)
-      return err(
+      return Result.err(
         commandFailure(`coredev ${selection.phase} ${step.task}`, result),
       );
     write(`PASS ${step.task}`);
   }
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 function remoteExecutable(command: Command): readonly string[] | undefined {

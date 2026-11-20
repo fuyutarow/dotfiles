@@ -56,8 +56,8 @@ describe("definition cards", () => {
     expect(isTest({ file: "src/testing_utils.jl" })).toBe(false);
   });
   test("without a judge nothing is judged; with one, its thresholds decide", async () => {
-    const strengths = (await loadRetrievalConfig()).match(
-      (config) => [
+    const strengths = (await loadRetrievalConfig()).match({
+      ok: (config) => [
         strengthOf(9, false, config.thresholds.local),
         strengthOf(4.2, true, config.thresholds.local),
         strengthOf(2, true, config.thresholds.local),
@@ -65,8 +65,8 @@ describe("definition cards", () => {
         strengthOf(2.3, true, config.thresholds.jev), // p ~ 0.91
         strengthOf(-0.1, true, config.thresholds.jev), // p < 0.5
       ],
-      (error) => [`ERROR: ${error.message}`],
-    );
+      err: (error) => [`ERROR: ${error.message}`],
+    });
     expect(strengths).toEqual([
       "unranked",
       "strong",
@@ -99,10 +99,7 @@ test("definitions resolve Python through the installed Bun entry's uv backend", 
   chmodSync(entry, 0o755);
 
   expect(
-    (await cccPython(entry)).match(
-      (value) => value,
-      () => null,
-    ),
+    (await cccPython(entry)).match({ ok: (value) => value, err: () => null }),
   ).toBe(python);
   const unrelated = join(bin, "other-wrapper");
   writeFileSync(unrelated, "#!/usr/bin/env bun\n");
@@ -115,16 +112,16 @@ describe("retrieval.toml", () => {
     "utf8",
   );
   test("the shipped file carries the hardcoded values it replaced (pool since re-measured)", async () => {
-    const values = (await loadRetrievalConfig()).match(
-      (config) => ({
-        recall: config.recall,
-        pool: config.pool,
-        priors: config.priors,
-        local: config.thresholds.local,
-        jev: config.thresholds.jev,
-      }),
-      (error) => `ERROR: ${error.message}`,
-    );
+    const loaded = await loadRetrievalConfig();
+    const values = loaded.isOk()
+      ? {
+          recall: loaded.value.recall,
+          pool: loaded.value.pool,
+          priors: loaded.value.priors,
+          local: loaded.value.thresholds.local,
+          jev: loaded.value.thresholds.jev,
+        }
+      : `ERROR: ${loaded.error.message}`;
     expect(values).toEqual({
       recall: 40,
       pool: 25,
@@ -132,10 +129,10 @@ describe("retrieval.toml", () => {
       local: { strong: 4, likely: 1.5, hook: 7.5 },
       jev: { strong: 2.2, likely: 0, hook: 3.5 },
     }); // pool 40 -> 25: bench 2026-10-01
-    const officialEndpoint = (await loadRetrievalConfig()).match(
-      (config) => config.jevEndpoint,
-      (error) => `ERROR: ${error.message}`,
-    );
+    const official = await loadRetrievalConfig();
+    const officialEndpoint = official.isOk()
+      ? official.value.jevEndpoint
+      : `ERROR: ${official.error.message}`;
     expect(officialEndpoint).toEqual({
       url: "https://api.typesafe.ai/v1/systemone",
       model: "jev-latest",
@@ -147,13 +144,13 @@ describe("retrieval.toml", () => {
           'jev_provider = "jevtypesafeai"',
         ),
       )()
-    ).match(
-      (config) => [
+    ).match({
+      ok: (config) => [
         config.jevEndpoint.url,
         config.jevEndpoint.whenExhausted ?? "missing",
       ],
-      (error) => [`ERROR: ${error.message}`, ""],
-    );
+      err: (error) => [`ERROR: ${error.message}`, ""],
+    });
     expect(resellerEndpoint[0]).toBe("https://jevtypesafeai.com/api/v1/decide");
     expect(resellerEndpoint[1]).toContain('jev_provider = "typesafe"');
   });
@@ -190,10 +187,10 @@ describe("retrieval.toml", () => {
     for (const [from, to, err] of cases) {
       expect(shipped.includes(from)).toBe(true);
       const text = shipped.replace(from, to);
-      const message = (await loadFromText(text)()).match(
-        () => "valid config unexpectedly accepted",
-        (error) => error.message,
-      );
+      const message = (await loadFromText(text)()).match({
+        ok: () => "valid config unexpectedly accepted",
+        err: (error) => error.message,
+      });
       expect(message).toMatch(err);
     }
   });

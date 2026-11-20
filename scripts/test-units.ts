@@ -37,7 +37,8 @@
 import { availableParallelism } from "node:os";
 import { basename, resolve } from "node:path";
 import { cli } from "cleye";
-import { fromThrowable, z } from "../tools/shared/src/zod.ts";
+import { z } from "../tools/shared/src/zod.ts";
+import { Result } from "../tools/shared/src/result.ts";
 
 export const TEST_GLOBS = [
   "scripts/tests/**/*.test.ts",
@@ -208,10 +209,8 @@ const KnownRedFile = z.strictObject({
 export type KnownRed = { path: string; since: string; reason: string };
 type Listed = { ok: true; known: KnownRed[] } | { ok: false; message: string };
 
-const parseToml = fromThrowable(
-  (text: string): unknown => Bun.TOML.parse(text),
-  String,
-);
+const parseToml = (text: string) =>
+  Result.try({ try: (): unknown => Bun.TOML.parse(text), catch: String });
 
 /** The `[[unit]]` entries of `text`; every path must be one of `units`, each at most once. */
 export function parseKnownRed(text: string, units: string[]): Listed {

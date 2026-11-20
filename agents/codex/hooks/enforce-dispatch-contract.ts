@@ -1,3 +1,4 @@
+import { Result } from "../../../tools/shared/src/result.ts";
 import { hookJson, hookStderr } from "./lib.ts";
 // Codex PreToolUse gate for spawn_agent (hook tool name "Agent"): every subagent names its model
 // AND reasoning_effort explicitly, as one of the owner's allowed pairs (ALLOWED below). Nothing is
@@ -7,7 +8,6 @@ import { hookJson, hookStderr } from "./lib.ts";
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { attempt } from "../../hooks/attempt.ts";
 import {
   compareVersions,
   exampleSlug,
@@ -119,8 +119,11 @@ function output(decision: "allow" | "deny", reason: string): void {
 }
 
 async function main(): Promise<void> {
-  const parsed = await attempt(async () => parseJson(await Bun.stdin.text()));
-  if (!parsed.ok) denyMalformed("invalid JSON payload");
+  const parsed = await Result.tryPromise({
+    try: async () => parseJson(await Bun.stdin.text()),
+    catch: (e: unknown) => e,
+  });
+  if (parsed.isErr()) denyMalformed("invalid JSON payload");
   if (parsed.value === undefined) denyMalformed("invalid JSON payload");
   const payload: unknown = parsed.value;
   const input = obj(at(payload, "tool_input"));
@@ -144,10 +147,12 @@ async function main(): Promise<void> {
   const model = str(rawModel) ?? null;
   const effort = str(rawEffort) ?? null;
 
-  const floors = await attempt(async () =>
-    parseFloorConfig(Bun.TOML.parse(await readFile(CONFIG_PATH, "utf8"))),
-  );
-  if (!floors.ok) denyMalformed(`cannot read ${CONFIG_PATH}`);
+  const floors = await Result.tryPromise({
+    try: async () =>
+      parseFloorConfig(Bun.TOML.parse(await readFile(CONFIG_PATH, "utf8"))),
+    catch: (e: unknown) => e,
+  });
+  if (floors.isErr()) denyMalformed(`cannot read ${CONFIG_PATH}`);
   if (!floors.value.ok)
     denyMalformed(
       `${CONFIG_PATH} is invalid — ${floors.value.errors.join("; ")}`,

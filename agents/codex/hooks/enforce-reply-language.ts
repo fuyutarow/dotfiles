@@ -1,5 +1,5 @@
+import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
 import { hookJson, hookStderr } from "./lib.ts";
-import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { at, parseJson, strAt } from "../../hooks/narrow.ts";
 import {
   classifyJapanesePrimary,
@@ -21,8 +21,11 @@ async function main(): Promise<number> {
   }
   if (at(payload, "stop_hook_active") === true) return 0;
 
-  const policy = await attempt(() => requiredReplyLanguage("codex"));
-  if (!policy.ok) {
+  const policy = await Result.tryPromise({
+    try: () => requiredReplyLanguage("codex"),
+    catch: (e: unknown) => e,
+  });
+  if (policy.isErr()) {
     stderrLine(`check failed open: ${errorMessage(policy.error)}`);
     return 0;
   }
@@ -44,8 +47,11 @@ async function main(): Promise<number> {
 }
 
 if (import.meta.main) {
-  const result = await attempt(main);
-  if (!result.ok) {
+  const result = await Result.tryPromise({
+    try: main,
+    catch: (e: unknown) => e,
+  });
+  if (result.isErr()) {
     stderrLine(`check failed open: ${errorMessage(result.error)}`);
     process.exit(0);
   }

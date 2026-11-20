@@ -3,7 +3,7 @@
 import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { z } from "../agents/hooks/zod.ts";
 
 export const RENDER_INPUTS = [
@@ -29,32 +29,41 @@ export const RENDER_INPUTS = [
 ];
 
 async function jj(root: string, args: string[]): Promise<string | Error> {
-  const result = await attempt(async () => {
-    const signal = AbortSignal.timeout(10_000);
-    const child = Bun.spawn(["jj", "--no-pager", "--color", "never", ...args], {
-      cwd: root,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      signal,
-    });
-    const [out, err, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (signal.aborted || code !== 0 || err.includes("Refused to snapshot"))
-      return new Error(
-        `render source: jj ${args[0]} failed (${code}): ${err.trim()}`,
+  const result = await Result.tryPromise({
+    try: async () => {
+      const signal = AbortSignal.timeout(10_000);
+      const child = Bun.spawn(
+        ["jj", "--no-pager", "--color", "never", ...args],
+        {
+          cwd: root,
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+          signal,
+        },
       );
-    return out;
+      const [out, err, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      if (signal.aborted || code !== 0 || err.includes("Refused to snapshot"))
+        return new Error(
+          `render source: jj ${args[0]} failed (${code}): ${err.trim()}`,
+        );
+      return out;
+    },
+    catch: (e: unknown) => e,
   });
-  return result.ok ? result.value : new Error(errorMessage(result.error));
+  return result.isOk() ? result.value : new Error(errorMessage(result.error));
 }
 
 async function hasJj(root: string): Promise<boolean | Error> {
-  const result = await attempt(() => stat(join(root, ".jj")));
-  if (result.ok) return true;
+  const result = await Result.tryPromise({
+    try: () => stat(join(root, ".jj")),
+    catch: (e: unknown) => e,
+  });
+  if (result.isOk()) return true;
   const error = z.looseObject({ code: z.string() }).safeParse(result.error);
   return error.success && error.data.code === "ENOENT"
     ? false
@@ -103,48 +112,51 @@ export async function renderRefusal(
 export async function restoreRenderDependencies(
   root: string,
 ): Promise<Error | undefined> {
-  const installed = await attempt(async () => {
-    const child = Bun.spawn(
-      [
-        process.execPath,
-        "install",
-        "--frozen-lockfile",
-        "--offline",
-        "--production",
-        "--ignore-scripts",
-        "--no-progress",
-      ],
-      {
-        timeout: 60_000,
-        killSignal: "SIGKILL",
-        cwd: root,
-        // Doctor renders into a scratch HOME; package cache belongs to the operator.
-        env: {
-          ...process.env,
-          BUN_INSTALL_CACHE_DIR:
-            process.env["BUN_INSTALL_CACHE_DIR"] ??
-            join(
-              process.env["COMMAND_TARGET_HOME"] ?? homedir(),
-              ".bun/install/cache",
-            ),
+  const installed = await Result.tryPromise({
+    try: async () => {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "install",
+          "--frozen-lockfile",
+          "--offline",
+          "--production",
+          "--ignore-scripts",
+          "--no-progress",
+        ],
+        {
+          timeout: 60_000,
+          killSignal: "SIGKILL",
+          cwd: root,
+          // Doctor renders into a scratch HOME; package cache belongs to the operator.
+          env: {
+            ...process.env,
+            BUN_INSTALL_CACHE_DIR:
+              process.env["BUN_INSTALL_CACHE_DIR"] ??
+              join(
+                process.env["COMMAND_TARGET_HOME"] ?? homedir(),
+                ".bun/install/cache",
+              ),
+          },
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
         },
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    );
-    const [out, err, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0)
-      return new Error(
-        `render dependencies: frozen install exited ${code}: ${(err + out).slice(0, 4000)}`,
       );
-    return null;
+      const [out, err, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      if (code !== 0)
+        return new Error(
+          `render dependencies: frozen install exited ${code}: ${(err + out).slice(0, 4000)}`,
+        );
+      return null;
+    },
+    catch: (e: unknown) => e,
   });
-  if (!installed.ok) {
+  if (!installed.isOk()) {
     return new Error(errorMessage(installed.error));
   }
   if (installed.value instanceof Error) {
@@ -229,34 +241,37 @@ export async function prepareRenderSource(
   const release = () => rm(scratch, { recursive: true, force: true });
   const paths = listed.split("\0").filter(Boolean);
   // Bound parallel jj readers; no full checkout, workspace registration or live-input copying.
-  const copied = await attempt(async () => {
-    for (let offset = 0; offset < paths.length; offset += 8) {
-      const results = await Promise.all(
-        paths.slice(offset, offset + 8).map(async (path) => {
-          const text = await jj(root, [
-            "--ignore-working-copy",
-            "file",
-            "show",
-            "-r",
-            commit,
-            "--",
-            `root-file:${JSON.stringify(path)}`,
-          ]);
-          if (text instanceof Error) return text;
-          const dest = join(scratch, path);
-          await mkdir(dirname(dest), { recursive: true });
-          await Bun.write(dest, text);
-          return true;
-        }),
-      );
-      const failure = results.find((value) => value instanceof Error);
-      if (failure !== undefined) {
-        return failure;
+  const copied = await Result.tryPromise({
+    try: async () => {
+      for (let offset = 0; offset < paths.length; offset += 8) {
+        const results = await Promise.all(
+          paths.slice(offset, offset + 8).map(async (path) => {
+            const text = await jj(root, [
+              "--ignore-working-copy",
+              "file",
+              "show",
+              "-r",
+              commit,
+              "--",
+              `root-file:${JSON.stringify(path)}`,
+            ]);
+            if (text instanceof Error) return text;
+            const dest = join(scratch, path);
+            await mkdir(dirname(dest), { recursive: true });
+            await Bun.write(dest, text);
+            return true;
+          }),
+        );
+        const failure = results.find((value) => value instanceof Error);
+        if (failure !== undefined) {
+          return failure;
+        }
       }
-    }
-    return true;
+      return true;
+    },
+    catch: (e: unknown) => e,
   });
-  const failure = copied.ok
+  const failure = copied.isOk()
     ? copied.value
     : new Error(errorMessage(copied.error));
   if (failure instanceof Error) {

@@ -10,7 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { attemptOr } from "../tools/shared/src/attempt.ts";
+import { Result } from "../tools/shared/src/result.ts";
 
 export const CCC_UNIT = "ccc-daemon.service";
 export type SystemctlResult = { code: number; out: string };
@@ -38,7 +38,12 @@ async function exists(path: string): Promise<boolean> {
 }
 
 async function lstatOrUndefined(path: string) {
-  return attemptOr(() => lstat(path), null);
+  return (
+    await Result.tryPromise({
+      try: () => lstat(path),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(null);
 }
 
 export async function deployCccDaemon(

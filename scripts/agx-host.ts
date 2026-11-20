@@ -2,7 +2,7 @@ import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { consola } from "consola";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 
 type ProbeSet = Readonly<{
   isContainer: () => boolean | Promise<boolean>;
@@ -213,8 +213,11 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  const result = await attempt(main);
-  if (!result.ok) {
+  const result = await Result.tryPromise({
+    try: main,
+    catch: (e: unknown) => e,
+  });
+  if (!result.isOk()) {
     process.stderr.write(`FATAL: ${errorMessage(result.error)}\n`);
     process.exitCode = 2;
   }

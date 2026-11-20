@@ -16,7 +16,7 @@ import {
 import { join, resolve } from "node:path";
 import { $ } from "bun";
 import { LINUXBREW } from "./core-tools.ts";
-import { attemptOr } from "../agents/hooks/attempt.ts";
+import { Result } from "../tools/shared/src/result.ts";
 
 /** Cap the installer itself, so Go also sees two CPUs instead of the shared host's full count. */
 export function buildCpuList(allowed: string): string {
@@ -104,10 +104,15 @@ export async function installLinuxbrew(
     await mkdir(join(prefix, "bin"), { recursive: true });
     // Homebrew's manual install layout. The official shell installer limits path length, so
     // long shared-host HOME paths use the documented Git checkout layout instead.
-    const cloned = await attemptOr(async () => {
-      await access(join(prefix, "Homebrew/.git"));
-      return true;
-    }, false);
+    const cloned = (
+      await Result.tryPromise({
+        try: async () => {
+          await access(join(prefix, "Homebrew/.git"));
+          return true;
+        },
+        catch: (e: unknown) => e,
+      })
+    ).unwrapOr(false);
     if (!cloned)
       await $`git clone https://github.com/Homebrew/brew ${join(prefix, "Homebrew")}`;
     await symlink("../Homebrew/bin/brew", join(prefix, "bin/brew"));
@@ -132,12 +137,25 @@ export async function legacyPathUsers(
   prefix: string,
   procRoot = "/proc",
 ): Promise<string[]> {
-  const entries = await attemptOr(() => readdir(procRoot), null);
+  const entries = (
+    await Result.tryPromise({
+      try: () => readdir(procRoot),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(null);
   if (entries === null)
     return ["/proc unavailable; cannot prove legacy PATH unused"];
   const users: string[] = [];
   const homes = [
-    ...new Set([home, await attemptOr(() => realpath(home), home)]),
+    ...new Set([
+      home,
+      (
+        await Result.tryPromise({
+          try: () => realpath(home),
+          catch: (e: unknown) => e,
+        })
+      ).unwrapOr(home),
+    ]),
   ];
   const runtimes = homes.map(
     (directory) => join(directory, ".local/share/mise/installs") + "/",
@@ -146,15 +164,24 @@ export async function legacyPathUsers(
     .filter((name) => /^\d+$/u.test(name) && Number(name) !== ownPid)
     .toSorted((a, b) => Number(a) - Number(b))) {
     const directory = join(procRoot, pid);
-    const environment = await attemptOr(
-      () => Bun.file(join(directory, "environ")).text(),
-      "",
-    );
-    const exe = await attemptOr(() => readlink(join(directory, "exe")), "");
-    const maps = await attemptOr(
-      () => Bun.file(join(directory, "maps")).text(),
-      "",
-    );
+    const environment = (
+      await Result.tryPromise({
+        try: () => Bun.file(join(directory, "environ")).text(),
+        catch: (e: unknown) => e,
+      })
+    ).unwrapOr("");
+    const exe = (
+      await Result.tryPromise({
+        try: () => readlink(join(directory, "exe")),
+        catch: (e: unknown) => e,
+      })
+    ).unwrapOr("");
+    const maps = (
+      await Result.tryPromise({
+        try: () => Bun.file(join(directory, "maps")).text(),
+        catch: (e: unknown) => e,
+      })
+    ).unwrapOr("");
     if (
       runtimes.some(
         (runtime) => exe.startsWith(runtime) || maps.includes(runtime),
@@ -196,7 +223,12 @@ export async function legacyLinks(
   const paths = (
     await Promise.all(
       directories.map(async (directory) => {
-        const entries = await attemptOr(() => readdir(directory), []);
+        const entries = (
+          await Result.tryPromise({
+            try: () => readdir(directory),
+            catch: (e: unknown) => e,
+          })
+        ).unwrapOr([]);
         return entries.map((name) => join(directory, name));
       }),
     )
@@ -216,9 +248,25 @@ async function isReplacedLegacyLink(
   if (!(await lstat(path)).isSymbolicLink()) return false;
   const directory = resolve(path, "..");
   const name = path.split("/").at(-1) ?? "";
-  const target = resolve(directory, await attemptOr(() => readlink(path), ""));
+  const target = resolve(
+    directory,
+    (
+      await Result.tryPromise({
+        try: () => readlink(path),
+        catch: (e: unknown) => e,
+      })
+    ).unwrapOr(""),
+  );
   const homes = [
-    ...new Set([home, await attemptOr(() => realpath(home), home)]),
+    ...new Set([
+      home,
+      (
+        await Result.tryPromise({
+          try: () => realpath(home),
+          catch: (e: unknown) => e,
+        })
+      ).unwrapOr(home),
+    ]),
   ];
   const ours =
     homes.some((taskHome) =>
@@ -237,8 +285,18 @@ async function isReplacedLegacyLink(
   let replacement = false;
   for (const candidate of replacements) {
     if (Bun.which(candidate) === null) continue;
-    const candidatePath = await attemptOr(() => realpath(candidate), "");
-    const prefixPath = await attemptOr(() => realpath(prefix), prefix);
+    const candidatePath = (
+      await Result.tryPromise({
+        try: () => realpath(candidate),
+        catch: (e: unknown) => e,
+      })
+    ).unwrapOr("");
+    const prefixPath = (
+      await Result.tryPromise({
+        try: () => realpath(prefix),
+        catch: (e: unknown) => e,
+      })
+    ).unwrapOr(prefix);
     if (candidatePath.startsWith(`${prefixPath}/`)) replacement = true;
   }
   return ours && replacement;
@@ -250,6 +308,11 @@ export async function removeLegacyLinks(
 ): Promise<void> {
   for (const link of links) await unlink(link);
   const runtime = join(home, ".local/share/dotfiles/runtime/bin");
-  const entries = await attemptOr(() => readdir(runtime), null);
+  const entries = (
+    await Result.tryPromise({
+      try: () => readdir(runtime),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(null);
   if (entries !== null && entries.length === 0) await rmdir(runtime);
 }

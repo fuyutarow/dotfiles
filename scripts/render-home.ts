@@ -66,7 +66,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonText, z } from "../agents/hooks/zod.ts";
 import { loadSlugs } from "../agents/hooks/slugs.ts";
@@ -107,14 +107,16 @@ function fatal(line: string, ...more: string[]): never {
 const home = process.env["HOME"] ?? homedir();
 const commandTargetHome = process.env["COMMAND_TARGET_HOME"] ?? home;
 const liveDotfiles = process.env["DOTFILES"] ?? join(import.meta.dir, "..");
-const prepared = await attempt(() =>
-  prepareRenderSource(
-    liveDotfiles,
-    process.env["DOTFILES_RENDER_FROM_WORKING_COPY"] === "1",
-    process.env["DOTFILES_RENDER_REV"],
-  ),
-);
-if (!prepared.ok)
+const prepared = await Result.tryPromise({
+  try: () =>
+    prepareRenderSource(
+      liveDotfiles,
+      process.env["DOTFILES_RENDER_FROM_WORKING_COPY"] === "1",
+      process.env["DOTFILES_RENDER_REV"],
+    ),
+  catch: (e: unknown) => e,
+});
+if (!prepared.isOk())
   fatal(`FATAL: render inputs: ${errorMessage(prepared.error)}`);
 if (prepared.value instanceof Error) fatal(`warn: ${prepared.value.message}`);
 const source = prepared.value;
@@ -347,9 +349,12 @@ async function withReasonNetwork(
 }
 
 // ── inputs ───────────────────────────────────────────────────────────────────────────────────
-const baseRead = await attempt(() => readJson(basePath));
-if (!baseRead.ok || baseRead.value instanceof Error) {
-  const error = baseRead.ok ? baseRead.value : baseRead.error;
+const baseRead = await Result.tryPromise({
+  try: () => readJson(basePath),
+  catch: (e: unknown) => e,
+});
+if (!baseRead.isOk() || baseRead.value instanceof Error) {
+  const error = baseRead.isOk() ? baseRead.value : baseRead.error;
   fatal(
     `FATAL: cannot read base settings ${basePath} — ${errorMessage(error)}`,
   );
@@ -358,11 +363,14 @@ if (!baseRead.ok || baseRead.value instanceof Error) {
 let overlay: Record<string, unknown> = {};
 let overlayKeys: string[] = [];
 if (await exists(overlayPath)) {
-  const overlayRead = await attempt(() => readJson(overlayPath));
+  const overlayRead = await Result.tryPromise({
+    try: () => readJson(overlayPath),
+    catch: (e: unknown) => e,
+  });
   // Hard failure, not a skip: a malformed overlay means the private rules (which include
   // soft_deny entries protecting a court-of-record file) would vanish without a word.
-  if (!overlayRead.ok || overlayRead.value instanceof Error) {
-    const error = overlayRead.ok ? overlayRead.value : overlayRead.error;
+  if (!overlayRead.isOk() || overlayRead.value instanceof Error) {
+    const error = overlayRead.isOk() ? overlayRead.value : overlayRead.error;
     fatal(
       `FATAL: private overlay ${overlayPath} is not readable JSON — ${errorMessage(error)}`,
       "  refusing to render settings that would silently drop the private rules",
@@ -372,8 +380,11 @@ if (await exists(overlayPath)) {
   overlayKeys = Object.keys(overlay).toSorted();
 }
 
-const registry = await attempt(() => loadRegistry(`${dotfiles}/agents/hooks`));
-if (!registry.ok) {
+const registry = await Result.tryPromise({
+  try: () => loadRegistry(`${dotfiles}/agents/hooks`),
+  catch: (e: unknown) => e,
+});
+if (!registry.isOk()) {
   fatal(
     `FATAL: cannot read ${dotfiles}/agents/hooks/hooks.toml — ${errorMessage(registry.error)}`,
   );
@@ -426,8 +437,11 @@ const tzPath = `${dotfiles}/zsh/timezone`;
 let tzNote = "";
 if (await exists(tzPath)) {
   const zone = (await readFile(tzPath, "utf8")).trim();
-  const known = await attempt(() => Temporal.Now.zonedDateTimeISO(zone));
-  if (zone === "" || zone.includes("\n") || !known.ok) {
+  const known = Result.try({
+    try: () => Temporal.Now.zonedDateTimeISO(zone),
+    catch: (e: unknown) => e,
+  });
+  if (zone === "" || zone.includes("\n") || !known.isOk()) {
     fatal(
       `FATAL: ${tzPath} must hold one IANA zone name, got ${JSON.stringify(zone)}`,
     );
@@ -442,9 +456,10 @@ if (await exists(tzPath)) {
 }
 
 const rolePath = join(dotfiles, "roles/roles.toml");
-const roleInput = await attempt(async () =>
-  Bun.TOML.parse(await Bun.file(rolePath).text()),
-);
+const roleInput = await Result.tryPromise({
+  try: async () => Bun.TOML.parse(await Bun.file(rolePath).text()),
+  catch: (e: unknown) => e,
+});
 const roleSchema = z.strictObject({
   workstation: z.strictObject({
     tokio_worker_threads: z.union([z.literal(""), z.number().int().positive()]),
@@ -455,7 +470,7 @@ const roleSchema = z.strictObject({
     rustc_wrapper: z.enum(["sccache", "none"]),
   }),
 });
-if (!roleInput.ok)
+if (!roleInput.isOk())
   fatal(`FATAL: cannot read ${rolePath} — ${errorMessage(roleInput.error)}`);
 const roles = roleSchema.safeParse(roleInput.value);
 if (!roles.success)
@@ -487,20 +502,23 @@ if (process.platform === "linux") {
   const directory = `${home}/.config/environment.d`;
   if ((await lstat(directory).catch(() => null))?.isSymbolicLink() === true)
     fatal(`FATAL: ${directory} is a symlink; refusing to render through it`);
-  const cpuProbe = await attempt(async () => {
-    const proc = Bun.spawn(["/usr/bin/getconf", "_NPROCESSORS_ONLN"], {
-      timeout: 5_000,
-      stdout: "pipe",
-      stderr: "ignore",
-    });
-    const [output, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      proc.exited,
-    ]);
-    return code === 0 ? output.trim() : "";
+  const cpuProbe = await Result.tryPromise({
+    try: async () => {
+      const proc = Bun.spawn(["/usr/bin/getconf", "_NPROCESSORS_ONLN"], {
+        timeout: 5_000,
+        stdout: "pipe",
+        stderr: "ignore",
+      });
+      const [output, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        proc.exited,
+      ]);
+      return code === 0 ? output.trim() : "";
+    },
+    catch: (e: unknown) => e,
   });
   // Like the shell reader, retain the role value if the CPU count is unavailable.
-  const cpuText = cpuProbe.ok ? cpuProbe.value : "";
+  const cpuText = cpuProbe.isOk() ? cpuProbe.value : "";
   const cpus = /^[0-9]+$/u.test(cpuText) ? Number(cpuText) : 0;
   const threads = defaults.tokio_worker_threads;
   const capped = threads !== "" && cpus > 0 ? Math.min(threads, cpus) : threads;
@@ -515,9 +533,12 @@ if (process.platform === "linux") {
 
 // ── ~/.codex/hooks.json ──────────────────────────────────────────────────────────────────────
 const codexPath = `${dotfiles}/agents/codex/hooks.json`;
-const codex = await attempt(() => readJson(codexPath));
-if (!codex.ok || codex.value instanceof Error) {
-  const error = codex.ok ? codex.value : codex.error;
+const codex = await Result.tryPromise({
+  try: () => readJson(codexPath),
+  catch: (e: unknown) => e,
+});
+if (!codex.isOk() || codex.value instanceof Error) {
+  const error = codex.isOk() ? codex.value : codex.error;
   fatal(`FATAL: cannot read ${codexPath} — ${errorMessage(error)}`);
 }
 const codexConfig = await withReasonNetwork(codex.value);
@@ -531,8 +552,12 @@ await validateCommandTargets(settings, codexConfig);
 
 // ── ~/.claude/CLAUDE.md ──────────────────────────────────────────────────────────────────────
 const mdPath = `${dotfiles}/agents/claude/CLAUDE.md`;
-const md = await attempt(() => readFile(mdPath, "utf8"));
-if (!md.ok) fatal(`FATAL: cannot read ${mdPath} — ${errorMessage(md.error)}`);
+const md = await Result.tryPromise({
+  try: () => readFile(mdPath, "utf8"),
+  catch: (e: unknown) => e,
+});
+if (!md.isOk())
+  fatal(`FATAL: cannot read ${mdPath} — ${errorMessage(md.error)}`);
 outputs.push({
   dest: `${home}/.claude/CLAUDE.md`,
   text: md.value,

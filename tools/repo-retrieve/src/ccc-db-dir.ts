@@ -31,12 +31,12 @@ import {
   relative,
   resolve,
 } from "node:path";
-import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
 const resolveRealpath = (path: string) =>
-  fromAsyncThrowable(() => realpath(path), asError)();
+  Result.tryPromise({ try: () => realpath(path), catch: asError });
 
 export const MAPPING_ENV = "COCOINDEX_CODE_DB_PATH_MAPPING";
 export const SETTINGS_DIR_NAME = ".cocoindex_code";
@@ -50,33 +50,33 @@ export async function declaredDbEnv(
   env: Record<string, string | undefined> = process.env,
   declaration = DB_ROOT_DECLARATION,
 ): Promise<Result<Record<string, string | undefined>, Error>> {
-  const read = await fromAsyncThrowable(
-    () => readFile(declaration, "utf8"),
-    asError,
-  )();
+  const read = await Result.tryPromise({
+    try: () => readFile(declaration, "utf8"),
+    catch: asError,
+  });
   if (read.isErr())
-    return err(new Error(`${declaration}: ${read.error.message}`));
+    return Result.err(new Error(`${declaration}: ${read.error.message}`));
   const root = read.value.trim();
   if (root === "" || isAbsolute(root) || root.split("/").includes(".."))
-    return err(
+    return Result.err(
       new Error(`${declaration}: expected a non-empty path relative to $HOME`),
     );
   const home = env["HOME"] ?? homedir();
   const declared = `${home}=${join(home, root)}`;
   const actual = env[MAPPING_ENV];
   if (actual === undefined || actual === "")
-    return ok({ ...env, [MAPPING_ENV]: declared });
+    return Result.ok({ ...env, [MAPPING_ENV]: declared });
   const [given, expected] = await Promise.all([
     parseMapping(actual),
     parseMapping(declared),
   ]);
-  if (given.isErr()) return err(given.error);
-  if (expected.isErr()) return err(expected.error);
+  if (given.isErr()) return Result.err(given.error);
+  if (expected.isErr()) return Result.err(expected.error);
   if (JSON.stringify(given.value) !== JSON.stringify(expected.value))
-    return err(
+    return Result.err(
       new Error(`${MAPPING_ENV} locates DBs differently from ${declaration}`),
     );
-  return ok(env);
+  return Result.ok(env);
 }
 
 // Every file ccc's daemon or repo-retrieve writes into a project's DB dir. `INDEXED_AT` is the
@@ -114,7 +114,7 @@ async function resolveLikePython(path: string): Promise<string> {
 export async function parseMapping(
   raw: string | undefined,
 ): Promise<Result<PathMapping[], Error>> {
-  if (raw === undefined || raw.trim() === "") return ok([]);
+  if (raw === undefined || raw.trim() === "") return Result.ok([]);
   const mappings: PathMapping[] = [];
   for (const piece of raw.split(",")) {
     const entry = piece.trim();
@@ -123,14 +123,14 @@ export async function parseMapping(
     const source = cut < 0 ? "" : entry.slice(0, cut);
     const target = cut < 0 ? "" : entry.slice(cut + 1);
     if (source === "" || target === "") {
-      return err(
+      return Result.err(
         new Error(
           `${MAPPING_ENV}: invalid entry '${entry}', expected 'source=target'`,
         ),
       );
     }
     if (!isAbsolute(source) || !isAbsolute(target)) {
-      return err(
+      return Result.err(
         new Error(`${MAPPING_ENV}: paths must be absolute, got '${entry}'`),
       );
     }
@@ -139,7 +139,7 @@ export async function parseMapping(
       target: await resolveLikePython(target),
     });
   }
-  return ok(mappings);
+  return Result.ok(mappings);
 }
 
 export async function resolveDbDir(

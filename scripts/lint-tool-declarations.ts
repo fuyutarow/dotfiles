@@ -22,7 +22,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { consola } from "consola";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import {
   loadToolDeclarations,
   type LoadedTool,
@@ -43,8 +43,11 @@ export type CheckOptions = {
 };
 
 async function text(root: string, path: string): Promise<string | undefined> {
-  const read = await attempt(() => readFile(join(root, path), "utf8"));
-  return read.ok ? read.value : undefined;
+  const read = await Result.tryPromise({
+    try: () => readFile(join(root, path), "utf8"),
+    catch: (e: unknown) => e,
+  });
+  return read.isOk() ? read.value : undefined;
 }
 
 async function binsOf(
@@ -84,10 +87,12 @@ export function fragmentList(zsh: string): string[] | undefined {
 }
 
 async function filesBelow(root: string, dir: string): Promise<string[]> {
-  const found = await attempt(() =>
-    readdir(join(root, dir), { recursive: true, withFileTypes: true }),
-  );
-  if (!found.ok) return [];
+  const found = await Result.tryPromise({
+    try: () =>
+      readdir(join(root, dir), { recursive: true, withFileTypes: true }),
+    catch: (e: unknown) => e,
+  });
+  if (!found.isOk()) return [];
   return found.value
     .filter(
       (entry) => entry.isFile() && !entry.parentPath.includes("node_modules"),
@@ -360,10 +365,14 @@ function report(
 
 if (import.meta.main) {
   const root = join(import.meta.dir, "..");
-  const result = await attempt(async () =>
-    toolDeclarationProblems(root, { registrySources: await registrySources() }),
-  );
-  if (result.ok)
+  const result = await Result.tryPromise({
+    try: async () =>
+      toolDeclarationProblems(root, {
+        registrySources: await registrySources(),
+      }),
+    catch: (e: unknown) => e,
+  });
+  if (result.isOk())
     process.exitCode = report(result.value.problems, result.value.undeclared);
   else {
     consola.error(`lint:tool-declarations: ${errorMessage(result.error)}`);

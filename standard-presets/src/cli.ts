@@ -1,3 +1,4 @@
+import { errorMessage, Result } from "../../tools/shared/src/result.ts";
 import {
   access,
   lstat,
@@ -14,7 +15,6 @@ import { dirname, join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { cli } from "cleye";
 import { consola } from "consola";
-import { attempt, errorMessage } from "../../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { discoverPresets, jsonKey } from "./manifests.ts";
 import templateHashes from "../template-hashes.json";
@@ -139,10 +139,11 @@ const Registry = z.looseObject({
 const registryPath = join(PRESETS, "consumers.toml");
 let placement = DEFAULT_PLACEMENT;
 if (name === "typescript" && (await Bun.file(registryPath).exists())) {
-  const raw = await attempt(async () =>
-    Bun.TOML.parse(await Bun.file(registryPath).text()),
-  );
-  const parsed = raw.ok ? Registry.safeParse(raw.value) : undefined;
+  const raw = await Result.tryPromise({
+    try: async () => Bun.TOML.parse(await Bun.file(registryPath).text()),
+    catch: (e: unknown) => e,
+  });
+  const parsed = raw.isOk() ? Registry.safeParse(raw.value) : undefined;
   if (parsed?.success !== true)
     fatal(`invalid consumer registry: ${registryPath}`);
   const consumer = parsed.data.consumers.find((row) => {
@@ -170,11 +171,14 @@ async function requireOwnedDestination(destination: string): Promise<void> {
     paths.push(current);
   }
   for (const path of paths) {
-    const entry = await attempt(() => lstat(path));
-    if (entry.ok && entry.value.isSymbolicLink())
+    const entry = await Result.tryPromise({
+      try: () => lstat(path),
+      catch: (e: unknown) => e,
+    });
+    if (entry.isOk() && entry.value.isSymbolicLink())
       fatal(`refusing write through consumer symlink: ${path}`);
     if (
-      !entry.ok &&
+      entry.isErr() &&
       !z.looseObject({ code: z.literal("ENOENT") }).safeParse(entry.error)
         .success
     )
@@ -324,8 +328,11 @@ async function checkJsonFile(
   requirements: JsonRequirement[],
 ): Promise<boolean> {
   const path = join(target, destination);
-  const content = await attempt(() => readFile(path, "utf8"));
-  const json = content.ok
+  const content = await Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (e: unknown) => e,
+  });
+  const json = content.isOk()
     ? jsonOf(z.record(z.string(), z.unknown())).safeParse(content.value)
     : undefined;
   if (json === undefined || !json.success) {

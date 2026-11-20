@@ -6,8 +6,8 @@
 // (the PATH check names the bins and probe tasks the declaration lists).
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { attempt, errorMessage } from "./attempt.ts";
-import { fromThrowable, z } from "./zod.ts";
+import { errorMessage, Result } from "./result.ts";
+import { z } from "./zod.ts";
 
 const RelativeFile = z
   .string()
@@ -58,10 +58,10 @@ export async function toolDirs(root: string): Promise<string[]> {
 export function parseToolDeclaration(
   text: string,
 ): { ok: true; declaration: ToolDeclaration } | { ok: false; problem: string } {
-  const toml = fromThrowable(
-    (): unknown => Bun.TOML.parse(text),
-    errorMessage,
-  )();
+  const toml = Result.try({
+    try: (): unknown => Bun.TOML.parse(text),
+    catch: errorMessage,
+  });
   if (toml.isErr())
     return { ok: false, problem: `not valid TOML: ${toml.error}` };
   const raw = toml.value;
@@ -93,8 +93,11 @@ export async function loadToolDeclarations(root: string): Promise<{
       undeclared.push(dir);
       continue;
     }
-    const read = await attempt(() => file.text());
-    if (!read.ok) {
+    const read = await Result.tryPromise({
+      try: () => file.text(),
+      catch: (e: unknown) => e,
+    });
+    if (read.isErr()) {
       broken.push({
         dir,
         problem: `cannot read tool.toml: ${errorMessage(read.error)}`,

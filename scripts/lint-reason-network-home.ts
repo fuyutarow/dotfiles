@@ -2,7 +2,7 @@
 // selects a fixture root. Fail closed on unreadable declarations.
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { attempt } from "../agents/hooks/attempt.ts";
+import { Result } from "../tools/shared/src/result.ts";
 
 const declarations = [
   ".mcp.json",
@@ -39,12 +39,14 @@ export async function reasonNetworkHomeViolations(
 }
 
 async function main(): Promise<number> {
-  const result = await attempt(() =>
-    reasonNetworkHomeViolations(
-      process.env["DOTFILES"] ?? join(import.meta.dir, ".."),
-    ),
-  );
-  if (!result.ok) {
+  const result = await Result.tryPromise({
+    try: () =>
+      reasonNetworkHomeViolations(
+        process.env["DOTFILES"] ?? join(import.meta.dir, ".."),
+      ),
+    catch: (e: unknown) => e,
+  });
+  if (!result.isOk()) {
     process.stderr.write(
       `reason-network home declarations: ${String(result.error)}\n`,
     );

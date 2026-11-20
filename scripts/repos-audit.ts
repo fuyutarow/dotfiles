@@ -3,7 +3,7 @@ import { access } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { registeredRepos } from "./workspace-repos.ts";
 import { consola } from "consola";
-import { attempt } from "../agents/hooks/attempt.ts";
+import { Result } from "../tools/shared/src/result.ts";
 
 // ~/Workspace の全 git repo の配線健全性を一望する (scaffolding-repositories の floor を
 // 横断実行)。dotfiles 自身の `lint` には入れない。他 repo の状態で dotfiles の gate が落ちる
@@ -14,7 +14,14 @@ const check =
     import.meta.dir,
     "../agents/skills/wiring-repositories/scripts/wiring-check.ts",
   );
-if (!(await attempt(() => access(check))).ok) {
+if (
+  !(
+    await Result.tryPromise({
+      try: () => access(check),
+      catch: (e: unknown) => e,
+    })
+  ).isOk()
+) {
   consola.error(`repos:audit: scaffold-check not found at ${check}`);
   process.exit(2);
 }

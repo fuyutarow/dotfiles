@@ -1,7 +1,6 @@
+import { Result } from "../../tools/shared/src/result.ts";
 import { homedir, release } from "node:os";
 import { join, resolve } from "node:path";
-import { err, ok, type Result } from "neverthrow";
-import { attempt } from "../hooks/attempt.ts";
 import { jsonOf, z } from "../hooks/zod.ts";
 
 export type RuntimeProvider = "standalone" | "windows-desktop";
@@ -38,17 +37,27 @@ export async function declaredProvider(
 ): Promise<Result<RuntimeProvider, Error>> {
   const path = join(dotfiles, "agents/codex/runtime.toml");
   if (!(await Bun.file(path).exists()))
-    return err(new Error(`${path}: missing runtime declaration`));
-  const source = await attempt(() => Bun.file(path).text());
-  if (!source.ok)
-    return err(new Error(`${path}: invalid TOML: ${String(source.error)}`));
-  const decoded = await attempt(() => Bun.TOML.parse(source.value));
-  if (!decoded.ok)
-    return err(new Error(`${path}: invalid TOML: ${String(decoded.error)}`));
+    return Result.err(new Error(`${path}: missing runtime declaration`));
+  const source = await Result.tryPromise({
+    try: () => Bun.file(path).text(),
+    catch: (e: unknown) => e,
+  });
+  if (source.isErr())
+    return Result.err(
+      new Error(`${path}: invalid TOML: ${String(source.error)}`),
+    );
+  const decoded = Result.try({
+    try: () => Bun.TOML.parse(source.value),
+    catch: (e: unknown) => e,
+  });
+  if (decoded.isErr())
+    return Result.err(
+      new Error(`${path}: invalid TOML: ${String(decoded.error)}`),
+    );
   const parsed = Declaration.safeParse(decoded.value);
   return parsed.success
-    ? ok(parsed.data.providers[kind])
-    : err(
+    ? Result.ok(parsed.data.providers[kind])
+    : Result.err(
         new Error(
           `${path}: invalid runtime declaration: ${parsed.error.message}`,
         ),

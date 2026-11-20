@@ -44,7 +44,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "better-result";
 
 // "row" is a reference-table row named by its label; "count" is a sentence stating N items whose
 // immediately following list or table has a different number of entries (a mismatch only).
@@ -1203,21 +1203,28 @@ async function main(): Promise<number> {
     return usage("--terms cannot be combined with --max-locations");
 
   const root = resolve(docdir);
-  const isDirectory = await fromAsyncThrowable(() => stat(root))();
+  const isDirectory = await Result.tryPromise({
+    try: () => stat(root),
+    catch: (e: unknown) => e,
+  });
   if (isDirectory.isErr())
     return fail(`cannot read ${docdir}: ${messageOf(isDirectory.error)}`);
   if (!isDirectory.value.isDirectory())
     return fail(`${docdir} is not a directory`);
 
-  const listed = await fromAsyncThrowable(() => docFiles(root))();
+  const listed = await Result.tryPromise({
+    try: () => docFiles(root),
+    catch: (e: unknown) => e,
+  });
   if (listed.isErr())
     return fail(`cannot list ${docdir}: ${messageOf(listed.error)}`);
   if (listed.value.length === 0)
     return fail(`no Markdown or TOML files under ${docdir}`);
 
-  const loaded = await fromAsyncThrowable(() =>
-    loadInputs(root, listed.value, glossaryFlag),
-  )();
+  const loaded = await Result.tryPromise({
+    try: () => loadInputs(root, listed.value, glossaryFlag),
+    catch: (e: unknown) => e,
+  });
   if (loaded.isErr())
     return fail(`cannot read input: ${messageOf(loaded.error)}`);
 

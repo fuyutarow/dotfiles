@@ -22,7 +22,7 @@ import {
   resolve,
 } from "node:path";
 import { cli } from "cleye";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { Result, errorMessage } from "../tools/shared/src/result.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { embedHousePin } from "../tools/shared/src/house-pin.ts";
 import { bundleEntry } from "../tools/shared/src/bundle-entry.ts";
@@ -291,10 +291,11 @@ function sandbox(
 const JsonObject = z.record(z.string(), z.unknown());
 async function objectFile(path: string) {
   // tsconfig permits comments; Bun's JSONC parser keeps that consumer contract.
-  const raw = await attempt(async () =>
-    Bun.JSONC.parse(await Bun.file(path).text()),
-  );
-  const parsed = raw.ok ? JsonObject.safeParse(raw.value) : undefined;
+  const raw = await Result.tryPromise({
+    try: async () => Bun.JSONC.parse(await Bun.file(path).text()),
+    catch: (e: unknown) => e,
+  });
+  const parsed = raw.isOk() ? JsonObject.safeParse(raw.value) : undefined;
   return parsed?.success === true ? parsed.data : undefined;
 }
 
@@ -417,8 +418,11 @@ async function containsSymlink(root: string, path: string): Promise<boolean> {
   for (const part of path.split("/")) {
     current = join(current, part);
     const entryPath = current;
-    const entry = await attempt(() => lstat(entryPath));
-    if (entry.ok && entry.value.isSymbolicLink()) return true;
+    const entry = await Result.tryPromise({
+      try: () => lstat(entryPath),
+      catch: (e: unknown) => e,
+    });
+    if (entry.isOk() && entry.value.isSymbolicLink()) return true;
   }
   return false;
 }
@@ -432,10 +436,11 @@ async function applySurface(
   placement: Placement,
 ): Promise<string | undefined> {
   const manifest = join(candidate, surface, "preset.toml");
-  const raw = await attempt(async () =>
-    Bun.TOML.parse(await Bun.file(manifest).text()),
-  );
-  const parsed = raw.ok ? Mappings.safeParse(raw.value) : undefined;
+  const raw = await Result.tryPromise({
+    try: async () => Bun.TOML.parse(await Bun.file(manifest).text()),
+    catch: (e: unknown) => e,
+  });
+  const parsed = raw.isOk() ? Mappings.safeParse(raw.value) : undefined;
   if (parsed?.success !== true)
     return `apply ${surface}: invalid or missing manifest`;
   // Parent-process writes must not traverse consumer links outside the isolated export.
@@ -591,14 +596,18 @@ async function seedMiseInstalls(home: string): Promise<void> {
     process.env["MISE_DATA_DIR"] ?? join(homedir(), ".local/share/mise"),
     "installs",
   );
-  const tools = await attempt(() => readdir(source));
-  if (!tools.ok) return;
+  const tools = await Result.tryPromise({
+    try: () => readdir(source),
+    catch: (e: unknown) => e,
+  });
+  if (!tools.isOk()) return;
   for (const tool of tools.value) {
     const directory = join(source, tool);
-    const versions = await attempt(() =>
-      readdir(directory, { withFileTypes: true }),
-    );
-    if (!versions.ok) continue;
+    const versions = await Result.tryPromise({
+      try: () => readdir(directory, { withFileTypes: true }),
+      catch: (e: unknown) => e,
+    });
+    if (!versions.isOk()) continue;
     const target = join(home, ".local/share/mise/installs", tool);
     await mkdir(target, { recursive: true });
     for (const version of versions.value.filter((entry) => entry.isDirectory()))
@@ -682,8 +691,11 @@ async function materializeCandidateNodeModules(
   candidate: string,
 ): Promise<void> {
   const source = join(root, "node_modules");
-  const entry = await attempt(() => lstat(source));
-  if (!entry.ok || !entry.value.isSymbolicLink()) return;
+  const entry = await Result.tryPromise({
+    try: () => lstat(source),
+    catch: (e: unknown) => e,
+  });
+  if (!entry.isOk() || !entry.value.isSymbolicLink()) return;
   const target = join(candidate, "node_modules");
   await rm(target);
   await copyTree(await realpath(source), target);
@@ -694,13 +706,16 @@ async function capturePathExecutable(
   target: string,
   shadowed: readonly string[],
 ) {
-  const entry = await attempt(async () => {
-    const executable = await realpath(path);
-    const info = await stat(executable);
-    return { executable, info };
+  const entry = await Result.tryPromise({
+    try: async () => {
+      const executable = await realpath(path);
+      const info = await stat(executable);
+      return { executable, info };
+    },
+    catch: (e: unknown) => e,
   });
   if (
-    !entry.ok ||
+    !entry.isOk() ||
     !entry.value.info.isFile() ||
     (entry.value.info.mode & 0o111) === 0
   )
@@ -719,10 +734,16 @@ async function capturePath(scratch: string, shadowed: readonly string[]) {
   const directories: string[] = [];
   const bindings = new Set<string>();
   for (const path of new Set((process.env["PATH"] ?? "").split(":"))) {
-    const origin = await attempt(() => realpath(resolve(path)));
-    if (!origin.ok) continue;
-    const entries = await attempt(() => readdir(origin.value));
-    if (!entries.ok) continue;
+    const origin = await Result.tryPromise({
+      try: () => realpath(resolve(path)),
+      catch: (e: unknown) => e,
+    });
+    if (!origin.isOk()) continue;
+    const entries = await Result.tryPromise({
+      try: () => readdir(origin.value),
+      catch: (e: unknown) => e,
+    });
+    if (!entries.isOk()) continue;
     const directory = join(
       scratch,
       "resolved-path",
@@ -820,8 +841,11 @@ async function checkConsumer(
   changed: readonly string[],
 ): Promise<string[]> {
   const source = expandRoot(consumer.root);
-  const consumerRoot = await attempt(() => stat(source));
-  if (!consumerRoot.ok || !consumerRoot.value.isDirectory())
+  const consumerRoot = await Result.tryPromise({
+    try: () => stat(source),
+    catch: (e: unknown) => e,
+  });
+  if (!consumerRoot.isOk() || !consumerRoot.value.isDirectory())
     return [
       `FAIL ${consumer.name}: consumer root missing: ${source}; clone with: jj git clone <repository-url> ${source}`,
     ];
@@ -838,15 +862,27 @@ async function checkConsumer(
   const candidate = join(home, "dotfiles");
   const copy = join(scratch, "consumer");
   const dotfiles = join(homedir(), "dotfiles");
-  const liveDotfiles = (await attempt(() => lstat(dotfiles))).ok
+  const liveDotfiles = (
+    await Result.tryPromise({
+      try: () => lstat(dotfiles),
+      catch: (e: unknown) => e,
+    })
+  ).isOk()
     ? dotfiles
     : undefined;
   const executables = await captureExecutables(scratch, consumer);
   if (!executables.ok) return [`FAIL ${consumer.name}: ${executables.error}`];
   const roots = await Promise.all(
-    [source, root, dotfiles].map((path) => attempt(() => realpath(path))),
+    [source, root, dotfiles].map((path) =>
+      Result.tryPromise({
+        try: () => realpath(path),
+        catch: (e: unknown) => e,
+      }),
+    ),
   );
-  const shadowed = roots.flatMap((entry) => (entry.ok ? [entry.value] : []));
+  const shadowed = roots.flatMap((entry) =>
+    entry.isOk() ? [entry.value] : [],
+  );
   const resolvedPath = await capturePath(scratch, shadowed);
   const prefix = sandbox(
     scratch,
@@ -862,8 +898,11 @@ async function checkConsumer(
       `FAIL ${consumer.name}: isolation unavailable (requires bwrap on Linux or sandbox-exec on macOS)`,
     ];
   const trunk = consumer.trunk ?? "trunk()";
-  const revision = await attempt(() => resolveTrunk(source, trunk));
-  if (!revision.ok)
+  const revision = await Result.tryPromise({
+    try: () => resolveTrunk(source, trunk),
+    catch: (e: unknown) => e,
+  });
+  if (!revision.isOk())
     return [
       `FAIL ${consumer.name}: no trunk (${trunk}): ${errorMessage(revision.error)}`,
     ];
@@ -876,15 +915,18 @@ async function checkConsumer(
     return [
       `FAIL ${consumer.name}: no trunk (${trunk}): ${revision.value.reason} ${revision.value.output}`,
     ];
-  const copied = await attempt(async () => {
-    const failure = await exportTrunk(source, copy, commit, scratch);
-    if (failure !== undefined) return failure;
-    await mkdir(home, { recursive: true });
-    await copyTree(root, candidate);
-    await materializeCandidateNodeModules(root, candidate);
-    return null;
+  const copied = await Result.tryPromise({
+    try: async () => {
+      const failure = await exportTrunk(source, copy, commit, scratch);
+      if (failure !== undefined) return failure;
+      await mkdir(home, { recursive: true });
+      await copyTree(root, candidate);
+      await materializeCandidateNodeModules(root, candidate);
+      return null;
+    },
+    catch: (e: unknown) => e,
   });
-  const copyFailure = copied.ok ? copied.value : errorMessage(copied.error);
+  const copyFailure = copied.isOk() ? copied.value : errorMessage(copied.error);
   if (copyFailure !== null && copyFailure !== undefined)
     return [
       `FAIL ${consumer.name}: consumer copy failed: ${source}: ${copyFailure}`,
@@ -1033,10 +1075,12 @@ export async function runConsumerGates(
       checked: 0,
       lines: ["SKIP consumer gates: no shared surface changed"],
     };
-  const loaded = await attempt(async () =>
-    Bun.TOML.parse(await Bun.file(join(root, REGISTRY)).text()),
-  );
-  const parsed = loaded.ok
+  const loaded = await Result.tryPromise({
+    try: async () =>
+      Bun.TOML.parse(await Bun.file(join(root, REGISTRY)).text()),
+    catch: (e: unknown) => e,
+  });
+  const parsed = loaded.isOk()
     ? ConsumerRegistry.safeParse(loaded.value)
     : undefined;
   if (parsed?.success !== true)
@@ -1044,7 +1088,7 @@ export async function runConsumerGates(
       ok: false,
       checked: 0,
       lines: [
-        `FAIL consumer registry ${REGISTRY}: ${loaded.ok ? parsed?.error.message : errorMessage(loaded.error)}`,
+        `FAIL consumer registry ${REGISTRY}: ${loaded.isOk() ? parsed?.error.message : errorMessage(loaded.error)}`,
       ],
     };
   const selected = parsed.data.consumers.filter(
@@ -1061,9 +1105,12 @@ export async function runConsumerGates(
     ),
   );
   for (const consumer of selected) {
-    const result = await attempt(() => checkConsumer(root, consumer, changed));
+    const result = await Result.tryPromise({
+      try: () => checkConsumer(root, consumer, changed),
+      catch: (e: unknown) => e,
+    });
     lines.push(
-      ...(result.ok
+      ...(result.isOk()
         ? result.value
         : [
             `FAIL ${consumer.name}: ${consumer.command.join(" ")}: ${errorMessage(result.error)}`,

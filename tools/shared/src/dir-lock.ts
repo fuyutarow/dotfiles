@@ -11,7 +11,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { fromThrowable, jsonOf, z } from "./zod.ts";
+import { jsonOf, z } from "./zod.ts";
+import { Result } from "./result.ts";
 
 const HolderSchema = z.looseObject({
   pid: z.number().int(),
@@ -25,7 +26,10 @@ const ownerFile = (lock: string): string => join(lock, "owner.json");
 
 /** The holder recorded in `lock`, or undefined (none, or still being written). */
 export function holderOf(lock: string): Holder | undefined {
-  const text = fromThrowable(() => readFileSync(ownerFile(lock), "utf8"))();
+  const text = Result.try({
+    try: () => readFileSync(ownerFile(lock), "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (text.isErr()) return undefined;
   const parsed = jsonOf(HolderSchema).safeParse(text.value);
   return parsed.success ? parsed.data : undefined;
@@ -33,7 +37,10 @@ export function holderOf(lock: string): Holder | undefined {
 
 /** Is `pid` a live process on this host? Signal 0 probes without signalling; EPERM = alive. */
 export function pidAlive(pid: number): boolean {
-  const probe = fromThrowable(() => process.kill(pid, 0))();
+  const probe = Result.try({
+    try: () => process.kill(pid, 0),
+    catch: (e: unknown) => e,
+  });
   if (probe.isOk()) return true;
   const parsed = z.object({ code: z.string() }).safeParse(probe.error);
   return parsed.success && parsed.data.code === "EPERM";
@@ -44,7 +51,10 @@ export function isStale(lock: string, host: string, graceMs: number): boolean {
   const holder = holderOf(lock);
   if (holder !== undefined)
     return holder.host === host && !pidAlive(holder.pid);
-  const stat = fromThrowable(() => statSync(lock))();
+  const stat = Result.try({
+    try: () => statSync(lock),
+    catch: (e: unknown) => e,
+  });
   return (
     stat.isOk() &&
     Temporal.Now.instant().epochMilliseconds - stat.value.mtimeMs > graceMs
@@ -64,9 +74,12 @@ export function tryAcquire(
   mkdirSync(dirname(lock), { recursive: true });
   if (isStale(lock, me.host, graceMs))
     rmSync(lock, { recursive: true, force: true });
-  const made = fromThrowable(() => {
-    mkdirSync(lock, { mode: 0o700 });
-  })();
+  const made = Result.try({
+    try: () => {
+      mkdirSync(lock, { mode: 0o700 });
+    },
+    catch: (e: unknown) => e,
+  });
   if (made.isErr()) return { ok: false, holder: holderOf(lock) };
   writeFileSync(ownerFile(lock), `${JSON.stringify(me)}\n`, { mode: 0o600 });
   return {

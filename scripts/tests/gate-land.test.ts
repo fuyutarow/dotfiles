@@ -1,17 +1,19 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "../../tools/shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 
 test("pre-commit runs exactly the gate:land checks plus staged formatting", async () => {
-  const toml = await attempt(async () =>
-    Bun.TOML.parse(await readFile(resolve(ROOT, "mise.toml"), "utf8")),
-  );
-  expect(toml.ok).toBe(true);
-  if (!toml.ok) return;
+  const toml = await Result.tryPromise({
+    try: async () =>
+      Bun.TOML.parse(await readFile(resolve(ROOT, "mise.toml"), "utf8")),
+    catch: (e: unknown) => e,
+  });
+  expect(toml.isOk()).toBe(true);
+  if (!toml.isOk()) return;
 
   const parsed = z
     .looseObject({

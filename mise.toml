@@ -377,10 +377,11 @@ run = "bun scripts/lint-bun.ts"
 # oxlint over the repo's own TS (config: .oxlintrc.json). Default correctness rules everywhere
 # tracked except agents/skills/** (vendored templates), plus the house syntax ban on EVERY
 # audited *.ts, with NO per-file opt-out and NO disable comment of any kind: `switch` and nested
-# ternaries -> ts-pattern (where the file may import it) or an if/else chain/lookup table;
-# try/catch -> neverthrow's fromThrowable/fromAsyncThrowable where the file already imports it,
-# else agents/hooks/attempt.ts (Promise.try, zero-dep — importable even from a hook or bootstrap
-# script that runs before `mise run deps` restores node_modules), or, inside a self-contained
+# ternaries -> an if/else chain or a lookup table (ts-pattern is equally fine in a file that
+# already imports an npm package); try/catch -> attempt() from tools/shared/src/attempt.ts
+# (Promise.try, zero-dep — importable from every file, including a hook or bootstrap script that
+# runs before `mise run deps` restores node_modules; neverthrow's fromThrowable is equally fine
+# in a file that already imports an npm package), or, inside a self-contained
 # agents/skills/** skill, an inline `Promise.try(fn).then(ok, err)` rather than crossing the
 # skill boundary. try/finally is banned too: cleanup goes through using / await using /
 # DisposableStack or promise.finally(), so the tree has no `try` at all.

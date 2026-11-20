@@ -98,7 +98,7 @@
       "error",
       {
         "selector": "SwitchStatement",
-        "message": "switch is banned: ts-pattern's match(..).exhaustive() where the file may import it, else an if/else chain or a lookup table."
+        "message": "switch is banned: use an if/else chain or a lookup table, which work in every file; ts-pattern's match(..).exhaustive() is equally fine in a file that already imports an npm package."
       },
       {
         "selector": "ConditionalExpression ConditionalExpression",
@@ -106,11 +106,11 @@
       },
       {
         "selector": "TryStatement",
-        "message": "try is banned (catch AND finally): errors as values — neverthrow's fromThrowable/fromAsyncThrowable where the file may import it, else agents/hooks/attempt.ts (Promise.try, zero-dep), or Promise.try(fn).then(ok, err) inline in a self-contained skill; cleanup via using / await using / DisposableStack, or promise.finally()."
+        "message": "try is banned (catch AND finally): errors as values — attempt() from tools/shared/src/attempt.ts (zero-dep, importable from every file); neverthrow's fromThrowable/fromAsyncThrowable is equally fine in a file that already imports an npm package; a self-contained skill script inlines Promise.try(fn).then(ok, err); cleanup via using / await using / DisposableStack, or promise.finally()."
       },
       {
         "selector": "ThrowStatement",
-        "message": "throw is banned: no-try left nothing to catch it, so a throw is a crash path no type shows. Return the failure as a value — neverthrow's err()/errAsync() and Result where the file may import it, else a tagged union like agents/hooks/attempt.ts's Attempt; the entry point matches the result, prints the message and calls process.exit(code). Code that throws (a library, JSON.parse) is wrapped once with fromThrowable/attempt."
+        "message": "throw is banned: no-try left nothing to catch it, so a throw is a crash path no type shows. Return the failure as a value the caller cannot mistake for success — the Attempt tagged union from tools/shared/src/attempt.ts (zero-dep, importable from every file); neverthrow's err()/errAsync() and Result are equally fine in a file that already imports an npm package. Never return a default or the input itself in place of the failure. A lookup that finds nothing is absence, not failure: return undefined. The entry point matches the result, prints the message and calls process.exit(code). Code that throws (a library, JSON.parse) is wrapped once with fromThrowable/attempt."
       },
       {
         "selector": "CallExpression[callee.object.name='Promise'][callee.property.name='reject']",

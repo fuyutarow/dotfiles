@@ -57,7 +57,8 @@
     "8cd92fc6659aff9228b862464cf501c4a999e74cb2f02ccf06227069b1742c2e"
   ],
   "typescript/house.oxlintrc.json": [
-    "b2d9b7aa42f065ea50bb3c17479113e6e1ed735a7a75bd9d787c39a4e78f97b6"
+    "b2d9b7aa42f065ea50bb3c17479113e6e1ed735a7a75bd9d787c39a4e78f97b6",
+    "65d02df2479d138d342cb2afd0785822e6bbb0292659e71850058c1642c80f74"
   ],
   "typescript/knip.jsonc": [
     "c8f94f2e00af487cc43f58f0462826b30889f4542d4b92d9487e28a6c94f1bf9"
@@ -75,7 +76,8 @@
     "c94293e2bb7b9d0bd7dddcea1cf726044672cebd5f8a567ff6c763f16d0041c9"
   ],
   "typescript/package.json": [
-    "d687aea9d67ab9ea0cdb92601fcab5f3f9141aa492df2e2740cd3fca3c16ebc2"
+    "d687aea9d67ab9ea0cdb92601fcab5f3f9141aa492df2e2740cd3fca3c16ebc2",
+    "7be1584d6625d77747f485c9bf142f7907690db17cfc0406c875b5d65465969c"
   ],
   "typescript/require-bun.ts": [
     "957c753ec15f95d9e1bc9f07481de93f3333667cc4e462801c340628febc132a"

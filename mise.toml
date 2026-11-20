@@ -4,7 +4,7 @@
 # tool check -> scripts/check-tools.sh.
 # 命名は wiring-mise-tasks 契約 (fmt/f fmt:check lint/l test/t up/u check/c)。この repo は
 # 言語プロジェクトでなく機械設定ゆえ setup は OS 別 init に分割:
-# mise-contract: waive setup -- OS-split into mac:init / wsl:init
+# mise-contract: waive setup -- OS-split into mac:init / linux:init (WSL is linux:init)
 
 # RUNTIME-DECLARED (wiring-mise-tasks, 2026-07-25). Task bodies below invoke `bun`; declaring
 # it here is what makes those bodies correct on a machine that has not run `brew bundle` yet.
@@ -905,7 +905,7 @@ run = 'bun ~/dotfiles/agents/models/check-releases.ts'
 # (it ends by calling this as the target user). Homebrew owns core; mise owns repo toolchains.
 [tasks."linux:init"]
 depends = ["bun:check"]
-description = "Core utilities via Homebrew bundle Brewfile.core at the declared Linux prefix; source builds allowed. Agent native CLIs and dotfile links follow. Experiments stay per repo. --rented declares only a measured owner's disposable host."
+description = "Every Linux box, WSL included: Brewfile.core via Homebrew, dotfile links, agent CLIs; on WSL also its user services, with root steps run via sudo -n or listed. Experiments stay per repo. --rented declares only a measured owner's disposable host."
 run = "bun ~/dotfiles/scripts/linux-init.ts"
 
 [tasks."linux:migrate-brew"]
@@ -918,11 +918,6 @@ run = "bun scripts/linux-init.ts --migrate-brew"
 depends = ["bun:check"]
 description = "From the Mac, once a rented box answers ssh (or with --root-host/--root-port to bootstrap it as root): bring it to 'experiments can resume' — reach, gh login (--gh), per --repo: clone, mise trust+install, jj (setup:jj or colocate), setup, doctor — then doctor:remote. Idempotent: a finished box re-runs as fast PASS no-ops. Usage: mise run box:init -- <alias> [--root-host H --root-port P] [--gh] [--repo owner/name …]"
 run = 'bun ~/dotfiles/scripts/box-init.ts'
-
-[tasks."wsl:init"]
-depends = ["bun:check"]
-description = "Initialize WSL: linux:init (Brewfile.core, links, agent CLIs) plus WSL user services; root steps run via sudo -n or are listed. After: install linuxbrew, brew install mise."
-run = 'bun ~/dotfiles/scripts/wsl-init.ts'
 
 # The ONE Windows-side file this repo owns, and the only one it cannot symlink: %USERPROFILE%\
 # .wslconfig is read by the Windows WSL service, which does not follow symlinks made inside WSL.

@@ -341,11 +341,12 @@ exec zsh
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 git clone https://github.com/fuyutarow/dotfiles.git ~/dotfiles
-cd ~/dotfiles && brew install mise && mise run wsl:init
+cd ~/dotfiles && brew install mise && mise run linux:init
 exec zsh
 ```
 
-`wsl:init` is `linux:init` plus the WSL user services: it installs `Brewfile.core` only (on-demand
+WSL uses the same `linux:init` as every Linux box; on WSL it also enables the WSL user services.
+It installs `Brewfile.core` only (on-demand
 formulas come later through `tool:get` / `install:tools`), links the dotfiles, and installs
 Claude Code and Codex. It never waits for a sudo password: a root-only step (zsh from apt, the
 login shell, the `/etc` links) either runs through `sudo -n` or is printed as a command for you

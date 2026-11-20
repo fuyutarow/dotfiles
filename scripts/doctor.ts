@@ -1687,7 +1687,7 @@ async function checkWslGpuPath(): Promise<Finding> {
     return fail(
       "wsl-gpu-path",
       "systemctl is not on PATH",
-      "mise run wsl:init",
+      "mise run linux:init",
     );
   if (result.timedOut)
     return warn("wsl-gpu-path", "systemctl --user show-environment timed out");

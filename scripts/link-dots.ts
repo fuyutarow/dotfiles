@@ -7,7 +7,7 @@
 // Port of scripts/link-dots.sh (2026-10-05). It had grown OS branches, a version gate, two prune
 // passes and a read-only mode — exactly the "first conditional is the signal" of writing-bun-scripts
 // BG0. Its old exemption ("runs before brew/bun exist") had stopped being true: the .sh already
-// called `bun render-claude-settings.ts`, and every caller (mac:init, wsl-init.ts, linux-init.ts,
+// called `bun render-claude-settings.ts`, and every caller (mac:init, linux-init.ts,
 // the post-merge hook) runs after bun and `mise run deps`. Deliberate changes from the .sh:
 //   - plain Linux (a rented box, a VM) is a real target, not "neither macOS nor WSL" noise;
 //   - `--force` onto a REAL DIRECTORY skips loudly: `ln -sfn src dir` put the link INSIDE it;

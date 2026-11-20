@@ -8,7 +8,7 @@
 // (Julia, CUDA, Python) stay in each repo's mise.toml; no global mise [tools] (INV-6).
 // Exit: 0 done · 1 a step failed (its output says which).
 import { access, realpath } from "node:fs/promises";
-import { homedir, hostname } from "node:os";
+import { homedir, hostname, release, userInfo } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { $ } from "bun";
@@ -182,6 +182,37 @@ if (await sudoIsOurs()) {
     `sshd: skipped — sudo is not ours here (scripts/sudo-group.ts); a dropped session can leave a dead smart-open socket (doctor:remote names it)`,
   );
 }
+
+// WSL is Linux plus three user services and a login shell; there is no separate wsl:init.
+async function wslExtras(): Promise<void> {
+  await $`${MISE} run tmux:plugins`.cwd(DOTFILES);
+  // After link:dots: zsh/zshenv arms the no-self-spawn guard as soon as the unit is placed, so
+  // leaving the unit un-enabled would make every ccc call wait 30s and fail.
+  if (Bun.which("ccc") === null)
+    say("ccc is not installed (uv missing) — skipped its daemon");
+  else await $`${MISE} run wsl:ccc-daemon`.cwd(DOTFILES);
+  await $`${MISE} run wsl:capacity:enable`.cwd(DOTFILES);
+  // Root steps never wait for a password: each runs through `sudo -n` or is listed.
+  const pending: string[] = [];
+  if (
+    Bun.which("zsh") === null &&
+    !(await sudoNow(["apt-get", "install", "-y", "zsh"]))
+  )
+    pending.push("sudo apt-get install -y zsh");
+  const { username, shell } = userInfo();
+  const zsh = Bun.which("zsh") ?? "/usr/bin/zsh";
+  if (
+    shell?.endsWith("/zsh") !== true &&
+    !(await sudoNow(["chsh", "-s", zsh, username]))
+  )
+    pending.push(`sudo chsh -s ${zsh} ${username}`);
+  if (pending.length > 0) {
+    say("root steps left for you (sudo needs a password here):");
+    for (const command of pending) say(`  ${command}`);
+    say("then re-run: mise run link:dots   # /etc links it listed as skipped");
+  }
+}
+if (/microsoft/iu.test(release())) await wslExtras();
 
 say("sheldon plugins");
 await $`${join(PREFIX, "bin/sheldon")} lock`;

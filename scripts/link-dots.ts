@@ -502,6 +502,9 @@ function ensureSshDir(ctx: Ctx): void {
 function linkEtc(ctx: Ctx, rel: string, dst: string, apply: string): void {
   const src = join(ctx.dotfiles, rel);
   if (readLink(dst) === src) return;
+  // No parent directory means the consumer is not installed here (a distro without
+  // openssh-server has no /etc/ssh/sshd_config.d): nothing would read the link.
+  if (!isDir(dirname(dst))) return;
   if (ctx.mode === "check") {
     drift(ctx, `${dst} (want -> ${src})`);
     return;

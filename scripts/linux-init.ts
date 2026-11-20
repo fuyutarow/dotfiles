@@ -9,7 +9,7 @@
 // Exit: 0 done · 1 a step failed (its output says which).
 import { access, realpath } from "node:fs/promises";
 import { homedir, hostname, release, userInfo } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { cli } from "cleye";
 import { $ } from "bun";
 import { buildLinuxInitEnv } from "./linux-init-env.ts";
@@ -91,6 +91,19 @@ const codexHostDeclaration = await declareRentedCodexHost({
 });
 if (codexHostDeclaration === "invalid") process.exit(1);
 
+// One password, once, and only when a human is at the terminal: every root step below then runs
+// through `sudo -n` on the cached credential instead of being listed for a later hand-run.
+// Never where sudo is not ours (scripts/sudo-group.ts) — an attempt there is reported.
+if (process.stdin.isTTY && userInfo().uid !== 0 && (await sudoIsOurs())) {
+  say("sudo once, for the root steps (apt zsh, login shell, /etc links)");
+  // bounded: a human types the password; a timeout would cut them off.
+  Bun.spawnSync(["sudo", "-v"], {
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+}
+
 const started = performance.now();
 await installLinuxbrew(PREFIX, say);
 // Homebrew refuses formulae from a tap it has not been told to trust; a fresh machine trusts none.
@@ -146,7 +159,13 @@ await $`bash -c ${agyInstaller}`;
 // The reload is a HUP to the LISTENER alone: session sshd processes are left alone, so no
 // connection drops (a container's sshd has no systemd unit to reload).
 const SSHD_DROPIN = "/etc/ssh/sshd_config.d/50-dotfiles.conf";
-if (await sudoIsOurs()) {
+const sshdInstalled = await access(dirname(SSHD_DROPIN)).then(
+  () => true,
+  () => false,
+);
+if (!sshdInstalled) {
+  say("sshd: not installed here — no drop-in to place");
+} else if (await sudoIsOurs()) {
   const source = join(DOTFILES, "wsl/sshd-dotfiles.conf");
   // WSL's link:dots already links this destination to the source; GNU install refuses itself.
   const alreadyLinked =
@@ -208,4 +227,13 @@ if (/microsoft/iu.test(release())) await wslRootSteps();
 
 say("sheldon plugins");
 await $`${join(PREFIX, "bin/sheldon")} lock`;
-say("done — check from your machine: mise run doctor:remote -- <host>");
+// The run ends with what is still open, taken from doctor, so nobody has to remember a
+// follow-up list: each FAIL line is followed by its own fix command.
+say("what is left on this machine (mise run doctor):");
+const doctor = await $`${MISE} run doctor`.cwd(DOTFILES).nothrow().quiet();
+const open = doctor.stdout
+  .toString()
+  .split("\n")
+  .filter((line) => /^FAIL |^\s+(?:- |fix: )/u.test(line));
+for (const line of open) say(line);
+say(open.length === 0 ? "nothing — done" : "done; the lines above remain");

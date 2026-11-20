@@ -345,12 +345,13 @@ cd ~/dotfiles && brew install mise && mise run linux:init
 exec zsh
 ```
 
-WSL uses the same `linux:init` as every Linux box; on WSL it also enables the WSL user services.
-It installs `Brewfile.core` only (on-demand
-formulas come later through `tool:get` / `install:tools`), links the dotfiles, and installs
-Claude Code and Codex. It never waits for a sudo password: a root-only step (zsh from apt, the
-login shell, the `/etc` links) either runs through `sudo -n` or is printed as a command for you
-to run (run `sudo -v` first to have them run). Re-running is safe; updating is `mise run up`.
+That is the whole first run. WSL uses the same `linux:init` as every Linux box: it installs
+`Brewfile.core` only (on-demand formulas come later through `tool:get` / `install:tools`), runs
+the declared deployment, and on WSL enables the WSL user services. At a terminal it asks for the
+sudo password once and then does the root steps itself (zsh from apt, the login shell, the `/etc`
+links); without a terminal it never waits and prints those commands instead. It ends by printing
+what `mise run doctor` still reports, each with its fix. Re-running is safe; updating is
+`mise run up`.
 
 On WSL, `Brewfile.core` declares the Homebrew `codex` cask. Install the Windows Codex Desktop
 app too, then run `mise run install:ai-clis` from the WSL checkout to deploy explicit `codex.exe`.

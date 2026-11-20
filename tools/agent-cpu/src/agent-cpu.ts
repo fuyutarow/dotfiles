@@ -8,7 +8,10 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { z, jsonOf } from "@dotfiles/shared/src/zod.ts";
+import cliPackage from "../package.json" with { type: "json" };
 import { produceMac } from "./macos.ts";
 
 const WINDOW = 2000;
@@ -589,19 +592,39 @@ export async function run(
     return 1;
   });
 }
+const cliArgv = () => process.argv.slice(2);
 async function main() {
   if (process.platform !== "linux" && process.platform !== "darwin") {
     process.stderr.write("agent-cpu: unsupported platform\n");
     return 1;
   }
-  const args = process.argv.slice(2);
-  if (args.length !== 2 || args[0] !== "--out" || args[1] === undefined) {
+  // The shared CLI surface: -V/--version, plain --help, and a typed error for an unknown flag.
+  const parsed = standardCli(
+    cleyeCli,
+    cliPackage,
+    cliArgv,
+  )({
+    strictFlags: true,
+    name: "agent-cpu",
+    parameters: [],
+    flags: {
+      out: {
+        type: String,
+        description: "Path the sample is written to (atomically)",
+      },
+    },
+    help: {
+      description: "Sample per-agent CPU use and write one snapshot file",
+    },
+  });
+  const out = parsed.flags.out;
+  if (out === undefined || out === "" || parsed._.length > 0) {
     process.stderr.write("usage: agent-cpu --out <path>\n");
     return 1;
   }
   const options = defaults();
   options.platform = process.platform;
-  if (process.platform === "darwin") return run(args[1], options);
+  if (process.platform === "darwin") return run(out, options);
   const tick = Bun.spawn({
     cmd: ["getconf", "CLK_TCK"],
     stdout: "pipe",
@@ -618,7 +641,7 @@ async function main() {
     return 1;
   }
   options.hz = hz;
-  return run(args[1], options);
+  return run(out, options);
 }
 if (import.meta.main)
   process.exitCode = await main().catch((error: unknown) => {

@@ -193,6 +193,11 @@ test("conditional Bun providers retain one pair of Homebrew runtime commands", a
   const commands = await coreCommands(join(import.meta.dir, "../.."), {
     isWsl: false,
   });
-  expect(commands).toHaveLength(43);
+  // The property, not a count: a count restates Brewfile.core and went stale with every edit.
+  expect(new Set(commands).size).toBe(commands.length);
+  expect(commands.filter((name) => /^bunx?$/u.test(name))).toEqual([
+    "bun",
+    "bunx",
+  ]);
   expect(commands.filter((name) => name.includes("/"))).toEqual([]);
 });

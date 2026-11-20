@@ -20,11 +20,6 @@ since = "2026-11-20"
 reason = "red before any gate ran tests; under diagnosis"
 
 [[unit]]
-path = "scripts/tests/core-tools.test.ts"
-since = "2026-11-20"
-reason = "red before any gate ran tests; under diagnosis"
-
-[[unit]]
 path = "scripts/tests/ccc-db-location.test.ts"
 since = "2026-11-20"
 reason = "red before any gate ran tests; under diagnosis"
@@ -46,16 +41,6 @@ reason = "red before any gate ran tests; under diagnosis"
 
 [[unit]]
 path = "scripts/tests/consumer-gate.test.ts"
-since = "2026-11-20"
-reason = "red before any gate ran tests; under diagnosis"
-
-[[unit]]
-path = "tools/preset/tests"
-since = "2026-11-20"
-reason = "red before any gate ran tests; under diagnosis"
-
-[[unit]]
-path = "tools/shared/tests"
 since = "2026-11-20"
 reason = "red before any gate ran tests; under diagnosis"
 

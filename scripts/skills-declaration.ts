@@ -305,10 +305,9 @@ export async function readToolLock(
   home: string,
 ): Promise<Result<SkillLock, string>> {
   const path = toolLockPath(home);
-  const contents = await fromAsyncThrowable(
-    () => readFile(path, "utf8"),
-    errorText,
-  )();
+  // Keep the raw error: mapping it to text first erased `code`, so a fresh machine's missing
+  // lock was reported as unreadable instead of empty.
+  const contents = await fromAsyncThrowable(() => readFile(path, "utf8"))();
   if (contents.isOk()) return parseSkillLock(contents.value);
   const code = z.object({ code: z.string() }).safeParse(contents.error);
   return code.success && code.data.code === "ENOENT"

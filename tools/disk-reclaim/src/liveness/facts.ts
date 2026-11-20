@@ -1,7 +1,8 @@
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative, resolve, isAbsolute, sep } from "node:path";
 import { homedir } from "node:os";
-import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "../../../shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   collectProcesses,
   resolveProcRoot,
@@ -55,8 +56,11 @@ const fail = (error: unknown): Probe<never> => ({
   ok: false,
   error: errorText(error),
 });
-const capture = <T>(operation: () => T): Probe<T> => {
-  const result = fromThrowable(operation, errorText)();
+const capture = <T>(operation: () => Awaited<T>): Probe<T> => {
+  const result = Result.try<T, string>({
+    try: () => operation(),
+    catch: errorText,
+  });
   return result.isOk() ? ok(result.value) : fail(result.error);
 };
 const captureProbe = <T>(operation: () => Probe<T>): Probe<T> => {

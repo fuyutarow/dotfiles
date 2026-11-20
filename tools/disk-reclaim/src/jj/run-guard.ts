@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { resolve, sep } from "node:path";
-import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const Runs = z.array(
   z.looseObject({
@@ -16,29 +16,37 @@ const Runs = z.array(
   }),
 );
 const real = async (path: string) =>
-  (await fromAsyncThrowable(() => realpath(path))()).unwrapOr(resolve(path));
+  (
+    await Result.tryPromise({
+      try: () => realpath(path),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(resolve(path));
 
 async function command(argv: string[], cwd: string) {
-  const result = await fromAsyncThrowable(async () => {
-    const child = Bun.spawn(argv, {
-      cwd,
-      env: process.env,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: 30_000,
-    });
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    return {
-      ok: exitCode === 0,
-      stdout,
-      detail: `exit ${exitCode}: ${stderr.slice(-300)}`,
-    };
-  })();
+  const result = await Result.tryPromise({
+    try: async () => {
+      const child = Bun.spawn(argv, {
+        cwd,
+        env: process.env,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 30_000,
+      });
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return {
+        ok: exitCode === 0,
+        stdout,
+        detail: `exit ${exitCode}: ${stderr.slice(-300)}`,
+      };
+    },
+    catch: (e: unknown) => e,
+  });
   return result.unwrapOr({
     ok: false,
     stdout: "",
@@ -123,9 +131,10 @@ async function protect(
   if (lineage.length > 0 && leaves.length === 0)
     return "cyclic run lineage; keep workspace";
   const dates = leaves.map((r) =>
-    fromThrowable(
-      () => Temporal.Instant.from(r.started_at ?? "").epochMilliseconds,
-    )().unwrapOr(Number.NaN),
+    Result.try({
+      try: () => Temporal.Instant.from(r.started_at ?? "").epochMilliseconds,
+      catch: (e: unknown) => e,
+    }).unwrapOr(Number.NaN),
   );
   const latest = dates.every((date) => Number.isFinite(date))
     ? leaves.filter((_, i) => dates[i] === Math.max(...dates))

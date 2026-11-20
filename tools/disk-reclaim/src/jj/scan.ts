@@ -1,6 +1,6 @@
 import { lstat, readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { checkScanDeadline } from "../lib/scan-cache.ts";
 
 export type Scan = {
@@ -46,9 +46,10 @@ export async function scanWorkspace(
   const visit = async (rel: string): Promise<void> => {
     checkScanDeadline();
     if (expired()) return;
-    const names = await fromAsyncThrowable(() =>
-      readdir(rel === "" ? root : join(root, rel)),
-    )();
+    const names = await Result.tryPromise({
+      try: () => readdir(rel === "" ? root : join(root, rel)),
+      catch: (e: unknown) => e,
+    });
     if (names.isErr()) {
       scan.foreign.push(`${rel.length > 0 ? rel : "."} (unreadable)`);
       return;
@@ -58,7 +59,10 @@ export async function scanWorkspace(
       if (rel.length === 0 && (name === ".jj" || name === ".git")) continue;
       const child = rel === "" ? name : `${rel}/${name}`;
       const abs = join(root, child);
-      const statResult = await fromAsyncThrowable(() => lstat(abs))();
+      const statResult = await Result.tryPromise({
+        try: () => lstat(abs),
+        catch: (e: unknown) => e,
+      });
       if (statResult.isErr()) continue;
       const stat = statResult.value;
       if (
@@ -85,6 +89,9 @@ export async function scanWorkspace(
 }
 
 async function isEmpty(path: string): Promise<boolean> {
-  const entries = await fromAsyncThrowable(() => readdir(path))();
+  const entries = await Result.tryPromise({
+    try: () => readdir(path),
+    catch: (e: unknown) => e,
+  });
   return entries.isOk() && entries.value.length === 0;
 }

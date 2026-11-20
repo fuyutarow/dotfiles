@@ -1,5 +1,5 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import type { Candidate } from "../model.ts";
 
@@ -10,7 +10,10 @@ export async function resumeCandidateOrder(
   path: string | undefined,
 ): Promise<number[]> {
   if (path === undefined) return order;
-  const stored = await fromAsyncThrowable(() => readFile(path, "utf8"))();
+  const stored = await Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (stored.isErr()) return order;
   const parsed = jsonOf(z.object({ after: z.string() })).safeParse(
     stored.value,
@@ -33,10 +36,13 @@ export async function checkpointCandidate(
   id: string,
 ): Promise<string | null> {
   if (path === undefined) return null;
-  const saved = await fromAsyncThrowable(async () => {
-    const pending = `${path}.${process.pid}.tmp`;
-    await writeFile(pending, JSON.stringify({ after: id }), { mode: 0o600 });
-    await rename(pending, path);
-  })();
+  const saved = await Result.tryPromise({
+    try: async () => {
+      const pending = `${path}.${process.pid}.tmp`;
+      await writeFile(pending, JSON.stringify({ after: id }), { mode: 0o600 });
+      await rename(pending, path);
+    },
+    catch: (e: unknown) => e,
+  });
   return saved.isErr() ? String(saved.error) : null;
 }

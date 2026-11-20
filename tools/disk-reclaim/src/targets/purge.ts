@@ -1,6 +1,6 @@
 import { chmodSync, lstatSync, readdirSync } from "node:fs";
 import { lstat } from "node:fs/promises";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { homedir } from "node:os";
 import {
   graveyardCandidates,
@@ -15,7 +15,7 @@ import { countEntries } from "../lib/purge-progress.ts";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ActionResult, Candidate, Config, Headroom } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { fromThrowable, z } from "@dotfiles/shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import { scanCache, checkScanDeadline } from "../lib/scan-cache.ts";
 import { ripExpiryCandidates } from "./rip-expire.ts";
 import { loadGraveyardAgePolicy } from "../graveyard-age.ts";
@@ -43,7 +43,10 @@ function driveForPath(path: string, headroom: Headroom | undefined) {
 
 function size(path: string, ctx?: Context): number {
   checkScanDeadline(ctx);
-  const stat = fromThrowable(() => lstatSync(path))();
+  const stat = Result.try({
+    try: () => lstatSync(path),
+    catch: (e: unknown) => e,
+  });
   if (stat.isErr()) return 0;
   if (!stat.value.isDirectory() || stat.value.isSymbolicLink())
     return stat.value.blocks * 512;
@@ -67,10 +70,16 @@ async function graveyardScope(
   for (const part of rel.split(sep).slice(0, -1)) {
     parent = join(parent, part);
     const entry = parent;
-    const stat = await fromAsyncThrowable(() => lstat(entry))();
+    const stat = await Result.tryPromise({
+      try: () => lstat(entry),
+      catch: (e: unknown) => e,
+    });
     if (stat.isErr() || stat.value.isSymbolicLink()) return [];
   }
-  const stat = await fromAsyncThrowable(() => lstat(only))();
+  const stat = await Result.tryPromise({
+    try: () => lstat(only),
+    catch: (e: unknown) => e,
+  });
   return stat.isOk() ? [resolve(only)] : [];
 }
 
@@ -142,7 +151,10 @@ export async function purgeCandidates(
             record.destination === entry ||
             record.destination.startsWith(`${entry}${sep}`),
         );
-        const stat = fromThrowable(() => lstatSync(entry))();
+        const stat = Result.try({
+          try: () => lstatSync(entry),
+          catch: (e: unknown) => e,
+        });
         const mtime = stat.isOk() ? stat.value.mtimeMs : 0;
         let newestTime: number | undefined = mtime;
         let estimated = false;
@@ -314,9 +326,12 @@ export function createPurgeTarget(
         ? [candidate.path]
         : graveyardEntries(candidate.path);
       for (const entry of entries) {
-        const writable = fromThrowable(() => {
-          (deps.writable ?? makeDirectoriesOwnerWritable)(entry);
-        })();
+        const writable = Result.try({
+          try: () => {
+            (deps.writable ?? makeDirectoriesOwnerWritable)(entry);
+          },
+          catch: (e: unknown) => e,
+        });
         if (writable.isErr()) {
           failed = true;
           ctx.log(

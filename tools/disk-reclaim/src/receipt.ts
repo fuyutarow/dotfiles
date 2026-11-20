@@ -15,9 +15,9 @@ import {
 } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { acquire, pidAlive } from "@dotfiles/shared/src/dir-lock.ts";
-import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   Receipt,
   ReclaimItemOutcome,
@@ -62,18 +62,27 @@ export async function registerForegroundWaiter(
   };
 }
 export async function hasForegroundWaiter(dir = stateDir()): Promise<boolean> {
-  const listed = await fromAsyncThrowable(() => readdir(waiterDir(dir)))();
+  const listed = await Result.tryPromise({
+    try: () => readdir(waiterDir(dir)),
+    catch: (e: unknown) => e,
+  });
   if (listed.isErr()) return false;
   for (const name of listed.value) {
     const file = join(waiterDir(dir), name);
-    const contents = await fromAsyncThrowable(() => readFile(file, "utf8"))();
+    const contents = await Result.tryPromise({
+      try: () => readFile(file, "utf8"),
+      catch: (e: unknown) => e,
+    });
     if (contents.isErr()) continue;
     const parsed = jsonOf(Waiter).safeParse(contents.value);
     if (!parsed.success) continue;
     const waiter = parsed.data;
     if (waiter.host === hostname() && pidAlive(waiter.pid)) return true;
     if (waiter.host === hostname())
-      await fromAsyncThrowable(() => rm(file, { force: true }))();
+      await Result.tryPromise({
+        try: () => rm(file, { force: true }),
+        catch: (e: unknown) => e,
+      });
   }
   return false;
 }
@@ -216,66 +225,71 @@ export async function wrap(
     return lock.exit;
   }
   using _lock = { [Symbol.dispose]: lock.release };
-  const result = await fromAsyncThrowable(async () => {
-    const started = now();
-    const before = freeBytes();
-    const output = interactive ? null : outputPath(name, dir);
-    const log = output === null ? undefined : Bun.file(output).writer();
-    // bounded: forwarded owner command controls its own lifetime; interactive commands retain the terminal.
-    const spawned = fromThrowable(() =>
-      Bun.spawn(command, {
-        stdin: interactive ? "inherit" : "ignore",
-        stdout: interactive ? "inherit" : "pipe",
-        stderr: interactive ? "inherit" : "pipe",
-      }),
-    )();
-    let exit = 1;
-    const tee = async (
-      stream: ReadableStream<Uint8Array>,
-      to: NodeJS.WriteStream,
-    ) => {
-      for await (const chunk of stream) {
-        to.write(chunk);
-        await log?.write(chunk);
+  const result = await Result.tryPromise({
+    try: async () => {
+      const started = now();
+      const before = freeBytes();
+      const output = interactive ? null : outputPath(name, dir);
+      const log = output === null ? undefined : Bun.file(output).writer();
+      // bounded: forwarded owner command controls its own lifetime; interactive commands retain the terminal.
+      const spawned = Result.try({
+        try: () =>
+          Bun.spawn(command, {
+            stdin: interactive ? "inherit" : "ignore",
+            stdout: interactive ? "inherit" : "pipe",
+            stderr: interactive ? "inherit" : "pipe",
+          }),
+        catch: (e: unknown) => e,
+      });
+      let exit = 1;
+      const tee = async (
+        stream: ReadableStream<Uint8Array>,
+        to: NodeJS.WriteStream,
+      ) => {
+        for await (const chunk of stream) {
+          to.write(chunk);
+          await log?.write(chunk);
+        }
+      };
+      if (spawned.isOk()) {
+        const proc = spawned.value;
+        const [, , code] = await Promise.all([
+          proc.stdout === null || proc.stdout === undefined
+            ? Promise.resolve()
+            : tee(proc.stdout, process.stdout),
+          proc.stderr === null || proc.stderr === undefined
+            ? Promise.resolve()
+            : tee(proc.stderr, process.stderr),
+          proc.exited,
+        ]);
+        exit = code;
+      } else {
+        const message = `reclaim: ${errorMessage(spawned.error)}\n`;
+        process.stderr.write(message);
+        await log?.write(message);
       }
-    };
-    if (spawned.isOk()) {
-      const proc = spawned.value;
-      const [, , code] = await Promise.all([
-        proc.stdout === null || proc.stdout === undefined
-          ? Promise.resolve()
-          : tee(proc.stdout, process.stdout),
-        proc.stderr === null || proc.stderr === undefined
-          ? Promise.resolve()
-          : tee(proc.stderr, process.stderr),
-        proc.exited,
-      ]);
-      exit = code;
-    } else {
-      const message = `reclaim: ${errorMessage(spawned.error)}\n`;
-      process.stderr.write(message);
-      await log?.write(message);
-    }
-    await log?.end();
-    const receipt: ReceiptV2 = {
-      schema: 2,
-      target: name,
-      tier: interactive ? "interactive" : "owner",
-      actions: [],
-      name,
-      command,
-      host: hostname(),
-      pid: process.pid,
-      started,
-      ended: now(),
-      exit,
-      free_before: before,
-      free_after: freeBytes(),
-      output,
-    };
-    finalLine(receipt, writeReceipt(receipt, dir));
-    return exit;
-  })();
+      await log?.end();
+      const receipt: ReceiptV2 = {
+        schema: 2,
+        target: name,
+        tier: interactive ? "interactive" : "owner",
+        actions: [],
+        name,
+        command,
+        host: hostname(),
+        pid: process.pid,
+        started,
+        ended: now(),
+        exit,
+        free_before: before,
+        free_after: freeBytes(),
+        output,
+      };
+      finalLine(receipt, writeReceipt(receipt, dir));
+      return exit;
+    },
+    catch: (e: unknown) => e,
+  });
   if (result.isErr()) {
     process.stderr.write(`disk-reclaim: ${errorMessage(result.error)}\n`);
     return 2;

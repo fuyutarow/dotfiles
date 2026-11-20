@@ -12,7 +12,8 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "../../../shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import type { Context } from "../targets/index.ts";
 
 const Entry = z.object({ key: z.string(), value: z.unknown() });
@@ -67,10 +68,18 @@ export function scanCache(
     JSON.stringify([
       changeKey(path, ctx?.onProbe),
       ...extraPaths.map((extra) =>
-        fromThrowable(() => changeKey(extra))().unwrapOr(null),
+        Result.try({
+          try: () => changeKey(extra),
+          catch: (e: unknown) => e,
+        }).unwrapOr(null),
       ),
     ]);
-  const key = enabled ? fromThrowable(currentKey)().unwrapOr(null) : null;
+  const key = enabled
+    ? Result.try({
+        try: () => currentKey(),
+        catch: (e: unknown) => e,
+      }).unwrapOr(null)
+    : null;
   const cacheRoot = ctx?.scanCacheDir ?? defaultScanCacheDir();
   const dir = join(cacheRoot, "scan-cache");
   const file = join(
@@ -82,7 +91,10 @@ export function scanCache(
   const read =
     key === null
       ? null
-      : fromThrowable(() => readFileSync(file, "utf8"))().unwrapOr(null);
+      : Result.try({
+          try: () => readFileSync(file, "utf8"),
+          catch: (e: unknown) => e,
+        }).unwrapOr(null);
   const entry = read === null ? null : jsonOf(Entry).safeParse(read);
   const value =
     entry?.success === true && entry.data.key === key
@@ -92,21 +104,24 @@ export function scanCache(
     value,
     save: (result: unknown) => {
       if (key === null) return;
-      const written = fromThrowable(() => {
-        // A changing root must never publish a reusable completed measurement.
-        if (currentKey() !== key) return;
-        mkdirSync(dir, { recursive: true, mode: 0o700 });
-        const temporary = `${file}.${randomUUID()}`;
-        using cleanup = new DisposableStack();
-        cleanup.defer(() => {
-          rmSync(temporary, { force: true });
-        });
-        writeFileSync(temporary, JSON.stringify({ key, value: result }), {
-          mode: 0o600,
-        });
-        renameSync(temporary, file);
-        evictOldEntries(dir);
-      })();
+      const written = Result.try({
+        try: () => {
+          // A changing root must never publish a reusable completed measurement.
+          if (currentKey() !== key) return;
+          mkdirSync(dir, { recursive: true, mode: 0o700 });
+          const temporary = `${file}.${randomUUID()}`;
+          using cleanup = new DisposableStack();
+          cleanup.defer(() => {
+            rmSync(temporary, { force: true });
+          });
+          writeFileSync(temporary, JSON.stringify({ key, value: result }), {
+            mode: 0o600,
+          });
+          renameSync(temporary, file);
+          evictOldEntries(dir);
+        },
+        catch: (e: unknown) => e,
+      });
       if (written.isErr())
         ctx?.log(`scan cache unavailable: ${String(written.error)}`);
     },
@@ -114,30 +129,37 @@ export function scanCache(
 }
 
 function evictOldEntries(dir: string): void {
-  const entries = fromThrowable(() =>
-    readdirSync(dir, { withFileTypes: true }).filter(
-      (entry) => entry.isFile() && entry.name.endsWith(".json"),
-    ),
-  )();
+  const entries = Result.try({
+    try: () =>
+      readdirSync(dir, { withFileTypes: true }).filter(
+        (entry) => entry.isFile() && entry.name.endsWith(".json"),
+      ),
+    catch: (e: unknown) => e,
+  });
   if (entries.isErr() || entries.value.length <= MAX_SCAN_CACHE_ENTRIES) return;
-  const sorted = fromThrowable(() =>
-    entries.value
-      .map((entry) => {
-        const path = join(dir, entry.name);
-        return { path, mtimeMs: statSync(path).mtimeMs };
-      })
-      .toSorted((left, right) => {
-        if (left.mtimeMs === right.mtimeMs)
-          return left.path.localeCompare(right.path);
-        return left.mtimeMs < right.mtimeMs ? -1 : 1;
-      }),
-  )();
+  const sorted = Result.try({
+    try: () =>
+      entries.value
+        .map((entry) => {
+          const path = join(dir, entry.name);
+          return { path, mtimeMs: statSync(path).mtimeMs };
+        })
+        .toSorted((left, right) => {
+          if (left.mtimeMs === right.mtimeMs)
+            return left.path.localeCompare(right.path);
+          return left.mtimeMs < right.mtimeMs ? -1 : 1;
+        }),
+    catch: (e: unknown) => e,
+  });
   if (sorted.isErr()) return;
   const keep = Math.floor(MAX_SCAN_CACHE_ENTRIES * 0.75);
   for (const entry of sorted.value.slice(0, sorted.value.length - keep))
-    fromThrowable(() => {
-      rmSync(entry.path, { force: true });
-    })();
+    Result.try({
+      try: () => {
+        rmSync(entry.path, { force: true });
+      },
+      catch: (e: unknown) => e,
+    });
 }
 
 export async function cachedDiscoveryAsync(

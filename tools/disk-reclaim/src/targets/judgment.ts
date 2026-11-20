@@ -5,7 +5,7 @@ import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
 import { protectedReason } from "../lib/protected.ts";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 
 const candidate = (id: string, path: string, bytes: number): Candidate => ({
   id,
@@ -34,7 +34,10 @@ export async function judgmentCandidates(
   const rustup = env["RUSTUP_HOME"] ?? join(home, ".rustup");
   const toolchains = join(rustup, "toolchains");
   const toolchainNames = (
-    await fromAsyncThrowable(() => readdir(toolchains))()
+    await Result.tryPromise({
+      try: () => readdir(toolchains),
+      catch: (e: unknown) => e,
+    })
   ).unwrapOr([]);
   for (const toolchain of toolchainNames) {
     const docs = join(toolchains, toolchain, "share/doc/rust/html");
@@ -74,13 +77,21 @@ export async function judgmentCandidates(
 async function estimate(path: string): Promise<number> {
   let size = 0;
   const walk = async (p: string): Promise<void> => {
-    const stat = await fromAsyncThrowable(() => lstat(p))();
+    const stat = await Result.tryPromise({
+      try: () => lstat(p),
+      catch: (e: unknown) => e,
+    });
     if (stat.isErr()) return;
     if (!stat.value.isDirectory() || stat.value.isSymbolicLink()) {
       size += stat.value.blocks * 512;
       return;
     }
-    const names = (await fromAsyncThrowable(() => readdir(p))()).unwrapOr([]);
+    const names = (
+      await Result.tryPromise({
+        try: () => readdir(p),
+        catch: (e: unknown) => e,
+      })
+    ).unwrapOr([]);
     for (const name of names) await walk(join(p, name));
   };
   await walk(path);

@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import {
   listWorkspaces,
   expandRoot,
@@ -32,7 +32,7 @@ import {
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 import { measuredTreeBytes } from "./tree.ts";
-import { fromThrowable, z } from "@dotfiles/shared/src/zod.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import { scanCache, checkScanDeadline } from "../lib/scan-cache.ts";
 import { protectedReason } from "../lib/protected.ts";
 
@@ -84,15 +84,19 @@ async function boundedBytes(
 ): Promise<{ bytes: number | null; truncated: boolean }> {
   if (planExpired(budget)) return { bytes: null, truncated: false };
   let truncated = false;
-  const bytes = await fromAsyncThrowable(() =>
-    measuredTreeBytes(path, ctx, {
-      deadline: workspaceDeadline(budget),
-      onTruncated: () => {
-        truncated = true;
-        budget.hit = true;
-      },
-    }),
-  )().unwrapOr(null);
+  const bytes = (
+    await Result.tryPromise({
+      try: () =>
+        measuredTreeBytes(path, ctx, {
+          deadline: workspaceDeadline(budget),
+          onTruncated: () => {
+            truncated = true;
+            budget.hit = true;
+          },
+        }),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(null);
   return { bytes, truncated };
 }
 const lowerBound = (budget: PlanBudget): string =>
@@ -114,14 +118,19 @@ async function sizeRow(
 }
 
 const real = (path: string): string => {
-  return fromThrowable(() => realpathSync(path))().unwrapOr(resolve(path));
+  return Result.try({
+    try: () => realpathSync(path),
+    catch: (e: unknown) => e,
+  }).unwrapOr(resolve(path));
 };
 const under = (path: string, dir: string): boolean =>
   path === dir || path.startsWith(`${dir}/`);
 const processComm = (pid: number, procDir?: string): string => {
-  const result = fromThrowable(() =>
-    readFileSync(join(resolveProcRoot(procDir), String(pid), "comm"), "utf8"),
-  )();
+  const result = Result.try({
+    try: () =>
+      readFileSync(join(resolveProcRoot(procDir), String(pid), "comm"), "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (result.isErr()) return "unreadable";
   const comm = result.value.trim();
   return comm === "" ? "unknown" : comm;
@@ -297,9 +306,11 @@ async function gather(
       fresh = { ok: true, detail: "snapshotted without warnings" };
     }
   } else {
-    const treeState = fromThrowable(
-      () => statSync(join(root, ".jj", "working_copy", "tree_state")).mtimeMs,
-    )();
+    const treeState = Result.try({
+      try: () =>
+        statSync(join(root, ".jj", "working_copy", "tree_state")).mtimeMs,
+      catch: (e: unknown) => e,
+    });
     if (treeState.isOk()) {
       treeStateMs = treeState.value;
       fresh = { ok: true, detail: "no tracked file newer than tree_state" };
@@ -472,9 +483,10 @@ async function evaluate(
     };
   }
   const stat = lstatSync(root);
-  const marker = fromThrowable(() =>
-    lstatSync(join(root, ".jj", "repo")).isFile(),
-  )().unwrapOr(false);
+  const marker = Result.try({
+    try: () => lstatSync(join(root, ".jj", "repo")).isFile(),
+    catch: (e: unknown) => e,
+  }).unwrapOr(false);
   if (
     !stat.isDirectory() ||
     stat.isSymbolicLink() ||
@@ -737,7 +749,10 @@ export function createWorkspacesTarget(
       if (candidate.action.kind === "jj-forget")
         return { ok: true, bytes_freed: 0, error: null };
       // 3. re-stat: the directory must be the very one that was judged
-      const after = fromThrowable(() => lstatSync(path))().unwrapOr(null);
+      const after = Result.try({
+        try: () => lstatSync(path),
+        catch: (e: unknown) => e,
+      }).unwrapOr(null);
       if (after === null) return { ok: true, bytes_freed: 0, error: null };
       if (
         dir === null ||

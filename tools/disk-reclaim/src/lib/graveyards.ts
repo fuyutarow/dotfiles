@@ -8,8 +8,7 @@ import {
 import { homedir } from "node:os";
 import { lstat, readdir } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "../../../shared/src/result.ts";
 
 export type Graveyard = { readonly label: string; readonly path: string };
 export type RipRecord = {
@@ -106,13 +105,16 @@ export function graveyardCandidates(
 export function existingGraveyards(
   candidates: Graveyard[],
   isDir: (path: string) => boolean = (path) =>
-    fromThrowable(() => lstatSync(path).isDirectory())().unwrapOr(false),
+    Result.try({
+      try: () => lstatSync(path).isDirectory(),
+      catch: (e: unknown) => e,
+    }).unwrapOr(false),
 ): Graveyard[] {
   return candidates.filter((g) => isDir(g.path));
 }
 
 export function graveyardEntries(path: string): string[] {
-  return fromThrowable(() => readdirSync(path))()
+  return Result.try({ try: () => readdirSync(path), catch: (e: unknown) => e })
     .map((names) => names.map((name) => join(path, name)))
     .unwrapOr([]);
 }
@@ -120,9 +122,10 @@ export function graveyardEntries(path: string): string[] {
 // rm-improved writes local ctime text; newer writers may use ISO instants.
 // Interpret the former in the machine's zone, just as rip does when restoring.
 function ripTime(timestamp: string): number | undefined {
-  const iso = fromThrowable(
-    () => Temporal.Instant.from(timestamp.trim()).epochMilliseconds,
-  )();
+  const iso = Result.try({
+    try: () => Temporal.Instant.from(timestamp.trim()).epochMilliseconds,
+    catch: (e: unknown) => e,
+  });
   if (iso.isOk()) return iso.value;
   const fields = timestamp
     .trim()
@@ -144,8 +147,8 @@ function ripTime(timestamp: string): number | undefined {
     "Nov",
     "Dec",
   ];
-  return fromThrowable(
-    () =>
+  return Result.try({
+    try: () =>
       Temporal.PlainDateTime.from(
         {
           year: Number(fields[6]),
@@ -157,13 +160,15 @@ function ripTime(timestamp: string): number | undefined {
         },
         { overflow: "reject" },
       ).toZonedDateTime(Temporal.Now.timeZoneId()).epochMilliseconds,
-  )().unwrapOr(undefined);
+    catch: (e: unknown) => e,
+  }).unwrapOr(undefined);
 }
 
 export function ripRecords(path: string): RipRecord[] {
-  const contents = fromThrowable(() =>
-    readFileSync(join(path, ".record"), "utf8"),
-  )();
+  const contents = Result.try({
+    try: () => readFileSync(join(path, ".record"), "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (contents.isErr()) return [];
   return contents.value.split(/\r?\n/u).flatMap((line) => {
     const [timestamp, original, destination] = line.split("\t");
@@ -262,7 +267,10 @@ export async function ripCtimeEstimate(
     entry === join(resolve(root), ".record")
   )
     return undefined;
-  const stat = await fromAsyncThrowable(() => lstat(entry))();
+  const stat = await Result.tryPromise({
+    try: () => lstat(entry),
+    catch: (e: unknown) => e,
+  });
   if (stat.isErr() || stat.value.isSymbolicLink()) return undefined;
   const ctime = Math.floor(stat.value.ctimeMs);
   return Number.isFinite(ctime) ? ctime : undefined;

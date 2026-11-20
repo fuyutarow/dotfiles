@@ -1,7 +1,7 @@
 import { access, readFile, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import {
   liveExecutables,
   readStore,
@@ -16,12 +16,20 @@ import { checkScanDeadline } from "../lib/scan-cache.ts";
 const walkPins = async (root: string, depth = 0): Promise<string[]> => {
   checkScanDeadline();
   if (depth > 5) return [];
-  const names = (await fromAsyncThrowable(() => readdir(root))()).unwrapOr([]);
+  const names = (
+    await Result.tryPromise({
+      try: () => readdir(root),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr([]);
   return (
     await Promise.all(
       names.map(async (name) => {
         const path = join(root, name);
-        const info = await fromAsyncThrowable(() => stat(path))();
+        const info = await Result.tryPromise({
+          try: () => stat(path),
+          catch: (e: unknown) => e,
+        });
         if (info.isErr()) return [];
         if (info.value.isDirectory()) return walkPins(path, depth + 1);
         if (name === "rust-toolchain" || name === "rust-toolchain.toml")
@@ -91,14 +99,17 @@ export const createToolchainsTarget = (
     defaultToolchain: () => Promise<string | undefined>;
   },
   processProbe: (hash: string) => Promise<number | undefined> = async (hash) =>
-    fromAsyncThrowable(async () => {
-      const child = Bun.spawn(["pgrep", "-f", hash], {
-        stdout: "ignore",
-        stderr: "ignore",
-        signal: AbortSignal.timeout(5000),
-      });
-      return child.exited;
-    })().then((result) => result.unwrapOr(undefined)),
+    Result.tryPromise({
+      try: async () => {
+        const child = Bun.spawn(["pgrep", "-f", hash], {
+          stdout: "ignore",
+          stderr: "ignore",
+          signal: AbortSignal.timeout(5000),
+        });
+        return child.exited;
+      },
+      catch: (e: unknown) => e,
+    }).then((result) => result.unwrapOr(undefined)),
   options: {
     includeRefusals?: boolean;
     nowSec?: () => number;
@@ -110,19 +121,22 @@ export const createToolchainsTarget = (
     available: () => Bun.which("rustup") !== null && Bun.which("fd") !== null,
     defaultToolchain: async () =>
       (
-        await fromAsyncThrowable(async () => {
-          const child = Bun.spawn(["rustup", "show", "active-toolchain"], {
-            stdout: "pipe",
-            stderr: "ignore",
-            signal: AbortSignal.timeout(5000),
-          });
-          const [exitCode, stdout] = await Promise.all([
-            child.exited,
-            new Response(child.stdout).text(),
-          ]);
-          void exitCode;
-          return stdout.trim().split(/\s+/u)[0];
-        })()
+        await Result.tryPromise({
+          try: async () => {
+            const child = Bun.spawn(["rustup", "show", "active-toolchain"], {
+              stdout: "pipe",
+              stderr: "ignore",
+              signal: AbortSignal.timeout(5000),
+            });
+            const [exitCode, stdout] = await Promise.all([
+              child.exited,
+              new Response(child.stdout).text(),
+            ]);
+            void exitCode;
+            return stdout.trim().split(/\s+/u)[0];
+          },
+          catch: (e: unknown) => e,
+        })
       ).unwrapOr(undefined),
   };
   return {
@@ -146,7 +160,10 @@ export const createToolchainsTarget = (
       const pinPaths = await walkPins(projects);
       const pinReads = await Promise.all(
         pinPaths.map((path) =>
-          fromAsyncThrowable(() => readFile(path, "utf8"))(),
+          Result.tryPromise({
+            try: () => readFile(path, "utf8"),
+            catch: (e: unknown) => e,
+          }),
         ),
       );
       const pins = pinReads
@@ -158,9 +175,19 @@ export const createToolchainsTarget = (
       let defaultName: string | undefined;
       if (
         rustup.available() &&
-        (await fromAsyncThrowable(() => access(rustupDir))()).isOk()
+        (
+          await Result.tryPromise({
+            try: () => access(rustupDir),
+            catch: (e: unknown) => e,
+          })
+        ).isOk()
       ) {
-        rustupNames = (await fromAsyncThrowable(() => readdir(rustupDir))())
+        rustupNames = (
+          await Result.tryPromise({
+            try: () => readdir(rustupDir),
+            catch: (e: unknown) => e,
+          })
+        )
           .map((names) => names.toSorted())
           .unwrapOr([]);
         defaultName = await rustup.defaultToolchain();
@@ -188,33 +215,41 @@ export const createToolchainsTarget = (
         );
       }
       const servers = join(home, ".vscode-server/cli/servers");
-      const serverEntries = (await fromAsyncThrowable(() => readdir(servers))())
+      const serverEntries = (
+        await Result.tryPromise({
+          try: () => readdir(servers),
+          catch: (e: unknown) => e,
+        })
+      )
         .unwrapOr([])
         .filter((name) => name.startsWith("Stable-"));
       const serverNames = (
         await Promise.all(
           serverEntries.map(async (name) => {
-            const info = await fromAsyncThrowable(() =>
-              stat(join(servers, name)),
-            )();
+            const info = await Result.tryPromise({
+              try: () => stat(join(servers, name)),
+              catch: (e: unknown) => e,
+            });
             return info.isOk() && info.value.isDirectory() ? [name] : [];
           }),
         )
       ).flat();
       let newest: string | undefined;
       for (const name of serverNames) {
-        const serverStat = await fromAsyncThrowable(() =>
-          stat(join(servers, name)),
-        )();
+        const serverStat = await Result.tryPromise({
+          try: () => stat(join(servers, name)),
+          catch: (e: unknown) => e,
+        });
         if (serverStat.isErr()) continue;
         if (newest === undefined) {
           newest = name;
           continue;
         }
         const latestName = newest;
-        const latest = await fromAsyncThrowable(() =>
-          stat(join(servers, latestName)),
-        )();
+        const latest = await Result.tryPromise({
+          try: () => stat(join(servers, latestName)),
+          catch: (e: unknown) => e,
+        });
         if (latest.isOk() && serverStat.value.mtimeMs > latest.value.mtimeMs)
           newest = name;
       }
@@ -222,7 +257,10 @@ export const createToolchainsTarget = (
         const path = join(servers, name);
         const hash = name.replace(/^Stable-/u, "").replace(/\.staging$/u, "");
         const busy = await processProbe(hash);
-        const serverStat = await fromAsyncThrowable(() => stat(path))();
+        const serverStat = await Result.tryPromise({
+          try: () => stat(path),
+          catch: (e: unknown) => e,
+        });
         if (serverStat.isErr()) continue;
         const reason =
           options.includeRefusals === true

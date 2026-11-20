@@ -1,6 +1,6 @@
 import { readlink, readdir, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { resolveProcRoot } from "./procs.ts";
 
 export type VersionStore = {
@@ -26,21 +26,34 @@ export type Release = {
   readonly mtimeSec: number;
 };
 const real = async (path: string): Promise<string | undefined> => {
-  return (await fromAsyncThrowable(() => realpath(path))()).unwrapOr(undefined);
+  return (
+    await Result.tryPromise({
+      try: () => realpath(path),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(undefined);
 };
 export async function readStore(
   home: string,
   store: VersionStore,
 ): Promise<{ releases: Release[]; current: string | undefined }> {
   const dir = join(home, store.dir);
-  const names = (await fromAsyncThrowable(() => readdir(dir))())
+  const names = (
+    await Result.tryPromise({
+      try: () => readdir(dir),
+      catch: (e: unknown) => e,
+    })
+  )
     .map((entries) => entries.toSorted((a, b) => a.localeCompare(b)))
     .unwrapOr([]);
   const releases = (
     await Promise.all(
       names.map(async (name): Promise<Release[]> => {
         const path = join(dir, name);
-        const info = await fromAsyncThrowable(() => stat(path))();
+        const info = await Result.tryPromise({
+          try: () => stat(path),
+          catch: (e: unknown) => e,
+        });
         return info.isOk()
           ? [{ name, path, mtimeSec: Math.floor(info.value.mtimeMs / 1000) }]
           : [];
@@ -63,16 +76,20 @@ export async function readStore(
 export async function liveExecutables(
   procDir = resolveProcRoot(),
 ): Promise<string[] | undefined> {
-  const pids = await fromAsyncThrowable(() => readdir(procDir))();
+  const pids = await Result.tryPromise({
+    try: () => readdir(procDir),
+    catch: (e: unknown) => e,
+  });
   if (pids.isErr()) return undefined;
   return (
     await Promise.all(
       pids.value
         .filter((p) => /^\d+$/u.test(p))
         .map(async (pid) => {
-          const executable = await fromAsyncThrowable(() =>
-            readlink(join(procDir, pid, "exe")),
-          )();
+          const executable = await Result.tryPromise({
+            try: () => readlink(join(procDir, pid, "exe")),
+            catch: (e: unknown) => e,
+          });
           return executable
             .map((path) => [path.replace(/ \(deleted\)$/u, "")])
             .unwrapOr([]);

@@ -1,5 +1,5 @@
 import { lstat, readdir } from "node:fs/promises";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { join } from "node:path";
 import { scanCache } from "../lib/scan-cache.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
@@ -111,7 +111,10 @@ self.addEventListener(
         const batch = pending.splice(Math.max(0, pending.length - 64));
         const measured = await Promise.all(
           batch.map(async (node) => {
-            const result = await fromAsyncThrowable(() => lstat(node.path))();
+            const result = await Result.tryPromise({
+              try: () => lstat(node.path),
+              catch: (e: unknown) => e,
+            });
             if (result.isErr()) return missing(node, result.error);
             const stat = result.value;
             onProbe();
@@ -129,9 +132,10 @@ self.addEventListener(
                 cache: undefined,
                 error: null,
               };
-            const names = await fromAsyncThrowable(() =>
-              directory ? readdir(node.path) : Promise.resolve([]),
-            )();
+            const names = await Result.tryPromise({
+              try: () => (directory ? readdir(node.path) : Promise.resolve([])),
+              catch: (e: unknown) => e,
+            });
             if (names.isErr()) return missing(node, names.error);
             return {
               node,

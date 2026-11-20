@@ -1,5 +1,7 @@
 {
-  "extends": ["./standard-presets/typescript/house.oxlintrc.json"],
+  "extends": [
+    "./standard-presets/typescript/house.oxlintrc.json"
+  ],
   "jsPlugins": [
     {
       "name": "house",
@@ -34,7 +36,40 @@
       {
         "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value=/^zod\\//]",
         "message": "Import `z` from agents/hooks/zod.ts (relative path), the repo's one zod."
+      },
+      {
+        "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value='neverthrow']",
+        "message": "neverthrow is retired: import Result from tools/shared/src/result.ts (better-result from the committed bundle) — Result.try / Result.tryPromise with catch, Result.ok / Result.err."
+      },
+      {
+        "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value='better-result']",
+        "message": "Import Result from tools/shared/src/result.ts, the repo's one better-result: hooks run before `bun install`, so it ships in the committed bundle and every file uses that same copy."
       }
     ]
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "agents/skills/**",
+        "scripts/vendor-deps.ts"
+      ],
+      "rules": {
+        "dotfiles-js/no-restricted-syntax": [
+          "error",
+          {
+            "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value='zod']",
+            "message": "Import `z` (and `jsonOf` for JSON text) from agents/hooks/zod.ts (relative path), the repo's one zod: hooks run before `bun install`, so zod ships as a generated bundle and every file uses that same copy."
+          },
+          {
+            "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value=/^zod\\//]",
+            "message": "Import `z` from agents/hooks/zod.ts (relative path), the repo's one zod."
+          },
+          {
+            "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value='neverthrow']",
+            "message": "neverthrow is retired: import Result from tools/shared/src/result.ts (better-result from the committed bundle) — Result.try / Result.tryPromise with catch, Result.ok / Result.err."
+          }
+        ]
+      }
+    }
+  ]
 }

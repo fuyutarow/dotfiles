@@ -1,7 +1,7 @@
 import { lstat, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { protectedReason } from "../lib/protected.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
@@ -55,14 +55,17 @@ export const createBuildsTarget = (
       const device = (await stat(root())).dev;
       for (const path of (await discover(root(), ctx)).toSorted()) {
         // Persisted discovery is a hint: moved, removed or symlinked paths are not candidates.
-        const present = await fromAsyncThrowable(async () => {
-          const current = await lstat(path);
-          return (
-            current.isDirectory() &&
-            current.dev === device &&
-            (await realpath(path)) === path
-          );
-        })();
+        const present = await Result.tryPromise({
+          try: async () => {
+            const current = await lstat(path);
+            return (
+              current.isDirectory() &&
+              current.dev === device &&
+              (await realpath(path)) === path
+            );
+          },
+          catch: (e: unknown) => e,
+        });
         if (present.isErr() || !present.value) continue;
         const reason = await protect(path, ctx);
         if (
@@ -101,8 +104,14 @@ export const createBuildsTarget = (
     recheck: async (candidate, ctx) => {
       const path = candidate.path;
       if (path === null || !BUILD_NAMES.has(basename(path))) return null;
-      const rootStat = await fromAsyncThrowable(() => inspect(root()))();
-      const pathStat = await fromAsyncThrowable(() => inspect(path))();
+      const rootStat = await Result.tryPromise({
+        try: () => inspect(root()),
+        catch: (e: unknown) => e,
+      });
+      const pathStat = await Result.tryPromise({
+        try: () => inspect(path),
+        catch: (e: unknown) => e,
+      });
       if (
         rootStat.isErr() ||
         pathStat.isErr() ||

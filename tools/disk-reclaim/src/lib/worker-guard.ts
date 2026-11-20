@@ -6,7 +6,7 @@ import {
   AGX_WORKER_VALUE,
 } from "@dotfiles/shared/src/worker-env.ts";
 import { stateDir } from "../receipt.ts";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "../../../shared/src/result.ts";
 
 const isWithin = (path: string, parent: string): boolean => {
   const rel = relative(resolve(parent), resolve(path));
@@ -16,9 +16,10 @@ const isWithin = (path: string, parent: string): boolean => {
   );
 };
 
-const realTmpdir = fromThrowable(() => realpathSync(tmpdir()))().unwrapOr(
-  resolve(tmpdir()),
-);
+const realTmpdir = Result.try({
+  try: () => realpathSync(tmpdir()),
+  catch: (e: unknown) => e,
+}).unwrapOr(resolve(tmpdir()));
 const isSystemTmp = (path: string): boolean =>
   [tmpdir(), realTmpdir, "/tmp", "/private/tmp"].some((root) =>
     isWithin(path, root),

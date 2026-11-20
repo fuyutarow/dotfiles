@@ -10,7 +10,7 @@
 // (`bash <<EOF`, `eval`, `sh -c STR`), in which case that body is parsed as a nested script.
 //
 // CHOICE: a small hand-written parser, not a vendored one. The vendor bundle (scripts/vendor-deps.ts)
-// carries zod and neverthrow only; a real shell parser (bash-parser, mvdan-sh) is hundreds of KB, a
+// carries zod and better-result only; a real shell parser (bash-parser, mvdan-sh) is hundreds of KB, a
 // new supply-chain pin, and returns an AST these gates would still have to flatten. The gates need
 // four things — words, command boundaries, heredoc-as-data, cwd — and nothing else, so the parser
 // stays small, zero-dep, and is tested here (tests/shell-syntax.test.ts).

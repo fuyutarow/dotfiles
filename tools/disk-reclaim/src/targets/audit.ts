@@ -8,7 +8,7 @@ import {
 import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "../../../shared/src/result.ts";
 import {
   graveyardCandidates,
   existingGraveyards,
@@ -84,11 +84,17 @@ export async function auditCandidates(
   const staleDays = Number(env["STALE_DAYS"] ?? "180");
   const cutoff =
     Temporal.Now.instant().epochMilliseconds - staleDays * 86400_000;
-  const homeEntries = fromThrowable(() => readdirSync(home))().unwrapOr([]);
+  const homeEntries = Result.try({
+    try: () => readdirSync(home),
+    catch: (e: unknown) => e,
+  }).unwrapOr([]);
   for (const name of homeEntries.toSorted((a, b) => a.localeCompare(b))) {
     if (!name.startsWith(".") || name.startsWith("..")) continue;
     const path = join(home, name);
-    const stat = fromThrowable(() => lstatSync(path))();
+    const stat = Result.try({
+      try: () => lstatSync(path),
+      catch: (e: unknown) => e,
+    });
     if (
       stat.isErr() ||
       !stat.value.isDirectory() ||
@@ -109,7 +115,10 @@ export async function auditCandidates(
     });
   }
   const cache = join(home, ".cache");
-  const cacheEntries = fromThrowable(() => readdirSync(cache))().unwrapOr([]);
+  const cacheEntries = Result.try({
+    try: () => readdirSync(cache),
+    catch: (e: unknown) => e,
+  }).unwrapOr([]);
   for (const name of cacheEntries.toSorted((a, b) => a.localeCompare(b))) {
     const path = join(cache, name);
     rows.push({
@@ -161,7 +170,10 @@ export async function auditCandidates(
     );
   }
   for (const path of pins) {
-    const text = fromThrowable(() => readFileSync(path, "utf8"))();
+    const text = Result.try({
+      try: () => readFileSync(path, "utf8"),
+      catch: (e: unknown) => e,
+    });
     if (text.isErr()) continue;
     const channel =
       /channel\s*=\s*"?([^"\s]+)"?/u.exec(text.value)?.[1] ??
@@ -176,12 +188,16 @@ export async function auditCandidates(
     );
   }
   const toolchains = join(home, ".rustup/toolchains");
-  const rustupEntries = fromThrowable(() => readdirSync(toolchains))().unwrapOr(
-    [],
-  );
+  const rustupEntries = Result.try({
+    try: () => readdirSync(toolchains),
+    catch: (e: unknown) => e,
+  }).unwrapOr([]);
   for (const name of rustupEntries.toSorted((a, b) => a.localeCompare(b))) {
     const path = join(toolchains, name);
-    const stat = fromThrowable(() => statSync(path))();
+    const stat = Result.try({
+      try: () => statSync(path),
+      catch: (e: unknown) => e,
+    });
     if (!stat.isOk() || !stat.value.isDirectory()) continue;
     report(
       `rust-toolchain:${name}`,
@@ -191,13 +207,17 @@ export async function auditCandidates(
     );
   }
   const servers = join(home, ".vscode-server/cli/servers");
-  const serverEntries = fromThrowable(() => readdirSync(servers))().unwrapOr(
-    [],
-  );
+  const serverEntries = Result.try({
+    try: () => readdirSync(servers),
+    catch: (e: unknown) => e,
+  }).unwrapOr([]);
   for (const name of serverEntries.toSorted((a, b) => a.localeCompare(b))) {
     if (!name.startsWith("Stable-")) continue;
     const path = join(servers, name);
-    const stat = fromThrowable(() => statSync(path))();
+    const stat = Result.try({
+      try: () => statSync(path),
+      catch: (e: unknown) => e,
+    });
     if (!stat.isOk() || !stat.value.isDirectory()) continue;
     report(
       `vscode-server:${name}`,

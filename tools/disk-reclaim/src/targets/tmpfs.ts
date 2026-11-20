@@ -7,12 +7,11 @@ import {
   statfsSync,
 } from "node:fs";
 import { lstat } from "node:fs/promises";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { removeTree } from "../lib/remove-tree.ts";
 import { collectProcesses } from "../lib/procs.ts";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import { checkScanDeadline } from "../lib/scan-cache.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
@@ -56,9 +55,10 @@ function mountedTmpfs(): Mount[] {
 
 function awaitMountInfo(): Mount[] | null {
   // mountinfo paths escape whitespace and backslashes with octal sequences.
-  const text = fromThrowable(() =>
-    readFileSync("/proc/self/mountinfo", "utf8"),
-  )();
+  const text = Result.try({
+    try: () => readFileSync("/proc/self/mountinfo", "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (text.isErr()) return null;
   return text.value.split("\n").flatMap((line) => {
     const parts = line.split(" - ");
@@ -166,14 +166,17 @@ function isDiskBacked(path: string): boolean {
     if (parent === current) return false;
     current = parent;
   }
-  const fs = fromThrowable(() => statfsSync(current, { bigint: true }))();
+  const fs = Result.try({
+    try: () => statfsSync(current, { bigint: true }),
+    catch: (e: unknown) => e,
+  });
   return (
     fs.isOk() && fs.value.type !== TMPFS_MAGIC && fs.value.type !== RAMFS_MAGIC
   );
 }
 
 function pathExists(path: string) {
-  return fromThrowable(() => existsSync(path))();
+  return Result.try({ try: () => existsSync(path), catch: (e: unknown) => e });
 }
 
 export function createTmpfsTarget(options: TmpfsOptions = {}) {
@@ -262,11 +265,13 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
           declared.startsWith(`${resolve(mount.path)}/`),
         )
       ) {
-        const fs = fromThrowable(() =>
-          (options.statfs ?? ((p: string) => statfsSync(p, { bigint: true })))(
-            declared,
-          ),
-        )();
+        const fs = Result.try({
+          try: () =>
+            (
+              options.statfs ?? ((p: string) => statfsSync(p, { bigint: true }))
+            )(declared),
+          catch: (e: unknown) => e,
+        });
         if (fs.isOk() && [TMPFS_MAGIC, RAMFS_MAGIC].includes(fs.value.type)) {
           const row = planEntry(declared, basename(declared), planOptions);
           rows.push(...(row === null ? [] : [row]));
@@ -351,7 +356,10 @@ function logUsage(
   log: (message: string) => void,
   measure?: (path: string) => Filesystem,
 ): void {
-  const result = fromThrowable(() => usage(root, measure))();
+  const result = Result.try({
+    try: () => usage(root, measure),
+    catch: (e: unknown) => e,
+  });
   if (result.isErr()) return;
   const after = result.value;
   log(
@@ -391,7 +399,10 @@ async function onlyAncestorRefusal(
     parent = dirname(parent)
   ) {
     const entry = parent;
-    const stat = await fromAsyncThrowable(() => lstat(entry))();
+    const stat = await Result.tryPromise({
+      try: () => lstat(entry),
+      catch: (e: unknown) => e,
+    });
     if (
       stat.isErr() ||
       stat.value.isSymbolicLink() ||
@@ -411,7 +422,10 @@ function planEntry(
   options: PlanOptions,
 ): Candidate | null {
   checkScanDeadline(options.context);
-  const stat = fromThrowable(() => lstatSync(path))();
+  const stat = Result.try({
+    try: () => lstatSync(path),
+    catch: (e: unknown) => e,
+  });
   if (stat.isErr()) return null;
   const st = stat.value;
   if (protectedName.test(name))
@@ -495,9 +509,10 @@ function planEntry(
       kind: "command",
       argv: [],
     });
-  const measurement = fromThrowable(() =>
-    inspectTree(path, options, isGraveyard ? undefined : cutoff),
-  )().unwrapOr(null);
+  const measurement = Result.try({
+    try: () => inspectTree(path, options, isGraveyard ? undefined : cutoff),
+    catch: (e: unknown) => e,
+  }).unwrapOr(null);
   if (measurement?.graveyard === true)
     return candidate(
       path,
@@ -552,19 +567,28 @@ function planMount(
   beforeUse: Map<string, ReturnType<typeof usage>>,
   measure: (p: string) => Filesystem = (p) => statfsSync(p, { bigint: true }),
 ): Candidate[] {
-  const fs = fromThrowable(() => measure(mount.path))();
+  const fs = Result.try({
+    try: () => measure(mount.path),
+    catch: (e: unknown) => e,
+  });
   if (
     fs.isErr() ||
     (fs.value.type !== TMPFS_MAGIC && fs.value.type !== RAMFS_MAGIC)
   )
     return [];
   const root = resolve(mount.path);
-  const writable = fromThrowable(() => {
-    accessSync(root, 2);
-  })();
+  const writable = Result.try({
+    try: () => {
+      accessSync(root, 2);
+    },
+    catch: (e: unknown) => e,
+  });
   if (writable.isErr()) return [];
   // Reuse the type probe's counters: a mount is measured once in each plan stage.
-  const measured = fromThrowable(() => usage(root, () => fs.value))();
+  const measured = Result.try({
+    try: () => usage(root, () => fs.value),
+    catch: (e: unknown) => e,
+  });
   if (measured.isErr()) return [];
   beforeUse.set(root, measured.value);
   const usageRow = candidate(
@@ -575,7 +599,10 @@ function planMount(
     { kind: "command", argv: [] },
   );
   usageRow.id = `tmpfs-usage:${root}`;
-  const names = fromThrowable(() => readdirSync(root).toSorted())();
+  const names = Result.try({
+    try: () => readdirSync(root).toSorted(),
+    catch: (e: unknown) => e,
+  });
   if (names.isErr()) return [usageRow];
   const only = options.context.only;
   const entries = names.value.flatMap((name) => {

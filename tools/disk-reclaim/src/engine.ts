@@ -1,8 +1,8 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { cpus, homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
-import { fromThrowable, z } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "../../shared/src/result.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 import { readHeadroom } from "./storage.ts";
 import { protectedReason } from "./lib/protected.ts";
 import {
@@ -48,9 +48,10 @@ export function loadConfig(
   path = process.env["RECLAIM_CONFIG"] ??
     resolve(import.meta.dir, "../reclaim.toml"),
 ) {
-  const raw = fromThrowable((): unknown =>
-    Bun.TOML.parse(readFileSync(path, "utf8")),
-  )();
+  const raw = Result.try({
+    try: (): unknown => Bun.TOML.parse(readFileSync(path, "utf8")),
+    catch: (e: unknown) => e,
+  });
   if (raw.isErr())
     return { config: null, error: `${path}: ${errorMessage(raw.error)}` };
   const ignoreEntries = regenerableIgnoreEntries(
@@ -276,9 +277,10 @@ async function planTarget(
     clearInterval(heartbeat);
     return null;
   }
-  const planned = await fromAsyncThrowable(async () =>
-    withScanSignal(ctx.signal, () => target.plan(ctx)),
-  )();
+  const planned = await Result.tryPromise({
+    try: async () => withScanSignal(ctx.signal, () => target.plan(ctx)),
+    catch: (e: unknown) => e,
+  });
   clearInterval(heartbeat);
   return planned;
 }
@@ -399,9 +401,10 @@ async function planUnlocked(
         liveness,
         explicit: options.explicit?.includes(target.name) === true,
       } satisfies Context;
-      const available = await fromAsyncThrowable(async () =>
-        target.available(ctx),
-      )();
+      const available = await Result.tryPromise({
+        try: async () => target.available(ctx),
+        catch: (e: unknown) => e,
+      });
       if (available.isErr()) {
         failTarget(index, target, errorMessage(available.error));
         continue;
@@ -523,11 +526,14 @@ async function recheckAndAct(
   // one liveness snapshot (ctx.liveness); a target with `recheck` judges only this
   // candidate instead of re-planning every candidate for each one.
   const freshContext = ctx;
-  const fresh = await fromAsyncThrowable(async () => {
-    if (target.recheck === undefined) return target.plan(freshContext);
-    const one = await target.recheck(original, freshContext);
-    return one === null ? [] : [one];
-  })();
+  const fresh = await Result.tryPromise({
+    try: async () => {
+      if (target.recheck === undefined) return target.plan(freshContext);
+      const one = await target.recheck(original, freshContext);
+      return one === null ? [] : [one];
+    },
+    catch: (e: unknown) => e,
+  });
   check("candidate recheck");
   if (isAborted(ctx.signal)) return 0;
   const parsed = fresh.isOk() ? Candidate.array().safeParse(fresh.value) : null;
@@ -592,9 +598,10 @@ async function recheckAndAct(
   actions.push(action);
   ctx.log(`${target.name}: ${found.id} ${found.action.kind}`);
   check("action");
-  const acted = await fromAsyncThrowable(async () =>
-    target.act(found, freshContext),
-  )();
+  const acted = await Result.tryPromise({
+    try: async () => target.act(found, freshContext),
+    catch: (e: unknown) => e,
+  });
   const validated = acted.isOk() ? ActionResult.safeParse(acted.value) : null;
   let result: ActionResult = {
     ok: false,
@@ -627,9 +634,10 @@ export async function actPlannedPath(
       context.config,
     ),
   };
-  const availability = await fromAsyncThrowable(async () =>
-    target.available(freshContext),
-  )();
+  const availability = await Result.tryPromise({
+    try: async () => target.available(freshContext),
+    catch: (e: unknown) => e,
+  });
   if (availability.isErr())
     return {
       ok: false,
@@ -642,9 +650,10 @@ export async function actPlannedPath(
       bytes_freed: null,
       error: availability.value.skip_reason ?? "target unavailable",
     };
-  const planned = await fromAsyncThrowable(async () =>
-    target.plan(freshContext),
-  )();
+  const planned = await Result.tryPromise({
+    try: async () => target.plan(freshContext),
+    catch: (e: unknown) => e,
+  });
   if (planned.isErr())
     return { ok: false, bytes_freed: null, error: errorMessage(planned.error) };
   const candidates = Candidate.array().safeParse(planned.value);
@@ -671,9 +680,10 @@ export async function actPlannedPath(
   });
   if (protection !== null)
     return { ok: false, bytes_freed: null, error: protection };
-  const acted = await fromAsyncThrowable(async () =>
-    target.act(candidate, freshContext),
-  )();
+  const acted = await Result.tryPromise({
+    try: async () => target.act(candidate, freshContext),
+    catch: (e: unknown) => e,
+  });
   if (acted.isErr())
     return { ok: false, bytes_freed: null, error: errorMessage(acted.error) };
   const result = ActionResult.safeParse(acted.value);
@@ -850,9 +860,10 @@ async function executeTarget(
   const plannedFailure = row.exit === 1 ? row.skip_reason : null;
   row.exit = 0;
   ctx.reportProgress?.(target.name, target.name, 0, 0, false, "delete");
-  const availability = await fromAsyncThrowable(async () =>
-    target.available(ctx),
-  )();
+  const availability = await Result.tryPromise({
+    try: async () => target.available(ctx),
+    catch: (e: unknown) => e,
+  });
   check("target plan");
   if (availability.isErr() || !availability.value.available) {
     row.available = false;
@@ -873,7 +884,10 @@ async function executeTarget(
         options.captureLiveness ?? ((config) => snapshotFor(config, ctx))
       )(ctx.config),
     };
-    const fresh = await fromAsyncThrowable(async () => target.plan(stageCtx))();
+    const fresh = await Result.tryPromise({
+      try: async () => target.plan(stageCtx),
+      catch: (e: unknown) => e,
+    });
     check("target plan");
     const parsed = fresh.isOk()
       ? Candidate.array().safeParse(fresh.value)
@@ -1101,9 +1115,10 @@ export async function run(
   };
   using _lock = { [Symbol.dispose]: lock.release };
   using _deadline = { [Symbol.dispose]: cancelDeadline };
-  const execute = await fromAsyncThrowable(async () =>
-    executeLocked(targets, lockedOptions, dir),
-  )();
+  const execute = await Result.tryPromise({
+    try: async () => executeLocked(targets, lockedOptions, dir),
+    catch: (e: unknown) => e,
+  });
   if (execute.isOk()) return execute.value;
   if (execute.error instanceof RunDeadline) {
     const time = now();

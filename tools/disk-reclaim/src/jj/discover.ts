@@ -1,6 +1,6 @@
 import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "../../../shared/src/result.ts";
 import { jj } from "./jj.ts";
 import { checkScanDeadline } from "../lib/scan-cache.ts";
 
@@ -55,7 +55,10 @@ const SKIP = new Set([
 ]);
 
 const real = (path: string): string => {
-  return fromThrowable(() => realpathSync(path))().unwrapOr(resolve(path));
+  return Result.try({
+    try: () => realpathSync(path),
+    catch: (e: unknown) => e,
+  }).unwrapOr(resolve(path));
 };
 
 /** Roots may end in a `*` segment (`~/Workspace/*`); expand it one level, keep only directories. */
@@ -66,20 +69,29 @@ export function expandRoot(pattern: string): string[] {
   const base = parts.slice(0, at).join("/");
   const globBase = base.length > 0 ? base : "/";
   const rest = parts.slice(at).join("/");
-  const paths = fromThrowable(() => [
-    ...new Bun.Glob(rest).scanSync({
-      cwd: globBase,
-      onlyFiles: false,
-      absolute: true,
-    }),
-  ])().unwrapOr([]);
+  const paths = Result.try({
+    try: () => [
+      ...new Bun.Glob(rest).scanSync({
+        cwd: globBase,
+        onlyFiles: false,
+        absolute: true,
+      }),
+    ],
+    catch: (e: unknown) => e,
+  }).unwrapOr([]);
   return paths.filter((path) =>
-    fromThrowable(() => lstatSync(path).isDirectory())().unwrapOr(false),
+    Result.try({
+      try: () => lstatSync(path).isDirectory(),
+      catch: (e: unknown) => e,
+    }).unwrapOr(false),
   );
 }
 
 const jjKind = (dir: string): "store" | "workspace" | null => {
-  return fromThrowable(() => lstatSync(join(dir, ".jj", "repo")))()
+  return Result.try({
+    try: () => lstatSync(join(dir, ".jj", "repo")),
+    catch: (e: unknown) => e,
+  })
     .map((stat) => {
       if (stat.isDirectory()) return "store";
       if (stat.isFile()) return "workspace";
@@ -109,9 +121,10 @@ export function walkRoots(
     if (kind === "store") stores.add(key);
     if (kind === "workspace") workspaces.add(key);
     if (depth >= MAX_DEPTH) return;
-    const entries = fromThrowable(() =>
-      readdirSync(dir, { withFileTypes: true }),
-    )();
+    const entries = Result.try({
+      try: () => readdirSync(dir, { withFileTypes: true }),
+      catch: (e: unknown) => e,
+    });
     if (entries.isErr()) return;
     for (const entry of entries.value) {
       if (!entry.isDirectory() || SKIP.has(entry.name)) continue;
@@ -125,15 +138,18 @@ export function walkRoots(
 
 /** The store a secondary workspace points at: `.jj/repo` holds a path relative to `.jj/`. */
 export function storeOf(workspace: string): string | null {
-  return fromThrowable(() => {
-    const target = resolve(
-      join(workspace, ".jj"),
-      readFileSync(join(workspace, ".jj", "repo"), "utf8").trim(),
-    );
-    return lstatSync(target).isDirectory()
-      ? dirname(dirname(real(target)))
-      : null;
-  })().unwrapOr(null);
+  return Result.try({
+    try: () => {
+      const target = resolve(
+        join(workspace, ".jj"),
+        readFileSync(join(workspace, ".jj", "repo"), "utf8").trim(),
+      );
+      return lstatSync(target).isDirectory()
+        ? dirname(dirname(real(target)))
+        : null;
+    },
+    catch: (e: unknown) => e,
+  }).unwrapOr(null);
 }
 
 /**
@@ -143,9 +159,10 @@ export function storeOf(workspace: string): string | null {
  */
 export function recordedRoot(store: string, name: string): string | null {
   const base = join(store, ".jj", "repo");
-  const result = fromThrowable(() =>
-    readFileSync(join(base, "workspace_store", "index")),
-  )();
+  const result = Result.try({
+    try: () => readFileSync(join(base, "workspace_store", "index")),
+    catch: (e: unknown) => e,
+  });
   if (result.isErr()) return null;
   const bytes = result.value;
   const cursor: ByteCursor = { at: 0 };

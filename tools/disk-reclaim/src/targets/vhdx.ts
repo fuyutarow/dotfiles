@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 
@@ -20,7 +20,10 @@ export function isWslRuntime(facts: {
 async function runningInWsl(): Promise<boolean> {
   if (process.platform !== "linux") return false;
   const [versionResult, interop] = await Promise.all([
-    fromAsyncThrowable(() => Bun.file("/proc/version").text())(),
+    Result.tryPromise({
+      try: () => Bun.file("/proc/version").text(),
+      catch: (e: unknown) => e,
+    }),
     Bun.file("/proc/sys/fs/binfmt_misc/WSLInterop").exists(),
   ]);
   return isWslRuntime({

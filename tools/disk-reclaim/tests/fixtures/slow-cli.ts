@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import type { Target } from "../../src/targets/index.ts";
 import { main } from "../../src/reclaim.ts";
 import { createLivenessSnapshot } from "../../src/liveness/facts.ts";
@@ -64,11 +64,13 @@ const args =
   process.env["RECLAIM_CANCEL_MODE"] === "delete"
     ? ["run", "slow", "--yes"]
     : ["plan", "slow", "--json"];
-const result = await fromAsyncThrowable(() =>
-  main(args, [target], {
-    captureLiveness: (config) =>
-      createLivenessSnapshot(config, { procs: { procRoot } }),
-  }),
-)();
+const result = await Result.tryPromise({
+  try: () =>
+    main(args, [target], {
+      captureLiveness: (config) =>
+        createLivenessSnapshot(config, { procs: { procRoot } }),
+    }),
+  catch: (e: unknown) => e,
+});
 if (result.isErr()) process.stderr.write(`fixture: ${String(result.error)}\n`);
 process.exit(result.isOk() ? result.value : 2);

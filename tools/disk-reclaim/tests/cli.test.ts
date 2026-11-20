@@ -10,7 +10,8 @@ import {
 } from "node:fs";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
-import { fromThrowable, jsonOf, z } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "../../shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   AGX_WORKER_ENV,
   AGX_WORKER_VALUE,
@@ -443,7 +444,12 @@ test("malformed config fails closed", () => {
   const path = join(fixture(), "bad.toml");
   writeFileSync(path, "session_grace_hours = 'bad'");
   expect(loadConfig(path).config).toBeNull();
-  expect(fromThrowable(() => loadConfig(path))().isOk()).toBe(true);
+  expect(
+    Result.try({
+      try: () => loadConfig(path),
+      catch: (e: unknown) => e,
+    }).isOk(),
+  ).toBe(true);
 });
 
 test("wrap spawn failure still records a failed v1-compatible receipt", () => {

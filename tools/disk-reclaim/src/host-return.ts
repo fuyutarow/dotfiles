@@ -1,50 +1,56 @@
 import { readFile, statfs } from "node:fs/promises";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 
 export type WslStorageSnapshot = { guestFree: number; hostCFree: number };
 
 export async function wslStorageSnapshot(): Promise<WslStorageSnapshot | null> {
   if (process.platform !== "linux") return null;
-  const result = await fromAsyncThrowable(async () => {
-    const release = await readFile("/proc/sys/kernel/osrelease", "utf8");
-    if (!release.toLowerCase().includes("microsoft")) return null;
-    const [guest, host] = await Promise.all([statfs("/"), statfs("/mnt/c")]);
-    return {
-      guestFree: guest.bavail * guest.bsize,
-      hostCFree: host.bavail * host.bsize,
-    };
-  })();
+  const result = await Result.tryPromise({
+    try: async () => {
+      const release = await readFile("/proc/sys/kernel/osrelease", "utf8");
+      if (!release.toLowerCase().includes("microsoft")) return null;
+      const [guest, host] = await Promise.all([statfs("/"), statfs("/mnt/c")]);
+      return {
+        guestFree: guest.bavail * guest.bsize,
+        hostCFree: host.bavail * host.bsize,
+      };
+    },
+    catch: (e: unknown) => e,
+  });
   return result.isOk() ? result.value : null;
 }
 
 export async function trimWslGuest(): Promise<{ ok: boolean; detail: string }> {
-  const result = await fromAsyncThrowable(async () => {
-    const signal = AbortSignal.timeout(120_000);
-    const child = Bun.spawn(["sudo", "-n", "fstrim", "-v", "/"], {
-      stdout: "pipe",
-      stderr: "pipe",
-      signal,
-    });
-    const [out, err, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    let detail = `${out}${err}`.trim();
-    if (signal.aborted) detail = "fstrim timed out after 120 seconds";
-    else if (detail.length === 0) detail = `fstrim exited ${code}`;
-    return {
-      ok: code === 0 && !signal.aborted,
-      detail,
-    };
-  })();
-  return result.match(
-    (value) => value,
-    (error) => ({
+  const result = await Result.tryPromise({
+    try: async () => {
+      const signal = AbortSignal.timeout(120_000);
+      const child = Bun.spawn(["sudo", "-n", "fstrim", "-v", "/"], {
+        stdout: "pipe",
+        stderr: "pipe",
+        signal,
+      });
+      const [out, err, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      let detail = `${out}${err}`.trim();
+      if (signal.aborted) detail = "fstrim timed out after 120 seconds";
+      else if (detail.length === 0) detail = `fstrim exited ${code}`;
+      return {
+        ok: code === 0 && !signal.aborted,
+        detail,
+      };
+    },
+    catch: (e: unknown) => e,
+  });
+  return result.match({
+    ok: (value) => value,
+    err: (error) => ({
       ok: false,
       detail: error instanceof Error ? error.message : String(error),
     }),
-  );
+  });
 }
 
 export async function sampleWslReturn(

@@ -8,7 +8,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import type { ActionResult } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
@@ -52,14 +52,25 @@ const isMissing = (error: unknown): boolean =>
   MissingFile.safeParse(error).success;
 
 const readRecordedPath = async (entry: string): Promise<string | undefined> => {
-  const metadata = await fromAsyncThrowable(() => lstat(entry))();
+  const metadata = await Result.tryPromise({
+    try: () => lstat(entry),
+    catch: (e: unknown) => e,
+  });
   if (metadata.isErr()) return undefined;
   if (metadata.value.isSymbolicLink())
-    return (await fromAsyncThrowable(() => readlink(entry))()).unwrapOr(
-      undefined,
-    );
+    return (
+      await Result.tryPromise({
+        try: () => readlink(entry),
+        catch: (e: unknown) => e,
+      })
+    ).unwrapOr(undefined);
   if (process.platform === "win32")
-    return (await fromAsyncThrowable(() => readFile(entry, "utf8"))())
+    return (
+      await Result.tryPromise({
+        try: () => readFile(entry, "utf8"),
+        catch: (e: unknown) => e,
+      })
+    )
       .map((value) => value.trim())
       .unwrapOr(undefined);
   return undefined;
@@ -73,9 +84,15 @@ export async function deadEntries(stateDir: string): Promise<string[]> {
     ["ignored-configs", false],
   ] as const) {
     const path = join(stateDir, directory);
-    const present = await fromAsyncThrowable(() => access(path))();
+    const present = await Result.tryPromise({
+      try: () => access(path),
+      catch: (e: unknown) => e,
+    });
     if (present.isErr() && isMissing(present.error)) continue;
-    const listed = await fromAsyncThrowable(() => readdir(path))();
+    const listed = await Result.tryPromise({
+      try: () => readdir(path),
+      catch: (e: unknown) => e,
+    });
     if (listed.isErr()) continue;
     dead.push(...(await deadInDirectory(path, listed.value, requiresFile)));
   }
@@ -104,9 +121,10 @@ async function isDeadRecord(
   const record = join(directory, name);
   const target = await readRecordedPath(record);
   if (target === undefined) return false;
-  const statResult = await fromAsyncThrowable(() =>
-    stat(resolve(dirname(record), target)),
-  )();
+  const statResult = await Result.tryPromise({
+    try: () => stat(resolve(dirname(record), target)),
+    catch: (e: unknown) => e,
+  });
   if (statResult.isErr()) return isMissing(statResult.error);
   return requiresFile && !statResult.value.isFile();
 }

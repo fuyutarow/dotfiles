@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { err, ok, type Result } from "neverthrow";
-import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { Result, errorMessage } from "../../shared/src/result.ts";
 import { loadStorageHeadroom } from "@dotfiles/shared/src/storage-headroom.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 
@@ -64,17 +63,23 @@ export async function loadCollectionPolicy(
   path: string = process.env["RECLAIM_CONFIG"] ??
     resolve(import.meta.dir, "../reclaim.toml"),
 ): Promise<Result<CollectionPolicy, CollectionPolicyError>> {
-  const file = await attempt(() => readFile(path, "utf8"));
-  if (!file.ok)
-    return err(
+  const file = await Result.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (e: unknown) => e,
+  });
+  if (!file.isOk())
+    return Result.err(
       new CollectionPolicyError(
         `collection policy: cannot read ${path}: ${errorMessage(file.error)}`,
       ),
     );
 
-  const toml = await attempt(() => Bun.TOML.parse(file.value));
-  if (!toml.ok)
-    return err(
+  const toml = Result.try({
+    try: (): unknown => Bun.TOML.parse(file.value),
+    catch: (e: unknown) => e,
+  });
+  if (!toml.isOk())
+    return Result.err(
       new CollectionPolicyError(
         `collection policy: invalid TOML in ${path}: ${errorMessage(toml.error)}`,
       ),
@@ -89,12 +94,12 @@ export async function loadCollectionPolicy(
           : issue.path.map(String).join(".");
       return `${field}: ${issue.message}`;
     });
-    return err(new CollectionPolicyError(issues.join("; ")));
+    return Result.err(new CollectionPolicyError(issues.join("; ")));
   }
 
   const headroom = loadStorageHeadroom(headroomPath);
   if (headroom.errors.length > 0)
-    return err(
+    return Result.err(
       new CollectionPolicyError(
         `storage-headroom: ${headroom.errors.join("; ")}`,
       ),
@@ -106,7 +111,7 @@ export async function loadCollectionPolicy(
     guest.recover_gib <= guest.deny_gib ||
     host?.stop_gib === undefined
   ) {
-    return err(
+    return Result.err(
       new CollectionPolicyError(
         "storage-headroom: drive.guest requires recover_gib above deny_gib and drive.host requires stop_gib",
       ),
@@ -116,7 +121,7 @@ export async function loadCollectionPolicy(
   const undoWindowMinutes = parsed.data.graveyard_pressure_undo_minutes;
   const graveyardMinAgeMinutes = parsed.data.graveyard_min_age_hours * 60;
   if (graveyardMinAgeMinutes < undoWindowMinutes)
-    return err(
+    return Result.err(
       new CollectionPolicyError(
         "graveyard_min_age_hours: must be at least graveyard_pressure_undo_minutes",
       ),
@@ -128,7 +133,7 @@ export async function loadCollectionPolicy(
     deregistered_index_db: deregisteredIndexDb,
   } = parsed.data.collection_policy.class_rules;
 
-  return ok({
+  return Result.ok({
     undoWindowMinutes,
     graveyardMinAgeHours: parsed.data.graveyard_min_age_hours,
     recoverHeadroomGiB,

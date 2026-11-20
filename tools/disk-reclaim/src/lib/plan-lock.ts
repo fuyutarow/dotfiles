@@ -9,7 +9,7 @@ import {
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { dlopen, FFIType } from "bun:ffi";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { pidAlive } from "@dotfiles/shared/src/dir-lock.ts";
 
 const openAsync = (path: string, flags: string, mode: number) =>
@@ -74,7 +74,10 @@ export async function acquirePlanLock(
         },
       };
     }
-    const pidResult = await fromAsyncThrowable(() => readFile(path, "utf8"))();
+    const pidResult = await Result.tryPromise({
+      try: () => readFile(path, "utf8"),
+      catch: (e: unknown) => e,
+    });
     const pidText = pidResult.isOk() ? pidResult.value.trim() : null;
     if (
       pidText !== null &&

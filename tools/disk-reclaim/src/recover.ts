@@ -1,7 +1,7 @@
 import { lstat, mkdir, realpath, statfs, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { hostname } from "node:os";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { enumerateRipPayloads } from "./targets/rip-expire.ts";
 import {
   loadGraveyardAgePolicy,
@@ -75,21 +75,24 @@ async function unchanged(
   undoMs: number,
 ): Promise<boolean> {
   if (rootIdentity === null) return false;
-  const checked = await fromAsyncThrowable(async () => {
-    const currentRoot = await lstat(root);
-    const current = await lstat(path);
-    const parent = await realpath(dirname(path));
-    if (
-      `${currentRoot.dev}:${currentRoot.ino}` !== rootIdentity ||
-      identity(current) !== row.identity ||
-      parent !== join(canonicalRoot, relative(root, dirname(path)))
-    )
-      return false;
-    const burial = await ripBurialTime(root, path);
-    return (
-      burial !== undefined && burial === row.time && now - burial >= undoMs
-    );
-  })();
+  const checked = await Result.tryPromise({
+    try: async () => {
+      const currentRoot = await lstat(root);
+      const current = await lstat(path);
+      const parent = await realpath(dirname(path));
+      if (
+        `${currentRoot.dev}:${currentRoot.ino}` !== rootIdentity ||
+        identity(current) !== row.identity ||
+        parent !== join(canonicalRoot, relative(root, dirname(path)))
+      )
+        return false;
+      const burial = await ripBurialTime(root, path);
+      return (
+        burial !== undefined && burial === row.time && now - burial >= undoMs
+      );
+    },
+    catch: (e: unknown) => e,
+  });
   // A lock holder may remove this snapshot row while recover waits for the lock.
   return checked.isOk() && checked.value;
 }
@@ -164,7 +167,10 @@ async function locateFilesystem(
   let candidate = path;
   while (true) {
     const inspectPath = candidate;
-    const inspected = await fromAsyncThrowable(() => lstat(inspectPath))();
+    const inspected = await Result.tryPromise({
+      try: () => lstat(inspectPath),
+      catch: (e: unknown) => e,
+    });
     if (inspected.isOk()) return { path: candidate, stat: inspected.value };
     const parent = dirname(candidate);
     if (parent === candidate) return null;
@@ -177,7 +183,10 @@ async function snapshotCandidates(
   agePolicy: GraveyardAgePolicy,
 ): Promise<CandidateSnapshot> {
   const { root, now, result } = context;
-  const inspected = await fromAsyncThrowable(() => lstat(root))();
+  const inspected = await Result.tryPromise({
+    try: () => lstat(root),
+    catch: (e: unknown) => e,
+  });
   if (inspected.isErr())
     return { rootStat: null, canonicalRoot: root, rows: [], error: null };
   const rootStat = inspected.value;
@@ -440,7 +449,10 @@ export async function recoverGraveyard(
     fsStat: options.statfs ?? defaultStatfs,
     signal: options.signal ?? new AbortController().signal,
   };
-  const operation = await fromAsyncThrowable(() => executeRecovery(context))();
+  const operation = await Result.tryPromise({
+    try: () => executeRecovery(context),
+    catch: (e: unknown) => e,
+  });
   if (operation.isOk()) return operation.value;
   context.result.outcome = "unknown";
   context.result.errors.push(
@@ -448,7 +460,10 @@ export async function recoverGraveyard(
       ? `${operation.error.name}: ${errorMessage(operation.error)}`
       : errorMessage(operation.error),
   );
-  await fromAsyncThrowable(() => saveReceipt(context))();
+  await Result.tryPromise({
+    try: () => saveReceipt(context),
+    catch: (e: unknown) => e,
+  });
   return context.result;
 }
 

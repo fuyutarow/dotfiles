@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { join } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 
 export async function countEntries(dir: string): Promise<number> {
   let n = 0;
@@ -9,9 +9,10 @@ export async function countEntries(dir: string): Promise<number> {
   while (stack.length > 0) {
     const d = stack.pop();
     if (d === undefined) continue;
-    const result = await fromAsyncThrowable(() =>
-      readdir(d, { withFileTypes: true }),
-    )();
+    const result = await Result.tryPromise({
+      try: () => readdir(d, { withFileTypes: true }),
+      catch: (e: unknown) => e,
+    });
     if (result.isErr()) continue;
     const ents: Dirent[] = result.value;
     n += ents.length;

@@ -1,7 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import {
   ripBurial,
   ripBurialTime,
@@ -87,7 +87,10 @@ export async function safeScope(
   let parent = dirname(resolve(only));
   while (inside(root, parent)) {
     const path = parent;
-    const inspected = await fromAsyncThrowable(() => lstat(path))();
+    const inspected = await Result.tryPromise({
+      try: () => lstat(path),
+      catch: (e: unknown) => e,
+    });
     if (inspected.isErr() || inspected.value.isSymbolicLink()) return false;
     parent = dirname(parent);
   }
@@ -108,7 +111,10 @@ export async function enumerateRipPayloads(
   check: () => void = () => {},
 ): Promise<Pick<Expiry, "payloads" | "overhead">> {
   if (!(await safeScope(root, only))) return { payloads: [], overhead: 0 };
-  const rootStat = await fromAsyncThrowable(() => lstat(root))();
+  const rootStat = await Result.tryPromise({
+    try: () => lstat(root),
+    catch: (e: unknown) => e,
+  });
   if (
     rootStat.isErr() ||
     !rootStat.value.isDirectory() ||
@@ -298,65 +304,70 @@ export function createRipExpiryTarget(
         verdict: "ASK",
         reason: "graveyard expiry work budget exhausted; next timer continues",
       };
-    const judged = await fromAsyncThrowable(async () => {
-      check(state);
-      const root = state.root;
-      let parent = dirname(candidate.path ?? root);
-      while (inside(root, parent)) {
-        if ((await lstat(parent)).isSymbolicLink()) return null;
-        parent = dirname(parent);
-      }
-      const stat = await lstat(candidate.path ?? root);
-      if (identity(stat) !== row.identity)
+    const judged = await Result.tryPromise({
+      try: async () => {
+        check(state);
+        const root = state.root;
+        let parent = dirname(candidate.path ?? root);
+        while (inside(root, parent)) {
+          if ((await lstat(parent)).isSymbolicLink()) return null;
+          parent = dirname(parent);
+        }
+        const stat = await lstat(candidate.path ?? root);
+        if (identity(stat) !== row.identity)
+          return {
+            ...candidate,
+            verdict: "ASK" as const,
+            reason: "graveyard payload changed; retry next timer",
+          };
+        const found = await ripBurial(root, candidate.path ?? root);
+        if (found === undefined || state.now - found.time < state.undoMs) {
+          row.hold = found === undefined ? "unknown" : "undo";
+          return {
+            ...candidate,
+            verdict: "KEEP" as const,
+            reason: burialHoldReason(found),
+          };
+        }
+        const basis = found.estimated
+          ? "; burial time estimated from ctime"
+          : "";
+        const old = state.now - found.time >= state.ageMs;
+        if (!old && !(await overLimit(state)))
+          return {
+            ...candidate,
+            verdict: "KEEP" as const,
+            reason: "graveyard is within its size limit",
+          };
+        // Measure this payload immediately before its action, leaving most of the
+        // budget for deletion. A huge payload may have only a lower-bound estimate:
+        // Age-expired trees get only 250ms: age already authorizes removal.
+        // The age or overflow witness authorizes expiry independently
+        // of that estimate. Removal reports the bytes actually unlinked.
+        state.knownBytes += stat.size - row.logical;
+        row.logical = stat.size;
+        row.pending =
+          stat.isDirectory() && !stat.isSymbolicLink()
+            ? [{ path: candidate.path ?? root, counted: true }]
+            : [];
+        await measure(
+          row,
+          state,
+          false,
+          Math.min(state.deadline, clock() + (old ? 250 : 10_000)),
+        );
+        check(state);
         return {
           ...candidate,
-          verdict: "ASK" as const,
-          reason: "graveyard payload changed; retry next timer",
+          verdict: "RECLAIM" as const,
+          bytes: row.logical,
+          reason: old
+            ? `older than ${state.ageMs / 3_600_000}h${basis}`
+            : `graveyard exceeds ${RIP_GRAVEYARD_MAX_BYTES} bytes; ${capacityReason}${basis}`,
         };
-      const found = await ripBurial(root, candidate.path ?? root);
-      if (found === undefined || state.now - found.time < state.undoMs) {
-        row.hold = found === undefined ? "unknown" : "undo";
-        return {
-          ...candidate,
-          verdict: "KEEP" as const,
-          reason: burialHoldReason(found),
-        };
-      }
-      const basis = found.estimated ? "; burial time estimated from ctime" : "";
-      const old = state.now - found.time >= state.ageMs;
-      if (!old && !(await overLimit(state)))
-        return {
-          ...candidate,
-          verdict: "KEEP" as const,
-          reason: "graveyard is within its size limit",
-        };
-      // Measure this payload immediately before its action, leaving most of the
-      // budget for deletion. A huge payload may have only a lower-bound estimate:
-      // Age-expired trees get only 250ms: age already authorizes removal.
-      // The age or overflow witness authorizes expiry independently
-      // of that estimate. Removal reports the bytes actually unlinked.
-      state.knownBytes += stat.size - row.logical;
-      row.logical = stat.size;
-      row.pending =
-        stat.isDirectory() && !stat.isSymbolicLink()
-          ? [{ path: candidate.path ?? root, counted: true }]
-          : [];
-      await measure(
-        row,
-        state,
-        false,
-        Math.min(state.deadline, clock() + (old ? 250 : 10_000)),
-      );
-      check(state);
-      return {
-        ...candidate,
-        verdict: "RECLAIM" as const,
-        bytes: row.logical,
-        reason: old
-          ? `older than ${state.ageMs / 3_600_000}h${basis}`
-          : `graveyard exceeds ${RIP_GRAVEYARD_MAX_BYTES} bytes; ${capacityReason}${basis}`,
-      };
-    })();
+      },
+      catch: (e: unknown) => e,
+    });
     return judged.isOk()
       ? judged.value
       : { ...candidate, verdict: "ASK", reason: String(judged.error) };
@@ -448,7 +459,10 @@ export function createRipExpiryTarget(
       }
       if (state.yielded) break;
     }
-    await fromAsyncThrowable(() => overLimit(state))();
+    await Result.tryPromise({
+      try: () => overLimit(state),
+      catch: (e: unknown) => e,
+    });
     const shortfall = capacityShortfall(state);
     if (shortfall !== null)
       rows.push({
@@ -595,7 +609,11 @@ export function createRipExpiryTarget(
     finish: async (ctx: Context) => {
       const state = states.get(ctx);
       if (state === undefined) return;
-      if (!state.yielded) await fromAsyncThrowable(() => overLimit(state))();
+      if (!state.yielded)
+        await Result.tryPromise({
+          try: () => overLimit(state),
+          catch: (e: unknown) => e,
+        });
       const shortfall = capacityShortfall(state);
       if (shortfall !== null) ctx.log(shortfall);
       let continuation = "";
@@ -630,9 +648,10 @@ const routes = new WeakMap<
 >();
 const children = new WeakMap<Context, { target: Target; context: Context }[]>();
 async function discoveredRootCandidate(root: string): Promise<Candidate[]> {
-  const measurement = await fromAsyncThrowable(() =>
-    inspectRipGraveyard(root, 2000),
-  )();
+  const measurement = await Result.tryPromise({
+    try: () => inspectRipGraveyard(root, 2000),
+    catch: (e: unknown) => e,
+  });
   if (measurement.isErr()) return [];
   return [
     {

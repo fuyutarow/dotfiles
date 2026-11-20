@@ -1,28 +1,30 @@
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "../../../shared/src/result.ts";
 
 export type JjResult = { ok: boolean; stdout: string; stderr: string };
 
 /** Run `jj` with an explicit argv. Never inherits a cwd: every call names its repo with -R. */
 export function jj(args: string[], cwd = "/"): JjResult {
-  const result = fromThrowable(() =>
-    Bun.spawnSync(["jj", "--color=never", "--no-pager", ...args], {
-      cwd,
-      stdin: "ignore",
-      timeout: 120_000,
-    }),
-  )();
-  return result.match(
-    (run) => ({
+  const result = Result.try({
+    try: () =>
+      Bun.spawnSync(["jj", "--color=never", "--no-pager", ...args], {
+        cwd,
+        stdin: "ignore",
+        timeout: 120_000,
+      }),
+    catch: (e: unknown) => e,
+  });
+  return result.match({
+    ok: (run) => ({
       ok: run.exitCode === 0,
       stdout: run.stdout.toString(),
       stderr: run.stderr.toString(),
     }),
-    (error) => ({
+    err: (error) => ({
       ok: false,
       stdout: "",
       stderr: error instanceof Error ? error.message : String(error),
     }),
-  );
+  });
 }
 
 /** The quoted `<name>@` revset for a workspace's working-copy commit. */

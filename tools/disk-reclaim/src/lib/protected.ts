@@ -1,7 +1,7 @@
 import { exists, lstat, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { collectProcesses, resolveProcRoot, type OpenPaths } from "./procs.ts";
 
 export type ProtectionOptions = {
@@ -20,17 +20,20 @@ export type ProtectionOptions = {
 let brewPrefix: Promise<string | null> | undefined;
 function brewPrefixOnce(): Promise<string | null> {
   brewPrefix ??= (async () => {
-    const brew = await fromAsyncThrowable(async () => {
-      const child = Bun.spawn(["brew", "--prefix"], {
-        stdout: "pipe",
-        stderr: "ignore",
-      });
-      const [exitCode, output] = await Promise.all([
-        child.exited,
-        new Response(child.stdout).text(),
-      ]);
-      return { exitCode, output };
-    })();
+    const brew = await Result.tryPromise({
+      try: async () => {
+        const child = Bun.spawn(["brew", "--prefix"], {
+          stdout: "pipe",
+          stderr: "ignore",
+        });
+        const [exitCode, output] = await Promise.all([
+          child.exited,
+          new Response(child.stdout).text(),
+        ]);
+        return { exitCode, output };
+      },
+      catch: (e: unknown) => e,
+    });
     const prefix =
       brew.isOk() && brew.value.exitCode === 0 ? brew.value.output.trim() : "";
     return isAbsolute(prefix) ? resolve(prefix) : null;
@@ -42,7 +45,12 @@ const within = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);
 const normalized = (path: string): string => resolve(path);
 const real = async (path: string): Promise<string> =>
-  (await fromAsyncThrowable(() => realpath(path))()).unwrapOr(normalized(path));
+  (
+    await Result.tryPromise({
+      try: () => realpath(path),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(normalized(path));
 
 async function repoRoots(
   configured: string[],
@@ -56,9 +64,10 @@ async function repoRoots(
       const parent = dirname(
         prefix.endsWith("/") ? prefix.slice(0, -1) : prefix,
       );
-      const entries = await fromAsyncThrowable(() =>
-        readdir(parent, { withFileTypes: true }),
-      )();
+      const entries = await Result.tryPromise({
+        try: () => readdir(parent, { withFileTypes: true }),
+        catch: (e: unknown) => e,
+      });
       return entries.isErr()
         ? []
         : entries.value
@@ -70,17 +79,26 @@ async function repoRoots(
 }
 
 async function hasDirectory(path: string): Promise<boolean> {
-  const result = await fromAsyncThrowable(() => lstat(path))();
+  const result = await Result.tryPromise({
+    try: () => lstat(path),
+    catch: (e: unknown) => e,
+  });
   return result.isOk() && result.value.isDirectory();
 }
 
 async function linksInDir(dir: string): Promise<string[]> {
-  const entries = await fromAsyncThrowable(() => readdir(dir))();
+  const entries = await Result.tryPromise({
+    try: () => readdir(dir),
+    catch: (e: unknown) => e,
+  });
   if (entries.isErr()) return [];
   const links = await Promise.all(
     entries.value.map(async (name) => {
       const link = join(dir, name);
-      const stat = await fromAsyncThrowable(() => lstat(link))();
+      const stat = await Result.tryPromise({
+        try: () => lstat(link),
+        catch: (e: unknown) => e,
+      });
       return stat.isOk() && stat.value.isSymbolicLink()
         ? [await real(link)]
         : [];

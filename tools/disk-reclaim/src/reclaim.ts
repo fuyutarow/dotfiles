@@ -6,7 +6,7 @@ import cliPackage from "../package.json" with { type: "json" };
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { resolve } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import {
   actPlannedPath,
@@ -1062,7 +1062,10 @@ export async function main(
   return cancelledWith ?? result.exit;
 }
 if (import.meta.main) {
-  const result = await fromAsyncThrowable(main)();
+  const result = await Result.tryPromise({
+    try: () => main(),
+    catch: (e: unknown) => e,
+  });
   if (result.isErr())
     process.stderr.write(`reclaim: ${errorMessage(result.error)}\n`);
   process.exitCode = result.isOk() ? result.value : 2;

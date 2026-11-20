@@ -13,14 +13,13 @@ import {
   rmdir as removeDir,
   unlink as unlinkFile,
 } from "node:fs/promises";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { userInfo } from "node:os";
 import { execFileSync } from "node:child_process";
 import { dirname, join, resolve, sep } from "node:path";
 import { dlopen, FFIType, ptr, read } from "bun:ffi";
 import { listWorkspaces, storeOf } from "../jj/discover.ts";
 import { runProtection } from "../jj/run-guard.ts";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
 import { protectedReason, type ProtectionOptions } from "./protected.ts";
 type ProtectionProcesses = NonNullable<ProtectionOptions["processes"]>;
 import { countEntries } from "./purge-progress.ts";
@@ -100,17 +99,27 @@ type ContextProgress = (
 ) => void;
 
 function nameForUid(uid: number): string {
-  return fromThrowable(() => userInfo())().match(
-    (user) => (user.uid === uid ? user.username : String(uid)),
-    () => String(uid),
-  );
+  return Result.try({ try: () => userInfo(), catch: (e: unknown) => e }).match({
+    ok: (user) => (user.uid === uid ? user.username : String(uid)),
+    err: () => String(uid),
+  });
 }
 
 const estimatedBytes = async (path: string): Promise<number> => {
-  const stat = (await fromAsyncThrowable(() => lstat(path))()).unwrapOr(null);
+  const stat = (
+    await Result.tryPromise({
+      try: () => lstat(path),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr(null);
   if (stat === null) return 0;
   if (!stat.isDirectory() || stat.isSymbolicLink()) return stat.blocks * 512;
-  const names = (await fromAsyncThrowable(() => readdir(path))()).unwrapOr([]);
+  const names = (
+    await Result.tryPromise({
+      try: () => readdir(path),
+      catch: (e: unknown) => e,
+    })
+  ).unwrapOr([]);
   let total = stat.blocks * 512;
   for (const name of names) total += await estimatedBytes(join(path, name));
   return total;
@@ -185,15 +194,17 @@ export async function directoryProtection(
 
 const linuxLibc =
   process.platform === "linux"
-    ? fromThrowable(() =>
-        dlopen("libc.so.6", {
-          ioctl: {
-            args: [FFIType.i32, FFIType.u64, FFIType.ptr],
-            returns: FFIType.i32,
-          },
-          __errno_location: { args: [], returns: FFIType.ptr },
-        }),
-      )()
+    ? Result.try({
+        try: () =>
+          dlopen("libc.so.6", {
+            ioctl: {
+              args: [FFIType.i32, FFIType.u64, FFIType.ptr],
+              returns: FFIType.i32,
+            },
+            __errno_location: { args: [], returns: FFIType.ptr },
+          }),
+        catch: (e: unknown) => e,
+      })
     : null;
 
 type LinuxFlagResult =
@@ -218,13 +229,16 @@ function readLinuxFlags(fd: number): LinuxFlagResult {
 
 async function linuxAttributesAt(path: string): Promise<boolean | null> {
   if (linuxLibc === null || linuxLibc.isErr()) return null;
-  const result = await fromAsyncThrowable(async () => {
-    await using file = await open(
-      path,
-      constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
-    );
-    return readLinuxFlags(file.fd);
-  })();
+  const result = await Result.tryPromise({
+    try: async () => {
+      await using file = await open(
+        path,
+        constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
+      );
+      return readLinuxFlags(file.fd);
+    },
+    catch: (e: unknown) => e,
+  });
   if (result.isErr() || result.value.kind === "unknown") return null;
   if (result.value.kind === "unsupported") return false;
   return (result.value.value & 0x30) !== 0;
@@ -233,24 +247,28 @@ async function linuxAttributesAt(path: string): Promise<boolean | null> {
 async function attributesAt(path: string): Promise<boolean | null> {
   if (process.platform === "linux") return linuxAttributesAt(path);
   if (process.platform === "darwin") {
-    const output = fromThrowable(() =>
-      execFileSync("/usr/bin/stat", ["-f", "%Sf", path], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }),
-    )();
+    const output = Result.try({
+      try: () =>
+        execFileSync("/usr/bin/stat", ["-f", "%Sf", path], {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }),
+      catch: (e: unknown) => e,
+    });
     if (output.isErr()) return null;
     const flags = output.value.trim();
     if (flags === "-") return false;
     if (flags === "") return null;
     return /(?:^|,)(?:uchg|schg|uappnd|sappnd|sunlnk)(?:,|$)/u.test(flags);
   }
-  const output = fromThrowable(() =>
-    execFileSync("lsattr", ["-d", "--", path], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }),
-  )();
+  const output = Result.try({
+    try: () =>
+      execFileSync("lsattr", ["-d", "--", path], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }),
+    catch: (e: unknown) => e,
+  });
   if (output.isErr()) return null;
   const attributes = output.value.trim().split(/\s+/u)[0];
   if (
@@ -309,14 +327,17 @@ export async function removeTree(
     // library callers get plain lines, never a second terminal renderer.
     writer(`${line}\n`);
   };
-  const rootResult = fromThrowable(() => lstatSync(path))();
-  const rootStat = rootResult.match(
-    (stat) => stat,
-    (error) => {
+  const rootResult = Result.try({
+    try: () => lstatSync(path),
+    catch: (e: unknown) => e,
+  });
+  const rootStat = rootResult.match({
+    ok: (stat) => stat,
+    err: (error) => {
       errors.push({ path, error: message(error) });
       return null;
     },
-  );
+  });
   if (rootStat === null)
     return {
       ok: false,
@@ -359,7 +380,7 @@ export async function removeTree(
   const parent = dirname(path);
   const measureFilesystem = options.measureFilesystem !== false;
   const before = measureFilesystem
-    ? fromThrowable(() => statfsSync(parent))()
+    ? Result.try({ try: () => statfsSync(parent), catch: (e: unknown) => e })
         .map((stat) => stat.bavail * stat.bsize)
         .unwrapOr(null)
     : null;
@@ -391,10 +412,15 @@ export async function removeTree(
     mode: number,
   ): Promise<string | null> => {
     if (options.dryRun === true || (mode & 0o700) === 0o700) return null;
-    return (await fromAsyncThrowable(() => chmod(entry, mode | 0o700))()).match(
-      () => null,
-      (error) => `cannot add owner rwx: ${message(error)}`,
-    );
+    return (
+      await Result.tryPromise({
+        try: () => chmod(entry, mode | 0o700),
+        catch: (e: unknown) => e,
+      })
+    ).match({
+      ok: () => null,
+      err: (error) => `cannot add owner rwx: ${message(error)}`,
+    });
   };
   const removeEntry = async (entry: {
     path: string;
@@ -405,10 +431,13 @@ export async function removeTree(
       errors.push({ path: entry.path, error: "request work budget exhausted" });
       return false;
     }
-    const removed = await fromAsyncThrowable(async () => {
-      if (entry.stat.isDirectory()) await removeDir(entry.path);
-      else await unlinkFile(entry.path);
-    })();
+    const removed = await Result.tryPromise({
+      try: async () => {
+        if (entry.stat.isDirectory()) await removeDir(entry.path);
+        else await unlinkFile(entry.path);
+      },
+      catch: (e: unknown) => e,
+    });
     if (removed.isErr()) {
       errors.push({ path: entry.path, error: message(removed.error) });
       return false;
@@ -472,7 +501,10 @@ export async function removeTree(
     }
     inspected++;
     if (inspected % 128 === 0 && !(await checkpoint())) return false;
-    const statResult = await fromAsyncThrowable(() => lstat(entry))();
+    const statResult = await Result.tryPromise({
+      try: () => lstat(entry),
+      catch: (e: unknown) => e,
+    });
     if (statResult.isErr()) {
       errors.push({ path: entry, error: message(statResult.error) });
       return false;
@@ -481,14 +513,20 @@ export async function removeTree(
     if (
       (options.device ?? ((_path, value) => value.dev))(entry, stat) !== device
     ) {
-      const owner = fromThrowable(() => getOwner(entry))().unwrapOr({
+      const owner = Result.try({
+        try: () => getOwner(entry),
+        catch: (e: unknown) => e,
+      }).unwrapOr({
         uid: stat.uid,
         name: String(stat.uid),
       });
       refuse(entry, owner, "filesystem boundary (st_dev differs)");
       return false;
     }
-    const ownerResult = fromThrowable(() => getOwner(entry))();
+    const ownerResult = Result.try({
+      try: () => getOwner(entry),
+      catch: (e: unknown) => e,
+    });
     if (ownerResult.isErr()) {
       errors.push({
         path: entry,
@@ -513,7 +551,10 @@ export async function removeTree(
     const immutable = stat.isSymbolicLink()
       ? false
       : (
-          await fromAsyncThrowable(async () => checkAttribute(entry))()
+          await Result.tryPromise({
+            try: async () => checkAttribute(entry),
+            catch: (e: unknown) => e,
+          })
         ).unwrapOr(null);
     if (immutable === null) {
       refuse(entry, owner, "immutable or append-only status is unknown");
@@ -532,13 +573,14 @@ export async function removeTree(
         options.graveyard === true
           ? null
           : (
-              await fromAsyncThrowable(() =>
-                directoryProtection(entry, forgottenCommit),
-              )()
-            ).match(
-              (reason) => reason,
-              (error) => `cannot inspect repo store: ${message(error)}`,
-            );
+              await Result.tryPromise({
+                try: () => directoryProtection(entry, forgottenCommit),
+                catch: (e: unknown) => e,
+              })
+            ).match({
+              ok: (reason) => reason,
+              err: (error) => `cannot inspect repo store: ${message(error)}`,
+            });
       if (
         protection !== null &&
         !(
@@ -549,7 +591,10 @@ export async function removeTree(
         refuse(entry, owner, protection);
         return false;
       }
-      const children = await fromAsyncThrowable(() => readdir(entry))();
+      const children = await Result.tryPromise({
+        try: () => readdir(entry),
+        catch: (e: unknown) => e,
+      });
       if (children.isErr()) {
         errors.push({ path: entry, error: message(children.error) });
         return false;
@@ -619,7 +664,7 @@ export async function removeTree(
       error: "tree removal cancelled",
     });
   const after = measureFilesystem
-    ? fromThrowable(() => statfsSync(parent))()
+    ? Result.try({ try: () => statfsSync(parent), catch: (e: unknown) => e })
         .map((stat) => stat.bavail * stat.bsize)
         .unwrapOr(null)
     : null;

@@ -1,6 +1,6 @@
 import { lstat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import type { Plan } from "./model.ts";
 
@@ -64,12 +64,11 @@ export async function recordsFromPlan(plan: Plan): Promise<ReclaimRecord[]> {
           const remoteHostPath = candidate.host_lever !== undefined;
           const localFingerprint = remoteHostPath
             ? null
-            : await fromAsyncThrowable(() => fingerprint(path))().then(
-                (result) =>
-                  result.match(
-                    (value) => value,
-                    () => null,
-                  ),
+            : await Result.tryPromise({
+                try: () => fingerprint(path),
+                catch: (e: unknown) => e,
+              }).then((result) =>
+                result.match({ ok: (value) => value, err: () => null }),
               );
           if (!remoteHostPath && localFingerprint === null) return null;
           const trashItem =
@@ -131,10 +130,12 @@ export type ApplyOptions = {
 };
 
 const currentFingerprint = async (path: string) =>
-  (await fromAsyncThrowable(() => fingerprint(path))()).match(
-    (value) => value,
-    () => null,
-  );
+  (
+    await Result.tryPromise({
+      try: () => fingerprint(path),
+      catch: (e: unknown) => e,
+    })
+  ).match({ ok: (value) => value, err: () => null });
 const sameFingerprint = (
   left: NonNullable<ReclaimRecord["fingerprint"]>,
   right: ReclaimRecord["fingerprint"] | null,

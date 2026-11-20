@@ -1,8 +1,7 @@
 import { lstat, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
-import { attempt, errorMessage } from "@dotfiles/shared/src/attempt.ts";
+import { Result, errorMessage } from "../../../shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import { loadCollectionPolicy } from "../policy.ts";
 import type { Candidate } from "../model.ts";
@@ -28,19 +27,22 @@ export async function declaredDbRoot(
   home: string,
   declaration: string = DB_ROOT_DECLARATION,
 ): Promise<Result<string, Error>> {
-  const read = await fromAsyncThrowable(() => readFile(declaration, "utf8"))();
+  const read = await Result.tryPromise({
+    try: () => readFile(declaration, "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (read.isErr())
-    return err(new Error(`${declaration}: ${errorMessage(read.error)}`));
+    return Result.err(new Error(`${declaration}: ${errorMessage(read.error)}`));
   const relativeRoot = read.value.trim();
   if (
     relativeRoot === "" ||
     isAbsolute(relativeRoot) ||
     relativeRoot.split("/").includes("..")
   )
-    return err(
+    return Result.err(
       new Error(`${declaration}: expected a non-empty path relative to $HOME`),
     );
-  return ok(join(home, relativeRoot));
+  return Result.ok(join(home, relativeRoot));
 }
 const settingsPath = join(".cocoindex_code", "settings.yml");
 const workspaceRepoPointer = join(".jj", "repo");
@@ -52,10 +54,13 @@ const errorCode = (error: unknown): string | undefined => {
 async function inspectPath(
   path: string,
 ): Promise<Result<Awaited<ReturnType<typeof lstat>> | null, unknown>> {
-  const result = await fromAsyncThrowable(() => lstat(path))();
-  if (result.isOk()) return ok(result.value);
-  if (errorCode(result.error) === "ENOENT") return ok(null);
-  return err(result.error);
+  const result = await Result.tryPromise({
+    try: () => lstat(path),
+    catch: (e: unknown) => e,
+  });
+  if (result.isOk()) return Result.ok(result.value);
+  if (errorCode(result.error) === "ENOENT") return Result.ok(null);
+  return Result.err(result.error);
 }
 
 /** rr serves exact roots with settings.yml; a jj workspace pointer redirects to its backing root. */
@@ -76,10 +81,11 @@ async function discoverArtifacts(
   while (pending.length > 0) {
     const directory = pending.pop();
     if (directory === undefined) continue;
-    const result = await fromAsyncThrowable(() =>
-      readdir(directory, { withFileTypes: true }),
-    )();
-    if (result.isErr()) return err(result.error);
+    const result = await Result.tryPromise({
+      try: () => readdir(directory, { withFileTypes: true }),
+      catch: (e: unknown) => e,
+    });
+    if (result.isErr()) return Result.err(result.error);
     const entries = result.value;
     artifacts.push(
       ...entries
@@ -99,27 +105,31 @@ async function discoverArtifacts(
         .map((entry) => join(directory, entry.name)),
     );
   }
-  return ok(artifacts.toSorted());
+  return Result.ok(artifacts.toSorted());
 }
 
 async function newestMtime(path: string): Promise<Result<number, unknown>> {
-  const own = await fromAsyncThrowable(() => lstat(path))();
-  if (own.isErr()) return err(own.error);
+  const own = await Result.tryPromise({
+    try: () => lstat(path),
+    catch: (e: unknown) => e,
+  });
+  if (own.isErr()) return Result.err(own.error);
   const stat = own.value;
   let newest = stat.mtimeMs;
-  if (!stat.isDirectory() || stat.isSymbolicLink()) return ok(newest);
-  const read = await fromAsyncThrowable(() =>
-    readdir(path, { withFileTypes: true }),
-  )();
-  if (read.isErr()) return err(read.error);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) return Result.ok(newest);
+  const read = await Result.tryPromise({
+    try: () => readdir(path, { withFileTypes: true }),
+    catch: (e: unknown) => e,
+  });
+  if (read.isErr()) return Result.err(read.error);
   const entries = read.value;
   for (const entry of entries) {
     const childPath = join(path, entry.name);
     const child = await newestMtime(childPath);
-    if (child.isErr()) return err(child.error);
+    if (child.isErr()) return Result.err(child.error);
     newest = Math.max(newest, child.value);
   }
-  return ok(newest);
+  return Result.ok(newest);
 }
 
 export function createCccIndexDbTarget(
@@ -136,7 +146,7 @@ export function createCccIndexDbTarget(
   const dbRoot = async (root: string): Promise<Result<string, Error>> =>
     options.dbRoot === undefined
       ? declaredDbRoot(root)
-      : ok(await options.dbRoot(root));
+      : Result.ok(await options.dbRoot(root));
   const loadPolicy = options.loadPolicy ?? loadCollectionPolicy;
   const now = options.now ?? (() => Temporal.Now.instant().epochMilliseconds);
 
@@ -168,8 +178,11 @@ export function createCccIndexDbTarget(
       )
         return [];
 
-      const policyResult = await attempt(() => loadPolicy());
-      if (!policyResult.ok) {
+      const policyResult = await Result.tryPromise({
+        try: () => loadPolicy(),
+        catch: (e: unknown) => e,
+      });
+      if (!policyResult.isOk()) {
         ctx.reportPlanError?.(
           `ccc index DB collection policy could not be loaded: ${errorMessage(policyResult.error)}`,
         );
@@ -216,25 +229,30 @@ export function createCccIndexDbTarget(
         const exists = projectStat.isOk()
           ? projectStat.value !== null
           : undefined;
-        const registrationResult = await attempt(() =>
-          Promise.resolve(
-            options.isRegisteredRoot === undefined
-              ? isRegisteredRoot(project)
-              : options.isRegisteredRoot(project),
-          ),
-        );
-        const registered = registrationResult.ok
+        const registrationResult = await Result.tryPromise({
+          try: () =>
+            Promise.resolve(
+              options.isRegisteredRoot === undefined
+                ? isRegisteredRoot(project)
+                : options.isRegisteredRoot(project),
+            ),
+          catch: (e: unknown) => e,
+        });
+        const registered = registrationResult.isOk()
           ? registrationResult.value
           : undefined;
-        const registrationError = registrationResult.ok
+        const registrationError = registrationResult.isOk()
           ? undefined
           : errorMessage(registrationResult.error);
 
         let bytes: number | null = null;
         let touchedAt: number | undefined;
         let measurementError: string | undefined;
-        const sizeResult = await attempt(() => measuredTreeBytes(path, ctx));
-        if (sizeResult.ok) bytes = sizeResult.value;
+        const sizeResult = await Result.tryPromise({
+          try: () => measuredTreeBytes(path, ctx),
+          catch: (e: unknown) => e,
+        });
+        if (sizeResult.isOk()) bytes = sizeResult.value;
         else measurementError = errorMessage(sizeResult.error);
         const mtimeResult = await newestMtime(path);
         if (mtimeResult.isOk()) touchedAt = mtimeResult.value;

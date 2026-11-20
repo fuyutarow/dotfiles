@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { lstat, readdir, statfs } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import {
@@ -84,10 +84,12 @@ const bytesAt = async (path: string): Promise<number> => {
   return total;
 };
 const lstatOrNull = async (path: string) =>
-  (await fromAsyncThrowable(() => lstat(path))()).match(
-    (stat) => stat,
-    () => null,
-  );
+  (
+    await Result.tryPromise({
+      try: () => lstat(path),
+      catch: (e: unknown) => e,
+    })
+  ).match({ ok: (stat) => stat, err: () => null });
 function configuredRoot(path: string, roots: string[]): boolean {
   return roots.some((pattern) => {
     const root = resolve(pattern);
@@ -188,14 +190,17 @@ async function evaluate(
     escaped === null &&
     !inGraveyard &&
     targetStat?.isDirectory()
-      ? await fromAsyncThrowable(() => directoryProtection(path))()
+      ? await Result.tryPromise({
+          try: () => directoryProtection(path),
+          catch: (e: unknown) => e,
+        })
       : null;
   let protectionReason: string | null = null;
   if (protection !== null) {
-    protectionReason = protection.match(
-      (reason) => reason,
-      (error) => `unknown: ${errorMessage(error)}`,
-    );
+    protectionReason = protection.match({
+      ok: (reason) => reason,
+      err: (error) => `unknown: ${errorMessage(error)}`,
+    });
   }
   const isStore = protectionReason?.includes("repo store holder") === true;
   let storeDetail = "store check deferred to traversal for nested directories";
@@ -232,7 +237,10 @@ async function evaluate(
   );
   if (checks.some((check) => !check.ok))
     return { path, bytes: null, checks, allowed: false };
-  const bytes = await fromAsyncThrowable(() => bytesAt(path))();
+  const bytes = await Result.tryPromise({
+    try: () => bytesAt(path),
+    catch: (e: unknown) => e,
+  });
   return {
     path,
     bytes: bytes.isOk() ? bytes.value : null,

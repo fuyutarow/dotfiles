@@ -816,7 +816,6 @@ describe("render-home: committed jj inputs", () => {
       "agents/hooks/slugs.ts",
       "agents/hooks/zod.ts",
       "agents/hooks/vendor/deps.js",
-      "tools/shared/src/attempt.ts",
       "tools/shared/src/narrow.ts",
       "tools/shared/src/zod.ts",
       "tools/tool-tiers/src/tool-tiers.ts",

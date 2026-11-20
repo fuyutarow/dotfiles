@@ -7,7 +7,8 @@ import {
 } from "node:fs";
 import { consola } from "consola";
 import { basename, join, resolve } from "node:path";
-import { fromThrowable, z } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "../../../shared/src/result.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
 
 export type Probe<T> = { ok: true; value: T } | { ok: false; error: string };
 type ProcResult<T> = { ok: true; value: T } | { ok: false; error: unknown };
@@ -63,8 +64,11 @@ const gone = (error: unknown): boolean =>
   ["ENOENT", "ESRCH"].includes(errorCode(error) ?? "");
 const message = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
-const procResult = <T>(operation: () => T | Error): ProcResult<T> => {
-  const result = fromThrowable(operation)();
+const procResult = <T>(operation: () => Awaited<T> | Error): ProcResult<T> => {
+  const result = Result.try<T | Error, unknown>({
+    try: () => operation(),
+    catch: (e: unknown) => e,
+  });
   if (result.isErr()) return { ok: false, error: result.error };
   return result.value instanceof Error
     ? { ok: false, error: result.value }
@@ -217,7 +221,7 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
     };
     const probe = <T>(
       via: string,
-      read: () => T | Error,
+      read: () => Awaited<T> | Error,
       scope: "paths" | "environ" | "none" = "paths",
     ): T | undefined => {
       const result = procResult<T>(read);

@@ -1,8 +1,7 @@
 import { existsSync, lstatSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
-import { fromThrowable } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "../../../shared/src/result.ts";
 import {
   createLivenessSnapshot,
   type LivenessFacts,
@@ -22,10 +21,12 @@ import { measuredTreeBytes } from "./tree.ts";
 type Inspection<T> = { ok: true; value: T } | { ok: false; error: string };
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
-const inspect = <T>(operation: () => T): Inspection<T> => {
-  const result = fromThrowable(operation, (error) =>
-    error instanceof Error ? error.message : String(error),
-  )();
+const inspect = <T>(operation: () => Awaited<T>): Inspection<T> => {
+  const result = Result.try<T, string>({
+    try: () => operation(),
+    catch: (error: unknown) =>
+      error instanceof Error ? error.message : String(error),
+  });
   return result.isOk()
     ? { ok: true, value: result.value }
     : { ok: false, error: result.error };
@@ -128,7 +129,10 @@ const candidateBytes = async (
   path: string,
   ctx: Context,
 ): Promise<number | null> => {
-  const result = await fromAsyncThrowable(() => measuredTreeBytes(path, ctx))();
+  const result = await Result.tryPromise({
+    try: () => measuredTreeBytes(path, ctx),
+    catch: (e: unknown) => e,
+  });
   return result.isOk() ? result.value : null;
 };
 

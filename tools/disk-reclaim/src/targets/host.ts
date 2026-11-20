@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 import { hostAction, hostProbe } from "./host-powershell.ts";
@@ -180,29 +180,35 @@ export const createSshRunner =
       lines(`${decoder.decode()}\n`);
       return output;
     };
-    const result = await fromAsyncThrowable(async () => {
-      const source = script === "$probe" ? hostProbe : script;
-      const send = fromAsyncThrowable(async () => {
-        await proc.stdin.write(
-          `${Buffer.from(source, "utf8").toString("base64")}\n`,
-        );
-        await proc.stdin.end();
-      })();
-      const [out, err, code] = await Promise.all([
-        new Response(proc.stdout).text(),
-        captureError(),
-        proc.exited,
-        send,
-      ]);
-      return {
-        code,
-        out: out.replaceAll("\r", ""),
-        err: err.replaceAll("\r", ""),
-        timedOut,
-        step,
-        timeoutMs: timeout,
-      };
-    })();
+    const result = await Result.tryPromise({
+      try: async () => {
+        const source = script === "$probe" ? hostProbe : script;
+        const send = Result.tryPromise({
+          try: async () => {
+            await proc.stdin.write(
+              `${Buffer.from(source, "utf8").toString("base64")}\n`,
+            );
+            await proc.stdin.end();
+          },
+          catch: (e: unknown) => e,
+        });
+        const [out, err, code] = await Promise.all([
+          new Response(proc.stdout).text(),
+          captureError(),
+          proc.exited,
+          send,
+        ]);
+        return {
+          code,
+          out: out.replaceAll("\r", ""),
+          err: err.replaceAll("\r", ""),
+          timedOut,
+          step,
+          timeoutMs: timeout,
+        };
+      },
+      catch: (e: unknown) => e,
+    });
     clearTimeout(timer);
     parentSignal?.removeEventListener("abort", abort);
     return result.unwrapOr({

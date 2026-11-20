@@ -1,6 +1,6 @@
 import { statfs } from "node:fs/promises";
 import { dirname } from "node:path";
-import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import { loadCollectionPolicy } from "./policy.ts";
 
@@ -22,13 +22,17 @@ async function filesystemAvailableBytes(
   let probePath = path;
   while (true) {
     const currentPath = probePath;
-    const measured = await fromAsyncThrowable(() => statfs(currentPath))();
+    const measured = await Result.tryPromise({
+      try: () => statfs(currentPath),
+      catch: (e: unknown) => e,
+    });
     if (measured.isOk())
-      return ok(measured.value.bavail * measured.value.bsize);
+      return Result.ok(measured.value.bavail * measured.value.bsize);
     const code = errorCode(measured.error);
-    if (code !== "ENOENT" && code !== "ENOTDIR") return err(measured.error);
+    if (code !== "ENOENT" && code !== "ENOTDIR")
+      return Result.err(measured.error);
     const parent = dirname(probePath);
-    if (parent === probePath) return err(measured.error);
+    if (parent === probePath) return Result.err(measured.error);
     probePath = parent;
   }
 }
@@ -42,19 +46,20 @@ export async function loadGraveyardAgePolicy(
   },
 ): Promise<Result<GraveyardAgePolicy, unknown>> {
   const loaded = await loadCollectionPolicy(options?.policyPath);
-  if (loaded.isErr()) return err(loaded.error);
+  if (loaded.isErr()) return Result.err(loaded.error);
 
   const probe = options?.availableBytes;
   const available =
     probe === undefined
       ? await filesystemAvailableBytes(graveyardPath)
-      : await fromAsyncThrowable(() =>
-          Promise.resolve().then(() => probe(graveyardPath)),
-        )();
-  if (available.isErr()) return err(available.error);
+      : await Result.tryPromise({
+          try: () => Promise.resolve().then(() => probe(graveyardPath)),
+          catch: (e: unknown) => e,
+        });
+  if (available.isErr()) return Result.err(available.error);
   const availableBytes = available.value;
   if (!Number.isFinite(availableBytes) || availableBytes < 0)
-    return err(
+    return Result.err(
       new Error("graveyard available-bytes probe returned an invalid value"),
     );
 
@@ -62,11 +67,11 @@ export async function loadGraveyardAgePolicy(
     availableBytes / GIB,
   );
   if (minimumAgeMinutes < loaded.value.undoWindowMinutes)
-    return err(
+    return Result.err(
       new Error("graveyard minimum age must not undercut its undo window"),
     );
 
-  return ok({
+  return Result.ok({
     minimumAgeMinutes,
     undoWindowMinutes: loaded.value.undoWindowMinutes,
   });

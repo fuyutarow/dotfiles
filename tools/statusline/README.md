@@ -269,16 +269,16 @@ outside this scaffolding step.
 ## Exact source import list
 
 - `src/ansi.ts`:
-- `src/bounded.ts`: `node:child_process`, `node:fs`, `node:path`, `neverthrow`, `./zod.ts`
-- `src/build-dataframe.ts`: `node:fs/promises`, `node:path`, `neverthrow`, `./session-status.ts`, `./dataframe.ts`, `./identity.ts`, `./rate-limits.ts`, `./model-context.ts`, `./repo-state.ts`, `./host-load.ts`, `./dispatch-runs.ts`, `./dispatch-warning.ts`, `./storage.ts`, `./zod.ts`, `./dispatch-state.ts`, `./bounded.ts`, `./codex-rate.ts`, `./jev-usage.ts`
+- `src/bounded.ts`: `node:child_process`, `node:fs`, `node:path`, `@dotfiles/shared/src/result.ts`, `./zod.ts`
+- `src/build-dataframe.ts`: `node:fs/promises`, `node:path`, `@dotfiles/shared/src/result.ts`, `./session-status.ts`, `./dataframe.ts`, `./identity.ts`, `./rate-limits.ts`, `./model-context.ts`, `./repo-state.ts`, `./host-load.ts`, `./dispatch-runs.ts`, `./dispatch-warning.ts`, `./storage.ts`, `./zod.ts`, `./dispatch-state.ts`, `./bounded.ts`, `./codex-rate.ts`, `./jev-usage.ts`
 - `src/cgroup-memory.ts`:
-- `src/dataframe.ts`: `neverthrow`, `./host-load.ts`, `./storage.ts`, `./identity.ts`, `./rate-limits.ts`, `./dispatch-runs.ts`
+- `src/dataframe.ts`: `@dotfiles/shared/src/result.ts`, `./host-load.ts`, `./storage.ts`, `./identity.ts`, `./rate-limits.ts`, `./dispatch-runs.ts`
 - `src/dispatch-runs.ts`: `./zod.ts`, `./core-runs.ts`, `./agx-snapshot.ts`, `./dispatch-display.ts`
 - `src/dispatch-warning.ts`: `node:os`, `./zod.ts`
-- `src/dispatch-state.ts`: `neverthrow`, `./zod.ts`, `./dispatch-display.ts`, `./dispatch-runs.ts`
+- `src/dispatch-state.ts`: `@dotfiles/shared/src/result.ts`, `./zod.ts`, `./dispatch-display.ts`, `./dispatch-runs.ts`
 - `src/format.ts`: `./ansi.ts`, `./prompt-stamp.ts`, `./dataframe.ts`, `./model-context.ts`, `./rate-limits.ts`, `./dispatch-runs.ts`, `./host-load.ts`
-- `src/host-load.ts`: `node:child_process`, `node:fs`, `node:path`, `node:os`, `neverthrow`, `./storage.ts`, `./cgroup-memory.ts`, `./zod.ts`, `./ansi.ts`, `./bounded.ts`
-- `src/identity.ts`: `node:fs`, `node:net`, `neverthrow`, `./zod.ts`, `./bounded.ts`
+- `src/host-load.ts`: `node:child_process`, `node:fs`, `node:path`, `node:os`, `@dotfiles/shared/src/result.ts`, `./storage.ts`, `./cgroup-memory.ts`, `./zod.ts`, `./ansi.ts`, `./bounded.ts`
+- `src/identity.ts`: `node:fs`, `node:net`, `@dotfiles/shared/src/result.ts`, `./zod.ts`, `./bounded.ts`
 - `src/live.ts`:
 - `src/session-status.ts`: (types only)
 - `src/adapters/claude-statusline.ts`: `../bounded.ts`, `../zod.ts`, `../session-status.ts`
@@ -286,13 +286,13 @@ outside this scaffolding step.
 - `src/jobs.ts`: `./prompt-stamp.ts`
 - `src/model-context.ts`: `./ansi.ts`, `./dataframe.ts`
 - `src/prompt-stamp.ts`: `node:os`
-- `src/rate-limits.ts`: `neverthrow`, `./zod.ts`, `./prompt-stamp.ts`, `./ansi.ts`, `./dataframe.ts`
+- `src/rate-limits.ts`: `@dotfiles/shared/src/result.ts`, `./zod.ts`, `./prompt-stamp.ts`, `./ansi.ts`, `./dataframe.ts`
 - `src/repo-state.ts`: `./bounded.ts`, `./model-context.ts`
 - `src/statusline.ts`: `node:fs/promises`, `cleye`, `./ansi.ts`, `./bounded.ts`, `./zod.ts`, `./adapters/claude-statusline.ts`, `./adapters/codex-rollout.ts`, `./session-status.ts`, `./prompt-stamp.ts`, `./format.ts`, `./build-dataframe.ts`, `./codex-rate.ts`, `./host-load.ts`, `./model-context.ts`, `./rate-limits.ts`, `./live.ts`, `./dataframe.ts`
-- `src/storage.ts`: `node:fs`, `node:path`, `neverthrow`, `../../shared/src/storage-headroom.ts`, `./zod.ts`, `./bounded.ts`, `./ansi.ts`
-- `src/zod.ts`: `neverthrow`, `../../shared/src/zod.ts`
+- `src/storage.ts`: `node:fs`, `node:path`, `@dotfiles/shared/src/result.ts`, `../../shared/src/storage-headroom.ts`, `./zod.ts`, `./bounded.ts`, `./ansi.ts`
+- `src/zod.ts`: `@dotfiles/shared/src/result.ts`, `../../shared/src/zod.ts`
 
-Imports resolve only within this package and `tools/shared/`, plus builtins and `neverthrow`.
+Imports resolve only within this package and `tools/shared/`, plus builtins.
 No source module imports agent code or another tool package.
 
 ## Verification

@@ -1,7 +1,7 @@
 // Consumer: owner shell and machine callers; one versioned JSON result, stderr progress.
 import { lstat, realpath, statfs } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../shared/src/result.ts";
 import { match } from "ts-pattern";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import type { Holder } from "@dotfiles/shared/src/dir-lock.ts";
@@ -228,179 +228,198 @@ export async function freeGraveyard(
   };
   let filesystemPath = root;
   let before: number | undefined;
-  const attempt = await fromAsyncThrowable(async () => {
-    let location = await fromAsyncThrowable(() => lstat(filesystemPath))();
-    const inspectLocation = () => lstat(filesystemPath);
-    const rootExists = location.isOk();
-    while (location.isErr() && dirname(filesystemPath) !== filesystemPath) {
-      check();
-      filesystemPath = dirname(filesystemPath);
-      location = await fromAsyncThrowable(inspectLocation)();
-    }
-    if (location.isErr()) {
-      result.outcome = "failed";
-      result.errors.push(errorMessage(location.error));
-      return;
-    }
-    const fs = await statfs(filesystemPath);
-    result.filesystem = {
-      path: filesystemPath,
-      device: String(location.value.dev),
-      type: `0x${fs.type.toString(16)}`,
-    };
-    before = await freeAt(filesystemPath);
-    log(
-      `disk:free: root ${JSON.stringify(root)}; filesystem ${JSON.stringify(result.filesystem)}`,
-    );
-    if (!rootExists) return;
-    const initialRoot = location.value;
-    if (!initialRoot.isDirectory() || initialRoot.isSymbolicLink()) {
-      result.outcome = "failed";
-      result.errors.push("graveyard root must be a real directory");
-      return;
-    }
-    const canonicalRoot = await realpath(root);
-    // Discovery completes before waiting: no candidates from later writers are added.
-    const snapshot = await enumerateRipPayloads(
-      root,
-      undefined,
-      now,
-      0,
-      undoMs,
-      checkTime,
-    );
-    const rows = snapshot.payloads.filter(
-      (row) => row.candidate.path !== join(root, ".record"),
-    );
-    for (const row of rows) {
-      checkTime();
-      accountHeld(row);
-    }
-    const removeWaiter = await registerForegroundWaiter(
-      options.state ?? stateDir(env),
-    );
-    await using _waiter = { [Symbol.asyncDispose]: removeWaiter };
-    const lock = await waitForLock(
-      "free",
-      options.state ?? stateDir(env),
-      log,
-      Math.max(
-        0,
-        Math.min(
-          options.lockWaitS ?? FREE_LOCK_WAIT_S,
-          FREE_LOCK_WAIT_S,
-          (deadline - clock()) / 1000,
-        ),
-      ),
-    );
-    if (lock.release === null) {
-      result.outcome = "busy";
-      result.lock_holder = lock.holder ?? null;
-      result.lock_elapsed_ms = lock.elapsed_ms ?? 0;
-      result.errors.push(lock.error ?? "reclaim lock unavailable");
-      return;
-    }
-    using _lock = { [Symbol.dispose]: lock.release };
-    checkTime();
-    const unchanged = async (row: Payload, path: string): Promise<boolean> => {
-      check();
-      const currentRoot = await lstat(root);
-      const current = await lstat(path);
-      const parent = await realpath(dirname(path));
-      const same =
-        currentRoot.dev === initialRoot.dev &&
-        currentRoot.ino === initialRoot.ino &&
-        current.dev === initialRoot.dev &&
-        parent === join(canonicalRoot, relative(root, dirname(path))) &&
-        identity(current) === row.identity;
-      if (!same) {
-        skip("changed", path);
-        return false;
+  const attempt = await Result.tryPromise({
+    try: async () => {
+      let location = await Result.tryPromise({
+        try: () => lstat(filesystemPath),
+        catch: (e: unknown) => e,
+      });
+      const inspectLocation = () => lstat(filesystemPath);
+      const rootExists = location.isOk();
+      while (location.isErr() && dirname(filesystemPath) !== filesystemPath) {
+        check();
+        filesystemPath = dirname(filesystemPath);
+        location = await Result.tryPromise({
+          try: () => inspectLocation(),
+          catch: (e: unknown) => e,
+        });
       }
-      const burial = await ripBurialTime(root, path, undefined, checkTime);
-      if (burial === undefined) {
-        skip("unknown_burial", path);
-        return false;
-      }
-      if (now - burial < undoMs) {
-        accountHeld({ ...row, hold: "undo", time: burial });
-        return false;
-      }
-      if (burial !== row.time) {
-        skip("changed", path);
-        return false;
-      }
-      return true;
-    };
-    const act = async (row: Payload): Promise<void> => {
-      const path = row.candidate.path;
-      if (row.hold !== undefined || path === null) return;
-      if (!(await unchanged(row, path))) return;
-      const current = await lstat(path);
-      const owner = options.owner?.(path)?.uid ?? current.uid;
-      if (owner !== (process.getuid?.() ?? 0)) {
-        skip("foreign_uid", path);
+      if (location.isErr()) {
+        result.outcome = "failed";
+        result.errors.push(errorMessage(location.error));
         return;
       }
-      // Share rip-expire's graveyard process rule and static protection in removeTree.
-      const removed = await removeTree(path, {
-        uid: process.getuid?.() ?? 0,
-        graveyard: true,
-        signal,
-        bytesKind: "logical",
-        measureFilesystem: false,
-        progress: false,
-        allowVisit,
-        beforeUnlink: () => unchanged(row, path),
-        ...(options.owner === undefined ? {} : { owner: options.owner }),
-        ...(options.immutable === undefined
-          ? {}
-          : { immutable: options.immutable }),
-        protection: {
-          ownerTarget: "delete",
-          processes: options.processes?.(),
-          protectedPaths: options.config.protected ?? [],
-        },
-      });
-      result.unlinked_bytes += removed.bytes_freed;
-      if (removed.ok) result.deleted_payloads.push(row.candidate.id);
-      else if (removed.entries_removed > 0) {
-        result.partial_payloads.push({
-          path,
-          unlinked_bytes: removed.bytes_freed,
-        });
-        log(
-          `disk:free: partially deleted ${JSON.stringify(path)}: ${removed.bytes_freed} logical bytes unlinked`,
-        );
+      const fs = await statfs(filesystemPath);
+      result.filesystem = {
+        path: filesystemPath,
+        device: String(location.value.dev),
+        type: `0x${fs.type.toString(16)}`,
+      };
+      before = await freeAt(filesystemPath);
+      log(
+        `disk:free: root ${JSON.stringify(root)}; filesystem ${JSON.stringify(result.filesystem)}`,
+      );
+      if (!rootExists) return;
+      const initialRoot = location.value;
+      if (!initialRoot.isDirectory() || initialRoot.isSymbolicLink()) {
+        result.outcome = "failed";
+        result.errors.push("graveyard root must be a real directory");
+        return;
       }
-      const reasons = new Set<SkipReason>(
-        removed.refused.map((refusal) =>
-          refusal.reason === "entry is owned by another uid"
-            ? "foreign_uid"
-            : "protected",
+      const canonicalRoot = await realpath(root);
+      // Discovery completes before waiting: no candidates from later writers are added.
+      const snapshot = await enumerateRipPayloads(
+        root,
+        undefined,
+        now,
+        0,
+        undoMs,
+        checkTime,
+      );
+      const rows = snapshot.payloads.filter(
+        (row) => row.candidate.path !== join(root, ".record"),
+      );
+      for (const row of rows) {
+        checkTime();
+        accountHeld(row);
+      }
+      const removeWaiter = await registerForegroundWaiter(
+        options.state ?? stateDir(env),
+      );
+      await using _waiter = { [Symbol.asyncDispose]: removeWaiter };
+      const lock = await waitForLock(
+        "free",
+        options.state ?? stateDir(env),
+        log,
+        Math.max(
+          0,
+          Math.min(
+            options.lockWaitS ?? FREE_LOCK_WAIT_S,
+            FREE_LOCK_WAIT_S,
+            (deadline - clock()) / 1000,
+          ),
         ),
       );
-      for (const reason of reasons) skip(reason, path);
-      result.errors.push(
-        ...removed.errors.map((error) => `${error.path}: ${error.error}`),
-      );
-      log(
-        `disk:free: ${JSON.stringify(path)}: ${removed.bytes_freed} logical bytes unlinked`,
-      );
-    };
-    const tryAct = async (row: Payload): Promise<void> => {
-      const acted = await fromAsyncThrowable(() => act(row))();
-      if (acted.isOk()) return;
-      signal.throwIfAborted();
-      skip("unreadable", row.candidate.path ?? root, errorMessage(acted.error));
-    };
-    for (const row of rows) {
-      if (result.unlinked_bytes >= requested) break;
-      if (row.hold !== undefined) continue;
-      check();
-      await tryAct(row);
-    }
-  })();
+      if (lock.release === null) {
+        result.outcome = "busy";
+        result.lock_holder = lock.holder ?? null;
+        result.lock_elapsed_ms = lock.elapsed_ms ?? 0;
+        result.errors.push(lock.error ?? "reclaim lock unavailable");
+        return;
+      }
+      using _lock = { [Symbol.dispose]: lock.release };
+      checkTime();
+      const unchanged = async (
+        row: Payload,
+        path: string,
+      ): Promise<boolean> => {
+        check();
+        const currentRoot = await lstat(root);
+        const current = await lstat(path);
+        const parent = await realpath(dirname(path));
+        const same =
+          currentRoot.dev === initialRoot.dev &&
+          currentRoot.ino === initialRoot.ino &&
+          current.dev === initialRoot.dev &&
+          parent === join(canonicalRoot, relative(root, dirname(path))) &&
+          identity(current) === row.identity;
+        if (!same) {
+          skip("changed", path);
+          return false;
+        }
+        const burial = await ripBurialTime(root, path, undefined, checkTime);
+        if (burial === undefined) {
+          skip("unknown_burial", path);
+          return false;
+        }
+        if (now - burial < undoMs) {
+          accountHeld({ ...row, hold: "undo", time: burial });
+          return false;
+        }
+        if (burial !== row.time) {
+          skip("changed", path);
+          return false;
+        }
+        return true;
+      };
+      const act = async (row: Payload): Promise<void> => {
+        const path = row.candidate.path;
+        if (row.hold !== undefined || path === null) return;
+        if (!(await unchanged(row, path))) return;
+        const current = await lstat(path);
+        const owner = options.owner?.(path)?.uid ?? current.uid;
+        if (owner !== (process.getuid?.() ?? 0)) {
+          skip("foreign_uid", path);
+          return;
+        }
+        // Share rip-expire's graveyard process rule and static protection in removeTree.
+        const removed = await removeTree(path, {
+          uid: process.getuid?.() ?? 0,
+          graveyard: true,
+          signal,
+          bytesKind: "logical",
+          measureFilesystem: false,
+          progress: false,
+          allowVisit,
+          beforeUnlink: () => unchanged(row, path),
+          ...(options.owner === undefined ? {} : { owner: options.owner }),
+          ...(options.immutable === undefined
+            ? {}
+            : { immutable: options.immutable }),
+          protection: {
+            ownerTarget: "delete",
+            processes: options.processes?.(),
+            protectedPaths: options.config.protected ?? [],
+          },
+        });
+        result.unlinked_bytes += removed.bytes_freed;
+        if (removed.ok) result.deleted_payloads.push(row.candidate.id);
+        else if (removed.entries_removed > 0) {
+          result.partial_payloads.push({
+            path,
+            unlinked_bytes: removed.bytes_freed,
+          });
+          log(
+            `disk:free: partially deleted ${JSON.stringify(path)}: ${removed.bytes_freed} logical bytes unlinked`,
+          );
+        }
+        const reasons = new Set<SkipReason>(
+          removed.refused.map((refusal) =>
+            refusal.reason === "entry is owned by another uid"
+              ? "foreign_uid"
+              : "protected",
+          ),
+        );
+        for (const reason of reasons) skip(reason, path);
+        result.errors.push(
+          ...removed.errors.map((error) => `${error.path}: ${error.error}`),
+        );
+        log(
+          `disk:free: ${JSON.stringify(path)}: ${removed.bytes_freed} logical bytes unlinked`,
+        );
+      };
+      const tryAct = async (row: Payload): Promise<void> => {
+        const acted = await Result.tryPromise({
+          try: () => act(row),
+          catch: (e: unknown) => e,
+        });
+        if (acted.isOk()) return;
+        signal.throwIfAborted();
+        skip(
+          "unreadable",
+          row.candidate.path ?? root,
+          errorMessage(acted.error),
+        );
+      };
+      for (const row of rows) {
+        if (result.unlinked_bytes >= requested) break;
+        if (row.hold !== undefined) continue;
+        check();
+        await tryAct(row);
+      }
+    },
+    catch: (e: unknown) => e,
+  });
   if (attempt.isErr()) {
     result.u_protected_bytes_complete = false;
     if (!signal.aborted) {
@@ -413,7 +432,10 @@ export async function freeGraveyard(
     result.skip_counts.budget += 1;
   }
   if (before !== undefined) {
-    const after = await fromAsyncThrowable(() => freeAt(filesystemPath))();
+    const after = await Result.tryPromise({
+      try: () => freeAt(filesystemPath),
+      catch: (e: unknown) => e,
+    });
     if (after.isOk()) result.free_delta_bytes = after.value - before;
     else {
       result.outcome = "failed";

@@ -8,7 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
-import { fromAsyncThrowable } from "neverthrow";
+import { Result } from "../../../shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { acquirePlanLock } from "../lib/plan-lock.ts";
 import { defaultScanCacheDir } from "../lib/scan-cache.ts";
@@ -46,7 +46,10 @@ async function loadCursor(
     seen: [],
     failed: [],
   };
-  const read = await fromAsyncThrowable(() => readFile(file, "utf8"))();
+  const read = await Result.tryPromise({
+    try: () => readFile(file, "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (read.isErr()) return fresh;
   const parsed = jsonOf(Cursor).safeParse(read.value);
   if (!parsed.success || parsed.data.identity !== identity) return fresh;
@@ -133,16 +136,19 @@ export async function discoverBuilds(
   ) {
     const entry = state.pending[0];
     if (entry === undefined) break;
-    const children = await fromAsyncThrowable(async () => {
-      const current = await lstat(entry.path);
-      if (
-        !current.isDirectory() ||
-        current.dev !== stat.dev ||
-        (await realpath(entry.path)) !== entry.path
-      )
-        return [];
-      return readdir(entry.path, { withFileTypes: true });
-    })();
+    const children = await Result.tryPromise({
+      try: async () => {
+        const current = await lstat(entry.path);
+        if (
+          !current.isDirectory() ||
+          current.dev !== stat.dev ||
+          (await realpath(entry.path)) !== entry.path
+        )
+          return [];
+        return readdir(entry.path, { withFileTypes: true });
+      },
+      catch: (e: unknown) => e,
+    });
     if (children.isErr()) {
       ctx.log(
         `build discovery skipped ${entry.path}: ${String(children.error)}`,

@@ -1,5 +1,5 @@
 import type { AgxJobRows } from "./agx-job-runs.ts";
-import type { Result } from "neverthrow";
+import type { Result } from "@dotfiles/shared/src/result.ts";
 import type { MemReading } from "./host-load.ts";
 import type { DiskEntry, TmpEntry, TmpfsReading } from "./storage.ts";
 import type { RcState } from "./identity.ts";

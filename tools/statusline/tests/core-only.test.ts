@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { workspaceCounts } from "./support/workspace-counts.ts";
 import { agxRouteRunsAsync } from "../src/dispatch-runs.ts";
 import { routeLines } from "../src/dispatch-display.ts";
-import { ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { render } from "../src/format.ts";
 import * as cp from "node:child_process";
 import { fleetLine } from "../src/fleet-line.ts";
@@ -133,11 +133,11 @@ test("fixed core outputs are rendered verbatim; bf3bb781 has no working row and 
     rc: "off",
     rlModel: [],
 
-    routes: ok(scan),
+    routes: Result.ok(scan),
     vram: undefined,
-    disks: ok([]),
-    cpuPct: ok(0),
-    ram: ok({ pct: 0, frac: "0/1G" }),
+    disks: Result.ok([]),
+    cpuPct: Result.ok(0),
+    ram: Result.ok({ pct: 0, frac: "0/1G" }),
   });
   expect(out).toContain("+11 workers outside session here");
   expect(out).not.toContain("outside-home 2");
@@ -253,11 +253,11 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
       rc: "off",
       rlModel: [],
 
-      routes: ok(inventory),
+      routes: Result.ok(inventory),
       vram: undefined,
-      disks: ok([]),
-      cpuPct: ok(0),
-      ram: ok({ pct: 0, frac: "0/1G" }),
+      disks: Result.ok([]),
+      cpuPct: Result.ok(0),
+      ram: Result.ok({ pct: 0, frac: "0/1G" }),
     },
     { layout: "shared" },
   );
@@ -282,11 +282,11 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
       rc: "off",
       rlModel: [],
 
-      routes: ok(ambient),
+      routes: Result.ok(ambient),
       vram: undefined,
-      disks: ok([]),
-      cpuPct: ok(0),
-      ram: ok({ pct: 0, frac: "0/1G" }),
+      disks: Result.ok([]),
+      cpuPct: Result.ok(0),
+      ram: Result.ok({ pct: 0, frac: "0/1G" }),
     },
     { layout: "shared" },
   );
@@ -311,11 +311,11 @@ test("Codex watch scope keeps both dispatcher workers visible beside a Claude se
       rc: "off",
       rlModel: [],
 
-      routes: ok(emptyInventory),
+      routes: Result.ok(emptyInventory),
       vram: undefined,
-      disks: ok([]),
-      cpuPct: ok(0),
-      ram: ok({ pct: 0, frac: "0/1G" }),
+      disks: Result.ok([]),
+      cpuPct: Result.ok(0),
+      ram: Result.ok({ pct: 0, frac: "0/1G" }),
     },
     { layout: "shared" },
   );

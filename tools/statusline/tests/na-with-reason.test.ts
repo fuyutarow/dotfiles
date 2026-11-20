@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { buildDataframe } from "../src/build-dataframe.ts";
 import { render } from "../src/format.ts";
 import { publishSnapshots } from "../src/sampler.ts";
@@ -286,7 +286,7 @@ test("snapshot publication composes same-session fleet Claude with cached Codex 
         codexRate: () => {
           codexReads += 1;
           return Promise.resolve(
-            ok({
+            Result.ok({
               windows: [{ minutes: 10080, percent: 8, reset: codexReset }],
               mtimeMs: now,
             }),

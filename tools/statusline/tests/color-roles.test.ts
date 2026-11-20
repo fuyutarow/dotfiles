@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { err, ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { rateRow } from "../src/rate-limits.ts";
 import { memSegment, sysSegment } from "../src/host-display.ts";
 import { type DiskReading } from "../src/storage.ts";
@@ -152,10 +152,10 @@ test.each([
 ])("Sys percent %s keeps names plain and details dim", (pct, color) => {
   const text = String(pct).padStart(2);
   const row = sysSegment(
-    ok(pct),
-    ok({ pct, frac: "13.1/16.0G" }),
-    ok({ pct, frac: "3.5/12.0G" }),
-    ok([disk]),
+    Result.ok(pct),
+    Result.ok({ pct, frac: "13.1/16.0G" }),
+    Result.ok({ pct, frac: "3.5/12.0G" }),
+    Result.ok([disk]),
     [],
   );
   expect(row).toBe(
@@ -165,10 +165,10 @@ test.each([
 
 test("Sys n/a values and reasons share the Rate roles", () => {
   const row = sysSegment(
-    err("cpu"),
-    err("ram"),
-    err("gpu"),
-    ok([{ kind: "miss", label: "Disk /", why: "disk" }]),
+    Result.err("cpu"),
+    Result.err("ram"),
+    Result.err("gpu"),
+    Result.ok([{ kind: "miss", label: "Disk /", why: "disk" }]),
   );
   for (const [label, why] of [
     ["CPU", "cpu"],
@@ -183,7 +183,13 @@ test("Sys n/a values and reasons share the Rate roles", () => {
   expect(row).not.toContain(`VRAM ${amber}n/a${reset}`);
   expect(row).not.toContain(`VRAM ${amber}n/a${reset}`);
   expect(
-    sysSegment(err("cpu"), err("ram"), undefined, err("storage"), []),
+    sysSegment(
+      Result.err("cpu"),
+      Result.err("ram"),
+      undefined,
+      Result.err("storage"),
+      [],
+    ),
   ).toEndWith(`Disk ${amber}n/a${reset} ${dim}(storage)${reset}`);
   expect(diskSegment({ ...disk, freeG: undefined })).toBe(
     `Disk / ${amber}n/a${reset} ${dim}(invalid free space reading)${reset}`,
@@ -228,10 +234,10 @@ test("GPU current value is colored and stale detail is secondary", () => {
 const gpuRow = (gpu: { gpuNow?: number }) =>
   Bun.stripANSI(
     sysSegment(
-      ok(1),
-      ok({ pct: 1, frac: "1/2G" }),
-      ok({ pct: 5, frac: "1/2G", ...gpu }),
-      ok([]),
+      Result.ok(1),
+      Result.ok({ pct: 1, frac: "1/2G" }),
+      Result.ok({ pct: 5, frac: "1/2G", ...gpu }),
+      Result.ok([]),
       [],
     ),
   );

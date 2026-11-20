@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { err, ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
 import { buildDataframe } from "../src/build-dataframe.ts";
 import { render } from "../src/format.ts";
@@ -39,22 +39,22 @@ async function renderFixture(wfOn: boolean): Promise<string> {
           modelCapsWhy: undefined,
           wfOn,
         }),
-      agentName: () => Promise.resolve(ok("fixture-agent")),
+      agentName: () => Promise.resolve(Result.ok("fixture-agent")),
       rcState: () => Promise.resolve("on"),
       repoState: () =>
         Promise.resolve({ branch: "fixture-branch", branchWhy: undefined }),
       hostLoad: () =>
         Promise.resolve({
-          cpuPct: ok(12),
-          ram: ok({ frac: "2.0/8.0G", pct: 25 }),
+          cpuPct: Result.ok(12),
+          ram: Result.ok({ frac: "2.0/8.0G", pct: 25 }),
           vram: undefined,
         }),
-      routes: () => Promise.resolve(ok({ runs: [], unreadable: 0 })),
+      routes: () => Promise.resolve(Result.ok({ runs: [], unreadable: 0 })),
       dispatchWarning: () => Promise.resolve(undefined),
-      storage: () => Promise.resolve(ok([])),
+      storage: () => Promise.resolve(Result.ok([])),
       herdrReport: () => Promise.resolve(),
-      codexRate: () => Promise.resolve(ok(undefined)),
-      jevUsage: () => Promise.resolve(err("fixture unavailable")),
+      codexRate: () => Promise.resolve(Result.ok(undefined)),
+      jevUsage: () => Promise.resolve(Result.err("fixture unavailable")),
       recoverHealth: () => Promise.resolve(undefined),
     },
   });

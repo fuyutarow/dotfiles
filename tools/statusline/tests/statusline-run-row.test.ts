@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fromThrowable } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 // Historical marker strings are fixture inputs only, never a production schema.
 const serializeActiveMarker = (value: unknown) => ({
   success: true,
@@ -192,9 +192,11 @@ async function render(
                 "",
               );
               const id = source.run_id ?? name.replace(/\.json$/u, "");
-              const alive = fromThrowable((pid: number) =>
-                process.kill(pid, 0),
-              )(source.pid).isOk();
+              const pid: number = source.pid;
+              const alive = Result.try({
+                try: () => process.kill(pid, 0),
+                catch: (e: unknown) => e,
+              }).isOk();
               const progressPath = join(active, `${id}.progress.json`);
               let vendorSession = source.worker_session ?? null;
               let lastProgressPath: string | null = null;

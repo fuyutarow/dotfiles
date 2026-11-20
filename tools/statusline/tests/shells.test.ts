@@ -19,7 +19,7 @@ import {
 } from "../src/shells.ts";
 import { render } from "../src/format.ts";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
-import { ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 const root = mkdtempSync(join(tmpdir(), "shells-fixture-"));
 afterAll(() => {
@@ -64,9 +64,9 @@ test("one row per writing task, not per holder; finished tasks absent", async ()
     rc: "off" as const,
     rlModel: [],
     vram: undefined,
-    disks: ok([]),
-    cpuPct: ok(0),
-    ram: ok({ frac: "0/1G", pct: 0 }),
+    disks: Result.ok([]),
+    cpuPct: Result.ok(0),
+    ram: Result.ok({ frac: "0/1G", pct: 0 }),
     shells: scan,
   };
   expect(render(frame, { layout: "block" })).toContain("sh_running 1m30s");

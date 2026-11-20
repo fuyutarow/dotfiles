@@ -2,7 +2,7 @@
 // Fixture benchmark for the render coordinator. No host probes or cache writes are used.
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { err, ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
 import {
   buildDataframe,
@@ -68,7 +68,7 @@ const makeOptions = (): BuildDataframeOptions => ({
         }),
       ),
     agentName: (sid, hint) =>
-      measure("agentName", () => Promise.resolve(ok(hint ?? sid))),
+      measure("agentName", () => Promise.resolve(Result.ok(hint ?? sid))),
     rcState: () => measure("rcState", () => Promise.resolve("unknown")),
     repoState: () =>
       measure("repoState", () =>
@@ -77,21 +77,23 @@ const makeOptions = (): BuildDataframeOptions => ({
     hostLoad: () =>
       measure("hostLoad", () =>
         Promise.resolve({
-          cpuPct: err("fixture n/a"),
-          ram: err("fixture n/a"),
-          vram: err("fixture n/a"),
+          cpuPct: Result.err("fixture n/a"),
+          ram: Result.err("fixture n/a"),
+          vram: Result.err("fixture n/a"),
         }),
       ),
     routes: () =>
-      measure("routes", () => Promise.resolve(ok({ runs: [], unreadable: 0 }))),
+      measure("routes", () =>
+        Promise.resolve(Result.ok({ runs: [], unreadable: 0 })),
+      ),
     dispatchWarning: () =>
       measure("dispatchWarning", () => Promise.resolve("fixture warning")),
-    storage: () => measure("storage", () => Promise.resolve(ok([]))),
+    storage: () => measure("storage", () => Promise.resolve(Result.ok([]))),
     herdrReport: () => measure("herdrReport", () => Promise.resolve()),
     codexRate: () =>
-      measure("codexRate", () => Promise.resolve(err("fixture n/a"))),
+      measure("codexRate", () => Promise.resolve(Result.err("fixture n/a"))),
     jevUsage: () =>
-      measure("jevUsage", () => Promise.resolve(err("fixture n/a"))),
+      measure("jevUsage", () => Promise.resolve(Result.err("fixture n/a"))),
   },
 });
 for (let i = 0; i < renders; i++) {

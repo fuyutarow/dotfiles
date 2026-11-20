@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { execAsyncWithin, readJsonAsync, writeCacheAsync } from "./bounded.ts";
 import { z } from "./zod.ts";
 
@@ -36,8 +36,8 @@ export async function readRecoverHealthAsync(): Promise<
     RECOVER_HEALTH_CACHE,
     RecoverSnapshotSchema,
   );
-  if (snapshot === undefined) return err("recover health unavailable");
-  return ok(snapshot.health ?? undefined);
+  if (snapshot === undefined) return Result.err("recover health unavailable");
+  return Result.ok(snapshot.health ?? undefined);
 }
 
 /** Called only by the timer-owned sampler. */

@@ -1,4 +1,4 @@
-import { ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   account,
   agentNameAsync,
@@ -44,7 +44,7 @@ export const COLLECTOR_SOURCES: Sources = {
   liveAgxJobs: readAgxJobRuns,
   hostLoad: readHostLoadAsync,
   routes: async (sid, cwd) =>
-    ok(await agxRouteRunsAsync(process.env, sid, false, cwd)),
+    Result.ok(await agxRouteRunsAsync(process.env, sid, false, cwd)),
   dispatchWarning: async () =>
     (await collectAgxRouting()).map((stats) => dispatchWarning(stats)),
   storage: diskReadingsAsync,

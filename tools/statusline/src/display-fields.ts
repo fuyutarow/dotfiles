@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { err, ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import type { Dataframe } from "./dataframe.ts";
 import { render } from "./format.ts";
 import {
@@ -48,7 +48,7 @@ export async function prepareDisplayFields(
     const why = df.disks.isErr() ? df.disks.error : "disk not reported";
     const entries = df.disks.isOk() ? df.disks.value : [];
     if (labels.success)
-      df.disks = ok([
+      df.disks = Result.ok([
         ...entries,
         ...labels.data
           .filter((label) => !entries.some((disk) => disk.label === label))
@@ -89,7 +89,7 @@ export async function prepareDisplayFields(
   );
   if (df.vram === undefined && vramPresence.kind !== "unknown") {
     // A previously observed GPU disappearing is a failed observation, not a new machine.
-    df.vram = err("GPU unavailable");
+    df.vram = Result.err("GPU unavailable");
   }
   const pending = new Map<
     string,
@@ -97,7 +97,7 @@ export async function prepareDisplayFields(
   >();
   if (df.tmpfs === undefined) {
     const prior = await retainField("host:tmpfs", observed(undefined), store);
-    if (prior.kind !== "unknown") df.tmpfs = err("tmpfs unavailable");
+    if (prior.kind !== "unknown") df.tmpfs = Result.err("tmpfs unavailable");
   }
   const tmpInventory = await retainField(
     "tmp-inventory",

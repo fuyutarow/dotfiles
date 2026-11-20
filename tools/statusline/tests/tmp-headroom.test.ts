@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { statfs } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { err, ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   ESC,
   TMP_INODE_DENY_PCT,
@@ -37,7 +37,7 @@ function fixture(freeGiB: number, ffree: number): StatFsCounts {
     ffree,
   };
 }
-const read = (counts: StatFsCounts) => tmpEntry(ok(counts));
+const read = (counts: StatFsCounts) => tmpEntry(Result.ok(counts));
 
 describe("tmp reading", () => {
   test("bytes and inodes render as free amounts", () => {
@@ -76,7 +76,9 @@ describe("tmp reading", () => {
     );
   });
   test("a statfs failure is named, never a blank or a throw", async () => {
-    expect(plain(tmpSegment(tmpEntry(err("ENOENT"))))).toBe("tmp n/a (ENOENT)");
+    expect(plain(tmpSegment(tmpEntry(Result.err("ENOENT"))))).toBe(
+      "tmp n/a (ENOENT)",
+    );
     const [missing] = await tmpReadingsAsync("/missing-config", () =>
       statfs(join(tmpdir(), "statusline-tmp-headroom-no-such-path")),
     );
@@ -122,18 +124,26 @@ describe("tmp entry", () => {
   test("Sys renders fixture headroom and statfs failures beside disks", () => {
     const row = (entry: ReturnType<typeof tmpEntry>) =>
       plain(
-        sysSegment(ok(5), ok({ pct: 5, frac: "1/20G" }), undefined, ok([]), [
-          entry,
-        ]),
+        sysSegment(
+          Result.ok(5),
+          Result.ok({ pct: 5, frac: "1/20G" }),
+          undefined,
+          Result.ok([]),
+          [entry],
+        ),
       );
     expect(row(read(fixture(26.5, 1038090)))).toContain(
       "tmp 26.5GiB free · inodes 99% free",
     );
-    expect(row(tmpEntry(err("EIO")))).toContain("tmp n/a (EIO)");
+    expect(row(tmpEntry(Result.err("EIO")))).toContain("tmp n/a (EIO)");
     expect(
-      sysSegment(ok(5), ok({ pct: 5, frac: "1/20G" }), undefined, ok([]), [
-        read(fixture(26.5, 0)),
-      ]),
+      sysSegment(
+        Result.ok(5),
+        Result.ok({ pct: 5, frac: "1/20G" }),
+        undefined,
+        Result.ok([]),
+        [read(fixture(26.5, 0))],
+      ),
     ).toContain(`${ESC}[38;5;167m0%`);
   });
   test("bytes use the same warning boundary as inode use", () => {

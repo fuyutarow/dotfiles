@@ -3,7 +3,7 @@
 // is first loaded, which is process start for both consumers — the same moment as before.
 import { mkdir, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "./zod.ts";
 
 export const recoverInvalid = <T extends z.ZodType>(schema: T) =>
@@ -94,18 +94,20 @@ export async function execAsyncWithin(
   env?: NodeJS.ProcessEnv,
 ): Promise<Result<string, ExecFailure>> {
   const timeout = AbortSignal.timeout(boundMs);
-  const started = fromThrowable(() =>
-    Bun.spawn({
-      cmd: [file, ...args],
-      ...(env !== undefined ? { env } : {}),
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      signal: timeout,
-    }),
-  )();
+  const started = Result.try({
+    try: () =>
+      Bun.spawn({
+        cmd: [file, ...args],
+        ...(env !== undefined ? { env } : {}),
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        signal: timeout,
+      }),
+    catch: (e: unknown) => e,
+  });
   if (started.isErr())
-    return err({
+    return Result.err({
       why: failWhy(started.error, tool, boundMs),
       stderr: "",
       ran: true,
@@ -132,24 +134,28 @@ export async function execAsyncWithin(
   if (onAbort !== undefined) timeout.removeEventListener("abort", onAbort);
   if (outcome.kind === "timeout") {
     child.kill("SIGKILL");
-    return err({ why: `${tool} timeout ${boundMs}ms`, stderr: "", ran: true });
+    return Result.err({
+      why: `${tool} timeout ${boundMs}ms`,
+      stderr: "",
+      ran: true,
+    });
   }
   const { stdout, stderr, status } = outcome;
   const trimmed = stderr.trim();
   if (timeout.aborted)
-    return err({
+    return Result.err({
       why: `${tool} timeout ${boundMs}ms`,
       stderr: trimmed,
       ran: true,
     });
   if (status !== 0)
-    return err({
+    return Result.err({
       why: `${tool} exit ${status}`,
       stderr: trimmed,
       ran: true,
       stdout,
     });
-  return ok(stdout);
+  return Result.ok(stdout);
 }
 /** Apply a child bound and the remaining whole-render budget. */
 export function execAsyncRenderBounded(
@@ -162,7 +168,7 @@ export function execAsyncRenderBounded(
   const left = RENDER_BUDGET_MS - (performance.now() - RENDER_T0);
   if (left <= 0)
     return Promise.resolve(
-      err({
+      Result.err({
         why: `${tool} not run, render budget ${RENDER_BUDGET_MS}ms spent`,
         stderr: "",
         ran: false,

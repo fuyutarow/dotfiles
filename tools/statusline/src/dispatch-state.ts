@@ -1,4 +1,4 @@
-import { fromThrowable } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { z } from "./zod.ts";
 import { actionLine } from "./dispatch-display.ts";
 import type { RouteRun } from "./dispatch-runs.ts";
@@ -29,16 +29,18 @@ export function listingProgress(
   let ageSecs: number | undefined;
   if (p.at !== null) {
     const at = p.at;
-    ageSecs = fromThrowable(() =>
-      Math.max(
-        0,
-        Math.floor(
-          Temporal.Now.instant()
-            .since(Temporal.Instant.from(at))
-            .total("seconds"),
+    ageSecs = Result.try({
+      try: () =>
+        Math.max(
+          0,
+          Math.floor(
+            Temporal.Now.instant()
+              .since(Temporal.Instant.from(at))
+              .total("seconds"),
+          ),
         ),
-      ),
-    )().unwrapOr(undefined);
+      catch: (e: unknown) => e,
+    }).unwrapOr(undefined);
   }
   return {
     last: p.last === null ? "n/a" : (actionLine(p.last, cwd) ?? ""),

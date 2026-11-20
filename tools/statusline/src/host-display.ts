@@ -1,4 +1,4 @@
-import type { Result } from "neverthrow";
+import type { Result } from "@dotfiles/shared/src/result.ts";
 import {
   ESC,
   RST,
@@ -49,8 +49,8 @@ export function memSegment(
   return seg;
 }
 function gpuObservation(vram: Result<MemReading, string>) {
-  return vram.match(
-    (m) => {
+  return vram.match({
+    ok: (m) => {
       const utilization = gpuSegment(m);
       return observed(
         `${utilization}${roles.separator()}${memSegment("VRAM", m, false)}`,
@@ -58,12 +58,12 @@ function gpuObservation(vram: Result<MemReading, string>) {
         (m.stale?.secs ?? 0) * 1000,
       );
     },
-    (why) => {
+    err: (why) => {
       if (why.startsWith("⚠ GPU stalled since "))
         return observed(roles.value(why, "167"));
       return observed(undefined, why);
     },
-  );
+  });
 }
 // Disks: WHICH filesystems and at what free space they turn yellow/red are not decided here —
 // Every reading is a Result: ok renders the value, err renders `<label> n/a (<why>)` — see the
@@ -83,8 +83,8 @@ export function sysSegment(
   tmpfs?: Result<TmpfsReading, string>,
 ): string {
   const parts: string[] = [
-    cpu.match(
-      (v) => {
+    cpu.match({
+      ok: (v) => {
         const { text: pct, col } = pctFmt(v);
         return field(
           "cpu",
@@ -92,10 +92,10 @@ export function sysSegment(
           observed(`${roles.label("CPU")} ${roles.value(`${pct}%`, col)}`),
         );
       },
-      (why) => field("cpu", "CPU", observed(undefined, why)),
-    ),
-    ram.match(
-      (m) =>
+      err: (why) => field("cpu", "CPU", observed(undefined, why)),
+    }),
+    ram.match({
+      ok: (m) =>
         field(
           "ram",
           "RAM",
@@ -105,8 +105,8 @@ export function sysSegment(
             (m.stale?.secs ?? 0) * 1000,
           ),
         ),
-      (why) => field("ram", "RAM", observed(undefined, why)),
-    ),
+      err: (why) => field("ram", "RAM", observed(undefined, why)),
+    }),
     ...(vram === undefined ? [] : [field("gpu", "GPU", gpuObservation(vram))]),
     ...(tmpfs === undefined
       ? []
@@ -114,17 +114,17 @@ export function sysSegment(
           field(
             "tmpfs",
             "tmpfs",
-            tmpfs.match(
-              (reading) =>
+            tmpfs.match({
+              ok: (reading) =>
                 observed(
                   `tmpfs ${formatBytes(reading.availableBytes)} free · ${reading.freeInodes}i`,
                 ),
-              (why) => observed(undefined, why),
-            ),
+              err: (why) => observed(undefined, why),
+            }),
           ),
         ]),
-    ...disks.match(
-      (ds) =>
+    ...disks.match({
+      ok: (ds) =>
         ds.map((disk) => {
           let value: string | undefined;
           let why = "invalid free space reading";
@@ -137,8 +137,8 @@ export function sysSegment(
             value = diskSegment(disk);
           return field(`disk:${disk.label}`, disk.label, observed(value, why));
         }),
-      (why) => [field("disks", "Disk", observed(undefined, why))],
-    ),
+      err: (why) => [field("disks", "Disk", observed(undefined, why))],
+    }),
     ...tmp.map((entry) =>
       field(
         `tmp:${entry.label}`,

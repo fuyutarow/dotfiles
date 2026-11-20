@@ -2,7 +2,7 @@ import {
   FleetSessionSchema,
   type FleetSession,
 } from "@dotfiles/shared/src/fleet-session.ts";
-import { fromThrowable } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import type { Dataframe } from "./dataframe.ts";
 import { contextLabel } from "./model-context.ts";
 
@@ -13,9 +13,12 @@ type ClaudeRate = {
   sevenDayReset: number;
 };
 
-const instantEpoch = fromThrowable((value: string) =>
-  Math.floor(Temporal.Instant.from(value).epochMilliseconds / 1000),
-);
+const instantEpoch = (value: string) =>
+  Result.try({
+    try: () =>
+      Math.floor(Temporal.Instant.from(value).epochMilliseconds / 1000),
+    catch: (e: unknown) => e,
+  });
 
 function resetEpochs(
   value: string,

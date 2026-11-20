@@ -1,4 +1,4 @@
-import { err, ok, Err, Ok, type Result } from "neverthrow";
+import { Err, Ok, Result } from "@dotfiles/shared/src/result.ts";
 import type { SessionStatus } from "./session-status.ts";
 import type { Dataframe } from "./dataframe.ts";
 import type { HostLoad } from "./host-load.ts";
@@ -287,7 +287,9 @@ export async function buildDataframe(
       budget("agentName"),
       () =>
         sid === undefined
-          ? Promise.resolve(ok<string | undefined, string>(undefined))
+          ? Promise.resolve<Result<string | undefined, string>>(
+              Result.ok(undefined),
+            )
           : sources.agentName(sid, sessionNameHint),
       (value) =>
         publish(
@@ -320,7 +322,7 @@ export async function buildDataframe(
       budget("routes"),
       async (): Promise<Result<RouteScan, string> | undefined> =>
         options.sources?.routes === undefined
-          ? ok(await readCoreRuns(process.env, sid, cwd))
+          ? Result.ok(await readCoreRuns(process.env, sid, cwd))
           : sources.routes(sid, cwd),
       (routes) => publish({ routes }, ["agx"]),
     ),
@@ -370,7 +372,7 @@ export async function buildDataframe(
     },
     "account",
   );
-  const name = settled(nameResult, err("name unavailable"), "name");
+  const name = settled(nameResult, Result.err("name unavailable"), "name");
   const rc = settled(rcResult, "unknown", "rc");
   const repo = settled(
     repoResult,
@@ -380,10 +382,10 @@ export async function buildDataframe(
   const host = settled(
     hostResult,
     {
-      cpuPct: err("host load unavailable"),
-      ram: err("host load unavailable"),
-      vram: err("host load unavailable"),
-      tmpfs: err("host load unavailable"),
+      cpuPct: Result.err("host load unavailable"),
+      ram: Result.err("host load unavailable"),
+      vram: Result.err("host load unavailable"),
+      tmpfs: Result.err("host load unavailable"),
     },
     "host load",
   );
@@ -397,7 +399,7 @@ export async function buildDataframe(
   ) {
     const snapshot = await readCoreRuns(process.env, sid, cwd);
     if (snapshot.snapshotWhy === undefined) {
-      routes.value = ok({
+      routes.value = Result.ok({
         ...snapshot,
         snapshotAgeSecs: snapshot.snapshotAgeSecs,
       });
@@ -405,15 +407,19 @@ export async function buildDataframe(
     }
   }
   const warning = settled(warningResult, undefined, "dispatch warning");
-  const storage = settled(storageResult, err("storage unavailable"), "storage");
+  const storage = settled(
+    storageResult,
+    Result.err("storage unavailable"),
+    "storage",
+  );
   const codexRate = settled(
     codexRateResult,
-    err("codex rate unavailable"),
+    Result.err("codex rate unavailable"),
     "codex rate",
   );
   const jevUsage = settled(
     jevUsageResult,
-    err("Jev usage unavailable"),
+    Result.err("Jev usage unavailable"),
     "Jev usage",
   );
   const recoverHealth = settled(
@@ -436,7 +442,8 @@ export async function buildDataframe(
   const cpu = host.value.cpuPct;
   const ram = host.value.ram;
   const vram = host.value.vram;
-  const disks = storage.why === undefined ? storage.value : err(storage.why);
+  const disks =
+    storage.why === undefined ? storage.value : Result.err(storage.why);
   const wfOn = identity.value.wfOn && effort === "xhigh";
 
   const dataframe: Dataframe = {
@@ -501,9 +508,9 @@ export async function buildDataframe(
       const result = settled(liveAgxResult, undefined, "agx");
       return result.why === undefined
         ? result.value
-        : err(result.why.replace(/^agx /u, ""));
+        : Result.err(result.why.replace(/^agx /u, ""));
     })(),
-    routes: routes.why === undefined ? routes.value : err(routes.why),
+    routes: routes.why === undefined ? routes.value : Result.err(routes.why),
     dispatchWarning: warningFacts.dispatchWarning,
     dispatchWarningWhy: warning.why ?? warningFacts.dispatchWarningWhy,
     recoverHealth: healthFacts.recoverHealth,

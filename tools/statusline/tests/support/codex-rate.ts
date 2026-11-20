@@ -2,7 +2,7 @@ import { open, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { pad2 } from "../../src/prompt-stamp.ts";
 import { readJsonlTail } from "@dotfiles/shared/src/jsonl.ts";
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "../../src/zod.ts";
 import type { CodexRate } from "../../src/codex-rate.ts";
 const LiveRateEvent = z.object({
@@ -33,9 +33,9 @@ const LiveRateWindow = z.object({
 export async function readLiveCodexRate(
   path?: string,
 ): Promise<Result<CodexRate | undefined, string>> {
-  if (path === undefined) return ok(undefined);
+  if (path === undefined) return Result.ok(undefined);
   const tail = await readJsonlTail(path, 512 * 1024).catch(() => null);
-  if (tail === null) return err("live Codex rollout unreadable");
+  if (tail === null) return Result.err("live Codex rollout unreadable");
   const now = Temporal.Now.instant().epochMilliseconds;
   for (const line of tail.text.split("\n").toReversed()) {
     if (!line.includes('"token_count"')) continue;
@@ -67,13 +67,13 @@ export async function readLiveCodexRate(
       credit.balance !== undefined
         ? String(Math.round(Number(credit.balance)))
         : undefined;
-    return ok({
+    return Result.ok({
       windows,
       mtimeMs,
       ...(credits === undefined ? {} : { credits }),
     });
   }
-  return ok(undefined);
+  return Result.ok(undefined);
 }
 
 type TokenUsage = {

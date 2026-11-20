@@ -19,7 +19,7 @@ import { listingProgress } from "./dispatch-state.ts";
 import type { RouteRun } from "./dispatch-runs.ts";
 import { sysRow } from "./host-display.ts";
 import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
-import { fromThrowable } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { renderRows, type DisplayRows } from "./row-state.ts";
 import { version } from "../package.json";
 import { statuslineColumns, wrapThroughSys } from "./wrap.ts";
@@ -77,9 +77,10 @@ function liveRouteRuns(
   cacheAgeMs: number,
 ): RouteRun[] {
   return rows.map((row) => {
-    const startMs = fromThrowable(
-      () => Temporal.Instant.from(row.started_at ?? "").epochMilliseconds,
-    )().unwrapOr(undefined);
+    const startMs = Result.try({
+      try: () => Temporal.Instant.from(row.started_at ?? "").epochMilliseconds,
+      catch: (e: unknown) => e,
+    }).unwrapOr(undefined);
     const seconds =
       startMs === undefined
         ? row.elapsed_seconds + Math.max(0, cacheAgeMs) / 1000
@@ -135,7 +136,10 @@ export function render(
   const joinText = (t: string, seg: string) => (t !== "" ? t + SEP : "") + seg;
 
   const line1 = coloredHead(
-    fromThrowable(() => promptParts(df.cwd))().unwrapOr(undefined),
+    Result.try({
+      try: () => promptParts(df.cwd),
+      catch: (e: unknown) => e,
+    }).unwrapOr(undefined),
     field,
   );
 

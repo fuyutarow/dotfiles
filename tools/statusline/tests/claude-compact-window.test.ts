@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
 import { contextLabel, ctxSegment } from "../src/model-context.ts";
 import { buildDataframe } from "../src/build-dataframe.ts";
-import { ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 const ansi = new RegExp(`${String.fromCodePoint(27)}\\[[0-9;]*m`, "gu");
 const directory = mkdtempSync(
@@ -208,23 +208,23 @@ describe("Claude auto-compact window", () => {
             modelCapsWhy: undefined,
             wfOn: false,
           }),
-        agentName: () => Promise.resolve(ok(undefined)),
+        agentName: () => Promise.resolve(Result.ok(undefined)),
         rcState: () => Promise.resolve("off"),
         repoState: () =>
           Promise.resolve({ branch: undefined, branchWhy: undefined }),
 
         hostLoad: () =>
           Promise.resolve({
-            cpuPct: ok(0),
-            ram: ok({ frac: "0/1G", pct: 0 }),
+            cpuPct: Result.ok(0),
+            ram: Result.ok({ frac: "0/1G", pct: 0 }),
             vram: undefined,
           }),
         routes: () => Promise.resolve(undefined),
         dispatchWarning: () => Promise.resolve(undefined),
-        storage: () => Promise.resolve(ok([])),
+        storage: () => Promise.resolve(Result.ok([])),
         herdrReport: () => Promise.resolve(),
-        codexRate: () => Promise.resolve(ok(undefined)),
-        jevUsage: () => Promise.resolve(ok(undefined)),
+        codexRate: () => Promise.resolve(Result.ok(undefined)),
+        jevUsage: () => Promise.resolve(Result.ok(undefined)),
         recoverHealth: () => Promise.resolve(undefined),
       },
     });
@@ -248,23 +248,23 @@ describe("Claude auto-compact window", () => {
             modelCapsWhy: undefined,
             wfOn: false,
           }),
-        agentName: () => Promise.resolve(ok(undefined)),
+        agentName: () => Promise.resolve(Result.ok(undefined)),
         rcState: () => Promise.resolve("off"),
         repoState: () =>
           Promise.resolve({ branch: undefined, branchWhy: undefined }),
 
         hostLoad: () =>
           Promise.resolve({
-            cpuPct: ok(0),
-            ram: ok({ frac: "0/1G", pct: 0 }),
+            cpuPct: Result.ok(0),
+            ram: Result.ok({ frac: "0/1G", pct: 0 }),
             vram: undefined,
           }),
         routes: () => Promise.resolve(undefined),
         dispatchWarning: () => Promise.resolve(undefined),
-        storage: () => Promise.resolve(ok([])),
+        storage: () => Promise.resolve(Result.ok([])),
         herdrReport: () => Promise.resolve(),
-        codexRate: () => Promise.resolve(ok(undefined)),
-        jevUsage: () => Promise.resolve(ok(undefined)),
+        codexRate: () => Promise.resolve(Result.ok(undefined)),
+        jevUsage: () => Promise.resolve(Result.ok(undefined)),
         recoverHealth: () => Promise.resolve(undefined),
       },
     });

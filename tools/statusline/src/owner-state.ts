@@ -1,7 +1,7 @@
 // The sampler is the only writer. A render reads one small snapshot, never refreshes it.
 import { dirname, join, resolve } from "node:path";
 import { readFile, realpath, stat } from "node:fs/promises";
-import { err, ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "./zod.ts";
 import { MemReadingSchema } from "./host-model.ts";
 import { RecoverHealthSchema } from "./recover-health.ts";
@@ -31,7 +31,7 @@ export const resultSchema = <T extends z.ZodType>(value: T) =>
   ResultWireSchema.transform((wire, context) => {
     if (Object.hasOwn(wire, "error")) {
       const failure = ErrorTextSchema.safeParse(wire["error"]);
-      if (failure.success) return err(failure.data);
+      if (failure.success) return Result.err(failure.data);
       context.addIssue({ code: "custom", message: "invalid owner error" });
       return z.NEVER;
     }
@@ -42,7 +42,7 @@ export const resultSchema = <T extends z.ZodType>(value: T) =>
       context.addIssue({ code: "custom", message: "invalid owner value" });
       return z.NEVER;
     }
-    return ok<z.output<T>, string>(parsed.data);
+    return Result.ok(parsed.data);
   });
 const DiskSchema = z.union([
   z.object({ kind: z.literal("miss"), label: z.string(), why: z.string() }),
@@ -253,7 +253,7 @@ export function ownerSources(
       },
     agentName: async (sid) =>
       (await read(`name:${sid}`, resultSchema(z.string().optional()))) ??
-      ok(undefined),
+      Result.ok(undefined),
     rcState: async () =>
       (process.env["CLAUDE_CODE_BRIDGE_SESSION_ID"] ?? "") !== ""
         ? "on"
@@ -279,14 +279,14 @@ export function ownerSources(
     },
     liveAgxJobs: async () => {
       const field = (await pending)?.fields["liveAgxJobs"];
-      if (field === undefined) return err("sampler unavailable");
+      if (field === undefined) return Result.err("sampler unavailable");
       if (field.value === null) return void field.value;
       const age = Temporal.Now.instant().epochMilliseconds - field.at;
       if (age < 0 || age > 600_000)
-        return err(field.error ?? "sample older than 10m");
+        return Result.err(field.error ?? "sample older than 10m");
       return (
         (await read("liveAgxJobs", resultSchema(Rows))) ??
-        err("invalid worker listing")
+        Result.err("invalid worker listing")
       );
     },
     hostLoad: async () => {
@@ -298,11 +298,11 @@ export function ownerSources(
         cpuPct:
           (await read("cpuPct", resultSchema(z.number()))) ??
           legacy?.cpuPct ??
-          err("sampler unavailable"),
+          Result.err("sampler unavailable"),
         ram:
           (await read("ram", resultSchema(MemReadingSchema))) ??
           legacy?.ram ??
-          err("sampler unavailable"),
+          Result.err("sampler unavailable"),
         vram:
           (await read("vram", resultSchema(MemReadingSchema))) ?? legacy?.vram,
         tmpfs:
@@ -317,10 +317,10 @@ export function ownerSources(
     },
     storage: async () =>
       (await read("storage", resultSchema(z.array(DiskSchema)))) ??
-      err("sampler unavailable"),
+      Result.err("sampler unavailable"),
     codexRate: async () =>
       (await read("codexRate", resultSchema(RateSchema.optional()))) ??
-      ok(undefined),
+      Result.ok(undefined),
     jevUsage: async () =>
       (await read(
         "jevUsage",
@@ -338,18 +338,18 @@ export function ownerSources(
             }))
             .optional(),
         ),
-      )) ?? ok(undefined),
+      )) ?? Result.ok(undefined),
     recoverHealth: async () =>
       (await read(
         "recoverHealth",
         resultSchema(RecoverHealthSchema.optional()),
-      )) ?? err("sampler unavailable"),
+      )) ?? Result.err("sampler unavailable"),
     dispatchWarning: async () => {
       const error = (await pending)?.fields["dispatchWarning"]?.error;
-      if (error !== undefined) return err(error);
+      if (error !== undefined) return Result.err(error);
       return (
         (await read("dispatchWarning", resultSchema(z.string().optional()))) ??
-        ok(undefined)
+        Result.ok(undefined)
       );
     },
     routes: () => Promise.resolve(undefined), // The builder adapts agx data from this owner cache.

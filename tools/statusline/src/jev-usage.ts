@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { err, ok, fromThrowable, type Result } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { execAsyncWithin } from "./bounded.ts";
 import { jsonOf, z } from "./zod.ts";
 
@@ -36,7 +36,8 @@ export async function readJevUsage(
   budgetMs = READ_BUDGET_MS,
 ): Promise<Result<JevUsage | undefined, string>> {
   const executable = Bun.which("mise", { PATH: env["PATH"] ?? "" });
-  if (executable === null) return err("Jev usage unavailable: no mise on PATH");
+  if (executable === null)
+    return Result.err("Jev usage unavailable: no mise on PATH");
   const result = await execAsyncWithin(
     "Jev usage",
     executable,
@@ -56,17 +57,22 @@ export async function readJevUsage(
     budgetMs,
     env,
   );
-  if (result.isErr()) return err(result.error.why);
+  if (result.isErr()) return Result.err(result.error.why);
   if (result.value.length > 64 * 1024)
-    return err("Jev usage output exceeds 64 KiB");
+    return Result.err("Jev usage output exceeds 64 KiB");
   const parsed = jsonOf(USAGE).safeParse(result.value);
-  if (!parsed.success) return err("Jev usage returned invalid schema-1 JSON");
+  if (!parsed.success)
+    return Result.err("Jev usage returned invalid schema-1 JSON");
   const usage = parsed.data;
-  const times = fromThrowable(() => ({
-    to: Temporal.Instant.from(usage.to).epochMilliseconds,
-    captured: Temporal.Instant.from(usage.captured_at).epochMilliseconds,
-  }))();
-  if (times.isErr()) return err("Jev usage has invalid observation time");
+  const times = Result.try({
+    try: () => ({
+      to: Temporal.Instant.from(usage.to).epochMilliseconds,
+      captured: Temporal.Instant.from(usage.captured_at).epochMilliseconds,
+    }),
+    catch: (e: unknown) => e,
+  });
+  if (times.isErr())
+    return Result.err("Jev usage has invalid observation time");
   const latest = nowMs ?? Temporal.Now.instant().epochMilliseconds;
   if (
     times.value.to > times.value.captured ||
@@ -74,9 +80,9 @@ export async function readJevUsage(
     latest - times.value.to > MAX_AGE_MS ||
     latest - times.value.captured > MAX_AGE_MS
   )
-    return err("Jev usage observation stale or in the future");
+    return Result.err("Jev usage observation stale or in the future");
   if (usage.estimated_cost_usd !== null)
-    return ok({
+    return Result.ok({
       costUsd: usage.estimated_cost_usd,
       partial: false,
       capturedMs: times.value.captured,
@@ -84,12 +90,12 @@ export async function readJevUsage(
   // agx leaves the estimate null while any run in the window has no usage; its known
   // subtotal is the only spend it vouches for, so show that as a lower bound.
   if (usage.known_tokens_at_effective_price_usd !== null)
-    return ok({
+    return Result.ok({
       costUsd: usage.known_tokens_at_effective_price_usd,
       partial: true,
       capturedMs: times.value.captured,
     });
-  return err(
+  return Result.err(
     `Jev usage has no priced usage in the window (completeness ${usage.completeness})`,
   );
 }

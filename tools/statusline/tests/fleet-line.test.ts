@@ -280,7 +280,7 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
       `
       import {spyOn, expect} from "bun:test";
       import * as cp from "node:child_process";
-      import {ok} from "neverthrow";
+      import {Result} from ${JSON.stringify(join(source, "../../shared/src/result.ts"))};
       import {agxRouteRunsAsync} from ${JSON.stringify(join(source, "dispatch-runs.ts"))};
       import {render} from ${JSON.stringify(join(source, "format.ts"))};
       Temporal.Now.instant = () => Temporal.Instant.fromEpochMilliseconds(${at});
@@ -288,7 +288,7 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
       const childSpies = [spyOn(cp, "spawn"), spyOn(cp, "execFile"), spyOn(cp, "exec")];
       const scan = await agxRouteRunsAsync(process.env, "here", false);
       const df = {cwd:${JSON.stringify(home)},sid:"here",model:"fixture",wfOn:false,rc:"off",rlModel:[],
-        routes:ok(scan),vram:undefined,disks:ok([]),cpuPct:ok(0),ram:ok({pct:0,frac:"0/1G"})};
+        routes:Result.ok(scan),vram:undefined,disks:Result.ok([]),cpuPct:Result.ok(0),ram:Result.ok({pct:0,frac:"0/1G"})};
       const lines = render(df).split("\\n").filter(line => line.includes("workers outside session"));
       if (${age} >= 0) expect(render(df)).toContain("model-layer");
       expect(lines).toHaveLength(${age >= 0 ? 1 : 0});
@@ -341,12 +341,12 @@ test.each([
     const output = await run(
       `
     import {expect} from "bun:test";
-    import {ok} from "neverthrow";
+    import {Result} from ${JSON.stringify(join(source, "../../shared/src/result.ts"))};
     import {agxRouteRunsAsync} from ${JSON.stringify(join(source, "dispatch-runs.ts"))};
     import {render} from ${JSON.stringify(join(source, "format.ts"))};
     const scan = await agxRouteRunsAsync(process.env, "here", false);
     const text = render({cwd:${JSON.stringify(home)},sid:"here",model:"fixture",wfOn:false,rc:"off",rlModel:[],
-      routes:ok(scan),vram:undefined,disks:ok([]),cpuPct:ok(0),ram:ok({pct:0,frac:"0/1G"})});
+      routes:Result.ok(scan),vram:undefined,disks:Result.ok([]),cpuPct:Result.ok(0),ram:Result.ok({pct:0,frac:"0/1G"})});
     const lines = text.split("\\n");
     const agx = lines.find(line => line.startsWith("agx "));
     expect(agx).toBeUndefined();

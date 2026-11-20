@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { err, ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   buildDataframe,
   type BuildDataframeOptions,
@@ -46,22 +46,22 @@ const quietSources = {
       modelCapsWhy: undefined,
       wfOn: false,
     }),
-  agentName: () => Promise.resolve(ok(undefined)),
+  agentName: () => Promise.resolve(Result.ok(undefined)),
   rcState: () => Promise.resolve("unknown" as const),
   repoState: () => Promise.resolve({ branch: undefined, branchWhy: undefined }),
 
   hostLoad: () =>
     Promise.resolve({
-      cpuPct: err("fixture"),
-      ram: err("fixture"),
+      cpuPct: Result.err("fixture"),
+      ram: Result.err("fixture"),
       vram: undefined,
     }),
   routes: () => Promise.resolve(undefined),
   dispatchWarning: () => Promise.resolve(undefined),
-  storage: () => Promise.resolve(ok([])),
+  storage: () => Promise.resolve(Result.ok([])),
   herdrReport: () => Promise.resolve(),
-  codexRate: () => Promise.resolve(ok(undefined)),
-  jevUsage: () => Promise.resolve(ok(undefined)),
+  codexRate: () => Promise.resolve(Result.ok(undefined)),
+  jevUsage: () => Promise.resolve(Result.ok(undefined)),
 } satisfies NonNullable<BuildDataframeOptions["sources"]>;
 
 async function row(payload: unknown = {}, options: BuildDataframeOptions = {}) {
@@ -139,7 +139,7 @@ test.each([...modes])("codex slot: %s", async (mode) => {
   if (mode === "exception")
     codexSource = async () => {
       await Bun.file(join(root, "missing")).text();
-      return ok(undefined);
+      return Result.ok(undefined);
     };
   const text = await row(
     {},
@@ -202,7 +202,7 @@ process.stdout.write(${JSON.stringify(JSON.stringify(jevFixture))});`,
   if (mode === "exception")
     jevSource = async () => {
       await Bun.file(join(root, "missing")).text();
-      return ok(undefined);
+      return Result.ok(undefined);
     };
   const text = await row(
     {},
@@ -342,12 +342,12 @@ test("completed sources cannot bypass an exhausted budget", async () => {
         identity: quietSources.identity,
         codexRate: () =>
           Promise.resolve(
-            ok({
+            Result.ok({
               windows: [{ minutes: 10080, percent: 3 }],
               mtimeMs: now() * 1000,
             }),
           ),
-        jevUsage: () => Promise.resolve(ok({ costUsd: 0.04 })),
+        jevUsage: () => Promise.resolve(Result.ok({ costUsd: 0.04 })),
       },
       budgets: { identity: 0, codexRate: 0, jevUsage: 0 },
     },

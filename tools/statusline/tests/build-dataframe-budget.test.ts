@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { err, ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
 import { buildDataframe, type SourceClock } from "../src/build-dataframe.ts";
 import { render } from "../src/format.ts";
@@ -41,7 +41,7 @@ describe("buildDataframe source budgets", () => {
             modelCapsWhy: undefined,
             wfOn: false,
           }),
-        agentName: () => Promise.resolve(ok(undefined)),
+        agentName: () => Promise.resolve(Result.ok(undefined)),
         rcState: () => Promise.resolve("unknown"),
         repoState: () => {
           gitStarted = true;
@@ -50,16 +50,16 @@ describe("buildDataframe source budgets", () => {
 
         hostLoad: () =>
           Promise.resolve({
-            cpuPct: err("host unavailable"),
-            ram: err("host unavailable"),
-            vram: err("host unavailable"),
+            cpuPct: Result.err("host unavailable"),
+            ram: Result.err("host unavailable"),
+            vram: Result.err("host unavailable"),
           }),
-        routes: () => Promise.resolve(ok({ runs: [], unreadable: 0 })),
+        routes: () => Promise.resolve(Result.ok({ runs: [], unreadable: 0 })),
         dispatchWarning: () => Promise.resolve(undefined),
-        storage: () => Promise.resolve(ok([])),
+        storage: () => Promise.resolve(Result.ok([])),
         herdrReport: () => Promise.resolve(),
-        codexRate: () => Promise.resolve(ok(undefined)),
-        jevUsage: () => Promise.resolve(ok(undefined)),
+        codexRate: () => Promise.resolve(Result.ok(undefined)),
+        jevUsage: () => Promise.resolve(Result.ok(undefined)),
         recoverHealth: () => Promise.resolve(undefined),
       },
       budgets: { repoState: 40 },
@@ -102,26 +102,26 @@ describe("buildDataframe source budgets", () => {
             modelCapsWhy: undefined,
             wfOn: false,
           }),
-        agentName: () => Promise.resolve(ok(undefined)),
+        agentName: () => Promise.resolve(Result.ok(undefined)),
         rcState: () => Promise.resolve("unknown"),
         repoState: () =>
           Promise.resolve({ branch: undefined, branchWhy: undefined }),
 
         hostLoad: () =>
           Promise.resolve({
-            cpuPct: err("host unavailable"),
-            ram: err("host unavailable"),
-            vram: err("host unavailable"),
+            cpuPct: Result.err("host unavailable"),
+            ram: Result.err("host unavailable"),
+            vram: Result.err("host unavailable"),
           }),
-        routes: () => Promise.resolve(ok({ runs: [], unreadable: 0 })),
+        routes: () => Promise.resolve(Result.ok({ runs: [], unreadable: 0 })),
         dispatchWarning: () => Promise.resolve(undefined),
-        storage: () => Promise.resolve(ok([])),
+        storage: () => Promise.resolve(Result.ok([])),
         herdrReport: () => {
           reports++;
           return Promise.resolve();
         },
-        codexRate: () => Promise.resolve(ok(undefined)),
-        jevUsage: () => Promise.resolve(ok(undefined)),
+        codexRate: () => Promise.resolve(Result.ok(undefined)),
+        jevUsage: () => Promise.resolve(Result.ok(undefined)),
         recoverHealth: () => Promise.resolve(undefined),
       },
     });

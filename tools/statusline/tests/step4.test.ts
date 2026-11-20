@@ -2,7 +2,7 @@ import { afterEach, expect, test, spyOn } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { readCoreRuns } from "../src/core-runs.ts";
 import { render } from "../src/format.ts";
 import { readHostLoadAsync } from "../src/host-load.ts";
@@ -74,11 +74,11 @@ function output(scan: Awaited<ReturnType<typeof readCoreRuns>>) {
       rc: "off",
       rlModel: [],
 
-      routes: ok(scan),
+      routes: Result.ok(scan),
       vram: undefined,
-      disks: ok([]),
-      cpuPct: ok(0),
-      ram: ok({ pct: 0, frac: "0/1G" }),
+      disks: Result.ok([]),
+      cpuPct: Result.ok(0),
+      ram: Result.ok({ pct: 0, frac: "0/1G" }),
     }),
   );
 }
@@ -202,7 +202,7 @@ test("gpu-owner stall replaces the utilization average with a JST recovery warni
     }),
   );
   const host = await readHostLoadAsync();
-  const text = Bun.stripANSI(sysRow({ ...host, disks: ok([]) }));
+  const text = Bun.stripANSI(sysRow({ ...host, disks: Result.ok([]) }));
   expect(text).toContain("⚠ GPU stalled since 08:07 JST · gpu-sampler --check");
   expect(text.split("⚠ GPU stalled")).toHaveLength(2);
   expect(text).not.toContain("GPU≈");
@@ -302,10 +302,10 @@ test("GPU owner fixtures cover first failed probe, recovery, and paused failures
     const reading = (await readHostLoadAsync()).vram;
     const text = Bun.stripANSI(
       sysRow({
-        cpuPct: ok(1),
-        ram: ok({ frac: "1/2G", pct: 50 }),
+        cpuPct: Result.ok(1),
+        ram: Result.ok({ frac: "1/2G", pct: 50 }),
         vram: reading,
-        disks: ok([]),
+        disks: Result.ok([]),
         tmp: [],
       }),
     );

@@ -1,6 +1,6 @@
 // Local JSON codecs ported from agents/hooks/zod.ts (now tools/shared/src/zod.ts).
 // Use the permitted shared Zod primitive so hooks and the package validate with the same pin.
-import { fromThrowable } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 
 export { z };
@@ -8,20 +8,16 @@ export { z };
 // Optional nullable wire fields become one explicit absent state after validation.
 export const maybe = <T extends z.ZodType>(schema: T) =>
   schema.nullish().transform((value) => value ?? undefined);
-// Throw → Result, synchronously (neverthrow's, from the same bundle): for the zero-dep files that
-// cannot import neverthrow from node_modules. The async floor is ./attempt.ts.
-export { fromThrowable };
-
 /**
  * JSON text as zod input: a JSON syntax error becomes a zod issue (code `invalid_format`, format
  * `json`), never a throw — zod does not catch an exception thrown inside a codec or transform.
  */
 export const jsonText = z.codec(z.string(), z.unknown(), {
   decode: (text, ctx) => {
-    const parsed = fromThrowable(
-      (): unknown => JSON.parse(text),
-      (e) => (e instanceof Error ? e.message : String(e)),
-    )();
+    const parsed = Result.try({
+      try: (): unknown => JSON.parse(text),
+      catch: (e) => (e instanceof Error ? e.message : String(e)),
+    });
     if (parsed.isOk()) return parsed.value;
     ctx.issues.push({
       code: "invalid_format",

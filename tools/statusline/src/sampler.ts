@@ -25,7 +25,7 @@ import type { Dataframe } from "./dataframe.ts";
 import type { SessionStatus } from "./session-status.ts";
 import { CYAN2, ESC, RST } from "./ansi.ts";
 import { readAgentNamesAsync } from "./identity.ts";
-import { ok, err, Ok, Err } from "neverthrow";
+import { Err, Ok, Result } from "@dotfiles/shared/src/result.ts";
 import { writeUsageSnapshotAsync } from "./usage-snapshot.ts";
 import {
   writePresentation,
@@ -275,8 +275,10 @@ export async function sample(
         await save(`name:${sid}`, () =>
           Promise.resolve(
             names.isErr()
-              ? err(names.error)
-              : ok(names.value.find((row) => row.sessionId === sid)?.name),
+              ? Result.err(names.error)
+              : Result.ok(
+                  names.value.find((row) => row.sessionId === sid)?.name,
+                ),
           ),
         );
     }
@@ -369,7 +371,7 @@ export async function sample(
         shared: render(
           {
             ...first,
-            routes: ok(routes),
+            routes: Result.ok(routes),
           },
           {
             layout: "shared",

@@ -1,5 +1,5 @@
 // Compatibility coverage for legacy enriched rows; production uses owner facts only.
-import { ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { buildDataframe } from "../src/build-dataframe.ts";
 import { COLLECTOR_SOURCES } from "../src/collector-sources.ts";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
@@ -17,7 +17,7 @@ process.stdout.write(
         ...COLLECTOR_SOURCES,
         liveAgxJobs: () => Promise.resolve(undefined),
         routes: async (sessionId) =>
-          ok(await agxRouteRunsAsync(process.env, sessionId, true)),
+          Result.ok(await agxRouteRunsAsync(process.env, sessionId, true)),
       },
     }),
   ),

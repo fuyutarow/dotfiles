@@ -10,6 +10,7 @@
 // a Panic. Code that can throw goes through Result.try / Result.tryPromise, with `catch` mapping
 // the thrown value to the error the caller expects.
 export { Result } from "../../../agents/hooks/vendor/deps.js";
+export { Err, Ok } from "../../../agents/hooks/vendor/deps.js";
 
 /** Message text of a caught value, for diagnostics. */
 export function errorMessage(error: unknown): string {

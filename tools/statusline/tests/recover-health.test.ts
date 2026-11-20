@@ -1,4 +1,4 @@
-import { ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { describe, expect, test } from "bun:test";
 import type { Dataframe } from "../src/dataframe.ts";
 import { render } from "../src/format.ts";
@@ -29,9 +29,9 @@ const frame: Dataframe = {
   rlModel: [],
 
   vram: undefined,
-  disks: ok([]),
-  cpuPct: ok(10),
-  ram: ok({ frac: "1/8G", pct: 12.5 }),
+  disks: Result.ok([]),
+  cpuPct: Result.ok(10),
+  ram: Result.ok({ frac: "1/8G", pct: 12.5 }),
 };
 
 describe("recover health", () => {

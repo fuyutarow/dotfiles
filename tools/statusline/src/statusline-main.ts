@@ -7,7 +7,7 @@ import { readCoreRuns } from "./core-runs.ts";
 import cliPackage from "../package.json" with { type: "json" };
 const { version } = cliPackage;
 import { realpath } from "node:fs/promises";
-import { ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { resetRenderBudget } from "./bounded.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { cli as cleyeCli } from "cleye";
@@ -72,10 +72,10 @@ async function renderDiscovered(
       { cwd },
       {
         ownerSnapshot,
-        sources: { codexRate: () => Promise.resolve(ok(undefined)) },
+        sources: { codexRate: () => Promise.resolve(Result.ok(undefined)) },
       },
     );
-    frame.routes = ok(await readCoreRuns(process.env, null, cwd, []));
+    frame.routes = Result.ok(await readCoreRuns(process.env, null, cwd, []));
     const output = `${render(frame, { layout: "location" })}\n${DIM}no agent session in ${cwd}${RST}\n${render(frame, { layout: "shared" })}`;
     const columns = statuslineColumns();
     return columns === undefined ? output : wrapThroughSys(output, columns);
@@ -99,7 +99,9 @@ async function renderDiscovered(
     const frame = await buildDataframe(data, {
       ownerSnapshot,
       codex,
-      sources: codex ? { agentName: () => Promise.resolve(ok(undefined)) } : {},
+      sources: codex
+        ? { agentName: () => Promise.resolve(Result.ok(undefined)) }
+        : {},
     });
     if (sharedFrame === undefined)
       blocks.push(render(frame, { layout: "location" }));
@@ -110,7 +112,7 @@ async function renderDiscovered(
     );
   }
   if (sharedFrame !== undefined && sessionId === undefined)
-    sharedFrame.routes = ok(
+    sharedFrame.routes = Result.ok(
       await readCoreRuns(
         process.env,
         null,

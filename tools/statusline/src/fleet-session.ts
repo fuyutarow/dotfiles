@@ -1,4 +1,4 @@
-import { attempt } from "@dotfiles/shared/src/attempt.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   writeFleetSession,
   type FleetSession,
@@ -105,68 +105,73 @@ export async function writeStatuslineFleetSession(
   const sessionId = session.sessionId;
   if (sessionId === undefined || sessionId === "") return;
 
-  await attempt(async () => {
-    const context = session.context;
-    let ctx: FleetSession["ctx"];
-    const window = context?.compactWindow ?? context?.modelWindow;
-    const pct =
-      window !== undefined && window > 0 && context?.inputTokens !== undefined
-        ? (context.inputTokens / window) * 100
-        : context?.usedPercent;
-    if (
-      context?.inputTokens !== undefined &&
-      Number.isInteger(context.inputTokens) &&
-      context.inputTokens >= 0 &&
-      pct !== undefined &&
-      Number.isFinite(pct) &&
-      pct >= 0 &&
-      pct <= 100
-    ) {
-      ctx = {
-        tokens: context.inputTokens,
-        pct,
-        ...(window !== undefined && Number.isInteger(window) && window > 0
-          ? { window }
-          : {}),
-      };
-    } else {
-      ctx = unavailable("context tokens and percentage are not both available");
-    }
+  await Result.tryPromise({
+    try: async () => {
+      const context = session.context;
+      let ctx: FleetSession["ctx"];
+      const window = context?.compactWindow ?? context?.modelWindow;
+      const pct =
+        window !== undefined && window > 0 && context?.inputTokens !== undefined
+          ? (context.inputTokens / window) * 100
+          : context?.usedPercent;
+      if (
+        context?.inputTokens !== undefined &&
+        Number.isInteger(context.inputTokens) &&
+        context.inputTokens >= 0 &&
+        pct !== undefined &&
+        Number.isFinite(pct) &&
+        pct >= 0 &&
+        pct <= 100
+      ) {
+        ctx = {
+          tokens: context.inputTokens,
+          pct,
+          ...(window !== undefined && Number.isInteger(window) && window > 0
+            ? { window }
+            : {}),
+        };
+      } else {
+        ctx = unavailable(
+          "context tokens and percentage are not both available",
+        );
+      }
 
-    const rate = sessionRate(
-      vendor,
-      session.rateLimits?.fiveHour?.usedPercent,
-      session.rateLimits?.sevenDay?.usedPercent,
-      session.rateLimits?.fiveHour?.resetsAt,
-      session.rateLimits?.sevenDay?.resetsAt,
-    );
-    const name = await sessionName(
-      vendor,
-      sessionId,
-      session.sessionName,
-      resolvedName,
-    );
-    const paneId = process.env["TMUX_PANE"];
-    const record: FleetSession = {
-      schema: 1,
-      session_id: sessionId,
-      vendor,
-      // Claude passes the same resolved name used by the statusline's Session identity line.
-      name,
-      model: availableText(
-        session.model?.name,
-        "model display name is not available",
-      ),
-      effort: availableText(
-        session.effort,
-        "reasoning effort is not available",
-      ),
-      ctx,
-      rate,
-      cwd: session.cwd ?? process.env["PWD"] ?? process.cwd(),
-      pane_id: paneId ?? null,
-      updated_at: Temporal.Now.instant().toString(),
-    };
-    await writeFleetSession(record);
+      const rate = sessionRate(
+        vendor,
+        session.rateLimits?.fiveHour?.usedPercent,
+        session.rateLimits?.sevenDay?.usedPercent,
+        session.rateLimits?.fiveHour?.resetsAt,
+        session.rateLimits?.sevenDay?.resetsAt,
+      );
+      const name = await sessionName(
+        vendor,
+        sessionId,
+        session.sessionName,
+        resolvedName,
+      );
+      const paneId = process.env["TMUX_PANE"];
+      const record: FleetSession = {
+        schema: 1,
+        session_id: sessionId,
+        vendor,
+        // Claude passes the same resolved name used by the statusline's Session identity line.
+        name,
+        model: availableText(
+          session.model?.name,
+          "model display name is not available",
+        ),
+        effort: availableText(
+          session.effort,
+          "reasoning effort is not available",
+        ),
+        ctx,
+        rate,
+        cwd: session.cwd ?? process.env["PWD"] ?? process.cwd(),
+        pane_id: paneId ?? null,
+        updated_at: Temporal.Now.instant().toString(),
+      };
+      await writeFleetSession(record);
+    },
+    catch: (e: unknown) => e,
   });
 }

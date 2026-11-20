@@ -224,10 +224,10 @@ test("schema-1 unknown and null optional facts remain unavailable", () => {
 });
 
 const failure = (result: Awaited<ReturnType<typeof collectAgxStatus>>) =>
-  result.match(
-    () => null,
-    (error) => error,
-  );
+  result.match({
+    ok: () => null,
+    err: (error) => error,
+  });
 
 test("failed commands, malformed JSON, and unsupported schemas never become observations", async () => {
   const env = await fixture("invalid");
@@ -381,10 +381,10 @@ test("C1 additive findings and incomplete observations retain owner facts", asyn
   };
   await writeFile(env.AGX_STATUS_FILE, JSON.stringify(wire));
   const result = await collectAgxStatus(env.HOME, env);
-  const snapshot = result.match(
-    (value) => adaptAgxStatus(value),
-    (error) => expect.unreachable(error),
-  );
+  const snapshot = result.match({
+    ok: (value) => adaptAgxStatus(value),
+    err: (error) => expect.unreachable(error),
+  });
   expect(snapshot.findings).toMatchObject({
     kinds: { "future.kind / arbitrary": 3 },
     lost: 0,
@@ -409,10 +409,10 @@ test("C5 collector uses the pinned routing command and rejects unavailable obser
   const collected = await collectAgxRouting(env);
   expect(collected.isOk()).toBe(true);
   expect(
-    collected.match(
-      (value) => value.jev,
-      () => null,
-    ),
+    collected.match({
+      ok: (value) => value.jev,
+      err: () => null,
+    }),
   ).toEqual({
     denominator: routing.jev.denominator,
     codex_pick_count: routing.jev.codex_pick_count,
@@ -422,10 +422,10 @@ test("C5 collector uses the pinned routing command and rejects unavailable obser
     JSON.stringify(["worker", "stats", "--routing", "--window", "24h"]) + "\n",
   );
   const failed = async (extra: NodeJS.ProcessEnv = {}) =>
-    (await collectAgxRouting({ ...env, ...extra })).match(
-      () => null,
-      (error) => error,
-    );
+    (await collectAgxRouting({ ...env, ...extra })).match({
+      ok: () => null,
+      err: (error) => error,
+    });
   expect(await failed({ AGX_STATUS_EXIT: "7" })).toContain("exit 7");
   expect(await failed({ PATH: "" })).toContain("no mise on PATH");
   for (const text of [

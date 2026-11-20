@@ -1,5 +1,5 @@
 import { open, stat, type FileHandle } from "node:fs/promises";
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, jsonText, maybe, z } from "./zod.ts";
 import { writeFleetSession } from "@dotfiles/shared/src/fleet-session.ts";
 import {
@@ -25,9 +25,11 @@ export async function readClaudeJsonAsync(): Promise<Result<unknown, string>> {
   const text = await Bun.file(`${HOME}/.claude.json`)
     .text()
     .catch(() => null);
-  if (text === null) return err("~/.claude.json unreadable");
+  if (text === null) return Result.err("~/.claude.json unreadable");
   const parsed = jsonText.safeParse(text);
-  return parsed.success ? ok(parsed.data) : err("~/.claude.json unreadable");
+  return parsed.success
+    ? Result.ok(parsed.data)
+    : Result.err("~/.claude.json unreadable");
 }
 const AccountSchema = z.object({
   oauthAccount: maybe(z.object({ emailAddress: maybe(z.string()) })),
@@ -35,10 +37,10 @@ const AccountSchema = z.object({
 export function account(cj: unknown): Result<string | undefined, string> {
   const parsed = AccountSchema.safeParse(cj);
   if (!parsed.success)
-    return err("~/.claude.json has an unexpected account shape");
+    return Result.err("~/.claude.json has an unexpected account shape");
   // `||` not `??`: an empty string is not an account either, and must drop the segment.
   const email = parsed.data.oauthAccount?.emailAddress;
-  return ok(email !== undefined && email !== "" ? email : undefined);
+  return Result.ok(email !== undefined && email !== "" ? email : undefined);
 }
 
 // Fable (and any other model with its own weekly ceiling — the CLI's own "You've hit your Opus
@@ -245,11 +247,11 @@ export async function readAgentNamesAsync() {
     ["agents", "--json"],
     AGENT_LIST_TIMEOUT_MS,
   );
-  if (result.isErr()) return err(result.error.why);
+  if (result.isErr()) return Result.err(result.error.why);
   const parsed = jsonOf(AgentListSchema).safeParse(result.value);
   return parsed.success
-    ? ok(parsed.data)
-    : err("claude agents output unparsable");
+    ? Result.ok(parsed.data)
+    : Result.err("claude agents output unparsable");
 }
 // Cache-miss refresh: fold `claude agents --json`'s list into the sid->name map, keeping only
 // entries that carry a sessionId. Extracted out of agentName() only to keep its try/for nesting
@@ -284,16 +286,16 @@ export async function agentNameAsync(
     !renamed &&
     Temporal.Now.instant().epochMilliseconds - hit.at < AGENT_NAME_TTL_MS
   )
-    return ok(hit.name);
+    return Result.ok(hit.name);
   const outResult = await execAsyncRenderBounded(
     "claude agents",
     CLAUDE_BIN,
     ["agents", "--json"],
     AGENT_LIST_TIMEOUT_MS,
   );
-  if (outResult.isErr()) return err(outResult.error.why);
+  if (outResult.isErr()) return Result.err(outResult.error.why);
   const listResult = jsonOf(AgentListSchema).safeParse(outResult.value);
-  if (!listResult.success) return err("claude agents output unparsable");
+  if (!listResult.success) return Result.err("claude agents output unparsable");
   const now = Temporal.Now.instant().epochMilliseconds;
   const next = agentNameEntries(listResult.data, now);
   if (!Object.hasOwn(next, sid)) next[sid] = { at: now };
@@ -302,7 +304,7 @@ export async function agentNameAsync(
     if (seen !== undefined) entry.hint = seen;
   }
   await writeCacheAsync(AGENT_NAME_CACHE, next);
-  return ok(next[sid]?.name);
+  return Result.ok(next[sid]?.name);
 }
 
 // The statusline is the sole writer of the shared fleet handoff. herdr-projector consumes these

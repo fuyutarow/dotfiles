@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { err, ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   buildDataframe,
   type BuildDataframeOptions,
@@ -28,16 +28,16 @@ const sources = {
       modelCapsWhy: undefined,
       wfOn: true,
     }),
-  agentName: () => Promise.resolve(ok("worker-name")),
+  agentName: () => Promise.resolve(Result.ok("worker-name")),
   rcState: () => Promise.resolve("on" as const),
   repoState: () =>
     Promise.resolve({ branch: "sticky-branch", branchWhy: undefined }),
   hostLoad: () =>
     Promise.resolve({
-      cpuPct: ok(85),
-      ram: ok({ pct: 55, frac: "5.5/10G" }),
-      vram: ok({ pct: 65, frac: "6.5/10G" }),
-      tmpfs: ok({ availableBytes: 1073741824, freeInodes: 1000 }),
+      cpuPct: Result.ok(85),
+      ram: Result.ok({ pct: 55, frac: "5.5/10G" }),
+      vram: Result.ok({ pct: 65, frac: "6.5/10G" }),
+      tmpfs: Result.ok({ availableBytes: 1073741824, freeInodes: 1000 }),
       tmp: [
         {
           kind: "reading",
@@ -48,7 +48,7 @@ const sources = {
         },
       ],
     }),
-  routes: () => Promise.resolve(err("fixture dispatch unavailable")),
+  routes: () => Promise.resolve(Result.err("fixture dispatch unavailable")),
   dispatchWarning: () => Promise.resolve("dispatch-warning-value"),
   recoverHealth: () =>
     Promise.resolve({
@@ -59,7 +59,7 @@ const sources = {
     }),
   storage: () =>
     Promise.resolve(
-      ok(
+      Result.ok(
         ["Disk C:", "Disk WSL", "tmpfs"].map((label) => ({
           kind: "reading" as const,
           label,
@@ -71,9 +71,9 @@ const sources = {
     ),
   codexRate: () =>
     Promise.resolve(
-      ok({ windows: [{ minutes: 10080, percent: 37 }], mtimeMs: now() }),
+      Result.ok({ windows: [{ minutes: 10080, percent: 37 }], mtimeMs: now() }),
     ),
-  jevUsage: () => Promise.resolve(ok({ costUsd: 1.25 })),
+  jevUsage: () => Promise.resolve(Result.ok({ costUsd: 1.25 })),
   herdrReport: async () => {},
 } satisfies NonNullable<BuildDataframeOptions["sources"]>;
 const payload: SessionStatus = {
@@ -218,20 +218,20 @@ test("every previously good display field survives failed reads independently wi
             modelCapsWhy: "failed",
             wfOn: false,
           }),
-        agentName: () => Promise.resolve(err("failed")),
+        agentName: () => Promise.resolve(Result.err("failed")),
         rcState: () => Promise.resolve("unknown"),
         repoState: () =>
           Promise.resolve({ branch: undefined, branchWhy: "failed" }),
         hostLoad: () =>
           Promise.resolve({
-            cpuPct: err("failed"),
-            ram: err("failed"),
-            vram: err("failed"),
-            tmpfs: err("failed"),
+            cpuPct: Result.err("failed"),
+            ram: Result.err("failed"),
+            vram: Result.err("failed"),
+            tmpfs: Result.err("failed"),
           }),
-        storage: () => Promise.resolve(err("failed")),
-        codexRate: () => Promise.resolve(err("failed")),
-        jevUsage: () => Promise.resolve(err("failed")),
+        storage: () => Promise.resolve(Result.err("failed")),
+        codexRate: () => Promise.resolve(Result.err("failed")),
+        jevUsage: () => Promise.resolve(Result.err("failed")),
         dispatchWarning: () => new Promise(() => {}),
         recoverHealth: () => new Promise(() => {}),
       },
@@ -296,13 +296,16 @@ test("a Codex read completing after its budget updates only the next frame", asy
   expect(frame.fields?.["codex:10080"]?.kind).toBe("stale");
   expect(plain(render(frame))).toContain("37%");
   delayed.resolve(
-    ok({ windows: [{ minutes: 10080, percent: 71 }], mtimeMs: now() }),
+    Result.ok({ windows: [{ minutes: 10080, percent: 71 }], mtimeMs: now() }),
   );
   let next = frame;
   for (let attempt = 0; attempt < 30; attempt++) {
     await Bun.sleep(10);
     next = await buildDataframe(payload, {
-      sources: { ...sources, codexRate: () => Promise.resolve(err("failed")) },
+      sources: {
+        ...sources,
+        codexRate: () => Promise.resolve(Result.err("failed")),
+      },
       fieldStoreRoot: store,
     });
     if (plain(render(next)).includes("71%")) break;
@@ -366,7 +369,7 @@ test("three disk-snapshot workers survive an outer dispatch timeout, including s
     [
       process.execPath,
       "--eval",
-      `import {buildDataframe} from ${JSON.stringify(join(import.meta.dir, "../src/build-dataframe.ts"))}; import {render} from ${JSON.stringify(join(import.meta.dir, "../src/format.ts"))}; import {err} from "neverthrow"; console.log(render(await buildDataframe(${JSON.stringify({ cwd: root, sessionId: payload.sessionId })}, {fieldStoreRoot: ${JSON.stringify(join(home, "reported-failure-fields"))}, sources: {routes: async () => err("dispatch read failed")}})));`,
+      `import {buildDataframe} from ${JSON.stringify(join(import.meta.dir, "../src/build-dataframe.ts"))}; import {render} from ${JSON.stringify(join(import.meta.dir, "../src/format.ts"))}; import {Result} from ${JSON.stringify(join(import.meta.dir, "../../shared/src/result.ts"))}; console.log(render(await buildDataframe(${JSON.stringify({ cwd: root, sessionId: payload.sessionId })}, {fieldStoreRoot: ${JSON.stringify(join(home, "reported-failure-fields"))}, sources: {routes: async () => Result.err("dispatch read failed")}})));`,
     ],
     {
       cwd: join(import.meta.dir, ".."),

@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { ok, err } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { render } from "../src/format.ts";
 import type { Dataframe } from "../src/dataframe.ts";
 import { readAgxJobRuns, Rows } from "../src/agx-job-runs.ts";
@@ -18,10 +18,10 @@ const base: Dataframe = {
   wfOn: false,
   rc: "off",
   rlModel: [],
-  cpuPct: ok(1),
-  ram: err("unknown"),
+  cpuPct: Result.ok(1),
+  ram: Result.err("unknown"),
   vram: undefined,
-  disks: ok([]),
+  disks: Result.ok([]),
 };
 const liveRow = (
   ticket: string,
@@ -57,7 +57,10 @@ test("live rows render the session's workers with their complete activity", () =
   ]);
   expect(parsed.success).toBe(true);
   if (!parsed.success) return;
-  const output = render({ ...base, liveAgxJobs: ok(parsed.data) }, { nowMs });
+  const output = render(
+    { ...base, liveAgxJobs: Result.ok(parsed.data) },
+    { nowMs },
+  );
   const plain = output.replaceAll(
     new RegExp(`${String.fromCodePoint(27)}\\[[0-9;]*m`, "gu"),
     "",
@@ -82,7 +85,7 @@ test("live agx jobs survive a process scan timeout and count other sessions", ()
     dispatcher_session: i < 3 ? "session" : "other",
     elapsed_seconds: 42,
   }));
-  const output = render({ ...base, liveAgxJobs: ok(rows) });
+  const output = render({ ...base, liveAgxJobs: Result.ok(rows) });
   for (const ticket of ["one", "two", "three"])
     expect(output).toContain(ticket);
   expect(output).toContain("+2 workers outside session");
@@ -138,13 +141,13 @@ test("run age advances independently of cache age", () => {
   expect(parsed.success && parsed.data[0]?.started_at).toBe(row.started_at);
   const frame = {
     ...base,
-    liveAgxJobs: ok([row]),
+    liveAgxJobs: Result.ok([row]),
     ownerAges: { liveAgxJobs: 20_000 },
   };
   expect(render(frame, { nowMs })).toContain("0m40s");
   expect(
     render(
-      { ...frame, liveAgxJobs: ok([{ ...row, started_at: undefined }]) },
+      { ...frame, liveAgxJobs: Result.ok([{ ...row, started_at: undefined }]) },
       { nowMs },
     ),
   ).toContain("0m40s");
@@ -197,8 +200,8 @@ test("fake agx executable supplies live jobs independently of ps and times out",
 test("render omits the Job row for live agx results", () => {
   for (const liveAgxJobs of [
     undefined,
-    ok([]),
-    ok([
+    Result.ok([]),
+    Result.ok([
       {
         id: "one",
         ticket: "one",
@@ -206,7 +209,7 @@ test("render omits the Job row for live agx results", () => {
         elapsed_seconds: 42,
       },
     ]),
-    err("unavailable"),
+    Result.err("unavailable"),
   ]) {
     const plain = render({ ...base, liveAgxJobs }).replaceAll(
       new RegExp(`${String.fromCodePoint(27)}\\[[0-9;]*m`, "gu"),

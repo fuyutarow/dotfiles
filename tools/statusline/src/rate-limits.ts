@@ -1,4 +1,4 @@
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { maybe, z } from "./zod.ts";
 import {
   clockHM,
@@ -62,7 +62,7 @@ const CapsSchema = z.lazy(() =>
 export function modelWeeklyLimits(cj: unknown): Result<ModelLimit[], string> {
   const parsed = CapsSchema.safeParse(cj);
   if (!parsed.success)
-    return err("~/.claude.json has an unexpected usage-limits shape");
+    return Result.err("~/.claude.json has an unexpected usage-limits shape");
   const limits = parsed.data.cachedUsageUtilization?.utilization?.limits ?? [];
   const out: ModelLimit[] = [];
   for (const l of limits) {
@@ -79,9 +79,10 @@ export function modelWeeklyLimits(cj: unknown): Result<ModelLimit[], string> {
     const resetsAt = l.resets_at;
     const epochMs =
       resetsAt !== undefined && resetsAt !== ""
-        ? fromThrowable(
-            () => Temporal.Instant.from(resetsAt).epochMilliseconds,
-          )().unwrapOr(undefined)
+        ? Result.try({
+            try: () => Temporal.Instant.from(resetsAt).epochMilliseconds,
+            catch: (e: unknown) => e,
+          }).unwrapOr(undefined)
         : undefined;
     out.push({
       name,
@@ -90,7 +91,7 @@ export function modelWeeklyLimits(cj: unknown): Result<ModelLimit[], string> {
         epochMs !== undefined ? Math.floor(epochMs / 1000) : undefined,
     });
   }
-  return ok(out);
+  return Result.ok(out);
 }
 // 5h reset: epoch s -> "⟳HH:MM(<h>h<mm>m NN%)" — local clock, time remaining and elapsed share.
 function reset5(epoch: number, now: number): string {
@@ -312,65 +313,68 @@ export function rateRow(
   // Positive space: exactly one slot per source, in this fixed order. A renderer failure
   // belongs to its own slot; no early return or undefined filter can erase a provider.
   const slots = sources.map((source) => {
-    const rendered = fromThrowable(() => {
-      if (source === "claude") return claudeRateSegment(df, now, field);
-      if (source === "codex") {
-        const windows = new Set([
-          ...(df.codexWindowMinutes ?? [10080]),
-          ...(df.codexRate?.windows.map((w) => w.minutes) ?? []),
-        ]);
-        const renderedWindows = [...windows]
-          .toSorted((a, b) => a - b)
-          .map((minutes) => {
-            const window = df.codexRate?.windows.find(
-              (w) => w.minutes === minutes,
-            );
-            const rate = df.codexRate;
-            const age =
-              rate === undefined
-                ? 0
-                : Math.max(
-                    0,
-                    Temporal.Now.instant().epochMilliseconds - rate.mtimeMs,
-                  );
-            let segment: string | undefined;
-            if (rate !== undefined && window !== undefined) {
-              segment = codexRateSegment(
-                { ...rate, windows: [window] },
-                undefined,
-                now,
+    const rendered = Result.try({
+      try: () => {
+        if (source === "claude") return claudeRateSegment(df, now, field);
+        if (source === "codex") {
+          const windows = new Set([
+            ...(df.codexWindowMinutes ?? [10080]),
+            ...(df.codexRate?.windows.map((w) => w.minutes) ?? []),
+          ]);
+          const renderedWindows = [...windows]
+            .toSorted((a, b) => a - b)
+            .map((minutes) => {
+              const window = df.codexRate?.windows.find(
+                (w) => w.minutes === minutes,
               );
-            } else if (rate !== undefined && rate.windows.length === 0) {
-              segment = codexCreditsSegment(rate);
-            }
-            return field(
-              `codex:${minutes}`,
-              "codex",
-              observed(segment, df.codexRateWhy, age > 30_000 ? age : 0),
-            );
-          })
-          .join(roles.separator());
-        let credits: string | undefined;
-        if (df.codexRate !== undefined && df.codexRate.windows.length > 0)
-          credits = codexCreditsSegment(df.codexRate);
-        if (credits === undefined) return renderedWindows;
-        return `${renderedWindows}${roles.separator()}${credits}`;
-      }
-      return field(
-        "jev",
-        "Jev",
-        observed(
-          df.jevUsage?.costUsd === undefined
-            ? undefined
-            : jevUsageSegment(
-                df.jevUsage,
-                undefined,
-                jevAgeMs(df.jevUsage.capturedMs),
-              ),
-          df.jevUsageWhy ?? "usage sample unavailable",
-        ),
-      );
-    })().unwrapOr(undefined);
+              const rate = df.codexRate;
+              const age =
+                rate === undefined
+                  ? 0
+                  : Math.max(
+                      0,
+                      Temporal.Now.instant().epochMilliseconds - rate.mtimeMs,
+                    );
+              let segment: string | undefined;
+              if (rate !== undefined && window !== undefined) {
+                segment = codexRateSegment(
+                  { ...rate, windows: [window] },
+                  undefined,
+                  now,
+                );
+              } else if (rate !== undefined && rate.windows.length === 0) {
+                segment = codexCreditsSegment(rate);
+              }
+              return field(
+                `codex:${minutes}`,
+                "codex",
+                observed(segment, df.codexRateWhy, age > 30_000 ? age : 0),
+              );
+            })
+            .join(roles.separator());
+          let credits: string | undefined;
+          if (df.codexRate !== undefined && df.codexRate.windows.length > 0)
+            credits = codexCreditsSegment(df.codexRate);
+          if (credits === undefined) return renderedWindows;
+          return `${renderedWindows}${roles.separator()}${credits}`;
+        }
+        return field(
+          "jev",
+          "Jev",
+          observed(
+            df.jevUsage?.costUsd === undefined
+              ? undefined
+              : jevUsageSegment(
+                  df.jevUsage,
+                  undefined,
+                  jevAgeMs(df.jevUsage.capturedMs),
+                ),
+            df.jevUsageWhy ?? "usage sample unavailable",
+          ),
+        );
+      },
+      catch: (e: unknown) => e,
+    }).unwrapOr(undefined);
     if (rendered !== undefined && rendered.trim() !== "") return rendered;
     // A formatting failure has the same keys as a read failure, so it retains prior values.
     if (source === "claude")

@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { execAsyncWithin } from "./bounded.ts";
 import { jsonOf, recoverInvalid, z } from "./zod.ts";
 
@@ -26,14 +26,16 @@ export async function readAgxJobRuns(
   boundMs = 30_000,
 ): Promise<Result<AgxJobRows, string>> {
   const executable = Bun.which("agx", { PATH: process.env["PATH"] ?? "" });
-  if (executable === null) return err("no agx");
+  if (executable === null) return Result.err("no agx");
   const result = await execAsyncWithin(
     "agx",
     executable,
     ["worker", "ls", "--json", "--running"],
     boundMs,
   );
-  if (result.isErr()) return err(result.error.why.replace(/^agx /u, ""));
+  if (result.isErr()) return Result.err(result.error.why.replace(/^agx /u, ""));
   const parsed = jsonOf(Rows).safeParse(result.value);
-  return parsed.success ? ok(parsed.data) : err("invalid worker listing");
+  return parsed.success
+    ? Result.ok(parsed.data)
+    : Result.err("invalid worker listing");
 }

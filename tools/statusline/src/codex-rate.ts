@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import type {
   CodexAccountRate,
   CodexCreditMemo,
@@ -26,16 +26,16 @@ export async function readCodexRate(
     result.rate === undefined &&
     result.reason === "Codex rollout read failed"
   )
-    return err("codex rate unavailable");
+    return Result.err("codex rate unavailable");
   const rate = result.rate;
   if (
     creditMemo === undefined ||
     creditMemo.computedAt > nowMs ||
     creditMemo.baseline.at > nowMs - CREDIT_DELTA_WINDOW_MS
   )
-    return ok(rate);
+    return Result.ok(rate);
   const current = rate ?? { windows: [], mtimeMs: nowMs };
-  return ok({
+  return Result.ok({
     ...current,
     creditMemo,
     ...(current.credits === undefined

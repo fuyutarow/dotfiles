@@ -10,7 +10,7 @@ import { diskSegment } from "../src/storage-display.ts";
 import { DiskRateStateSchema, updateDiskRates } from "../src/disk-rate.ts";
 import { execAsyncWithin, readJsonAsync } from "../src/bounded.ts";
 import { ESC, RST } from "../src/ansi.ts";
-import { ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { sysSegment } from "../src/host-display.ts";
 import { cleanupTempDirs, tempDir } from "./helpers.ts";
 
@@ -24,10 +24,10 @@ test("nonzero subprocess exit preserves quota output", async () => {
   );
   expect(result.isErr()).toBe(true);
   expect(
-    result.match(
-      () => null,
-      (failure) => failure.stdout,
-    ),
+    result.match({
+      ok: () => null,
+      err: (failure) => failure.stdout,
+    }),
   ).toBe("quota output");
 });
 test("quota uses the nearer block limit and displays exhausted capacity", () => {
@@ -252,10 +252,10 @@ test.each(["Disk /", "Disk WSL", "Disk C:", "Disk /Volumes/data"])(
       `${label} ${ESC}[38;5;167m58.2GiB${RST}${ESC}[38;5;241m/931GiB (6%) free ↓0.089GiB/min${RST}`,
     );
     const row = sysSegment(
-      ok(0),
-      ok({ frac: "1/2G", pct: 50 }),
+      Result.ok(0),
+      Result.ok({ frac: "1/2G", pct: 50 }),
       undefined,
-      ok([reading]),
+      Result.ok([reading]),
     );
     expect(row).toContain(segment);
   },

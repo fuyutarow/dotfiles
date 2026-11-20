@@ -1,12 +1,6 @@
 import { readFile, statfs } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  err,
-  fromAsyncThrowable,
-  fromThrowable,
-  ok,
-  type Result,
-} from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { z } from "./zod.ts";
 import {
   execAsyncBounded,
@@ -78,13 +72,13 @@ const TMPFS_MAGIC = 0x01021994;
 export async function tmpfsReading(
   path = "/tmp",
 ): Promise<Result<TmpfsReading, string>> {
-  const stats = await fromAsyncThrowable(
-    () => statfs(path, { bigint: true }),
-    (error): string => execError(error).code ?? "statfs failed",
-  )();
-  if (stats.isErr()) return err(stats.error);
-  if (Number(stats.value.type) !== TMPFS_MAGIC) return err("not tmpfs");
-  return ok({
+  const stats = await Result.tryPromise({
+    try: () => statfs(path, { bigint: true }),
+    catch: (error): string => execError(error).code ?? "statfs failed",
+  });
+  if (stats.isErr()) return Result.err(stats.error);
+  if (Number(stats.value.type) !== TMPFS_MAGIC) return Result.err("not tmpfs");
+  return Result.ok({
     availableBytes: Number(stats.value.bavail * stats.value.bsize),
     freeInodes: Number(stats.value.ffree),
   });
@@ -145,15 +139,15 @@ async function boundedTmpStatfs(
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<Result<StatFsCounts, string>>((resolve) => {
     timer = setTimeout(() => {
-      resolve(err("statfs timeout 150ms"));
+      resolve(Result.err("statfs timeout 150ms"));
     }, 150);
   });
   const pending = Promise.resolve()
     .then(() => read(path))
     .then(
-      (value): Result<StatFsCounts, string> => ok(value),
+      (value): Result<StatFsCounts, string> => Result.ok(value),
       (reason: unknown): Result<StatFsCounts, string> =>
-        err(execError(reason).code ?? "statfs failed"),
+        Result.err(execError(reason).code ?? "statfs failed"),
     );
   const counts = await Promise.race([pending, timeout]);
   clearTimeout(timer);
@@ -168,7 +162,10 @@ export async function tmpReadingsAsync(
     .text()
     .then(
       (text) =>
-        fromThrowable((): unknown => Bun.TOML.parse(text))().unwrapOr(null),
+        Result.try({
+          try: (): unknown => Bun.TOML.parse(text),
+          catch: (e: unknown) => e,
+        }).unwrapOr(null),
       () => null,
     );
   const parsed = StorageConfigSchema.safeParse(config);
@@ -248,14 +245,18 @@ export async function diskReadingsAsync(
   const text = await Bun.file(options.configPath ?? STORAGE_CONFIG)
     .text()
     .catch(() => null);
-  if (text === null) return err("storage-headroom.toml unreadable");
-  const raw = fromThrowable((): unknown => Bun.TOML.parse(text))();
-  if (raw.isErr()) return err("storage-headroom.toml unreadable");
+  if (text === null) return Result.err("storage-headroom.toml unreadable");
+  const raw = Result.try({
+    try: (): unknown => Bun.TOML.parse(text),
+    catch: (e: unknown) => e,
+  });
+  if (raw.isErr()) return Result.err("storage-headroom.toml unreadable");
   const parsed = StorageConfigSchema.safeParse(raw.value);
   if (!parsed.success)
-    return err("storage-headroom.toml has an unexpected shape");
+    return Result.err("storage-headroom.toml has an unexpected shape");
   const drives = Object.values(parsed.data.drive ?? {});
-  if (drives.length === 0) return err("no [drive.*] in storage-headroom.toml");
+  if (drives.length === 0)
+    return Result.err("no [drive.*] in storage-headroom.toml");
   const out: DiskEntry[] = [];
   for (const d of drives) {
     if (d.path === undefined) {
@@ -304,10 +305,10 @@ export async function diskReadingsAsync(
     );
     out.push(
       ...parseQuota(
-        quota.match(
-          (stdout) => stdout,
-          (failure) => failure.stdout ?? "",
-        ),
+        quota.match({
+          ok: (stdout) => stdout,
+          err: (failure) => failure.stdout ?? "",
+        }),
       ),
     );
   }
@@ -318,5 +319,5 @@ export async function diskReadingsAsync(
     options.now ?? Temporal.Now.instant().epochMilliseconds,
   );
   await writeCacheAsync(statePath, rated.state, options.resolveCache);
-  return ok(rated.entries);
+  return Result.ok(rated.entries);
 }

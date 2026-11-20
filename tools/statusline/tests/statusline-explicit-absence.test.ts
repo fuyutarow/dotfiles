@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { err, fromThrowable, ok } from "neverthrow";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { gpuSamplingSupported } from "../src/host-load.ts";
 import { sysSegment } from "../src/host-display.ts";
 import { jsonText, z } from "../src/zod.ts";
@@ -201,7 +201,10 @@ function writeClaudeJson(home: string, body: string): void {
 }
 
 function cacheFileState(path: string): "missing" | "valid" | "torn" {
-  const read = fromThrowable(() => readFileSync(path, "utf8"))();
+  const read = Result.try({
+    try: () => readFileSync(path, "utf8"),
+    catch: (e: unknown) => e,
+  });
   if (read.isErr()) return "missing";
   return jsonText.safeParse(read.value).success ? "valid" : "torn";
 }
@@ -214,10 +217,10 @@ describe("statusline Sys row: VRAM", () => {
     expect(gpuSamplingSupported("linux", false)).toBe(true);
     const keys: string[] = [];
     const row = sysSegment(
-      ok(0),
-      ok({ pct: 0, frac: "0/1G" }),
-      err("missing sampler"),
-      ok([]),
+      Result.ok(0),
+      Result.ok({ pct: 0, frac: "0/1G" }),
+      Result.err("missing sampler"),
+      Result.ok([]),
       [],
       (key, _label, state) => {
         keys.push(key);

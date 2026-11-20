@@ -1,4 +1,5 @@
-import { fromThrowable, jsonOf, z } from "../src/zod.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "../src/zod.ts";
 import {
   mkdirSync,
   mkdtempSync,
@@ -83,7 +84,10 @@ export function seedAgxSnapshot(
     },
   };
   const path = ownerStatePath(env);
-  const previous = fromThrowable(() => readFileSync(path, "utf8"))();
+  const previous = Result.try({
+    try: () => readFileSync(path, "utf8"),
+    catch: (e: unknown) => e,
+  });
   const parsed = previous.isOk()
     ? jsonOf(OwnerStateSchema).safeParse(previous.value)
     : undefined;

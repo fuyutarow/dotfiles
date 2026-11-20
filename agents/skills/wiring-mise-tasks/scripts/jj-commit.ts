@@ -21,7 +21,7 @@
 import { $ } from "bun";
 import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { cli } from "cleye";
 import {
   filesets,
@@ -97,10 +97,14 @@ if (rootRun.exitCode !== 0)
 const root = rootRun.stdout.toString().trim();
 process.chdir(root);
 function isAgxWorkspace(workspaceRoot: string): boolean {
-  // Agx worker workspaces use <repo>-arm-<worker> roots. Classify only the current
-  // workspace: resolving every registered root lets unrelated stale or missing workspaces
-  // block a commit.
-  return /^.+-arm-.+$/u.test(basename(resolve(workspaceRoot)));
+  // `agx ws add` creates <repo>.ws/ws_<slug>. Classify only the current workspace: resolving
+  // every registered root lets unrelated stale or missing workspaces block a commit.
+  // Until 2026-11-20 this matched the retired <repo>-arm-<worker> form only, so a worker in a
+  // current workspace could move the trunk bookmark.
+  const here = resolve(workspaceRoot);
+  return (
+    basename(dirname(here)).endsWith(".ws") && basename(here).startsWith("ws_")
+  );
 }
 const agxWorkspace = isAgxWorkspace(root);
 const explicitBookmark = parsed.flags.bookmark !== "";

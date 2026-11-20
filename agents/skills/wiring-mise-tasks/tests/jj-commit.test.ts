@@ -31,6 +31,8 @@ function fixture() {
   const bin = join(dir, "bin");
   mkdirSync(root);
   mkdirSync(bin);
+  // Where `agx ws add` puts a repository's workspaces: <repo>.ws/ws_<slug>.
+  mkdirSync(join(dir, "repo.ws"));
   const binaries = [
     ["bun", process.execPath],
     ["jj", Bun.which("jj")],
@@ -149,17 +151,9 @@ function recorded(f: ReturnType<typeof fixture>) {
 describe("jj gated commit (J1)", () => {
   test("agx workspace allows a diagnostic bookmark and refuses alpha", () => {
     const f = fixture();
-    const worker = join(f.dir, "repo-arm-agx-test");
+    const worker = join(f.dir, "repo.ws", "ws_agx-test");
     f.jj("bookmark", "set", "alpha", "-r", "@-");
-    f.jj(
-      "workspace",
-      "add",
-      "--name",
-      "repo-arm-agx-test",
-      "-r",
-      "alpha",
-      worker,
-    );
+    f.jj("workspace", "add", "--name", "ws_agx-test", "-r", "alpha", worker);
     writeFileSync(join(worker, "selected.txt"), "worker edit\n");
     const runWorkerCommit = (bookmark?: string) =>
       Bun.spawnSync(
@@ -202,19 +196,44 @@ describe("jj gated commit (J1)", () => {
     expect(existsSync(f.receipt)).toBe(true);
   });
 
+  test("only <repo>.ws/ws_<slug> is an agx workspace: a sibling workspace commits to alpha", () => {
+    const f = fixture();
+    f.jj("bookmark", "set", "alpha", "-r", "@-");
+    // Each has one half of the agx shape, so neither may be refused.
+    for (const [name, parts] of [
+      ["ws_elsewhere", ["ws_elsewhere"]],
+      ["plain", ["repo.ws", "plain"]],
+      ["repo-arm-retired", ["repo-arm-retired"]],
+    ] satisfies [string, string[]][]) {
+      const other = join(f.dir, ...parts);
+      f.jj("workspace", "add", "--name", name, "-r", "alpha", other);
+      writeFileSync(join(other, "selected.txt"), `${name} edit\n`);
+      const result = Bun.spawnSync(
+        ["mise", "run", "commit", "--", "-m", name, "--", "selected.txt"],
+        {
+          cwd: other,
+          env: {
+            ...f.env,
+            MISE_TRUSTED_CONFIG_PATHS: other,
+            PATH: `${f.bin}:/usr/bin:/bin`,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 60_000,
+        },
+      );
+      expect(result.exitCode, result.stderr.toString()).toBe(0);
+      expect(
+        f.jj("log", "--no-graph", "-r", "alpha", "-T", "description"),
+      ).toBe(name);
+    }
+  });
+
   test("agx workspace without an explicit bookmark names both target options", () => {
     const f = fixture();
-    const worker = join(f.dir, "repo-arm-agx-test");
+    const worker = join(f.dir, "repo.ws", "ws_agx-test");
     f.jj("bookmark", "set", "alpha", "-r", "@-");
-    f.jj(
-      "workspace",
-      "add",
-      "--name",
-      "repo-arm-agx-test",
-      "-r",
-      "alpha",
-      worker,
-    );
+    f.jj("workspace", "add", "--name", "ws_agx-test", "-r", "alpha", worker);
     writeFileSync(join(worker, "selected.txt"), "worker edit\n");
     const result = Bun.spawnSync(
       ["mise", "run", "commit", "--", "-m", "worker", "--", "selected.txt"],
@@ -289,7 +308,7 @@ describe("jj gated commit (J1)", () => {
 
   test("a stale committing workspace still fails with the snapshot error", () => {
     const f = fixture();
-    const stale = join(f.dir, "repo-arm-stale-test");
+    const stale = join(f.dir, "repo.ws", "ws_stale-test");
     f.jj("workspace", "add", "--name", "stale-test", "-r", "@", stale);
     writeFileSync(join(stale, "selected.txt"), "stale workspace edit\n");
     const staleStatus = Bun.spawnSync(["jj", "status"], {

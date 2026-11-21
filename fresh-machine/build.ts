@@ -1,5 +1,5 @@
 // `mise run test:fresh` — does an empty Linux machine become a working one through
-// scripts/bootstrap-linux.sh? Builds scripts/fresh-machine.Dockerfile from the files jj tracks in
+// scripts/bootstrap-linux.sh? Builds fresh-machine/Dockerfile from the files jj tracks in
 // this checkout (uncommitted edits included), so an init change is tried before it is pushed.
 //
 // Not part of `test`: the build installs Homebrew and Brewfile.core from nothing and takes many
@@ -67,10 +67,7 @@ async function main(): Promise<number> {
       recursive: true,
     }).catch(() => {});
   }
-  await cp(
-    join(ROOT, "scripts/fresh-machine.Dockerfile"),
-    join(context, "Dockerfile"),
-  );
+  await cp(join(ROOT, "fresh-machine/Dockerfile"), join(context, "Dockerfile"));
   let where = context;
   if (runner === "wslc.exe") {
     const windows = await capture(["wslpath", "-w", context], ROOT);

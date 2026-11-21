@@ -886,7 +886,7 @@ run = "bun ~/dotfiles/scripts/linux-init.ts"
 [tasks."test:fresh"]
 depends = ["bun:check"]
 description = "Build a bare Ubuntu through scripts/bootstrap-linux.sh from this checkout (docker, podman or wslc). Many minutes; run when the init path changes. Not part of test."
-run = "bun scripts/test-fresh.ts"
+run = "bun fresh-machine/build.ts"
 
 [tasks."linux:migrate-brew"]
 depends = ["bun:check"]

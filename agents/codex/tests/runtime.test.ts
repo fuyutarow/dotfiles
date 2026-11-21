@@ -49,9 +49,9 @@ describe("WSL dual Codex runtime", () => {
   });
 
   test("detects the three supported host kinds", () => {
-    expect(hostKind("darwin", "xnu")).toBe("mac");
-    expect(hostKind("linux", "6.8.0-microsoft-standard-WSL2")).toBe("wsl");
-    expect(hostKind("linux", "6.8.0-generic")).toBe("linux");
+    expect(hostKind("darwin", false)).toBe("mac");
+    expect(hostKind("linux", true)).toBe("wsl");
+    expect(hostKind("linux", false)).toBe("linux");
   });
 
   test("preserves argv order and translates only declared path operands", async () => {

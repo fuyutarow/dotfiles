@@ -8,7 +8,8 @@
 // (Julia, CUDA, Python) stay in each repo's mise.toml; no global mise [tools] (INV-6).
 // Exit: 0 done · 1 a step failed (its output says which).
 import { access, realpath } from "node:fs/promises";
-import { homedir, hostname, release, userInfo } from "node:os";
+import { homedir, hostname, userInfo } from "node:os";
+import { isWslDistro } from "../tools/shared/src/wsl.ts";
 import { dirname, join } from "node:path";
 import { cli } from "cleye";
 import { $ } from "bun";
@@ -223,7 +224,7 @@ async function wslRootSteps(): Promise<void> {
     say("then re-run: mise run link:dots   # /etc links it listed as skipped");
   }
 }
-if (/microsoft/iu.test(release())) await wslRootSteps();
+if (isWslDistro()) await wslRootSteps();
 
 say("sheldon plugins");
 await $`${join(PREFIX, "bin/sheldon")} lock`;

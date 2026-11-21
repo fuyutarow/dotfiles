@@ -46,7 +46,8 @@ import {
   rename,
   writeFile,
 } from "node:fs/promises";
-import { hostname, homedir, release } from "node:os";
+import { hostname, homedir } from "node:os";
+import { isWslDistro } from "../tools/shared/src/wsl.ts";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
 import { Result, errorMessage } from "../tools/shared/src/result.ts";
@@ -727,8 +728,7 @@ function detectOs(): Os | Error {
   if (process.platform === "darwin") return "mac";
   if (process.platform !== "linux")
     return new Error(`unsupported platform: ${process.platform}`);
-  // Same test as zsh/aliases.zsh: the WSL kernel names itself in `uname -r`.
-  return /microsoft/iu.test(release()) ? "wsl" : "linux";
+  return isWslDistro() ? "wsl" : "linux";
 }
 
 export async function linkAll(ctx: Ctx, sshV: string): Promise<void> {

@@ -1,4 +1,5 @@
-import { homedir, release } from "node:os";
+import { homedir } from "node:os";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { join, resolve } from "node:path";
 import { lstat, realpath, stat } from "node:fs/promises";
 import { commandsForFormula, readToolCommandMap } from "./tool-commands.ts";
@@ -108,7 +109,7 @@ export function currentToolHost(): ToolHost {
   return {
     isMac: process.platform === "darwin",
     isLinux,
-    isWsl: isLinux && /microsoft/iu.test(release()),
+    isWsl: isLinux && isWslDistro(),
   };
 }
 

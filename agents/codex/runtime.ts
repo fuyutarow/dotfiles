@@ -1,5 +1,6 @@
 import { Result } from "../../tools/shared/src/result.ts";
-import { homedir, release } from "node:os";
+import { homedir } from "node:os";
+import { isWslDistro } from "../../tools/shared/src/wsl.ts";
 import { join, resolve } from "node:path";
 import { jsonOf, z } from "../hooks/zod.ts";
 
@@ -25,10 +26,10 @@ const WindowsRuntime = z.object({
 
 export function hostKind(
   platform = process.platform,
-  kernel = release(),
+  wsl = isWslDistro(),
 ): HostKind {
   if (platform === "darwin") return "mac";
-  return /microsoft/iu.test(kernel) ? "wsl" : "linux";
+  return wsl ? "wsl" : "linux";
 }
 
 export async function declaredProvider(

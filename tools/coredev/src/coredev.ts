@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import { release } from "node:os";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { join } from "node:path";
 import {
   executeSelection,
@@ -57,8 +57,7 @@ function fail(message: string, code = 1): void {
 
 function currentHostKind(): HostKind {
   if (process.platform === "darwin") return "mac";
-  if (process.env["WSL_DISTRO_NAME"] !== undefined) return "wsl";
-  return /microsoft/iu.test(release()) ? "wsl" : "linux";
+  return isWslDistro() ? "wsl" : "linux";
 }
 
 async function targetKind(target: string): Promise<HostKind | Error> {

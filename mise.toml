@@ -883,6 +883,11 @@ depends = ["bun:check"]
 description = "Every Linux box, WSL included: Brewfile.core via Homebrew, dotfile links, agent CLIs; on WSL also its user services, with root steps run via sudo -n or listed. Experiments stay per repo. --rented declares only a measured owner's disposable host."
 run = "bun ~/dotfiles/scripts/linux-init.ts"
 
+[tasks."test:fresh"]
+depends = ["bun:check"]
+description = "Build a bare Ubuntu through scripts/bootstrap-linux.sh from this checkout (docker, podman or wslc). Many minutes; run when the init path changes. Not part of test."
+run = "bun scripts/test-fresh.ts"
+
 [tasks."linux:migrate-brew"]
 depends = ["bun:check"]
 description = "Migrate core to Homebrew at LAND_HOSTS' prefix; --dry-run prints plan. Verify new shell PATH before cleanup; defer links used by existing processes and never delete mise installs."

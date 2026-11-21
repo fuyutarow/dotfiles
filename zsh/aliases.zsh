@@ -13,7 +13,8 @@ command_exists() {
 # sourced at the end of this file: zsh/mac.zsh, zsh/wsl.zsh)
 IS_WSL=false
 IS_MAC=false
-[[ "$(uname -r)" == *microsoft* ]] && IS_WSL=true
+# A container on the WSL kernel shares its name but is plain Linux; only a distribution has /run/WSL.
+[[ "$(uname -r)" == *microsoft* && -d /run/WSL ]] && IS_WSL=true
 [[ "$OSTYPE" == darwin* ]]         && IS_MAC=true
 
 # --- shadow dangling completion symlinks (must run BEFORE any compinit) ------

@@ -36,8 +36,9 @@ tap "fuyutarow/tap"
 brew "fuyutarow/tap/agx"
 brew "fuyutarow/tap/semlint"
 # WSL alone uses the Homebrew Codex cask for unqualified `codex`; macOS and ordinary Linux
-# retain their standalone installer. Probe procfs so SSH/herdr WSL sessions work too.
-if OS.linux? && File.read("/proc/sys/kernel/osrelease").match?(/microsoft/iu)
+# retain their standalone installer. Probe procfs so SSH/herdr WSL sessions work too. /run/WSL
+# tells a distribution from a container that merely runs on the WSL kernel.
+if OS.linux? && File.read("/proc/sys/kernel/osrelease").match?(/microsoft/iu) && File.directory?("/run/WSL")
   cask "codex"
 end
 # A nonstandard Linux prefix would build core Bun/WebKit from source. The vendor's official

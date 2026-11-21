@@ -300,7 +300,7 @@ _dotfiles_tool_lookup() {
   elif [[ -r /proc/sys/kernel/osrelease ]]; then
     is_linux=true
     IFS= read -r kernel_release < /proc/sys/kernel/osrelease
-    [[ ${(L)kernel_release} == *microsoft* ]] && is_wsl=true
+    [[ ${(L)kernel_release} == *microsoft* && -d /run/WSL ]] && is_wsl=true
   else
     is_mac=true
   fi

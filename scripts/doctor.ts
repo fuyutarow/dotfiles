@@ -79,7 +79,8 @@ import { consola } from "consola";
 import { bunRequirement, checkBunRuntime } from "./bun-runtime.ts";
 export { checkBunRuntime } from "./bun-runtime.ts";
 import { ownerlessRefLocks } from "@dotfiles/shared/src/ref-locks.ts";
-import { homedir, hostname, release, tmpdir, userInfo } from "node:os";
+import { homedir, hostname, tmpdir, userInfo } from "node:os";
+import { isWslDistro } from "../tools/shared/src/wsl.ts";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { registeredRepos } from "./workspace-repos.ts";
 import {
@@ -2625,8 +2626,8 @@ async function main(): Promise<void> {
     home,
     dotfiles: process.env["DOTFILES"] ?? join(import.meta.dir, ".."),
     isMac: process.platform === "darwin",
-    isWsl: /microsoft/iu.test(release()), // same test as link-dots.ts: `uname -r`
-    isCoreBox: process.platform === "linux" && !/microsoft/iu.test(release()),
+    isWsl: isWslDistro(),
+    isCoreBox: process.platform === "linux" && !isWslDistro(),
   };
   const only = (process.env["DOCTOR_ONLY"] ?? "")
     .split(",")

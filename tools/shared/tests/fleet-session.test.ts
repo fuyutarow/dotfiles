@@ -82,10 +82,16 @@ test("parses a valid schema 1 session and rejects invalid known fields", () => {
     FleetSessionSchema.safeParse({ ...record, session_id: "../escape" })
       .success,
   ).toBe(false);
-  expect(
-    FleetSessionSchema.safeParse({ ...record, name: "not-an-agent-name" })
-      .success,
-  ).toBe(false);
+  // A `/rename`d session keeps whatever the human called it; only an empty or multi-line
+  // name is not a name.
+  for (const name of ["dotfiles-fellow", "WSL defrag 必要性"])
+    expect(FleetSessionSchema.safeParse({ ...record, name }).success).toBe(
+      true,
+    );
+  for (const name of ["", "two\nlines", "bell\u0007"])
+    expect(FleetSessionSchema.safeParse({ ...record, name }).success).toBe(
+      false,
+    );
   expect(parseFleetSession("{")).toMatchObject({ na: true });
 });
 
@@ -215,7 +221,7 @@ test("rejects malformed, incomplete, and out-of-range records with a reason", ()
     { ...record, vendor: "other" },
     { ...record, session_id: ".." },
     { ...record, session_id: "a/b" },
-    { ...record, name: "project-pi_123" },
+    { ...record, name: "" },
     { ...record, model: "" },
     { ...record, effort: { na: true, why: "" } },
     { ...record, ctx: { tokens: -1, pct: 0 } },

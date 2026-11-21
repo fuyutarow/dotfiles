@@ -1081,11 +1081,12 @@ export async function bindClaudePanes(
       na: true,
       why: "not in native footer",
     } satisfies FleetSessionRead;
-    const nativeName = /^[a-z0-9]+(?:-[a-z0-9]+)*-agt_[a-z0-9]+$/u.test(
-      observed.name,
-    )
-      ? observed.name
-      : agent.terminal_title_stripped;
+    // Structured sources only. The footer's name cell is rendered text (`name n/a (...)`,
+    // `x · 2m old`), so a name is never parsed out of it: the statusline's own record says
+    // what the session is called, and the terminal title covers a session it has not recorded.
+    const recorded = existing.success ? existing.data.name : undefined;
+    const nativeName =
+      typeof recorded === "string" ? recorded : agent.terminal_title_stripped;
     const parsed = FleetSessionSchema.safeParse({
       schema: 1,
       session_id: id,

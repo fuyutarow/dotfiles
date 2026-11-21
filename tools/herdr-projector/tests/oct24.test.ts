@@ -54,6 +54,26 @@ test("Oct 24 footer supports warning counts, Main default and home cwd", () => {
   }
 });
 
+test("a renamed Claude session keeps the name the human gave it", async () => {
+  const root = await mkdtemp(join(tmpdir(), "projector-rename-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(root, { recursive: true, force: true }),
+  };
+  const env = { HOME: root, XDG_RUNTIME_DIR: root };
+  await Bun.write(
+    join(root, ".claude/projects/-workspace-project", `${id}.jsonl`),
+    `${JSON.stringify({ type: "custom-title", sessionId: id, customTitle: "dotfiles-fellow" })}\n`,
+  );
+  // `/rename` leaves the generated <repo>-agt_<id> form; until 2026-11-22 such a pane was dropped.
+  const agents = [{ ...agent(), terminal_title_stripped: "dotfiles-fellow" }];
+  const sessions = await bindClaudePanes(agents, new Map(), env, () =>
+    Promise.resolve(
+      claude.replaceAll("firedancer-agt_0smx", "dotfiles-fellow"),
+    ),
+  );
+  expect(sessions.get(id)).toMatchObject({ name: "dotfiles-fellow" });
+});
+
 test("Oct 24 missing Claude registration recovers from pane footer and exact transcript", async () => {
   const root = await mkdtemp(join(tmpdir(), "projector-oct24-"));
   await using _cleanup = {

@@ -18,9 +18,14 @@ export const FleetSessionUnavailableSchema = z.strictObject({
   why: z.string().min(1),
 });
 
+// Whatever the session is called: the generated <repo>-agt_<id> default or a `/rename`d name.
+// Requiring the generated form dropped every renamed session's record, so its Herdr tab kept
+// the old name (2026-11-22). One line, no control characters: it becomes a tab title and argv.
 const SessionNameSchema = z
   .string()
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*-agt_[a-z0-9]+$/u);
+  .min(1)
+  .max(200)
+  .regex(/^[^\p{Cc}]+$/u);
 
 const SessionIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u);
 

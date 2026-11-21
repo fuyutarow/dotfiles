@@ -18,6 +18,10 @@ await cp(
   join(scratch, "standard-presets/typescript/dotfiles-plugin.js"),
 );
 await cp(
+  join(PRESET, "one-home-plugin.js"),
+  join(scratch, "standard-presets/typescript/one-home-plugin.js"),
+);
+await cp(
   join(PRESET, "house.oxlintrc.json"),
   join(scratch, "standard-presets/typescript/house.oxlintrc.json"),
 );
@@ -36,7 +40,7 @@ const cases = jsonOf(
     z.object({
       id: z.string(),
       entry: z.number().int(),
-      scope: z.enum(["house", "dotfiles"]),
+      scope: z.enum(["house", "dotfiles", "one-home"]),
       bad: z.array(z.string()).min(1),
       good: z.array(z.string()).min(1),
     }),
@@ -60,9 +64,16 @@ const house = Entries.safeParse(
 const local = Entries.safeParse(
   configs[1]?.rules["dotfiles-js/no-restricted-syntax"],
 );
-if (!house.success || !local.success)
+const oneHome = Entries.safeParse(
+  configs[1]?.rules["one-home/no-restricted-syntax"],
+);
+if (!house.success || !local.success || !oneHome.success)
   expect.unreachable("missing custom syntax entries");
-const entries = { house: house.data.slice(1), dotfiles: local.data.slice(1) };
+const entries = {
+  house: house.data.slice(1),
+  dotfiles: local.data.slice(1),
+  "one-home": oneHome.data.slice(1),
+};
 const Report = jsonOf(
   z.looseObject({
     diagnostics: z.array(
@@ -109,7 +120,7 @@ if (!report.success) expect.unreachable(`exit ${exit}: ${err}\n${out}`);
 test("each configured custom entry has bad and good fixture proof", () => {
   expect(exit).toBe(1);
   expect(report.data.number_of_files).toBe(proofCases.length);
-  for (const scope of ["house", "dotfiles"] as const) {
+  for (const scope of ["house", "dotfiles", "one-home"] as const) {
     expect(
       cases.data
         .filter((row) => row.scope === scope && row.entry >= 0)

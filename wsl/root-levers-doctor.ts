@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
-import { release } from "node:os";
 import { join } from "node:path";
+import { isWslDistro } from "../tools/shared/src/wsl.ts";
 
 const hasMode = async (path: string, mode: number): Promise<boolean> =>
   stat(path).then(
@@ -9,7 +9,7 @@ const hasMode = async (path: string, mode: number): Promise<boolean> =>
   );
 
 const main = async (): Promise<void> => {
-  if (!/microsoft/iu.test(release())) {
+  if (!isWslDistro()) {
     process.stdout.write("SKIP wsl-root-levers: WSL only\n");
     return;
   }

@@ -73,7 +73,10 @@ Add local ignores to the wrapper's `ignorePatterns` with a reason comment.
 Dotfiles' root config extends the preset locally and adds its vendored-zod import
 restrictions. `dotfiles-plugin.js` gives those selectors a separate plugin identity
 so they do not replace the inherited house selectors. Consumers receive neither
-this plugin nor the root config. The root also retains the dotfiles ignores.
+this plugin nor the root config. `one-home-plugin.js` is a third identity for "this fact has
+one home" selectors (today: only `tools/shared/src/wsl.ts` may decide WSL-ness from the kernel
+name); its rule is switched off for the home and for exceptions named with their reason in the
+root config's `overrides`. The root also retains the dotfiles ignores.
 Sync I/O is not a house rule (owner decision 2026-10-12). Every custom entry has bad/good proof in
 `fixtures.json`, run by `../tests/oxlint-custom.test.ts`; snippets are executed
 in temporary repositories outside the checkout.

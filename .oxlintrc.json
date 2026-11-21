@@ -14,6 +14,10 @@
     {
       "name": "dotfiles-js",
       "specifier": "./standard-presets/typescript/dotfiles-plugin.js"
+    },
+    {
+      "name": "one-home",
+      "specifier": "./standard-presets/typescript/one-home-plugin.js"
     }
   ],
   "ignorePatterns": [
@@ -45,9 +49,36 @@
         "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value='better-result']",
         "message": "Import Result from tools/shared/src/result.ts, the repo's one better-result: hooks run before `bun install`, so it ships in the committed bundle and every file uses that same copy."
       }
+    ],
+    // One home per fact. A copy of a fact goes stale on its own: eleven readers of the kernel
+    // name each decided "is this WSL?" and all of them took a container on the WSL kernel for a
+    // distribution (2026-11-22).
+    "one-home/no-restricted-syntax": [
+      "error",
+      {
+        "selector": "Literal[regex.pattern=/microsoft/i]",
+        "message": "Ask isWslDistro() (tools/shared/src/wsl.ts) whether this is WSL: the kernel name alone also matches a container running on the WSL kernel."
+      },
+      {
+        "selector": "CallExpression[callee.property.name='includes'] > Literal[value=/^microsoft$/i]",
+        "message": "Ask isWslDistro() (tools/shared/src/wsl.ts) whether this is WSL: a kernel-name substring also matches a container running on the WSL kernel."
+      }
     ]
   },
   "overrides": [
+    {
+      // The home itself; statusline, whose golden tests switch WSL-ness by intercepting its
+      // /proc/version read (tools/statusline/tests/parity-preload.ts); and tool-tiers, which
+      // reads the word in a Brewfile condition line, not on the machine.
+      "files": [
+        "tools/shared/src/wsl.ts",
+        "tools/statusline/src/storage.ts",
+        "tools/tool-tiers/src/tool-tiers.ts"
+      ],
+      "rules": {
+        "one-home/no-restricted-syntax": "off"
+      }
+    },
     {
       "files": [
         "agents/skills/**",

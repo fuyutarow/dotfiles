@@ -3,7 +3,9 @@
     "id": "no-date",
     "entry": -1,
     "scope": "house",
-    "bad": ["export const t = Date.now();\n"],
+    "bad": [
+      "export const t = Date.now();\n"
+    ],
     "good": [
       "export const t = Temporal.Now.instant();\n",
       "export function now(Date: { now: () => number }): number { return Date.now(); }\n"
@@ -27,7 +29,9 @@
     "bad": [
       "export const f = (a: boolean, b: boolean): number => (a ? (b ? 1 : 2) : 3);\n"
     ],
-    "good": ["export const f = (a: boolean): number => (a ? 1 : 3);\n"]
+    "good": [
+      "export const f = (a: boolean): number => (a ? 1 : 3);\n"
+    ]
   },
   {
     "id": "no-try",
@@ -69,7 +73,9 @@
     "bad": [
       "process.stdin.once(\"data\", (d: Buffer) => {\n  void d;\n});\nexport {};\n"
     ],
-    "good": ["export const answer = prompt(\"continue?\") ?? \"\";\n"]
+    "good": [
+      "export const answer = prompt(\"continue?\") ?? \"\";\n"
+    ]
   },
   {
     "id": "no-type-predicate",
@@ -99,15 +105,23 @@
     "id": "no-as-cast",
     "entry": 8,
     "scope": "house",
-    "bad": ["export const n = (v: unknown): number => v as number;\n"],
-    "good": ["export const pair = [1, 2] as const;\n"]
+    "bad": [
+      "export const n = (v: unknown): number => v as number;\n"
+    ],
+    "good": [
+      "export const pair = [1, 2] as const;\n"
+    ]
   },
   {
     "id": "no-angle-cast",
     "entry": 9,
     "scope": "house",
-    "bad": ["export const n = (v: unknown): number => <number>v;\n"],
-    "good": ["export const pair = [1, 2] as const;\n"]
+    "bad": [
+      "export const n = (v: unknown): number => <number>v;\n"
+    ],
+    "good": [
+      "export const pair = [1, 2] as const;\n"
+    ]
   },
   {
     "id": "no-json-parse",
@@ -177,6 +191,52 @@
       "import { z } from \"./agents/hooks/zod.ts\";\nexport const s = z.string();\n",
       "export { z } from \"./agents/hooks/zod.ts\";\n",
       "export * from \"./agents/hooks/zod.ts\";\n"
+    ]
+  },
+  {
+    "id": "one-home-wsl-regex",
+    "entry": 0,
+    "scope": "one-home",
+    "bad": [
+      "import { release } from \"node:os\";\nexport const wsl = /microsoft/iu.test(release());\n"
+    ],
+    "good": [
+      "declare function isWslDistro(): boolean;\nexport const wsl = isWslDistro();\n",
+      "export const vendor = /redhat/iu.test(\"x\");\n"
+    ]
+  },
+  {
+    "id": "one-home-wsl-includes",
+    "entry": 1,
+    "scope": "one-home",
+    "bad": [
+      "export const wsl = (kernel: string) => kernel.toLowerCase().includes(\"microsoft\");\n"
+    ],
+    "good": [
+      "export const edge = \"com.microsoft.Edge.plist\";\n",
+      "export const has = (text: string) => text.includes(\"generic\");\n"
+    ]
+  },
+  {
+    "id": "no-direct-neverthrow",
+    "entry": 2,
+    "scope": "dotfiles",
+    "bad": [
+      "import { ok } from \"neverthrow\";\nexport const value = ok(1);\n"
+    ],
+    "good": [
+      "import { Result } from \"./result.ts\";\nexport const value = Result.ok(1);\n"
+    ]
+  },
+  {
+    "id": "no-direct-better-result",
+    "entry": 3,
+    "scope": "dotfiles",
+    "bad": [
+      "import { Result } from \"better-result\";\nexport const value = Result.ok(1);\n"
+    ],
+    "good": [
+      "import { Result } from \"./result.ts\";\nexport const value = Result.ok(1);\n"
     ]
   }
 ]

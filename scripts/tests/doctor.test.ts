@@ -19,7 +19,8 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { release, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
+import { isWslDistro } from "../../tools/shared/src/wsl.ts";
 import { dirname, join } from "node:path";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { LINKS } from "../config-registry.ts";
@@ -1122,7 +1123,7 @@ describe("doctor", () => {
     chmodSync(join(bin, "ps"), 0o755);
     const r = doctor("codex-remote", { HOME: home, DOTFILES: REPO, PATH: bin });
     expect(r.code).toBe(0);
-    if (/microsoft/iu.test(release())) {
+    if (isWslDistro()) {
       expect(r.out).toContain("SKIP  codex-remote");
       expect(r.out).toContain(
         "Windows Desktop owns the native Codex app-server",
@@ -1268,7 +1269,7 @@ describe("doctor", () => {
     // Realize the declared links so this fixture tests dangling links, not the display cap.
     let os: "mac" | "wsl" | "linux" = "linux";
     if (process.platform === "darwin") os = "mac";
-    if (/microsoft/iu.test(release())) os = "wsl";
+    if (isWslDistro()) os = "wsl";
     for (const [when, source, destination] of LINKS) {
       if (!applies(when, os) || source.startsWith("@")) continue;
       const target = join(home, destination);
@@ -1383,7 +1384,7 @@ network_access = true
 
   // capacity-guard applies on WSL only (doctor.ts CHECKS): elsewhere doctor SKIPs it, so the
   // FAIL this case expects cannot occur — declared, not failed.
-  test.skipIf(!/microsoft/iu.test(release()))(
+  test.skipIf(!isWslDistro())(
     "capacity-guard: both timer enablement and liveness are required",
     () => {
       const home = tmp("doctor-capacity-home-");

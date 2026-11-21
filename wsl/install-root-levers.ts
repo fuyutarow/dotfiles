@@ -1,12 +1,13 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { release, tmpdir, userInfo } from "node:os";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
+import { isWslDistro } from "../tools/shared/src/wsl.ts";
 
 const username = userInfo().username;
 const source = join(import.meta.dir, "dotfiles-root-levers.sudoers");
 const main = async (): Promise<number> => {
   const template = await readFile(source, "utf8");
-  if (!/microsoft/iu.test(release())) {
+  if (!isWslDistro()) {
     process.stderr.write("FAIL wsl-root-levers: WSL only\n");
     return 2;
   }

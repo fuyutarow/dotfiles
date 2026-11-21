@@ -1,6 +1,7 @@
 import { copyFile, stat } from "node:fs/promises";
 import { createConsola } from "consola";
 import { Result } from "../tools/shared/src/result.ts";
+import { isWslDistro } from "../tools/shared/src/wsl.ts";
 
 const consola = createConsola({ level: 4 });
 
@@ -64,15 +65,7 @@ async function capture(cmd: string[], ms: number): Promise<string> {
 
 const RESERVE_GB = 6; // Windows needs headroom; 60GB on a 63.9GB host measurably destabilised it
 
-if (
-  !(
-    await Bun.file("/proc/sys/kernel/osrelease")
-      .text()
-      .catch(() => "")
-  )
-    .toLowerCase()
-    .includes("microsoft")
-) {
+if (!isWslDistro()) {
   consola.error(
     "not running inside WSL — .wslconfig lives on the Windows host, so this task\nmust run from inside the WSL distro that host is running.",
   );

@@ -49,6 +49,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { errorMessage, Result } from "../../shared/src/result.ts";
+import { isWslDistro } from "../../shared/src/wsl.ts";
 import {
   type ShellCommand,
   effective as effectiveCommand,
@@ -1078,12 +1079,7 @@ export async function decide(payload: unknown): Promise<Verdict> {
   const warningLine = drives.filter(
     (d) => d.free !== null && d.free < (d.warnAt ?? d.denyAt),
   );
-  const wsl =
-    process.platform === "linux" &&
-    (await exists("/proc/sys/kernel/osrelease")) &&
-    (await readFile("/proc/sys/kernel/osrelease", "utf8"))
-      .toLowerCase()
-      .includes("microsoft");
+  const wsl = isWslDistro();
   const hostUnreadable =
     wsl &&
     config.drive["host"] !== undefined &&

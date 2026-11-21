@@ -2,9 +2,9 @@
 // The service serializes invocations; this module never queries the GPU driver.
 import { mkdir, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { release } from "node:os";
 import { errorMessage, Result } from "./result.ts";
 import { GpuStateSchema, gpuStatePath, MAX_BYTES } from "./gpu-samples.ts";
+import { isWslDistro } from "./wsl.ts";
 import { jsonOf, z } from "./zod.ts";
 
 const StallState = GpuStateSchema.extend({
@@ -140,10 +140,7 @@ async function notify(options: NotifyOptions): Promise<Result<boolean, Error>> {
 async function sendDesktopNotification(
   since: number,
 ): Promise<Result<void, Error>> {
-  const command = gpuStallNotificationCommand(
-    since,
-    /microsoft/iu.test(release()),
-  );
+  const command = gpuStallNotificationCommand(since, isWslDistro());
   if (command.isErr()) return Result.err(command.error);
   const child = Bun.spawn({
     cmd: command.value,

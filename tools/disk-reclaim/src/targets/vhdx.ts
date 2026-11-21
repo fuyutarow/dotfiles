@@ -1,38 +1,10 @@
 import { hostname } from "node:os";
-import { Result } from "@dotfiles/shared/src/result.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 
-export function isWslRuntime(facts: {
-  platform: string;
-  distroName: string | undefined;
-  procVersion: string;
-  interop: boolean;
-}): boolean {
-  return (
-    facts.platform === "linux" &&
-    (facts.distroName !== undefined ||
-      facts.procVersion.toLowerCase().includes("microsoft") ||
-      facts.interop)
-  );
-}
-
-async function runningInWsl(): Promise<boolean> {
-  if (process.platform !== "linux") return false;
-  const [versionResult, interop] = await Promise.all([
-    Result.tryPromise({
-      try: () => Bun.file("/proc/version").text(),
-      catch: (e: unknown) => e,
-    }),
-    Bun.file("/proc/sys/fs/binfmt_misc/WSLInterop").exists(),
-  ]);
-  return isWslRuntime({
-    platform: process.platform,
-    distroName: process.env["WSL_DISTRO_NAME"],
-    procVersion: versionResult.unwrapOr(""),
-    interop,
-  });
-}
+const runningInWsl = (): boolean =>
+  process.platform === "linux" && isWslDistro();
 
 // The guest that runs the planner is itself the Windows host's WSL guest when
 // interop reaches powershell.exe; probing ssh back to the host then only adds a
@@ -258,17 +230,17 @@ export function createVhdxTarget(options: {
   distro?: () => string | null;
 }) {
   const distroFor = options.distro ?? (() => distroName());
-  const hostFor = async (ctx: Context): Promise<string> =>
+  const hostFor = (ctx: Context): string =>
     ctx.host ??
     options.host ??
-    ((await runningInWsl()) && localInterop() ? "local" : "r99");
+    (runningInWsl() && localInterop() ? "local" : "r99");
   return {
     name: "vhdx",
     tier: "plan-only",
     available: async (ctx: Context) => {
-      if (!(await runningInWsl()))
+      if (!runningInWsl())
         return { available: false, skip_reason: "vhdx planner requires WSL" };
-      const host = await hostFor(ctx);
+      const host = hostFor(ctx);
       if (host === "local") return { available: true, skip_reason: null };
       const connection = await ctx.remoteProbes?.get(host);
       return connection?.available === false
@@ -276,7 +248,7 @@ export function createVhdxTarget(options: {
         : { available: true, skip_reason: null };
     },
     plan: async (ctx: Context) => {
-      const host = await hostFor(ctx);
+      const host = hostFor(ctx);
       const distro = distroFor();
       if (distro === null)
         return [

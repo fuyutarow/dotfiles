@@ -1,5 +1,6 @@
-import { readFile, statfs } from "node:fs/promises";
+import { statfs } from "node:fs/promises";
 import { Result } from "../../shared/src/result.ts";
+import { isWslDistro } from "../../shared/src/wsl.ts";
 
 export type WslStorageSnapshot = { guestFree: number; hostCFree: number };
 
@@ -7,8 +8,7 @@ export async function wslStorageSnapshot(): Promise<WslStorageSnapshot | null> {
   if (process.platform !== "linux") return null;
   const result = await Result.tryPromise({
     try: async () => {
-      const release = await readFile("/proc/sys/kernel/osrelease", "utf8");
-      if (!release.toLowerCase().includes("microsoft")) return null;
+      if (!isWslDistro()) return null;
       const [guest, host] = await Promise.all([statfs("/"), statfs("/mnt/c")]);
       return {
         guestFree: guest.bavail * guest.bsize,

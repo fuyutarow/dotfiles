@@ -1,4 +1,5 @@
-import { access, readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 
@@ -29,11 +30,7 @@ const defaultRun: CommandRunner = async (argv) => {
 };
 export function createSystemTarget(options: SystemOptions = {}) {
   const run = options.run ?? defaultRun;
-  const isWsl = async () =>
-    options.wsl ??
-    (await readFile("/proc/sys/kernel/osrelease", "utf8")
-      .then((text) => text.toLowerCase().includes("microsoft"))
-      .catch(() => false));
+  const isWsl = () => options.wsl ?? isWslDistro();
   const hasSudo = async () =>
     options.sudo ??
     (Bun.which("sudo") !== null &&
@@ -72,7 +69,7 @@ export function createSystemTarget(options: SystemOptions = {}) {
     name: "system",
     tier: "sudo",
     available: async (_ctx?: Context) => {
-      const wsl = await isWsl();
+      const wsl = isWsl();
       const unitInstalled = await hasFstrimUnit();
       const broadSudo = wsl ? await hasSudo() : false;
       const unitSudo =
@@ -87,7 +84,7 @@ export function createSystemTarget(options: SystemOptions = {}) {
       };
     },
     plan: async (_ctx: Context) => {
-      const wsl = await isWsl();
+      const wsl = isWsl();
       const hasUnit = await hasFstrimUnit();
       const broadSudo = wsl ? await hasSudo() : false;
       const entries: { argv: string[]; reason: string }[] = [

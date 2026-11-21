@@ -11,13 +11,13 @@
 // (scripts/wsl-interop-session.ts, the same socket smart-copy fed clip.exe through); macOS — pbpaste.
 // A reader that needs a display (xclip, wl-paste) is not used: those hosts SKIP.
 import { randomUUID } from "node:crypto";
-import { release } from "node:os";
 import {
   desktopInterop,
   repoHelperCommand,
 } from "@dotfiles/shared/src/desktop-interop.ts";
 import { errorMessage, Result } from "../../shared/src/result.ts";
 import { render, type Finding } from "@dotfiles/shared/src/finding.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 
 const NAME = "clipboard round-trip";
 const READ_MS = 15_000;
@@ -188,7 +188,7 @@ export async function checkClipboardRoundTrip(deps: Deps): Promise<Finding> {
 }
 
 if (import.meta.main) {
-  const isWsl = /microsoft/iu.test(release());
+  const isWsl = isWslDistro();
   const result = await Result.tryPromise({
     try: () =>
       checkClipboardRoundTrip({

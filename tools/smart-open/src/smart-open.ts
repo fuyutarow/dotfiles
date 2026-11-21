@@ -47,7 +47,7 @@
 //   busy         the receiver's rate or connection limit → NOT opened anywhere, exit 1. The limit
 //                protects the screen you sit at; opening here would route around it. Run it again,
 //                or say --here.
-import { readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
@@ -64,6 +64,7 @@ import {
   unlinkIfSame,
   type FileKey,
 } from "@dotfiles/shared/src/sockets.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
 import { desktopInterop, helperCommand } from "./desktop-interop.ts";
@@ -196,12 +197,7 @@ const SSH_CLIENT = sshClientAddress();
 const OVER_SSH = SSH_CLIENT !== "" && !isLoopbackAddress(SSH_CLIENT);
 const isUrl = (t: string) =>
   /^[a-z][a-z0-9+.-]*:\/\//iu.test(t) || /^mailto:/iu.test(t);
-const isWsl = async (): Promise<boolean> => {
-  if (process.platform !== "linux") return false;
-  if (process.env["WSL_DISTRO_NAME"] !== undefined) return true;
-  if (!(await Bun.file("/proc/version").exists())) return false;
-  return /microsoft/iu.test(await readFile("/proc/version", "utf8"));
-};
+const isWsl = (): boolean => process.platform === "linux" && isWslDistro();
 
 type Outcome =
   | "client"
@@ -283,7 +279,7 @@ async function localCommand(target: string): Promise<string[]> {
   if (override !== undefined && override !== "")
     return [...override.split(" "), target];
   if (process.platform === "darwin") return ["open", target];
-  if (await isWsl()) {
+  if (isWsl()) {
     if (isUrl(target)) return ["explorer.exe", target];
     const win = Bun.spawn(["wslpath", "-w", target], {
       stdout: "pipe",
@@ -466,7 +462,7 @@ function refusalHint(reply: string): string {
 // spawn gets the socket scripts/wsl-interop-session.ts chose (src/desktop-interop.ts). Only this
 // child's env changes. When no socket qualifies the inherited value stays and one stderr line says so.
 async function windowsEnv(): Promise<Record<string, string | undefined>> {
-  if (!(await isWsl())) return process.env;
+  if (!isWsl()) return process.env;
   const { value: chosen } = await waitSaying(
     "choosing the desktop session's WSL interop socket",
     desktopInterop(helperCommand(process.env)),
@@ -516,7 +512,7 @@ async function openHere(target: string): Promise<boolean> {
   );
   if (deadline.aborted) {
     // A locked or logged-out Windows session is the case seen: explorer.exe then never returns.
-    const hint = (await isWsl())
+    const hint = isWsl()
       ? " — is someone logged in, unlocked, at this machine's Windows desktop?"
       : "";
     consola.error(

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
 import { mkdir, rename } from "node:fs/promises";
-import { release } from "node:os";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { isAbsolute, join } from "node:path";
 import { Result } from "../../shared/src/result.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
@@ -1114,11 +1114,11 @@ export async function bindClaudePanes(
 export async function nativeCodexRc(
   env: NodeJS.ProcessEnv = process.env,
   readArgs = (pid: number) => run("ps", ["-o", "args=", "-p", String(pid)]),
-  osRelease = release(),
+  wsl = isWslDistro(),
 ): Promise<string> {
-  // Equivalent public OS read to doctor's ctx.isWsl (scripts/doctor.ts).
+  // The same answer as doctor's ctx.isWsl (tools/shared/src/wsl.ts).
   // Windows Desktop owns the native app-server on WSL, not this daemon.
-  if (/microsoft/iu.test(osRelease))
+  if (wsl)
     return "not applicable: Windows Desktop owns the native Codex app-server on WSL";
   const directory = join(
     env["CODEX_HOME"] ?? join(env["HOME"] ?? "", ".codex"),

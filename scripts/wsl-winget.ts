@@ -2,6 +2,7 @@ import { copyFile, stat } from "node:fs/promises";
 import { cli } from "cleye";
 import { createConsola } from "consola";
 import { Result } from "../tools/shared/src/result.ts";
+import { isWslDistro } from "../tools/shared/src/wsl.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 const consola = createConsola({ level: 4 });
@@ -87,11 +88,8 @@ async function run(
   return { ...done, out: done.out.replaceAll("\r", ""), timedOut: false };
 }
 
-async function requireWsl(): Promise<void> {
-  const rel = await Bun.file("/proc/sys/kernel/osrelease")
-    .text()
-    .catch(() => "");
-  if (!rel.toLowerCase().includes("microsoft")) {
+function requireWsl(): void {
+  if (!isWslDistro()) {
     consola.error(
       "not running inside WSL — winget lives on the Windows host, so this runs from its distro",
     );
@@ -325,7 +323,7 @@ async function main(): Promise<Result<void, Error>> {
       new UsageError(`verb must be dump or restore, got '${verb}'`),
     );
   }
-  await requireWsl();
+  requireWsl();
   if (verb === "dump") await dump();
   else await restore(parsed.flags.dryRun);
   return Result.ok(undefined);

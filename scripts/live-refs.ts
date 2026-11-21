@@ -16,6 +16,7 @@ import {
   chmod,
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
+import { isWslDistro } from "../tools/shared/src/wsl.ts";
 import {
   dirname,
   isAbsolute,
@@ -676,14 +677,10 @@ export async function candidateFindings(
   return await findings({ repo, home: targetHome, os });
 }
 
-async function systemOs(): Promise<Os | undefined> {
+function systemOs(): Os | undefined {
   if (process.platform === "darwin") return "mac";
   if (process.platform !== "linux") return undefined;
-  return /microsoft/iu.test(
-    await readFile("/proc/sys/kernel/osrelease", "utf8"),
-  )
-    ? "wsl"
-    : "linux";
+  return isWslDistro() ? "wsl" : "linux";
 }
 
 async function main(): Promise<void> {
@@ -704,7 +701,7 @@ async function main(): Promise<void> {
   }
   const home = process.env["HOME"] ?? homedir();
   const repo = process.env["DOTFILES"] ?? resolve(import.meta.dir, "..");
-  const os = await systemOs();
+  const os = systemOs();
   if (os === undefined) {
     process.stderr.write(`FATAL: unsupported platform: ${process.platform}\n`);
     process.exitCode = 2;

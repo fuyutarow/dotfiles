@@ -85,17 +85,10 @@ test.each(displayCases)(
 test("Codex applicability uses the same public OS release fact as doctor before reading daemon state", async () => {
   const root = await mkdtemp(join(tmpdir(), "projector-wsl-"));
   const env = { CODEX_HOME: root };
-  for (const osRelease of [
-    "6.6.87.2-microsoft-standard-WSL2",
-    "4.4.0-Microsoft",
-  ]) {
-    expect(await nativeCodexRc(env, undefined, osRelease)).toBe(notApplicable);
-  }
-  for (const osRelease of ["6.8.0-generic", "24.6.0"]) {
-    expect(await nativeCodexRc(env, undefined, osRelease)).toBe(
-      "daemon settings unreadable",
-    );
-  }
+  expect(await nativeCodexRc(env, undefined, true)).toBe(notApplicable);
+  expect(await nativeCodexRc(env, undefined, false)).toBe(
+    "daemon settings unreadable",
+  );
   await Bun.write(
     join(root, "app-server-daemon/app-server.pid"),
     JSON.stringify({ pid: 123 }),
@@ -108,7 +101,7 @@ test("Codex applicability uses the same public OS release fact as doctor before 
         reads++;
         return Promise.resolve("codex app-server --remote-control");
       },
-      "6.6.87.2-microsoft-standard-WSL2",
+      true,
     ),
   ).toBe(notApplicable);
   expect(reads).toBe(0);
@@ -118,7 +111,7 @@ test("Codex reads persisted daemon state and prioritizes the running process ove
   const root = await mkdtemp(join(tmpdir(), "projector-daemon-"));
   const env = { CODEX_HOME: root };
   const read = (readArgs?: (pid: number) => Promise<string | undefined>) =>
-    nativeCodexRc(env, readArgs, "6.8.0-generic");
+    nativeCodexRc(env, readArgs, false);
   const directory = join(root, "app-server-daemon");
   const settings = join(directory, "settings.json");
   expect(await read()).toBe("daemon settings unreadable");

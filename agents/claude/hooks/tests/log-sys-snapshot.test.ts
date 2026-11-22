@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
@@ -50,17 +50,27 @@ const body = (stdout: string): string =>
   messageOf(stdout)
     .replace(ANSI, "")
     .replace(/^\[dotfiles:sys-snapshot\] /u, "")
-    .replace(/^[^@\s]+@[^:\s]+:\d\d-\d\d \d\d:\d\d[+-]\d\d(?:\d\d)? \| /u, ""); // the prompt-stamp.ts head, offset included
-const fire = (home: string, event: string) =>
-  runHook(
+    .replace(/^[^@\s]+@[^:\s]+:\d\d-\d\d \d\d:\d\d[+-]\d\d(?:\d\d)? \| /u, "") // the prompt-stamp.ts head, offset included
+    .replace(/ \| Agx: n\/a \(agx not found on PATH\)$/u, "");
+// Each fire starts a fresh cadence window unless `keep` says otherwise. agx is kept off PATH so
+// the line ends in a fixed "Agx: n/a (...)" segment, which body() strips; agx-runs.test.ts owns it.
+const fire = (home: string, event: string, keep = false) => {
+  if (!keep)
+    rmSync(join(home, ".cache", "claude", "sys-log"), {
+      recursive: true,
+      force: true,
+    });
+  return runHook(
     HOOK,
     { hook_event_name: event, session_id: "s1" },
     {
       HOME: home,
+      PATH: "/nonexistent",
       XDG_STATE_HOME: join(home, ".local", "state"),
       XDG_RUNTIME_DIR: join(home, "runtime"),
     },
   );
+};
 
 describe("log-sys-snapshot", () => {
   test("fresh statusline rows retain both provider limits and resets over the reduced fleet handoff", async () => {
@@ -184,12 +194,14 @@ describe("log-sys-snapshot", () => {
       ),
     );
   });
-  test("PostToolUse within a minute of the last line stays silent", () => {
+  test("within a minute of the last line, Stop and PostToolUse both stay silent", () => {
     const home = homeWithCache(1_000);
     expect(fire(home, "Stop").stdout).toContain(LINE);
-    const r = fire(home, "PostToolUse");
-    expect(r.code).toBe(0);
-    expect(r.stdout.trim()).toBe("");
+    for (const event of ["PostToolUse", "Stop"]) {
+      const r = fire(home, event, true);
+      expect(r.code).toBe(0);
+      expect(r.stdout.trim()).toBe("");
+    }
   });
 
   test("a stale reading is not shown", () => {

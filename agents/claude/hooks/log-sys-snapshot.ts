@@ -7,7 +7,7 @@ import {
   readFleetSession,
   type FleetSession,
 } from "../../../tools/shared/src/fleet-session.ts";
-// Stop / PostToolUse hook — attach one line "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: 5h … · 7d … | Sys: CPU …"
+// Stop / PostToolUse hook — attach one line "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: 5h … · 7d … | Sys: CPU … | Agx: …"
 // (time, this session's context and API budget, host) to the thread at this moment, so a transcript shows what the machine looked like WHEN something
 // happened, not only what the statusline shows now.
 //
@@ -23,8 +23,9 @@ import {
 // it, so a tool call never pays for a sample. A reading older than STALE_MS is not shown — it
 // would be a claim about a moment it does not describe.
 //
-// Cadence: every Stop (end of turn), and on PostToolUse at most once per MIN_GAP_MS per session,
-// so a long tool-heavy turn still gets a timeline without one line per tool call.
+// Cadence: at most once per MIN_GAP_MS per session, Stop and PostToolUse alike. Stop is not
+// exempt: a Stop hook that blocks, or a background task that re-invokes the session, makes
+// several Stops a minute, and each used to print a line.
 //
 // Fail-open: this is a log, never a gate. Any problem -> exit 0 with no output.
 
@@ -32,6 +33,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import { readStdinJson } from "./lib.ts";
 import { promptParts } from "./prompt-stamp.ts";
+import { agxRuns } from "./agx-runs.ts";
 
 const HOME = process.env["HOME"] ?? "";
 const CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
@@ -120,18 +122,27 @@ async function main(): Promise<void> {
   // One record per line: "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: … | Sys: …" — who and where
   // (sessions now span machines), and this event's time (the mobile app shows none), in the
   // prompt's own head shape (prompt-stamp.ts); the separator is SEP.
-  const { user, host, stamp } = promptParts("");
-  const shown = [`${DIM}${user}@${host}:${stamp}${RST}`, ...rows, sys].join(
-    SEP,
-  );
-
   const statePath = `${STATE_DIR}/${key}.last`;
   const last = await Result.tryPromise({
     try: async () => Number(await readFile(statePath, "utf8")),
     catch: (e: unknown) => e,
   });
   const lastAt = last.isOk() && Number.isFinite(last.value) ? last.value : 0;
-  if (event === "PostToolUse" && now - lastAt < MIN_GAP_MS) return;
+  if (now - lastAt < MIN_GAP_MS) return;
+
+  // This session's agx runs, last: "Agx: 0 running" or the running/unjudged runs, or n/a (why).
+  const runs = await Result.tryPromise({
+    try: () => agxRuns(sid, strAt(payload, "cwd") ?? process.cwd()),
+    catch: (e: unknown) => e,
+  });
+  const agx = `Agx: ${runs.isOk() ? runs.value : `n/a (${String(runs.error)})`}`;
+  const { user, host, stamp } = promptParts("");
+  const shown = [
+    `${DIM}${user}@${host}:${stamp}${RST}`,
+    ...rows,
+    sys,
+    agx,
+  ].join(SEP);
 
   await mkdir(STATE_DIR, { recursive: true });
   await writeFile(statePath, `${now}\n`);

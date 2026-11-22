@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { chmod, mkdir } from "node:fs/promises";
+import { chmod, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
 import { runHook, tempHome } from "./helpers.ts";
 import { decoded } from "../../../hooks/tests/decode.ts";
-import { fleetSessionFixture } from "./fleet-session-fixture.ts";
 
-const HOOK = "log-agx-snapshot.ts";
+// The Agx segment of log-sys-snapshot.ts (agx-runs.ts): this session's runs from `agx status --json`.
+const HOOK = "log-sys-snapshot.ts";
 const Message = z.object({ systemMessage: z.string() });
 const row = (
   id: string,
@@ -45,6 +45,14 @@ async function fixture(rows: unknown[] = []) {
       judgments: { by_session: {}, repository: 0, land: 0, why: null },
     }),
   );
+  await mkdir(join(home, ".cache", "claude"), { recursive: true });
+  await Bun.write(
+    join(home, ".cache", "claude", "statusline-sys.json"),
+    JSON.stringify({
+      at: Temporal.Now.instant().epochMilliseconds,
+      line: "Sys: CPU 1%",
+    }),
+  );
   const agx = join(bin, "agx");
   await Bun.write(
     agx,
@@ -66,12 +74,19 @@ process.stdout.write(await Bun.file(${JSON.stringify(path)}).text());
   return { home, path, calls };
 }
 
-function fire(
+// Each fire starts a fresh cadence window unless `keep` says otherwise.
+async function fire(
   f: { home: string },
   event = "Stop",
   payload?: unknown,
   extra: Record<string, string> = {},
+  keep = false,
 ) {
+  if (!keep)
+    await rm(join(f.home, ".cache", "claude", "sys-log"), {
+      recursive: true,
+      force: true,
+    });
   return runHook(
     HOOK,
     {
@@ -94,79 +109,31 @@ function fire(
   );
 }
 
-function message(result: ReturnType<typeof fire>, session = "s1") {
+async function message(pending: ReturnType<typeof fire>) {
+  const result = await pending;
   expect(result.code).toBe(0);
   expect(result.stderr).toBe("");
   expect(result.stdout.trim().split("\n")).toHaveLength(1);
   const msg = decoded(Message, parseJson(result.stdout)).systemMessage;
-  expect(msg).toStartWith("[dotfiles:agx:snapshot] ");
-  expect(msg).toContain(`session=${session}`);
+  expect(msg).toContain("Agx: ");
   expect(msg).not.toContain("\n");
-  return msg;
+  return msg.slice(msg.indexOf("Agx: "));
 }
 
-describe("log-agx-snapshot", () => {
-  test("Stop includes this session's context and rates from the fleet handoff", async () => {
-    const f = await fixture();
-    await fleetSessionFixture(f.home);
-    const msg = message(fire(f));
-    expect(msg).toContain("Ctx: 120k 60%");
-    expect(msg).toContain("Rate: 5h 40% · 7d 60%");
-    expect(msg).toContain("0 running");
-    expect(msg).not.toContain("input has no");
-  });
-
-  test("another fleet session's context and rates are excluded", async () => {
-    const f = await fixture();
-    await fleetSessionFixture(f.home, "other");
-    const msg = message(fire(f));
-    expect(msg).not.toContain("Ctx:");
-    expect(msg).not.toContain("Rate:");
-  });
-
-  test("handoff unavailable reasons are printed on one line and token counts stay readable", async () => {
-    const f = await fixture();
-    const { session, path } = await fleetSessionFixture(f.home);
-    const na = { na: true, why: "not observed\nthis turn" };
-    await Bun.write(path, JSON.stringify({ ...session, ctx: na, rate: na }));
-    const msg = message(fire(f));
-    expect(msg).toContain("Ctx: n/a (not observed this turn)");
-    expect(msg).toContain("Rate: n/a (not observed this turn)");
-    await Bun.write(
-      path,
-      JSON.stringify({ ...session, ctx: { tokens: 999, pct: 0.5 } }),
-    );
-    expect(message(fire(f))).toContain("Ctx: 999 0.5%");
-  });
-
-  test("malformed or mismatched handoffs preserve the run snapshot", async () => {
-    const f = await fixture();
-    const { session, path } = await fleetSessionFixture(f.home);
-    for (const text of [
-      "{bad",
-      "null",
-      JSON.stringify({ ...session, session_id: "other" }),
-    ]) {
-      await Bun.write(path, text);
-      const msg = message(fire(f));
-      expect(msg).toContain("0 running");
-      expect(msg).not.toContain("Ctx:");
-    }
-  });
+describe("log-sys-snapshot Agx segment", () => {
   test("Stop lists only this session's runs with run prefixes and vendor session/thread ids", async () => {
     const f = await fixture([
       row("abcdef12-aaaa", "s1", "claude-worker-session"),
       row("12345678-bbbb", "s1", "codex-worker-thread"),
       row("other-id", "other"),
     ]);
-    const msg = message(fire(f));
+    const msg = await message(fire(f));
     expect(msg).toContain("2 running");
     expect(msg).toContain("abcdef12");
     expect(msg).toContain("12345678");
     expect(msg).toContain("vendor_session=claude-worker-session");
     expect(msg).toContain("vendor_session=codex-worker-thread");
     expect(msg).not.toContain("other-id");
-    message(fire(f)); // every Stop, including immediately repeated Stops
   });
 
   test("zero runs, foreign runs and unattributed runs still print 0 running", async () => {
@@ -175,19 +142,21 @@ describe("log-agx-snapshot", () => {
       [row("foreign", "other")],
       [{ ...row("none"), dispatcher_session: null }],
     ]) {
-      expect(message(fire(await fixture(rows)))).toContain("0 running");
+      expect(await message(fire(await fixture(rows)))).toContain("0 running");
     }
   });
 
   test("missing vendor identity is explicit", async () => {
-    const msg = message(fire(await fixture([row("abcdefgh-run", "s1", null)])));
+    const msg = await message(
+      fire(await fixture([row("abcdefgh-run", "s1", null)])),
+    );
     expect(msg).toContain("abcdefgh");
     expect(msg).toContain("vendor_session=n/a (not recorded)");
   });
 
   test("non-zero CLI exit prints n/a with its failure reason", async () => {
     const f = await fixture();
-    const msg = message(
+    const msg = await message(
       fire(f, "Stop", { session_id: "s1" }, { FAKE_AGX_MODE: "failure" }),
     );
     expect(msg).toContain("n/a (");
@@ -205,7 +174,7 @@ describe("log-agx-snapshot", () => {
     ]) {
       const f = await fixture();
       await Bun.write(f.path, data);
-      expect(message(fire(f))).toContain("n/a (invalid agx status JSON)");
+      expect(await message(fire(f))).toContain("n/a (invalid agx status JSON)");
     }
   });
 
@@ -223,7 +192,7 @@ describe("log-agx-snapshot", () => {
           },
         }),
       );
-      const msg = message(fire(f));
+      const msg = await message(fire(f));
       expect(msg).toContain(
         source === "unknown"
           ? "n/a (snapshot unavailable)"
@@ -236,7 +205,7 @@ describe("log-agx-snapshot", () => {
   test("a hung CLI is killed within the hook's short timeout and fails open", async () => {
     const f = await fixture();
     const start = performance.now();
-    const msg = message(
+    const msg = await message(
       fire(f, "Stop", undefined, { FAKE_AGX_MODE: "timeout" }),
     );
     const elapsed = performance.now() - start;
@@ -251,47 +220,24 @@ describe("log-agx-snapshot", () => {
 
   test("missing agx fails open", async () => {
     expect(
-      message(
+      await message(
         fire(await fixture(), "Stop", undefined, { PATH: "/nonexistent" }),
       ),
     ).toContain("n/a (agx not found on PATH)");
   });
 
-  test("Stop survives an unwritable cadence cache", async () => {
+  test("Stop and PostToolUse share one per-session cadence", async () => {
     const f = await fixture();
-    await Bun.write(join(f.home, ".cache"), "not a directory");
-    expect(message(fire(f))).toContain("0 running");
+    await message(fire(f, "PostToolUse"));
+    expect((await fire(f, "Stop", undefined, {}, true)).stdout).toBe("");
+    expect((await fire(f, "PostToolUse", undefined, {}, true)).stdout).toBe("");
+    await message(fire(f));
   });
-
-  test("PostToolUse is throttled but Stop is never throttled", async () => {
-    const f = await fixture();
-    message(fire(f, "PostToolUse"));
-    expect(fire(f, "PostToolUse").stdout).toBe("");
-    message(fire(f));
-    message(fire(f));
-  });
-
-  test("Codex thread and environment fallback identities are printed", async () => {
-    const f = await fixture();
-    message(fire(f, "Stop", { thread_id: "codex-thread" }), "codex-thread");
-    message(
-      fire(f, "Stop", {}, { CODEX_SESSION_ID: "codex-env" }),
-      "codex-env",
-    );
-    message(
-      fire(f, "Stop", {}, { CLAUDE_CODE_SESSION_ID: "claude-env" }),
-      "claude-env",
-    );
-    expect(message(fire(f, "Stop", {}), "n/a (not supplied)")).toContain(
-      "n/a (session id not supplied)",
-    );
-  });
-
   test("one CLI call receives the payload cwd as one argument, with process cwd fallback", async () => {
     const f = await fixture([row("cli-run")]);
     const start = performance.now();
     expect(
-      message(
+      await message(
         fire(
           f,
           "Stop",
@@ -306,7 +252,7 @@ describe("log-agx-snapshot", () => {
     expect(await Bun.file(f.calls).text()).toBe(
       `${JSON.stringify(["status", "--json", "--cwd", "/repo with spaces"])}\n`,
     );
-    message(fire(f));
+    await message(fire(f));
     const calls = (await Bun.file(f.calls).text()).trim().split("\n");
     expect(calls).toHaveLength(2);
     expect(calls[1]).toBe(
@@ -324,12 +270,12 @@ describe("log-agx-snapshot", () => {
       { ...row("orphan"), state: "orphaned" },
       { ...row("foreign", "other"), state: "ended" },
     ]);
-    const msg = message(fire(f));
+    const msg = await message(fire(f));
     expect(msg).toContain("0 running · 1 ended-unjudged · orphaned 1");
   });
 
   test("other events stay silent", async () => {
-    const result = fire(await fixture(), "UserPromptSubmit");
+    const result = await fire(await fixture(), "UserPromptSubmit");
     expect(result.code).toBe(0);
     expect(result.stdout).toBe("");
   });

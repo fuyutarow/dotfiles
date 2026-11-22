@@ -12,7 +12,7 @@
 # agents/hooks/lib.ts). A hook that reads a vendor's transcript, a vendor-only tool name, or
 # answers "ask" stays in that vendor's own dir (agents/claude/hooks, agents/codex/hooks).
 #
-# Slug: required, unique kebab-case identity, optionally nested with `:` (for example agx:snapshot),
+# Slug: required, unique kebab-case identity, optionally nested with `:` (for example area:name),
 # used as [<slug>] on every visible message.
 # vendor_hook declares vendor-only identities; external lists third-party commands, owner and reason.
 # vendor_hook.script is relative to agents/; commands lists its exact hand-written registrations.
@@ -146,11 +146,6 @@ commands = [
 slug = "sys-snapshot"
 script = "claude/hooks/log-sys-snapshot.ts"
 commands = ["sh ~/.claude/hooks/run.sh log-sys-snapshot.ts"]
-
-[[vendor_hook]]
-slug = "agx:snapshot"
-script = "claude/hooks/log-agx-snapshot.ts"
-commands = ["sh ~/.claude/hooks/run.sh log-agx-snapshot.ts"]
 
 [[vendor_hook]]
 slug = "existing-definition"

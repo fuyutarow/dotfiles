@@ -363,7 +363,7 @@ describe("render-home: base only", () => {
     expect(rendered["cleanupPeriodDays"]).toBe(36500);
   });
 
-  test("real Claude settings render agx:snapshot on the same events as sys-snapshot", async () => {
+  test("real Claude settings render one snapshot hook, sys-snapshot, on Stop and PostToolUse", async () => {
     const base = jsonOf(JsonObject).safeParse(
       await Bun.file(join(ROOT, "agents/claude/settings.json")).text(),
     );
@@ -392,10 +392,10 @@ describe("render-home: base only", () => {
             "HOOK_SLUG=dotfiles:sys-snapshot sh ~/.claude/hooks/run.sh log-sys-snapshot.ts",
         ),
       );
-      expect(agx).toHaveLength(1);
+      // The agx run summary is a segment of the sys-snapshot line, not a second hook.
+      expect(agx).toHaveLength(0);
       expect(sys).toHaveLength(1);
-      expect(agx[0]?.["matcher"]).toBe(sys[0]?.["matcher"]);
-      expect(agx[0]?.["hooks"][0]?.["timeout"]).toBe(5);
+      expect(sys[0]?.["hooks"][0]?.["timeout"]).toBe(5);
     }
     cleanup(dotfiles, home);
   });

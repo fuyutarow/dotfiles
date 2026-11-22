@@ -64,6 +64,7 @@ import {
   headLabel,
   requestAutoReindex,
   resolveRegisteredProject,
+  runIndexInit,
   runIndexStatus,
   runIndexWrapper,
   runningIndexPid,
@@ -79,13 +80,14 @@ const INDEX_BOOLEAN_FLAGS = new Set([
   "--detach",
   "--status",
   "--plan",
+  "--init",
   "--accept-plan",
   "--help",
   "-h",
 ]);
 const INDEX_VALUE_FLAGS = new Set(["--timeout-ms", "--timeoutMs"]);
 const INDEX_USAGE =
-  "Usage: rr index [-h|--help] [--timeout-ms|--timeoutMs <ms>] [--detach] [--status] [--plan] [--accept-plan]";
+  "Usage: rr index [-h|--help] [--timeout-ms|--timeoutMs <ms>] [--detach] [--status] [--plan] [--init] [--accept-plan]";
 
 function rejectUnknownIndexFlags(argv: string[]): boolean {
   if (argv[0] !== "index") return false;
@@ -709,7 +711,7 @@ async function writeNoIndexDiagnostic(
     freshnessMessage +
       `Cause: no current certified ccc index is recorded for this repo; ${daemon}.\n` +
       (reindex.isErr()
-        ? `Repair: from this project root run 'ccc init' if it is not registered, then ` +
+        ? `Repair: from this project root run 'rr index --init' if it is not registered, then ` +
           `'repo-retrieve index' to run ccc index and record the freshness watermark.\n`
         : "") +
       `Available now: lexical routes 'rr text', 'rr regex', and 'rr files' read the working tree.\n`,
@@ -914,7 +916,7 @@ async function runCccSearch(
     return Result.err(
       new Error(
         `${route} requested, but ${cwd} is not ccc-registered at that project root; ` +
-          "run ccc init/index or use an explicitly lexical route",
+          "register it with 'rr index --init', or use an explicitly lexical route",
       ),
     );
   }
@@ -1864,6 +1866,7 @@ function indexCommand() {
         detach: Boolean,
         status: Boolean,
         plan: Boolean,
+        init: Boolean,
         acceptPlan: Boolean,
       },
       strictFlags: true,
@@ -1902,6 +1905,18 @@ function indexCommand() {
             "--plan requires a read-only foreground invocation; --accept-plan cannot be combined with --plan or --status",
           ),
         );
+        return;
+      }
+      if (parsed.flags.init === true) {
+        const others = [
+          parsed.flags.detach,
+          parsed.flags.status,
+          parsed.flags.plan,
+          parsed.flags.acceptPlan,
+        ].some((flag) => flag === true);
+        commandResult = others
+          ? Result.err(new Error("--init registers only; run it alone"))
+          : await runIndexInit();
         return;
       }
       if (parsed.flags.status === true) {

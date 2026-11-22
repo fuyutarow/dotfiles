@@ -1589,7 +1589,7 @@ describe("repo-retrieve route contract", () => {
         "check progress with 'rr index --status'",
       );
       expect(result.stderr).not.toContain(
-        "Repair: from this project root run 'ccc init'",
+        "Repair: from this project root run 'rr index --init'",
       );
       expect(result.stderr).toContain("rr text");
       expect(result.stderr).toContain("rr regex");

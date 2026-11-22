@@ -1257,6 +1257,37 @@ export type IndexOutcome =
   | { kind: "indexed"; exitCode: 0; project: string; backend: string }
   | { kind: "failed"; exitCode: number };
 
+/**
+ * `rr index --init`: register the current directory as a ccc project and nothing else. ccc's own
+ * `init` only writes `.cocoindex_code/settings.yml`; it starts no daemon and no indexing, so the
+ * admission plan still stands between registration and the first index. An already registered
+ * root (or a directory inside one) is refused rather than re-initialized.
+ */
+export async function runIndexInit(): Promise<Result<number, Error>> {
+  const cwd = process.cwd();
+  const existing = await resolveRegisteredProject(cwd);
+  if (existing?.project !== undefined && existing.project !== null)
+    return Result.err(
+      new Error(
+        `index --init refused: ${cwd} is already inside ccc-registered project ${existing.project}; run 'rr index --plan' there`,
+      ),
+    );
+  const ccc = requireExecutable("ccc");
+  if (ccc.isErr()) return Result.err(ccc.error);
+  const backend = await cccBackend(ccc.value);
+  const result = await runChildCaptured([backend, "init"], 60_000);
+  if (result.exitCode !== 0)
+    return Result.err(
+      new Error(
+        `ccc init exited ${result.exitCode}; stderr tail=${JSON.stringify(result.stderr.trim().slice(-400))}`,
+      ),
+    );
+  process.stdout.write(
+    `REGISTERED: ${cwd}\nNEXT: rr index --plan > /tmp/<repo>-rr-plan.jsonl\n`,
+  );
+  return Result.ok(0);
+}
+
 export async function runIndexWrapper(
   timeoutMs = INDEX_STALL_MS,
   mode: "wait" | "detach" = "wait",

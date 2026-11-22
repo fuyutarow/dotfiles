@@ -1318,7 +1318,7 @@ async function decidePayload(
     return {
       reason: override
         ? `search-route: agent use of rr index --accept-plan is denied for ${target}. Remove --accept-plan and make the admission plan pass first. Use rr index.`
-        : `search-route: raw ccc index entry points are denied for ${target}. Use rr index; it runs the exclusion admission plan before ccc.`,
+        : `search-route: raw ccc index entry points are denied for ${target}. Use rr index; it runs the exclusion admission plan before ccc. To register an unregistered root, use rr index --init.`,
     };
   }
   const unresolved = unresolvedOperands(command, cwd);

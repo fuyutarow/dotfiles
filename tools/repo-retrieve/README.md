@@ -170,12 +170,15 @@ retrieval and is not an index-policy source.
 
 ## Bringing a new root into retrieval
 
-Run this procedure from the new repository root. `ccc init` registers the project and creates
-its ccc configuration directory. Before the first index, build an admission plan and save its
+Run this procedure from the new repository root. `rr index --init` registers the project and
+creates its ccc configuration directory; it runs ccc's `init`, which writes
+`.cocoindex_code/settings.yml` and starts neither the daemon nor any indexing. It refuses a
+directory that is already inside a registered project. Raw `ccc init` is denied to agents like
+every other direct ccc entry point. Before the first index, build an admission plan and save its
 JSONL stdout so the exact candidate set can be reviewed; the contributor report is on stderr:
 
 ```sh
-ccc init
+rr index --init
 rr index --plan > /tmp/<repo>-rr-plan.jsonl
 ```
 
@@ -399,7 +402,7 @@ bun /path/to/dotfiles/tools/repo-retrieve/views/research-record-v1.ts \
 Use a fresh dedicated output when changing kinds or shard count; nothing is deleted.
 Repeated exports reuse byte-identical files. Optional `--shards N` (1–16) partitions
 all selected objects by `floor(first_hash_hex_digit * N / 16)` into `shard-01`, etc.
-Each shard is a separate ccc project: run `ccc init`, configure its own settings.yml
+Each shard is a separate ccc project: run `rr index --init`, configure its own settings.yml
 and rr.toml with `max_seconds = 600`, then save `rr index --plan` before indexing.
 Include all statement files in each shard; no hash sampling or size exclusions are
 needed. For a canonical statement over the planner's per-file byte ceiling, declare

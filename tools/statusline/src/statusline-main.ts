@@ -552,6 +552,7 @@ if (liveMode) {
         : session,
       codexMode ? "codex" : "claude",
       codexMode ? undefined : df.sessionName,
+      codexMode ? undefined : df.shells,
     );
   process.stdout.write(
     `${render(df, { codex: codexMode, layout: "block" })}${codexMode && onceMode ? "\n" : ""}`,

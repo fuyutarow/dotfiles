@@ -5,9 +5,22 @@ import {
   type FleetSessionUnavailable,
 } from "@dotfiles/shared/src/fleet-session.ts";
 import type { SessionStatus } from "./session-status.ts";
+import type { ShellScan } from "./shells.ts";
 import { agentNameAsync } from "./identity.ts";
 
 type Vendor = FleetSession["vendor"];
+
+/** The scanned shells as start times, so a reader can age them without rescanning. */
+function shellRecord(scan: ShellScan): NonNullable<FleetSession["shells"]> {
+  if (scan.kind === "unknown") return { na: true, why: scan.reason };
+  const now = Temporal.Now.instant();
+  return {
+    running: scan.rows.map((row) => ({
+      id: row.id,
+      started_at: now.subtract({ seconds: row.seconds }).toString(),
+    })),
+  };
+}
 type Unavailable = FleetSessionUnavailable;
 
 const unavailable = (why: string): Unavailable => ({ na: true, why });
@@ -101,6 +114,7 @@ export async function writeStatuslineFleetSession(
   session: SessionStatus,
   vendor: Vendor,
   resolvedName?: string,
+  shells?: ShellScan,
 ): Promise<void> {
   const sessionId = session.sessionId;
   if (sessionId === undefined || sessionId === "") return;
@@ -169,6 +183,7 @@ export async function writeStatuslineFleetSession(
         cwd: session.cwd ?? process.env["PWD"] ?? process.cwd(),
         pane_id: paneId ?? null,
         updated_at: Temporal.Now.instant().toString(),
+        ...(shells === undefined ? {} : { shells: shellRecord(shells) }),
       };
       await writeFleetSession(record);
     },

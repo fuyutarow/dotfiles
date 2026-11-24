@@ -134,7 +134,13 @@ test("attributes nearest agents, worker cgroups and top unowned", async () => {
       cpu_pct: 30,
       ram_bytes: 60 * 1024,
       vram_bytes: 2097152,
-      workers: { count: 1, cpu_pct: 50, ram_bytes: 4096, vram_bytes: 5242880 },
+      workers: {
+        count: 1,
+        cpu_pct: 50,
+        ram_bytes: 4096,
+        vram_bytes: 5242880,
+        runs: [],
+      },
     },
   ]);
   expect(doc.unresolved_agents).toEqual([
@@ -316,7 +322,13 @@ test("macOS attributes ps trees and worker lease without proc or cgroups", async
     cpu_pct: 100,
     ram_bytes: 30 * 1024,
     vram_bytes: null,
-    workers: { count: 1, cpu_pct: 100, ram_bytes: 70 * 1024, vram_bytes: null },
+    workers: {
+      count: 1,
+      cpu_pct: 100,
+      ram_bytes: 70 * 1024,
+      vram_bytes: null,
+      runs: [],
+    },
   });
   expect(doc?.unresolved_agents).toEqual([]);
   expect(doc?.sessions[1]).toEqual({
@@ -326,7 +338,7 @@ test("macOS attributes ps trees and worker lease without proc or cgroups", async
     cpu_pct: 50,
     ram_bytes: 50 * 1024,
     vram_bytes: null,
-    workers: { count: 0, cpu_pct: 0, ram_bytes: 0, vram_bytes: null },
+    workers: { count: 0, cpu_pct: 0, ram_bytes: 0, vram_bytes: null, runs: [] },
   });
   expect(doc?.host.ram_bytes).toBe(1048576 - 35 * 4096);
   expect(doc?.host.vram_bytes).toBeNull();

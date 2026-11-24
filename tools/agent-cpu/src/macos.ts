@@ -6,6 +6,7 @@ import {
   codexResumeId,
   descriptorId,
   vendorOf,
+  runStarts,
   workers,
   type Options,
   type Row,
@@ -227,6 +228,7 @@ export async function produceMac(options: Options) {
                 0,
               ),
               vram_bytes: null,
+              runs: runStarts(owned),
             },
     });
   }

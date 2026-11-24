@@ -11,6 +11,7 @@
 // the thrown value to the error the caller expects.
 export { Result } from "../../../agents/hooks/vendor/deps.js";
 export { Err, Ok } from "../../../agents/hooks/vendor/deps.js";
+export { matchError, TaggedError } from "../../../agents/hooks/vendor/deps.js";
 
 /** Message text of a caught value, for diagnostics. */
 export function errorMessage(error: unknown): string {

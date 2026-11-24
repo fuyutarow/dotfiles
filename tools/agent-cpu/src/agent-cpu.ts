@@ -17,6 +17,8 @@ import { produceMac } from "./macos.ts";
 const WINDOW = 2000;
 const uuid = z.uuid();
 const rowSchema = z.object({
+  id: z.string().optional(),
+  started_at: z.string().nullable().optional(),
   dispatcher_session: z.string().nullable(),
   lease: z
     .object({
@@ -27,6 +29,19 @@ const rowSchema = z.object({
     .optional(),
 });
 export type Row = z.infer<typeof rowSchema>;
+
+/** Each run's id and start, so a reader can tell how long it has been running. */
+export function runStarts(
+  rows: readonly Row[],
+): { id: string; started_at: string }[] {
+  return rows.flatMap((row) =>
+    row.id === undefined ||
+    row.started_at === null ||
+    row.started_at === undefined
+      ? []
+      : [{ id: row.id, started_at: row.started_at }],
+  );
+}
 type Vendor = "claude" | "codex";
 type Proc = {
   pid: number;
@@ -470,6 +485,7 @@ export async function produce(options: Options) {
       cpu_pct: number;
       ram_bytes: number;
       vram_bytes: number | null;
+      runs: { id: string; started_at: string }[];
     } | null;
   }[] = [];
   const unresolved_agents: {
@@ -515,6 +531,7 @@ export async function produce(options: Options) {
       cpu_pct: number;
       ram_bytes: number;
       vram_bytes: number | null;
+      runs: { id: string; started_at: string }[];
     } | null = null;
     if (owned !== undefined) {
       const workersVramBytes = gpuAvailable ? workersVram : null;
@@ -523,6 +540,7 @@ export async function produce(options: Options) {
         cpu_pct: Math.round((micros / (WINDOW * 1000)) * 100),
         ram_bytes: workersRam,
         vram_bytes: workersVramBytes,
+        runs: runStarts(owned),
       };
     }
     sessions.push({

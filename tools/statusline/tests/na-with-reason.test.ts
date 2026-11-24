@@ -190,6 +190,11 @@ test.each([false, true])(
       expect(cached.data.rows.map((row) => row.ansi)).toEqual(
         snapshot.slice(0, 2),
       );
+      // The hook prints at most one line a minute per session; each case starts a fresh window.
+      await rm(join(home, ".cache", "claude", "sys-log"), {
+        recursive: true,
+        force: true,
+      });
       const child = Bun.spawn(
         [
           process.execPath,

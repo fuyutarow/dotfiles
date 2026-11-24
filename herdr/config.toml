@@ -139,12 +139,17 @@ agent_panel_sort = "spaces"
 # vram is reported only when non-zero (a 0 reading means no vram in use and is omitted).
 # The projector fits the row as drawn, separators included, and drops whole parts from the right, never
 # cut mid-token: vram first, then shells, then workers. cpu and ram are never dropped while they fit.
-# Each override under rows_by_agent repeats row 3, since an override replaces rows.
+# Each override under rows_by_agent repeats rows 3 and 4, since an override replaces rows.
+# Row 4 appears only when the projector reports something to act on (tools/herdr-projector/src/alerts.ts):
+# $alert_err (red) names source failures as tagged errors; $alert_warn (yellow) names this session's
+# workers and background shells running 12 minutes or more. With neither, both are cleared and the
+# row disappears.
 [ui.sidebar.agents]
 rows = [
   ["state_icon", { token = "tab", fg = "#878787", bold = true, dim = false }, { token = "$rc", fg = "#878787", bold = false, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#626262", bold = false, dim = false }, { token = "$ctx_mid", fg = "#af8700", bold = false, dim = false }, { token = "$ctx_hi", fg = "#af5f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
   [{ token = "$cpu_idle", fg = "#4e4e4e", bold = false, dim = false }, { token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
+  [{ token = "$alert_err", fg = "#d75f5f", bold = false, dim = false }, { token = "$alert_warn", fg = "#d7af00", bold = false, dim = false }],
   # Custom reported agents use these default rows, not rows_by_agent overrides.
   # Unreported tokens disappear. See https://herdr.dev/docs/configuration/#sidebar-row-layouts.
   ["$btm_summary"],
@@ -164,11 +169,13 @@ claude = [
   ["state_icon", { token = "$fullname", fg = "#878787", bold = true, dim = false }, { token = "$rc", fg = "#878787", bold = false, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#626262", bold = false, dim = false }, { token = "$ctx_mid", fg = "#af8700", bold = false, dim = false }, { token = "$ctx_hi", fg = "#af5f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
   [{ token = "$cpu_idle", fg = "#4e4e4e", bold = false, dim = false }, { token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
+  [{ token = "$alert_err", fg = "#d75f5f", bold = false, dim = false }, { token = "$alert_warn", fg = "#d7af00", bold = false, dim = false }],
 ]
 codex = [
   ["state_icon", { token = "$fullname", fg = "#878787", bold = true, dim = false }, { token = "$rc", fg = "#878787", bold = false, dim = false }],
   [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#626262", bold = false, dim = false }, { token = "$ctx_mid", fg = "#af8700", bold = false, dim = false }, { token = "$ctx_hi", fg = "#af5f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
   [{ token = "$cpu_idle", fg = "#4e4e4e", bold = false, dim = false }, { token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
+  [{ token = "$alert_err", fg = "#d75f5f", bold = false, dim = false }, { token = "$alert_warn", fg = "#d7af00", bold = false, dim = false }],
 ]
 [session]
 # resume_agents_on_restore = true (default)

@@ -7,6 +7,14 @@ import { Result } from "../../shared/src/result.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
 import {
+  AgxUnavailable,
+  alertTokenArgs,
+  type PaneError,
+  ResourceSnapshotUnavailable,
+  SessionRecordUnavailable,
+  ShellScanUnavailable,
+} from "./alerts.ts";
+import {
   FleetSessionSchema,
   FleetSessionUnavailableSchema,
   readFleetSession,
@@ -89,6 +97,9 @@ const AgentCpuSchemaV2 = AgentCpuSchemaV1.extend({
           cpu_pct: z.number(),
           ram_bytes: bytes,
           vram_bytes: bytes.nullable(),
+          runs: z
+            .array(z.object({ id: z.string(), started_at: z.iso.datetime() }))
+            .optional(),
         })
         .nullable(),
     }),
@@ -1455,7 +1466,28 @@ export async function projectAgents(
         vram,
         shells,
       );
-      cpuArgs.push(...resourceTokenArgs(tokens));
+      cpuArgs.push(
+        ...resourceTokenArgs(tokens),
+        ...alertTokenArgs(
+          paneErrors(session, identity, cpuSnapshot),
+          [
+            ...(memoryWorkers?.runs ?? []).map((job) => ({
+              kind: "wkr" as const,
+              id: job.id,
+              startedAt: job.started_at,
+            })),
+            ...(
+              ShellsRunningSchema.safeParse(identity?.shells).data?.running ??
+              []
+            ).map((shell) => ({
+              kind: "sh" as const,
+              id: shell.id,
+              startedAt: shell.started_at,
+            })),
+          ],
+          Temporal.Now.instant().epochMilliseconds,
+        ),
+      );
       // Retired tokens (the row-4 counts, the single grey resources token and older per-field
       // names): cleared so a value reported by an earlier version does not linger. They come last
       // so that a split report never drops a live token to make room for them.
@@ -1510,6 +1542,47 @@ export async function projectAgents(
   }
   process.stdout.write(`herdr-projector: projected ${updated} pane(s)\n`);
   return 0;
+}
+
+/** The fleet record's running shells, when the statusline's scan succeeded. */
+const ShellsRunningSchema = z.object({
+  running: z.array(z.object({ id: z.string(), started_at: z.string() })),
+});
+
+/** This pane's source failures, as tagged errors for row 4. */
+function paneErrors(
+  session: FleetSessionRead | undefined,
+  identity: FleetSession | undefined,
+  cpuSnapshot: AgentCpuSnapshot | undefined,
+): PaneError[] {
+  const errors: PaneError[] = [];
+  const unavailable = FleetSessionUnavailableSchema.safeParse(session);
+  if (unavailable.success)
+    errors.push(
+      new SessionRecordUnavailable({
+        why: sessionWhy(session),
+        message: unavailable.data.why,
+      }),
+    );
+  if (cpuSnapshot === undefined)
+    errors.push(
+      new ResourceSnapshotUnavailable({
+        message: "agent-cpu.json is missing, invalid, or older than 180 s",
+      }),
+    );
+  else if (cpuSnapshot.agx === "unavailable")
+    errors.push(
+      new AgxUnavailable({ message: "agent-cpu could not list agx runs" }),
+    );
+  const shellScan = FleetSessionUnavailableSchema.safeParse(identity?.shells);
+  if (shellScan.success)
+    errors.push(
+      new ShellScanUnavailable({
+        why: shellScan.data.why,
+        message: shellScan.data.why,
+      }),
+    );
+  return errors;
 }
 
 export function agentCpuCacheInput(

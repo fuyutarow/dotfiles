@@ -55,6 +55,21 @@ export const FleetSessionSchema = z.strictObject({
   cwd: z.string().min(1),
   pane_id: z.string().nullable(),
   updated_at: z.iso.datetime(),
+  // The session's running background shells and when each started, as the statusline scanned them.
+  // Optional: Codex and records written before this field carry none.
+  shells: z
+    .union([
+      z.strictObject({
+        running: z.array(
+          z.strictObject({
+            id: z.string().min(1),
+            started_at: z.iso.datetime(),
+          }),
+        ),
+      }),
+      FleetSessionUnavailableSchema,
+    ])
+    .optional(),
 });
 
 export type FleetSessionUnavailable = z.output<

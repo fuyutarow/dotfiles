@@ -394,6 +394,8 @@ function run(
       COCOINDEX_CODE_DB_PATH_MAPPING: "",
       // Most tests pin the freshness gate without depending on a live ccc installation.
       REPO_RETRIEVE_AUTO_INDEX: "0",
+      // These tests pin the refusal itself; the bounded catch-up wait has its own test.
+      REPO_RETRIEVE_CATCH_UP_MS: "0",
       XDG_STATE_HOME: join(tools.bin, "state"),
       XDG_RUNTIME_DIR: join(tools.bin, "runtime"),
       REPO_RETRIEVE_INDEX_WORKER: "0",
@@ -2286,6 +2288,22 @@ describe("repo-retrieve route contract", () => {
     expect(result.code).toBe(3);
     expect(result.stderr).toContain("gap=1 commits");
     expect(result.stderr).toContain("reindex is running (pid");
+  });
+
+  test("a stale index is caught up: the search waits for the reindex and answers fresh", () => {
+    const { dir } = registerFreshGitProject();
+    writeFileSync(join(dir, "later.md"), "later\n");
+    gitCmd(dir, ["add", "later.md"]);
+    gitCmd(dir, ["commit", "-q", "-m", "later"]);
+    const result = run(
+      dir,
+      ["about", "x"],
+      { FAKE_SCOPE_RESULT: '["later.md"]', REPO_RETRIEVE_CATCH_UP_MS: "20000" },
+      30_000,
+    );
+    expect(result.stderr).toContain("waiting up to 20 s for the reindex");
+    expect(result).toMatchObject({ code: 0 });
+    expect(result.stdout).toContain("status=fresh");
   });
 
   test("a HEAD drift that changes no path is not staleness: served, with a NOTE", () => {

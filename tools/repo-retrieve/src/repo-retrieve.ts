@@ -59,7 +59,7 @@ import {
 import { parseDaemonStatus, type DaemonStatus } from "./ccc-daemon-status.ts";
 import { declaredDbEnv, MAPPING_ENV } from "./ccc-db-dir.ts";
 import {
-  checkIndexFreshness,
+  catchUpIndex,
   citationToken,
   headLabel,
   requestAutoReindex,
@@ -923,7 +923,7 @@ async function runCccSearch(
 
   if (resolution.workspace !== null) backingIndexNote(project);
 
-  const freshnessResult = await checkIndexFreshness(project, route);
+  const freshnessResult = await catchUpIndex(project, route);
   if (freshnessResult.isErr()) return Result.err(freshnessResult.error);
   const freshness = freshnessResult.value;
   if (freshness.status === "stale") {
@@ -1210,7 +1210,7 @@ async function runCccGrep(
       new Error(`structural requested, but ${cwd} is not ccc-registered`),
     );
   const project = resolution.project;
-  const freshness = await checkIndexFreshness(project, "structural");
+  const freshness = await catchUpIndex(project, "structural");
   if (freshness.isErr()) return Result.err(freshness.error);
   if (freshness.value.status === "stale") {
     await writeNoIndexDiagnostic(
@@ -1743,7 +1743,7 @@ async function runDefinition(
     );
   }
   if (resolution.workspace !== null) backingIndexNote(project);
-  const freshness = await checkIndexFreshness(project, "exists");
+  const freshness = await catchUpIndex(project, "exists");
   if (freshness.isErr()) return Result.err(freshness.error);
   if (freshness.value.status === "stale") {
     await writeNoIndexDiagnostic(

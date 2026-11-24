@@ -313,6 +313,47 @@ export async function requestAutoReindex(
   return result;
 }
 
+/**
+ * A stale index is caught up, not refused: start (or join) the admitted reindex and wait for it,
+ * bounded, then answer from the index it certifies. Freshness is still observed through
+ * checkIndexFreshness, so an answer only ever comes from an index a real `ccc index` produced
+ * at the current HEAD. It returns the last observation: still stale when the reindex could not
+ * start, ended without certifying HEAD, or outran the bound (REPO_RETRIEVE_CATCH_UP_MS, default
+ * 180 s; 0 disables waiting). Progress goes to stderr so a waiting caller sees why it waits.
+ */
+export async function catchUpIndex(
+  project: string,
+  route: string,
+): Promise<Result<Freshness, Error>> {
+  const clock = {
+    now: () => Temporal.Now.instant().epochMilliseconds,
+    sleep: (ms: number) => Bun.sleep(ms),
+  };
+  const first = await checkIndexFreshness(project, route);
+  if (first.isErr() || first.value.status === "fresh") return first;
+  const bound = Number(process.env["REPO_RETRIEVE_CATCH_UP_MS"] ?? 180_000);
+  if (!Number.isFinite(bound) || bound <= 0) return first;
+  const requested = await requestAutoReindex(project);
+  if (requested.isErr()) return first;
+  if (!requested.value.started && (await runningIndexPid(project)) === null)
+    return first;
+  process.stderr.write(
+    `INDEX: stale; waiting up to ${Math.round(bound / 1000)} s for the reindex to certify the current HEAD\n`,
+  );
+  const deadline = clock.now() + bound;
+  let last: Result<Freshness, Error> = first;
+  while (clock.now() < deadline) {
+    await clock.sleep(2_000);
+    last = await checkIndexFreshness(project, route);
+    if (last.isErr() || last.value.status === "fresh") return last;
+    // The reindex ended without certifying HEAD: one more read covers a watermark written just
+    // after the request closed; otherwise the caller reports NO_INDEX as before.
+    if ((await runningIndexPid(project)) === null)
+      return checkIndexFreshness(project, route);
+  }
+  return last;
+}
+
 export type IndexProgressSource = {
   now: () => number;
   sleep: (milliseconds: number) => Promise<void>;

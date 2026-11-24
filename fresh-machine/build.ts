@@ -77,7 +77,9 @@ async function main(): Promise<number> {
     }
     where = windows.value.trim();
   }
-  say(`${runner} build: ${paths.length} tracked files, bare ubuntu:24.04`);
+  say(
+    `${runner} build: ${paths.length} tracked files, fresh-machine/Dockerfile`,
+  );
   const build = Bun.spawn([runner, "build", "-t", "dotfiles-fresh", where], {
     cwd: ROOT,
     stdin: "ignore",

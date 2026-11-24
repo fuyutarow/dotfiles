@@ -4,7 +4,7 @@
 # machine, so this file cannot disagree with Brewfile.core or COREDEV_SELECTION. What a container
 # cannot show stays unproven: systemd user units and timers, /etc links, the login shell, WSL's
 # own services.
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 # git before the bootstrap only to turn the copied checkout into something `git clone` accepts;
 # the bootstrap installs everything else itself.
 RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git > /dev/null

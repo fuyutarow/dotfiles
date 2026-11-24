@@ -96,7 +96,10 @@ export const COREDEV_SELECTION: Readonly<
       { task: "skills:sync", timeoutSeconds: 600 },
       // Before cc:install-mcp, which skips an MCP server whose command is absent.
       { task: "reason-network:install", timeoutSeconds: 120 },
-      { task: "cc:install-mcp", timeoutSeconds: 120 },
+      // On a machine without ccc it first installs cocoindex-code[full] (torch and CUDA, about
+      // 6 GB); 120 s timed out on a fresh Ubuntu 26.04 (test:fresh, 2026-11-25). Later runs find
+      // ccc on PATH and only re-register servers.
+      { task: "cc:install-mcp", timeoutSeconds: 1_800 },
     ],
     doctor: [{ task: "core:doctor", timeoutSeconds: 180 }],
   },

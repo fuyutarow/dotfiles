@@ -340,18 +340,36 @@ export async function catchUpIndex(
   process.stderr.write(
     `INDEX: stale; waiting up to ${Math.round(bound / 1000)} s for the reindex to certify the current HEAD\n`,
   );
-  const deadline = clock.now() + bound;
+  const started = clock.now();
+  const deadline = started + bound;
   let last: Result<Freshness, Error> = first;
+  // The reindex child exits before its runner writes the watermark that certifies HEAD, so its
+  // pid vanishing is not the end: keep reading for a short grace, still inside the bound.
+  let exitedAt: number | null = null;
   while (clock.now() < deadline) {
     await clock.sleep(2_000);
     last = await checkIndexFreshness(project, route);
-    if (last.isErr() || last.value.status === "fresh") return last;
-    // The reindex ended without certifying HEAD: one more read covers a watermark written just
-    // after the request closed; otherwise the caller reports NO_INDEX as before.
-    if ((await runningIndexPid(project)) === null)
-      return checkIndexFreshness(project, route);
+    if (last.isErr() || last.value.status === "fresh") break;
+    const running = (await runningIndexPid(project)) !== null;
+    exitedAt = running ? null : (exitedAt ?? clock.now());
+    if (exitedAt !== null && clock.now() - exitedAt >= CERTIFY_GRACE_MS) break;
   }
+  waitedMs += clock.now() - started;
   return last;
+}
+
+/** How long a finished reindex may take to write the watermark that certifies HEAD. */
+const CERTIFY_GRACE_MS = 15_000;
+
+let waitedMs = 0;
+
+/**
+ * Milliseconds this process has spent on its own work, not counting time spent waiting for a
+ * reindex in catchUpIndex. Search budgets count from here: measured from process start, a
+ * caught-up call had already spent its budget waiting and gave the daemon status read 1 ms.
+ */
+export function workElapsedMs(): number {
+  return process.uptime() * 1_000 - waitedMs;
 }
 
 export type IndexProgressSource = {

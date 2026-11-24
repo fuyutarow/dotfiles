@@ -273,6 +273,8 @@ if [ "${name}" = ccc ] && [ "$1" = index ]; then
   if [ -n "\${FAKE_CCC_REPLACE_REQUEST:-}" ]; then cat "$FAKE_CCC_REPLACE_REQUEST" > "$PWD/.cocoindex_code/INDEX_REQUEST.json"; fi
 fi
 if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_INDEX_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
+# A slow but successful index: it still finishes and certifies HEAD, only later.
+if [ "${name}" = ccc ] && [ "$1" = index ] && [ -n "\${FAKE_CCC_INDEX_SECONDS:-}" ]; then sleep "$FAKE_CCC_INDEX_SECONDS"; fi
 if [ "${name}" = ccc ] && [ "$1" = search ] && [ "\${FAKE_CCC_INDEXING_AFTER_SEARCH:-0}" = 1 ]; then touch "$FAKE_SEARCH_LOG.search-started"; fi
 if [ "${name}" = ccc ] && [ "$1" = search ] && [ -n "\${FAKE_CCC_SEARCH_SLEEP_SECONDS:-}" ]; then exec sleep "$FAKE_CCC_SEARCH_SLEEP_SECONDS"; fi
 # The real ccc is a wrapper that spawns a backend: the backend, not the wrapper, answers late and
@@ -2305,6 +2307,30 @@ describe("repo-retrieve route contract", () => {
     expect(result).toMatchObject({ code: 0 });
     expect(result.stdout).toContain("status=fresh");
   });
+
+  // 2026-11-25 (research-record-v3): a call that waited past 9 s for the reindex then gave the
+  // daemon status read the remainder of a 9 s process-uptime budget -- 1 ms -- and died FATAL.
+  // The search budget counts the call's own work, not the time it spent waiting.
+  test("a catch-up that waits longer than the search budget still searches", () => {
+    const { dir } = registerFreshGitProject();
+    writeFileSync(join(dir, "later.md"), "later\n");
+    gitCmd(dir, ["add", "later.md"]);
+    gitCmd(dir, ["commit", "-q", "-m", "later"]);
+    const result = run(
+      dir,
+      ["about", "x"],
+      {
+        FAKE_SCOPE_RESULT: '["later.md"]',
+        FAKE_CCC_INDEX_SECONDS: "11",
+        REPO_RETRIEVE_CATCH_UP_MS: "40000",
+      },
+      60_000,
+    );
+    expect(result.stderr).not.toContain("timed out after 1ms");
+    expect(result.stderr).not.toContain("could not read ccc daemon status");
+    expect(result).toMatchObject({ code: 0 });
+    expect(result.stdout).toContain("status=fresh");
+  }, 70_000);
 
   test("a HEAD drift that changes no path is not staleness: served, with a NOTE", () => {
     const { dir } = registerGitProject();

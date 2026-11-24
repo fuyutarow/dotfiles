@@ -63,6 +63,7 @@ import {
 import { declaredDbEnv, MAPPING_ENV } from "#src/ccc-db-dir.ts";
 import {
   catchUpIndex,
+  workElapsedMs,
   citationToken,
   headLabel,
   requestAutoReindex,
@@ -974,7 +975,7 @@ async function runCccSearch(
   const statusTimeoutMs = Math.min(
     timeoutMs,
     5_000,
-    Math.max(1, Math.floor(9_000 - process.uptime() * 1_000)),
+    Math.max(1, Math.floor(9_000 - workElapsedMs())),
   );
   const statusResult = await Result.tryPromise({
     try: () =>
@@ -1021,7 +1022,7 @@ async function runCccSearch(
   // Leave one second for process termination and delivery of the BUSY result.
   const searchDeadline = reindexing
     ? Temporal.Now.instant().epochMilliseconds +
-      Math.min(timeoutMs, Math.floor(9_000 - process.uptime() * 1_000))
+      Math.min(timeoutMs, Math.floor(9_000 - workElapsedMs()))
     : null;
   const cccPath =
     path === undefined ? undefined : await cccSearchPath(project, path);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.1 — 2026-11-25
+
+- A call that waits for the reindex no longer gives up 2 s after it finishes, and no longer fails its daemon status read with a 1 ms timeout after waiting longer than 9 s.
+
 ## 1.15.0 — 2026-11-25
 
 - A stale index is caught up instead of refused: about, absent, shape and exists start or join the admitted reindex and wait for it (REPO_RETRIEVE_CATCH_UP_MS, default 180 s), then answer from the index it certifies; NO_INDEX remains when it cannot catch up

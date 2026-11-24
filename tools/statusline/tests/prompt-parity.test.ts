@@ -6,7 +6,7 @@ import {
   isolatedStatuslineEnv,
   tempHome,
   tempDir,
-} from "./helpers.ts";
+} from "#tests/helpers.ts";
 
 // The statusline's first line copies the zsh PS1 head (user@host:time zone|cwd), but nothing tied
 // the two together: on 2026-10-06 the offset was desaturated in one and the owner found the other

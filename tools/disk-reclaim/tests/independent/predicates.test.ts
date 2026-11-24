@@ -13,9 +13,9 @@ import {
   readdirSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 import { jsonOf } from "@dotfiles/shared/src/zod.ts";
-import { Plan, type Candidate } from "../../src/model.ts";
+import { Plan, type Candidate } from "#src/model.ts";
 const cli = resolve("tools/disk-reclaim/src/reclaim.ts");
 function repair(p: string) {
   if (!existsSync(p)) return;

@@ -1,18 +1,18 @@
 import { readFile, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { z } from "./zod.ts";
+import { z } from "#src/zod.ts";
 import {
   execAsyncBounded,
   execError,
   readJsonAsync,
   writeCacheAsync,
-} from "./bounded.ts";
+} from "#src/bounded.ts";
 import {
   DiskRateStateSchema,
   diskRateStatePath,
   updateDiskRates,
-} from "./disk-rate.ts";
+} from "#src/disk-rate.ts";
 
 // Drive paths come from agents/hooks/storage-headroom.toml. Free-space color thresholds are
 // presentation rules in ansi.ts; the storage gate keeps its own enforcement thresholds. statfs is

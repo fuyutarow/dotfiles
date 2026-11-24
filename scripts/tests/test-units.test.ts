@@ -17,7 +17,7 @@ import {
   unitsOf,
   verdictOf,
   type Outcome,
-} from "../test-units.ts";
+} from "#root/test-units.ts";
 
 const RUNNER = join(import.meta.dir, "..", "test-units.ts");
 const HEADER = 'import { expect, test } from "bun:test";\n';

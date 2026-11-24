@@ -1,0 +1,11 @@
+{
+  "name": "@dotfiles/goal-kernel",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#root/*": "./*"
+  },
+  "dependencies": {
+    "cleye": "2.6.0"
+  }
+}

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { join, resolve } from "node:path";
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { jsonOf, z } from "../src/zod.ts";
+import { jsonOf, z } from "#src/zod.ts";
 const PackageSchema = jsonOf(
   z.object({
     version: z.string(),

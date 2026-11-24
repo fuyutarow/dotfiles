@@ -2,7 +2,7 @@ import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { gitHead } from "./ccc-index.ts";
+import { gitHead } from "#src/ccc-index.ts";
 
 const prefix = "AUTO_REINDEX_RECEIPT-";
 // Declared once: how many of the newest auto-reindex receipts a DB directory keeps.

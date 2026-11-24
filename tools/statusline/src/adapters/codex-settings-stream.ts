@@ -1,6 +1,6 @@
 import { open } from "node:fs/promises";
 import { StringDecoder } from "node:string_decoder";
-import { jsonOf, z } from "../zod.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 // Project only the settings envelope, validating JSON syntax without retaining
 // assistant text, instructions or arrays. Bounds apply to memory, not file length.

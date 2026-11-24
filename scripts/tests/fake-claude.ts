@@ -1,7 +1,7 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { Result } from "../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { resolve } from "node:path";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const args = Bun.argv.slice(2);
 const home = process.env["HOME"] ?? "";

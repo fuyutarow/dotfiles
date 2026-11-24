@@ -3,4 +3,4 @@ export {
   executeJob,
   validateManifest,
   type ResourceManifest,
-} from "./agent-resource-run.ts";
+} from "#src/agent-resource-run.ts";

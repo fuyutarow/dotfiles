@@ -1,6 +1,6 @@
 // `bun agents/codex/codex-runtime.ts [deploy] [--check]` — reconcile WSL's
 // explicit `codex.exe` Windows Desktop launcher while plain `codex` stays native.
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { cli } from "cleye";
 import {
   access,
@@ -14,14 +14,17 @@ import {
 import { constants } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative } from "node:path";
-import { z } from "../hooks/zod.ts";
-import { deployWindowsAssets, windowsAssetsDrift } from "./windows-assets.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
+import {
+  deployWindowsAssets,
+  windowsAssetsDrift,
+} from "#root/windows-assets.ts";
 import {
   hostKind,
   resolveDesktopRuntime,
   resolveRuntime,
   windowsPath,
-} from "./runtime.ts";
+} from "#root/runtime.ts";
 
 const DEFAULT_DOTFILES = join(process.env["HOME"] ?? homedir(), "dotfiles");
 const MANAGED_LAUNCHER =

@@ -1,11 +1,11 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname } from "node:path";
-import { applyToolChangesets } from "./land-changesets.ts";
+import { applyToolChangesets } from "#root/land-changesets.ts";
 import { join } from "node:path";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { changesetDiagnostic, parseChangeset } from "./changeset.ts";
-import { Result } from "../tools/shared/src/result.ts";
+import { changesetDiagnostic, parseChangeset } from "#root/changeset.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 export type ToolDiffEntry = { path: string; status: "A" | "M" | "D" };
 

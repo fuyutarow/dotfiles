@@ -11,9 +11,9 @@
 import { readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { readonlyCommand } from "@dotfiles/shared/src/readonly-command.ts";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { cccBackend } from "./ccc-entry.ts";
+import { cccBackend } from "#src/ccc-entry.ts";
 
 // The owned public entry may be a Bun wrapper; its preserved backend is the uv-tool script whose
 // shebang names the interpreter that can import cocoindex_code.

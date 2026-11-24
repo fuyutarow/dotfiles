@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildLinuxInitEnv } from "../linux-init-env.ts";
+import { buildLinuxInitEnv } from "#root/linux-init-env.ts";
 
 describe("linux:init child environment", () => {
   test("puts declared Homebrew ahead of legacy executable directories", () => {

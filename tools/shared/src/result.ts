@@ -9,9 +9,9 @@
 // A callback passed to map/andThen/match/tap that throws is a defect: better-result rethrows it as
 // a Panic. Code that can throw goes through Result.try / Result.tryPromise, with `catch` mapping
 // the thrown value to the error the caller expects.
-export { Result } from "../../../agents/hooks/vendor/deps.js";
-export { Err, Ok } from "../../../agents/hooks/vendor/deps.js";
-export { matchError, TaggedError } from "../../../agents/hooks/vendor/deps.js";
+export { Result } from "@dotfiles/hooks/vendor/deps.js";
+export { Err, Ok } from "@dotfiles/hooks/vendor/deps.js";
+export { matchError, TaggedError } from "@dotfiles/hooks/vendor/deps.js";
 
 /** Message text of a caught value, for diagnostics. */
 export function errorMessage(error: unknown): string {

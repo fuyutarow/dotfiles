@@ -2,7 +2,7 @@
 import { access, readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { cli } from "cleye";
-import { jsonText, z } from "../../../hooks/zod.ts";
+import { jsonText, z } from "@dotfiles/hooks/zod.ts";
 
 const BudgetSchema = z.object({ maxListingChars: z.unknown() });
 

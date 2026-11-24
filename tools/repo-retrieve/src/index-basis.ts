@@ -12,10 +12,10 @@ import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { Result } from "../../shared/src/result.ts";
-import { resolveDbDir } from "./ccc-db-dir.ts";
-import { requireExecutable, runChildCaptured } from "./child.ts";
-import type { IncrementalBasis } from "./index-plan.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { resolveDbDir } from "#src/ccc-db-dir.ts";
+import { requireExecutable, runChildCaptured } from "#src/child.ts";
+import type { IncrementalBasis } from "#src/index-plan.ts";
 
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));

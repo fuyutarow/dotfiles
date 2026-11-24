@@ -4,7 +4,7 @@
 import { mock } from "bun:test";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 const readDirectory = fs.readdir;
 const readFile = fs.readFile;

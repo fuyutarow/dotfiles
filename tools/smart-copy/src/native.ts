@@ -23,7 +23,7 @@ import {
   desktopInterop,
   repoHelperCommand,
 } from "@dotfiles/shared/src/desktop-interop.ts";
-import { errorMessage, Result } from "../../shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 
 export const NATIVE_MS = 5_000;
 const STDERR_GRACE_MS = 200;

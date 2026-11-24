@@ -1,13 +1,16 @@
 {
   "name": "@dotfiles/codex-thread-copy",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "bin": {
     "codex-thread-copy": "src/codex-thread-copy.ts"
   },
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0"
+  },
+  "imports": {
+    "#root/*": "./*",
+    "#src/*": "./src/*"
   }
 }

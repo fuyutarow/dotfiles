@@ -13,12 +13,12 @@
 // a commit. When the command cannot be parsed, the text is split at shell operators and judged at bashCwd (fail closed).
 // `jj`, `command jj` and `env jj` are matched. The gated commit spawns jj from bun, not through this tool.
 // FAIL CLOSED (run.sh --fail-closed): a hook error denies.
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { parseShell } from "../../tools/shared/src/shell-syntax.ts";
-import { bashCwd, decidePre, readStdinJson } from "./lib.ts";
-import { strAt } from "./narrow.ts";
+import { parseShell } from "@dotfiles/shared/src/shell-syntax.ts";
+import { bashCwd, decidePre, readStdinJson } from "#root/lib.ts";
+import { strAt } from "#root/narrow.ts";
 
 const SEGMENT_SPLIT = /&&|\|\||[;|\n]|\$\(|`|\(|\)/u;
 const BARE_COMMIT =

@@ -1,8 +1,8 @@
 import { homedir } from "node:os";
-import { isWslDistro } from "../../shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { join, resolve } from "node:path";
 import { lstat, realpath, stat } from "node:fs/promises";
-import { commandsForFormula, readToolCommandMap } from "./tool-commands.ts";
+import { commandsForFormula, readToolCommandMap } from "#src/tool-commands.ts";
 
 export type ToolTier = "core" | "ondemand";
 const TOOL_TIERS: readonly ToolTier[] = ["core", "ondemand"];

@@ -1,14 +1,17 @@
 {
   "name": "@dotfiles/herdr-btm",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "type": "module",
   "bin": {
     "btmp": "src/btmp.ts"
   },
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0",
     "type-flag": "4.5.0"
+  },
+  "imports": {
+    "#root/*": "./*",
+    "#src/*": "./src/*"
   }
 }

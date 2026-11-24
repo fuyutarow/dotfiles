@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
-import { createRunProtection, runProtection } from "../../src/jj/run-guard.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { createRunProtection, runProtection } from "#src/jj/run-guard.ts";
 
 const originalPath = process.env["PATH"];
 let root: string | undefined;

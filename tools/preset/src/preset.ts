@@ -11,11 +11,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { jsonOf, z } from "../../../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { bundleEntry } from "@dotfiles/shared/src/bundle-entry.ts";
 import { embedHousePin } from "@dotfiles/shared/src/house-pin.ts";
-import pkg from "../package.json" with { type: "json" };
+import pkg from "#root/package.json" with { type: "json" };
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);

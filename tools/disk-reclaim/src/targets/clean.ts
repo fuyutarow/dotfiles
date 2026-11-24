@@ -1,8 +1,12 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import type { Context, Target } from "./index.ts";
-import { deleteTree, keepTreeCandidate, treeCandidate } from "./tree.ts";
-import { processBusy } from "../lib/busy.ts";
+import type { Context, Target } from "#src/targets/index.ts";
+import {
+  deleteTree,
+  keepTreeCandidate,
+  treeCandidate,
+} from "#src/targets/tree.ts";
+import { processBusy } from "#src/lib/busy.ts";
 
 export type ProcessProbe = (comm: string) => boolean;
 const defaultFs = {

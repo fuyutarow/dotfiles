@@ -10,19 +10,19 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildDataframe } from "../src/build-dataframe.ts";
-import { readOwnerState, ownerStatePath } from "../src/owner-state.ts";
+import { buildDataframe } from "#src/build-dataframe.ts";
+import { readOwnerState, ownerStatePath } from "#src/owner-state.ts";
 import {
   presentation,
   presentationPath,
   encodePresentation,
   type Presentation,
-} from "../src/presentation.ts";
-import { cleanSamplerLeftovers } from "../src/sampler.ts";
-import { fleetLine } from "../src/fleet-line.ts";
-import { renderField, observed } from "../src/field-state.ts";
-import { modelName } from "../src/model-context.ts";
-import { version } from "../package.json";
+} from "#src/presentation.ts";
+import { cleanSamplerLeftovers } from "#src/sampler.ts";
+import { fleetLine } from "#src/fleet-line.ts";
+import { renderField, observed } from "#src/field-state.ts";
+import { modelName } from "#src/model-context.ts";
+import { version } from "#root/package.json";
 
 const roots: string[] = [];
 const oldOwner = process.env["STATUSLINE_OWNER_STATE"];

@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { Result } from "../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import type { StageRun } from "../wsl-capacity-recover.ts";
-import { registry } from "../../tools/disk-reclaim/src/targets/index.ts";
+import type { StageRun } from "#root/wsl-capacity-recover.ts";
+import { registry } from "@dotfiles/disk-reclaim/src/targets/index.ts";
 import {
   controllerCalls,
   diskReclaimArgv,
   reclaimStages,
   runReclaimStages,
   type ReclaimStage,
-} from "../wsl-capacity-recover.ts";
+} from "#root/wsl-capacity-recover.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const GiB = 1024 ** 3;

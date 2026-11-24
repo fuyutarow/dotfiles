@@ -1,8 +1,8 @@
 import * as fs from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readJsonlTail } from "@dotfiles/shared/src/jsonl.ts";
-import { jsonText, z } from "./zod.ts";
-import type { SessionStatus } from "./session-status.ts";
+import { jsonText, z } from "#src/zod.ts";
+import type { SessionStatus } from "#src/session-status.ts";
 
 export interface AgentSession {
   vendor: "claude" | "codex";
@@ -605,7 +605,7 @@ export async function statusForSession(
 ): Promise<SessionStatus> {
   if (session.vendor === "codex" && !sampledRender) {
     const { readCodexTranscriptStatus } =
-      await import("./adapters/codex-rollout.ts");
+      await import("#src/adapters/codex-rollout.ts");
     const data = (await readCodexTranscriptStatus(
       session.transcript_path,
       session.cwd,

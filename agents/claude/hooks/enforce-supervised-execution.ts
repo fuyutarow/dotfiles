@@ -44,10 +44,10 @@
 //
 // FAIL CLOSED on hook errors (registered with run.sh --fail-closed).
 
-import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
-import { strAt } from "../../hooks/narrow.ts";
-import { effective, parseShell } from "../../hooks/shell-syntax.ts";
-import { decidePre, readStdinJson } from "./lib.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
+import { strAt } from "@dotfiles/hooks/narrow.ts";
+import { effective, parseShell } from "@dotfiles/hooks/shell-syntax.ts";
+import { decidePre, readStdinJson } from "#hooks/lib.ts";
 
 // Command position: start of line, or after a shell separator / then / do. Keeps the gate off
 // mere MENTIONS — `repo-retrieve literal --query 'setsid'` is an argument, not a command.

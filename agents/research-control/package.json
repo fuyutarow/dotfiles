@@ -1,0 +1,8 @@
+{
+  "name": "@dotfiles/research-control",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#root/*": "./*"
+  }
+}

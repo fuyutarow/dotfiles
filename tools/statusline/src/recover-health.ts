@@ -1,8 +1,12 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { execAsyncWithin, readJsonAsync, writeCacheAsync } from "./bounded.ts";
-import { z } from "./zod.ts";
+import {
+  execAsyncWithin,
+  readJsonAsync,
+  writeCacheAsync,
+} from "#src/bounded.ts";
+import { z } from "#src/zod.ts";
 
 export const RECOVER_UNITS = [
   "wsl-capacity-recover.service",

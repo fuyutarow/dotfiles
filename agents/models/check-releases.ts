@@ -18,13 +18,13 @@
 // Usage:  bun agents/models/check-releases.ts [--today YYYY-MM-DD] [--quiet]
 // Exit:   0 = clean, 1 = at least one FAIL.
 
-import { Result } from "../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { consola } from "consola";
-import { z } from "../hooks/zod.ts";
-import releases from "./releases.toml";
+import { z } from "@dotfiles/hooks/zod.ts";
+import releases from "#root/releases.toml";
 
 let prototypeFlagError: string | undefined;
 

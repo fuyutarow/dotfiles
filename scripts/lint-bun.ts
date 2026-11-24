@@ -3,14 +3,14 @@ import { access } from "node:fs/promises";
 import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import {
   jjCandidate,
   jjChanged,
   jjContext,
   jjExport,
-} from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
-import { lintTmpLeaks } from "./lint-tmp-leaks.ts";
+} from "@dotfiles/skill-wiring-mise-tasks/scripts/jj-precommit.ts";
+import { lintTmpLeaks } from "#root/lint-tmp-leaks.ts";
 
 const PATTERNS = [
   "scripts/*.ts",
@@ -43,6 +43,7 @@ const Manifest = jsonOf(
     bin: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
     dependencies: z.record(z.string(), z.string()).optional(),
     devDependencies: z.record(z.string(), z.string()).optional(),
+    imports: z.record(z.string(), z.string()).optional(),
   }),
 );
 const Lock = z.object({
@@ -67,63 +68,15 @@ function pinned(
   );
 }
 
-async function sanctioned(
-  root: string,
-  file: string,
-  specifier: string,
-): Promise<boolean> {
-  const path = relative(root, resolve(file));
-  if (path.startsWith(`..${sep}`) || path === "..") return false;
-  let directory = dirname(resolve(file));
-  while (directory !== root && directory.startsWith(`${root}${sep}`)) {
-    if (await Bun.file(join(directory, "package.json")).exists()) break;
-    directory = dirname(directory);
-  }
-  if (directory === root || !directory.startsWith(`${root}${sep}`))
-    return false;
-  const workspace = relative(root, directory).split(sep).join("/");
-  if (workspace === "tools/shared") return false;
-  const suffix = specifier.slice("@dotfiles/shared/".length);
-  if (!/^src\/[\w.-]+\.ts$/u.test(suffix)) return false;
-  return Promise.try(async () => {
-    const rootPackage = Manifest.safeParse(
-      await Bun.file(join(root, "package.json")).text(),
-    );
-    const workspacePackage = Manifest.safeParse(
-      await Bun.file(join(directory, "package.json")).text(),
-    );
-    const sharedPackage = Manifest.safeParse(
-      await Bun.file(join(root, "tools/shared/package.json")).text(),
-    );
-    const lock = Lock.safeParse(
-      Bun.JSONC.parse(await Bun.file(join(root, "bun.lock")).text()),
-    );
-    return (
-      rootPackage.success &&
-      workspacePackage.success &&
-      sharedPackage.success &&
-      lock.success &&
-      (rootPackage.data.workspaces?.some((pattern) =>
-        new Bun.Glob(pattern).match(workspace),
-      ) ??
-        false) &&
-      workspacePackage.data.dependencies?.["@dotfiles/shared"] ===
-        "workspace:*" &&
-      sharedPackage.data.name === "@dotfiles/shared" &&
-      lock.data.workspaces["tools/shared"]?.name === "@dotfiles/shared" &&
-      lock.data.workspaces[workspace]?.dependencies?.["@dotfiles/shared"] ===
-        "workspace:*" &&
-      (await Bun.file(join(root, "tools/shared", suffix)).exists())
-    );
-  }).catch(() => false);
-}
-
 async function check(paths: string[], root: string): Promise<number> {
   if (paths.length === 0) {
     process.stdout.write("lint:bun: no selected production script\n");
     return 0;
   }
   const stage = await mkdtemp(join(tmpdir(), "lint-bun-workspaces-"));
+  // Staged files still resolve `@dotfiles/<name>/…` through the root tsconfig `paths`.
+  if (await Bun.file(join(root, "tsconfig.json")).exists())
+    await copyFile(join(root, "tsconfig.json"), join(stage, "tsconfig.json"));
   const replacements = new Map<string, string>();
   const stagedPaths = await Promise.all(
     paths.map(async (file) => {
@@ -226,39 +179,8 @@ async function check(paths: string[], root: string): Promise<number> {
   for (const [staged, original] of replacements)
     output = output.replaceAll(staged, original);
   await rm(stage, { recursive: true, force: true });
-  const lines = output.split("\n");
-  let removed = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const match = lines[i]?.match(
-      /^FAIL (.*): unpinned external dependency '(@dotfiles\/shared\/src\/[\w.-]+\.ts)' — BG3 ladder: builtin, pinned bunx, or graduate \(no governing package\.json\+bun\.lock declares it\)$/u,
-    );
-    if (
-      match?.[1] !== undefined &&
-      match[2] !== undefined &&
-      (await sanctioned(root, match[1], match[2]))
-    ) {
-      lines[i] = "";
-      removed++;
-    }
-  }
-  const summary = lines.findIndex((line) =>
-    /^floor: FAIL=\d+ WARN=\d+ /u.test(line),
-  );
-  if (removed > 0 && summary >= 0)
-    lines[summary] = (lines[summary] ?? "").replace(
-      /^floor: FAIL=(\d+)/u,
-      (_, count) => `floor: FAIL=${Number(count) - removed}`,
-    );
-  process.stdout.write(
-    lines.filter((line, i) => line !== "" || i === lines.length - 1).join("\n"),
-  );
+  process.stdout.write(output);
   process.stderr.write(stderr);
-  if (
-    exitCode === 1 &&
-    summary >= 0 &&
-    (lines[summary] ?? "").startsWith("floor: FAIL=0 ")
-  )
-    return 0;
   return exitCode;
 }
 
@@ -316,7 +238,7 @@ async function floor(): Promise<number> {
         ([path]) =>
           paths.includes(path) ||
           /(^|\/)(package\.json|bun\.lock|\.zero-dep)$/u.test(path) ||
-          path.startsWith("tools/shared/src/"),
+          path === "tsconfig.json",
       ),
     );
     await jjExport(context, tmp, entries);

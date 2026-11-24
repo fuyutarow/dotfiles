@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
-import { TerminalProgress } from "../src/terminal-progress.ts";
+import { TerminalProgress } from "#src/terminal-progress.ts";
 
 // Minimal screen for Clack's erase-line, cursor-up and cursor-column sequences.
 function screen(transcript: string): string {

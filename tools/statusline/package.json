@@ -1,16 +1,20 @@
 {
   "name": "@dotfiles/statusline",
-  "version": "0.24.8",
+  "version": "0.25.0",
   "private": true,
   "bin": {
     "statusline": "src/statusline.ts"
   },
   "type": "module",
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0"
   },
   "devDependencies": {
     "consola": "3.4.2"
+  },
+  "imports": {
+    "#root/*": "./*",
+    "#src/*": "./src/*",
+    "#tests/*": "./tests/*"
   }
 }

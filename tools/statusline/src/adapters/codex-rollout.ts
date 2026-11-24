@@ -1,12 +1,12 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { SessionStatus } from "../session-status.ts";
+import type { SessionStatus } from "#src/session-status.ts";
 import { jsonlLines, readJsonlTail } from "@dotfiles/shared/src/jsonl.ts";
 import {
   hashSettingsPrefix,
   readCodexSettingsEvents,
-} from "./codex-settings-stream.ts";
-import { jsonText, maybe, z } from "../zod.ts";
+} from "#src/adapters/codex-settings-stream.ts";
+import { jsonText, maybe, z } from "#src/zod.ts";
 
 function settingText() {
   return maybe(z.string().trim().min(1)).catch(undefined);

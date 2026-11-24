@@ -1,4 +1,4 @@
-import { pad2 } from "./prompt-stamp.ts";
+import { pad2 } from "#src/prompt-stamp.ts";
 
 // elapsed: <h>h<mm>m past an hour, else <m>m<ss>s — same shape as the rate-limit countdowns.
 export const dur = (seconds: number) => {

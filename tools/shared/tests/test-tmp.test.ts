@@ -19,7 +19,7 @@ import {
   ownerPidOf,
   removeTree,
   sweepStaleRuns,
-} from "../src/test-tmp.ts";
+} from "#src/test-tmp.ts";
 
 const MODULE = join(import.meta.dir, "../src/test-tmp.ts");
 const BUN = process.execPath;

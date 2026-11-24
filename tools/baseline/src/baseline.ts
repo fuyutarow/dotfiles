@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import { errorMessage, Result } from "../../shared/src/result.ts";
-import packageJson from "../package.json" with { type: "json" };
-import { newFailures, render } from "./data.ts";
-import { record } from "./record.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
+import packageJson from "#root/package.json" with { type: "json" };
+import { newFailures, render } from "#src/data.ts";
+import { record } from "#src/record.ts";
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, packageJson, cliArgv);

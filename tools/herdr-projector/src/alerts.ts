@@ -4,7 +4,7 @@
 // TaggedError so a reader branches on `_tag`, never on message text. Warnings are this session's
 // workers (agx runs) and background shells that have been running for LONG_RUNNING_MS or more.
 // With neither, both tokens are cleared and herdr drops the row.
-import { matchError, TaggedError } from "../../shared/src/result.ts";
+import { matchError, TaggedError } from "@dotfiles/shared/src/result.ts";
 
 /** A worker or shell running this long gets a warning. */
 export const LONG_RUNNING_MS = 12 * 60_000;

@@ -18,7 +18,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { $ } from "bun";
 import { cli } from "cleye";
-import { jsonOf, jsonText, z } from "../../../hooks/zod.ts";
+import { jsonOf, jsonText, z } from "@dotfiles/hooks/zod.ts";
 
 /** `.claude/settings.json` `permissions.deny`, the only part of the file JJ-2 reads. */
 const DenyRulesSchema = z.object({

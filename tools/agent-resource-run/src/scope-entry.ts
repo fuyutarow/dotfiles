@@ -2,18 +2,18 @@
 // task accounting before executing anything; unavailable cgroup enforcement fails closed.
 import { readFile } from "node:fs/promises";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { Result } from "../../shared/src/result.ts";
-import { gpuAdmissionRefusal } from "./agent-resource-run.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { gpuAdmissionRefusal } from "#src/agent-resource-run.ts";
 import {
   effectiveMemoryLimitsMatch,
   kernelPageSizeBytes,
-} from "./lib/cgroup-memory-limits.ts";
+} from "#src/lib/cgroup-memory-limits.ts";
 
 import {
   DecisionRecord,
   withDecision,
   saveDecision,
-} from "./lib/decision-record.ts";
+} from "#src/lib/decision-record.ts";
 class HealthRefusal extends Error {}
 const inheritedId = process.env["AGENT_RESOURCE_DECISION_ID"];
 const decisionId =

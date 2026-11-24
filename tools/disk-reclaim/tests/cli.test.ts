@@ -10,18 +10,18 @@ import {
 } from "node:fs";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   AGX_WORKER_ENV,
   AGX_WORKER_VALUE,
 } from "@dotfiles/shared/src/worker-env.ts";
-import { Plan, ReceiptV1 } from "../src/model.ts";
-import { readReceipts, stateDir, writeReceipt } from "../src/receipt.ts";
-import { loadConfig } from "../src/engine.ts";
-import { cliEnv } from "./fixtures/cli-env.ts";
-import { tempRoot } from "./fixtures/temp.ts";
-import { realTmpdir } from "./fixtures/temp.ts";
+import { Plan, ReceiptV1 } from "#src/model.ts";
+import { readReceipts, stateDir, writeReceipt } from "#src/receipt.ts";
+import { loadConfig } from "#src/engine.ts";
+import { cliEnv } from "#tests/fixtures/cli-env.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { realTmpdir } from "#tests/fixtures/temp.ts";
 
 const script = resolve(import.meta.dir, "../src/reclaim.ts");
 // CLI cases may spawn several children; retain a bounded case budget above startup jitter.

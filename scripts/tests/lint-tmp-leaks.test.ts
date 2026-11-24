@@ -15,7 +15,7 @@ import {
   probeProblems,
   staticFindings,
   SYSTEM_TMP,
-} from "../lint-tmp-leaks.ts";
+} from "#root/lint-tmp-leaks.ts";
 
 const REPO = resolve(import.meta.dir, "../..");
 

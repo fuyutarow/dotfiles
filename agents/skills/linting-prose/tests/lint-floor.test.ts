@@ -6,8 +6,8 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "../../../hooks/zod.ts";
-import { decodedJson } from "../../../hooks/tests/decode.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
+import { decodedJson } from "@dotfiles/hooks/tests/decode.ts";
 
 const RelayedSchema = z.array(z.string());
 const FLOOR = new URL("../scripts/lint-floor.ts", import.meta.url).pathname;

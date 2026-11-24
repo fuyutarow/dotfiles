@@ -7,7 +7,7 @@ import {
   hasScriptAgeProvider,
   parseSecretSpecs,
   SECRETS_PUSH_CLI_OPTIONS,
-} from "../src/secrets-push.ts";
+} from "#src/secrets-push.ts";
 
 const roots: string[] = [];
 afterEach(async () => {

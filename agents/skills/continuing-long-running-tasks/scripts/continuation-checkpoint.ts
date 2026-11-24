@@ -17,7 +17,7 @@ import {
   MAX_RECORD_BYTES,
   readContinuationBindingAtSlot,
   validateContinuationRecord,
-} from "./continuation-record";
+} from "#scripts/continuation-record.ts";
 
 type Snapshot = Readonly<{
   path: string;

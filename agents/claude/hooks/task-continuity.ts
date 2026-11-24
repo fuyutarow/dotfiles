@@ -1,8 +1,8 @@
 /** claude adapter; continuation semantics remain in the continuity skill. Fail open. */
-import { Result } from "../../../tools/shared/src/result.ts";
-import { handleCompactHook } from "../../skills/continuing-long-running-tasks/scripts/compact-hook";
-import { hookJson, readBoundedStdinJson } from "./lib.ts";
-import { parseJson } from "../../hooks/narrow.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { handleCompactHook } from "@dotfiles/skill-continuing-long-running-tasks/scripts/compact-hook";
+import { hookJson, readBoundedStdinJson } from "#hooks/lib.ts";
+import { parseJson } from "@dotfiles/hooks/narrow.ts";
 
 await Result.tryPromise({
   try: async () => {

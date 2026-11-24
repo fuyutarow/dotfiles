@@ -3,7 +3,7 @@ import { closeSync, fstatSync, mkdirSync, openSync, readSync } from "node:fs";
 import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { jsonOf, z } from "../zod.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 const SCAN_BYTES = 8 * 1024 * 1024;
 const LINE_BYTES = 64 * 1024;

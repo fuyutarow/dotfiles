@@ -1,5 +1,5 @@
-import { Result } from "../../../tools/shared/src/result.ts";
-import { hookJson } from "./lib.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { hookJson } from "#hooks/lib.ts";
 // Stop hook — groundless-claim guard.
 //
 // WARNS (never blocks) when the assistant's final text this turn makes a
@@ -21,8 +21,8 @@ import { hookJson } from "./lib.ts";
 // `{"systemMessage": "..."}` to stdout and exits 0 — a nudge the harness surfaces to the
 // user, not a block that feeds back into the transcript.
 
-import { at, strAt } from "../../hooks/narrow.ts";
-import { readStdinJson, stripCode, turnTextTail } from "./lib.ts";
+import { at, strAt } from "@dotfiles/hooks/narrow.ts";
+import { readStdinJson, stripCode, turnTextTail } from "#hooks/lib.ts";
 
 const MIN_LINES = 8;
 

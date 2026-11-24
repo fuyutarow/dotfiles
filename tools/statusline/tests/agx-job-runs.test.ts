@@ -1,15 +1,15 @@
 import { test, expect } from "bun:test";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { render } from "../src/format.ts";
-import type { Dataframe } from "../src/dataframe.ts";
-import { readAgxJobRuns, Rows } from "../src/agx-job-runs.ts";
-import { buildDataframe } from "../src/build-dataframe.ts";
+import { render } from "#src/format.ts";
+import type { Dataframe } from "#src/dataframe.ts";
+import { readAgxJobRuns, Rows } from "#src/agx-job-runs.ts";
+import { buildDataframe } from "#src/build-dataframe.ts";
 import { mkdtemp, writeFile, chmod } from "node:fs/promises";
 import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ownerSources } from "../src/owner-state.ts";
-import { dur } from "../src/jobs.ts";
+import { ownerSources } from "#src/owner-state.ts";
+import { dur } from "#src/jobs.ts";
 
 const base: Dataframe = {
   cwd: "/tmp",

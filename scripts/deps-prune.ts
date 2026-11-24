@@ -10,8 +10,8 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, parse, relative, resolve, sep } from "node:path";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 async function info(path: string, follow = false) {
   const result = await Result.tryPromise({

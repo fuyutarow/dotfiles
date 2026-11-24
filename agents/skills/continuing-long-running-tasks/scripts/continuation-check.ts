@@ -13,7 +13,7 @@ import {
   continuationProjectRoot,
   continuationWorkspaceRootFromSlot,
   inspectContinuationRecord,
-} from "./continuation-record";
+} from "#scripts/continuation-record.ts";
 
 class UsageError extends Error {}
 

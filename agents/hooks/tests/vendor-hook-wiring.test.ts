@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HooksConfigSchema } from "../../../scripts/hook-registry.ts";
-import { decoded } from "./decode.ts";
-import { jsonOf, z } from "../zod.ts";
+import { HooksConfigSchema } from "@dotfiles/scripts/hook-registry.ts";
+import { decoded } from "#tests/decode.ts";
+import { jsonOf, z } from "#root/zod.ts";
 
 const ROOT = join(import.meta.dir, "../../..");
 const Registry = z.object({

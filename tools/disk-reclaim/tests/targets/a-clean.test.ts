@@ -1,12 +1,12 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
-import { createCleanTarget } from "../../src/targets/clean.ts";
-import { run } from "../../src/engine.ts";
-import { processBusy } from "../../src/lib/busy.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { createCleanTarget } from "#src/targets/clean.ts";
+import { run } from "#src/engine.ts";
+import { processBusy } from "#src/lib/busy.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { loadConfig } from "../../src/engine.ts";
+import { loadConfig } from "#src/engine.ts";
 
 const cacheRoot = tempRoot("reclaim-clean-cache-");
 afterAll(() => {

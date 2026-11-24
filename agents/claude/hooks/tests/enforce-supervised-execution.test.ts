@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decisionOf as decisionResult, runHook } from "./helpers.ts";
+import { decisionOf as decisionResult, runHook } from "#hooks/tests/helpers.ts";
 
 const HOOK = "enforce-supervised-execution.ts";
 

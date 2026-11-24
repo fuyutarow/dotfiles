@@ -2,8 +2,8 @@ import { cli } from "cleye";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { PRIMARY_DISTRO_RECORD } from "./wsl-distro";
-import { pressureInstallPowerShell } from "./wsl-host-pressure";
+import { PRIMARY_DISTRO_RECORD } from "#root/wsl-distro.ts";
+import { pressureInstallPowerShell } from "#root/wsl-host-pressure.ts";
 
 export type ManagedDistro = { alias: string; distro: string; wake: boolean };
 

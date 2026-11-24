@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { cliEnv } from "./fixtures/cli-env.ts";
-import { tempRoot } from "./fixtures/temp.ts";
+import { cliEnv } from "#tests/fixtures/cli-env.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 
 const script = resolve(import.meta.dir, "fixtures/slow-cli.ts");
 const nowMs = () => Temporal.Now.instant().epochMilliseconds;

@@ -13,16 +13,16 @@ import {
   rmdir as removeDir,
   unlink as unlinkFile,
 } from "node:fs/promises";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { userInfo } from "node:os";
 import { execFileSync } from "node:child_process";
 import { dirname, join, resolve, sep } from "node:path";
 import { dlopen, FFIType, ptr, read } from "bun:ffi";
-import { listWorkspaces, storeOf } from "../jj/discover.ts";
-import { runProtection } from "../jj/run-guard.ts";
-import { protectedReason, type ProtectionOptions } from "./protected.ts";
+import { listWorkspaces, storeOf } from "#src/jj/discover.ts";
+import { runProtection } from "#src/jj/run-guard.ts";
+import { protectedReason, type ProtectionOptions } from "#src/lib/protected.ts";
 type ProtectionProcesses = NonNullable<ProtectionOptions["processes"]>;
-import { countEntries } from "./purge-progress.ts";
+import { countEntries } from "#src/lib/purge-progress.ts";
 const message = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 const pathDepth = (item: string): number => item.split(sep).length;

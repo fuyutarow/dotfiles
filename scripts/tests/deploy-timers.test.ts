@@ -2,13 +2,13 @@ import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import {
   captureDeclaredTriggers,
   deployDeclaredTriggers,
   link,
   type Ctx,
-} from "../link-dots.ts";
+} from "#root/link-dots.ts";
 
 const root = join(import.meta.dir, "../..");
 const scratch: string[] = [];

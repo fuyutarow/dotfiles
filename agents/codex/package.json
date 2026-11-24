@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/codex",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#hooks/*": "./hooks/*",
+    "#root/*": "./*"
+  }
+}

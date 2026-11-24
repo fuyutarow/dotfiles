@@ -1,7 +1,7 @@
 import { hostname } from "node:os";
-import { isWslDistro } from "../../../shared/src/wsl.ts";
-import type { ActionResult, Candidate } from "../model.ts";
-import type { Context, Target } from "./index.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
+import type { ActionResult, Candidate } from "#src/model.ts";
+import type { Context, Target } from "#src/targets/index.ts";
 
 const runningInWsl = (): boolean =>
   process.platform === "linux" && isWslDistro();

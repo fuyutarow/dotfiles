@@ -1,8 +1,8 @@
 import { afterAll, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanupTempDirs, tempHome } from "./helpers.ts";
-import { ESC } from "../src/ansi.ts";
+import { cleanupTempDirs, tempHome } from "#tests/helpers.ts";
+import { ESC } from "#src/ansi.ts";
 
 afterAll(cleanupTempDirs);
 const SLOW = { timeout: 30_000 };

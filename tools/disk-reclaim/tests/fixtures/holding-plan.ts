@@ -1,5 +1,5 @@
-import { plan, loadConfig } from "../../src/engine.ts";
-import type { Target } from "../../src/targets/index.ts";
+import { plan, loadConfig } from "#src/engine.ts";
+import type { Target } from "#src/targets/index.ts";
 
 const { config } = loadConfig();
 if (config === null) process.exit(2);

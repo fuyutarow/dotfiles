@@ -2,7 +2,7 @@
 // discovery and freshness; this module consumes only its public CLI. Every failure is a
 // readable `n/a (...)`, never a throw. Used by log-sys-snapshot.ts.
 import { basename } from "node:path";
-import { jsonOf, z } from "../../hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 // Leave room for CLI startup, but cap a hung status command's impact on the session.
 const STATUS_TIMEOUT_MS = 500;

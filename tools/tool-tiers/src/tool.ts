@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import cliPackage from "../package.json" with { type: "json" };
+import cliPackage from "#root/package.json" with { type: "json" };
 import { dirname, join } from "node:path";
 import {
   declaredToolCommands,
@@ -9,7 +9,7 @@ import {
   getTool,
   toolDeclaration,
   type ToolDeclaration,
-} from "./tool-tiers.ts";
+} from "#src/tool-tiers.ts";
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, cliArgv);

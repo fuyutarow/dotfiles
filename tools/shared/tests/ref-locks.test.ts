@@ -12,7 +12,7 @@ import {
   lsofHasHolder,
   ownerlessRefLocks,
   REF_LOCK_STALE_MS,
-} from "../src/ref-locks.ts";
+} from "#src/ref-locks.ts";
 
 const roots: string[] = [];
 afterEach(() => {

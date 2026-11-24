@@ -3,14 +3,18 @@
 import { appendFile, mkdir, readdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import {
   acquire,
   holderOf,
   tryAcquire,
 } from "@dotfiles/shared/src/dir-lock.ts";
-import { LandReportSchema, landExit, type LandReport } from "./land-verdict.ts";
+import {
+  LandReportSchema,
+  landExit,
+  type LandReport,
+} from "#root/land-verdict.ts";
 
 const Enqueue = z.strictObject({
   schema: z.literal(1),

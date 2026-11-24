@@ -6,8 +6,8 @@
 // (the PATH check names the bins and probe tasks the declaration lists).
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { errorMessage, Result } from "./result.ts";
-import { z } from "./zod.ts";
+import { errorMessage, Result } from "#src/result.ts";
+import { z } from "#src/zod.ts";
 
 const RelativeFile = z
   .string()

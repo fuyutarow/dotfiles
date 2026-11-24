@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2 — 2026-11-25
+
+- Error handling uses better-result instead of neverthrow
+- The local host kind comes from isWslDistro, so a container on the WSL kernel deploys as linux
+
 ## 0.5.1 — 2026-10-17
 
 - Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.

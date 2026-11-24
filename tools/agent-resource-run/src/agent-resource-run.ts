@@ -5,7 +5,7 @@ import { mkdir, opendir, readFile, readdir, readlink } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
 import { createConsola } from "consola";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
@@ -14,13 +14,13 @@ import {
   readGpuState,
   type GpuState,
 } from "@dotfiles/shared/src/gpu-samples.ts";
-import { waitForRecoveryVerdict } from "./lib/recovery-verdict.ts";
+import { waitForRecoveryVerdict } from "#src/lib/recovery-verdict.ts";
 import {
   rejectPrototypeFlag,
   statusCommand,
   statusHasOperands,
-} from "./lib/status-command.ts";
-import pkg from "../package.json" with { type: "json" };
+} from "#src/lib/status-command.ts";
+import pkg from "#root/package.json" with { type: "json" };
 
 import {
   DecisionRecord,
@@ -28,7 +28,7 @@ import {
   withDecision,
   saveDecision,
   readDecision,
-} from "./lib/decision-record.ts";
+} from "#src/lib/decision-record.ts";
 
 const consola = createConsola({ level: 4 });
 

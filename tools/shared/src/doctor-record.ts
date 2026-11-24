@@ -1,4 +1,4 @@
-import { z } from "./zod.ts";
+import { z } from "#src/zod.ts";
 
 export const DoctorRecord = z.object({
   tool: z.string().min(1),

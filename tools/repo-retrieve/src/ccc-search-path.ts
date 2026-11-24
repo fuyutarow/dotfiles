@@ -13,7 +13,7 @@
 
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 // Characters that a name may contain but that SQLite GLOB would read as a pattern.
 const GLOB_MAGIC = /[*?[\]{}]/u;

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3 — 2026-11-25
+
+- Error handling uses better-result instead of neverthrow
+
 ## 0.2.2 — 2026-10-17
 
 - Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.

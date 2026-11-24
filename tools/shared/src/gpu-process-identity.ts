@@ -2,8 +2,8 @@
 import { constants } from "node:fs";
 import { open, readlink } from "node:fs/promises";
 import { join } from "node:path";
-import { z } from "./zod.ts";
-import type { GpuState } from "./gpu-samples.ts";
+import { z } from "#src/zod.ts";
+import type { GpuState } from "#src/gpu-samples.ts";
 
 type Identity = NonNullable<GpuState["processIdentity"]>;
 type Observation = Identity["collector"];

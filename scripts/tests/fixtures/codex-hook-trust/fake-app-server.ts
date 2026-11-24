@@ -9,7 +9,7 @@
 // The placeholder __HOOKS__ in the fixture becomes $CODEX_HOME/hooks.json, the path Codex reports
 // for the copy it loaded.
 import { readFile } from "node:fs/promises";
-import { jsonText, z } from "../../../../agents/hooks/zod.ts";
+import { jsonText, z } from "@dotfiles/hooks/zod.ts";
 
 const Request = z.object({
   id: z.number().optional(),

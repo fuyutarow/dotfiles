@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.13.0 — 2026-11-25
+
+- Error handling uses better-result instead of neverthrow
+- Remove the disk command family (the disk bin and its src/disk-*.ts modules, tests and docs); the disk-reclaim bin and every unattended path are unchanged.
+- WSL is decided by isWslDistro in the system and vhdx targets and the host-return snapshot, so a container on the WSL kernel is plain Linux
+
 ## 1.12.35 — 2026-11-10
 
 - Checkpoint bounded build discovery and return partial candidates for safe reclamation.

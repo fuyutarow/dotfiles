@@ -1,8 +1,8 @@
 import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
-import { auditCandidates } from "../../src/targets/audit.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { auditCandidates } from "#src/targets/audit.ts";
 
 const roots: string[] = [];
 const fixture = () => {

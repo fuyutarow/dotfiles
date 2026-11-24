@@ -8,17 +8,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  commandsForFormula,
-  readToolCommandMap,
-} from "../src/tool-commands.ts";
+import { commandsForFormula, readToolCommandMap } from "#src/tool-commands.ts";
 import {
   brewEntries,
   findToolCommandShadows,
   getTool,
   toolDeclaration,
   type ToolHost,
-} from "../src/tool-tiers.ts";
+} from "#src/tool-tiers.ts";
 
 const roots: string[] = [];
 const linux: ToolHost = { isMac: false, isLinux: true, isWsl: false };

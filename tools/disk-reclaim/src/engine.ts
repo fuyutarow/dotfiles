@@ -1,14 +1,14 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { cpus, homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { readHeadroom } from "./storage.ts";
-import { protectedReason } from "./lib/protected.ts";
+import { readHeadroom } from "#src/storage.ts";
+import { protectedReason } from "#src/lib/protected.ts";
 import {
   createLivenessSnapshot,
   type LivenessSnapshot,
-} from "./liveness/facts.ts";
+} from "#src/liveness/facts.ts";
 import {
   ActionResult,
   Candidate,
@@ -19,7 +19,7 @@ import {
   type ReceiptAction,
   type ReceiptV2,
   type TargetPlan,
-} from "./model.ts";
+} from "#src/model.ts";
 import {
   errorMessage,
   finalLine,
@@ -30,14 +30,14 @@ import {
   stateDir,
   waitForLock,
   writeReceipt,
-} from "./receipt.ts";
-import type { Context, Target } from "./targets/index.ts";
-import { defaultScanCacheDir, withScanSignal } from "./lib/scan-cache.ts";
-import { acquirePlanLock } from "./lib/plan-lock.ts";
+} from "#src/receipt.ts";
+import type { Context, Target } from "#src/targets/index.ts";
+import { defaultScanCacheDir, withScanSignal } from "#src/lib/scan-cache.ts";
+import { acquirePlanLock } from "#src/lib/plan-lock.ts";
 import {
   checkpointCandidate,
   resumeCandidateOrder,
-} from "./lib/candidate-cursor.ts";
+} from "#src/lib/candidate-cursor.ts";
 
 const expand = (p: string) =>
   p

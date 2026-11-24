@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   readReclaimPlanCache,
   writeReclaimPlanCache,
-} from "../src/reclaim-plan-cache.ts";
+} from "#src/reclaim-plan-cache.ts";
 
 test("cached plan contains only capped, safe blind candidates and expires", async () => {
   const home = await mkdtemp(join(tmpdir(), "reclaim-plan-cache-"));

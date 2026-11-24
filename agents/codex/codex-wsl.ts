@@ -6,7 +6,7 @@ import {
   resolveDesktopRuntime,
   windowsArguments,
   windowsPath,
-} from "./runtime.ts";
+} from "#root/runtime.ts";
 
 export const MAX_CONPTY_CONFIG_BYTES = 24 * 1024;
 export const MAX_CONPTY_INPUT_BYTES = 64 * 1024;

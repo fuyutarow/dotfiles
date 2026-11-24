@@ -2,9 +2,9 @@ import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdtemp, mkdir, readlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkWsGc } from "../doctor.ts";
-import { LINKS, unitSource } from "../config-registry.ts";
-import { deployWsGc, link, type Ctx } from "../link-dots.ts";
+import { checkWsGc } from "#root/doctor.ts";
+import { LINKS, unitSource } from "#root/config-registry.ts";
+import { deployWsGc, link, type Ctx } from "#root/link-dots.ts";
 
 const REPO = join(import.meta.dir, "../..");
 const scratch: string[] = [];

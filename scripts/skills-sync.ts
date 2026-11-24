@@ -29,28 +29,28 @@ import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
 import { consola } from "consola";
-import { Result } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import {
   homePathRefusals,
   inHouseLayoutRefusals,
   parseDeclaration,
   skillCliArgs,
-} from "./skills-declaration.ts";
+} from "#root/skills-declaration.ts";
 import {
   readInstalledLock,
   removeNewStowaways,
   runSkillsCli,
   runPinnedSkillsCommand,
   targetSkillNames,
-} from "./skills-install.ts";
-import { skillFiles } from "./skills-declaration.ts";
+} from "#root/skills-install.ts";
+import { skillFiles } from "#root/skills-declaration.ts";
 import {
   prepareSkillCopy,
   sourceDigester,
   skillEntries,
   unresolvedSkillImports,
-} from "./skills-copy.ts";
+} from "#root/skills-copy.ts";
 
 const USAGE =
   "Usage: bun scripts/skills-sync.ts [--dry-run] [--in-house-only] [--dotfiles <path>] [--home <path>]\n";

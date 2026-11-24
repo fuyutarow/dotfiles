@@ -1,5 +1,5 @@
-import { z } from "./zod.ts";
-import { within } from "./bounded.ts";
+import { z } from "#src/zod.ts";
+import { within } from "#src/bounded.ts";
 
 export const CCC_PROBE_TTL_MS = 60_000;
 export const CCC_INDEX_THRESHOLD_MS = 15 * 60_000;

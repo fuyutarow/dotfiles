@@ -1,4 +1,4 @@
-import { readCodexSessionStatus } from "./support/codex-session.ts";
+import { readCodexSessionStatus } from "#tests/support/codex-session.ts";
 import { afterEach, expect, test, spyOn } from "bun:test";
 import * as fs from "node:fs/promises";
 import {
@@ -17,7 +17,7 @@ import {
   discoverSessions,
   darwinProcessSource,
   payloadForSession,
-} from "../src/session-discovery.ts";
+} from "#src/session-discovery.ts";
 
 test("Darwin source discovers live Claude and Codex using injected commands", async () => {
   const { root, home, cwd, spelledRoot } = await fixture();
@@ -83,15 +83,15 @@ test("Darwin source discovers live Claude and Codex using injected commands", as
   );
   expect(reason).toBe("ps unavailable");
 });
-import { decodedJson } from "./decode.ts";
-import { z } from "../src/zod.ts";
-import { ESC } from "../src/ansi.ts";
-import { encodePresentation, presentation } from "../src/presentation.ts";
-import { version } from "../package.json";
+import { decodedJson } from "#tests/decode.ts";
+import { z } from "#src/zod.ts";
+import { ESC } from "#src/ansi.ts";
+import { encodePresentation, presentation } from "#src/presentation.ts";
+import { version } from "#root/package.json";
 import {
   readCodexPinnedSessionStatus,
   readCodexThreadStatus,
-} from "../src/adapters/codex-rollout.ts";
+} from "#src/adapters/codex-rollout.ts";
 
 const roots: string[] = [];
 const previousHome = process.env["HOME"];

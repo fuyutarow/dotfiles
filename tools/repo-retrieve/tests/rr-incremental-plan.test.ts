@@ -14,7 +14,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { settingsDigest } from "../src/index-basis.ts";
+import { settingsDigest } from "#src/index-basis.ts";
 
 const ccc = Bun.which("ccc");
 const router = join(import.meta.dir, "../src/repo-retrieve.ts");

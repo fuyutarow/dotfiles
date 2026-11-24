@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { CPU_TOKENS, CTX_TOKENS } from "../src/herdr-projector.ts";
+import { CPU_TOKENS, CTX_TOKENS } from "#src/herdr-projector.ts";
 
 const Style = z.object({ token: z.string(), fg: z.string() });
 const Row = z.array(z.union([z.string(), Style]));

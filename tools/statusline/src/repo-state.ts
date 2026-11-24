@@ -1,8 +1,8 @@
-import { execAsyncBounded } from "./bounded.ts";
-import { firstNonEmpty } from "./model-context.ts";
+import { execAsyncBounded } from "#src/bounded.ts";
+import { firstNonEmpty } from "#src/model-context.ts";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { execAsyncWithin } from "./bounded.ts";
+import { execAsyncWithin } from "#src/bounded.ts";
 
 /** Render-path variant: git is asynchronous and cannot hold the statusline event loop. */
 export async function repoStateAsync(cwd: string): Promise<{

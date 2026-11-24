@@ -1,4 +1,4 @@
-import type { GpuState } from "../src/gpu-samples.ts";
+import type { GpuState } from "#src/gpu-samples.ts";
 export function ownerState(at: number): GpuState {
   return {
     schema: 1,

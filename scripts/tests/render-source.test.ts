@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { RENDER_INPUTS, renderNeedsDependencies } from "../render-source.ts";
+import { RENDER_INPUTS, renderNeedsDependencies } from "#root/render-source.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 const RESTORE = join(ROOT, "scripts/render-source.ts");

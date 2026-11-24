@@ -1,10 +1,10 @@
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
 import { access as accessPath } from "node:fs/promises";
 
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
-import { z } from "../agents/hooks/zod.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 const pathExists = (path: Parameters<typeof accessPath>[0]) =>
   accessPath(path).then(

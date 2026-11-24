@@ -3,7 +3,7 @@ import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parse } from "yaml";
-import { discoverPresets } from "../src/manifests.ts";
+import { discoverPresets } from "#src/manifests.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const scratch = await mkdtemp(join(tmpdir(), "preset-uv-"));

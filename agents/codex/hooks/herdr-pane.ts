@@ -1,5 +1,5 @@
 import { createConnection } from "node:net";
-import { jsonOf, z } from "../../hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const paneReply = jsonOf(
   z.object({ result: z.object({ pane: z.object({ pane_id: z.string() }) }) }),

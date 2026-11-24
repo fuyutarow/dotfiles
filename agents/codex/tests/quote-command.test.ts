@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse } from "yaml";
-import { z } from "../../hooks/zod.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 const temporaryHomes: string[] = [];
 const thread = "11111111-2222-4333-8444-555555555555";

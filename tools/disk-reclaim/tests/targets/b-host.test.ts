@@ -2,22 +2,22 @@ import { expect, test } from "bun:test";
 import { chmodSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { jsonOf } from "@dotfiles/shared/src/zod.ts";
-import { Plan } from "../../src/model.ts";
-import { ReclaimRecord } from "../../src/records.ts";
-import { cliEnv } from "../fixtures/cli-env.ts";
-import { tempRoot } from "../fixtures/temp.ts";
+import { Plan } from "#src/model.ts";
+import { ReclaimRecord } from "#src/records.ts";
+import { cliEnv } from "#tests/fixtures/cli-env.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 import {
   hostAction,
   hostFunctions,
   hostProbe,
-} from "../../src/targets/host-powershell.ts";
+} from "#src/targets/host-powershell.ts";
 import {
   classifySwaps,
   createHostTarget,
   parseProbe,
   HOST_PROBE_TIMEOUT_MS,
-} from "../../src/targets/host.ts";
-import type { Context } from "../../src/targets/index.ts";
+} from "#src/targets/host.ts";
+import type { Context } from "#src/targets/index.ts";
 
 const context: Context = {
   mode: "plan",
@@ -55,28 +55,27 @@ test("VSS allocated storage is an ASK record and cannot execute even when approv
     bytes: 14800000000,
     action: { argv: [] },
   });
-  const records = await import("../../src/records.ts").then(
-    ({ recordsFromPlan }) =>
-      recordsFromPlan({
-        schema: "reclaim.plan/1",
-        generated_at: "2026-10-12T00:00:00Z",
-        host: "r99",
-        mode: "plan",
-        totals: { reclaim_bytes: 0, ask_bytes: 14800000000, freed_bytes: null },
-        receipt: null,
-        headroom: { drives: [] },
-        targets: [
-          {
-            name: "host",
-            tier: "owner",
-            available: true,
-            skip_reason: null,
-            exit: null,
-            candidates: rows,
-            totals: { reclaim: 0, ask: 1, keep: 0 },
-          },
-        ],
-      }),
+  const records = await import("#src/records.ts").then(({ recordsFromPlan }) =>
+    recordsFromPlan({
+      schema: "reclaim.plan/1",
+      generated_at: "2026-10-12T00:00:00Z",
+      host: "r99",
+      mode: "plan",
+      totals: { reclaim_bytes: 0, ask_bytes: 14800000000, freed_bytes: null },
+      receipt: null,
+      headroom: { drives: [] },
+      targets: [
+        {
+          name: "host",
+          tier: "owner",
+          available: true,
+          skip_reason: null,
+          exit: null,
+          candidates: rows,
+          totals: { reclaim: 0, ask: 1, keep: 0 },
+        },
+      ],
+    }),
   );
   expect(records[0]).toMatchObject({
     target: "vss-shadow-storage",

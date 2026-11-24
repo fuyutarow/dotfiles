@@ -3,12 +3,12 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { readCoreRuns } from "../src/core-runs.ts";
-import { render } from "../src/format.ts";
-import { readHostLoadAsync } from "../src/host-load.ts";
-import { sysRow } from "../src/host-display.ts";
-import { fleetLine } from "../src/fleet-line.ts";
-import { seedAgxSnapshot } from "./helpers.ts";
+import { readCoreRuns } from "#src/core-runs.ts";
+import { render } from "#src/format.ts";
+import { readHostLoadAsync } from "#src/host-load.ts";
+import { sysRow } from "#src/host-display.ts";
+import { fleetLine } from "#src/fleet-line.ts";
+import { seedAgxSnapshot } from "#tests/helpers.ts";
 
 const roots: string[] = [];
 const oldXdg = process.env["XDG_STATE_HOME"];

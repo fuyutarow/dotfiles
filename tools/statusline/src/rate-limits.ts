@@ -1,22 +1,25 @@
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { maybe, z } from "./zod.ts";
+import { maybe, z } from "#src/zod.ts";
 import {
   clockHM,
   localFromEpochSec,
   nowEpochSec,
   pad2,
   stampMDHM,
-} from "./prompt-stamp.ts";
-import { ESC, RST, paceColor, pctFmt, roles } from "./ansi.ts";
-import type { Dataframe } from "./dataframe.ts";
-import { codexCreditsSegment, codexRateSegment } from "./provider-display.ts";
-import { jevUsageSegment } from "./provider-display.ts";
+} from "#src/prompt-stamp.ts";
+import { ESC, RST, paceColor, pctFmt, roles } from "#src/ansi.ts";
+import type { Dataframe } from "#src/dataframe.ts";
+import {
+  codexCreditsSegment,
+  codexRateSegment,
+} from "#src/provider-display.ts";
+import { jevUsageSegment } from "#src/provider-display.ts";
 import {
   fieldDisplay,
   observed,
   type FieldDisplay,
   type FieldState,
-} from "./field-state.ts";
+} from "#src/field-state.ts";
 
 const RSET = "⟳";
 // the account's own /usage screen ("Current week (Fable)"). This is NOT in the statusline's own

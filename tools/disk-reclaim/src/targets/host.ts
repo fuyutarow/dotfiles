@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { Result } from "../../../shared/src/result.ts";
-import type { ActionResult, Candidate } from "../model.ts";
-import type { Context, Target } from "./index.ts";
-import { hostAction, hostProbe } from "./host-powershell.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import type { ActionResult, Candidate } from "#src/model.ts";
+import type { Context, Target } from "#src/targets/index.ts";
+import { hostAction, hostProbe } from "#src/targets/host-powershell.ts";
 
 export type Swap = { path: string; mtimeMs: number; bytes: number };
 type Lever = { id: string; path: string; bytes: number | null };

@@ -1,8 +1,8 @@
 import { statfs } from "node:fs/promises";
 import { dirname } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { loadCollectionPolicy } from "./policy.ts";
+import { loadCollectionPolicy } from "#src/policy.ts";
 
 const GIB = 1024 ** 3;
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.25.0 — 2026-11-25
+
+- Each running shell row shows the description the agent gave the Bash call that started it
+- Error handling uses better-result instead of neverthrow
+- The fleet record carries the session's running background shells and their start times
+
 ## 0.24.8 — 2026-11-14
 
 - a running row's "working ·" takes the bar's dim grey

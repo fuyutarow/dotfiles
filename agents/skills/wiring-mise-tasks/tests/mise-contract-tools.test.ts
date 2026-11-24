@@ -6,8 +6,8 @@ import {
   checkTools,
   commandFindings,
   sourceFindings,
-} from "../scripts/mise-contract.ts";
-import templateCounterexample from "./fixtures/template-interpolation-counterexample.json";
+} from "#scripts/mise-contract.ts";
+import templateCounterexample from "#tests/fixtures/template-interpolation-counterexample.json";
 
 const roots: string[] = [];
 afterEach(async () => {

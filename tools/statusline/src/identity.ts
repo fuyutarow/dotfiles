@@ -1,13 +1,13 @@
 import { open, stat, type FileHandle } from "node:fs/promises";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { jsonOf, jsonText, maybe, z } from "./zod.ts";
+import { jsonOf, jsonText, maybe, z } from "#src/zod.ts";
 import { writeFleetSession } from "@dotfiles/shared/src/fleet-session.ts";
 import {
   execAsyncRenderBounded,
   execAsyncWithin,
   readJsonAsync,
   writeCacheAsync,
-} from "./bounded.ts";
+} from "#src/bounded.ts";
 
 const HOME = process.env["HOME"] ?? "";
 const fleetUnavailable = (why: string) => ({ na: true as const, why });

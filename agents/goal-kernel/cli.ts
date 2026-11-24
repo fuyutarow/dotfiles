@@ -3,10 +3,10 @@
  * Consumer: agent/human. JSON mode emits one line. Exit 0 clean, 1 findings, 2 fatal.
  */
 
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { resolve } from "node:path";
 import { cli, command } from "cleye";
-import { jsonText, z } from "../hooks/zod.ts";
+import { jsonText, z } from "@dotfiles/hooks/zod.ts";
 import {
   activateGoal,
   type GoalContract,
@@ -14,8 +14,8 @@ import {
   recordRunDecision,
   resolveWorkspaceRoot,
   type GoalStatus,
-} from "./kernel.ts";
-import { buildPostmortem, type PostmortemReport } from "./postmortem.ts";
+} from "#root/kernel.ts";
+import { buildPostmortem, type PostmortemReport } from "#root/postmortem.ts";
 
 class UsageError extends Error {}
 

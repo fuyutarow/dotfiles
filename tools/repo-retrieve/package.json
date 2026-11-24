@@ -1,6 +1,6 @@
 {
   "name": "@dotfiles/repo-retrieve",
-  "version": "1.14.1",
+  "version": "1.15.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -8,8 +8,12 @@
     "repo-retrieve": "src/repo-retrieve.ts"
   },
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0",
     "consola": "3.4.2"
+  },
+  "imports": {
+    "#root/*": "./*",
+    "#src/*": "./src/*",
+    "#views/*": "./views/*"
   }
 }

@@ -14,8 +14,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { prepareSkillCopy, sourceDigester } from "../skills-copy.ts";
-import { parseSkillLock } from "../skills-declaration.ts";
+import { prepareSkillCopy, sourceDigester } from "#root/skills-copy.ts";
+import { parseSkillLock } from "#root/skills-declaration.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "skills-sync.ts");
 const FAKE = join(import.meta.dir, "fake-skills.ts");

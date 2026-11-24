@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 import {
   readSessions,
   type LivenessFacts,
   type LivenessRef,
   type Probe,
-} from "../../src/liveness/facts.ts";
-import { judge } from "../../src/liveness/predicate.ts";
+} from "#src/liveness/facts.ts";
+import { judge } from "#src/liveness/predicate.ts";
 
 const ref: LivenessRef = {
   uid: 1000,

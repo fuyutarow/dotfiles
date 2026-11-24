@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import { isWslDistro } from "../../shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { join } from "node:path";
 import {
   executeSelection,
@@ -12,10 +12,10 @@ import {
   systemRunner,
   type HostKind,
   type SelectionPhase,
-} from "./deployment.ts";
-import { readApprovedHost } from "./hosts.ts";
-import pkg from "../package.json" with { type: "json" };
-import { Result } from "../../shared/src/result.ts";
+} from "#src/deployment.ts";
+import { readApprovedHost } from "#src/hosts.ts";
+import pkg from "#root/package.json" with { type: "json" };
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);

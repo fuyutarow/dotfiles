@@ -2,8 +2,8 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
-import { checkBunRuntime, type Ctx } from "../doctor.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { checkBunRuntime, type Ctx } from "#root/doctor.ts";
 
 const root = join(import.meta.dir, "../..");
 const scratch = await mkdtemp(join(tmpdir(), "bun-runtime-min-"));
@@ -95,7 +95,7 @@ test.each(["1.4.2", "1.4.3"])(
   "doctor probes Homebrew %s even outside PATH",
   async (version) => {
     const { mkdir, chmod } = await import("node:fs/promises");
-    const { checkBunFloor } = await import("../doctor.ts");
+    const { checkBunFloor } = await import("#root/doctor.ts");
     const fixture = await mkdtemp(join(scratch, "brew-"));
     const homebrew = join(fixture, "homebrew");
     const binary = join(homebrew, "bin/bun");

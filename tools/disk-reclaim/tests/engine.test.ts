@@ -11,14 +11,14 @@ import {
   regenerableIgnoreEntries,
   run,
   type EngineOptions,
-} from "../src/engine.ts";
-import { Plan, ReceiptV2 } from "../src/model.ts";
-import { readReceipts } from "../src/receipt.ts";
-import { createSystemTarget } from "../src/targets/system.ts";
-import { createWorkspacesTarget } from "../src/targets/workspaces.ts";
-import { createHostTarget } from "../src/targets/host.ts";
-import { candidate, fakeTarget } from "./fixtures/fake-target.ts";
-import { tempRoot } from "./fixtures/temp.ts";
+} from "#src/engine.ts";
+import { Plan, ReceiptV2 } from "#src/model.ts";
+import { readReceipts } from "#src/receipt.ts";
+import { createSystemTarget } from "#src/targets/system.ts";
+import { createWorkspacesTarget } from "#src/targets/workspaces.ts";
+import { createHostTarget } from "#src/targets/host.ts";
+import { candidate, fakeTarget } from "#tests/fixtures/fake-target.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 
 const dirs: string[] = [];
 const noop = (): void => {};

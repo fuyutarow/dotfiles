@@ -2,7 +2,7 @@ import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { consola } from "consola";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
 
 type ProbeSet = Readonly<{
   isContainer: () => boolean | Promise<boolean>;

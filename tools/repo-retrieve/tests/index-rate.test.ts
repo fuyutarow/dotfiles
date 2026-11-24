@@ -10,8 +10,8 @@ import {
   recordIndexRate,
   selectIndexRate,
   type IndexMeasurement,
-} from "../src/index-rate.ts";
-import { planReport, summarize } from "../src/index-plan.ts";
+} from "#src/index-rate.ts";
+import { planReport, summarize } from "#src/index-plan.ts";
 
 const current = { startLoad1: 6, nproc: 12 };
 const measurement = (

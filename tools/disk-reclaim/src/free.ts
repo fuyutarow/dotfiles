@@ -1,21 +1,21 @@
 // Consumer: owner shell and machine callers; one versioned JSON result, stderr progress.
 import { lstat, realpath, statfs } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { match } from "ts-pattern";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import type { Holder } from "@dotfiles/shared/src/dir-lock.ts";
-import type { Config } from "./model.ts";
+import type { Config } from "#src/model.ts";
 import {
   errorMessage,
   registerForegroundWaiter,
   stateDir,
   waitForLock,
-} from "./receipt.ts";
-import { ripBurialTime, ripGraveyardRoot } from "./lib/graveyards.ts";
-import type { OpenPaths } from "./lib/procs.ts";
-import { removeTree, type RemoveTreeOptions } from "./lib/remove-tree.ts";
-import { enumerateRipPayloads } from "./targets/rip-expire.ts";
+} from "#src/receipt.ts";
+import { ripBurialTime, ripGraveyardRoot } from "#src/lib/graveyards.ts";
+import type { OpenPaths } from "#src/lib/procs.ts";
+import { removeTree, type RemoveTreeOptions } from "#src/lib/remove-tree.ts";
+import { enumerateRipPayloads } from "#src/targets/rip-expire.ts";
 
 export const FREE_LOCK_WAIT_S = 10;
 export const FREE_BUDGET_MS = 120_000;

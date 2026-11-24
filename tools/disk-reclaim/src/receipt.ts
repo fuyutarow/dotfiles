@@ -15,7 +15,7 @@ import {
 } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { acquire, pidAlive } from "@dotfiles/shared/src/dir-lock.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
@@ -23,7 +23,7 @@ import {
   ReclaimItemOutcome,
   type ReceiptV1,
   type ReceiptV2,
-} from "./model.ts";
+} from "#src/model.ts";
 
 export const errorMessage = (e: unknown): string =>
   e instanceof Error ? e.message : String(e);

@@ -10,12 +10,12 @@ import {
   recordEnd,
   recordStart,
   stepKeys,
-} from "../bash-durations.ts";
-import { backgroundReason } from "../enforce-background-waits.ts";
+} from "#hooks/bash-durations.ts";
+import { backgroundReason } from "#hooks/enforce-background-waits.ts";
 import {
   AGX_WORKER_ENV,
   AGX_WORKER_VALUE,
-} from "../../../../tools/shared/src/worker-env.ts";
+} from "@dotfiles/shared/src/worker-env.ts";
 
 // bash-durations: a command kind's measured duration decides whether it may run in front.
 const HOOK = join(import.meta.dir, "..", "enforce-background-waits.ts");

@@ -4,9 +4,9 @@ import {
   type FleetSession,
   type FleetSessionUnavailable,
 } from "@dotfiles/shared/src/fleet-session.ts";
-import type { SessionStatus } from "./session-status.ts";
-import type { ShellScan } from "./shells.ts";
-import { agentNameAsync } from "./identity.ts";
+import type { SessionStatus } from "#src/session-status.ts";
+import type { ShellScan } from "#src/shells.ts";
+import { agentNameAsync } from "#src/identity.ts";
 
 type Vendor = FleetSession["vendor"];
 

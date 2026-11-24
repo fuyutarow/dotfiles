@@ -3,8 +3,8 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "../../../hooks/zod.ts";
-import { decodedJson } from "../../../hooks/tests/decode.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
+import { decodedJson } from "@dotfiles/hooks/tests/decode.ts";
 
 const hook = join(import.meta.dir, "..", "enforce-dispatch-contract.ts");
 

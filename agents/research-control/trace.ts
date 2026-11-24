@@ -1,5 +1,5 @@
-import { Result } from "../../tools/shared/src/result.ts";
-import { z } from "../hooks/zod.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 export const SCHEMA = "research-section-trace/v2";
 export type Finding = { code: string; eventId?: string; message: string };

@@ -12,16 +12,16 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { loadConfig } from "../../src/engine.ts";
-import { loadCollectionPolicy } from "../../src/policy.ts";
+import { loadConfig } from "#src/engine.ts";
+import { loadCollectionPolicy } from "#src/policy.ts";
 import {
   createRipExpiryTarget,
   createMultiRipExpiryTarget,
-} from "../../src/targets/rip-expire.ts";
-import { purgeCandidates } from "../../src/targets/purge.ts";
-import { deleteApproved } from "../../src/delete.ts";
-import { RIP_GRAVEYARD_MAX_BYTES } from "../../src/lib/graveyards.ts";
-import type { Context } from "../../src/targets/index.ts";
+} from "#src/targets/rip-expire.ts";
+import { purgeCandidates } from "#src/targets/purge.ts";
+import { deleteApproved } from "#src/delete.ts";
+import { RIP_GRAVEYARD_MAX_BYTES } from "#src/lib/graveyards.ts";
+import type { Context } from "#src/targets/index.ts";
 
 const now = Temporal.Instant.from("2026-10-24T12:00:00Z").epochMilliseconds;
 const config = {

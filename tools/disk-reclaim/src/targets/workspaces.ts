@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   listWorkspaces,
   expandRoot,
@@ -15,26 +15,26 @@ import {
   walkRoots,
   type Found,
   type Listed,
-} from "../jj/discover.ts";
-import { jj, unpushedRevset, workingCopyRevset } from "../jj/jj.ts";
-import { createRunProtection, runProtection } from "../jj/run-guard.ts";
-import type { OpenPaths } from "../lib/procs.ts";
-import { resolveProcRoot } from "../lib/procs.ts";
-import { createLivenessSnapshot, scratchRef } from "../liveness/facts.ts";
-import { judge } from "../liveness/predicate.ts";
-import { judgeWorkspace, type WorkspaceFacts } from "../jj/safety.ts";
-import { scanWorkspace } from "../jj/scan.ts";
+} from "#src/jj/discover.ts";
+import { jj, unpushedRevset, workingCopyRevset } from "#src/jj/jj.ts";
+import { createRunProtection, runProtection } from "#src/jj/run-guard.ts";
+import type { OpenPaths } from "#src/lib/procs.ts";
+import { resolveProcRoot } from "#src/lib/procs.ts";
+import { createLivenessSnapshot, scratchRef } from "#src/liveness/facts.ts";
+import { judge } from "#src/liveness/predicate.ts";
+import { judgeWorkspace, type WorkspaceFacts } from "#src/jj/safety.ts";
+import { scanWorkspace } from "#src/jj/scan.ts";
 import {
   removeTree,
   removeTreeProgress,
   type RemoveTreeOptions,
-} from "../lib/remove-tree.ts";
-import type { ActionResult, Candidate } from "../model.ts";
-import type { Context, Target } from "./index.ts";
-import { measuredTreeBytes } from "./tree.ts";
+} from "#src/lib/remove-tree.ts";
+import type { ActionResult, Candidate } from "#src/model.ts";
+import type { Context, Target } from "#src/targets/index.ts";
+import { measuredTreeBytes } from "#src/targets/tree.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { scanCache, checkScanDeadline } from "../lib/scan-cache.ts";
-import { protectedReason } from "../lib/protected.ts";
+import { scanCache, checkScanDeadline } from "#src/lib/scan-cache.ts";
+import { protectedReason } from "#src/lib/protected.ts";
 
 export type WorkspacesOptions = {
   jj?: typeof jj;

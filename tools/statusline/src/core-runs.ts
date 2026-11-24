@@ -1,9 +1,9 @@
-import { listingProgress } from "./dispatch-state.ts";
+import { listingProgress } from "#src/dispatch-state.ts";
 import { basename } from "node:path";
-import { z, recoverInvalid } from "./zod.ts";
-import { readAgxSnapshotAsync } from "./agx-snapshot.ts";
-import { currentDispatcherSession } from "./dispatch-display.ts";
-import type { RouteRun, RouteScan } from "./dispatch-runs.ts";
+import { z, recoverInvalid } from "#src/zod.ts";
+import { readAgxSnapshotAsync } from "#src/agx-snapshot.ts";
+import { currentDispatcherSession } from "#src/dispatch-display.ts";
+import type { RouteRun, RouteScan } from "#src/dispatch-runs.ts";
 
 export type ResolvedRunScope =
   | { kind: "session"; session: string | undefined }

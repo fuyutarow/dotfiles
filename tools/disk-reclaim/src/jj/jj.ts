@@ -1,4 +1,4 @@
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 export type JjResult = { ok: boolean; stdout: string; stderr: string };
 

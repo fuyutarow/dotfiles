@@ -1,5 +1,5 @@
-import { main } from "../../src/reclaim.ts";
-import { createRipExpiryTarget } from "../../src/targets/rip-expire.ts";
+import { main } from "#src/reclaim.ts";
+import { createRipExpiryTarget } from "#src/targets/rip-expire.ts";
 
 // Spend a deterministic stage budget after one real payload deletion. Each new
 // CLI process recomputes record order; no expiry continuation file is involved.

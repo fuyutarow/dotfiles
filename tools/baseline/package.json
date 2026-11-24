@@ -1,14 +1,17 @@
 {
   "name": "@dotfiles/baseline",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "bin": {
     "baseline": "src/baseline.ts"
   },
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0",
     "consola": "3.4.2"
+  },
+  "imports": {
+    "#root/*": "./*",
+    "#src/*": "./src/*"
   }
 }

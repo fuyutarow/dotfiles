@@ -17,7 +17,7 @@ import {
   expandRoot,
   runConsumerGates,
   sharedSurfaces,
-} from "../consumer-gate.ts";
+} from "#root/consumer-gate.ts";
 
 // Real exports, PATH capture and nested sandboxes can exceed Bun's five seconds.
 // Individual consumer-command deadlines (including the timeout test) stay short.

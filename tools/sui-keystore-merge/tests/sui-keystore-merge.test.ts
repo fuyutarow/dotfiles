@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mergeSuiData } from "../src/sui-keystore-merge.ts";
+import { mergeSuiData } from "#src/sui-keystore-merge.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const keystoreJson = jsonOf(z.array(z.string()));

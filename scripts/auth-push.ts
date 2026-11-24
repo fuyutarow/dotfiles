@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
 
 export type CliName = "codex" | "claude" | "gh";
 type Ran = Readonly<{ code: number; out: string; err: string }>;

@@ -3,7 +3,7 @@ import {
   sampleWslReturn,
   wslReturnReport,
   type WslStorageSnapshot,
-} from "../src/host-return.ts";
+} from "#src/host-return.ts";
 
 test("WSL report separates guest free delta from Windows host C return", () => {
   const before: WslStorageSnapshot = {

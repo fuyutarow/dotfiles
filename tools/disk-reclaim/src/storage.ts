@@ -6,7 +6,7 @@ import {
   measureStorage,
   type StorageMeasurement,
 } from "@dotfiles/shared/src/storage-headroom.ts";
-import type { Headroom } from "./model.ts";
+import type { Headroom } from "#src/model.ts";
 
 export async function readHeadroom(
   options: { measure?: (path: string) => StorageMeasurement | null } = {},

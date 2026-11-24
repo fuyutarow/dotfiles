@@ -9,16 +9,19 @@
 // Exit: 0 done · 1 a step failed (its output says which).
 import { access, realpath } from "node:fs/promises";
 import { homedir, hostname, userInfo } from "node:os";
-import { isWslDistro } from "../tools/shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { dirname, join } from "node:path";
 import { cli } from "cleye";
 import { $ } from "bun";
-import { buildLinuxInitEnv } from "./linux-init-env.ts";
-import { declareRentedCodexHost, hostDeclarationProbes } from "./agx-host.ts";
-import { sudoIsOurs, sudoNow } from "./sudo-group.ts";
-import { brewPrefix } from "./core-tools.ts";
-import { installLinuxbrew, bundleCore } from "./linux-brew.ts";
-import { migrateLinuxbrew } from "./linux-migrate-brew.ts";
+import { buildLinuxInitEnv } from "#root/linux-init-env.ts";
+import {
+  declareRentedCodexHost,
+  hostDeclarationProbes,
+} from "#root/agx-host.ts";
+import { sudoIsOurs, sudoNow } from "#root/sudo-group.ts";
+import { brewPrefix } from "#root/core-tools.ts";
+import { installLinuxbrew, bundleCore } from "#root/linux-brew.ts";
+import { migrateLinuxbrew } from "#root/linux-migrate-brew.ts";
 
 const HOME = homedir();
 const DOTFILES = join(HOME, "dotfiles");

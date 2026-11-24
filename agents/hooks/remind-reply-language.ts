@@ -2,13 +2,13 @@
 // into each prompt as additional context. Errors fail open so a broken settings file cannot stop
 // prompt submission. Zero external dependencies; preserve the former onPrompt wire behavior.
 
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { hookJson, hookStderr } from "./lib.ts";
-import { parseJson, strAt } from "./narrow.ts";
-import { jsonOf, z } from "./zod.ts";
+import { hookJson, hookStderr } from "#root/lib.ts";
+import { parseJson, strAt } from "#root/narrow.ts";
+import { jsonOf, z } from "#root/zod.ts";
 
 const CONTEXT =
   "返答は途中経過の報告も含めてすべて日本語で書く（コード・識別子・引用はそのまま）。作業者の英語出力は訳してから示す。";

@@ -1,6 +1,6 @@
 // Shared human/queue verdict protocol. Doctor findings are advisory deploy details.
-import { jsonOf, z } from "../agents/hooks/zod.ts";
-import { RENDERED } from "./config-registry.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { RENDERED } from "#root/config-registry.ts";
 
 export const LandReportSchema = z.strictObject({
   commit: z.enum(["pending", "ok", "failed"]),

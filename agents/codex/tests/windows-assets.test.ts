@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "../../hooks/zod.ts";
-import { bridgeHooks, nativeGuidance } from "../windows-assets.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
+import { bridgeHooks, nativeGuidance } from "#root/windows-assets.ts";
 
 const hooksSchema = z.object({
   hooks: z.object({

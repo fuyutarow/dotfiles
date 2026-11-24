@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { execAsyncWithin } from "./bounded.ts";
-import { jsonOf, z } from "./zod.ts";
+import { execAsyncWithin } from "#src/bounded.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 const USAGE = z.object({
   schema: z.literal(1),

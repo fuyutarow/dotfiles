@@ -1,7 +1,7 @@
 /// <reference types="bun" />
 // Run the pinned local oxlint with Bun and reject invalid or diagnostic-bearing reports.
 import { cli } from "cleye";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const Report = z.looseObject({
   diagnostics: z.array(z.unknown()),

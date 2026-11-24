@@ -12,15 +12,15 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { cccPython } from "../src/ccc-scope.ts";
-import { computeIndexPlan, planReport, summarize } from "../src/index-plan.ts";
-import { waitForIndexChild } from "../src/ccc-index.ts";
+import { cccPython } from "#src/ccc-scope.ts";
+import { computeIndexPlan, planReport, summarize } from "#src/index-plan.ts";
+import { waitForIndexChild } from "#src/ccc-index.ts";
 import {
   indexRateFile,
   median,
   readIndexRate,
   recordIndexRate,
-} from "../src/index-rate.ts";
+} from "#src/index-rate.ts";
 
 const ccc = Bun.which("ccc");
 const roots: string[] = [];

@@ -3,15 +3,15 @@
 import { mkdir, open, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readBoundedStdinJson } from "./lib.ts";
-import { strAt } from "../../hooks/narrow.ts";
-import { jsonOf, z } from "../../hooks/zod.ts";
-import { readCodexThreadStatus } from "../../../tools/statusline/src/adapters/codex-rollout.ts";
+import { readBoundedStdinJson } from "#hooks/lib.ts";
+import { strAt } from "@dotfiles/hooks/narrow.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { readCodexThreadStatus } from "@dotfiles/statusline/src/adapters/codex-rollout.ts";
 import {
   clearHerdrMetadata,
   reportToHerdr,
-} from "../../../tools/statusline/src/identity.ts";
-import { codexAgentName } from "./herdr-identity.ts";
+} from "@dotfiles/statusline/src/identity.ts";
+import { codexAgentName } from "#hooks/herdr-identity.ts";
 
 const reportValue = (value: string | undefined) =>
   value === undefined || value === "" ? "unknown" : value;

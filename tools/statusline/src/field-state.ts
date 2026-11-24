@@ -7,8 +7,8 @@ import {
   unavailable,
   hasBareUnavailable,
   type Unavailable,
-} from "./ansi.ts";
-import { jsonOf, z } from "./zod.ts";
+} from "#src/ansi.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 /** Unknown is permitted only before a successful observation. Good values never expire. */
 export type FieldState<T> =

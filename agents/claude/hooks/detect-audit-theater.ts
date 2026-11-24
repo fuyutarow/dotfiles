@@ -1,5 +1,5 @@
-import { Result } from "../../../tools/shared/src/result.ts";
-import { hookStderr } from "./lib.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { hookStderr } from "#hooks/lib.ts";
 // Stop hook — audit-theater guard.
 //
 // BLOCKS (exit 2) when the assistant's own prose-audit / style-review report uses
@@ -18,13 +18,13 @@ import { hookStderr } from "./lib.ts";
 // Detection: specific phrases fire directly; PASS/GREEN fire only when the text carries
 // NO "what was checked / what is unchecked" clause (the skill's bounded-PASS rule).
 
-import { at, strAt } from "../../hooks/narrow.ts";
+import { at, strAt } from "@dotfiles/hooks/narrow.ts";
 import {
   lastUserTextTail,
   readStdinJson,
   stripCode,
   turnTextTail,
-} from "./lib.ts";
+} from "#hooks/lib.ts";
 
 async function main(): Promise<number> {
   const payload = readStdinJson();

@@ -19,16 +19,16 @@
 // that one environment variable lifts is not a floor. MODEL_FLOOR_CONFIG points the hook at another
 // config (the test suite's fixtures).
 
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { decidePre, readStdinJson } from "./lib.ts";
-import { strAt } from "./narrow.ts";
+import { decidePre, readStdinJson } from "#root/lib.ts";
+import { strAt } from "#root/narrow.ts";
 import {
   judge,
   ordersIn,
   parseFloorConfig,
-} from "../../tools/shared/src/model-orders.ts";
+} from "@dotfiles/shared/src/model-orders.ts";
 
 const CONFIG_PATH =
   process.env["MODEL_FLOOR_CONFIG"] ??

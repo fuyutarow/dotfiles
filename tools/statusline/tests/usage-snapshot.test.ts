@@ -7,9 +7,9 @@ import {
   SubscriptionUsageSnapshotSchema,
 } from "@dotfiles/shared/src/subscription-usage.ts";
 import { jsonOf } from "@dotfiles/shared/src/zod.ts";
-import { rateRow } from "../src/rate-limits.ts";
-import { writeUsageSnapshotAsync } from "../src/usage-snapshot.ts";
-import { decodedJson } from "./decode.ts";
+import { rateRow } from "#src/rate-limits.ts";
+import { writeUsageSnapshotAsync } from "#src/usage-snapshot.ts";
+import { decodedJson } from "#tests/decode.ts";
 
 const priorHome = process.env["HOME"];
 const roots: string[] = [];

@@ -1,6 +1,6 @@
 import { statfs } from "node:fs/promises";
-import { Result } from "../../shared/src/result.ts";
-import { isWslDistro } from "../../shared/src/wsl.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 
 export type WslStorageSnapshot = { guestFree: number; hostCFree: number };
 

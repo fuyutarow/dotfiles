@@ -9,21 +9,18 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import {
-  createLivenessSnapshot,
-  scratchRef,
-} from "../../src/liveness/facts.ts";
-import { judge } from "../../src/liveness/predicate.ts";
+import { createLivenessSnapshot, scratchRef } from "#src/liveness/facts.ts";
+import { judge } from "#src/liveness/predicate.ts";
 import {
   collectProcesses,
   procFs,
   processDecisionText,
-} from "../../src/lib/procs.ts";
-import { protectedReason } from "../../src/lib/protected.ts";
-import { judgeWorkspace, type WorkspaceFacts } from "../../src/jj/safety.ts";
-import { procFixture } from "../fixtures/procs.ts";
-import { tempRoot } from "../fixtures/temp.ts";
-import type { Candidate } from "../../src/model.ts";
+} from "#src/lib/procs.ts";
+import { protectedReason } from "#src/lib/protected.ts";
+import { judgeWorkspace, type WorkspaceFacts } from "#src/jj/safety.ts";
+import { procFixture } from "#tests/fixtures/procs.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import type { Candidate } from "#src/model.ts";
 
 const uuid = "123e4567-e89b-42d3-a456-426614174000";
 const deniedProcError = (path: string): Error =>

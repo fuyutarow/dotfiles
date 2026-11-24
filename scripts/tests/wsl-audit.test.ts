@@ -15,8 +15,8 @@ import { mkdtemp, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { jsonText } from "../../agents/hooks/zod";
-import { distroFromRoot, judge, parseKv, toMntPath } from "../wsl-audit";
+import { jsonText } from "@dotfiles/hooks/zod";
+import { distroFromRoot, judge, parseKv, toMntPath } from "#root/wsl-audit.ts";
 
 const GB = 1024 ** 3;
 

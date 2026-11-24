@@ -66,17 +66,17 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
-import { obj } from "../agents/hooks/narrow.ts";
-import { jsonText, z } from "../agents/hooks/zod.ts";
-import { loadSlugs } from "../agents/hooks/slugs.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { obj } from "@dotfiles/hooks/narrow.ts";
+import { jsonText, z } from "@dotfiles/hooks/zod.ts";
+import { loadSlugs } from "@dotfiles/hooks/slugs.ts";
 import {
   LAND_HOSTS,
   renderedForPlatform,
   roleSystemdEnvironment,
-} from "./config-registry.ts";
-import { brewPrefix, machineRole } from "./core-tools.ts";
-import { prepareRenderSource } from "./render-source.ts";
+} from "#root/config-registry.ts";
+import { brewPrefix, machineRole } from "#root/core-tools.ts";
+import { prepareRenderSource } from "#root/render-source.ts";
 import {
   type HookSpec,
   loadRegistry,
@@ -84,7 +84,7 @@ import {
   type Vendor,
   wire,
   commandFor,
-} from "./hook-registry.ts";
+} from "#root/hook-registry.ts";
 
 function print(line: string): void {
   process.stdout.write(`${line}\n`);

@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadGraveyardAgePolicy } from "../src/graveyard-age.ts";
-import { CollectionPolicyError, loadCollectionPolicy } from "../src/policy.ts";
+import { loadGraveyardAgePolicy } from "#src/graveyard-age.ts";
+import { CollectionPolicyError, loadCollectionPolicy } from "#src/policy.ts";
 
 const config = `
 graveyard_min_age_hours = 24

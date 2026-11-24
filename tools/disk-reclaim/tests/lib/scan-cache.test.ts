@@ -13,8 +13,8 @@ import {
   MAX_SCAN_CACHE_ENTRIES,
   defaultScanCacheDir,
   scanCache,
-} from "../../src/lib/scan-cache.ts";
-import { tempRoot } from "../fixtures/temp.ts";
+} from "#src/lib/scan-cache.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 
 const root = tempRoot("reclaim-scan-cache-");
 const cacheRoot = join(root, "cache");

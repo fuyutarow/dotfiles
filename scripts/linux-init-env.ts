@@ -1,5 +1,5 @@
 /** Build the environment used by every command spawned during linux:init. */
-import { brewPrefix, prefixPaths } from "./core-tools.ts";
+import { brewPrefix, prefixPaths } from "#root/core-tools.ts";
 
 export function buildLinuxInitEnv(
   home: string,

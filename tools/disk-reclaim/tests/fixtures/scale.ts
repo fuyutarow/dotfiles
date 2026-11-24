@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, realpath, rm, statfs } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 /** Includes directories, payloads, and engine state, not just candidate count. */
 export const SCALE_ENTRY_CAP = 100_000;

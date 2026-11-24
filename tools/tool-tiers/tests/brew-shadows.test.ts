@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findToolCommandShadows } from "../src/tool-tiers.ts";
+import { findToolCommandShadows } from "#src/tool-tiers.ts";
 
 const repo = join(import.meta.dir, "../../..");
 

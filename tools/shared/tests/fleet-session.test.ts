@@ -21,7 +21,7 @@ import {
   type FleetSession,
   type FleetSessionRead,
   type FleetSessionUnavailable,
-} from "../src/fleet-session.ts";
+} from "#src/fleet-session.ts";
 
 const roots: string[] = [];
 const unavailable = (why: string): FleetSessionUnavailable => ({

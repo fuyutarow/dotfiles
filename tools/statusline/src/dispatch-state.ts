@@ -1,7 +1,7 @@
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { z } from "./zod.ts";
-import { actionLine } from "./dispatch-display.ts";
-import type { RouteRun } from "./dispatch-runs.ts";
+import { z } from "#src/zod.ts";
+import { actionLine } from "#src/dispatch-display.ts";
+import type { RouteRun } from "#src/dispatch-runs.ts";
 
 // Consumer projection of released C2 fields, never the private writer's schema.
 const Progress = z.object({

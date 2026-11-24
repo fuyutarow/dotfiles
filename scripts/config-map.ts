@@ -16,15 +16,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { consola } from "consola";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
-import { type Kind, type Surface, surfaces } from "./config-registry.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { type Kind, type Surface, surfaces } from "#root/config-registry.ts";
 import {
   jjCandidate,
   jjContent,
   jjContext,
   type JjPrecommit,
-} from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
+} from "@dotfiles/skill-wiring-mise-tasks/scripts/jj-precommit.ts";
 
 const ROOT = join(import.meta.dir, "..");
 

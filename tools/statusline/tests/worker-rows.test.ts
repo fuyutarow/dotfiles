@@ -3,9 +3,9 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { seedAgxSnapshot } from "./helpers.ts";
-import { decodedJson } from "./decode.ts";
-import { z } from "../src/zod.ts";
+import { seedAgxSnapshot } from "#tests/helpers.ts";
+import { decodedJson } from "#tests/decode.ts";
+import { z } from "#src/zod.ts";
 
 const SESSION = "worker-rows-dispatcher";
 const VENDOR = "01a1111b-7dab-7d61-8f9b-231c4cc9082b";

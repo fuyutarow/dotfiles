@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { bareCommitVerb } from "../enforce-gated-commit.ts";
-import { decisionOf, runHook, tempDir } from "./helpers.ts";
+import { bareCommitVerb } from "#root/enforce-gated-commit.ts";
+import { decisionOf, runHook, tempDir } from "#tests/helpers.ts";
 
 const HOOK = "enforce-gated-commit.ts";
 

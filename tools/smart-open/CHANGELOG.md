@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.6 — 2026-11-25
+
+- Error handling uses better-result instead of neverthrow
+- WSL is decided by isWslDistro, so a container on the WSL kernel is treated as plain Linux
+
 ## 1.2.5 — 2026-11-20
 
 - Take the desktop-session interop runner from tools/shared

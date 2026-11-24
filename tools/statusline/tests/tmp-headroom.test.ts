@@ -8,19 +8,15 @@ import {
   TMP_INODE_DENY_PCT,
   TMP_INODE_WARN_PCT,
   tmpInodeColor,
-} from "../src/ansi.ts";
-import {
-  tmpEntry,
-  tmpReadingsAsync,
-  type StatFsCounts,
-} from "../src/storage.ts";
-import { tmpSegment } from "../src/storage-display.ts";
-import { sysSegment } from "../src/host-display.ts";
+} from "#src/ansi.ts";
+import { tmpEntry, tmpReadingsAsync, type StatFsCounts } from "#src/storage.ts";
+import { tmpSegment } from "#src/storage-display.ts";
+import { sysSegment } from "#src/host-display.ts";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import {
   TMP_INODE_WARN_PCT as hookWarn,
   TMP_INODE_DENY_PCT as hookDeny,
-} from "../../storage-headroom/src/decision.ts";
+} from "@dotfiles/storage-headroom/src/decision.ts";
 
 const GiB = 1024 ** 3;
 const BSIZE = 4096;

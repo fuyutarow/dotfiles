@@ -1,10 +1,11 @@
 // Immutable render inputs, shared by link:dots, render-home and doctor's reference render.
 // No live checkout dependencies or node_modules links enter an immutable export.
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
-import { z } from "../agents/hooks/zod.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 export const RENDER_INPUTS = [
   "agents/claude/settings.json",
@@ -15,12 +16,16 @@ export const RENDER_INPUTS = [
   "tools/shared/package.json",
   "package.json",
   "bun.lock",
+  "tsconfig.json",
+  "standard-presets/typescript/tsconfig.json",
+  "tools/tool-tiers/package.json",
   "tools/tool-tiers/src/tool-tiers.ts",
   "tools/tool-tiers/src/tool-commands.ts",
   "tools/tool-tiers/src/tool-commands.tsv",
   "Brewfile.core",
   "zsh/timezone",
   "roles/roles.toml",
+  "scripts/package.json",
   "scripts/render-home.ts",
   "scripts/render-source.ts",
   "scripts/hook-registry.ts",
@@ -171,6 +176,56 @@ export type RenderSource = {
   release: () => Promise<void>;
 };
 
+const PathsSchema = z.object({
+  compilerOptions: z.object({
+    paths: z.record(z.string(), z.array(z.string())).default({}),
+  }),
+});
+const ImportsSchema = z.object({
+  imports: z.record(z.string(), z.string()).default({}),
+});
+
+/** `@dotfiles/<name>/*` → its directory, from the root tsconfig `paths` that Bun resolves with. */
+async function workspaceDirs(root: string): Promise<Map<string, string>> {
+  const file = Bun.file(join(root, "tsconfig.json"));
+  if (!(await file.exists())) return new Map();
+  const parsed = PathsSchema.safeParse(Bun.JSONC.parse(await file.text()));
+  if (!parsed.success) return new Map();
+  return new Map(
+    Object.entries(parsed.data.compilerOptions.paths).flatMap(
+      ([pattern, [target]]) =>
+        pattern.endsWith("/*") && target?.endsWith("/*") === true
+          ? [[pattern.slice(0, -1), join(root, target.slice(0, -1))]]
+          : [],
+    ),
+  );
+}
+
+/** A `#alias/…` specifier through the nearest package.json "imports" above `from`. */
+function aliasPath(
+  root: string,
+  from: string,
+  specifier: string,
+): string | null {
+  let dir = dirname(from);
+  while (dir.startsWith(root) && !existsSync(join(dir, "package.json")))
+    dir = dirname(dir);
+  const parsed = Result.try(() =>
+    ImportsSchema.safeParse(
+      Bun.JSONC.parse(readFileSync(join(dir, "package.json"), "utf8")),
+    ),
+  );
+  if (parsed.isErr() || !parsed.value.success) return null;
+  const match = Object.entries(parsed.value.data.imports).find(
+    ([key]) => key.endsWith("*") && specifier.startsWith(key.slice(0, -1)),
+  );
+  if (match === undefined) return null;
+  const [key, target] = match;
+  return join(dir, target.replace("*", specifier.slice(key.length - 1)));
+}
+
+const IMPORT_SCANNER = new Bun.Transpiler({ loader: "tsx" });
+
 /** Only the renderer's reachable imports require dependencies; unused manifests do not. */
 export async function renderNeedsDependencies(
   root: string,
@@ -178,6 +233,17 @@ export async function renderNeedsDependencies(
 ): Promise<boolean> {
   const pending = entries.map((entry) => join(root, entry));
   const visited = new Set<string>();
+  const packages = await workspaceDirs(root);
+  const localPath = (from: string, specifier: string): string | null => {
+    if (specifier.startsWith(".")) return resolve(dirname(from), specifier);
+    if (specifier.startsWith("#")) return aliasPath(root, from, specifier);
+    const owner = [...packages].find(([prefix]) =>
+      specifier.startsWith(prefix),
+    );
+    return owner === undefined
+      ? null
+      : join(owner[1], specifier.slice(owner[0].length));
+  };
   while (pending.length > 0) {
     const path = pending.pop();
     if (path === undefined || visited.has(path)) continue;
@@ -185,17 +251,25 @@ export async function renderNeedsDependencies(
     const file = Bun.file(path);
     if (!(await file.exists()) || !/\.[cm]?[jt]sx?$/u.test(path)) continue;
     const source = await file.text();
-    const imports = Array.from(
-      source.matchAll(
-        /\b(?:import|export)\s+(?:type\s+)?[\w$*{},\s]*?\s+from\s*["']([^"']+)["']|\bimport\s*["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']\s*\)/gu,
-      ),
-      (match) => match[1] ?? match[2] ?? match[3],
-    )
-      .filter((specifier) => specifier !== undefined)
+    // The parser, not a regex: comments and strings that read like imports are not imports.
+    const imports = IMPORT_SCANNER.scanImports(source)
+      .map((entry) => entry.path)
       .filter((specifier) => !/^(?:node:|bun:|bun$)/u.test(specifier));
-    if (imports.some((specifier) => !specifier.startsWith("."))) return true;
+    // Workspace packages (@dotfiles/*, through the exported tsconfig `paths`) and package-internal
+    // aliases (#…, through package.json "imports") need no install; only third-party packages do.
+    if (
+      imports.some(
+        (specifier) =>
+          !specifier.startsWith(".") &&
+          !specifier.startsWith("#") &&
+          !specifier.startsWith("@dotfiles/"),
+      )
+    )
+      return true;
     pending.push(
-      ...imports.map((specifier) => resolve(dirname(path), specifier)),
+      ...imports
+        .map((specifier) => localPath(path, specifier))
+        .filter((target) => target !== null),
     );
   }
   return false;

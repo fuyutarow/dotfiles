@@ -10,8 +10,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Result, errorMessage } from "../../tools/shared/src/result.ts";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const SCRIPT = join(ROOT, "scripts/gate-changed.ts");

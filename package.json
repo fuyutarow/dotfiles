@@ -65,6 +65,18 @@
     "tools/*",
     "agents/hooks",
     "agents/skills/*",
-    "scripts"
+    "scripts",
+    "agents/claude",
+    "agents/codex",
+    "agents/goal-kernel",
+    "agents/research-control",
+    "agents/models",
+    "standard-presets",
+    "wsl",
+    "android",
+    "reason-network",
+    "cocoindex",
+    "fresh-machine",
+    "macos"
   ]
 }

@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findings, candidateFindings } from "../live-refs.ts";
+import { findings, candidateFindings } from "#root/live-refs.ts";
 
 async function fixture(): Promise<{ home: string; repo: string }> {
   const root = await mkdtemp(join(tmpdir(), "live-refs-"));

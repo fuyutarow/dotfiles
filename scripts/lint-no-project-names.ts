@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 
 function fatal(error: unknown): number {

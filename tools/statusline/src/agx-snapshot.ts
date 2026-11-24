@@ -1,7 +1,7 @@
 import { DoctorFindings } from "@dotfiles/shared/src/doctor-record.ts";
 import { resolve } from "node:path";
-import { readOwnerState } from "./owner-state.ts";
-import { z } from "./zod.ts";
+import { readOwnerState } from "#src/owner-state.ts";
+import { z } from "#src/zod.ts";
 const WorkspaceCountsSchema = () =>
   z.object({
     total: z.number().int().nonnegative(),

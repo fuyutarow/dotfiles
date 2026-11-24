@@ -1,8 +1,8 @@
-import { Result } from "../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { homedir } from "node:os";
-import { isWslDistro } from "../../tools/shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { join, resolve } from "node:path";
-import { jsonOf, z } from "../hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 export type RuntimeProvider = "standalone" | "windows-desktop";
 export type HostKind = "mac" | "linux" | "wsl";

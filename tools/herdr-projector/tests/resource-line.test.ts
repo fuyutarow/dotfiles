@@ -8,7 +8,7 @@ import {
   row3VisibleText,
   ROW3_FIT_WIDTH,
   type ResourceTokens,
-} from "../src/herdr-projector.ts";
+} from "#src/herdr-projector.ts";
 
 const GiB = 1024 ** 3;
 const CPU_NAMES = ["cpu_idle", "cpu_lo", "cpu_mid", "cpu_hi"];

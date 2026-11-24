@@ -1,4 +1,4 @@
-import { z } from "./zod.ts";
+import { z } from "#src/zod.ts";
 
 export function embedHousePin(source: string, parsed: unknown) {
   const pin = z

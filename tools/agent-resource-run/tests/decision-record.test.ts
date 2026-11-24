@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DecisionRecordSchema } from "../src/lib/decision-record.ts";
+import { DecisionRecordSchema } from "#src/lib/decision-record.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const runner = join(import.meta.dir, "../src/agent-resource-run.ts");

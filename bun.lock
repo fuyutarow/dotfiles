@@ -20,8 +20,30 @@
         "yaml": "2.9.0",
       },
     },
+    "agents/claude": {
+      "name": "@dotfiles/claude",
+    },
+    "agents/codex": {
+      "name": "@dotfiles/codex",
+    },
+    "agents/goal-kernel": {
+      "name": "@dotfiles/goal-kernel",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
     "agents/hooks": {
       "name": "@dotfiles/hooks",
+    },
+    "agents/models": {
+      "name": "@dotfiles/models",
+      "dependencies": {
+        "cleye": "2.6.0",
+        "consola": "3.4.2",
+      },
+    },
+    "agents/research-control": {
+      "name": "@dotfiles/research-control",
     },
     "agents/skills/codifying-doctrine": {
       "name": "@dotfiles/skill-codifying-doctrine",
@@ -175,6 +197,24 @@
         "type-flag": "4.5.0",
       },
     },
+    "agents/skills/writing-typescript": {
+      "name": "@dotfiles/skill-writing-typescript",
+    },
+    "android": {
+      "name": "@dotfiles/android",
+      "dependencies": {
+        "cleye": "2.6.0",
+      },
+    },
+    "cocoindex": {
+      "name": "@dotfiles/cocoindex",
+    },
+    "fresh-machine": {
+      "name": "@dotfiles/fresh-machine",
+    },
+    "macos": {
+      "name": "@dotfiles/macos",
+    },
     "obsidian": {
       "name": "@dotfiles/obsidian",
       "dependencies": {
@@ -182,15 +222,20 @@
         "obsidian": "1.5.7",
       },
     },
+    "reason-network": {
+      "name": "@dotfiles/reason-network",
+    },
     "scripts": {
       "name": "@dotfiles/scripts",
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "better-result": "3.0.1",
         "cleye": "2.6.0",
         "consola": "3.4.2",
         "ts-pattern": "5.9.0",
       },
+    },
+    "standard-presets": {
+      "name": "@dotfiles/standard-presets",
     },
     "tools/agent-cpu": {
       "name": "@dotfiles/agent-cpu",
@@ -199,7 +244,6 @@
         "agent-cpu": "src/agent-cpu.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
     },
@@ -210,7 +254,6 @@
         "agent-resource-run": "src/agent-resource-run.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
         "consola": "3.4.2",
       },
@@ -222,7 +265,6 @@
         "baseline": "src/baseline.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
         "consola": "3.4.2",
       },
@@ -234,7 +276,6 @@
         "codex-thread-copy": "src/codex-thread-copy.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
     },
@@ -245,7 +286,6 @@
         "coredev": "src/coredev.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
     },
@@ -256,7 +296,6 @@
         "detect-japanese": "src/cli.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
     },
@@ -267,7 +306,6 @@
         "disk-reclaim": "src/reclaim.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
         "consola": "3.4.2",
         "ts-pattern": "5.9.0",
@@ -280,7 +318,6 @@
         "btmp": "src/btmp.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
         "type-flag": "4.5.0",
       },
@@ -292,7 +329,6 @@
         "herdr-projector": "src/herdr-projector.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
     },
@@ -303,7 +339,6 @@
         "preset": "src/preset.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
     },
@@ -314,7 +349,6 @@
         "prompt-archive": "src/prompt-archive.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
     },
@@ -326,7 +360,6 @@
         "repo-retrieve": "src/repo-retrieve.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
         "consola": "3.4.2",
       },
@@ -335,7 +368,6 @@
       "name": "@dotfiles/secrets-push",
       "version": "0.2.3",
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
     },
@@ -346,7 +378,6 @@
         "serena-foreground": "src/serena-foreground.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
     },
@@ -369,7 +400,6 @@
         "smart-copy": "src/smart-copy.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
     },
@@ -380,7 +410,6 @@
         "smart-open": "src/smart-open.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
         "consola": "3.4.2",
       },
@@ -392,7 +421,6 @@
         "statusline": "src/statusline.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
       "devDependencies": {
@@ -406,7 +434,6 @@
         "storage-headroom": "src/storage-headroom.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
     },
@@ -417,7 +444,6 @@
         "sui-keystore-merge": "src/sui-keystore-merge.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
     },
@@ -428,9 +454,11 @@
         "tool": "src/tool.ts",
       },
       "dependencies": {
-        "@dotfiles/shared": "workspace:*",
         "cleye": "2.6.0",
       },
+    },
+    "wsl": {
+      "name": "@dotfiles/wsl",
     },
   },
   "packages": {
@@ -446,7 +474,15 @@
 
     "@dotfiles/agent-resource-run": ["@dotfiles/agent-resource-run@workspace:tools/agent-resource-run"],
 
+    "@dotfiles/android": ["@dotfiles/android@workspace:android"],
+
     "@dotfiles/baseline": ["@dotfiles/baseline@workspace:tools/baseline"],
+
+    "@dotfiles/claude": ["@dotfiles/claude@workspace:agents/claude"],
+
+    "@dotfiles/cocoindex": ["@dotfiles/cocoindex@workspace:cocoindex"],
+
+    "@dotfiles/codex": ["@dotfiles/codex@workspace:agents/codex"],
 
     "@dotfiles/codex-thread-copy": ["@dotfiles/codex-thread-copy@workspace:tools/codex-thread-copy"],
 
@@ -456,11 +492,19 @@
 
     "@dotfiles/disk-reclaim": ["@dotfiles/disk-reclaim@workspace:tools/disk-reclaim"],
 
+    "@dotfiles/fresh-machine": ["@dotfiles/fresh-machine@workspace:fresh-machine"],
+
+    "@dotfiles/goal-kernel": ["@dotfiles/goal-kernel@workspace:agents/goal-kernel"],
+
     "@dotfiles/herdr-btm": ["@dotfiles/herdr-btm@workspace:tools/herdr-btm"],
 
     "@dotfiles/herdr-projector": ["@dotfiles/herdr-projector@workspace:tools/herdr-projector"],
 
     "@dotfiles/hooks": ["@dotfiles/hooks@workspace:agents/hooks"],
+
+    "@dotfiles/macos": ["@dotfiles/macos@workspace:macos"],
+
+    "@dotfiles/models": ["@dotfiles/models@workspace:agents/models"],
 
     "@dotfiles/obsidian": ["@dotfiles/obsidian@workspace:obsidian"],
 
@@ -468,7 +512,11 @@
 
     "@dotfiles/prompt-archive": ["@dotfiles/prompt-archive@workspace:tools/prompt-archive"],
 
+    "@dotfiles/reason-network": ["@dotfiles/reason-network@workspace:reason-network"],
+
     "@dotfiles/repo-retrieve": ["@dotfiles/repo-retrieve@workspace:tools/repo-retrieve"],
+
+    "@dotfiles/research-control": ["@dotfiles/research-control@workspace:agents/research-control"],
 
     "@dotfiles/scripts": ["@dotfiles/scripts@workspace:scripts"],
 
@@ -520,9 +568,13 @@
 
     "@dotfiles/skill-writing-bun-scripts": ["@dotfiles/skill-writing-bun-scripts@workspace:agents/skills/writing-bun-scripts"],
 
+    "@dotfiles/skill-writing-typescript": ["@dotfiles/skill-writing-typescript@workspace:agents/skills/writing-typescript"],
+
     "@dotfiles/smart-copy": ["@dotfiles/smart-copy@workspace:tools/smart-copy"],
 
     "@dotfiles/smart-open": ["@dotfiles/smart-open@workspace:tools/smart-open"],
+
+    "@dotfiles/standard-presets": ["@dotfiles/standard-presets@workspace:standard-presets"],
 
     "@dotfiles/statusline": ["@dotfiles/statusline@workspace:tools/statusline"],
 
@@ -531,6 +583,8 @@
     "@dotfiles/sui-keystore-merge": ["@dotfiles/sui-keystore-merge@workspace:tools/sui-keystore-merge"],
 
     "@dotfiles/tool-tiers": ["@dotfiles/tool-tiers@workspace:tools/tool-tiers"],
+
+    "@dotfiles/wsl": ["@dotfiles/wsl@workspace:wsl"],
 
     "@emnapi/core": ["@emnapi/core@1.11.2", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA=="],
 

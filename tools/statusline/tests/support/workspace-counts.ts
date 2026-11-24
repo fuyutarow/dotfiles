@@ -1,5 +1,5 @@
-import { jsonOf, z } from "../../src/zod.ts";
-import type { WorkspaceCounts } from "../../src/agx-snapshot.ts";
+import { jsonOf, z } from "#src/zod.ts";
+import type { WorkspaceCounts } from "#src/agx-snapshot.ts";
 const WorkspaceCountsSchema = () =>
   z.object({
     total: z.number().int().nonnegative(),

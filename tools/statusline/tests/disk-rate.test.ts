@@ -5,14 +5,14 @@ import {
   diskReadingsAsync,
   parseQuota,
   type DiskReading,
-} from "../src/storage.ts";
-import { diskSegment } from "../src/storage-display.ts";
-import { DiskRateStateSchema, updateDiskRates } from "../src/disk-rate.ts";
-import { execAsyncWithin, readJsonAsync } from "../src/bounded.ts";
-import { ESC, RST } from "../src/ansi.ts";
+} from "#src/storage.ts";
+import { diskSegment } from "#src/storage-display.ts";
+import { DiskRateStateSchema, updateDiskRates } from "#src/disk-rate.ts";
+import { execAsyncWithin, readJsonAsync } from "#src/bounded.ts";
+import { ESC, RST } from "#src/ansi.ts";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { sysSegment } from "../src/host-display.ts";
-import { cleanupTempDirs, tempDir } from "./helpers.ts";
+import { sysSegment } from "#src/host-display.ts";
+import { cleanupTempDirs, tempDir } from "#tests/helpers.ts";
 
 const GiB = 1024 ** 3;
 test("nonzero subprocess exit preserves quota output", async () => {

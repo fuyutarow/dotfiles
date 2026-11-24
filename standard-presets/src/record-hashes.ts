@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { join, relative, resolve } from "node:path";
-import { discoverPresets } from "./manifests.ts";
-import recorded from "../template-hashes.json";
+import { discoverPresets } from "#src/manifests.ts";
+import recorded from "#root/template-hashes.json";
 
 const root = resolve(import.meta.dir, "..");
 const path = join(root, "template-hashes.json");

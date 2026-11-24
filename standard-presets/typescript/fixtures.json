@@ -236,7 +236,35 @@
       "import { Result } from \"better-result\";\nexport const value = Result.ok(1);\n"
     ],
     "good": [
-      "import { Result } from \"./result.ts\";\nexport const value = Result.ok(1);\n"
+      "import { Result } from \"@dotfiles/shared/src/result.ts\";\nexport const value = Result.ok(1);\n"
+    ]
+  },
+  {
+    "id": "no-relative-import",
+    "entry": 0,
+    "scope": "no-relative",
+    "bad": [
+      "import { a } from \"./a.ts\";\nexport { a };\n",
+      "export { b } from \"../b.ts\";\n",
+      "export * from \"./c.ts\";\n",
+      "export const d = await import(\"./d.ts\");\n"
+    ],
+    "good": [
+      "import { a } from \"#src/a.ts\";\nexport { a };\n",
+      "export { b } from \"@dotfiles/shared/src/b.ts\";\n",
+      "export const d = await import(\"node:path\");\n"
+    ]
+  },
+  {
+    "id": "no-relative-import-type",
+    "entry": 1,
+    "scope": "no-relative",
+    "bad": [
+      "export type V = import(\"../v.ts\").V;\n"
+    ],
+    "good": [
+      "export type V = import(\"#src/v.ts\").V;\n",
+      "export type W = import(\"@dotfiles/shared/src/w.ts\").W;\n"
     ]
   }
 ]

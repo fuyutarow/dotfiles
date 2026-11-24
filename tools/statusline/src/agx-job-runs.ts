@@ -1,6 +1,6 @@
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { execAsyncWithin } from "./bounded.ts";
-import { jsonOf, recoverInvalid, z } from "./zod.ts";
+import { execAsyncWithin } from "#src/bounded.ts";
+import { jsonOf, recoverInvalid, z } from "#src/zod.ts";
 
 export const Rows = z.array(
   z.object({

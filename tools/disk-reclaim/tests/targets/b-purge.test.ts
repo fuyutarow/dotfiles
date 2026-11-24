@@ -12,23 +12,20 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { tempRoot as allocateTempRoot } from "../fixtures/temp.ts";
-import { purge, purgeRip } from "../../src/targets/purge.ts";
-import { ripExpiryCandidates } from "../../src/targets/rip-expire.ts";
-import { main as reclaimMain } from "../../src/reclaim.ts";
-import { loadConfig } from "../../src/engine.ts";
-import { loadCollectionPolicy } from "../../src/policy.ts";
-import { purgeCandidates } from "../../src/targets/purge.ts";
+import { tempRoot as allocateTempRoot } from "#tests/fixtures/temp.ts";
+import { purge, purgeRip } from "#src/targets/purge.ts";
+import { ripExpiryCandidates } from "#src/targets/rip-expire.ts";
+import { main as reclaimMain } from "#src/reclaim.ts";
+import { loadConfig } from "#src/engine.ts";
+import { loadCollectionPolicy } from "#src/policy.ts";
+import { purgeCandidates } from "#src/targets/purge.ts";
 import {
   existingGraveyards,
   graveyardCandidates,
-} from "../../src/lib/graveyards.ts";
-import { countEntries } from "../../src/lib/purge-progress.ts";
-import type { Context } from "../../src/targets/index.ts";
-import type {
-  LivenessFacts,
-  LivenessSnapshot,
-} from "../../src/liveness/facts.ts";
+} from "#src/lib/graveyards.ts";
+import { countEntries } from "#src/lib/purge-progress.ts";
+import type { Context } from "#src/targets/index.ts";
+import type { LivenessFacts, LivenessSnapshot } from "#src/liveness/facts.ts";
 
 const roots: string[] = [];
 function restoreDirectories(path: string): void {
@@ -175,7 +172,7 @@ test("purge removes 500/400 tree without following a symlink outside it", async 
 });
 
 test("typed confirmation accepts only an exact yes", async () => {
-  const { typedYes } = await import("../../src/targets/purge.ts");
+  const { typedYes } = await import("#src/targets/purge.ts");
   expect(typedYes("yes")).toBe(true);
   expect(typedYes(" yes ")).toBe(true);
   expect(typedYes("YES")).toBe(false);

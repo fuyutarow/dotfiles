@@ -1,6 +1,6 @@
 // One physical-line ratchet shared by the hook and commit gate.
 import { basename, extname, normalize, resolve } from "node:path";
-import { effective, parseShell, type ShellCommand } from "./shell-syntax.ts";
+import { effective, parseShell, type ShellCommand } from "#src/shell-syntax.ts";
 
 export const SHELL_LIMIT = 12;
 export function shellRemedy(limit = SHELL_LIMIT): string {

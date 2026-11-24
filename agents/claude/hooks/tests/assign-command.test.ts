@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "../../../hooks/zod.ts";
-import { parseJson } from "../../../hooks/narrow.ts";
-import { decisionOf as decisionResult, runHook } from "./helpers.ts";
-import { decoded } from "../../../hooks/tests/decode.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
+import { parseJson } from "@dotfiles/hooks/narrow.ts";
+import { decisionOf as decisionResult, runHook } from "#hooks/tests/helpers.ts";
+import { decoded } from "@dotfiles/hooks/tests/decode.ts";
 
 const HOOK = "assign-command.ts";
 const Block = z.object({ decision: z.string(), reason: z.string() });

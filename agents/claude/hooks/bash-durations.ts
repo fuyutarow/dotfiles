@@ -14,8 +14,8 @@ import { access, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { jsonOf, z } from "../../hooks/zod.ts";
-import { parseShell } from "../../hooks/shell-syntax.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { parseShell } from "@dotfiles/hooks/shell-syntax.ts";
 
 const KEEP = 10;
 

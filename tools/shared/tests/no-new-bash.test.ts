@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bashShellViolation } from "../src/no-new-bash.ts";
+import { bashShellViolation } from "#src/no-new-bash.ts";
 
 const remedialText =
   "Write the logic as one .ts file run by bun. A shell file is allowed only as a thin shim that execs it";

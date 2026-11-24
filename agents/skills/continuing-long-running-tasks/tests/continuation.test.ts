@@ -10,15 +10,15 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { z } from "../../../hooks/zod.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 import {
   bindContinuationSlot,
   continuationSlotPath,
   inspectContinuationRecord,
   readContinuationBinding,
   validateContinuationRecord,
-} from "../scripts/continuation-record";
-import { decodedJson } from "../../../hooks/tests/decode.ts";
+} from "#scripts/continuation-record.ts";
+import { decodedJson } from "@dotfiles/hooks/tests/decode.ts";
 
 // What the code under test prints is parsed, never cast: the stdout/stderr of a subprocess is
 // untrusted text until a schema accepts it.

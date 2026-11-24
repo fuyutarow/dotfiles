@@ -1,6 +1,6 @@
 // Consumer projection of C5 routing statistics; no owner state-file knowledge.
 import { hostname } from "node:os";
-import { z } from "./zod.ts";
+import { z } from "#src/zod.ts";
 
 export const RoutingStatsSchema = z.object({
   schema: z.literal(1),

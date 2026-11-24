@@ -1,13 +1,16 @@
 {
   "name": "@dotfiles/serena-foreground",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "bin": {
     "serena-foreground": "src/serena-foreground.ts"
   },
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0"
+  },
+  "imports": {
+    "#root/*": "./*",
+    "#src/*": "./src/*"
   }
 }

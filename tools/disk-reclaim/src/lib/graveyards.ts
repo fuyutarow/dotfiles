@@ -8,7 +8,7 @@ import {
 import { homedir } from "node:os";
 import { lstat, readdir } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 export type Graveyard = { readonly label: string; readonly path: string };
 export type RipRecord = {

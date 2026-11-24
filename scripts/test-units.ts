@@ -37,8 +37,8 @@
 import { availableParallelism } from "node:os";
 import { basename, resolve } from "node:path";
 import { cli } from "cleye";
-import { z } from "../tools/shared/src/zod.ts";
-import { Result } from "../tools/shared/src/result.ts";
+import { z } from "@dotfiles/shared/src/zod.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 export const TEST_GLOBS = [
   "scripts/tests/**/*.test.ts",

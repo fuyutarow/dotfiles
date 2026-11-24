@@ -8,15 +8,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 import {
   liveExecutables,
   readStore,
   releasesToRemove,
   STORES,
   type VersionStore,
-} from "../../src/lib/version-stores.ts";
-import { createToolchainsTarget } from "../../src/targets/toolchains.ts";
+} from "#src/lib/version-stores.ts";
+import { createToolchainsTarget } from "#src/targets/toolchains.ts";
 
 const cacheRoot = tempRoot("reclaim-toolchains-cache-");
 afterAll(() => {

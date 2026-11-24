@@ -3,8 +3,8 @@ import { fail } from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadGraveyardAgePolicy } from "../src/graveyard-age.ts";
-import { loadCollectionPolicy } from "../src/policy.ts";
+import { loadGraveyardAgePolicy } from "#src/graveyard-age.ts";
+import { loadCollectionPolicy } from "#src/policy.ts";
 
 const GIB = 1024 ** 3;
 const validPolicy = `

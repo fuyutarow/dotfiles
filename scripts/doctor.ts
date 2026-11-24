@@ -73,53 +73,53 @@ import {
 import {
   DRIVE_MOUNT_REPAIR,
   STALE_DRIVE_MOUNT_REPAIR,
-} from "../wsl/drive-mount.ts";
+} from "@dotfiles/wsl/drive-mount.ts";
 import { constants, type Stats } from "node:fs";
 import { consola } from "consola";
-import { bunRequirement, checkBunRuntime } from "./bun-runtime.ts";
-export { checkBunRuntime } from "./bun-runtime.ts";
+import { bunRequirement, checkBunRuntime } from "#root/bun-runtime.ts";
+export { checkBunRuntime } from "#root/bun-runtime.ts";
 import { ownerlessRefLocks } from "@dotfiles/shared/src/ref-locks.ts";
 import { homedir, hostname, tmpdir, userInfo } from "node:os";
-import { isWslDistro } from "../tools/shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { registeredRepos } from "./workspace-repos.ts";
+import { registeredRepos } from "#root/workspace-repos.ts";
 import {
   MAPPING_ENV,
   parseMapping,
-} from "../tools/repo-retrieve/src/ccc-db-dir.ts";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
-import { renderedForPlatform } from "./config-registry.ts";
-import { googleDriveTargets } from "./link-dots.ts";
+} from "@dotfiles/repo-retrieve/src/ccc-db-dir.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { renderedForPlatform } from "#root/config-registry.ts";
+import { googleDriveTargets } from "#root/link-dots.ts";
 import {
   brewPrefix,
   coreCommands,
   corePathProblems,
   machineRole,
-} from "./core-tools.ts";
+} from "#root/core-tools.ts";
 import {
   checkCoreFloor,
   coreFloorIO,
   type FloorIO,
-} from "../tools/tool-tiers/src/core-floor.ts";
+} from "@dotfiles/tool-tiers/src/core-floor.ts";
 import {
   declaredToolCommands,
   findToolCommandShadows,
-} from "../tools/tool-tiers/src/tool-tiers.ts";
-import { configHome, declaredProvider } from "../agents/codex/runtime.ts";
-import { danglingRepoBins } from "./deps-prune.ts";
-import { checkCodexHookTrust } from "./doctor/codex-hook-trust.ts";
-import { obj } from "../agents/hooks/narrow.ts";
-import { jsonOf, jsonText } from "../agents/hooks/zod.ts";
+} from "@dotfiles/tool-tiers/src/tool-tiers.ts";
+import { configHome, declaredProvider } from "@dotfiles/codex/runtime.ts";
+import { danglingRepoBins } from "#root/deps-prune.ts";
+import { checkCodexHookTrust } from "#doctor/codex-hook-trust.ts";
+import { obj } from "@dotfiles/hooks/narrow.ts";
+import { jsonOf, jsonText } from "@dotfiles/hooks/zod.ts";
 import {
   drift,
   readDeclared,
   readLive,
-} from "../agents/codex/remote-control.ts";
+} from "@dotfiles/codex/remote-control.ts";
 import {
   drift as sandboxNetworkDrift,
   readDeclared as readSandboxNetworkDeclared,
   readLive as readSandboxNetworkLive,
-} from "../agents/codex/sandbox-network.ts";
+} from "@dotfiles/codex/sandbox-network.ts";
 import {
   editorHost,
   receiverSocket,
@@ -128,12 +128,15 @@ import {
 import {
   inspectRipGraveyard,
   RIP_GRAVEYARD_MAX_BYTES,
-} from "../tools/disk-reclaim/src/lib/graveyards.ts";
-import { TMPFS_RECLAIM_PERCENT, tmpfsUsage } from "./wsl-capacity-recover.ts";
+} from "@dotfiles/disk-reclaim/src/lib/graveyards.ts";
+import {
+  TMPFS_RECLAIM_PERCENT,
+  tmpfsUsage,
+} from "#root/wsl-capacity-recover.ts";
 import {
   RECOVER_UNITS,
   recoverJournalFailure,
-} from "../tools/statusline/src/recover-health.ts";
+} from "@dotfiles/statusline/src/recover-health.ts";
 
 export { render, type Finding };
 

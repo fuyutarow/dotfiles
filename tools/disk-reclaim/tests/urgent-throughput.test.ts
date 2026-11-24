@@ -8,11 +8,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { createRipExpiryTarget } from "../src/targets/rip-expire.ts";
-import type { Context } from "../src/targets/index.ts";
-import { cliEnv } from "./fixtures/cli-env.ts";
-import { tempRoot } from "./fixtures/temp.ts";
-import { Plan } from "../src/model.ts";
+import { createRipExpiryTarget } from "#src/targets/rip-expire.ts";
+import type { Context } from "#src/targets/index.ts";
+import { cliEnv } from "#tests/fixtures/cli-env.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { Plan } from "#src/model.ts";
 import { jsonOf } from "@dotfiles/shared/src/zod.ts";
 
 const config = {

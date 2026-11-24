@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { stripCode } from "../lib.ts";
+import { stripCode } from "#hooks/lib.ts";
 
 describe("stripCode", () => {
   test("removes fenced blocks and inline spans", () => {

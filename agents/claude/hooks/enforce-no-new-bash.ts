@@ -1,4 +1,4 @@
-import { hookJson, hookStderr } from "./lib.ts";
+import { hookJson, hookStderr } from "#hooks/lib.ts";
 // PreToolUse gate (matcher: Write|Edit|MultiEdit|Bash) — NO-NEW-BASH, made deterministic.
 //
 // The rule lives in dotfiles:writing-bun-scripts (THE LAW, gate BG0): local automation is Bun
@@ -32,10 +32,10 @@ import { hookJson, hookStderr } from "./lib.ts";
 import {
   bashShellViolation,
   shellRemedy,
-} from "../../../tools/shared/src/no-new-bash.ts";
+} from "@dotfiles/shared/src/no-new-bash.ts";
 import { basename, extname, normalize } from "node:path";
-import { arr, at, str, strAt } from "../../hooks/narrow.ts";
-import { decidePre, readStdinJson } from "./lib.ts";
+import { arr, at, str, strAt } from "@dotfiles/hooks/narrow.ts";
+import { decidePre, readStdinJson } from "#hooks/lib.ts";
 
 // Overridable for the test suite only; a malformed value falls back rather than disarming.
 const envMax = Number(process.env["NO_NEW_BASH_MAX_LINES"]);

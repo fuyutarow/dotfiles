@@ -12,9 +12,9 @@ import {
   fingerprint,
   recordsFromPlan,
   type ReclaimRecord,
-} from "../src/records.ts";
-import { Plan } from "../src/model.ts";
-import { tempRoot } from "./fixtures/temp.ts";
+} from "#src/records.ts";
+import { Plan } from "#src/model.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 
 async function record(
   path: string,

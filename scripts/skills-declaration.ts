@@ -1,7 +1,7 @@
 import { lstat, readFile, readlink, readdir, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { Result } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const SkillName = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u);
 const SourceName = z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);

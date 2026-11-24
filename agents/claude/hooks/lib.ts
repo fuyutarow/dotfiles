@@ -9,7 +9,7 @@
 //   - Stop guard block    = top-level { decision: "block", reason } JSON on stdout. Existing
 //     guards may use exit 2 + stderr, but new guards should return the structured decision.
 
-import { readTranscriptTail, textBlocks } from "./lib/transcript-tail.ts";
+import { readTranscriptTail, textBlocks } from "#hooks/lib/transcript-tail.ts";
 
 // The protocol primitives are vendor-neutral and live with the portable hooks; re-exported so
 // Claude-only hooks keep importing everything from ./lib.ts.
@@ -21,10 +21,10 @@ export {
   hookJson,
   hookMessage,
   hookStderr,
-} from "../../hooks/lib.ts";
+} from "@dotfiles/hooks/lib.ts";
 
-export type { TranscriptEntry } from "./lib/transcript-tail.ts";
-export { readTranscriptTail, textBlocks } from "./lib/transcript-tail.ts";
+export type { TranscriptEntry } from "#hooks/lib/transcript-tail.ts";
+export { readTranscriptTail, textBlocks } from "#hooks/lib/transcript-tail.ts";
 
 // This turn's assistant prose, read backward from the end of the transcript: the assistant
 // text blocks after the last user-type entry (tool_result carriers count as user entries, which

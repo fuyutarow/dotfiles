@@ -6,14 +6,18 @@
  */
 
 import { cli } from "cleye";
-import { validatePacketJoins } from "./research-run/joins";
-import { type Finding, field, MAX_PACKET_COUNT } from "./research-run/model";
+import { validatePacketJoins } from "#scripts/research-run/joins.ts";
+import {
+  type Finding,
+  field,
+  MAX_PACKET_COUNT,
+} from "#scripts/research-run/model.ts";
 import {
   validateIntent,
   validateJudgment,
   validateReceipt,
-} from "./research-run/packet-validation";
-import { loadPacket } from "./research-run/parse";
+} from "#scripts/research-run/packet-validation.ts";
+import { loadPacket } from "#scripts/research-run/parse.ts";
 
 function usageError(message: string): void {
   process.stderr.write(

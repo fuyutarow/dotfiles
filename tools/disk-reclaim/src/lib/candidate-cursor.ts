@@ -1,7 +1,7 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import type { Candidate } from "../model.ts";
+import type { Candidate } from "#src/model.ts";
 
 // The checkpoint affects scheduling only. It never supplies candidates or safety facts.
 export async function resumeCandidateOrder(

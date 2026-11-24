@@ -11,7 +11,7 @@
 // and exited 0. Exit: topgrade's own status; 1 when topgrade is missing.
 import { userInfo } from "node:os";
 import { $ } from "bun";
-import { SUDO_GROUPS, sudoIsOurs } from "./sudo-group.ts";
+import { SUDO_GROUPS, sudoIsOurs } from "#root/sudo-group.ts";
 
 // topgrade steps that run sudo (or need root) on Linux.
 const ROOT_STEPS = [

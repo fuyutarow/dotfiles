@@ -1,11 +1,14 @@
 import { access, lstat, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import type { Candidate } from "../model.ts";
-import { collectProcesses, resolveProcRoot } from "../lib/procs.ts";
-import type { Context, Target } from "./index.ts";
-import { deleteTree, treeCandidate } from "./tree.ts";
-import { cachedDiscoveryAsync, checkScanDeadline } from "../lib/scan-cache.ts";
+import type { Candidate } from "#src/model.ts";
+import { collectProcesses, resolveProcRoot } from "#src/lib/procs.ts";
+import type { Context, Target } from "#src/targets/index.ts";
+import { deleteTree, treeCandidate } from "#src/targets/tree.ts";
+import {
+  cachedDiscoveryAsync,
+  checkScanDeadline,
+} from "#src/lib/scan-cache.ts";
 
 const within = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);

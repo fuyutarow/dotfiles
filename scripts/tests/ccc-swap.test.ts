@@ -29,7 +29,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
-import { MAPPING_ENV } from "../../tools/repo-retrieve/src/ccc-db-dir";
+import { MAPPING_ENV } from "@dotfiles/repo-retrieve/src/ccc-db-dir";
 import {
   buildDbPathMappingEnv,
   computeIndexDimension,
@@ -50,7 +50,7 @@ import {
   resolveHome,
   resolveShadowDir,
   snapshotDir,
-} from "../ccc-swap";
+} from "#root/ccc-swap.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "ccc-swap.ts");
 const FAKE_CCC = join(import.meta.dir, "fake-ccc.ts");

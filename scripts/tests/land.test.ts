@@ -24,17 +24,17 @@ import {
 import { hostname, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import {
   packageBinProblems,
   parseWorkspaceList,
   removedCommandCallers,
   runLandConsumerGates,
   workspacePreflightVerdicts,
-} from "../land.ts";
-import { landStateDir } from "../land-queue.ts";
-import { doctorReport } from "../land-doctor.ts";
-import { applyToolChangesets } from "../land-changesets.ts";
+} from "#root/land.ts";
+import { landStateDir } from "#root/land-queue.ts";
+import { doctorReport } from "#root/land-doctor.ts";
+import { applyToolChangesets } from "#root/land-changesets.ts";
 import { tryAcquire } from "@dotfiles/shared/src/dir-lock.ts";
 
 const pathExists = (path: Parameters<typeof accessPath>[0]) =>

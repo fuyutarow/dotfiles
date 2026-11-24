@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isolatedStatuslineEnv } from "./helpers.ts";
+import { isolatedStatuslineEnv } from "#tests/helpers.ts";
 
 const homes: string[] = [];
 afterEach(async () => {

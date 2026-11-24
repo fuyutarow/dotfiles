@@ -1,13 +1,17 @@
 {
   "name": "@dotfiles/herdr-projector",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "private": true,
   "bin": {
     "herdr-projector": "src/herdr-projector.ts"
   },
   "type": "module",
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0"
+  },
+  "imports": {
+    "#root/*": "./*",
+    "#src/*": "./src/*",
+    "#tests/*": "./tests/*"
   }
 }

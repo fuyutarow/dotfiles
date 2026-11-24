@@ -2,8 +2,8 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { jsonlLines, readJsonlTail } from "../src/jsonl.ts";
-import { jsonOf, z } from "../src/zod.ts";
+import { jsonlLines, readJsonlTail } from "#src/jsonl.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "shared-jsonl-"));
 afterAll(() => {

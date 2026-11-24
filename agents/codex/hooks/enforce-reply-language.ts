@@ -1,11 +1,11 @@
-import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
-import { hookJson, hookStderr } from "./lib.ts";
-import { at, parseJson, strAt } from "../../hooks/narrow.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
+import { hookJson, hookStderr } from "#hooks/lib.ts";
+import { at, parseJson, strAt } from "@dotfiles/hooks/narrow.ts";
 import {
   classifyJapanesePrimary,
   JAPANESE_REPLY_BLOCK_REASON,
   requiredReplyLanguage,
-} from "../../hooks/reply-language.ts";
+} from "@dotfiles/hooks/reply-language.ts";
 
 // Stop hook: enforce the owner-declared Japanese-primary Codex final-reply policy.
 // Safety: fail open on malformed payload/policy; only non-Japanese visible reply prose blocks.

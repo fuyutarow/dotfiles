@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir, homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   parseSkillLock,
   pathExists,
@@ -9,7 +9,7 @@ import {
   skillCliArgs,
   toolLockPath,
   type SkillLock,
-} from "./skills-declaration.ts";
+} from "#root/skills-declaration.ts";
 
 export const FETCH_TIMEOUT_MS = 600_000;
 

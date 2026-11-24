@@ -1,8 +1,8 @@
 import { lstat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import type { Plan } from "./model.ts";
+import type { Plan } from "#src/model.ts";
 
 export const Fingerprint = z.object({
   dev: z.number().nonnegative(),

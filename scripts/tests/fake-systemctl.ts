@@ -9,7 +9,7 @@ import {
   existsSync,
 } from "node:fs";
 import { join } from "node:path";
-import { z, jsonOf } from "../../agents/hooks/zod.ts";
+import { z, jsonOf } from "@dotfiles/hooks/zod.ts";
 const home = process.env["HOME"] ?? "";
 const stateFile = join(home, "state.json");
 const parsed = jsonOf(

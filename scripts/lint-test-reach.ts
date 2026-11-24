@@ -8,10 +8,10 @@
 // a reached zsh test sources it (zsh/tests/terminal-hygiene.test.zsh sources its siblings), or
 // when the task launches scripts/test-units.ts and the runner's discovery (`unitsOf`) covers it.
 import { resolve } from "node:path";
-import { Result } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../tools/shared/src/zod.ts";
-import { unitsOf } from "./test-units.ts";
-import { trackedFiles } from "./tracked-files.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
+import { unitsOf } from "#root/test-units.ts";
+import { trackedFiles } from "#root/tracked-files.ts";
 
 const ROOT_TASK = "test";
 const UNIT_RUNNER = "scripts/test-units.ts";

@@ -1,9 +1,9 @@
 // A read-only admission gate. The Python bridge owns enumeration; all policy is here.
 import { join, posix } from "node:path";
-import { errorMessage, Result } from "../../shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { z, jsonOf } from "@dotfiles/shared/src/zod.ts";
-import { cccPython } from "./ccc-scope.ts";
-import { readIndexRate } from "./index-rate.ts";
+import { cccPython } from "#src/ccc-scope.ts";
+import { readIndexRate } from "#src/index-rate.ts";
 
 // Per-file backstops complement ceil(chars / 800): binary files have zero chunks,
 // and a large dump must not disappear into a source-heavy data-share denominator.

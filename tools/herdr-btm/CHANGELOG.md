@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.9 — 2026-11-25
+
+- Error handling uses better-result instead of neverthrow
+
 ## 0.2.8 — 2026-11-12
 
 - Keep one btm tab after a Herdr server restart: count restored btm tabs before creating, and close only duplicate btm-only tabs.

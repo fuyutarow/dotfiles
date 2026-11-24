@@ -9,7 +9,7 @@ import {
   nativeClaudeRc,
   projectAgents,
   readProjectorTitle,
-} from "../src/herdr-projector.ts";
+} from "#src/herdr-projector.ts";
 
 const id = "c602d8dc-0a46-438f-aca5-88a88ff0f0dd";
 const agent = () => {

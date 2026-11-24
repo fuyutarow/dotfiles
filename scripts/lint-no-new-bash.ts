@@ -2,11 +2,11 @@ import { lstat, readlink } from "node:fs/promises";
 // Commit-gate backstop: compare tracked shell content with the parent, never a mutable baseline.
 import { join } from "node:path";
 import { cli } from "cleye";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
 import {
   selected,
   validPath,
-} from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
+} from "@dotfiles/skill-wiring-mise-tasks/scripts/jj-precommit.ts";
 import {
   physicalLines,
   shellExempt,

@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { z } from "./zod.ts";
+import { z } from "#src/zod.ts";
 
 const UsageWindowSchema = z.object({
   used_percent: z.number().nullable(),

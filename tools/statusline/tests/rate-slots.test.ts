@@ -6,13 +6,13 @@ import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   buildDataframe,
   type BuildDataframeOptions,
-} from "../src/build-dataframe.ts";
-import { readCodexRate } from "../src/codex-rate.ts";
-import { readJevUsage } from "../src/jev-usage.ts";
-import jevFixture from "./fixtures/jev-usage-c6.json";
-import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
-import { RATE_SOURCES, rateRow } from "../src/rate-limits.ts";
-import { ESC } from "../src/ansi.ts";
+} from "#src/build-dataframe.ts";
+import { readCodexRate } from "#src/codex-rate.ts";
+import { readJevUsage } from "#src/jev-usage.ts";
+import jevFixture from "#tests/fixtures/jev-usage-c6.json";
+import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
+import { RATE_SOURCES, rateRow } from "#src/rate-limits.ts";
+import { ESC } from "#src/ansi.ts";
 
 const roots: string[] = [];
 afterEach(async () => {

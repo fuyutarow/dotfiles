@@ -6,17 +6,17 @@ import {
   roles,
   renderUnavailable,
   unavailable,
-} from "./ansi.ts";
+} from "#src/ansi.ts";
 import {
   fieldDisplay,
   observed,
   type DisplayFields,
   type FieldDisplay,
-} from "./field-state.ts";
-import type { DiskEntry, TmpEntry, TmpfsReading } from "./storage.ts";
-import { diskSegment, tmpSegment } from "./storage-display.ts";
-import type { MemReading } from "./host-model.ts";
-import { cccBadge } from "./ccc-model.ts";
+} from "#src/field-state.ts";
+import type { DiskEntry, TmpEntry, TmpfsReading } from "#src/storage.ts";
+import { diskSegment, tmpSegment } from "#src/storage-display.ts";
+import type { MemReading } from "#src/host-model.ts";
+import { cccBadge } from "#src/ccc-model.ts";
 export const STALE_SHOW_S = 60;
 
 function gpuSegment(m: MemReading): string {

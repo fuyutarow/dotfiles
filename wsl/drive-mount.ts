@@ -3,8 +3,8 @@
 import { chmod, mkdir, rename, stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
-import { obj } from "../agents/hooks/narrow.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { obj } from "@dotfiles/hooks/narrow.ts";
 
 const FSTAB = "/etc/fstab";
 

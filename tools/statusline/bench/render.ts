@@ -3,13 +3,13 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
+import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
 import {
   buildDataframe,
   type BuildDataframeOptions,
-} from "../src/build-dataframe.ts";
-import { render } from "../src/format.ts";
-import { jsonText } from "../src/zod.ts";
+} from "#src/build-dataframe.ts";
+import { render } from "#src/format.ts";
+import { jsonText } from "#src/zod.ts";
 
 const here = import.meta.dir;
 const fixturePath = resolve(here, "../tests/golden/fixture-0.json");

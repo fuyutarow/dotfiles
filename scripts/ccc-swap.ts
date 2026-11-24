@@ -84,16 +84,16 @@ import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { cli, command } from "cleye";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { match } from "ts-pattern";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import {
   DB_ARTIFACTS,
   MAPPING_ENV,
   parseMapping,
   resolveDbDir,
   SETTINGS_DIR_NAME,
-} from "../tools/repo-retrieve/src/ccc-db-dir";
+} from "@dotfiles/repo-retrieve/src/ccc-db-dir";
 
 // ---------------------------------------------------------------------------------------------
 // Constants

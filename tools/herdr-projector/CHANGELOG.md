@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0 — 2026-11-25
+
+- A Claude tab takes its name from the statusline's record or the terminal title, never from rendered footer text, so /rename reaches the Herdr tab
+- Error handling uses better-result instead of neverthrow
+- Row 4 of an agent's sidebar entry shows only when there is something to act on: source failures as better-result tagged errors (alert_err, red) and this session's workers and background shells running 12 minutes or more (alert_warn, yellow, with ⚠️)
+- WSL is decided by isWslDistro, so a container on the WSL kernel is treated as plain Linux
+
 ## 0.6.5 — 2026-11-14
 
 - roster ids match agx 11 claude-session/claude-api rows as one claude id

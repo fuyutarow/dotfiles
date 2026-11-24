@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 — 2026-11-25
+
+- Error handling uses better-result instead of neverthrow
+
 ## 0.1.2 — 2026-10-31
 
 - Make baseline recording operations asynchronous.

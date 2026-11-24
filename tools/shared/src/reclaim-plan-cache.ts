@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { Result } from "./result.ts";
-import { jsonOf, z } from "./zod.ts";
+import { Result } from "#src/result.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 const MAX_CACHE_BYTES = 32 * 1024;
 const MAX_AGE_MS = 60 * 60 * 1000;

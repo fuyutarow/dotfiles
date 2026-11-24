@@ -11,10 +11,10 @@ import { homedir } from "node:os";
 import { consola } from "consola";
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import cliPackage from "../package.json" with { type: "json" };
-import { Result } from "../../shared/src/result.ts";
+import cliPackage from "#root/package.json" with { type: "json" };
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { findDefinitions } from "./definitions.ts";
+import { findDefinitions } from "#src/definitions.ts";
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, cliArgv);

@@ -16,7 +16,7 @@
 // never doubled — and `mise run lint:one-writer` fails while one is there.
 
 import { access, readFile } from "node:fs/promises";
-import { z } from "../agents/hooks/zod.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 export const RUNNER = "~/.agents/hooks/run.sh";
 export const VENDORS = ["claude", "codex"] as const;

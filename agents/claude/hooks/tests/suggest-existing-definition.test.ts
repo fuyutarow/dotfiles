@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { definitionsIn } from "../suggest-existing-definition.ts";
+import { definitionsIn } from "#hooks/suggest-existing-definition.ts";
 
 describe("new-definition detection", () => {
   test("julia long and short forms, with the comment above as context", () => {

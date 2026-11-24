@@ -1,7 +1,7 @@
 import { readlink, readdir, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
-import { resolveProcRoot } from "./procs.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { resolveProcRoot } from "#src/lib/procs.ts";
 
 export type VersionStore = {
   readonly name: string;

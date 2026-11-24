@@ -12,8 +12,8 @@ import { join, resolve } from "node:path";
 import {
   jjCandidate,
   type JjPrecommit,
-} from "../../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
-import { findings } from "../config-map.ts";
+} from "@dotfiles/skill-wiring-mise-tasks/scripts/jj-precommit.ts";
+import { findings } from "#root/config-map.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const DISABLE_COMMENT = ["// eslint", "disable\n"].join("-");

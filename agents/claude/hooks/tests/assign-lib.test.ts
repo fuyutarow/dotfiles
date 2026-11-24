@@ -8,7 +8,7 @@ import {
   randomSuffix,
   rolePrompt,
   sessionName,
-} from "../assign-lib.ts";
+} from "#hooks/assign-lib.ts";
 
 describe("isValidRole", () => {
   test("accepts a plain lowercase token", () => {

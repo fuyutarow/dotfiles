@@ -1,12 +1,12 @@
-import { Result } from "../../../tools/shared/src/result.ts";
-import { hookJson } from "./lib.ts";
-import { hasBareUnavailable } from "../../../tools/statusline/src/ansi.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { hookJson } from "#hooks/lib.ts";
+import { hasBareUnavailable } from "@dotfiles/statusline/src/ansi.ts";
 import {
   FleetSessionSchema,
   FleetSessionUnavailableSchema,
   readFleetSession,
   type FleetSession,
-} from "../../../tools/shared/src/fleet-session.ts";
+} from "@dotfiles/shared/src/fleet-session.ts";
 // Stop / PostToolUse hook — attach one line "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: 5h … · 7d … | Sys: CPU … | Agx: …"
 // (time, this session's context and API budget, host) to the thread at this moment, so a transcript shows what the machine looked like WHEN something
 // happened, not only what the statusline shows now.
@@ -30,10 +30,10 @@ import {
 // Fail-open: this is a log, never a gate. Any problem -> exit 0 with no output.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
-import { readStdinJson } from "./lib.ts";
-import { promptParts } from "./prompt-stamp.ts";
-import { agxRuns } from "./agx-runs.ts";
+import { arr, at, parseJson, str, strAt } from "@dotfiles/hooks/narrow.ts";
+import { readStdinJson } from "#hooks/lib.ts";
+import { promptParts } from "#hooks/prompt-stamp.ts";
+import { agxRuns } from "#hooks/agx-runs.ts";
 
 const HOME = process.env["HOME"] ?? "";
 const CACHE = `${HOME}/.cache/claude/statusline-sys.json`;

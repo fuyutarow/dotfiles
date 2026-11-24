@@ -2,10 +2,10 @@ import { expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
-import { cliEnv } from "./fixtures/cli-env.ts";
-import { tempRoot } from "./fixtures/temp.ts";
+import { cliEnv } from "#tests/fixtures/cli-env.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 import { jsonOf } from "@dotfiles/shared/src/zod.ts";
-import { Plan } from "../src/model.ts";
+import { Plan } from "#src/model.ts";
 
 const fixture = resolve(import.meta.dir, "fixtures/progress-cli.ts");
 function invoke(

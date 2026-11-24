@@ -1,33 +1,36 @@
 // Stdin JSON -> the existing statusline bytes; no harness configuration cutover.
-import { DIM, ESC, RST } from "./ansi.ts";
-import { readInput } from "./stdin.ts";
-import { scanShells } from "./shells.ts";
-import { presentation } from "./presentation.ts";
-import { readCoreRuns } from "./core-runs.ts";
-import cliPackage from "../package.json" with { type: "json" };
+import { DIM, ESC, RST } from "#src/ansi.ts";
+import { readInput } from "#src/stdin.ts";
+import { scanShells } from "#src/shells.ts";
+import { presentation } from "#src/presentation.ts";
+import { readCoreRuns } from "#src/core-runs.ts";
+import cliPackage from "#root/package.json" with { type: "json" };
 const { version } = cliPackage;
 import { realpath } from "node:fs/promises";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { resetRenderBudget } from "./bounded.ts";
+import { resetRenderBudget } from "#src/bounded.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { cli as cleyeCli } from "cleye";
-import { jsonText, z } from "./zod.ts";
-import { SessionStatusSchema, type SessionStatus } from "./session-status.ts";
-import { promptParts } from "./prompt-stamp.ts";
-import { coloredHead, render } from "./format.ts";
-import { statuslineColumns, wrapThroughSys } from "./wrap.ts";
-import { buildDataframe } from "./build-dataframe.ts";
-import { writeStatuslineFleetSession } from "./fleet-session.ts";
-import { writeUsageSnapshotAsync } from "./usage-snapshot.ts";
-import { runLive, type LiveFrame } from "./live.ts";
-import { readRenderSessions, readOwnerState } from "./owner-state.ts";
+import { jsonText, z } from "#src/zod.ts";
+import {
+  SessionStatusSchema,
+  type SessionStatus,
+} from "#src/session-status.ts";
+import { promptParts } from "#src/prompt-stamp.ts";
+import { coloredHead, render } from "#src/format.ts";
+import { statuslineColumns, wrapThroughSys } from "#src/wrap.ts";
+import { buildDataframe } from "#src/build-dataframe.ts";
+import { writeStatuslineFleetSession } from "#src/fleet-session.ts";
+import { writeUsageSnapshotAsync } from "#src/usage-snapshot.ts";
+import { runLive, type LiveFrame } from "#src/live.ts";
+import { readRenderSessions, readOwnerState } from "#src/owner-state.ts";
 import {
   AgentSessionSchema,
   discoverSessions,
   payloadForSession,
   statusForSession,
   sessionFromId,
-} from "./session-discovery.ts";
+} from "#src/session-discovery.ts";
 
 const cliArgv = () => process.argv.slice(2);
 
@@ -173,7 +176,8 @@ async function cwdForPid(pid: string): Promise<string | null> {
   return null;
 }
 async function codexSession(cwd?: string, pid?: string, threadId?: string) {
-  const { readCodexThreadStatus } = await import("./adapters/codex-rollout.ts");
+  const { readCodexThreadStatus } =
+    await import("#src/adapters/codex-rollout.ts");
   if (pid !== undefined && cwd !== undefined)
     return { session: null, error: "use only one of --pid or --cwd" };
   if (threadId !== undefined && (pid !== undefined || cwd !== undefined))
@@ -460,7 +464,7 @@ if (!codexMode) {
     process.exit(0);
   }
   const { ClaudeStatuslineInputSchema } =
-    await import("./adapters/claude-statusline.ts");
+    await import("#src/adapters/claude-statusline.ts");
   const payload = await ClaudeStatuslineInputSchema.safeParseAsync(json.data);
   if (!payload.success) {
     const issue = payload.error.issues[0];
@@ -508,7 +512,7 @@ if (liveMode) {
           return 2;
         }
         const { readCodexPinnedSessionStatus } =
-          await import("./adapters/codex-rollout.ts");
+          await import("#src/adapters/codex-rollout.ts");
         current = await readCodexPinnedSessionStatus(pinnedId);
       }
       firstFrame = false;

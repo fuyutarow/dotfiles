@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { ProgressReporter } from "../../src/lib/progress.ts";
+import { ProgressReporter } from "#src/lib/progress.ts";
 
 test("non-TTY progress is silent", () => {
   let time = 100;

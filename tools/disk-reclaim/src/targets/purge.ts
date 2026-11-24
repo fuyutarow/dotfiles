@@ -1,6 +1,6 @@
 import { chmodSync, lstatSync, readdirSync } from "node:fs";
 import { lstat } from "node:fs/promises";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { homedir } from "node:os";
 import {
   graveyardCandidates,
@@ -9,18 +9,18 @@ import {
   ripRecords,
   ripBurial,
   UNKNOWN_RIP_BURIAL,
-} from "../lib/graveyards.ts";
-import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
-import { countEntries } from "../lib/purge-progress.ts";
+} from "#src/lib/graveyards.ts";
+import { removeTree, removeTreeProgress } from "#src/lib/remove-tree.ts";
+import { countEntries } from "#src/lib/purge-progress.ts";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { ActionResult, Candidate, Config, Headroom } from "../model.ts";
-import type { Context, Target } from "./index.ts";
+import type { ActionResult, Candidate, Config, Headroom } from "#src/model.ts";
+import type { Context, Target } from "#src/targets/index.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { scanCache, checkScanDeadline } from "../lib/scan-cache.ts";
-import { ripExpiryCandidates } from "./rip-expire.ts";
-import { loadGraveyardAgePolicy } from "../graveyard-age.ts";
-export { purgeRip } from "./rip-expire.ts";
-import type { LivenessSnapshot } from "../liveness/facts.ts";
+import { scanCache, checkScanDeadline } from "#src/lib/scan-cache.ts";
+import { ripExpiryCandidates } from "#src/targets/rip-expire.ts";
+import { loadGraveyardAgePolicy } from "#src/graveyard-age.ts";
+export { purgeRip } from "#src/targets/rip-expire.ts";
+import type { LivenessSnapshot } from "#src/liveness/facts.ts";
 
 type AvailableBytesProbe = (path: string) => number | Promise<number>;
 

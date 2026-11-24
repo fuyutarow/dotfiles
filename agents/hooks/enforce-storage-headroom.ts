@@ -1,13 +1,13 @@
 // PreToolUse transport adapter for Claude Code and Codex.
 // FAIL CLOSED on runtime errors (run.sh --fail-closed); policy lives in tools/storage-headroom.
 import { join } from "node:path";
-import { decide } from "../../tools/storage-headroom/src/decision.ts";
+import { decide } from "@dotfiles/storage-headroom/src/decision.ts";
 import {
   isReadOnlyBash,
   requestGuestRecovery,
-} from "../../tools/shared/src/storage-headroom.ts";
-import { strAt } from "../../tools/shared/src/narrow.ts";
-import { decidePre, hookJson, hookStderr, readStdinJson } from "./lib.ts";
+} from "@dotfiles/shared/src/storage-headroom.ts";
+import { strAt } from "@dotfiles/shared/src/narrow.ts";
+import { decidePre, hookJson, hookStderr, readStdinJson } from "#root/lib.ts";
 
 const CONFIG_PATH =
   process.env["STORAGE_HEADROOM_CONFIG"] ??

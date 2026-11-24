@@ -7,14 +7,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { removeTree, removeTreeProgress } from "../src/lib/remove-tree.ts";
-import { deleteTree } from "../src/targets/tree.ts";
+import { removeTree, removeTreeProgress } from "#src/lib/remove-tree.ts";
+import { deleteTree } from "#src/targets/tree.ts";
 import {
   hasForegroundWaiter,
   registerForegroundWaiter,
   waitForLock,
-} from "../src/receipt.ts";
-import { tempRoot } from "./fixtures/temp.ts";
+} from "#src/receipt.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 
 test("unmeasured removal progress reports counters without a preliminary tree walk", async () => {
   const reports: unknown[][] = [];

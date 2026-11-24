@@ -1,14 +1,14 @@
 // Claude Stop hook. Fail open on missing input, unavailable agx, or malformed output.
-import { Result } from "../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { execFile } from "node:child_process";
-import { arr, at, parseJson, strAt } from "./narrow.ts";
+import { arr, at, parseJson, strAt } from "#root/narrow.ts";
 import {
   hookStderr,
   readStdinJson,
   readTranscriptTail,
   textBlocks,
   type TranscriptEntry,
-} from "../claude/hooks/lib.ts";
+} from "@dotfiles/claude/hooks/lib.ts";
 
 // A human prompt: a user entry with string content or a text block. Tool results are user
 // entries too, but they do not start a new human turn.

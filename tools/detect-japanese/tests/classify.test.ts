@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { classifyJapanesePrimary } from "../src/classify.ts";
+import { classifyJapanesePrimary } from "#src/classify.ts";
 
 test.each([
   [

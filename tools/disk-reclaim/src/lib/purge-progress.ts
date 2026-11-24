@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { join } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 export async function countEntries(dir: string): Promise<number> {
   let n = 0;

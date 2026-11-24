@@ -1,8 +1,8 @@
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { resolve } from "node:path";
 import { cli } from "cleye";
-import { jsonText } from "../hooks/zod.ts";
-import { checkTrace } from "./trace.ts";
+import { jsonText } from "@dotfiles/hooks/zod.ts";
+import { checkTrace } from "#root/trace.ts";
 
 let argvError: string | undefined;
 function rejectPrototypeFlag(type: string, flag: string): void {

@@ -9,9 +9,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decodedJson } from "./decode.ts";
-import { z } from "../zod.ts";
-import { runHook } from "./helpers.ts";
+import { decodedJson } from "#tests/decode.ts";
+import { z } from "#root/zod.ts";
+import { runHook } from "#tests/helpers.ts";
 
 const HOOK = "enforce-storage-headroom.ts";
 const payload = (command = "touch output") => ({

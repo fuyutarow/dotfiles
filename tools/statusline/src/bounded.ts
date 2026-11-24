@@ -4,7 +4,7 @@
 import { mkdir, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { jsonOf, z } from "./zod.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 export const recoverInvalid = <T extends z.ZodType>(schema: T) =>
   schema.optional().catch(undefined);

@@ -8,13 +8,13 @@ import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   executeJob,
   validateManifest,
   type ResourceManifest,
-} from "../../agent-resource-run/src/index.ts";
-import pkg from "../package.json" with { type: "json" };
+} from "@dotfiles/agent-resource-run/src/index.ts";
+import pkg from "#root/package.json" with { type: "json" };
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);

@@ -1,11 +1,11 @@
 // Fixture binary: real parser/output with forty injected same-uid permission failures.
 import { symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { main } from "../../src/reclaim.ts";
-import { collectProcesses } from "../../src/lib/procs.ts";
-import { candidate } from "./fake-target.ts";
-import { procFixture } from "./procs.ts";
-import type { Target } from "../../src/targets/index.ts";
+import { main } from "#src/reclaim.ts";
+import { collectProcesses } from "#src/lib/procs.ts";
+import { candidate } from "#tests/fixtures/fake-target.ts";
+import { procFixture } from "#tests/fixtures/procs.ts";
+import type { Target } from "#src/targets/index.ts";
 
 const root = process.env["RECLAIM_FIXTURE_ROOT"];
 if (root === undefined) process.exit(2);

@@ -19,14 +19,14 @@ import {
 } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   ACK_MS,
   fileKey,
   SETTLE_MS,
   unlinkIfSame,
 } from "@dotfiles/shared/src/sockets.ts";
-import pkg from "../package.json" with { type: "json" };
+import pkg from "#root/package.json" with { type: "json" };
 
 const TOOL = join(import.meta.dir, "..");
 const RECEIVE = join(TOOL, "src", "receive.ts");

@@ -1,7 +1,7 @@
 // The detached-execution guard judges shell SYNTAX: a word is not a command, a heredoc body is data
 // (2026-10-06, case 1). Each allow is paired with the same construct used for real, still denied.
 import { describe, expect, test } from "bun:test";
-import { decisionOf, runHook } from "./helpers.ts";
+import { decisionOf, runHook } from "#hooks/tests/helpers.ts";
 
 const HOOK = "enforce-supervised-execution.ts";
 const run = (command: string) =>

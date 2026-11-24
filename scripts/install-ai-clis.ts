@@ -12,8 +12,8 @@ import {
   declaredProvider,
   hostKind,
   type HostKind,
-} from "../agents/codex/runtime.ts";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
+} from "@dotfiles/codex/runtime.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
 
 type Installer = { label: string; command: string; args: string[] };
 

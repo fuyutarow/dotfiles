@@ -2,8 +2,8 @@ import { open, stat } from "node:fs/promises";
 import type { BigIntStats } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Result } from "./result.ts";
-import { jsonOf, z } from "./zod.ts";
+import { Result } from "#src/result.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 const MAX_INDEX_BYTES = 2 * 1024 * 1024;
 const MAX_TITLE_CODE_POINTS = 512;

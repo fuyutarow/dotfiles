@@ -11,8 +11,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { surfaces, type Surface } from "../config-registry.ts";
-import { findings, workingTreeConfigFiles } from "../config-map.ts";
+import { surfaces, type Surface } from "#root/config-registry.ts";
+import { findings, workingTreeConfigFiles } from "#root/config-map.ts";
 
 const scratch: string[] = [];
 afterEach(() => {

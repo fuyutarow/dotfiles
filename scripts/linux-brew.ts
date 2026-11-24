@@ -15,8 +15,8 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { $ } from "bun";
-import { LINUXBREW } from "./core-tools.ts";
-import { Result } from "../tools/shared/src/result.ts";
+import { LINUXBREW } from "#root/core-tools.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 /** Cap the installer itself, so Go also sees two CPUs instead of the shared host's full count. */
 export function buildCpuList(allowed: string): string {

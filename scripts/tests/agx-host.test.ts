@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
-import { checkAgxHost, declareRentedCodexHost } from "../agx-host.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { checkAgxHost, declareRentedCodexHost } from "#root/agx-host.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures/agx-host/command.ts");
 const ROOT = join(import.meta.dir, "../..");

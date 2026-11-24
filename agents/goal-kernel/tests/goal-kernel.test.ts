@@ -1,4 +1,4 @@
-import { Result } from "../../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawn } from "node:child_process";
 import {
@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "../../hooks/zod.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 import {
   activateGoal as activateGoalResult,
   type GoalContract,
@@ -20,9 +20,9 @@ import {
   listRunEvents as listRunEventsResult,
   processHookEvent,
   recordRunDecision as recordRunDecisionResult,
-} from "../kernel.ts";
-import { buildPostmortem } from "../postmortem.ts";
-import { decoded, decodedJson } from "../../hooks/tests/decode.ts";
+} from "#root/kernel.ts";
+import { buildPostmortem } from "#root/postmortem.ts";
+import { decoded, decodedJson } from "@dotfiles/hooks/tests/decode.ts";
 
 // Tests that spawn real hook and CLI processes exceed bun's 5s default on a loaded host.
 setDefaultTimeout(60_000);

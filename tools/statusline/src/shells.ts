@@ -1,10 +1,10 @@
 import { opendir, open, readlink, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
-import { DIM, RST } from "./ansi.ts";
-import { padDisplay, truncateDisplay } from "./dispatch-display.ts";
-import { dur } from "./jobs.ts";
-import { jsonOf, z } from "./zod.ts";
+import { DIM, RST } from "#src/ansi.ts";
+import { padDisplay, truncateDisplay } from "#src/dispatch-display.ts";
+import { dur } from "#src/jobs.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 const PID_LIMIT = 8192;
 const FD_LIMIT = 256;

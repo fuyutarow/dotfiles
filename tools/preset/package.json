@@ -7,7 +7,9 @@
     "preset": "src/preset.ts"
   },
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0"
+  },
+  "imports": {
+    "#root/*": "./*"
   }
 }

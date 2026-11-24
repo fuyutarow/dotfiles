@@ -33,27 +33,27 @@ import { access, lstat, readFile, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { Result } from "../../shared/src/result.ts";
-import { resolveDbDir } from "./ccc-db-dir.ts";
-import { latestAutoReindexReceipt } from "./auto-reindex-receipt.ts";
-import { parseDaemonStatus } from "./ccc-daemon-status.ts";
-import { cccBackend } from "./ccc-entry.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { resolveDbDir } from "#src/ccc-db-dir.ts";
+import { latestAutoReindexReceipt } from "#src/auto-reindex-receipt.ts";
+import { parseDaemonStatus } from "#src/ccc-daemon-status.ts";
+import { cccBackend } from "#src/ccc-entry.ts";
 import {
   BasisRecordSchema,
   captureBasisRecord,
   incrementalBasis,
   mergeBasisRecords,
   type BasisRecord,
-} from "./index-basis.ts";
-import { hostLoad, processedWork, recordIndexRate } from "./index-rate.ts";
-import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
-import { requireExecutable, runChildCaptured } from "./child.ts";
+} from "#src/index-basis.ts";
+import { hostLoad, processedWork, recordIndexRate } from "#src/index-rate.ts";
+import { inScopeChanges, type ScopeDrift } from "#src/ccc-scope.ts";
+import { requireExecutable, runChildCaptured } from "#src/child.ts";
 import {
   computeIndexPlan,
   planReport,
   writePlanJsonl,
   type IndexPlan,
-} from "./index-plan.ts";
+} from "#src/index-plan.ts";
 
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));

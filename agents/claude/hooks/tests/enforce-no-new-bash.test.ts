@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { decisionOf as decisionResult, runHook, tempDir } from "./helpers.ts";
+import {
+  decisionOf as decisionResult,
+  runHook,
+  tempDir,
+} from "#hooks/tests/helpers.ts";
 
 async function decisionOf(stdout: string) {
   const result = await decisionResult(stdout);

@@ -8,9 +8,9 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
-import type { ActionResult } from "../model.ts";
-import type { Context, Target } from "./index.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import type { ActionResult } from "#src/model.ts";
+import type { Context, Target } from "#src/targets/index.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 
 type CommandResult = { code: number; out: string; err: string };

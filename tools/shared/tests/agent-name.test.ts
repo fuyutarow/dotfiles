@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { agentNameFor, isValidRole, projectSlug } from "../src/agent-name.ts";
+import { agentNameFor, isValidRole, projectSlug } from "#src/agent-name.ts";
 
 const rows = readFileSync(
   join(import.meta.dir, "fixtures", "agent-name-vectors.tsv"),

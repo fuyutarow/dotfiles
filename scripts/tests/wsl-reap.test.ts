@@ -12,7 +12,7 @@ import {
   killScript,
   parseProbe,
   type SshdProc,
-} from "../wsl-reap";
+} from "#root/wsl-reap.ts";
 
 const SVC = 4416;
 

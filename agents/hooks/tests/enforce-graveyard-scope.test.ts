@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { jsonOf, z } from "../zod.ts";
-import { runHook } from "./helpers.ts";
+import { jsonOf, z } from "#root/zod.ts";
+import { runHook } from "#tests/helpers.ts";
 
 const decision = jsonOf(
   z.object({

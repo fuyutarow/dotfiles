@@ -7,7 +7,7 @@ import {
   PLACEHOLDER,
   STABLE_ID,
   type Timestamp,
-} from "./model";
+} from "#scripts/research-run/model.ts";
 
 export function validateRequiredKeys(
   packet: LoadedPacket,

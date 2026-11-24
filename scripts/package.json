@@ -3,10 +3,14 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "better-result": "3.0.1",
     "cleye": "2.6.0",
     "consola": "3.4.2",
     "ts-pattern": "5.9.0"
+  },
+  "imports": {
+    "#doctor/*": "./doctor/*",
+    "#root/*": "./*",
+    "#tests/*": "./tests/*"
   }
 }

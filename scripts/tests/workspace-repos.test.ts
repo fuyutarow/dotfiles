@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { registeredRepos } from "../workspace-repos.ts";
+import { registeredRepos } from "#root/workspace-repos.ts";
 
 test("discovers dotfiles and workspace repositories, including git files", async () => {
   const home = await mkdtemp(join(tmpdir(), "workspace-repos-"));

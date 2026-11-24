@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import { parseSkillLock } from "../skills-declaration.ts";
+import { parseSkillLock } from "#root/skills-declaration.ts";
 
 const args = Bun.argv.slice(2);
 const home = process.env["HOME"] ?? "";

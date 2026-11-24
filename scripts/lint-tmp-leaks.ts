@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { RUN_DIR_ENV } from "@dotfiles/shared/src/test-tmp.ts";
 
 export const SYSTEM_TMP = "/tmp";

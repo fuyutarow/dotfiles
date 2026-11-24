@@ -11,7 +11,7 @@ import {
   jjExport,
   jjRead,
   validPath,
-} from "./jj-precommit.ts";
+} from "#scripts/jj-precommit.ts";
 
 const exportCandidate: (...args: Parameters<typeof jjExport>) => unknown =
   jjExport;

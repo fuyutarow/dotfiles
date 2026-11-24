@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileKey, fileKeyAsync } from "../src/sockets.ts";
+import { fileKey, fileKeyAsync } from "#src/sockets.ts";
 
 test("async socket helpers agree with synchronous counterparts", async () => {
   const dir = await mkdtemp(join(tmpdir(), "sockets-async-"));

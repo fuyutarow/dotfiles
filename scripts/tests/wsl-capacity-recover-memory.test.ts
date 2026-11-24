@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { probeHostMemory } from "../wsl-capacity-recover.ts";
+import { probeHostMemory } from "#root/wsl-capacity-recover.ts";
 
 const roots: string[] = [];
 afterEach(async () => {

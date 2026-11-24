@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
-import { buildDataframe } from "../src/build-dataframe.ts";
-import { render } from "../src/format.ts";
-import { currentDispatcherSession } from "../src/dispatch-display.ts";
+import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
+import { buildDataframe } from "#src/build-dataframe.ts";
+import { render } from "#src/format.ts";
+import { currentDispatcherSession } from "#src/dispatch-display.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

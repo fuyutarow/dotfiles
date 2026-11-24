@@ -1,8 +1,8 @@
 /** Read-only postmortem reconstruction from one Goal Kernel run id. */
 
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { access, readFile, realpath } from "node:fs/promises";
-import { jsonText } from "../hooks/zod.ts";
+import { jsonText } from "@dotfiles/hooks/zod.ts";
 import {
   asRecord,
   assertReadableRegularFile,
@@ -17,7 +17,7 @@ import {
   sha256Text,
   sha256Value,
   transcriptLocator,
-} from "./kernel.ts";
+} from "#root/kernel.ts";
 
 type TranscriptMessage = Readonly<{
   role: "user" | "assistant";

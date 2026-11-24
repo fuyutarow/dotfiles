@@ -1,13 +1,17 @@
 {
   "name": "@dotfiles/storage-headroom",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "private": true,
   "type": "module",
   "bin": {
     "storage-headroom": "src/storage-headroom.ts"
   },
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0"
+  },
+  "imports": {
+    "#root/*": "./*",
+    "#src/*": "./src/*",
+    "#tests/*": "./tests/*"
   }
 }

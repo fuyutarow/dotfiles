@@ -1,11 +1,11 @@
 // Compatibility coverage for legacy enriched rows; production uses owner facts only.
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { buildDataframe } from "../src/build-dataframe.ts";
-import { COLLECTOR_SOURCES } from "../src/collector-sources.ts";
-import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
-import { agxRouteRunsAsync } from "../src/dispatch-runs.ts";
-import { render } from "../src/format.ts";
-import { jsonOf } from "../src/zod.ts";
+import { buildDataframe } from "#src/build-dataframe.ts";
+import { COLLECTOR_SOURCES } from "#src/collector-sources.ts";
+import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
+import { agxRouteRunsAsync } from "#src/dispatch-runs.ts";
+import { render } from "#src/format.ts";
+import { jsonOf } from "#src/zod.ts";
 const data = await jsonOf(ClaudeStatuslineInputSchema).safeParseAsync(
   await Bun.stdin.text(),
 );

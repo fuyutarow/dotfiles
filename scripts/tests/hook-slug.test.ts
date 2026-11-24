@@ -15,11 +15,11 @@ import {
   lintHookSlugs,
   lintHookSource,
   lintHookLauncher,
-} from "../lint-hook-slug.ts";
-import { hookJson, hookMessage } from "../../agents/hooks/lib.ts";
-import { loadSlugs } from "../../agents/hooks/slugs.ts";
-import { jsonText } from "../../agents/hooks/zod.ts";
-import { loadRegistry, wire } from "../hook-registry.ts";
+} from "#root/lint-hook-slug.ts";
+import { hookJson, hookMessage } from "@dotfiles/hooks/lib.ts";
+import { loadSlugs } from "@dotfiles/hooks/slugs.ts";
+import { jsonText } from "@dotfiles/hooks/zod.ts";
+import { loadRegistry, wire } from "#root/hook-registry.ts";
 
 const root = resolve(import.meta.dir, "../..");
 

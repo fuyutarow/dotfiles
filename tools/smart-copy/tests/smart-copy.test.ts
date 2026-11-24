@@ -10,8 +10,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { Result } from "../../shared/src/result.ts";
-import { osc52 } from "../src/terminal.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { osc52 } from "#src/terminal.ts";
 
 const SMART_COPY = join(import.meta.dir, "..", "src", "smart-copy.ts");
 

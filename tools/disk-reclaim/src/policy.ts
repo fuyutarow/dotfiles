@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { Result, errorMessage } from "../../shared/src/result.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
 import { loadStorageHeadroom } from "@dotfiles/shared/src/storage-headroom.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 

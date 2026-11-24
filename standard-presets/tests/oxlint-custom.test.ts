@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const PRESET = join(ROOT, "standard-presets/typescript");
@@ -20,6 +20,10 @@ await cp(
 await cp(
   join(PRESET, "one-home-plugin.js"),
   join(scratch, "standard-presets/typescript/one-home-plugin.js"),
+);
+await cp(
+  join(PRESET, "no-relative-plugin.js"),
+  join(scratch, "standard-presets/typescript/no-relative-plugin.js"),
 );
 await cp(
   join(PRESET, "house.oxlintrc.json"),
@@ -40,7 +44,7 @@ const cases = jsonOf(
     z.object({
       id: z.string(),
       entry: z.number().int(),
-      scope: z.enum(["house", "dotfiles", "one-home"]),
+      scope: z.enum(["house", "dotfiles", "one-home", "no-relative"]),
       bad: z.array(z.string()).min(1),
       good: z.array(z.string()).min(1),
     }),
@@ -67,12 +71,16 @@ const local = Entries.safeParse(
 const oneHome = Entries.safeParse(
   configs[1]?.rules["one-home/no-restricted-syntax"],
 );
-if (!house.success || !local.success || !oneHome.success)
+const noRelative = Entries.safeParse(
+  configs[1]?.rules["no-relative/no-restricted-syntax"],
+);
+if (!house.success || !local.success || !oneHome.success || !noRelative.success)
   expect.unreachable("missing custom syntax entries");
 const entries = {
   house: house.data.slice(1),
   dotfiles: local.data.slice(1),
   "one-home": oneHome.data.slice(1),
+  "no-relative": noRelative.data.slice(1),
 };
 const Report = jsonOf(
   z.looseObject({
@@ -120,7 +128,12 @@ if (!report.success) expect.unreachable(`exit ${exit}: ${err}\n${out}`);
 test("each configured custom entry has bad and good fixture proof", () => {
   expect(exit).toBe(1);
   expect(report.data.number_of_files).toBe(proofCases.length);
-  for (const scope of ["house", "dotfiles", "one-home"] as const) {
+  for (const scope of [
+    "house",
+    "dotfiles",
+    "one-home",
+    "no-relative",
+  ] as const) {
     expect(
       cases.data
         .filter((row) => row.scope === scope && row.entry >= 0)

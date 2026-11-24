@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { hostProbe } from "../src/targets/host-powershell.ts";
+import { hostProbe } from "#src/targets/host-powershell.ts";
 
 test("Windows host plan measures allocated SizeOnDisk, not apparent file length", () => {
   expect(hostProbe).toContain("GetCompressedFileSizeW");

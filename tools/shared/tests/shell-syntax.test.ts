@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { effective, parseShell } from "../src/shell-syntax.ts";
+import { effective, parseShell } from "#src/shell-syntax.ts";
 
 const names = (command: string): string[] => {
   const parsed = parseShell(command, "/w");

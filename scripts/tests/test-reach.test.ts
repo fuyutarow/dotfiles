@@ -4,7 +4,7 @@ import {
   reachableTasks,
   runReferences,
   type Task,
-} from "../lint-test-reach.ts";
+} from "#root/lint-test-reach.ts";
 
 const task = (name: string, depends: string[], ...run: string[]): Task => ({
   name,

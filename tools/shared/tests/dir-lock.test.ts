@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { acquire, tryAcquire, type Holder } from "../src/dir-lock.ts";
+import { acquire, tryAcquire, type Holder } from "#src/dir-lock.ts";
 
 function fixture(): { dir: string; lock: string } {
   const dir = mkdtempSync(join(import.meta.dir, "lock-"));

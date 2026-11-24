@@ -1,7 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   ripBurial,
   ripBurialTime,
@@ -12,12 +12,12 @@ import {
   ripGraveyardRoot,
   discoverRipGraveyards,
   inspectRipGraveyard,
-} from "../lib/graveyards.ts";
-import type { RipBurial } from "../lib/graveyards.ts";
-import { removeTree } from "../lib/remove-tree.ts";
-import { loadGraveyardAgePolicy } from "../graveyard-age.ts";
-import type { Candidate, Config } from "../model.ts";
-import type { Context, Target } from "./index.ts";
+} from "#src/lib/graveyards.ts";
+import type { RipBurial } from "#src/lib/graveyards.ts";
+import { removeTree } from "#src/lib/remove-tree.ts";
+import { loadGraveyardAgePolicy } from "#src/graveyard-age.ts";
+import type { Candidate, Config } from "#src/model.ts";
+import type { Context, Target } from "#src/targets/index.ts";
 
 type AvailableBytesProbe = (path: string) => number | Promise<number>;
 

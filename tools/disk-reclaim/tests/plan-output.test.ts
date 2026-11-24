@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { jsonOf } from "@dotfiles/shared/src/zod.ts";
-import { Plan } from "../src/model.ts";
-import { cliEnv } from "./fixtures/cli-env.ts";
-import { tempRoot } from "./fixtures/temp.ts";
+import { Plan } from "#src/model.ts";
+import { cliEnv } from "#tests/fixtures/cli-env.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 
 // Include fixture setup and cleanup around the child's existing 10-second deadline.
 test("native plan CLI drains a large JSON document before exiting", async () => {

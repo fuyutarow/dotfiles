@@ -9,9 +9,9 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { workspaceCounts } from "./support/workspace-counts.ts";
-import { seedAgxSnapshot } from "./helpers.ts";
-import { fleetLine } from "../src/fleet-line.ts";
+import { workspaceCounts } from "#tests/support/workspace-counts.ts";
+import { seedAgxSnapshot } from "#tests/helpers.ts";
+import { fleetLine } from "#src/fleet-line.ts";
 
 const root = await mkdtemp(join(tmpdir(), "fleet-line-"));
 afterAll(() => rm(root, { recursive: true, force: true }));

@@ -4,7 +4,7 @@ import {
   landExit,
   landLiveness,
   landSummary,
-} from "../land-verdict.ts";
+} from "#root/land-verdict.ts";
 
 test("land verdict covers only its commit and push", () => {
   const report = { commit: "ok", push: "ok" } satisfies Parameters<

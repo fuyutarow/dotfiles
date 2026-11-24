@@ -9,10 +9,10 @@
 //              exist (measured 2026-10-01).
 //   running    the live daemon's argv carries `--remote-control` (pid from app-server.pid).
 //              null = no daemon running, which is not drift: the next start reads `persisted`.
-import { Result } from "../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { jsonOf, z } from "../hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const RecordSchema = z.record(z.string(), z.unknown());
 

@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
-import { isolatedStatuslineEnv } from "./helpers.ts";
+import { isolatedStatuslineEnv } from "#tests/helpers.ts";
 
 const script = join(import.meta.dir, "..", "src", "statusline.ts");
 const esc = "\u001B[";

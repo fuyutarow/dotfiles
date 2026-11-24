@@ -1,5 +1,5 @@
-import { Result } from "../../../tools/shared/src/result.ts";
-import { hookJson, hookStderr } from "./lib.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { hookJson, hookStderr } from "#hooks/lib.ts";
 // Codex PreToolUse gate for spawn_agent (hook tool name "Agent"): every subagent names its model
 // AND reasoning_effort explicitly, as one of the owner's allowed pairs (ALLOWED below). Nothing is
 // injected. Fail closed: malformed input exits 2.
@@ -15,8 +15,8 @@ import {
   modelName,
   parseFloorConfig,
   type Floors,
-} from "../../../tools/shared/src/model-orders.ts";
-import { at, obj, parseJson, str, strAt } from "../../hooks/narrow.ts";
+} from "@dotfiles/shared/src/model-orders.ts";
+import { at, obj, parseJson, str, strAt } from "@dotfiles/hooks/narrow.ts";
 
 // Codex spawn_agent (hooks see it as tool "Agent") takes per-call `model` and
 // `reasoning_effort` overrides — both keys observed in this machine's own session records

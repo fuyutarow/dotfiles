@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
-import { errorMessage, Result } from "../../shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import { plainHelp } from "@dotfiles/shared/src/cli.ts";
 

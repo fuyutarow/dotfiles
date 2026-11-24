@@ -6,7 +6,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtemp, readdir, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { declaredDbRoot } from "../../tools/disk-reclaim/src/targets/ccc-index-db.ts";
+import { declaredDbRoot } from "@dotfiles/disk-reclaim/src/targets/ccc-index-db.ts";
 
 const REPO = resolve(import.meta.dir, "../..");
 const DECLARATION = join(REPO, "cocoindex/db-root");

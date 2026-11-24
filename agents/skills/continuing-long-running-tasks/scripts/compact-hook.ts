@@ -4,13 +4,13 @@
  * Fail direction: open. A broken continuity helper must not turn auto-compaction into a failed turn.
  */
 
-import { z } from "../../../hooks/zod.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 import {
   continuationProjectRoot,
   inspectContinuationRecord,
   type Platform,
   readContinuationBinding,
-} from "./continuation-record";
+} from "#scripts/continuation-record.ts";
 
 // A hook payload is a plain JSON object; null, arrays, and scalars fail the schema.
 const HookInputSchema = z.record(z.string(), z.unknown());

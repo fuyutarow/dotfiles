@@ -1,4 +1,4 @@
-import { readCodexSessionStatus } from "./support/codex-session.ts";
+import { readCodexSessionStatus } from "#tests/support/codex-session.ts";
 import {
   afterEach,
   beforeEach,
@@ -18,17 +18,17 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { readCodexRate } from "../src/codex-rate.ts";
-import { codexRateSegment } from "../src/provider-display.ts";
-import { jsonText } from "../src/zod.ts";
+import { readCodexRate } from "#src/codex-rate.ts";
+import { codexRateSegment } from "#src/provider-display.ts";
+import { jsonText } from "#src/zod.ts";
 import {
   hashSettingsPrefix,
   readCodexSettingsEvents,
-} from "../src/adapters/codex-settings-stream.ts";
+} from "#src/adapters/codex-settings-stream.ts";
 import {
   readCodexThreadStatus,
   readCodexPinnedSessionStatus,
-} from "../src/adapters/codex-rollout.ts";
+} from "#src/adapters/codex-rollout.ts";
 
 const roots: string[] = [];
 const fixtureDir = join(import.meta.dir, "fixtures");

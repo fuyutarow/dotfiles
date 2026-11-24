@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { lstat, readdir, statfs } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import {
@@ -11,7 +11,7 @@ import {
   resolve,
   sep,
 } from "node:path";
-import type { Config, ReceiptV2 } from "./model.ts";
+import type { Config, ReceiptV2 } from "#src/model.ts";
 import {
   errorMessage,
   now,
@@ -19,20 +19,20 @@ import {
   stateDir,
   waitForLock,
   writeReceiptAsync,
-} from "./receipt.ts";
+} from "#src/receipt.ts";
 import {
   directoryProtection,
   removeTree,
   removeTreeProgress,
   type RemovalRefusal,
-} from "./lib/remove-tree.ts";
+} from "#src/lib/remove-tree.ts";
 import {
   collectProcesses,
   type ProcessSnapshot,
   type ProcFs,
-} from "./lib/procs.ts";
-import type { Context } from "./targets/index.ts";
-import { ripBurialTime, UNKNOWN_RIP_BURIAL } from "./lib/graveyards.ts";
+} from "#src/lib/procs.ts";
+import type { Context } from "#src/targets/index.ts";
+import { ripBurialTime, UNKNOWN_RIP_BURIAL } from "#src/lib/graveyards.ts";
 
 type Check = { name: string; ok: boolean; detail: string };
 type PlanRow = {

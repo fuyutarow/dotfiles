@@ -20,11 +20,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { isWslDistro } from "../../tools/shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { dirname, join } from "node:path";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
-import { LINKS } from "../config-registry.ts";
-import { applies, sshSupportsAttachMatch } from "../link-dots.ts";
+import { LINKS } from "#root/config-registry.ts";
+import { applies, sshSupportsAttachMatch } from "#root/link-dots.ts";
 import {
   checkAgx,
   checkToolFloor,
@@ -44,15 +44,15 @@ import {
   checkWslGpuManagerPath,
   orphanedReasonNetworkProcesses,
   type Ctx,
-} from "../doctor.ts";
-import { reasonNetworkHomeViolations } from "../lint-reason-network-home.ts";
-import type { FloorIO } from "../../tools/tool-tiers/src/core-floor.ts";
+} from "#root/doctor.ts";
+import { reasonNetworkHomeViolations } from "#root/lint-reason-network-home.ts";
+import type { FloorIO } from "@dotfiles/tool-tiers/src/core-floor.ts";
 import {
   checkCodexHookTrust,
   type HookStatusRead,
   readCodexHookStatus,
   rewriteTrustKeys,
-} from "../doctor/codex-hook-trust.ts";
+} from "#doctor/codex-hook-trust.ts";
 
 test("reason-network one-home detects split processes and keys", async () => {
   const root = mkdtempSync(join(tmpdir(), "reason-home-"));
@@ -224,14 +224,14 @@ test("the machine's own profile file decides its role, whatever its hostname", a
 import {
   inspectRipGraveyard,
   RIP_GRAVEYARD_MAX_BYTES,
-} from "../../tools/disk-reclaim/src/lib/graveyards.ts";
+} from "@dotfiles/disk-reclaim/src/lib/graveyards.ts";
 import { REF_LOCK_STALE_MS } from "@dotfiles/shared/src/ref-locks.ts";
-import { STEPS } from "../post-merge.ts";
+import { STEPS } from "#root/post-merge.ts";
 import {
   desktopLauncherProblem,
   installDesktopFacade,
   launcherContents,
-} from "../../agents/codex/codex-runtime.ts";
+} from "@dotfiles/codex/codex-runtime.ts";
 
 // The smart-open fixtures scope the forward with Match sessiontype (OpenSSH >= 9.9; Ubuntu 24.04
 // ships 9.6, which rejects the line).
@@ -262,6 +262,13 @@ test("bun:check runs without installed packages", () => {
     join(fixture, "agents/hooks/vendor/deps.js"),
   );
   cpSync(join(REPO, "package.json"), join(fixture, "package.json"));
+  // `@dotfiles/<name>/…` resolves through the root tsconfig `paths`, with no node_modules.
+  mkdirSync(join(fixture, "standard-presets/typescript"), { recursive: true });
+  for (const path of [
+    "tsconfig.json",
+    "standard-presets/typescript/tsconfig.json",
+  ])
+    cpSync(join(REPO, path), join(fixture, path));
   const config = z
     .object({ tasks: z.object({ "bun:check": z.object({ run: z.string() }) }) })
     .safeParse(Bun.TOML.parse(readFileSync(join(REPO, "mise.toml"), "utf8")));

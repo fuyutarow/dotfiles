@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { formatCostUsd } from "../src/dispatch-pricing.ts";
+import { formatCostUsd } from "#src/dispatch-pricing.ts";
 
 test("formats statusline costs to cents without hiding sub-cent spend", () => {
   expect(formatCostUsd(0)).toBe("$0");

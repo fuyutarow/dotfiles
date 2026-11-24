@@ -1,13 +1,16 @@
 {
   "name": "@dotfiles/tool-tiers",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "private": true,
   "type": "module",
   "bin": {
     "tool": "src/tool.ts"
   },
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0"
+  },
+  "imports": {
+    "#root/*": "./*",
+    "#src/*": "./src/*"
   }
 }

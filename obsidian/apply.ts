@@ -1,4 +1,4 @@
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { cli } from "cleye";
 import type { Dirent } from "node:fs";
 import {
@@ -13,7 +13,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 // Bring EVERY registered Obsidian vault in line with this directory (single source):
 //   app.json     — keys merged into each vault's .obsidian/app.json

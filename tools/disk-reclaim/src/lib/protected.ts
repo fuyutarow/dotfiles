@@ -1,8 +1,12 @@
 import { exists, lstat, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
-import { collectProcesses, resolveProcRoot, type OpenPaths } from "./procs.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import {
+  collectProcesses,
+  resolveProcRoot,
+  type OpenPaths,
+} from "#src/lib/procs.ts";
 
 export type ProtectionOptions = {
   /** Override external Homebrew discovery for isolated fixtures. */

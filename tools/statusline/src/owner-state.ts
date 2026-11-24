@@ -2,15 +2,15 @@
 import { dirname, join, resolve } from "node:path";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { jsonOf, z } from "./zod.ts";
-import { MemReadingSchema } from "./host-model.ts";
-import { RecoverHealthSchema } from "./recover-health.ts";
-import type { Sources } from "./build-dataframe.ts";
-import { Rows } from "./agx-job-runs.ts";
+import { jsonOf, z } from "#src/zod.ts";
+import { MemReadingSchema } from "#src/host-model.ts";
+import { RecoverHealthSchema } from "#src/recover-health.ts";
+import type { Sources } from "#src/build-dataframe.ts";
+import { Rows } from "#src/agx-job-runs.ts";
 import {
   AgentSessionSchema,
   sessionProcessMatches,
-} from "./session-discovery.ts";
+} from "#src/session-discovery.ts";
 
 export const ownerStatePath = (env: NodeJS.ProcessEnv = process.env) =>
   env["STATUSLINE_OWNER_STATE"] ??

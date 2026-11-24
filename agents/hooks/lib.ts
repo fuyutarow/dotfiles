@@ -12,11 +12,11 @@
 //     "ask" is Claude-only — Codex marks it a FAILED hook run — so a portable hook never asks.
 
 import { readFileSync, readSync } from "node:fs";
-import { obj, parseJson } from "./narrow.ts";
-import { slugForScript } from "./slugs.ts";
+import { obj, parseJson } from "#root/narrow.ts";
+import { slugForScript } from "#root/slugs.ts";
 
-export { bashCwd } from "../../tools/shared/src/bash-cwd.ts";
-export { findExe } from "../../tools/shared/src/find-executable.ts";
+export { bashCwd } from "@dotfiles/shared/src/bash-cwd.ts";
+export { findExe } from "@dotfiles/shared/src/find-executable.ts";
 
 /** Registry identity, also passed by the renderer for launcher diagnostics. */
 export function hookSlug(): string {

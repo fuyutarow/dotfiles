@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { discoverBuilds } from "../../src/targets/build-discovery.ts";
-import type { Context } from "../../src/targets/index.ts";
-import { tempRoot } from "../fixtures/temp.ts";
+import { discoverBuilds } from "#src/targets/build-discovery.ts";
+import type { Context } from "#src/targets/index.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 
 function context(cache: string, errors: string[]): Context {
   return {

@@ -7,22 +7,22 @@ import {
   RST,
   SLATE_BLUE1,
   YELLOW3,
-} from "./ansi.ts";
-import { promptParts, type PromptParts } from "./prompt-stamp.ts";
-import type { Dataframe } from "./dataframe.ts";
-import { fleetLine } from "./fleet-line.ts";
-import { ctxSegment } from "./model-context.ts";
-import { rateRow } from "./rate-limits.ts";
-import { routeLines } from "./dispatch-display.ts";
-import { shellLines } from "./shells.ts";
-import { listingProgress } from "./dispatch-state.ts";
-import type { RouteRun } from "./dispatch-runs.ts";
-import { sysRow } from "./host-display.ts";
-import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
+} from "#src/ansi.ts";
+import { promptParts, type PromptParts } from "#src/prompt-stamp.ts";
+import type { Dataframe } from "#src/dataframe.ts";
+import { fleetLine } from "#src/fleet-line.ts";
+import { ctxSegment } from "#src/model-context.ts";
+import { rateRow } from "#src/rate-limits.ts";
+import { routeLines } from "#src/dispatch-display.ts";
+import { shellLines } from "#src/shells.ts";
+import { listingProgress } from "#src/dispatch-state.ts";
+import type { RouteRun } from "#src/dispatch-runs.ts";
+import { sysRow } from "#src/host-display.ts";
+import { fieldDisplay, observed, type FieldDisplay } from "#src/field-state.ts";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { renderRows, type DisplayRows } from "./row-state.ts";
-import { version } from "../package.json";
-import { statuslineColumns, wrapThroughSys } from "./wrap.ts";
+import { renderRows, type DisplayRows } from "#src/row-state.ts";
+import { version } from "#root/package.json";
+import { statuslineColumns, wrapThroughSys } from "#src/wrap.ts";
 
 const SEP = ` ${DIM}|${RST} `;
 const BR = "⎇";
@@ -72,7 +72,7 @@ export function coloredHead(
   );
 }
 function liveRouteRuns(
-  rows: import("./agx-job-runs.ts").AgxJobRows,
+  rows: import("#src/agx-job-runs.ts").AgxJobRows,
   nowMs: number,
   cacheAgeMs: number,
 ): RouteRun[] {

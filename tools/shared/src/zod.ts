@@ -8,7 +8,7 @@
 // This file stays a single-import module: tools/preset copies it alone into consumer repositories
 // (as support/zod.ts beside support/deps.js), so it takes Result from the bundle directly rather
 // than through ./result.ts.
-import { Result, z } from "../../../agents/hooks/vendor/deps.js";
+import { Result, z } from "@dotfiles/hooks/vendor/deps.js";
 
 export { z };
 

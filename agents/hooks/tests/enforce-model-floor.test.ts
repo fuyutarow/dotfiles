@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { decisionOf, runHook, tempDir } from "./helpers.ts";
+import { decisionOf, runHook, tempDir } from "#tests/helpers.ts";
 
 const HOOK = "enforce-model-floor.ts";
 

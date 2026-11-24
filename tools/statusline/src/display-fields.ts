@@ -1,15 +1,15 @@
 import { join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import type { Dataframe } from "./dataframe.ts";
-import { render } from "./format.ts";
+import type { Dataframe } from "#src/dataframe.ts";
+import { render } from "#src/format.ts";
 import {
   observed,
   renderField,
   retainField,
   type DisplayFields,
   type FieldState,
-} from "./field-state.ts";
-import { jsonOf, z } from "./zod.ts";
+} from "#src/field-state.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 const HOST_FIELDS = new Set([
   "cpu",

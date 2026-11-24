@@ -1,11 +1,11 @@
 // Shared Japanese-primary decision inputs for vendor Stop adapters. The classifier owns text
 // analysis; this module owns the one declared policy source consumed by Claude and Codex.
 import { join } from "node:path";
-import { strAt } from "./narrow.ts";
+import { strAt } from "#root/narrow.ts";
 import {
   classifyJapanesePrimary,
   type JapaneseClassification,
-} from "../../tools/detect-japanese/src/classify.ts";
+} from "@dotfiles/detect-japanese/src/classify.ts";
 
 export type ReplyLanguageVendor = "claude" | "codex";
 export type { JapaneseClassification };

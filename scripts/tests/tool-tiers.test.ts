@@ -1,1 +1,1 @@
-import "../../tools/tool-tiers/tests/tool-tiers.test.ts";
+import "@dotfiles/tool-tiers/tests/tool-tiers.test.ts";

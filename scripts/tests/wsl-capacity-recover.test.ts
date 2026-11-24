@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Result } from "../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   hasLiveBuildProcess,
@@ -31,7 +31,7 @@ import {
   writeRecoveryVerdict,
   type ComputeProcess,
   type CapacityDecisionContext,
-} from "../wsl-capacity-recover.ts";
+} from "#root/wsl-capacity-recover.ts";
 
 // The raw stop reads /proc/<pid>/stat for a process's start time (Linux procfs): declared, so macOS
 // SKIPs this case instead of failing it.

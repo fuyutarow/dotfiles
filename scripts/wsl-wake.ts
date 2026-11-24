@@ -1,6 +1,9 @@
 import { cli } from "cleye";
 import { consola } from "consola";
-import { managedDistrosFromConfig, type ManagedDistro } from "./wsl-keepalive";
+import {
+  managedDistrosFromConfig,
+  type ManagedDistro,
+} from "#root/wsl-keepalive.ts";
 
 // Start the WSL distro on a Windows host, and leave the GUEST actually reachable, from the Mac.
 // Consumer: human/agent running `mise run wsl:wake`; output is verdict lines.

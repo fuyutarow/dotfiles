@@ -3,10 +3,10 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { buildDataframe } from "../src/build-dataframe.ts";
-import { render } from "../src/format.ts";
-import { publishSnapshots } from "../src/sampler.ts";
-import { snapshotWithFleetFacts } from "../src/snapshot-rate.ts";
+import { buildDataframe } from "#src/build-dataframe.ts";
+import { render } from "#src/format.ts";
+import { publishSnapshots } from "#src/sampler.ts";
+import { snapshotWithFleetFacts } from "#src/snapshot-rate.ts";
 import {
   writeFleetSession,
   type FleetSession,
@@ -16,13 +16,13 @@ import {
   renderUnavailable,
   roles,
   unavailable,
-} from "../src/ansi.ts";
-import { observed, renderField } from "../src/field-state.ts";
-import { diskSegment, tmpSegment } from "../src/storage-display.ts";
-import { formatBytes } from "../src/host-display.ts";
-import { codexRateSegment, jevUsageSegment } from "../src/provider-display.ts";
-import { routeLines } from "../src/dispatch-display.ts";
-import { jsonOf, z } from "../src/zod.ts";
+} from "#src/ansi.ts";
+import { observed, renderField } from "#src/field-state.ts";
+import { diskSegment, tmpSegment } from "#src/storage-display.ts";
+import { formatBytes } from "#src/host-display.ts";
+import { codexRateSegment, jevUsageSegment } from "#src/provider-display.ts";
+import { routeLines } from "#src/dispatch-display.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 const root = await mkdtemp(join(tmpdir(), "na-with-reason-"));
 afterAll(() => rm(root, { recursive: true, force: true }));

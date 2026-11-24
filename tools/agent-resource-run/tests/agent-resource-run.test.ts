@@ -17,12 +17,12 @@ import {
   gpuAdmissionRefusal,
   validateManifest,
   type ResourceManifest,
-} from "../src/agent-resource-run.ts";
+} from "#src/agent-resource-run.ts";
 import {
   effectiveMemoryLimitsMatch,
   kernelPageSizeBytes,
-} from "../src/lib/cgroup-memory-limits.ts";
-import { captureStderrMessages } from "./captured-stderr.ts";
+} from "#src/lib/cgroup-memory-limits.ts";
+import { captureStderrMessages } from "#tests/captured-stderr.ts";
 
 // Holder identity only contributes an advisory diagnostic, never a refusal.
 async function advisoryAdmission(
@@ -775,7 +775,7 @@ test("effective cgroup memory limits accept page-aligned readbacks", () => {
   ).toBe(false);
 });
 test("CLI retains version, help, unknown flag and malformed manifest exits", async () => {
-  const pkg = (await import("../package.json")).default;
+  const pkg = (await import("#root/package.json")).default;
   expect((await invoke(["--version"])).stdout.trim()).toBe(
     `agent-resource-run ${pkg.version}`,
   );

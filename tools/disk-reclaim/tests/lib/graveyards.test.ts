@@ -18,7 +18,7 @@ import {
   discoverRipGraveyards,
   ripBurial,
   ripRecords,
-} from "../../src/lib/graveyards.ts";
+} from "#src/lib/graveyards.ts";
 
 test("ripBurial estimates only a top-level unrecorded entry, from its own ctime", async () => {
   const root = mkdtempSync(join(tmpdir(), "rip-burial-estimate-"));

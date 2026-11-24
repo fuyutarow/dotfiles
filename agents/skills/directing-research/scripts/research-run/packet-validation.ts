@@ -15,7 +15,7 @@ import {
   TERMINAL_STATUSES,
   TRANSITIONS,
   withoutComments,
-} from "./model";
+} from "#scripts/research-run/model.ts";
 import {
   validateDigestField,
   validateLocatorField,
@@ -23,7 +23,7 @@ import {
   validateSchema,
   validateStableId,
   validateTimestampField,
-} from "./primitives";
+} from "#scripts/research-run/primitives.ts";
 
 export function validateIntent(
   packet: LoadedPacket,

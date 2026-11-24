@@ -5,24 +5,24 @@ import type {
   Headroom,
   ReceiptAction,
   Tier,
-} from "../model.ts";
-import type { LivenessSnapshot } from "../liveness/facts.ts";
-import type { RemoveTreeResult } from "../lib/remove-tree.ts";
-import { clean } from "./clean.ts";
-import { builds } from "./builds.ts";
-import { rust } from "./rust.ts";
-import { toolchains } from "./toolchains.ts";
-import { workspaces } from "./workspaces.ts";
-import { scratch } from "./scratch.ts";
-import { system } from "./system.ts";
-import { judgment } from "./judgment.ts";
-import { purge, purgeRip } from "./purge.ts";
-import { host } from "./host.ts";
-import { vhdx } from "./vhdx.ts";
-import { audit } from "./audit.ts";
-import { tmpfs } from "./tmpfs.ts";
-import { miseConfigs } from "./mise-configs.ts";
-import { cccIndexDb } from "./ccc-index-db.ts";
+} from "#src/model.ts";
+import type { LivenessSnapshot } from "#src/liveness/facts.ts";
+import type { RemoveTreeResult } from "#src/lib/remove-tree.ts";
+import { clean } from "#src/targets/clean.ts";
+import { builds } from "#src/targets/builds.ts";
+import { rust } from "#src/targets/rust.ts";
+import { toolchains } from "#src/targets/toolchains.ts";
+import { workspaces } from "#src/targets/workspaces.ts";
+import { scratch } from "#src/targets/scratch.ts";
+import { system } from "#src/targets/system.ts";
+import { judgment } from "#src/targets/judgment.ts";
+import { purge, purgeRip } from "#src/targets/purge.ts";
+import { host } from "#src/targets/host.ts";
+import { vhdx } from "#src/targets/vhdx.ts";
+import { audit } from "#src/targets/audit.ts";
+import { tmpfs } from "#src/targets/tmpfs.ts";
+import { miseConfigs } from "#src/targets/mise-configs.ts";
+import { cccIndexDb } from "#src/targets/ccc-index-db.ts";
 
 export type Context = {
   mode: "plan" | "run";

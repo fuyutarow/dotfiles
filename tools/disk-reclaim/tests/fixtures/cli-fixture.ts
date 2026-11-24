@@ -1,8 +1,8 @@
 // Fixture binary: real CLI parsing/registry/engine with an injected process filesystem.
-import { main } from "../../src/reclaim.ts";
-import { createLivenessSnapshot } from "../../src/liveness/facts.ts";
-import { registry } from "../../src/targets/index.ts";
-import { Result } from "../../../shared/src/result.ts";
+import { main } from "#src/reclaim.ts";
+import { createLivenessSnapshot } from "#src/liveness/facts.ts";
+import { registry } from "#src/targets/index.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 const procRoot = process.env["RECLAIM_UNIT_PROC_ROOT"];
 if (procRoot === undefined) {

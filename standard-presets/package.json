@@ -1,0 +1,11 @@
+{
+  "name": "@dotfiles/standard-presets",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#root/*": "./*",
+    "#src/*": "./src/*",
+    "#tests/*": "./tests/*",
+    "#typescript/*": "./typescript/*"
+  }
+}

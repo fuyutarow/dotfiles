@@ -3,7 +3,7 @@ import {
   USAGE_RED_PCT,
   USAGE_YELLOW_PCT,
   usageLevel,
-} from "../src/usage-level.ts";
+} from "#src/usage-level.ts";
 
 test("usage level boundaries: green <70, yellow 70-89, red >=90", () => {
   expect([USAGE_YELLOW_PCT, USAGE_RED_PCT]).toEqual([70, 90]);

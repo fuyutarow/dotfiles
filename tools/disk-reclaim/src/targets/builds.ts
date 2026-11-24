@@ -1,12 +1,16 @@
 import { lstat, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
-import { protectedReason } from "../lib/protected.ts";
-import type { Candidate } from "../model.ts";
-import type { Context, Target } from "./index.ts";
-import { deleteTree, keepTreeCandidate, treeCandidate } from "./tree.ts";
-import { BUILD_NAMES, discoverBuilds } from "./build-discovery.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { protectedReason } from "#src/lib/protected.ts";
+import type { Candidate } from "#src/model.ts";
+import type { Context, Target } from "#src/targets/index.ts";
+import {
+  deleteTree,
+  keepTreeCandidate,
+  treeCandidate,
+} from "#src/targets/tree.ts";
+import { BUILD_NAMES, discoverBuilds } from "#src/targets/build-discovery.ts";
 
 // Each build directory is sized by a bounded walk: a huge node_modules is a lower-bound
 // estimate instead of the whole stage budget, and fast-first acting frees the small ones first.

@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  dispatchWarning,
-  RoutingStatsSchema,
-} from "../src/dispatch-warning.ts";
-import recorded from "./fixtures/agx-c5-1.5.0.json";
-import { decoded } from "./decode.ts";
+import { dispatchWarning, RoutingStatsSchema } from "#src/dispatch-warning.ts";
+import recorded from "#tests/fixtures/agx-c5-1.5.0.json";
+import { decoded } from "#tests/decode.ts";
 
 // The release only reports unknown/unavailable. Affirmative capability is the
 // coordinator-authorized forward-compatible case, not a recorded release fact.

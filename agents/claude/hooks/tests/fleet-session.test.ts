@@ -7,9 +7,9 @@ import {
   readFleetSession,
   writeFleetSession,
   type FleetSessionUnavailable,
-} from "../../../../tools/shared/src/fleet-session.ts";
-import { fleetSessionFixture } from "./fleet-session-fixture.ts";
-import { tempHome } from "./helpers.ts";
+} from "@dotfiles/shared/src/fleet-session.ts";
+import { fleetSessionFixture } from "#hooks/tests/fleet-session-fixture.ts";
+import { tempHome } from "#hooks/tests/helpers.ts";
 
 test("schema 1 round-trips both vendors and atomic replacement leaves no temp file", async () => {
   const home = tempHome();

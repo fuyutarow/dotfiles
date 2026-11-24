@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { waitForRecoveryVerdict } from "../src/lib/recovery-verdict.ts";
+import { waitForRecoveryVerdict } from "#src/lib/recovery-verdict.ts";
 
 const verdict = (value: "OK" | "HOLD", emergency = false) =>
   JSON.stringify({

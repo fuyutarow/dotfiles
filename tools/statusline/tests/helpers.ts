@@ -1,5 +1,5 @@
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { jsonOf, z } from "../src/zod.ts";
+import { jsonOf, z } from "#src/zod.ts";
 import {
   mkdirSync,
   mkdtempSync,
@@ -13,9 +13,9 @@ import {
   agxStatusKey,
   type FleetFindings,
   type WorkspaceCounts,
-} from "../src/agx-snapshot.ts";
-import { ownerStatePath, OwnerStateSchema } from "../src/owner-state.ts";
-import { decodedJson } from "./decode.ts";
+} from "#src/agx-snapshot.ts";
+import { ownerStatePath, OwnerStateSchema } from "#src/owner-state.ts";
+import { decodedJson } from "#tests/decode.ts";
 
 /** Convert legacy listing fixtures into the sampler's CLI wire cache. */
 export function seedAgxSnapshot(

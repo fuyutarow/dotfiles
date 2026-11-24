@@ -2,8 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
-import { bunVersionError } from "../typescript/require-bun.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { bunVersionError } from "#typescript/require-bun.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 const FIXTURES = join(import.meta.dir, "fixtures");

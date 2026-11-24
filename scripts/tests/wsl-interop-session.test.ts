@@ -20,7 +20,7 @@ import {
   type Selection,
   type Deps,
   type Probed,
-} from "../wsl-interop-session.ts";
+} from "#root/wsl-interop-session.ts";
 
 const Stored = jsonOf(z.object({ socket: z.string() }));
 

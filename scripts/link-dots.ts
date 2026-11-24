@@ -47,14 +47,14 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { hostname, homedir } from "node:os";
-import { isWslDistro } from "../tools/shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
-import { deployCccDaemon } from "../cocoindex/deploy-daemon.ts";
-import { STALE_DRIVE_MOUNT_REPAIR } from "../wsl/drive-mount.ts";
-import { renderRefusal } from "./render-source.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { deployCccDaemon } from "@dotfiles/cocoindex/deploy-daemon.ts";
+import { STALE_DRIVE_MOUNT_REPAIR } from "@dotfiles/wsl/drive-mount.ts";
+import { renderRefusal } from "#root/render-source.ts";
 import {
   ETC_LINKS,
   LINKS,
@@ -62,7 +62,7 @@ import {
   TOOL_OWNED,
   unitSource,
   type When,
-} from "./config-registry.ts";
+} from "#root/config-registry.ts";
 
 type Os = "mac" | "wsl" | "linux";
 type Mode = "safe" | "force" | "check";

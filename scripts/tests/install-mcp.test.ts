@@ -13,7 +13,7 @@ import {
   loadMcpServers,
   partitionAvailableServers,
   shellWords,
-} from "../install-mcp.ts";
+} from "#root/install-mcp.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "install-mcp.ts");
 const FAKE_CLAUDE = join(import.meta.dir, "fake-claude-mcp.ts");

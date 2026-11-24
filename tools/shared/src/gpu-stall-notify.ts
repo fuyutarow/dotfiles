@@ -2,10 +2,10 @@
 // The service serializes invocations; this module never queries the GPU driver.
 import { mkdir, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { errorMessage, Result } from "./result.ts";
-import { GpuStateSchema, gpuStatePath, MAX_BYTES } from "./gpu-samples.ts";
-import { isWslDistro } from "./wsl.ts";
-import { jsonOf, z } from "./zod.ts";
+import { errorMessage, Result } from "#src/result.ts";
+import { GpuStateSchema, gpuStatePath, MAX_BYTES } from "#src/gpu-samples.ts";
+import { isWslDistro } from "#src/wsl.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 const StallState = GpuStateSchema.extend({
   unresponsiveSince: z.number().int().nonnegative().nullable().optional(),

@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { danglingRepoBins, pruneRepoBins } from "../deps-prune.ts";
+import { danglingRepoBins, pruneRepoBins } from "#root/deps-prune.ts";
 
 test("prune removes dangling repo links, including Bun global links, and preserves foreign/live links", async () => {
   const temp = mkdtempSync(join(tmpdir(), "deps-prune-"));

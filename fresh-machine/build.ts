@@ -9,7 +9,7 @@
 import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const say = (line: string): void => {

@@ -12,13 +12,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { skillFiles } from "../skills-declaration.ts";
+import { skillFiles } from "#root/skills-declaration.ts";
 import {
   prepareSkillCopy,
   skillEntries,
   sourceDigester,
   unresolvedSkillImports,
-} from "../skills-copy.ts";
+} from "#root/skills-copy.ts";
 
 const root = resolve(import.meta.dir, "../..");
 

@@ -13,7 +13,7 @@
 
 import { join } from "node:path";
 import { cli } from "cleye";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 

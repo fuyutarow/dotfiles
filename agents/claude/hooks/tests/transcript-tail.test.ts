@@ -10,9 +10,9 @@ import {
   entryOf,
   textBlocks,
   type TranscriptEntry,
-} from "../lib/transcript-tail.ts";
-import { lastUserTextTail, turnTextTail } from "../lib.ts";
-import { parseJson } from "../../../hooks/narrow.ts";
+} from "#hooks/lib/transcript-tail.ts";
+import { lastUserTextTail, turnTextTail } from "#hooks/lib.ts";
+import { parseJson } from "@dotfiles/hooks/narrow.ts";
 
 // Test-only full-file reference: the oracle the bounded readers must agree with. Not production code.
 async function readTranscript(path: string): Promise<TranscriptEntry[]> {

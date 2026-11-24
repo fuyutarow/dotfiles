@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
-import { jsonText, z } from "../src/zod.ts";
+import { jsonText, z } from "#src/zod.ts";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp, rm } from "node:fs/promises";
-import { codexAgentName } from "../../../agents/codex/hooks/herdr-identity.ts";
-import { readHerdrPaneName } from "../../../agents/codex/hooks/herdr-pane.ts";
+import { codexAgentName } from "@dotfiles/codex/hooks/herdr-identity.ts";
+import { readHerdrPaneName } from "@dotfiles/codex/hooks/herdr-pane.ts";
 import { readFleetSession } from "@dotfiles/shared/src/fleet-session.ts";
-import { writeStatuslineFleetSession } from "../src/fleet-session.ts";
+import { writeStatuslineFleetSession } from "#src/fleet-session.ts";
 
 test("Codex names derive their suffixes from the exact thread, not pane display text", () => {
   const cwd = "/fixture/Poly_Search.v1";

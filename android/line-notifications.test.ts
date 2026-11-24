@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { inspectNotificationPolicy } from "./line-notifications";
+import { inspectNotificationPolicy } from "#root/line-notifications.ts";
 
 const lineChannel =
   "        NotificationChannel{mId='jp.naver.line.android.notification.NewMessages', mImportance=4, mBypassDnd=true, mVibrationEnabled=true, mDeleted=false}";

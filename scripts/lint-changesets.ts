@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
-import { changesetDiagnostic, parseChangeset } from "./changeset.ts";
+import { changesetDiagnostic, parseChangeset } from "#root/changeset.ts";
 
 export async function lintChangesets(root: string): Promise<string[]> {
   const problems: string[] = [];

@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { jsonOf } from "@dotfiles/shared/src/zod.ts";
-import { ReclaimRecord } from "../src/records.ts";
-import { cliEnv } from "./fixtures/cli-env.ts";
-import { tempRoot } from "./fixtures/temp.ts";
+import { ReclaimRecord } from "#src/records.ts";
+import { cliEnv } from "#tests/fixtures/cli-env.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 
 test("explicit plan emits flat JSONL records without a presentation flag", () => {
   const root = tempRoot("reclaim-record-cli-");

@@ -3,7 +3,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import type { ShellCommand } from "./shell-syntax.ts";
+import type { ShellCommand } from "#src/shell-syntax.ts";
 
 export function insidePath(path: string, root: string): boolean {
   const rel = relative(root, path);

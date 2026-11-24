@@ -1,1 +1,1 @@
-export * from "../../tools/shared/src/read-path.ts";
+export * from "@dotfiles/shared/src/read-path.ts";

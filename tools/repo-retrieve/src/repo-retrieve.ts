@@ -49,15 +49,18 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { Result } from "../../shared/src/result.ts";
-import { cccSearchPath } from "./ccc-search-path.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { cccSearchPath } from "#src/ccc-search-path.ts";
 import {
   adaptivePathSearch,
   parseKnnResponse,
   renderKnnRows,
-} from "./knn-path-search.ts";
-import { parseDaemonStatus, type DaemonStatus } from "./ccc-daemon-status.ts";
-import { declaredDbEnv, MAPPING_ENV } from "./ccc-db-dir.ts";
+} from "#src/knn-path-search.ts";
+import {
+  parseDaemonStatus,
+  type DaemonStatus,
+} from "#src/ccc-daemon-status.ts";
+import { declaredDbEnv, MAPPING_ENV } from "#src/ccc-db-dir.ts";
 import {
   catchUpIndex,
   citationToken,
@@ -68,10 +71,14 @@ import {
   runIndexStatus,
   runIndexWrapper,
   runningIndexPid,
-} from "./ccc-index.ts";
-import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
-import { findDefinitions, refreshCatalog, renderCards } from "./definitions.ts";
-import pkg from "../package.json" with { type: "json" };
+} from "#src/ccc-index.ts";
+import { requireExecutable, runChild, runChildCaptured } from "#src/child.ts";
+import {
+  findDefinitions,
+  refreshCatalog,
+  renderCards,
+} from "#src/definitions.ts";
+import pkg from "#root/package.json" with { type: "json" };
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);

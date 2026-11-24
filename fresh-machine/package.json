@@ -1,0 +1,5 @@
+{
+  "name": "@dotfiles/fresh-machine",
+  "private": true,
+  "type": "module"
+}

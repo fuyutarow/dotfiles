@@ -1,5 +1,5 @@
-import { Candidate } from "../../src/model.ts";
-import type { Target } from "../../src/targets/index.ts";
+import { Candidate } from "#src/model.ts";
+import type { Target } from "#src/targets/index.ts";
 
 export function candidate(
   id: string,

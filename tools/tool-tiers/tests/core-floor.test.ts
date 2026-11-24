@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkCoreFloor } from "../src/core-floor.ts";
+import { checkCoreFloor } from "#src/core-floor.ts";
 
 test("a timed-out installation observation is not reported as absence", async () => {
   const result = await checkCoreFloor(

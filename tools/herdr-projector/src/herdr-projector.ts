@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
 import { mkdir, rename } from "node:fs/promises";
-import { isWslDistro } from "../../shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { isAbsolute, join } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import cliPackage from "../package.json" with { type: "json" };
+import cliPackage from "#root/package.json" with { type: "json" };
 import {
   AgxUnavailable,
   alertTokenArgs,
@@ -13,7 +13,7 @@ import {
   ResourceSnapshotUnavailable,
   SessionRecordUnavailable,
   ShellScanUnavailable,
-} from "./alerts.ts";
+} from "#src/alerts.ts";
 import {
   FleetSessionSchema,
   FleetSessionUnavailableSchema,

@@ -15,9 +15,9 @@ import {
   desktopInterop,
   repoHelperCommand,
 } from "@dotfiles/shared/src/desktop-interop.ts";
-import { errorMessage, Result } from "../../shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { render, type Finding } from "@dotfiles/shared/src/finding.ts";
-import { isWslDistro } from "../../shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 
 const NAME = "clipboard round-trip";
 const READ_MS = 15_000;

@@ -1,7 +1,10 @@
 // The existing oneshot sampler alone refreshes history. Renders read its snapshot.
 import { join } from "node:path";
-import { readCodexRate } from "./codex-rate.ts";
-import { codexCreditMemoFromSnapshot, type OwnerState } from "./owner-state.ts";
+import { readCodexRate } from "#src/codex-rate.ts";
+import {
+  codexCreditMemoFromSnapshot,
+  type OwnerState,
+} from "#src/owner-state.ts";
 import {
   CREDIT_DELTA_WINDOW_MS,
   readCodexCreditBaseline,

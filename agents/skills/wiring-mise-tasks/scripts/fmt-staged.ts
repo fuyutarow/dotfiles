@@ -21,7 +21,7 @@ import {
   jjExport,
   jjRead,
   type JjPrecommit,
-} from "./jj-precommit.ts";
+} from "#scripts/jj-precommit.ts";
 
 // jjExport returns void until jj-precommit goes async; widening the result keeps the await valid
 // (and waiting) in both states.

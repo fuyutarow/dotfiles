@@ -14,18 +14,18 @@ import {
 } from "node:fs/promises";
 import { tmpdir, hostname } from "node:os";
 import { join, resolve } from "node:path";
-import { freeGraveyard, freeExit, requestedBytes } from "../../src/free.ts";
+import { freeGraveyard, freeExit, requestedBytes } from "#src/free.ts";
 import { tryAcquire } from "@dotfiles/shared/src/dir-lock.ts";
-import { hasForegroundWaiter } from "../../src/receipt.ts";
-import { loadConfig, run } from "../../src/engine.ts";
+import { hasForegroundWaiter } from "#src/receipt.ts";
+import { loadConfig, run } from "#src/engine.ts";
 import { jsonOf, jsonText } from "@dotfiles/shared/src/zod.ts";
-import { collectProcesses } from "../../src/lib/procs.ts";
-import { removeTree } from "../../src/lib/remove-tree.ts";
-import { RIP_GRAVEYARD_MAX_BYTES } from "../../src/lib/graveyards.ts";
-import { createRipExpiryTarget } from "../../src/targets/rip-expire.ts";
-import type { Context } from "../../src/targets/index.ts";
-import { procFixture } from "../fixtures/procs.ts";
-import { ReceiptV2 } from "../../src/model.ts";
+import { collectProcesses } from "#src/lib/procs.ts";
+import { removeTree } from "#src/lib/remove-tree.ts";
+import { RIP_GRAVEYARD_MAX_BYTES } from "#src/lib/graveyards.ts";
+import { createRipExpiryTarget } from "#src/targets/rip-expire.ts";
+import type { Context } from "#src/targets/index.ts";
+import { procFixture } from "#tests/fixtures/procs.ts";
+import { ReceiptV2 } from "#src/model.ts";
 
 const now = Temporal.Instant.from("2026-10-24T12:00:00Z").epochMilliseconds;
 const config = {

@@ -2,7 +2,7 @@
 import { access, readFile, realpath } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { cli } from "cleye";
-import { jsonOf, jsonText, z } from "../../../hooks/zod.ts";
+import { jsonOf, jsonText, z } from "@dotfiles/hooks/zod.ts";
 
 // Cleye handles unknown options after parsing their raw spelling.
 

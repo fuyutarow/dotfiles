@@ -20,7 +20,7 @@
 // and is not a route switch for callers: with it unset the behaviour is the one above.
 import { constants } from "node:fs";
 import { access, open, stat } from "node:fs/promises";
-import { errorMessage, Result } from "../../shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 
 export const TTY_SEAM = "SMART_COPY_TTY";
 /** One write (open + write) to a terminal device is cut here; a flow-controlled tty can block forever. */

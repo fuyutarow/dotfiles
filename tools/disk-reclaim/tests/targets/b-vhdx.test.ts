@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { expect, test } from "bun:test";
-import { Plan } from "../../src/model.ts";
-import { planOnlyNotices } from "../../src/reclaim.ts";
-import { run } from "../../src/engine.ts";
-import type { Context } from "../../src/targets/index.ts";
+import { Plan } from "#src/model.ts";
+import { planOnlyNotices } from "#src/reclaim.ts";
+import { run } from "#src/engine.ts";
+import type { Context } from "#src/targets/index.ts";
 import {
   createVhdxTarget,
   distroName,
@@ -11,7 +11,7 @@ import {
   pickMethod,
   probeFailure,
   resolveVhdx,
-} from "../../src/targets/vhdx.ts";
+} from "#src/targets/vhdx.ts";
 
 const GiB = 1024 ** 3;
 const R99_BASE =

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { decideSearchRoute } from "../src/search-route.ts";
+import { decideSearchRoute } from "#src/search-route.ts";
 
 const commands = [
   "cd /home/fuyu/Workspace/firedancer && export PATH=/home/linuxbrew/.linuxbrew/bin:$PATH && mise run leaderboard:view -- --all 2>&1 | grep -F -e '25fc5cf3' | head -14 | cut -c1-300",

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { cli } from "cleye";
-import { z } from "../../../hooks/zod.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 const RecoveryModeSchema = z.enum([
   "exact",

@@ -22,7 +22,9 @@
 //                                 (BG3 graduation, resolved on the file's REALPATH) declares it
 //                                 at an EXACT version; ALWAYS FAIL inside hooks/ (they run
 //                                 before any install); pinned inline import WARN (cwd trap);
-//                                 computed dynamic WARN
+//                                 computed dynamic WARN. A `#alias/…` declared in the nearest
+//                                 package.json "imports", or a specifier the nearest tsconfig
+//                                 `paths` maps, is local code (no install); an undeclared `#…` FAILs
 //   F5  Cleye boundary unguarded — every cli()/command() has strictFlags plus a local
 //                                 ignoreArgv prototype guard before type-flag mutation
 //   F8  legacy/raw argv parsing — parseArgs(), raw argv without cli(), or direct typeFlag()
@@ -43,7 +45,7 @@
 import { realpath, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { cli } from "cleye";
-import { jsonOf, z } from "../../../hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 let failures = 0;
 let warnings = 0;
@@ -116,6 +118,73 @@ function classifySpecifier(
   if (spec.startsWith(".") || spec.startsWith("/")) return "relative";
   // pinned: name@range or @scope/name@range (an @ after the first character)
   return spec.slice(1).includes("@") ? "pinned" : "bare";
+}
+
+// --- Local specifiers that need no install --------------------------------------------------
+// `#alias/…` resolves through the nearest package.json "imports"; `@scope/name/…` through the
+// nearest tsconfig.json `compilerOptions.paths`. Bun resolves both from files alone — no
+// node_modules, no lockfile — so they are local code, like a relative path, even in zero-dep
+// trees. Whether the mapped file exists is the type checker's job, not this floor's.
+const ImportsManifest = z.object({
+  imports: z.record(z.string(), z.string()).optional(),
+});
+const PathsConfig = z.object({
+  compilerOptions: z
+    .object({ paths: z.record(z.string(), z.array(z.string())).optional() })
+    .optional(),
+});
+
+async function nearest(from: string, name: string): Promise<string | null> {
+  let directory = dirname(from);
+  for (;;) {
+    if (await Bun.file(join(directory, name)).exists())
+      return join(directory, name);
+    const parent = dirname(directory);
+    if (parent === directory) return null;
+    directory = parent;
+  }
+}
+
+function mapPattern(
+  map: Record<string, string>,
+  spec: string,
+): string | undefined {
+  if (map[spec] !== undefined) return map[spec];
+  for (const [key, target] of Object.entries(map)) {
+    if (!key.endsWith("*") || !spec.startsWith(key.slice(0, -1))) continue;
+    return target.replace("*", spec.slice(key.length - 1));
+  }
+  return undefined;
+}
+
+async function localTarget(file: string, spec: string): Promise<string | null> {
+  const real = await realpath(file);
+  if (spec.startsWith("#")) {
+    const manifest = await nearest(real, "package.json");
+    if (manifest === null) return null;
+    const parsed = ImportsManifest.safeParse(
+      Bun.JSONC.parse(await Bun.file(manifest).text()),
+    );
+    const target = parsed.success
+      ? mapPattern(parsed.data.imports ?? {}, spec)
+      : undefined;
+    return target === undefined ? null : join(dirname(manifest), target);
+  }
+  const tsconfig = await nearest(real, "tsconfig.json");
+  if (tsconfig === null) return null;
+  const parsed = PathsConfig.safeParse(
+    Bun.JSONC.parse(await Bun.file(tsconfig).text()),
+  );
+  const paths = parsed.success
+    ? (parsed.data.compilerOptions?.paths ?? {})
+    : {};
+  const first = Object.fromEntries(
+    Object.entries(paths).flatMap(([key, targets]) =>
+      targets[0] === undefined ? [] : [[key, targets[0]]],
+    ),
+  );
+  const target = mapPattern(first, spec);
+  return target === undefined ? null : join(dirname(tsconfig), target);
 }
 
 // --- BG3 graduation resolution -------------------------------------------------------------
@@ -523,7 +592,15 @@ async function checkFile(file: string): Promise<void> {
     const spec = importMatch[1] ?? importMatch[2] ?? importMatch[3];
     if (spec === undefined) continue;
     const kind = classifySpecifier(spec);
-    if (kind === "bare") {
+    const local = kind === "bare" ? await localTarget(file, spec) : null;
+    if (local !== null) {
+      // Local code: the type checker proves the target resolves.
+    } else if (spec.startsWith("#")) {
+      fail(
+        file,
+        `'${spec}' is not declared in the nearest package.json "imports"`,
+      );
+    } else if (kind === "bare") {
       await checkBareSpecifier(file, spec);
     } else if (kind === "pinned") {
       warn(

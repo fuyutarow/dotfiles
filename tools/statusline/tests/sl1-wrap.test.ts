@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  displayWidth,
-  statuslineColumns,
-  wrapThroughSys,
-} from "../src/wrap.ts";
+import { displayWidth, statuslineColumns, wrapThroughSys } from "#src/wrap.ts";
 
 const ESC = String.fromCodePoint(27);
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");

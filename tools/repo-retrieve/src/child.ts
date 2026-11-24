@@ -3,7 +3,7 @@
 // contract (exit 124 on abort) is part of repo-retrieve's documented exit codes.
 import { basename } from "node:path";
 import { readonlyCommand } from "@dotfiles/shared/src/readonly-command.ts";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 export function requireExecutable(name: string): Result<string, Error> {
   const executable = Bun.which(name);

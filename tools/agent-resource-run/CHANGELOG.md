@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.2 — 2026-11-25
+
+- Error handling uses better-result instead of neverthrow
+
 ## 1.15.1 — 2026-10-31
 
 - Cancel recovery HOLD waits promptly on SIGINT and SIGTERM.

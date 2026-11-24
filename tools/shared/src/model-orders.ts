@@ -15,7 +15,7 @@
 // command), wrappers (env, timeout, sudo, bash -c ...) are looked through, and only then is the
 // executable's own flag list read.
 
-import { arr, num, obj, str } from "./narrow.ts";
+import { arr, num, obj, str } from "#src/narrow.ts";
 
 export type Cli = "codex" | "grok" | "claude" | "agy";
 export type Vendor = "openai" | "xai" | "anthropic" | "google";

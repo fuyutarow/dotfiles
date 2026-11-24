@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { mkdtemp, writeFile, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runSteps, STEPS } from "../post-merge.ts";
+import { runSteps, STEPS } from "#root/post-merge.ts";
 import {
   checkCoreFloor,
   type FloorIO,
-} from "../../tools/tool-tiers/src/core-floor.ts";
+} from "@dotfiles/tool-tiers/src/core-floor.ts";
 
 const untrusted = {
   stderr:

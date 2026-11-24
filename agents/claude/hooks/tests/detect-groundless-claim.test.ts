@@ -1,8 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "../../../hooks/zod.ts";
-import { parseJson } from "../../../hooks/narrow.ts";
-import { assistant, runHook, user, writeTranscript } from "./helpers.ts";
-import { decoded } from "../../../hooks/tests/decode.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
+import { parseJson } from "@dotfiles/hooks/narrow.ts";
+import {
+  assistant,
+  runHook,
+  user,
+  writeTranscript,
+} from "#hooks/tests/helpers.ts";
+import { decoded } from "@dotfiles/hooks/tests/decode.ts";
 
 const Message = z.object({ systemMessage: z.string() });
 

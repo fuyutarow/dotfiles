@@ -1,6 +1,6 @@
-import { z } from "../../src/zod.ts";
-import { readAgxSnapshotAsync } from "../../src/agx-snapshot.ts";
-import type { JobRun } from "../../src/dispatch-runs.ts";
+import { z } from "#src/zod.ts";
+import { readAgxSnapshotAsync } from "#src/agx-snapshot.ts";
+import type { JobRun } from "#src/dispatch-runs.ts";
 export async function agxJobRunsAsync(
   sessionId: string | undefined,
   env: NodeJS.ProcessEnv = process.env,

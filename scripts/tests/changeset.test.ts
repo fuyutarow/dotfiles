@@ -7,7 +7,7 @@ import {
   formatChangeset,
   parseChangeset,
   writeChangeset,
-} from "../changeset.ts";
+} from "#root/changeset.ts";
 
 const temporary: string[] = [];
 const fnoxNewlineChangeset =

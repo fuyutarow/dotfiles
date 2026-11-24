@@ -4,8 +4,8 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { applyToolChangesets } from "../land-changesets.ts";
-import { lintChangesets } from "../lint-changesets.ts";
+import { applyToolChangesets } from "#root/land-changesets.ts";
+import { lintChangesets } from "#root/lint-changesets.ts";
 
 const pathExists = (path: Parameters<typeof accessPath>[0]) =>
   accessPath(path).then(

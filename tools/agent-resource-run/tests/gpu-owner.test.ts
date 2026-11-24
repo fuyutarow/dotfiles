@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ownerState } from "../../shared/tests/gpu-owner-fixture.ts";
+import { ownerState } from "@dotfiles/shared/tests/gpu-owner-fixture.ts";
 
 test.skipIf(Bun.which("uv") === null)(
   "Python partition reads fresh state and refuses stale or unresponsive memory",

@@ -1,4 +1,4 @@
-import { superviseIndexWorker } from "./ccc-index.ts";
+import { superviseIndexWorker } from "#src/ccc-index.ts";
 
 const requestId = process.env["REPO_RETRIEVE_INDEX_REQUEST_ID"];
 if (requestId === undefined) {

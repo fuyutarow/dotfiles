@@ -2,8 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { z } from "../../agents/hooks/zod.ts";
-import { discoverPresets } from "../src/manifests.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
+import { discoverPresets } from "#src/manifests.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const scratch = await mkdtemp(join(tmpdir(), "preset-julia-"));

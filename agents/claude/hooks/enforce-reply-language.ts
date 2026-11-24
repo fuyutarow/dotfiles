@@ -1,5 +1,5 @@
-import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
-import { hookJson, hookStderr } from "./lib.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
+import { hookJson, hookStderr } from "#hooks/lib.ts";
 // Stop hook: enforce the user's Japanese reply preference against the final assistant message.
 // Safety: FAIL OPEN on every hook error (including unreadable/malformed transcripts), with one
 // stderr line explaining the failure. A broken language check must never trap a session.
@@ -7,13 +7,13 @@ import { hookJson, hookStderr } from "./lib.ts";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
+import { arr, at, parseJson, str, strAt } from "@dotfiles/hooks/narrow.ts";
 import {
   classifyJapanesePrimary,
   JAPANESE_REPLY_BLOCK_REASON,
   requiredReplyLanguage,
   type JapaneseClassification,
-} from "../../hooks/reply-language.ts";
+} from "@dotfiles/hooks/reply-language.ts";
 
 function stderrLine(reason: string): void {
   hookStderr(`enforce-reply-language: ${reason.replaceAll(/\s+/gu, " ")}\n`);

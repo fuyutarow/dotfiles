@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { readCodexThreadStatus } from "../../src/adapters/codex-rollout.ts";
-import type { SessionStatus } from "../../src/session-status.ts";
+import { readCodexThreadStatus } from "#src/adapters/codex-rollout.ts";
+import type { SessionStatus } from "#src/session-status.ts";
 export async function readCodexSessionStatus(
   sessionId: string,
   cwd: string,

@@ -17,10 +17,10 @@ import { createHash } from "node:crypto";
 import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import pkg from "../package.json" with { type: "json" };
-import { decodedJson } from "../../../agents/hooks/tests/decode.ts";
-import { waitForIndexChild } from "../src/ccc-index.ts";
-import { cccSearchPath, escapeGlobLiteral } from "../src/ccc-search-path.ts";
+import pkg from "#root/package.json" with { type: "json" };
+import { decodedJson } from "@dotfiles/hooks/tests/decode.ts";
+import { waitForIndexChild } from "#src/ccc-index.ts";
+import { cccSearchPath, escapeGlobLiteral } from "#src/ccc-search-path.ts";
 
 // Isolation startup belongs to the fixture budget; behavior deadlines keep
 // their own explicit elapsed assertions.

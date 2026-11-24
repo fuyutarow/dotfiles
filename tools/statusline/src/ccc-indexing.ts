@@ -2,8 +2,8 @@ import {
   CCC_PROBE_TTL_MS,
   CccIndexSchema,
   type CccIndex,
-} from "./ccc-model.ts";
-export type { CccIndex } from "./ccc-model.ts";
+} from "#src/ccc-model.ts";
+export type { CccIndex } from "#src/ccc-model.ts";
 // Replaces detect-ccc-gpu-hold's prompt/Bash advisory. In September 2026, catch-up indexing
 // held the GPU for over an hour: generated records, archives and frozen copies dominated
 // index scope. A long index is useful context for GPU contention and include/exclude review.
@@ -23,8 +23,8 @@ import {
   readJsonAsync,
   within,
   writeCacheAsync,
-} from "./bounded.ts";
-import { z } from "./zod.ts";
+} from "#src/bounded.ts";
+import { z } from "#src/zod.ts";
 
 export function cccObservation(
   previous: CccIndex | undefined,

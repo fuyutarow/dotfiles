@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseSkillLock } from "../skills-declaration.ts";
+import { parseSkillLock } from "#root/skills-declaration.ts";
 
 const FAKE = join(import.meta.dir, "fake-skills.ts");
 const SCRIPT = join(import.meta.dir, "..", "vendor-skill.ts");

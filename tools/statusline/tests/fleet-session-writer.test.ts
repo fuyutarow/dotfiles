@@ -14,8 +14,8 @@ import {
   FleetSessionSchema,
   readFleetSession,
 } from "@dotfiles/shared/src/fleet-session.ts";
-import { writeStatuslineFleetSession } from "../src/fleet-session.ts";
-import { isolatedStatuslineEnv } from "./helpers.ts";
+import { writeStatuslineFleetSession } from "#src/fleet-session.ts";
+import { isolatedStatuslineEnv } from "#tests/helpers.ts";
 
 const root = await mkdtemp(join(tmpdir(), "fleet-session-writer-"));
 afterAll(() => rm(root, { recursive: true, force: true }));

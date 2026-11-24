@@ -1,6 +1,6 @@
-import { ESC, RST, pctFmt } from "./ansi.ts";
-import type { Dataframe } from "./dataframe.ts";
-import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
+import { ESC, RST, pctFmt } from "#src/ansi.ts";
+import type { Dataframe } from "#src/dataframe.ts";
+import { fieldDisplay, observed, type FieldDisplay } from "#src/field-state.ts";
 
 function tokenLabel(n: number): string {
   const rounded = Number(n.toPrecision(3));

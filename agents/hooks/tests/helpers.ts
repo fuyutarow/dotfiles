@@ -6,7 +6,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "bun:test";
-import { at, obj, parseJson, strAt } from "../narrow.ts";
+import { at, obj, parseJson, strAt } from "#root/narrow.ts";
 
 const HOOKS_DIR = join(import.meta.dir, "..");
 

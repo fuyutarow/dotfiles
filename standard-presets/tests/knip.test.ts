@@ -11,8 +11,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
-import { handleKnipResult } from "../typescript/lint-knip.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { handleKnipResult } from "#typescript/lint-knip.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const PRESET = join(ROOT, "standard-presets/typescript");

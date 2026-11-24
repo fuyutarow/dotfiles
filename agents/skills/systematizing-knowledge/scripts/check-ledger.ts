@@ -4,7 +4,7 @@
  */
 
 import { cli } from "cleye";
-import { jsonText, z } from "../../../hooks/zod.ts";
+import { jsonText, z } from "@dotfiles/hooks/zod.ts";
 
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.15.0 — 2026-11-25
+
+- A stale index is caught up instead of refused: about, absent, shape and exists start or join the admitted reindex and wait for it (REPO_RETRIEVE_CATCH_UP_MS, default 180 s), then answer from the index it certifies; NO_INDEX remains when it cannot catch up
+- Error handling uses better-result instead of neverthrow
+- rr index --init registers an unregistered root (ccc's init only: no daemon, no indexing), so an agent can follow the first-registration procedure; raw ccc init stays denied
+
 ## 1.14.1 — 2026-11-14
 
 - data share is judged on the corpus, not the incremental delta

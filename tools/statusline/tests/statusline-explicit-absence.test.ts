@@ -17,17 +17,17 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { gpuSamplingSupported } from "../src/host-load.ts";
-import { sysSegment } from "../src/host-display.ts";
-import { jsonText, z } from "../src/zod.ts";
+import { gpuSamplingSupported } from "#src/host-load.ts";
+import { sysSegment } from "#src/host-display.ts";
+import { jsonText, z } from "#src/zod.ts";
 import {
   cleanupTempDirs,
   isolatedStatuslineEnv,
   tempDir,
   tempHome,
-} from "./helpers.ts";
-import { decodedJson } from "./decode.ts";
-import { repositoryRoot } from "../src/owner-state.ts";
+} from "#tests/helpers.ts";
+import { decodedJson } from "#tests/decode.ts";
+import { repositoryRoot } from "#src/owner-state.ts";
 
 const STATUSLINE = join(import.meta.dir, "..", "src", "statusline.ts");
 const ESC = String.fromCodePoint(27); // not a literal \u001b: the pattern then has no control character

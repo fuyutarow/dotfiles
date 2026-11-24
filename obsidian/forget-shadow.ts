@@ -1,9 +1,9 @@
 // Consumer: obs wrapper / vouched receiver. Remove one exact shadow, recoverably.
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { cli } from "cleye";
 import { access, realpath, rmdir, stat } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import {
   acquireLock,
   atomicWrite,
@@ -11,7 +11,7 @@ import {
   quit,
   readRegistry,
   running,
-} from "./open-vault.ts";
+} from "#root/open-vault.ts";
 
 export async function forgetShadow(
   selector:

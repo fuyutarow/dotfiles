@@ -2,8 +2,8 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { Result } from "../../shared/src/result.ts";
-import { runChild, runChildCaptured } from "../src/child.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { runChild, runChildCaptured } from "#src/child.ts";
 
 function pidFile(): string {
   return join(mkdtempSync(join(tmpdir(), "rr-child-")), "pid");

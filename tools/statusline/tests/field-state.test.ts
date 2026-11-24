@@ -6,13 +6,13 @@ import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   buildDataframe,
   type BuildDataframeOptions,
-} from "../src/build-dataframe.ts";
-import { observed, renderField, retainField } from "../src/field-state.ts";
-import { render } from "../src/format.ts";
-import { seedAgxSnapshot } from "./helpers.ts";
-import { jsonOf, z } from "../src/zod.ts";
-import type { SessionStatus } from "../src/session-status.ts";
-import { ROW_KINDS, renderRows, type DisplayRows } from "../src/row-state.ts";
+} from "#src/build-dataframe.ts";
+import { observed, renderField, retainField } from "#src/field-state.ts";
+import { render } from "#src/format.ts";
+import { seedAgxSnapshot } from "#tests/helpers.ts";
+import { jsonOf, z } from "#src/zod.ts";
+import type { SessionStatus } from "#src/session-status.ts";
+import { ROW_KINDS, renderRows, type DisplayRows } from "#src/row-state.ts";
 
 const root = await mkdtemp(join(tmpdir(), "statusline-fields-"));
 afterAll(() => rm(root, { recursive: true, force: true }));

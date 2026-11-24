@@ -8,11 +8,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { acquirePlanLock } from "../lib/plan-lock.ts";
-import { defaultScanCacheDir } from "../lib/scan-cache.ts";
-import type { Context } from "./index.ts";
+import { acquirePlanLock } from "#src/lib/plan-lock.ts";
+import { defaultScanCacheDir } from "#src/lib/scan-cache.ts";
+import type { Context } from "#src/targets/index.ts";
 
 export const BUILD_NAMES = new Set([
   "target",

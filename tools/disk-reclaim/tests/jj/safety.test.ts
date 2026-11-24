@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
-import { regenerable, scanWorkspace } from "../../src/jj/scan.ts";
-import { judgeWorkspace, type WorkspaceFacts } from "../../src/jj/safety.ts";
-import { REMOTE_SET, unpushedRevset } from "../../src/jj/jj.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { regenerable, scanWorkspace } from "#src/jj/scan.ts";
+import { judgeWorkspace, type WorkspaceFacts } from "#src/jj/safety.ts";
+import { REMOTE_SET, unpushedRevset } from "#src/jj/jj.ts";
 
 const clean: WorkspaceFacts = {
   fresh: { ok: true, detail: "fresh" },

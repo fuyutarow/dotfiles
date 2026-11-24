@@ -10,8 +10,8 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type as osType } from "node:os";
-import { errorMessage, Result } from "./result.ts";
-import { jsonOf, z } from "./zod.ts";
+import { errorMessage, Result } from "#src/result.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 export const FleetSessionUnavailableSchema = z.strictObject({
   na: z.literal(true),

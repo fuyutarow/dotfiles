@@ -1,11 +1,7 @@
 import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import {
-  decisionOf,
-  runHook,
-  tempDir,
-} from "../../../agents/hooks/tests/helpers.ts";
+import { decisionOf, runHook, tempDir } from "@dotfiles/hooks/tests/helpers.ts";
 
 test("external literal operands and globs retain project boundaries", () => {
   const root = tempDir("external-operands-");

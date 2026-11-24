@@ -1,7 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { join } from "node:path";
-import { scanCache } from "../lib/scan-cache.ts";
+import { scanCache } from "#src/lib/scan-cache.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 
 declare var self: Worker;

@@ -143,7 +143,7 @@ describe("idle coordinator Stop hook", () => {
 });
 
 const commands = (
-  config: import("../../../scripts/hook-registry.ts").HooksConfig,
+  config: import("@dotfiles/scripts/hook-registry.ts").HooksConfig,
 ) =>
   Object.values(config)
     .flat()
@@ -152,7 +152,7 @@ const commands = (
 
 test("registry wires the hook only to Claude Stop", async () => {
   const { loadRegistry, wire } =
-    await import("../../../scripts/hook-registry.ts");
+    await import("@dotfiles/scripts/hook-registry.ts");
   const registry = await loadRegistry(join(import.meta.dir, ".."));
   expect(registry.errors).toEqual([]);
   const claude = wire({}, registry.specs, "claude");

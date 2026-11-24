@@ -11,10 +11,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
-import { ReceiptAction } from "../../src/model.ts";
-import type { Context } from "../../src/targets/index.ts";
-import { createMiseConfigsTarget } from "../../src/targets/mise-configs.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { ReceiptAction } from "#src/model.ts";
+import type { Context } from "#src/targets/index.ts";
+import { createMiseConfigsTarget } from "#src/targets/mise-configs.ts";
 
 const roots: string[] = [];
 const fixture = () => {

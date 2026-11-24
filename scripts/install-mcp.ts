@@ -59,9 +59,9 @@ import {
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { cli } from "cleye";
-import { Result } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
-import { cccBackend } from "../tools/repo-retrieve/src/ccc-entry.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { cccBackend } from "@dotfiles/repo-retrieve/src/ccc-entry.ts";
 
 export async function installCccEntry(
   home: string,

@@ -1,9 +1,9 @@
 import { appendFileSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
-import type { Target } from "../../src/targets/index.ts";
-import { main } from "../../src/reclaim.ts";
-import { createLivenessSnapshot } from "../../src/liveness/facts.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import type { Target } from "#src/targets/index.ts";
+import { main } from "#src/reclaim.ts";
+import { createLivenessSnapshot } from "#src/liveness/facts.ts";
 
 const procRoot = process.env["RECLAIM_UNIT_PROC_ROOT"];
 const ready = process.env["RECLAIM_SLOW_READY"];

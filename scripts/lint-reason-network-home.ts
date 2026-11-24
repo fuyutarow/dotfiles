@@ -2,7 +2,7 @@
 // selects a fixture root. Fail closed on unreadable declarations.
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 const declarations = [
   ".mcp.json",

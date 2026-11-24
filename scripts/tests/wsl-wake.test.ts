@@ -7,7 +7,7 @@
 // unreachable probe never counts as a win — the exact bug shipped and then fixed on 2026-09-17.
 import { describe, expect, test } from "bun:test";
 
-import { firstReachable, hostCandidates } from "../wsl-wake";
+import { firstReachable, hostCandidates } from "#root/wsl-wake.ts";
 
 describe("hostCandidates — pin vs fallback", () => {
   test("no --host tries the LAN alias first, then the tailnet alias", () => {

@@ -1,15 +1,19 @@
 // Consumer: owner/agent. Dry-run is read-only; failure stops before retiring any legacy links.
 import { resolve } from "node:path";
 import { $ } from "bun";
-import { coreCommands, brewPrefix, corePathProblems } from "./core-tools.ts";
-import { buildLinuxInitEnv } from "./linux-init-env.ts";
+import {
+  coreCommands,
+  brewPrefix,
+  corePathProblems,
+} from "#root/core-tools.ts";
+import { buildLinuxInitEnv } from "#root/linux-init-env.ts";
 import {
   installLinuxbrew,
   bundleCore,
   legacyLinks,
   legacyPathUsers,
   removeLegacyLinks,
-} from "./linux-brew.ts";
+} from "#root/linux-brew.ts";
 
 const say = (line: string): void => {
   process.stdout.write(`linux:migrate-brew: ${line}\n`);

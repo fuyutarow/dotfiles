@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { link, mkdir, mkdtemp, readdir, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { exportView, shardIndex } from "../views/research-record-v1.ts";
+import { exportView, shardIndex } from "#views/research-record-v1.ts";
 
 // Synthesized TOML follows the inspected real FORMAT, MANIFEST and object encoding.
 const format =

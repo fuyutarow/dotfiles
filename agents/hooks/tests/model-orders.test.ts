@@ -10,7 +10,7 @@ import {
   ordersIn,
   parseFloorConfig,
   simpleCommands,
-} from "../../../tools/shared/src/model-orders.ts";
+} from "@dotfiles/shared/src/model-orders.ts";
 
 const parseToml = (text: string): unknown => Bun.TOML.parse(text);
 

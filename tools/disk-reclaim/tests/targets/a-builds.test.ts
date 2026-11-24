@@ -7,12 +7,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
-import { run } from "../../src/engine.ts";
-import { createLivenessSnapshot } from "../../src/liveness/facts.ts";
-import { createBuildsTarget } from "../../src/targets/builds.ts";
-import { treeCandidate } from "../../src/targets/tree.ts";
-import { discoverBuilds } from "../../src/targets/build-discovery.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { run } from "#src/engine.ts";
+import { createLivenessSnapshot } from "#src/liveness/facts.ts";
+import { createBuildsTarget } from "#src/targets/builds.ts";
+import { treeCandidate } from "#src/targets/tree.ts";
+import { discoverBuilds } from "#src/targets/build-discovery.ts";
 
 const cacheRoot = tempRoot("reclaim-builds-cache-");
 afterAll(() => {

@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { arr, at, bool, num, obj, parseJson, str, strAt } from "../narrow.ts";
+import {
+  arr,
+  at,
+  bool,
+  num,
+  obj,
+  parseJson,
+  str,
+  strAt,
+} from "#root/narrow.ts";
 
 const payload = parseJson(
   JSON.stringify({

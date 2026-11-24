@@ -1,23 +1,23 @@
 import { lstat, mkdir, realpath, statfs, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { hostname } from "node:os";
-import { Result } from "../../shared/src/result.ts";
-import { enumerateRipPayloads } from "./targets/rip-expire.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { enumerateRipPayloads } from "#src/targets/rip-expire.ts";
 import {
   loadGraveyardAgePolicy,
   type GraveyardAgePolicy,
-} from "./graveyard-age.ts";
-import { ripBurialTime, ripGraveyardRoot } from "./lib/graveyards.ts";
-import { removeTree, type RemoveTreeOptions } from "./lib/remove-tree.ts";
-import type { Config } from "./model.ts";
+} from "#src/graveyard-age.ts";
+import { ripBurialTime, ripGraveyardRoot } from "#src/lib/graveyards.ts";
+import { removeTree, type RemoveTreeOptions } from "#src/lib/remove-tree.ts";
+import type { Config } from "#src/model.ts";
 import {
   errorMessage,
   registerForegroundWaiter,
   stateDir,
   waitForLock,
   writeReceiptAsync,
-} from "./receipt.ts";
-import { requestedBytes } from "./free.ts";
+} from "#src/receipt.ts";
+import { requestedBytes } from "#src/free.ts";
 
 export const RECOVER_BUDGET_MS = 120_000;
 export type RecoverResult = {

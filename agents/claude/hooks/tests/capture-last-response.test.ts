@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseJson } from "../../../hooks/narrow.ts";
-import { decoded } from "../../../hooks/tests/decode.ts";
-import { z } from "../../../hooks/zod.ts";
-import { runHook, tempHome } from "./helpers.ts";
+import { parseJson } from "@dotfiles/hooks/narrow.ts";
+import { decoded } from "@dotfiles/hooks/tests/decode.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
+import { runHook, tempHome } from "#hooks/tests/helpers.ts";
 
 describe("capture-last-response", () => {
   test("a Stop-hook retry replaces the blocked draft for the same turn", () => {

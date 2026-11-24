@@ -3,8 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { decodedJson } from "../../../hooks/tests/decode.ts";
-import { z } from "../../../hooks/zod.ts";
+import { decodedJson } from "@dotfiles/hooks/tests/decode.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..", "..");
 const FIXTURE = join(ROOT, "standard-presets", "typescript");
@@ -108,9 +108,8 @@ describe("consumer-repo fixture", () => {
 
 describe("consumer-repo zod.ts", () => {
   test("decodes JSON exactly like dotfiles' agents/hooks/zod.ts", async () => {
-    const theirs =
-      await import("../../../../standard-presets/typescript/zod.ts");
-    const ours = await import("../../../hooks/zod.ts");
+    const theirs = await import("@dotfiles/standard-presets/typescript/zod.ts");
+    const ours = await import("@dotfiles/hooks/zod.ts");
     for (const text of ['{"a":1}', "[1,2]", "{", "", "null"]) {
       const a = theirs.jsonOf(theirs.z.unknown()).safeParse(text);
       const b = ours.jsonOf(ours.z.unknown()).safeParse(text);

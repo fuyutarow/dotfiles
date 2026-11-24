@@ -1,10 +1,10 @@
-import { Result } from "../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { lstat, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { dirname, join, relative } from "node:path";
-import { obj } from "../hooks/narrow.ts";
-import { jsonText } from "../hooks/zod.ts";
-import { windowsPath } from "./runtime.ts";
+import { obj } from "@dotfiles/hooks/narrow.ts";
+import { jsonText } from "@dotfiles/hooks/zod.ts";
+import { windowsPath } from "#root/runtime.ts";
 
 const MANIFEST = "dotfiles-wsl-assets.json";
 const BEGIN = "<!-- dotfiles-wsl-codex:begin -->";

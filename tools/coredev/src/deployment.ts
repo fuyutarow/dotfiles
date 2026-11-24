@@ -1,6 +1,6 @@
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { shellQuote } from "@dotfiles/shared/src/read-path.ts";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 export type HostKind = "linux" | "wsl" | "mac";
 export type SelectionPhase = "deploy" | "doctor";

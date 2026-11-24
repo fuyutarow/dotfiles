@@ -11,7 +11,7 @@
 // variable and passes its value to repoHelperCommand.
 // Tests: tools/smart-open/tests/desktop-interop.test.ts.
 import { fileURLToPath } from "node:url";
-import { errorMessage, Result } from "./result.ts";
+import { errorMessage, Result } from "#src/result.ts";
 
 /** The helper's own budget is 12 s (scripts/wsl-interop-session.ts BUDGET_MS); this is the outer cut. */
 export const HELPER_MS = 15_000;

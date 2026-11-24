@@ -1,16 +1,16 @@
-import { seedAgxSnapshot } from "./helpers.ts";
+import { seedAgxSnapshot } from "#tests/helpers.ts";
 import { afterAll, afterEach, beforeEach, expect, test, spyOn } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { workspaceCounts } from "./support/workspace-counts.ts";
-import { agxRouteRunsAsync } from "../src/dispatch-runs.ts";
-import { routeLines } from "../src/dispatch-display.ts";
+import { workspaceCounts } from "#tests/support/workspace-counts.ts";
+import { agxRouteRunsAsync } from "#src/dispatch-runs.ts";
+import { routeLines } from "#src/dispatch-display.ts";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { render } from "../src/format.ts";
+import { render } from "#src/format.ts";
 import * as cp from "node:child_process";
-import { fleetLine } from "../src/fleet-line.ts";
-import { readCoreRuns } from "../src/core-runs.ts";
+import { fleetLine } from "#src/fleet-line.ts";
+import { readCoreRuns } from "#src/core-runs.ts";
 
 const root = await mkdtemp(join(tmpdir(), "statusline-core-only-"));
 afterAll(() => rm(root, { recursive: true, force: true }));

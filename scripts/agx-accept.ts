@@ -1,4 +1,4 @@
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { access as accessPath } from "node:fs/promises";
 
 import { cli } from "cleye";

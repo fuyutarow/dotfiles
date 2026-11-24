@@ -19,10 +19,10 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Ctx, Finding } from "../doctor.ts";
-import { Result, errorMessage } from "../../tools/shared/src/result.ts";
-import { obj } from "../../agents/hooks/narrow.ts";
-import { jsonText, z } from "../../agents/hooks/zod.ts";
+import type { Ctx, Finding } from "#root/doctor.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { obj } from "@dotfiles/hooks/narrow.ts";
+import { jsonText, z } from "@dotfiles/hooks/zod.ts";
 
 export type HookTrustEntry = {
   /** HOOK_SLUG= from the command, or the command text when a hook sets no slug. */

@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { jsonOf, z } from "./zod.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 export const DXG_SCAN_MAX_TASKS = 4096;
 export const DXG_SCAN_BUDGET_MS = 1500;

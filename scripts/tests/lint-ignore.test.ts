@@ -18,7 +18,7 @@ import {
   freshCloneGateFindings,
   ignoreFindings,
   visiblePaths,
-} from "../lint-ignore.ts";
+} from "#root/lint-ignore.ts";
 
 const scratch: string[] = [];
 const temporary = () => {

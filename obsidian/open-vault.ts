@@ -1,4 +1,4 @@
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { cli } from "cleye";
 import {
   access,
@@ -10,7 +10,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 // Consumer: human, verdict lines. Register an unregistered directory, then open it on macOS.
 // Evidence: obsidian-1.14.4.asar main.js (2026-10-15), C=ee("obsidian"),

@@ -1,5 +1,5 @@
-import { Result } from "../../../tools/shared/src/result.ts";
-import { hookJson } from "./lib.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { hookJson } from "#hooks/lib.ts";
 // PostToolUse (Write|Edit|MultiEdit) — the moment a NEW function or type is written, check whether
 // the repository already has one that does the same thing, and say so to the model.
 //
@@ -23,10 +23,10 @@ import {
   isTest,
   loadRetrievalConfig,
   type Definition,
-} from "../../../tools/repo-retrieve/src/definitions.ts";
-import { findRegisteredProject } from "../../../tools/repo-retrieve/src/ccc-index.ts";
-import { arr, at, strAt } from "../../hooks/narrow.ts";
-import { readStdinJson } from "./lib.ts";
+} from "@dotfiles/repo-retrieve/src/definitions.ts";
+import { findRegisteredProject } from "@dotfiles/repo-retrieve/src/ccc-index.ts";
+import { arr, at, strAt } from "@dotfiles/hooks/narrow.ts";
+import { readStdinJson } from "#hooks/lib.ts";
 
 const MAX_CHECKS = 2;
 const BUDGET_MS = 8_000; // the catalog is read as is (no rebuild inside an edit); recall + rerank ~1-3 s

@@ -1,7 +1,7 @@
 // Codex legacy prompt executor for /prompts:quote. Codex has no UserPromptExpansion event, so
 // the prompt uses a normal inference turn to run this script. It emits status only; it never
 // sends quoted answer text back into the model context.
-import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import {
   access,
   mkdir,
@@ -13,7 +13,7 @@ import {
 import { hostname, homedir, userInfo } from "node:os";
 import { basename, join } from "node:path";
 import { cli } from "cleye";
-import { jsonOf, z } from "../../hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const MAX_TURNS = 1024;
 const CLIPBOARD_TURN_LIMIT = 50;

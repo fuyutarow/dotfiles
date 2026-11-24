@@ -1,4 +1,4 @@
-import { z } from "./zod.ts";
+import { z } from "#root/zod.ts";
 
 // The fields dotfiles consumes from each agx roster choice. The roster's top-level
 // projection differs by consumer, but choice rows share this contract.

@@ -19,7 +19,7 @@ import {
   cccPython,
   loadRetrievalConfig,
   strengthOf,
-} from "../src/definitions.ts";
+} from "#src/definitions.ts";
 
 const loadFromText = (text: string) => {
   const path = join(

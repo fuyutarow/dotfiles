@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { z } from "../../../hooks/zod.ts";
-import { parseJson } from "../../../hooks/narrow.ts";
-import { runHook, tempHome } from "./helpers.ts";
-import { promptParts } from "../prompt-stamp.ts";
-import { decoded } from "../../../hooks/tests/decode.ts";
-import { fleetSessionFixture } from "./fleet-session-fixture.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
+import { parseJson } from "@dotfiles/hooks/narrow.ts";
+import { runHook, tempHome } from "#hooks/tests/helpers.ts";
+import { promptParts } from "#hooks/prompt-stamp.ts";
+import { decoded } from "@dotfiles/hooks/tests/decode.ts";
+import { fleetSessionFixture } from "#hooks/tests/fleet-session-fixture.ts";
 
 const HOOK = "log-sys-snapshot.ts";
 const LINE = "Sys: CPU 25% · RAM 18% (10.0/54.9G) · VRAM 28% (3.3/12.0G)";

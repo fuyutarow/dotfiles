@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { escapeGlobLiteral } from "../src/ccc-search-path.ts";
+import { escapeGlobLiteral } from "#src/ccc-search-path.ts";
 import {
   adaptivePathSearch,
   parseKnnResponse,
@@ -28,7 +28,7 @@ import {
   type KnnRow,
   type PathSearchPlan,
   type RoundOutcome,
-} from "../src/knn-path-search.ts";
+} from "#src/knn-path-search.ts";
 
 setDefaultTimeout(60_000);
 

@@ -16,9 +16,9 @@ import {
   compactCommand,
   scanShells,
   shellLines,
-} from "../src/shells.ts";
-import { render } from "../src/format.ts";
-import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
+} from "#src/shells.ts";
+import { render } from "#src/format.ts";
+import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
 import { Result } from "@dotfiles/shared/src/result.ts";
 
 const root = mkdtempSync(join(tmpdir(), "shells-fixture-"));

@@ -48,8 +48,8 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { errorMessage, Result } from "../../shared/src/result.ts";
-import { isWslDistro } from "../../shared/src/wsl.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import {
   type ShellCommand,
   effective as effectiveCommand,

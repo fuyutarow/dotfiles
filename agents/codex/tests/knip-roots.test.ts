@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { roots } from "../../../scripts/knip-gate.ts";
+import { roots } from "@dotfiles/scripts/knip-gate.ts";
 
 test("Codex prompt and shell hook expose their production entries", async () => {
   const entries = await roots(resolve(import.meta.dir, "../../.."));

@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { jsonOf, z } from "../../../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const SCRIPT = resolve(import.meta.dir, "../src/preset.ts");
 const roots: string[] = [];

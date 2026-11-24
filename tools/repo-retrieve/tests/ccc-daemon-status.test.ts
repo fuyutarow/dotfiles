@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseDaemonStatus } from "../src/ccc-daemon-status.ts";
+import { parseDaemonStatus } from "#src/ccc-daemon-status.ts";
 
 describe("parseDaemonStatus", () => {
   test("recognizes the observed empty daemon and an empty list", () => {

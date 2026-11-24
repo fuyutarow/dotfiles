@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { buildPlan } from "../../box-init.ts";
-import { pushAuth, type AuthPushDependencies } from "../../auth-push.ts";
-import { changedPaths } from "./scope.ts";
+import { buildPlan } from "#root/box-init.ts";
+import { pushAuth, type AuthPushDependencies } from "#root/auth-push.ts";
+import { changedPaths } from "#tests/deploy-characterization/scope.ts";
 
 describe("deploy characterization seams", () => {
   test("box-init plan preserves the ordered no-repo actions", () => {

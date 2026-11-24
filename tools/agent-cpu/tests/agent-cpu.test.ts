@@ -11,8 +11,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { produce, run, type Options } from "../src/agent-cpu.ts";
-import { deployMacStatusline } from "../../../scripts/link-dots.ts";
+import { produce, run, type Options } from "#src/agent-cpu.ts";
+import { deployMacStatusline } from "@dotfiles/scripts/link-dots.ts";
 
 const id = "12345678-1234-4234-8234-123456789abc";
 async function fixture(mode = "ok", codexCommand = "codex\0") {

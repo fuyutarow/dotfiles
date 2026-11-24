@@ -10,21 +10,21 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import { at, obj, parseJson, strAt } from "../../../hooks/narrow.ts";
+import { at, obj, parseJson, strAt } from "@dotfiles/hooks/narrow.ts";
 import {
   HOMEBREW_AGX,
   isolatedTestEnv,
   TEST_HOST_PATH,
   TEST_TMPDIR,
   testPathWithStub,
-} from "../../../../scripts/tests/support/test-isolation.ts";
+} from "@dotfiles/scripts/tests/support/test-isolation.ts";
 const dotfilesRoot = realpathSync(resolve(import.meta.dir, "../../../../"));
 const AGX_CONFIG = join(dotfilesRoot, "agents/agx/agx.toml");
 const NO_USE_FOR_FIXTURE = join(
   dotfilesRoot,
   "scripts/tests/fixtures/agx-roster-no-use-for.json",
 );
-import { runHook } from "./helpers.ts";
+import { runHook } from "#hooks/tests/helpers.ts";
 
 // enforce-dispatch-contract: the Agent, Task and Workflow tools dispatch nothing. Every worker
 // starts through the worker tool, so every one of these calls is denied with its entry points and the roster

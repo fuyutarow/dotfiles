@@ -13,17 +13,17 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { purgeCandidates } from "../../src/targets/purge.ts";
-import { RIP_GRAVEYARD_MAX_BYTES } from "../../src/lib/graveyards.ts";
-import type { LivenessSnapshot } from "../../src/liveness/facts.ts";
-import { expireGraveyard } from "../../../../scripts/wsl-capacity-recover.ts";
-import { cliEnv } from "../fixtures/cli-env.ts";
-import { inspectRipGraveyard, ripRecords } from "../../src/lib/graveyards.ts";
-import { Plan } from "../../src/model.ts";
+import { purgeCandidates } from "#src/targets/purge.ts";
+import { RIP_GRAVEYARD_MAX_BYTES } from "#src/lib/graveyards.ts";
+import type { LivenessSnapshot } from "#src/liveness/facts.ts";
+import { expireGraveyard } from "@dotfiles/scripts/wsl-capacity-recover.ts";
+import { cliEnv } from "#tests/fixtures/cli-env.ts";
+import { inspectRipGraveyard, ripRecords } from "#src/lib/graveyards.ts";
+import { Plan } from "#src/model.ts";
 import { jsonOf } from "@dotfiles/shared/src/zod.ts";
-import { removeTree } from "../../src/lib/remove-tree.ts";
-import { createRipExpiryTarget } from "../../src/targets/rip-expire.ts";
-import type { Context } from "../../src/targets/index.ts";
+import { removeTree } from "#src/lib/remove-tree.ts";
+import { createRipExpiryTarget } from "#src/targets/rip-expire.ts";
+import type { Context } from "#src/targets/index.ts";
 
 test("only deleted graveyards bypass unknown and positive process-use guards", async () => {
   const root = await mkdtemp(join(tmpdir(), "rip-cap-process-guard-"));

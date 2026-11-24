@@ -53,7 +53,7 @@ import { join, resolve } from "node:path";
 import { cli as cleyeCli } from "cleye";
 import { createConsola } from "consola";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import { errorMessage, Result } from "../../shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import {
   ACK_MS,
   editorHost,
@@ -64,11 +64,11 @@ import {
   unlinkIfSame,
   type FileKey,
 } from "@dotfiles/shared/src/sockets.ts";
-import { isWslDistro } from "../../shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import pkg from "../package.json" with { type: "json" };
-import { desktopInterop, helperCommand } from "./desktop-interop.ts";
-import { OBSIDIAN_ACK_MS } from "./protocol.ts";
+import pkg from "#root/package.json" with { type: "json" };
+import { desktopInterop, helperCommand } from "#src/desktop-interop.ts";
+import { OBSIDIAN_ACK_MS } from "#src/protocol.ts";
 
 const consola = createConsola({ level: 4 });
 const progress = createConsola({ level: 4, stdout: process.stderr });

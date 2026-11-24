@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 import { tmpdir, userInfo } from "node:os";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { sshSupportsAttachMatch } from "../link-dots.ts";
+import { sshSupportsAttachMatch } from "#root/link-dots.ts";
 
 const REPO = join(import.meta.dir, "../..");
 test.skipIf(process.platform !== "darwin")(

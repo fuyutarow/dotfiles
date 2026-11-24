@@ -1,15 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
-import { run, plan } from "../../src/engine.ts";
-import type {
-  LivenessFacts,
-  LivenessRef,
-  Probe,
-} from "../../src/liveness/facts.ts";
-import { createScratchTarget } from "../../src/targets/scratch.ts";
-import type { Context } from "../../src/targets/index.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { run, plan } from "#src/engine.ts";
+import type { LivenessFacts, LivenessRef, Probe } from "#src/liveness/facts.ts";
+import { createScratchTarget } from "#src/targets/scratch.ts";
+import type { Context } from "#src/targets/index.ts";
 
 const cacheRoot = tempRoot("reclaim-scratch-cache-");
 afterAll(() => {

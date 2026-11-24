@@ -1,6 +1,6 @@
 // Consumer: flock's foreground child. Retain inherited lock descriptors until systemd
 // has stopped every descendant, including processes that outlive the direct command.
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { readFile } from "node:fs/promises";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 

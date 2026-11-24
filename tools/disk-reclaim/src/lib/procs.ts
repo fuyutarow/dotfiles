@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { consola } from "consola";
 import { basename, join, resolve } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 
 export type Probe<T> = { ok: true; value: T } | { ok: false; error: string };

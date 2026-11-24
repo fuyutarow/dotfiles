@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { LINKS } from "./config-registry.ts";
+import { LINKS } from "#root/config-registry.ts";
 
 export const ROOT = resolve(import.meta.dir, "..");
 

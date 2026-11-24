@@ -10,17 +10,17 @@ import {
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { setDefaultTimeout } from "bun:test";
-import { decodedJson } from "./decode.ts";
+import { decodedJson } from "#tests/decode.ts";
 import {
   cleanupTempDirs,
   tempHome,
   coreSnapshot,
   seedAgxSnapshot,
-} from "./helpers.ts";
-import { z } from "../src/zod.ts";
-import { version } from "../package.json";
-import { hasBareUnavailable } from "../src/ansi.ts";
-import routing from "./fixtures/agx-c5-1.5.0.json";
+} from "#tests/helpers.ts";
+import { z } from "#src/zod.ts";
+import { version } from "#root/package.json";
+import { hasBareUnavailable } from "#src/ansi.ts";
+import routing from "#tests/fixtures/agx-c5-1.5.0.json";
 
 const GOLDEN = join(import.meta.dir, "golden");
 setDefaultTimeout(30000);

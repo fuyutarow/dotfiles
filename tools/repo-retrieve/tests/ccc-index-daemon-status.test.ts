@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseDaemonStatus } from "../src/ccc-daemon-status.ts";
-import { projectDaemonState } from "../src/ccc-index.ts";
+import { parseDaemonStatus } from "#src/ccc-daemon-status.ts";
+import { projectDaemonState } from "#src/ccc-index.ts";
 
 const project = "/tmp/a project";
 

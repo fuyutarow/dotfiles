@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { rateRow } from "../src/rate-limits.ts";
-import { memSegment, sysSegment } from "../src/host-display.ts";
-import { type DiskReading } from "../src/storage.ts";
-import { diskSegment } from "../src/storage-display.ts";
-import { diskFreeColor, paceColor } from "../src/ansi.ts";
+import { rateRow } from "#src/rate-limits.ts";
+import { memSegment, sysSegment } from "#src/host-display.ts";
+import { type DiskReading } from "#src/storage.ts";
+import { diskSegment } from "#src/storage-display.ts";
+import { diskFreeColor, paceColor } from "#src/ansi.ts";
 
 const reset = "\u001B[0m";
 const dim = "\u001B[38;5;241m";

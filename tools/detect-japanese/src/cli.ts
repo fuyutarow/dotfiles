@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import cliPackage from "../package.json" with { type: "json" };
-import { classifyJapanesePrimary } from "./classify.ts";
+import cliPackage from "#root/package.json" with { type: "json" };
+import { classifyJapanesePrimary } from "#src/classify.ts";
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, cliArgv);

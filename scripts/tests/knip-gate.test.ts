@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { declaredBinaries, roots } from "../knip-gate.ts";
+import { declaredBinaries, roots } from "#root/knip-gate.ts";
 
 test("binary allowances follow declared packages and installer commands", () => {
   const brew = ['brew "vendor/tap/example"\ncask "widget"\n# brew "commented"'];

@@ -64,8 +64,8 @@ import { dirname, join } from "node:path";
 import { cli as cleyeCli } from "cleye";
 import { createConsola } from "consola";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import cliPackage from "../package.json" with { type: "json" };
-import { Result } from "../../shared/src/result.ts";
+import cliPackage from "#root/package.json" with { type: "json" };
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   ACK_MS,
   editorHost,
@@ -73,7 +73,7 @@ import {
   SETTLE_MS,
 } from "@dotfiles/shared/src/sockets.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { OBSIDIAN_OPEN_MS } from "./protocol.ts";
+import { OBSIDIAN_OPEN_MS } from "#src/protocol.ts";
 
 const consola = createConsola({ level: 4 });
 

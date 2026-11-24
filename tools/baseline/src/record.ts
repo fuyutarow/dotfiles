@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createConsola } from "consola";
-import { errorMessage, Result } from "../../shared/src/result.ts";
-import { parseFailures } from "./data.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
+import { parseFailures } from "#src/data.ts";
 
 const JJ_TIMEOUT = 60_000;
 const TEST_TIMEOUT = 30 * 60_000;

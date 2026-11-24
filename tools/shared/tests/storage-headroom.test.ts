@@ -3,14 +3,14 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { jsonOf, z } from "../src/zod.ts";
+import { jsonOf, z } from "#src/zod.ts";
 import {
   assess,
   isReadOnlyBash,
   loadStorageHeadroom,
   measureStorage,
   storageLine,
-} from "../src/storage-headroom.ts";
+} from "#src/storage-headroom.ts";
 
 const GiB = 1024 ** 3;
 const REAL_CONFIG = join(

@@ -1,11 +1,11 @@
 // `mise run codex:config` — converge declared Codex settings into the Codex-owned config.
 // Exit: 0 converged/no-op · 1 drift in check mode or still drifting · 2 bad declaration/config.
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
-import { drift, edit, readDeclared, readLive } from "./sandbox-network.ts";
-import { configHome } from "./runtime.ts";
+import { drift, edit, readDeclared, readLive } from "#root/sandbox-network.ts";
+import { configHome } from "#root/runtime.ts";
 
 const dotfiles =
   process.env["DOTFILES"] ?? join(process.env["HOME"] ?? homedir(), "dotfiles");

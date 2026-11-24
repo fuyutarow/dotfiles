@@ -9,9 +9,9 @@ import {
   parseShell,
   type Redirect,
   type ShellCommand,
-} from "./shell-syntax.ts";
-import { jsonOf, z } from "./zod.ts";
-import { Result } from "./result.ts";
+} from "#src/shell-syntax.ts";
+import { jsonOf, z } from "#src/zod.ts";
+import { Result } from "#src/result.ts";
 
 const GiB = 1024 ** 3;
 

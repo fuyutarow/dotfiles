@@ -11,9 +11,9 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { installCccEntry } from "../../../scripts/install-mcp.ts";
-import { cccBackend } from "../src/ccc-entry.ts";
-import { declaredDbEnv, MAPPING_ENV } from "../src/ccc-db-dir.ts";
+import { installCccEntry } from "@dotfiles/scripts/install-mcp.ts";
+import { cccBackend } from "#src/ccc-entry.ts";
+import { declaredDbEnv, MAPPING_ENV } from "#src/ccc-db-dir.ts";
 
 const router = join(import.meta.dir, "../src/repo-retrieve.ts");
 const fixture = join(import.meta.dir, "ccc-slow-daemon-fixture.py");

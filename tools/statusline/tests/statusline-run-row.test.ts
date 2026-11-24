@@ -1,6 +1,6 @@
 import { createConsola } from "consola";
 
-import { agxJobRunsAsync } from "./support/job-runs.ts";
+import { agxJobRunsAsync } from "#tests/support/job-runs.ts";
 import { afterAll, describe, expect, test } from "bun:test";
 import {
   chmodSync,
@@ -22,23 +22,23 @@ const serializeActiveMarker = (value: unknown) => ({
   success: true,
   text: JSON.stringify(value),
 });
-import { agxRouteRunsAsync } from "../src/dispatch-runs.ts";
+import { agxRouteRunsAsync } from "#src/dispatch-runs.ts";
 const FixtureObject = z.record(z.string(), z.unknown());
-import { decodedJson } from "./decode.ts";
+import { decodedJson } from "#tests/decode.ts";
 import {
   coreSnapshot,
   isolatedStatuslineEnv,
   seedAgxSnapshot,
-} from "./helpers.ts";
-import { jsonOf, z } from "../src/zod.ts";
-import { fleetLine } from "../src/fleet-line.ts";
+} from "#tests/helpers.ts";
+import { jsonOf, z } from "#src/zod.ts";
+import { fleetLine } from "#src/fleet-line.ts";
 import {
   deadOwnMarker,
   malformedMarker,
   ownFreshMarker,
   ownResumedMarker,
   unreadableMarker,
-} from "../../shared/tests/fixtures/active-markers.ts";
+} from "@dotfiles/shared/tests/fixtures/active-markers.ts";
 
 // The legacy enriched Run rows (no "Run:" head; each line starts with its row id): agx's running workers, read from its markers
 // (the released agx-worker command). One line per live worker (row, elapsed time, label), the

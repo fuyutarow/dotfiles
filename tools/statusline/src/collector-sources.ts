@@ -6,19 +6,19 @@ import {
   rcStateAsync,
   reportToHerdr,
   ultracodeConfiguredAsync,
-} from "./identity.ts";
-import { modelWeeklyLimits } from "./rate-limits.ts";
-import { repoStateAsync } from "./repo-state.ts";
-import { readHostLoadAsync } from "./host-load.ts";
-import { agxRouteRunsAsync } from "./dispatch-runs.ts";
-import { dispatchWarning } from "./dispatch-warning.ts";
-import { collectAgxRouting } from "./agx-collector.ts";
-import { diskReadingsAsync } from "./storage.ts";
-import { readCodexRate } from "./codex-rate.ts";
-import { readJevUsage } from "./jev-usage.ts";
-import { readRecoverHealthAsync } from "./recover-health.ts";
-import type { Sources } from "./build-dataframe.ts";
-import { readAgxJobRuns } from "./agx-job-runs.ts";
+} from "#src/identity.ts";
+import { modelWeeklyLimits } from "#src/rate-limits.ts";
+import { repoStateAsync } from "#src/repo-state.ts";
+import { readHostLoadAsync } from "#src/host-load.ts";
+import { agxRouteRunsAsync } from "#src/dispatch-runs.ts";
+import { dispatchWarning } from "#src/dispatch-warning.ts";
+import { collectAgxRouting } from "#src/agx-collector.ts";
+import { diskReadingsAsync } from "#src/storage.ts";
+import { readCodexRate } from "#src/codex-rate.ts";
+import { readJevUsage } from "#src/jev-usage.ts";
+import { readRecoverHealthAsync } from "#src/recover-health.ts";
+import type { Sources } from "#src/build-dataframe.ts";
+import { readAgxJobRuns } from "#src/agx-job-runs.ts";
 
 async function identityFacts(): ReturnType<Sources["identity"]> {
   const cjResult = await readClaudeJsonAsync();

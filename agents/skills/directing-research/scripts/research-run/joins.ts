@@ -4,8 +4,11 @@ import {
   type Finding,
   field,
   type LoadedPacket,
-} from "./model";
-import { parseIdList, parseTimestamp } from "./primitives";
+} from "#scripts/research-run/model.ts";
+import {
+  parseIdList,
+  parseTimestamp,
+} from "#scripts/research-run/primitives.ts";
 
 function indexedPackets(
   packets: readonly LoadedPacket[],

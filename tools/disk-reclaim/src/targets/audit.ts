@@ -8,23 +8,26 @@ import {
 import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   graveyardCandidates,
   existingGraveyards,
   discoverRipGraveyards,
   inspectRipGraveyard,
-} from "../lib/graveyards.ts";
+} from "#src/lib/graveyards.ts";
 import {
   liveExecutables,
   readStore,
   releasesToRemove,
   STORES,
-} from "../lib/version-stores.ts";
-import type { Candidate } from "../model.ts";
-import type { Context, Target } from "./index.ts";
-import { cachedDiscoveryAsync, checkScanDeadline } from "../lib/scan-cache.ts";
-import { measuredTreeBytes } from "./tree.ts";
+} from "#src/lib/version-stores.ts";
+import type { Candidate } from "#src/model.ts";
+import type { Context, Target } from "#src/targets/index.ts";
+import {
+  cachedDiscoveryAsync,
+  checkScanDeadline,
+} from "#src/lib/scan-cache.ts";
+import { measuredTreeBytes } from "#src/targets/tree.ts";
 
 async function treeSize(
   path: string,

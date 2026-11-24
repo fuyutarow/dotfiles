@@ -1,14 +1,18 @@
 {
   "name": "@dotfiles/agent-resource-run",
-  "version": "1.15.1",
+  "version": "1.15.2",
   "private": true,
   "type": "module",
   "bin": {
     "agent-resource-run": "src/agent-resource-run.ts"
   },
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0",
     "consola": "3.4.2"
+  },
+  "imports": {
+    "#root/*": "./*",
+    "#src/*": "./src/*",
+    "#tests/*": "./tests/*"
   }
 }

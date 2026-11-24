@@ -11,7 +11,7 @@ import {
   sha256,
   temporaryRoot,
   write,
-} from "./research-run-check-fixtures";
+} from "#tests/research-run-check-fixtures.ts";
 
 afterEach(cleanupTemporaryRoots);
 

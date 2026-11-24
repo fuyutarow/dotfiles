@@ -2,7 +2,7 @@
 // installer: they inspect the bounded plan and execute only the script's --dry-run route.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { installPlan } from "../install-ai-clis.ts";
+import { installPlan } from "#root/install-ai-clis.ts";
 
 const REPO = join(import.meta.dir, "..", "..");
 const SCRIPT = join(REPO, "scripts", "install-ai-clis.ts");

@@ -1,8 +1,8 @@
 // PreToolUse adapter: classification, project resolution and rewrite text live in repo-retrieve.
 
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
-import { jsonText } from "../../tools/shared/src/zod.ts";
-import { decideSearchRoute } from "../../tools/repo-retrieve/src/search-route.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
+import { jsonText } from "@dotfiles/shared/src/zod.ts";
+import { decideSearchRoute } from "@dotfiles/repo-retrieve/src/search-route.ts";
 
 const result = await Result.tryPromise({
   try: async () => {
@@ -12,7 +12,7 @@ const result = await Result.tryPromise({
       payload: parsed.success ? parsed.data : undefined,
     });
     if (decision !== undefined) {
-      const { decidePre } = await import("./lib.ts");
+      const { decidePre } = await import("#root/lib.ts");
       // SINGLE-AXIS: decideSearchRoute returns at most one verdict; its raw-search axis and its fatal cases
       // (non-JSON payload, missing router) are declared in tools/repo-retrieve/src/search-route.ts.
       decidePre("deny", decision.reason);
@@ -26,7 +26,7 @@ if (result.isErr()) {
     error: errorMessage(result.error),
   });
   if (decision !== undefined) {
-    const { decidePre } = await import("./lib.ts");
+    const { decidePre } = await import("#root/lib.ts");
     // FATAL: the hook itself failed, so no axis could be evaluated; fail closed with the one fix
     decidePre("deny", decision.reason);
   }

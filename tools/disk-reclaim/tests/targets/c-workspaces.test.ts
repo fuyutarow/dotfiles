@@ -16,15 +16,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { Candidate, ReceiptAction } from "../../src/model.ts";
-import { createWorkspacesTarget } from "../../src/targets/workspaces.ts";
-import { World } from "../jj/fixture.ts";
-import { collectProcesses } from "../../src/lib/procs.ts";
-import { procFixture } from "../fixtures/procs.ts";
-import { treeBytes } from "../../src/targets/tree.ts";
-import { loadConfig } from "../../src/engine.ts";
-import { runProtection } from "../../src/jj/run-guard.ts";
-import { directoryProtection, removeTree } from "../../src/lib/remove-tree.ts";
+import type { Candidate, ReceiptAction } from "#src/model.ts";
+import { createWorkspacesTarget } from "#src/targets/workspaces.ts";
+import { World } from "#tests/jj/fixture.ts";
+import { collectProcesses } from "#src/lib/procs.ts";
+import { procFixture } from "#tests/fixtures/procs.ts";
+import { treeBytes } from "#src/targets/tree.ts";
+import { loadConfig } from "#src/engine.ts";
+import { runProtection } from "#src/jj/run-guard.ts";
+import { directoryProtection, removeTree } from "#src/lib/remove-tree.ts";
 
 type Recovery = NonNullable<ReceiptAction["recovery"]>;
 // Each case runs several real jj children, each bounded at twenty seconds by World.

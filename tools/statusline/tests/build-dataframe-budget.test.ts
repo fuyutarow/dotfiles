@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
-import { buildDataframe, type SourceClock } from "../src/build-dataframe.ts";
-import { render } from "../src/format.ts";
+import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
+import { buildDataframe, type SourceClock } from "#src/build-dataframe.ts";
+import { render } from "#src/format.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

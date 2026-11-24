@@ -10,11 +10,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
-import { loadCollectionPolicy } from "../../src/policy.ts";
-import { createCccIndexDbTarget } from "../../src/targets/ccc-index-db.ts";
-import { Config } from "../../src/model.ts";
-import type { Context } from "../../src/targets/index.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { loadCollectionPolicy } from "#src/policy.ts";
+import { createCccIndexDbTarget } from "#src/targets/ccc-index-db.ts";
+import { Config } from "#src/model.ts";
+import type { Context } from "#src/targets/index.ts";
 
 const fixtureRoot = tempRoot("reclaim-ccc-index-db-");
 afterAll(() => {

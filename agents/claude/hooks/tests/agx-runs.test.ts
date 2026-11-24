@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { chmod, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { z } from "../../../hooks/zod.ts";
-import { parseJson } from "../../../hooks/narrow.ts";
-import { runHook, tempHome } from "./helpers.ts";
-import { decoded } from "../../../hooks/tests/decode.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
+import { parseJson } from "@dotfiles/hooks/narrow.ts";
+import { runHook, tempHome } from "#hooks/tests/helpers.ts";
+import { decoded } from "@dotfiles/hooks/tests/decode.ts";
 
 // The Agx segment of log-sys-snapshot.ts (agx-runs.ts): this session's runs from `agx status --json`.
 const HOOK = "log-sys-snapshot.ts";

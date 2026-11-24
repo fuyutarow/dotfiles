@@ -1,5 +1,5 @@
-import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
-import { hookJson } from "./lib.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
+import { hookJson } from "#hooks/lib.ts";
 // UserPromptExpansion hook (matcher: quote) — runs /quote to completion HERE and returns
 // decision:"block", so the turn ends without an inference call.
 //
@@ -29,13 +29,13 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { userInfo } from "node:os";
 import { basename, join } from "node:path";
-import { readStdinJson } from "./lib.ts";
-import { at, parseJson, str, strAt } from "../../hooks/narrow.ts";
-import { promptParts, stampMDHMZ } from "./prompt-stamp.ts";
+import { readStdinJson } from "#hooks/lib.ts";
+import { at, parseJson, str, strAt } from "@dotfiles/hooks/narrow.ts";
+import { promptParts, stampMDHMZ } from "#hooks/prompt-stamp.ts";
 import {
   CLIPBOARD_TURN_LIMIT,
   MAX_QUOTE_TURNS as MAX_TURNS,
-} from "./quote.config.ts";
+} from "#hooks/quote.config.ts";
 
 const HOME = process.env["HOME"] ?? "";
 const HOOKS = `${HOME}/.claude/hooks`;

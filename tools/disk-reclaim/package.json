@@ -1,5 +1,5 @@
 {
-  "version": "1.12.35",
+  "version": "1.13.0",
   "name": "@dotfiles/disk-reclaim",
   "private": true,
   "type": "module",
@@ -7,9 +7,13 @@
     "disk-reclaim": "src/reclaim.ts"
   },
   "dependencies": {
-    "@dotfiles/shared": "workspace:*",
     "cleye": "2.6.0",
     "consola": "3.4.2",
     "ts-pattern": "5.9.0"
+  },
+  "imports": {
+    "#root/*": "./*",
+    "#src/*": "./src/*",
+    "#tests/*": "./tests/*"
   }
 }

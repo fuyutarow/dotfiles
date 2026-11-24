@@ -5,8 +5,8 @@ import {
   AGX_WORKER_ENV,
   AGX_WORKER_VALUE,
 } from "@dotfiles/shared/src/worker-env.ts";
-import { stateDir } from "../receipt.ts";
-import { Result } from "../../../shared/src/result.ts";
+import { stateDir } from "#src/receipt.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 const isWithin = (path: string, parent: string): boolean => {
   const rel = relative(resolve(parent), resolve(path));

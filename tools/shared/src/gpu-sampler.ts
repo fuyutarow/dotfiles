@@ -2,8 +2,8 @@
 // Sole nvidia-smi owner. Run this foreground entrypoint under the host's supervisor.
 // Recover a crashed owner only after /proc proves both owner and driver absent.
 // Retired owner directories prevent delayed reclaimers from moving a successor lock.
-import { Result } from "./result.ts";
-import { z, jsonOf } from "./zod.ts";
+import { Result } from "#src/result.ts";
+import { z, jsonOf } from "#src/zod.ts";
 import { cli } from "cleye";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
@@ -17,7 +17,7 @@ import {
   rm,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { plainHelp, printVersion } from "./cli.ts";
+import { plainHelp, printVersion } from "#src/cli.ts";
 import {
   GPU_INTERVAL_MS,
   GpuDeviceSchema,
@@ -27,18 +27,18 @@ import {
   gpuStatePath,
   readGpuState,
   type GpuState,
-} from "./gpu-samples.ts";
-import pkg from "../package.json" with { type: "json" };
+} from "#src/gpu-samples.ts";
+import pkg from "#root/package.json" with { type: "json" };
 import {
   collectGpuProcessIdentity,
   type IdentityIo,
-} from "./gpu-process-identity.ts";
+} from "#src/gpu-process-identity.ts";
 import {
   dxgEpisodeLogPath,
   recordDxgEpisodes,
   type DxgEpisodeOptions,
   type DxgEpisodeIo,
-} from "./gpu-dxg-episodes.ts";
+} from "#src/gpu-dxg-episodes.ts";
 
 const tag = (xml: string, name: string): string | undefined =>
   new RegExp(`<${name}>([^<]*)</${name}>`, "u").exec(xml)?.[1]?.trim();

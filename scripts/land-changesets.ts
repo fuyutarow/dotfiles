@@ -2,9 +2,9 @@ import { access as accessPath } from "node:fs/promises";
 
 import { readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Result } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
-import { changesetDiagnostic, parseChangeset } from "./changeset.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { changesetDiagnostic, parseChangeset } from "#root/changeset.ts";
 
 const pathExists = (path: Parameters<typeof accessPath>[0]) =>
   accessPath(path).then(

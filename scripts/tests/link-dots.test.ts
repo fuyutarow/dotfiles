@@ -18,7 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { mkdir, symlink } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { LINKS, surfaces, unitSource } from "../config-registry.ts";
+import { LINKS, surfaces, unitSource } from "#root/config-registry.ts";
 import {
   applies,
   assertRoots,
@@ -32,7 +32,7 @@ import {
   linkGoogleDrive,
   prune,
   sshSupportsAttachMatch,
-} from "../link-dots.ts";
+} from "#root/link-dots.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "link-dots.ts");
 // What bun itself creates under a fresh HOME (its caches): macOS Library/ and .cache/, Linux .bun/.

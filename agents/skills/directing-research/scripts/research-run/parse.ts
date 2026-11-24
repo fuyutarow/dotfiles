@@ -15,7 +15,7 @@ import {
   SECRET_PATTERNS,
   sha256,
   withoutComments,
-} from "./model";
+} from "#scripts/research-run/model.ts";
 
 function parseFields(
   text: string,

@@ -2,10 +2,10 @@ import { afterAll, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
-import { buildDataframe } from "../src/build-dataframe.ts";
-import { render } from "../src/format.ts";
-import { cleanupTempDirs, tempDir } from "./helpers.ts";
+import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
+import { buildDataframe } from "#src/build-dataframe.ts";
+import { render } from "#src/format.ts";
+import { cleanupTempDirs, tempDir } from "#tests/helpers.ts";
 
 // The statusline paints only xterm-256 named colors: SGR 38;5;N, plus reset (0) and bold (1).
 // Dim (2), the 16-color codes (30-37, 90-97, 39) and truecolor (38;2;...) must not appear in a

@@ -1,14 +1,14 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
-import { World } from "../jj/fixture.ts";
-import { scanWorkspace } from "../../src/jj/scan.ts";
-import { treeBytes } from "../../src/targets/tree.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { World } from "#tests/jj/fixture.ts";
+import { scanWorkspace } from "#src/jj/scan.ts";
+import { treeBytes } from "#src/targets/tree.ts";
 import {
   createWorkspacesTarget,
   WORKSPACES_WORKSPACE_BUDGET_MS,
-} from "../../src/targets/workspaces.ts";
+} from "#src/targets/workspaces.ts";
 
 const dirs: string[] = [];
 const worlds: World[] = [];

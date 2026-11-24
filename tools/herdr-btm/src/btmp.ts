@@ -1,15 +1,15 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import cliPackage from "../package.json" with { type: "json" };
+import cliPackage from "#root/package.json" with { type: "json" };
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   gpuEstimate,
   gpuStateFailure,
   readGpuState,
 } from "@dotfiles/shared/src/gpu-samples.ts";
-import { ensureBtm } from "./ensure.ts";
-import { btmpArgs } from "./args.ts";
+import { ensureBtm } from "#src/ensure.ts";
+import { btmpArgs } from "#src/args.ts";
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, cliArgv);

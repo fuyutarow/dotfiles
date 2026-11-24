@@ -1,4 +1,4 @@
-import type { DiskEntry, TmpEntry } from "./storage.ts";
+import type { DiskEntry, TmpEntry } from "#src/storage.ts";
 import {
   diskFreeColor,
   MID,
@@ -6,7 +6,7 @@ import {
   roles,
   tmpInodeColor,
   unavailable,
-} from "./ansi.ts";
+} from "#src/ansi.ts";
 
 export function tmpSegment(t: TmpEntry): string {
   if (t.kind === "miss") return naSegment(t.label, t.why);

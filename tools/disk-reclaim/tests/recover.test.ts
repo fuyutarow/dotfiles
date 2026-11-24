@@ -12,12 +12,12 @@ import {
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { tryAcquire } from "@dotfiles/shared/src/dir-lock.ts";
-import { run } from "../src/engine.ts";
-import { hasForegroundWaiter } from "../src/receipt.ts";
-import { recoverExit, recoverGraveyard } from "../src/recover.ts";
-import { removeTree } from "../src/lib/remove-tree.ts";
-import { createRipExpiryTarget } from "../src/targets/rip-expire.ts";
-import { loadCollectionPolicy } from "../src/policy.ts";
+import { run } from "#src/engine.ts";
+import { hasForegroundWaiter } from "#src/receipt.ts";
+import { recoverExit, recoverGraveyard } from "#src/recover.ts";
+import { removeTree } from "#src/lib/remove-tree.ts";
+import { createRipExpiryTarget } from "#src/targets/rip-expire.ts";
+import { loadCollectionPolicy } from "#src/policy.ts";
 
 const now = Temporal.Instant.from("2026-10-24T12:00:00Z").epochMilliseconds;
 const config = {

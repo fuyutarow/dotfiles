@@ -12,9 +12,9 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import type { Context } from "../targets/index.ts";
+import type { Context } from "#src/targets/index.ts";
 
 const Entry = z.object({ key: z.string(), value: z.unknown() });
 export const MAX_SCAN_CACHE_ENTRIES = 2048;

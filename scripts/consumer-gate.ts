@@ -22,16 +22,16 @@ import {
   resolve,
 } from "node:path";
 import { cli } from "cleye";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
-import { embedHousePin } from "../tools/shared/src/house-pin.ts";
-import { bundleEntry } from "../tools/shared/src/bundle-entry.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { embedHousePin } from "@dotfiles/shared/src/house-pin.ts";
+import { bundleEntry } from "@dotfiles/shared/src/bundle-entry.ts";
 import {
   DEFAULT_PLACEMENT,
   Placement,
   placedContent,
   placedDestination,
-} from "../standard-presets/src/placement.ts";
+} from "@dotfiles/standard-presets/src/placement.ts";
 
 const Surface = z
   .string()
@@ -571,7 +571,8 @@ async function registerWorkspaceLinks(
       )),
     );
   }
-  for (const path of paths) {
+  // Overlapping patterns (`agents/skills/*` and one of its members) name a package once.
+  for (const path of new Set(paths)) {
     const workspace = jsonOf(
       z.looseObject({
         name: z.string().regex(/^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/u),

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { jsonOf, z } from "../tools/shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const Manifest = jsonOf(z.object({ engines: z.object({ bun: z.string() }) }));
 

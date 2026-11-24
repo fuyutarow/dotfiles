@@ -1,8 +1,8 @@
-import { DIM, RST, renderUnavailable, unavailable } from "./ansi.ts";
-import { dur } from "./jobs.ts";
+import { DIM, RST, renderUnavailable, unavailable } from "#src/ansi.ts";
+import { dur } from "#src/jobs.ts";
 import { relative } from "node:path";
 import { formatCostUsd } from "@dotfiles/shared/src/dispatch-pricing.ts";
-import type { RouteRun, RouteScan } from "./dispatch-runs.ts";
+import type { RouteRun, RouteScan } from "#src/dispatch-runs.ts";
 
 export function actionLine(value: string, cwd?: string): string | undefined {
   const first = value.split(/\r?\n|\\n/u, 1)[0]?.trim();

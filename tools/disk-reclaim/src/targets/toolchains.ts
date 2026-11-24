@@ -1,17 +1,21 @@
 import { access, readFile, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   liveExecutables,
   readStore,
   releasesToRemove,
   STORES,
   type Release,
-} from "../lib/version-stores.ts";
-import type { Context, Target } from "./index.ts";
-import { deleteTree, keepTreeCandidate, treeCandidate } from "./tree.ts";
-import { checkScanDeadline } from "../lib/scan-cache.ts";
+} from "#src/lib/version-stores.ts";
+import type { Context, Target } from "#src/targets/index.ts";
+import {
+  deleteTree,
+  keepTreeCandidate,
+  treeCandidate,
+} from "#src/targets/tree.ts";
+import { checkScanDeadline } from "#src/lib/scan-cache.ts";
 
 const walkPins = async (root: string, depth = 0): Promise<string[]> => {
   checkScanDeadline();

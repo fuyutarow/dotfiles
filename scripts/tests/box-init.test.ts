@@ -9,7 +9,7 @@ import {
   logged,
   parseOpts,
   sq,
-} from "../box-init.ts";
+} from "#root/box-init.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "box-init.ts");
 

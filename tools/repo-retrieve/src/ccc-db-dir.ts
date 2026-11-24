@@ -31,7 +31,7 @@ import {
   relative,
   resolve,
 } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));

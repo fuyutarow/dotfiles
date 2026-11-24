@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { lstatSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { treeBytes } from "../../src/targets/tree.ts";
-import { tempRoot } from "../fixtures/temp.ts";
+import { treeBytes } from "#src/targets/tree.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 
 test("worker sizing delivers intermediate counters and preserves allocated bytes", async () => {
   const root = tempRoot("reclaim-tree-progress-");

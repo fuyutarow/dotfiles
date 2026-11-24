@@ -5,8 +5,8 @@ import { join } from "node:path";
 import {
   runHook as runClaudeHook,
   tempHome,
-} from "../../claude/hooks/tests/helpers.ts";
-import { decisionOf, runHook, tempDir } from "./helpers.ts";
+} from "@dotfiles/claude/hooks/tests/helpers.ts";
+import { decisionOf, runHook, tempDir } from "#tests/helpers.ts";
 
 const home = tempHome();
 const root = tempDir("pretool-contract-");

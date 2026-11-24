@@ -9,7 +9,7 @@ import {
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { dlopen, FFIType } from "bun:ffi";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { pidAlive } from "@dotfiles/shared/src/dir-lock.ts";
 
 const openAsync = (path: string, flags: string, mode: number) =>

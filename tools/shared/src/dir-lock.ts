@@ -11,8 +11,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { jsonOf, z } from "./zod.ts";
-import { Result } from "./result.ts";
+import { jsonOf, z } from "#src/zod.ts";
+import { Result } from "#src/result.ts";
 
 const HolderSchema = z.looseObject({
   pid: z.number().int(),

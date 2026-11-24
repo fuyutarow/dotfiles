@@ -10,7 +10,7 @@
 // UTF-8 decoding yields the same strings as decoding the whole file.
 
 import { open, type FileHandle } from "node:fs/promises";
-import { arr, at, parseJson, str, strAt } from "../../../hooks/narrow.ts";
+import { arr, at, parseJson, str, strAt } from "@dotfiles/hooks/narrow.ts";
 
 export type TranscriptEntry = {
   type?: string | undefined;

@@ -13,9 +13,9 @@
 // against the way SessionStart has). Shares the SAME cache file, so whichever of the three
 // warms it first still helps the others.
 
-import { Result } from "../../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { arr, at, parseJson, strAt } from "../../hooks/narrow.ts";
+import { arr, at, parseJson, strAt } from "@dotfiles/hooks/narrow.ts";
 
 const HOME = process.env["HOME"] ?? "";
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;

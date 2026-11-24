@@ -7,7 +7,7 @@ import {
   MEMORY_EARLY_DROP_MB,
   memoryDropPlan,
   recoverMemoryEmergency,
-} from "../wsl-capacity-recover.ts";
+} from "#root/wsl-capacity-recover.ts";
 
 const roots: string[] = [];
 afterEach(() => {

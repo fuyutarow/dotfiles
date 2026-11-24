@@ -11,12 +11,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { decodedJson } from "../../../agents/hooks/tests/decode.ts";
+import { decodedJson } from "@dotfiles/hooks/tests/decode.ts";
 import {
   AUTO_REINDEX_RECEIPT_RETENTION,
   ReceiptSchema,
   superviseAutoReindex,
-} from "../src/auto-reindex-receipt.ts";
+} from "#src/auto-reindex-receipt.ts";
 
 const modulePath = join(import.meta.dir, "../src/ccc-index.ts");
 const receiptModule = join(import.meta.dir, "../src/auto-reindex-receipt.ts");

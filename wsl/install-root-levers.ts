@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
-import { isWslDistro } from "../tools/shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 
 const username = userInfo().username;
 const source = join(import.meta.dir, "dotfiles-root-levers.sudoers");

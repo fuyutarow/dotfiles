@@ -1,7 +1,7 @@
 import { cli } from "cleye";
-import { LAND_HOSTS } from "./config-registry.ts";
-import { doctorReport, doctorStep } from "./land-doctor.ts";
-import { foreignWip } from "./land-verdict.ts";
+import { LAND_HOSTS } from "#root/config-registry.ts";
+import { doctorReport, doctorStep } from "#root/land-doctor.ts";
+import { foreignWip } from "#root/land-verdict.ts";
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {

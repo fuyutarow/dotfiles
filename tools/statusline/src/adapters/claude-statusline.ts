@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { jsonOf, maybe, z } from "../zod.ts";
-import type { SessionStatus } from "../session-status.ts";
-import { claudeTranscriptWindow } from "./claude-transcript-window.ts";
+import { jsonOf, maybe, z } from "#src/zod.ts";
+import type { SessionStatus } from "#src/session-status.ts";
+import { claudeTranscriptWindow } from "#src/adapters/claude-transcript-window.ts";
 
 const RateWindowSchema = z.object({
   used_percentage: maybe(z.number()),

@@ -1,7 +1,7 @@
 // Names use the same formatter as Claude's launcher/assign hook. Codex has no native agent-name
 // field, so its authoritative name is generated from the exact thread and cwd. Herdr display
 // tokens are presentation state and never a naming input.
-import { agentNameFor } from "../../../tools/shared/src/agent-name.ts";
+import { agentNameFor } from "@dotfiles/shared/src/agent-name.ts";
 
 export function codexAgentName(
   cwd: string,

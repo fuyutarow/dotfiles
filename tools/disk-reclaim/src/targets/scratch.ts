@@ -1,22 +1,22 @@
 import { existsSync, lstatSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   createLivenessSnapshot,
   type LivenessFacts,
   type LivenessProbes,
   type LivenessRef,
-} from "../liveness/facts.ts";
-import { judge } from "../liveness/predicate.ts";
+} from "#src/liveness/facts.ts";
+import { judge } from "#src/liveness/predicate.ts";
 import {
   removeTree,
   removeTreeProgress,
   type RemoveTreeResult,
-} from "../lib/remove-tree.ts";
-import type { Candidate } from "../model.ts";
-import type { Context, Target } from "./index.ts";
-import { measuredTreeBytes } from "./tree.ts";
+} from "#src/lib/remove-tree.ts";
+import type { Candidate } from "#src/model.ts";
+import type { Context, Target } from "#src/targets/index.ts";
+import { measuredTreeBytes } from "#src/targets/tree.ts";
 
 type Inspection<T> = { ok: true; value: T } | { ok: false; error: string };
 const uuidPattern =

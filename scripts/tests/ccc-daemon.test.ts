@@ -11,9 +11,9 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { deployCccDaemon } from "../../cocoindex/deploy-daemon.ts";
-import { checkCccDaemon } from "../doctor.ts";
-import { z } from "../../agents/hooks/zod.ts";
+import { deployCccDaemon } from "@dotfiles/cocoindex/deploy-daemon.ts";
+import { checkCccDaemon } from "#root/doctor.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 const REPO = join(import.meta.dir, "../..");
 

@@ -16,7 +16,7 @@ import {
   chmod,
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { isWslDistro } from "../tools/shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 import {
   dirname,
   isAbsolute,
@@ -27,20 +27,20 @@ import {
   sep,
 } from "node:path";
 import { cli } from "cleye";
-import { Result } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
-import { LINKS, type When } from "./config-registry.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { LINKS, type When } from "#root/config-registry.ts";
 import {
   jjContext,
   jjCandidate,
   selected,
   type JjPrecommit,
-} from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
+} from "@dotfiles/skill-wiring-mise-tasks/scripts/jj-precommit.ts";
 import {
   RENDER_INPUTS,
   renderNeedsDependencies,
   restoreRenderDependencies,
-} from "./render-source.ts";
+} from "#root/render-source.ts";
 
 type Os = "mac" | "wsl" | "linux";
 type Roots = { repo: string; home: string; os: Os };

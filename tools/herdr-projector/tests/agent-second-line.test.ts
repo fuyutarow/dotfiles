@@ -7,7 +7,7 @@ import {
   metadataReportChunks,
   projectAgents,
   rosterRow,
-} from "../src/herdr-projector.ts";
+} from "#src/herdr-projector.ts";
 
 const rows = [
   {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { checkCard } from "../scripts/diagnostic-card-check.ts";
+import { checkCard } from "#scripts/diagnostic-card-check.ts";
 
 const validCard = `# DIAGNOSTIC CARD
 Surface: cli

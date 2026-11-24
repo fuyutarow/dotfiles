@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
-import { routeLines } from "../src/dispatch-display.ts";
-import { listingProgress } from "../src/dispatch-state.ts";
-import { cleanupTempDirs } from "./helpers.ts";
+import { routeLines } from "#src/dispatch-display.ts";
+import { listingProgress } from "#src/dispatch-state.ts";
+import { cleanupTempDirs } from "#tests/helpers.ts";
 
 afterAll(cleanupTempDirs);
 

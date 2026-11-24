@@ -10,7 +10,7 @@ import { consola } from "consola";
 // Exit: 0 converged/skipped · 1 unresolved or unmanaged drift · 2 broken declaration.
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { drift, readDeclared, readLive } from "./remote-control.ts";
+import { drift, readDeclared, readLive } from "#root/remote-control.ts";
 
 const home = process.env["HOME"] ?? homedir();
 const dotfiles = process.env["DOTFILES"] ?? join(home, "dotfiles");

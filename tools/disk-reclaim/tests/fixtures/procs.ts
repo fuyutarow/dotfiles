@@ -1,6 +1,6 @@
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { procFs, type ProcFs } from "../../src/lib/procs.ts";
+import { procFs, type ProcFs } from "#src/lib/procs.ts";
 
 /** On-disk /proc fixture with injected permission errors (also reliable as root). */
 export function procFixture(

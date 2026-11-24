@@ -19,20 +19,20 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve, join } from "node:path";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
-import { brewPrefix } from "../core-tools.ts";
-import { resolveRole } from "../config-registry.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { brewPrefix } from "#root/core-tools.ts";
+import { resolveRole } from "#root/config-registry.ts";
 import {
   type HooksConfig,
   HooksConfigSchema,
   loadRegistry,
   wire,
-} from "../hook-registry.ts";
+} from "#root/hook-registry.ts";
 import {
   isolatedTestEnv,
   TEST_TMPDIR,
   testPathWithStub,
-} from "./support/test-isolation.ts";
+} from "#tests/support/test-isolation.ts";
 
 const ROOT = realpathSync(resolve(import.meta.dir, "../.."));
 const CLI_HOME = mkdtempSync(join(TEST_TMPDIR, "render-home-cli-"));
@@ -806,18 +806,24 @@ describe("render-home: committed jj inputs", () => {
     const env = { HOME: home, DOTFILES: dotfiles, JJ_CONFIG: config };
     mkdirSync(join(dotfiles, "scripts"));
     for (const path of [
+      "tsconfig.json",
+      "standard-presets/typescript/tsconfig.json",
+      "scripts/package.json",
       "scripts/render-home.ts",
       "scripts/render-source.ts",
       "scripts/config-registry.ts",
       "scripts/core-tools.ts",
       "scripts/hook-registry.ts",
+      "agents/hooks/package.json",
       "agents/hooks/agx-roster.ts",
       "agents/hooks/narrow.ts",
       "agents/hooks/slugs.ts",
       "agents/hooks/zod.ts",
       "agents/hooks/vendor/deps.js",
+      "tools/shared/package.json",
       "tools/shared/src/narrow.ts",
       "tools/shared/src/zod.ts",
+      "tools/tool-tiers/package.json",
       "tools/tool-tiers/src/tool-tiers.ts",
       "tools/tool-tiers/src/tool-commands.ts",
       "tools/tool-tiers/src/tool-commands.tsv",

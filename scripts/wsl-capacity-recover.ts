@@ -13,7 +13,7 @@ import {
 import { open, unlink, stat as fileStat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   loadStorageHeadroom,
   storageLine,

@@ -21,9 +21,9 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
-import { normalizeManagedWslConfig } from "./wsl-distro.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { normalizeManagedWslConfig } from "#root/wsl-distro.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 type Finding = { name: string; verdict: Verdict; detail: string; fix?: string };

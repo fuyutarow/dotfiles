@@ -10,12 +10,12 @@ import {
   jjCandidate,
   jjContent,
   jjContext,
-} from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
+} from "@dotfiles/skill-wiring-mise-tasks/scripts/jj-precommit.ts";
 import {
   parseDeclaration,
   thirdPartySkillFiles,
   type SkillFile,
-} from "./skills-declaration.ts";
+} from "#root/skills-declaration.ts";
 
 const git = async (args: string[]): Promise<{ code: number; out: string }> => {
   const child = Bun.spawn(["git", ...args], {

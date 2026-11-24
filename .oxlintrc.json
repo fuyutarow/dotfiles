@@ -18,6 +18,10 @@
     {
       "name": "one-home",
       "specifier": "./standard-presets/typescript/one-home-plugin.js"
+    },
+    {
+      "name": "no-relative",
+      "specifier": "./standard-presets/typescript/no-relative-plugin.js"
     }
   ],
   "ignorePatterns": [
@@ -35,19 +39,19 @@
       "error",
       {
         "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value='zod']",
-        "message": "Import `z` (and `jsonOf` for JSON text) from agents/hooks/zod.ts (relative path), the repo's one zod: hooks run before `bun install`, so zod ships as a generated bundle and every file uses that same copy."
+        "message": "Import `z` (and `jsonOf` for JSON text) from `@dotfiles/hooks/zod.ts`, the repo's one zod: hooks run before `bun install`, so zod ships as a generated bundle and every file uses that same copy."
       },
       {
         "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value=/^zod\\//]",
-        "message": "Import `z` from agents/hooks/zod.ts (relative path), the repo's one zod."
+        "message": "Import `z` from `@dotfiles/hooks/zod.ts`, the repo's one zod."
       },
       {
         "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value='neverthrow']",
-        "message": "neverthrow is retired: import Result from tools/shared/src/result.ts (better-result from the committed bundle) — Result.try / Result.tryPromise with catch, Result.ok / Result.err."
+        "message": "neverthrow is retired: import Result from `@dotfiles/shared/src/result.ts` (better-result from the committed bundle) — Result.try / Result.tryPromise with catch, Result.ok / Result.err."
       },
       {
         "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value='better-result']",
-        "message": "Import Result from tools/shared/src/result.ts, the repo's one better-result: hooks run before `bun install`, so it ships in the committed bundle and every file uses that same copy."
+        "message": "Import Result from `@dotfiles/shared/src/result.ts`, the repo's one better-result: hooks run before `bun install`, so it ships in the committed bundle and every file uses that same copy."
       }
     ],
     // One home per fact. A copy of a fact goes stale on its own: eleven readers of the kernel
@@ -63,9 +67,31 @@
         "selector": "CallExpression[callee.property.name='includes'] > Literal[value=/^microsoft$/i]",
         "message": "Ask isWslDistro() (tools/shared/src/wsl.ts) whether this is WSL: a kernel-name substring also matches a container running on the WSL kernel."
       }
+    ],
+    // A module names its target by owner, never by walking the tree: `#<top>/…` inside its own
+    // package (package.json "imports"), `@dotfiles/<name>/…` across packages. A `../` path breaks
+    // silently when either file moves and hides which package a file depends on.
+    "no-relative/no-restricted-syntax": [
+      "error",
+      {
+        "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration, ImportExpression)[source.value=/^\\.{1,2}\\//]",
+        "message": "Relative import: inside this package use its `#<top>/…` alias (package.json \"imports\"); from another package use `@dotfiles/<name>/…` and declare it `workspace:*` in this package's dependencies."
+      },
+      {
+        "selector": "TSImportType[source.value=/^\\.{1,2}\\//]",
+        "message": "Relative import() type: use the `#<top>/…` alias or `@dotfiles/<name>/…`, like a value import."
+      }
     ]
   },
   "overrides": [
+    {
+      // The TypeScript preset is copied flat into a consumer's .oxlint/ (preset sync), where no
+      // dotfiles package or alias exists; its files reach their siblings by relative path.
+      "files": ["standard-presets/typescript/**"],
+      "rules": {
+        "no-relative/no-restricted-syntax": "off"
+      }
+    },
     {
       // The home itself; statusline, whose golden tests switch WSL-ness by intercepting its
       // /proc/version read (tools/statusline/tests/parity-preload.ts); and tool-tiers, which
@@ -89,15 +115,15 @@
           "error",
           {
             "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value='zod']",
-            "message": "Import `z` (and `jsonOf` for JSON text) from agents/hooks/zod.ts (relative path), the repo's one zod: hooks run before `bun install`, so zod ships as a generated bundle and every file uses that same copy."
+            "message": "Import `z` (and `jsonOf` for JSON text) from `@dotfiles/hooks/zod.ts`, the repo's one zod: hooks run before `bun install`, so zod ships as a generated bundle and every file uses that same copy."
           },
           {
             "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value=/^zod\\//]",
-            "message": "Import `z` from agents/hooks/zod.ts (relative path), the repo's one zod."
+            "message": "Import `z` from `@dotfiles/hooks/zod.ts`, the repo's one zod."
           },
           {
             "selector": ":matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value='neverthrow']",
-            "message": "neverthrow is retired: import Result from tools/shared/src/result.ts (better-result from the committed bundle) — Result.try / Result.tryPromise with catch, Result.ok / Result.err."
+            "message": "neverthrow is retired: import Result from `@dotfiles/shared/src/result.ts` (better-result from the committed bundle) — Result.try / Result.tryPromise with catch, Result.ok / Result.err."
           }
         ]
       }

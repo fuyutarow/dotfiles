@@ -6,7 +6,7 @@ import {
   checkReach,
   managedWslConfigFinding,
   reachFailure,
-} from "../doctor-remote.ts";
+} from "#root/doctor-remote.ts";
 
 const failure = (err: string, jump?: string, wsl = false) =>
   reachFailure(

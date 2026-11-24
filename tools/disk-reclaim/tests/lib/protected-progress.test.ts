@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
-import { removeTree } from "../../src/lib/remove-tree.ts";
-import { protectedReason } from "../../src/lib/protected.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { removeTree } from "#src/lib/remove-tree.ts";
+import { protectedReason } from "#src/lib/protected.ts";
 
 test("tool install roots and bin symlink destinations are protected", async () => {
   const home = tempRoot("reclaim-protected-home-");

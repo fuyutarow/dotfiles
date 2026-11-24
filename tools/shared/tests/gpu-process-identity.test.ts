@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import {
   collectGpuProcessIdentity,
   type IdentityIo,
-} from "../src/gpu-process-identity.ts";
-import { GpuStateSchema } from "../src/gpu-samples.ts";
-import { ownerState } from "./gpu-owner-fixture.ts";
+} from "#src/gpu-process-identity.ts";
+import { GpuStateSchema } from "#src/gpu-samples.ts";
+import { ownerState } from "#tests/gpu-owner-fixture.ts";
 
 function source(mode = "read"): IdentityIo {
   let brackets = 0;

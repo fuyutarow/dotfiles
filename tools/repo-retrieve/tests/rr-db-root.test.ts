@@ -6,7 +6,7 @@ import {
   declaredDbEnv,
   DB_ROOT_DECLARATION,
   MAPPING_ENV,
-} from "../src/ccc-db-dir.ts";
+} from "#src/ccc-db-dir.ts";
 
 const entry = resolve(import.meta.dir, "../src/repo-retrieve.ts");
 

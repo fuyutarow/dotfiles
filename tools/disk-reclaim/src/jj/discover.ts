@@ -1,8 +1,8 @@
 import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
-import { jj } from "./jj.ts";
-import { checkScanDeadline } from "../lib/scan-cache.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { jj } from "#src/jj/jj.ts";
+import { checkScanDeadline } from "#src/lib/scan-cache.ts";
 
 export type Listed = { name: string; root: string | null };
 /** `store` is the directory whose `.jj/repo` is the store directory. */

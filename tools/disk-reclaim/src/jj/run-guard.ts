@@ -1,5 +1,5 @@
 import { realpath } from "node:fs/promises";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { resolve, sep } from "node:path";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 

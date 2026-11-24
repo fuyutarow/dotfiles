@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { isWslDistro } from "../src/wsl.ts";
+import { isWslDistro } from "#src/wsl.ts";
 
 const wslKernel = "6.18.58.1-microsoft-standard-WSL2";
 

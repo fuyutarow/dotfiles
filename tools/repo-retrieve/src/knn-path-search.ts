@@ -23,7 +23,7 @@
 // is ordering by distance ascending.
 
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 // vec0 rejects `k > 4096` ("k value in knn query too large").
 export const KNN_K_CAP = 4096;

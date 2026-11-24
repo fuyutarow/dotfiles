@@ -15,12 +15,12 @@
 // FAIL CLOSED: an unreadable roster or any hook error denies; run.sh also denies when bun is
 // missing.
 
-import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { resolve } from "node:path";
-import { AgxRosterChoiceSchema } from "../../hooks/agx-roster.ts";
-import { strAt } from "../../hooks/narrow.ts";
-import { jsonOf, z } from "../../hooks/zod.ts";
-import { decidePre, readStdinJson } from "./lib.ts";
+import { AgxRosterChoiceSchema } from "@dotfiles/hooks/agx-roster.ts";
+import { strAt } from "@dotfiles/hooks/narrow.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { decidePre, readStdinJson } from "#hooks/lib.ts";
 
 const DOTFILES_ROOT = resolve(import.meta.dir, "../../..");
 const ROSTER_CLI = [

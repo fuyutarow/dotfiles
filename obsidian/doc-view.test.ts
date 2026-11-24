@@ -1,5 +1,5 @@
 import { expect, mock, test } from "bun:test";
-import { z } from "../agents/hooks/zod.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 function FileView() {}
 function Plugin() {}

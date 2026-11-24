@@ -16,7 +16,7 @@ import { pathToFileURL } from "node:url";
 import {
   inspectResearchDocs as inspectResearchDocsValue,
   type ResearchDocsInspection,
-} from "../scripts/research-docs-check";
+} from "#scripts/research-docs-check.ts";
 
 // Async fixture I/O counts toward the timeout, including local Git commands.
 setDefaultTimeout(30_000);

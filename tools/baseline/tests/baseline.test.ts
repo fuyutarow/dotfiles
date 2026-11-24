@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { newFailures, parseFailures } from "../src/data.ts";
+import { newFailures, parseFailures } from "#src/data.ts";
 
 setDefaultTimeout(60_000);
 const entry = join(import.meta.dir, "../src/baseline.ts");

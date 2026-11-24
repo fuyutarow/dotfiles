@@ -11,8 +11,8 @@ import { basename, dirname, join } from "node:path";
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import { z, jsonOf } from "@dotfiles/shared/src/zod.ts";
-import cliPackage from "../package.json" with { type: "json" };
-import { produceMac } from "./macos.ts";
+import cliPackage from "#root/package.json" with { type: "json" };
+import { produceMac } from "#src/macos.ts";
 
 const WINDOW = 2000;
 const uuid = z.uuid();

@@ -1,4 +1,4 @@
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import {
   access,
   lstat,
@@ -15,15 +15,15 @@ import { dirname, join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { cli } from "cleye";
 import { consola } from "consola";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
-import { discoverPresets, jsonKey } from "./manifests.ts";
-import templateHashes from "../template-hashes.json";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { discoverPresets, jsonKey } from "#src/manifests.ts";
+import templateHashes from "#root/template-hashes.json";
 import {
   DEFAULT_PLACEMENT,
   Placement,
   placedContent,
   placedDestination,
-} from "./placement.ts";
+} from "#src/placement.ts";
 
 consola.level = 3;
 
@@ -80,7 +80,7 @@ if (action === "record-hashes") {
     argv.flags["dry-run"]
   )
     fatal("record-hashes accepts no name, target or --dry-run");
-  await import("./record-hashes.ts");
+  await import("#src/record-hashes.ts");
   process.exit(0);
 }
 const catalog = await discoverPresets(PRESETS);

@@ -1,8 +1,8 @@
-import { clockHM, nowEpochSec, pad2, stampMDHM } from "./prompt-stamp.ts";
-import { pctColor, roles, paceColor, pctFmt, unavailable } from "./ansi.ts";
+import { clockHM, nowEpochSec, pad2, stampMDHM } from "#src/prompt-stamp.ts";
+import { pctColor, roles, paceColor, pctFmt, unavailable } from "#src/ansi.ts";
 import { formatCostUsd } from "@dotfiles/shared/src/dispatch-pricing.ts";
-import type { CodexRate } from "./codex-rate.ts";
-import type { JevUsage } from "./jev-usage.ts";
+import type { CodexRate } from "#src/codex-rate.ts";
+import type { JevUsage } from "#src/jev-usage.ts";
 
 function remaining(epoch: number, now: number): string {
   const seconds = Math.max(0, epoch - now);

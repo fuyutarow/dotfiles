@@ -12,16 +12,16 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { version } from "../package.json";
-import { readAgxSnapshotAsync } from "../src/agx-snapshot.ts";
-import { cleanRetiredCaches } from "../src/sampler.ts";
-import { writeCacheAsync } from "../src/bounded.ts";
-import { coreSnapshot, seedAgxSnapshot } from "./helpers.ts";
-import { ownerStatePath } from "../src/owner-state.ts";
-import { agxStatusKey } from "../src/agx-snapshot.ts";
-import { z } from "../src/zod.ts";
-import { decodedJson } from "./decode.ts";
-import { jsonText } from "../src/zod.ts";
+import { version } from "#root/package.json";
+import { readAgxSnapshotAsync } from "#src/agx-snapshot.ts";
+import { cleanRetiredCaches } from "#src/sampler.ts";
+import { writeCacheAsync } from "#src/bounded.ts";
+import { coreSnapshot, seedAgxSnapshot } from "#tests/helpers.ts";
+import { ownerStatePath } from "#src/owner-state.ts";
+import { agxStatusKey } from "#src/agx-snapshot.ts";
+import { z } from "#src/zod.ts";
+import { decodedJson } from "#tests/decode.ts";
+import { jsonText } from "#src/zod.ts";
 
 const roots: string[] = [];
 afterEach(async () => {

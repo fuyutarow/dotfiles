@@ -7,14 +7,14 @@ import {
   statfsSync,
 } from "node:fs";
 import { lstat } from "node:fs/promises";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { removeTree } from "../lib/remove-tree.ts";
-import { collectProcesses } from "../lib/procs.ts";
-import { checkScanDeadline } from "../lib/scan-cache.ts";
-import type { Candidate } from "../model.ts";
-import type { Context, Target } from "./index.ts";
+import { removeTree } from "#src/lib/remove-tree.ts";
+import { collectProcesses } from "#src/lib/procs.ts";
+import { checkScanDeadline } from "#src/lib/scan-cache.ts";
+import type { Candidate } from "#src/model.ts";
+import type { Context, Target } from "#src/targets/index.ts";
 
 type Mount = { path: string; type: string };
 type Filesystem = {

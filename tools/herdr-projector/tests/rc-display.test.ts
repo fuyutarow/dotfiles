@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { nativeCodexRc, projectAgents } from "../src/herdr-projector.ts";
+import { nativeCodexRc, projectAgents } from "#src/herdr-projector.ts";
 
 const notApplicable =
   "not applicable: Windows Desktop owns the native Codex app-server on WSL";

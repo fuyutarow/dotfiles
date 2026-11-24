@@ -22,7 +22,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { consola } from "consola";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
 import {
   loadToolDeclarations,
   type LoadedTool,
@@ -348,7 +348,7 @@ export async function toolDeclarationProblems(
 }
 
 async function registrySources(): Promise<Set<string>> {
-  const { surfaces } = await import("./config-registry.ts");
+  const { surfaces } = await import("#root/config-registry.ts");
   return new Set(surfaces().flatMap((surface) => surface.sources));
 }
 

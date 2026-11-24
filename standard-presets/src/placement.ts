@@ -1,5 +1,5 @@
 import { isAbsolute, join, relative } from "node:path";
-import { z } from "../../agents/hooks/zod.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 const Directory = z
   .string()

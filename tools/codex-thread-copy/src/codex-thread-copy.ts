@@ -2,8 +2,8 @@
 import { cli as cleyeCli } from "cleye";
 import { resolve } from "node:path";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import { newestThread } from "./threads.ts";
-import pkg from "../package.json" with { type: "json" };
+import { newestThread } from "#src/threads.ts";
+import pkg from "#root/package.json" with { type: "json" };
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, pkg, cliArgv);

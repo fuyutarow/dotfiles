@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { applyToolChangesets } from "../land-changesets.ts";
+import { applyToolChangesets } from "#root/land-changesets.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,7 +9,7 @@ import {
   toolDiffEntries,
   toolChangesetProblems,
   type ToolDiffEntry,
-} from "../lint-tool-changesets.ts";
+} from "#root/lint-tool-changesets.ts";
 
 const tool = "agx";
 const packagePath = `tools/${tool}/package.json`;

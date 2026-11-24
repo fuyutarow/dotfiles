@@ -6,10 +6,10 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "../../../hooks/zod.ts";
-import { parseJson } from "../../../hooks/narrow.ts";
-import { decoded } from "../../../hooks/tests/decode.ts";
-import { AGX_WORKER_ENV } from "../../../../tools/shared/src/worker-env.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
+import { parseJson } from "@dotfiles/hooks/narrow.ts";
+import { decoded } from "@dotfiles/hooks/tests/decode.ts";
+import { AGX_WORKER_ENV } from "@dotfiles/shared/src/worker-env.ts";
 
 const HOOKS_DIR = join(import.meta.dir, "..");
 

@@ -2,8 +2,12 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runVcs } from "../enforce-official-execution.ts";
-import { decisionOf as decisionResult, runHook, tempDir } from "./helpers.ts";
+import { runVcs } from "#hooks/enforce-official-execution.ts";
+import {
+  decisionOf as decisionResult,
+  runHook,
+  tempDir,
+} from "#hooks/tests/helpers.ts";
 
 const HOOK = "enforce-official-execution.ts";
 

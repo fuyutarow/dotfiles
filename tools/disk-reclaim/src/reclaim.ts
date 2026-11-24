@@ -2,11 +2,11 @@
 // Consumer: humans (tables) and machine callers (one JSON document).
 import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import cliPackage from "../package.json" with { type: "json" };
+import cliPackage from "#root/package.json" with { type: "json" };
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { resolve } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import {
   actPlannedPath,
@@ -14,8 +14,8 @@ import {
   plan,
   run,
   type EngineOptions,
-} from "./engine.ts";
-import { Plan, Tier } from "./model.ts";
+} from "#src/engine.ts";
+import { Plan, Tier } from "#src/model.ts";
 import {
   errorMessage,
   readReceipts,
@@ -24,32 +24,37 @@ import {
   waitForLock,
   writeItemOutcomes,
   wrap,
-} from "./receipt.ts";
-import { deleteApproved } from "./delete.ts";
-import { freeGraveyard, freeResult, freeExit, requestedBytes } from "./free.ts";
-import { recoverExit, recoverGraveyard } from "./recover.ts";
-import { ProgressReporter } from "./lib/progress.ts";
-import { readHeadroom } from "./storage.ts";
-import { registry, type Context, type Target } from "./targets/index.ts";
-import { typedYes } from "./targets/purge.ts";
-import { workerMutationRefusal } from "./lib/worker-guard.ts";
+} from "#src/receipt.ts";
+import { deleteApproved } from "#src/delete.ts";
+import {
+  freeGraveyard,
+  freeResult,
+  freeExit,
+  requestedBytes,
+} from "#src/free.ts";
+import { recoverExit, recoverGraveyard } from "#src/recover.ts";
+import { ProgressReporter } from "#src/lib/progress.ts";
+import { readHeadroom } from "#src/storage.ts";
+import { registry, type Context, type Target } from "#src/targets/index.ts";
+import { typedYes } from "#src/targets/purge.ts";
+import { workerMutationRefusal } from "#src/lib/worker-guard.ts";
 import {
   sampleWslReturn,
   trimWslGuest,
   wslStorageSnapshot,
   wslReturnReport,
-} from "./host-return.ts";
-import { cachePlanReport } from "./report.ts";
+} from "#src/host-return.ts";
+import { cachePlanReport } from "#src/report.ts";
 import {
   applyRecords,
   recordsFromPlan,
   type ReclaimRecord,
-} from "./records.ts";
+} from "#src/records.ts";
 import {
   resolveProcRoot,
   processDecisionText,
   summarizeProcessFailures,
-} from "./lib/procs.ts";
+} from "#src/lib/procs.ts";
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, cliArgv);

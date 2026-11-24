@@ -15,7 +15,7 @@ import {
   remoteRunner,
   type CommandRunner,
   type Selection,
-} from "../src/deployment.ts";
+} from "#src/deployment.ts";
 
 const roots: string[] = [];
 const DOTFILES = join(import.meta.dir, "../../..");

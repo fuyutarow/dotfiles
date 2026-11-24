@@ -1,8 +1,8 @@
 // Read-only GPU state API. Only gpu-sampler.ts may execute the driver tool.
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Result } from "./result.ts";
-import { jsonOf, z } from "./zod.ts";
+import { Result } from "#src/result.ts";
+import { jsonOf, z } from "#src/zod.ts";
 export const RETAIN_MS = 2 * 60 * 60_000;
 const MAX_SAMPLES = 721;
 export const MAX_BYTES = 1024 * 1024;

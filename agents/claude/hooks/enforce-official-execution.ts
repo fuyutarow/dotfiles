@@ -35,18 +35,18 @@
 // from `$VAR` cannot be checked; inside an example-research context it is denied, outside it passes.
 // FAIL CLOSED on hook errors (registered with run.sh --fail-closed).
 
-import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
-import { readonlyCommand } from "../../../tools/shared/src/readonly-command.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
+import { readonlyCommand } from "@dotfiles/shared/src/readonly-command.ts";
 import { access, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { strAt } from "../../hooks/narrow.ts";
+import { strAt } from "@dotfiles/hooks/narrow.ts";
 import {
   effective,
   parseShell,
   type ShellCommand,
-} from "../../hooks/shell-syntax.ts";
-import { decidePre, findExe, readStdinJson } from "./lib.ts";
+} from "@dotfiles/hooks/shell-syntax.ts";
+import { decidePre, findExe, readStdinJson } from "#hooks/lib.ts";
 
 const OFFICIAL_ROUTE =
   "scratch execution is banned in example-research: measure through " +

@@ -1,4 +1,4 @@
-import type { LivenessFacts, LivenessRef } from "./facts.ts";
+import type { LivenessFacts, LivenessRef } from "#src/liveness/facts.ts";
 
 export type LivenessVerdict = "dead" | "live" | "unknown";
 export type LivenessJudgment = { verdict: LivenessVerdict; evidence: string[] };

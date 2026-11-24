@@ -20,7 +20,7 @@ import {
   updateConfigLocal,
   validateOptions,
   type Options,
-} from "../wsl-distro";
+} from "#root/wsl-distro.ts";
 
 const options: Options = {
   name: "Ubuntu-Test",

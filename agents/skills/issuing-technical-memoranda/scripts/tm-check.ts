@@ -13,7 +13,7 @@
  */
 
 import { cli } from "cleye";
-import { z } from "../../../hooks/zod.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 const writeResult = (message: string): void => {
   process.stdout.write(`${message}\n`);

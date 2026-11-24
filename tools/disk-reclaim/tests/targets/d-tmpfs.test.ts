@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createTmpfsTarget } from "../../src/targets/tmpfs.ts";
+import { createTmpfsTarget } from "#src/targets/tmpfs.ts";
 
 const roots: string[] = [];
 function restoreDirectories(path: string): void {

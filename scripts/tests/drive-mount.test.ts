@@ -4,7 +4,7 @@ import {
   STALE_DRIVE_MOUNT_REPAIR,
   ensureFstabEntry,
   mountDirOutcome,
-} from "../../wsl/drive-mount.ts";
+} from "@dotfiles/wsl/drive-mount.ts";
 
 const DECLARED = "G: /mnt/g drvfs defaults,nofail 0 0";
 

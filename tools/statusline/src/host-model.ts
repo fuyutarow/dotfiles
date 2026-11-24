@@ -1,5 +1,5 @@
-import { z } from "./zod.ts";
-import { CccIndexSchema } from "./ccc-model.ts";
+import { z } from "#src/zod.ts";
+import { CccIndexSchema } from "#src/ccc-model.ts";
 
 export const MemReadingSchema = z.object({
   frac: z.string(), // e.g. "16.2/54.9G"

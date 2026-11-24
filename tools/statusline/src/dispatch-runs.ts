@@ -1,9 +1,9 @@
-import { readCoreRuns } from "./core-runs.ts";
+import { readCoreRuns } from "#src/core-runs.ts";
 import {
   type RunSnapshotSource,
   type WorkspaceCounts,
   type FleetFindings,
-} from "./agx-snapshot.ts";
+} from "#src/agx-snapshot.ts";
 export interface RouteRun {
   coreState?: "running" | "ended";
   displayId: string | undefined;

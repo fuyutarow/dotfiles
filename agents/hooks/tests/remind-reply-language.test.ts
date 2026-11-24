@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { runHook, tempDir } from "./helpers.ts";
-import { jsonOf, z } from "../zod.ts";
+import { runHook, tempDir } from "#tests/helpers.ts";
+import { jsonOf, z } from "#root/zod.ts";
 
 const HOOK = "remind-reply-language.ts";
 const CONTEXT =

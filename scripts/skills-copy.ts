@@ -2,9 +2,9 @@
 import { cp, readdir, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { Result } from "../tools/shared/src/result.ts";
-import { skillLayoutRefusal } from "./skills-declaration.ts";
-import { bundleEntry } from "../tools/shared/src/bundle-entry.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { skillLayoutRefusal } from "#root/skills-declaration.ts";
+import { bundleEntry } from "@dotfiles/shared/src/bundle-entry.ts";
 
 const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -39,10 +39,13 @@ export function sourceDigester() {
         const visit = async (path: string, name: string): Promise<void> => {
           const info = await stat(path); // Follow resource links just as prepareSkillCopy does.
           hash.update(`${name}\0${info.mode}\0`);
-          if (info.isDirectory()) {
-            for (const entry of (await readdir(path)).toSorted())
-              await visit(join(path, entry), `${name}/${entry}`);
-          } else hash.update(await fileDigest(path));
+          if (!info.isDirectory()) {
+            hash.update(await fileDigest(path));
+            return;
+          }
+          const entries = (await readdir(path)).toSorted();
+          for (const entry of entries.filter((e) => e !== "node_modules"))
+            await visit(join(path, entry), `${name}/${entry}`);
         };
         await visit(source, ".");
         for (const path of [...new Set(inputs)].toSorted()) {
@@ -56,6 +59,12 @@ export function sourceDigester() {
     return result.unwrapOr(undefined);
   };
 }
+
+/** Deployed entries are bundles, so a copy never needs node_modules — and workspace links there
+ * form cycles (`@dotfiles/hooks` → `@dotfiles/shared` → `@dotfiles/hooks`) that a dereferencing
+ * copy cannot finish. */
+export const withoutNodeModules = (path: string): boolean =>
+  !path.split("/").includes("node_modules");
 
 export async function skillEntries(skill: string): Promise<string[]> {
   const entries: string[] = [];
@@ -73,7 +82,11 @@ export async function prepareSkillCopy(
       const sourceRefusal = await skillLayoutRefusal(source);
       if (sourceRefusal !== undefined) return Result.err(sourceRefusal);
       const inputs = new Set<string>();
-      await cp(source, target, { recursive: true, dereference: true });
+      await cp(source, target, {
+        recursive: true,
+        dereference: true,
+        filter: withoutNodeModules,
+      });
       const stagedRefusal = await skillLayoutRefusal(target);
       if (stagedRefusal !== undefined) return Result.err(stagedRefusal);
       for (const entry of await skillEntries(source)) {

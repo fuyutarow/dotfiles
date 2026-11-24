@@ -16,15 +16,15 @@
 import { lstat, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
-import { RENDERED } from "./config-registry.ts";
-import { HooksConfigSchema, owned } from "./hook-registry.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import { RENDERED } from "#root/config-registry.ts";
+import { HooksConfigSchema, owned } from "#root/hook-registry.ts";
 import {
   readDeclaration,
   skillFiles,
   thirdPartySkillFiles,
-} from "./skills-declaration.ts";
+} from "#root/skills-declaration.ts";
 
 const root = process.env["DOTFILES"] ?? join(import.meta.dir, "..");
 const home = process.env["HOME"] ?? homedir();

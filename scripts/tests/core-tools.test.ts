@@ -10,13 +10,17 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { brewPrefix, coreCommands, corePathProblems } from "../core-tools.ts";
+import {
+  brewPrefix,
+  coreCommands,
+  corePathProblems,
+} from "#root/core-tools.ts";
 import {
   legacyLinks,
   legacyPathUsers,
   removeLegacyLinks,
   buildCpuList,
-} from "../linux-brew.ts";
+} from "#root/linux-brew.ts";
 
 const roots: string[] = [];
 test("installer affinity honors sparse or restricted CPU sets", () => {

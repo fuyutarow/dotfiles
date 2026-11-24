@@ -1,10 +1,10 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { pad2 } from "../../src/prompt-stamp.ts";
+import { pad2 } from "#src/prompt-stamp.ts";
 import { readJsonlTail } from "@dotfiles/shared/src/jsonl.ts";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import { jsonOf, z } from "../../src/zod.ts";
-import type { CodexRate } from "../../src/codex-rate.ts";
+import { jsonOf, z } from "#src/zod.ts";
+import type { CodexRate } from "#src/codex-rate.ts";
 const LiveRateEvent = z.object({
   timestamp: z.iso.datetime({ offset: true }).optional(),
   type: z.literal("event_msg"),

@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { isWslDistro } from "../tools/shared/src/wsl.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 
 const hasMode = async (path: string, mode: number): Promise<boolean> =>
   stat(path).then(

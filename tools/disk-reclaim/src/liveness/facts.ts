@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative, resolve, isAbsolute, sep } from "node:path";
 import { homedir } from "node:os";
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import {
   collectProcesses,
@@ -9,8 +9,8 @@ import {
   type OpenPaths,
   type ProcessSnapshot,
   type ProcOptions,
-} from "../lib/procs.ts";
-import type { Config } from "../model.ts";
+} from "#src/lib/procs.ts";
+import type { Config } from "#src/model.ts";
 
 export type SessionEntry = {
   sessionId: string;

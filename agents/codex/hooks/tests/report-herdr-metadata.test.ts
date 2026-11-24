@@ -14,11 +14,11 @@ import { tmpdir } from "node:os";
 import {
   FleetSessionUnavailableSchema,
   readFleetSession,
-} from "../../../../tools/shared/src/fleet-session.ts";
-import { projectAgents } from "../../../../tools/herdr-projector/src/herdr-projector.ts";
-import { jsonOf, z } from "../../../../tools/shared/src/zod.ts";
-import { codexAgentName } from "../herdr-identity.ts";
-import { readHerdrPaneName } from "../herdr-pane.ts";
+} from "@dotfiles/shared/src/fleet-session.ts";
+import { projectAgents } from "@dotfiles/herdr-projector/src/herdr-projector.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
+import { codexAgentName } from "#hooks/herdr-identity.ts";
+import { readHerdrPaneName } from "#hooks/herdr-pane.ts";
 
 const requestSchema = z.record(z.string(), z.unknown());
 const restoreEnvironment = (previous: Map<string, string | undefined>) => {

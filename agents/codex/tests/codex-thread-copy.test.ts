@@ -1,4 +1,4 @@
-import { Result } from "../../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { afterEach, expect, test } from "bun:test";
 import {
   chmod,
@@ -13,8 +13,8 @@ import { join } from "node:path";
 import {
   copyThread,
   copyToClipboard,
-} from "../../../tools/codex-thread-copy/src/codex-thread-copy.ts";
-import { newestThread } from "../../../tools/codex-thread-copy/src/threads.ts";
+} from "@dotfiles/codex-thread-copy/src/codex-thread-copy.ts";
+import { newestThread } from "@dotfiles/codex-thread-copy/src/threads.ts";
 
 const roots: string[] = [];
 const cwd = "/work/current";

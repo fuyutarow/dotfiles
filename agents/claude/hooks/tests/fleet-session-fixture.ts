@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { FleetSession } from "../../../../tools/shared/src/fleet-session.ts";
+import type { FleetSession } from "@dotfiles/shared/src/fleet-session.ts";
 
 export async function fleetSessionFixture(home: string, sid = "s1") {
   const session = {

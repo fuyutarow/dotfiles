@@ -1,9 +1,9 @@
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { $ } from "bun";
 import { cli } from "cleye";
 import { access, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { jsonOf, jsonText, z } from "../agents/hooks/zod.ts";
+import { jsonOf, jsonText, z } from "@dotfiles/hooks/zod.ts";
 
 // Turn Obsidian's "Restricted mode" OFF for every registered vault, so the plugins apply.ts
 // installs actually load. Run via `mise run mac:obsidian:trust`. Consumer: human, verdict lines.

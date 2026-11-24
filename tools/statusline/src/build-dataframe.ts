@@ -1,18 +1,18 @@
 import { Err, Ok, Result } from "@dotfiles/shared/src/result.ts";
-import type { SessionStatus } from "./session-status.ts";
-import type { Dataframe } from "./dataframe.ts";
-import type { HostLoad } from "./host-load.ts";
-import type { RouteScan } from "./dispatch-runs.ts";
-import type { DiskEntry } from "./storage.ts";
-import type { ModelLimit } from "./rate-limits.ts";
-import type { RcState } from "./identity.ts";
-import { contextLabel, firstNonEmpty, modelName } from "./model-context.ts";
-import type { readCodexRate } from "./codex-rate.ts";
-import type { readJevUsage } from "./jev-usage.ts";
-import type { RecoverHealth } from "./recover-health.ts";
-import { ownerSources, type OwnerState } from "./owner-state.ts";
-import type { AgxJobRows } from "./agx-job-runs.ts";
-import { readCoreRuns } from "./core-runs.ts";
+import type { SessionStatus } from "#src/session-status.ts";
+import type { Dataframe } from "#src/dataframe.ts";
+import type { HostLoad } from "#src/host-load.ts";
+import type { RouteScan } from "#src/dispatch-runs.ts";
+import type { DiskEntry } from "#src/storage.ts";
+import type { ModelLimit } from "#src/rate-limits.ts";
+import type { RcState } from "#src/identity.ts";
+import { contextLabel, firstNonEmpty, modelName } from "#src/model-context.ts";
+import type { readCodexRate } from "#src/codex-rate.ts";
+import type { readJevUsage } from "#src/jev-usage.ts";
+import type { RecoverHealth } from "#src/recover-health.ts";
+import { ownerSources, type OwnerState } from "#src/owner-state.ts";
+import type { AgxJobRows } from "#src/agx-job-runs.ts";
+import { readCoreRuns } from "#src/core-runs.ts";
 
 type IdentityFacts = {
   email: string | undefined;
@@ -233,7 +233,7 @@ export async function buildDataframe(
   ) => {
     const frame = { ...(await ready.promise), ...patch };
     delete frame.fields;
-    const { prepareDisplayFields } = await import("./display-fields.ts");
+    const { prepareDisplayFields } = await import("#src/display-fields.ts");
     await prepareDisplayFields(
       frame,
       options.fieldStoreRoot,
@@ -524,7 +524,7 @@ export async function buildDataframe(
   };
   // The statusline entrypoint writes the complete session once after building this frame.
   if (options.fieldStoreRoot !== undefined) {
-    const { prepareDisplayFields } = await import("./display-fields.ts");
+    const { prepareDisplayFields } = await import("#src/display-fields.ts");
     await prepareDisplayFields(
       dataframe,
       options.fieldStoreRoot,

@@ -10,17 +10,17 @@ import {
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { recordDxgEpisodes } from "../src/gpu-dxg-episodes.ts";
-import { jsonOf, z } from "../src/zod.ts";
-import { gpuReadFromState, readGpuState } from "../src/gpu-samples.ts";
+import { recordDxgEpisodes } from "#src/gpu-dxg-episodes.ts";
+import { jsonOf, z } from "#src/zod.ts";
+import { gpuReadFromState, readGpuState } from "#src/gpu-samples.ts";
 import {
   checkGpuSampler,
   hostHasNvidiaSmi,
   parseGpuXml,
   runGpuSampler,
   gpuSlotHeld,
-} from "../src/gpu-sampler.ts";
-import { GPU_XML, ownerState } from "./gpu-owner-fixture.ts";
+} from "#src/gpu-sampler.ts";
+import { GPU_XML, ownerState } from "#tests/gpu-owner-fixture.ts";
 const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(

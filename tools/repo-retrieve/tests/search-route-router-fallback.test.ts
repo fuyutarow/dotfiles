@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { expect, test } from "bun:test";
-import { decisionOf, tempDir } from "../../../agents/hooks/tests/helpers.ts";
+import { decisionOf, tempDir } from "@dotfiles/hooks/tests/helpers.ts";
 
 test("router degradation allows lexical search with context and keeps other gates closed", () => {
   const root = resolve(import.meta.dir, "../../..");

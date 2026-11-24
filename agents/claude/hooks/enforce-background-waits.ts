@@ -30,24 +30,24 @@
 // that hook judges a detacher in one; a string handed to another program (`ssh host 'x &'`) is data.
 // FAIL CLOSED (run.sh --fail-closed).
 
-import { at, num, strAt } from "../../hooks/narrow.ts";
+import { at, num, strAt } from "@dotfiles/hooks/narrow.ts";
 import {
   type ShellCommand,
   effective,
   parseShell,
-} from "../../hooks/shell-syntax.ts";
+} from "@dotfiles/hooks/shell-syntax.ts";
 import {
   coordinatorPath,
   insidePath,
   readPath,
   readRepositoryRoot,
   shellQuote,
-} from "../../hooks/read-path.ts";
+} from "@dotfiles/hooks/read-path.ts";
 import { statSync } from "node:fs";
 import {
   AGX_WORKER_ENV,
   AGX_WORKER_VALUE,
-} from "../../../tools/shared/src/worker-env.ts";
+} from "@dotfiles/shared/src/worker-env.ts";
 import {
   commandKey,
   exactKey,
@@ -55,8 +55,8 @@ import {
   judgedMs,
   recordStart,
   stateDir,
-} from "./bash-durations.ts";
-import { decidePre, readStdinJson } from "./lib.ts";
+} from "#hooks/bash-durations.ts";
+import { decidePre, readStdinJson } from "#hooks/lib.ts";
 
 export const FOREGROUND_MAX_MS = 120_000;
 // How long the human may be kept waiting on a call the coordinator started in front. 5 s, the

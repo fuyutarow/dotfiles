@@ -8,7 +8,7 @@ import {
   statSync,
 } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { Result } from "./result.ts";
+import { Result } from "#src/result.ts";
 
 export const REF_LOCK_STALE_MS = 60_000;
 

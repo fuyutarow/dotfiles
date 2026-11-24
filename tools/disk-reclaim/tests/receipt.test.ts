@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { readReceipts } from "../src/receipt.ts";
-import { tempRoot } from "./fixtures/temp.ts";
+import { readReceipts } from "#src/receipt.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 
 test("readReceipts preserves deadline fields and reports unknown outcomes", () => {
   const dir = tempRoot("reclaim-receipt-");

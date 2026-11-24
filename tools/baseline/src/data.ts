@@ -1,5 +1,5 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 /** Line sets preserve names exactly; CRLF and blank lines are framing, not names. */
 export function lines(text: string): Set<string> {

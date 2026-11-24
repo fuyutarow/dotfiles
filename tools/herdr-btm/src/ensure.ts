@@ -1,7 +1,7 @@
 import { mkdir, rm, stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { createConnection } from "node:net";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const Agents = z.object({

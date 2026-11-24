@@ -1,13 +1,13 @@
 // Consumer: smart-open receiver. stdin is receiver-built, vouched SSH configuration.
 // Reference: obsidian-remote-ssh 1.1.11 plugin/src/shadow/ShadowVaultBootstrap.ts
 // and vaultNaming.ts. Identity lives in autoConnectProfileId, not the directory name.
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { createHash } from "node:crypto";
 import { access, mkdir, readdir, rename } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
-import plugins from "./plugins.json";
-import { openVault } from "./open-vault.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
+import plugins from "#root/plugins.json";
+import { openVault } from "#root/open-vault.ts";
 
 export const RemoteRequest = z.object({
   alias: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/u),
@@ -195,7 +195,7 @@ if (import.meta.main) {
     if (!parsed.success) return Result.err("invalid receiver request");
     const request = parsed.data;
     if (request.action === "forget") {
-      const { forgetShadow } = await import("./forget-shadow.ts");
+      const { forgetShadow } = await import("#root/forget-shadow.ts");
       return forgetShadow({
         kind: "profile",
         value: profileId(request.alias, request.path),

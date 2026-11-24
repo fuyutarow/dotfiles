@@ -1,10 +1,10 @@
 // The declaration is repo-owned; ~/.codex/config.toml remains Codex-owned. Read with Bun's real
 // TOML parser, then edit only the declared top-level assignments to preserve every other byte.
-import { Result } from "../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { access, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { jsonOf, z } from "../hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const RecordSchema = z.record(z.string(), z.unknown());
 const ApprovalPolicySchema = z.enum(["on-request", "never"]);

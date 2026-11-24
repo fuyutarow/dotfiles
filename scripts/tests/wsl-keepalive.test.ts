@@ -4,8 +4,8 @@ import {
   encodePowerShell,
   keepalivePowerShell,
   parseManagedDistros,
-} from "../wsl-keepalive";
-import { wakeManagedDistros } from "../wsl-wake";
+} from "#root/wsl-keepalive.ts";
+import { wakeManagedDistros } from "#root/wsl-wake.ts";
 
 const config = `# BEGIN dotfiles-wsl:r99-u24
 Host r99-u24 r99-u24-code

@@ -10,7 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 export const CCC_UNIT = "ccc-daemon.service";
 export type SystemctlResult = { code: number; out: string };

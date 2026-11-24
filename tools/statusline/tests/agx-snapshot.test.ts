@@ -14,12 +14,12 @@ import {
   agxStatusKey,
   AgxStatusSchema,
   readAgxSnapshotAsync,
-} from "../src/agx-snapshot.ts";
-import { collectAgxRouting, collectAgxStatus } from "../src/agx-collector.ts";
-import routing from "./fixtures/agx-c5-1.5.0.json";
-import { ownerStatePath } from "../src/owner-state.ts";
-import { z } from "../src/zod.ts";
-import { decoded, decodedJson } from "./decode.ts";
+} from "#src/agx-snapshot.ts";
+import { collectAgxRouting, collectAgxStatus } from "#src/agx-collector.ts";
+import routing from "#tests/fixtures/agx-c5-1.5.0.json";
+import { ownerStatePath } from "#src/owner-state.ts";
+import { z } from "#src/zod.ts";
+import { decoded, decodedJson } from "#tests/decode.ts";
 
 const root = await mkdtemp(join(tmpdir(), "statusline-status-cli-"));
 afterAll(() => rm(root, { recursive: true, force: true }));

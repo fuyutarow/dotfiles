@@ -5,7 +5,7 @@ import {
   LONG_RUNNING_MS,
   SessionRecordUnavailable,
   ShellScanUnavailable,
-} from "../src/alerts.ts";
+} from "#src/alerts.ts";
 
 const now = Temporal.Instant.from("2026-11-25T00:00:00Z").epochMilliseconds;
 const ago = (ms: number) =>

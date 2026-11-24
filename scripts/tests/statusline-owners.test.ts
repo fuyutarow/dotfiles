@@ -2,9 +2,9 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LINKS, unitSource } from "../config-registry.ts";
-import { deployStatuslineOwners, link, type Ctx } from "../link-dots.ts";
-import { checkStatuslineOwners, type Ctx as DoctorCtx } from "../doctor.ts";
+import { LINKS, unitSource } from "#root/config-registry.ts";
+import { deployStatuslineOwners, link, type Ctx } from "#root/link-dots.ts";
+import { checkStatuslineOwners, type Ctx as DoctorCtx } from "#root/doctor.ts";
 
 const roots: string[] = [];
 afterEach(async () => {

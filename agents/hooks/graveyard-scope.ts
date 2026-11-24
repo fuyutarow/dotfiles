@@ -27,7 +27,7 @@ import {
   parseShell,
   type Effective,
   type ShellCommand,
-} from "./shell-syntax.ts";
+} from "#root/shell-syntax.ts";
 
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=([\s\S]*)$/u;
 const GRAVEYARD_NAMES = new Set(["GRAVEYARD", "RIP_GRAVEYARD"]);

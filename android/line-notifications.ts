@@ -4,7 +4,7 @@
 // Consumer: a human running `mise run android:line` or `android:line:check`.
 // Verdicts: PASS/FAIL lines; exit 0 = policy holds, 1 = policy drift, 2 = tool failure.
 
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { cli } from "cleye";
 
 const LINE_PACKAGE = "jp.naver.line.android";

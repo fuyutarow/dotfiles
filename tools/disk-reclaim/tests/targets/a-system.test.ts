@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import assert from "node:assert/strict";
-import { createSystemTarget } from "../../src/targets/system.ts";
-import type { Context } from "../../src/targets/index.ts";
+import { createSystemTarget } from "#src/targets/system.ts";
+import type { Context } from "#src/targets/index.ts";
 
 const systemContext = {
   mode: "plan",

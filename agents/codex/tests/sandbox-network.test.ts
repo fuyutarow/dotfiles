@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { drift, edit, readLive, type Declared } from "../sandbox-network.ts";
+import { drift, edit, readLive, type Declared } from "#root/sandbox-network.ts";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

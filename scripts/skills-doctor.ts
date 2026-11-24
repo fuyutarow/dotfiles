@@ -1,15 +1,15 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import {
   inHouseLayoutRefusals,
   skillLayoutRefusal,
   readDeclaration,
   skillFiles,
   thirdPartySkillFiles,
-} from "./skills-declaration.ts";
+} from "#root/skills-declaration.ts";
 
 const InstalledPluginsSchema = z.looseObject({
   plugins: z.record(z.string(), z.array(z.looseObject({ scope: z.string() }))),

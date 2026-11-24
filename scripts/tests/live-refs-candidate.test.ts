@@ -10,9 +10,9 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { LINKS } from "../config-registry.ts";
-import { RENDER_INPUTS } from "../render-source.ts";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { LINKS } from "#root/config-registry.ts";
+import { RENDER_INPUTS } from "#root/render-source.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 test("candidate render includes imported siblings and refuses an unselected declaration update", async () => {
   const root = await mkdtemp(join(tmpdir(), "live-refs-commit-fixture-"));

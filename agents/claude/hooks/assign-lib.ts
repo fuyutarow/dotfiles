@@ -12,14 +12,11 @@
 // skill-shipped default at agents/skills/commanding-research-fleets/fleet_policy.toml applies.
 // There is no third fallback — assign-roles.toml is gone, not layered underneath.
 
-import { Result } from "../../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { dirname, join } from "node:path";
 import { realpath } from "node:fs/promises";
-import { at, obj, str } from "../../hooks/narrow.ts";
-import {
-  agentNameFor,
-  isValidRole,
-} from "../../../tools/shared/src/agent-name.ts";
+import { at, obj, str } from "@dotfiles/hooks/narrow.ts";
+import { agentNameFor, isValidRole } from "@dotfiles/shared/src/agent-name.ts";
 
 export { isValidRole };
 

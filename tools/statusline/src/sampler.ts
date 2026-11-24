@@ -1,46 +1,46 @@
 // Timer-owned collectors. No render imports or invokes this entry point.
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
-import { acquireSamplerLock } from "./sampler-lock.ts";
+import { acquireSamplerLock } from "#src/sampler-lock.ts";
 import { dirname, join } from "node:path";
 import { cli } from "cleye";
-import { buildDataframe } from "./build-dataframe.ts";
-import type { Sources } from "./build-dataframe.ts";
-import { COLLECTOR_SOURCES } from "./collector-sources.ts";
-import { sampleCodexRate } from "./codex-credit-sampler.ts";
+import { buildDataframe } from "#src/build-dataframe.ts";
+import type { Sources } from "#src/build-dataframe.ts";
+import { COLLECTOR_SOURCES } from "#src/collector-sources.ts";
+import { sampleCodexRate } from "#src/codex-credit-sampler.ts";
 import {
   discoverSessions,
   statusForSession,
   type AgentSession,
-} from "./session-discovery.ts";
+} from "#src/session-discovery.ts";
 import {
   ownerStatePath,
   readOwnerState,
   repositoryRoot,
   type OwnerState,
-} from "./owner-state.ts";
-import { refreshRecoverHealth } from "./recover-health.ts";
-import { writeCacheAsync } from "./bounded.ts";
-import { jsonText, z } from "./zod.ts";
-import type { Dataframe } from "./dataframe.ts";
-import type { SessionStatus } from "./session-status.ts";
-import { CYAN2, ESC, RST } from "./ansi.ts";
-import { readAgentNamesAsync } from "./identity.ts";
+} from "#src/owner-state.ts";
+import { refreshRecoverHealth } from "#src/recover-health.ts";
+import { writeCacheAsync } from "#src/bounded.ts";
+import { jsonText, z } from "#src/zod.ts";
+import type { Dataframe } from "#src/dataframe.ts";
+import type { SessionStatus } from "#src/session-status.ts";
+import { CYAN2, ESC, RST } from "#src/ansi.ts";
+import { readAgentNamesAsync } from "#src/identity.ts";
 import { Err, Ok, Result } from "@dotfiles/shared/src/result.ts";
-import { writeUsageSnapshotAsync } from "./usage-snapshot.ts";
+import { writeUsageSnapshotAsync } from "#src/usage-snapshot.ts";
 import {
   writePresentation,
   type Presentation,
   type PresentationRow,
   type PresentationSession,
-} from "./presentation.ts";
-import { render } from "./format.ts";
-import { readCoreRuns } from "./core-runs.ts";
-import { agxStatusKey } from "./agx-snapshot.ts";
-import { collectAgxStatus } from "./agx-collector.ts";
-import { renderField } from "./field-state.ts";
-import { version } from "../package.json";
+} from "#src/presentation.ts";
+import { render } from "#src/format.ts";
+import { readCoreRuns } from "#src/core-runs.ts";
+import { agxStatusKey } from "#src/agx-snapshot.ts";
+import { collectAgxStatus } from "#src/agx-collector.ts";
+import { renderField } from "#src/field-state.ts";
+import { version } from "#root/package.json";
 import { readFleetSession } from "@dotfiles/shared/src/fleet-session.ts";
-import { snapshotWithFleetFacts } from "./snapshot-rate.ts";
+import { snapshotWithFleetFacts } from "#src/snapshot-rate.ts";
 
 const plain = (value: string) =>
   value.replaceAll(new RegExp(`${ESC}\\[[0-9;]*m`, "gu"), "");

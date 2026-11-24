@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const homes: string[] = [];
 afterEach(async () => {
@@ -550,7 +550,7 @@ test("forget removes exactly one shadow after graceful flush and preserves recov
 
 test("remote forget finds auto-connect identity and never creates an unknown shadow", async () => {
   const f = await forgetFixture();
-  const { profileId } = await import("./open-remote.ts");
+  const { profileId } = await import("#root/open-remote.ts");
   await Bun.write(
     join(f.target, ".obsidian/plugins/remote-ssh/data.json"),
     JSON.stringify({ autoConnectProfileId: profileId("fixture", "/notes") }),
@@ -598,7 +598,7 @@ test("forget refuses duplicate identities and registry paths inside the selected
     expect(await exists(f.target)).toBe(true);
   }
   await Bun.write(f.registry, original);
-  const { profileId } = await import("./open-remote.ts");
+  const { profileId } = await import("#root/open-remote.ts");
   for (const path of [f.target, f.other])
     await Bun.write(
       join(path, ".obsidian/plugins/remote-ssh/data.json"),

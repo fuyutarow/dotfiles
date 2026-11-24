@@ -1,8 +1,8 @@
-import { renderUnavailable, unavailable } from "./ansi.ts";
-import { memReading, type MemReading } from "./host-model.ts";
-import { sysRow, formatBytes, type HostLoad } from "./host-display.ts";
-export type { MemReading } from "./host-model.ts";
-export type { HostLoad } from "./host-display.ts";
+import { renderUnavailable, unavailable } from "#src/ansi.ts";
+import { memReading, type MemReading } from "#src/host-model.ts";
+import { sysRow, formatBytes, type HostLoad } from "#src/host-display.ts";
+export type { MemReading } from "#src/host-model.ts";
+export type { HostLoad } from "#src/host-display.ts";
 // Host load — CPU · RAM · VRAM · Disk — read and rendered as the statusline's Sys row. Consumers:
 // tools/statusline/src/statusline.ts (row 5) and `s` in zsh/aliases.zsh (one row, now).
 // GPU data comes exclusively from tools/shared/src/gpu-sampler.ts state.
@@ -14,10 +14,10 @@ import {
   IS_WSL,
   tmpfsReading,
   tmpReadingsAsync,
-} from "./storage.ts";
-import { cgroupMemory } from "./cgroup-memory.ts";
-import { z } from "./zod.ts";
-import { sampleCccIndexing } from "./ccc-indexing.ts";
+} from "#src/storage.ts";
+import { cgroupMemory } from "#src/cgroup-memory.ts";
+import { z } from "#src/zod.ts";
+import { sampleCccIndexing } from "#src/ccc-indexing.ts";
 import {
   gpuReadFromState,
   readGpuState,
@@ -30,7 +30,7 @@ import {
   readJsonAsync,
   within,
   writeCacheAsync,
-} from "./bounded.ts";
+} from "#src/bounded.ts";
 
 const HOME = process.env["HOME"] ?? "";
 

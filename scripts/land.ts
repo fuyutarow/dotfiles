@@ -1,4 +1,4 @@
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
 import { access as accessPath } from "node:fs/promises";
 
 // Consumer: human/agent. Stage verdicts; stop on the first failure. Test seams are executable
@@ -20,12 +20,12 @@ import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { cli } from "cleye";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import {
   filesets,
   validPath,
-} from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
-import { registeredRepos } from "./workspace-repos.ts";
+} from "@dotfiles/skill-wiring-mise-tasks/scripts/jj-precommit.ts";
+import { registeredRepos } from "#root/workspace-repos.ts";
 import {
   enqueue,
   landLock,
@@ -33,16 +33,16 @@ import {
   landStateReady,
   queueStatus,
   runQueue,
-} from "./land-queue.ts";
-import { applyToolChangesets } from "./land-changesets.ts";
-import { recordLandReleaseCandidate } from "./lint-tool-changesets.ts";
-import type { ConsumerGateReport } from "./consumer-gate.ts";
+} from "#root/land-queue.ts";
+import { applyToolChangesets } from "#root/land-changesets.ts";
+import { recordLandReleaseCandidate } from "#root/lint-tool-changesets.ts";
+import type { ConsumerGateReport } from "#root/consumer-gate.ts";
 import {
   landExit,
   landLiveness,
   landSummary,
   type LandReport,
-} from "./land-verdict.ts";
+} from "#root/land-verdict.ts";
 
 const pathExists = (path: Parameters<typeof accessPath>[0]) =>
   accessPath(path).then(

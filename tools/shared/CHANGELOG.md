@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.22.0 — 2026-11-25
+
+- A fleet session name may be any single-line name, so a renamed session's record is written instead of dropped
+- attempt.ts and the fromThrowable re-export of zod.ts are removed: Result.try / Result.tryPromise from result.ts replace them
+- Error handling uses better-result instead of neverthrow
+- gpu-stall-notify decides WSL through isWslDistro
+- isWslDistro tells a WSL distribution from a container on the WSL kernel (/run/WSL), one answer for every caller
+- no-new-bash judges a write target that names a variable set in the inherited environment at its value
+- The fleet record schema gains an optional shells field; result.ts re-exports TaggedError and matchError
+
 ## 0.21.0 — 2026-11-20
 
 - Add desktop-interop, the WSL desktop-session interop runner shared by smart-open and smart-copy

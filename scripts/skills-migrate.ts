@@ -16,11 +16,11 @@ import consola from "consola";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { cli } from "cleye";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   readDeclaration,
   resolvesIntoRepository,
-} from "./skills-declaration.ts";
+} from "#root/skills-declaration.ts";
 
 const USAGE =
   "Usage: bun scripts/skills-migrate.ts [--dry-run] [--dotfiles <path>] [--home <path>]\n";

@@ -3,10 +3,13 @@
 //
 // FAIL CLOSED (run.sh --fail-closed): an unreadable payload or a runtime error denies.
 
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
-import { decidePre, readStdinJson } from "./lib.ts";
-import { strAt } from "./narrow.ts";
-import { declaredGraveyard, graveyardViolations } from "./graveyard-scope.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
+import { decidePre, readStdinJson } from "#root/lib.ts";
+import { strAt } from "#root/narrow.ts";
+import {
+  declaredGraveyard,
+  graveyardViolations,
+} from "#root/graveyard-scope.ts";
 
 type MainOutcome =
   | { readonly kind: "deny"; readonly message: string }

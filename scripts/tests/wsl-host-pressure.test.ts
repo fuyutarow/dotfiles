@@ -6,8 +6,11 @@ import {
   PRESSURE_TASK_NAME,
   pressureInstallPowerShell,
   pressureRecorderScript,
-} from "../wsl-host-pressure";
-import { keepalivePowerShell, parseManagedDistros } from "../wsl-keepalive";
+} from "#root/wsl-host-pressure.ts";
+import {
+  keepalivePowerShell,
+  parseManagedDistros,
+} from "#root/wsl-keepalive.ts";
 
 const managedR99 = `# BEGIN dotfiles-wsl:r99-u26
 Host r99-u26

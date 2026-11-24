@@ -26,6 +26,27 @@
       ],
       "ignoreBinaries": ["mise", "coredev"],
     },
+    "agents/codex": {
+      "entry": [],
+      "project": [
+        "**/*.{ts,tsx,js,jsx}!",
+        "!**/tests/**!",
+        "!**/*.{test,spec}.{ts,tsx,js,jsx}!",
+        "!**/fixtures/**!",
+        // Read only by tests (the Herdr pane-name probe); the hooks resolve the pane another way.
+        "!**/herdr-pane.ts!",
+      ],
+    },
+    "standard-presets": {
+      // oxlint loads these through the root .oxlintrc.json `jsPlugins`, not an import.
+      "entry": ["typescript/*-plugin.js!"],
+      "project": [
+        "**/*.{ts,tsx,js,jsx}!",
+        "!**/tests/**!",
+        "!**/*.{test,spec}.{ts,tsx,js,jsx}!",
+        "!**/fixtures/**!",
+      ],
+    },
     "obsidian": {
       // Shell and remote launchers invoke these scripts; Obsidian loads the plugin.
       "entry": ["open-vault.ts!", "open-remote.ts!", "forget-shadow.ts!", "local-plugins/doc-view/main.js!"],

@@ -3,9 +3,9 @@ import { mkdtempSync, writeFileSync, renameSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
-import { contextLabel, ctxSegment } from "../src/model-context.ts";
-import { buildDataframe } from "../src/build-dataframe.ts";
+import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
+import { contextLabel, ctxSegment } from "#src/model-context.ts";
+import { buildDataframe } from "#src/build-dataframe.ts";
 import { Result } from "@dotfiles/shared/src/result.ts";
 
 const ansi = new RegExp(`${String.fromCodePoint(27)}\\[[0-9;]*m`, "gu");

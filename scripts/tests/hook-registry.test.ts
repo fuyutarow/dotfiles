@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import {
   commandFor,
   type HookSpec,
@@ -10,7 +10,7 @@ import {
   loadRegistry,
   HooksConfigSchema,
   wire,
-} from "../hook-registry.ts";
+} from "#root/hook-registry.ts";
 
 const ROOT = join(import.meta.dir, "..", "..");
 

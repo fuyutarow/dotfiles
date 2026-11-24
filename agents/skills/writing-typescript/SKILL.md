@@ -12,7 +12,7 @@ paths: "**/*.{ts,tsx}"
 
 # Writing TypeScript — house style
 
-> **Version**: v2610.1.2 (2026-10-17) — consumers own standard oxlint configuration copies.
+> **Version**: v2611.1.0 (2026-11-25) — code-shape checks are oxlint entries, each proved by fixtures.
 > A lean per-filetype style floor; extend as house TS conventions accrete.
 
 Each rule changes what you write. Prefer the `✅` form; flag the `❌` in review.
@@ -63,9 +63,31 @@ plugin. Add ignores or React overrides directly using oxlint's standard format.
 Run `mise run preset -- diff typescript --to /path/to/repo` from dotfiles to
 inspect drift. `sync typescript --to /path/to/repo` replaces only the oxlint
 config and its plugin; review and commit the change. Dotfiles' root extends the
-preset locally and adds its vendored-zod restrictions, which consumers do not
-receive. `lint:ts` checks changed candidate files; `lint:ts:all` checks the whole
-tree. Dotfiles keeps its JSON codec in `agents/hooks/zod.ts`.
+preset locally and adds its vendored-zod restrictions and its relative-import ban,
+which consumers do not receive. `lint:ts` checks changed candidate files;
+`lint:ts:all` checks the whole tree. Dotfiles keeps its JSON codec in
+`@dotfiles/hooks/zod.ts`.
+
+## Adding a check
+
+A rule about the shape of code — a syntax form, an import, a call — is an oxlint entry,
+not a script. Write a custom script only for what oxlint cannot see (several files at once,
+repository state, non-TypeScript files), and record that reason in the script's header.
+When a script's check becomes expressible in oxlint, move it and delete the script, its task,
+its exception file and its tests in the same change.
+
+- **Selectors cover every form of the construct.** An import appears as `ImportDeclaration`,
+  `ExportNamedDeclaration`, `ExportAllDeclaration`, `ImportExpression` (all with `source.value`)
+  and `TSImportType` (`import("x").T`, also `source.value`); a rule that names only the first
+  lets the others through.
+- **One plugin alias per group you may switch off.** An override that names a rule key replaces
+  the root's options for that key; it does not merge. Give each separately exempted group its
+  own alias — a one-line `export { default } from "oxlint-plugin-eslint"` registered in
+  `jsPlugins` (dotfiles: `dotfiles-js`, `one-home`, `no-relative`) — so turning one group off
+  for some files keeps every other group in force there.
+- **Prove each entry.** Add a `fixtures.json` row per entry: `scope` (the alias), `entry` (its
+  index), `bad` snippets that must hit it exactly once, and `good` near-misses that must not.
+  `standard-presets/tests/oxlint-custom.test.ts` also fails when an entry has no row.
 
 ## Cut
 

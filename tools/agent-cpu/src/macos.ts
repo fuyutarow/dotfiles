@@ -10,7 +10,7 @@ import {
   workers,
   type Options,
   type Row,
-} from "./agent-cpu.ts";
+} from "#src/agent-cpu.ts";
 
 type Process = {
   pid: number;

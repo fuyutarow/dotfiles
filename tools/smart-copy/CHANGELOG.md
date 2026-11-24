@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 — 2026-11-25
+
+- Error handling uses better-result instead of neverthrow
+- WSL is decided by isWslDistro, so a container on the WSL kernel is treated as plain Linux
+
 ## 0.1.2 — 2026-11-20
 
 - Declare the tool in tool.toml: shell fragment and clipboard probe now live in the tool directory

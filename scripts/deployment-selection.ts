@@ -5,8 +5,8 @@ import {
   COREDEV_SELECTION,
   type CoredevHostKind,
   type CoredevPhase,
-} from "./config-registry.ts";
-import { z } from "../agents/hooks/zod.ts";
+} from "#root/config-registry.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",

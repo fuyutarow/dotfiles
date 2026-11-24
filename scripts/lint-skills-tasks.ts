@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { jsonOf, z } from "../tools/shared/src/zod.ts";
+import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const root = resolve(import.meta.dir, "..");
 // Consumer-owned tasks and illustrative placeholders, scoped to their document.

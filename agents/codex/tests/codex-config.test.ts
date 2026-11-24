@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "../../hooks/zod.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 
 const repo = join(import.meta.dir, "..", "..", "..");
 const script = join(repo, "agents/codex/codex-config.ts");

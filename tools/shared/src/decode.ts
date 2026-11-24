@@ -2,7 +2,7 @@
 // test right here with zod's reason — through bun:test's own `expect.unreachable`, never a
 // throwing `.parse` (oxlint-policy.toml no-throwing-parse). Tests only: it imports bun:test.
 import { expect } from "bun:test";
-import { jsonOf, z } from "./zod.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 /** `value` as `schema`'s output, or the test fails with zod's message. */
 export function decoded<S extends z.ZodType>(

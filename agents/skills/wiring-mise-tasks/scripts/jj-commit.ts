@@ -29,7 +29,7 @@ import {
   jjFiles,
   selected,
   validPath,
-} from "./jj-precommit.ts";
+} from "#scripts/jj-precommit.ts";
 
 const die = (m: string, code = 2): never => {
   process.stderr.write(`jj-commit: ${m}\n`);

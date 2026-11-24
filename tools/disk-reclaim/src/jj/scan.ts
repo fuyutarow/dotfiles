@@ -1,7 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { Result } from "../../../shared/src/result.ts";
-import { checkScanDeadline } from "../lib/scan-cache.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { checkScanDeadline } from "#src/lib/scan-cache.ts";
 
 export type Scan = {
   /** tracked files modified after the working-copy tree_state was written */

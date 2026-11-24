@@ -14,23 +14,23 @@ import {
   unlinkSync,
 } from "node:fs";
 import { join } from "node:path";
-import { deleteApproved } from "../src/delete.ts";
-import { loadConfig, run, type EngineOptions } from "../src/engine.ts";
-import { removeTree } from "../src/lib/remove-tree.ts";
-import { readReceipts } from "../src/receipt.ts";
-import { ReceiptV2 } from "../src/model.ts";
-import { createRipExpiryTarget } from "../src/targets/rip-expire.ts";
-import type { LivenessSnapshot } from "../src/liveness/facts.ts";
-import { purgeCandidates, purgeRip } from "../src/targets/purge.ts";
-import { createTmpfsTarget } from "../src/targets/tmpfs.ts";
-import type { Context } from "../src/targets/index.ts";
-import { procFixture } from "./fixtures/procs.ts";
+import { deleteApproved } from "#src/delete.ts";
+import { loadConfig, run, type EngineOptions } from "#src/engine.ts";
+import { removeTree } from "#src/lib/remove-tree.ts";
+import { readReceipts } from "#src/receipt.ts";
+import { ReceiptV2 } from "#src/model.ts";
+import { createRipExpiryTarget } from "#src/targets/rip-expire.ts";
+import type { LivenessSnapshot } from "#src/liveness/facts.ts";
+import { purgeCandidates, purgeRip } from "#src/targets/purge.ts";
+import { createTmpfsTarget } from "#src/targets/tmpfs.ts";
+import type { Context } from "#src/targets/index.ts";
+import { procFixture } from "#tests/fixtures/procs.ts";
 import {
   SCALE_ENTRY_CAP,
   SCALE_BATCH_ENTRIES,
   withScaleRoot,
-} from "./fixtures/scale.ts";
-import { tempRoot } from "./fixtures/temp.ts";
+} from "#tests/fixtures/scale.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 
 // Explicit runs include fixture creation and cleanup in the wall-clock bounds.
 // Never more than 50k payload entries coexist; cumulative workloads are 100k and 1M.
@@ -542,7 +542,7 @@ test("ownership conflicts distinguish siblings, prefixes, identical paths, and n
       expect.unreachable("plan must never act");
     },
   }));
-  const { plan } = await import("../src/engine.ts");
+  const { plan } = await import("#src/engine.ts");
   const result = await plan(targets, {
     context: { mode: "plan", config: config(), procDir, log: () => {} },
     headroom: { drives: [] },

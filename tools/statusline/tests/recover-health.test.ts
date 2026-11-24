@@ -1,8 +1,8 @@
 import { Result } from "@dotfiles/shared/src/result.ts";
 import { describe, expect, test } from "bun:test";
-import type { Dataframe } from "../src/dataframe.ts";
-import { render } from "../src/format.ts";
-import { recoverJournalFailure } from "../src/recover-health.ts";
+import type { Dataframe } from "#src/dataframe.ts";
+import { render } from "#src/format.ts";
+import { recoverJournalFailure } from "#src/recover-health.ts";
 
 const unit = "wsl-capacity-recover.service";
 const line = (time: string, message: string) =>

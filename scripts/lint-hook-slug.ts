@@ -2,14 +2,14 @@
 // Fail closed: malformed registry, missing/duplicate identities or raw visible emission fail.
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
-import { loadSlugs } from "../agents/hooks/slugs.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
+import { loadSlugs } from "@dotfiles/hooks/slugs.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import {
   HooksConfigSchema,
   commandFor,
   loadRegistry,
-} from "./hook-registry.ts";
+} from "#root/hook-registry.ts";
 
 function commandError(
   hook: { type: string; command?: unknown },

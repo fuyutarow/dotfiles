@@ -1,6 +1,6 @@
 import { $ } from "bun";
 import { access, stat } from "node:fs/promises";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 // Install tmux plugins via TPM (non-interactive; run after link-dots).
 const tpmDir = `${process.env["HOME"]}/.tmux/plugins/tpm`;

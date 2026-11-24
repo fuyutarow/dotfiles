@@ -1,11 +1,11 @@
 import { exists, lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
-import { protectedReason } from "../lib/protected.ts";
-import type { ActionResult, Candidate } from "../model.ts";
-import type { Context, Target } from "./index.ts";
-import { Result } from "../../../shared/src/result.ts";
+import { removeTree, removeTreeProgress } from "#src/lib/remove-tree.ts";
+import { protectedReason } from "#src/lib/protected.ts";
+import type { ActionResult, Candidate } from "#src/model.ts";
+import type { Context, Target } from "#src/targets/index.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 const candidate = (id: string, path: string, bytes: number): Candidate => ({
   id,

@@ -8,8 +8,8 @@ import {
   fragmentList,
   readmeRows,
   toolDeclarationProblems,
-} from "../lint-tool-declarations.ts";
-import { probeFile } from "../tool-probe.ts";
+} from "#root/lint-tool-declarations.ts";
+import { probeFile } from "#root/tool-probe.ts";
 import { parseToolDeclaration } from "@dotfiles/shared/src/tool-declaration.ts";
 
 const PURPOSE = "Copies things; `c` calls it.";
@@ -316,7 +316,7 @@ describe("parsers and the probe lookup", () => {
 describe("this repository", () => {
   test("smart-copy's lists agree with tools/smart-copy/tool.toml", async () => {
     const root = join(import.meta.dir, "..", "..");
-    const { surfaces } = await import("../config-registry.ts");
+    const { surfaces } = await import("#root/config-registry.ts");
     const result = await toolDeclarationProblems(root, {
       registrySources: new Set(
         surfaces().flatMap((surface) => surface.sources),

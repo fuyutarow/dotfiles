@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.8 — 2026-11-25
+
+- The WSL tier condition uses isWslDistro, so a container on the WSL kernel gets no WSL-only entries
+
 ## 0.2.7 — 2026-11-01
 
 - Map the neovim formula to its nvim command.

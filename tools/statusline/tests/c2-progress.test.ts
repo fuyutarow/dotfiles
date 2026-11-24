@@ -1,17 +1,17 @@
-import { agxJobRunsAsync } from "./support/job-runs.ts";
+import { agxJobRunsAsync } from "#tests/support/job-runs.ts";
 import { afterAll, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { routeLines } from "../src/dispatch-display.ts";
-import { listingProgress } from "../src/dispatch-state.ts";
-import { agxRouteRunsAsync } from "../src/dispatch-runs.ts";
+import { routeLines } from "#src/dispatch-display.ts";
+import { listingProgress } from "#src/dispatch-state.ts";
+import { agxRouteRunsAsync } from "#src/dispatch-runs.ts";
 import {
   cleanupTempDirs,
   coreSnapshot,
   seedAgxSnapshot,
   tempDir,
-} from "./helpers.ts";
-import { jsonOf, z } from "../src/zod.ts";
+} from "#tests/helpers.ts";
+import { jsonOf, z } from "#src/zod.ts";
 
 afterAll(cleanupTempDirs);
 const Rows = z.array(z.looseObject({ id: z.string(), progress: z.unknown() }));

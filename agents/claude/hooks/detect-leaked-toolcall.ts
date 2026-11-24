@@ -1,5 +1,5 @@
-import { Result } from "../../../tools/shared/src/result.ts";
-import { hookMessage } from "./lib.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { hookMessage } from "#hooks/lib.ts";
 // Stop hook — "leaked tool-call" early-warning.
 //
 // Detects the Opus-4.x serialization regression where a tool call is emitted as PLAIN
@@ -19,8 +19,8 @@ import { hookMessage } from "./lib.ts";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { appendFile, writeFile } from "node:fs/promises";
-import { strAt } from "../../hooks/narrow.ts";
-import { readStdinJson, stripCode, turnTextTail } from "./lib.ts";
+import { strAt } from "@dotfiles/hooks/narrow.ts";
+import { readStdinJson, stripCode, turnTextTail } from "#hooks/lib.ts";
 
 async function main(): Promise<void> {
   const payload = readStdinJson();

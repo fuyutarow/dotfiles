@@ -9,7 +9,7 @@
 import { lstatSync, readdirSync, unlinkSync } from "node:fs";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
-import { Result } from "./result.ts";
+import { Result } from "#src/result.ts";
 
 // Bun supports the same missing-entry option on async lstat as on lstatSync.
 const missingEntryOptions = { bigint: false as const, throwIfNoEntry: false };

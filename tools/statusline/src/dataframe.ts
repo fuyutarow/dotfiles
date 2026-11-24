@@ -1,15 +1,15 @@
-import type { AgxJobRows } from "./agx-job-runs.ts";
+import type { AgxJobRows } from "#src/agx-job-runs.ts";
 import type { Result } from "@dotfiles/shared/src/result.ts";
-import type { MemReading } from "./host-load.ts";
-import type { DiskEntry, TmpEntry, TmpfsReading } from "./storage.ts";
-import type { RcState } from "./identity.ts";
-import type { ModelLimit } from "./rate-limits.ts";
-import type { CodexRate } from "./codex-rate.ts";
-import type { JevUsage } from "./jev-usage.ts";
-import type { JobRun, RouteScan } from "./dispatch-runs.ts";
-import type { RecoverHealth } from "./recover-health.ts";
-import type { DisplayFields } from "./field-state.ts";
-import type { ShellScan } from "./shells.ts";
+import type { MemReading } from "#src/host-load.ts";
+import type { DiskEntry, TmpEntry, TmpfsReading } from "#src/storage.ts";
+import type { RcState } from "#src/identity.ts";
+import type { ModelLimit } from "#src/rate-limits.ts";
+import type { CodexRate } from "#src/codex-rate.ts";
+import type { JevUsage } from "#src/jev-usage.ts";
+import type { JobRun, RouteScan } from "#src/dispatch-runs.ts";
+import type { RecoverHealth } from "#src/recover-health.ts";
+import type { DisplayFields } from "#src/field-state.ts";
+import type { ShellScan } from "#src/shells.ts";
 
 // Every value this file can show, already computed — the sole output of buildDataframe() and
 // sole input to render(). Raw facts remain separate from `fields`, the retained presentation

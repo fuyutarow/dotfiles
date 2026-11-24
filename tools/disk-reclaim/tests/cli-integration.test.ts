@@ -9,13 +9,13 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { jsonOf } from "@dotfiles/shared/src/zod.ts";
-import { plan } from "../src/engine.ts";
-import { createLivenessSnapshot, readSessions } from "../src/liveness/facts.ts";
-import { Plan, ReceiptV2 } from "../src/model.ts";
-import { registry } from "../src/targets/index.ts";
-import { cliEnv } from "./fixtures/cli-env.ts";
-import { procFixture } from "./fixtures/procs.ts";
-import { World } from "./jj/fixture.ts";
+import { plan } from "#src/engine.ts";
+import { createLivenessSnapshot, readSessions } from "#src/liveness/facts.ts";
+import { Plan, ReceiptV2 } from "#src/model.ts";
+import { registry } from "#src/targets/index.ts";
+import { cliEnv } from "#tests/fixtures/cli-env.ts";
+import { procFixture } from "#tests/fixtures/procs.ts";
+import { World } from "#tests/jj/fixture.ts";
 
 const script = resolve(import.meta.dir, "fixtures/cli-fixture.ts");
 const uuid = (n: number) => `${n}23e4567-e89b-42d3-a456-426614174000`;

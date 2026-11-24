@@ -1,5 +1,5 @@
-import { Result } from "../../../tools/shared/src/result.ts";
-import { hookJson } from "./lib.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { hookJson } from "#hooks/lib.ts";
 // UserPromptSubmit hook (no matcher — this event supports none) implementing `/assign <role>`:
 // typed at the start of a prompt, it renames THIS session to "<project-slug>-<role>_<suffix>" (the
 // same effect as `/rename`, via hookSpecificOutput.sessionTitle) and, if configured, delivers
@@ -34,15 +34,15 @@ import { hookJson } from "./lib.ts";
 // goes through UserPromptSubmit. A model-invoked call still gets assign.md's own body, just
 // without this rename side effect.
 
-import { readStdinJson } from "./lib.ts";
+import { readStdinJson } from "#hooks/lib.ts";
 import {
   isValidRole,
   loadFleetPolicy,
   randomSuffix,
   rolePrompt,
   sessionName,
-} from "./assign-lib.ts";
-import { strAt } from "../../hooks/narrow.ts";
+} from "#hooks/assign-lib.ts";
+import { strAt } from "@dotfiles/hooks/narrow.ts";
 
 function block(reason: string): never {
   process.stdout.write(`${hookJson({ decision: "block", reason })}\n`);

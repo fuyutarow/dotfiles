@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonText, z } from "@dotfiles/shared/src/zod.ts";
 
 type JsonRecord = Record<string, unknown>;

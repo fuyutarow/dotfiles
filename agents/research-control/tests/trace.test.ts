@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { z } from "../../hooks/zod.ts";
-import { checkTrace } from "../trace.ts";
-import { decoded, decodedJson } from "../../hooks/tests/decode.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
+import { checkTrace } from "#root/trace.ts";
+import { decoded, decodedJson } from "@dotfiles/hooks/tests/decode.ts";
 
 const digest = (digit: string) => digit.repeat(64);
 const at = (second: number) =>

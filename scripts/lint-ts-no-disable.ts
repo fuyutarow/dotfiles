@@ -1,11 +1,11 @@
 import { join } from "node:path";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   jjChanged,
   jjContent,
   jjContext,
   jjFiles,
-} from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
+} from "@dotfiles/skill-wiring-mise-tasks/scripts/jj-precommit.ts";
 
 type Listing = { code: number; stdout: string; stderr: string };
 

@@ -19,13 +19,13 @@ import {
   projectAgents,
   readAgentCpu,
   paneResourcePids,
-} from "../src/herdr-projector.ts";
-import u26Witness from "./resource-u26.json" with { type: "json" };
-import ambiguousPaneWitness from "./resource-ambiguous-pane-1031.json" with { type: "json" };
-import { AgentSchema } from "../src/herdr-projector.ts";
-import ownerList from "./owner-list-oct21.json" with { type: "json" };
-import resourceV1 from "./resource-schema1.json" with { type: "json" };
-import resourceV2 from "./resource-schema2.json" with { type: "json" };
+} from "#src/herdr-projector.ts";
+import u26Witness from "#tests/resource-u26.json" with { type: "json" };
+import ambiguousPaneWitness from "#tests/resource-ambiguous-pane-1031.json" with { type: "json" };
+import { AgentSchema } from "#src/herdr-projector.ts";
+import ownerList from "#tests/owner-list-oct21.json" with { type: "json" };
+import resourceV1 from "#tests/resource-schema1.json" with { type: "json" };
+import resourceV2 from "#tests/resource-schema2.json" with { type: "json" };
 
 const session = (overrides: Record<string, unknown> = {}) => ({
   schema: 1,
@@ -675,7 +675,7 @@ import {
   bindNativeCodexFooters,
   nativeFooterId,
   nativeFooterObservation,
-} from "../src/herdr-projector.ts";
+} from "#src/herdr-projector.ts";
 import { mkdir } from "node:fs/promises";
 import { readCodexNativeSession } from "@dotfiles/shared/src/fleet-session.ts";
 

@@ -1,4 +1,4 @@
-import { z } from "./zod.ts";
+import { z } from "#src/zod.ts";
 
 export const SessionStatusSchema = z.object({
   cwd: z.string().optional(),

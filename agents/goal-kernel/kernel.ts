@@ -6,7 +6,7 @@
  * event ledger blocks PreToolUse/UserPromptSubmit; post-effect events can only warn.
  */
 
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { createHash, randomUUID } from "node:crypto";
 import {
   access,
@@ -21,7 +21,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { jsonText } from "../hooks/zod.ts";
+import { jsonText } from "@dotfiles/hooks/zod.ts";
 
 export type Provider = "claude" | "codex";
 

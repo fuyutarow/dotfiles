@@ -1,6 +1,6 @@
-import { main } from "../../src/reclaim.ts";
-import { candidate } from "./fake-target.ts";
-import type { Target } from "../../src/targets/index.ts";
+import { main } from "#src/reclaim.ts";
+import { candidate } from "#tests/fixtures/fake-target.ts";
+import type { Target } from "#src/targets/index.ts";
 
 const targets: Target[] = ["slow-delete", "next-delete"].map((name) => ({
   name,

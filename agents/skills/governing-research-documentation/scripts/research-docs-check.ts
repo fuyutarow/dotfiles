@@ -15,7 +15,7 @@ import {
 } from "node:path";
 import { cli } from "cleye";
 import { parseDocument } from "yaml";
-import { jsonText, z } from "../../../hooks/zod.ts";
+import { jsonText, z } from "@dotfiles/hooks/zod.ts";
 
 const pathExists = async (path: string): Promise<boolean> =>
   access(path).then(

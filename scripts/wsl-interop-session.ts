@@ -40,7 +40,7 @@ import {
 import { connect } from "node:net";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { Result, errorMessage } from "../tools/shared/src/result.ts";
+import { Result, errorMessage } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 export const WSL_DIR = "/run/WSL";

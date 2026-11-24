@@ -1,7 +1,7 @@
 import { copyFile, stat } from "node:fs/promises";
 import { createConsola } from "consola";
-import { Result } from "../tools/shared/src/result.ts";
-import { isWslDistro } from "../tools/shared/src/wsl.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
 
 const consola = createConsola({ level: 4 });
 

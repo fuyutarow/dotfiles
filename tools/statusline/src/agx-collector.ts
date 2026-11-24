@@ -1,8 +1,8 @@
 // Sampler-only subprocess boundary. Render modules never import this collector.
-import { execAsyncWithin } from "./bounded.ts";
-import { AgxStatusSchema } from "./agx-snapshot.ts";
-import { RoutingStatsSchema } from "./dispatch-warning.ts";
-import { jsonOf, z } from "./zod.ts";
+import { execAsyncWithin } from "#src/bounded.ts";
+import { AgxStatusSchema } from "#src/agx-snapshot.ts";
+import { RoutingStatsSchema } from "#src/dispatch-warning.ts";
+import { jsonOf, z } from "#src/zod.ts";
 import { Result } from "@dotfiles/shared/src/result.ts";
 import { resolve } from "node:path";
 

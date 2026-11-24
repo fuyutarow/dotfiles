@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { strAt } from "./shape.ts";
-import { parseShell } from "./shell-syntax.ts";
+import { strAt } from "#src/shape.ts";
+import { parseShell } from "#src/shell-syntax.ts";
 
 // The directory a Bash command ends up in: the payload cwd, then each plain `cd <dir>` the
 // command itself runs (quoted or bare, after start / && / ;). Not a shell: `cd "$X"` and

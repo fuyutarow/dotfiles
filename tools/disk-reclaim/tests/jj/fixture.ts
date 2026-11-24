@@ -1,9 +1,9 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 import assert from "node:assert/strict";
-import type { Config } from "../../src/model.ts";
-import type { Context } from "../../src/targets/index.ts";
+import type { Config } from "#src/model.ts";
+import type { Context } from "#src/targets/index.ts";
 
 /** A throwaway world: bare git remote + one jj store (`repo`, pushed `main`) + secondary workspaces beside it. */
 export class World {

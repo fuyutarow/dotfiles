@@ -9,13 +9,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import {
   assess,
   loadStorageHeadroom,
 } from "@dotfiles/shared/src/storage-headroom.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import { decisionOf, runHook as runHookProcess } from "./helpers.ts";
+import { decisionOf, runHook as runHookProcess } from "#tests/helpers.ts";
 import { decoded } from "@dotfiles/shared/src/decode.ts";
 
 // The host-drive cases measure the WSL host drive itself (/mnt/c): declared, so elsewhere SKIPs.

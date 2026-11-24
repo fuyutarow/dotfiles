@@ -1,9 +1,9 @@
 /** codex protocol adapter; semantics remain in agents/goal-kernel. */
-import { errorMessage, Result } from "../../../tools/shared/src/result.ts";
-import { jsonText } from "../../hooks/zod.ts";
-import { processHookEvent } from "../../goal-kernel/kernel.ts";
-import { hookJson, hookStderr } from "./lib.ts";
-import { parseJson } from "../../hooks/narrow.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
+import { jsonText } from "@dotfiles/hooks/zod.ts";
+import { processHookEvent } from "@dotfiles/goal-kernel/kernel.ts";
+import { hookJson, hookStderr } from "#hooks/lib.ts";
+import { parseJson } from "@dotfiles/hooks/narrow.ts";
 
 async function main(): Promise<void> {
   const input = await Result.tryPromise({

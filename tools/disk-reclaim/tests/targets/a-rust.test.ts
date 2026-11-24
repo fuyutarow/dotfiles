@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
-import { createRustTarget } from "../../src/targets/rust.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { createRustTarget } from "#src/targets/rust.ts";
 
 const cacheRoot = tempRoot("reclaim-rust-cache-");
 afterAll(() => {

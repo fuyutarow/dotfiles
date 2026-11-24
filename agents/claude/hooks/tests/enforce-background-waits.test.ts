@@ -7,16 +7,16 @@ import {
   FOREGROUND_MAX_MS,
   isSmallFileViewer,
   unwaitedJobs,
-} from "../enforce-background-waits.ts";
+} from "#hooks/enforce-background-waits.ts";
 import {
   commandKey,
   exactKey,
   recordEnd,
   recordStart,
   stepKeys,
-} from "../bash-durations.ts";
-import { AGX_WORKER_ENV } from "../../../../tools/shared/src/worker-env.ts";
-import { parseJson, strAt } from "../../../hooks/narrow.ts";
+} from "#hooks/bash-durations.ts";
+import { AGX_WORKER_ENV } from "@dotfiles/shared/src/worker-env.ts";
+import { parseJson, strAt } from "@dotfiles/hooks/narrow.ts";
 
 // enforce-background-waits: a long or waiting foreground Bash call is denied with the resend to make.
 

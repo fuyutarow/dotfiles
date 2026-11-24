@@ -3,16 +3,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
-import { LAND_HOSTS, resolveRole } from "./config-registry.ts";
+import { LAND_HOSTS, resolveRole } from "#root/config-registry.ts";
 import {
   commandsForFormula,
   readToolCommandMap,
-} from "../tools/tool-tiers/src/tool-commands.ts";
+} from "@dotfiles/tool-tiers/src/tool-commands.ts";
 import {
   currentToolHost,
   parseBrewEntries,
   type ToolHost,
-} from "../tools/tool-tiers/src/tool-tiers.ts";
+} from "@dotfiles/tool-tiers/src/tool-tiers.ts";
 
 export const LINUXBREW = "/home/linuxbrew/.linuxbrew";
 

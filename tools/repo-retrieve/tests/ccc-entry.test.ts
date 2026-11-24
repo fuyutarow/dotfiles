@@ -10,8 +10,8 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { installCccEntry } from "../../../scripts/install-mcp.ts";
-import { jsonOf, z } from "../../../agents/hooks/zod.ts";
+import { installCccEntry } from "@dotfiles/scripts/install-mcp.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const roots: string[] = [];
 afterAll(async () => {

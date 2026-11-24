@@ -1,12 +1,12 @@
-import type { Dataframe } from "./dataframe.ts";
+import type { Dataframe } from "#src/dataframe.ts";
 import {
   subscriptionUsagePath,
   SubscriptionUsageSnapshotSchema,
   type SubscriptionUsageSnapshot,
   type SubscriptionUsageWindow,
 } from "@dotfiles/shared/src/subscription-usage.ts";
-import { readJsonAsync, writeCacheAsync } from "./bounded.ts";
-import { acquireSamplerLock } from "./sampler-lock.ts";
+import { readJsonAsync, writeCacheAsync } from "#src/bounded.ts";
+import { acquireSamplerLock } from "#src/sampler-lock.ts";
 
 type RateFacts = Pick<
   Dataframe,

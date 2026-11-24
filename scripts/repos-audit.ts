@@ -1,9 +1,9 @@
 import { $ } from "bun";
 import { access } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { registeredRepos } from "./workspace-repos.ts";
+import { registeredRepos } from "#root/workspace-repos.ts";
 import { consola } from "consola";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 // ~/Workspace の全 git repo の配線健全性を一望する (scaffolding-repositories の floor を
 // 横断実行)。dotfiles 自身の `lint` には入れない。他 repo の状態で dotfiles の gate が落ちる

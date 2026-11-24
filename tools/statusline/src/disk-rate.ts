@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { z } from "./zod.ts";
-import type { DiskEntry } from "./storage.ts";
+import { z } from "#src/zod.ts";
+import type { DiskEntry } from "#src/storage.ts";
 
 const GiB = 1024 ** 3;
 const WINDOW_MS = 300_000;

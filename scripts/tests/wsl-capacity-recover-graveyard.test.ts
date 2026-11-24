@@ -11,13 +11,13 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expireGraveyard } from "../wsl-capacity-recover.ts";
-import { cliEnv } from "../../tools/disk-reclaim/tests/fixtures/cli-env.ts";
+import { expireGraveyard } from "#root/wsl-capacity-recover.ts";
+import { cliEnv } from "@dotfiles/disk-reclaim/tests/fixtures/cli-env.ts";
 import {
   inspectRipGraveyard,
   RIP_GRAVEYARD_MAX_BYTES,
-} from "../../tools/disk-reclaim/src/lib/graveyards.ts";
-import { Plan } from "../../tools/disk-reclaim/src/model.ts";
+} from "@dotfiles/disk-reclaim/src/lib/graveyards.ts";
+import { Plan } from "@dotfiles/disk-reclaim/src/model.ts";
 import { jsonOf } from "@dotfiles/shared/src/zod.ts";
 
 test("timer expiry bounds a fresh graveyard oldest-first, then preserves its restore record", async () => {

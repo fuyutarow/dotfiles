@@ -1,20 +1,20 @@
-import { readCodexUsage } from "./support/codex-rate.ts";
+import { readCodexUsage } from "#tests/support/codex-rate.ts";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readCodexRate } from "../src/codex-rate.ts";
-import { codexRateSegment } from "../src/provider-display.ts";
+import { readCodexRate } from "#src/codex-rate.ts";
+import { codexRateSegment } from "#src/provider-display.ts";
 import {
   sampleCodexRate,
   CODEX_CREDIT_REFRESH_INTERVAL_MS,
-} from "../src/codex-credit-sampler.ts";
+} from "#src/codex-credit-sampler.ts";
 import { readCodexCreditBaseline } from "@dotfiles/shared/src/codex-subscription-usage.ts";
 import {
   codexCreditMemoFromSnapshot,
   ownerSources,
   type OwnerState,
-} from "../src/owner-state.ts";
+} from "#src/owner-state.ts";
 
 const roots: string[] = [];
 const ESC = String.fromCodePoint(27);

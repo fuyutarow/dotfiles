@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.12 — 2026-11-25
+
+- Error handling uses better-result instead of neverthrow
+- WSL is decided by isWslDistro, so a container on the WSL kernel is treated as plain Linux
+
 ## 0.2.11 — 2026-11-08
 
 - Allow explicit workspace GC apply under the deny line.

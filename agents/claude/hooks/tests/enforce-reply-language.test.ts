@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseJson } from "../../../hooks/narrow.ts";
+import { parseJson } from "@dotfiles/hooks/narrow.ts";
 import {
   assistant,
   runHook,
   tempDir,
   user,
   writeTranscript,
-} from "./helpers.ts";
+} from "#hooks/tests/helpers.ts";
 
 const stopPayload = (transcript_path: string, stop_hook_active = false) => ({
   transcript_path,

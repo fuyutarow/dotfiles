@@ -19,7 +19,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import housePackage from "../typescript/package.json";
+import housePackage from "#typescript/package.json";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const scratch = await mkdtemp(join(tmpdir(), "preset-manifests-"));
@@ -44,10 +44,13 @@ beforeAll(async () => {
       join(fixtureRoot, "standard-presets", directory),
       { recursive: true },
     );
-  await cp(
-    join(ROOT, "standard-presets/template-hashes.json"),
-    join(fixtureRoot, "standard-presets/template-hashes.json"),
-  );
+  // package.json carries the `#…` aliases; tsconfig.json the `@dotfiles/<name>/…` paths.
+  for (const path of [
+    "standard-presets/template-hashes.json",
+    "standard-presets/package.json",
+    "tsconfig.json",
+  ])
+    await cp(join(ROOT, path), join(fixtureRoot, path));
   for (const directory of ["agents", "scripts", "tools", "node_modules"])
     await symlink(join(ROOT, directory), join(fixtureRoot, directory));
   await mkdir(join(fixtureRoot, "standard-presets/demo"));

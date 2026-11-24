@@ -7,19 +7,20 @@
 // copy of agents/skills/ and the budget file are exported to a temp dir and checked there.
 // J1 jj mode exports BASE with only selected REV paths overlaid; unrelated WIP is excluded.
 import { cp, copyFile, mkdtemp, mkdir, rm, stat } from "node:fs/promises";
-import { Result } from "../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   readDeclaration,
   skillFiles,
   thirdPartySkillFiles,
-} from "./skills-declaration.ts";
+} from "#root/skills-declaration.ts";
+import { withoutNodeModules } from "#root/skills-copy.ts";
 import {
   jjCandidate,
   jjContext,
   jjExport,
-} from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
+} from "@dotfiles/skill-wiring-mise-tasks/scripts/jj-precommit.ts";
 
 const BUDGET = "agents/skills-listing-budget.json";
 const ROOT = join(import.meta.dir, "..");
@@ -52,6 +53,7 @@ async function copyWorktreeInputs(
     await cp(join(sourceSkills, directory), join(candidateSkills, directory), {
       recursive: true,
       dereference: true,
+      filter: withoutNodeModules,
     });
   }
   for (const path of [BUDGET, "agents/skills.thirdparty.toml"]) {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { observed, renderField, type FieldState } from "./field-state.ts";
+import { observed, renderField, type FieldState } from "#src/field-state.ts";
 
 export const ROW_KINDS = [
   "prompt",

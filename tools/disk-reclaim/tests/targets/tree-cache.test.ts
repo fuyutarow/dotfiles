@@ -8,9 +8,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { loadConfig } from "../../src/engine.ts";
-import { measuredTreeBytes } from "../../src/targets/tree.ts";
-import { tempRoot } from "../fixtures/temp.ts";
+import { loadConfig } from "#src/engine.ts";
+import { measuredTreeBytes } from "#src/targets/tree.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
 
 const roots: string[] = [];
 function fixtureConfig() {

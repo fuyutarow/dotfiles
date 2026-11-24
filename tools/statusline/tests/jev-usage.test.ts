@@ -2,13 +2,13 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { readJevUsage } from "../src/jev-usage.ts";
-import { jevUsageSegment } from "../src/provider-display.ts";
-import { ESC } from "../src/ansi.ts";
-import recorded from "./fixtures/jev-usage-c6.json";
-import empty from "./fixtures/jev-usage-c6-empty.json";
-import real from "./fixtures/jev-usage-agx-10.4.2-partial.json";
-import { rateRow } from "../src/rate-limits.ts";
+import { readJevUsage } from "#src/jev-usage.ts";
+import { jevUsageSegment } from "#src/provider-display.ts";
+import { ESC } from "#src/ansi.ts";
+import recorded from "#tests/fixtures/jev-usage-c6.json";
+import empty from "#tests/fixtures/jev-usage-c6-empty.json";
+import real from "#tests/fixtures/jev-usage-agx-10.4.2-partial.json";
+import { rateRow } from "#src/rate-limits.ts";
 
 const plain = (text: string) =>
   text.replaceAll(new RegExp(`${ESC}\\[[0-9;]*m`, "gu"), "");

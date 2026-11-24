@@ -17,7 +17,7 @@ import {
   hasBuildProcess,
   recover,
   type Deps,
-} from "../guest-capacity-recover.ts";
+} from "#root/guest-capacity-recover.ts";
 
 const GiB = 1024 ** 3;
 const roots: string[] = [];

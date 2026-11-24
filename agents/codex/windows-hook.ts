@@ -1,7 +1,7 @@
 // Windows Codex invokes this through wsl.exe; hook implementations remain in WSL.
-import { Result } from "../../tools/shared/src/result.ts";
-import { obj } from "../hooks/narrow.ts";
-import { jsonText } from "../hooks/zod.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { obj } from "@dotfiles/hooks/narrow.ts";
+import { jsonText } from "@dotfiles/hooks/zod.ts";
 
 const command = Bun.argv[2];
 if (command === undefined) process.exit(2);

@@ -11,21 +11,21 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { declaredProvider, hostKind, windowsArguments } from "../runtime.ts";
+import { declaredProvider, hostKind, windowsArguments } from "#root/runtime.ts";
 import {
   hasManagedDefaultFacade,
   installDesktopFacade,
   launcherContents,
   retireManagedDefaultFacade,
   wslDistroName,
-} from "../codex-runtime.ts";
+} from "#root/codex-runtime.ts";
 import {
   conptyConfigArgument,
   conptyEnvironment,
   desktopArguments,
   shouldUseConpty,
-} from "../codex-wsl.ts";
-import { bridgeHooks, deployWindowsAssets } from "../windows-assets.ts";
+} from "#root/codex-wsl.ts";
+import { bridgeHooks, deployWindowsAssets } from "#root/windows-assets.ts";
 
 const repo = join(import.meta.dir, "..", "..", "..");
 const roots: string[] = [];

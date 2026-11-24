@@ -12,10 +12,10 @@
 // Fires on every Stop (see settings.json's matcher). Best-effort only: never worth failing a
 // turn over a clipboard convenience feature.
 
-import { Result } from "../../../tools/shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { at, parseJson, strAt } from "../../hooks/narrow.ts";
-import { MAX_QUOTE_TURNS } from "./quote.config.ts";
+import { at, parseJson, strAt } from "@dotfiles/hooks/narrow.ts";
+import { MAX_QUOTE_TURNS } from "#hooks/quote.config.ts";
 
 const HOME = process.env["HOME"] ?? "";
 const KEEP = MAX_QUOTE_TURNS; // deepest `/quote N` worth supporting; bounds the file for a long session

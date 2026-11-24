@@ -1,5 +1,5 @@
-import type { RunSnapshotSource } from "./agx-snapshot.ts";
-import type { RouteScan } from "./dispatch-runs.ts";
+import type { RunSnapshotSource } from "#src/agx-snapshot.ts";
+import type { RouteScan } from "#src/dispatch-runs.ts";
 
 // Only findings with a clearing command belong here. Historical counters stay in doctor.
 const ACTIONS: Record<string, string> = {

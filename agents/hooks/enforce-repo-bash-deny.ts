@@ -20,12 +20,12 @@
 // FAIL CLOSED (run.sh --fail-closed): a hook error denies. An unreadable or malformed
 // settings file is that repo's own fault and denies with its path.
 
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { bashCwd, decidePre, readStdinJson } from "./lib.ts";
-import { arr, at, str, strAt } from "./narrow.ts";
-import { jsonOf, z } from "./zod.ts";
+import { bashCwd, decidePre, readStdinJson } from "#root/lib.ts";
+import { arr, at, str, strAt } from "#root/narrow.ts";
+import { jsonOf, z } from "#root/zod.ts";
 
 type Rule = { text: string; prefix: string; exact: boolean };
 

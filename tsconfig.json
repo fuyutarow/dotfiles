@@ -3,7 +3,180 @@
   "compilerOptions": {
     "noPropertyAccessFromIndexSignature": true,
     "paths": {
-      "@dotfiles/shared/*": ["./tools/shared/*"]
+      "@dotfiles/agent-cpu/*": [
+        "./tools/agent-cpu/*"
+      ],
+      "@dotfiles/agent-resource-run/*": [
+        "./tools/agent-resource-run/*"
+      ],
+      "@dotfiles/android/*": [
+        "./android/*"
+      ],
+      "@dotfiles/baseline/*": [
+        "./tools/baseline/*"
+      ],
+      "@dotfiles/claude/*": [
+        "./agents/claude/*"
+      ],
+      "@dotfiles/cocoindex/*": [
+        "./cocoindex/*"
+      ],
+      "@dotfiles/codex/*": [
+        "./agents/codex/*"
+      ],
+      "@dotfiles/codex-thread-copy/*": [
+        "./tools/codex-thread-copy/*"
+      ],
+      "@dotfiles/coredev/*": [
+        "./tools/coredev/*"
+      ],
+      "@dotfiles/detect-japanese/*": [
+        "./tools/detect-japanese/*"
+      ],
+      "@dotfiles/disk-reclaim/*": [
+        "./tools/disk-reclaim/*"
+      ],
+      "@dotfiles/fresh-machine/*": [
+        "./fresh-machine/*"
+      ],
+      "@dotfiles/goal-kernel/*": [
+        "./agents/goal-kernel/*"
+      ],
+      "@dotfiles/herdr-btm/*": [
+        "./tools/herdr-btm/*"
+      ],
+      "@dotfiles/herdr-projector/*": [
+        "./tools/herdr-projector/*"
+      ],
+      "@dotfiles/hooks/*": [
+        "./agents/hooks/*"
+      ],
+      "@dotfiles/macos/*": [
+        "./macos/*"
+      ],
+      "@dotfiles/models/*": [
+        "./agents/models/*"
+      ],
+      "@dotfiles/obsidian/*": [
+        "./obsidian/*"
+      ],
+      "@dotfiles/preset/*": [
+        "./tools/preset/*"
+      ],
+      "@dotfiles/prompt-archive/*": [
+        "./tools/prompt-archive/*"
+      ],
+      "@dotfiles/reason-network/*": [
+        "./reason-network/*"
+      ],
+      "@dotfiles/repo-retrieve/*": [
+        "./tools/repo-retrieve/*"
+      ],
+      "@dotfiles/research-control/*": [
+        "./agents/research-control/*"
+      ],
+      "@dotfiles/scripts/*": [
+        "./scripts/*"
+      ],
+      "@dotfiles/secrets-push/*": [
+        "./tools/secrets-push/*"
+      ],
+      "@dotfiles/serena-foreground/*": [
+        "./tools/serena-foreground/*"
+      ],
+      "@dotfiles/shared/*": [
+        "./tools/shared/*"
+      ],
+      "@dotfiles/skill-codifying-doctrine/*": [
+        "./agents/skills/codifying-doctrine/*"
+      ],
+      "@dotfiles/skill-commanding-research-fleets/*": [
+        "./agents/skills/commanding-research-fleets/*"
+      ],
+      "@dotfiles/skill-compiling-latex/*": [
+        "./agents/skills/compiling-latex/*"
+      ],
+      "@dotfiles/skill-continuing-long-running-tasks/*": [
+        "./agents/skills/continuing-long-running-tasks/*"
+      ],
+      "@dotfiles/skill-designing-cli-contracts/*": [
+        "./agents/skills/designing-cli-contracts/*"
+      ],
+      "@dotfiles/skill-designing-version-schemes/*": [
+        "./agents/skills/designing-version-schemes/*"
+      ],
+      "@dotfiles/skill-directing-research/*": [
+        "./agents/skills/directing-research/*"
+      ],
+      "@dotfiles/skill-driving-antigravity/*": [
+        "./agents/skills/driving-antigravity/*"
+      ],
+      "@dotfiles/skill-driving-git/*": [
+        "./agents/skills/driving-git/*"
+      ],
+      "@dotfiles/skill-driving-grok/*": [
+        "./agents/skills/driving-grok/*"
+      ],
+      "@dotfiles/skill-forging-novel-theses/*": [
+        "./agents/skills/forging-novel-theses/*"
+      ],
+      "@dotfiles/skill-forging-skills/*": [
+        "./agents/skills/forging-skills/*"
+      ],
+      "@dotfiles/skill-forming-hypotheses-from-anomalies/*": [
+        "./agents/skills/forming-hypotheses-from-anomalies/*"
+      ],
+      "@dotfiles/skill-governing-research-documentation/*": [
+        "./agents/skills/governing-research-documentation/*"
+      ],
+      "@dotfiles/skill-issuing-technical-memoranda/*": [
+        "./agents/skills/issuing-technical-memoranda/*"
+      ],
+      "@dotfiles/skill-linting-prose/*": [
+        "./agents/skills/linting-prose/*"
+      ],
+      "@dotfiles/skill-surfacing-blind-spots/*": [
+        "./agents/skills/surfacing-blind-spots/*"
+      ],
+      "@dotfiles/skill-systematizing-knowledge/*": [
+        "./agents/skills/systematizing-knowledge/*"
+      ],
+      "@dotfiles/skill-wiring-mise-tasks/*": [
+        "./agents/skills/wiring-mise-tasks/*"
+      ],
+      "@dotfiles/skill-wiring-repositories/*": [
+        "./agents/skills/wiring-repositories/*"
+      ],
+      "@dotfiles/skill-writing-bun-scripts/*": [
+        "./agents/skills/writing-bun-scripts/*"
+      ],
+      "@dotfiles/skill-writing-typescript/*": [
+        "./agents/skills/writing-typescript/*"
+      ],
+      "@dotfiles/smart-copy/*": [
+        "./tools/smart-copy/*"
+      ],
+      "@dotfiles/smart-open/*": [
+        "./tools/smart-open/*"
+      ],
+      "@dotfiles/standard-presets/*": [
+        "./standard-presets/*"
+      ],
+      "@dotfiles/statusline/*": [
+        "./tools/statusline/*"
+      ],
+      "@dotfiles/storage-headroom/*": [
+        "./tools/storage-headroom/*"
+      ],
+      "@dotfiles/sui-keystore-merge/*": [
+        "./tools/sui-keystore-merge/*"
+      ],
+      "@dotfiles/tool-tiers/*": [
+        "./tools/tool-tiers/*"
+      ],
+      "@dotfiles/wsl/*": [
+        "./wsl/*"
+      ]
     }
   },
   "include": ["**/*.ts"],

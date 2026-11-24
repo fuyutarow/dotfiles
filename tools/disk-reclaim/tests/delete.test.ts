@@ -13,17 +13,17 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { loadConfig, run } from "../src/engine.ts";
-import { deleteApproved } from "../src/delete.ts";
-import { hasForegroundWaiter, readReceipts } from "../src/receipt.ts";
-import { removeTree } from "../src/lib/remove-tree.ts";
-import { createLivenessSnapshot } from "../src/liveness/facts.ts";
-import { ReceiptV2 } from "../src/model.ts";
-import { createBuildsTarget } from "../src/targets/builds.ts";
-import type { Target } from "../src/targets/index.ts";
-import { procFixture } from "./fixtures/procs.ts";
-import { tempRoot } from "./fixtures/temp.ts";
-import { World } from "./jj/fixture.ts";
+import { loadConfig, run } from "#src/engine.ts";
+import { deleteApproved } from "#src/delete.ts";
+import { hasForegroundWaiter, readReceipts } from "#src/receipt.ts";
+import { removeTree } from "#src/lib/remove-tree.ts";
+import { createLivenessSnapshot } from "#src/liveness/facts.ts";
+import { ReceiptV2 } from "#src/model.ts";
+import { createBuildsTarget } from "#src/targets/builds.ts";
+import type { Target } from "#src/targets/index.ts";
+import { procFixture } from "#tests/fixtures/procs.ts";
+import { tempRoot } from "#tests/fixtures/temp.ts";
+import { World } from "#tests/jj/fixture.ts";
 
 const fixtures: string[] = [];
 function restoreDirectories(path: string): void {

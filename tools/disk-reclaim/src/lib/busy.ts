@@ -1,4 +1,4 @@
-import { Result } from "../../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 
 /** Exact process-name probe; missing pgrep mirrors the shell's false condition. */
 export function processBusy(

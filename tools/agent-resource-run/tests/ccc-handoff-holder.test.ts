@@ -2,9 +2,12 @@ import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gpuAdmissionRefusal } from "../src/agent-resource-run.ts";
+import { gpuAdmissionRefusal } from "#src/agent-resource-run.ts";
 import type { GpuState } from "@dotfiles/shared/src/gpu-samples.ts";
-import { captureStderrMessages, consolaMessages } from "./captured-stderr.ts";
+import {
+  captureStderrMessages,
+  consolaMessages,
+} from "#tests/captured-stderr.ts";
 
 // Holder identity only contributes an advisory diagnostic, never a refusal.
 async function advisoryAdmission(

@@ -1,7 +1,7 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { pushAuth, type AuthPushDependencies } from "../auth-push.ts";
+import { pushAuth, type AuthPushDependencies } from "#root/auth-push.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "auth-push.ts");
 setDefaultTimeout(20_000);

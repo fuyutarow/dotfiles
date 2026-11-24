@@ -3,8 +3,8 @@
 // FAIL CLOSED: never exec the target if kernel write denial cannot be installed.
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import { open, realpath, stat } from "node:fs/promises";
-import { jsonOf, z } from "./zod.ts";
-import { READONLY_JOB_ENV } from "./readonly-command.ts";
+import { jsonOf, z } from "#src/zod.ts";
+import { READONLY_JOB_ENV } from "#src/readonly-command.ts";
 
 const Job = z.object({ argv: z.array(z.string()).min(1), cwd: z.string() });
 const fatal = (message: string): never => {

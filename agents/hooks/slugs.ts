@@ -2,7 +2,7 @@
 // Zero-install; consumers are hook emitters, render-home and lint:hook-slug.
 import { readFileSync, existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-import { z } from "./zod.ts";
+import { z } from "#root/zod.ts";
 
 const Identity = z.object({
   slug: z

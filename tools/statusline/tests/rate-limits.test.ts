@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
-import { rateRow } from "../src/rate-limits.ts";
-import { ESC, RST } from "../src/ansi.ts";
+import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
+import { rateRow } from "#src/rate-limits.ts";
+import { ESC, RST } from "#src/ansi.ts";
 
 const stripAnsi = (value: string): string =>
   value.replaceAll(new RegExp(`${ESC}\\[[0-9;]*m`, "gu"), "");

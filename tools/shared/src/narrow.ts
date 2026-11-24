@@ -1,6 +1,6 @@
 // Readers for untyped JSON values, plus JSON text parsing for consumers that need the zod codec.
 
-import { jsonText } from "./zod.ts";
+import { jsonText } from "#src/zod.ts";
 
 export type Obj = Readonly<Record<string, unknown>>;
 

@@ -3,8 +3,8 @@ import {
   type FleetSession,
 } from "@dotfiles/shared/src/fleet-session.ts";
 import { Result } from "@dotfiles/shared/src/result.ts";
-import type { Dataframe } from "./dataframe.ts";
-import { contextLabel } from "./model-context.ts";
+import type { Dataframe } from "#src/dataframe.ts";
+import { contextLabel } from "#src/model-context.ts";
 
 type ClaudeRate = {
   fiveHour: number;

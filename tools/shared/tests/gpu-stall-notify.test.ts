@@ -6,9 +6,9 @@ import {
   gpuStallNotificationCommand,
   notifyGpuStall,
   pendingGpuStall,
-} from "../src/gpu-stall-notify.ts";
-import { Result } from "../src/result.ts";
-import { ownerState } from "./gpu-owner-fixture.ts";
+} from "#src/gpu-stall-notify.ts";
+import { Result } from "#src/result.ts";
+import { ownerState } from "#tests/gpu-owner-fixture.ts";
 
 const at = 1_792_368_000_000;
 const healthy = ownerState(at);

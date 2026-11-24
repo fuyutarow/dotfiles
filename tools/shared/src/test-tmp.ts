@@ -29,8 +29,8 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { pidAlive } from "./dir-lock.ts";
-import { Result } from "./result.ts";
+import { pidAlive } from "#src/dir-lock.ts";
+import { Result } from "#src/result.ts";
 
 // Signal 0 can only establish liveness inside this PID namespace. Codex sandboxes share /tmp
 // but can each have PID 3: a sweeper must never treat another namespace's live owner as dead.

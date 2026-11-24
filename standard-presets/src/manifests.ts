@@ -1,7 +1,7 @@
-import { errorMessage, Result } from "../../tools/shared/src/result.ts";
+import { errorMessage, Result } from "@dotfiles/shared/src/result.ts";
 import { readdir } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 /** Dot-separated object keys; own properties only, never inherited values. */
 export function jsonKey(value: unknown, key: string): unknown {

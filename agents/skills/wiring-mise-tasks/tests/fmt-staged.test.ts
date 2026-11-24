@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { jsonOf, z } from "../../../hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 
 const SCRIPT = resolve(import.meta.dir, "../scripts/fmt-staged.ts");
 const dirs: string[] = [];

@@ -2,8 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkGpuSampler } from "../src/gpu-sampler.ts";
-import { ownerState } from "./gpu-owner-fixture.ts";
+import { checkGpuSampler } from "#src/gpu-sampler.ts";
+import { ownerState } from "#tests/gpu-owner-fixture.ts";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -140,7 +140,7 @@ test("fails closed for a D-state task whose wait channel cannot be identified", 
 
 test("legacy GPU state fields are ignored and the current reading omits them", async () => {
   const { readGpuState, gpuReadFromState } =
-    await import("../src/gpu-samples.ts");
+    await import("#src/gpu-samples.ts");
   const f = await fixture();
   const old = {
     ...ownerState(f.at),

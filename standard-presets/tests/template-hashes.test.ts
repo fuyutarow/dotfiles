@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { join, relative, resolve } from "node:path";
-import { discoverPresets } from "../src/manifests.ts";
-import hashes from "../template-hashes.json";
-import alphaHashes from "./alpha-template-hashes.json";
+import { discoverPresets } from "#src/manifests.ts";
+import hashes from "#root/template-hashes.json";
+import alphaHashes from "#tests/alpha-template-hashes.json";
 
 test("the released alpha template hashes remain available", () => {
   const known: Record<string, string[]> = hashes;

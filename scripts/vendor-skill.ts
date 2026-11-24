@@ -11,8 +11,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { cli } from "cleye";
-import { Result } from "../tools/shared/src/result.ts";
-import { z } from "../agents/hooks/zod.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
+import { z } from "@dotfiles/hooks/zod.ts";
 import {
   formatDeclaration,
   homePathRefusals,
@@ -21,13 +21,13 @@ import {
   resolvesIntoRepository,
   skillCliArgs,
   type ThirdPartySkill,
-} from "./skills-declaration.ts";
+} from "#root/skills-declaration.ts";
 import {
   readInstalledLock,
   removeNewStowaways,
   runSkillsCli,
   targetSkillNames,
-} from "./skills-install.ts";
+} from "#root/skills-install.ts";
 
 const USAGE =
   "Usage: bun scripts/vendor-skill.ts <owner/repo> --skill <name> [--skill <name>…] " +

@@ -38,11 +38,11 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { typesafeKey } from "@dotfiles/shared/src/typesafe-key.ts";
-import { requireExecutable, runChildCaptured } from "./child.ts";
-import { cccBackend } from "./ccc-entry.ts";
+import { requireExecutable, runChildCaptured } from "#src/child.ts";
+import { cccBackend } from "#src/ccc-entry.ts";
 
 // One definition as ccc_defs.py writes it (see its `Record:` line); every file this module reads
 // back — the extractor's cache and the catalog's records.json — is parsed with this schema.

@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readCodexSubscriptionUsage } from "../src/codex-subscription-usage.ts";
+import { readCodexSubscriptionUsage } from "#src/codex-subscription-usage.ts";
 
 const roots: string[] = [];
 const now = Temporal.Now.instant().epochMilliseconds;

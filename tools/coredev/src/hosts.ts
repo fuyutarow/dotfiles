@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Result } from "../../shared/src/result.ts";
+import { Result } from "@dotfiles/shared/src/result.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
-import type { HostKind } from "./profiles.ts";
+import type { HostKind } from "#src/profiles.ts";
 
 export type ApprovedHost = {
   alias: string;

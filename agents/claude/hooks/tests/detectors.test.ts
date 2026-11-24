@@ -7,7 +7,7 @@ import {
   tempHome,
   user,
   writeTranscript,
-} from "./helpers.ts";
+} from "#hooks/tests/helpers.ts";
 
 const stopPayload = (transcript_path: string, active = false) => ({
   transcript_path,

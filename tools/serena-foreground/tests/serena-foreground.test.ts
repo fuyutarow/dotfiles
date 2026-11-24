@@ -4,9 +4,9 @@ import {
   SERENA_DEFAULT_CONTEXT,
   buildSerenaCommand,
   buildSerenaManifest,
-} from "../src/serena-foreground.ts";
+} from "#src/serena-foreground.ts";
 
-import pkg from "../package.json" with { type: "json" };
+import pkg from "#root/package.json" with { type: "json" };
 
 const GiB = 1024 ** 3;
 

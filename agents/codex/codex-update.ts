@@ -39,10 +39,10 @@ import { consola } from "consola";
 
 // Script-scoped, not a library: this import (not an `export {}`, now redundant with it in
 // scope) makes the file a module so the top-level `await` calls below are legal under TypeScript.
-import { jsonOf, z } from "../hooks/zod.ts";
+import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { hostKind, resolveRuntime } from "./runtime.ts";
+import { hostKind, resolveRuntime } from "#root/runtime.ts";
 const recoverInvalid = <T extends z.ZodType>(schema: T) =>
   schema.optional().catch(undefined);
 

@@ -2,12 +2,12 @@
 // path needs no JSON/schema engine or collector modules. The formatter remains format.ts.
 import { mkdir, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { promptParts } from "./prompt-stamp.ts";
-import { version } from "../package.json";
-import { hasBareUnavailable } from "./ansi.ts";
-import type { RunSnapshotSource } from "./agx-snapshot.ts";
-import { runSourceLine } from "./fleet-line.ts";
-import { sessionProcessMatches } from "./session-discovery.ts";
+import { promptParts } from "#src/prompt-stamp.ts";
+import { version } from "#root/package.json";
+import { hasBareUnavailable } from "#src/ansi.ts";
+import type { RunSnapshotSource } from "#src/agx-snapshot.ts";
+import { runSourceLine } from "#src/fleet-line.ts";
+import { sessionProcessMatches } from "#src/session-discovery.ts";
 
 const PRESENTATION_PROTOCOL = "session-inventory-worker-scope-v4";
 

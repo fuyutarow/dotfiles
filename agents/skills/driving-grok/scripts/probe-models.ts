@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { jsonText, z } from "../../../hooks/zod.ts";
+import { jsonText, z } from "@dotfiles/hooks/zod.ts";
 
 const RecordSchema = z.record(z.string(), z.unknown());
 

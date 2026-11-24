@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
+import { isWslDistro } from "../../../shared/src/wsl.ts";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 

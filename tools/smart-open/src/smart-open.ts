@@ -64,7 +64,7 @@ import {
   unlinkIfSame,
   type FileKey,
 } from "@dotfiles/shared/src/sockets.ts";
-import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
+import { isWslDistro } from "../../shared/src/wsl.ts";
 import { z } from "@dotfiles/shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
 import { desktopInterop, helperCommand } from "./desktop-interop.ts";

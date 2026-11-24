@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
 import { mkdir, rename } from "node:fs/promises";
-import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
+import { isWslDistro } from "../../shared/src/wsl.ts";
 import { isAbsolute, join } from "node:path";
 import { Result } from "../../shared/src/result.ts";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";

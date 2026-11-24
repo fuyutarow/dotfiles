@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "@dotfiles/shared/src/cli.ts";
-import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
+import { isWslDistro } from "../../shared/src/wsl.ts";
 import { join } from "node:path";
 import {
   executeSelection,

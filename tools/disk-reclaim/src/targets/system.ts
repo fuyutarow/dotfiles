@@ -1,5 +1,5 @@
 import { access } from "node:fs/promises";
-import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
+import { isWslDistro } from "../../../shared/src/wsl.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 

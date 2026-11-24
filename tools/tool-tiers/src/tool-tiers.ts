@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { isWslDistro } from "@dotfiles/shared/src/wsl.ts";
+import { isWslDistro } from "../../shared/src/wsl.ts";
 import { join, resolve } from "node:path";
 import { lstat, realpath, stat } from "node:fs/promises";
 import { commandsForFormula, readToolCommandMap } from "./tool-commands.ts";

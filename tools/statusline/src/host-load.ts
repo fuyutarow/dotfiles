@@ -24,13 +24,19 @@ import {
   type GpuState,
 } from "@dotfiles/shared/src/gpu-samples.ts";
 import {
-  ENRICHMENT_TIMEOUT_MS,
   execAsyncBounded,
-  execAsyncRenderBounded,
   readJsonAsync,
   within,
   writeCacheAsync,
 } from "#src/bounded.ts";
+import {
+  gpuStalled,
+  missing,
+  stale,
+  toolFailed,
+  unparsable,
+  type ReadError,
+} from "#src/errors.ts";
 
 const HOME = process.env["HOME"] ?? "";
 
@@ -41,7 +47,7 @@ const HOME = process.env["HOME"] ?? "";
 // GPU observations belong to the shared owner. Rendering never launches a sampler.
 function vramFromState(
   state: GpuState | undefined,
-): Result<MemReading, string> {
+): Result<MemReading, ReadError> {
   // A recorded failure is current evidence, even when the last good sample is old.
   // Pausing an admitted GPU job is intentional and must never become a stall alert.
   if (
@@ -55,111 +61,106 @@ function vramFromState(
       state.unresponsiveSince ?? state.attemptAt,
     ).toZonedDateTimeISO("Asia/Tokyo");
     const time = `${String(since.hour).padStart(2, "0")}:${String(since.minute).padStart(2, "0")}`;
-    return Result.err(`⚠ GPU stalled since ${time} JST · gpu-sampler --check`);
+    return Result.err(gpuStalled(time));
   }
   const result = gpuReadFromState(
     state?.paused === true
       ? { ...state, unresponsiveSince: undefined, why: undefined }
       : state,
   );
-  if (!result.ok) return Result.err(result.why);
+  if (!result.ok) return Result.err(stale("gpu-sampler", result.why));
   const d = result.value;
   const reading = memReading(d.memUsedGiB, d.memTotalGiB);
   return reading === undefined
-    ? Result.err("stale (invalid GPU memory)")
+    ? Result.err(stale("gpu-sampler", "stale (invalid GPU memory)"))
     : Result.ok({
         ...reading,
         gpuNow: d.nowPct,
       });
 }
-// Host RAM, Linux only (reads /proc/meminfo — instant, no subprocess). MemAvailable (not
-// MemFree) is what "used" is measured against: it already accounts for reclaimable page cache,
-// which MemFree does not, so MemFree would read as chronically "almost full" on a healthy box.
-// macOS host RAM: `vm_stat` (a few ms, no privileges) for the page counts, os.totalmem() for the
-// size. "Used" is Activity Monitor's Memory Used — app memory (anonymous minus purgeable pages) +
-// wired + compressed — NOT total minus "Pages free": macOS keeps free pages near zero by caching
-// files, so that would read as chronically full, the same trap MemFree is on Linux. Not `top -l 1`:
-// its PhysMem "used" counts that file cache too, and it costs a full process-table pass.
-export const VmStatPage = z.string().regex(/^\d+$/u).transform(Number);
-export async function macRam(): Promise<Result<MemReading, string>> {
-  return (
-    await execAsyncRenderBounded(
-      "vm_stat",
-      "vm_stat",
-      [],
-      ENRICHMENT_TIMEOUT_MS,
-    )
+// Host RAM. Linux reads /proc/meminfo (instant, no subprocess); MemAvailable (not MemFree) is
+// what "used" is measured against, because it already accounts for reclaimable page cache, which
+// MemFree does not, so MemFree would read as chronically "almost full" on a healthy box. A cgroup
+// limit, when one applies, replaces the host total.
+// macOS: `vm_stat` (a few ms, no privileges) for the page counts, os.totalmem() for the size.
+// "Used" is Activity Monitor's Memory Used — app memory (anonymous minus purgeable pages) + wired +
+// compressed — NOT total minus "Pages free": macOS keeps free pages near zero by caching files, so
+// that would read as chronically full, the same trap MemFree is on Linux. Not `top -l 1`: its
+// PhysMem "used" counts that file cache too, and it costs a full process-table pass.
+const VmStatPage = z.string().regex(/^\d+$/u).transform(Number);
+export function parseVmStat(
+  raw: string,
+  totalBytes: number,
+): Result<MemReading, ReadError> {
+  const size = raw.match(/page size of (\d+) bytes/u)?.[1];
+  const pages = (label: string): number | undefined => {
+    const line = raw.split("\n").find((part) => part.startsWith(`${label}:`));
+    const value = VmStatPage.safeParse(
+      line?.split(/\s+/u).pop()?.replace(/\.$/u, ""),
+    );
+    return value.success ? value.data : undefined;
+  };
+  const wired = pages("Pages wired down");
+  const compressed = pages("Pages occupied by compressor");
+  const anonymous = pages("Anonymous pages");
+  const purgeable = pages("Pages purgeable");
+  if (
+    size === undefined ||
+    wired === undefined ||
+    compressed === undefined ||
+    anonymous === undefined ||
+    purgeable === undefined
   )
-    .mapError((f) => f.why)
-    .andThen((raw) => {
-      const size = raw.match(/page size of (\d+) bytes/u)?.[1];
-      const pages = (label: string): number | undefined => {
-        const line = raw.split("\n").find((l) => l.startsWith(`${label}:`));
-        const v = VmStatPage.safeParse(
-          line?.split(/\s+/u).pop()?.replace(/\.$/u, ""),
-        );
-        return v.success ? v.data : undefined;
-      };
-      const wired = pages("Pages wired down");
-      const compressed = pages("Pages occupied by compressor");
-      const anonymous = pages("Anonymous pages");
-      const purgeable = pages("Pages purgeable");
-      if (
-        size === undefined ||
-        wired === undefined ||
-        compressed === undefined ||
-        anonymous === undefined ||
-        purgeable === undefined
-      )
-        return Result.err("vm_stat output unparsable");
-      const usedBytes =
-        (wired + compressed + Math.max(0, anonymous - purgeable)) *
-        Number(size);
-      const GiB = 1024 ** 3;
-      const reading = memReading(usedBytes / GiB, totalmem() / GiB);
-      return reading !== undefined
-        ? Result.ok(reading)
-        : Result.err("vm_stat output unparsable");
-    });
+    return Result.err(unparsable("vm_stat output"));
+  const usedBytes =
+    (wired + compressed + Math.max(0, anonymous - purgeable)) * Number(size);
+  const reading = memReading(usedBytes / 1024 ** 3, totalBytes / 1024 ** 3);
+  return reading === undefined
+    ? Result.err(unparsable("vm_stat output"))
+    : Result.ok(reading);
 }
-export async function ramFrac(): Promise<Result<MemReading, string>> {
-  if (process.platform === "darwin") return macRam();
+const CGROUP_MEMORY_PATHS = [
+  "/sys/fs/cgroup/memory.max",
+  "/sys/fs/cgroup/memory.current",
+  "/sys/fs/cgroup/memory.stat",
+  "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+  "/sys/fs/cgroup/memory/memory.usage_in_bytes",
+  "/sys/fs/cgroup/memory/memory.stat",
+];
+async function linuxRam(): Promise<Result<MemReading, ReadError>> {
   const raw = await readFile("/proc/meminfo", "utf8").catch(() => null);
-  if (raw === null) return Result.err("no /proc/meminfo");
-  let totalKb: number | undefined;
-  let availKb: number | undefined;
-  for (const line of raw.split("\n")) {
-    if (line.startsWith("MemTotal:")) totalKb = Number(line.split(/\s+/u)[1]);
-    else if (line.startsWith("MemAvailable:"))
-      availKb = Number(line.split(/\s+/u)[1]);
-    if (totalKb !== undefined && availKb !== undefined) break;
-  }
-  if (totalKb === undefined || availKb === undefined)
-    return Result.err("meminfo lacks MemTotal/MemAvailable");
-  const cgPaths = [
-    "/sys/fs/cgroup/memory.max",
-    "/sys/fs/cgroup/memory.current",
-    "/sys/fs/cgroup/memory.stat",
-    "/sys/fs/cgroup/memory/memory.limit_in_bytes",
-    "/sys/fs/cgroup/memory/memory.usage_in_bytes",
-    "/sys/fs/cgroup/memory/memory.stat",
-  ];
-  const cgTexts = await Promise.all(
-    cgPaths.map((path) => readFile(path, "utf8").catch(() => null)),
+  if (raw === null) return Result.err(missing("/proc/meminfo"));
+  const kb = (label: string) =>
+    raw
+      .split("\n")
+      .find((line) => line.startsWith(`${label}:`))
+      ?.split(/\s+/u)[1];
+  const totalText = kb("MemTotal");
+  const availText = kb("MemAvailable");
+  if (totalText === undefined || availText === undefined)
+    return Result.err(
+      unparsable("meminfo", "meminfo lacks MemTotal/MemAvailable"),
+    );
+  const totalKb = Number(totalText);
+  const availKb = Number(availText);
+  const texts = new Map<string, string>();
+  const read = await Promise.all(
+    CGROUP_MEMORY_PATHS.map((path) =>
+      readFile(path, "utf8").then(
+        (text) => [path, text] as const,
+        () => null,
+      ),
+    ),
   );
-  const cgMap = new Map<string, string>();
-  cgTexts.forEach((text, index) => {
-    const path = cgPaths[index];
-    if (text !== null && path !== undefined) cgMap.set(path, text);
-  });
-  const cg = cgroupMemory((path) => cgMap.get(path), totalKb * 1024);
+  for (const entry of read) if (entry !== null) texts.set(entry[0], entry[1]);
+  const cg = cgroupMemory((path) => texts.get(path), totalKb * 1024);
   if (cg !== undefined) {
     const capped = memReading(
       cg.usedBytes / 1024 ** 3,
       cg.limitBytes / 1024 ** 3,
     );
     return capped === undefined
-      ? Result.err("cgroup memory unparsable")
+      ? Result.err(unparsable("cgroup memory"))
       : Result.ok({ ...capped, frac: `${capped.frac} cgroup` });
   }
   const reading = memReading(
@@ -167,8 +168,15 @@ export async function ramFrac(): Promise<Result<MemReading, string>> {
     totalKb / 1024 / 1024,
   );
   return reading === undefined
-    ? Result.err("meminfo unparsable")
+    ? Result.err(unparsable("meminfo"))
     : Result.ok(reading);
+}
+/** Host RAM for this platform: the one reader the Sys row, `s` and the metrics mode share. */
+export async function readRam(): Promise<Result<MemReading, ReadError>> {
+  if (process.platform !== "darwin") return linuxRam();
+  const raw = await execAsyncBounded("vm_stat", "vm_stat", [], 2000);
+  if (raw.isErr()) return Result.err(toolFailed("vm_stat", raw.error.why));
+  return parseVmStat(raw.value, totalmem());
 }
 
 // One /proc/stat snapshot alone cannot give a CPU percentage — its counters are cumulative
@@ -191,9 +199,10 @@ export const CPU_BASELINE_MAX_MS = 60_000;
 // two-sample delta. Not `top -l 2`: its first sample is the since-boot average, so a real
 // percentage costs a second sample ~1 s later (measured 1.9 s), most of ENRICHMENT_TIMEOUT_MS.
 // The units differ (jiffies vs ms) but a host only ever diffs against its own kind.
-export function macCpuSample(): Result<CpuSample, string> {
+function macCpuSample(): Result<CpuSample, ReadError> {
   const cores = cpus();
-  if (cores.length === 0) return Result.err("os.cpus() returned no cores");
+  if (cores.length === 0)
+    return Result.err(unparsable("os.cpus()", "os.cpus() returned no cores"));
   let total = 0;
   let idle = 0;
   for (const { times } of cores) {
@@ -202,27 +211,27 @@ export function macCpuSample(): Result<CpuSample, string> {
   }
   return total > 0
     ? Result.ok({ total, idle })
-    : Result.err("os.cpus() counters are zero");
+    : Result.err(unparsable("os.cpus()", "os.cpus() counters are zero"));
 }
-export async function readCpuSample(): Promise<Result<CpuSample, string>> {
+async function readCpuSample(): Promise<Result<CpuSample, ReadError>> {
   if (process.platform === "darwin") return macCpuSample();
   const raw = await readFile("/proc/stat", "utf8").catch(() => null);
-  if (raw === null) return Result.err("no /proc/stat");
+  if (raw === null) return Result.err(missing("/proc/stat"));
   const line = raw.split("\n").find((part) => part.startsWith("cpu "));
   if (line === undefined || line === "")
-    return Result.err("/proc/stat has no cpu line");
+    return Result.err(unparsable("/proc/stat", "/proc/stat has no cpu line"));
   const fields = line.trim().split(/\s+/u).slice(1).map(Number);
   const idle = (fields[3] ?? 0) + (fields[4] ?? 0);
   const total = fields.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
   return Number.isFinite(idle) && total > 0
     ? Result.ok({ total, idle })
-    : Result.err("/proc/stat cpu line unparsable");
+    : Result.err(unparsable("/proc/stat", "/proc/stat cpu line unparsable"));
 }
 export async function cpuPct(
   resolveCache = false,
-): Promise<Result<number, string>> {
+): Promise<Result<number, ReadError>> {
   const sampled = await readCpuSample();
-  if (sampled.isErr()) return Result.err(sampled.error);
+  if (sampled.isErr()) return sampled;
   const sample = sampled.value;
   const now = Temporal.Now.instant().epochMilliseconds;
   const prev = await readJsonAsync(CPU_CACHE, CpuSampleSchema, resolveCache);
@@ -231,12 +240,17 @@ export async function cpuPct(
   if (!keep)
     await writeCacheAsync(CPU_CACHE, { ...sample, at: now }, resolveCache);
   if (prev === undefined)
-    return Result.err("no earlier sample to diff against");
+    return Result.err(
+      stale("cpu baseline", "no earlier sample to diff against"),
+    );
   if (prev.at === undefined || !within(prev.at, now, CPU_BASELINE_MAX_MS))
-    return Result.err("no earlier sample from the last 60s");
+    return Result.err(
+      stale("cpu baseline", "no earlier sample from the last 60s"),
+    );
   const dTotal = sample.total - prev.total;
   const dIdle = sample.idle - prev.idle;
-  if (dTotal <= 0) return Result.err("no ticks since the last sample");
+  if (dTotal <= 0)
+    return Result.err(stale("cpu baseline", "no ticks since the last sample"));
   return Result.ok(Math.max(0, Math.min(100, (1 - dIdle / dTotal) * 100)));
 }
 // Sys row: "CPU NN% · RAM NN% (X.X/Y.YG) · VRAM NN% (X.X/Y.YG) · Disk …" — each reading a value
@@ -254,16 +268,16 @@ export interface HostMetrics {
 export async function readHostMetrics(): Promise<HostMetrics> {
   const cpu = (await cpuPct()).match({
     ok: (value) => `${Math.round(value)}%`,
-    err: (why) => renderUnavailable(unavailable(why)),
+    err: (error) => renderUnavailable(unavailable(error.message)),
   });
-  const ram = (await ramFrac()).match({
+  const ram = (await readRam()).match({
     ok: (value) => value.frac,
-    err: (why) => renderUnavailable(unavailable(why)),
+    err: (error) => renderUnavailable(unavailable(error.message)),
   });
   const tmp = (await tmpfsReading()).match({
     ok: (value) =>
       `${formatBytes(value.availableBytes)} free · ${value.freeInodes}i`,
-    err: (why) => renderUnavailable(unavailable(why)),
+    err: (error) => renderUnavailable(unavailable(error.message)),
   });
   return { cpu, ram, tmp };
 }
@@ -272,91 +286,13 @@ export async function readHostMetrics(): Promise<HostMetrics> {
 export async function readHostLoadAsync(): Promise<Omit<HostLoad, "disks">> {
   const [cpu, ram, vram, tmp] = await Promise.all([
     cpuPct(true),
-    ramFracAsync(),
+    readRam(),
     vramGatedAsync(),
     tmpReadingsAsync(),
   ]);
   return { cpuPct: cpu, ram, vram, tmp };
 }
-async function ramFracAsync(): Promise<Result<MemReading, string>> {
-  if (process.platform === "darwin") {
-    const rawResult = await execAsyncBounded("vm_stat", "vm_stat", [], 2000);
-    if (rawResult.isErr()) return Result.err(rawResult.error.why);
-    const raw = rawResult.value;
-    const size = raw.match(/page size of (\d+) bytes/u)?.[1];
-    const pages = (label: string): number | undefined => {
-      const line = raw.split("\n").find((part) => part.startsWith(`${label}:`));
-      const value = VmStatPage.safeParse(
-        line?.split(/\s+/u).pop()?.replace(/\.$/u, ""),
-      );
-      return value.success ? value.data : undefined;
-    };
-    const wired = pages("Pages wired down");
-    const compressed = pages("Pages occupied by compressor");
-    const anonymous = pages("Anonymous pages");
-    const purgeable = pages("Pages purgeable");
-    if (
-      size === undefined ||
-      wired === undefined ||
-      compressed === undefined ||
-      anonymous === undefined ||
-      purgeable === undefined
-    )
-      return Result.err("vm_stat output unparsable");
-    const usedBytes =
-      (wired + compressed + Math.max(0, anonymous - purgeable)) * Number(size);
-    const reading = memReading(usedBytes / 1024 ** 3, totalmem() / 1024 ** 3);
-    return reading === undefined
-      ? Result.err("vm_stat output unparsable")
-      : Result.ok(reading);
-  }
-  const raw = await readFile("/proc/meminfo", "utf8").catch(() => null);
-  if (raw === null) return Result.err("no /proc/meminfo");
-  let totalKb: number | undefined;
-  let availKb: number | undefined;
-  for (const line of raw.split("\n")) {
-    if (line.startsWith("MemTotal:")) totalKb = Number(line.split(/\s+/u)[1]);
-    else if (line.startsWith("MemAvailable:"))
-      availKb = Number(line.split(/\s+/u)[1]);
-    if (totalKb !== undefined && availKb !== undefined) break;
-  }
-  if (totalKb === undefined || availKb === undefined)
-    return Result.err("meminfo lacks MemTotal/MemAvailable");
-  const cgPaths = [
-    "/sys/fs/cgroup/memory.max",
-    "/sys/fs/cgroup/memory.current",
-    "/sys/fs/cgroup/memory.stat",
-    "/sys/fs/cgroup/memory/memory.limit_in_bytes",
-    "/sys/fs/cgroup/memory/memory.usage_in_bytes",
-    "/sys/fs/cgroup/memory/memory.stat",
-  ];
-  const cgTexts = await Promise.all(
-    cgPaths.map((path) => readFile(path, "utf8").catch(() => null)),
-  );
-  const cgMap = new Map<string, string>();
-  cgTexts.forEach((text, index) => {
-    const path = cgPaths[index];
-    if (text !== null && path !== undefined) cgMap.set(path, text);
-  });
-  const cg = cgroupMemory((path) => cgMap.get(path), totalKb * 1024);
-  if (cg !== undefined) {
-    const capped = memReading(
-      cg.usedBytes / 1024 ** 3,
-      cg.limitBytes / 1024 ** 3,
-    );
-    return capped === undefined
-      ? Result.err("cgroup memory unparsable")
-      : Result.ok({ ...capped, frac: `${capped.frac} cgroup` });
-  }
-  const reading = memReading(
-    (totalKb - availKb) / 1024 / 1024,
-    totalKb / 1024 / 1024,
-  );
-  return reading === undefined
-    ? Result.err("meminfo unparsable")
-    : Result.ok(reading);
-}
-async function vramFracAsync(): Promise<Result<MemReading, string>> {
+async function vramFracAsync(): Promise<Result<MemReading, ReadError>> {
   const state = await readGpuState();
   const reading = vramFromState(state);
   if (reading.isErr()) return reading;
@@ -366,7 +302,7 @@ async function vramFracAsync(): Promise<Result<MemReading, string>> {
   return Result.ok({ ...reading.value, cccIndexing });
 }
 async function vramGatedAsync(): Promise<
-  Result<MemReading, string> | undefined
+  Result<MemReading, ReadError> | undefined
 > {
   if (
     !gpuSamplingSupported(

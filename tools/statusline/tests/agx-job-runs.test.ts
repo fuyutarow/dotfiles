@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { stale } from "#src/errors.ts";
 import { render } from "#src/format.ts";
 import type { Dataframe } from "#src/dataframe.ts";
 import { readAgxJobRuns, Rows } from "#src/agx-job-runs.ts";
@@ -19,7 +20,7 @@ const base: Dataframe = {
   rc: "off",
   rlModel: [],
   cpuPct: Result.ok(1),
-  ram: Result.err("unknown"),
+  ram: Result.err(stale("fixture", "unknown")),
   vram: undefined,
   disks: Result.ok([]),
 };
@@ -209,7 +210,7 @@ test("render omits the Job row for live agx results", () => {
         elapsed_seconds: 42,
       },
     ]),
-    Result.err("unavailable"),
+    Result.err(stale("fixture", "unavailable")),
   ]) {
     const plain = render({ ...base, liveAgxJobs }).replaceAll(
       new RegExp(`${String.fromCodePoint(27)}\\[[0-9;]*m`, "gu"),

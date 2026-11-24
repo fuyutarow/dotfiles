@@ -3,6 +3,12 @@ import { join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
 import { z } from "#src/zod.ts";
 import {
+  missing,
+  toolFailed,
+  unparsable,
+  type ReadError,
+} from "#src/errors.ts";
+import {
   execAsyncBounded,
   execError,
   readJsonAsync,
@@ -71,13 +77,15 @@ const TMPFS_MAGIC = 0x01021994;
 /** Current free bytes and inodes on /tmp when it is a tmpfs filesystem. */
 export async function tmpfsReading(
   path = "/tmp",
-): Promise<Result<TmpfsReading, string>> {
+): Promise<Result<TmpfsReading, ReadError>> {
   const stats = await Result.tryPromise({
     try: () => statfs(path, { bigint: true }),
-    catch: (error): string => execError(error).code ?? "statfs failed",
+    catch: (error) =>
+      toolFailed("statfs", execError(error).code ?? "statfs failed"),
   });
-  if (stats.isErr()) return Result.err(stats.error);
-  if (Number(stats.value.type) !== TMPFS_MAGIC) return Result.err("not tmpfs");
+  if (stats.isErr()) return stats;
+  if (Number(stats.value.type) !== TMPFS_MAGIC)
+    return Result.err(missing("tmpfs", "not tmpfs"));
   return Result.ok({
     availableBytes: Number(stats.value.bavail * stats.value.bsize),
     freeInodes: Number(stats.value.ffree),
@@ -240,23 +248,25 @@ export function parseQuota(text: string): DiskReading[] {
 export async function diskReadingsAsync(
   options: DiskReadOptions = {},
   isWslOverride?: boolean,
-): Promise<Result<DiskEntry[], string>> {
+): Promise<Result<DiskEntry[], ReadError>> {
   const isWsl = isWslOverride ?? (await isWslAsync());
+  const config = "storage-headroom.toml";
   const text = await Bun.file(options.configPath ?? STORAGE_CONFIG)
     .text()
     .catch(() => null);
-  if (text === null) return Result.err("storage-headroom.toml unreadable");
+  if (text === null) return Result.err(missing(config, `${config} unreadable`));
   const raw = Result.try({
     try: (): unknown => Bun.TOML.parse(text),
     catch: (e: unknown) => e,
   });
-  if (raw.isErr()) return Result.err("storage-headroom.toml unreadable");
+  if (raw.isErr())
+    return Result.err(unparsable(config, `${config} unreadable`));
   const parsed = StorageConfigSchema.safeParse(raw.value);
   if (!parsed.success)
-    return Result.err("storage-headroom.toml has an unexpected shape");
+    return Result.err(unparsable(config, `${config} has an unexpected shape`));
   const drives = Object.values(parsed.data.drive ?? {});
   if (drives.length === 0)
-    return Result.err("no [drive.*] in storage-headroom.toml");
+    return Result.err(missing(config, `no [drive.*] in ${config}`));
   const out: DiskEntry[] = [];
   for (const d of drives) {
     if (d.path === undefined) {

@@ -1,5 +1,6 @@
 import type { AgxJobRows } from "#src/agx-job-runs.ts";
 import type { Result } from "@dotfiles/shared/src/result.ts";
+import type { ReadError } from "#src/errors.ts";
 import type { MemReading } from "#src/host-load.ts";
 import type { DiskEntry, TmpEntry, TmpfsReading } from "#src/storage.ts";
 import type { RcState } from "#src/identity.ts";
@@ -61,10 +62,10 @@ export interface Dataframe {
   wt?: string | undefined;
   workspace?: string | undefined;
   // agx workers. undefined = agx has never run on this machine (no state dir).
-  routes?: Result<RouteScan, string> | undefined;
+  routes?: Result<RouteScan, ReadError> | undefined;
   // Current-session runs from agx worker ls; optional for render-only fixtures using the legacy row source.
   jobRuns?: JobRun[] | undefined;
-  liveAgxJobs?: Result<AgxJobRows, string> | undefined;
+  liveAgxJobs?: Result<AgxJobRows, ReadError> | undefined;
   dispatchWarning?: string | undefined; // codex-share warning for this host, see dispatch-warning.ts
   dispatchWarningWhy?: string | undefined;
   recoverHealth?: RecoverHealth | undefined;
@@ -72,10 +73,10 @@ export interface Dataframe {
   // Host readings are Results, not optionals: "could not be taken" carries its reason, and
   // render() prints it. See the EXPLICIT-ABSENCE law below.
   // undefined: this host has no discrete VRAM at all (see vramGated) — silence, not n/a.
-  vram: Result<MemReading, string> | undefined;
-  disks: Result<DiskEntry[], string>;
-  cpuPct: Result<number, string>;
-  ram: Result<MemReading, string>;
-  tmpfs?: Result<TmpfsReading, string> | undefined;
+  vram: Result<MemReading, ReadError> | undefined;
+  disks: Result<DiskEntry[], ReadError>;
+  cpuPct: Result<number, ReadError>;
+  ram: Result<MemReading, ReadError>;
+  tmpfs?: Result<TmpfsReading, ReadError> | undefined;
   tmp?: TmpEntry[] | undefined;
 }

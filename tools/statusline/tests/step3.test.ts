@@ -142,9 +142,11 @@ test("project XDG overrides cannot hide the host sampler; unreadable snapshot re
   expect(frame.cpuPct.unwrapOr(-1)).toBe(42);
   expect(frame.ram.unwrapOr(undefined)?.pct).toBe(50);
   expect(frame.ownerAges?.["cpu"]).toBeGreaterThanOrEqual(65_000);
-  expect((await readOwnerState())?.fields["cpuPct"]?.error).toBe(
-    "owner snapshot unreadable",
-  );
+  expect((await readOwnerState())?.fields["cpuPct"]?.error).toEqual({
+    _tag: "SourceStale",
+    source: "owner snapshot",
+    message: "owner snapshot unreadable",
+  });
 });
 
 test("sampler removes its old atomic leftovers and preserves recent or foreign files", async () => {

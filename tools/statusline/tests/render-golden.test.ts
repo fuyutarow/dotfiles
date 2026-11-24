@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { stale } from "#src/errors.ts";
 import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
 import { buildDataframe } from "#src/build-dataframe.ts";
 import { render } from "#src/format.ts";
@@ -55,7 +56,8 @@ describe("statusline render golden", () => {
         storage: () => Promise.resolve(Result.ok([])),
         herdrReport: () => Promise.resolve(),
         codexRate: () => Promise.resolve(Result.ok(undefined)),
-        jevUsage: () => Promise.resolve(Result.err("fixture unavailable")),
+        jevUsage: () =>
+          Promise.resolve(Result.err(stale("fixture", "fixture unavailable"))),
         recoverHealth: () => Promise.resolve(undefined),
       },
     });

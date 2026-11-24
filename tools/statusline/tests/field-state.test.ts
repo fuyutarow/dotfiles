@@ -3,6 +3,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { stale } from "#src/errors.ts";
 import {
   buildDataframe,
   type BuildDataframeOptions,
@@ -48,7 +49,10 @@ const sources = {
         },
       ],
     }),
-  routes: () => Promise.resolve(Result.err("fixture dispatch unavailable")),
+  routes: () =>
+    Promise.resolve(
+      Result.err(stale("fixture", "fixture dispatch unavailable")),
+    ),
   dispatchWarning: () => Promise.resolve("dispatch-warning-value"),
   recoverHealth: () =>
     Promise.resolve({
@@ -218,20 +222,22 @@ test("every previously good display field survives failed reads independently wi
             modelCapsWhy: "failed",
             wfOn: false,
           }),
-        agentName: () => Promise.resolve(Result.err("failed")),
+        agentName: () =>
+          Promise.resolve(Result.err(stale("fixture", "failed"))),
         rcState: () => Promise.resolve("unknown"),
         repoState: () =>
           Promise.resolve({ branch: undefined, branchWhy: "failed" }),
         hostLoad: () =>
           Promise.resolve({
-            cpuPct: Result.err("failed"),
-            ram: Result.err("failed"),
-            vram: Result.err("failed"),
-            tmpfs: Result.err("failed"),
+            cpuPct: Result.err(stale("fixture", "failed")),
+            ram: Result.err(stale("fixture", "failed")),
+            vram: Result.err(stale("fixture", "failed")),
+            tmpfs: Result.err(stale("fixture", "failed")),
           }),
-        storage: () => Promise.resolve(Result.err("failed")),
-        codexRate: () => Promise.resolve(Result.err("failed")),
-        jevUsage: () => Promise.resolve(Result.err("failed")),
+        storage: () => Promise.resolve(Result.err(stale("fixture", "failed"))),
+        codexRate: () =>
+          Promise.resolve(Result.err(stale("fixture", "failed"))),
+        jevUsage: () => Promise.resolve(Result.err(stale("fixture", "failed"))),
         dispatchWarning: () => new Promise(() => {}),
         recoverHealth: () => new Promise(() => {}),
       },
@@ -304,7 +310,8 @@ test("a Codex read completing after its budget updates only the next frame", asy
     next = await buildDataframe(payload, {
       sources: {
         ...sources,
-        codexRate: () => Promise.resolve(Result.err("failed")),
+        codexRate: () =>
+          Promise.resolve(Result.err(stale("fixture", "failed"))),
       },
       fieldStoreRoot: store,
     });
@@ -369,7 +376,7 @@ test("three disk-snapshot workers survive an outer dispatch timeout, including s
     [
       process.execPath,
       "--eval",
-      `import {buildDataframe} from ${JSON.stringify(join(import.meta.dir, "../src/build-dataframe.ts"))}; import {render} from ${JSON.stringify(join(import.meta.dir, "../src/format.ts"))}; import {Result} from ${JSON.stringify(join(import.meta.dir, "../../shared/src/result.ts"))}; console.log(render(await buildDataframe(${JSON.stringify({ cwd: root, sessionId: payload.sessionId })}, {fieldStoreRoot: ${JSON.stringify(join(home, "reported-failure-fields"))}, sources: {routes: async () => Result.err("dispatch read failed")}})));`,
+      `import {buildDataframe} from ${JSON.stringify(join(import.meta.dir, "../src/build-dataframe.ts"))}; import {render} from ${JSON.stringify(join(import.meta.dir, "../src/format.ts"))}; import {Result} from ${JSON.stringify(join(import.meta.dir, "../../shared/src/result.ts"))}; import {stale} from ${JSON.stringify(join(import.meta.dir, "../src/errors.ts"))}; console.log(render(await buildDataframe(${JSON.stringify({ cwd: root, sessionId: payload.sessionId })}, {fieldStoreRoot: ${JSON.stringify(join(home, "reported-failure-fields"))}, sources: {routes: async () => Result.err(stale("fixture", "dispatch read failed"))}})));`,
     ],
     {
       cwd: join(import.meta.dir, ".."),

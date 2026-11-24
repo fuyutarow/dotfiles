@@ -3,6 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { stale } from "#src/errors.ts";
 import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
 import {
   buildDataframe,
@@ -77,9 +78,9 @@ const makeOptions = (): BuildDataframeOptions => ({
     hostLoad: () =>
       measure("hostLoad", () =>
         Promise.resolve({
-          cpuPct: Result.err("fixture n/a"),
-          ram: Result.err("fixture n/a"),
-          vram: Result.err("fixture n/a"),
+          cpuPct: Result.err(stale("fixture", "fixture n/a")),
+          ram: Result.err(stale("fixture", "fixture n/a")),
+          vram: Result.err(stale("fixture", "fixture n/a")),
         }),
       ),
     routes: () =>
@@ -91,9 +92,13 @@ const makeOptions = (): BuildDataframeOptions => ({
     storage: () => measure("storage", () => Promise.resolve(Result.ok([]))),
     herdrReport: () => measure("herdrReport", () => Promise.resolve()),
     codexRate: () =>
-      measure("codexRate", () => Promise.resolve(Result.err("fixture n/a"))),
+      measure("codexRate", () =>
+        Promise.resolve(Result.err(stale("fixture", "fixture n/a"))),
+      ),
     jevUsage: () =>
-      measure("jevUsage", () => Promise.resolve(Result.err("fixture n/a"))),
+      measure("jevUsage", () =>
+        Promise.resolve(Result.err(stale("fixture", "fixture n/a"))),
+      ),
   },
 });
 for (let i = 0; i < renders; i++) {

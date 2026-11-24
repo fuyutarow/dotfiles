@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { toolFailed, type ReadError } from "#src/errors.ts";
 import type {
   CodexAccountRate,
   CodexCreditMemo,
@@ -13,7 +14,7 @@ export async function readCodexRate(
   _session?: string,
   nowMs = Temporal.Now.instant().epochMilliseconds,
   creditMemo?: CodexCreditMemo,
-): Promise<Result<CodexRate | undefined, string>> {
+): Promise<Result<CodexRate | undefined, ReadError>> {
   const { readCodexSubscriptionUsage } =
     await import("@dotfiles/shared/src/codex-subscription-usage.ts");
   const result = await readCodexSubscriptionUsage(
@@ -26,7 +27,7 @@ export async function readCodexRate(
     result.rate === undefined &&
     result.reason === "Codex rollout read failed"
   )
-    return Result.err("codex rate unavailable");
+    return Result.err(toolFailed("codex rollout", "codex rate unavailable"));
   const rate = result.rate;
   if (
     creditMemo === undefined ||

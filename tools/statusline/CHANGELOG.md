@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.25.1 — 2026-11-25
+
+- Readings fail with tagged errors (SourceMissing, SourceUnparsable, SourceStale, ToolFailed, GpuStalled) from reader to renderer; the GPU stall alert is chosen by tag, the duplicate RAM readers are one, and the legacy hostLoad owner field is gone.
+
 ## 0.25.0 — 2026-11-25
 
 - Each running shell row shows the description the agent gave the Bash call that started it

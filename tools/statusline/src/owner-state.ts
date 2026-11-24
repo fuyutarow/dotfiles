@@ -3,6 +3,15 @@ import { dirname, join, resolve } from "node:path";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { Result } from "@dotfiles/shared/src/result.ts";
 import { jsonOf, z } from "#src/zod.ts";
+import {
+  decodeError,
+  ErrorWireSchema,
+  missing,
+  ReadErrorSchema,
+  unparsable,
+  stale,
+  wireError,
+} from "#src/errors.ts";
 import { MemReadingSchema } from "#src/host-model.ts";
 import { RecoverHealthSchema } from "#src/recover-health.ts";
 import type { Sources } from "#src/build-dataframe.ts";
@@ -18,19 +27,18 @@ export const ownerStatePath = (env: NodeJS.ProcessEnv = process.env) =>
 export const OwnerFieldSchema = z.object({
   at: z.number(),
   value: z.unknown(),
-  error: z.string().optional(),
+  error: ErrorWireSchema.optional(),
 });
 export const OwnerStateSchema = z.object({
   schema: z.literal(1),
   fields: z.record(z.string(), OwnerFieldSchema),
 });
 export type OwnerState = z.output<typeof OwnerStateSchema>;
-const ErrorTextSchema = z.string();
 const ResultWireSchema = z.record(z.string(), z.unknown());
 export const resultSchema = <T extends z.ZodType>(value: T) =>
   ResultWireSchema.transform((wire, context) => {
     if (Object.hasOwn(wire, "error")) {
-      const failure = ErrorTextSchema.safeParse(wire["error"]);
+      const failure = ReadErrorSchema.safeParse(wire["error"]);
       if (failure.success) return Result.err(failure.data);
       context.addIssue({ code: "custom", message: "invalid owner error" });
       return z.NEVER;
@@ -102,19 +110,6 @@ const IdentitySchema = z.lazy(() =>
       modelCapsWhy: v.modelCapsWhy,
     })),
 );
-const HostSchema = z.lazy(() =>
-  z
-    .object({
-      cpuPct: resultSchema(z.number()),
-      ram: resultSchema(MemReadingSchema),
-      vram: resultSchema(MemReadingSchema).optional(),
-      tmpfs: resultSchema(
-        z.object({ availableBytes: z.number(), freeInodes: z.number() }),
-      ).optional(),
-      tmp: z.array(TmpSchema).optional(),
-    })
-    .transform((v) => ({ ...v, vram: v.vram })),
-);
 export const RepoSchema = z
   .object({
     branch: z.string().optional(),
@@ -181,7 +176,12 @@ export async function readOwnerState(
       fields: Object.fromEntries(
         Object.entries(parsed.data.fields).map(([key, field]) => [
           key,
-          { ...field, error: field.error ?? "owner snapshot unreadable" },
+          {
+            ...field,
+            error:
+              field.error ??
+              wireError(stale("owner snapshot", "owner snapshot unreadable")),
+          },
         ]),
       ),
     };
@@ -227,6 +227,8 @@ export async function repositoryRoot(cwd: string): Promise<string | undefined> {
     path = parent;
   }
 }
+
+const SAMPLER_UNAVAILABLE = missing("sampler", "sampler unavailable");
 
 export function ownerSources(
   pending = readOwnerState(),
@@ -279,45 +281,39 @@ export function ownerSources(
     },
     liveAgxJobs: async () => {
       const field = (await pending)?.fields["liveAgxJobs"];
-      if (field === undefined) return Result.err("sampler unavailable");
+      if (field === undefined) return Result.err(SAMPLER_UNAVAILABLE);
       if (field.value === null) return void field.value;
       const age = Temporal.Now.instant().epochMilliseconds - field.at;
       if (age < 0 || age > 600_000)
-        return Result.err(field.error ?? "sample older than 10m");
+        return Result.err(
+          field.error === undefined
+            ? stale("sampler", "sample older than 10m")
+            : decodeError(field.error),
+        );
       return (
         (await read("liveAgxJobs", resultSchema(Rows))) ??
-        Result.err("invalid worker listing")
+        Result.err(unparsable("worker listing", "invalid worker listing"))
       );
     },
-    hostLoad: async () => {
-      const legacy =
-        (await pending)?.fields["cpuPct"] === undefined
-          ? await read("hostLoad", HostSchema)
-          : undefined;
-      return {
-        cpuPct:
-          (await read("cpuPct", resultSchema(z.number()))) ??
-          legacy?.cpuPct ??
-          Result.err("sampler unavailable"),
-        ram:
-          (await read("ram", resultSchema(MemReadingSchema))) ??
-          legacy?.ram ??
-          Result.err("sampler unavailable"),
-        vram:
-          (await read("vram", resultSchema(MemReadingSchema))) ?? legacy?.vram,
-        tmpfs:
-          (await read(
-            "tmpfs",
-            resultSchema(
-              z.object({ availableBytes: z.number(), freeInodes: z.number() }),
-            ),
-          )) ?? legacy?.tmpfs,
-        tmp: (await read("tmp", z.array(TmpSchema))) ?? legacy?.tmp,
-      };
-    },
+    hostLoad: async () => ({
+      cpuPct:
+        (await read("cpuPct", resultSchema(z.number()))) ??
+        Result.err(SAMPLER_UNAVAILABLE),
+      ram:
+        (await read("ram", resultSchema(MemReadingSchema))) ??
+        Result.err(SAMPLER_UNAVAILABLE),
+      vram: await read("vram", resultSchema(MemReadingSchema)),
+      tmpfs: await read(
+        "tmpfs",
+        resultSchema(
+          z.object({ availableBytes: z.number(), freeInodes: z.number() }),
+        ),
+      ),
+      tmp: await read("tmp", z.array(TmpSchema)),
+    }),
     storage: async () =>
       (await read("storage", resultSchema(z.array(DiskSchema)))) ??
-      Result.err("sampler unavailable"),
+      Result.err(SAMPLER_UNAVAILABLE),
     codexRate: async () =>
       (await read("codexRate", resultSchema(RateSchema.optional()))) ??
       Result.ok(undefined),
@@ -343,10 +339,10 @@ export function ownerSources(
       (await read(
         "recoverHealth",
         resultSchema(RecoverHealthSchema.optional()),
-      )) ?? Result.err("sampler unavailable"),
+      )) ?? Result.err(SAMPLER_UNAVAILABLE),
     dispatchWarning: async () => {
       const error = (await pending)?.fields["dispatchWarning"]?.error;
-      if (error !== undefined) return Result.err(error);
+      if (error !== undefined) return Result.err(decodeError(error));
       return (
         (await read("dispatchWarning", resultSchema(z.string().optional()))) ??
         Result.ok(undefined)

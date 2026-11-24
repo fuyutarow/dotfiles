@@ -1,5 +1,12 @@
 import { resolve } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import {
+  missing,
+  stale,
+  toolFailed,
+  unparsable,
+  type ReadError,
+} from "#src/errors.ts";
 import { execAsyncWithin } from "#src/bounded.ts";
 import { jsonOf, z } from "#src/zod.ts";
 
@@ -34,10 +41,12 @@ export async function readJevUsage(
   nowMs?: number,
   env: NodeJS.ProcessEnv = process.env,
   budgetMs = READ_BUDGET_MS,
-): Promise<Result<JevUsage | undefined, string>> {
+): Promise<Result<JevUsage | undefined, ReadError>> {
   const executable = Bun.which("mise", { PATH: env["PATH"] ?? "" });
   if (executable === null)
-    return Result.err("Jev usage unavailable: no mise on PATH");
+    return Result.err(
+      missing("mise", "Jev usage unavailable: no mise on PATH"),
+    );
   const result = await execAsyncWithin(
     "Jev usage",
     executable,
@@ -57,12 +66,14 @@ export async function readJevUsage(
     budgetMs,
     env,
   );
-  if (result.isErr()) return Result.err(result.error.why);
+  if (result.isErr()) return Result.err(toolFailed("agx", result.error.why));
   if (result.value.length > 64 * 1024)
-    return Result.err("Jev usage output exceeds 64 KiB");
+    return Result.err(toolFailed("agx", "Jev usage output exceeds 64 KiB"));
   const parsed = jsonOf(USAGE).safeParse(result.value);
   if (!parsed.success)
-    return Result.err("Jev usage returned invalid schema-1 JSON");
+    return Result.err(
+      unparsable("Jev usage", "Jev usage returned invalid schema-1 JSON"),
+    );
   const usage = parsed.data;
   const times = Result.try({
     try: () => ({
@@ -72,7 +83,9 @@ export async function readJevUsage(
     catch: (e: unknown) => e,
   });
   if (times.isErr())
-    return Result.err("Jev usage has invalid observation time");
+    return Result.err(
+      unparsable("Jev usage", "Jev usage has invalid observation time"),
+    );
   const latest = nowMs ?? Temporal.Now.instant().epochMilliseconds;
   if (
     times.value.to > times.value.captured ||
@@ -80,7 +93,9 @@ export async function readJevUsage(
     latest - times.value.to > MAX_AGE_MS ||
     latest - times.value.captured > MAX_AGE_MS
   )
-    return Result.err("Jev usage observation stale or in the future");
+    return Result.err(
+      stale("Jev usage", "Jev usage observation stale or in the future"),
+    );
   if (usage.estimated_cost_usd !== null)
     return Result.ok({
       costUsd: usage.estimated_cost_usd,
@@ -96,6 +111,9 @@ export async function readJevUsage(
       capturedMs: times.value.captured,
     });
   return Result.err(
-    `Jev usage has no priced usage in the window (completeness ${usage.completeness})`,
+    missing(
+      "Jev usage",
+      `Jev usage has no priced usage in the window (completeness ${usage.completeness})`,
+    ),
   );
 }

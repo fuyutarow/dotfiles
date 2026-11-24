@@ -21,6 +21,16 @@ import {
 import { refreshRecoverHealth } from "#src/recover-health.ts";
 import { writeCacheAsync } from "#src/bounded.ts";
 import { jsonText, z } from "#src/zod.ts";
+import {
+  decodeError,
+  ErrorWireSchema,
+  thrown,
+  toolFailed,
+  toWire,
+  wireError,
+} from "#src/errors.ts";
+
+const FailedSchema = z.object({ error: ErrorWireSchema });
 import type { Dataframe } from "#src/dataframe.ts";
 import type { SessionStatus } from "#src/session-status.ts";
 import { CYAN2, ESC, RST } from "#src/ansi.ts";
@@ -149,16 +159,12 @@ export async function sample(
     const next: OwnerState = { schema: 1, fields: {} };
     const persist = (key: string, value: unknown) => {
       const prior = previous?.fields[key];
-      const failed = z.object({ error: z.string() }).safeParse(value);
-      const previousFailed = z
-        .object({ error: z.string() })
-        .safeParse(prior?.value);
+      const failed = FailedSchema.safeParse(value);
+      const previousFailed = FailedSchema.safeParse(prior?.value);
       // A driver stall is a current observation, not a failed attempt to take a
       // reading. Keeping last-good VRAM here would conceal it behind GPU≈.
       const gpuStalled =
-        key === "vram" &&
-        failed.success &&
-        failed.data.error.startsWith("⚠ GPU stalled since ");
+        failed.success && decodeError(failed.data.error)._tag === "GpuStalled";
       if (
         failed.success &&
         !gpuStalled &&
@@ -177,12 +183,12 @@ export async function sample(
     const save = async (key: string, source: () => Promise<unknown>) => {
       const loaded = await source().then(
         (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error: String(error) }),
+        (error: unknown) => ({ ok: false as const, error: thrown(key, error) }),
       );
       const prior = previous?.fields[key];
       if (!loaded.ok) {
         if (prior !== undefined)
-          next.fields[key] = { ...prior, error: loaded.error };
+          next.fields[key] = { ...prior, error: wireError(loaded.error) };
         return;
       }
       if (key === "liveAgxJobs" && loaded.value === undefined) {
@@ -198,16 +204,16 @@ export async function sample(
             const current: unknown = value.value;
             return { value: current ?? null };
           }
-          if (value instanceof Err) {
-            const error: unknown = value.error;
-            return { error };
-          }
+          if (value instanceof Err) return { error: toWire(value.error) };
           return value;
         }),
       );
       if (!parsed.success) return;
-      persist(key, parsed.data);
-      if (key !== "hostLoad") return;
+      // Host load is stored per reading, so one failed reading keeps the others' last-good.
+      if (key !== "hostLoad") {
+        persist(key, parsed.data);
+        return;
+      }
       const metrics = z.record(z.string(), z.unknown()).safeParse(parsed.data);
       if (!metrics.success) return;
       for (const [metric, value] of Object.entries(metrics.data))
@@ -239,7 +245,9 @@ export async function sample(
       next.fields["sessions"] = {
         at: Temporal.Now.instant().epochMilliseconds,
         value: null,
-        error: `session discovery failed: ${error}`,
+        error: wireError(
+          toolFailed("session discovery", `session discovery failed: ${error}`),
+        ),
       };
     }
     const home = process.env["HOME"] ?? "";
@@ -318,7 +326,7 @@ export async function sample(
       ].map((cwd) =>
         save(agxStatusKey(cwd), async () => {
           const result = await collectAgxStatus(cwd);
-          return result.isOk() ? result.value : { error: result.error };
+          return result.isOk() ? result.value : { error: toWire(result.error) };
         }),
       ),
     ]);

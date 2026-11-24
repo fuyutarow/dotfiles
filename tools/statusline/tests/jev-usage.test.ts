@@ -76,8 +76,8 @@ test("empty evidence has no priced usage and says so instead of a generic n/a", 
   const usage = await readJevUsage(at, env);
   expect(usage.isErr()).toBe(true);
   if (usage.isErr()) {
-    expect(usage.error).toContain("no priced usage");
-    const text = plain(jevUsageSegment(undefined, usage.error));
+    expect(usage.error.message).toContain("no priced usage");
+    const text = plain(jevUsageSegment(undefined, usage.error.message));
     expect(text).toContain("Jev n/a (Jev usage has no priced usage");
   }
 });
@@ -115,9 +115,11 @@ test("a failed read reaches the Rate row as its specific reason, never bare (una
   expect(usage.isErr()).toBe(true);
   if (!usage.isErr()) return;
   const row = plain(
-    rateRow({ rlModel: [], jevUsageWhy: usage.error }, undefined, ["Jev"]),
+    rateRow({ rlModel: [], jevUsageWhy: usage.error.message }, undefined, [
+      "Jev",
+    ]),
   );
-  expect(row).toContain(`Jev n/a (${usage.error})`);
+  expect(row).toContain(`Jev n/a (${usage.error.message})`);
   expect(row).not.toContain("(unavailable)");
   // No reason at all still names the missing sample rather than the generic word.
   const none = plain(rateRow({ rlModel: [] }, undefined, ["Jev"]));
@@ -131,7 +133,7 @@ test("a read slower than its budget reports a timeout naming Jev usage", async (
     300,
   );
   expect(usage.isErr()).toBe(true);
-  if (usage.isErr()) expect(usage.error).toContain("Jev usage");
+  if (usage.isErr()) expect(usage.error.message).toContain("Jev usage");
 });
 
 test.each([
@@ -150,7 +152,7 @@ test.each([
     const usage = await readJevUsage(now, await fakeCli(source));
     expect(usage.isErr()).toBe(true);
     if (usage.isErr())
-      expect(plain(jevUsageSegment(undefined, usage.error))).toContain(
+      expect(plain(jevUsageSegment(undefined, usage.error.message))).toContain(
         "Jev n/a",
       );
   },
@@ -171,7 +173,7 @@ test("uses the dotfiles mise pin from an arbitrary cwd without agx on PATH", asy
       "--eval",
       `import { readJevUsage } from ${JSON.stringify(modulePath)};
 const usage = await readJevUsage(${now});
-if (usage.isErr()) throw new Error(usage.error);
+if (usage.isErr()) throw new Error(usage.error.message);
 process.stdout.write(JSON.stringify(usage.value));`,
     ],
     cwd: env.PATH,

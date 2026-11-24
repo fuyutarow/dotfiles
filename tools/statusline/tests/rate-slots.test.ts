@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { stale } from "#src/errors.ts";
 import {
   buildDataframe,
   type BuildDataframeOptions,
@@ -52,8 +53,8 @@ const quietSources = {
 
   hostLoad: () =>
     Promise.resolve({
-      cpuPct: Result.err("fixture"),
-      ram: Result.err("fixture"),
+      cpuPct: Result.err(stale("fixture", "fixture")),
+      ram: Result.err(stale("fixture", "fixture")),
       vram: undefined,
     }),
   routes: () => Promise.resolve(undefined),

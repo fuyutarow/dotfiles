@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { stale } from "#src/errors.ts";
 import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
 import { buildDataframe } from "#src/build-dataframe.ts";
 import { render } from "#src/format.ts";
@@ -54,7 +55,8 @@ async function renderFixture(wfOn: boolean): Promise<string> {
       storage: () => Promise.resolve(Result.ok([])),
       herdrReport: () => Promise.resolve(),
       codexRate: () => Promise.resolve(Result.ok(undefined)),
-      jevUsage: () => Promise.resolve(Result.err("fixture unavailable")),
+      jevUsage: () =>
+        Promise.resolve(Result.err(stale("fixture", "fixture unavailable"))),
       recoverHealth: () => Promise.resolve(undefined),
     },
   });

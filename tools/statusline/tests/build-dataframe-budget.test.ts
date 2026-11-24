@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { stale } from "#src/errors.ts";
 import { ClaudeStatuslineInputSchema } from "#src/adapters/claude-statusline.ts";
 import { buildDataframe, type SourceClock } from "#src/build-dataframe.ts";
 import { render } from "#src/format.ts";
@@ -50,9 +51,9 @@ describe("buildDataframe source budgets", () => {
 
         hostLoad: () =>
           Promise.resolve({
-            cpuPct: Result.err("host unavailable"),
-            ram: Result.err("host unavailable"),
-            vram: Result.err("host unavailable"),
+            cpuPct: Result.err(stale("fixture", "host unavailable")),
+            ram: Result.err(stale("fixture", "host unavailable")),
+            vram: Result.err(stale("fixture", "host unavailable")),
           }),
         routes: () => Promise.resolve(Result.ok({ runs: [], unreadable: 0 })),
         dispatchWarning: () => Promise.resolve(undefined),
@@ -109,9 +110,9 @@ describe("buildDataframe source budgets", () => {
 
         hostLoad: () =>
           Promise.resolve({
-            cpuPct: Result.err("host unavailable"),
-            ram: Result.err("host unavailable"),
-            vram: Result.err("host unavailable"),
+            cpuPct: Result.err(stale("fixture", "host unavailable")),
+            ram: Result.err(stale("fixture", "host unavailable")),
+            vram: Result.err(stale("fixture", "host unavailable")),
           }),
         routes: () => Promise.resolve(Result.ok({ runs: [], unreadable: 0 })),
         dispatchWarning: () => Promise.resolve(undefined),

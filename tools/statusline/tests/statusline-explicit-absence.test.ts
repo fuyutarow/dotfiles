@@ -17,6 +17,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { stale } from "#src/errors.ts";
 import { gpuSamplingSupported } from "#src/host-load.ts";
 import { sysSegment } from "#src/host-display.ts";
 import { jsonText, z } from "#src/zod.ts";
@@ -219,7 +220,7 @@ describe("statusline Sys row: VRAM", () => {
     const row = sysSegment(
       Result.ok(0),
       Result.ok({ pct: 0, frac: "0/1G" }),
-      Result.err("missing sampler"),
+      Result.err(stale("fixture", "missing sampler")),
       Result.ok([]),
       [],
       (key, _label, state) => {

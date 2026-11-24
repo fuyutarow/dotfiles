@@ -4,6 +4,12 @@ import { AgxStatusSchema } from "#src/agx-snapshot.ts";
 import { RoutingStatsSchema } from "#src/dispatch-warning.ts";
 import { jsonOf, z } from "#src/zod.ts";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import {
+  missing,
+  toolFailed,
+  unparsable,
+  type ReadError,
+} from "#src/errors.ts";
 import { resolve } from "node:path";
 
 async function collectAgx<S extends z.ZodType>(
@@ -11,10 +17,10 @@ async function collectAgx<S extends z.ZodType>(
   args: string[],
   schema: S,
   env: NodeJS.ProcessEnv,
-): Promise<Result<z.output<S>, string>> {
+): Promise<Result<z.output<S>, ReadError>> {
   const executable = Bun.which("mise", { PATH: env["PATH"] ?? "" });
   if (executable === null)
-    return Result.err(`${tool} unavailable: no mise on PATH`);
+    return Result.err(missing("mise", `${tool} unavailable: no mise on PATH`));
   const result = await execAsyncWithin(
     tool,
     executable,
@@ -22,12 +28,14 @@ async function collectAgx<S extends z.ZodType>(
     5000,
     env,
   );
-  if (result.isErr()) return Result.err(result.error.why);
+  if (result.isErr()) return Result.err(toolFailed(tool, result.error.why));
   if (result.value.length > 4 * 1024 * 1024)
-    return Result.err(`${tool} output exceeds 4 MiB`);
+    return Result.err(toolFailed(tool, `${tool} output exceeds 4 MiB`));
   const parsed = jsonOf(schema).safeParse(result.value);
   if (!parsed.success)
-    return Result.err(`${tool} returned invalid schema-1 JSON`);
+    return Result.err(
+      unparsable(tool, `${tool} returned invalid schema-1 JSON`),
+    );
   return Result.ok(parsed.data);
 }
 

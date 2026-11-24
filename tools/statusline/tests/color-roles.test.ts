@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { stale } from "#src/errors.ts";
 import { rateRow } from "#src/rate-limits.ts";
 import { memSegment, sysSegment } from "#src/host-display.ts";
 import { type DiskReading } from "#src/storage.ts";
@@ -165,9 +166,9 @@ test.each([
 
 test("Sys n/a values and reasons share the Rate roles", () => {
   const row = sysSegment(
-    Result.err("cpu"),
-    Result.err("ram"),
-    Result.err("gpu"),
+    Result.err(stale("fixture", "cpu")),
+    Result.err(stale("fixture", "ram")),
+    Result.err(stale("fixture", "gpu")),
     Result.ok([{ kind: "miss", label: "Disk /", why: "disk" }]),
   );
   for (const [label, why] of [
@@ -184,10 +185,10 @@ test("Sys n/a values and reasons share the Rate roles", () => {
   expect(row).not.toContain(`VRAM ${amber}n/a${reset}`);
   expect(
     sysSegment(
-      Result.err("cpu"),
-      Result.err("ram"),
+      Result.err(stale("fixture", "cpu")),
+      Result.err(stale("fixture", "ram")),
       undefined,
-      Result.err("storage"),
+      Result.err(stale("fixture", "storage")),
       [],
     ),
   ).toEndWith(`Disk ${amber}n/a${reset} ${dim}(storage)${reset}`);

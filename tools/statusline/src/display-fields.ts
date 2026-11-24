@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { missing } from "#src/errors.ts";
 import type { Dataframe } from "#src/dataframe.ts";
 import { render } from "#src/format.ts";
 import {
@@ -45,7 +46,7 @@ export async function prepareDisplayFields(
   );
   if (inventory.kind !== "unknown") {
     const labels = jsonOf(z.array(z.string())).safeParse(inventory.value);
-    const why = df.disks.isErr() ? df.disks.error : "disk not reported";
+    const why = df.disks.isErr() ? df.disks.error.message : "disk not reported";
     const entries = df.disks.isOk() ? df.disks.value : [];
     if (labels.success)
       df.disks = Result.ok([
@@ -89,7 +90,7 @@ export async function prepareDisplayFields(
   );
   if (df.vram === undefined && vramPresence.kind !== "unknown") {
     // A previously observed GPU disappearing is a failed observation, not a new machine.
-    df.vram = Result.err("GPU unavailable");
+    df.vram = Result.err(missing("GPU", "GPU unavailable"));
   }
   const pending = new Map<
     string,
@@ -97,7 +98,8 @@ export async function prepareDisplayFields(
   >();
   if (df.tmpfs === undefined) {
     const prior = await retainField("host:tmpfs", observed(undefined), store);
-    if (prior.kind !== "unknown") df.tmpfs = Result.err("tmpfs unavailable");
+    if (prior.kind !== "unknown")
+      df.tmpfs = Result.err(missing("tmpfs", "tmpfs unavailable"));
   }
   const tmpInventory = await retainField(
     "tmp-inventory",

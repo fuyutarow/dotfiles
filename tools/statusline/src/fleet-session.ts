@@ -60,7 +60,7 @@ async function sessionName(
       "Claude name lookup is not enabled outside Herdr sessions",
     );
   const result = await agentNameAsync(sessionId, hint);
-  if (result.isErr()) return unavailable(result.error);
+  if (result.isErr()) return unavailable(result.error.message);
   return availableText(
     result.value,
     "Claude agent name is not listed for this session",

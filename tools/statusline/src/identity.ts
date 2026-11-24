@@ -1,5 +1,6 @@
 import { open, stat, type FileHandle } from "node:fs/promises";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { toolFailed, unparsable, type ReadError } from "#src/errors.ts";
 import { jsonOf, jsonText, maybe, z } from "#src/zod.ts";
 import { writeFleetSession } from "@dotfiles/shared/src/fleet-session.ts";
 import {
@@ -247,11 +248,12 @@ export async function readAgentNamesAsync() {
     ["agents", "--json"],
     AGENT_LIST_TIMEOUT_MS,
   );
-  if (result.isErr()) return Result.err(result.error.why);
+  if (result.isErr())
+    return Result.err(toolFailed("claude agents", result.error.why));
   const parsed = jsonOf(AgentListSchema).safeParse(result.value);
   return parsed.success
     ? Result.ok(parsed.data)
-    : Result.err("claude agents output unparsable");
+    : Result.err(unparsable("claude agents output"));
 }
 // Cache-miss refresh: fold `claude agents --json`'s list into the sid->name map, keeping only
 // entries that carry a sessionId. Extracted out of agentName() only to keep its try/for nesting
@@ -274,7 +276,7 @@ function agentNameEntries(
 export async function agentNameAsync(
   sid: string,
   hint?: string,
-): Promise<Result<string | undefined, string>> {
+): Promise<Result<string | undefined, ReadError>> {
   const cache =
     (await readJsonAsync(AGENT_NAME_CACHE, AgentNameCacheSchema)) ?? {};
   const hit = cache[sid];
@@ -293,9 +295,11 @@ export async function agentNameAsync(
     ["agents", "--json"],
     AGENT_LIST_TIMEOUT_MS,
   );
-  if (outResult.isErr()) return Result.err(outResult.error.why);
+  if (outResult.isErr())
+    return Result.err(toolFailed("claude agents", outResult.error.why));
   const listResult = jsonOf(AgentListSchema).safeParse(outResult.value);
-  if (!listResult.success) return Result.err("claude agents output unparsable");
+  if (!listResult.success)
+    return Result.err(unparsable("claude agents output"));
   const now = Temporal.Now.instant().epochMilliseconds;
   const next = agentNameEntries(listResult.data, now);
   if (!Object.hasOwn(next, sid)) next[sid] = { at: now };

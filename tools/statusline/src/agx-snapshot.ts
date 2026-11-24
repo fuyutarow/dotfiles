@@ -1,6 +1,7 @@
 import { DoctorFindings } from "@dotfiles/shared/src/doctor-record.ts";
 import { resolve } from "node:path";
 import { readOwnerState } from "#src/owner-state.ts";
+import { decodeError } from "#src/errors.ts";
 import { z } from "#src/zod.ts";
 const WorkspaceCountsSchema = () =>
   z.object({
@@ -190,7 +191,8 @@ export async function readAgxSnapshotAsync(
         ),
       );
     }
-    snapshot.reason = field.error;
+    snapshot.reason =
+      field.error === undefined ? undefined : decodeError(field.error).message;
     if (snapshot.workspaces !== undefined) snapshot.workspaces.stale = true;
     if (snapshot.findings !== undefined) snapshot.findings.stale = true;
   }

@@ -226,7 +226,7 @@ test("schema-1 unknown and null optional facts remain unavailable", () => {
 const failure = (result: Awaited<ReturnType<typeof collectAgxStatus>>) =>
   result.match({
     ok: () => null,
-    err: (error) => error,
+    err: (error) => error.message,
   });
 
 test("failed commands, malformed JSON, and unsupported schemas never become observations", async () => {
@@ -424,7 +424,7 @@ test("C5 collector uses the pinned routing command and rejects unavailable obser
   const failed = async (extra: NodeJS.ProcessEnv = {}) =>
     (await collectAgxRouting({ ...env, ...extra })).match({
       ok: () => null,
-      err: (error) => error,
+      err: (error) => error.message,
     });
   expect(await failed({ AGX_STATUS_EXIT: "7" })).toContain("exit 7");
   expect(await failed({ PATH: "" })).toContain("no mise on PATH");

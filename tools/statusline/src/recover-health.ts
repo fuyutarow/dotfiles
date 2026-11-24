@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
+import { missing, type ReadError } from "#src/errors.ts";
 import {
   execAsyncWithin,
   readJsonAsync,
@@ -34,13 +35,14 @@ const now = (): number => Temporal.Now.instant().epochMilliseconds;
 
 /** Read owner health only; the sampler owns all refreshes. */
 export async function readRecoverHealthAsync(): Promise<
-  Result<RecoverHealth | undefined, string>
+  Result<RecoverHealth | undefined, ReadError>
 > {
   const snapshot = await readJsonAsync(
     RECOVER_HEALTH_CACHE,
     RecoverSnapshotSchema,
   );
-  if (snapshot === undefined) return Result.err("recover health unavailable");
+  if (snapshot === undefined)
+    return Result.err(missing("recover health", "recover health unavailable"));
   return Result.ok(snapshot.health ?? undefined);
 }
 

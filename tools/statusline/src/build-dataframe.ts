@@ -1,4 +1,5 @@
 import { Err, Ok, Result } from "@dotfiles/shared/src/result.ts";
+import { toolFailed, type ReadError } from "#src/errors.ts";
 import type { SessionStatus } from "#src/session-status.ts";
 import type { Dataframe } from "#src/dataframe.ts";
 import type { HostLoad } from "#src/host-load.ts";
@@ -22,9 +23,9 @@ type IdentityFacts = {
   wfOn: boolean;
   workflowWhy?: string | undefined;
 };
-type WarningRead = Result<string | undefined, string> | string | undefined;
+type WarningRead = Result<string | undefined, ReadError> | string | undefined;
 type HealthRead =
-  | Result<RecoverHealth | undefined, string>
+  | Result<RecoverHealth | undefined, ReadError>
   | RecoverHealth
   | undefined;
 function warningPatch(
@@ -34,7 +35,7 @@ function warningPatch(
     return { dispatchWarning: value, dispatchWarningWhy: undefined };
   return {
     dispatchWarning: value.unwrapOr(undefined),
-    dispatchWarningWhy: value.isErr() ? value.error : undefined,
+    dispatchWarningWhy: value.isErr() ? value.error.message : undefined,
   };
 }
 function healthPatch(
@@ -43,7 +44,7 @@ function healthPatch(
   if (value instanceof Ok || value instanceof Err)
     return {
       recoverHealth: value.unwrapOr(undefined),
-      recoverHealthWhy: value.isErr() ? value.error : undefined,
+      recoverHealthWhy: value.isErr() ? value.error.message : undefined,
     };
   return { recoverHealth: value, recoverHealthWhy: undefined };
 }
@@ -52,7 +53,7 @@ export type Sources = {
   agentName: (
     sid: string,
     hint?: string,
-  ) => Promise<Result<string | undefined, string>>;
+  ) => Promise<Result<string | undefined, ReadError>>;
   rcState: () => Promise<RcState>;
   repoState: (cwd: string) => Promise<{
     branch: string | undefined;
@@ -61,14 +62,14 @@ export type Sources = {
     add?: number | undefined;
     del?: number | undefined;
   }>;
-  liveAgxJobs: () => Promise<Result<AgxJobRows, string> | undefined>;
+  liveAgxJobs: () => Promise<Result<AgxJobRows, ReadError> | undefined>;
   hostLoad: () => Promise<Omit<HostLoad, "disks">>;
   routes: (
     sessionId?: string,
     cwd?: string,
-  ) => Promise<Result<RouteScan, string> | undefined>;
+  ) => Promise<Result<RouteScan, ReadError> | undefined>;
   dispatchWarning: () => Promise<WarningRead>;
-  storage: () => Promise<Result<DiskEntry[], string>>;
+  storage: () => Promise<Result<DiskEntry[], ReadError>>;
   herdrReport: (
     model: string,
     sessionName?: string,
@@ -102,6 +103,7 @@ const SOURCE_CLOCK: SourceClock = {
     };
   },
 };
+const HOST_LOAD_UNAVAILABLE = toolFailed("host load", "host load unavailable");
 const BUDGETS_MS: Record<keyof Sources, number> = {
   identity: 1500,
   agentName: 3000,
@@ -287,7 +289,7 @@ export async function buildDataframe(
       budget("agentName"),
       () =>
         sid === undefined
-          ? Promise.resolve<Result<string | undefined, string>>(
+          ? Promise.resolve<Result<string | undefined, ReadError>>(
               Result.ok(undefined),
             )
           : sources.agentName(sid, sessionNameHint),
@@ -295,7 +297,7 @@ export async function buildDataframe(
         publish(
           {
             sessionName: value.unwrapOr(undefined),
-            sessionNameWhy: value.isErr() ? value.error : undefined,
+            sessionNameWhy: value.isErr() ? value.error.message : undefined,
           },
           ["name"],
         ),
@@ -320,7 +322,7 @@ export async function buildDataframe(
     bounded(
       "dispatch",
       budget("routes"),
-      async (): Promise<Result<RouteScan, string> | undefined> =>
+      async (): Promise<Result<RouteScan, ReadError> | undefined> =>
         options.sources?.routes === undefined
           ? Result.ok(await readCoreRuns(process.env, sid, cwd))
           : sources.routes(sid, cwd),
@@ -339,7 +341,7 @@ export async function buildDataframe(
       publish(
         {
           codexRate: value.unwrapOr(undefined),
-          codexRateWhy: value.isErr() ? value.error : undefined,
+          codexRateWhy: value.isErr() ? value.error.message : undefined,
         },
         [],
         "codex:",
@@ -349,7 +351,7 @@ export async function buildDataframe(
       publish(
         {
           jevUsage: value.unwrapOr(undefined),
-          jevUsageWhy: value.isErr() ? value.error : undefined,
+          jevUsageWhy: value.isErr() ? value.error.message : undefined,
         },
         ["jev"],
       ),
@@ -372,7 +374,11 @@ export async function buildDataframe(
     },
     "account",
   );
-  const name = settled(nameResult, Result.err("name unavailable"), "name");
+  const name = settled(
+    nameResult,
+    Result.err(toolFailed("name", "name unavailable")),
+    "name",
+  );
   const rc = settled(rcResult, "unknown", "rc");
   const repo = settled(
     repoResult,
@@ -382,10 +388,10 @@ export async function buildDataframe(
   const host = settled(
     hostResult,
     {
-      cpuPct: Result.err("host load unavailable"),
-      ram: Result.err("host load unavailable"),
-      vram: Result.err("host load unavailable"),
-      tmpfs: Result.err("host load unavailable"),
+      cpuPct: Result.err(HOST_LOAD_UNAVAILABLE),
+      ram: Result.err(HOST_LOAD_UNAVAILABLE),
+      vram: Result.err(HOST_LOAD_UNAVAILABLE),
+      tmpfs: Result.err(HOST_LOAD_UNAVAILABLE),
     },
     "host load",
   );
@@ -409,17 +415,17 @@ export async function buildDataframe(
   const warning = settled(warningResult, undefined, "dispatch warning");
   const storage = settled(
     storageResult,
-    Result.err("storage unavailable"),
+    Result.err(toolFailed("storage", "storage unavailable")),
     "storage",
   );
   const codexRate = settled(
     codexRateResult,
-    Result.err("codex rate unavailable"),
+    Result.err(toolFailed("codex rate", "codex rate unavailable")),
     "codex rate",
   );
   const jevUsage = settled(
     jevUsageResult,
-    Result.err("Jev usage unavailable"),
+    Result.err(toolFailed("Jev usage", "Jev usage unavailable")),
     "Jev usage",
   );
   const recoverHealth = settled(
@@ -436,14 +442,16 @@ export async function buildDataframe(
     : undefined;
   let sessionNameWhy = name.why;
   if (sessionNameWhy === undefined && nameResultValue.isErr())
-    sessionNameWhy = nameResultValue.error;
+    sessionNameWhy = nameResultValue.error.message;
   const branch = repo.value.branch;
   const branchWhy = repo.why ?? repo.value.branchWhy;
   const cpu = host.value.cpuPct;
   const ram = host.value.ram;
   const vram = host.value.vram;
   const disks =
-    storage.why === undefined ? storage.value : Result.err(storage.why);
+    storage.why === undefined
+      ? storage.value
+      : Result.err(toolFailed("storage", storage.why));
   const wfOn = identity.value.wfOn && effort === "xhigh";
 
   const dataframe: Dataframe = {
@@ -491,14 +499,14 @@ export async function buildDataframe(
         : undefined,
     codexRateWhy:
       codexRate.why ??
-      (codexRate.value.isErr() ? codexRate.value.error : undefined),
+      (codexRate.value.isErr() ? codexRate.value.error.message : undefined),
     jevUsage:
       jevUsage.why === undefined && jevUsage.value.isOk()
         ? jevUsage.value.value
         : undefined,
     jevUsageWhy:
       jevUsage.why ??
-      (jevUsage.value.isErr() ? jevUsage.value.error : undefined),
+      (jevUsage.value.isErr() ? jevUsage.value.error.message : undefined),
     branch,
     branchWhy,
     add: repo.value.add ?? data.changes?.linesAdded,
@@ -508,9 +516,12 @@ export async function buildDataframe(
       const result = settled(liveAgxResult, undefined, "agx");
       return result.why === undefined
         ? result.value
-        : Result.err(result.why.replace(/^agx /u, ""));
+        : Result.err(toolFailed("agx", result.why.replace(/^agx /u, "")));
     })(),
-    routes: routes.why === undefined ? routes.value : Result.err(routes.why),
+    routes:
+      routes.why === undefined
+        ? routes.value
+        : Result.err(toolFailed("dispatch", routes.why)),
     dispatchWarning: warningFacts.dispatchWarning,
     dispatchWarningWhy: warning.why ?? warningFacts.dispatchWarningWhy,
     recoverHealth: healthFacts.recoverHealth,

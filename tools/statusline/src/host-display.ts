@@ -16,6 +16,7 @@ import {
 import type { DiskEntry, TmpEntry, TmpfsReading } from "#src/storage.ts";
 import { diskSegment, tmpSegment } from "#src/storage-display.ts";
 import type { MemReading } from "#src/host-model.ts";
+import type { ReadError } from "#src/errors.ts";
 import { cccBadge } from "#src/ccc-model.ts";
 export const STALE_SHOW_S = 60;
 
@@ -48,7 +49,7 @@ export function memSegment(
     seg += ` ${roles.secondary(`stale ${m.stale.secs}s (${m.stale.why})`)}`;
   return seg;
 }
-function gpuObservation(vram: Result<MemReading, string>) {
+function gpuObservation(vram: Result<MemReading, ReadError>) {
   return vram.match({
     ok: (m) => {
       const utilization = gpuSegment(m);
@@ -58,11 +59,11 @@ function gpuObservation(vram: Result<MemReading, string>) {
         (m.stale?.secs ?? 0) * 1000,
       );
     },
-    err: (why) => {
-      if (why.startsWith("⚠ GPU stalled since "))
-        return observed(roles.value(why, "167"));
-      return observed(undefined, why);
-    },
+    // A stall is an alert drawn in place of the reading, not a quiet n/a.
+    err: (error) =>
+      error._tag === "GpuStalled"
+        ? observed(roles.value(error.message, "167"))
+        : observed(undefined, error.message),
   });
 }
 // Disks: WHICH filesystems and at what free space they turn yellow/red are not decided here —
@@ -74,13 +75,13 @@ const currentTmp: TmpEntry[] = [
   { kind: "miss", label: "tmp", why: "not sampled" },
 ];
 export function sysSegment(
-  cpu: Result<number, string>,
-  ram: Result<MemReading, string>,
-  vram: Result<MemReading, string> | undefined,
-  disks: Result<DiskEntry[], string>,
+  cpu: Result<number, ReadError>,
+  ram: Result<MemReading, ReadError>,
+  vram: Result<MemReading, ReadError> | undefined,
+  disks: Result<DiskEntry[], ReadError>,
   tmp: TmpEntry[] = currentTmp,
   field: FieldDisplay = fieldDisplay(),
-  tmpfs?: Result<TmpfsReading, string>,
+  tmpfs?: Result<TmpfsReading, ReadError>,
 ): string {
   const parts: string[] = [
     cpu.match({
@@ -92,7 +93,7 @@ export function sysSegment(
           observed(`${roles.label("CPU")} ${roles.value(`${pct}%`, col)}`),
         );
       },
-      err: (why) => field("cpu", "CPU", observed(undefined, why)),
+      err: (error) => field("cpu", "CPU", observed(undefined, error.message)),
     }),
     ram.match({
       ok: (m) =>
@@ -105,7 +106,7 @@ export function sysSegment(
             (m.stale?.secs ?? 0) * 1000,
           ),
         ),
-      err: (why) => field("ram", "RAM", observed(undefined, why)),
+      err: (error) => field("ram", "RAM", observed(undefined, error.message)),
     }),
     ...(vram === undefined ? [] : [field("gpu", "GPU", gpuObservation(vram))]),
     ...(tmpfs === undefined
@@ -119,7 +120,7 @@ export function sysSegment(
                 observed(
                   `tmpfs ${formatBytes(reading.availableBytes)} free · ${reading.freeInodes}i`,
                 ),
-              err: (why) => observed(undefined, why),
+              err: (error) => observed(undefined, error.message),
             }),
           ),
         ]),
@@ -137,7 +138,9 @@ export function sysSegment(
             value = diskSegment(disk);
           return field(`disk:${disk.label}`, disk.label, observed(value, why));
         }),
-      err: (why) => [field("disks", "Disk", observed(undefined, why))],
+      err: (error) => [
+        field("disks", "Disk", observed(undefined, error.message)),
+      ],
     }),
     ...tmp.map((entry) =>
       field(
@@ -154,11 +157,11 @@ export function sysSegment(
 
 /** Every Sys reading, each a value or the reason it could not be taken (EXPLICIT-ABSENCE). */
 export interface HostLoad {
-  cpuPct: Result<number, string>;
-  ram: Result<MemReading, string>;
-  vram: Result<MemReading, string> | undefined; // undefined: this host has no discrete VRAM
-  disks: Result<DiskEntry[], string>;
-  tmpfs?: Result<TmpfsReading, string> | undefined;
+  cpuPct: Result<number, ReadError>;
+  ram: Result<MemReading, ReadError>;
+  vram: Result<MemReading, ReadError> | undefined; // undefined: this host has no discrete VRAM
+  disks: Result<DiskEntry[], ReadError>;
+  tmpfs?: Result<TmpfsReading, ReadError> | undefined;
   tmp?: TmpEntry[] | undefined;
 }
 

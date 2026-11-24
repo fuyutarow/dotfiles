@@ -69,8 +69,10 @@ describe("mise-contract floor", () => {
 
   test("current clean aggregate remains at zero hard findings", async () => {
     const { out, code } = await run(REPO_ROOT);
+    // Warnings: the rumdl patch pin, hyphenated names, and grammar rule 7's five inversions
+    // (config, doctor, install, link, tools) — WARN until they are renamed.
     expect(out).toContain(
-      `—     mise-contract: 0 hard, 2 warn (${REPO_ROOT})\n`,
+      `—     mise-contract: 0 hard, 3 warn (${REPO_ROOT})\n`,
     );
     expect(code).toBe(0);
   });

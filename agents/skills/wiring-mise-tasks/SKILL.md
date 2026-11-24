@@ -164,6 +164,14 @@ Missing or malformed jj variables must fail closed; never silently use the Git f
    holds. The mise facts a hook depends on (`:::`, `--jobs 1`, `raw = true`) are
    `references/recipes.md` §8. Templates ship `hook:pre-commit = ["fmt:staged", "lint"]`.
    Julia ships `["fmt:staged"]` alone. Its starter `lint` reuses the whole-tree `fmt:check`.
+7. Object first, action after: the first segment names what the task acts on (`web`, `docs`,
+   `chain`, `localnet`), later segments the action (`web:deploy`, `localnet:up`). One object's
+   tasks then share one prefix — `deploy:testnet` beside `testnet:publish` splits them. A task
+   whose body differs only by environment takes it as an argument
+   (`chain:publish` given `--network testnet`), not as a name segment. The gate WARNs on a
+   word that leads one name and ends another. A contract verb is exempt in either place: last it
+   is the action (`okf:lint`, `X:check`), first it is a verb namespace whose object comes last on
+   purpose (`lint:bun`, `test:android`; rules 4–5).
 
 ## Per-language bodies — the matrix
 

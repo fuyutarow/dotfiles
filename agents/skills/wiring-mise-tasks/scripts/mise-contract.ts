@@ -1256,6 +1256,13 @@ async function check(
     );
     warnings += 1;
   }
+  const inversions = segmentInversions(local.map((task) => task.name));
+  if (inversions.length > 0) {
+    process.stdout.write(
+      `WARN  grammar: object word both leads and ends task names (object first, action after; an environment is an argument): ${inversions.join(" ")}\n`,
+    );
+    warnings += 1;
+  }
   const checkTask = local.find((task) => task.name === "check");
   if (checkTask?.depends.length === 0) {
     process.stdout.write(
@@ -1279,6 +1286,47 @@ async function check(
     `—     mise-contract: ${failures} hard, ${warnings} warn (${root})\n`,
   );
   return { failures, environmentFailure: false };
+}
+
+/**
+ * Grammar rule 7: the first segment names the object a task acts on, later segments the action.
+ * A word that leads one task name and ends another (`testnet:publish` beside `deploy:testnet`)
+ * splits one object's tasks across two prefixes. A contract verb is exempt in either place: last
+ * it is the action (`okf:lint`, rule 2's `X:check`), first it is a verb namespace whose object
+ * comes last on purpose (`lint:bun`, `test:android`; rules 4–5).
+ * Returns `word(lead-example,end-example)` per word.
+ */
+const VERB_NAMESPACES = new Set([
+  "setup",
+  "fmt",
+  "lint",
+  "test",
+  "up",
+  "check",
+  "commit",
+  "pull",
+  "push",
+  "hook",
+]);
+
+export function segmentInversions(names: readonly string[]): string[] {
+  const split = names
+    .map((name) => name.split(":"))
+    .filter((segments) => segments.length >= 2);
+  const leads = new Map<string, string>();
+  const ends = new Map<string, string>();
+  for (const segments of split) {
+    const name = segments.join(":");
+    const first = segments[0] ?? "";
+    const last = segments.at(-1) ?? "";
+    if (!leads.has(first)) leads.set(first, name);
+    if (VERB_NAMESPACES.has(last) || VERB_NAMESPACES.has(first)) continue;
+    if (!ends.has(last)) ends.set(last, name);
+  }
+  return [...leads]
+    .filter(([word]) => ends.has(word))
+    .map(([word, lead]) => `${word}(${lead},${ends.get(word) ?? ""})`)
+    .toSorted();
 }
 
 function rejectPrototypeFlag(type: string, flag: string): void {

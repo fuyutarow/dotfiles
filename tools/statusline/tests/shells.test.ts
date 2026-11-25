@@ -75,11 +75,9 @@ test("one row per writing task, not per holder; finished tasks absent", async ()
 // whose cwd is a subdirectory must be looked up under the project_dir slug.
 test("cwd in a subdirectory finds the shells under the project_dir slug", async () => {
   const subCwd = "/project/sub/dir";
+  // Under the cwd slug there is no task directory, which reads as no shells at all.
   const without = await scanShells(subCwd, sid, options);
-  expect(without).toEqual({
-    kind: "unknown",
-    reason: "tasks dir unreadable: ENOENT",
-  });
+  expect(without).toEqual({ kind: "known", rows: [] });
   const scan = await scanShells(subCwd, sid, {
     ...options,
     projectDir: "/project",
@@ -480,4 +478,12 @@ test("descriptions pad to one column, cut with an ellipsis, and count wide chara
   expect(Bun.stripANSI(shellLines(scan, 30).split("\n")[0] ?? "")).toBe(
     "sh_aaa 2m00s │ working",
   );
+});
+// A new session has not started a background shell yet, so Claude Code has not created its task
+// directory: that is zero shells, never `shells: unknown`.
+test("a session with no task directory yet has no shells", async () => {
+  expect(await scanShells(cwd, "new-session", options)).toEqual({
+    kind: "known",
+    rows: [],
+  });
 });

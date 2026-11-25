@@ -41,9 +41,11 @@ readable or fits, the row contains only the task ID and elapsed time. The output
 its own stdout and stderr away from its output file is not shown. An unreadable
 or incomplete scan, including on macOS, displays `shells: unknown (<reason>)`,
 where the reason names the check that failed, for example `tasks dir unreadable:
-ENOENT`, `/proc has more than 8192 entries`, `pid 123 fd 4 fdinfo over 4096 bytes`,
-or `scan failed: <message>`. The scan runs in this order: the session's task
-directory must exist (it is stat-ed, never listed); `/proc` is listed with at most
+EACCES`, `/proc has more than 8192 entries`, `pid 123 fd 4 fdinfo over 4096 bytes`,
+or `scan failed: <message>`. A missing task directory is not unreadable: Claude Code creates
+it with the session's first background shell, so its absence means zero shells. The scan runs
+in this order: the session's task directory is stat-ed, never listed (absent ends the
+scan with zero shells); `/proc` is listed with at most
 8192 entries; each same-UID process has at most 256 descriptors read; a descriptor
 counts only when its target is a `.output` file directly under that task directory
 and its fdinfo shows write access. Running shells therefore come from the bounded

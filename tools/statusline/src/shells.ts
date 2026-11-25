@@ -329,6 +329,11 @@ export async function scanShells(
   const work = async (): Promise<ShellScan> => {
     // Existence only: the directory is never listed, so its size cannot hide a shell.
     const tasks = await settle(stat(taskDir));
+    // Claude Code creates the directory with the session's first background shell, so a new
+    // session has none. With no directory, no process can hold an output file inside it:
+    // that is a known zero, not an unreadable scan.
+    if (!tasks.ok && code(tasks.error) === "ENOENT")
+      return { kind: "known", rows: [] };
     if (!tasks.ok) return unknown(`tasks dir unreadable: ${code(tasks.error)}`);
     const listed = await settle(entries(proc, PID_LIMIT));
     if (!listed.ok) return unknown(`/proc unreadable: ${code(listed.error)}`);

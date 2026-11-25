@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.25.2 — 2026-11-25
+
+- A session with no background-shell task directory yet shows zero shells instead of shells: unknown (tasks dir unreadable: ENOENT).
+
 ## 0.25.1 — 2026-11-25
 
 - Readings fail with tagged errors (SourceMissing, SourceUnparsable, SourceStale, ToolFailed, GpuStalled) from reader to renderer; the GPU stall alert is chosen by tag, the duplicate RAM readers are one, and the legacy hostLoad owner field is gone.

@@ -14,6 +14,6 @@ url = "https://api.typesafe.ai/v1/systemone"
 model = "jev-latest"
 
 [claude_run]
-max_budget_usd = 2.0
-max_turns = 60
-reason = "A worker task here cost 0.05-0.20 USD on luna; 20x is 1-4 USD, so 2 USD caps a run near the median at claude prices and turns an endless loop into a bounded failure."
+max_budget_usd = 5.0
+max_turns = 120
+reason = "Raised from 2 to 5 USD by the owner (2026-11-23): at 2 USD, cross-module coralbase tickets stopped mid-step before their final report and needed a continuation per step. 5 USD still turns an endless loop into a bounded failure. max_turns raised from 60 to 120 (2026-11-26): coralbase runs 9f8dd022 and a1977c8f stopped at 60 turns mid-test at 1.85-1.97 USD, inside the budget, so turns rather than cost ended the work; cost stays bounded by max_budget_usd."

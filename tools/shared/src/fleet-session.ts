@@ -16,6 +16,8 @@ import { jsonOf, z } from "#src/zod.ts";
 export const FleetSessionUnavailableSchema = z.strictObject({
   na: z.literal(true),
   why: z.string().min(1),
+  // Readers branch on this, never on the words in `why`.
+  kind: z.enum(["missing", "invalid"]).optional(),
 });
 
 // Whatever the session is called: the generated <repo>-agt_<id> default or a `/rename`d name.
@@ -90,8 +92,11 @@ function sessionPath(
   return Result.ok(join(runtimeDir, "fleet", "sessions", `${sessionId}.json`));
 }
 
-function unavailable(why: string): FleetSessionUnavailable {
-  return { na: true, why };
+function unavailable(
+  why: string,
+  kind?: "missing" | "invalid",
+): FleetSessionUnavailable {
+  return kind === undefined ? { na: true, why } : { na: true, why, kind };
 }
 
 /** Different spellings are equivalent only when the filesystem proves it. */
@@ -119,6 +124,7 @@ export function parseFleetSession(text: string): FleetSessionRead {
     ? parsed.data
     : unavailable(
         `invalid fleet session: ${parsed.error.issues[0]?.message ?? "unknown validation error"}`,
+        "invalid",
       );
 }
 
@@ -138,7 +144,7 @@ export async function readFleetSession(
           `fleet session ${sessionId} could not be read: not a file`,
         );
       if (info.size > 64 * 1024)
-        return unavailable("invalid oversized fleet session");
+        return unavailable("invalid oversized fleet session", "invalid");
       const buffer = Buffer.alloc(info.size);
       const read = await handle.read(buffer, 0, buffer.length, 0);
       return buffer.subarray(0, read.bytesRead).toString("utf8");
@@ -149,11 +155,11 @@ export async function readFleetSession(
     const missing = z
       .object({ code: z.literal("ENOENT") })
       .safeParse(text.error);
-    return unavailable(
-      missing.success
-        ? `fleet session ${sessionId} is missing`
-        : `fleet session ${sessionId} could not be read: ${errorMessage(text.error)}`,
-    );
+    return missing.success
+      ? unavailable(`fleet session ${sessionId} is missing`, "missing")
+      : unavailable(
+          `fleet session ${sessionId} could not be read: ${errorMessage(text.error)}`,
+        );
   }
   if (typeof text.value !== "string") return text.value;
   const parsed = parseFleetSession(text.value);

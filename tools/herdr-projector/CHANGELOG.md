@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1 — 2026-11-25
+
+- Unavailable fleet sessions carry a kind (missing, invalid); readers branch on it instead of searching the reason text, and a paused GPU probe is recognised by its paused flag alone.
+
 ## 0.7.0 — 2026-11-25
 
 - A Claude tab takes its name from the statusline's record or the terminal title, never from rendered footer text, so /rename reaches the Herdr tab

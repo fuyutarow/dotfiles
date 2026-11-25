@@ -853,8 +853,8 @@ function sessionWhy(session: FleetSessionRead | undefined): string {
   if (session === undefined) return "no session id";
   const unavailable = FleetSessionUnavailableSchema.safeParse(session);
   if (unavailable.success) {
-    if (unavailable.data.why.includes("missing")) return "no session file";
-    if (unavailable.data.why.includes("invalid")) return "invalid session file";
+    if (unavailable.data.kind === "missing") return "no session file";
+    if (unavailable.data.kind === "invalid") return "invalid session file";
     return "session unavailable";
   }
   const parsed = FleetSessionSchema.safeParse(session);

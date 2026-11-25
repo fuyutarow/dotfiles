@@ -53,7 +53,6 @@ function vramFromState(
   if (
     state !== undefined &&
     state.paused !== true &&
-    state.why?.startsWith("probe paused:") !== true &&
     (state.unresponsiveSince !== undefined ||
       (state.consecutiveProbeMisses ?? 0) > 0)
   ) {

@@ -280,7 +280,10 @@ test("projects known identity metadata and labels unknown agents without model",
     agents,
     new Map<string, FleetSessionRead>([
       [validKnown.data.session_id, validKnown.data],
-      ["sid-2", { na: true, why: "fleet session sid-2 is missing" }],
+      [
+        "sid-2",
+        { na: true, why: "fleet session sid-2 is missing", kind: "missing" },
+      ],
     ]),
     (args) => Promise.resolve(calls.push(args)).then(() => true),
   );
@@ -414,7 +417,14 @@ test("missing session clears stale identity tokens and explains the missing file
       },
     ],
     new Map([
-      ["stale-id", { na: true, why: "fleet session stale-id is missing" }],
+      [
+        "stale-id",
+        {
+          na: true,
+          why: "fleet session stale-id is missing",
+          kind: "missing",
+        },
+      ],
     ]),
     (args) => Promise.resolve(calls.push(args)).then(() => true),
   );

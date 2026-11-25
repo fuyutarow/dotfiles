@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.1 — 2026-11-25
+
+- Unavailable fleet sessions carry a kind (missing, invalid); readers branch on it instead of searching the reason text, and a paused GPU probe is recognised by its paused flag alone.
+
 ## 0.22.0 — 2026-11-25
 
 - A fleet session name may be any single-line name, so a renamed session's record is written instead of dropped

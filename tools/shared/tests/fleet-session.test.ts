@@ -97,9 +97,10 @@ test("parses a valid schema 1 session and rejects invalid known fields", () => {
 
 test("read returns an explicit na reason when the record is missing", async () => {
   const { env } = await fixture();
-  expect(await readFleetSession(record.session_id, env)).toEqual(
-    unavailable(`fleet session ${record.session_id} is missing`),
-  );
+  expect(await readFleetSession(record.session_id, env)).toEqual({
+    ...unavailable(`fleet session ${record.session_id} is missing`),
+    kind: "missing",
+  });
 });
 
 test("read reports missing XDG_RUNTIME_DIR and invalid session ids as na", async () => {
@@ -321,4 +322,24 @@ test("parse returns na for a valid JSON document with the wrong shape", () => {
   expect(parseFleetSession(JSON.stringify({ schema: 1 }))).toMatchObject({
     na: true,
   });
+});
+
+// herdr labels an unavailable session by `kind`. It once searched `why` for the words
+// "missing" and "invalid", so a malformed session id read as an invalid session file.
+test("an unavailable session names its kind; a bad session id is neither missing nor an invalid file", async () => {
+  const runtime = await mkdtemp(join(tmpdir(), "fleet-kind-"));
+  const env = { XDG_RUNTIME_DIR: runtime };
+  expect(await readFleetSession("absent-session", env)).toMatchObject({
+    na: true,
+    kind: "missing",
+  });
+  const badId = await readFleetSession("not a valid id!", env);
+  expect(badId).toEqual({ na: true, why: "invalid session_id" });
+  await mkdir(join(runtime, "fleet", "sessions"), { recursive: true });
+  await writeFile(join(runtime, "fleet", "sessions", "broken.json"), "{");
+  expect(await readFleetSession("broken", env)).toMatchObject({
+    na: true,
+    kind: "invalid",
+  });
+  await rm(runtime, { recursive: true, force: true });
 });

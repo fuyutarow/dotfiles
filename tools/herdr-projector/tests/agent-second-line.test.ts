@@ -10,19 +10,23 @@ import {
 } from "#src/herdr-projector.ts";
 
 test("every model reads as its observed name and effort", () => {
-  expect(modelDetail("Opus 5.5", "high")).toBe("opus-5.5 high");
-  expect(modelDetail("Fable 5.2", "medium")).toBe("fable-5.2 medium");
-  expect(modelDetail("claude-opus-5-5", "xhigh+WF")).toBe("opus-5.5 xhigh+WF");
-  expect(modelDetail("GPT-6.1-Sol", "low")).toBe("gpt-6.1-sol low");
+  expect(modelDetail("Opus 5.5", "high")).toBe("opus-5.5 ● high");
+  expect(modelDetail("Fable 5.2", "medium")).toBe("fable-5.2 ◐ medium");
+  expect(modelDetail("claude-opus-5-5", "xhigh+WF")).toBe(
+    "opus-5.5 ◉ xhigh+WF",
+  );
+  expect(modelDetail("GPT-6.1-Sol", "low")).toBe("gpt-6.1-sol ○ low");
+  expect(modelDetail("Opus 5.5", "max")).toBe("opus-5.5 ◈ max");
+  expect(modelDetail("Opus 5.5", "turbo")).toBe("opus-5.5 turbo");
   expect(modelDetail("", "high")).toBeUndefined();
   expect(modelDetail("Fable 5.2", "")).toBeUndefined();
 });
 
 test("hidden footer: session context forms the second line", async () => {
   for (const [vendor, model, effort, expected] of [
-    ["claude", "Opus 5.5", "medium", "opus-5.5 medium"],
-    ["codex", "GPT-6.1-Terra", "low", "gpt-6.1-terra low"],
-    ["claude", "Opus 5.5", "xhigh+WF", "opus-5.5 xhigh+WF"],
+    ["claude", "Opus 5.5", "medium", "opus-5.5 ◐ medium"],
+    ["codex", "GPT-6.1-Terra", "low", "gpt-6.1-terra ○ low"],
+    ["claude", "Opus 5.5", "xhigh+WF", "opus-5.5 ◉ xhigh+WF"],
   ] as const) {
     const id = "c602d8dc-0a46-438f-aca5-88a88ff0f0dd";
     const agents = [

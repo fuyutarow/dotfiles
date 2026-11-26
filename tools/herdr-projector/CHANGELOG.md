@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.4 — 2026-11-26
+
+- Row 2 marks the effort with the circle Claude Code draws for it: opus-5.5 ◐ medium, fable-5.2 ● high.
+
 ## 0.7.3 — 2026-11-26
 
 - Row 2 shows every model in one format, the observed model and effort (opus-5.5 high, fable-5.2 medium); the agx roster lookup and its agx call are removed.

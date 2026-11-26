@@ -1163,9 +1163,22 @@ export async function nativeCodexRc(
 
 /**
  * Row 2's model part: the observed model and effort, one format for every model
- * (`opus-5.5 high`, `fable-5.2 medium`, `gpt-6.1-sol xhigh+WF`). Nothing is looked up, so a
+ * (`opus-5.5 ● high`, `fable-5.2 ◐ medium`, `gpt-6.1-sol ◉ xhigh+WF`). Nothing is looked up, so a
  * model no list names yet reads the same way. Only an unobserved model or effort is unknown.
  */
+/**
+ * The mark Claude Code draws beside an effort level (its /model picker and footer): the circle
+ * fills as effort rises. The five glyphs are the consecutive figures in Claude Code 2.1.332;
+ * low and medium are confirmed on screen, high and above follow that order.
+ */
+const EFFORT_MARKS: Readonly<Record<string, string>> = {
+  low: "○",
+  medium: "◐",
+  high: "●",
+  xhigh: "◉",
+  max: "◈",
+};
+
 export function modelDetail(model: string, effort: string): string | undefined {
   if (model === "" || effort === "") return undefined;
   const short = model
@@ -1175,7 +1188,11 @@ export function modelDetail(model: string, effort: string): string | undefined {
     .replaceAll(/\s+/gu, "-")
     // An API id spells the version with a hyphen (opus-5-5); the display name with a dot.
     .replace(/-(\d+)-(\d+)$/u, "-$1.$2");
-  return `${short} ${effort}`;
+  // `xhigh+WF` keeps its workflow suffix; an effort with no mark is shown bare.
+  const mark = EFFORT_MARKS[effort.replace(/\+WF$/u, "").toLowerCase()];
+  return mark === undefined
+    ? `${short} ${effort}`
+    : `${short} ${mark} ${effort}`;
 }
 
 /** Row 2's ctx part: the percentage is graded like cpu, an unknown reading is the neutral `ctx_off`. */

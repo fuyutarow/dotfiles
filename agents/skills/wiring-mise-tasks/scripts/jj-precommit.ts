@@ -137,33 +137,128 @@ export async function jjCandidate(
   return entries;
 }
 
+/** The paths of `rev` for which `template` (a jj boolean over a tree entry) holds. */
+async function jjPathsWhere(
+  root: string,
+  rev: string,
+  template: string,
+): Promise<Set<string>> {
+  const out = await jjRead(
+    ["file", "list", "-r", rev, "-T", `if(${template}, path ++ "\\0")`],
+    root,
+  );
+  return new Set(out.toString().split("\0"));
+}
+
 export async function jjExport(
   context: JjPrecommit,
   destination: string,
   entries: ReadonlyMap<string, string>,
 ): Promise<void> {
+  for (const path of entries.keys())
+    if (!validPath(path)) fatal(`unsafe snapshot path: ${path}`);
+  const revs = [...new Set(entries.values())];
   const executable = new Map<string, Set<string>>();
-  for (const rev of new Set(entries.values())) {
-    executable.set(
+  // Only regular files are read in bulk: for a symlink `jj file show` prints nothing, and the
+  // per-file read below keeps that answer.
+  const files = new Map<string, Set<string>>();
+  for (const rev of revs) {
+    executable.set(rev, await jjPathsWhere(context.root, rev, "executable"));
+    files.set(
       rev,
-      new Set(
-        (
-          await jjRead(
-            ["file", "list", "-r", rev, "-T", 'if(executable, path ++ "\\0")'],
-            context.root,
-          )
-        )
-          .toString()
-          .split("\0"),
-      ),
+      await jjPathsWhere(context.root, rev, 'file_type == "file"'),
     );
   }
+  const regular = new Map(
+    [...entries].filter(([path, rev]) => files.get(rev)?.has(path) === true),
+  );
+  // A few jj processes read every file; one `jj file show` per file took minutes on a tree of
+  // a few thousand files and was the commit gate's largest cost.
+  const bulk = await jjBlobs(context.root, revs, regular);
   for (const [path, rev] of entries) {
-    if (!validPath(path)) fatal(`unsafe snapshot path: ${path}`);
     const target = join(destination, path);
     await mkdir(dirname(target), { recursive: true });
-    await writeFile(target, await jjContent(context, path, rev));
+    await writeFile(
+      target,
+      bulk?.get(path) ?? (await jjContent(context, path, rev)),
+    );
     // Snapshot executability is needed by the Bun script floor, independent of the worktree.
     if (executable.get(rev)?.has(path) === true) await chmod(target, 0o755);
   }
+}
+
+/** Paths per `jj file show` call: bounds the argument list on any tree size. */
+const SHOW_BATCH = 400;
+
+/**
+ * Splits one `jj file show -T '<token> ++ path ++ "\0"'` stream into path -> bytes, or undefined
+ * when the stream does not start with the token or a path is unterminated.
+ */
+function splitShown(
+  out: Buffer,
+  mark: Buffer,
+): Map<string, Buffer> | undefined {
+  const shown = new Map<string, Buffer>();
+  let offset = out.indexOf(mark);
+  if (offset !== 0) return out.length === 0 ? shown : undefined;
+  while (offset >= 0) {
+    const nameStart = offset + mark.length;
+    const nameEnd = out.indexOf(0, nameStart);
+    if (nameEnd < 0) return undefined;
+    const next = out.indexOf(mark, nameEnd + 1);
+    shown.set(
+      out.toString("utf8", nameStart, nameEnd),
+      out.subarray(nameEnd + 1, next < 0 ? out.length : next),
+    );
+    offset = next;
+  }
+  return shown;
+}
+
+/**
+ * Every entry's bytes from a few `jj file show` calls instead of one per file, or undefined when
+ * an answer does not name exactly the requested paths (the caller then reads per file). The
+ * template prints a random token and the path before each file's bytes, so the stream splits
+ * without knowing sizes; a file containing a 128-bit random token is not a case to handle.
+ */
+async function jjBlobs(
+  root: string,
+  revs: readonly string[],
+  entries: ReadonlyMap<string, string>,
+): Promise<Map<string, Buffer> | undefined> {
+  const token = `<<jj-export-${crypto.randomUUID()}>>`;
+  const mark = Buffer.from(token);
+  const batches = revs.flatMap((rev) => {
+    const paths = [...entries].flatMap(([path, at]) =>
+      at === rev ? [path] : [],
+    );
+    return Array.from(
+      { length: Math.ceil(paths.length / SHOW_BATCH) },
+      (_, index) => ({
+        rev,
+        paths: paths.slice(index * SHOW_BATCH, (index + 1) * SHOW_BATCH),
+      }),
+    );
+  });
+  const blobs = new Map<string, Buffer>();
+  for (const { rev, paths } of batches) {
+    const out = await jjRead(
+      [
+        "file",
+        "show",
+        "-r",
+        rev,
+        "-T",
+        `${JSON.stringify(token)} ++ path ++ "\\0"`,
+        "--",
+        ...paths.map((path) => `root-file:${JSON.stringify(path)}`),
+      ],
+      root,
+    );
+    const shown = splitShown(out, mark);
+    if (shown === undefined || !paths.every((path) => shown.has(path)))
+      return undefined;
+    for (const [path, bytes] of shown) blobs.set(path, bytes);
+  }
+  return blobs;
 }

@@ -3,6 +3,7 @@ import {
   AgxUnavailable,
   alertTokenArgs,
   LONG_RUNNING_MS,
+  ModelUnobserved,
   SessionRecordUnavailable,
   ShellScanUnavailable,
 } from "#src/alerts.ts";
@@ -58,7 +59,7 @@ test("errors are rendered from their tags, and warnings that do not fit fold int
   );
   const err = args[1] ?? "";
   const warn = args[3] ?? "";
-  expect(err).toStartWith("alert_err=✖ session no session file");
+  expect(err).toStartWith("alert_err=✗ session no session file");
   expect(err).toMatch(/ · \+\d+$/u);
   expect(warn).toStartWith("alert_warn=⚠️ sh_shell5 17m");
   expect(warn).toMatch(/ · \+\d+$/u);
@@ -66,4 +67,13 @@ test("errors are rendered from their tags, and warnings that do not fit fold int
     expect(
       Bun.stringWidth(text.slice(text.indexOf("=") + 1)),
     ).toBeLessThanOrEqual(44);
+});
+
+test("a `?` model on row 2 is explained on the alert row", () => {
+  const args = alertTokenArgs(
+    [new ModelUnobserved({ missing: "effort", message: "no effort" })],
+    [],
+    now,
+  );
+  expect(args[1]).toBe("alert_err=✗ effort unobserved");
 });

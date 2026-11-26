@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.2 — 2026-11-26
+
+- A ? model on row 2 is explained on the alert row (model/effort unobserved), and the error mark is a one-cell text glyph that takes the row color instead of the emoji-font heavy X.
+- An agent tab whose model the agx roster does not list (Fable 5.2 while the roster still names 5.1) shows the observed model and effort, e.g. fable-5.2 high, instead of a bare ?.
+
 ## 0.7.1 — 2026-11-25
 
 - Unavailable fleet sessions carry a kind (missing, invalid); readers branch on it instead of searching the reason text, and a paused GPU probe is recognised by its paused flag alone.

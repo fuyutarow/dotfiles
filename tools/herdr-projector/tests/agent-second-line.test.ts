@@ -5,9 +5,22 @@ import {
   CTX_TOKENS,
   HERDR_MAX_METADATA_TOKENS,
   metadataReportChunks,
+  modelDetail,
   projectAgents,
   rosterRow,
 } from "#src/herdr-projector.ts";
+
+test("a model the roster does not list shows its own name and effort, not ?", () => {
+  expect(modelDetail(rows, "claude", "Opus 5.5", "medium")).toBe("opus-medium");
+  expect(modelDetail(rows, "claude", "Fable 5.2", "high")).toBe(
+    "fable-5.2 high",
+  );
+  expect(modelDetail(rows, "claude", "claude-fable-5-2", "xhigh+WF")).toBe(
+    "fable-5-2 xhigh+WF",
+  );
+  expect(modelDetail(rows, "claude", "", "high")).toBeUndefined();
+  expect(modelDetail(rows, "claude", "Fable 5.2", "")).toBeUndefined();
+});
 
 const rows = [
   {

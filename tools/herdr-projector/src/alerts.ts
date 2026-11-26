@@ -8,6 +8,12 @@ import { matchError, TaggedError } from "@dotfiles/shared/src/result.ts";
 
 /** A worker or shell running this long gets a warning. */
 export const LONG_RUNNING_MS = 12 * 60_000;
+/**
+ * Marks the error row. A text glyph, one cell wide, that takes the row's own color: the heavy
+ * `✖` (U+2716) is drawn from the emoji font, in that font's color and wider than its cell, so it
+ * ignored the red and ran into the first word.
+ */
+const ERROR_MARK = "✗";
 /** Text cells on an agent row (see ROW3_FIT_WIDTH in herdr-projector.ts). */
 const ROW_CELLS = 44;
 
@@ -25,7 +31,14 @@ export class ShellScanUnavailable extends TaggedError("ShellScanUnavailable")<{
   message: string;
 }> {}
 
+/** Row 2 drew `?` for the model: the session record names no model, no effort, or neither. */
+export class ModelUnobserved extends TaggedError("ModelUnobserved")<{
+  missing: "model" | "effort" | "model and effort";
+  message: string;
+}> {}
+
 export type PaneError =
+  | ModelUnobserved
   | SessionRecordUnavailable
   | ResourceSnapshotUnavailable
   | AgxUnavailable
@@ -36,6 +49,7 @@ export type Running = { kind: "wkr" | "sh"; id: string; startedAt: string };
 
 const errorText = (error: PaneError): string =>
   matchError(error, {
+    ModelUnobserved: (e) => `${e.missing} unobserved`,
     SessionRecordUnavailable: (e) => `session ${e.why}`,
     ResourceSnapshotUnavailable: () => "agent-cpu unavailable",
     AgxUnavailable: () => "agx unavailable",
@@ -80,7 +94,7 @@ export function alertTokenArgs(
       : [
           "--token",
           `alert_err=${fit(
-            "✖",
+            ERROR_MARK,
             errors.map((error) => errorText(error)),
           )}`,
         ]),

@@ -8,6 +8,7 @@ import { standardCli } from "@dotfiles/shared/src/cli.ts";
 import cliPackage from "#root/package.json" with { type: "json" };
 import {
   AgxUnavailable,
+  ModelUnobserved,
   alertTokenArgs,
   type PaneError,
   ResourceSnapshotUnavailable,
@@ -1184,6 +1185,28 @@ export function routeVendor(route: string): string {
   return route.startsWith("claude-") ? "claude" : route;
 }
 
+/**
+ * Row 2's model part: the agx roster id when exactly one row matches, otherwise the observed
+ * model and effort themselves (`fable-5-2 high`), so a model the roster does not list yet shows
+ * what it is instead of `?`. Only an unobserved model or effort leaves it unknown.
+ */
+export function modelDetail(
+  rows: RosterRows,
+  vendor: string,
+  model: string,
+  effort: string,
+): string | undefined {
+  const row = rosterRow(rows, vendor, model, effort);
+  if (row !== undefined && !row.startsWith("?")) return row;
+  if (model === "" || effort === "") return row;
+  const short = model
+    .trim()
+    .toLowerCase()
+    .replace(/^(?:claude|gpt)[- ]/u, "")
+    .replaceAll(/\s+/gu, "-");
+  return `${short} ${effort}`;
+}
+
 /** Match observed model and effort to an agx roster row; ambiguous matches are unknown. */
 export function rosterRow(
   rows: RosterRows,
@@ -1469,7 +1492,7 @@ export async function projectAgents(
       cpuArgs.push(
         ...resourceTokenArgs(tokens),
         ...alertTokenArgs(
-          paneErrors(session, identity, cpuSnapshot),
+          paneErrors(session, identity, cpuSnapshot, model, effort),
           [
             ...(memoryWorkers?.runs ?? []).map((job) => ({
               kind: "wkr" as const,
@@ -1523,7 +1546,7 @@ export async function projectAgents(
       ...(isAgent
         ? agentSecondRowArgs(
             agentSecondRow(
-              rosterRow(roster, vendor, model, effort),
+              modelDetail(roster, vendor, model, effort),
               contextText,
             ),
           )
@@ -1554,6 +1577,8 @@ function paneErrors(
   session: FleetSessionRead | undefined,
   identity: FleetSession | undefined,
   cpuSnapshot: AgentCpuSnapshot | undefined,
+  model: string,
+  effort: string,
 ): PaneError[] {
   const errors: PaneError[] = [];
   const unavailable = FleetSessionUnavailableSchema.safeParse(session);
@@ -1564,6 +1589,19 @@ function paneErrors(
         message: unavailable.data.why,
       }),
     );
+  // An unreadable record already says why row 2 is `?`; this names the case where the record
+  // was read and still carries no model or effort.
+  else if (model === "" || effort === "") {
+    const both = model === "" && effort === "";
+    const one = model === "" ? "model" : "effort";
+    const missing = both ? "model and effort" : one;
+    errors.push(
+      new ModelUnobserved({
+        missing,
+        message: `the session record carries no ${missing}`,
+      }),
+    );
+  }
   if (cpuSnapshot === undefined)
     errors.push(
       new ResourceSnapshotUnavailable({

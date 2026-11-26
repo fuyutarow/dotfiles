@@ -9,7 +9,7 @@
 set -euo pipefail
 
 # Owner decision (2026-10-09): disable iTerm2's Claude Code integration; the renderer remains the sole writer of ~/.claude/settings.json, so iTerm2 hooks are never restored there.
-defaults write com.googlecode.iterm2 PrefsCustomFolder -string "$HOME/dotfiles/iterm2"
+defaults write com.googlecode.iterm2 PrefsCustomFolder -string "$HOME/dotfiles/config/iterm2"
 defaults write com.googlecode.iterm2 LoadPrefsFromCustomFolder -bool true
 defaults write com.googlecode.iterm2 NoSyncSuppressClaudeCodeIntegrationRepairPrompt -bool true
 defaults write com.googlecode.iterm2 NoSyncClaudeCodeWorkgroupUpsellSuppressed -bool true
@@ -19,7 +19,7 @@ if [[ $toolbelt_tools == '("SessionStatus")' ]]; then
   defaults write com.googlecode.iterm2 ToolbeltTools -array
 fi
 
-echo "✅ iTerm2 pointed at $HOME/dotfiles/iterm2 for preferences."
+echo "✅ iTerm2 pointed at $HOME/dotfiles/config/iterm2 for preferences."
 echo "   Quit and relaunch iTerm2 for this to take effect (tmux sessions survive — just detach)."
 echo "   On first relaunch, iTerm2 asks whether to write its current settings into that folder;"
 echo "   say yes so iterm2/com.googlecode.iterm2.plist appears and can be committed."

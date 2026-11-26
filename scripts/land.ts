@@ -792,14 +792,19 @@ function prepareLander(
   name: string,
 ): Promise<Result<string, Error>> {
   return Result.gen(async function* () {
-    if (await pathExists(root)) {
-      const workspaces = yield* await jj(source, ["workspace", "list"]);
-      const registered = workspaces
-        .split("\n")
-        .some((line) => line.trimStart().startsWith(`${name}:`));
-      if (!registered) yield* await run(source, ["rip", root]);
-    }
+    const workspaces = yield* await jj(source, ["workspace", "list"]);
+    const registered = workspaces
+      .split("\n")
+      .some((line) => line.trimStart().startsWith(`${name}:`));
+    // The land tree is disposable state: a cleaner may remove its files while jj and git still
+    // list it. A directory without its `.jj`, or a registration without a directory, is rebuilt.
+    const intact = await pathExists(join(root, ".jj"));
+    if ((await pathExists(root)) && !(registered && intact))
+      yield* await run(source, ["rip", root]);
     if (!(await pathExists(root))) {
+      if (registered) yield* await jj(source, ["workspace", "forget", name]);
+      // A colocated jj workspace is a git worktree; drop the entry of the removed directory.
+      yield* await run(source, ["git", "worktree", "prune"]);
       yield* await jj(source, [
         "workspace",
         "add",

@@ -539,8 +539,10 @@ describe("repo-retrieve route contract", () => {
         ["about", "needle", "--project", dir],
         env,
       );
-      expect(semantic.code).toBe(2);
-      expect(semantic.stderr).toContain("daemon has no projects loaded");
+      // A registered root named by --project is judged by its index, as without the flag: an
+      // empty daemon list is not a reason to refuse it before the freshness check.
+      expect(semantic.code).toBe(3);
+      expect(semantic.stderr).toContain("NO_INDEX");
       expect(semantic.stderr).not.toContain("did not contain a project list");
     });
   }
@@ -857,6 +859,20 @@ describe("repo-retrieve route contract", () => {
     expect(absent.stderr).toContain(`project=${backing}`);
     expect(absent.stderr).toContain(`INDEX: backing repo ${backing}`);
     expect(absent.stdout).toContain("RESULT: PASS route=battery engine=ccc");
+  });
+
+  test("an explicit --project naming a jj workspace resolves to the backing repo index", () => {
+    const { dir: backing } = registerFreshGitProject();
+    const workspace = jjWorkspace(backing);
+    const result = run(
+      workspace,
+      ["about", "--query", "workspace backing index", "--project", "."],
+      { FAKE_SEARCH_EXPECT_CWD: backing },
+    );
+    expect(result.stderr).not.toContain("unknown root");
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain(`INDEX: backing repo ${backing}`);
+    expect(result.stdout).toContain("RESULT: PASS route=concept engine=ccc");
   });
 
   test("semantic results map backing repo paths into matching workspace files", () => {

@@ -370,6 +370,22 @@ async function targetProject(
       ),
     );
   }
+  // A registered root, or a jj workspace of one, is a target whether or not the daemon has it
+  // loaded right now: the search resolves a workspace to its backing repo's index, as it does
+  // without --project, and the freshness check (not the daemon) decides whether it can answer.
+  const named = await Result.tryPromise({
+    try: () => realpath(resolve(path)),
+    catch: asError,
+  });
+  if (named.isOk()) {
+    const resolution = await resolveRegisteredProject(named.value);
+    if (
+      resolution !== null &&
+      (resolution.project === named.value ||
+        resolution.workspace === named.value)
+    )
+      return Result.ok(named.value);
+  }
   const roots = await registeredRoots();
   if (roots.isErr()) return Result.err(roots.error);
   if (roots.value.existing.length === 0 && roots.value.missing.length === 0)

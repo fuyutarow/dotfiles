@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.3 — 2026-11-26
+
+- A semantic search with --project naming a registered root or a jj workspace of one resolves like the same search without the flag (a workspace answers from its backing repo index); it is no longer refused as an unknown root or because the daemon has nothing loaded.
+
 ## 1.15.2 — 2026-11-26
 
 - A semantic search on a stale index names why the last reindex at this HEAD failed (the PLAN REFUSED file and limit) and answers without waiting for a reindex that cannot certify it; rr output takes the same stdin-only stages (grep -c, cut, sort, wc) as any other producer.

@@ -72,10 +72,10 @@ function run(
 /** The other inputs render-home.ts reads, as minimal fixtures: an empty-hooks codex file, a
  * CLAUDE.md with empty legacy markers and a one-hook registry. */
 function writeOtherInputs(dir: string, productionCli = false): void {
-  mkdirSync(join(dir, "roles"), { recursive: true });
+  mkdirSync(join(dir, "config", "roles"), { recursive: true });
   writeFileSync(
-    join(dir, "roles/roles.toml"),
-    readFileSync(join(ROOT, "roles/roles.toml")),
+    join(dir, "config/roles/roles.toml"),
+    readFileSync(join(ROOT, "config/roles/roles.toml")),
   );
   mkdirSync(join(dir, "agents", "agx"), { recursive: true });
   writeFileSync(
@@ -151,7 +151,7 @@ test("Linux role environment renders safely without touching a linked directory"
   const cpus = Number(cpuProbe.stdout.toString().trim());
   expect(cpus).toBeGreaterThan(0);
   writeFileSync(
-    join(dotfiles, "roles/roles.toml"),
+    join(dotfiles, "config/roles/roles.toml"),
     `[workstation]\ntokio_worker_threads = ""\nrustc_wrapper = "sccache"\n[shared-light]\ntokio_worker_threads = ${cpus + 1}\nrustc_wrapper = "none"\n`,
   );
   setHost("sol.cc.uec.ac.jp");
@@ -160,7 +160,7 @@ test("Linux role environment renders safely without touching a linked directory"
   expect(readFileSync(path, "utf8")).toBe(`TOKIO_WORKER_THREADS=${cpus}\n`);
   expect(lstatSync(path).isFile()).toBe(true);
   writeFileSync(
-    join(dotfiles, "roles/roles.toml"),
+    join(dotfiles, "config/roles/roles.toml"),
     '[workstation]\ntokio_worker_threads = ""\nrustc_wrapper = "sccache"\n[shared-light]\ntokio_worker_threads = 1\nrustc_wrapper = "none"\n',
   );
   result = run({ DOTFILES: dotfiles, HOME: home }, preload);
@@ -173,7 +173,7 @@ test("Linux role environment renders safely without touching a linked directory"
   const linkedHome = makeHome();
   mkdirSync(join(linkedHome, ".config"), { recursive: true });
   symlinkSync(
-    join(dotfiles, "roles"),
+    join(dotfiles, "config", "roles"),
     join(linkedHome, ".config/environment.d"),
   );
   result = run({ DOTFILES: dotfiles, HOME: linkedHome }, preload);
@@ -203,7 +203,7 @@ test("role render is data only and invalid defaults leave outputs untouched", ()
     /^DOTFILES_ROLE=(workstation|shared-light)\nDOTFILES_ROLE_TOKIO_WORKER_THREADS=(|[1-9][0-9]*)\nDOTFILES_ROLE_RUSTC_WRAPPER=(sccache|none)\n$/u,
   );
   writeFileSync(
-    join(dotfiles, "roles/roles.toml"),
+    join(dotfiles, "config/roles/roles.toml"),
     '[workstation]\ntokio_worker_threads = -1\nrustc_wrapper = "none"\n',
   );
   expect(run({ DOTFILES: dotfiles, HOME: home }).code).toBe(1);
@@ -694,12 +694,12 @@ describe("render-home: failure modes", () => {
   });
 });
 
-describe("render-home: the time zone from zsh/timezone", () => {
-  /** A dotfiles fixture whose zsh/timezone holds `zone`. "UTC" exists in every zone database. */
+describe("render-home: the time zone from config/zsh/timezone", () => {
+  /** A dotfiles fixture whose config/zsh/timezone holds `zone`. "UTC" exists in every zone database. */
   function withZone(base: object, zone: string): string {
     const dotfiles = makeDotfiles(base);
-    mkdirSync(join(dotfiles, "zsh"), { recursive: true });
-    writeFileSync(join(dotfiles, "zsh", "timezone"), `${zone}\n`);
+    mkdirSync(join(dotfiles, "config", "zsh"), { recursive: true });
+    writeFileSync(join(dotfiles, "config", "zsh", "timezone"), `${zone}\n`);
     return dotfiles;
   }
 
@@ -741,7 +741,10 @@ describe("render-home: the time zone from zsh/timezone", () => {
     const home = makeHome();
     run({ HOME: home, DOTFILES: dotfiles });
     const before = readFileSync(dest(home), "utf8");
-    writeFileSync(join(dotfiles, "zsh", "timezone"), "Nowhere/Fake\n");
+    writeFileSync(
+      join(dotfiles, "config", "zsh", "timezone"),
+      "Nowhere/Fake\n",
+    );
     const { out, code } = run({ HOME: home, DOTFILES: dotfiles });
     expect(code).toBe(1);
     expect(out).toContain("must hold one IANA zone name");

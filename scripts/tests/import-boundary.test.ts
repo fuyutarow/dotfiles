@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 
 const REPO = resolve(import.meta.dir, "../..");
-const BASELINE = resolve(REPO, "lint/import-boundary-baseline.tsv");
+const BASELINE = resolve(REPO, "scripts/lint/import-boundary-baseline.tsv");
 
 type Token = { kind: "string" | "word" | "punct"; value: string };
 type Edge = { file: string; target: string };

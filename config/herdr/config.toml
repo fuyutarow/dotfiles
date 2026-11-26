@@ -1,0 +1,193 @@
+onboarding = false
+# ========================================
+# herdr configuration
+# Ported from config/tmux/tmux.conf
+# ========================================
+#
+# Apply with: `herdr server reload-config`
+# Note: config is NOT hot-watched.
+# Config path is hardcoded: `~/.config/herdr/config.toml`
+# `HERDR_CONFIG_PATH` can override it.
+#
+# Deliberately NOT ported:
+# - status-line CPU/RAM: herdr sidebar replaces it.
+# - 11/12-pane layout scripts: tmux-only.
+# - synchronize-panes/swap-pane/rotate/join-pane: no herdr equivalent.
+# - tmux custom m/M mark-then-recall pair (bind m/M): herdr has no persistent pane mark; last_pane (prefix+;) is only a recency toggle.
+# - tmux-fzf-url: set ui.mouse_capture=false if you want Cmd+click URL opening.
+
+[terminal]
+# Force login shells for every new pane on every OS.
+# Default shell_mode="auto" only starts login shells on macOS; on Linux/WSL it keeps
+# non-login startup, which skips config/zsh/zprofile.wsl entirely. That file is the ONLY place
+# `brew shellenv` runs, so a non-login WSL pane never gets /home/linuxbrew/.linuxbrew/bin
+# on PATH — which means `sheldon` (config/zsh/zshrc's `command -v sheldon` gate, no fallback)
+# is unreachable, so config/zsh/aliases.zsh + config/zsh/wsl.zsh silently never load either. Root-caused
+# 2026-08-23: this is why new panes needed a manual `exec zsh -l` to get aliases/PATH.
+# Explicit "login" makes WSL match what "auto" already does on macOS; no-op there.
+shell_mode = "login"
+
+[theme]
+name = "one-dark"
+
+auto_switch = false
+[keys]
+prefix = "ctrl+g" # tmux prefix C-g
+
+split_vertical = "prefix+|"        # tmux `|` side-by-side. Raw | char is valid. NEVER use "prefix+shift+backslash" (silently fails to fire on many terminals)
+split_horizontal = "prefix+minus"  # tmux `-` (equals herdr default; explicit on purpose)
+new_workspace = "prefix+v"         # tmux v = new-session; workspace ~= tmux session; v is freed because split_vertical moved to |
+detach = "prefix+d"                # tmux d detach-client (herdr default is prefix+q; moved to d for muscle memory). NB prefix+shift+d = close_workspace (destructive); lowercase d is free
+next_workspace = "prefix+f"        # tmux f
+previous_workspace = "prefix+b"    # tmux b - collides with default toggle_sidebar, hence next line
+toggle_sidebar = "prefix+a"        # relocated; tmux a toggled the status bar (same semantics)
+previous_tab = "prefix+ctrl+h"     # tmux C-h window nav; tab ~= tmux window
+next_tab = "prefix+ctrl+l"         # tmux C-l
+new_tab = "prefix+c"               # equals default; = tmux c
+copy_mode = "prefix+["             # equals default; = tmux copy-mode. Written explicitly because `herdr --default-config` omits this real key (vi: h/j/k/l move, v select, y copy)
+last_pane = "prefix+;"             # tmux DEFAULT last-pane key; herdr last_pane is the same recency toggle. Raw ; is valid (also a named token "semicolon")
+focus_pane_left = "prefix+h"       # equals defaults; = tmux h/j/k/l - kept explicit as self-documentation
+focus_pane_down = "prefix+j"       # equals default; = tmux j
+focus_pane_up = "prefix+k"         # equals default; = tmux k
+focus_pane_right = "prefix+l"      # equals default; = tmux l
+
+# Defaults that already match the tmux muscle memory and are deliberately left unset:
+# - zoom = "prefix+z"              # tmux z/U zoom toggle
+# - close_pane = "prefix+x"        # tmux default close-pane habit
+# - help = "prefix+?"              # tmux custom help lived on ?
+# - switch_tab = "prefix+1..9"     # tmux windows start at 1
+# - resize_mode = "prefix+r"       # replaces tmux H/J/K/L resize. NOTE: tmux r was reload; herdr reload is prefix+shift+r
+# - edit_scrollback = "prefix+e"   # scrollback in $EDITOR
+# - new_worktree = "prefix+shift+g"
+
+[[keys.command]] # lazygit - user's daily driver (alias lg)
+key = "prefix+alt+g"
+type = "pane"
+command = "lazygit"
+
+[[keys.command]] # btop popup - tmux bind G analog; runs via /bin/sh -c, so the || fallback works (prefix+shift+g stays herdr new_worktree)
+key = "prefix+shift+b"
+type = "pane"
+command = "btop 2>/dev/null || top"
+
+[ui]
+# Sidebar is 48 columns wide, pinned: the default max is 36, so max is raised too (min 18 is below 48, so the
+# width clamps to exactly 48). tools/herdr-projector ROW3_FIT_WIDTH (= 48 - 1 divider - 3 row indent) follows it.
+sidebar_width = 48
+sidebar_max_width = 48
+# Server-side scheduler: immediate at startup, then every 5s, also headless.
+# https://herdr.dev/docs/configuration/#ui-and-sidebar documents command entries.
+# Explicit installed bin avoids login-shell PATH changes. Silent output hides the entry.
+tab_bar_right = [{ type = "command", command = '"$HOME/.bun/bin/btmp" ensure', interval_seconds = 5, timeout_seconds = 20 }]
+prompt_new_tab_name = false # tmux c created windows instantly - no name prompt
+
+# mouse_scroll_lines=3 default already equals tmux WheelUp 3-line scroll.
+# confirm_close=true default kept — matches tmux's confirm-before kill-pane habit.
+
+# Show the detected/reported agent label in each split pane's own border, not just the
+# sidebar row — the thing to look at when a pane has no manual name set (prefix+, renames).
+show_agent_labels_on_pane_borders = true
+
+agent_panel_sort = "spaces"
+
+# Line 1: state icon + name + Remote Control mark when confirmed on.
+# Line 2: the projector reports $agent_detail (the agx roster row) and the observed session
+# context as its own graded token, so the screen reads "opus-medium · ctx 38%/600k". Unknown
+# values use ?. RC off and unknown both omit the mark.
+# The roster row retains +WF when the statusline reports active workflow orchestration.
+# Workspace was dropped from here entirely 2026-09-03, on request:
+# agent_panel_sort="spaces" already groups rows by workspace with its own header, so repeating
+# the workspace name on every row was pure redundancy once someone looked for it.
+# Row position alone doesn't move the look — "tab" carries its own hardcoded base color+weight
+# wherever it appears (src/ui/sidebar.rs: tab/pane/agent always paint on the fixed muted
+# `overlay0` + dim; bold/dim flags alone only toggle modifiers on top of that base color, they
+# don't repaint it). `tab` keeps bold weight for scanability but drops to a muted fg so it doesn't
+# overpower the row.
+# Every color here is an xterm-256 named color (herdr takes hex only, so the name is in this comment):
+#   Grey53 (102) #878787: tab, $rc       Turquoise4 (30) #008787: $agent_detail (statusline model label)
+#   DarkSeaGreen4 (71) #5faf5f: $cpu_lo (10-69%)
+#   Gold3 (178) #d7af00 / IndianRed (167) #d75f5f: cpu mid / hi (cpu idle, below 10%, is Grey30, like ram)
+#   DarkGoldenrod (136) #af8700 / IndianRed (131) #af5f5f: $ctx_mid / $ctx_hi (one step darker than cpu's)
+#   DarkTurquoise (44) #00d7d7: counts >= 1  Grey30 (239) #4e4e4e: $cpu_idle, $ram, counts 0 or unknown
+#   Grey39 (241) #626262: $ctx_lo, $ctx_off (the statusline's dim text)
+# The projector fills three rows per agent, each width-bounded (the sidebar is 48 columns, 44 of them
+# text on an agent row; the installed client renders three rows per agent, so counts live on row 3).
+# Row 3 is CPU, then RAM and VRAM, then WORKERS and SHELLS, as separate tokens (no bar between them).
+# SHELLS are the agent session's own background shells, read from the Claude Code footer (a "N shell" / "N shells"
+# pill is N, a recognised footer without one is 0; other pills are ignored); plain herdr shell panes in the tab are not counted. Codex has no such
+# source, so its row reads "? sh".
+# CPU is its own token so it can be colored alone
+# (herdr strips control characters from reported values and styles per token): the projector reports
+# exactly one of $cpu_idle / $cpu_lo / $cpu_mid / $cpu_hi (the others are cleared and unreported tokens
+# disappear). $cpu_idle is the rounded reading below 10% (CPU_IDLE_BELOW_PCT in the projector; Grey30);
+# from 10% the statusline's thresholds apply (tools/shared/src/usage-level.ts: green <70, yellow 70-89,
+# red >=90), and lo / mid / hi are styled with the statusline's colors (ANSI-256 idx 71 / 178 / 167 =
+# #5faf5f / #d7af00 / #d75f5f). The rest of row 3 is three more tokens: $ram ("ram 20G" or
+# "ram 20G vram 12G"), $workers_* ("1 wkr") and $shells_* ("4 sh"). $ram and the *_off tokens are
+# Grey30, darker than the statusline's dim text so they recede behind cpu.
+# Row 2's ctx is graded by the same function and colors: the projector reports exactly one of $ctx_lo /
+# $ctx_mid / $ctx_hi ("ctx 38%/600k", level of the rounded percentage from usageLevel, the function
+# behind the statusline's Ctx percentage and the cpu token, so the boundaries 70 and 90 agree), or
+# $ctx_off (Grey39, "ctx ?/?") when the reading is unknown, and clears the other three. $agent_detail
+# keeps Turquoise4. If row 2 would not fit, the projector drops $agent_detail whole and keeps ctx.
+# Each count is colored the same way as cpu, with no rules: the projector reports exactly one token of
+# the pair, $workers_on / $shells_on when the count is >= 1 (DarkTurquoise) and $workers_off /
+# $shells_off when it is 0 or unknown (Grey30, "? wkr" / "? sh"), and clears the other.
+# herdr draws its own non-removable " · " between every pair of visible tokens (v0.9.5,
+# src/ui/sidebar/tokens.rs `separator`), so the screen reads "cpu 1% · ram 20G · 1 wkr · 4 sh"; the old
+# single grey $resources token and its bar (│) are gone, and the projector clears $resources.
+# vram is reported only when non-zero (a 0 reading means no vram in use and is omitted).
+# The projector fits the row as drawn, separators included, and drops whole parts from the right, never
+# cut mid-token: vram first, then shells, then workers. cpu and ram are never dropped while they fit.
+# Each override under rows_by_agent repeats rows 3 and 4, since an override replaces rows.
+# Row 4 appears only when the projector reports something to act on (tools/herdr-projector/src/alerts.ts):
+# $alert_err (red) names source failures as tagged errors; $alert_warn (yellow) names this session's
+# workers and background shells running 12 minutes or more. With neither, both are cleared and the
+# row disappears.
+[ui.sidebar.agents]
+rows = [
+  ["state_icon", { token = "tab", fg = "#878787", bold = true, dim = false }, { token = "$rc", fg = "#878787", bold = false, dim = false }],
+  [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#626262", bold = false, dim = false }, { token = "$ctx_mid", fg = "#af8700", bold = false, dim = false }, { token = "$ctx_hi", fg = "#af5f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
+  [{ token = "$cpu_idle", fg = "#4e4e4e", bold = false, dim = false }, { token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
+  [{ token = "$alert_err", fg = "#d75f5f", bold = false, dim = false }, { token = "$alert_warn", fg = "#d7af00", bold = false, dim = false }],
+  # Custom reported agents use these default rows, not rows_by_agent overrides.
+  # Unreported tokens disappear. See https://herdr.dev/docs/configuration/#sidebar-row-layouts.
+  ["$btm_summary"],
+  ["$unowned"],
+]
+
+[ui.sidebar.agents.rows_by_agent]
+# Both vendors — an override REPLACES rows, it doesn't extend them, so this repeats the layout
+# above rather than diffing against it. agents/claude/hooks/herdr-tab-name.ts and
+# tools/statusline now sends the real herdr tab name as just its trailing `-`-segment
+# ("example-research-dc" -> "dc"), to keep the desktop tab bar compact — reading that back via the
+# "tab" token here would shorten the sidebar too. $fullname is a second pane-metadata token
+# those same two writers report alongside it, carrying the untruncated name; this row reads
+# that instead, so the sidebar keeps the full name independently of the tab bar. Same colors and
+# same dropped-workspace layout as the default rows above — see that block's comment for why.
+claude = [
+  ["state_icon", { token = "$fullname", fg = "#878787", bold = true, dim = false }, { token = "$rc", fg = "#878787", bold = false, dim = false }],
+  [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#626262", bold = false, dim = false }, { token = "$ctx_mid", fg = "#af8700", bold = false, dim = false }, { token = "$ctx_hi", fg = "#af5f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
+  [{ token = "$cpu_idle", fg = "#4e4e4e", bold = false, dim = false }, { token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
+  [{ token = "$alert_err", fg = "#d75f5f", bold = false, dim = false }, { token = "$alert_warn", fg = "#d7af00", bold = false, dim = false }],
+]
+codex = [
+  ["state_icon", { token = "$fullname", fg = "#878787", bold = true, dim = false }, { token = "$rc", fg = "#878787", bold = false, dim = false }],
+  [{ token = "$agent_detail", fg = "#008787", bold = false, dim = false }, { token = "$ctx_lo", fg = "#626262", bold = false, dim = false }, { token = "$ctx_mid", fg = "#af8700", bold = false, dim = false }, { token = "$ctx_hi", fg = "#af5f5f", bold = false, dim = false }, { token = "$ctx_off", fg = "#626262", bold = false, dim = false }],
+  [{ token = "$cpu_idle", fg = "#4e4e4e", bold = false, dim = false }, { token = "$cpu_lo", fg = "#5faf5f", bold = false, dim = false }, { token = "$cpu_mid", fg = "#d7af00", bold = false, dim = false }, { token = "$cpu_hi", fg = "#d75f5f", bold = false, dim = false }, { token = "$ram", fg = "#4e4e4e", bold = false, dim = false }, { token = "$workers_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$workers_off", fg = "#4e4e4e", bold = false, dim = false }, { token = "$shells_on", fg = "#00d7d7", bold = false, dim = false }, { token = "$shells_off", fg = "#4e4e4e", bold = false, dim = false }],
+  [{ token = "$alert_err", fg = "#d75f5f", bold = false, dim = false }, { token = "$alert_warn", fg = "#d7af00", bold = false, dim = false }],
+]
+[session]
+# resume_agents_on_restore = true (default)
+# Replaces tmux-resurrect/continuum; on server restart herdr re-runs
+# claude --resume / codex resume etc. (stronger than tmux).
+
+[experimental]
+switch_ascii_input_source_in_prefix = true # replaces the tmux 全角キー hack (bind -n M-ｇ/C-ｇ, ｈｊｋｌ...): macOS-only, switches to ASCII input while prefix mode is active
+reveal_hidden_cursor_for_cjk_ime = true    # Japanese IME candidate-window tracking in agent TUIs
+cjk_ime_agents = ["claude", "codex"]
+
+# pane_history stays default false.
+# Analog of tmux @resurrect-capture-pane-contents 'on', but stores raw pane
+# text (may contain secrets) in session-history.json; experimental - revisit
+# when stable.

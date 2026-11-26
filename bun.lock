@@ -42,6 +42,9 @@
         "consola": "3.4.2",
       },
     },
+    "agents/reason-network": {
+      "name": "@dotfiles/reason-network",
+    },
     "agents/research-control": {
       "name": "@dotfiles/research-control",
     },
@@ -200,30 +203,27 @@
     "agents/skills/writing-typescript": {
       "name": "@dotfiles/skill-writing-typescript",
     },
-    "android": {
+    "config/android": {
       "name": "@dotfiles/android",
       "dependencies": {
         "cleye": "2.6.0",
       },
     },
-    "cocoindex": {
+    "config/cocoindex": {
       "name": "@dotfiles/cocoindex",
     },
-    "fresh-machine": {
-      "name": "@dotfiles/fresh-machine",
-    },
-    "macos": {
+    "config/macos": {
       "name": "@dotfiles/macos",
     },
-    "obsidian": {
+    "config/obsidian": {
       "name": "@dotfiles/obsidian",
       "dependencies": {
         "cleye": "2.6.0",
         "obsidian": "1.5.7",
       },
     },
-    "reason-network": {
-      "name": "@dotfiles/reason-network",
+    "config/wsl": {
+      "name": "@dotfiles/wsl",
     },
     "scripts": {
       "name": "@dotfiles/scripts",
@@ -233,6 +233,9 @@
         "consola": "3.4.2",
         "ts-pattern": "5.9.0",
       },
+    },
+    "scripts/fresh-machine": {
+      "name": "@dotfiles/fresh-machine",
     },
     "standard-presets": {
       "name": "@dotfiles/standard-presets",
@@ -354,7 +357,7 @@
     },
     "tools/repo-retrieve": {
       "name": "@dotfiles/repo-retrieve",
-      "version": "1.15.1",
+      "version": "1.15.2",
       "bin": {
         "rr": "src/repo-retrieve.ts",
         "repo-retrieve": "src/repo-retrieve.ts",
@@ -457,9 +460,6 @@
         "cleye": "2.6.0",
       },
     },
-    "wsl": {
-      "name": "@dotfiles/wsl",
-    },
   },
   "packages": {
     "@clack/core": ["@clack/core@1.5.1", "", { "dependencies": { "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-iHTrHA8MtVuLl2TfZySmcKv1qO2PoyC9Z7pfSDozEuV5vtY3/wcOPKJXlqJ5Oq2Cx5DDGQGAMVx6HZfRRoVEbQ=="],
@@ -474,13 +474,13 @@
 
     "@dotfiles/agent-resource-run": ["@dotfiles/agent-resource-run@workspace:tools/agent-resource-run"],
 
-    "@dotfiles/android": ["@dotfiles/android@workspace:android"],
+    "@dotfiles/android": ["@dotfiles/android@workspace:config/android"],
 
     "@dotfiles/baseline": ["@dotfiles/baseline@workspace:tools/baseline"],
 
     "@dotfiles/claude": ["@dotfiles/claude@workspace:agents/claude"],
 
-    "@dotfiles/cocoindex": ["@dotfiles/cocoindex@workspace:cocoindex"],
+    "@dotfiles/cocoindex": ["@dotfiles/cocoindex@workspace:config/cocoindex"],
 
     "@dotfiles/codex": ["@dotfiles/codex@workspace:agents/codex"],
 
@@ -492,7 +492,7 @@
 
     "@dotfiles/disk-reclaim": ["@dotfiles/disk-reclaim@workspace:tools/disk-reclaim"],
 
-    "@dotfiles/fresh-machine": ["@dotfiles/fresh-machine@workspace:fresh-machine"],
+    "@dotfiles/fresh-machine": ["@dotfiles/fresh-machine@workspace:scripts/fresh-machine"],
 
     "@dotfiles/goal-kernel": ["@dotfiles/goal-kernel@workspace:agents/goal-kernel"],
 
@@ -502,17 +502,17 @@
 
     "@dotfiles/hooks": ["@dotfiles/hooks@workspace:agents/hooks"],
 
-    "@dotfiles/macos": ["@dotfiles/macos@workspace:macos"],
+    "@dotfiles/macos": ["@dotfiles/macos@workspace:config/macos"],
 
     "@dotfiles/models": ["@dotfiles/models@workspace:agents/models"],
 
-    "@dotfiles/obsidian": ["@dotfiles/obsidian@workspace:obsidian"],
+    "@dotfiles/obsidian": ["@dotfiles/obsidian@workspace:config/obsidian"],
 
     "@dotfiles/preset": ["@dotfiles/preset@workspace:tools/preset"],
 
     "@dotfiles/prompt-archive": ["@dotfiles/prompt-archive@workspace:tools/prompt-archive"],
 
-    "@dotfiles/reason-network": ["@dotfiles/reason-network@workspace:reason-network"],
+    "@dotfiles/reason-network": ["@dotfiles/reason-network@workspace:agents/reason-network"],
 
     "@dotfiles/repo-retrieve": ["@dotfiles/repo-retrieve@workspace:tools/repo-retrieve"],
 
@@ -584,7 +584,7 @@
 
     "@dotfiles/tool-tiers": ["@dotfiles/tool-tiers@workspace:tools/tool-tiers"],
 
-    "@dotfiles/wsl": ["@dotfiles/wsl@workspace:wsl"],
+    "@dotfiles/wsl": ["@dotfiles/wsl@workspace:config/wsl"],
 
     "@emnapi/core": ["@emnapi/core@1.11.2", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA=="],
 

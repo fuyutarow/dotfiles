@@ -682,7 +682,7 @@ describe("CLI: full build -> cutover -> rollback -> gc lifecycle (fake-ccc)", ()
   testWithTimeout(
     "build strips COCOINDEX_CODE_DAEMON_SUPERVISED so the shadow daemon can still self-spawn",
     async () => {
-      // zsh/zshenv exports this whenever the systemd unit exists, so every real invocation
+      // config/zsh/zshenv exports this whenever the systemd unit exists, so every real invocation
       // inherits it. The shadow tree has no supervisor: leaked through, it makes each shadow
       // `ccc index` wait out the client's 30s socket timeout and fail. Regression 2026-08-08.
       const home = await makeHome();

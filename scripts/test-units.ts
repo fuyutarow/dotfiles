@@ -27,7 +27,7 @@
 //   anything else                no unit
 // No owning unit prints "no test unit owns the changed files" and exits 0.
 //
-// KNOWN-RED: lint/test-known-red.toml lists units that are red today, each with a date and reason.
+// KNOWN-RED: scripts/lint/test-known-red.toml lists units that are red today, each with a date and reason.
 // A listed unit that fails prints `KNOWN-RED <s>s <unit>` and does not fail the run; a listed unit
 // that passes fails the run until its line is removed. `--strict` ignores the list.
 //
@@ -192,7 +192,7 @@ export async function changedPaths(root: string, base: string): Promise<Paths> {
   return { ok: true, paths: [...paths].toSorted() };
 }
 
-export const KNOWN_RED_FILE = "lint/test-known-red.toml";
+export const KNOWN_RED_FILE = "scripts/lint/test-known-red.toml";
 
 const KnownRedFile = z.strictObject({
   unit: z
@@ -510,7 +510,7 @@ async function main(): Promise<number> {
       },
       help: {
         description:
-          "Run the repo's script and tool tests as parallel units. A unit is one scripts/tests/*.test.ts file, one scripts/tests sub-directory or one tools/<name>/tests directory. Positional arguments select units by path prefix, e.g. tools/smart-copy or scripts/tests/land. --changed selects the units that own the changed files instead. A unit listed in lint/test-known-red.toml that fails is printed KNOWN-RED and does not fail the run; one that passes fails it.",
+          "Run the repo's script and tool tests as parallel units. A unit is one scripts/tests/*.test.ts file, one scripts/tests sub-directory or one tools/<name>/tests directory. Positional arguments select units by path prefix, e.g. tools/smart-copy or scripts/tests/land. --changed selects the units that own the changed files instead. A unit listed in scripts/lint/test-known-red.toml that fails is printed KNOWN-RED and does not fail the run; one that passes fails it.",
       },
     },
     undefined,

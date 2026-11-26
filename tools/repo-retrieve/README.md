@@ -41,7 +41,7 @@ lines keep the old internal labels (`route=literal` …) because other tools par
 
 Entry points: `bun ~/.claude/hooks/repo-retrieve.ts` (guaranteed; a symlink in the linked hooks
 dir) and the PATH command `repo-retrieve` (package `bin`, installed by `mise run deps`).
-ccc's own configuration — global settings and the capped daemon unit — stays in `cocoindex/`.
+ccc's own configuration — global settings and the capped daemon unit — stays in `config/cocoindex/`.
 
 Search another corpus from the current repository with `--project`. It selects one target
 directory; `--path` (`-p`) narrows files inside that target. Explicit targets must be existing daemon registrations; use `rr roots --all` to enumerate them. The default listing excludes catalog caches and `<repo>.ws/ws_*` worktrees by path shape; `--all` includes them. `--json` emits an array including missing registrations, with `kind` and `exists` fields. Missing registrations are never removed. Semantic routes require the selected

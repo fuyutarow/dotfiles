@@ -16,7 +16,7 @@ brew "mise"
 brew "neovim"       # nvim — shared view, vd, sp and vs aliases
 brew "ripgrep"      # better grep (gr)
 brew "rm-improved"  # rip — the ONLY sanctioned file remover (rm is disabled)
-brew "sheldon"      # zsh plugins → zsh/aliases.zsh
+brew "sheldon"      # zsh plugins → config/zsh/aliases.zsh
 brew "herdr"        # agent multiplexer; `herdr --remote <host>` needs it on the remote too
 brew "topgrade"     # `mise run up` (m up)
 brew "zoxide"       # better cd (,)

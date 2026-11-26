@@ -1,6 +1,6 @@
 // The usage-percent thresholds behind every green / yellow / red load display. One declaration:
 // the statusline maps the level to ANSI colors (tools/statusline/src/ansi.ts pctColor) and the
-// herdr projector maps it to a sidebar token (cpu_lo / cpu_mid / cpu_hi) that herdr/config.toml
+// herdr projector maps it to a sidebar token (cpu_lo / cpu_mid / cpu_hi) that config/herdr/config.toml
 // styles. Neither consumer may restate these numbers.
 export const USAGE_YELLOW_PCT = 70;
 export const USAGE_RED_PCT = 90;

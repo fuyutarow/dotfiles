@@ -8,7 +8,7 @@ executable lookup does not consult zsh aliases.
 
 ## Automatic presence
 
-`herdr/config.toml` adds a **new server-side command timer**, immediately at
+`config/herdr/config.toml` adds a **new server-side command timer**, immediately at
 startup and every 5 seconds, calling `"$HOME/.bun/bin/btmp" ensure`. Successful
 ensure emits no output, so it adds no visible tab-bar status text.
 Herdr documents immediate execution, periodic execution, non-overlap, and socket

@@ -1,5 +1,5 @@
 # Shared vectors for the agent session name format `<project-slug>-<role>_<id>`.
-# Checked by tools/shared/tests/agent-name.test.ts (TS module) and zsh/tests/terminal-hygiene.test.zsh (zsh _agent_name).
+# Checked by tools/shared/tests/agent-name.test.ts (TS module) and config/zsh/tests/terminal-hygiene.test.zsh (zsh _agent_name).
 # Tab-separated. "format": cwd, role, id, expected name.  "parse": name, project, role, id ("-" x3 = not a name).
 format	/home/fuyu/Workspace/example-search_v1	agt	f24v	example-search-v1-agt_f24v
 format	/home/fuyu/Workspace/example-search-v1	agt	f24v	example-search-v1-agt_f24v

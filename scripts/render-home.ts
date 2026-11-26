@@ -1,7 +1,7 @@
 // Renders the GENERATED half of $HOME — every deployed file that is a function of several repo
 // declarations (plus machine facts), so it cannot be a symlink to one of them:
 //   ~/.claude/settings.json  <- agents/claude/settings.json + ~/.claude/settings.private.json
-//                               + zsh/timezone (env.TZ) + agents/hooks/hooks.toml (claude)
+//                               + config/zsh/timezone (env.TZ) + agents/hooks/hooks.toml (claude)
 //   ~/.codex/hooks.json      <- agents/codex/hooks.json + agents/hooks/hooks.toml (codex)
 //   ~/.claude/CLAUDE.md      <- agents/claude/CLAUDE.md
 // Consumer: scripts/link-dots.ts (and therefore `mise run link:dots` + the post-merge hook), and
@@ -42,7 +42,7 @@
 // (append? match on matcher? dedupe?), and guessing one would silently reorder security hooks.
 // The registry hooks are wired AFTER the merge, so an overlay `hooks` still gets them.
 //
-// TIME ZONE: the human's zone NAME lives only in zsh/timezone (see zsh/zshenv). zsh hands it to
+// TIME ZONE: the human's zone NAME lives only in config/zsh/timezone (see config/zsh/zshenv). zsh hands it to
 // every process it starts, but a Claude Code process started some other way (herdr's server, a
 // session older than the file) had none, and its statusline and hooks read UTC (2026-10-06). So
 // it is rendered into `env.TZ`, which Claude Code exports to everything it spawns. An `env.TZ`
@@ -298,7 +298,7 @@ const REASON_NETWORK_TOKEN = "{reason-network}";
 async function reasonNetworkExecutable(): Promise<string | undefined> {
   const onPath = Bun.which("reason-network");
   if (onPath !== null) return onPath;
-  // reason-network/install.ts installs here; a PATH without ~/.local/bin must not drop the hooks.
+  // agents/reason-network/install.ts installs here; a PATH without ~/.local/bin must not drop the hooks.
   const installed = `${commandTargetHome}/.local/bin/reason-network`;
   return (await exists(installed)) ? installed : undefined;
 }
@@ -433,7 +433,7 @@ if (
   if (Object.keys(remaining).length === 0) delete settings["enabledPlugins"];
   else settings["enabledPlugins"] = remaining;
 }
-const tzPath = `${dotfiles}/zsh/timezone`;
+const tzPath = `${dotfiles}/config/zsh/timezone`;
 let tzNote = "";
 if (await exists(tzPath)) {
   const zone = (await readFile(tzPath, "utf8")).trim();
@@ -455,7 +455,7 @@ if (await exists(tzPath)) {
   } else tzNote = ` (no /usr/share/zoneinfo/${zone}: env.TZ not set)`;
 }
 
-const rolePath = join(dotfiles, "roles/roles.toml");
+const rolePath = join(dotfiles, "config/roles/roles.toml");
 const roleInput = await Result.tryPromise({
   try: async () => Bun.TOML.parse(await Bun.file(rolePath).text()),
   catch: (e: unknown) => e,

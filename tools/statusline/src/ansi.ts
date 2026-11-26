@@ -19,7 +19,7 @@ export const RST = `${ESC}[0m`;
 // The statusline's color vocabulary is one xterm-256 palette: every color is an SGR `38;5;N`
 // (named below) and the only other SGR code is reset (0). Nothing uses SGR 2 (dim), 16-color
 // codes (30-37, 90-97, 39) or truecolor. herdr's sidebar uses the same named palette
-// (herdr/config.toml). The index is normative; the hex is the xterm 6x6x6 cube (levels
+// (config/herdr/config.toml). The index is normative; the hex is the xterm 6x6x6 cube (levels
 // 0,95,135,175,215,255) or grey ramp (8+10k) for that index; the name is the common xterm-256
 // list name.
 //    N  name             hex      role

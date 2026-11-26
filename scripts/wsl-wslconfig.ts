@@ -43,7 +43,7 @@ async function capture(cmd: string[], ms: number): Promise<string> {
   return sig.aborted ? "" : out.replaceAll("\r", "").trim();
 }
 
-// Deploy wsl/wslconfig.win to the Windows profile as %USERPROFILE%\.wslconfig.
+// Deploy config/wsl/wslconfig.win to the Windows profile as %USERPROFILE%\.wslconfig.
 // Consumer: human/agent running `mise run wsl:wslconfig`; output is verdict lines.
 //
 // WHY A COPY AND NOT A SYMLINK — the one place this repo cannot use its usual mechanism.
@@ -72,7 +72,7 @@ if (!isWslDistro()) {
   process.exit(1);
 }
 
-const src = `${process.env["DOTFILES"] ?? `${process.env["HOME"]}/dotfiles`}/wsl/wslconfig.win`;
+const src = `${process.env["DOTFILES"] ?? `${process.env["HOME"]}/dotfiles`}/config/wsl/wslconfig.win`;
 if (!(await exists(src))) {
   consola.error(`missing source: ${src}`);
   process.exit(1);
@@ -128,7 +128,7 @@ if (wanted?.[1] !== undefined && Number.isFinite(hostGb) && hostGb > 0) {
   consola.info(`host RAM ${hostGb.toFixed(1)} GB, config asks for ${askGb} GB`);
   if (askGb > hostGb - RESERVE_GB) {
     consola.error(
-      `REFUSED: memory=${askGb}GB leaves Windows under ${RESERVE_GB} GB on a ${hostGb.toFixed(1)} GB host.\nLower memory= in wsl/wslconfig.win for this machine, then re-run.`,
+      `REFUSED: memory=${askGb}GB leaves Windows under ${RESERVE_GB} GB on a ${hostGb.toFixed(1)} GB host.\nLower memory= in config/wsl/wslconfig.win for this machine, then re-run.`,
     );
     process.exit(1);
   }

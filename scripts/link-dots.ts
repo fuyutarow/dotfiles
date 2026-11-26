@@ -486,12 +486,12 @@ async function sshVersion(): Promise<string> {
 }
 
 // The smart-open attach forward uses Match keywords OpenSSH added in 9.9; an older client treats
-// them as a FATAL parse error and every ssh fails (see ssh/config). Link it only where they parse;
+// them as a FATAL parse error and every ssh fails (see config/ssh/config). Link it only where they parse;
 // on an older client a leftover link into the repo is drift (it breaks ssh), not a harmless extra.
 export function linkSshAttach(ctx: Ctx, sshV: string): void {
   const dst = join(ctx.home, ".ssh/config.d/smart-open-attach.conf");
   if (sshSupportsAttachMatch(sshV)) {
-    link(ctx, "ssh/smart-open-attach.conf", dst);
+    link(ctx, "config/ssh/smart-open-attach.conf", dst);
     return;
   }
   const target = readLink(dst);

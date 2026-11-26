@@ -29,14 +29,14 @@ import { loadToolDeclarations } from "@dotfiles/shared/src/tool-declaration.ts";
 //   codex-remote agents/codex/app-server.toml     Codex daemon remote control (mobile app) as declared
 //   codex-hook-trust ~/.codex/hooks.json          every hook is trusted by the installed Codex (its
 //                                                own `hooks/list` status, read from a copy; READ-ONLY)
-//   wslconfig   wsl/wslconfig.win   (WSL only)   %USERPROFILE%\.wslconfig is a byte-equal copy
+//   wslconfig   config/wsl/wslconfig.win   (WSL only)   %USERPROFILE%\.wslconfig is a byte-equal copy
 //   wsl-gpu-path environment.d      (WSL only)   systemd user manager PATH contains WSL GPU tools
 //   ccc-daemon  cocoindex unit      (Linux)      enabled in default.target and active
 //   capacity-guard WSL timer       (WSL only)   autonomous host recovery timer is enabled and active
-//   ccc-db-map  zsh/zshenv + unit                the ccc daemon relocates index DBs exactly as
+//   ccc-db-map  config/zsh/zshenv + unit                the ccc daemon relocates index DBs exactly as
 //                                                this shell does (`ccc doctor` DB path mappings)
-//   edge-policy edge/policy.plist.mac (mac only) the live Edge managed policy is a byte-equal copy
-//   smart-open  ssh/config + tools/shared/src/sockets.ts
+//   edge-policy config/edge/policy.plist.mac (mac only) the live Edge managed policy is a byte-equal copy
+//   smart-open  config/ssh/config + tools/shared/src/sockets.ts
 //                                                r99-u24's RemoteForward joins the two socket paths
 //                                                smart-open and its receiver actually use (the
 //                                                remote name carrying the alias), on attach only
@@ -391,7 +391,10 @@ export async function checkRipGraveyard(
   ctx: Ctx,
   inspect: typeof inspectRipGraveyard = inspectRipGraveyard,
 ): Promise<Finding> {
-  const declaration = await readFile(join(ctx.dotfiles, "zsh/zshenv"), "utf8");
+  const declaration = await readFile(
+    join(ctx.dotfiles, "config/zsh/zshenv"),
+    "utf8",
+  );
   const lines = declaration.split("\n");
   const hasRipDeclaration =
     lines.filter((line) => line === 'export RIP_GRAVEYARD="$GRAVEYARD"')
@@ -934,12 +937,12 @@ export async function checkLoginShell(ctx: Ctx): Promise<Finding> {
   if (basename(shell) === "zsh")
     return pass("login-shell", `login shell is ${shell}`);
   // Where chsh is not ours (a shared server, sol): bash stays the login shell and hands every
-  // interactive shell to zsh — zsh/bash_profile for a login, zsh/bashrc for a herdr pane. Healthy
+  // interactive shell to zsh — config/zsh/bash_profile for a login, config/zsh/bashrc for a herdr pane. Healthy
   // only when BOTH handoffs are this repo's; doctor:remote checks the result from outside.
   const handoffChecks = await Promise.all(
     [
-      [".bash_profile", "zsh/bash_profile"],
-      [".bashrc", "zsh/bashrc"],
+      [".bash_profile", "config/zsh/bash_profile"],
+      [".bashrc", "config/zsh/bashrc"],
     ].map(async ([dst = "", src = ""]): Promise<Result<boolean, unknown>> => {
       const link = join(ctx.home, dst);
       const stat = await lstatOrUndefined(link);
@@ -979,7 +982,7 @@ export async function checkLoginShell(ctx: Ctx): Promise<Finding> {
 export async function checkMiseScope(ctx: Ctx): Promise<Finding> {
   const r = await run(
     ["bun", join(ctx.dotfiles, "scripts/test-mise-scope.ts")],
-    // cwd: the test opens zsh/tests/mise-scope.test.zsh by a repo-relative path; run from ~ it
+    // cwd: the test opens config/zsh/tests/mise-scope.test.zsh by a repo-relative path; run from ~ it
     // exited 127 and read as an INV-6 FAIL (2026-10-05).
     { ms: 120_000, cwd: ctx.dotfiles },
   );
@@ -1221,7 +1224,7 @@ export async function checkReasonNetworkOneHome(
 }
 
 export async function checkWslconfig(ctx: Ctx): Promise<Finding> {
-  const src = join(ctx.dotfiles, "wsl", "wslconfig.win");
+  const src = join(ctx.dotfiles, "config", "wsl", "wslconfig.win");
   // Same interop path as scripts/wsl-wslconfig.ts: cmd.exe is deliberately off this PATH.
   const r = await run(
     [
@@ -1254,14 +1257,14 @@ export async function checkWslconfig(ctx: Ctx): Promise<Finding> {
   if (have !== want && effectiveConfig(have) === effectiveConfig(want)) {
     return warn(
       "wslconfig",
-      `${dst} differs from wsl/wslconfig.win in comments only — effective settings identical (mise run wsl:wslconfig to refresh)`,
+      `${dst} differs from config/wsl/wslconfig.win in comments only — effective settings identical (mise run wsl:wslconfig to refresh)`,
     );
   }
   return have === want
-    ? pass("wslconfig", `${dst} is a copy of wsl/wslconfig.win`)
+    ? pass("wslconfig", `${dst} is a copy of config/wsl/wslconfig.win`)
     : fail(
         "wslconfig",
-        `${dst} differs from wsl/wslconfig.win`,
+        `${dst} differs from config/wsl/wslconfig.win`,
         "mise run wsl:wslconfig (then wsl --shutdown)",
       );
 }
@@ -1306,7 +1309,10 @@ export async function checkCccDaemon(
   const stateLabel = state === "" ? "unknown" : state;
   const enablementLabel =
     enabled.out.trim() === "" ? "unknown enablement" : enabled.out.trim();
-  const declaration = join(ctx.dotfiles, "cocoindex/ccc-daemon.service.wsl");
+  const declaration = join(
+    ctx.dotfiles,
+    "config/cocoindex/ccc-daemon.service.wsl",
+  );
   const declared = (
     await Result.tryPromise({
       try: () => readFile(declaration, "utf8"),
@@ -1593,7 +1599,10 @@ export async function checkCapacityGuard(ctx: Ctx): Promise<Finding> {
     ".config/systemd/user/timers.target.wants",
     unit,
   );
-  const source = join(ctx.dotfiles, "wsl/wsl-capacity-recover.timer.wsl");
+  const source = join(
+    ctx.dotfiles,
+    "config/wsl/wsl-capacity-recover.timer.wsl",
+  );
   const [wantsExists, sourceExists] = await Promise.all([
     fileExists(wants),
     fileExists(source),
@@ -1770,8 +1779,8 @@ async function checkWslGpuPath(): Promise<Finding> {
 
 // ccc resolves a project's DB dir in TWO processes: the daemon writes the index where its own
 // COCOINDEX_CODE_DB_PATH_MAPPING points, while `ccc reset`/`ccc status` and repo-retrieve's
-// watermark look where the client's points. Both values derive from cocoindex/db-root (zsh/zshenv
-// for clients, cocoindex/ccc-daemon-launch.py for the daemon); a daemon started before it
+// watermark look where the client's points. Both values derive from config/cocoindex/db-root (config/zsh/zshenv
+// for clients, config/cocoindex/ccc-daemon-launch.py for the daemon); a daemon started before it
 // changed keeps the old value until restarted. `ccc doctor` is the only CLI that reports the daemon's mapping.
 export async function checkCccDbMap(
   ctx: Ctx,
@@ -1787,7 +1796,7 @@ export async function checkCccDbMap(
     return fail(
       "ccc-db-map",
       `${MAPPING_ENV} is malformed: ${parsed.error.message}`,
-      "fix the export in zsh/zshenv",
+      "fix the export in config/zsh/zshenv",
     );
   }
   const client = parsed.value;
@@ -1795,7 +1804,7 @@ export async function checkCccDbMap(
     return fail(
       "ccc-db-map",
       `${MAPPING_ENV} is unset in this shell — index DBs would be read from inside the repos`,
-      "open a new shell (zsh/zshenv exports it)",
+      "open a new shell (config/zsh/zshenv exports it)",
     );
   }
   const r = await probe(["ccc", "doctor"], { ms: 8_000, cwd: ctx.home });
@@ -1957,7 +1966,7 @@ export async function checkIterm2(ctx: Ctx): Promise<Finding> {
     { ms: 10_000 },
   );
   const have = r.out.trim().replace(/^~/u, ctx.home);
-  const want = join(ctx.dotfiles, "iterm2");
+  const want = join(ctx.dotfiles, "config", "iterm2");
   const haveLabel = have === "" ? "unset" : have;
   return have === want
     ? pass("iterm2", "iTerm2 loads its prefs from iterm2/")
@@ -2206,7 +2215,7 @@ export async function checkEdgePolicy(ctx: Ctx): Promise<Finding> {
   if (r.code === 0)
     return pass(
       "edge-policy",
-      "the live Edge policy matches edge/policy.plist.mac",
+      "the live Edge policy matches config/edge/policy.plist.mac",
     );
   const detail =
     r.out.split("\n").find((l) => l.startsWith("FAIL")) ?? `exit ${r.code}`;
@@ -2217,17 +2226,17 @@ export async function checkEdgePolicy(ctx: Ctx): Promise<Finding> {
   );
 }
 
-// ssh/config's `Host r99-u24` forwards the REMOTE's smart-open socket to THIS machine's receiver.
+// config/ssh/config's `Host r99-u24` forwards the REMOTE's smart-open socket to THIS machine's receiver.
 // Both ends are code (tools/shared/src/sockets.ts);the forward is ssh syntax (%r, %d) that cannot
 // import them, so the only guard against drift is to ask ssh what it RESOLVES and compare. A
 // mismatch is silent in use: `o <url>` finds no socket (or one nobody answers) and opens on the
-// remote's own screen. -F pins the declared source (this repo's ssh/config, not whatever
+// remote's own screen. -F pins the declared source (this repo's config/ssh/config, not whatever
 // ~/.ssh/config currently links to); -G prints the resolved options without connecting.
 const SMART_OPEN_HOST = "r99-u24";
 export async function checkSmartOpen(ctx: Ctx): Promise<Finding> {
   const config = join(ctx.dotfiles, "ssh", "config");
   if (!(await fileExists(config)))
-    return skip("smart-open", "no ssh/config in this checkout");
+    return skip("smart-open", "no config/ssh/config in this checkout");
   const r = await run(["ssh", "-G", "-F", config, SMART_OPEN_HOST], {
     ms: 10_000,
   });
@@ -2265,7 +2274,7 @@ export async function checkSmartOpen(ctx: Ctx): Promise<Finding> {
   return fail(
     "smart-open",
     `${SMART_OPEN_HOST}'s RemoteForward does not join the paths tools/shared/src/sockets.ts uses — \`o <url>\` would open on the remote's screen`,
-    "make the RemoteForward in ssh/config match tools/shared/src/sockets.ts (or the reverse)",
+    "make the RemoteForward in config/ssh/config match tools/shared/src/sockets.ts (or the reverse)",
     [`want: ${want}`, ...seen],
   );
 }
@@ -2296,7 +2305,7 @@ async function checkEditorAlias(
   );
   if (same && !forwards) {
     // Only the attach may carry the forward: a command session (an agent's `ssh r99-u24 cmd`)
-    // would steal the socket and leave a dead bind behind when it exits (ssh/config, Match).
+    // would steal the socket and leave a dead bind behind when it exits (config/ssh/config, Match).
     const ex = await run(["ssh", "-G", "-F", config, SMART_OPEN_HOST, "true"], {
       ms: 10_000,
     });
@@ -2316,7 +2325,7 @@ async function checkEditorAlias(
       return fail(
         "smart-open",
         `a command session to ${SMART_OPEN_HOST} carries the smart-open forward — every \`ssh ${SMART_OPEN_HOST} <cmd>\` steals the socket and leaves a dead bind`,
-        'scope the RemoteForward in ssh/smart-open-attach.conf with `Match tagged smart-open … sessiontype shell` / `command "*herdr remote-client-bridge*"`',
+        'scope the RemoteForward in config/ssh/smart-open-attach.conf with `Match tagged smart-open … sessiontype shell` / `command "*herdr remote-client-bridge*"`',
         [`have: ssh -G ${SMART_OPEN_HOST} true → remoteforward`],
       );
     return pass(

@@ -44,7 +44,7 @@ references outside the write set for coordinator triage. None was edited:
 
 | Locator | Meaning and possible follow-up |
 | --- | --- |
-| `zsh/aliases.zsh:41` | Comment cites old project policy for disabled rm; repoint to AGENTS if maintained. |
+| `config/zsh/aliases.zsh:41` | Comment cites old project policy for disabled rm; repoint to AGENTS if maintained. |
 | `scripts/wsl-wslconfig.ts:84` | Comment attributes portable-path rule to CLAUDE; repoint to AGENTS. |
 | `scripts/wsl-winget.ts:110` | Same project-policy attribution in a comment. |
 | `tools/agx-worker/src/state.ts:81` | Generic CLAUDE dispatch-resource attribution; coordinator should distinguish global policy. |

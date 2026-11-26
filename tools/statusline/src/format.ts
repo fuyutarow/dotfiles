@@ -34,12 +34,12 @@ const BR = "⎇";
 // PLUS repo state (branch + diff + worktree) again — folded back in 2026-09-12, on request,
 // after a same-day round trip that briefly split them onto separate rows. KNOWN, ACCEPTED
 // DIVERGENCE: this makes line 1 no longer a byte-for-byte mirror of .zshrc's real PROMPT (which
-// carries no git info at all — confirmed against zsh/zshrc's own `PROMPT=` line), only of its
+// carries no git info at all — confirmed against config/zsh/zshrc's own `PROMPT=` line), only of its
 // user@host:date|cwd portion. If that divergence ever needs to close instead, the fix is adding
-// git info to the REAL PROMPT in zsh/zshrc, not reverting this — see the conversation that
+// git info to the REAL PROMPT in config/zsh/zshrc, not reverting this — see the conversation that
 // requested this cut. Line 2 pairs email with the Session uuid (both are copy/reference
 // identity strings, not live state); the uuid MUST stay LAST on whatever row it appears on —
-// tmux/tmux.conf sets `word-separators ' \t'`, so a row ending in the raw uuid is a one-gesture
+// config/tmux/tmux.conf sets `word-separators ' \t'`, so a row ending in the raw uuid is a one-gesture
 // `claude --resume <id>` double-click copy, which breaks if the row wraps before reaching the
 // uuid on a narrow pane. Keeping this row short (just email ahead of it) is what keeps that
 // risk small; if a future change puts more before the uuid and this starts biting in practice,

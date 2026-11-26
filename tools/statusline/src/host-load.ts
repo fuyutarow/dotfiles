@@ -4,7 +4,7 @@ import { sysRow, formatBytes, type HostLoad } from "#src/host-display.ts";
 export type { MemReading } from "#src/host-model.ts";
 export type { HostLoad } from "#src/host-display.ts";
 // Host load — CPU · RAM · VRAM · Disk — read and rendered as the statusline's Sys row. Consumers:
-// tools/statusline/src/statusline.ts (row 5) and `s` in zsh/aliases.zsh (one row, now).
+// tools/statusline/src/statusline.ts (row 5) and `s` in config/zsh/aliases.zsh (one row, now).
 // GPU data comes exclusively from tools/shared/src/gpu-sampler.ts state.
 import { readFile } from "node:fs/promises";
 import { cpus, totalmem } from "node:os";

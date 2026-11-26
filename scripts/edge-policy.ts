@@ -1,4 +1,4 @@
-// edge-policy.ts — deploy edge/policy.plist.mac as Microsoft Edge's managed policy (macOS).
+// edge-policy.ts — deploy config/edge/policy.plist.mac as Microsoft Edge's managed policy (macOS).
 // Consumer: a human or agent running `mise run edge:policy`, and `mise run doctor` (check
 // `edge-policy`, via --check). Output is verdict lines.
 //
@@ -31,7 +31,7 @@ const argv = cli(
     parameters: [],
     help: {
       description:
-        "Deploy edge/policy.plist.mac as Microsoft Edge's managed policy (needs sudo), or --check it.",
+        "Deploy config/edge/policy.plist.mac as Microsoft Edge's managed policy (needs sudo), or --check it.",
     },
     flags: {
       check: {
@@ -49,7 +49,7 @@ const argv = cli(
 if (argv._.length > 0)
   die(`unexpected argument: ${argv._[0]} (this command takes no positionals)`);
 
-const SRC = join(import.meta.dir, "..", "edge", "policy.plist.mac");
+const SRC = join(import.meta.dir, "..", "config", "edge", "policy.plist.mac");
 const OVERRIDE = process.env["EDGE_POLICY_DST"];
 const MANAGED_DIR = "/Library/Managed Preferences";
 const DST = OVERRIDE ?? join(MANAGED_DIR, "com.microsoft.Edge.plist");
@@ -141,11 +141,14 @@ async function deploy(): Promise<string | undefined> {
 
 async function main(): Promise<number> {
   if ((await run(["plutil", "-lint", SRC], 10_000)) !== 0) {
-    verdict("FAIL", "edge/policy.plist.mac is not a valid property list");
+    verdict(
+      "FAIL",
+      "config/edge/policy.plist.mac is not a valid property list",
+    );
     return 1;
   }
   if (await matches()) {
-    verdict("PASS", `${DST} matches edge/policy.plist.mac`);
+    verdict("PASS", `${DST} matches config/edge/policy.plist.mac`);
     return 0;
   }
   const destination = await Result.tryPromise({
@@ -156,7 +159,7 @@ async function main(): Promise<number> {
   if (argv.flags.check) {
     verdict(
       "FAIL",
-      `${DST} ${why} edge/policy.plist.mac`,
+      `${DST} ${why} config/edge/policy.plist.mac`,
       "mise run edge:policy (asks for sudo)",
     );
     return 1;
@@ -166,7 +169,7 @@ async function main(): Promise<number> {
   if (!(await matches())) {
     verdict(
       "FAIL",
-      `copied, but ${DST} still differs from edge/policy.plist.mac`,
+      `copied, but ${DST} still differs from config/edge/policy.plist.mac`,
     );
     return 1;
   }

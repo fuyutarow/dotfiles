@@ -1192,7 +1192,7 @@ async function reindexCertified(
 
   // The daemon wrote the index wherever ITS COCOINDEX_CODE_DB_PATH_MAPPING points; this process
   // resolves the DB dir from its own. If the two disagree (a daemon started before the mapping
-  // was set, a shell that never read zsh/zshenv), the index exists and this process cannot see
+  // was set, a shell that never read config/zsh/zshenv), the index exists and this process cannot see
   // it — certifying it here would put the watermark beside no DB. Refuse, and name the fix.
   const artifacts = await hasIndexArtifacts(project);
   if (artifacts.isErr()) return Result.err(artifacts.error);

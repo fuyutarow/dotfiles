@@ -3,7 +3,7 @@ import { consola } from "consola";
 
 // File list reused from shfmt -f (same discovery shfmt/fmt:sh use).
 const files = (
-  await $`shfmt -f scripts tmux/scripts agents/claude lazygit macos .githooks`.text()
+  await $`shfmt -f scripts config/tmux/scripts agents/claude config/lazygit config/macos .githooks`.text()
 ).trim();
 if (files === "") {
   consola.info("no shell files");

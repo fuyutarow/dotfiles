@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.5 — 2026-11-27
+
+- Paths follow the repository's move of topic directories under config/ (for example config/cocoindex, config/zsh).
+
 ## 0.7.4 — 2026-11-26
 
 - Row 2 marks the effort with the circle Claude Code draws for it: opus-5.5 ◐ medium, fable-5.2 ● high.

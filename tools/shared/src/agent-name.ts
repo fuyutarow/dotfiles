@@ -13,7 +13,7 @@
 // pattern is unambiguous even though the slug itself contains hyphens.
 //
 // Producers: agents/claude/hooks/assign-lib.ts (the assign hook) imports this module; the zsh
-// claude() wrapper (zsh/aliases.zsh, `_agent_name`) re-implements `format` in pure zsh and is
+// claude() wrapper (config/zsh/aliases.zsh, `_agent_name`) re-implements `format` in pure zsh and is
 // held to this module by the shared vector table tools/shared/tests/fixtures/agent-name-vectors.tsv.
 // Consumers that only display or parse names (the released agx command and tools/statusline) migrate separately.
 

@@ -1,4 +1,4 @@
-// `mise run up` (m up) — update everything through topgrade (topgrade/topgrade.toml decides which
+// `mise run up` (m up) — update everything through topgrade (config/topgrade/topgrade.toml decides which
 // steps exist). Consumer: a human at a terminal; topgrade's own output is the report.
 //
 // NO SUDO, NO SUDO ATTEMPT. On a shared server where we have no root (sol, 2026-10-05) topgrade ran

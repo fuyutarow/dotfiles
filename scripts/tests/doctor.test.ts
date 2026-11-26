@@ -105,14 +105,14 @@ test("reason-network declaration gate rejects both override names", async () => 
     "agents/hooks/hooks.toml",
     "agents/codex/hooks.json",
     "agents/claude/settings.json",
-    "zsh/aliases.zsh",
+    "config/zsh/aliases.zsh",
   ]) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), "# no override\n");
   }
   expect(await reasonNetworkHomeViolations(root)).toEqual([]);
   writeFileSync(join(root, ".mcp.json"), '{"REASON_NETWORK_HOME": "x"}');
-  writeFileSync(join(root, "zsh/aliases.zsh"), 'export TINCAN_HOME="x"');
+  writeFileSync(join(root, "config/zsh/aliases.zsh"), 'export TINCAN_HOME="x"');
   expect(await reasonNetworkHomeViolations(root)).toHaveLength(2);
 });
 
@@ -876,9 +876,9 @@ describe("doctor", () => {
     expect(tooLarge.out).toContain(`limit is ${RIP_GRAVEYARD_MAX_BYTES}`);
 
     const undeclared = tmp("doctor-rip-graveyard-undeclared-");
-    mkdirSync(join(undeclared, "zsh"), { recursive: true });
+    mkdirSync(join(undeclared, "config", "zsh"), { recursive: true });
     writeFileSync(
-      join(undeclared, "zsh/zshenv"),
+      join(undeclared, "config/zsh/zshenv"),
       "# no graveyard declaration\n",
     );
     const unset = doctor("rip-graveyard", {
@@ -1413,7 +1413,10 @@ network_access = true
         ".config/systemd/user/timers.target.wants/wsl-capacity-recover.timer",
       );
       mkdirSync(join(wants, ".."), { recursive: true });
-      symlinkSync(join(REPO, "wsl/wsl-capacity-recover.timer.wsl"), wants);
+      symlinkSync(
+        join(REPO, "config/wsl/wsl-capacity-recover.timer.wsl"),
+        wants,
+      );
       const enabled = doctor("capacity-guard", env);
       expect(enabled.code).toBe(0);
       expect(enabled.out).toContain("is enabled and active");
@@ -1426,7 +1429,7 @@ network_access = true
   );
 
   /**
-   * A dotfiles fixture whose ssh/config gives `r99-u24` one User and (optionally) one forward.
+   * A dotfiles fixture whose config/ssh/config gives `r99-u24` one User and (optionally) one forward.
    */
   function fixtureSshConfig(
     forward: string | null,
@@ -1445,7 +1448,7 @@ network_access = true
       editor === "forwards" && forward !== null
         ? `Host r99-u24-code\n${fwd}`
         : "";
-    // Scoped as ssh/config does it: only an interactive session carries the forward.
+    // Scoped as config/ssh/config does it: only an interactive session carries the forward.
     const attach = scoped
       ? "Match originalhost r99-u24 sessiontype shell\n"
       : "Host r99-u24\n";
@@ -1489,7 +1492,9 @@ network_access = true
         expect([name, r.code]).toEqual([name, 1]);
         expect(r.out).toContain(`want: ${remote} ${receiver}`);
         expect(r.out).toContain(`have: ${forward}`);
-        expect(r.out).toContain("fix: make the RemoteForward in ssh/config");
+        expect(r.out).toContain(
+          "fix: make the RemoteForward in config/ssh/config",
+        );
       }
     },
   );
@@ -1563,14 +1568,14 @@ network_access = true
     },
   );
 
-  test("smart-open: a checkout with no ssh/config is SKIPped with the reason, not PASSed", () => {
+  test("smart-open: a checkout with no config/ssh/config is SKIPped with the reason, not PASSed", () => {
     const r = doctor("smart-open", {
       HOME: tmp("doctor-home-"),
       DOTFILES: tmp("doctor-empty-"),
     });
     expect(r.code).toBe(0);
     expect(r.out).toMatch(
-      /^SKIP {2}smart-open {2}no ssh\/config in this checkout/mu,
+      /^SKIP {2}smart-open {2}no config\/ssh\/config in this checkout/mu,
     );
   });
 

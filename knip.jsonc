@@ -47,10 +47,18 @@
         "!**/fixtures/**!",
       ],
     },
-    "obsidian": {
+    "config/obsidian": {
       // Shell and remote launchers invoke these scripts; Obsidian loads the plugin.
-      "entry": ["open-vault.ts!", "open-remote.ts!", "forget-shadow.ts!", "local-plugins/doc-view/main.js!"],
-      "project": ["**/*.{ts,tsx,js,jsx}!", "!**/*.{test,spec}.{ts,tsx,js,jsx}!"],
+      "entry": [
+        "open-vault.ts!",
+        "open-remote.ts!",
+        "forget-shadow.ts!",
+        "local-plugins/doc-view/main.js!",
+      ],
+      "project": [
+        "**/*.{ts,tsx,js,jsx}!",
+        "!**/*.{test,spec}.{ts,tsx,js,jsx}!",
+      ],
     },
     "tools/disk-reclaim": {
       "entry": [],

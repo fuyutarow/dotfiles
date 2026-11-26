@@ -70,7 +70,7 @@ export async function installCccEntry(
   const bin = join(home, ".local", "bin");
   const backend = await realpath(await cccBackend(entry));
   const source = await readFile(
-    new URL("../cocoindex/ccc-entry", import.meta.url),
+    new URL("../config/cocoindex/ccc-entry", import.meta.url),
   );
   await mkdir(bin, { recursive: true });
   const backendTemp = join(bin, `ccc-backend.tmp-${process.pid}`);

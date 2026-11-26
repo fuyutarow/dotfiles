@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.7 — 2026-11-27
+
+- Paths follow the repository's move of topic directories under config/ (for example config/cocoindex, config/zsh).
+
 ## 1.2.6 — 2026-11-25
 
 - Error handling uses better-result instead of neverthrow

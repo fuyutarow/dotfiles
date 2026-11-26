@@ -21,7 +21,7 @@ import { agentNameFor, isValidRole } from "@dotfiles/shared/src/agent-name.ts";
 export { isValidRole };
 
 // Crockford base32, lowercase, no i/l/o/u — the exact alphabet the plain `claude()` wrapper
-// (zsh/aliases.zsh) uses, so an assigned name and a plain-wrapper name read as the same species
+// (config/zsh/aliases.zsh) uses, so an assigned name and a plain-wrapper name read as the same species
 // of suffix.
 const SUFFIX_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 

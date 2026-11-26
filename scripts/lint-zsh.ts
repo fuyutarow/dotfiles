@@ -7,13 +7,13 @@ import { loadToolDeclarations } from "@dotfiles/shared/src/tool-declaration.ts";
 // zsh syntax gate: `zsh -n` parse-only on boot-critical zsh config (MUST use the zsh binary,
 // never bash -n).
 const files = [
-  "zsh/aliases.zsh",
-  "zsh/mac.zsh",
-  "zsh/wsl.zsh",
-  "zsh/zshrc",
-  "zsh/zshenv",
-  "zsh/zprofile.mac",
-  "zsh/zprofile.wsl",
+  "config/zsh/aliases.zsh",
+  "config/zsh/mac.zsh",
+  "config/zsh/wsl.zsh",
+  "config/zsh/zshrc",
+  "config/zsh/zshenv",
+  "config/zsh/zprofile.mac",
+  "config/zsh/zprofile.wsl",
 ];
 
 // Shell fragments come from the tool declarations (tools/<name>/tool.toml `shell`), not a list here.

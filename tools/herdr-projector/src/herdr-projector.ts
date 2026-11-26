@@ -262,7 +262,7 @@ export type ResourceTokens = {
    * it is reported.
    */
   ram?: string;
-  /** `N wkr`; `workers_on` (cyan in herdr/config.toml) when N >= 1, else `workers_off` (grey), `?` is off. */
+  /** `N wkr`; `workers_on` (cyan in config/herdr/config.toml) when N >= 1, else `workers_off` (grey), `?` is off. */
   workers?: { token: (typeof WORKER_TOKENS)[number]; text: string };
   /** `M sh`; `shells_on` (cyan) when M >= 1, else `shells_off` (grey), `?` is off. */
   shells?: { token: (typeof SHELL_TOKENS)[number]; text: string };
@@ -380,7 +380,7 @@ const RESOURCE_DROP_ORDER = ["vram", "shells", "workers"] as const;
 
 /**
  * Default row width for row 3, in sidebar columns: the text width herdr gives an agent row at the
- * 48-column sidebar (herdr/config.toml ui.sidebar_width = sidebar_max_width = 48), so 44 = 48 - 4.
+ * 48-column sidebar (config/herdr/config.toml ui.sidebar_width = sidebar_max_width = 48), so 44 = 48 - 4.
  * The 4 columns of non-text overhead come from herdr v0.9.5 source (github.com/herdrdev/herdr):
  *   - 1 column: the sidebar's right-hand divider. `expanded_sidebar_sections` in src/ui/sidebar.rs
  *     lays content out in `area.width.saturating_sub(1)` columns.
@@ -395,9 +395,9 @@ export const ROW3_FIT_WIDTH = 44;
 
 /**
  * The sidebar has three rows for an agent: row 3 is four tokens. `cpu NN%` is chosen by load level
- * (CPU_IDLE_BELOW_PCT, then the thresholds from tools/shared) so herdr/config.toml can color it; the grey `ram X[ vram Y]`;
+ * (CPU_IDLE_BELOW_PCT, then the thresholds from tools/shared) so config/herdr/config.toml can color it; the grey `ram X[ vram Y]`;
  * `N wkr` and `M sh` are each reported as an `_on` token (cyan) when the count is 1 or more and as
- * an `_off` token (grey) otherwise, so herdr/config.toml colors them without rules. herdr draws
+ * an `_off` token (grey) otherwise, so config/herdr/config.toml colors them without rules. herdr draws
  * its own " · " between the tokens and there is no bar, so the row reads
  * `cpu 21% · ram 0.3G · 1 wkr · 0 sh`. Unknown counts read `? wkr` and `? sh` (grey). vram appears
  * only when reported as a non-zero value: a session that uses no vram reports 0, which is treated

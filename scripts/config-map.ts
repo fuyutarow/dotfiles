@@ -29,7 +29,7 @@ import {
 const ROOT = join(import.meta.dir, "..");
 
 // What "config-shaped" means for the gate: the extensions a declaration in this repo uses. A file
-// without one (zsh/zshenv, git/gitconfig, Brewfile) is still registered; the gate just cannot
+// without one (config/zsh/zshenv, config/git/gitconfig, Brewfile) is still registered; the gate just cannot
 // discover it by name.
 const CONFIG_PATH = /\.(?:toml|json|jsonc|yml|yaml|conf|plist|win|mac|wsl)$/u;
 

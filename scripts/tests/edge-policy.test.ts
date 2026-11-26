@@ -7,13 +7,13 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Edge's managed policy is a macOS plist (edge/policy.plist.mac); elsewhere the tool refuses (exit 2).
+// Edge's managed policy is a macOS plist (config/edge/policy.plist.mac); elsewhere the tool refuses (exit 2).
 const NOT_MAC = process.platform !== "darwin";
 setDefaultTimeout(20_000);
 
 const REPO = join(import.meta.dir, "..", "..");
 const SCRIPT = join(REPO, "scripts", "edge-policy.ts");
-const POLICY = join(REPO, "edge", "policy.plist.mac");
+const POLICY = join(REPO, "config", "edge", "policy.plist.mac");
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -50,7 +50,9 @@ describe("edge-policy.ts", () => {
       const r = await run(["--check"], to);
       expect(r.code).toBe(1);
       expect(r.out).toContain("FAIL edge-policy:");
-      expect(r.out).toContain("is missing, unlike edge/policy.plist.mac");
+      expect(r.out).toContain(
+        "is missing, unlike config/edge/policy.plist.mac",
+      );
       expect(r.out).toContain("fix: mise run edge:policy");
       expect(await Bun.file(to).exists()).toBe(false);
     },
@@ -77,7 +79,7 @@ describe("edge-policy.ts", () => {
       await writeFile(to, "<plist></plist>");
       const drift = await run(["--check"], to);
       expect(drift.code).toBe(1);
-      expect(drift.out).toContain("differs from edge/policy.plist.mac");
+      expect(drift.out).toContain("differs from config/edge/policy.plist.mac");
       expect(await readFile(to, "utf8")).toBe("<plist></plist>"); // --check changed nothing
       expect((await run([], to)).code).toBe(0);
       expect((await run(["--check"], to)).code).toBe(0);
@@ -91,7 +93,7 @@ describe("edge-policy.ts", () => {
   });
 });
 
-describe("edge/policy.plist.mac", () => {
+describe("config/edge/policy.plist.mac", () => {
   test("blocks the extension that took over the default search, and pins the engine", async () => {
     const text = await readFile(POLICY, "utf8");
     // ID of "You.com v1.0" (chrome_settings_overrides.search_provider.is_default, 2026-10-01).

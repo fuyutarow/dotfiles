@@ -77,7 +77,7 @@ test("max_seconds stops only the client; rr says the daemon build continues, and
   await symlink(backend, entry);
   await installCccEntry(home, entry);
   await chmod(entry, 0o755);
-  // rr refuses a mapping that differs from the declared db-root (cocoindex/db-root), so the
+  // rr refuses a mapping that differs from the declared db-root (config/cocoindex/db-root), so the
   // fixture uses the declared one for its own HOME. The project sits outside HOME, so the
   // mapping does not cover it and its DB stays in the disposable project directory.
   const declared = await declaredDbEnv({ HOME: home });

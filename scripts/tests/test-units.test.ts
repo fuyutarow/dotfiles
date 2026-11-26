@@ -336,13 +336,13 @@ test("ownedUnits: each kind of changed path selects the units that own it", () =
 test("ownedUnits: files owned by no unit select nothing", () => {
   for (const file of [
     "README.md",
-    "lint/test-known-red.toml",
+    "scripts/lint/test-known-red.toml",
     "scripts/unrelated.ts",
     "scripts/notes.md",
     "scripts/sub/land.ts",
     "scripts/tests/helper.ts",
     "tools/nothing/src/a.ts",
-    "zsh/aliases.zsh",
+    "config/zsh/aliases.zsh",
   ])
     expect({ file, units: ownedUnits([file], UNITS) }).toEqual({
       file,
@@ -400,7 +400,7 @@ test("a listed unit that fails is KNOWN-RED and passes the run; one that passes 
   expect(failureText(fail, 1000, red)).toBe("");
   expect(unitLine(fixed, red)).toBe("FAIL 2.0s u-fixed");
   expect(failureText(fixed, 1000, red)).toBe(
-    "  u-fixed: passes: remove it from lint/test-known-red.toml\n",
+    "  u-fixed: passes: remove it from scripts/lint/test-known-red.toml\n",
   );
   expect(summary([fail], 1, red)).toEqual({
     failed: 0,
@@ -414,8 +414,8 @@ test("a listed unit that fails is KNOWN-RED and passes the run; one that passes 
 });
 
 async function withKnownRed(toml: string, ...args: string[]) {
-  const file = join(root, "lint", "test-known-red.toml");
-  await mkdir(join(root, "lint"), { recursive: true });
+  const file = join(root, "scripts", "lint", "test-known-red.toml");
+  await mkdir(join(root, "scripts", "lint"), { recursive: true });
   await Bun.write(file, toml);
   const run = await cli(...args);
   await rm(file);
@@ -452,7 +452,7 @@ test("the command fails a known-red unit that passes, naming the line to remove"
   expect(run.exit).toBe(1);
   expect(run.stdout).toMatch(/FAIL \d+\.\ds scripts\/tests\/pass\.test\.ts/u);
   expect(run.stdout).toContain(
-    "passes: remove it from lint/test-known-red.toml",
+    "passes: remove it from scripts/lint/test-known-red.toml",
   );
   expect(run.stdout).toContain("failed:\n  scripts/tests/pass.test.ts");
 });

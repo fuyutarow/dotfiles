@@ -2,11 +2,11 @@
 name = "smart-copy"
 kind = "A"
 purpose = "The one clipboard route: zsh `c`/`pp`/`pwdc`/`q`, the Claude and Codex `/quote` hooks and `codex-thread-copy` copy stdin through it (`mise run doctor:clipboard` reads a copy back)."
-# Sourced by zsh/aliases.zsh (TOOL_SHELL_FRAGMENTS); lint:zsh parses it; path is relative to this directory.
+# Sourced by config/zsh/aliases.zsh (TOOL_SHELL_FRAGMENTS); lint:zsh parses it; path is relative to this directory.
 shell = "shell.zsh"
 # Files that call the tool (repo-relative); each must exist and still mention a bin or a shell function.
 consumers = [
-  "zsh/aliases.zsh",
+  "config/zsh/aliases.zsh",
   "agents/claude/hooks/quote-command.ts",
   "agents/codex/hooks/quote-command.ts",
   "tools/codex-thread-copy/src/codex-thread-copy.ts",

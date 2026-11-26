@@ -39,6 +39,19 @@ async function command(
   return process.exit(2);
 }
 
+// The old path of a file this change moved: the one base path, gone from the revision, whose
+// tail matches the new path's tail (`tmux/x.sh` → `config/tmux/x.sh`). Ambiguity is no move.
+export function movedFrom(
+  baseFiles: ReadonlySet<string>,
+  revFiles: ReadonlySet<string>,
+): (path: string) => string | undefined {
+  const gone = [...baseFiles].filter((p) => p !== "" && !revFiles.has(p));
+  return (path) => {
+    const origins = gone.filter((old) => path.endsWith(`/${old}`));
+    return origins.length === 1 ? origins[0] : undefined;
+  };
+}
+
 export async function lintShell(root = process.cwd()): Promise<number> {
   const vcs = process.env["PRECOMMIT_VCS"];
   let files: string[];
@@ -66,16 +79,18 @@ export async function lintShell(root = process.cwd()): Promise<number> {
       return 2;
     const jj = (args: string[], optional = false) =>
       command(["jj", "--ignore-working-copy", ...args], root, optional);
-    files = (
+    const revFiles = (
       (await jj(["file", "list", "-r", rev, "-T", 'path ++ "\\0"'])) ?? ""
     )
       .split("\0")
-      .filter((p) => p !== "" && selected(paths, p));
+      .filter((p) => p !== "");
+    files = revFiles.filter((p) => selected(paths, p));
     const baseFiles = new Set(
       (
         (await jj(["file", "list", "-r", base, "-T", 'path ++ "\\0"'])) ?? ""
       ).split("\0"),
     );
+    const moved = movedFrom(baseFiles, new Set(revFiles));
     const show = (version: string, path: string) =>
       jj([
         "file",
@@ -85,8 +100,11 @@ export async function lintShell(root = process.cwd()): Promise<number> {
         "--",
         `root-file:${JSON.stringify(path)}`,
       ]);
-    before = (path) =>
-      baseFiles.has(path) ? show(base, path) : Promise.resolve(null);
+    // A moved file is compared with its old path, so a move alone is neither new nor growth.
+    before = (path) => {
+      const origin = baseFiles.has(path) ? path : moved(path);
+      return origin === undefined ? Promise.resolve(null) : show(base, origin);
+    };
     after = (path) => show(rev, path);
   } else {
     // Git-index fallback for J1 migration: fallback also checks unstaged growth in tracked files.

@@ -79,7 +79,7 @@ test("deploy migrates the suffix alias, enables default.target without activatio
   const f = await fixture("alias", "active");
   const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
   await mkdir(join(f.home, ".config/systemd/user"), { recursive: true });
-  await symlink(join(REPO, "cocoindex/ccc-daemon.service.wsl"), unit);
+  await symlink(join(REPO, "config/cocoindex/ccc-daemon.service.wsl"), unit);
   await f.enableEdge();
   expect((await f.doctor()).verdict).toBe("FAIL");
   expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
@@ -123,7 +123,7 @@ test("an old enable edge pointing directly at the repo declaration migrates to t
   const dir = join(f.home, ".config/systemd/user/default.target.wants");
   await mkdir(dir, { recursive: true });
   await symlink(
-    join(REPO, "cocoindex/ccc-daemon.service.wsl"),
+    join(REPO, "config/cocoindex/ccc-daemon.service.wsl"),
     join(dir, "ccc-daemon.service"),
   );
   const run = async (args: string[]) => {

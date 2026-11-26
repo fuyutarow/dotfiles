@@ -44,7 +44,7 @@ export async function coreCommands(
 }
 
 /** Which profile this machine is. The machine says so itself, in one word, in
- * ~/.config/dotfiles/profile; the repo defines what a profile means (roles/roles.toml) and must
+ * ~/.config/dotfiles/profile; the repo defines what a profile means (config/roles/roles.toml) and must
  * not need a machine's name to answer. LAND_HOSTS' hostname match is the fallback for machines
  * that have not written the file yet, and goes away once they have. */
 export function machineRole(

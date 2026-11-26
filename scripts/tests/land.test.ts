@@ -633,7 +633,7 @@ if (argv[1] === 'commit' && process.env.LAND_CHECK_IGNORE === '1') {
  const fs = await import('node:fs');
  const path = await import('node:path');
  appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['commit-cwd', process.cwd()]) + '\\n');
- if (fs.existsSync(path.join(process.cwd(), 'git/ignore')) && fs.readFileSync(path.join(process.cwd(), 'git/ignore'), 'utf8').includes('INVALID-LINT')) { process.stderr.write('lint:ignore refused\\n'); process.exit(9); }
+ if (fs.existsSync(path.join(process.cwd(), 'config/git/ignore')) && fs.readFileSync(path.join(process.cwd(), 'config/git/ignore'), 'utf8').includes('INVALID-LINT')) { process.stderr.write('lint:ignore refused\\n'); process.exit(9); }
 }
 if (argv[1] === 'commit' && process.env.LAND_CHECK_TOOL_CHANGESETS === '1') {
  const { lintToolChangesets } = await import(${JSON.stringify(pathToFileURL(join(REPO, "scripts/lint-tool-changesets.ts")).href)});
@@ -1975,13 +1975,13 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
   test("LAND-OWN-TREE ignores main lint failures, commits only the worker and pushes alpha", async () => {
     const f = await fixture();
     await mkdir(join(f.main, "git"));
-    await writeFile(join(f.main, "git/ignore"), "*.fixture-cache\n");
+    await writeFile(join(f.main, "config/git/ignore"), "*.fixture-cache\n");
     await f.jj(f.main, ["commit", "-m", "Tracked ignore fixture"]);
     await f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
     await f.jj(f.worker, ["rebase", "-r", "@", "-o", "alpha"]);
     await writeFile(join(f.worker, "keep.txt"), "worker version\n");
-    await writeFile(join(f.main, "git/ignore"), "INVALID-LINT\n");
-    const before = await readFile(join(f.main, "git/ignore"));
+    await writeFile(join(f.main, "config/git/ignore"), "INVALID-LINT\n");
+    const before = await readFile(join(f.main, "config/git/ignore"));
     const alpha = await f.jj(f.main, [
       "log",
       "-r",
@@ -1995,9 +1995,9 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       result.exitCode,
       result.stdout.toString() + result.stderr.toString(),
     ).toBe(0);
-    expect(await readFile(join(f.main, "git/ignore"))).toEqual(before);
+    expect(await readFile(join(f.main, "config/git/ignore"))).toEqual(before);
     expect(
-      await f.jj(f.main, ["file", "show", "-r", "alpha", "git/ignore"]),
+      await f.jj(f.main, ["file", "show", "-r", "alpha", "config/git/ignore"]),
     ).toBe("*.fixture-cache");
     expect(
       await f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"]),

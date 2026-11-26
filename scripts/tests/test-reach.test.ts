@@ -14,9 +14,9 @@ const task = (name: string, depends: string[], ...run: string[]): Task => ({
 
 const sources: Record<string, string> = {
   "scripts/test-zsh.ts":
-    "await $`${to} 120 zsh zsh/tests/hygiene.test.zsh`.nothrow();",
-  "zsh/tests/hygiene.test.zsh":
-    'source "$ROOT/zsh/tests/sibling.test.zsh"\n# mentions zsh/tests/mentioned.test.zsh only in a comment\n',
+    "await $`${to} 120 zsh config/zsh/tests/hygiene.test.zsh`.nothrow();",
+  "config/zsh/tests/hygiene.test.zsh":
+    'source "$ROOT/config/zsh/tests/sibling.test.zsh"\n# mentions config/zsh/tests/mentioned.test.zsh only in a comment\n',
 };
 const read = (path: string): Promise<string | undefined> =>
   Promise.resolve(sources[path]);
@@ -37,8 +37,8 @@ const files = [
   "tools/x/tests/nested/b2.test.ts",
   "topic/c.test.ts",
   "standard-presets/d.test.ts",
-  "zsh/tests/hygiene.test.zsh",
-  "zsh/tests/sibling.test.zsh",
+  "config/zsh/tests/hygiene.test.zsh",
+  "config/zsh/tests/sibling.test.zsh",
 ];
 
 test("every file a reachable task names, globs, launches or sources is reached", async () => {
@@ -97,10 +97,10 @@ test("a runner no task reachable from test launches reaches nothing", async () =
 
 test("a path merely mentioned in a reached zsh test does not reach it", async () => {
   const verdict = await judge(
-    { tasks, files: [...files, "zsh/tests/mentioned.test.zsh"], read },
+    { tasks, files: [...files, "config/zsh/tests/mentioned.test.zsh"], read },
     {},
   );
-  expect(verdict.unreached).toEqual(["zsh/tests/mentioned.test.zsh"]);
+  expect(verdict.unreached).toEqual(["config/zsh/tests/mentioned.test.zsh"]);
 });
 
 test("an exception names a file or a glob and carries the unreached file", async () => {

@@ -12,8 +12,8 @@ dates or treat them as observations made by this combined acceptance.
 ## Native TOML semantic comparison
 
 `Bun.TOML.parse` parsed the baseline obtained with `jj file show -r
-f7a79651209d6e28a6c6f8bd00ee30f3ab3964de topgrade/topgrade.toml` and the
-candidate `topgrade/topgrade.toml`. A recursive structured comparison produced
+f7a79651209d6e28a6c6f8bd00ee30f3ab3964de config/topgrade/topgrade.toml` and the
+candidate `config/topgrade/topgrade.toml`. A recursive structured comparison produced
 exactly these semantic leaves:
 
 | Path | Baseline | Candidate |
@@ -29,7 +29,7 @@ configuration key through TOML section placement.
 ## Planned normal-run acceptance
 
 The next evidence row will record one bounded, non-mutating normal candidate
-Topgrade plan using `--config topgrade/topgrade.toml --dry-run`; it deliberately
+Topgrade plan using `--config config/topgrade/topgrade.toml --dry-run`; it deliberately
 does not use `--only uv`, because explicit selection overrides `misc.disable`.
 Required outcomes are no `uv self update`, no implicit dotfiles Git pull, and
 the retained Homebrew formula path.
@@ -40,7 +40,7 @@ At 2026-10-21 20:17:52–20:17:54 JST, the following foreground command
 completed within the 60-second bound with exit 0:
 
 ```text
-timeout 60s topgrade --config topgrade/topgrade.toml --dry-run --show-skipped --no-ask-retry --no-tmux --notify-end never
+timeout 60s topgrade --config config/topgrade/topgrade.toml --dry-run --show-skipped --no-ask-retry --no-tmux --notify-end never
 ```
 
 Its `Brew` section planned:

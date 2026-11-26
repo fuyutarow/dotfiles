@@ -177,3 +177,17 @@ test("shell symlink compares declaration bytes without counting the target twice
   writeFileSync(join(root, "legacy.sh"), lines(31));
   expect(lint(root).code).toBe(1);
 });
+
+test("movedFrom: a file moved under a new prefix maps to its one old path", async () => {
+  const { movedFrom } = await import("@dotfiles/scripts/lint-no-new-bash.ts");
+  const base = new Set(["tmux/x.sh", "keep.sh", "run.sh", "x/run.sh"]);
+  const rev = new Set(["config/tmux/x.sh", "keep.sh", "p/x/run.sh"]);
+  const moved = movedFrom(base, rev);
+  expect(moved("config/tmux/x.sh")).toBe("tmux/x.sh");
+  // Still present in the revision: not a move.
+  expect(moved("config/keep.sh")).toBeUndefined();
+  // Both run.sh and x/run.sh are gone and both are tails of p/x/run.sh: ambiguous, so no move.
+  expect(moved("p/x/run.sh")).toBeUndefined();
+  // A different name is never a move.
+  expect(moved("config/tmux/y.sh")).toBeUndefined();
+});

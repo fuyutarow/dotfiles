@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const entry = resolve(import.meta.dir, "../src/btmp.ts");
-const configPath = resolve(import.meta.dir, "../../../herdr/config.toml");
+const configPath = resolve(
+  import.meta.dir,
+  "../../../config/herdr/config.toml",
+);
 const Agents = jsonOf(
   z.object({
     result: z.object({
@@ -175,7 +178,7 @@ test("ensure creates at most one btm across workspaces and respects close", asyn
 }, 60000);
 
 test("interactive zsh maps btm to btmp without recursion", async () => {
-  const aliases = resolve(import.meta.dir, "../../../zsh/aliases.zsh");
+  const aliases = resolve(import.meta.dir, "../../../config/zsh/aliases.zsh");
   const root = await mkdtemp(join(tmpdir(), "btm-zsh-"));
   await using _temp = {
     [Symbol.asyncDispose]: async () => {

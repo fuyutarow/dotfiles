@@ -14,7 +14,7 @@ import { lintTmpLeaks } from "#root/lint-tmp-leaks.ts";
 
 const PATTERNS = [
   "scripts/*.ts",
-  "android/line-notifications.ts",
+  "config/android/line-notifications.ts",
   "tools/repo-retrieve/src/*.ts",
   "tools/disk-reclaim/src/*.ts",
   "tools/storage-headroom/src/*.ts",

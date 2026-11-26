@@ -37,7 +37,9 @@ export const ownResumedMarker = {
   started_at: "2026-10-10T01:35:03.372806Z",
   cwd: "/fixture/dotfiles-arm-hosts-1010",
   dispatcher_session: fixtureSession,
-  ticket: { writes: ["scripts/**", "zsh/**", "mise.toml", "tools/coredev/**"] },
+  ticket: {
+    writes: ["scripts/**", "config/zsh/**", "mise.toml", "tools/coredev/**"],
+  },
 };
 
 /** Sanitized active marker shape emitted by agx 2.9.0, including its expanded ticket. */
@@ -102,5 +104,7 @@ export const deadOwnMarker = {
   pick_source: "override",
   started_at: "2026-10-09T12:31:32.232298Z",
   cwd: "/fixture/dotfiles-arm-hosts",
-  ticket: { writes: ["scripts/**", "zsh/**", "mise.toml", "tools/coredev/**"] },
+  ticket: {
+    writes: ["scripts/**", "config/zsh/**", "mise.toml", "tools/coredev/**"],
+  },
 };

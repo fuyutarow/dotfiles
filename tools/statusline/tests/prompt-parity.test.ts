@@ -12,7 +12,7 @@ import {
 // the two together: on 2026-10-06 the offset was desaturated in one and the owner found the other
 // unchanged — 「片方は治しているのに、もう片方に影響がないのはどうなの？」. They stay separate code
 // (no forced sharing); this test is the link. It renders BOTH heads for real — zsh from the repo's
-// zsh/zshrc, not the deployed copy, using the header _prompt_stamp prints rather than PROMPT's
+// config/zsh/zshrc, not the deployed copy, using the header _prompt_stamp prints rather than PROMPT's
 // input line — and fails when any part's color or text differs (the minute may tick between the
 // two renders, so the time's text is not compared, only its color).
 
@@ -102,7 +102,7 @@ const comparable = (ps: Part[]): Part[] =>
   ps.map((p, i) => (i === 4 ? { color: p.color, text: "<time>" } : p));
 
 // The statusline draws the named xterm-256 color (ansi.ts table) for each zsh 16-color it copies.
-// zsh/zshrc still uses the 16-color codes; this map keeps each part's color checked against its
+// config/zsh/zshrc still uses the 16-color codes; this map keeps each part's color checked against its
 // zsh counterpart until the PS1 is migrated, then it can be removed.
 const ZSH_TO_NAMED: Record<string, string> = {
   "35": "38;5;170", // magenta -> Orchid (user)

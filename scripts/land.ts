@@ -694,7 +694,7 @@ function landDeployChanges(
     const changedEnvironmentDropins: string[] = [];
     for (const path of changedPaths) {
       const packageManifest = path.endsWith("package.json");
-      const environmentDropin = path.startsWith("zsh/environment.d/");
+      const environmentDropin = path.startsWith("config/zsh/environment.d/");
       if (!packageManifest && !environmentDropin) continue;
       const existedBefore = beforePaths.has(path);
       const existsAfter = afterPaths.has(path);

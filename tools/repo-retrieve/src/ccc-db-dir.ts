@@ -11,9 +11,9 @@
 // (a large repository: 2.8 GB rewritten per HEAD move), and every tool that walks the repo tree — a
 // before/after file scan, a backup, rip — pays for bytes that are derived state, not project
 // content. The indexed tool's landing took 21–36 s while the daemon rewrote the
-// in-repo DB, against 0.65–0.88 s otherwise. zsh/zshenv exports the mapping for every client,
-// and cocoindex/ccc-daemon-launch.py sets the same value for the supervised daemon. Both derive
-// it from the one declaration cocoindex/db-root (a root relative to $HOME, outside ~/.cache,
+// in-repo DB, against 0.65–0.88 s otherwise. config/zsh/zshenv exports the mapping for every client,
+// and config/cocoindex/ccc-daemon-launch.py sets the same value for the supervised daemon. Both derive
+// it from the one declaration config/cocoindex/db-root (a root relative to $HOME, outside ~/.cache,
 // which disk-reclaim treats as deletable).
 //
 // Consequence of prefix mapping: a project nested inside another project (a git worktree under
@@ -42,7 +42,7 @@ export const MAPPING_ENV = "COCOINDEX_CODE_DB_PATH_MAPPING";
 export const SETTINGS_DIR_NAME = ".cocoindex_code";
 export const DB_ROOT_DECLARATION = resolve(
   import.meta.dir,
-  "../../../cocoindex/db-root",
+  "../../../config/cocoindex/db-root",
 );
 
 /** Establish the daemon's declared mapping before any watermark read or ccc child. */

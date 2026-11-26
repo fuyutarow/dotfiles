@@ -81,7 +81,7 @@ export async function visiblePaths(root = ROOT): Promise<{
       "--ignore-file",
       ".gitignore",
       "--ignore-file",
-      "git/ignore",
+      "config/git/ignore",
       "-g",
       "!**/.jj/**",
       "-g",
@@ -100,25 +100,29 @@ export async function visiblePaths(root = ROOT): Promise<{
 export async function ignoreFindings(root = ROOT): Promise<string[]> {
   const [localIgnore, globalIgnore] = await Promise.all([
     ignoreRuleFindings(root, ".gitignore"),
-    ignoreRuleFindings(root, "git/ignore"),
+    ignoreRuleFindings(root, "config/git/ignore"),
   ]);
   const findings = [...localIgnore, ...globalIgnore];
-  const config = await readFile(join(root, "git/gitconfig"), "utf8");
+  const config = await readFile(join(root, "config/git/gitconfig"), "utf8");
   const excludes = config.match(/^\s*excludesfile\s*=\s*(\S+)\s*$/imu)?.[1];
   const expected = "~/.config/git/ignore";
   if (excludes !== expected)
-    findings.push(`git/gitconfig must declare core.excludesfile = ${expected}`);
-  if (!(await fileExists(join(root, "git/ignore"))))
-    findings.push("missing declared global ignore source: git/ignore");
+    findings.push(
+      `config/git/gitconfig must declare core.excludesfile = ${expected}`,
+    );
+  if (!(await fileExists(join(root, "config/git/ignore"))))
+    findings.push("missing declared global ignore source: config/git/ignore");
   if (
     !LINKS.some(
       ([when, source, destination]) =>
         when === "all" &&
-        source === "git/ignore" &&
+        source === "config/git/ignore" &&
         destination === ".config/git/ignore",
     )
   )
-    findings.push("git/ignore is not linked by scripts/config-registry.ts");
+    findings.push(
+      "config/git/ignore is not linked by scripts/config-registry.ts",
+    );
 
   const local = await trackedPaths(root);
   if (local.error !== null) findings.push(local.error);
@@ -150,7 +154,7 @@ async function trackedIgnoreFindingsInProbe(
   }
   await mkdir(join(probe, "git"), { recursive: true });
   await cp(join(root, ".gitignore"), join(probe, ".gitignore"));
-  await cp(join(root, "git/ignore"), join(probe, "git/ignore"));
+  await cp(join(root, "config/git/ignore"), join(probe, "config/git/ignore"));
   const visible = await visiblePaths(probe);
   if (visible.error !== null) return [visible.error];
   const present = new Set(visible.paths);

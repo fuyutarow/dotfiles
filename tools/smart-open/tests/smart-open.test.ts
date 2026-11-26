@@ -513,7 +513,7 @@ test("Obsidian sender and receiver build a stable shadow only for a vouched dire
     `Host probe-host\n HostName box.invalid\n User remote-user\n Port 2226\n ProxyJump jump.invalid\n RemoteForward /tmp/probe.sock ${sock}\nHost elsewhere\n HostName elsewhere.invalid\n`,
   );
   const helper = join(dir, "obs-helper.ts");
-  const module = join(TOOL, "../../obsidian/open-remote.ts");
+  const module = join(TOOL, "../../config/obsidian/open-remote.ts");
   await writeFile(
     helper,
     `

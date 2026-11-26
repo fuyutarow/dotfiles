@@ -8,8 +8,9 @@ their executable details.
 
 ## Topic ownership and configuration flow
 
-- Keep one tool per topic directory. Adding or removing a tool touches its directory and
-  `scripts/config-registry.ts`; do not create cross-topic `common`/`mac`/`wsl` buckets.
+- Keep one tool per topic directory under `config/`. Adding or removing a tool touches its
+  directory and `scripts/config-registry.ts`; do not create cross-topic `common`/`mac`/`wsl` buckets.
+  The root directories are only `config/`, `agents/`, `tools/`, `scripts/`, `standard-presets/` and `archives/`.
   A genuinely OS-specific topic may own a directory. Cross-OS variants belong inside their
   topic as `*.mac`, `*.wsl`, `*.win`, `mac.zsh` or `wsl.zsh`.
 - Register every configuration surface in `scripts/config-registry.ts`, including source,
@@ -28,7 +29,7 @@ their executable details.
   Keep the repo's readable half separate: `~/.config/git/config` beside tool-owned
   `~/.gitconfig`, and `~/.config/jj/conf.d/dotfiles.toml` beside tool-owned jj `config.toml`.
   Human-driven sheldon and Karabiner edits to declarations remain intentional exceptions.
-- A value has one declaration: for example, `zsh/timezone` supplies shell and rendered
+- A value has one declaration: for example, `config/zsh/timezone` supplies shell and rendered
   agent timezone settings. Repo tasks live only in `mise.toml`; do not add a justfile.
 - Tool parts may import only their own `tools/<name>/` directory and `tools/shared/`.
   For a tool release change, generate its changeset with
@@ -76,7 +77,7 @@ their executable details.
 ## Portability and shell runtime
 
 - Detect macOS, ordinary Linux and WSL at runtime; never assume the current machine.
-  Shared shell logic uses `IS_MAC` / `IS_WSL`, computed once in `zsh/aliases.zsh`; do not
+  Shared shell logic uses `IS_MAC` / `IS_WSL`, computed once in `config/zsh/aliases.zsh`; do not
   add inline `uname` / `$OSTYPE` checks. Guard OS commands and optional paths by existence.
   Shared files must not contain machine-absolute `/Users/...` or `/home/...` paths.
 - Windows-host `*.win` declarations are copied by the owning WSL task, never symlinked.
@@ -84,9 +85,9 @@ their executable details.
   Windows configuration home; never replace Herdr's `codex` function with that launcher.
   README Setup and `Brewfile.core` own provider/install details. Use VS Code's declared
   launchers; do not reintroduce Cursor.
-- `zsh/mac.zsh` and `zsh/wsl.zsh` load after common aliases and may override them.
-  Sheldon sources only `zsh/aliases.zsh`, never a `*.zsh` glob.
-- Keep `zsh/zshenv` tiny and quiet: it runs for every invocation, including SSH commands.
+- `config/zsh/mac.zsh` and `config/zsh/wsl.zsh` load after common aliases and may override them.
+  Sheldon sources only `config/zsh/aliases.zsh`, never a `*.zsh` glob.
+- Keep `config/zsh/zshenv` tiny and quiet: it runs for every invocation, including SSH commands.
   Preserve user/Bun bin access, the rendered Homebrew prefix and existing rustup proxies
   for non-login shells. Bash SSH commands read the same prefix. Do not add `brew shellenv`,
   plugins, prompts, completions, printing or blocking work to zshenv.
@@ -141,7 +142,7 @@ their executable details.
   through `mise run commit -- -m "<msg>" [--push] -- <path>...` and sync through
   `mise run pull`. These tasks supply checks/hooks jj itself does not run. The default
   bookmark is `alpha`; mise tasks may call Git internally. Human lazygit remains supported.
-- Shared jj policy belongs in `jj/config.toml`; repo-specific overrides use
+- Shared jj policy belongs in `config/jj/config.toml`; repo-specific overrides use
   `jj config set --repo` only for genuinely repo-specific values. Per-OS Git settings remain
   in the declared local include. Code, comments and commit subjects/bodies are English;
   Japanese is acceptable in documentation and conversation.

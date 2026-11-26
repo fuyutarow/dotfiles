@@ -27,7 +27,7 @@ does **not** prove that it caused the omitted historical failure.
 
 - `scripts/up.ts:43` invokes `topgrade --disable containers ${skip}`; it
   delegates the selected updater behavior to Topgrade.
-- `topgrade/topgrade.toml:13-15` documents the Homebrew owner and adds `uv` to
+- `config/topgrade/topgrade.toml:13-15` documents the Homebrew owner and adds `uv` to
   the native Topgrade disable list. It does not disable `brew_formula`.
 - `topgrade --help` lists `uv` as a valid step and defines `--dry-run` as
   "Print what would be done".
@@ -47,7 +47,7 @@ does **not** prove that it caused the omitted historical failure.
 The normal candidate plan was run as:
 
 ```text
-topgrade --config topgrade/topgrade.toml --dry-run --show-skipped --no-ask-retry --notify-end never
+topgrade --config config/topgrade/topgrade.toml --dry-run --show-skipped --no-ask-retry --notify-end never
 ```
 
 It accepted the candidate config, planned `brew upgrade --formula`, and printed

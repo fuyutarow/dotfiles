@@ -34,13 +34,13 @@ run = "bun scripts/agx-accept.ts"
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Bootstrap Reason Network when absent; preserve existing installs and upstream updates"
-run = "bun reason-network/install.ts install"
+run = "bun agents/reason-network/install.ts install"
 
 [tasks."reason-network:check"]
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Check that Reason Network on PATH runs"
-run = "bun reason-network/install.ts check"
+run = "bun agents/reason-network/install.ts check"
 
 [tasks.up]
 depends = ["bun:check"]
@@ -50,7 +50,7 @@ description = "Update system packages"
 run = "bun ~/dotfiles/scripts/up.ts"
 
 # ── shell ────────────────────────────────────────────────────────────────────
-# The zsh alias in zsh/aliases.zsh is the primary `relogin`; this is its mise-side entrypoint.
+# The zsh alias in config/zsh/aliases.zsh is the primary `relogin`; this is its mise-side entrypoint.
 # It looks like a second home for the same three tokens, but it is a DIFFERENT entrypoint to the
 # same act, and it exists because the alias cannot cover its own failure case: an alias is baked
 # into a shell at startup, while mise.toml is re-read from disk on every `mise run`. So the one
@@ -195,7 +195,7 @@ run = "bun scripts/lint-no-project-names.ts"
 hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
-description = "Fail when a tracked *.test.ts or *.test.zsh is run by no task reachable from test (exceptions: lint/test-reach-exceptions.toml)"
+description = "Fail when a tracked *.test.ts or *.test.zsh is run by no task reachable from test (exceptions: scripts/lint/test-reach-exceptions.toml)"
 run = "bun scripts/lint-test-reach.ts"
 
 [tasks."lint:tool-changesets"]
@@ -478,7 +478,7 @@ hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Tests beside their topic: obsidian, reason-network and agents/research-control"
-run = "bun test ./obsidian/*.test.ts ./reason-network/*.test.ts agents/research-control/tests"
+run = "bun test ./config/obsidian/*.test.ts ./agents/reason-network/*.test.ts agents/research-control/tests"
 
 [tasks."test:codex"]
 hide = true
@@ -492,7 +492,7 @@ hide = true
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Offline safety checks for the Pixel LINE-only vibration policy parser"
-run = "bun test android/line-notifications.test.ts"
+run = "bun test config/android/line-notifications.test.ts"
 
 [tasks."test:hooks"]
 depends = ["bun:check"]
@@ -554,8 +554,8 @@ depends = ["bun:check"]
 description = "Terminal-state hygiene regression tests (real pty via zsh/zpty; the timeout IS an assertion — one guarded regression is a hang)"
 run = "bun scripts/test-zsh.ts"
 
-# INV-6: no global tool rows; mise/dotfiles.toml disables agx and dx to block stale repo pins.
-# See zsh/zshenv. zsh again,
+# INV-6: no global tool rows; config/mise/dotfiles.toml disables agx and dx to block stale repo pins.
+# See config/zsh/zshenv. zsh again,
 # and again deliberately: the unit under test is a startup file whose behaviour is a function of
 # shell mode (`-o interactive`) and inherited PATH, and its last case needs a real login tty.
 # The timeout is an assertion here too — that last case boots the user's whole login chain.
@@ -600,13 +600,13 @@ run = "bun scripts/lint-changesets.ts"
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Reapply the safe ADB settings for LINE-only vibration after the dedicated Android Mode is configured"
-run = "bun android/line-notifications.ts --apply"
+run = "bun config/android/line-notifications.ts --apply"
 
 [tasks."android:line:check"]
 depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Audit the live Pixel LINE-only vibration and lock-screen privacy policy (read-only)"
-run = "bun android/line-notifications.ts"
+run = "bun config/android/line-notifications.ts"
 
 # ── git hooks ────────────────────────────────────────────────────────────────────────────────
 # 規律: .githooks/<event> は `mise run --jobs 1 hook:<event>` を呼ぶだけの薄い殻。git の各 hook で
@@ -653,7 +653,7 @@ description = "Deploy dotfiles to each configured host independently; optionally
 run = "bun scripts/deploy.ts"
 
 [tasks.pull]
-description = "jj pull: fetch origin, rebase the working-copy branch onto trunk() (= alpha@origin, jj/config.toml), then run hook:post-merge (relink dotfiles + skills) — what .githooks/post-merge did for git pull."
+description = "jj pull: fetch origin, rebase the working-copy branch onto trunk() (= alpha@origin, config/jj/config.toml), then run hook:post-merge (relink dotfiles + skills) — what .githooks/post-merge did for git pull."
 run = '''
 set -e
 jj git fetch --remote origin
@@ -739,7 +739,7 @@ run = "DOCTOR_ONLY=brew,core-tools,deps,bins,skills,mcp,codex-config,codex-runti
 # storage-headroom, statusline, serena-foreground, repo-retrieve) are this repo's PATH commands,
 # and `bun link` is what turns a `bin` entry into a symlink in bun's global bin dir (~/.bun/bin,
 # on every shell's PATH via
-# zsh/zshenv). Before 2026-09-13 link-dots.sh hand-symlinked the .ts files into ~/.local/bin —
+# config/zsh/zshenv). Before 2026-09-13 link-dots.sh hand-symlinked the .ts files into ~/.local/bin —
 # a re-implementation of exactly this mechanism, minus the declaration that made their shebangs
 # legitimate. Idempotent: re-linking an already-linked package is a no-op.
 [tasks.deps]
@@ -776,26 +776,26 @@ run = [
 
 [tasks."mac:defaults"]
 depends = ["bun:check"]
-description = "Apply declarative macOS system defaults (single source: macos/defaults.ts)"
-run = 'bun ~/dotfiles/macos/defaults.ts'
+description = "Apply declarative macOS system defaults (single source: config/macos/defaults.ts)"
+run = 'bun ~/dotfiles/config/macos/defaults.ts'
 
 [tasks."mac:obsidian"]
 depends = ["bun:check"]
-description = "Bring every registered Obsidian vault in line with obsidian/: merge app.json keys, install + enable sha256-pinned plugins.json"
-run = 'bun ~/dotfiles/obsidian/apply.ts'
+description = "Bring every registered Obsidian vault in line with config/obsidian/: merge app.json keys, install + enable sha256-pinned plugins.json"
+run = 'bun ~/dotfiles/config/obsidian/apply.ts'
 
 [tasks."mac:obsidian:trust"]
 depends = ["bun:check"]
 description = "Turn Obsidian's Restricted mode OFF for every registered vault so the plugins mac:obsidian installs load. RESTARTS Obsidian (it sets the switch through a one-shot DevTools port, then relaunches without it)"
-run = 'bun ~/dotfiles/obsidian/trust.ts'
+run = 'bun ~/dotfiles/config/obsidian/trust.ts'
 
 [tasks."mac:iterm2"]
-description = "Point iTerm2 at dotfiles/iterm2/ as its preferences folder (single source: iterm2/setup.sh)"
-run = 'bash ~/dotfiles/iterm2/setup.sh'
+description = "Point iTerm2 at dotfiles/config/iterm2/ as its preferences folder (single source: config/iterm2/setup.sh)"
+run = 'bash ~/dotfiles/config/iterm2/setup.sh'
 
 [tasks."edge:policy"]
 depends = ["bun:check"]
-description = "Deploy edge/policy.plist.mac as Microsoft Edge's managed policy (/Library/Managed Preferences, sudo): blocks the extension that hijacked the default search and pins the engine. --check compares only (no sudo). macOS only."
+description = "Deploy config/edge/policy.plist.mac as Microsoft Edge's managed policy (/Library/Managed Preferences, sudo): blocks the extension that hijacked the default search and pins the engine. --check compares only (no sudo). macOS only."
 run = 'bun ~/dotfiles/scripts/edge-policy.ts'
 
 [tasks."mac:rosetta"]
@@ -886,7 +886,7 @@ run = "bun ~/dotfiles/scripts/linux-init.ts"
 [tasks."test:fresh"]
 depends = ["bun:check"]
 description = "Build a bare Ubuntu through scripts/bootstrap-linux.sh from this checkout (docker, podman or wslc). Many minutes; run when the init path changes. Not part of test."
-run = "bun fresh-machine/build.ts"
+run = "bun scripts/fresh-machine/build.ts"
 
 [tasks."linux:migrate-brew"]
 depends = ["bun:check"]
@@ -907,23 +907,23 @@ run = 'bun ~/dotfiles/scripts/box-init.ts'
 # an over-committed memory=60GB on a 63.9 GB box measurably destabilised it on 2026-09-06.
 [tasks."wsl:wslconfig"]
 depends = ["bun:check"]
-description = "Deploy wsl/wslconfig.win to %USERPROFILE%\\.wslconfig (COPY — Windows cannot follow a WSL symlink). Idempotent, backs up drift, guards memory= against host RAM. Needs `wsl --shutdown` to take effect."
+description = "Deploy config/wsl/wslconfig.win to %USERPROFILE%\\.wslconfig (COPY — Windows cannot follow a WSL symlink). Idempotent, backs up drift, guards memory= against host RAM. Needs `wsl --shutdown` to take effect."
 run = 'bun ~/dotfiles/scripts/wsl-wslconfig.ts'
 
 [tasks."wsl:drive-mount"]
 depends = ["bun:check"]
 description = "Install the declared Google Drive G: drvfs entry in /etc/fstab so WSL mounts the virtual drive on future starts; preserves unrelated entries."
-run = "bun wsl/drive-mount.ts"
+run = "bun config/wsl/drive-mount.ts"
 
 [tasks."wsl:install-root-levers"]
 depends = ["bun:check"]
 description = "Install the WSL fstrim and page-cache oneshot units plus the exact per-user sudoers rule; run once from the owner account."
-run = "bun wsl/install-root-levers.ts"
+run = "bun config/wsl/install-root-levers.ts"
 
 [tasks."wsl:root-levers:doctor"]
 depends = ["bun:check"]
 description = "Read-only check for installed WSL root-lever units and passwordless authorization to start only those units."
-run = "bun wsl/root-levers-doctor.ts"
+run = "bun config/wsl/root-levers-doctor.ts"
 
 # Start WSL on a Windows host parked at its LOGON SCREEN — the thing that actually fixes the
 # "Windows Update rebooted overnight and the box was unreachable for 5 hours" failure.
@@ -986,18 +986,18 @@ run = 'bun ~/dotfiles/scripts/wsl-audit.ts'
 # The Windows half of the tool declarations. Brewfiles are the source of truth for Homebrew tools on macOS and
 # WSL; the Windows host underneath had none — 113 winget-managed packages (2026-09-11) lived only
 # on the machine. `winget export` / `winget import` give the same source-of-truth shape, so the
-# tracked file is wsl/winget.win.json and these two verbs are the plumbing. dump and restore are each
+# tracked file is config/wsl/winget.win.json and these two verbs are the plumbing. dump and restore are each
 # one-way (host -> repo, repo -> host); drift is a git diff after dump, never a silent merge.
 # Coverage limit, by winget's contract: only packages a source can resolve are exported (96 of
 # 113 here). The NVIDIA display driver is NOT in winget; CUDA is.
 [tasks."wsl:winget:dump"]
 depends = ["bun:check"]
-description = "Capture the Windows host's winget-managed packages into wsl/winget.win.json (winget export via interop, ids sorted for stable diffs). Review the diff, then commit."
+description = "Capture the Windows host's winget-managed packages into config/wsl/winget.win.json (winget export via interop, ids sorted for stable diffs). Review the diff, then commit."
 run = 'bun ~/dotfiles/scripts/wsl-winget.ts dump'
 
 [tasks."wsl:winget:restore"]
 depends = ["bun:check"]
-description = "Install everything wsl/winget.win.json lists that is missing on the Windows host (winget import --no-upgrade --ignore-unavailable). --dry-run prints the command only."
+description = "Install everything config/wsl/winget.win.json lists that is missing on the Windows host (winget import --no-upgrade --ignore-unavailable). --dry-run prints the command only."
 run = 'bun ~/dotfiles/scripts/wsl-winget.ts restore'
 
 [tasks."bench:definitions"]

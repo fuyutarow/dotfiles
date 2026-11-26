@@ -14,7 +14,7 @@ collect this evidence.
 - `Brewfile.core:27-31` declares the WSL unqualified `codex` executable as the
   Homebrew `codex` cask. Its comment distinguishes it from macOS and ordinary
   Linux standalone installations.
-- `topgrade/topgrade.toml:46` invokes `codex-update.ts` as a custom
+- `config/topgrade/topgrade.toml:46` invokes `codex-update.ts` as a custom
   declared-provider step. Homebrew's own Cask step is therefore the WSL
   installation updater, not that custom script.
 

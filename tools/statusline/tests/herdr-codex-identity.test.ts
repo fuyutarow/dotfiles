@@ -244,7 +244,7 @@ test("Claude status does not clear or report pane metadata on session start", as
 
 test("Codex and Claude sidebar rows use the same full name and vendor metadata tokens", async () => {
   const text = await Bun.file(
-    new URL("../../../herdr/config.toml", import.meta.url),
+    new URL("../../../config/herdr/config.toml", import.meta.url),
   ).text();
   const toml = await Promise.try(() => Bun.TOML.parse(text)).catch(() => null);
   const config = z

@@ -17,11 +17,11 @@ const artifactNames = new Set([
   "target_sqlite.db",
   "INDEXED_AT",
 ]);
-// The one declaration of the index DB root (relative to $HOME), shared with zsh/zshenv and the
+// The one declaration of the index DB root (relative to $HOME), shared with config/zsh/zshenv and the
 // daemon launcher. It is outside ~/.cache so this tool's cache rules cannot reach the live index.
 export const DB_ROOT_DECLARATION = resolve(
   import.meta.dir,
-  "../../../../cocoindex/db-root",
+  "../../../../config/cocoindex/db-root",
 );
 export async function declaredDbRoot(
   home: string,

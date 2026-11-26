@@ -17,7 +17,7 @@ const TOOL_TOML = `name = "demo"
 kind = "A"
 purpose = "${PURPOSE}"
 shell = "shell.zsh"
-consumers = ["zsh/aliases.zsh"]
+consumers = ["config/zsh/aliases.zsh"]
 
 [bins]
 demo = "src/demo.ts"
@@ -38,10 +38,10 @@ const FILES: Record<string, string> = {
   "tools/demo/src/doctor-demo.ts": "export {};\n",
   "tools/other/package.json": JSON.stringify({ bin: {} }),
   "README.md": `| Bin | Kind | Reason |\n|---|---|---|\n| \`demo\` | A | ${PURPOSE} |\n`,
-  "zsh/aliases.zsh":
+  "config/zsh/aliases.zsh":
     "TOOL_SHELL_FRAGMENTS=(\n  tools/demo/shell.zsh\n)\nq() { democopy; }\n",
   "mise.toml": `[tasks."doctor:demo"]\nrun = "bun scripts/tool-probe.ts demo roundtrip"\n`,
-  "lint/tool-declarations-baseline.txt": "# comment\nother\n",
+  "scripts/lint/tool-declarations-baseline.txt": "# comment\nother\n",
 };
 const REGISTRY = new Set(["tools/demo/package.json", "tools/demo/tool.toml"]);
 
@@ -167,16 +167,17 @@ describe("every hand-written list is compared with the declaration", () => {
 
   test("a declared fragment missing from the aliases list", async () => {
     const out = await problems({
-      "zsh/aliases.zsh": "TOOL_SHELL_FRAGMENTS=(\n)\nq() { democopy; }\n",
+      "config/zsh/aliases.zsh":
+        "TOOL_SHELL_FRAGMENTS=(\n)\nq() { democopy; }\n",
     });
     expect(out).toContain(
-      "tools/demo/shell.zsh is declared but not in zsh/aliases.zsh TOOL_SHELL_FRAGMENTS",
+      "tools/demo/shell.zsh is declared but not in config/zsh/aliases.zsh TOOL_SHELL_FRAGMENTS",
     );
   });
 
   test("an aliases-list entry that no declaration names", async () => {
     const out = await problems({
-      "zsh/aliases.zsh":
+      "config/zsh/aliases.zsh":
         "TOOL_SHELL_FRAGMENTS=(\n  tools/demo/shell.zsh\n  tools/ghost/shell.zsh\n)\nq() { democopy; }\n",
     });
     expect(out).toContain(
@@ -206,7 +207,7 @@ describe("every hand-written list is compared with the declaration", () => {
     expect(
       await problems({
         "tools/demo/tool.toml": TOOL_TOML.replace(
-          "zsh/aliases.zsh",
+          "config/zsh/aliases.zsh",
           "zsh/gone.zsh",
         ),
       }),
@@ -214,7 +215,7 @@ describe("every hand-written list is compared with the declaration", () => {
     expect(
       await problems({
         "tools/demo/tool.toml": TOOL_TOML.replace(
-          "zsh/aliases.zsh",
+          "config/zsh/aliases.zsh",
           "tools/other/package.json",
         ),
       }),
@@ -264,13 +265,13 @@ describe("tools without a declaration are a ratchet", () => {
       "tools/fresh/package.json": "{}",
     });
     expect(out).toContain(
-      "tools/fresh has no tool.toml and is not in lint/tool-declarations-baseline.txt",
+      "tools/fresh has no tool.toml and is not in scripts/lint/tool-declarations-baseline.txt",
     );
   });
 
   test("a baseline line for a tool that now declares itself fails (count may only shrink, and says so)", async () => {
     const out = await problems({
-      "lint/tool-declarations-baseline.txt": "other\ndemo\n",
+      "scripts/lint/tool-declarations-baseline.txt": "other\ndemo\n",
     });
     expect(out).toContain("lists demo, which now declares itself or is gone");
     expect(out).toContain("count 2 → 1");
@@ -278,7 +279,7 @@ describe("tools without a declaration are a ratchet", () => {
 
   test("a missing baseline file fails", async () => {
     expect(
-      await problems({ "lint/tool-declarations-baseline.txt": null }),
+      await problems({ "scripts/lint/tool-declarations-baseline.txt": null }),
     ).toContain("is missing");
   });
 });
@@ -324,7 +325,7 @@ describe("this repository", () => {
     });
     expect(result.problems).toEqual([]);
     const baseline = await readFile(
-      join(root, "lint/tool-declarations-baseline.txt"),
+      join(root, "scripts/lint/tool-declarations-baseline.txt"),
       "utf8",
     );
     expect(baseline).not.toContain("smart-copy");

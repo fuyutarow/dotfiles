@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const workspaceRoot = join(import.meta.dirname, "../..");
-const jjConfig = join(workspaceRoot, "jj/config.toml");
+const jjConfig = join(workspaceRoot, "config/jj/config.toml");
 const temporary: string[] = [];
 
 afterEach(async () => {

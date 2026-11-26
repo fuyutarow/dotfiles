@@ -156,7 +156,7 @@ if (
 const agyInstaller =
   await $`curl -fsSL https://antigravity.google/cli/install.sh`.text();
 await $`bash -c ${agyInstaller}`;
-// sshd: let the newest attach re-bind smart-open's forwarded socket (wsl/sshd-dotfiles.conf says
+// sshd: let the newest attach re-bind smart-open's forwarded socket (config/wsl/sshd-dotfiles.conf says
 // why). Without it a dropped session leaves a dead /tmp/smart-open-*.sock and the next attach loses
 // its forward (doctor:remote FAILed exactly that on a rented box, 2026-10-06). Needs root, so only
 // where sudo is ours (scripts/sudo-group.ts) — never tried elsewhere, where it would be reported.
@@ -170,7 +170,7 @@ const sshdInstalled = await access(dirname(SSHD_DROPIN)).then(
 if (!sshdInstalled) {
   say("sshd: not installed here — no drop-in to place");
 } else if (await sudoIsOurs()) {
-  const source = join(DOTFILES, "wsl/sshd-dotfiles.conf");
+  const source = join(DOTFILES, "config/wsl/sshd-dotfiles.conf");
   // WSL's link:dots already links this destination to the source; GNU install refuses itself.
   const alreadyLinked =
     (await access(SSHD_DROPIN).then(

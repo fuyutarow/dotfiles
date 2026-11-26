@@ -1,5 +1,5 @@
 # smart-copy shell fragment — declared by `shell` in tools/smart-copy/tool.toml and sourced by
-# zsh/aliases.zsh from its explicit TOOL_SHELL_FRAGMENTS list (scripts/lint-tool-declarations.ts
+# config/zsh/aliases.zsh from its explicit TOOL_SHELL_FRAGMENTS list (scripts/lint-tool-declarations.ts
 # compares that list with the declarations). Keep it quiet: it runs at every shell start.
 #
 # Clipboard function: stdin to the `smart-copy` command (tools/smart-copy), which feeds the terminal

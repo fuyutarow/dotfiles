@@ -10,7 +10,7 @@
         "./tools/agent-resource-run/*"
       ],
       "@dotfiles/android/*": [
-        "./android/*"
+        "./config/android/*"
       ],
       "@dotfiles/baseline/*": [
         "./tools/baseline/*"
@@ -19,7 +19,7 @@
         "./agents/claude/*"
       ],
       "@dotfiles/cocoindex/*": [
-        "./cocoindex/*"
+        "./config/cocoindex/*"
       ],
       "@dotfiles/codex/*": [
         "./agents/codex/*"
@@ -37,7 +37,7 @@
         "./tools/disk-reclaim/*"
       ],
       "@dotfiles/fresh-machine/*": [
-        "./fresh-machine/*"
+        "./scripts/fresh-machine/*"
       ],
       "@dotfiles/goal-kernel/*": [
         "./agents/goal-kernel/*"
@@ -52,13 +52,13 @@
         "./agents/hooks/*"
       ],
       "@dotfiles/macos/*": [
-        "./macos/*"
+        "./config/macos/*"
       ],
       "@dotfiles/models/*": [
         "./agents/models/*"
       ],
       "@dotfiles/obsidian/*": [
-        "./obsidian/*"
+        "./config/obsidian/*"
       ],
       "@dotfiles/preset/*": [
         "./tools/preset/*"
@@ -67,7 +67,7 @@
         "./tools/prompt-archive/*"
       ],
       "@dotfiles/reason-network/*": [
-        "./reason-network/*"
+        "./agents/reason-network/*"
       ],
       "@dotfiles/repo-retrieve/*": [
         "./tools/repo-retrieve/*"
@@ -175,7 +175,7 @@
         "./tools/tool-tiers/*"
       ],
       "@dotfiles/wsl/*": [
-        "./wsl/*"
+        "./config/wsl/*"
       ]
     }
   },

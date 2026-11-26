@@ -17,8 +17,8 @@ macOS + WSL2 · one history since 2017 · plain `ln -sfn` symlinks, no templatin
 
 Most dotfiles configure a shell. Two things here are less usual:
 
-- **Your coding agent is a first-class topic, not an afterthought.** `agents/` sits beside `zsh/`
-  and `git/`. `mise run skills:sync` installs in-house skills as Claude's `dotfiles:<name>` plugin
+- **Your coding agent is a first-class topic, not an afterthought.** `agents/` sits beside `config/zsh/`
+  and `config/git/`. `mise run skills:sync` installs in-house skills as Claude's `dotfiles:<name>` plugin
   and Codex copies; `mise run agents:link` links slash-commands and Codex guidance. It never
   links `agents/skills` into a tool directory. `agents/skills/` contains in-house skills only.
   Third-party source/name pairs live in [`agents/skills.thirdparty.toml`](agents/skills.thirdparty.toml) and
@@ -105,39 +105,46 @@ vendored hook bundle with `mise run vendor:deps`.
 
 ## Architecture
 
-Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac` / `*.wsl`.
+Topic-first: one configured tool owns one directory under `config/`; OS variance lives inside it as `*.mac` / `*.wsl`.
 
 ```
 ~/dotfiles/
-├── zsh/         # zshenv (tiny, SSH-safe), zshrc, aliases.zsh (+ IS_MAC/IS_WSL), mac.zsh / wsl.zsh
-├── git/         # gitconfig + local.mac / local.wsl (per-OS include)
+├── config/      # one directory per configured tool; OS variants live inside as *.mac / *.wsl
+│   ├── zsh/         # zshenv (tiny, SSH-safe), zshrc, aliases.zsh (+ IS_MAC/IS_WSL), mac.zsh / wsl.zsh, timezone
+│   ├── git/         # gitconfig + local.mac / local.wsl (per-OS include)
+│   ├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
+│   ├── tmux/        # tmux.conf, clipboard.conf, scripts/ (status bar, layouts)
+│   ├── herdr/       # config.toml (agent multiplexer; tmux muscle-memory port)
+│   ├── sheldon/     # zsh plugin manager (sources only config/zsh/aliases.zsh)
+│   ├── lazygit/     # config.yml + ai-commit.sh
+│   ├── mise/        # dotfiles.toml: user-level mise settings (no global tool rows)
+│   ├── ssh/         # ssh client config + smart-open attach drop-in
+│   ├── cocoindex/   # cocoindex-code (ccc) settings + its capped daemon unit
+│   ├── obsidian/    # Obsidian app settings, plugins and vault open/apply scripts
+│   ├── roles/       # roles.toml: per-role build settings (tokio threads, rustc wrapper)
+│   ├── android/     # Pixel LINE vibration policy: ADB audit/apply script and one-time UI recipe
+│   ├── bottom/      # btm system monitor — groups same-named processes so swarm leaks are visible
+│   ├── topgrade/    # which update steps `mise run up` runs
+│   ├── karabiner/   # keyboard remap (macOS only)
+│   ├── macos/       # declarative `defaults write` system settings (macOS only, defaults.ts)
+│   ├── iterm2/      # terminal prefs, synced via iTerm2's own custom-folder mechanism (macOS only)
+│   ├── edge/        # Microsoft Edge managed policy (macOS only): blocklist + pinned default search; COPIED with sudo by `mise run edge:policy`, checked by doctor
+│   └── wsl/         # WSL system config: sysctl, sshd drop-in, .wslconfig (WSL only)
+├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/,
+│                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
+│                #   agx/ (worker suite config), reason-network/ (messaging install);
+│                #   other repos call task helpers through package.json bins instead of skill installation paths
 ├── tools/       # repo CLIs and libraries, one directory each (release notes in .changes/, generated package.json semver + CHANGELOG.md, src/, tests/); parts import their own dir and tools/shared/
-│   ├── rr/          # rr (= repo-retrieve): declared query-shape router over ccc / rg / Serena; src/ (CLI, ccc adapters, python helpers), retrieval.toml, tests/
+│   ├── repo-retrieve/ # rr: declared query-shape router over ccc / rg / Serena; src/ (CLI, ccc adapters, python helpers), retrieval.toml, tests/
 │   ├── smart-copy/  # smart-copy: stdin → the clipboard of the screen you are at, by doing both routes every time (OSC 52 to the terminal + this machine's clipboard tool); decides nothing from SSH_*/HERDR_*
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
 │   ├── storage-headroom/ # storage decisions (decide) and read-only headroom CLI; hooks adapt the verdict
 │   ├── agent-cpu/   # agent and worker CPU samples for the Herdr display
 │   └── shared/      # code several tools import (Bash syntax parsing, hook path resolution, zod, attempt, narrow, typesafe-key, jev-client, sockets, model-orders, worker-env)
-├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
-├── tmux/        # tmux.conf, clipboard.conf, scripts/ (status bar, layouts)
-├── herdr/       # config.toml (agent multiplexer; tmux muscle-memory port)
-├── sheldon/     # zsh plugin manager (sources only zsh/aliases.zsh)
-├── lazygit/     # config.yml + ai-commit.sh
-├── cocoindex/   # cocoindex-code (ccc) settings + its capped daemon unit
-├── android/     # Pixel LINE vibration policy: ADB audit/apply script and one-time UI recipe
-├── bottom/      # btm system monitor — groups same-named processes so swarm leaks are visible
-├── topgrade/    # which update steps `mise run up` runs
-├── karabiner/   # keyboard remap (macOS only)
-├── macos/       # declarative `defaults write` system settings (macOS only, defaults.ts)
-├── iterm2/      # terminal prefs, synced via iTerm2's own custom-folder mechanism (macOS only)
-├── edge/        # Microsoft Edge managed policy (macOS only): blocklist + pinned default search; COPIED with sudo by `mise run edge:policy`, checked by doctor
-├── wsl/         # WSL system config: sysctl, sshd drop-in, .wslconfig (WSL only)
-├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/,
-│                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
-│                #   and shared agent assets (commands/, skills/); other repos call task helpers
-│                #   through package.json bins instead of skill installation paths
-├── tools/       # repo CLIs (rr, agent-resource-run, serena-foreground, smart-open, smart-copy, secrets-push, sui-keystore-merge) + shared TS modules
-├── scripts/     # plumbing — config-registry.ts, link-dots.ts, check-tools.sh, shared tool lookup
+├── scripts/     # plumbing — config-registry.ts, link-dots.ts, check-tools.sh, shared tool lookup;
+│                #   lint/ (lint data such as test-known-red.toml), fresh-machine/ (fresh-machine image build)
+├── standard-presets/ # language presets that consumer repos apply and sync
+├── archives/    # retired skills and specs, kept as reference
 ├── Brewfile.core      # tools needed on every box
 ├── Brewfile.ondemand  # tools installed when first needed (OS guards stay here)
 ├── Brewfile           # union used for full Homebrew Bundle installs
@@ -255,9 +262,9 @@ Claude and Codex lives in [`AGENTS.md`](AGENTS.md).
    No `common` / `mac` / `wsl` bucket directories — OS variance goes _inside_ the tool's directory.
 2. **Single source of truth.** Each fact has one home (see _Architecture → Single sources of truth_):
    to change it you edit one file, never many.
-3. **OS-neutral.** Shell logic branches on `IS_MAC` / `IS_WSL` (computed once in `zsh/aliases.zsh`);
+3. **OS-neutral.** Shell logic branches on `IS_MAC` / `IS_WSL` (computed once in `config/zsh/aliases.zsh`);
    shared files never hard-code a machine-absolute path.
-4. **A quiet `zshenv`.** `zsh/zshenv` stays tiny — zsh reads it on _every_ invocation, including
+4. **A quiet `zshenv`.** `config/zsh/zshenv` stays tiny — zsh reads it on _every_ invocation, including
    `ssh host 'cmd'`, so user CLIs in `~/.local/bin` and bun's global bins in `~/.bun/bin`
    (this repo's own `bin` commands) work in non-login SSH shells. It reads the rendered
    `~/.config/dotfiles/brew-prefix` and quietly adds Homebrew bin/sbin and rustup proxies;
@@ -298,7 +305,7 @@ Claude and Codex lives in [`AGENTS.md`](AGENTS.md).
    back as data; the only way back is a check (`mise run doctor`, `link:dots --check`).
    - A deployed path is a **link** when it is one declaration verbatim, and **rendered** when it
      is a function of several (`scripts/render-home.ts`: `~/.claude/settings.json` = base +
-     private overlay + `zsh/timezone` + the hook registry; `~/.codex/hooks.json`;
+     private overlay + `config/zsh/timezone` + the hook registry; `~/.codex/hooks.json`;
      `~/.claude/CLAUDE.md` = template + dispatch roster; `~/.config/dotfiles/brew-prefix` = host
      declaration + OS + HOME). A generator never writes INTO a
      hand-written file — `mise run lint:one-writer` fails on registry hooks in a committed vendor
@@ -312,9 +319,9 @@ Claude and Codex lives in [`AGENTS.md`](AGENTS.md).
      the in-house plugin and Codex copies. Sync removes old links into this checkout. If a global
      skill path still links into another repo, `mise run skills:migrate` copies it into a real
      tool-owned directory before add/sync.
-   - A value has one home: the zone name is `zsh/timezone`, read by zshenv/bashrc, rendered into
+   - A value has one home: the zone name is `config/zsh/timezone`, read by zshenv/bashrc, rendered into
      Claude Code's `env.TZ`, and expected by `doctor:remote`.
-   - Remaining human-driven write-through, by design: `sheldon add` (edits `sheldon/plugins.toml`,
+   - Remaining human-driven write-through, by design: `sheldon add` (edits `config/sheldon/plugins.toml`,
      measured) and Karabiner's GUI (macOS) are the owner editing the declaration through a tool.
 9. **Tools have two kinds and two install modes.** Machine-wide operator tools (A) are installed
    from the pinned root package with `bun install` / `bun link`, one version per machine.
@@ -362,7 +369,7 @@ The WSL capacity controller runs every minute and reclaims stale `/tmp` director
 
 `/etc/wsl.conf` belongs to each distro (hostname, default user) and is not managed here. WSL
 automounts Windows drives at `/mnt` by default. Google Drive's virtual `G:` is not found by WSL automount. Run `mise run wsl:drive-mount`
-once to install the declared drvfs entry from `wsl/gdrive.fstab` into `/etc/fstab`; WSL will mount
+once to install the declared drvfs entry from `config/wsl/gdrive.fstab` into `/etc/fstab`; WSL will mount
 it at `/mnt/g` on later distro starts. `mise run doctor` reports when
 that mount is absent. If `G:` goes away on the Windows side, the drvfs mount stays behind and
 `stat /mnt/g` fails with ENODEV; `link:dots` and `doctor` then print
@@ -418,7 +425,7 @@ herdr --remote <alias>
 
 Renting, choosing and destroying a GPU box (Vast.ai) is the `renting-cloud-gpus` skill.
 
-`rip` keeps recoverable removals under `$XDG_DATA_HOME/graveyard` (or `~/.local/share/graveyard` when XDG data home is unset), exported by both `zsh/zshenv` and `zsh/bashrc`. `mise run doctor` evaluates the zshenv declaration, fails if the configured graveyard is RAM-backed or exceeds 10 GiB, and warns separately when a legacy `/tmp/graveyard-<user>` remains. The blind `mise run reclaim` tier purges eligible rip entries after 24 hours.
+`rip` keeps recoverable removals under `$XDG_DATA_HOME/graveyard` (or `~/.local/share/graveyard` when XDG data home is unset), exported by both `config/zsh/zshenv` and `config/zsh/bashrc`. `mise run doctor` evaluates the zshenv declaration, fails if the configured graveyard is RAM-backed or exceeds 10 GiB, and warns separately when a legacy `/tmp/graveyard-<user>` remains. The blind `mise run reclaim` tier purges eligible rip entries after 24 hours.
 
 ## Tasks
 

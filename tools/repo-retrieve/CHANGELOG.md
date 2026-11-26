@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.4 — 2026-11-27
+
+- Paths follow the repository's move of topic directories under config/ (for example config/cocoindex, config/zsh).
+
 ## 1.15.3 — 2026-11-26
 
 - A semantic search with --project naming a registered root or a jj workspace of one resolves like the same search without the flag (a workspace answers from its backing repo index); it is no longer refused as an unknown root or because the daemon has nothing loaded.

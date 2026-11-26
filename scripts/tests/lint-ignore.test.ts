@@ -43,12 +43,12 @@ function compatibilityFixture(root: string): void {
 test("tracked directory, empty-directory and file symlinks are checked by their own names", async () => {
   const root = temporary();
   compatibilityFixture(root);
-  mkdirSync(join(root, "git"));
+  mkdirSync(join(root, "config", "git"), { recursive: true });
   writeFileSync(
-    join(root, "git/gitconfig"),
+    join(root, "config/git/gitconfig"),
     "[core]\nexcludesfile = ~/.config/git/ignore\n",
   );
-  writeFileSync(join(root, "git/ignore"), "# Owner: fixture\n");
+  writeFileSync(join(root, "config/git/ignore"), "# Owner: fixture\n");
   writeFileSync(join(root, ".gitignore"), "# Owner: fixture\n/unused\n");
   const init = Bun.spawnSync(["jj", "git", "init", "--no-colocate", root], {
     cwd: root,
@@ -108,12 +108,12 @@ test("AGX ticket files stay hidden while agent sources remain visible", async ()
   const root = temporary();
   mkdirSync(join(root, ".agents/tickets"), { recursive: true });
   mkdirSync(join(root, "agents/skills"), { recursive: true });
-  mkdirSync(join(root, "git"), { recursive: true });
+  mkdirSync(join(root, "config", "git"), { recursive: true });
   copyFileSync(
     join(import.meta.dir, "../../.gitignore"),
     join(root, ".gitignore"),
   );
-  writeFileSync(join(root, "git/ignore"), "# Owner: fixture\n");
+  writeFileSync(join(root, "config/git/ignore"), "# Owner: fixture\n");
   writeFileSync(
     join(root, ".agents/tickets/probe-ticket.md"),
     "private ticket\n",

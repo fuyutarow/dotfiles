@@ -25,9 +25,9 @@ const EXPECTED = new Map([
   ["$ctx_off", "#626262"],
 ]);
 
-test("herdr/config.toml greys ctx below the red level and colors only ctx_hi, in the default, claude and codex layouts", async () => {
+test("config/herdr/config.toml greys ctx below the red level and colors only ctx_hi, in the default, claude and codex layouts", async () => {
   const text = await Bun.file(
-    new URL("../../../herdr/config.toml", import.meta.url),
+    new URL("../../../config/herdr/config.toml", import.meta.url),
   ).text();
   const toml = Result.try({
     try: () => Bun.TOML.parse(text),

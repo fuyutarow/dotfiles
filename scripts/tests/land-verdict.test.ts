@@ -48,13 +48,13 @@ test("land liveness follows checkout links and package bin map changes", () => {
   });
   expect(
     landLiveness(
-      ["zsh/environment.d/20-new.conf"],
+      ["config/zsh/environment.d/20-new.conf"],
       [],
-      ["zsh/environment.d/20-new.conf"],
+      ["config/zsh/environment.d/20-new.conf"],
     ),
   ).toEqual({
     live: false,
-    deployPaths: ["zsh/environment.d/20-new.conf"],
+    deployPaths: ["config/zsh/environment.d/20-new.conf"],
   });
   expect(landLiveness(["docs/notes.md"], [])).toEqual({
     live: true,

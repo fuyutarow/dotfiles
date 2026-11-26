@@ -138,27 +138,27 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   ["all", "@google-drive/personal", "Personal-Drive"],
   // --- zsh ---
   // Bun is a Brewfile.core utility. The exec wrapper remains for temporary-HOME renders only.
-  ["all", "zsh/zshenv", ".zshenv"],
-  ["all", "zsh/zshrc", ".zshrc"],
-  ["mac", "zsh/zprofile.mac", ".zprofile"],
+  ["all", "config/zsh/zshenv", ".zshenv"],
+  ["all", "config/zsh/zshrc", ".zshrc"],
+  ["mac", "config/zsh/zprofile.mac", ".zprofile"],
   // zprofile.wsl is the Linux login profile (brew shellenv, PATH, sheldon → aliases); its WSL-only
   // parts are guarded. Plain Linux gets it too: without it linuxbrew is off PATH, sheldon never
   // runs and no alias exists (2026-10-05, Vast box: `l`/`p`/`h` not found).
-  ["not-mac", "zsh/zprofile.wsl", ".zprofile"],
-  ["all", "sheldon", ".config/sheldon"],
+  ["not-mac", "config/zsh/zprofile.wsl", ".zprofile"],
+  ["all", "config/sheldon", ".config/sheldon"],
   // bash where it is still the login shell and chsh is not ours (a shared server, sol): the login
   // is handed to zsh, and `ssh host 'cmd'` (read: herdr --remote) gets zshenv's PATH. Plain Linux
   // only — WSL's login shell is zsh and its distro ~/.bashrc is not ours to move aside.
-  ["linux", "zsh/bash_profile", ".bash_profile"],
-  ["linux", "zsh/bashrc", ".bashrc"],
+  ["linux", "config/zsh/bash_profile", ".bash_profile"],
+  ["linux", "config/zsh/bashrc", ".bashrc"],
   [
     "not-mac",
-    "zsh/environment.d/10-rip.conf",
+    "config/zsh/environment.d/10-rip.conf",
     ".config/environment.d/10-rip.conf",
   ],
   [
     "not-mac",
-    "zsh/environment.d/99-zz-path.conf",
+    "config/zsh/environment.d/99-zz-path.conf",
     ".config/environment.d/99-zz-path.conf",
   ],
 
@@ -166,21 +166,21 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   // git reads BOTH ~/.config/git/config and ~/.gitconfig. The repo's config is linked to the
   // XDG one, which git only reads; ~/.gitconfig is TOOL_OWNED below, so `git config --global`
   // (and gh/lfs, which call it) writes there, not through a link into the repo (INV-8, measured).
-  ["all", "git/gitconfig", ".config/git/config"],
-  ["all", "git/ignore", ".config/git/ignore"],
-  ["mac", "git/local.mac", ".local-gitconfig"],
-  ["wsl", "git/local.wsl", ".local-gitconfig"],
+  ["all", "config/git/gitconfig", ".config/git/config"],
+  ["all", "config/git/ignore", ".config/git/ignore"],
+  ["mac", "config/git/local.mac", ".local-gitconfig"],
+  ["wsl", "config/git/local.wsl", ".local-gitconfig"],
 
   // --- ssh (client POLICY only; the host inventory stays machine-local) ---
-  // ssh/config Includes ~/.ssh/config.local FIRST, and that file holds HostName/Port/User — a
+  // config/ssh/config Includes ~/.ssh/config.local FIRST, and that file holds HostName/Port/User — a
   // tailnet map that must never enter this PUBLIC repo. A missing config.local is not an error
   // (ssh -G still resolves, exit 0), so a fresh clone links cleanly and simply has no hosts yet.
   // The smart-open attach file is linked separately: it needs OpenSSH >= 9.9 (linkSshAttach).
-  ["all", "ssh/config", ".ssh/config"],
+  ["all", "config/ssh/config", ".ssh/config"],
 
   // --- tmux / herdr (herdr: the config file only — ~/.config/herdr/ also holds live sockets) ---
-  ["all", "tmux/tmux.conf", ".tmux.conf"],
-  ["all", "herdr/config.toml", ".config/herdr/config.toml"],
+  ["all", "config/tmux/tmux.conf", ".tmux.conf"],
+  ["all", "config/herdr/config.toml", ".config/herdr/config.toml"],
 
   // User policy is shared; host.toml and repos/ keep their machine-local owners.
   ["all", "agents/agx/agx.toml", ".config/agx/agx.toml"],
@@ -231,8 +231,8 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
     "tools/agent-cpu/agent-cpu.plist",
     "Library/LaunchAgents/agent-cpu.plist",
   ],
-  ["not-mac", "agx/ws-gc.service", ".config/systemd/user/ws-gc.service"],
-  ["not-mac", "agx/ws-gc.timer", ".config/systemd/user/ws-gc.timer"],
+  ["not-mac", "agents/agx/ws-gc.service", ".config/systemd/user/ws-gc.service"],
+  ["not-mac", "agents/agx/ws-gc.timer", ".config/systemd/user/ws-gc.timer"],
   [
     "not-mac",
     "tools/statusline/statusline-sampler.service",
@@ -245,10 +245,14 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   ],
   [
     "not-mac",
-    "agx/agx-doctor.service",
+    "agents/agx/agx-doctor.service",
     ".config/systemd/user/agx-doctor.service",
   ],
-  ["not-mac", "agx/agx-doctor.timer", ".config/systemd/user/agx-doctor.timer"],
+  [
+    "not-mac",
+    "agents/agx/agx-doctor.timer",
+    ".config/systemd/user/agx-doctor.timer",
+  ],
   [
     "not-mac",
     "tools/shared/gpu-sampler.service",
@@ -323,64 +327,64 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   // --- cocoindex-code (declarative global settings = no interactive `ccc init`) ---
   [
     "all",
-    "cocoindex/global_settings.yml",
+    "config/cocoindex/global_settings.yml",
     ".cocoindex_code/global_settings.yml",
   ],
   [
     "wsl",
-    "cocoindex/repo-retrieve-rerank.socket.wsl",
+    "config/cocoindex/repo-retrieve-rerank.socket.wsl",
     ".config/systemd/user/repo-retrieve-rerank.socket",
   ],
   [
     "wsl",
-    "cocoindex/repo-retrieve-rerank.service.wsl",
+    "config/cocoindex/repo-retrieve-rerank.service.wsl",
     ".config/systemd/user/repo-retrieve-rerank.service",
   ],
   [
     "wsl",
-    "wsl/wsl-capacity-recover.service.wsl",
+    "config/wsl/wsl-capacity-recover.service.wsl",
     ".config/systemd/user/wsl-capacity-recover.service",
   ],
   [
     "wsl",
-    "wsl/wsl-capacity-recover.timer.wsl",
+    "config/wsl/wsl-capacity-recover.timer.wsl",
     ".config/systemd/user/wsl-capacity-recover.timer",
   ],
   [
     "wsl",
-    "wsl/guest-capacity-recover.service.wsl",
+    "config/wsl/guest-capacity-recover.service.wsl",
     ".config/systemd/user/guest-capacity-recover.service",
   ],
   [
     "wsl",
-    "wsl/guest-capacity-recover.timer.wsl",
+    "config/wsl/guest-capacity-recover.timer.wsl",
     ".config/systemd/user/guest-capacity-recover.timer",
   ],
   [
     "wsl",
-    "wsl/environment.d/99-zz-wsl-gpu.conf",
+    "config/wsl/environment.d/99-zz-wsl-gpu.conf",
     ".config/environment.d/99-zz-wsl-gpu.conf",
   ],
 
   // --- update steps, process monitor, jj ---
-  ["all", "topgrade/topgrade.toml", ".config/topgrade.toml"],
-  ["all", "bottom/bottom.toml", ".config/bottom/bottom.toml"],
+  ["all", "config/topgrade/topgrade.toml", ".config/topgrade.toml"],
+  ["all", "config/bottom/bottom.toml", ".config/bottom/bottom.toml"],
   // jj reads every conf.d/*.toml beside its user config; `jj config set --user` writes config.toml
   // (TOOL_OWNED below) — but conf.d when config.toml is missing, hence the empty file (measured).
-  ["all", "jj/config.toml", ".config/jj/conf.d/dotfiles.toml"],
+  ["all", "config/jj/config.toml", ".config/jj/conf.d/dotfiles.toml"],
   // INV-6 requires zero global mise tool rows; this declaration only supplies settings.
-  ["all", "mise/dotfiles.toml", ".config/mise/conf.d/dotfiles.toml"],
+  ["all", "config/mise/dotfiles.toml", ".config/mise/conf.d/dotfiles.toml"],
 
   // --- lazygit (config dir differs by OS) ---
   [
     "mac",
-    "lazygit/config.yml",
+    "config/lazygit/config.yml",
     "Library/Application Support/lazygit/config.yml",
   ],
-  ["not-mac", "lazygit/config.yml", ".config/lazygit/config.yml"],
+  ["not-mac", "config/lazygit/config.yml", ".config/lazygit/config.yml"],
 
   // --- karabiner (whole directory; a real one is moved aside only under --force) ---
-  ["mac", "karabiner", ".config/karabiner"],
+  ["mac", "config/karabiner", ".config/karabiner"],
 
   // --- smart-open receiver (macOS: the machine you sit at; opens URLs forwarded from remote `o`) ---
   [
@@ -398,10 +402,14 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
 // to the machine (scripts/wsl-distro.ts writes it at creation), never to a shared file.
 export const ETC_LINKS: readonly (readonly [string, string, string])[] = [
   // 50- so it applies after the distro's own 10-* drop-ins and before 99-sysctl.conf.
-  ["wsl/sysctl.conf", "/etc/sysctl.d/50-dotfiles.conf", "sudo sysctl --system"],
+  [
+    "config/wsl/sysctl.conf",
+    "/etc/sysctl.d/50-dotfiles.conf",
+    "sudo sysctl --system",
+  ],
   // Lets the newest ssh connection re-bind smart-open's forwarded socket.
   [
-    "wsl/sshd-dotfiles.conf",
+    "config/wsl/sshd-dotfiles.conf",
     "/etc/ssh/sshd_config.d/50-dotfiles.conf",
     "sudo systemctl reload ssh",
   ],
@@ -462,14 +470,14 @@ export type Surface = {
 export const RENDERED = [
   {
     dest: ".config/dotfiles/role.env",
-    inputs: ["roles/roles.toml", "scripts/config-registry.ts"],
+    inputs: ["config/roles/roles.toml", "scripts/config-registry.ts"],
     machine: "hostname selects a declared role",
     consumer: "shell profiles",
     when: "all",
   },
   {
     dest: ".config/environment.d/60-dotfiles-role.conf",
-    inputs: ["roles/roles.toml", "scripts/config-registry.ts"],
+    inputs: ["config/roles/roles.toml", "scripts/config-registry.ts"],
     machine: "hostname selects a declared role",
     consumer: "systemd user manager",
     when: "not-mac",
@@ -486,7 +494,7 @@ export const RENDERED = [
     dest: ".claude/settings.json",
     inputs: [
       "agents/claude/settings.json",
-      "zsh/timezone",
+      "config/zsh/timezone",
       "agents/hooks/hooks.toml",
       "agents/hooks/slots.toml",
     ],
@@ -531,7 +539,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "all",
-    sources: ["cocoindex/ccc-entry"],
+    sources: ["config/cocoindex/ccc-entry"],
     deployed:
       "~/.local/bin/ccc (owned entry), ~/.local/bin/ccc-backend (uv backend link)",
     consumer: "ccc clients and rr index",
@@ -542,7 +550,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "not-mac",
-    sources: ["cocoindex/ccc-daemon.service.wsl"],
+    sources: ["config/cocoindex/ccc-daemon.service.wsl"],
     deployed:
       "~/.config/systemd/user/ccc-daemon.service (real file), default.target.wants",
     consumer: "systemd user manager",
@@ -552,9 +560,9 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["cocoindex/db-root", "cocoindex/ccc_db_mapping.py"],
+    sources: ["config/cocoindex/db-root", "config/cocoindex/ccc_db_mapping.py"],
     deployed:
-      "the checkout: zsh/zshenv (client COCOINDEX_CODE_DB_PATH_MAPPING), ccc-daemon-launch.py (daemon) and disk-reclaim's ccc-index-db target read cocoindex/db-root directly",
+      "the checkout: config/zsh/zshenv (client COCOINDEX_CODE_DB_PATH_MAPPING), ccc-daemon-launch.py (daemon) and disk-reclaim's ccc-index-db target read config/cocoindex/db-root directly",
     consumer:
       "ccc clients, the supervised ccc daemon, tools/disk-reclaim ccc-index-db",
     writer:
@@ -653,7 +661,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "linux",
-    sources: ["reason-network/install.ts"],
+    sources: ["agents/reason-network/install.ts"],
     deployed:
       "~/.local/bin/reason-network on first install; thereafter upstream updates",
     consumer: "Reason Network callers on PATH",
@@ -676,7 +684,7 @@ const OTHER: readonly Surface[] = [
     when: "all",
     sources: [
       "scripts/package.json",
-      "obsidian/package.json",
+      "config/obsidian/package.json",
       "tools/shared/package.json",
       "tools/smart-open/package.json",
       "tools/smart-copy/package.json",
@@ -703,12 +711,12 @@ const OTHER: readonly Surface[] = [
       "agents/goal-kernel/package.json",
       "agents/models/package.json",
       "agents/research-control/package.json",
-      "android/package.json",
-      "cocoindex/package.json",
-      "fresh-machine/package.json",
-      "macos/package.json",
-      "reason-network/package.json",
-      "wsl/package.json",
+      "config/android/package.json",
+      "config/cocoindex/package.json",
+      "scripts/fresh-machine/package.json",
+      "config/macos/package.json",
+      "agents/reason-network/package.json",
+      "config/wsl/package.json",
     ],
     deployed: "the checkout",
     consumer:
@@ -729,7 +737,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "mac",
-    sources: ["macos/defaults.ts"],
+    sources: ["config/macos/defaults.ts"],
     deployed: "macOS defaults domains",
     consumer: "macOS",
     writer: "human, in the repo; mise run mac:defaults writes",
@@ -738,7 +746,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "mac",
-    sources: ["iterm2"],
+    sources: ["config/iterm2"],
     deployed: "iTerm2's custom preferences folder (points at the repo)",
     consumer: "iTerm2",
     writer:
@@ -748,7 +756,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "mac",
-    sources: ["obsidian/app.json", "obsidian/plugins.json"],
+    sources: ["config/obsidian/app.json", "config/obsidian/plugins.json"],
     deployed: "each registered vault's .obsidian/",
     consumer: "Obsidian",
     writer: "human, in the repo; mise run mac:obsidian merges",
@@ -757,28 +765,28 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "mac",
-    sources: ["obsidian/open-remote.ts"],
+    sources: ["config/obsidian/open-remote.ts"],
     deployed: "~/.obsidian-remote/vaults/<name>--<path-tail>/.obsidian/",
     consumer: "Obsidian Remote SSH",
     writer:
-      "obsidian/open-remote.ts after smart-open SSH vouch; plugin owns subsequent runtime state",
-    verify: "bun test tools/smart-open obsidian",
+      "config/obsidian/open-remote.ts after smart-open SSH vouch; plugin owns subsequent runtime state",
+    verify: "bun test tools/smart-open config/obsidian",
   },
   {
     kind: "applied",
     when: "mac",
-    sources: ["obsidian/local-plugins/doc-view/manifest.json"],
+    sources: ["config/obsidian/local-plugins/doc-view/manifest.json"],
     deployed:
       "each registered vault's .obsidian/plugins/doc-view/ (staged directory swap)",
     consumer: "Obsidian",
     writer:
-      "human, in the repo; obsidian/apply.ts copies via mise run mac:obsidian",
-    verify: "bun test obsidian/apply.test.ts",
+      "human, in the repo; config/obsidian/apply.ts copies via mise run mac:obsidian",
+    verify: "bun test config/obsidian/apply.test.ts",
   },
   {
     kind: "applied",
     when: "mac",
-    sources: ["edge/policy.plist.mac"],
+    sources: ["config/edge/policy.plist.mac"],
     deployed: "/Library/Managed Preferences (COPY, sudo)",
     consumer: "Microsoft Edge",
     writer: "human, in the repo; mise run edge:policy copies",
@@ -787,7 +795,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "wsl",
-    sources: ["wsl/wslconfig.win"],
+    sources: ["config/wsl/wslconfig.win"],
     deployed:
       "%USERPROFILE%\\.wslconfig (COPY: Windows cannot follow a WSL link)",
     consumer: "the Windows WSL service",
@@ -797,7 +805,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "wsl",
-    sources: ["wsl/gdrive.fstab"],
+    sources: ["config/wsl/gdrive.fstab"],
     deployed: "/etc/fstab (drvfs G: mounted at /mnt/g)",
     consumer: "WSL2 mount initialization",
     writer: "human, in the repo; mise run wsl:drive-mount installs the entry",
@@ -807,9 +815,9 @@ const OTHER: readonly Surface[] = [
     kind: "applied",
     when: "wsl",
     sources: [
-      "wsl/dotfiles-fstrim.service.wsl",
-      "wsl/dotfiles-dropcache.service.wsl",
-      "wsl/dotfiles-root-levers.sudoers",
+      "config/wsl/dotfiles-fstrim.service.wsl",
+      "config/wsl/dotfiles-dropcache.service.wsl",
+      "config/wsl/dotfiles-root-levers.sudoers",
     ],
     deployed: "/etc/systemd/system and /etc/sudoers.d (installed with sudo)",
     consumer:
@@ -821,7 +829,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "wsl",
-    sources: ["wsl/winget.win.json"],
+    sources: ["config/wsl/winget.win.json"],
     deployed: "the Windows host's winget packages",
     consumer: "winget",
     writer:
@@ -831,7 +839,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "linux",
-    sources: ["wsl/sshd-dotfiles.conf"],
+    sources: ["config/wsl/sshd-dotfiles.conf"],
     deployed:
       "/etc/ssh/sshd_config.d/50-dotfiles.conf (COPY by linux:init, sudo)",
     consumer: "sshd",
@@ -842,7 +850,11 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["zsh/aliases.zsh", "zsh/mac.zsh", "zsh/wsl.zsh"],
+    sources: [
+      "config/zsh/aliases.zsh",
+      "config/zsh/mac.zsh",
+      "config/zsh/wsl.zsh",
+    ],
     deployed:
       "the checkout (sheldon sources aliases.zsh; it sources the OS file)",
     consumer: "interactive zsh",
@@ -852,7 +864,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["tmux/clipboard.conf"],
+    sources: ["config/tmux/clipboard.conf"],
     deployed: "the checkout (tmux.conf source-file)",
     consumer: "tmux",
     writer: "human, in the repo",
@@ -861,7 +873,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["zsh/timezone"],
+    sources: ["config/zsh/timezone"],
     deployed:
       "the checkout (zshenv, bashrc), rendered into Claude Code's env.TZ",
     consumer: "every shell, Claude Code, doctor:remote",
@@ -976,9 +988,9 @@ const OTHER: readonly Surface[] = [
       "tsconfig.json",
       "mise.toml",
       "knip.jsonc",
-      "lint/knip-exceptions.toml",
-      "lint/test-reach-exceptions.toml",
-      "lint/test-known-red.toml",
+      "scripts/lint/knip-exceptions.toml",
+      "scripts/lint/test-reach-exceptions.toml",
+      "scripts/lint/test-known-red.toml",
     ],
     deployed: "the checkout",
     consumer:
@@ -1001,7 +1013,7 @@ const OTHER: readonly Surface[] = [
     when: "all",
     sources: [".cocoindex_code/settings.yml"],
     deployed:
-      "the checkout (the index DB itself lives in ~/.cache, see zsh/zshenv)",
+      "the checkout (the index DB itself lives in ~/.cache, see config/zsh/zshenv)",
     consumer:
       "ccc daemon (what to index) and the search-route gate (an operational ccc repo)",
     writer: "human, in the repo",
@@ -1031,7 +1043,7 @@ const OTHER: readonly Surface[] = [
     when: "all",
     sources: [],
     deployed: "~/.ssh/config.local",
-    consumer: "ssh (Included first by ssh/config)",
+    consumer: "ssh (Included first by config/ssh/config)",
     writer:
       "the human on that machine (the host inventory never enters the public repo)",
     verify: "mise run doctor:remote (reach)",
@@ -1060,7 +1072,7 @@ export function surfaces(): Surface[] {
       src === "agents/agx/agx.toml"
         ? { consumer: "agx-worker", verify: "agx worker check" }
         : {},
-      src === "mise/dotfiles.toml"
+      src === "config/mise/dotfiles.toml"
         ? { verify: "mise run test:mise-scope" }
         : {},
       src === "tools/statusline/statusline-sampler.plist"
@@ -1074,7 +1086,7 @@ export function surfaces(): Surface[] {
   const attach: Surface = {
     kind: "link",
     when: "all",
-    sources: ["ssh/smart-open-attach.conf"],
+    sources: ["config/ssh/smart-open-attach.conf"],
     deployed: "~/.ssh/config.d/smart-open-attach.conf (OpenSSH >= 9.9 only)",
     consumer: "ssh (smart-open forward on attach)",
     writer: "human, in the repo",
@@ -1108,8 +1120,8 @@ export function surfaces(): Surface[] {
     deployed: `~/${p}`,
     consumer: p.includes("jj") ? "jj" : "git",
     writer: p.includes("jj")
-      ? "`jj config set --user` (the repo's half: jj/config.toml in conf.d)"
-      : "`git config --global`, gh, git-lfs (the repo's half: git/gitconfig in ~/.config/git)",
+      ? "`jj config set --user` (the repo's half: config/jj/config.toml in conf.d)"
+      : "`git config --global`, gh, git-lfs (the repo's half: config/git/gitconfig in ~/.config/git)",
     verify: "mise run link:dots -- --check",
   }));
   return [...links, attach, ...etc, ...rendered, ...tool, ...OTHER];

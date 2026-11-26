@@ -140,7 +140,7 @@ test("quiet zshenv uses the rendered prefix in both shell modes", () => {
   exe(join(prefix, "bin/brew"));
   exe(join(prefix, "bin/bun"));
   writeFileSync(join(home, ".config/dotfiles/brew-prefix"), `${prefix}\n`);
-  const source = join(import.meta.dir, "../../zsh/zshenv");
+  const source = join(import.meta.dir, "../../config/zsh/zshenv");
   for (const mode of ["-fc", "-fic"]) {
     const result = Bun.spawnSync(
       ["zsh", mode, 'source "$SOURCE"; command -v bun'],

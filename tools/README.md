@@ -13,7 +13,7 @@ the other tools keep working unchanged and are counted by a ratchet.
 | `kind` | `A` or `B` — README "Kind" column | check: row Kind equals it |
 | `purpose` | One line — README "Reason" column | check: row Reason equals it |
 | `bins` | PATH command → entry file, relative to the tool | check: root and tool `package.json` `bin` carry exactly these; every bin has a README row |
-| `shell` | Optional zsh fragment, relative to the tool | check: file exists and is in `zsh/aliases.zsh` `TOOL_SHELL_FRAGMENTS`; `lint:zsh` parses it |
+| `shell` | Optional zsh fragment, relative to the tool | check: file exists and is in `config/zsh/aliases.zsh` `TOOL_SHELL_FRAGMENTS`; `lint:zsh` parses it |
 | `consumers` | Repo files that call the tool | check: each exists and mentions a bin or a function the fragment defines |
 | `probes.<p>.file`, `.task` | A live probe and the mise task that runs it | check: file exists, task runs `scripts/tool-probe.ts <name> <p>`; `tool-probe` and `doctor` find the probe here |
 
@@ -36,7 +36,7 @@ Unknown fields are rejected: a field exists only because some check or generator
 
 ## Ratchet
 
-`lint/tool-declarations-baseline.txt` lists the tools without `tool.toml` (20 now). A tool outside
+`scripts/lint/tool-declarations-baseline.txt` lists the tools without `tool.toml` (20 now). A tool outside
 the list without a declaration fails; a listed tool that has declared itself fails until its line is
 deleted, so the count only shrinks. To migrate a tool: add its `tool.toml`, delete its baseline line,
 and fix whatever the check names.

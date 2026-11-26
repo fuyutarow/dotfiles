@@ -38,7 +38,7 @@ function fixture(name: string, content: string): string {
 
 describe("enforce-no-new-bash", () => {
   test("allows two added aliases in shebang-bearing zsh configuration", () => {
-    const p = fixture("zsh/aliases.zsh", lines(1136, "#!/bin/zsh"));
+    const p = fixture("config/zsh/aliases.zsh", lines(1136, "#!/bin/zsh"));
     const r = runHook(
       HOOK,
       edit(p, "echo 3\n", "echo 3\nalias cpa='cp -a'\nalias cpv='cp -v'\n"),
@@ -50,7 +50,7 @@ describe("enforce-no-new-bash", () => {
   test("exempts shell configuration paths even with automation extensions or shebangs", () => {
     const dir = tempDir("nonewbash-");
     for (const name of [
-      "zsh/tests/x.test.zsh",
+      "config/zsh/tests/x.test.zsh",
       "zsh/legacy.sh",
       "config/interactive.zsh",
       "config/x.test.zsh",

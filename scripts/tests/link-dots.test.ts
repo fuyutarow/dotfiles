@@ -46,9 +46,12 @@ function tmp(prefix: string): string {
 
 function fixture(mode: Ctx["mode"]): Ctx {
   const dotfiles = tmp("link-dots-repo-");
-  mkdirSync(join(dotfiles, "ssh"));
+  mkdirSync(join(dotfiles, "config", "ssh"), { recursive: true });
   writeFileSync(join(dotfiles, "a.conf"), "a\n");
-  writeFileSync(join(dotfiles, "ssh", "smart-open-attach.conf"), "m\n");
+  writeFileSync(
+    join(dotfiles, "config", "ssh", "smart-open-attach.conf"),
+    "m\n",
+  );
   return {
     home: tmp("link-dots-home-"),
     dotfiles,
@@ -235,7 +238,9 @@ test("doctor refresh deployment enables its timer without starting a collector",
   expect(calls).toContainEqual(["stop", "agx-doctor.path"]);
   expect(calls).toContainEqual(["enable", "agx-doctor.timer"]);
   expect(calls.some((args) => args[0] === "start")).toBe(false);
-  const unit = await Bun.file(join(REPO, "agx/agx-doctor.service")).text();
+  const unit = await Bun.file(
+    join(REPO, "agents/agx/agx-doctor.service"),
+  ).text();
   expect(unit).toMatch(/^SuccessExitStatus=1$/mu);
   expect(unit).not.toContain("ExecStartPre=");
   expect(unit).toContain("agx doctor --json --refresh");
@@ -395,11 +400,12 @@ test("the WSL systemd environment drop-in is registered and linked into XDG conf
   };
   const entry = LINKS.find(
     ([when, source]) =>
-      when === "wsl" && source === "wsl/environment.d/99-zz-wsl-gpu.conf",
+      when === "wsl" &&
+      source === "config/wsl/environment.d/99-zz-wsl-gpu.conf",
   );
   expect(entry).toEqual([
     "wsl",
-    "wsl/environment.d/99-zz-wsl-gpu.conf",
+    "config/wsl/environment.d/99-zz-wsl-gpu.conf",
     ".config/environment.d/99-zz-wsl-gpu.conf",
   ]);
   if (entry === undefined) return;
@@ -420,11 +426,12 @@ test("the systemd user PATH drop-in is registered and linked into XDG config", (
   };
   const entry = LINKS.find(
     ([when, source]) =>
-      when === "not-mac" && source === "zsh/environment.d/99-zz-path.conf",
+      when === "not-mac" &&
+      source === "config/zsh/environment.d/99-zz-path.conf",
   );
   expect(entry).toEqual([
     "not-mac",
-    "zsh/environment.d/99-zz-path.conf",
+    "config/zsh/environment.d/99-zz-path.conf",
     ".config/environment.d/99-zz-path.conf",
   ]);
   if (entry === undefined) return;
@@ -651,7 +658,7 @@ test.each(["ENODEV", "ENOTCONN", "EIO", "ESTALE"])(
       });
       await linkGoogleDrive(ctx);
       await linkGoogleDrive(ctx);
-      link(ctx, "zsh/zshenv", ctx.home + "/.zshenv");
+      link(ctx, "config/zsh/zshenv", ctx.home + "/.zshenv");
       const calls = [];
       const error = await deployStatuslineOwners(ctx, async (args) => {
         calls.push(args);
@@ -669,7 +676,7 @@ test.each(["ENODEV", "ENOTCONN", "EIO", "ESTALE"])(
       `skip (unreachable ${code}): /mnt/g; repair: sudo umount -l /mnt/g && mise run wsl:drive-mount && sudo mount /mnt/g\n`,
     );
     expect(readlinkSync(join(ctx.home, ".zshenv"))).toBe(
-      join(REPO, "zsh/zshenv"),
+      join(REPO, "config/zsh/zshenv"),
     );
     expect(readlinkSync(join(ctx.home, "Google Drive"))).toBe("/mnt/g");
     expect(result.stdout.toString()).toContain(

@@ -79,7 +79,7 @@ test("registry links all owner units; owner deployment enables triggers without 
   ).toBeUndefined();
   expect(calls).toEqual([]);
   const timer = await readFile(
-    join(ctx.dotfiles, "agx/agx-doctor.timer"),
+    join(ctx.dotfiles, "agents/agx/agx-doctor.timer"),
     "utf8",
   );
   expect(timer).toContain("OnBootSec=60s");
@@ -91,7 +91,7 @@ test("registry links all owner units; owner deployment enables triggers without 
     false,
   );
   const service = await readFile(
-    join(ctx.dotfiles, "agx/agx-doctor.service"),
+    join(ctx.dotfiles, "agents/agx/agx-doctor.service"),
     "utf8",
   );
   expect(service).toContain("Type=oneshot");

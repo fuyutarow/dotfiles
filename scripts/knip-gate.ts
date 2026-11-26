@@ -173,10 +173,10 @@ export async function roots(root: string): Promise<string[]> {
     );
     for (const match of matches) await add(match[1] ?? "");
   }
-  // A unit lives beside the tool it runs: tools/<name>/ or agx/.
+  // A unit lives beside the tool it runs: tools/<name>/ or agents/agx/.
   const units = [
     ...(await Array.fromAsync(
-      new Bun.Glob("agx/*.service").scan({ cwd: root }),
+      new Bun.Glob("agents/agx/*.service").scan({ cwd: root }),
     )),
     ...(await Array.fromAsync(
       new Bun.Glob("tools/*/*.service").scan({ cwd: root }),
@@ -225,11 +225,14 @@ export async function roots(root: string): Promise<string[]> {
     ["scripts/link-dots.ts", "scripts/render-home.ts"],
     ["scripts/lint-skills-floor.ts", "scripts/tracked-files.ts"],
     [
-      "wsl/guest-capacity-recover.service.wsl",
+      "config/wsl/guest-capacity-recover.service.wsl",
       "scripts/guest-capacity-recover.ts",
     ],
-    ["wsl/wsl-capacity-recover.service.wsl", "scripts/wsl-capacity-recover.ts"],
-    ["topgrade/topgrade.toml", "agents/codex/codex-update.ts"],
+    [
+      "config/wsl/wsl-capacity-recover.service.wsl",
+      "scripts/wsl-capacity-recover.ts",
+    ],
+    ["config/topgrade/topgrade.toml", "agents/codex/codex-update.ts"],
     ["agents/codex/codex-runtime.ts", "agents/codex/codex-wsl.ts"],
     ["agents/codex/windows-assets.ts", "agents/codex/windows-hook.ts"],
     [
@@ -415,7 +418,7 @@ async function main() {
     return fatal(`knip exited ${exit}: ${stderr}`);
   const result = evaluateKnipOutput(
     stdout,
-    await Bun.file(join(repoRoot, "lint/knip-exceptions.toml")).text(),
+    await Bun.file(join(repoRoot, "scripts/lint/knip-exceptions.toml")).text(),
   );
   for (const line of result.messages) process.stdout.write(`${line}\n`);
   if (result.messages.length === 0)

@@ -18,7 +18,7 @@ const GiB = 1024 ** 3;
 // Executables resolve against the PATH the systemd unit gives the controller, not the test's.
 const SERVICE_PATH =
   readFileSync(
-    join(ROOT, "wsl/wsl-capacity-recover.service.wsl"),
+    join(ROOT, "config/wsl/wsl-capacity-recover.service.wsl"),
     "utf8",
   ).match(/^Environment=PATH=(.+)$/mu)?.[1] ?? "";
 

@@ -1,4 +1,4 @@
-// The zsh PROMPT's `user@host:MM-DD HH:MM+09|cwd` head (zsh/zshrc: `%n@%m:%D{%m-%d %H:%M}<offset>|%~`),
+// The zsh PROMPT's `user@host:MM-DD HH:MM+09|cwd` head (config/zsh/zshrc: `%n@%m:%D{%m-%d %H:%M}<offset>|%~`),
 // as plain text — the one home for that shape. Consumers: tools/statusline/src/statusline.ts (its row 1,
 // which it colors itself) and quote-command.ts (the /quote header, where it says who quoted
 // from where, and when). Zero-dep like every hook, so the statusline can import it too.
@@ -31,7 +31,7 @@ export const stampMDHM = (t: WallClock): string =>
  * The UTC offset, ISO 8601 short form: "+09:00" -> "+09", "+05:30" -> "+0530", "+00:00" -> "+00".
  * Machines now span time zones (the Mac in JST, a rented box in UTC), so a bare "00:47" no longer
  * says when; an offset is unambiguous where an abbreviation ("JST", "IST") is not (owner, 2026-10-06).
- * zsh/zshrc's prompt shortens %z the same way.
+ * config/zsh/zshrc's prompt shortens %z the same way.
  */
 export function offsetShort(z: Pick<Temporal.ZonedDateTime, "offset">): string {
   const m = /^([+-]\d{2}):(\d{2})/u.exec(z.offset);

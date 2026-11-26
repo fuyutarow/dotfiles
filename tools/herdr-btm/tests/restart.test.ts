@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 
 const entry = resolve(import.meta.dir, "../src/btmp.ts");
-const configPath = resolve(import.meta.dir, "../../../herdr/config.toml");
+const configPath = resolve(
+  import.meta.dir,
+  "../../../config/herdr/config.toml",
+);
 const Tabs = jsonOf(
   z.object({
     result: z.object({

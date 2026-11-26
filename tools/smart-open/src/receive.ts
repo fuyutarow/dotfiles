@@ -1,6 +1,6 @@
 // smart-open receiver — runs on the machine you sit at (the Mac), opens what a remote
 // `smart-open` sends it. Started at login by tools/smart-open/smart-open-receiver.plist.mac (launchd).
-// ssh/config forwards the remote /tmp/smart-open-$USER--<alias>.sock to this socket, so it is reachable
+// config/ssh/config forwards the remote /tmp/smart-open-$USER--<alias>.sock to this socket, so it is reachable
 // only through your own ssh connections; the socket file itself is owner-only.
 //
 // Protocol: one JSON line in — {"url": "..."} or {"path": "/abs", "kind": "file"|"dir", "host":
@@ -30,7 +30,7 @@
 //                 the remote's own screen.
 // What the editor then runs is VS Code's business (remote-path prompt, Workspace Trust).
 // Obsidian accepts directories only. After the attach alias is vouched, the Mac's resolved
-// hostname/port/user/proxyjump go to obsidian/open-remote.ts, which registers a local Remote SSH
+// hostname/port/user/proxyjump go to config/obsidian/open-remote.ts, which registers a local Remote SSH
 // shadow, applies pinned plugins, sets the absolute remotePath and auto-connect id, trusts it,
 // and opens it. This branch waits for the complete operation (protocol.ts), never an early ok.
 //
@@ -267,10 +267,10 @@ async function runOpener(url: string, settle = settleMs): Promise<string> {
   return `refused: opener exited ${early}`;
 }
 
-// A Host alias as ssh/config spells one. Leading alnum, so it can never be read as an ssh option.
+// A Host alias as config/ssh/config spells one. Leading alnum, so it can never be read as an ssh option.
 const HOST = /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/u;
 
-// What `ssh -G` RESOLVES an alias to: asking ssh keeps ssh/config the one place that says which
+// What `ssh -G` RESOLVES an alias to: asking ssh keeps config/ssh/config the one place that says which
 // boxes may open folders here — a parse of our own would drift from ssh's Include/Match rules.
 type Resolved = {
   target: string; // hostname:port as user — the box a connection would actually reach
@@ -401,7 +401,7 @@ async function handlePath(
     code.target !== attach.target
   ) {
     note("no editor alias");
-    return `refused: ${editor} must reach the same box as ${h} without the smart-open forward (ssh/config)`;
+    return `refused: ${editor} must reach the same box as ${h} without the smart-open forward (config/ssh/config)`;
   }
   const left = Math.floor(settleMs - (performance.now() - start));
   if (left < 1) {
@@ -425,7 +425,7 @@ async function openObsidian(
       // The helper receives only Mac-resolved SSH fields, never remote-supplied connection data.
       const helper =
         process.env["SMART_OPEN_OBSIDIAN_OPENER"] ??
-        join(import.meta.dir, "../../../obsidian/open-remote.ts");
+        join(import.meta.dir, "../../../config/obsidian/open-remote.ts");
       const proc = Bun.spawn([process.execPath, helper], {
         stdin: new Blob([
           JSON.stringify({

@@ -518,7 +518,9 @@ export async function candidateFindings(
     [...entries].filter(
       ([path]) =>
         selected(RENDER_INPUTS, path) ||
-        ["mise.toml", "mise.lock", "mise/dotfiles.toml"].includes(path) ||
+        ["mise.toml", "mise.lock", "config/mise/dotfiles.toml"].includes(
+          path,
+        ) ||
         path.endsWith("package.json"),
     ),
   );

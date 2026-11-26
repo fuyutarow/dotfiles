@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 // wsl-interop-session — print the /run/WSL/*_interop socket whose Windows processes run in the
 // owner's INTERACTIVE desktop session (explorer.exe's SessionId), so the clipboard read shim
-// (wsl/bin/wsl-clipboard) reads the clipboard the owner just wrote with Win+Shift+S.
+// (config/wsl/bin/wsl-clipboard) reads the clipboard the owner just wrote with Win+Shift+S.
 //
-// Consumer: wsl/bin/wsl-clipboard, as `WSL_INTEROP=$(bun wsl-interop-session.ts)`. stdout is the
+// Consumer: config/wsl/bin/wsl-clipboard, as `WSL_INTEROP=$(bun wsl-interop-session.ts)`. stdout is the
 // socket path and nothing else. Exit: 0 chosen · 1 no socket qualifies (stderr says why) or unknown flag · 2 stray arguments.
 //
 // WHY. Windows clipboards are per Windows session. A process started through a stale or
@@ -11,7 +11,7 @@
 // capture made in session 1 (measured 2026-11-18: `powershell.exe` via /run/WSL/2_interop →
 // SessionId 0, formats `System.Drawing.Bitmap, Bitmap`; via 1646784_interop → SessionId 1, formats
 // also `PNG`). Every long-lived `claude` pane keeps the WSL_INTEROP it inherited at start — a
-// socket (/run/WSL/554_interop) that may no longer exist, and zsh/zshenv picks the newest socket
+// socket (/run/WSL/554_interop) that may no longer exist, and config/zsh/zshenv picks the newest socket
 // without spawning, so it cannot know the session. Sockets outlive their sessions, so liveness
 // and session both have to be measured, here, by spawning.
 //

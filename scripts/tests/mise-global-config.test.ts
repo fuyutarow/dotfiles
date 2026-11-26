@@ -32,7 +32,7 @@ test.each([
       );
       const signal = AbortSignal.timeout(10_000);
       const child = Bun.spawn(
-        ["zsh", "zsh/tests/mise-scope.test.zsh", "--global-config-only"],
+        ["zsh", "config/zsh/tests/mise-scope.test.zsh", "--global-config-only"],
         {
           cwd: root,
           env: { ...process.env, XDG_CONFIG_HOME: fixture },

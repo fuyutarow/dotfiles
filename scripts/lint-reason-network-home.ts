@@ -18,11 +18,11 @@ export async function reasonNetworkHomeViolations(
   const zsh = new Bun.Glob("**/*");
   const paths = [...declarations];
   for await (const path of zsh.scan({
-    cwd: join(root, "zsh"),
+    cwd: join(root, "config/zsh"),
     onlyFiles: true,
     dot: true,
   }))
-    paths.push(`zsh/${path}`);
+    paths.push(`config/zsh/${path}`);
   const violations: string[] = [];
   for (const path of paths) {
     const lines = (await readFile(join(root, path), "utf8")).split("\n");

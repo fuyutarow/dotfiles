@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.2 — 2026-11-27
+
+- Paths follow the repository's move of topic directories under config/ (for example config/cocoindex, config/zsh).
+
 ## 0.22.1 — 2026-11-25
 
 - Unavailable fleet sessions carry a kind (missing, invalid); readers branch on it instead of searching the reason text, and a paused GPU probe is recognised by its paused flag alone.

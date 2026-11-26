@@ -7,7 +7,7 @@
 // a coordinator script ran `rip --graveyard <repo>/.graveyard-gc` on every land, and 36G piled up
 // where no reclaim could see it.
 //
-// The declared graveyard is `${XDG_DATA_HOME:-$HOME/.local/share}/graveyard` (zsh/zshenv). Denied:
+// The declared graveyard is `${XDG_DATA_HOME:-$HOME/.local/share}/graveyard` (config/zsh/zshenv). Denied:
 //   - `rip --graveyard X` / `rip --graveyard=X` where X is not the declared graveyard;
 //   - `GRAVEYARD=X` / `RIP_GRAVEYARD=X` before rip, including `env NAME=X rip …`, when X is not
 //     the declared graveyard, and the same assignment as a statement or as an `export` argument
@@ -51,7 +51,7 @@ function homeDir(env: Record<string, string | undefined>): string {
   return home !== undefined && home !== "" ? home : homedir();
 }
 
-/** The graveyard zsh/zshenv declares; an empty XDG_DATA_HOME is unset, as in `:-`. */
+/** The graveyard config/zsh/zshenv declares; an empty XDG_DATA_HOME is unset, as in `:-`. */
 export function declaredGraveyard(
   env: Record<string, string | undefined> = process.env,
 ): string {

@@ -89,8 +89,8 @@ describe("config-map findings", () => {
   test("a file under a registered directory or equal to a source is covered", async () => {
     expect(
       await findings(
-        [row(["mise.toml", "karabiner"])],
-        ["mise.toml", "karabiner/karabiner.json"],
+        [row(["mise.toml", "config/karabiner"])],
+        ["mise.toml", "config/karabiner/karabiner.json"],
       ),
     ).toEqual([]);
   });
@@ -106,7 +106,10 @@ describe("config-map findings", () => {
 
   test("a prefix that is not a path segment does not cover (karabiner ≠ karabiner-old)", async () => {
     expect(
-      await findings([row(["karabiner"])], ["karabiner-old/a.json"]),
+      await findings(
+        [row(["config/karabiner"])],
+        ["config/karabiner-old/a.json"],
+      ),
     ).toHaveLength(1);
   });
 

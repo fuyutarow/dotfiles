@@ -49,6 +49,22 @@ export async function trackedFiles(
   options: Options,
   cwd = process.cwd(),
 ): Promise<Selection> {
+  // jj is the record when present: a jj workspace's Git index can lag its tree (a moved file stays
+  // listed at its old path), so only a Git-index caller reads the index there.
+  const jjListing = options.gitIndex
+    ? undefined
+    : await run(
+        ["jj", "--ignore-working-copy", "file", "list", "-T", 'path ++ "\\0"'],
+        cwd,
+      );
+  if (jjListing?.code === 0)
+    return selection(
+      jjListing.stdout
+        .split("\0")
+        .filter(Boolean)
+        .filter((path) => matchesJjPath(path, options.pathspecs)),
+      options.expectNonEmpty,
+    );
   const gitRoot = await run(["git", "rev-parse", "--show-toplevel"], cwd);
   if (gitRoot.code === 0) {
     const listing = await run(

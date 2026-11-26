@@ -11,7 +11,7 @@ test.skipIf(process.platform !== "darwin")(
   "Edge policy is a valid property list using the platform validator",
   () => {
     const result = Bun.spawnSync(
-      ["plutil", "-lint", join(REPO, "edge/policy.plist.mac")],
+      ["plutil", "-lint", join(REPO, "config/edge/policy.plist.mac")],
       { timeout: 5000 },
     );
     expect(result.exitCode).toBe(0);
@@ -20,7 +20,7 @@ test.skipIf(process.platform !== "darwin")(
 
 const version = Bun.spawnSync(["ssh", "-V"], { timeout: 5000 });
 const host = Bun.spawnSync(
-  ["ssh", "-G", "-F", join(REPO, "ssh/config"), "r99-u24"],
+  ["ssh", "-G", "-F", join(REPO, "config/ssh/config"), "r99-u24"],
   { timeout: 5000 },
 );
 const attaches = !host.stdout
@@ -29,7 +29,7 @@ const attaches = !host.stdout
   .includes("hostname r99-u24");
 
 test.skipIf(!sshSupportsAttachMatch(version.stderr.toString()) || !attaches)(
-  "smart-open: the deployed ssh/config agrees with tools/shared/src/sockets.ts",
+  "smart-open: the deployed config/ssh/config agrees with tools/shared/src/sockets.ts",
   () => {
     const cache = mkdtempSync(join(tmpdir(), "doctor-live-bun-cache-"));
     const result = Bun.spawnSync(

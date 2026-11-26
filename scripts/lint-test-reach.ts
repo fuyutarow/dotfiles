@@ -1,11 +1,11 @@
 // `mise run lint:test-reach` — every tracked *.test.ts / *.test.zsh is run by `test`, or is named,
-// with a reason, in lint/test-reach-exceptions.toml. A test no task reaches rots unseen: it
+// with a reason, in scripts/lint/test-reach-exceptions.toml. A test no task reaches rots unseen: it
 // passes in nobody's gate, so its failures are found by nobody.
 //
 // Reach is read from the mise task graph (`mise tasks ls --json --hidden`), never from a
 // second list: a file is reached when a path or glob in the `run` body of a task reachable
 // from `test` covers it, when a launcher script such as scripts/test-zsh.ts names it, or when
-// a reached zsh test sources it (zsh/tests/terminal-hygiene.test.zsh sources its siblings), or
+// a reached zsh test sources it (config/zsh/tests/terminal-hygiene.test.zsh sources its siblings), or
 // when the task launches scripts/test-units.ts and the runner's discovery (`unitsOf`) covers it.
 import { resolve } from "node:path";
 import { Result } from "@dotfiles/shared/src/result.ts";
@@ -72,7 +72,7 @@ export function runReferences(run: string): string[] {
   ];
 }
 
-// A reference `$ROOT/zsh/tests/x.test.zsh` names the file once its unknown leading
+// A reference `$ROOT/config/zsh/tests/x.test.zsh` names the file once its unknown leading
 // segments are dropped, so try every suffix of two or more segments (never for a glob:
 // the suffix `*/tests` of `tools/*/tests` would cover every tests directory).
 function suffixes(reference: string): string[] {
@@ -260,7 +260,7 @@ async function readExceptions(
   root: string,
 ): Promise<Loaded<Record<string, string>>> {
   const text = await Bun.file(
-    resolve(root, "lint/test-reach-exceptions.toml"),
+    resolve(root, "scripts/lint/test-reach-exceptions.toml"),
   ).text();
   const parsed = parseToml(text);
   if (parsed.isErr())
@@ -277,11 +277,11 @@ async function readExceptions(
 function report(verdict: Verdict): void {
   for (const file of verdict.unreached)
     process.stderr.write(
-      `FAIL ${file}: no task reachable from \`test\` runs it; add it to a test task or name it in lint/test-reach-exceptions.toml with a reason\n`,
+      `FAIL ${file}: no task reachable from \`test\` runs it; add it to a test task or name it in scripts/lint/test-reach-exceptions.toml with a reason\n`,
     );
   for (const path of verdict.stale)
     process.stderr.write(
-      `FAIL ${path}: lint/test-reach-exceptions.toml covers no unreached tracked file; remove the entry\n`,
+      `FAIL ${path}: scripts/lint/test-reach-exceptions.toml covers no unreached tracked file; remove the entry\n`,
     );
 }
 

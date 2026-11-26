@@ -13,5 +13,5 @@ if (to === null) {
 }
 
 const res =
-  await $`${to} 120 zsh zsh/tests/terminal-hygiene.test.zsh`.nothrow();
+  await $`${to} 120 zsh config/zsh/tests/terminal-hygiene.test.zsh`.nothrow();
 process.exit(res.exitCode ?? 1);

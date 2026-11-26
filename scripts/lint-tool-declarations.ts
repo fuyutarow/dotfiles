@@ -11,12 +11,12 @@
 //   README      a table row keyed by the tool name has the declared Kind and Reason (= purpose);
 //               every other declared bin has a row too
 //   registry    scripts/config-registry.ts lists tools/<name>/package.json and tool.toml as sources
-//   shell       the file exists, and zsh/aliases.zsh TOOL_SHELL_FRAGMENTS lists exactly the
+//   shell       the file exists, and config/zsh/aliases.zsh TOOL_SHELL_FRAGMENTS lists exactly the
 //               declared fragments (no more, no fewer)
 //   probes      the file exists and mise.toml's task runs it through scripts/tool-probe.ts
 //   consumers   each file exists and still mentions a declared bin or a function the fragment defines
 //   undeclared  a *.zsh file or a src/doctor-*.ts under the tool that its declaration does not name
-// Ratchet: lint/tool-declarations-baseline.txt lists the tools without tool.toml; a tool outside
+// Ratchet: scripts/lint/tool-declarations-baseline.txt lists the tools without tool.toml; a tool outside
 // the list without a declaration, or a listed tool that declares (or is gone), fails.
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -28,8 +28,8 @@ import {
   type LoadedTool,
 } from "@dotfiles/shared/src/tool-declaration.ts";
 
-export const BASELINE = "lint/tool-declarations-baseline.txt";
-export const FRAGMENT_LIST = "zsh/aliases.zsh";
+export const BASELINE = "scripts/lint/tool-declarations-baseline.txt";
+export const FRAGMENT_LIST = "config/zsh/aliases.zsh";
 
 const Manifest = jsonOf(
   z.looseObject({
@@ -75,7 +75,7 @@ export function readmeRows(
   return rows;
 }
 
-/** The entries of `TOOL_SHELL_FRAGMENTS=( … )` in zsh/aliases.zsh; undefined if the list is absent. */
+/** The entries of `TOOL_SHELL_FRAGMENTS=( … )` in config/zsh/aliases.zsh; undefined if the list is absent. */
 export function fragmentList(zsh: string): string[] | undefined {
   const match = /^TOOL_SHELL_FRAGMENTS=\(([^)]*)\)/mu.exec(zsh);
   if (match?.[1] === undefined) return undefined;
@@ -321,7 +321,7 @@ export async function toolDeclarationProblems(
   for (const tool of declared)
     problems.push(...(await checkTool(root, tool, context)));
 
-  // The list in zsh/aliases.zsh may hold nothing a declaration does not name.
+  // The list in config/zsh/aliases.zsh may hold nothing a declaration does not name.
   const list =
     context.aliases === undefined ? [] : (fragmentList(context.aliases) ?? []);
   const named = new Set(

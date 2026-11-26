@@ -41,7 +41,7 @@ consola.setReporters([
 // form that survives both legs unchanged.
 //
 // ALIASES, NOT ADDRESSES. The defaults are ssh ALIASES. This repo is public, so HostName/Port/User
-// live only in the untracked ~/.ssh/config.local that ssh/config Includes first. Same rule as
+// live only in the untracked ~/.ssh/config.local that config/ssh/config Includes first. Same rule as
 // wsl-wake.ts.
 //
 // MEASURE THE VHDX WITH `du`, NEVER WITH PowerShell's Get-Item.Length. On a sparse file Length is

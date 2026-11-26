@@ -4,7 +4,7 @@
 //
 // WHERE IT OPENS, in order (first that succeeds wins):
 //   1. URL + a live client receiver  → the CLIENT machine. When you drive this box from a Mac over
-//      `ssh` / `herdr --remote`, ssh/config's RemoteForward exposes the Mac's receiver
+//      `ssh` / `herdr --remote`, config/ssh/config's RemoteForward exposes the Mac's receiver
 //      (tools/smart-open/src/receive.ts) here as /tmp/smart-open-$USER--<client alias>.sock (the newest one
 //      wins). Opening "here" would put the page on a screen nobody is in front of — that was the
 //      old WSL `o` (explorer.exe, always).
@@ -38,7 +38,7 @@
 // over ssh, or over a loopback ssh (see above); a path also stops at `no answer` and `refused` (exit 1):
 //   no socket    not attached over ssh, or no forward         → open here, silently
 //   dead bind    ECONNREFUSED: left by a dropped connection.  → open here. sshd re-binds over it where
-//                wsl/sshd-dotfiles.conf is installed; elsewhere it is removed here — but only if it is
+//                config/wsl/sshd-dotfiles.conf is installed; elsewhere it is removed here — but only if it is
 //                still the very file we probed, since a newer connection may have re-bound the path
 //   no answer    accepts but sends no `ok` within ACK_MS, closes without answering, or cannot be
 //                connected to for a reason other than "nobody listens" (EACCES, ECONNRESET): the Mac
@@ -453,7 +453,7 @@ function refusalHint(reply: string): string {
   if (reply.includes("without the smart-open forward"))
     return " — on the Mac, give ~/.ssh/config.local's Host line for this box the -code alias too (e.g. `Host r99-u24 r99-u24-code`)";
   if (reply.includes("no ssh host"))
-    return " — the alias rides in the forward's socket name (ssh/config: RemoteForward /tmp/smart-open-%r--%n.sock); reattach from the client so it is bound under that name";
+    return " — the alias rides in the forward's socket name (config/ssh/config: RemoteForward /tmp/smart-open-%r--%n.sock); reattach from the client so it is bound under that name";
   return "";
 }
 

@@ -6,7 +6,7 @@
 //   login      an interactive login lands in zsh with the dotfiles aliases loaded
 //   pane       an interactive NON-login shell (how herdr opens a pane: `$SHELL`, no -l) does too
 //   agents     codex and claude logged in; Jev's key opens via fnox (else stated as WARN)
-//   time-zone  the box's clock reads the human's time zone (zsh/timezone, e.g. +0900)
+//   time-zone  the box's clock reads the human's time zone (config/zsh/timezone, e.g. +0900)
 //   commands   every alias target and topic command (btm, herdr, …) resolves there
 //   smart-open a host tagged `Tag smart-open` gets its forwarded socket bound on attach
 // Every check here was first a hand-run ssh during the 2026-10-05 rentals, and two of them found
@@ -324,11 +324,11 @@ async function checkAgents(host: string): Promise<Finding> {
       );
 }
 
-// The human's time zone reaches the box (zsh/zshenv, zsh/bashrc): a rented box runs in UTC, and a
+// The human's time zone reaches the box (config/zsh/zshenv, config/zsh/bashrc): a rented box runs in UTC, and a
 // TZ whose zone file is missing would silently fall back to UTC — so this asks the clock itself.
-// The zone NAME is read from this checkout's zsh/timezone (its one home); the offset to expect is
+// The zone NAME is read from this checkout's config/zsh/timezone (its one home); the offset to expect is
 // that zone's offset NOW, in `date +%z` form, so a DST zone is judged at the moment of the probe.
-const ZONE_PATH = join(import.meta.dir, "..", "zsh", "timezone");
+const ZONE_PATH = join(import.meta.dir, "..", "config", "zsh", "timezone");
 
 /** `date +%z` for `zone` at this instant: "+09:00" -> "+0900". */
 export function wantOffset(zone: string): string {
@@ -359,7 +359,7 @@ async function checkTimeZone(host: string): Promise<Finding> {
     "FAIL",
     `${host}'s clock reads ${off}, not ${want} (TZ=${marker(r.out, "TZ") ?? "?"}, ${ZONE} zone file ${zoneFile ? "present" : "MISSING"})`,
     zoneFile
-      ? "pull dotfiles there (zsh/zshenv and zsh/bashrc export TZ from zsh/timezone)"
+      ? "pull dotfiles there (config/zsh/zshenv and config/zsh/bashrc export TZ from config/zsh/timezone)"
       : `install the tz database there (Debian/Ubuntu: tzdata) — without it TZ=${ZONE} would read as UTC`,
   );
 }
@@ -399,8 +399,8 @@ function shellVerdict(name: string, what: string, r: Ran): Finding {
       ? `${what} is not zsh`
       : `${what} is zsh ${zsh} but the dotfiles aliases are not loaded`,
     zsh === "none"
-      ? "where chsh is not ours: mise run link:dots links ~/.bash_profile and ~/.bashrc (zsh/bash_profile, zsh/bashrc) to hand bash to zsh"
-      : "mise run link:dots (zprofile → sheldon → zsh/aliases.zsh)",
+      ? "where chsh is not ours: mise run link:dots links ~/.bash_profile and ~/.bashrc (config/zsh/bash_profile, config/zsh/bashrc) to hand bash to zsh"
+      : "mise run link:dots (zprofile → sheldon → config/zsh/aliases.zsh)",
   );
 }
 
@@ -425,7 +425,7 @@ async function checkPane(host: string): Promise<Finding> {
 // 2026-10-05 boxes (gh, claude, topgrade, btm) — each found by hand. This asks for all of them at once.
 const TOPIC_COMMANDS = [
   "btm",
-  "bun", // interactive only: Claude Code hooks run `bun …` (zsh/zshrc runtime dir)
+  "bun", // interactive only: Claude Code hooks run `bun …` (config/zsh/zshrc runtime dir)
   "cargo",
 
   "herdr",

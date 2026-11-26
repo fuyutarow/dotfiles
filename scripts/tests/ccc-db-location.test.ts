@@ -1,5 +1,5 @@
-// bun test: the ccc index DB location has ONE declaration, cocoindex/db-root, and every consumer
-// follows it. The client (zsh/zshenv), the supervised daemon (cocoindex/ccc-daemon-launch.py via
+// bun test: the ccc index DB location has ONE declaration, config/cocoindex/db-root, and every consumer
+// follows it. The client (config/zsh/zshenv), the supervised daemon (config/cocoindex/ccc-daemon-launch.py via
 // ccc_db_mapping.py) and disk-reclaim's ccc-index-db target must resolve the same directory; a
 // second hand-written copy of the value anywhere in the repo fails here.
 import { afterAll, describe, expect, test } from "bun:test";
@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import { declaredDbRoot } from "@dotfiles/disk-reclaim/src/targets/ccc-index-db.ts";
 
 const REPO = resolve(import.meta.dir, "../..");
-const DECLARATION = join(REPO, "cocoindex/db-root");
+const DECLARATION = join(REPO, "config/cocoindex/db-root");
 const homes: string[] = [];
 afterAll(async () => {
   await Promise.all(
@@ -27,9 +27,9 @@ async function declaredRelative(): Promise<string> {
   return (await readFile(DECLARATION, "utf8")).trim();
 }
 
-/** The mapping a fresh zsh exports for a client, via the real zsh/zshenv linked as ~/.zshenv. */
+/** The mapping a fresh zsh exports for a client, via the real config/zsh/zshenv linked as ~/.zshenv. */
 async function clientMapping(home: string): Promise<string> {
-  await symlink(join(REPO, "zsh/zshenv"), join(home, ".zshenv"));
+  await symlink(join(REPO, "config/zsh/zshenv"), join(home, ".zshenv"));
   const child = Bun.spawn(
     ["zsh", "-c", 'print -r -- "${COCOINDEX_CODE_DB_PATH_MAPPING-UNSET}"'],
     {
@@ -56,7 +56,7 @@ async function daemonMapping(home: string): Promise<string> {
       "-c",
       [
         "import sys",
-        `sys.path.insert(0, ${JSON.stringify(join(REPO, "cocoindex"))})`,
+        `sys.path.insert(0, ${JSON.stringify(join(REPO, "config", "cocoindex"))})`,
         "import ccc_db_mapping",
         `print(ccc_db_mapping.mapping(${JSON.stringify(home)}))`,
       ].join("; "),
@@ -85,7 +85,7 @@ async function daemonModuleExit(
       "-c",
       [
         "import sys, pathlib",
-        `sys.path.insert(0, ${JSON.stringify(join(REPO, "cocoindex"))})`,
+        `sys.path.insert(0, ${JSON.stringify(join(REPO, "config", "cocoindex"))})`,
         "import ccc_db_mapping",
         `ccc_db_mapping.mapping(${JSON.stringify(home)}, pathlib.Path(${JSON.stringify(declaration)}))`,
       ].join("; "),
@@ -135,12 +135,12 @@ describe("ccc index DB location: one declaration", () => {
 
   test("the daemon unit carries no second copy and the launcher installs the declared mapping", async () => {
     const unit = await readFile(
-      join(REPO, "cocoindex/ccc-daemon.service.wsl"),
+      join(REPO, "config/cocoindex/ccc-daemon.service.wsl"),
       "utf8",
     );
     expect(unit).not.toMatch(/^Environment="?COCOINDEX_CODE_DB_PATH_MAPPING/mu);
     const launcher = await readFile(
-      join(REPO, "cocoindex/ccc-daemon-launch.py"),
+      join(REPO, "config/cocoindex/ccc-daemon-launch.py"),
       "utf8",
     );
     expect(launcher).toContain("from ccc_db_mapping import install");

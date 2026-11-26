@@ -115,14 +115,14 @@ test("WS-GC-TIMER: registry links both units and the only service command uses s
     link(f.ctx, row[1], join(f.home, row[2]));
     expect(await readlink(join(f.home, row[2]))).toBe(join(REPO, row[1]));
   }
-  const service = await Bun.file(join(REPO, "agx/ws-gc.service")).text();
+  const service = await Bun.file(join(REPO, "agents/agx/ws-gc.service")).text();
   expect(service.split("\n").filter((line) => line.startsWith("Exec"))).toEqual(
     ["ExecStart=/usr/bin/env bun %h/dotfiles/scripts/ws-gc-log.ts"],
   );
   expect(service).toContain("StandardOutput=journal");
   expect(service).toContain("StandardError=journal");
   expect(service).not.toContain("--abandoned");
-  const timer = await Bun.file(join(REPO, "agx/ws-gc.timer")).text();
+  const timer = await Bun.file(join(REPO, "agents/agx/ws-gc.timer")).text();
   expect(timer).toContain("OnBootSec=5min");
   expect(timer).toContain("OnUnitActiveSec=1h");
   expect(timer).toContain("Unit=ws-gc.service");

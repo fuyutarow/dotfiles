@@ -2,7 +2,7 @@
 // (scripts/doctor.ts, checkSmartOpen) must AGREE on, defined once so they cannot drift apart:
 // the two socket paths, the two timings that couple the client's patience to the receiver's
 // answer, and the one file operation the client performs on the remote socket.
-// ssh/config's `RemoteForward` spells the path pair in ssh's own token syntax (%r = the remote
+// config/ssh/config's `RemoteForward` spells the path pair in ssh's own token syntax (%r = the remote
 // user, %n = the host alias as typed on the client, %d = the local home); that is a different
 // language and cannot import this file, so the doctor compares what ssh RESOLVES it to against the
 // two path functions.
@@ -16,7 +16,7 @@ const missingEntryOptions = { bigint: false as const, throwIfNoEntry: false };
 
 /**
  * Where sshd binds the forward on the REMOTE box: one per user AND client alias. The alias is in
- * the NAME (ssh/config's `%n`) because it is the one thing the remote cannot learn otherwise, and a
+ * the NAME (config/ssh/config's `%n`) because it is the one thing the remote cannot learn otherwise, and a
  * path request needs it (the client's VS Code connects back to <alias>-code). A file name is read
  * fresh by every invocation; an environment variable is frozen into a long-lived herdr server at
  * its first attach, where no relogin can ever refresh it.
@@ -100,7 +100,7 @@ export async function fileKeyAsync(path: string): Promise<FileKey | undefined> {
  * Remove `path` only if it is still the very file `seen` described, and say whether it did. A dead
  * bind is worth removing; a LIVE one that a newer ssh connection bound at the same path while we
  * were probing is not. unlink-by-path cannot be made atomic with the check, so a window of
- * microseconds remains; sshd's own StreamLocalBindUnlink (wsl/sshd-dotfiles.conf) is the primary
+ * microseconds remains; sshd's own StreamLocalBindUnlink (config/wsl/sshd-dotfiles.conf) is the primary
  * recovery, this is the fallback. A failing unlink (the file vanished in that window, or the path is
  * not ours to remove) is "did not remove", never an exception: the caller's job is still to open the URL.
  */

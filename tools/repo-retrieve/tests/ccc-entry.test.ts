@@ -55,7 +55,7 @@ async function fixture() {
   const entry = join(bin, "ccc");
   const deployedEntry = join(vendor, "ccc-entry");
   const wrapper = await Bun.file(
-    join(import.meta.dir, "../../../cocoindex/ccc-entry"),
+    join(import.meta.dir, "../../../config/cocoindex/ccc-entry"),
   ).text();
   await writeFile(deployedEntry, wrapper);
   await chmod(deployedEntry, 0o755);

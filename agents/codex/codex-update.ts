@@ -2,11 +2,11 @@ import { consola } from "consola";
 /**
  * Reconcile the declared Codex CLI update with the app-server version gap it can leave behind.
  *
- * Invoked as a topgrade custom step (see topgrade/topgrade.toml). It lives here, as a real
+ * Invoked as a topgrade custom step (see config/topgrade/topgrade.toml). It lives here, as a real
  * file, rather than inline in that TOML for two measured reasons:
  *
  * 1. Code inside a config string is invisible to every linter. This repo lints shell via
- *    `mise run lint:sh` over scripts/ tmux/scripts agents/claude lazygit .githooks — a
+ *    `mise run lint:sh` over scripts/ config/tmux/scripts agents/claude lazygit .githooks — a
  *    snippet in topgrade.toml is in none of them. A step that had NEVER once succeeded was
  *    committed and went unnoticed until 2026-08-24. As a .ts file it is covered by the
  *    existing `fmt:ts` / `lint:bun` tasks (`fd -e ts -E agents/skills .`).

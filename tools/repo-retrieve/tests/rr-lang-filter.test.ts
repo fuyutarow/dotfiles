@@ -32,10 +32,10 @@ const DB_ROOT_DECLARATION = join(
 //    through HOME, so the real one is restored (otherwise ccc waits for a daemon that is not
 //    there and may start a second, unmanaged one).
 //  - The index DB, and with it the INDEXED_AT freshness watermark, lives where the one
-//    declaration cocoindex/db-root says (zsh/zshenv exports it for interactive clients). A
+//    declaration config/cocoindex/db-root says (config/zsh/zshenv exports it for interactive clients). A
 //    verify environment without zshenv has no mapping and would look for the watermark inside
 //    the repo, report NO_INDEX (exit 3) and ask for a reindex of the shared root; so the mapping
-//    is derived from the declaration here, exactly as zsh/zshenv does.
+//    is derived from the declaration here, exactly as config/zsh/zshenv does.
 function liveEnv(): Record<string, string | undefined> {
   const home = userInfo().homedir;
   const root = readFileSync(DB_ROOT_DECLARATION, "utf8").trim();

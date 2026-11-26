@@ -8,7 +8,7 @@ import { jsonOf, z } from "@dotfiles/hooks/zod.ts";
 const consola = createConsola({ level: 4 });
 
 // The Windows half of the tool declarations: capture what winget manages on the host into
-// wsl/winget.win.json, or restore the host from it. Consumer: human/agent running
+// config/wsl/winget.win.json, or restore the host from it. Consumer: human/agent running
 // `mise run wsl:winget:dump` / `mise run wsl:winget:restore`; output is verdict lines.
 //
 // WHY THIS EXISTS. Brewfile.core and Brewfile.ondemand declare Homebrew tiers for macOS and WSL;
@@ -23,7 +23,7 @@ const consola = createConsola({ level: 4 });
 // winget-managed, and 96 survive export (17 fail source lookup: the tool prints "not available
 // from any source" for each — that is winget's contract, not a bug here). Everything else is
 // unmanaged: installers run by hand, the NVIDIA display driver (NOT in winget — CUDA is), Nsight,
-// MSI leftovers. wsl/winget.win.json is the part that is reproducible, not an inventory of the box.
+// MSI leftovers. config/wsl/winget.win.json is the part that is reproducible, not an inventory of the box.
 //
 // DIRECTION. Both verbs are one-way. `dump` reads the host and writes the repo file; `restore`
 // reads the repo file and drives the host. Neither reads the file it is about to write, so there
@@ -132,7 +132,7 @@ async function wingetPath(): Promise<string> {
   return p;
 }
 
-const repoFile = `${process.env["DOTFILES"] ?? `${process.env["HOME"]}/dotfiles`}/wsl/winget.win.json`;
+const repoFile = `${process.env["DOTFILES"] ?? `${process.env["HOME"]}/dotfiles`}/config/wsl/winget.win.json`;
 
 // A Windows temp path winget can write to, and the same path as seen from WSL.
 async function scratch(): Promise<{ win: string; wsl: string }> {
@@ -244,7 +244,7 @@ async function dump(): Promise<void> {
   }
   consola.success(`wrote ${repoFile}`);
   consola.info(
-    "Review with `git diff wsl/winget.win.json`; commit if the change is intended.",
+    "Review with `git diff config/wsl/winget.win.json`; commit if the change is intended.",
   );
 }
 
@@ -305,7 +305,7 @@ async function main(): Promise<Result<void, Error>> {
       parameters: ["<verb>"],
       help: {
         description:
-          "dump: capture the Windows host's winget packages into wsl/winget.win.json. restore: install what that file lists.",
+          "dump: capture the Windows host's winget packages into config/wsl/winget.win.json. restore: install what that file lists.",
       },
       flags: { dryRun: { type: Boolean, default: false } },
     },

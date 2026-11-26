@@ -45,7 +45,7 @@ test("candidate render includes imported siblings and refuses an unselected decl
       source.startsWith("@google-drive/") ||
       source.startsWith("agents/hooks") ||
       source === "agents/agx/agx.toml" ||
-      source === "zsh/timezone"
+      source === "config/zsh/timezone"
     )
       continue;
     const dest = join(base, source);
@@ -80,7 +80,7 @@ test("candidate render includes imported siblings and refuses an unselected decl
   await mkdir(join(base, "mise"), { recursive: true });
   await writeFile(join(base, "mise.toml"), "[tasks]\nfixture = 'true'\n");
   await writeFile(
-    join(base, "mise/dotfiles.toml"),
+    join(base, "config/mise/dotfiles.toml"),
     '[settings]\ndisable_tools = ["github:fuyutarow/agx", "github:fuyutarow/dx"]\n',
   );
   const manifest = jsonOf(z.record(z.string(), z.unknown())).safeParse(

@@ -107,7 +107,7 @@ describe("tracked-files.ts", () => {
 
     const lintBunPathspecs = [
       ":(glob)scripts/*.ts",
-      "android/line-notifications.ts",
+      "config/android/line-notifications.ts",
       ":(glob)tools/repo-retrieve/src/*.ts",
       ":(glob)agents/claude/*.ts",
       ":(glob)agents/claude/hooks/*.ts",

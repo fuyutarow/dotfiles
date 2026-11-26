@@ -2049,7 +2049,6 @@ test("row 3 sh is each agent pane's own footer count, never the plain panes of i
     new Map(),
     undefined,
     new Map(),
-    [],
     new Map(),
     shellCounts,
   );
@@ -2116,7 +2115,6 @@ test("widest agent pane splits its metadata into reports of at most 16 tokens", 
       new Map(),
       undefined,
       new Map(),
-      [],
       new Map(),
       new Map([[pane, 1]]),
     )

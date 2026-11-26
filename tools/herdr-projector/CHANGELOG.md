@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.3 — 2026-11-26
+
+- Row 2 shows every model in one format, the observed model and effort (opus-5.5 high, fable-5.2 medium); the agx roster lookup and its agx call are removed.
+
 ## 0.7.2 — 2026-11-26
 
 - A ? model on row 2 is explained on the alert row (model/effort unobserved), and the error mark is a one-cell text glyph that takes the row color instead of the emoji-font heavy X.

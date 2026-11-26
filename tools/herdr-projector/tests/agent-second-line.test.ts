@@ -7,42 +7,22 @@ import {
   metadataReportChunks,
   modelDetail,
   projectAgents,
-  rosterRow,
 } from "#src/herdr-projector.ts";
 
-test("a model the roster does not list shows its own name and effort, not ?", () => {
-  expect(modelDetail(rows, "claude", "Opus 5.5", "medium")).toBe("opus-medium");
-  expect(modelDetail(rows, "claude", "Fable 5.2", "high")).toBe(
-    "fable-5.2 high",
-  );
-  expect(modelDetail(rows, "claude", "claude-fable-5-2", "xhigh+WF")).toBe(
-    "fable-5-2 xhigh+WF",
-  );
-  expect(modelDetail(rows, "claude", "", "high")).toBeUndefined();
-  expect(modelDetail(rows, "claude", "Fable 5.2", "")).toBeUndefined();
+test("every model reads as its observed name and effort", () => {
+  expect(modelDetail("Opus 5.5", "high")).toBe("opus-5.5 high");
+  expect(modelDetail("Fable 5.2", "medium")).toBe("fable-5.2 medium");
+  expect(modelDetail("claude-opus-5-5", "xhigh+WF")).toBe("opus-5.5 xhigh+WF");
+  expect(modelDetail("GPT-6.1-Sol", "low")).toBe("gpt-6.1-sol low");
+  expect(modelDetail("", "high")).toBeUndefined();
+  expect(modelDetail("Fable 5.2", "")).toBeUndefined();
 });
-
-const rows = [
-  {
-    id: "opus-medium",
-    route: "claude",
-    model: "claude-opus-5-5",
-    effort: "medium",
-  },
-  { id: "terra-low", route: "codex", model: "gpt-6.1-terra", effort: "low" },
-  {
-    id: "opus-xhigh",
-    route: "claude",
-    model: "claude-opus-5-5",
-    effort: "xhigh",
-  },
-];
 
 test("hidden footer: session context forms the second line", async () => {
   for (const [vendor, model, effort, expected] of [
-    ["claude", "Opus 5.5", "medium", "opus-medium"],
-    ["codex", "GPT-6.1-Terra", "low", "terra-low"],
-    ["claude", "Opus 5.5", "xhigh+WF", "opus-xhigh+WF"],
+    ["claude", "Opus 5.5", "medium", "opus-5.5 medium"],
+    ["codex", "GPT-6.1-Terra", "low", "gpt-6.1-terra low"],
+    ["claude", "Opus 5.5", "xhigh+WF", "opus-5.5 xhigh+WF"],
   ] as const) {
     const id = "c602d8dc-0a46-438f-aca5-88a88ff0f0dd";
     const agents = [
@@ -84,7 +64,6 @@ test("hidden footer: session context forms the second line", async () => {
       new Map(),
       undefined,
       new Map(),
-      rows,
     );
     // Row 2 is two tokens: the model/effort part and the graded ctx token.
     expect(calls[1]).toContain(`agent_detail=${expected}`);
@@ -95,51 +74,6 @@ test("hidden footer: session context forms the second line", async () => {
     detail: "opus-medium",
     ctx: { token: "ctx_lo", text: "ctx 29%/700k" },
   });
-  expect(rosterRow(rows, "claude", "unknown", "medium")).toBeUndefined();
-});
-
-test("agx 11 roster: one id under claude-session and claude-api is one claude match", () => {
-  // Shape of `agx worker roster --json` from agx 11.0.0 (2026-11-13).
-  const agx11Rows = [
-    {
-      id: "haiku-low",
-      route: "claude-session",
-      model: "claude-haiku-5-5",
-      effort: "low",
-    },
-    {
-      id: "haiku-low",
-      route: "claude-api",
-      model: "claude-haiku-5-5",
-      effort: "low",
-    },
-    { id: "luna-low", route: "codex", model: "gpt-6-luna", effort: "low" },
-  ];
-  expect(rosterRow(agx11Rows, "claude", "Haiku 5.5", "low")).toBe("haiku-low");
-  expect(rosterRow(agx11Rows, "claude", "Haiku 5.5", "low+WF")).toBe(
-    "haiku-low+WF",
-  );
-  expect(
-    rosterRow(agx11Rows, "codex", "claude-haiku-5-5", "low"),
-  ).toBeUndefined();
-  expect(rosterRow(agx11Rows, "codex", "gpt-6-luna", "low")).toBe("luna-low");
-  // Two distinct ids for the same model/effort stay ambiguous.
-  expect(
-    rosterRow(
-      [
-        ...agx11Rows,
-        {
-          id: "haiku-cheap",
-          route: "claude-api",
-          model: "claude-haiku-5-5",
-          effort: "low",
-        },
-      ],
-      "claude",
-      "Haiku 5.5",
-      "low",
-    ),
-  ).toBeUndefined();
 });
 
 test("ctx level: 0, 69, 70, 89, 90 and unknown choose exactly one token, the rest are cleared", () => {
@@ -249,7 +183,6 @@ test("stale ctx token is cleared when the level changes between projections", as
       new Map(),
       undefined,
       new Map(),
-      rows,
     );
     return calls.filter((call) => call[1] === "report-metadata").flat();
   };

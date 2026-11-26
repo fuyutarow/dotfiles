@@ -1161,76 +1161,21 @@ export async function nativeCodexRc(
   return settings.data.remoteControlEnabled ? "rc:on" : "rc:off";
 }
 
-const Roster = z.object({
-  choice: z.array(
-    z.object({
-      id: z.string(),
-      route: z.string(),
-      model: z.string(),
-      effort: z.string(),
-    }),
-  ),
-});
-type RosterRows = z.output<typeof Roster>["choice"];
-
-function rosterModelKey(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/^(?:claude|gpt)[- ]/u, "")
-    .replaceAll(/[^a-z0-9]/gu, "");
-}
-
-/** The agent vendor an agx route runs: `claude-api` and `claude-session` both run claude. */
-export function routeVendor(route: string): string {
-  return route.startsWith("claude-") ? "claude" : route;
-}
-
 /**
- * Row 2's model part: the agx roster id when exactly one row matches, otherwise the observed
- * model and effort themselves (`fable-5-2 high`), so a model the roster does not list yet shows
- * what it is instead of `?`. Only an unobserved model or effort leaves it unknown.
+ * Row 2's model part: the observed model and effort, one format for every model
+ * (`opus-5.5 high`, `fable-5.2 medium`, `gpt-6.1-sol xhigh+WF`). Nothing is looked up, so a
+ * model no list names yet reads the same way. Only an unobserved model or effort is unknown.
  */
-export function modelDetail(
-  rows: RosterRows,
-  vendor: string,
-  model: string,
-  effort: string,
-): string | undefined {
-  const row = rosterRow(rows, vendor, model, effort);
-  if (row !== undefined && !row.startsWith("?")) return row;
-  if (model === "" || effort === "") return row;
+export function modelDetail(model: string, effort: string): string | undefined {
+  if (model === "" || effort === "") return undefined;
   const short = model
     .trim()
     .toLowerCase()
-    .replace(/^(?:claude|gpt)[- ]/u, "")
-    .replaceAll(/\s+/gu, "-");
+    .replace(/^claude[- ]/u, "")
+    .replaceAll(/\s+/gu, "-")
+    // An API id spells the version with a hyphen (opus-5-5); the display name with a dot.
+    .replace(/-(\d+)-(\d+)$/u, "-$1.$2");
   return `${short} ${effort}`;
-}
-
-/** Match observed model and effort to an agx roster row; ambiguous matches are unknown. */
-export function rosterRow(
-  rows: RosterRows,
-  vendor: string,
-  model: string,
-  effort: string,
-): string | undefined {
-  if (model === "" || effort === "") return undefined;
-  const workflow = effort.endsWith("+WF");
-  const baseEffort = workflow ? effort.slice(0, -3) : effort;
-  // agx 11 splits route `claude` into `claude-api` and `claude-session`, listing the same
-  // roster id under both; one id across those rows is still one match.
-  const ids = new Set(
-    rows
-      .filter(
-        (row) =>
-          routeVendor(row.route) === vendor &&
-          rosterModelKey(row.model) === rosterModelKey(model) &&
-          row.effort.toLowerCase() === baseEffort.toLowerCase(),
-      )
-      .map((row) => row.id),
-  );
-  if (ids.size !== 1) return workflow ? "?+WF" : undefined;
-  return `${[...ids][0]}${workflow ? "+WF" : ""}`;
 }
 
 /** Row 2's ctx part: the percentage is graded like cpu, an unknown reading is the neutral `ctx_off`. */
@@ -1331,7 +1276,6 @@ export async function projectAgents(
   reasons: ReadonlyMap<string, string> = new Map(),
   cpuSnapshot?: AgentCpuSnapshot,
   panePids: ReadonlyMap<string, PaneProcessIds> = new Map(),
-  roster: RosterRows = [],
   _contexts: ReadonlyMap<string, string> = new Map(),
   shellCounts?: ReadonlyMap<string, number>,
 ): Promise<number> {
@@ -1545,10 +1489,7 @@ export async function projectAgents(
       `effort=${effort}`,
       ...(isAgent
         ? agentSecondRowArgs(
-            agentSecondRow(
-              modelDetail(roster, vendor, model, effort),
-              contextText,
-            ),
+            agentSecondRow(modelDetail(model, effort), contextText),
           )
         : []),
       ...(marker !== ""
@@ -1724,10 +1665,6 @@ async function project(dryRun = false): Promise<number> {
     }),
   );
   await bindClaudePanes(agents, remoteControl);
-  const rosterResult = jsonOf(Roster).safeParse(
-    (await run("agx", ["worker", "roster", "--json"])) ?? "",
-  );
-  const roster = rosterResult.success ? rosterResult.data.choice : [];
   const panePids = await paneResourcePids(
     agents,
     (pane) => run("herdr", ["pane", "process-info", "--pane", pane]),
@@ -1795,7 +1732,6 @@ async function project(dryRun = false): Promise<number> {
           cpuSnapshot: agentCpuCacheInput(cpuSnapshot),
           panePids: [...panePids],
           contexts: [...contexts],
-          roster,
           shellCounts: [...shellCounts].toSorted(([a], [b]) =>
             a.localeCompare(b),
           ),
@@ -1820,7 +1756,6 @@ async function project(dryRun = false): Promise<number> {
     reasons,
     cpuSnapshot,
     panePids,
-    roster,
     contexts,
     shellCounts,
   );

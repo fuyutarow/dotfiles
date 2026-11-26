@@ -42,13 +42,46 @@ case "$HOST" in
   # +0900, so the prompt is rebuilt before each line with the :00 dropped — the same shape as
   # agents/claude/hooks/prompt-stamp.ts (statusline, /quote). Rebuilt per prompt, so a DST change
   # or a TZ= edit shows at once.
+  # A main checkout (~/Workspace/<repo>, jj) says when it is stale: `trunk⇣N` counts trunk()
+  # commits (alpha@origin as of the last fetch) that @ does not contain, and `@✎` marks an @ with
+  # changes and no description. Nothing is printed when @ is current and clean. The read skips
+  # the snapshot (--ignore-working-copy), so the prompt never waits on a large tree.
+  _prompt_trunk_lag() {
+    _prompt_lag=""
+    [[ $PWD == $HOME/Workspace/?* ]] || return 0
+    local top=${${PWD#$HOME/Workspace/}%%/*}
+    local repo=$HOME/Workspace/$top
+    [[ -d $repo/.jj ]] && (( $+commands[jj] )) || return 0
+    # Recompute only when the repo's operation log moved (commit, fetch, rebase, snapshot).
+    # The op head file names are the current operation ids, so they change with every operation.
+    local -a stamp=( "$repo"/.jj/repo/op_heads/heads/*(N:t) )
+    (( $#stamp )) || return 0
+    stamp=( "${(j:,:)stamp}" )
+    typeset -gA _prompt_lag_key _prompt_lag_val
+    if [[ ${_prompt_lag_key[$repo]} == "${stamp[1]}" ]]; then
+      _prompt_lag=${_prompt_lag_val[$repo]}
+      return 0
+    fi
+    local -a jjr=(jj --ignore-working-copy -R "$repo" --no-pager --color never log --no-graph)
+    local marks dirty
+    marks=$("${jjr[@]}" -n 100 -r '::trunk() ~ ::@' -T '"x"' 2>/dev/null) || return 0
+    dirty=$("${jjr[@]}" -r '@ & ~empty() & description(exact:"")' -T '"@"' 2>/dev/null)
+    local behind=${#marks}
+    (( behind >= 100 )) && behind=99+
+    [[ $behind != 0 ]] && _prompt_lag+=" %F{red}trunk⇣${behind}%f"
+    [[ $dirty == @ ]] && _prompt_lag+=" %F{yellow}@✎%f"
+    _prompt_lag_key[$repo]=${stamp[1]}
+    _prompt_lag_val[$repo]=$_prompt_lag
+    return 0
+  }
   _prompt_stamp() {
     local fmt='%D{%z}' z
     z=${(%)fmt}
     [[ $z == [+-][0-9][0-9]00 ]] && z=${z[1,3]}
     # The offset in dark gray (256-color 240), the statusline's same color: it is context,
     # not news, and at full cyan it read as part of the time (owner 2026-10-06).
-    _prompt_header="${uname}@${host}:%F{cyan}%D{%m-%d %H:%M}%f%F{240}${z}%f|${pwd}"
+    _prompt_trunk_lag
+    _prompt_header="${uname}@${host}:%F{cyan}%D{%m-%d %H:%M}%f%F{240}${z}%f|${pwd}${_prompt_lag}"
     # A multiline prompt is reprinted from its first line on ZLE redraw (notably SIGWINCH),
     # which stacks headers above the input line. Print the stamp outside PROMPT so ZLE owns
     # only the single input line and can redraw it without duplicating the header.

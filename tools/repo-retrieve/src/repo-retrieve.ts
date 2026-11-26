@@ -66,6 +66,7 @@ import {
   workElapsedMs,
   citationToken,
   headLabel,
+  lastReindexFailure,
   requestAutoReindex,
   resolveRegisteredProject,
   runIndexInit,
@@ -696,12 +697,19 @@ async function writeNoIndexDiagnostic(
   freshnessMessage: string,
   json: boolean,
 ): Promise<void> {
+  const failure = await lastReindexFailure(project);
   const reindex = await requestAutoReindex(project);
   const staleSince =
     freshnessMessage.match(/index was built at HEAD=([^ ]+)/u)?.[1] ??
     freshnessMessage.match(/current HEAD=([^;]+);/u)?.[1] ??
     "unknown";
-  if (reindex.isErr()) {
+  if (failure !== undefined) {
+    process.stderr.write(
+      `INDEX: stale since ${staleSince}; the last reindex at this HEAD failed (${failure}); ` +
+        `waiting cannot certify HEAD until that cause is fixed; full plan: 'rr index --status'; ` +
+        `lexical routes now: rr text/regex/files\n`,
+    );
+  } else if (reindex.isErr()) {
     process.stderr.write(
       `INDEX: stale since ${staleSince}; reindex could not start (${reindex.error.message}); lexical routes now: rr text/regex/files\n`,
     );
@@ -718,7 +726,11 @@ async function writeNoIndexDiagnostic(
   process.stderr.write(
     freshnessMessage +
       `Cause: no current certified ccc index is recorded for this repo; ${daemon}.\n` +
-      (reindex.isErr()
+      (failure !== undefined
+        ? `Repair: the repository owner removes the refused cause (the plan in 'rr index --status' ` +
+          `names the file and the .cocoindex_code/settings.yml exclude), then 'repo-retrieve index'.\n`
+        : "") +
+      (failure === undefined && reindex.isErr()
         ? `Repair: from this project root run 'rr index --init' if it is not registered, then ` +
           `'repo-retrieve index' to run ccc index and record the freshness watermark.\n`
         : "") +

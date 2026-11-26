@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.2 — 2026-11-26
+
+- A semantic search on a stale index names why the last reindex at this HEAD failed (the PLAN REFUSED file and limit) and answers without waiting for a reindex that cannot certify it; rr output takes the same stdin-only stages (grep -c, cut, sort, wc) as any other producer.
+
 ## 1.15.1 — 2026-11-25
 
 - A call that waits for the reindex no longer gives up 2 s after it finishes, and no longer fails its daemon status read with a 1 ms timeout after waiting longer than 9 s.

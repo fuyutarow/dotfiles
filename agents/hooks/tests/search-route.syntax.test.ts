@@ -41,6 +41,18 @@ describe("search-route reads syntax, not text", () => {
       expect(verdict(command)).toBeUndefined();
   });
 
+  test("router output takes several stdin-only stages: count, cut, sort", () => {
+    for (const command of [
+      `rr text '0.1.0-dev.293' 2>&1 | grep -F -e 'README' | cut -c1-260`,
+      `rr text 'round ごと' 2>&1 | grep -F -e 'proofs/' | grep -c .`,
+      `rr text '<x>' | grep -F -e '.ts:' | sort | uniq -c | wc -l`,
+    ])
+      expect({ command, verdict: verdict(command) }).toEqual({
+        command,
+        verdict: undefined,
+      });
+  });
+
   test("non-search command output can be filtered with any grep/rg flags", () => {
     for (const command of [
       `agx worker run /tmp/ticket.md 2>&1 | grep -E 'a|b'`,
@@ -65,7 +77,7 @@ describe("search-route reads syntax, not text", () => {
   test("the same constructs used for real are still denied", () => {
     for (const command of [
       `rr text '<x>' | grep -F -e '.ts:' src/`,
-      `rr text '<x>' | grep -F -e '.ts:' | sort`,
+      `rr text '<x>' | xargs grep -n y`,
       `rr text '<x>' $(grep -rn x .)`,
       `cat file.txt | grep foo`,
       `sed -n '1,5p' src/file.ts | rg foo`,

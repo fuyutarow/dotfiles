@@ -443,7 +443,7 @@ describe("enforce-search-route", () => {
     const project = registerProject();
     for (const command of [
       "repo-retrieve literal --query needle | grep -F -- wanted file.txt",
-      "repo-retrieve files | grep -- wanted | rg raw",
+      "repo-retrieve files | grep -- wanted | rg raw src/",
       "repo-retrieve literal --query needle ; grep -- wanted file.txt",
       "repo-retrieve literal --query needle | grep -- wanted < file.txt",
       "agx worker run /tmp/ticket.md | grep foo | cut -c1-150 file.txt",
@@ -801,12 +801,14 @@ describe("display filter over the router's stream (widened 2026-10-01)", () => {
     "bun ~/.claude/hooks/repo-retrieve.ts battery -q a -q b -q c --limit 8 2>&1 | grep -F -e 'File:' | head -n 20",
     "repo-retrieve literal --query 'x' 2>&1 | rg -F -- 'File:'",
     "repo-retrieve definition --query 'x' | grep -F -- 'Ops'",
+    // A second grep on the stream reads stdin only, like grep -c or cut: it searches no file.
+    "repo-retrieve literal --query 'x' | grep -F -- 'y' | head | grep z",
   ];
   const denied = [
     "repo-retrieve literal --query 'x' | grep -F -- 'y' pkg/file.jl",
     "repo-retrieve literal --query 'x' | grep -F -e 'y' | xargs cat",
     "repo-retrieve literal --query 'x' | grep -F -- 'y' > out.txt",
-    "repo-retrieve literal --query 'x' | grep -F -- 'y' | head | grep z",
+    "repo-retrieve literal --query 'x' | grep -F -- 'y' | head | grep z src/",
   ];
   for (const command of allowed) {
     test(`allows: ${command}`, () => {

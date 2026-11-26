@@ -35,7 +35,10 @@ import { fileURLToPath } from "node:url";
 import { jsonOf, z } from "@dotfiles/shared/src/zod.ts";
 import { Result } from "@dotfiles/shared/src/result.ts";
 import { resolveDbDir } from "#src/ccc-db-dir.ts";
-import { latestAutoReindexReceipt } from "#src/auto-reindex-receipt.ts";
+import {
+  latestAutoReindexReceipt,
+  receiptFailure,
+} from "#src/auto-reindex-receipt.ts";
 import { parseDaemonStatus } from "#src/ccc-daemon-status.ts";
 import { cccBackend } from "#src/ccc-entry.ts";
 import {
@@ -333,6 +336,9 @@ export async function catchUpIndex(
   if (first.isErr() || first.value.status === "fresh") return first;
   const bound = Number(process.env["REPO_RETRIEVE_CATCH_UP_MS"] ?? 180_000);
   if (!Number.isFinite(bound) || bound <= 0) return first;
+  // A reindex that already failed at this HEAD (an admission refusal is deterministic) cannot
+  // certify it by waiting; answer now and let the diagnostic name the failure.
+  if ((await lastReindexFailure(project)) !== undefined) return first;
   const requested = await requestAutoReindex(project);
   if (requested.isErr()) return first;
   if (!requested.value.started && (await runningIndexPid(project)) === null)
@@ -352,10 +358,29 @@ export async function catchUpIndex(
     if (last.isErr() || last.value.status === "fresh") break;
     const running = (await runningIndexPid(project)) !== null;
     exitedAt = running ? null : (exitedAt ?? clock.now());
+    if (exitedAt !== null && (await lastReindexFailure(project)) !== undefined)
+      break;
     if (exitedAt !== null && clock.now() - exitedAt >= CERTIFY_GRACE_MS) break;
   }
   waitedMs += clock.now() - started;
   return last;
+}
+
+/**
+ * Why the newest auto reindex failed at the current HEAD, as one line, or undefined when it did
+ * not (none ran there, it succeeded, or its receipt is unreadable).
+ */
+export async function lastReindexFailure(
+  project: string,
+): Promise<string | undefined> {
+  const directory = await resolveDbDir(project);
+  if (directory.isErr()) return undefined;
+  const head = await gitHead(project);
+  if (head.isErr()) return undefined;
+  return receiptFailure(
+    await latestAutoReindexReceipt(directory.value),
+    head.value,
+  );
 }
 
 /** How long a finished reindex may take to write the watermark that certifies HEAD. */

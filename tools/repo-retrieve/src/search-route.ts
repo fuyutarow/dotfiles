@@ -641,26 +641,8 @@ async function isAllowedStreamFilterPipeline(
   if (rest.slice(1).some((stage) => !isPipePassThrough(stage))) return false;
   const filters = rest.slice(1).filter((stage) => isStreamFilter(stage));
   if (filters.length === 0) return false;
-  // The original rr contract is intentionally narrower: one display grep, optionally shortened
-  // by head/tail. Keep its existing xargs/second-search deny behavior intact.
-  if (isRouterProducer(rest[0])) {
-    return (
-      filters.length === 1 &&
-      rest.slice(1).every((stage, index) => {
-        if (isStreamFilter(stage)) return true;
-        const priorFilter = rest
-          .slice(1, index + 1)
-          .some((candidate) => isStreamFilter(candidate));
-        const eff = effective(stage);
-        return (
-          priorFilter &&
-          eff !== undefined &&
-          (eff.name === "head" || eff.name === "tail") &&
-          isStdinTextStage(stage)
-        );
-      })
-    );
-  }
+  // rr output takes the same stdin-only stages as any other producer (count, cut, sort): none of
+  // them reads a repository file, and xargs or a file-operand grep is still not a pass-through.
   return true;
 }
 

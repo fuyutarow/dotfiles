@@ -73,6 +73,33 @@ export async function latestAutoReindexReceipt(directory: string) {
     })[0];
 }
 
+/** Longest refusal line a search diagnostic quotes from a failed receipt. */
+const FAILURE_LINE_CHARS = 300;
+
+/**
+ * Why the newest auto reindex at `head` failed, as one line, or undefined when it did not fail
+ * there. The admission refusal line (PLAN REFUSED, FATAL, …) is preferred over the last line,
+ * because the plan prints its informational tail after the refusal.
+ */
+export function receiptFailure(
+  receipt: z.output<typeof ReceiptSchema> | undefined,
+  head: string | null,
+): string | undefined {
+  if (receipt === undefined || receipt.exitCode === 0) return undefined;
+  if (head === null || receipt.requestedHead !== head) return undefined;
+  const lines = receipt.stderrTail
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  const reason =
+    lines.find((line) =>
+      /^(?:PLAN REFUSED|REFUSED|FATAL|ERROR)\b/u.test(line),
+    ) ??
+    lines.at(-1) ??
+    "no stderr";
+  return `exit ${receipt.exitCode}: ${reason.slice(0, FAILURE_LINE_CHARS)}`;
+}
+
 // This detached supervisor owns its receipt; the query never waits for it.
 export async function superviseAutoReindex(
   directory: string,
